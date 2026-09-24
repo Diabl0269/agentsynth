@@ -42,6 +42,7 @@
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/MidiRemote/Detect/DetectModeController.h"
 
 #include <cmath>
 #include <functional>
@@ -568,4 +569,63 @@ TEST_F(MidiRemoteWorkflowE2ETest, HostedModeLearnsAndDrivesTheCutoffFromTheHosts
     EXPECT_NEAR(rig->cutoff()->getValue(), 64.0f / 127.0f, 1.0e-3f);
     rig->letGestureExpire();
     rig->engine.releaseFromHost();
+}
+
+// ============================================================================
+// 9. FRO140: a 14-bit knob -- Detect adds ONE control, assigning it drives the parameter at full resolution
+// ============================================================================
+
+TEST_F(MidiRemoteWorkflowE2ETest, FourteenBitKnobIsDetectedAsOneControlAndSweepsTheCutoffWithoutStairSteps) {
+    auto rig = makeRigWithFilter();
+
+    ControllerProfile profile;
+    profile.id = "profile-14bit";
+    profile.name = "Fader box";
+    profile.input.identifier = kDevice;
+    profile.input.name = kDevice;
+    ASSERT_TRUE(rig->controller.addProfile(profile));
+    rig->hearDevice();
+
+    // Touch the knob: an MSB then its LSB, unmapped, so both surface as plain activity events for Detect.
+    rig->engine.handleIncomingMidiMessageFromSource(kDevice, juce::MidiMessage::controllerEvent(1, kCc, 64));
+    rig->engine.handleIncomingMidiMessageFromSource(kDevice, juce::MidiMessage::controllerEvent(1, kCc + 32, 0));
+    std::vector<RemoteEvent> touched;
+    rig->remote.drainActivity([&](const juce::String&, const RemoteEvent& e) { touched.push_back(e); });
+    ASSERT_EQ(touched.size(), 2u);
+    // The stamps are real (RemoteEngineTwoHalfDecodeTests asserts they are set); the gap is pinned here so a
+    // preempted CI runner cannot turn the 5 ms pairing window into a flake.
+    touched[1].timeMs = static_cast<std::uint16_t>(touched[0].timeMs + 2);
+
+    synth::ui::DetectModeController detect;
+    detect.setActive(true);
+    ControllerProfile working = rig->controller.getProfiles().front();
+    for (const auto& e : touched)
+        detect.handleEvent(working, e);
+
+    ASSERT_EQ(working.controls.size(), 1u) << "both halves of one knob are ONE control";
+    EXPECT_EQ(working.controls[0].encoding, Encoding::abs14);
+    EXPECT_EQ(working.controls[0].message.number, kCc);
+    ASSERT_TRUE(rig->controller.updateProfile(working));
+
+    ASSERT_EQ(rig->controller.assignControl(profile.id, working.controls[0].id,
+                                            PickTarget::parameter(rig->filter->nodeID, "cutoff")),
+              AssignStatus::assigned);
+    rig->hearDevice(); // the controller re-registers real devices only; see the file header
+    ASSERT_EQ(rig->doc.assignments.size(), 1u);
+    EXPECT_EQ(rig->doc.assignments[0].specEncoding, Encoding::abs14);
+
+    // A slow sweep of the fine byte under one coarse value: every LSB step is its own 14-bit position, so the
+    // parameter climbs in ~1/16383 steps instead of holding still (a 7-bit reading would ignore the LSB).
+    rig->send(juce::MidiMessage::controllerEvent(1, kCc, 64));
+    float previous = -1.0f;
+    for (int lsb = 0; lsb < 128; ++lsb) {
+        rig->send(juce::MidiMessage::controllerEvent(1, kCc + 32, lsb));
+        const float expected = static_cast<float>((64 << 7) | lsb) / 16383.0f;
+        EXPECT_NEAR(rig->cutoff()->getValue(), expected, 1.0e-4f) << "LSB " << lsb;
+        if (previous >= 0.0f)
+            EXPECT_GT(rig->cutoff()->getValue(), previous) << "no stair-step at LSB " << lsb;
+        previous = rig->cutoff()->getValue();
+        rig->advance(kGestureIdleMs / 10.0);
+    }
+    rig->letGestureExpire();
 }

@@ -13,6 +13,7 @@
 // fine: AbstractFifo's write index is an atomic with release semantics, so a later thread sees the
 // earlier one's writes.
 
+#include "MidiRemote/RemoteEngine/RemoteLaneState.h"
 #include "MidiRemote/RemoteModel.h"
 
 #include <atomic>
@@ -32,7 +33,7 @@ enum class RemoteEventKind : std::uint8_t {
     learnCandidate, // no assignment: the spec fields carry the candidate message key
 };
 
-/** One decoded hardware event. Trivially copyable and 16 bytes on purpose — this is written on the
+/** One decoded hardware event. Trivially copyable and small on purpose — this is written on the
  *  MIDI/audio thread, so it must be a plain memcpy into a pre-allocated slot. */
 struct RemoteEvent {
     std::int32_t slotIndex = -1; // index into RemoteMappingSnapshot::slots, or -1 when unassigned
@@ -48,11 +49,17 @@ struct RemoteEvent {
     RemoteEventKind kind = RemoteEventKind::absolute;
     std::uint8_t specType = 0;    // static_cast<std::uint8_t>(synth::MessageType)
     std::uint8_t specChannel = 0; // 1..16 exactly as received (never the profile's 0 = "any")
-    std::uint8_t specNumber = 0;  // cc/note number; 0 for pitchBend / channelPressure
-    /** The message's own 7-bit data byte exactly as received (cc value / note velocity / pressure),
-     *  never scaled or decoded -- what `value` is NOT for a relative encoding or a range-mapped
-     *  assignment. Encoder auto-detect (docs/control/midi-remote-ui.md#detect-mode) classifies the
-     *  raw pattern, so it must see this whatever encoding the control currently claims. */
+    /** cc/note number; 0 for pitchBend / channelPressure; the 14-bit ADDRESS for an nrpn event. For a
+     *  paired-CC control this is whichever half (MSB n or LSB n+32) completed the value. */
+    std::uint16_t specNumber = 0;
+    /** Low 16 bits of juce::Time::getMillisecondCounter() when the MIDI path decoded this event
+     *  (wraps every ~65 s; compare with a modular difference). Detect mode's "both halves within
+     *  5 ms" rule (docs/control/midi-remote-ui.md#detect-mode) is the only reader. */
+    std::uint16_t timeMs = 0;
+    /** The message's own 7-bit data byte exactly as received (cc value / note velocity / pressure --
+     *  for a paired/nrpn event, the completing half's byte), never scaled or decoded -- what `value` is NOT for a
+     * relative encoding or a range-mapped assignment. Encoder auto-detect (docs/control/midi-remote-ui.md#detect-mode)
+     * classifies the raw pattern, so it must see this whatever encoding the control currently claims. */
     std::uint8_t rawValue = 0;
 };
 
@@ -133,6 +140,8 @@ struct SourceLane {
 
     RemoteEventFifo events;
     RemoteEventFifo activity;
+    /** The MIDI path's per-source memory (paired-CC halves, NRPN address). Producer thread only. */
+    LaneState state;
 };
 
 /** Upper bound on distinct sources. Lanes are allocated once, at engine construction: a lane index

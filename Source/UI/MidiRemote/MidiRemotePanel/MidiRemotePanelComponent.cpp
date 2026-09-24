@@ -320,7 +320,8 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
                     if (resolution.resolved()) {
                         paramName = resolution.liveParameter()->getName(64);
                         const float paramValue = resolution.liveParameter()->getValue();
-                        if (projectIt->specEncoding == synth::Encoding::abs7) {
+                        if (projectIt->specEncoding == synth::Encoding::abs7 ||
+                            synth::isPairedEncoding(projectIt->specEncoding)) {
                             // FRO262: Surface widgets show hardware position, not parameter position --
                             // activity events are raw 0..1 (RemoteEngineDecode.cpp's pushActivityOnly),
                             // only ever range-mapped on write (RemoteEngineInternal.h's mapThroughRange,

@@ -455,3 +455,103 @@ TEST(MidiRemoteModelTest, MidiRemoteProjectDocRejectsMissingVersion) {
     MidiRemoteProjectDoc parsed;
     EXPECT_FALSE(parsed.fromVar(v));
 }
+
+// -- 14-bit and NRPN encodings (FRO140) -----------------------------------------------------------------
+
+TEST(MidiRemoteModelTest, NrpnAndPairedControlsRoundTrip) {
+    auto nrpn = makeControl("ctrl-nrpn", makeSpec(MessageType::nrpn, 1, MessageSpec::maxNumber(MessageType::nrpn)));
+    nrpn.encoding = Encoding::abs14;
+    auto lsbFirst = makeControl("ctrl-lsb", makeSpec(MessageType::cc, 1, 21));
+    lsbFirst.encoding = Encoding::abs14LsbFirst;
+
+    Control parsedNrpn;
+    ASSERT_TRUE(Control::fromVar(nrpn.toVar(), parsedNrpn));
+    EXPECT_EQ(parsedNrpn.message.type, MessageType::nrpn);
+    EXPECT_EQ(parsedNrpn.message.number, 16383);
+    EXPECT_EQ(parsedNrpn.encoding, Encoding::abs14);
+
+    Control parsedLsb;
+    ASSERT_TRUE(Control::fromVar(lsbFirst.toVar(), parsedLsb));
+    EXPECT_EQ(parsedLsb.message.number, 21);
+    EXPECT_EQ(parsedLsb.encoding, Encoding::abs14LsbFirst);
+}
+
+TEST(MidiRemoteModelTest, AssignmentCarryingNrpnAndPairedEncodingsRoundTrips) {
+    auto nrpn = makeParameterAssignment("assign-nrpn");
+    nrpn.spec = makeSpec(MessageType::nrpn, 0, 16383);
+    nrpn.specEncoding = Encoding::abs14;
+    auto paired = makeParameterAssignment("assign-paired");
+    paired.spec = makeSpec(MessageType::cc, 1, 21);
+    paired.specEncoding = Encoding::abs14LsbFirst;
+
+    Assignment parsedNrpn;
+    ASSERT_TRUE(Assignment::fromVar(nrpn.toVar(), parsedNrpn));
+    EXPECT_TRUE(parsedNrpn.spec == nrpn.spec);
+    EXPECT_EQ(parsedNrpn.specEncoding, Encoding::abs14);
+
+    Assignment parsedPaired;
+    ASSERT_TRUE(Assignment::fromVar(paired.toVar(), parsedPaired));
+    EXPECT_TRUE(parsedPaired.spec == paired.spec);
+    EXPECT_EQ(parsedPaired.specEncoding, Encoding::abs14LsbFirst);
+}
+
+TEST(MidiRemoteModelTest, MessageSpecRejectsNrpnAddressAboveFourteenBits) {
+    MessageSpec parsed;
+    EXPECT_FALSE(MessageSpec::fromVar(juce::JSON::parse(R"({"type":"nrpn","channel":1,"number":16384})"), parsed));
+    EXPECT_TRUE(MessageSpec::fromVar(juce::JSON::parse(R"({"type":"nrpn","channel":1,"number":16383})"), parsed));
+}
+
+TEST(MidiRemoteModelTest, MessageSpecStillRejectsCcNumberAbove127) {
+    // The widened range is nrpn-only; every other type keeps its 7-bit cap.
+    MessageSpec parsed;
+    EXPECT_FALSE(MessageSpec::fromVar(juce::JSON::parse(R"({"type":"cc","channel":1,"number":128})"), parsed));
+}
+
+TEST(MidiRemoteModelTest, ControlRejectsPairedEncodingOnCcWithoutLsbPartner) {
+    auto control = makeControl("ctrl-1", makeSpec(MessageType::cc, 1, 40)); // 40 + 32 > 63
+    control.encoding = Encoding::abs14;
+
+    Control parsed;
+    parsed.id = "sentinel-untouched"; // all-or-nothing: a rejected control leaves `out` alone
+    EXPECT_FALSE(Control::fromVar(control.toVar(), parsed));
+    EXPECT_EQ(parsed.id, "sentinel-untouched");
+}
+
+TEST(MidiRemoteModelTest, ControlRejectsRelativeEncodingOnNrpn) {
+    auto control = makeControl("ctrl-1", makeSpec(MessageType::nrpn, 1, 1024));
+    control.encoding = Encoding::relTwos;
+
+    Control parsed;
+    EXPECT_FALSE(Control::fromVar(control.toVar(), parsed));
+}
+
+TEST(MidiRemoteModelTest, ControlStillRejectsUnknownEncodingStringOnNrpn) {
+    auto control = makeControl("ctrl-1", makeSpec(MessageType::nrpn, 1, 1024));
+    auto v = control.toVar();
+    v.getDynamicObject()->setProperty("encoding", "abs15");
+
+    Control parsed;
+    EXPECT_FALSE(Control::fromVar(v, parsed));
+}
+
+TEST(MidiRemoteModelTest, AssignmentRejectsEncodingInvalidForItsSpec) {
+    auto pairedOnHighCc = makeParameterAssignment("assign-bad-1");
+    pairedOnHighCc.spec = makeSpec(MessageType::cc, 1, 40);
+    pairedOnHighCc.specEncoding = Encoding::abs14;
+    auto relativeNrpn = makeParameterAssignment("assign-bad-2");
+    relativeNrpn.spec = makeSpec(MessageType::nrpn, 1, 1024);
+    relativeNrpn.specEncoding = Encoding::relBinOffset;
+
+    Assignment parsed;
+    EXPECT_FALSE(Assignment::fromVar(pairedOnHighCc.toVar(), parsed));
+    EXPECT_FALSE(Assignment::fromVar(relativeNrpn.toVar(), parsed));
+}
+
+TEST(MidiRemoteModelTest, EncodingValidForSpecBoundaries) {
+    // The highest MSB with an LSB partner (31 + 32 = 63) is fine; CC 32 has none.
+    EXPECT_TRUE(encodingValidForSpec(makeSpec(MessageType::cc, 1, 31), Encoding::abs14));
+    EXPECT_FALSE(encodingValidForSpec(makeSpec(MessageType::cc, 1, 32), Encoding::abs14LsbFirst));
+    EXPECT_TRUE(encodingValidForSpec(makeSpec(MessageType::nrpn, 1, 5), Encoding::abs7));
+    EXPECT_FALSE(encodingValidForSpec(makeSpec(MessageType::note, 1, 60), Encoding::abs14));
+    EXPECT_TRUE(encodingValidForSpec(makeSpec(MessageType::note, 1, 60), Encoding::relTwos));
+}

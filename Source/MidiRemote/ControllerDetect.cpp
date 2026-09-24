@@ -23,11 +23,61 @@ bool specMatchesEvent(const MessageSpec& spec, const RemoteEvent& event) {
     return spec.number == event.specNumber;
 }
 
+namespace {
+
+bool isPairedCc(const Control& control) {
+    return isPairedEncoding(control.encoding) && control.message.type == MessageType::cc;
+}
+
+} // namespace
+
+bool controlMatchesEvent(const Control& control, const RemoteEvent& event) {
+    if (specMatchesEvent(control.message, event))
+        return true;
+    return isPairedCc(control) && event.specType == static_cast<std::uint8_t>(MessageType::cc) &&
+           (control.message.channel == 0 || control.message.channel == event.specChannel) &&
+           event.specNumber == control.message.number + kPairedLsbOffset;
+}
+
+bool controlClaimsSpec(const Control& control, const MessageSpec& spec) {
+    if (control.message == spec)
+        return true;
+    return isPairedCc(control) && spec.type == MessageType::cc &&
+           (control.message.channel == 0 || spec.channel == control.message.channel) &&
+           spec.number == control.message.number + kPairedLsbOffset;
+}
+
 const Control* findControlForEvent(const std::vector<Control>& controls, const RemoteEvent& event) {
     for (const auto& control : controls)
-        if (specMatchesEvent(control.message, event))
+        if (controlMatchesEvent(control, event))
             return &control;
     return nullptr;
+}
+
+bool foldIntoPairedControl(std::vector<Control>& controls, const DetectedCc& previous, const RemoteEvent& event) {
+    if (!previous.valid || event.specType != static_cast<std::uint8_t>(MessageType::cc) ||
+        event.specChannel != previous.channel)
+        return false;
+    const int elapsedMs = static_cast<std::uint16_t>(event.timeMs - previous.timeMs);
+    if (elapsedMs > kPairedHalvesWindowMs)
+        return false;
+
+    const int incoming = event.specNumber;
+    const bool msbFirst = previous.number < kPairedLsbOffset && incoming == previous.number + kPairedLsbOffset;
+    const bool lsbFirst = incoming < kPairedLsbOffset && previous.number == incoming + kPairedLsbOffset;
+    if (!msbFirst && !lsbFirst)
+        return false;
+
+    const auto it = std::find_if(controls.begin(), controls.end(), [&](const Control& c) {
+        return c.id == previous.controlId && c.message.type == MessageType::cc && c.encoding == Encoding::abs7;
+    });
+    if (it == controls.end())
+        return false;
+
+    it->encoding = msbFirst ? Encoding::abs14 : Encoding::abs14LsbFirst;
+    it->message.number = msbFirst ? previous.number : incoming;
+    it->name = detectedControlName(it->message);
+    return true;
 }
 
 void placeAtNextFreeCell(Control& control, const std::vector<Control>& existing) {
@@ -62,6 +112,8 @@ juce::String detectedControlName(const MessageSpec& spec) {
         return "Channel Pressure";
     case MessageType::programChange:
         return "Program " + juce::String(spec.number);
+    case MessageType::nrpn:
+        return "NRPN " + juce::String(spec.number);
     case MessageType::cc:
     default:
         return "CC " + juce::String(spec.number);
@@ -79,6 +131,12 @@ Control makeDetectedControl(const RemoteEvent& event, const std::vector<Control>
         break;
     case MessageType::pitchBend:
         control.kind = ControlKind::wheel;
+        break;
+    case MessageType::nrpn:
+        // Detect can only see an NRPN whose address CCs it recognised; its value is a CC 6 / CC 38
+        // pair, so the control starts as the 14-bit encoding (the inspector can drop it to CC 6 only).
+        control.kind = ControlKind::knob;
+        control.encoding = Encoding::abs14;
         break;
     default:
         control.kind = ControlKind::knob;

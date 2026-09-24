@@ -8,8 +8,10 @@ namespace synth::ui {
 
 void DetectModeController::setActive(bool active) {
     active_ = active;
-    if (!active_)
+    if (!active_) {
         pulsingControlId_.clear();
+        lastNewCc_ = {};
+    }
 }
 
 DetectModeController::Step DetectModeController::handleEvent(synth::ControllerProfile& profile,
@@ -27,8 +29,19 @@ DetectModeController::Step DetectModeController::handleEvent(synth::ControllerPr
     if (!synth::midi::isDetectCandidate(event))
         return step;
 
+    // The other half of a 14-bit pair whose first half just added a control: fold, don't add.
+    if (synth::midi::foldIntoPairedControl(profile.controls, lastNewCc_, event)) {
+        pulsingControlId_ = lastNewCc_.controlId;
+        lastNewCc_ = {};
+        step.controlAdded = true; // the profile changed and must be persisted, same as an add
+        return step;
+    }
+
     auto control = synth::midi::makeDetectedControl(event, profile.controls);
     pulsingControlId_ = control.id;
+    lastNewCc_ = {};
+    if (event.specType == static_cast<std::uint8_t>(synth::MessageType::cc))
+        lastNewCc_ = {true, event.timeMs, event.specChannel, event.specNumber, control.id};
     profile.controls.push_back(std::move(control));
     step.controlAdded = true;
     return step;

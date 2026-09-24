@@ -566,3 +566,143 @@ TEST_F(ControlInspectorComponentTest, AutoDetectIsEnabledOnlyForACcKnobOrEncoder
     autoDetect->onClick();
     EXPECT_EQ(requested, 1);
 }
+
+//==============================================================================
+// 14-bit and NRPN encodings (FRO140)
+//==============================================================================
+
+namespace {
+
+std::vector<std::pair<int, juce::String>> comboItems(const juce::ComboBox& combo) {
+    std::vector<std::pair<int, juce::String>> items;
+    for (int i = 0; i < combo.getNumItems(); ++i)
+        items.emplace_back(combo.getItemId(i), combo.getItemText(i));
+    return items;
+}
+
+ControlInspectorComponent::ControlModel modelFor(synth::MessageType type, int number, synth::Encoding encoding) {
+    ControlInspectorComponent::ControlModel model;
+    model.hasControl = true;
+    model.control = makeControl();
+    model.control.message = {type, 1, number};
+    model.control.encoding = encoding;
+    return model;
+}
+
+using ItemList = std::vector<std::pair<int, juce::String>>;
+
+const ItemList kFourOriginalItems = {{1, "Absolute (7-bit)"},
+                                     {2, "Relative (Two's Complement)"},
+                                     {3, "Relative (Binary Offset)"},
+                                     {4, "Relative (Sign Magnitude)"}};
+
+} // namespace
+
+TEST_F(ControlInspectorComponentTest, LowNumberedCcOffersTheTwoFourteenBitEncodings) {
+    inspector.setControl(modelFor(synth::MessageType::cc, 21, synth::Encoding::abs7));
+    auto* encoding = dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "encodingCombo"));
+    ASSERT_NE(encoding, nullptr);
+
+    auto expected = kFourOriginalItems;
+    expected.emplace_back(5, "Absolute (14-bit, MSB first)");
+    expected.emplace_back(6, "Absolute (14-bit, LSB first)");
+    EXPECT_EQ(comboItems(*encoding), expected);
+    EXPECT_EQ(encoding->getSelectedId(), 1);
+}
+
+TEST_F(ControlInspectorComponentTest, CcAtOrAbove32OffersOnlyTheFourOriginalEncodings) {
+    inspector.setControl(modelFor(synth::MessageType::cc, 32, synth::Encoding::abs7));
+    auto* encoding = dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "encodingCombo"));
+    ASSERT_NE(encoding, nullptr);
+    EXPECT_EQ(comboItems(*encoding), kFourOriginalItems) << "CC 32 has no LSB partner at 64";
+
+    inspector.setControl(modelFor(synth::MessageType::cc, 100, synth::Encoding::relTwos));
+    EXPECT_EQ(comboItems(*encoding), kFourOriginalItems);
+    EXPECT_EQ(encoding->getSelectedId(), 2);
+}
+
+TEST_F(ControlInspectorComponentTest, NonCcNonNrpnTypesOfferOnlyTheFourOriginalEncodings) {
+    auto* encoding = dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "encodingCombo"));
+    ASSERT_NE(encoding, nullptr);
+    inspector.setControl(modelFor(synth::MessageType::note, 10, synth::Encoding::abs7));
+    EXPECT_EQ(comboItems(*encoding), kFourOriginalItems);
+    inspector.setControl(modelFor(synth::MessageType::pitchBend, 0, synth::Encoding::abs7));
+    EXPECT_EQ(comboItems(*encoding), kFourOriginalItems);
+}
+
+TEST_F(ControlInspectorComponentTest, NrpnControlOffersOnlyNrpnNamedChoicesWithEnumDerivedIds) {
+    inspector.setControl(modelFor(synth::MessageType::nrpn, 1024, synth::Encoding::abs14LsbFirst));
+    auto* encoding = dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "encodingCombo"));
+    ASSERT_NE(encoding, nullptr);
+
+    const ItemList expected = {
+        {1, "NRPN (7-bit, CC 6 only)"}, {5, "NRPN (14-bit, MSB first)"}, {6, "NRPN (14-bit, LSB first)"}};
+    EXPECT_EQ(comboItems(*encoding), expected);
+    EXPECT_EQ(encoding->getSelectedId(), 6);
+}
+
+TEST_F(ControlInspectorComponentTest, ComboIsRepopulatedWhenTheSelectionChangesBetweenControlKinds) {
+    auto* encoding = dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "encodingCombo"));
+    ASSERT_NE(encoding, nullptr);
+
+    inspector.setControl(modelFor(synth::MessageType::nrpn, 1024, synth::Encoding::abs14));
+    EXPECT_EQ(encoding->getNumItems(), 3);
+    inspector.setControl(modelFor(synth::MessageType::cc, 21, synth::Encoding::abs14));
+    EXPECT_EQ(encoding->getNumItems(), 6);
+    EXPECT_EQ(encoding->getSelectedId(), 5);
+    inspector.setControl(modelFor(synth::MessageType::note, 60, synth::Encoding::abs7));
+    EXPECT_EQ(encoding->getNumItems(), 4);
+}
+
+TEST_F(ControlInspectorComponentTest, NrpnMessageSpecLabelShowsTheAddressAndChannel) {
+    inspector.setControl(modelFor(synth::MessageType::nrpn, 1024, synth::Encoding::abs14));
+    auto* messageLabel = dynamic_cast<juce::Label*>(findComponentWithID(inspector, "controlMessageSpecLabel"));
+    ASSERT_NE(messageLabel, nullptr);
+    EXPECT_EQ(messageLabel->getText(), "NRPN 1024 ch 1");
+}
+
+TEST_F(ControlInspectorComponentTest, ChoosingFourteenBitMsbFirstFiresOnControlEditedWithAbs14) {
+    inspector.setControl(modelFor(synth::MessageType::cc, 21, synth::Encoding::abs7));
+    std::vector<synth::Control> edits;
+    inspector.onControlEdited = [&](const synth::Control& c) { edits.push_back(c); };
+
+    auto* encoding = dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "encodingCombo"));
+    ASSERT_NE(encoding, nullptr);
+    int msbFirstId = 0;
+    for (const auto& [id, text] : comboItems(*encoding))
+        if (text == "Absolute (14-bit, MSB first)")
+            msbFirstId = id;
+    ASSERT_NE(msbFirstId, 0);
+    encoding->setSelectedId(msbFirstId, juce::sendNotificationSync);
+
+    ASSERT_EQ(edits.size(), 1u);
+    EXPECT_EQ(edits[0].encoding, synth::Encoding::abs14);
+    EXPECT_EQ(edits[0].message.number, 21) << "only the encoding changes";
+    EXPECT_EQ(edits[0].id, "control-1");
+}
+
+TEST_F(ControlInspectorComponentTest, ChoosingNrpnLsbFirstFiresOnControlEditedWithAbs14LsbFirst) {
+    inspector.setControl(modelFor(synth::MessageType::nrpn, 1024, synth::Encoding::abs14));
+    std::vector<synth::Control> edits;
+    inspector.onControlEdited = [&](const synth::Control& c) { edits.push_back(c); };
+
+    auto* encoding = dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "encodingCombo"));
+    ASSERT_NE(encoding, nullptr);
+    encoding->setSelectedId(6, juce::sendNotificationSync);
+
+    ASSERT_EQ(edits.size(), 1u);
+    EXPECT_EQ(edits[0].encoding, synth::Encoding::abs14LsbFirst);
+    EXPECT_EQ(edits[0].message.type, synth::MessageType::nrpn);
+}
+
+TEST_F(ControlInspectorComponentTest, AutoDetectIsDisabledForAPairedEncodingControl) {
+    auto* autoDetect = dynamic_cast<juce::TextButton*>(findComponentWithID(inspector, "autoDetectButton"));
+    ASSERT_NE(autoDetect, nullptr);
+
+    inspector.setControl(modelFor(synth::MessageType::cc, 21, synth::Encoding::abs7));
+    EXPECT_TRUE(autoDetect->isEnabled());
+    inspector.setControl(modelFor(synth::MessageType::cc, 21, synth::Encoding::abs14));
+    EXPECT_FALSE(autoDetect->isEnabled());
+    inspector.setControl(modelFor(synth::MessageType::cc, 21, synth::Encoding::abs14LsbFirst));
+    EXPECT_FALSE(autoDetect->isEnabled());
+}

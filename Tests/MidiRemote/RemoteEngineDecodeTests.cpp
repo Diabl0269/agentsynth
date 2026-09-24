@@ -323,5 +323,6 @@ TEST(MidiRemoteEngineDecodeTest, EventsCarryTheRawDataByteWhateverTheEncoding) {
     EXPECT_EQ(h.sendAndReadOne(juce::MidiMessage::controllerEvent(1, 50, 127)).rawValue, 127);
     EXPECT_EQ(h.sendAndReadOne(juce::MidiMessage::controllerEvent(1, 50, 1)).rawValue, 1);
     EXPECT_EQ(h.sendAndReadOne(juce::MidiMessage::controllerEvent(1, 51, 93)).rawValue, 93);
-    EXPECT_EQ(h.sendAndReadOne(juce::MidiMessage::controllerEvent(1, 99, 65)).rawValue, 65) << "unassigned";
+    EXPECT_EQ(h.sendAndReadOne(juce::MidiMessage::controllerEvent(1, 90, 65)).rawValue, 65)
+        << "unassigned"; // not 99: an NRPN address CC
 }

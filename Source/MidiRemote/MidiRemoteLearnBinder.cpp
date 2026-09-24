@@ -22,6 +22,8 @@ juce::String nameForSpec(const MessageSpec& spec) {
         return "Channel Pressure";
     case MessageType::programChange:
         return "Program " + juce::String(spec.number);
+    case MessageType::nrpn:
+        return "NRPN " + juce::String(spec.number);
     case MessageType::cc:
     default:
         return "CC " + juce::String(spec.number);
@@ -57,14 +59,17 @@ LearnBindOutcome bindLearnResult(const LearnResult& result, const juce::String& 
     }
 
     const auto existingControl = std::find_if(profile.controls.begin(), profile.controls.end(),
-                                              [&](const Control& c) { return c.message == result.spec; });
+                                              [&](const Control& c) { return controlClaimsSpec(c, result.spec); });
 
     Control control;
     if (existingControl != profile.controls.end()) {
         // Same message key already on this profile: keep its identity/name/layout, but the
         // encoding/buttonMode just observed is the freshest evidence of how the hardware behaves.
         control = *existingControl;
-        control.encoding = result.encoding;
+        // A paired 14-bit control keeps its encoding: a right-click learn only ever hears one half
+        // of it as a plain CC, which is no evidence the control stopped being 14-bit.
+        if (!isPairedEncoding(control.encoding))
+            control.encoding = result.encoding;
         control.buttonMode = result.buttonMode;
         *existingControl = control;
     } else {
@@ -85,8 +90,8 @@ LearnBindOutcome bindLearnResult(const LearnResult& result, const juce::String& 
     assignment.id = juce::Uuid().toDashedString();
     assignment.control.profileId = profile.id;
     assignment.control.controlId = control.id;
-    assignment.spec = result.spec;
-    assignment.specEncoding = result.encoding;
+    assignment.spec = control.message; // == result.spec, except a paired control's MSB when its LSB was learned
+    assignment.specEncoding = control.encoding;
     assignment.specButtonMode = result.buttonMode;
     assignment.specControlName = control.name;
     assignment.target = result.target;

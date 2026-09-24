@@ -59,7 +59,15 @@ const ControllerProfile* findProfileWithOutput(const std::vector<ControllerProfi
     return nullptr;
 }
 
+// FRO140: a paired 14-bit CC is echoed as both halves (MSB on CC n, LSB on CC n+32).
+bool isPairedCcSlot(const RemoteMappingSnapshot::Slot& slot) {
+    return slot.spec.type == MessageType::cc && isPairedEncoding(slot.encoding) && slot.spec.number >= 0 &&
+           slot.spec.number + kPairedLsbOffset <= 63;
+}
+
 int encodeFeedbackValue(const RemoteMappingSnapshot::Slot& slot, float x) {
+    if (isPairedCcSlot(slot))
+        return juce::roundToInt(x * 16383.0f);
     switch (slot.spec.type) {
     case MessageType::pitchBend:
         return juce::roundToInt(x * 16383.0f);
@@ -100,6 +108,8 @@ void RemoteEngine::sendFeedback(const RemoteMappingSnapshot& snapshot) {
     for (const auto& slot : snapshot.slots) {
         if (!slot.target.isParameter() || slot.orphaned || slot.param == nullptr)
             continue;
+        // An nrpn slot is skipped like every other type without a feedback encoding: echoing an NRPN
+        // means re-sending its address CCs first, which the controller may not accept.
         if (slot.spec.type != MessageType::cc && slot.spec.type != MessageType::note &&
             slot.spec.type != MessageType::pitchBend)
             continue;
@@ -118,7 +128,16 @@ void RemoteEngine::sendFeedback(const RemoteMappingSnapshot& snapshot) {
             continue;
 
         const int channel = slot.spec.channel == 0 ? 1 : slot.spec.channel;
-        feedbackSink_->sendFeedback(profile->output, buildFeedbackMessage(slot, channel, encoded));
+        if (isPairedCcSlot(slot)) {
+            const auto msb = juce::MidiMessage::controllerEvent(channel, slot.spec.number, encoded >> 7);
+            const auto lsb =
+                juce::MidiMessage::controllerEvent(channel, slot.spec.number + kPairedLsbOffset, encoded & 0x7f);
+            const bool lsbFirst = slot.encoding == Encoding::abs14LsbFirst;
+            feedbackSink_->sendFeedback(profile->output, lsbFirst ? lsb : msb);
+            feedbackSink_->sendFeedback(profile->output, lsbFirst ? msb : lsb);
+        } else {
+            feedbackSink_->sendFeedback(profile->output, buildFeedbackMessage(slot, channel, encoded));
+        }
         fb.lastSent = encoded;
     }
 }

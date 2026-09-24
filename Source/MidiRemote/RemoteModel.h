@@ -18,10 +18,29 @@ namespace synth {
 
 enum class ControlKind { knob, fader, button, pad, encoder, wheel };
 
-enum class MessageType { cc, note, pitchBend, channelPressure, programChange };
+// nrpn (FRO140): a 14-bit parameter address (CC 99/98) whose value arrives as data-entry CCs 6/38.
+// MessageSpec::number is the ADDRESS (0..16383), so an NRPN key can never collide with CC n.
+enum class MessageType { cc, note, pitchBend, channelPressure, programChange, nrpn };
 
-// abs14 (14-bit MSB/LSB pairs) is a later extension (FRO140) — not modelled here.
-enum class Encoding { abs7, relTwos, relBinOffset, relSignMag };
+// abs14 / abs14LsbFirst (FRO140) are 14-bit absolute values carried by TWO messages: CC n (MSB) with
+// CC n+32 (LSB) for a cc control (n 0..31), or data-entry CC 6 / CC 38 for an nrpn control. The
+// value is committed when the SECOND half arrives -- abs14 waits for the LSB, abs14LsbFirst for the
+// MSB -- and the other half is the last one seen. On an nrpn control abs7 means "CC 6 only".
+// Appended after the relative encodings: the inspector's combo ids are declaration order.
+enum class Encoding { abs7, relTwos, relBinOffset, relSignMag, abs14, abs14LsbFirst };
+
+/** MSB CC n pairs with LSB CC n + kPairedLsbOffset (MIDI 1.0 CC 0..31 / 32..63). */
+inline constexpr int kPairedLsbOffset = 32;
+/** NRPN address CCs and the data-entry CCs that carry its value. */
+inline constexpr int kNrpnAddressMsbCc = 99;
+inline constexpr int kNrpnAddressLsbCc = 98;
+inline constexpr int kRpnAddressMsbCc = 101; // RPN select: cancels an armed NRPN address
+inline constexpr int kRpnAddressLsbCc = 100;
+inline constexpr int kDataEntryMsbCc = 6;
+inline constexpr int kDataEntryLsbCc = 38;
+inline constexpr int kMaxNrpnAddress = 16383;
+
+inline bool isPairedEncoding(Encoding e) noexcept { return e == Encoding::abs14 || e == Encoding::abs14LsbFirst; }
 
 enum class ButtonMode { momentary, toggle };
 
@@ -44,17 +63,31 @@ enum class NodeCommandKind { toggleSolo };
 struct MessageSpec {
     MessageType type = MessageType::cc;
     int channel = 0; // 0 = any, else 1..16
-    int number = 0;  // 0..127
+    int number = 0;  // 0..127; nrpn: the 14-bit address 0..16383
 
     bool operator==(const MessageSpec& other) const {
         return type == other.type && channel == other.channel && number == other.number;
     }
     bool operator!=(const MessageSpec& other) const { return !(*this == other); }
 
+    /** Highest legal `number` for `type` (nrpn: a 14-bit address; everything else 7-bit). */
+    static constexpr int maxNumber(MessageType t) noexcept { return t == MessageType::nrpn ? kMaxNrpnAddress : 127; }
+
     juce::var toVar() const;
     /** All-or-nothing: a malformed field leaves `out` untouched and returns false. */
     static bool fromVar(const juce::var& v, MessageSpec& out);
 };
+
+/** Whether `encoding` may describe a control on `spec`: a paired encoding needs a cc in 0..31 (its
+ *  partner is number+32) or an nrpn; an nrpn carries only abs7 (CC 6 alone) or a paired encoding.
+ *  Every other combination stays as permissive as it always was. */
+inline bool encodingValidForSpec(const MessageSpec& spec, Encoding encoding) noexcept {
+    if (isPairedEncoding(encoding))
+        return spec.type == MessageType::nrpn || (spec.type == MessageType::cc && spec.number + kPairedLsbOffset <= 63);
+    if (spec.type == MessageType::nrpn)
+        return encoding == Encoding::abs7;
+    return true;
+}
 
 // -- Control ---------------------------------------------------------------------------------------
 /** One physical control on a ControllerProfile's detected surface (docs/control/midi-remote.md#data-model). */

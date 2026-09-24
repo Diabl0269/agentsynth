@@ -99,10 +99,11 @@ a **note path only** ([`midi-input.md`](midi-input.md)):
 7. **The plugin build degrades honestly** (see [The plugin build](#the-plugin-build-vst3au-inside-a-host)): no device management inside a host, but
    mappings on the host-supplied MIDI stream still work.
 
-**Non-goals (for now)** — each a planned extension tracked separately, not an accident: 14-bit CC / NRPN,
+**Non-goals (for now)** — each a planned extension tracked separately, not an accident:
 MCU/HUI protocol surfaces, MPE per-note expression, a "focused module" bank that follows selection,
 a device template library beyond a few generic ones, OSC. (Feedback to the controller shipped —
-see [Controller feedback](#controller-feedback).)
+see [Controller feedback](#controller-feedback); 14-bit CC and NRPN encodings shipped — see
+[14-bit and NRPN encodings](#14-bit-and-nrpn-encodings).)
 
 ---
 
@@ -364,6 +365,75 @@ through a new `RemoteActionInvoker::invokeNodeCommand(nodeId, command)` (Core kn
 `ChannelStripModule` nor `AudioEngine::setChannelStripSoloed`), which performs the SAME undo-bracketed
 call the mixer column's own click does — one undo step per press.
 
+### 14-bit and NRPN encodings
+
+Two additions let 14-bit controllers map without stair-steps: a message type (`nrpn`) and two paired encodings (`abs14`, `abs14LsbFirst`).
+
+**Message types:**
+- **`cc` (existing)** — unchanged; CC 0..127 with one of the absolute or relative encodings.
+- **`nrpn`** — NRPN (Non-Registered Parameter Number) addressing 0..16383. The engine maps
+  the message key `(sourceKey, type=nrpn, channel, number=14bitAddress)` such that NRPN addresses
+  never collide with CC numbers — `nrpn 21` is distinct from `cc 21`.
+
+**Encodings for CC pairs (abs14 variants):**
+- **`abs14`** (JSON `"abs14"`) — for controllers that send MSB first. CC `n` is MSB (0..31),
+  CC `n+32` is LSB; the value is committed when the LSB arrives, using the last MSB seen. A second
+  MSB arrival (without an intervening LSB) is remembered; a lone LSB re-commits with the last MSB;
+  a lone LSB with no MSB ever seen produces nothing. State is held per source AND per MIDI channel.
+- **`abs14LsbFirst`** (JSON `"abs14LsbFirst"`) — for controllers that send LSB first. CC `n`
+  is MSB, CC `n+32` is LSB; the value is committed when the MSB arrives, using the last LSB seen.
+  Same per-source/per-channel pairing rule as `abs14`.
+
+Only a CC number 0..31 or an NRPN may use a paired encoding. An NRPN carries only `abs7` (data
+via CC 6 alone) or one of the paired encodings (`abs14` / `abs14LsbFirst` via CC 6 and CC 38).
+Loading a profile that violates these rules rejects the whole profile like any other malformed
+field.
+
+**Engine behaviour (MIDI path):**
+- **CC pair lookup:** the mapping table registers BOTH CC `n` and CC `n+32` to the same paired slot.
+  An explicit user assignment on CC `n+32` keeps that message and prevents `n+32` from binding
+  implicitly to the paired control.
+- **NRPN state machine:** CC 99 (NRPN MSB address) and CC 98 (NRPN LSB address) arm an address per
+  channel (a fresh 99/98 pair resets the buffered data halves — address changes mid-stream never mix
+  values). CC 101 and CC 100 (RPN select, the MIDI "cancel NRPN" message) disarm the channel.
+  CC 6 = data MSB, CC 38 = data LSB under an armed address. The four address CCs (99, 98, 101, 100)
+  are never consumed (always pass to the patch) and never appear as `RemoteEvent`s.
+- **Data CCs under NRPN:** CC 6 and CC 38 with an armed address become one `nrpn` message; they
+  are consumed only when that address is mapped AND "also pass mapped messages" is off. An explicit
+  mapping on the raw CC number (e.g. a plain knob on CC 6) wins over NRPN reading, and CC 6/38 with
+  no armed address stay plain CCs. Unmapped NRPN and unmapped CC pairs still light the activity
+  surface and feed Detect.
+
+**Feedback:** a paired parameter slot echoes both CCs (MSB then LSB for `abs14`, LSB then MSB for
+`abs14LsbFirst`); NRPN slots are not echoed.
+
+**Detect mode:** if the two halves of a CC pair (CC `n` and CC `n+32`, either order, same channel)
+arrive within 5 ms, they become ONE control — CC `n` then `n+32` ⇒ `abs14` control at number `n`;
+CC `n+32` then `n` ⇒ `abs14LsbFirst` control at number `n` (the control is renumbered to `n`).
+Slower or different-channel messages stay separate. `RemoteEvent` carries a 16-bit millisecond
+timestamp for this pairing window. An unmapped NRPN shows up as ONE control named "NRPN `<address>`",
+encoding `abs14`, kind knob.
+
+**Inspector & Learn:**
+- **Encoding dropdown:** for a CC 0..31, the dropdown offers "Absolute (7-bit)", the three relative
+  encodings, "Absolute (14-bit, MSB first)", "Absolute (14-bit, LSB first)". For a CC ≥ 32 or any
+  other message type, only the original four entries are shown. For an NRPN control: "NRPN (7-bit,
+  CC 6 only)", "NRPN (14-bit, MSB first)", "NRPN (14-bit, LSB first)". A CC control cannot be
+  retyped into an NRPN from the dropdown.
+- **Right-click Learn:** an NRPN learns as type `nrpn` with the detected address and encoding `abs14`
+ . A Learn on the LSB of an existing paired CC control
+  binds to that control and does not change its encoding. A plain CC Learn never infers 14-bit by
+  itself (use Detect or the inspector to set it).
+
+**Known limits:**
+- NRPN data-increment/decrement (CC 96/97) and relative NRPN are not supported.
+- A controller that sends only the MSB of a 14-bit pair (no LSB) does not move a paired mapping —
+  use `abs7` for it.
+- A separate control already mapped on CC `n+32` keeps that message: the paired control on CC `n` then
+  never receives its LSB, so give the two different numbers.
+
+---
+
 ### Controller feedback
 
 **Decision (FRO139):** `RemoteEngine::drain()` sends every mapped parameter's current value back
@@ -385,11 +455,12 @@ playback, undo, or a project load, not just a hardware turn.
   own picture of where the parameter really is, and what a motor fader needs to snap to on release.
 - **Encoding** is the exact inverse of the assignment's own range mapping (`docs` above, "hardware
   value reach a parameter"): the parameter's normalised value is mapped back through
-  `[rangeMin, rangeMax]` to 0..1, then encoded per `MessageSpec.type` — `cc`/`pitchBend` scale to
-  7-/14-bit; `note` sends note-on velocity 127/0 for a bool parameter or a button-like control,
-  else a scaled velocity. A relative-encoded control still gets the same absolute CC echo — an LED
-  ring reads position, not delta. Channel 0 (the profile's "any channel" for the incoming lookup)
-  becomes channel 1 for feedback, since a message must go out on one real channel.
+  `[rangeMin, rangeMax]` to 0..1, then encoded per `MessageSpec.type` and encoding:
+  `cc` with abs7 → 7-bit; `cc` with abs14/abs14LsbFirst → both CCs (MSB then LSB, or LSB then MSB per encoding);
+  `nrpn` → not echoed (echoing one means re-sending its address CCs first); `pitchBend` → 14-bit; `note` sends note-on velocity 127/0 for
+  a bool parameter or a button-like control, else a scaled velocity. A relative-encoded control still gets the
+  same absolute CC echo — an LED ring reads position, not delta. Channel 0 (the profile's "any channel" for the
+  incoming lookup) becomes channel 1 for feedback, since a message must go out on one real channel.
 - **Only a parameter target with an output-configured profile sends anything** — an action or
   `nodeCommand` target has no value to echo, and a profile with `hasOutput == false` (the default)
   is silent. The output device is picked per controller, from the Controllers list's own
@@ -427,14 +498,14 @@ Control
   name          : "Knob 1"
   kind          : knob | fader | button | pad | encoder | wheel
   message       : MessageSpec
-  encoding      : abs7 | relTwos | relBinOffset | relSignMag      // abs14 is not built yet
+  encoding      : abs7 | abs14 | abs14LsbFirst | relTwos | relBinOffset | relSignMag
   buttonMode    : momentary | toggle       // buttons/pads only
   layout        : { col, row }             // grid cell on the drawn surface
 
 MessageSpec     // the KEY the engine matches on
-  type          : cc | note | pitchBend | channelPressure | programChange
+  type          : cc | note | pitchBend | channelPressure | programChange | nrpn
   channel       : 1..16 | 0 (= any)
-  number        : 0..127                   // cc number / note number; ignored for pitchBend/channelPressure
+  number        : 0..127 (cc/note), 0..16383 (nrpn)  // cc number / note number / nrpn address; ignored for pitchBend/channelPressure
 
 Assignment
   id            : uuid string

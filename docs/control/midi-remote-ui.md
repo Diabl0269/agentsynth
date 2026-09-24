@@ -179,8 +179,18 @@ re-detects the message), encoding (with **Auto-detect…** for encoders: "turn l
 which observes the two value patterns and picks the encoding), button mode. Name (double-click),
 kind and encoding are editable (FRO134/FRO264); each edit is a profile edit — global, not undoable —
 and is copied onto every assignment that references the control, because the engine reads the
-encoding from the assignment. **Relearn** is still a disabled placeholder. Below the divider,
-its assignment(s): what it drives (click jumps to the module on the canvas via the existing
+encoding from the assignment. **Relearn** is still a disabled placeholder.
+
+The **encoding dropdown** offers different options depending on the message type and CC number
+(see [`midi-remote.md#14-bit-and-nrpn-encodings`](midi-remote.md#14-bit-and-nrpn-encodings)):
+- **CC 0..31:** "Absolute (7-bit)", the three relative encodings ("Relative (two's complement)", etc.),
+  "Absolute (14-bit, MSB first)", "Absolute (14-bit, LSB first)".
+- **CC ≥ 32 or other types (note, pitch bend, etc.):** only the original four entries
+  (Absolute 7-bit and the three relative encodings).
+- **NRPN:** "NRPN (7-bit, CC 6 only)", "NRPN (14-bit, MSB first)", "NRPN (14-bit, LSB first)".
+  A CC control cannot be retyped into an NRPN from the dropdown.
+
+Below the divider, its assignment(s): what it drives (click jumps to the module on the canvas via the existing
 locate path), scope tag, takeover, range with an invert toggle, **Learn target**
 ([Assign from the panel](#assign-from-the-panel-control-first-learn)),
 **Forget**. A control may carry one project assignment and one global assignment at most for
@@ -240,7 +250,7 @@ re-bound automatically.
 
 **Detect** toggles the surface into detection: every message the profile's device sends that
 is not yet a control appears as a new cell in touch order (kind guessed: CC → knob, note →
-pad, pitch bend → wheel; name "CC 21" / "C3"), pulsing until the next one arrives; an existing control's cell lights
+pad, pitch bend → wheel, NRPN → knob; name "CC 21" / "C3" / "NRPN 1024"), pulsing until the next one arrives; an existing control's cell lights
 instead. A hint row reads *"Touch each knob, fader and button once. Rename or retype them
 afterwards. Turn an encoder left then right to detect its encoding."* Leaving Detect keeps
 everything. Detect never consumes messages, never assigns anything, and never touches the
@@ -256,6 +266,12 @@ Detect needs from it. Details a reader would not guess:
 
 - A note-off, a program change and a learn candidate never create a cell (the press already did;
   each program number is its own message key). A detected control keeps the channel it arrived on.
+- **14-bit CC pairing:** if the two halves of a CC pair (CC `n` and CC `n+32`, either order,
+  same channel) arrive within 5 ms, they are merged into ONE control; CC `n` then `n+32`
+  becomes `abs14`, and `n+32` then `n` becomes `abs14LsbFirst` (renumbered to `n`). Slower or
+  different-channel arrivals stay separate.
+- **NRPN detection:** an unmapped NRPN appears as ONE control named "NRPN `<address>`" with
+  encoding `abs14` and kind knob.
 - The pulse is a breathing accent outline **bounded to 10 s** — the animation rules forbid an
   unbounded animation — repainted only from the panel's existing gated activity tick, per cell. The
   "lit" flash on an existing control is a solid outline for 250 ms.

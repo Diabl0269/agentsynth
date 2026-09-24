@@ -199,3 +199,27 @@ TEST(MidiRemoteEngineLearnTest, ArmingAgainReplacesThePendingLearn) {
     EXPECT_EQ(h.lastResult.target.parameter.paramId, "second");
     EXPECT_EQ(h.lastResult.spec.number, 20);
 }
+
+// ============================================================================
+// NRPN: learned as one addressed 14-bit control, not as CC 99/98/6/38 (docs/control/midi-remote.md
+// #14-bit-and-nrpn-encodings).
+// ============================================================================
+
+TEST(MidiRemoteEngineLearnTest, NrpnLearnsAsOneAddressedAbs14Control) {
+    LearnHarness h;
+    h.arm(/*buttonLike=*/false);
+
+    h.send(juce::MidiMessage::controllerEvent(1, 99, 2)); // address 2 * 128 + 5
+    h.send(juce::MidiMessage::controllerEvent(1, 98, 5));
+    h.send(juce::MidiMessage::controllerEvent(1, 6, 64));
+    h.send(juce::MidiMessage::controllerEvent(1, 38, 3));
+    h.engine.drain();
+    h.advance(kLearnSettleMs + 1.0);
+    h.engine.drain();
+
+    ASSERT_EQ(h.learnedCount, 1);
+    EXPECT_EQ(h.lastResult.spec.type, MessageType::nrpn);
+    EXPECT_EQ(h.lastResult.spec.number, 2 * 128 + 5);
+    EXPECT_EQ(h.lastResult.spec.channel, 1);
+    EXPECT_EQ(h.lastResult.encoding, Encoding::abs14);
+}

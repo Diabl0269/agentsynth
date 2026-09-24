@@ -56,6 +56,8 @@ juce::String messageTypeDisplayName(synth::MessageType type) {
         return "Channel Pressure";
     case synth::MessageType::programChange:
         return "Program Change";
+    case synth::MessageType::nrpn:
+        return "NRPN";
     }
     return "Unknown";
 }
@@ -64,14 +66,26 @@ juce::String messageTypeDisplayName(synth::MessageType type) {
 juce::String formatMessageSpec(const synth::MessageSpec& spec) {
     juce::String text = messageTypeDisplayName(spec.type);
     const bool hasNumber = spec.type == synth::MessageType::cc || spec.type == synth::MessageType::note ||
-                           spec.type == synth::MessageType::programChange;
+                           spec.type == synth::MessageType::programChange || spec.type == synth::MessageType::nrpn;
     if (hasNumber)
         text << " " << spec.number;
     text << " ch " << (spec.channel == 0 ? juce::String("any") : juce::String(spec.channel));
     return text;
 }
 
-juce::String encodingDisplayName(synth::Encoding encoding) {
+// An NRPN control's value is CC 6 (+ CC 38), so its choices are named for that; a plain CC's paired
+// choices name the MSB/LSB order the hardware sends them in (FRO140).
+juce::String encodingDisplayName(synth::Encoding encoding, synth::MessageType type = synth::MessageType::cc) {
+    if (type == synth::MessageType::nrpn) {
+        switch (encoding) {
+        case synth::Encoding::abs14:
+            return "NRPN (14-bit, MSB first)";
+        case synth::Encoding::abs14LsbFirst:
+            return "NRPN (14-bit, LSB first)";
+        default:
+            return "NRPN (7-bit, CC 6 only)";
+        }
+    }
     switch (encoding) {
     case synth::Encoding::abs7:
         return "Absolute (7-bit)";
@@ -81,6 +95,10 @@ juce::String encodingDisplayName(synth::Encoding encoding) {
         return "Relative (Binary Offset)";
     case synth::Encoding::relSignMag:
         return "Relative (Sign Magnitude)";
+    case synth::Encoding::abs14:
+        return "Absolute (14-bit, MSB first)";
+    case synth::Encoding::abs14LsbFirst:
+        return "Absolute (14-bit, LSB first)";
     }
     return "Unknown";
 }
@@ -100,9 +118,10 @@ void populateKindCombo(juce::ComboBox& combo) {
         combo.addItem(controlKindDisplayName(kind), kindToComboId(kind));
 }
 
-// Only a continuous CC control can be an encoder whose encoding is worth detecting.
+// Only a continuous CC control can be an encoder whose encoding is worth detecting (auto-detect
+// classifies single 7-bit CC values, which a paired 14-bit control does not send).
 bool canAutoDetectEncoding(const synth::Control& control) {
-    return control.message.type == synth::MessageType::cc &&
+    return control.message.type == synth::MessageType::cc && !synth::isPairedEncoding(control.encoding) &&
            (control.kind == synth::ControlKind::knob || control.kind == synth::ControlKind::encoder);
 }
 
@@ -135,11 +154,23 @@ synth::Takeover comboIdToTakeover(int id) {
     }
 }
 
-void populateEncodingCombo(juce::ComboBox& combo) {
-    combo.addItem(encodingDisplayName(synth::Encoding::abs7), encodingToComboId(synth::Encoding::abs7));
-    combo.addItem(encodingDisplayName(synth::Encoding::relTwos), encodingToComboId(synth::Encoding::relTwos));
-    combo.addItem(encodingDisplayName(synth::Encoding::relBinOffset), encodingToComboId(synth::Encoding::relBinOffset));
-    combo.addItem(encodingDisplayName(synth::Encoding::relSignMag), encodingToComboId(synth::Encoding::relSignMag));
+// The encodings offered depend on the control's message: an NRPN has no relative form, and a paired
+// 14-bit CC needs a partner at n+32, so only a CC 0..31 (or one already paired) offers it.
+void populateEncodingCombo(juce::ComboBox& combo, const synth::Control& control) {
+    const auto type = control.message.type;
+    combo.clear(juce::dontSendNotification);
+    const auto add = [&](synth::Encoding e) { combo.addItem(encodingDisplayName(e, type), encodingToComboId(e)); };
+
+    add(synth::Encoding::abs7);
+    if (type != synth::MessageType::nrpn) {
+        add(synth::Encoding::relTwos);
+        add(synth::Encoding::relBinOffset);
+        add(synth::Encoding::relSignMag);
+    }
+    if (synth::encodingValidForSpec(control.message, synth::Encoding::abs14)) {
+        add(synth::Encoding::abs14);
+        add(synth::Encoding::abs14LsbFirst);
+    }
 }
 
 // "Default (<the Preferences default>)": the row names what Default currently means (FRO136).
@@ -412,7 +443,7 @@ ControlInspectorComponent::ControlInspectorComponent() {
     relearnButton_.setTooltip("Coming in a later update");
     addAndMakeVisible(relearnButton_);
 
-    populateEncodingCombo(encodingCombo_);
+    populateEncodingCombo(encodingCombo_, model_.control);
     encodingCombo_.setComponentID("encodingCombo");
     encodingCombo_.onChange = [this] {
         if (!model_.hasControl)
@@ -480,6 +511,7 @@ void ControlInspectorComponent::setControl(const ControlModel& model) {
 
     relearnButton_.setVisible(true);
 
+    populateEncodingCombo(encodingCombo_, model_.control);
     encodingCombo_.setSelectedId(encodingToComboId(model_.control.encoding), juce::dontSendNotification);
     encodingCombo_.setVisible(true);
 

@@ -113,7 +113,9 @@ void RemoteEngine::settleLearnIfDue() {
     if (haveResult) {
         result.sourceKey = best->sourceKey;
         result.spec = best->spec;
-        result.encoding = Encoding::abs7;
+        // An nrpn is always a 14-bit value pair; a learned CC stays plain absolute (its LSB partner is
+        // paired by Detect / the inspector, never inferred from one learn).
+        result.encoding = best->spec.type == MessageType::nrpn ? Encoding::abs14 : Encoding::abs7;
         result.buttonMode = best->sawRelease ? ButtonMode::momentary : ButtonMode::toggle;
         result.target = learnRequest_.target;
     }

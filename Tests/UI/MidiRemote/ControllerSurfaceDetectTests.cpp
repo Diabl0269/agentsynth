@@ -217,6 +217,88 @@ TEST(MidiRemoteDetectModeControllerTest, AddThenLightAndThePulseFollowsTheNewest
     EXPECT_TRUE(detect.getPulsingControlId().isEmpty());
 }
 
+namespace {
+synth::midi::RemoteEvent ccEvent(int number, int timeMs, int channel = 1) {
+    synth::midi::RemoteEvent event;
+    event.specType = static_cast<std::uint8_t>(synth::MessageType::cc);
+    event.specChannel = static_cast<std::uint8_t>(channel);
+    event.specNumber = static_cast<std::uint16_t>(number);
+    event.timeMs = static_cast<std::uint16_t>(timeMs);
+    return event;
+}
+} // namespace
+
+TEST(MidiRemoteDetectModeControllerTest, MsbThenLsbWithinTheWindowFoldsIntoOneAbs14Control) {
+    synth::ui::DetectModeController detect;
+    detect.setActive(true);
+    synth::ControllerProfile profile;
+
+    auto step = detect.handleEvent(profile, ccEvent(21, 100));
+    EXPECT_TRUE(step.controlAdded);
+    step = detect.handleEvent(profile, ccEvent(53, 103));
+    EXPECT_TRUE(step.controlAdded) << "the profile changed (folded), so the caller must persist it";
+
+    ASSERT_EQ(profile.controls.size(), 1u);
+    EXPECT_EQ(profile.controls[0].encoding, synth::Encoding::abs14);
+    EXPECT_EQ(profile.controls[0].message.number, 21);
+    EXPECT_EQ(detect.getPulsingControlId(), profile.controls[0].id);
+}
+
+TEST(MidiRemoteDetectModeControllerTest, LsbThenMsbFoldsIntoOneAbs14LsbFirstControlNumberedByTheMsb) {
+    synth::ui::DetectModeController detect;
+    detect.setActive(true);
+    synth::ControllerProfile profile;
+
+    EXPECT_TRUE(detect.handleEvent(profile, ccEvent(53, 100)).controlAdded);
+    EXPECT_TRUE(detect.handleEvent(profile, ccEvent(21, 102)).controlAdded);
+
+    ASSERT_EQ(profile.controls.size(), 1u);
+    EXPECT_EQ(profile.controls[0].encoding, synth::Encoding::abs14LsbFirst);
+    EXPECT_EQ(profile.controls[0].message.number, 21);
+    EXPECT_EQ(profile.controls[0].name, "CC 21");
+}
+
+TEST(MidiRemoteDetectModeControllerTest, HalvesFarApartAreTwoSeparateControls) {
+    synth::ui::DetectModeController detect;
+    detect.setActive(true);
+    synth::ControllerProfile profile;
+
+    EXPECT_TRUE(detect.handleEvent(profile, ccEvent(21, 100)).controlAdded);
+    EXPECT_TRUE(detect.handleEvent(profile, ccEvent(53, 150)).controlAdded);
+
+    ASSERT_EQ(profile.controls.size(), 2u);
+    EXPECT_EQ(profile.controls[0].encoding, synth::Encoding::abs7);
+    EXPECT_EQ(profile.controls[1].encoding, synth::Encoding::abs7);
+    EXPECT_EQ(profile.controls[1].message.number, 53);
+}
+
+TEST(MidiRemoteDetectModeControllerTest, ALaterLsbEventLightsThePairedControlInsteadOfAddingOne) {
+    synth::ui::DetectModeController detect;
+    detect.setActive(true);
+    synth::ControllerProfile profile;
+    detect.handleEvent(profile, ccEvent(21, 100));
+    detect.handleEvent(profile, ccEvent(53, 103));
+    ASSERT_EQ(profile.controls.size(), 1u);
+
+    const auto step = detect.handleEvent(profile, ccEvent(53, 4000));
+    EXPECT_FALSE(step.controlAdded);
+    EXPECT_EQ(step.litControlId, profile.controls[0].id);
+    EXPECT_EQ(profile.controls.size(), 1u);
+    EXPECT_TRUE(detect.getPulsingControlId().isEmpty());
+}
+
+TEST(MidiRemoteDetectModeControllerTest, TurningDetectOffForgetsAHalfSoAPartnerAfterReenableStaysSeparate) {
+    synth::ui::DetectModeController detect;
+    detect.setActive(true);
+    synth::ControllerProfile profile;
+    detect.handleEvent(profile, ccEvent(21, 100));
+    detect.setActive(false);
+    detect.setActive(true);
+
+    EXPECT_TRUE(detect.handleEvent(profile, ccEvent(53, 101)).controlAdded);
+    EXPECT_EQ(profile.controls.size(), 2u);
+}
+
 // ---- Toolbar ------------------------------------------------------------------------------------------------
 
 namespace {

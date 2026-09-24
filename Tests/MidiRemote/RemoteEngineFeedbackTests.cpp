@@ -303,3 +303,95 @@ TEST(MidiRemoteEngineFeedbackTest, NoSinkDoesNotCrash) {
     h.cutoff()->setValueNotifyingHost(0.5f);
     EXPECT_NO_FATAL_FAILURE(h.engine.drain());
 }
+
+// -- 14-bit pairs and NRPN (FRO140) ------------------------------------------------------------------
+
+TEST(MidiRemoteEngineFeedbackTest, PairedAbs14SlotEchoesMsbOnCcNThenLsbOnCcNPlus32) {
+    FeedbackHarness h;
+    h.publish({makeProfile({makeControl("fader", MessageType::cc, 1, 21, Encoding::abs14)}, true)},
+              {makeParamAssignment("a1", "fader", MessageType::cc, 1, 21, Encoding::abs14, "cutoff")});
+
+    h.cutoff()->setValueNotifyingHost(0.3f);
+    h.engine.drain();
+
+    // 0.3 * 16383 = 4914.9 -> 4915 = (38 << 7) | 51
+    ASSERT_EQ(h.sink.sent.size(), 2u);
+    EXPECT_EQ(h.sink.sent[0].device.identifier, kOutputId);
+    EXPECT_EQ(h.sink.sent[1].device.identifier, kOutputId);
+    EXPECT_TRUE(h.sink.sent[0].message.isController());
+    EXPECT_EQ(h.sink.sent[0].message.getControllerNumber(), 21);
+    EXPECT_EQ(h.sink.sent[0].message.getControllerValue(), 38);
+    EXPECT_EQ(h.sink.sent[0].message.getChannel(), 1);
+    EXPECT_TRUE(h.sink.sent[1].message.isController());
+    EXPECT_EQ(h.sink.sent[1].message.getControllerNumber(), 53);
+    EXPECT_EQ(h.sink.sent[1].message.getControllerValue(), 51);
+    EXPECT_EQ(h.sink.sent[1].message.getChannel(), 1);
+}
+
+TEST(MidiRemoteEngineFeedbackTest, PairedAbs14LsbFirstSlotEchoesTheSameTwoCcsInReverseOrder) {
+    FeedbackHarness h;
+    h.publish({makeProfile({makeControl("fader", MessageType::cc, 1, 21, Encoding::abs14LsbFirst)}, true)},
+              {makeParamAssignment("a1", "fader", MessageType::cc, 1, 21, Encoding::abs14LsbFirst, "cutoff")});
+
+    h.cutoff()->setValueNotifyingHost(0.3f);
+    h.engine.drain();
+
+    ASSERT_EQ(h.sink.sent.size(), 2u);
+    EXPECT_EQ(h.sink.sent[0].message.getControllerNumber(), 53) << "LSB first";
+    EXPECT_EQ(h.sink.sent[0].message.getControllerValue(), 51);
+    EXPECT_EQ(h.sink.sent[1].message.getControllerNumber(), 21);
+    EXPECT_EQ(h.sink.sent[1].message.getControllerValue(), 38);
+}
+
+TEST(MidiRemoteEngineFeedbackTest, PairedSlotAtFullScaleSendsBothHalvesAt127AndChannelZeroMeansOne) {
+    FeedbackHarness h;
+    h.publish({makeProfile({makeControl("fader", MessageType::cc, 0, 21, Encoding::abs14)}, true)},
+              {makeParamAssignment("a1", "fader", MessageType::cc, 0, 21, Encoding::abs14, "cutoff")});
+
+    h.cutoff()->setValueNotifyingHost(1.0f);
+    h.engine.drain();
+
+    ASSERT_EQ(h.sink.sent.size(), 2u);
+    EXPECT_EQ(h.sink.sent[0].message.getControllerValue(), 127);
+    EXPECT_EQ(h.sink.sent[1].message.getControllerValue(), 127);
+    EXPECT_EQ(h.sink.sent[0].message.getChannel(), 1);
+    EXPECT_EQ(h.sink.sent[1].message.getChannel(), 1);
+}
+
+TEST(MidiRemoteEngineFeedbackTest, PairedSlotUnchangedValueSendsThePairOnlyOnce) {
+    FeedbackHarness h;
+    h.publish({makeProfile({makeControl("fader", MessageType::cc, 1, 21, Encoding::abs14)}, true)},
+              {makeParamAssignment("a1", "fader", MessageType::cc, 1, 21, Encoding::abs14, "cutoff")});
+
+    h.cutoff()->setValueNotifyingHost(0.3f);
+    h.engine.drain();
+    h.engine.drain();
+
+    EXPECT_EQ(h.sink.sent.size(), 2u);
+}
+
+TEST(MidiRemoteEngineFeedbackTest, PairedSlotWhoseLsbPartnerWouldExceedCc63SendsSinglePlainCc) {
+    // Guards isPairedCcSlot's number+32 <= 63 bound. Such a slot can't come from a valid profile
+    // (encodingValidForSpec rejects it), but the engine must not emit a CC above the LSB range.
+    FeedbackHarness h;
+    h.publish({makeProfile({makeControl("fader", MessageType::cc, 1, 40, Encoding::abs14)}, true)},
+              {makeParamAssignment("a1", "fader", MessageType::cc, 1, 40, Encoding::abs14, "cutoff")});
+
+    h.cutoff()->setValueNotifyingHost(0.5f);
+    h.engine.drain();
+
+    ASSERT_EQ(h.sink.sent.size(), 1u);
+    EXPECT_EQ(h.sink.sent[0].message.getControllerNumber(), 40);
+    EXPECT_EQ(h.sink.sent[0].message.getControllerValue(), juce::roundToInt(0.5f * 127.0f));
+}
+
+TEST(MidiRemoteEngineFeedbackTest, NrpnSlotSendsNothing) {
+    FeedbackHarness h;
+    h.publish({makeProfile({makeControl("nrpn", MessageType::nrpn, 1, 1024, Encoding::abs14)}, true)},
+              {makeParamAssignment("a1", "nrpn", MessageType::nrpn, 1, 1024, Encoding::abs14, "cutoff")});
+
+    h.cutoff()->setValueNotifyingHost(0.5f);
+    h.engine.drain();
+
+    EXPECT_TRUE(h.sink.sent.empty());
+}
