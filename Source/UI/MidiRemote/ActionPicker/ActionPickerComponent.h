@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MidiRemote/RemoteModel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
@@ -8,17 +9,22 @@
 // "Choose an action" -- a searchable list of the actions a MIDI control can trigger, grouped by
 // ShortcutCategory in the Shortcuts tab's own order and named by ShortcutManager::getActionDescription.
 // Only command-dispatched actions are offered (AppCommands::getCommandForAction != kNoCommand); a
-// surface action such as a bare arrow key has no command to invoke.
+// surface action such as a bare arrow key has no command to invoke. FRO236
+// (docs/control/midi-remote.md#continuous-targets) appends one more group after every action category -- "Continuous"
+// -- with a fixed three rows (Tempo/Playhead/Master Volume), named via synth::continuousTargetDisplayName so the picker
+// can never disagree with the panel/inspector's own labels.
 namespace synth::ui {
 
 struct ActionPickerRow {
     bool isHeader = false;
-    juce::String actionId; // empty for a header
-    juce::String label;    // the category name for a header, else the action's description
+    bool isContinuous = false; // FRO236: this row picks a continuous target, not an action
+    juce::String actionId;     // empty for a header or a continuous row
+    juce::String label;        // the category name for a header, else the target's description
+    synth::ContinuousTargetKind continuousKind = synth::ContinuousTargetKind::bpm; // valid iff isContinuous
 };
 
-/** The rows the picker shows for `filter` (case-insensitive substring of the action's description;
- *  empty = everything). A category with no matching action gets no header. */
+/** The rows the picker shows for `filter` (case-insensitive substring of the row's own label;
+ *  empty = everything). A category (action or continuous) with no matching row gets no header. */
 std::vector<ActionPickerRow> buildActionPickerRows(const juce::String& filter);
 
 class ActionPickerComponent
@@ -30,6 +36,8 @@ public:
 
     /** An action row was chosen. */
     std::function<void(const juce::String& actionId)> onChosen;
+    /** FRO236: a continuous-target row was chosen. */
+    std::function<void(synth::ContinuousTargetKind kind)> onContinuousChosen;
 
     void setFilter(const juce::String& filter);
     int getRowCountForTest() const { return static_cast<int>(rows_.size()); }

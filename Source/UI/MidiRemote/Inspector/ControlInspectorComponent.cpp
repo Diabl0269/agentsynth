@@ -310,12 +310,17 @@ private:
         }
     };
 
-    // Applies `model_.assignment.target.kind == parameter` -- the only target kind takeover/range
-    // apply to (docs/control/midi-remote.md#takeover: "not buttons", and an action or nodeCommand
-    // target is always button-like, docs/control/midi-remote.md#node-command-targets).
+    // Applies to `parameter` and `continuous` targets -- the only two kinds an absolute takeover and
+    // a range narrow anything for (docs/control/midi-remote.md#takeover: "not buttons"; an action or
+    // nodeCommand target is always button-like, docs/control/midi-remote.md#node-command-targets).
+    // FRO236: a continuous target's range narrows its native-unit window exactly like a parameter's
+    // normalised one, and bpm/masterVolume both honour takeover (playhead ignores it -- always
+    // Jump -- but showing the combo costs nothing and stays consistent with the other two).
     // An orphaned row (its target no longer resolves) offers Forget only.
     bool isTakeoverEditable() const {
-        return model_.assignment.target.kind == synth::Target::Kind::parameter && !model_.isOrphaned;
+        return (model_.assignment.target.kind == synth::Target::Kind::parameter ||
+                model_.assignment.target.kind == synth::Target::Kind::continuous) &&
+               !model_.isOrphaned;
     }
 
     // Same dynamic_cast-with-null-fallback convention MixerDockComponent::refreshDetachButton()

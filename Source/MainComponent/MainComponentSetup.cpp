@@ -5,6 +5,8 @@
 // in MainComponent.cpp for the ordered call sequence these steps implement.
 #include "AI/AIProviderRegistry.h"
 #include "MainComponent.h"
+#include "Mixer/MasterSplice.h"
+#include "Modules/MasterModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
@@ -361,6 +363,23 @@ void MainComponent::wireMidiRemoteEngine() {
     remoteEngine.setActionInvoker(&remoteActionInvoker_);
     remoteEngine.setActionCommandLookup(
         [](const juce::String& actionId) { return AppCommands::getCommandForAction(actionId); });
+    // FRO236 (docs/control/midi-remote.md#continuous-targets): resolves masterVolume to the SAME
+    // juce::AudioParameterFloat* the mixer's own master fader binds (MixerMasterColumn::setNodeId) --
+    // Core must not include MasterModule.h, so this lookup lives here instead.
+    remoteEngine.setContinuousParameterLookup(
+        [](juce::AudioProcessorGraph& graph, synth::ContinuousTargetKind kind) -> juce::AudioProcessorParameter* {
+            if (kind != synth::ContinuousTargetKind::masterVolume)
+                return nullptr;
+            auto* masterNode = synth::findMasterNode(graph);
+            auto* master = masterNode != nullptr ? dynamic_cast<MasterModule*>(masterNode->getProcessor()) : nullptr;
+            if (master == nullptr)
+                return nullptr;
+            for (auto* param : master->getParameters())
+                if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param);
+                    floatParam != nullptr && floatParam->paramID == "gain")
+                    return floatParam;
+            return nullptr;
+        });
     // The engine yields exactly as a second mouse would while a real gesture already holds the
     // same parameter (docs/control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter) —
     // GestureClaims::isClaimed is already exactly the audio-visible predicate AutomationApplier itself consults, so no

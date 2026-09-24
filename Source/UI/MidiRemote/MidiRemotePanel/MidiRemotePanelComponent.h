@@ -154,6 +154,9 @@ public:
     /** The picker's choice: assigns the selected control to `actionId`. False if nothing is selected or the action is
      * not invokable. */
     bool assignSelectedControlToAction(const juce::String& actionId);
+    /** FRO236 (docs/control/midi-remote.md#continuous-targets): the picker's "Continuous" choice.
+     *  False if nothing is selected. */
+    bool assignSelectedControlToContinuous(synth::ContinuousTargetKind kind);
 
     /** An orphan controller row (a project reference with no local profile) is selected. */
     bool isOrphanSelected() const;

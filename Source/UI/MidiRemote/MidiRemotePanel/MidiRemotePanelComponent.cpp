@@ -5,6 +5,7 @@
 #include "MidiRemotePanelComponent.h"
 
 #include "AudioEngine/AudioEngine.h"
+#include "MidiRemote/ContinuousTarget.h"
 #include "MidiRemote/ControllerDetect.h"
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
@@ -362,7 +363,10 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
             }
         } else if (actionIt != profile->actions.end()) {
             cell.isMapped = true;
-            cell.assignmentLabel = ShortcutManager::getActionDescription(actionIt->target.action.actionId);
+            // FRO236: profile->actions also carries continuous assignments now -- branch on kind.
+            cell.assignmentLabel = actionIt->target.isContinuous()
+                                       ? synth::continuousTargetDisplayName(actionIt->target.continuous.kind)
+                                       : ShortcutManager::getActionDescription(actionIt->target.action.actionId);
         } else {
             cell.assignmentLabel = "-";
         }
@@ -445,7 +449,9 @@ void MidiRemotePanelComponent::refreshInspectorForSelection() {
         ControlInspectorComponent::AssignmentRowModel row;
         row.assignment = a;
         row.scopeLabel = "Global";
-        row.drivesLabel = ShortcutManager::getActionDescription(a.target.action.actionId);
+        // FRO236: profile->actions also carries continuous assignments now -- branch on kind.
+        row.drivesLabel = a.target.isContinuous() ? synth::continuousTargetDisplayName(a.target.continuous.kind)
+                                                  : ShortcutManager::getActionDescription(a.target.action.actionId);
         model.assignments.push_back(row);
     }
 

@@ -343,11 +343,12 @@ Keyboard Shortcuts settings tab, so the two lists can never disagree.
 
 A button target's `buttonMode` (momentary / toggle) decides whether note-off / CC 0 fires
 anything (momentary: nothing; toggle: the action fires on every press only). BPM and playhead
-position as *continuous* action targets are a planned extension, tracked separately.
+position are NOT action targets — they are continuous targets (below), so a knob/fader/encoder can
+drive them with direction and takeover instead of firing on every press.
 
 Action targets are press-only, so a relative encoder assigned to an action fires it on every
-detent regardless of direction; direction-aware jogging needs a continuous playhead target, which
-is a planned extension.
+detent regardless of direction; direction-aware jogging is what a continuous playhead target
+(below) is for.
 
 ### Node command targets
 
@@ -369,6 +370,63 @@ press toggles solo, like a mouse click; hold-to-solo is not built. Applying reac
 through a new `RemoteActionInvoker::invokeNodeCommand(nodeId, command)` (Core knows neither
 `ChannelStripModule` nor `AudioEngine::setChannelStripSoloed`), which performs the SAME undo-bracketed
 call the mixer column's own click does — one undo step per press.
+
+### Continuous targets
+
+*Options:* reserve a handful of fixed `ShortcutManager` action ids for "BPM up/down"-style presses
+(the way [Action targets](#action-targets) already promotes transport verbs to commands); or give
+`Target` a fourth kind that a knob/fader/encoder drives continuously, with a value and a takeover,
+the same way a parameter target already works.
+
+**Decision:** a fourth `Target` kind, **`continuous`** — `{ kind: bpm | playhead | masterVolume }`.
+An action target is fundamentally *press-only* (`docs/control/midi-remote.md#action-targets`'s own
+"fires on every detent regardless of direction"): reserving action ids for tempo/playhead would
+still leave a jog wheel unable to report which way it turned, which is the whole point of a jog
+wheel. A continuous target is scope **GLOBAL**, exactly like an action (`ControllerProfile::actions`,
+never a project's `MidiRemoteProjectDoc`) — "the current project's tempo" is a contradiction; there
+is one transport and one master fader per *machine session*, not per project, so it means the same
+thing everywhere an action id does. A control drives at most one global target: assigning a
+continuous kind replaces any existing assignment in that profile's actions on the same control
+(action or continuous) or with the same continuous kind — and assigning an action likewise replaces
+a continuous one on that control.
+
+**masterVolume reuses the parameter path outright.** It resolves to the SAME
+`juce::AudioProcessorParameter*` the mixer's own master fader binds (a new injected
+`ContinuousParameterLookup`, since Core must not include `MasterModule.h` — the app layer finds the
+graph's Master node and its `"gain"` parameter), so `applyToParameter`'s takeover/gesture math and
+`RemoteEngineFeedback.cpp`'s echo both apply unchanged; a continuous target only fires its own
+`applyToContinuous` for the two kinds with no `juce::AudioProcessorParameter` to point at:
+
+| kind | native units | absolute window | relative | takeover |
+|---|---|---|---|---|
+| `bpm` | BPM | 60..187, fixed (`kRemoteBpmWindowMin/Max`) — 1 BPM per 7-bit step | ±1 BPM per detent | honoured (default Scale, same as a parameter) |
+| `playhead` | beats | the loop region when looping, else 0..the arrangement end rounded UP to a whole bar (minimum 8 bars) | ±1 beat per detent, clamped ≥ 0 | **ignored — always Jump** (the playhead moves on its own; there is nothing to converge from) |
+| `masterVolume` | — (parameter path) | the assignment's own `[range.min, range.max]`, same as any parameter | bypasses takeover, same as any parameter | honoured (parameter path) |
+
+An assignment's `range` still narrows the hardware's 0..1 before it is mapped into whichever window
+applies — the same `[rangeMin, rangeMax]` role a parameter assignment's range already plays.
+
+**Reaching the transport:** `RemoteActionInvoker` (the same Core-to-app-layer seam `nodeCommand`
+uses) gains three message-thread methods — `getContinuousValue`/`setContinuousValue` (native units)
+and `getContinuousWindow` (playhead's window; bpm's is the Core constants above, so it never asks).
+The app layer's implementation drives `synth::TransportService::setBpm` for bpm (tracking its own
+last posted BPM the same unconsumed-request way, so several detents in one drain add up), and for playhead
+reuses FRO271's own tracked-request state (`Source/Transport/TransportNudge.h`,
+`locateTransportTracked`/the same accumulation `nudgeTransportCursor` relies on) rather than a
+second "where is the cursor really going" bookkeeping — a fast jog wheel produces several relative
+events inside one drain tick exactly like a fast keyboard repeat does, and both need to accumulate
+against the still-pending request, not the stale audio-thread snapshot.
+
+**The plugin build is inert for bpm/playhead** (`setContinuousValue` a no-op, `getContinuousWindow`
+returns false) — `HostMode::Hosted` never owns the transport, same rule
+[The plugin build](#the-plugin-build-vst3au-inside-a-host) already states for device management.
+masterVolume keeps working there: it is the parameter path, and Master is an ordinary graph node
+whether or not the app owns the audio device.
+
+**No feedback for bpm/playhead.** [Controller feedback](#controller-feedback)'s loop only ever
+echoes a *parameter* slot's value; masterVolume qualifies (it has one) and is echoed exactly like
+any other mapped parameter, but bpm/playhead have no `juce::AudioProcessorParameter` to read back
+from, so nothing lights an LED ring for them today.
 
 ### 14-bit and NRPN encodings
 
@@ -466,9 +524,11 @@ playback, undo, or a project load, not just a hardware turn.
   a bool parameter or a button-like control, else a scaled velocity. A relative-encoded control still gets the
   same absolute CC echo — an LED ring reads position, not delta. Channel 0 (the profile's "any channel" for the
   incoming lookup) becomes channel 1 for feedback, since a message must go out on one real channel.
-- **Only a parameter target with an output-configured profile sends anything** — an action or
-  `nodeCommand` target has no value to echo, and a profile with `hasOutput == false` (the default)
-  is silent. The output device is picked per controller, from the Controllers list's own
+- **Only a parameter target (or a masterVolume continuous target, which resolves to a real
+  parameter — see [Continuous targets](#continuous-targets)) with an output-configured profile
+  sends anything** — an action, `nodeCommand`, or bpm/playhead continuous target has no value to
+  echo, and a profile with `hasOutput == false` (the default) is silent. The output device is picked
+  per controller, from the Controllers list's own
   right-click (see [midi-remote-ui.md](midi-remote-ui.md#controllers-list-left)), never the dead
   Audio-tab MIDI-output selector.
 - **The plugin build never sends feedback.** `MainComponent` only calls
@@ -495,7 +555,7 @@ ControllerProfile                         // GLOBAL — one per physical control
   output        : { identifier, name } | null   // controller feedback's destination -- see Controller feedback
   passMapped    : bool (default false)    // see Are mapped messages consumed
   controls[]    : Control
-  actions[]     : Assignment              // GLOBAL assignments: target.kind == action only
+  actions[]     : Assignment              // GLOBAL assignments: target.kind == action or continuous only
   version       : 1
 
 Control
@@ -525,10 +585,11 @@ Target (exactly one)
   parameter     : { nodeUuid, paramId, paramIndexHint }   // same triple as an automation lane
   action        : { actionId }                            // ShortcutManager action id
   nodeCommand   : { nodeUuid, command }                   // command: toggleSolo -- see Node command targets
+  continuous    : { kind }                                // kind: bpm | playhead | masterVolume -- see Continuous targets
 
 Project "midiRemote" (reserved top-level key in project.json)
   version       : 1
-  assignments[] : Assignment               // target.kind == parameter or nodeCommand; never action
+  assignments[] : Assignment               // target.kind == parameter or nodeCommand; never action or continuous
   controllers[] : { profileId, name }      // for the orphan-controller display, see Where does a mapping live
 ```
 

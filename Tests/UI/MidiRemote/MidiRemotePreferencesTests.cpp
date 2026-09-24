@@ -2,7 +2,9 @@
 // Preferences keys reach the things they govern live, through the settings-file broadcast
 // MainComponent already listens to -- Default takeover into RemoteEngine (Core never reads
 // settings), and the badge switch into the MIDI Learn badge painter every surface shares.
+#include "../../FakeAudioIODevice.h"
 #include "MainComponent/MainComponent.h"
+#include "MidiRemote/ContinuousTarget.h"
 #include "MidiRemote/MidiRemotePreferences.h"
 #include "MidiRemoteMockProvider.h"
 #include "MidiRemotePanelTestFixture.h"
@@ -67,6 +69,90 @@ TEST(MidiRemotePreferencesTests, DefaultTakeoverReachesTheEngineLive) {
     tab.setMidiRemoteDefaultTakeover(synth::Takeover::pickup);
     pump();
     EXPECT_EQ(mc.getRemoteEngineForTest().getDefaultTakeover(), synth::Takeover::pickup);
+}
+
+// FRO236 (docs/control/midi-remote.md#continuous-targets): drives the REAL
+// MainComponentRemoteActionInvoker wireMidiRemoteEngine() installs (rather than a test fake --
+// see MidiLearnControllerTests.cpp/RemoteEngineNodeCommandE2ETests.cpp's own ToggleSoloInvoker for
+// why those need one and this doesn't: there is no ChannelStripModule/undo bracket to fake here,
+// just the transport) -- a mapped knob's CC really moves AudioEngine's own TransportService.
+TEST(MidiRemotePreferencesTests, BpmContinuousTargetReachesTheRealTransportThroughTheInvoker) {
+    MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
+    mc.setSize(1200, 800);
+
+    // setBpm() only POSTS a command; only tick(), from the audio thread's device callback, drains it
+    // into getPositionSnapshot().bpm (same fix MainComponentLayoutTests.cpp's
+    // StatusBarPlayStopButtonDrivesTheSameTransport uses for play/stop).
+    auto& audioEngine = mc.getAudioEngine();
+    audioEngine.suspendDeviceCallback();
+    synth::test::FakeAudioIODevice fake(2, 2);
+    audioEngine.audioDeviceAboutToStart(&fake);
+    const auto driveOneBlock = [&audioEngine] {
+        constexpr int kBlockSize = synth::test::kFakeDeviceBlockSize;
+        std::vector<float> left((std::size_t)kBlockSize, 0.0f), right((std::size_t)kBlockSize, 0.0f);
+        std::vector<float> outLeft((std::size_t)kBlockSize, 0.0f), outRight((std::size_t)kBlockSize, 0.0f);
+        const float* inputs[] = {left.data(), right.data()};
+        float* outputs[] = {outLeft.data(), outRight.data()};
+        audioEngine.audioDeviceIOCallbackWithContext(inputs, 2, outputs, 2, kBlockSize, {});
+    };
+
+    auto& engine = mc.getRemoteEngineForTest();
+    engine.setSources({"test-source"});
+
+    synth::Control control;
+    control.id = "c";
+    control.name = "c";
+    control.kind = synth::ControlKind::knob;
+    control.message.type = synth::MessageType::cc;
+    control.message.channel = 1;
+    control.message.number = 20;
+
+    synth::ControllerProfile profile;
+    profile.id = "p";
+    profile.name = "p";
+    profile.input.identifier = "test-source";
+    profile.controls = {control};
+
+    synth::Assignment a;
+    a.id = "a1";
+    a.control.profileId = "p";
+    a.control.controlId = "c";
+    a.spec = control.message;
+    a.target.kind = synth::Target::Kind::continuous;
+    a.target.continuous.kind = synth::ContinuousTargetKind::bpm;
+    a.takeover = synth::Takeover::jump;
+
+    engine.setProfiles({profile});
+    engine.setAssignments({a});
+    engine.reconcile(mc.getAudioEngine().getGraph());
+
+    ASSERT_TRUE(engine.handleMessage("test-source", juce::MidiMessage::controllerEvent(1, 20, 0)));
+    engine.drain();
+    driveOneBlock();
+
+    EXPECT_NEAR(audioEngine.getTransport().getPositionSnapshot().bpm, synth::kRemoteBpmWindowMin, 1e-2)
+        << "CC 0 with Jump must reach the real transport's BPM through the real invoker";
+
+    // A relative encoder whose detents all land in ONE drain, before the audio thread has applied
+    // any of them: each detent must build on the previous request, not on the stale snapshot.
+    a.spec.number = 21;
+    a.specEncoding = synth::Encoding::relTwos;
+    profile.controls[0].message.number = 21;
+    profile.controls[0].kind = synth::ControlKind::encoder;
+    profile.controls[0].encoding = synth::Encoding::relTwos;
+    engine.setProfiles({profile});
+    engine.setAssignments({a});
+    engine.reconcile(mc.getAudioEngine().getGraph());
+
+    const double before = audioEngine.getTransport().getPositionSnapshot().bpm;
+    for (int i = 0; i < 3; ++i)
+        ASSERT_TRUE(engine.handleMessage("test-source", juce::MidiMessage::controllerEvent(1, 21, 1)));
+    engine.drain();
+    driveOneBlock();
+    EXPECT_NEAR(audioEngine.getTransport().getPositionSnapshot().bpm, before + 3.0, 1e-6)
+        << "three +1 detents in one drain must add 3 BPM, not collapse into one";
+
+    audioEngine.audioDeviceStopped();
 }
 
 TEST(MidiRemotePreferencesTests, TheStoredTakeoverIsAppliedAtLaunch) {

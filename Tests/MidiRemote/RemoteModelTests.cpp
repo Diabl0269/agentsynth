@@ -215,6 +215,53 @@ TEST(MidiRemoteModelTest, TargetNodeCommandRejectsEmptyNodeUuid) {
     EXPECT_FALSE(Target::fromVar(v, parsed));
 }
 
+// -- Target::Continuous (FRO236, docs/control/midi-remote.md#continuous-targets) -----------------
+
+TEST(MidiRemoteModelTest, TargetContinuousVariantRoundTripsForEveryKind) {
+    for (const auto kind :
+         {ContinuousTargetKind::bpm, ContinuousTargetKind::playhead, ContinuousTargetKind::masterVolume}) {
+        Target target;
+        target.kind = Target::Kind::continuous;
+        target.continuous.kind = kind;
+
+        Target parsed;
+        ASSERT_TRUE(Target::fromVar(target.toVar(), parsed)) << "kind=" << static_cast<int>(kind);
+        EXPECT_TRUE(parsed.isContinuous());
+        EXPECT_EQ(parsed.continuous.kind, kind);
+    }
+}
+
+TEST(MidiRemoteModelTest, TargetContinuousSerialisesAsDocExactCamelCaseStrings) {
+    struct Case {
+        ContinuousTargetKind kind;
+        const char* expected;
+    };
+    for (const auto& c : {Case{ContinuousTargetKind::bpm, "bpm"}, Case{ContinuousTargetKind::playhead, "playhead"},
+                          Case{ContinuousTargetKind::masterVolume, "masterVolume"}}) {
+        Target target;
+        target.kind = Target::Kind::continuous;
+        target.continuous.kind = c.kind;
+        const auto v = target.toVar();
+        EXPECT_EQ(v.getDynamicObject()->getProperty("continuous").getDynamicObject()->getProperty("kind").toString(),
+                  juce::String(c.expected));
+    }
+}
+
+TEST(MidiRemoteModelTest, TargetWithTwoOfFourKindsIsRejected) {
+    juce::var v = juce::JSON::parse(R"({
+        "action": {"actionId": "a1"},
+        "continuous": {"kind": "bpm"}
+    })");
+    Target parsed;
+    EXPECT_FALSE(Target::fromVar(v, parsed));
+}
+
+TEST(MidiRemoteModelTest, TargetContinuousRejectsUnknownKindString) {
+    juce::var v = juce::JSON::parse(R"({"continuous": {"kind": "reverb"}})");
+    Target parsed;
+    EXPECT_FALSE(Target::fromVar(v, parsed));
+}
+
 // -- Assignment -------------------------------------------------------------------------------------
 
 TEST(MidiRemoteModelTest, AssignmentRoundTrips) {

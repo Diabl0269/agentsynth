@@ -918,7 +918,10 @@ private:
     // FRO127/FRO253: see MainComponentRemoteActionInvoker.h -- extracted to its own file rather
     // than nested here (this header sits at the 1,000-line cap).
     synth::midi::RemoteEngine remoteEngine; // docs/control/midi-remote.md#the-engine; wired in wireMidiRemoteEngine()
-    MainComponentRemoteActionInvoker remoteActionInvoker_{commandManager, audioEngine, undoManager};
+    // FRO236: transportNudge_/timelineDoc are declared earlier in this member list (see their own
+    // declarations) so both references are already valid here.
+    MainComponentRemoteActionInvoker remoteActionInvoker_{commandManager, audioEngine, undoManager, transportNudge_,
+                                                          timelineDoc};
     // FRO130 (docs/control/midi-remote-ui.md#the-learn-interaction) -- declared last of its refs.
     synth::midi::MidiLearnController midiLearnController_{audioEngine,   graphEditor, remoteEngine,
                                                           midiRemoteDoc, undoManager, statusBar};

@@ -215,12 +215,16 @@ Select a control → **Assign…** (toolbar) or **Learn target** (inspector) →
   not pickable.
 - **Choose an action** — a searchable list grouped by `ShortcutCategory` using the Shortcuts
   tab's display names (`ShortcutManager::getActionDescription`), command-dispatched actions only
-  (`AppCommands::getCommandForAction` is not `kNoCommand`).
+  (`AppCommands::getCommandForAction` is not `kNoCommand`), plus one more group appended last —
+  **Continuous** — with a fixed three rows (Tempo (BPM), Playhead Position, Master Volume; named by
+  `synth::continuousTargetDisplayName`, docs/control/midi-remote.md#continuous-targets), filtered by
+  the same search box.
 
 Where it lives: the assignment is made by `MidiLearnController::assignControl` (a parameter or Solo →
-project scope, one `recordMidiRemoteChange` step; an action, e.g. a transport button → global, written
-into the profile and not undoable). It replaces whatever the target was mapped to and whatever the control
-drove in the same scope, so a control has at most one project and one global assignment. The overlay is
+project scope, one `recordMidiRemoteChange` step; an action or a continuous target, e.g. a transport
+button or Tempo (BPM) → global, written into the profile and not undoable). It replaces whatever the
+target was mapped to and whatever the control drove in the same scope, so a control has at most one
+project and one global assignment. The overlay is
 `synth::ui::PickTargetOverlay` (`Source/UI/Graph/PickTargetOverlay/`), a transparent layer added to
 `MainComponent` — not to the canvas — because the mixer columns and the transport bar are not canvas
 children. It draws once (no timer, no animation), resolves the click itself against the candidates every

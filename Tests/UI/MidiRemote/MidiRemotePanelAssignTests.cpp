@@ -105,6 +105,22 @@ TEST_F(MidiRemotePanelAssignTest, ChoosingAnActionAssignsGloballyAndShowsOnTheSu
     EXPECT_EQ(drives->getText(), ShortcutManager::getActionDescription("transportTogglePlayStop"));
 }
 
+// FRO236 (docs/control/midi-remote.md#continuous-targets): mirrors
+// ChoosingAnActionAssignsGloballyAndShowsOnTheSurfaceAndInTheInspector above.
+TEST_F(MidiRemotePanelAssignTest, ChoosingAContinuousTargetAssignsGloballyAndShowsOnTheSurfaceAndInTheInspector) {
+    panel_.selectForTest("p1", "pad");
+    ASSERT_TRUE(panel_.assignSelectedControlToContinuous(synth::ContinuousTargetKind::masterVolume));
+
+    ASSERT_EQ(controller_->getProfiles().front().actions.size(), 1u);
+    EXPECT_TRUE(doc_.assignments.empty());
+    const auto* cell = panel_.findSurfaceCellForTest("pad");
+    ASSERT_NE(cell, nullptr);
+    EXPECT_EQ(cell->getAssignmentLabelForTest(), "Master Volume");
+    auto* drives = dynamic_cast<juce::Label*>(findById(panel_, "assignmentDrivesLabel0"));
+    ASSERT_NE(drives, nullptr);
+    EXPECT_EQ(drives->getText(), "Master Volume");
+}
+
 TEST_F(MidiRemotePanelAssignTest, AnActionWithNoCommandIsRefusedAndChangesNothing) {
     panel_.selectForTest("p1", "pad");
     EXPECT_FALSE(panel_.assignSelectedControlToAction("timelineToggleLoop"));

@@ -45,6 +45,13 @@ void MidiRemotePanelComponent::showActionPicker(juce::Component& anchor) {
             if (safeBox != nullptr)
                 safeBox->dismiss();
         };
+        // FRO236 (docs/control/midi-remote.md#continuous-targets): the picker's "Continuous" group.
+        content->onContinuousChosen = [safePanel, safeBox](synth::ContinuousTargetKind kind) {
+            if (safePanel != nullptr)
+                safePanel->assignSelectedControlToContinuous(kind);
+            if (safeBox != nullptr)
+                safeBox->dismiss();
+        };
     }
 }
 
@@ -53,6 +60,21 @@ bool MidiRemotePanelComponent::assignSelectedControlToAction(const juce::String&
         return false;
     const auto status = learnController_->assignControl(selectedProfileId_, selectedControlId_,
                                                         synth::midi::PickTarget::action(actionId));
+    if (status != synth::midi::AssignStatus::assigned)
+        return false;
+    refreshSurfaceForSelectedProfile();
+    controllerSurface_.setSelectedControlId(selectedControlId_);
+    refreshInspectorForSelection();
+    return true;
+}
+
+// FRO236 (docs/control/midi-remote.md#continuous-targets): mirrors assignSelectedControlToAction
+// above.
+bool MidiRemotePanelComponent::assignSelectedControlToContinuous(synth::ContinuousTargetKind kind) {
+    if (learnController_ == nullptr || selectedProfileId_.isEmpty() || selectedControlId_.isEmpty())
+        return false;
+    const auto status = learnController_->assignControl(selectedProfileId_, selectedControlId_,
+                                                        synth::midi::PickTarget::continuousTarget(kind));
     if (status != synth::midi::AssignStatus::assigned)
         return false;
     refreshSurfaceForSelectedProfile();

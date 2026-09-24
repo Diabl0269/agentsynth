@@ -8,6 +8,7 @@
 #include "UI/MidiRemote/ActionPicker/ActionPickerComponent.h"
 
 #include <gtest/gtest.h>
+#include <optional>
 
 using synth::ui::ActionPickerComponent;
 using synth::ui::ActionPickerRow;
@@ -17,7 +18,7 @@ TEST(MidiRemoteActionPickerTest, ListsOnlyCommandDispatchedActions) {
     const auto rows = buildActionPickerRows({});
     int actions = 0;
     for (const auto& row : rows) {
-        if (row.isHeader)
+        if (row.isHeader || row.isContinuous) // FRO236: the Continuous group has its own rows below
             continue;
         ++actions;
         EXPECT_NE(AppCommands::getCommandForAction(row.actionId), AppCommands::kNoCommand) << row.actionId;
@@ -43,19 +44,24 @@ TEST(MidiRemoteActionPickerTest, GroupsByCategoryInTheShortcutsTabOrderWithAHead
             headers.push_back(row.label);
             continue;
         }
+        if (row.isContinuous) // FRO236: the Continuous group is not a ShortcutCategory
+            continue;
         current = ShortcutManager::getCategory(row.actionId);
         ASSERT_FALSE(headers.empty());
         EXPECT_EQ(headers.back(), ShortcutManager::getCategoryName(current))
             << row.actionId << " sits under its own header";
     }
 
-    // Headers appear in getCategoryOrder() order (skipping any category with nothing invokable).
+    // Headers appear in getCategoryOrder() order (skipping any category with nothing invokable),
+    // with "Continuous" (FRO236) appended last.
     std::vector<juce::String> expectedOrder;
     for (const auto category : ShortcutManager::getCategoryOrder())
         if (std::find(headers.begin(), headers.end(), ShortcutManager::getCategoryName(category)) != headers.end())
             expectedOrder.push_back(ShortcutManager::getCategoryName(category));
+    expectedOrder.push_back("Continuous");
     EXPECT_EQ(headers, expectedOrder);
     EXPECT_EQ(headers.front(), "General");
+    EXPECT_EQ(headers.back(), "Continuous");
 }
 
 TEST(MidiRemoteActionPickerTest, SearchFiltersByDescriptionCaseInsensitivelyAndDropsEmptyGroups) {
@@ -106,6 +112,42 @@ TEST(MidiRemoteActionPickerTest, ListsTheCursorAndLoopActionsAndTheRenamedPlaySt
         EXPECT_TRUE(foundToggle) << query;
         EXPECT_TRUE(foundVerb) << query;
     }
+}
+
+// FRO236 (docs/control/midi-remote.md#continuous-targets).
+TEST(MidiRemoteActionPickerTest, ListsTheContinuousGroupWithExactlyThreeRows) {
+    const auto rows = buildActionPickerRows({});
+    std::vector<juce::String> continuousLabels;
+    bool sawContinuousHeader = false;
+    for (const auto& row : rows) {
+        if (row.isHeader) {
+            sawContinuousHeader = sawContinuousHeader || row.label == "Continuous";
+            continue;
+        }
+        if (row.isContinuous)
+            continuousLabels.push_back(row.label);
+    }
+    EXPECT_TRUE(sawContinuousHeader);
+    ASSERT_EQ(continuousLabels.size(), 3u);
+    EXPECT_EQ(continuousLabels[0], "Tempo (BPM)");
+    EXPECT_EQ(continuousLabels[1], "Playhead Position");
+    EXPECT_EQ(continuousLabels[2], "Master Volume");
+}
+
+TEST(MidiRemoteActionPickerTest, ChoosingAContinuousRowFiresOnContinuousChosenWithTheRightKind) {
+    ActionPickerComponent picker;
+    std::optional<synth::ContinuousTargetKind> chosen;
+    picker.onContinuousChosen = [&](synth::ContinuousTargetKind kind) { chosen = kind; };
+
+    int masterVolumeRow = -1;
+    for (int i = 0; i < picker.getRowCountForTest(); ++i)
+        if (picker.getRowForTest(i).isContinuous && picker.getRowForTest(i).label == "Master Volume")
+            masterVolumeRow = i;
+    ASSERT_GE(masterVolumeRow, 0);
+
+    picker.chooseRowForTest(masterVolumeRow);
+    ASSERT_TRUE(chosen.has_value());
+    EXPECT_EQ(*chosen, synth::ContinuousTargetKind::masterVolume);
 }
 
 TEST(MidiRemoteActionPickerTest, ChoosingAnActionRowFiresOnChosenAndAHeaderDoesNot) {

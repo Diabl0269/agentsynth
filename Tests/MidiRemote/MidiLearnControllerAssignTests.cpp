@@ -104,6 +104,54 @@ TEST_F(MidiRemoteAssignTest, NodeCommandTargetIsProjectScope) {
     EXPECT_TRUE(profile().actions.empty());
 }
 
+// FRO236 (docs/control/midi-remote.md#continuous-targets): mirrors
+// ActionTargetIsGlobalAndStoredOnTheProfileNotTheProject above -- a continuous target is GLOBAL,
+// exactly like an action.
+TEST_F(MidiRemoteAssignTest, ContinuousTargetIsGlobalAndStoredOnTheProfileNotTheProject) {
+    ASSERT_EQ(controller_->assignControl("p1", "pad", PickTarget::continuousTarget(synth::ContinuousTargetKind::bpm)),
+              AssignStatus::assigned);
+
+    EXPECT_TRUE(doc_.assignments.empty()) << "a continuous target is global, never in the project doc";
+    ASSERT_EQ(profile().actions.size(), 1u);
+    EXPECT_TRUE(profile().actions[0].target.isContinuous());
+    EXPECT_EQ(profile().actions[0].target.continuous.kind, synth::ContinuousTargetKind::bpm);
+    EXPECT_EQ(profile().actions[0].control.controlId, "pad");
+    const auto stored = synth::ControllerProfileStore(root_).loadAll().profiles;
+    ASSERT_EQ(stored.size(), 1u);
+    EXPECT_EQ(stored[0].actions.size(), 1u) << "written to disk";
+    EXPECT_FALSE(undo_.canUndo()) << "a profile edit is not undoable";
+    EXPECT_EQ(statusBar_.getTransientMessageForTest(), "'Pad 1' now drives Tempo (BPM)");
+}
+
+TEST_F(MidiRemoteAssignTest, AssigningAContinuousTargetReplacesTheSameKindOrTheSameControl) {
+    ASSERT_EQ(controller_->assignControl("p1", "knob", PickTarget::continuousTarget(synth::ContinuousTargetKind::bpm)),
+              AssignStatus::assigned);
+    ASSERT_EQ(controller_->assignControl("p1", "pad", PickTarget::continuousTarget(synth::ContinuousTargetKind::bpm)),
+              AssignStatus::assigned);
+    ASSERT_EQ(profile().actions.size(), 1u) << "bpm has one driver";
+    EXPECT_EQ(profile().actions[0].control.controlId, "pad");
+
+    ASSERT_EQ(controller_->assignControl("p1", "pad",
+                                         PickTarget::continuousTarget(synth::ContinuousTargetKind::masterVolume)),
+              AssignStatus::assigned);
+    ASSERT_EQ(profile().actions.size(), 1u) << "the control drives one global target";
+    EXPECT_EQ(profile().actions[0].target.continuous.kind, synth::ContinuousTargetKind::masterVolume);
+}
+
+// One global assignment per control across kinds: an action and a continuous target on the same
+// control would otherwise both claim its message, and the lookup table keeps only one.
+TEST_F(MidiRemoteAssignTest, ContinuousAndActionTargetsReplaceEachOtherOnTheSameControl) {
+    ASSERT_EQ(controller_->assignControl("p1", "knob", PickTarget::action("togglePlayback")), AssignStatus::assigned);
+    ASSERT_EQ(controller_->assignControl("p1", "knob", PickTarget::continuousTarget(synth::ContinuousTargetKind::bpm)),
+              AssignStatus::assigned);
+    ASSERT_EQ(profile().actions.size(), 1u);
+    EXPECT_TRUE(profile().actions[0].target.isContinuous());
+
+    ASSERT_EQ(controller_->assignControl("p1", "knob", PickTarget::action("togglePlayback")), AssignStatus::assigned);
+    ASSERT_EQ(profile().actions.size(), 1u);
+    EXPECT_TRUE(profile().actions[0].target.isAction());
+}
+
 TEST_F(MidiRemoteAssignTest, RefusesWhatCannotBeMappedAndChangesNothing) {
     EXPECT_EQ(controller_->assignControl("nope", "knob", PickTarget::action("togglePlayback")),
               AssignStatus::unknownControl);
@@ -143,4 +191,13 @@ TEST_F(MidiRemoteAssignTest, ForgetByIdRemovesAGlobalActionAssignmentToo) {
     ASSERT_TRUE(controller_->forgetAssignment(profile().actions[0].id));
     EXPECT_TRUE(profile().actions.empty());
     EXPECT_FALSE(controller_->forgetAssignment("no-such-id"));
+}
+
+// FRO236: mirrors ForgetByIdRemovesAGlobalActionAssignmentToo above -- forgetAssignment() searches
+// by id regardless of target kind, so a continuous target needs no special case.
+TEST_F(MidiRemoteAssignTest, ForgetByIdRemovesAGlobalContinuousAssignmentToo) {
+    ASSERT_EQ(controller_->assignControl("p1", "pad", PickTarget::continuousTarget(synth::ContinuousTargetKind::bpm)),
+              AssignStatus::assigned);
+    ASSERT_TRUE(controller_->forgetAssignment(profile().actions[0].id));
+    EXPECT_TRUE(profile().actions.empty());
 }

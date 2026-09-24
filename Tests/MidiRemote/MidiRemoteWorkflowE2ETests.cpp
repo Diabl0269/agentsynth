@@ -67,6 +67,10 @@ class CountingInvoker : public RemoteActionInvoker {
 public:
     void invokeRemoteCommand(juce::CommandID commandId) override { invoked.push_back(commandId); }
     void invokeNodeCommand(juce::AudioProcessorGraph::NodeID, NodeCommandKind) override {}
+    // FRO236: this suite doesn't exercise continuous targets -- stub, never called.
+    double getContinuousValue(ContinuousTargetKind) override { return 0.0; }
+    void setContinuousValue(ContinuousTargetKind, double) override {}
+    bool getContinuousWindow(ContinuousTargetKind, double&, double&) override { return false; }
     std::vector<juce::CommandID> invoked;
 };
 

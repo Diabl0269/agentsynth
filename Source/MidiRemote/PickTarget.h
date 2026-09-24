@@ -12,13 +12,14 @@
 namespace synth::midi {
 
 struct PickTarget {
-    enum class Kind { parameter, action, nodeCommand };
+    enum class Kind { parameter, action, nodeCommand, continuous };
 
     Kind kind = Kind::parameter;
     juce::AudioProcessorGraph::NodeID nodeId; // parameter / nodeCommand
     juce::String paramId;                     // parameter
     juce::String actionId;                    // action
     NodeCommandKind command = NodeCommandKind::toggleSolo;
+    ContinuousTargetKind continuous = ContinuousTargetKind::bpm; // continuous
 
     static PickTarget parameter(juce::AudioProcessorGraph::NodeID node, const juce::String& id) {
         PickTarget t;
@@ -38,6 +39,14 @@ struct PickTarget {
         t.kind = Kind::nodeCommand;
         t.nodeId = node;
         t.command = kind;
+        return t;
+    }
+    // FRO236 (docs/control/midi-remote.md#continuous-targets): no node -- a continuous target never
+    // names a graph node (ContinuousTargetKind's own comment on how each kind resolves).
+    static PickTarget continuousTarget(ContinuousTargetKind kind) {
+        PickTarget t;
+        t.kind = Kind::continuous;
+        t.continuous = kind;
         return t;
     }
 };
