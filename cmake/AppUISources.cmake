@@ -183,6 +183,15 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.h
     Source/UI/Graph/ModuleComponent/HostedParameterAttachment.cpp
     Source/UI/Graph/ModuleComponent/HostedParameterAttachment.h
+    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h
+    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.cpp
+    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentRows.cpp
+    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentScope.cpp
+    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentTestSeams.cpp
+    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerRow.h
+    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerRow.cpp
+    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.h
+    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.cpp
     Source/UI/MidiRemote/MidiLearnMenu.h
     Source/UI/MidiRemote/MidiLearnMenu.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h

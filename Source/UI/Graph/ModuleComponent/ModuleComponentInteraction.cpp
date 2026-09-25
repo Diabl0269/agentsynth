@@ -9,6 +9,7 @@
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/LayoutUtil.h"
 #include <cmath>
@@ -401,6 +402,20 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
                 mod->setBypassed(!mod->isBypassed());
                 repaint();
             }
+        });
+        m.addSeparator();
+    }
+
+    // FRO132 (docs/control/plugin-card-layout.md#choosing-knobs): the card's own "Choose knobs..."
+    // button, offered here too for a Hosted Plugin node only -- both just call onChooseKnobsRequested,
+    // which showPluginKnobPicker() (ModuleComponentHostedPluginCard.cpp) wires up for exactly this
+    // module type. dynamic_cast rather than getType(module) == ModuleType::HostedPlugin to match the
+    // bypass-toggle check just above, which already establishes the "is this really a ModuleBase"
+    // pattern this menu builds against.
+    if (dynamic_cast<synth::HostedPluginModule*>(module) != nullptr) {
+        m.addItem("Choose knobs...", [this] {
+            if (onChooseKnobsRequested)
+                onChooseKnobsRequested();
         });
         m.addSeparator();
     }
