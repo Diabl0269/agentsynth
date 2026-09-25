@@ -196,6 +196,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModTargetTests.cpp
     UI/Graph/ModuleComponent/HostedPluginCardTests.cpp
+    UI/Graph/ModuleComponent/HostedPluginCardMidiLearnTests.cpp
     UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp
     UI/Graph/PluginKnobPicker/PluginKnobPickerTouchFallbackTests.cpp
     UI/Graph/AutomationUiReflectionTests.cpp
@@ -261,7 +262,9 @@ add_executable(Tests
     MidiRemote/ControllerDetectTests.cpp
     MidiRemote/EncoderAutoDetectTests.cpp
     MidiRemote/MidiLearnControllerTests.cpp
+    MidiRemote/MidiLearnControllerHostedParameterTests.cpp
     App/E2EWorkflowTests.cpp
+    App/E2EPluginCardWorkflowTests.cpp
     Modules/ExternalMidiModuleTests.cpp
     Project/PresetManagerTests.cpp
     Project/SettingsMigrationTests.cpp
@@ -326,6 +329,7 @@ add_executable(Tests
     Project/SnippetManager/SnippetManagerPrepareInsertTests.cpp
     Project/SnippetManager/SnippetManagerMacroTests.cpp
     Project/SnippetManager/SnippetManagerPersistenceTests.cpp
+    Project/SnippetManager/SnippetManagerCardLayoutTests.cpp
     UI/Graph/MultiSelectTests.cpp
     UI/Graph/ModuleStepOrderTests.cpp
     Macros/MacroGroupController/MacroGroupControllerTests.cpp
@@ -476,6 +480,7 @@ add_executable(Tests
     Timeline/TimelineE2ETests.cpp
     Project/PatchDocumentTests.cpp
     Project/ProjectBundleTests.cpp
+    Project/ProjectBundleCardLayoutTests.cpp
     Project/AutosaveTests.cpp
     Project/RecentProjectsTests.cpp
     Project/AssetManagerTests.cpp

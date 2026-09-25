@@ -68,6 +68,23 @@ Two tripwire suites then apply automatically: a new audio-output module must be 
 `ModuleAdoptionTests.cpp`, and a new float parameter is swept by `AutomationZipperTest` without any
 edit — both fail the build until the module is accounted for.
 
+## Known flaky patterns
+
+- **A `MainComponent` and a raw `GraphEditor` Rig alternating in the same process can crash a
+  LATER, unrelated test.** Found while writing `Tests/App/E2EPluginCardWorkflowTests.cpp` (FRO137):
+  constructing/destroying a `MainComponent` (any test, including the existing `E2EWorkflowTest`
+  suite) and then, in a SEPARATE test, building a hand-wired `GraphEditor`/`ModuleComponent` rig
+  the way `MidiLearnControllerTests.cpp`/`MidiRemoteWorkflowE2ETests.cpp` do — crashes the second
+  test, reliably, whenever the two run back to back. Isolated (`--gtest_filter` down to just the
+  Rig-based test) it passes every time; the crash needs a `MainComponent` to have existed earlier
+  in the same process. Root cause not chased down (this doc entry is the flag, not the fix — a
+  debugger session is warranted before touching it further); the working fix for this suite was to
+  never construct a raw Rig at all here — every test uses one `MainComponent` per test, exactly
+  like `E2EWorkflowTest` already does, including for the MIDI Learn / fake-CC portion (a fake
+  device key straight into `AudioEngine::handleIncomingMidiMessageFromSource`, same seam
+  `MidiRemoteWorkflowE2ETests.cpp` uses, works regardless of host mode). If a future suite hits the
+  same crash, suspect this pattern first rather than the new code.
+
 ## Snapshot testing
 
 `AudioRenderingTests` compares rendered audio against golden reference files in `Tests/reference/`.

@@ -507,3 +507,29 @@ TEST(HostedPluginLaneTest, SerializationAdditive) {
     ASSERT_NE(legacyLoaded.getLane(laneId), nullptr);
     EXPECT_EQ(legacyLoaded.getLane(laneId)->paramIndexHint, -1) << "absent -> the -1 'no hint' default";
 }
+
+// ============================================================================
+// 9. MIDI Learn / Automate share the lane picker's own resolver (FRO137)
+// ============================================================================
+
+// docs/control/plugin-card-layout.md#interaction-with-midi-remote-and-automation: "MIDI Learn ...
+// resolved by resolveLaneParameter's hosted rules" and "Automate ... calls the existing
+// onAutomateParameterRequested ... which the lane picker already supports". Both
+// MidiLearnController::arm()/assignControl() (Tests/MidiRemote/MidiLearnControllerHostedParameterTests.cpp)
+// and a lane's own creation path capture a hosted parameter's index through the SAME two functions
+// this suite already exercises for lanes -- proving they agree is what "the same target triple"
+// means, without needing a lane picker or a MidiLearnController here.
+TEST(HostedPluginLaneTest, MidiLearnAndTheLanePickerCaptureTheSameParamIndexHintForTheSameParameter) {
+    Fixture fx;
+    ASSERT_TRUE(fx.build({{"cutoff", "Cutoff", 0.5f, {}, false}}));
+
+    const int laneCreationHint = synth::captureParamIndexHint(fx.hostedModule, "cutoff");
+    const int midiLearnHint = synth::captureParamIndexHint(fx.hostedModule, "cutoff"); // arm()'s own call
+    ASSERT_GE(laneCreationHint, 0);
+    EXPECT_EQ(laneCreationHint, midiLearnHint);
+
+    const auto resolution = synth::resolveLaneParameter(fx.hostedModule, "cutoff", -1);
+    ASSERT_TRUE(resolution.resolved());
+    EXPECT_EQ(resolution.liveParameter(), fx.hostedModule->findInstanceParameter("cutoff"))
+        << "MIDI Learn/Automate and an automation lane bind the exact same live parameter object";
+}

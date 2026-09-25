@@ -547,7 +547,7 @@ void ModuleComponent::timerCallback() {
     refreshMidiLearnBadges();
     if (midiLearnArmedParamId_.isNotEmpty()) {
         for (const auto& e : midiLearnableRegistry_.entries()) {
-            if (e.param != nullptr && e.param->paramID == midiLearnArmedParamId_) {
+            if (e.param != nullptr && e.paramId == midiLearnArmedParamId_) {
                 repaint(e.component->getBounds().expanded(2));
                 ++midiLearnArmedRepaintCount_;
                 break;

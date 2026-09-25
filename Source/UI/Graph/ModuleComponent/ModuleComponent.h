@@ -299,9 +299,23 @@ protected:
     virtual void launchPluginKnobPickerCallOutBox(std::unique_ptr<juce::Component> picker, juce::Rectangle<int> anchor);
 
 public:
-    /** Test/inspection: the param a right-click on `component` would open MIDI Learn for, or null. */
+    /** Test/inspection: the param a right-click on `component` would open MIDI Learn for, or null
+     *  (also null for a hosted entry -- see findMidiLearnableEntryForTest() below). */
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const {
-        return midiLearnableRegistry_.find(component);
+        const auto* entry = midiLearnableRegistry_.find(component);
+        return entry != nullptr ? dynamic_cast<juce::RangedAudioParameter*>(entry->param) : nullptr;
+    }
+
+    /** Test/inspection: a registered control's paramId + hosted flag, or nullopt if unregistered. */
+    struct MidiLearnableEntryForTest {
+        juce::String paramId;
+        bool hosted = false;
+    };
+    std::optional<MidiLearnableEntryForTest> findMidiLearnableEntryForTest(const juce::Component* component) const {
+        const auto* entry = midiLearnableRegistry_.find(component);
+        if (entry == nullptr)
+            return std::nullopt;
+        return MidiLearnableEntryForTest{entry->paramId, entry->hosted};
     }
 
     /** Test/inspection: `component`'s MIDI-mapped badge cache, as of the last timerCallback() tick. */
@@ -360,14 +374,20 @@ private:
     public:
         struct Entry {
             juce::Component* component = nullptr;
-            juce::RangedAudioParameter* param = nullptr;
-            bool mapped = false;      // badge cache, written only by refreshBadges() below
+            juce::AudioProcessorParameter* param = nullptr; // base class: ranged (built-in) or hosted
+            juce::String paramId;                           // ranged: param->paramID; hosted: the slot's stable paramId
+            bool hosted = false;                            // true for a plugin-card knob/toggle/choice
+            bool mapped = false;                            // badge cache, written only by refreshBadges() below
             juce::String tooltip;     // assignment text, e.g. "MIDI: Knob 1 on Launchkey Mini MK3"
             juce::String baseTooltip; // component's own tooltip at registration (e.g. "Bypass")
         };
 
         void add(juce::Component& component, juce::RangedAudioParameter* param);
-        juce::RangedAudioParameter* find(const juce::Component* component) const;
+        /** Hosted-card counterpart of add() -- see the .cpp for why `param`/`paramId` differ. */
+        void addHosted(juce::Component& component, juce::AudioProcessorParameter& param, const juce::String& paramId);
+        /** Drops every hosted entry; call before a hosted card rebuild destroys its widgets. */
+        void clearHosted();
+        const Entry* find(const juce::Component* component) const;
         const std::vector<Entry>& entries() const { return entries_; }
 
         /** Mapped display label for `paramId` ("Knob 1 on Launchkey Mini"), or empty if unmapped.
@@ -563,14 +583,26 @@ private:
      *  `param` is silently ignored. */
     void registerMidiLearnable(juce::Component& control, juce::RangedAudioParameter* param);
 
+    /** Hosted-card counterpart of registerMidiLearnable(); see ModuleComponentHostedPluginCard.cpp. */
+    void registerHostedMidiLearnable(juce::Component& control, juce::AudioProcessorParameter& param,
+                                     const juce::String& paramId);
+    /** Drops every hosted registry entry; call before a hosted card rebuild tears down its widgets. */
+    void clearHostedMidiLearnable();
+
     /** mouseDown()'s right-click handler for every registered control OTHER than a generic slider.
      *  Routes through showContextMenuHook_, same as showAutomateMenuForSlider. */
     void showMidiLearnOnlyMenu(juce::RangedAudioParameter* param);
+    /** Hosted-card counterpart for a toggle/choice control (no RangedAudioParameter to key on). */
+    void showMidiLearnOnlyMenu(const juce::String& paramId, const juce::String& displayName);
+    /** Right-click on a hosted-card KNOB: "Automate..." plus the shared MIDI Learn block. */
+    void showHostedKnobMenu(const juce::String& paramId, const juce::String& displayName);
 
     /** Shared by both menu builders above: appends the doc-exact MIDI Learn block
      *  (docs/control/midi-remote-ui.md#the-learn-interaction) to `menu`. A no-op if
      *  owner.onQueryMidiMappingsForNode isn't set. */
     void appendMidiLearnMenuItems(juce::PopupMenu& menu, juce::RangedAudioParameter* param);
+    /** The hosted-parameter overload every menu builder above funnels into. */
+    void appendMidiLearnMenuItems(juce::PopupMenu& menu, const juce::String& paramId, const juce::String& displayName);
 
     /** "MIDI Learn"/"MIDI Learn again" menu action: fires owner.onMidiLearnRequested(nodeId, paramId). */
     void armMidiLearnFor(const juce::String& paramId);

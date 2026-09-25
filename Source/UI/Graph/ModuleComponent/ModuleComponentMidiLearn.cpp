@@ -31,6 +31,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <algorithm>
 
 using namespace detail;
 
@@ -44,15 +45,42 @@ void ModuleComponent::MidiLearnableRegistry::add(juce::Component& component, juc
     Entry e;
     e.component = &component;
     e.param = param;
+    e.paramId = param->paramID;
     if (auto* tooltipClient = dynamic_cast<juce::SettableTooltipClient*>(&component))
         e.baseTooltip = tooltipClient->getTooltip();
     entries_.push_back(std::move(e));
 }
 
-juce::RangedAudioParameter* ModuleComponent::MidiLearnableRegistry::find(const juce::Component* component) const {
+// FRO137: a hosted-plugin card's knob/toggle/choice control. `param` is the live instance
+// parameter (a juce::HostedAudioProcessorParameter in practice, never a RangedAudioParameter with
+// a real paramID) and `paramId` is the slot's own stable id -- see CardLayout.h.
+void ModuleComponent::MidiLearnableRegistry::addHosted(juce::Component& component, juce::AudioProcessorParameter& param,
+                                                       const juce::String& paramId) {
+    Entry e;
+    e.component = &component;
+    e.param = &param;
+    e.paramId = paramId;
+    e.hosted = true;
+    if (auto* tooltipClient = dynamic_cast<juce::SettableTooltipClient*>(&component))
+        e.baseTooltip = tooltipClient->getTooltip();
+    entries_.push_back(std::move(e));
+}
+
+// A hosted card rebuild (layout change, instance swap) tears down every widget it created and
+// builds new ones -- this must run BEFORE that teardown, or an entry is left pointing at a freed
+// Component until the next add() overwrites it (docs/control/plugin-card-layout.md's rebuild
+// triggers). Built-in entries are created once in createControls() and never rebuilt, so this
+// never touches them.
+void ModuleComponent::MidiLearnableRegistry::clearHosted() {
+    entries_.erase(std::remove_if(entries_.begin(), entries_.end(), [](const Entry& e) { return e.hosted; }),
+                   entries_.end());
+}
+
+const ModuleComponent::MidiLearnableRegistry::Entry*
+ModuleComponent::MidiLearnableRegistry::find(const juce::Component* component) const {
     for (const auto& e : entries_)
         if (e.component == component)
-            return e.param;
+            return &e;
     return nullptr;
 }
 
@@ -60,7 +88,7 @@ bool ModuleComponent::MidiLearnableRegistry::refreshBadges(
     const std::function<juce::String(const juce::String&)>& mappingLabelFor) {
     bool changed = false;
     for (auto& e : entries_) {
-        const juce::String label = mappingLabelFor(e.param->paramID);
+        const juce::String label = mappingLabelFor(e.paramId);
         const bool mapped = label.isNotEmpty();
         const juce::String tooltip = mapped ? "MIDI: " + label : juce::String();
         if (mapped == e.mapped && tooltip == e.tooltip)
@@ -84,12 +112,20 @@ void ModuleComponent::registerMidiLearnable(juce::Component& control, juce::Rang
     midiLearnableRegistry_.add(control, param);
 }
 
+void ModuleComponent::registerHostedMidiLearnable(juce::Component& control, juce::AudioProcessorParameter& param,
+                                                  const juce::String& paramId) {
+    midiLearnableRegistry_.addHosted(control, param, paramId);
+}
+
+void ModuleComponent::clearHostedMidiLearnable() { midiLearnableRegistry_.clearHosted(); }
+
 // The pick-target overlay's view of this card (FRO135): every registered control with its parameter,
-// so the overlay never needs to know what a card is.
+// so the overlay never needs to know what a card is. Hosted controls are included the same as
+// built-in ones (FRO137) -- e.paramId is the identity to key on either way.
 void ModuleComponent::collectPickCandidates(std::vector<synth::ui::PickCandidate>& out) const {
     for (const auto& e : midiLearnableRegistry_.entries())
         if (e.param != nullptr)
-            out.push_back({e.component, synth::midi::PickTarget::parameter(nodeId, e.param->paramID)});
+            out.push_back({e.component, synth::midi::PickTarget::parameter(nodeId, e.paramId)});
 }
 
 // ============================================================================
@@ -99,21 +135,54 @@ void ModuleComponent::collectPickCandidates(std::vector<synth::ui::PickCandidate
 void ModuleComponent::showMidiLearnOnlyMenu(juce::RangedAudioParameter* param) {
     if (param == nullptr)
         return;
+    showMidiLearnOnlyMenu(param->paramID, param->getName(100));
+}
+
+// FRO137: hosted-plugin toggle/choice controls -- same menu, keyed on a plain paramId + display
+// name rather than a RangedAudioParameter (a hosted parameter isn't one).
+void ModuleComponent::showMidiLearnOnlyMenu(const juce::String& paramId, const juce::String& displayName) {
     juce::PopupMenu menu;
-    appendMidiLearnMenuItems(menu, param);
+    appendMidiLearnMenuItems(menu, paramId, displayName);
     if (menu.getNumItems() == 0)
         return; // no host wired (headless build, or GraphEditor's callbacks never set) -- nothing to show
     showContextMenuHook_(menu);
 }
 
+// FRO137: right-click on a hosted-plugin KNOB -- "Automate '<Param>'" (mirrors
+// showAutomateMenuForSlider's own item for a built-in knob) plus the shared MIDI Learn block.
+void ModuleComponent::showHostedKnobMenu(const juce::String& paramId, const juce::String& displayName) {
+    if (module == nullptr)
+        return;
+
+    juce::Component::SafePointer<ModuleComponent> safeThis(this);
+    const auto nodeIdCopy = nodeId;
+
+    juce::PopupMenu menu;
+    menu.addItem("Automate '" + displayName + "'", [safeThis, nodeIdCopy, paramId] {
+        if (safeThis == nullptr)
+            return;
+        if (safeThis->owner.onAutomateParameterRequested)
+            safeThis->owner.onAutomateParameterRequested(nodeIdCopy, paramId);
+    });
+    appendMidiLearnMenuItems(menu, paramId, displayName);
+    showContextMenuHook_(menu);
+}
+
 void ModuleComponent::appendMidiLearnMenuItems(juce::PopupMenu& menu, juce::RangedAudioParameter* param) {
-    if (param == nullptr || module == nullptr || !owner.onMidiLearnRequested)
+    if (param == nullptr)
+        return;
+    appendMidiLearnMenuItems(menu, param->paramID, param->getName(100));
+}
+
+void ModuleComponent::appendMidiLearnMenuItems(juce::PopupMenu& menu, const juce::String& paramId,
+                                               const juce::String& displayName) {
+    if (paramId.isEmpty() || module == nullptr || !owner.onMidiLearnRequested)
         return; // headless build, mid-teardown, or MainComponent never wired the MIDI Remote host
 
     juce::String label;
     if (owner.onQueryMidiMappingsForNode) {
         const auto mappings = owner.onQueryMidiMappingsForNode(nodeId);
-        const auto found = mappings.find(param->paramID);
+        const auto found = mappings.find(paramId);
         if (found != mappings.end())
             label = found->second;
     }
@@ -121,10 +190,9 @@ void ModuleComponent::appendMidiLearnMenuItems(juce::PopupMenu& menu, juce::Rang
     // The popup's actions run asynchronously (showMenuAsync), so `this` must be re-checked rather
     // than captured raw -- same reasoning as showAutomateMenuForSlider's own comment.
     juce::Component::SafePointer<ModuleComponent> safeThis(this);
-    const juce::String paramId = param->paramID;
 
     synth::ui::midilearn::MenuContent content;
-    content.targetName = param->getName(100);
+    content.targetName = displayName;
     content.mappingLabel = label;
     content.learn = [safeThis, paramId] {
         if (safeThis != nullptr)
@@ -165,7 +233,7 @@ void ModuleComponent::setMidiLearnArmedParam(const juce::String& paramId) {
         if (id.isEmpty())
             return;
         for (const auto& e : midiLearnableRegistry_.entries())
-            if (e.param != nullptr && e.param->paramID == id) {
+            if (e.param != nullptr && e.paramId == id) {
                 repaint(e.component->getBounds().expanded(2));
                 return;
             }
@@ -206,7 +274,7 @@ void ModuleComponent::paintMidiLearnOverlays(juce::Graphics& g) {
         return;
 
     for (const auto& e : midiLearnableRegistry_.entries()) {
-        if (e.param == nullptr || e.param->paramID != midiLearnArmedParamId_)
+        if (e.param == nullptr || e.paramId != midiLearnArmedParamId_)
             continue;
         // Time-bounded overall by RemoteEngine's 10 s learn timeout (setMidiLearnArmedParam({})
         // on cancel/bind/timeout); repainted only by the existing gated 15 Hz timerCallback while

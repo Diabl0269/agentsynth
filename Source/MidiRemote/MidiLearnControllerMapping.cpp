@@ -11,6 +11,7 @@
 #include "Modules/ModuleBase.h"
 #include "ShortcutManager/AppCommands.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "Timeline/AutomationBinding.h"
 #include "UI/Chrome/StatusBarComponent.h"
 #include <algorithm>
 
@@ -67,17 +68,35 @@ AssignStatus MidiLearnController::assignControl(const juce::String& profileId, c
             targetName = "Solo";
         } else {
             juce::RangedAudioParameter* param = nullptr;
-            if (auto* node = engine_.getGraph().getNodeForId(pick.nodeId))
-                for (auto* p : node->getProcessor()->getParameters())
+            juce::AudioProcessor* processor = nullptr;
+            if (auto* node = engine_.getGraph().getNodeForId(pick.nodeId)) {
+                processor = node->getProcessor();
+                for (auto* p : processor->getParameters())
                     if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p);
                         ranged && ranged->paramID == pick.paramId)
                         param = ranged;
-            if (param == nullptr)
+            }
+
+            // FRO137: not one of this node's own RangedAudioParameters -- fall back to the same
+            // hosted-plugin resolution an automation lane uses
+            // (docs/control/plugin-card-layout.md#interaction-with-midi-remote-and-automation), so
+            // the pick-target overlay/panel can also assign a plugin-card knob.
+            juce::AudioProcessorParameter* hostedParam = nullptr;
+            int paramIndexHint = -1;
+            if (param == nullptr && processor != nullptr) {
+                const auto resolution = synth::resolveLaneParameter(processor, pick.paramId, -1);
+                hostedParam = resolution.liveParameter();
+                if (hostedParam != nullptr)
+                    paramIndexHint = synth::captureParamIndexHint(processor, pick.paramId);
+            }
+
+            if (param == nullptr && hostedParam == nullptr)
                 return AssignStatus::unresolvedTarget;
             target.kind = synth::Target::Kind::parameter;
             target.parameter.nodeUuid = uuid;
             target.parameter.paramId = pick.paramId;
-            targetName = param->getName(100);
+            target.parameter.paramIndexHint = paramIndexHint;
+            targetName = param != nullptr ? param->getName(100) : hostedParam->getName(100);
         }
     }
 

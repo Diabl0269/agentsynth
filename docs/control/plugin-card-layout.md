@@ -11,8 +11,9 @@ default, `PluginCardLayoutStore`, the per-instance `"cardLayout"` extra-state ke
 The card unit and `HostedParameterAttachment` (FRO128), described in
 [Card rendering as built](#card-rendering-as-built-fro128). The picker (FRO132), described in
 [Choosing knobs as built](#choosing-knobs-as-built-fro132) -- touch-to-add now has both a gesture
-path and a burst-filtered value-change fallback (FRO241). The MIDI Learn / Automate right-click on a
-plugin-card knob is still designed only.
+path and a burst-filtered value-change fallback (FRO241). MIDI Learn / Forget / Edit assignment and
+"Automate..." on a plugin-card knob (FRO137), described in
+[Interaction with MIDI Remote and automation](#interaction-with-midi-remote-and-automation).
 
 ---
 
@@ -178,9 +179,13 @@ with `label` or the parameter's name, and binds it with a **`HostedParameterAtta
   editor, a controller) to `ModuleComponent::handleHostedGesture`, which captures the graph at the first
   start and pushes the snapshot at the last end: one begin/end pair, one undo step, and overlapping
   gestures still make one.
-- **Not yet wired.** The card registers nothing with the MIDI Learn registry (`registerMidiLearnable`
-  takes a `RangedAudioParameter*`) and adds no right-click Automate; hosted widgets are inert to
-  right-click. That comes with the picker work.
+- **MIDI Learn and Automate (FRO137).** Every slot's widget registers with `ModuleComponent`'s MIDI
+  Learn registry via `registerHostedMidiLearnable` (the hosted counterpart to `registerMidiLearnable`,
+  which takes only a `RangedAudioParameter*`), and gets a mouse listener the same way a generic
+  auto-UI control does, so right-click reaches `ModuleComponent::mouseDown` at all. A knob's
+  right-click menu is "Automate '<Param>'" (mirroring a built-in knob's own menu) plus the shared
+  MIDI Learn block; a toggle/choice control gets MIDI Learn only. See
+  [Interaction with MIDI Remote and automation](#interaction-with-midi-remote-and-automation).
 
 ### Instance lifetime and unbinding
 
@@ -332,7 +337,14 @@ tick/untick, drag-reorder, label, the one `applyCurrentLayout()` write path) and
 ## Persistence
 
 - **Per-instance:** extra-state key `"cardLayout"` on the `HostedPlugin` node, saved with the
-  project and with snippets; restored trusted-only with the rest of extra state.
+  project and with snippets, and restored via `setExtraState` with the rest of extra state --
+  `setExtraState` is only ever called from `applyJSONToGraph`'s trusted branch
+  (`AIStateMapper.cpp`), so a model can never set it. A **snippet's own** carry/drop of the whole
+  `"state"` object (of which `"cardLayout"` is one key) is `includeExtraState`'s call, not
+  `trustedPayload`'s -- `SnippetManager::insertSnippet` always applies on the trusted path once
+  validation passes; `includeExtraState=false` (the on-disk-drop shape, `GraphEditorCommands.cpp`)
+  is what keeps `"state"` out of the JSON in the first place. See
+  `Tests/Project/SnippetManager/SnippetManagerCardLayoutTests.cpp`.
 - **Per-type default and presets:** JSON files under the settings folder
   (`branding::kSettingsFolderName`), never inside the `PropertiesFile`; the store is an
   app-layer class (`PluginCardLayoutStore`, `Source/Plugin/Hosting/`) injected into the card
@@ -352,6 +364,41 @@ Nothing special — that is the point of binding real hosted parameters rather t
   hosted parameter, which the lane picker already supports.
 - A parameter removed from the layout keeps its lanes and assignments — the layout is
   presentation, never a binding.
+
+### As built (FRO137)
+
+- **`MidiLearnController::arm`/`assignControl`** (`Source/MidiRemote/MidiLearnController.cpp`,
+  `MidiLearnControllerMapping.cpp`) first scan the node's own `RangedAudioParameter`s, exactly as
+  before FRO137 (a built-in assignment's JSON stays byte-identical: `paramIndexHint` is left at its
+  existing `-1` default). When `paramId` doesn't match one, they fall back to
+  `synth::resolveLaneParameter(processor, paramId, -1)` — the SAME resolver an automation lane
+  uses — and, only on a successful hosted resolution, capture the live index via
+  `synth::captureParamIndexHint` into `Target::Parameter::paramIndexHint`. `buttonLike` comes from
+  the resolved parameter's `isBoolean()`/`getNumSteps() == 2`. The engine side needed no change:
+  `RemoteEngineReconcile::resolveParameterTarget` already resolves every parameter target —
+  built-in or hosted — through `resolveLaneParameter`.
+- **`ModuleComponent::MidiLearnableRegistry`** (`ModuleComponent.h`, `ModuleComponentMidiLearn.cpp`)
+  generalised its `Entry` to hold a `juce::AudioProcessorParameter*` (the common base of a
+  `RangedAudioParameter` and a hosted parameter) plus its own `paramId` string, and a `hosted` flag.
+  `add()` (built-in) is unchanged in effect; `addHosted()` is the hosted-card counterpart. **A
+  hosted card rebuilds its controls on every layout change** (a new/removed slot, a stored default
+  changing, the instance itself reloading) — `clearHosted()` drops every hosted entry, called from
+  `unbindHostedPluginCard()` BEFORE the widgets themselves are destroyed, so the registry can never
+  hold a dangling `Component*` between one rebuild and the next `addHosted()` call. Built-in entries
+  (created once, in `createControls()`) are untouched by it. Every reader (the right-click menu
+  lookup, the mapped badge, the armed breathing outline, `collectPickCandidates`) now keys on
+  `Entry::paramId` rather than `Entry::param->paramID`, since a hosted parameter has no `paramID`
+  member.
+- **The hosted card unit** (`ModuleComponentHostedPluginCard.cpp`) gives every slot's widget a
+  mouse listener on the card (`addMouseListener(&card_, false)`, the same wiring a generic auto-UI
+  slider gets in `createControls()`) — without it a right-click never reaches
+  `ModuleComponent::mouseDown` at all, which is why a hosted control was inert to right-click before
+  this. A knob's right-click ("Automate '<Param>'" + the shared MIDI Learn block) and a
+  toggle/choice's right-click (MIDI Learn only) both route through `showContextMenuHook_`, same as
+  a built-in control's menu. The card body's own right-click keeps FRO132's "Choose knobs..." item
+  unchanged.
+- **Badges and the armed outline** paint on hosted controls the same way as built-in ones — both
+  read the same registry, keyed the same way.
 
 ---
 
@@ -399,12 +446,28 @@ grid, so "edit layout" there means at most hide/reorder of the knobs they *do* e
   automatic), touch-to-add via a real gesture and its off-thread -> message-thread hop, missing
   parameters, and the two real-gesture entry points (the card button and the context-menu item,
   each through a real click handler with a stubbed `juce::CallOutBox`). The value-change fallback
-  and its burst-ignored debounce are deferred to a follow-up (FRO241), see
+  and its burst filter are covered by `PluginKnobPickerTouchFallbackTests.cpp` (FRO241), see
   [Choosing knobs](#choosing-knobs).
+- `Tests/UI/Graph/ModuleComponent/HostedPluginCardMidiLearnTests.cpp` (FRO137): hosted controls
+  register with `hosted=true` and their own `paramId`; a layout-triggered rebuild leaves no stale
+  registry entry; a real right-click on a hosted knob shows "Automate..." + MIDI Learn (and clicking
+  Automate fires `onAutomateParameterRequested`), a hosted toggle/choice shows MIDI Learn only, and
+  the block is empty when the host never wired `onMidiLearnRequested`.
+- `Tests/MidiRemote/MidiLearnControllerHostedParameterTests.cpp` (FRO137): `arm()`/`assignControl()`
+  capture `paramIndexHint` for a hosted parameter and leave it at `-1` for a built-in one; a hosted
+  boolean arms without crashing; an unresolvable paramId still arms; removing a param from the card
+  layout never touches its MIDI assignment or automation lane.
 - `Tests/Plugin/HostedPluginLaneTests.cpp` gains: MIDI Learn and Automate from a plugin-card
-  knob produce the same target triple as the lane picker.
-- E2E: add plugin → Choose knobs → tick two → save project → reload → knobs present → set as
-  default for all → second instance shows them.
+  knob capture the exact same `paramIndexHint`/live parameter the lane picker's own creation path
+  does (`MidiLearnAndTheLanePickerCaptureTheSameParamIndexHintForTheSameParameter`).
+- `Tests/Project/SnippetManager/SnippetManagerCardLayoutTests.cpp` /
+  `Tests/Project/ProjectBundleCardLayoutTests.cpp` (FRO137): `cardLayout` follows the SAME
+  `includeExtraState`/trusted-path rules as every other module's `state` -- carried by the in-app
+  clipboard and a trusted insert, dropped by a `.agsnip` on disk and an untrusted insert, and
+  round-trips through a full project save/load.
+- E2E (`Tests/App/E2EPluginCardWorkflowTests.cpp`, FRO137): add plugin → choose two knobs → save
+  project → reload → knobs present → "Apply to all instances" → a second instance shows them too →
+  a real right-click MIDI Learn on a hosted knob → a fake CC drives the hosted parameter.
 
 ---
 

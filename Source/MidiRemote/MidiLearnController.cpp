@@ -9,6 +9,7 @@
 #include "MidiRemote/MidiRemoteLearnBinder.h"
 #include "MidiRemote/RemoteEngine/RemoteMessageSink.h"
 #include "Modules/ModuleBase.h"
+#include "Timeline/AutomationBinding.h"
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/PickTargetOverlay/PickTargetOverlay.h"
@@ -77,12 +78,27 @@ void MidiLearnController::arm(juce::AudioProcessorGraph::NodeID nodeId, const ju
         return;
 
     bool buttonLike = false;
+    int paramIndexHint = -1; // set only for a hosted-plugin parameter -- see below
     if (auto* node = engine_.getGraph().getNodeForId(nodeId)) {
+        juce::RangedAudioParameter* ranged = nullptr;
         for (auto* p : node->getProcessor()->getParameters()) {
-            auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p);
-            if (ranged != nullptr && ranged->paramID == paramId) {
-                buttonLike = dynamic_cast<juce::AudioParameterBool*>(ranged) != nullptr;
+            if (auto* r = dynamic_cast<juce::RangedAudioParameter*>(p); r != nullptr && r->paramID == paramId) {
+                ranged = r;
                 break;
+            }
+        }
+        if (ranged != nullptr) {
+            buttonLike = dynamic_cast<juce::AudioParameterBool*>(ranged) != nullptr;
+        } else {
+            // FRO137: paramId isn't one of this node's own RangedAudioParameters -- it may be a
+            // hosted plugin-card knob (docs/control/plugin-card-layout.md#interaction-with-midi-remote-and-automation).
+            // Resolve it the same way an automation lane would, and capture the same
+            // paramIndexHint an automation lane captures at creation -- ONLY for a hosted
+            // parameter, so a built-in assignment's JSON never gains this field.
+            const auto resolution = synth::resolveLaneParameter(node->getProcessor(), paramId, -1);
+            if (auto* live = resolution.liveParameter()) {
+                buttonLike = live->isBoolean() || live->getNumSteps() == 2;
+                paramIndexHint = synth::captureParamIndexHint(node->getProcessor(), paramId);
             }
         }
     }
@@ -95,6 +111,7 @@ void MidiLearnController::arm(juce::AudioProcessorGraph::NodeID nodeId, const ju
     request.target.kind = synth::Target::Kind::parameter;
     request.target.parameter.nodeUuid = uuid;
     request.target.parameter.paramId = paramId;
+    request.target.parameter.paramIndexHint = paramIndexHint;
     request.buttonLike = buttonLike;
     remoteEngine_.armLearn(request);
 
