@@ -79,6 +79,8 @@ public:
      *  macro change (MainComponent's existing reconcile funnel is the natural place). */
     void rebuildMixer() { mixer_.rebuild(); }
     MixerPanelComponent& getMixerPanel() noexcept { return mixer_; }
+    // FRO227: const overload for resolveEditSurface(), a const member function.
+    const MixerPanelComponent& getMixerPanel() const noexcept { return mixer_; }
 
     /** FRO263: mirrors rebuildMixer() above -- see its call site's own comment. */
     void rebuildMidiRemote() { midiRemotePanel_.rebuildFromProfiles(); }

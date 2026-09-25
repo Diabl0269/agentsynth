@@ -84,6 +84,10 @@ bool MainComponent::performSelectAllModules() {
         else
             statusBar.showMessage("Nothing to select - the clip has no notes");
         return true;
+    case EditSurface::Mixer:
+        // No "select all" meaning on the mixer -- no-op, rather than falling through to Graph below.
+        statusBar.showMessage("Nothing to select - Select All has no effect on the mixer");
+        return true;
     case EditSurface::Graph:
         break;
     }
@@ -115,6 +119,8 @@ bool MainComponent::performCopySelection() {
         else
             statusBar.showMessage("Nothing to copy - select one or more notes first");
         return true;
+    case EditSurface::Mixer:
+        return true; // isEditSurfaceCommandActive() reports Mixer inactive -- belt-and-suspenders
     case EditSurface::Graph:
         break;
     }
@@ -146,6 +152,8 @@ bool MainComponent::performPasteSelection() {
         else
             statusBar.showMessage("Nothing to paste - copy some notes first");
         return true;
+    case EditSurface::Mixer:
+        return true; // see performCopySelection's Mixer case
     case EditSurface::Graph:
         break;
     }
@@ -172,6 +180,8 @@ bool MainComponent::performDuplicateSelection() {
         else
             statusBar.showMessage("Nothing to duplicate - select one or more notes first");
         return true;
+    case EditSurface::Mixer:
+        return true; // see performCopySelection's Mixer case
     case EditSurface::Graph:
         break;
     }
@@ -198,6 +208,8 @@ bool MainComponent::performCutSelection() {
         else
             statusBar.showMessage("Nothing to cut - select one or more notes first");
         return true;
+    case EditSurface::Mixer:
+        return true; // see performCopySelection's Mixer case
     case EditSurface::Graph:
         break;
     }
@@ -266,6 +278,8 @@ bool MainComponent::applyZoomCommand(juce::CommandID commandID) {
             timelinePanel.zoomTimelineHorizontal(factor);
         statusBar.showMessage(vertical ? "Timeline: track height" : "Timeline: zoom");
         return true;
+    case EditSurface::Mixer:
+        return true; // isZoomCommandActive() reports Mixer inactive on both axes
     case EditSurface::Graph:
         break;
     }
@@ -280,104 +294,9 @@ bool MainComponent::applyZoomCommand(juce::CommandID commandID) {
     return true;
 }
 
-// ---- Named isActive predicates shared by more than one row ----
-
-bool MainComponent::touchesAnyMacro() const {
-    for (auto nodeId : graphEditor.getSelectedNodes()) {
-        if (graphEditor.getMacroController().macroForNode(nodeId) != nullptr)
-            return true;
-    }
-    return false;
-}
-
-// The Copy/Paste/Duplicate/Cut/Repeat block: each routes by resolveEditSurface(), but the exact
-// per-surface predicate differs by command (see each case) -- moved verbatim out of the former
-// per-command switches in MainComponent::getCommandInfo, now selected by id in one place.
-bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
-    switch (id) {
-    case AppCommands::copySelection:
-        switch (resolveEditSurface()) {
-        case EditSurface::TimelineClips:
-            // getClipSelection() has no const overload; hasClipSelection() answers the same
-            // !clipSelection_.isEmpty() question and is const, so getCommandInfo (const-context
-            // predicate) uses it here in place of the non-const getClipSelection().size() > 0
-            // the perform-side action code below still uses for its status-bar count.
-            return timelinePanel.hasClipSelection();
-        case EditSurface::PianoRoll:
-            return timelinePanel.getPianoRoll().hasNoteSelection();
-        case EditSurface::Graph:
-            return graphEditor.getSelectionCount() > 0;
-        }
-        break;
-    case AppCommands::pasteSelection:
-        switch (resolveEditSurface()) {
-        case EditSurface::TimelineClips:
-            return timelinePanel.canPasteClips();
-        case EditSurface::PianoRoll:
-            // canPasteNotes() is BOTH halves: a non-empty note clipboard AND an open clip. A roll
-            // with nothing open has nowhere to put the block, so the row greys out rather than
-            // silently discarding a paste.
-            return timelinePanel.getPianoRoll().canPasteNotes();
-        case EditSurface::Graph:
-            return graphEditor.canPaste();
-        }
-        break;
-    case AppCommands::duplicateSelection:
-        switch (resolveEditSurface()) {
-        case EditSurface::TimelineClips:
-            // Same substitution as copySelection above (const-context: hasClipSelection()).
-            return timelinePanel.hasClipSelection();
-        case EditSurface::PianoRoll:
-            return timelinePanel.getPianoRoll().hasNoteSelection();
-        case EditSurface::Graph:
-            return graphEditor.getSelectionCount() > 0;
-        }
-        break;
-    case AppCommands::cutSelection:
-        // Same enablement predicate Copy uses on every surface -- a cut is a copy that also
-        // deletes, so anything copyable is cuttable and the two rows can never disagree.
-        switch (resolveEditSurface()) {
-        case EditSurface::TimelineClips:
-            return timelinePanel.canCutClips();
-        case EditSurface::PianoRoll:
-            return timelinePanel.getPianoRoll().hasNoteSelection();
-        case EditSurface::Graph:
-            return graphEditor.getSelectionCount() > 0;
-        }
-        break;
-    case AppCommands::repeatSelection:
-        // The ONLY edit verb that is inactive on the Graph surface: "repeat N times, each copy one
-        // block further along" is a time-axis idea, and a spatial canvas has no such axis -- the
-        // graph's answer to "another one of these" is Duplicate. See performRepeatSelection.
-        switch (resolveEditSurface()) {
-        case EditSurface::TimelineClips:
-            return timelinePanel.hasClipSelection();
-        case EditSurface::PianoRoll:
-            return timelinePanel.getPianoRoll().hasNoteSelection();
-        case EditSurface::Graph:
-            return false;
-        }
-        break;
-    default:
-        break;
-    }
-    return true;
-}
-
-bool MainComponent::isZoomCommandActive(juce::CommandID id) const {
-    const bool vertical = id == AppCommands::zoomInVertical || id == AppCommands::zoomOutVertical;
-    // The graph canvas zooms UNIFORMLY (GraphEditor::zoomAroundCentre -- one zoomLevel, no
-    // separate axes), so the horizontal pair drives it and the vertical pair is inactive there
-    // rather than silently doing the same thing twice under a different key.
-    switch (resolveEditSurface()) {
-    case EditSurface::Graph:
-        return !vertical;
-    case EditSurface::TimelineClips:
-    case EditSurface::PianoRoll:
-        return isTimelineVisible;
-    }
-    return true;
-}
+// ---- Named isActive predicates shared by more than one row (touchesAnyMacro,
+// isEditSurfaceCommandActive, isZoomCommandActive) moved to MainComponentCommandPredicates.cpp,
+// FRO227 -- registering the Mixer edit surface pushed this file over the 1,000-line cap.
 
 // ---- The table itself, split into category-grouped builder functions purely to keep
 // commandTable() itself under the function-size cap (FRO11) -- category boundaries are the

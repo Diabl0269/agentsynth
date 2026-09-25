@@ -221,12 +221,14 @@ bool MainComponent::performRepeatSelection(int count) {
         return timelinePanel.repeatSelectedClips(repeats);
     case EditSurface::PianoRoll:
         return timelinePanel.getPianoRoll().repeatSelectedNotes(repeats);
+    case EditSurface::Mixer:
     case EditSurface::Graph:
         break;
     }
     // Graph: deliberately unsupported. Repeat tiles copies along a time axis the canvas doesn't
     // have; Duplicate is the graph's equivalent gesture, and getCommandInfo already reports the
-    // command inactive here so the key never reaches this line in normal use.
+    // command inactive here so the key never reaches this line in normal use. Mixer has no
+    // "another one of these" gesture at all -- same inactive treatment, no equivalent to point to.
     return false;
 }
 
@@ -245,6 +247,7 @@ void MainComponent::promptRepeatSelection() {
         if (timelinePanel.getPianoRoll().hasNoteSelection())
             subject = "selected notes";
         break;
+    case EditSurface::Mixer:
     case EditSurface::Graph:
         break;
     }
@@ -297,8 +300,18 @@ void MainComponent::promptRepeatSelection() {
 // pointer points at. Every one of those surfaces already grabs focus on mouseDown (the canvas
 // idiom GraphEditor::mouseDown established, followed by TimelineClipLaneArea/
 // PianoRollComponent/AutomationLaneEditor), so "last-clicked surface owns the verbs" falls out
-// of ordinary JUCE focus tracking with no extra bookkeeping in this class. Public: both
-// perform()/getCommandInfo() and FocusArbitrationTests.cpp call it directly.
+// of ordinary JUCE focus tracking with no extra bookkeeping in this class.
+//
+// FRO227: Mixer follows the same "check it's actually showing before trusting a stale focus
+// pointer" shape, but the mixer has THREE placements (MixerPlacementController::Placement) —
+// docked on the tab strip, an "Own panel" strip, or detached into its own window — so its
+// showing check is the same OR MainComponent::timerCallback already uses to gate meter ticks
+// (mixerDock.isMixerShowing() covers Tab-docked-and-active and Window; mixerPlacement_.
+// isOwnPanelShowing() covers Own panel), not the plain isTimelineVisible gate the two timeline
+// surfaces use. MixerPanelComponent is the mixer's single focusable leaf (FRO18: every column's
+// own controls are setWantsKeyboardFocus(false)), so isOrIsChildOf covers a column's controls
+// too, not just the panel root itself. Public: both perform()/getCommandInfo() and
+// FocusArbitrationTests.cpp call it directly.
 MainComponent::EditSurface MainComponent::resolveEditSurface() const {
     if (editSurfaceOverrideForTest_.has_value())
         return *editSurfaceOverrideForTest_;
@@ -311,6 +324,12 @@ MainComponent::EditSurface MainComponent::resolveEditSurface() const {
                 return EditSurface::PianoRoll;
             if (isOrIsChildOf(focused, timelinePanel.getClipLaneArea()))
                 return EditSurface::TimelineClips;
+        }
+    }
+    if (mixerDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing()) {
+        if (auto* focused = juce::Component::getCurrentlyFocusedComponent()) {
+            if (isOrIsChildOf(focused, mixerDock.getMixerPanel()))
+                return EditSurface::Mixer;
         }
     }
     return EditSurface::Graph;
