@@ -152,11 +152,13 @@ TEST(BottomDockComponentTests, StartupMigratesTheOldTimelinePanelVisibleKeyToBot
         s->saveIfNeeded();
     }
 
-    MainComponent mc(std::make_unique<MockProviderMDCT>());
-    mc.setSize(1400, 900);
-    mc.newPatchForTest();
+    {
+        MainComponent mc(std::make_unique<MockProviderMDCT>());
+        mc.setSize(1400, 900);
+        mc.newPatchForTest();
 
-    EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "the old key's \"1\" must carry over";
+        EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "the old key's \"1\" must carry over";
+    } // MainComponent's ApplicationProperties flushes the migrated file on destruction -- read it only after
 
     juce::ApplicationProperties props;
     props.setStorageParameters(bottomDockVisibleMigrationTestOptions());
