@@ -67,6 +67,7 @@ public:
      *  drives the same `timerCallback()` a real 200 ms tick would invoke, deterministically and
      *  instantly. A no-op if no window is open. */
     void forceBurstWindowCloseForTest() { timerCallback(); }
+    void setBurstWindowMsForTest(int ms) { burstWindowMs_ = ms; } // before arming
 
 private:
     void parameterValueChanged(int parameterIndex, float) override;
@@ -95,6 +96,7 @@ private:
     // ---- Burst window state: message thread only (handleAsyncUpdate / timerCallback). ----
     std::vector<int> burstCandidates_;
     bool burstWindowOpen_ = false;
+    int burstWindowMs_ = kBurstWindowMs;
     bool burstExceeded_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginKnobPickerTouchCapture)

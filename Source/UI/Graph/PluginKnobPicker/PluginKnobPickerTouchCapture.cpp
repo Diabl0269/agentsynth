@@ -121,7 +121,7 @@ void PluginKnobPickerTouchCapture::handleAsyncUpdate() {
         burstCandidates_.push_back(parameterIndex);
         if (!burstWindowOpen_) {
             burstWindowOpen_ = true;
-            startTimer(kBurstWindowMs);
+            startTimer(burstWindowMs_);
         }
         if (static_cast<int>(burstCandidates_.size()) > kBurstMaxDistinctParams)
             burstExceeded_ = true;

@@ -90,8 +90,9 @@ edit — both fail the build until the module is accounted for.
   `-DCMAKE_CXX_FLAGS=-fsanitize=address` the ASan recipe passes. The bad read above happened inside
   `juce::AudioProcessorParameter::endChangeGesture()` and passed silently under local ASan. CI's ASan
   job runs on Linux, where JUCE compiles as `.cpp` and is instrumented. Locally, also pass
-  `-DCMAKE_OBJCXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer"` or reproduce in a Release
-  build under `lldb`.
+  `-DCMAKE_OBJCXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer"`; with it, local ASan reports
+  that same read. Add `-fsanitize-recover=address` to all three flag sets and run with
+  `ASAN_OPTIONS=halt_on_error=0` to collect every report in one run instead of stopping at the first.
 
 ## Snapshot testing
 

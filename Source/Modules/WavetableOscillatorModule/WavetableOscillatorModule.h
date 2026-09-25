@@ -160,6 +160,7 @@ public:
     // -------------------------------------------------------------------------
     /** Jack labels, indexed by the Jack enum. */
     static const juce::String* jackLabels();
+    static const juce::String* jackParamIds();
 
     std::vector<ModulationTarget> getModulationTargets() const override;
 

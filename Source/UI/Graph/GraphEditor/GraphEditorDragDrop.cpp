@@ -45,7 +45,10 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
         return {280, 443};
     if (typeName == "LFO")
-        return {280, 361}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        // FRO281: +40 for the Rate/Level/Glide CV jacks (3 input jacks, one row shared per pair
+        // with the mono CV output already there — see ModuleComponentTest.
+        // EstimatedModuleSizesMatchTheRealComponents, which pins this to the real component).
+        return {280, 401}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "VCA")
         return {280, 253}; // +20 in #219: the Audio L/R input pair adds a jack row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
@@ -55,7 +58,9 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // params moved onto the collapsed-by-default envelope graph's bend handles, and a
         // collapsed graph adds one row (its disclosure toggle + BPM|MS). Below 2 jacks + Poly
         // toggle + threshold control + knob grid (2 rows) + disclosure row, collapsed.
-        return {280, 389};
+        // FRO281: +100 for the five Attack/Hold/Decay/Sustain/Release CV jacks appended after
+        // Threshold (see ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents).
+        return {280, 489};
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
         // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
         return {synth::LayoutUtil::kDoubleWidth, 406};
@@ -74,11 +79,13 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Ring Modulator")
         return {280, 391}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Delay")
-        return {280, 237}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
+        return {280, 297}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+                           // +60: Time/Feedback/Mix CV jacks finally exist (4 port rows)
     if (typeName == "Reverb")
-        return {280, 237}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
+        return {280, 337}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+                           // +100: Size/Damping/Wet/Dry/Width CV jacks finally exist (6 port rows)
     if (typeName == "AudioInput" || typeName == "Audio Input")
         // Height tracks the DEVICE's input channel count at runtime (one jack per channel, up to
         // AudioInputModule::kMaxChannels — eight jacks measure 217px, pinned by
@@ -115,24 +122,28 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // the gutter nor the control count sets the height on its own.
         return {synth::LayoutUtil::kDoubleWidth, 554};
     if (typeName == "Chorus" || typeName == "Phaser" || typeName == "Flanger")
-        return {280, 277}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        // +60: every continuous parameter has a CV jack now (Audio + 5 CV = 6 port rows), and
+        // the port gutter, not the 2-row knob grid, sets the height.
+        return {280, 337};
     if (typeName == "Bitcrusher")
         return {280, 323}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Pitch Shifter")
-        return {280, 467}; // Dual I/O off: one Audio jack + Level knob row
+        return {280, 507}; // Dual I/O off: one Audio jack + Level knob row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+                           // +40: Fine and Window CV jacks (Audio + 6 CV = 7 port rows)
     if (typeName == "Parametric EQ")
         // Double-width card: a 150px response curve set between the port-label gutters, then a
         // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().
         return {synth::LayoutUtil::kDoubleWidth, 592};
     if (typeName == "Compressor")
-        return {280, 237}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 337}; // +100: a CV jack per parameter (Audio + 5 CV = 6 port rows) sets it
     if (typeName == "Limiter")
-        return {280, 161}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 221}; // +60: a CV jack per parameter (Audio + 3 CV = 4 port rows) sets it
     if (typeName == "Gate")
         // 6 float sliders (Threshold/Attack/Hold/Release/Range/Level): same row count as
         // Compressor's 5 (3+3 wraps to the same number of rows as 6 in a 3-per-row grid).
-        return {280, 237};
+        // +100: a CV jack per parameter (Audio + 5 CV = 6 port rows) sets it, as for Compressor.
+        return {280, 337};
     if (typeName == "Voice Mixer")
         return {280, 301}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "External MIDI")

@@ -243,7 +243,7 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
         for (const auto& t : mod->getModulationTargets()) {
             if (t.channelIndex != modDropTargetChannel)
                 continue;
-            const int si = getModRingSliderIndex(t.name);
+            const int si = sliderIndexForModTarget(t);
             if (si < 0)
                 break;
             const auto b = sliders[si]->getBounds().toFloat();
@@ -264,17 +264,21 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
         if (info.destNodeID != nodeId || info.isBypassed)
             continue;
 
-        juce::String targetParamName;
+        // The ring belongs on the knob of the parameter the routed jack DRIVES — resolved through
+        // the target's bound parameter, not its jack label. "Rate" is the Flanger's jack label
+        // and "Rate (Hz)" its knob; matching the label against the knob's name silently drew no
+        // ring on every module whose labels carry no unit (FRO-modulation-ux).
+        const ModulationTarget* target = nullptr;
         for (const auto& t : targets) {
             if (t.channelIndex == info.destChannelIndex) {
-                targetParamName = t.name;
+                target = &t;
                 break;
             }
         }
-        if (targetParamName.isEmpty())
+        if (target == nullptr)
             continue;
 
-        const int si = getModRingSliderIndex(targetParamName);
+        const int si = sliderIndexForModTarget(*target);
         if (si < 0)
             continue;
 
@@ -284,12 +288,8 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
         float radius = std::min(sliderBounds.getWidth(), sliderBounds.getHeight()) / 2.0f - 11.0f;
 
         float baseNorm = 0.5f;
-        for (auto* param : module->getParameters()) {
-            if (param->getName(100) == targetParamName) {
-                baseNorm = param->getValue();
-                break;
-            }
-        }
+        if (const auto* param = mod->parameterForModTarget(*target))
+            baseNorm = param->getValue();
 
         float modNorm = juce::jlimit(0.0f, 1.0f, baseNorm + info.modSignalValue);
 
@@ -417,32 +417,42 @@ std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(j
 
     const auto targets = mod->getModulationTargets();
 
-    for (int si = 0; si < sliders.size(); ++si) {
-        auto* slider = sliders[si];
-        // A knob on an inactive tab page keeps its last bounds, so it must not swallow a drop.
-        if (!slider->isVisible() || !slider->getBounds().contains(localPoint))
-            continue;
-
-        // Only rotaries are modulation targets; the ADSR's vertical sliders are not addressed
-        // this way and neither is anything without a matching CV jack.
-        if (slider->getSliderStyle() != juce::Slider::RotaryHorizontalVerticalDrag)
-            continue;
-
-        for (const auto& t : targets) {
-            if (t.name != slider->getComponentID())
-                continue;
-            return Port{slider->getBounds(), t.channelIndex, /*isInput*/ true, /*isMidi*/ false};
-        }
+    // Resolve each target to ITS knob (bound parameter first, jack label as the fallback) rather
+    // than scanning knobs for a label match: only the bound lookup finds "Rate (Hz)" for "Rate".
+    // Only rotaries are modulation targets; the ADSR's vertical sliders are not addressed this way
+    // and neither is anything without a matching CV jack. A knob on an inactive tab page keeps its
+    // last bounds, so a hidden one (sliderIndexForModTarget says -1) must not swallow a drop.
+    for (const auto& t : targets) {
+        const int si = sliderIndexForModTarget(t);
+        if (si >= 0 && sliders[si]->getBounds().contains(localPoint))
+            return Port{sliders[si]->getBounds(), t.channelIndex, /*isInput*/ true, /*isMidi*/ false};
     }
 
     if (thresholdControl != nullptr && thresholdControl->getSlider() != nullptr &&
         thresholdControl->getBounds().contains(localPoint)) {
         for (const auto& t : targets) {
-            if (t.name == thresholdControl->getParamName())
+            if (knobNameForModTarget(mod, t) == thresholdControl->getParamName())
                 return Port{thresholdControl->getBounds(), t.channelIndex, /*isInput*/ true, /*isMidi*/ false};
         }
     }
     return std::nullopt;
+}
+
+// The componentID the card gave the knob a target drives: its bound parameter's display name
+// (ModuleComponent::createControls sets every slider's componentID to param->getName(100)), or
+// the jack label itself when the target binds to no parameter — the pre-paramId behaviour, kept
+// so a module that never sets paramId and whose labels ARE its knob names keeps working unchanged.
+juce::String ModuleComponent::knobNameForModTarget(const ModuleBase* mod, const ModulationTarget& target) {
+    if (mod != nullptr)
+        if (const auto* param = mod->parameterForModTarget(target))
+            return param->getName(100);
+    return target.name;
+}
+
+// Resolves the knob through the target's BOUND parameter (ModuleBase::parameterForModTarget), so a
+// jack labelled "Rate" finds the "Rate (Hz)" knob; the visibility rule stays getModRingSliderIndex's.
+int ModuleComponent::sliderIndexForModTarget(const ModulationTarget& target) const {
+    return getModRingSliderIndex(knobNameForModTarget(dynamic_cast<const ModuleBase*>(module), target));
 }
 
 bool ModuleComponent::setModDropTargetChannel(int channelIndex) {

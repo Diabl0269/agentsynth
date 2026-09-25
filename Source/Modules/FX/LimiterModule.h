@@ -13,7 +13,7 @@
 class LimiterModule : public ModuleBase {
 public:
     LimiterModule()
-        : ModuleBase("Limiter", 2, 2) {
+        : ModuleBase("Limiter", 5, 2) { // 2 audio + 3 CV (Threshold, Release, Input Gain)
         addParameter(thresholdParam =
                          new juce::AudioParameterFloat("threshold", "Threshold (dB)", -20.0f, 0.0f, -1.0f));
         addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release (ms)", 1.0f, 500.0f, 100.0f));
@@ -41,7 +41,9 @@ public:
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         if (isBypassed()) {
-            // Pure stereo module — no CV channels to clear; pass dry audio through unchanged
+            // Pass dry audio through; clear CV channels so mod signals don't leak downstream
+            for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
+                buffer.clear(ch, 0, buffer.getNumSamples());
             return;
         }
         if (isMuted()) {
@@ -57,32 +59,52 @@ public:
 
         smoothedInputGain.setTargetValue(*inputGainParam);
         smoothedThreshold.setTargetValue(*thresholdParam);
-        limiter.setThreshold(smoothedThreshold.getCurrentValue());
+        // CV (ch2-4) follows the normalised convention (docs/modules/modulation.md#cv-in-normalised-units),
+        // read once per block: Threshold and Release land in juce::dsp::Limiter setters that are
+        // only consulted per block, and Input Gain is a per-block dB shift on the smoothed ramp.
+        limiter.setThreshold(
+            modulateNormalised(*thresholdParam, smoothedThreshold.getCurrentValue(), blockCV(buffer, 2)));
         // Release is a detector time constant: stepping it changes how fast gain recovers, never
         // the current gain. Deliberately not smoothed.
-        limiter.setRelease(*releaseParam);
+        limiter.setRelease(modulateNormalised(*releaseParam, *releaseParam, blockCV(buffer, 3)));
         smoothedThreshold.skip(numSamples);
 
         // Apply input gain per-sample (smoothed)
+        const float inputGainCV = blockCV(buffer, 4);
         for (int i = 0; i < numSamples; ++i) {
-            float gain = juce::Decibels::decibelsToGain(smoothedInputGain.getNextValue());
+            const float gainDb = modulateNormalised(*inputGainParam, smoothedInputGain.getNextValue(), inputGainCV);
+            const float gain = juce::Decibels::decibelsToGain(gainDb);
             buffer.getWritePointer(0)[i] *= gain;
             buffer.getWritePointer(1)[i] *= gain;
         }
 
-        juce::dsp::AudioBlock<float> block(buffer);
-        juce::dsp::ProcessContextReplacing<float> context(block);
+        // Only the audio pair goes through the limiter: it was prepared for 2 channels, and the
+        // CV block behind it is not audio.
+        juce::dsp::AudioBlock<float> fullBlock(buffer);
+        juce::dsp::AudioBlock<float> audioBlock = fullBlock.getSubsetChannelBlock(0, 2);
+        juce::dsp::ProcessContextReplacing<float> context(audioBlock);
         limiter.process(context);
+
+        // Clear CV channels to prevent leaking to downstream modules
+        for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
+            buffer.clear(ch, 0, numSamples);
     }
 
-    juce::String getInputPortLabel(int i) const override { return stereoInputLabel(i, 0, nullptr); }
+    juce::String getInputPortLabel(int i) const override {
+        const juce::String cv[] = {"Threshold", "Release", "Input Gain"};
+        return stereoInputLabel(i, 3, cv);
+    }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(0); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(3); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 0); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 3); }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
-    std::vector<ModulationTarget> getModulationTargets() const override { return {}; }
+    // Every continuous parameter has a CV jack; paramId binds each jack to its knob ("Threshold"
+    // is the jack label, "Threshold (dB)" the knob) so the card rings it and accepts a drop on it.
+    std::vector<ModulationTarget> getModulationTargets() const override {
+        return {{"Threshold", 2, "threshold"}, {"Release", 3, "release"}, {"Input Gain", 4, "inputGain"}};
+    }
     // Pure audio FX — processBlock never touches the MIDI buffer.
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }

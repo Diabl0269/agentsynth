@@ -50,6 +50,11 @@ struct TrackHeaderHost {
      *  in the live graph (the "Missing" / orphaned case). */
     virtual juce::String getNodeDisplayName(const juce::String& uuid) = 0;
 
+    /** A parameter's display name, or empty when it doesn't resolve (callers fall back to paramId). */
+    virtual juce::String getParameterDisplayName(const juce::String& /*uuid*/, const juce::String& /*paramId*/) {
+        return {};
+    }
+
     /** One-click re-bind. NEVER called automatically: a binding is only ever changed by an explicit
      *  user choice from the chip menu. Matching an orphaned track back onto a node BY NAME is
      *  forbidden — two nodes can share a display name and a silent re-bind would point a track at

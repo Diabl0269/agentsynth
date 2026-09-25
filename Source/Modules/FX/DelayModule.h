@@ -5,7 +5,7 @@
 class DelayModule : public ModuleBase {
 public:
     DelayModule()
-        : ModuleBase("Delay", 2, 2) {
+        : ModuleBase("Delay", 5, 2) { // 2 audio + 3 CV (Time, Feedback, Mix)
         addParameter(timeParam = new juce::AudioParameterFloat("time", "Time (ms)", 1.0f, 1000.0f, 250.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, 0.95f, 0.5f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.3f));
@@ -32,7 +32,9 @@ public:
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         if (isBypassed()) {
-            // Pure stereo module — no CV channels to clear; pass dry audio through unchanged
+            // Pass dry audio through; clear CV channels so mod signals don't leak downstream
+            for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
+                buffer.clear(ch, 0, buffer.getNumSamples());
             return;
         }
         if (isMuted()) {
@@ -42,14 +44,20 @@ public:
 
         juce::ignoreUnused(midiMessages);
 
-        smoothedTime.setTargetValue(*timeParam);
-        smoothedFeedback.setTargetValue(*feedbackParam);
-        smoothedMix.setTargetValue(*mixParam);
+        // CV (ch2-4) follows the normalised convention (docs/modules/modulation.md#cv-in-normalised-units),
+        // read once per block into the smoothing targets: Time's own 50 ms ramp is what keeps a
+        // modulated delay time from zipping, so the CV rides that ramp like a knob move does.
+        // These jacks were declared as targets long before the module had the channels — the
+        // ModulationTargetBinding sweep is what caught it (channelIndex >= declared inputs).
+        smoothedTime.setTargetValue(modulateNormalised(*timeParam, *timeParam, blockCV(buffer, 2)));
+        smoothedFeedback.setTargetValue(modulateNormalised(*feedbackParam, *feedbackParam, blockCV(buffer, 3)));
+        smoothedMix.setTargetValue(modulateNormalised(*mixParam, *mixParam, blockCV(buffer, 4)));
 
         int bufferSize = buffer.getNumSamples();
         int delayBufferSize = delayBuffer.getNumSamples();
 
-        int numChannels = juce::jmin(buffer.getNumChannels(), delayBuffer.getNumChannels());
+        // Only the audio pair runs through the delay line; the CV block behind it is not audio.
+        int numChannels = juce::jmin(juce::jmin(buffer.getNumChannels(), delayBuffer.getNumChannels()), 2);
         int localWritePos = writePos;
 
         for (int i = 0; i < bufferSize; ++i) {
@@ -79,17 +87,25 @@ public:
         // Output stage, deliberately outside the feedback path above — the delay line
         // stores the pre-level signal, so lowering Level does not starve the repeats.
         applyOutputLevel(buffer, 2);
+
+        // Clear CV channels to prevent leaking to downstream modules
+        for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
+            buffer.clear(ch, 0, bufferSize);
     }
 
-    juce::String getInputPortLabel(int i) const override { return stereoInputLabel(i, 0, nullptr); }
+    juce::String getInputPortLabel(int i) const override {
+        const juce::String cv[] = {"Time", "Feedback", "Mix"};
+        return stereoInputLabel(i, 3, cv);
+    }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(0); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(3); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 0); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 3); }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
+    // Every continuous parameter has a CV jack; paramId binds "Time" to the "Time (ms)" knob.
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Time", 2}, {"Feedback", 3}, {"Mix", 4}};
+        return {{"Time", 2, "time"}, {"Feedback", 3, "feedback"}, {"Mix", 4, "mix"}};
     }
     // Pure audio FX — processBlock never touches the MIDI buffer.
     bool acceptsMidi() const override { return false; }

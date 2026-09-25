@@ -521,18 +521,35 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
     if (e.eventComponent != this) {
         for (int i = 0; i < sliders.size(); ++i) {
             if (sliders[i] == e.eventComponent) {
-                if (e.mods.isPopupMenu())
-                    showAutomateMenuForSlider(sliderParams[i]);
+                if (e.mods.isPopupMenu()) {
+                    if (sliderParams[i] != nullptr) {
+                        showAutomateMenuForSlider(sliderParams[i]);
+                    } else if (const auto* entry = midiLearnableRegistry_.find(e.eventComponent);
+                               entry != nullptr && entry->hosted && entry->param != nullptr) {
+                        // FRO137: a hosted-plugin card knob -- sliderParams[i] is always null for
+                        // these (a hosted parameter is not a RangedAudioParameter), so the registry
+                        // is what supplies its identity for "Automate..." + MIDI Learn.
+                        showHostedKnobMenu(entry->paramId, entry->param->getName(100));
+                    }
+                }
                 return;
             }
         }
-        // FRO130: every other learnable control (toggles, combos, header buttons, bespoke-card
-        // knobs already matched above via `sliders`) -- ONE registry lookup rather than a new
-        // per-kind identity loop (docs/control/midi-remote-ui.md#right-click-midi-learn--coverage,
-        // Source/UI/CLAUDE.md). No "Automate" item here: that has only ever existed for sliders.
+        // FRO130/FRO137: every other learnable control (toggles, combos, header buttons, bespoke-
+        // card knobs already matched above via `sliders`, hosted toggles/choices) -- ONE registry
+        // lookup rather than a new per-kind identity loop
+        // (docs/control/midi-remote-ui.md#right-click-midi-learn--coverage, Source/UI/CLAUDE.md).
+        // No "Automate" item here: that has only ever existed for sliders (built-in or hosted knob,
+        // both handled above).
         if (e.mods.isPopupMenu()) {
-            if (auto* param = midiLearnableRegistry_.find(e.eventComponent))
-                showMidiLearnOnlyMenu(param);
+            if (const auto* entry = midiLearnableRegistry_.find(e.eventComponent)) {
+                if (entry->hosted) {
+                    if (entry->param != nullptr)
+                        showMidiLearnOnlyMenu(entry->paramId, entry->param->getName(100));
+                } else if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(entry->param)) {
+                    showMidiLearnOnlyMenu(ranged);
+                }
+            }
         }
         return; // some other attached child's own click — nothing for the module body to do
     }

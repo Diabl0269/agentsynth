@@ -208,7 +208,7 @@ public:
     juce::Button& getAutomationCloseButton() noexcept { return automationCloseButton_; }
     juce::Rectangle<int> getAutomationStripBounds() const noexcept { return automationStripBounds_; }
 
-    /** One entry in the lane picker: either an EXISTING doc lane labelled "NodeName \xC2\xB7 paramId"
+    /** One entry in the lane picker: either an EXISTING doc lane labelled "NodeName \xC2\xB7 param name"
      *  (resolved via TrackHeaderHost::getNodeDisplayName; falls back to the uuid's first 8
      *  characters when the node doesn't resolve), or an "Add lane..." entry for a hosted plugin
      *  instance parameter that has none yet -- `isAddEntry` distinguishes the two, `id` is only

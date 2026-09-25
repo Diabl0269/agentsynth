@@ -9,6 +9,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Branding.h"
 #include "Modules/TimelineAudioSourceModule.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
 #include "Timeline/AutomationBinding.h"
@@ -731,6 +732,16 @@ void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, 
         }
     }
     if (param == nullptr) {
+        // A hosted plugin-card knob (FRO137): its parameter is not a RangedAudioParameter, so hand
+        // it to the lane picker's own hosted path, which captures the index hint and the 0..1 range.
+        if (dynamic_cast<synth::HostedPluginModule*>(module) != nullptr) {
+            synth::ui::TrackHeaderHost::PluginLaneOption option;
+            option.nodeUuid = uuid;
+            option.paramId = paramId;
+            option.paramIndex = synth::captureParamIndexHint(module, paramId);
+            if (addPluginAutomationLane(option).isValid())
+                return;
+        }
         statusBar.showMessage("Can't automate: parameter not found");
         return;
     }

@@ -44,9 +44,11 @@ add_executable(Tests
     Modules/ADSR/ADSRClickDiagnosticsTests.cpp
     Modules/ADSR/ADSRReadoutFormattingTests.cpp
     Modules/ADSR/ADSRTempoSyncTests.cpp
+    Modules/ADSR/ADSRCVTests.cpp
     Modules/Envelope/EnvelopeGeneratorTests.cpp
     Modules/EnvelopeFollowerModuleTests.cpp
     Modules/ModuleBaseTests.cpp
+    Modules/ModulationTargetBindingTests.cpp
     Engine/VisualBufferTests.cpp
     Modules/AntiClickTests.cpp
     Timeline/AutomationZipperTests.cpp
@@ -194,7 +196,9 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentPaintTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentEnvelopeCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentModTargetTests.cpp
     UI/Graph/ModuleComponent/HostedPluginCardTests.cpp
+    UI/Graph/ModuleComponent/HostedPluginCardMidiLearnTests.cpp
     UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp
     UI/Graph/PluginKnobPicker/PluginKnobPickerTouchFallbackTests.cpp
     UI/Graph/AutomationUiReflectionTests.cpp
@@ -222,10 +226,12 @@ add_executable(Tests
     FX/FXModule/FXModuleLimiterTests.cpp
     FX/FXModule/FXModulePhaserTests.cpp
     FX/FXModule/FXModulePortLabelsTests.cpp
+    FX/FXModule/FXModuleCVJackTests.cpp
     FX/FXModule/FXModuleReverbTests.cpp
     FX/GateModuleTests.cpp
     FX/PitchShifterModuleTests.cpp
-    FX/ParametricEQModuleTests.cpp
+    FX/ParametricEQ/ParametricEQModuleTests.cpp
+    FX/ParametricEQ/ParametricEQCVTests.cpp
     Modules/VoiceMixerModuleTests.cpp
     FX/BitcrusherModuleTests.cpp
     FX/RingModulatorModuleTests.cpp
@@ -259,7 +265,9 @@ add_executable(Tests
     MidiRemote/ControllerDetectTests.cpp
     MidiRemote/EncoderAutoDetectTests.cpp
     MidiRemote/MidiLearnControllerTests.cpp
+    MidiRemote/MidiLearnControllerHostedParameterTests.cpp
     App/E2EWorkflowTests.cpp
+    App/E2EPluginCardWorkflowTests.cpp
     Modules/ExternalMidiModuleTests.cpp
     Project/PresetManagerTests.cpp
     Project/SettingsMigrationTests.cpp
@@ -324,6 +332,7 @@ add_executable(Tests
     Project/SnippetManager/SnippetManagerPrepareInsertTests.cpp
     Project/SnippetManager/SnippetManagerMacroTests.cpp
     Project/SnippetManager/SnippetManagerPersistenceTests.cpp
+    Project/SnippetManager/SnippetManagerCardLayoutTests.cpp
     UI/Graph/MultiSelectTests.cpp
     UI/Graph/ModuleStepOrderTests.cpp
     Macros/MacroGroupController/MacroGroupControllerTests.cpp
@@ -474,6 +483,7 @@ add_executable(Tests
     Timeline/TimelineE2ETests.cpp
     Project/PatchDocumentTests.cpp
     Project/ProjectBundleTests.cpp
+    Project/ProjectBundleCardLayoutTests.cpp
     Project/AutosaveTests.cpp
     Project/RecentProjectsTests.cpp
     Project/AssetManagerTests.cpp
