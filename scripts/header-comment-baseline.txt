@@ -19,7 +19,7 @@
 49 Source/Mixer/TrackPresetManager.h
 45 Source/Modules/RecordTapModule.h
 38 Source/Plugin/Hosting/HostedPluginBackend.h
-80 Source/Plugin/Hosting/HostedPluginModule.h
+76 Source/Plugin/Hosting/HostedPluginModule.h
 147 Source/Plugin/Hosting/PluginScanService.h
 60 Source/ProjectBundle.h
 56 Source/SnippetManager.h
@@ -39,7 +39,7 @@
 1 Source/Transport/TransportService.h
 62 Source/UI/Assistant/AIChatComponent/AIChatComponent.h
 40 Source/UI/Chrome/StatusBarComponent.h
-45 Source/UI/Graph/ModuleComponent/ModuleComponent.h
+41 Source/UI/Graph/ModuleComponent/ModuleComponent.h
 1 Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
 125 Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
 70 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h

@@ -31,6 +31,10 @@ add_executable(TimelineOpsHarness
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorPersistence.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponent.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/HostedParameterAttachment.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Plugin/Hosting/HostedPluginCardLayout.cpp
+    ${CMAKE_SOURCE_DIR}/Source/Plugin/Hosting/PluginCardLayoutStore.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentAudioDrop.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp

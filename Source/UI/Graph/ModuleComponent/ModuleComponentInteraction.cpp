@@ -23,6 +23,16 @@ void ModuleComponent::reflectParameterValue(const juce::AudioProcessorParameter*
     if (param == nullptr || module == nullptr)
         return; // nothing to reflect into, or this component is mid-teardown (detachFromProcessor)
 
+    // Hosted Plugin card (FRO128): its widgets have null entries in sliderParams/comboParams, so they are
+    // matched by the attachment that owns each one instead. Automation writes a hosted parameter with a plain setValue,
+    // which its listeners never hear, so this feed is the only thing that moves the widget.
+    for (auto* attachment : hostedAttachments_) {
+        if (attachment->getParameter() == param) {
+            attachment->reflectValue(normalized);
+            return;
+        }
+    }
+
     for (int i = 0; i < sliderParams.size(); ++i) {
         if (sliderParams[i] != param)
             continue;

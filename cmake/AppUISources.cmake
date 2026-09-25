@@ -179,6 +179,10 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.h
+    Source/UI/Graph/ModuleComponent/HostedParameterAttachment.cpp
+    Source/UI/Graph/ModuleComponent/HostedParameterAttachment.h
     Source/UI/MidiRemote/MidiLearnMenu.h
     Source/UI/MidiRemote/MidiLearnMenu.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h

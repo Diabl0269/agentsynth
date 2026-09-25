@@ -66,14 +66,37 @@ public:
     bool isDiscrete() const override { return traits_.boolean || !traits_.choices.isEmpty(); }
     juce::StringArray getAllValueStrings() const override { return traits_.choices; }
 
+    // A choice parameter behaves like a real discrete one: one step per value string, the string as its
+    // text, and the string as the thing typed back. Every other stub parameter keeps the plain-number defaults.
+    int getNumSteps() const override {
+        return traits_.choices.isEmpty() ? juce::AudioProcessorParameter::getNumSteps() : traits_.choices.size();
+    }
+    juce::String getText(float value, int maximumStringLength) const override {
+        if (traits_.choices.size() < 2)
+            return juce::AudioProcessorParameter::getText(value, maximumStringLength);
+        const int last = traits_.choices.size() - 1;
+        return traits_.choices[juce::jlimit(0, last, juce::roundToInt(value * (float)last))];
+    }
+
     juce::String getParameterID() const override { return paramId_; }
 
     float getValue() const override { return value_; }
-    void setValue(float newValue) override { value_ = newValue; }
+    void setValue(float newValue) override {
+        value_ = newValue;
+        ++setValueCalls;
+    }
     float getDefaultValue() const override { return defaultValue_; }
     juce::String getName(int) const override { return name_; }
     juce::String getLabel() const override { return {}; }
-    float getValueForText(const juce::String& text) const override { return text.getFloatValue(); }
+    float getValueForText(const juce::String& text) const override {
+        const int index = traits_.choices.indexOf(text);
+        if (index >= 0 && traits_.choices.size() > 1)
+            return (float)index / (float)(traits_.choices.size() - 1);
+        return text.getFloatValue();
+    }
+
+    /** How many times setValue() ran: a widget-driven write must cost exactly one, never an echo. */
+    std::atomic<int> setValueCalls{0};
 
 private:
     juce::String paramId_;
