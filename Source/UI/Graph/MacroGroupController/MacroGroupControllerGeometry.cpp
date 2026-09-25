@@ -129,31 +129,49 @@ juce::Rectangle<int> MacroGroupController::macroHullBoundsExcluding(const juce::
     return computeMacroHullBounds(host_, *macro, excludedMemberUuid);
 }
 
-juce::String MacroGroupController::macroDragJoinOrLeaveTarget(juce::AudioProcessorGraph::NodeID draggedNodeId,
-                                                              juce::Point<int> canvasCentre) const {
+// The ONE query behind the Cmd-drag-across-a-hull gesture (docs/macros/menu-and-membership.md).
+//
+// LEAVE test: the plain hull is a LIVE union of member bounds, so the member being dragged OUT
+// keeps inflating its own macro's hull and would never test as outside it. The test is therefore
+// against macroHullBoundsExcluding(current, uuid). An EMPTY excluding hull (the dragged node is
+// the macro's only ordinary member, so there is nothing left to union) also means "staying": with
+// no remaining body to leave, the gesture is a plain move.
+//
+// JOIN test: the same live-union trap bites from the other side. The dragged module is one of
+// A's members, so A's live hull always contains the module's own centre, and macroHullAt (smallest
+// hull under the centre) would answer A itself (or nothing smaller than it) every time. The JOIN
+// scan therefore skips the macro being left (macroHullAtExcluding) and only considers macros the
+// node is NOT a member of, where the live hull carries no contribution from it. That is what
+// makes `leave` + `join` a transfer.
+MacroGroupController::MacroDragTargets
+MacroGroupController::macroDragJoinOrLeaveTarget(juce::AudioProcessorGraph::NodeID draggedNodeId,
+                                                 juce::Point<int> canvasCentre) const {
     const juce::String uuid = nodeUuidFor(draggedNodeId);
     if (uuid.isEmpty())
         return {};
 
-    if (const auto* currentMacro = host_.getMacros().findByMember(uuid)) {
-        // LEAVE test: outside the hull it would have EXCLUDING its own contribution -> leaving.
-        const auto hullExcludingSelf = macroHullBoundsExcluding(currentMacro->id, uuid);
-        if (!hullExcludingSelf.isEmpty() && !hullExcludingSelf.contains(canvasCentre))
-            return currentMacro->id;
-        return {};
-    }
+    const auto* currentMacro = host_.getMacros().findByMember(uuid);
+    if (currentMacro == nullptr)
+        return {{}, macroHullAt(canvasCentre)};
 
-    // JOIN test: not a member of anything, so any EXPANDED macro whose hull contains the centre
-    // is a candidate — macroHullAt already skips collapsed macros and picks the smallest hull
-    // when more than one overlaps.
-    return macroHullAt(canvasCentre);
+    const auto hullExcludingSelf = macroHullBoundsExcluding(currentMacro->id, uuid);
+    if (hullExcludingSelf.isEmpty() || hullExcludingSelf.contains(canvasCentre))
+        return {};
+    return {currentMacro->id, macroHullAtExcluding(canvasCentre, currentMacro->id)};
 }
 
 juce::String MacroGroupController::macroHullAt(juce::Point<int> canvasPos) const {
+    return macroHullAtExcluding(canvasPos, {});
+}
+
+// macroHullAt's body, with one macro left out of the scan (empty id: none). Private: macroHullAt
+// itself stays the plain hit-test click/right-click use; only the drag query needs the exclusion.
+juce::String MacroGroupController::macroHullAtExcluding(juce::Point<int> canvasPos,
+                                                        const juce::String& excludedMacroId) const {
     juce::String best;
     int bestArea = std::numeric_limits<int>::max();
     for (const auto& macro : host_.getMacros().getAll()) {
-        if (macro.collapsed)
+        if (macro.collapsed || (excludedMacroId.isNotEmpty() && macro.id == excludedMacroId))
             continue;
         const auto bounds = macroHullBounds(macro.id);
         if (bounds.isEmpty() || !bounds.contains(canvasPos))

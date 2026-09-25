@@ -11,26 +11,11 @@
 // end.
 
 #include "AppUndoManager.h"
-#include "MacroContainerTestHelpers.h"
-#include "Modules/FilterModule.h"
-#include "Modules/OscillatorModule.h"
+#include "MacroDragTestHelpers.h"
 #include <algorithm>
-#include <functional>
 #include <gtest/gtest.h>
 
 namespace {
-
-// Same fixed-mouseDownPosition idiom as MacroPortRealMouseDragTests.cpp / DragStateResetTests.cpp:
-// JUCE holds e.getMouseDownPosition() fixed at the original press point for the whole gesture
-// while e.getPosition() tracks wherever the cursor claims to be right now.
-juce::MouseEvent realMouseEvent(juce::Component& eventComp, juce::Point<int> localPos,
-                                juce::Point<int> mouseDownLocalPos, juce::ModifierKeys mods, bool wasDragged = false) {
-    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), localPos.toFloat(), mods, 0.0f, 0.0f,
-                            0.0f, 0.0f, 0.0f, &eventComp, &eventComp, juce::Time::getCurrentTime(),
-                            mouseDownLocalPos.toFloat(), juce::Time::getCurrentTime(), 1, wasDragged);
-}
-
-const juce::ModifierKeys kCmdClick(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::commandModifier);
 
 // Simulates the Windows/Linux reality that commandModifier IS ctrlModifier there (both bits are
 // always set together) — on macOS this sets two genuinely distinct bits, which is exactly what
@@ -40,34 +25,6 @@ const juce::ModifierKeys kCmdClick(juce::ModifierKeys::leftButtonModifier | juce
 const juce::ModifierKeys kCtrlOrWindowsLinuxCmdClick(juce::ModifierKeys::leftButtonModifier |
                                                      juce::ModifierKeys::ctrlModifier |
                                                      juce::ModifierKeys::commandModifier);
-
-/** Drives a full real body-drag gesture on `comp`, from its current position to `delta` away,
- *  under `mods`. `afterDragBeforeUp`, when given, runs after mouseDrag but before mouseUp — the
- *  ONE place a test can observe `GraphEditor::getMacroDragCandidateId()` for real, so a test whose
- *  whole point is "this crosses a hull" can assert the candidate was actually armed instead of
- *  trusting the post-mouseUp membership check alone to have exercised the right branch. */
-void dragBodyBy(ModuleComponent& comp, juce::Point<int> delta, juce::ModifierKeys mods,
-                std::function<void()> afterDragBeforeUp = nullptr) {
-    const juce::Point<int> pressPos(comp.getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
-    const juce::Point<int> dragPos = pressPos + delta;
-    comp.mouseDown(realMouseEvent(comp, pressPos, pressPos, mods));
-    comp.mouseDrag(realMouseEvent(comp, dragPos, pressPos, mods, /*wasDragged=*/true));
-    if (afterDragBeforeUp)
-        afterDragBeforeUp();
-    comp.mouseUp(realMouseEvent(comp, dragPos, pressPos, mods, /*wasDragged=*/true));
-}
-
-/** Sets up a 2-member macro (Oscillator + Filter, both unconnected), expanded so its hull is
- *  live, and returns the macro id. */
-juce::String makeExpandedTwoMemberMacro(GraphEditor& editor, AudioEngine& engine, NodeID& outA, NodeID& outB) {
-    outA = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
-    outB = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
-    editor.setSelectedNodes({outA, outB});
-    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
-    if (!macroId.isEmpty())
-        editor.getMacroController().setMacroCollapsed(macroId, false);
-    return macroId;
-}
 
 } // namespace
 
@@ -94,7 +51,7 @@ TEST(MacroDragMembership, CmdDragOutsideModuleIntoExpandedHullJoinsTheMacro) {
     const auto delta = hull.getCentre() - compC->getBounds().getCentre();
 
     dragBodyBy(*compC, delta, kCmdClick, [&] {
-        EXPECT_FALSE(editor.getMacroDragCandidateId().isEmpty())
+        EXPECT_TRUE(editor.hasMacroDragCandidate())
             << "sanity: dragging C's centre into the hull must arm the JOIN candidate mid-drag -- "
                "without this the assertions below could silently pass on the plain finalize path";
     });
@@ -132,7 +89,7 @@ TEST(MacroDragMembership, CmdDragMemberOutPastHullLeavesTheMacro) {
     // MacroGroupController::macroDragJoinOrLeaveTarget's own comment on why the LEAVE test can
     // never pass without excluding the dragged member's own contribution first.
     dragBodyBy(*compA, {2400, 0}, kCmdClick, [&] {
-        EXPECT_FALSE(editor.getMacroDragCandidateId().isEmpty())
+        EXPECT_TRUE(editor.hasMacroDragCandidate())
             << "sanity: dragging A well outside the hull must arm the LEAVE candidate mid-drag";
     });
 
@@ -176,7 +133,7 @@ TEST(MacroDragMembership, PaintedHullOfOwnMacroExcludesDraggedMemberFromTheFirst
     // FIRST tick of the gesture, not only once a LEAVE candidate actually arms (the bug the user
     // hit: the live union kept including A for the whole first stretch of the pull-out).
     dragBodyBy(*compA, {20, 15}, kCmdClick, [&] {
-        EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty())
+        EXPECT_FALSE(editor.hasMacroDragCandidate())
             << "sanity: this small a drag must not arm any LEAVE/JOIN candidate yet";
         EXPECT_EQ(editor.paintedMacroHullBounds(macroId), expectedExcludingA)
             << "the macro A is being dragged OUT of must already paint as the excluding hull, "
@@ -202,7 +159,7 @@ TEST(MacroDragMembership, PaintedHullOfAJoinTargetStaysTheOrdinaryLiveHull) {
     const auto delta = liveHull.getCentre() - compC->getBounds().getCentre();
 
     dragBodyBy(*compC, delta, kCmdClick, [&] {
-        EXPECT_FALSE(editor.getMacroDragCandidateId().isEmpty()) << "sanity: this must arm the JOIN candidate";
+        EXPECT_TRUE(editor.hasMacroDragCandidate()) << "sanity: this must arm the JOIN candidate";
         EXPECT_EQ(editor.paintedMacroHullBounds(macroId), liveHull)
             << "a macro C might JOIN (C isn't a member of anything yet) must keep painting its "
                "ordinary live hull — nothing to exclude C from";
@@ -249,7 +206,7 @@ TEST(MacroDragMembership, ThreeMemberMacroLeaveIsReachablePerpendicularToTheRow)
     // bigger move than a 2-member macro would), but it is not unreachable, just directional; the
     // next drag below proves the short direction.
     dragBodyBy(*compB, {150, 0}, kCmdClick, [&] {
-        EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty())
+        EXPECT_FALSE(editor.hasMacroDragCandidate())
             << "moving the middle member ALONG the row must stay inside the wide A/C bounding box";
     });
     ASSERT_NE(editor.getMacroController().macroForNode(b), nullptr)
@@ -259,7 +216,7 @@ TEST(MacroDragMembership, ThreeMemberMacroLeaveIsReachablePerpendicularToTheRow)
     // row's height plus the hull margin, regardless of how far apart A and C are horizontally.
     const int perpendicularDrop = hullExcludingB.getBottom() - compB->getBounds().getCentreY() + 5;
     dragBodyBy(*compB, {0, perpendicularDrop}, kCmdClick, [&] {
-        EXPECT_FALSE(editor.getMacroDragCandidateId().isEmpty())
+        EXPECT_TRUE(editor.hasMacroDragCandidate())
             << "moving the middle member PAST the hull's bottom edge must arm the LEAVE candidate";
     });
 
@@ -310,7 +267,7 @@ TEST(MacroDragMembership, CmdDragJoinSplicesOutInteriorPortAndCreatesNewCrossing
     const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
     dragBodyBy(*compF, hull.getCentre() - compF->getBounds().getCentre(), kCmdClick, [&] {
-        EXPECT_FALSE(editor.getMacroDragCandidateId().isEmpty())
+        EXPECT_TRUE(editor.hasMacroDragCandidate())
             << "sanity: dragging F's centre into the hull must arm the JOIN candidate mid-drag";
     });
 
@@ -365,7 +322,7 @@ TEST(MacroDragMembership, OneUndoStepRestoresBothPositionAndMembership) {
 
     const int serialBeforeDrag = undo.getEditSerial();
     dragBodyBy(*compC, delta, kCmdClick, [&] {
-        EXPECT_FALSE(editor.getMacroDragCandidateId().isEmpty())
+        EXPECT_TRUE(editor.hasMacroDragCandidate())
             << "sanity: dragging C's centre into the hull must arm the JOIN candidate mid-drag";
     });
 
@@ -454,7 +411,7 @@ TEST(MacroDragMembership, CmdDragStayingOutsideEveryHullIsAPlainMoveMembershipUn
 
     const int serialBeforeDrag = undo.getEditSerial();
     dragBodyBy(*compC, {30, 30}, kCmdClick, [&] {
-        EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty())
+        EXPECT_FALSE(editor.hasMacroDragCandidate())
             << "sanity: nowhere near any hull must NOT arm a candidate mid-drag";
     }); // small move, nowhere near the macro's hull
 
@@ -477,6 +434,8 @@ TEST(MacroDragMembership, CmdPressedAfterDragBeganStillReparentsInOneUndoStep) {
     GraphEditor editor(engine, &undo);
     undo.setGraphEditor(&editor);
     editor.setSize(1600, 1200);
+    // These tests are about what Cmd (and only Cmd) does, so the plain-drag preference is off.
+    editor.setMacroDragWithoutCmdEnabled(false);
 
     NodeID a, b;
     const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
@@ -506,7 +465,7 @@ TEST(MacroDragMembership, CmdPressedAfterDragBeganStillReparentsInOneUndoStep) {
 
     // First tick, still plain: nothing may arm yet.
     compA->mouseDrag(realMouseEvent(*compA, dragPos, pressPos, plain, /*wasDragged=*/true));
-    EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty())
+    EXPECT_FALSE(editor.hasMacroDragCandidate())
         << "sanity: no modifier held yet -- this tick must be an ordinary plain-drag tick";
 
     // Cmd goes down MID-drag, cursor otherwise held at the SAME screen point -- this must arm the
@@ -516,7 +475,7 @@ TEST(MacroDragMembership, CmdPressedAfterDragBeganStillReparentsInOneUndoStep) {
     // zero further delta), NOT the same `dragPos` as tick one -- reusing `dragPos` would double
     // the move instead of holding it still.
     compA->mouseDrag(realMouseEvent(*compA, pressPos, pressPos, kCmdClick, /*wasDragged=*/true));
-    EXPECT_EQ(editor.getMacroDragCandidateId(), macroId)
+    EXPECT_EQ(editor.getMacroDragLeaveId(), macroId)
         << "pressing Cmd mid-drag, after the press already happened, must still arm the candidate";
 
     const int serialBeforeUp = undo.getEditSerial();
@@ -545,6 +504,8 @@ TEST(MacroDragMembership, CmdReleasedMidDragRevertsToAPlainMove) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
+    // These tests are about what Cmd (and only Cmd) does, so the plain-drag preference is off.
+    editor.setMacroDragWithoutCmdEnabled(false);
 
     NodeID a, b;
     const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
@@ -561,14 +522,13 @@ TEST(MacroDragMembership, CmdReleasedMidDragRevertsToAPlainMove) {
     compA->mouseDown(realMouseEvent(*compA, pressPos, pressPos, kCmdClick));
 
     compA->mouseDrag(realMouseEvent(*compA, dragPos, pressPos, kCmdClick, /*wasDragged=*/true));
-    EXPECT_EQ(editor.getMacroDragCandidateId(), macroId) << "sanity: LEAVE must arm first, same as test 2";
+    EXPECT_EQ(editor.getMacroDragLeaveId(), macroId) << "sanity: LEAVE must arm first, same as test 2";
 
     // Cmd goes UP mid-drag, cursor otherwise held at the SAME screen point (see the sibling test
     // above for why that means `pressPos` again here, not `dragPos`) -- this must disarm the
     // candidate immediately, not wait for mouseUp to notice.
     compA->mouseDrag(realMouseEvent(*compA, pressPos, pressPos, plain, /*wasDragged=*/true));
-    EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty())
-        << "releasing Cmd mid-drag must disarm the candidate immediately";
+    EXPECT_FALSE(editor.hasMacroDragCandidate()) << "releasing Cmd mid-drag must disarm the candidate immediately";
 
     compA->mouseUp(realMouseEvent(*compA, pressPos, pressPos, plain, /*wasDragged=*/true));
 
@@ -605,7 +565,7 @@ TEST(MacroDragMembership, WindowsLinuxCtrlDragCrossingHullReparents) {
     const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
     dragBodyBy(*compC, hull.getCentre() - compC->getBounds().getCentre(), kCtrlOrWindowsLinuxCmdClick, [&] {
-        EXPECT_FALSE(editor.getMacroDragCandidateId().isEmpty())
+        EXPECT_TRUE(editor.hasMacroDragCandidate())
             << "sanity: dragging C's centre into the hull must arm the JOIN candidate mid-drag, "
                "with BOTH ctrlModifier and commandModifier set (the Windows/Linux shape)";
     });
@@ -630,7 +590,7 @@ TEST(MacroDragMembership, WindowsLinuxCtrlDragNotCrossingAHullKeepsThePlainInser
     const auto positionBeforeDrag = compC->getPosition();
 
     dragBodyBy(*compC, {60, 5}, kCtrlOrWindowsLinuxCmdClick, [&] {
-        EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty())
+        EXPECT_FALSE(editor.hasMacroDragCandidate())
             << "sanity: nowhere near any hull must NOT arm a candidate mid-drag";
     }); // nowhere near the macro's hull
 
@@ -667,6 +627,8 @@ TEST(MacroDragMembership, MacOsPlainCtrlDragCrossingHullDoesNotReparent) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
+    // These tests are about what Cmd (and only Cmd) does, so the plain-drag preference is off.
+    editor.setMacroDragWithoutCmdEnabled(false);
 
     NodeID a, b;
     const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
@@ -684,7 +646,7 @@ TEST(MacroDragMembership, MacOsPlainCtrlDragCrossingHullDoesNotReparent) {
     const auto delta = hull.getCentre() - compC->getBounds().getCentre();
 
     dragBodyBy(*compC, delta, macOsCtrlOnly, [&] {
-        EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty())
+        EXPECT_FALSE(editor.hasMacroDragCandidate())
             << "a plain Ctrl-drag (no Cmd) must never arm the reparent candidate, even crossing a hull";
     });
 

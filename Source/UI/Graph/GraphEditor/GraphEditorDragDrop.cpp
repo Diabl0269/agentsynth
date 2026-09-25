@@ -283,8 +283,18 @@ juce::Point<int> GraphEditor::getViewportCentreInCanvasSpace() const {
 // Creates `name` at a canvas position, snapped and anti-overlapped, with undo recorded.
 // `configure` runs on the processor BEFORE it joins the graph, so any non-parameter state it
 // sets is captured by the undo snapshot.
+//
+// A non-empty `joinMacroId` (a library drop with Cmd held over an expanded hull, FRO168) also makes
+// the new node a member of that macro. Node creation and membership must be ONE undo step, and a
+// graph-only recordStructuralChange snapshot cannot carry a membership change, so that case is
+// recorded through recordGraphAndMacroChange instead (same mutation lambda). The node gets its uuid
+// right after addNode (membership is keyed by uuid, and a fresh node has none), and the join runs
+// LAST inside the mutation, after finalizeNewDrop has placed the node and applied any smart
+// connections: addSelectionToMacro computes its crossing-port plan from the then-current graph, so
+// cables the drop just made are seen as boundary crossings and get their ports.
 void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Point<int> dropPos,
-                                            const std::function<void(juce::AudioProcessor&)>& configure) {
+                                            const std::function<void(juce::AudioProcessor&)>& configure,
+                                            const juce::String& joinMacroId) {
     // Audio Input/Output are singletons. JUCE ties every audioOutputNode's channel count to the whole
     // graph and each one sums into the same device buffer, so a second instance would double the
     // signal rather than address another output — and every node lookup in the app (auto-connect,
@@ -336,31 +346,32 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             smartConnections_.applySmartSuggestions(newNodeId, /*recordUndo=*/false);
         };
 
-        if (undoManager) {
-            // Use shared_ptr to make the lambda copyable (std::function requires it)
-            auto proc = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(newProcessor));
-            undoManager->recordStructuralChange(graph, [this, proc, initialPlaced, finalizeNewDrop] {
-                if (*proc) {
-                    auto node = audioEngine.getGraph().addNode(std::move(*proc));
-                    if (node) {
-                        node->properties.set("x", initialPlaced.x);
-                        node->properties.set("y", initialPlaced.y);
-                        auto newNodeId = node->nodeID;
-                        updateComponents();
-                        finalizeNewDrop(newNodeId);
-                    }
-                }
-            });
-        } else {
-            auto node = graph.addNode(std::move(newProcessor));
-            if (node) {
-                node->properties.set("x", initialPlaced.x);
-                node->properties.set("y", initialPlaced.y);
-                auto newNodeId = node->nodeID;
-                updateComponents();
-                finalizeNewDrop(newNodeId);
-            }
-        }
+        // Shared by the undo and no-undo paths; the node is handed over through a shared_ptr so the
+        // lambda stays copyable (std::function requires it).
+        auto proc = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(newProcessor));
+        auto placeNode = [this, proc, initialPlaced, finalizeNewDrop, joinMacroId] {
+            if (!*proc)
+                return;
+            auto node = audioEngine.getGraph().addNode(std::move(*proc));
+            if (!node)
+                return;
+            node->properties.set("x", initialPlaced.x);
+            node->properties.set("y", initialPlaced.y);
+            const auto newNodeId = node->nodeID;
+            const juce::String uuid =
+                joinMacroId.isNotEmpty() ? synth::AIStateMapper::ensureNodeUuid(node.get()) : juce::String();
+            updateComponents();
+            finalizeNewDrop(newNodeId);
+            if (uuid.isNotEmpty())
+                macroController_.addSelectionToMacro(joinMacroId, {uuid}, /*recordUndo=*/false);
+        };
+
+        if (undoManager && joinMacroId.isNotEmpty())
+            undoManager->recordGraphAndMacroChange(graph, macros, placeNode);
+        else if (undoManager)
+            undoManager->recordStructuralChange(graph, placeNode);
+        else
+            placeNode();
     }
 }
 
@@ -482,18 +493,19 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     repaintCanvas();
 }
 
-// ---- Cmd/Ctrl-drag macro reparent (FRO40, docs/macros/ports.md) ------------------------------
+// ---- Cmd-drag macro reparent (FRO40, FRO168, docs/macros/menu-and-membership.md) --------------
 //
-// A Cmd- or Ctrl-armed drag joins/leaves an expanded macro by crossing its hull border.
-// ModuleComponentInteraction.cpp's mouseDrag calls updateMacroDragCandidate on every tick (only
-// while one of those modifiers armed the drag — see its own comment); mouseUp reads the last
-// value updateMacroDragCandidate left rather than re-querying geometry of its own, so what gets
-// finalized is exactly what was highlighted. GraphEditorCables.cpp's paint() reads
-// getMacroDragCandidateId() (declared inline in GraphEditor.h) to draw the emphasis.
+// A Cmd-armed drag (or a plain single-module drag with the drag-without-Cmd preference) joins,
+// leaves or transfers between expanded macros by crossing their hull borders.
+// ModuleComponentInteraction.cpp's mouseDrag calls updateMacroDragCandidate on every tick while the
+// drag is reparent-armed; mouseUp reads the last leave/join pair updateMacroDragCandidate left
+// rather than re-querying geometry of its own, so what gets finalized is exactly what was
+// highlighted. GraphEditorCables.cpp's paint() reads getMacroDragLeaveId()/getMacroDragJoinId()
+// (declared inline in GraphEditor.h) to draw the emphasis.
 
 void GraphEditor::updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID draggedNodeId,
                                            juce::Point<int> canvasCentre) {
-    // Set unconditionally, BEFORE the candidate-string early-return below, so paintedMacroHullBounds
+    // Set unconditionally, BEFORE the candidate early-return below, so paintedMacroHullBounds
     // already excludes the dragged module from its own macro's hull from the very first tick of the
     // drag — not only once the drag actually crosses into LEAVE-candidate territory. That first
     // stretch (still inside the excluding hull, no candidate yet) is exactly the phase where a live
@@ -501,29 +513,31 @@ void GraphEditor::updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID dra
     const bool nodeChanged = draggedNodeId != macroDragDraggedNodeId_;
     macroDragDraggedNodeId_ = draggedNodeId;
 
-    const juce::String candidate = macroController_.macroDragJoinOrLeaveTarget(draggedNodeId, canvasCentre);
-    if (candidate == macroDragCandidateId_ && !nodeChanged)
+    const auto targets = macroController_.macroDragJoinOrLeaveTarget(draggedNodeId, canvasCentre);
+    if (targets.leave == macroDragLeaveId_ && targets.join == macroDragJoinId_ && !nodeChanged)
         return;
-    macroDragCandidateId_ = candidate;
+    macroDragLeaveId_ = targets.leave;
+    macroDragJoinId_ = targets.join;
     repaintCanvas();
 }
 
 void GraphEditor::clearMacroDragCandidate() {
     const bool nodeWasSet = macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{};
-    if (macroDragCandidateId_.isEmpty() && !nodeWasSet)
+    if (macroDragLeaveId_.isEmpty() && macroDragJoinId_.isEmpty() && !nodeWasSet)
         return;
-    macroDragCandidateId_.clear();
+    macroDragLeaveId_.clear();
+    macroDragJoinId_.clear();
     macroDragDraggedNodeId_ = {};
     repaintCanvas();
 }
 
 // macroHullBounds(macroId), except while a reparent drag is pulling one of macroId's OWN members
 // out: then it's macroHullBoundsExcluding that member, so the hull visibly shrinks away from the
-// module instead of the live union chasing it. Paint-only. Only the macro the dragged module is CURRENTLY a member of
-// (the one a LEAVE would remove it from) gets the excluding hull; a macro it might JOIN is never
-// its current macro (the flat membership model means a member of one macro is never re-tested as
-// a JOIN candidate for another, per macroDragJoinOrLeaveTarget's own comment), so this can never
-// accidentally shrink a JOIN target's hull.
+// module instead of the live union chasing it. Paint-only. Only the macro the dragged module is
+// CURRENTLY a member of (the one a LEAVE would remove it from) gets the excluding hull. A macro it
+// might JOIN is by construction not its current macro (a transfer joins a DIFFERENT one, per
+// macroDragJoinOrLeaveTarget), so the dragged module contributes nothing to that hull and it keeps
+// its live bounds.
 juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& macroId) const {
     if (macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{}) {
         const auto* ownMacro = macroController_.macroForNode(macroDragDraggedNodeId_);
@@ -535,11 +549,39 @@ juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& mac
     return macroController_.macroHullBounds(macroId);
 }
 
-// The single-undo-step finalize (docs/macros/ports.md): modeled on finalizeMacroCardDrag
-// (GraphEditorSelection.cpp) — ONE lambda runs the ordinary position finalize AND the membership
-// mutation, handed to ONE recordGraphAndMacroChange call, so Cmd+Z undoes the whole gesture
-// (position + membership + any macro-port splicing addSelectionToMacro/removeSelectionFromMacro
-// do along the way) together.
+// Whether a library drop should join a macro: Cmd held (the same modifier a canvas module drag
+// uses), or the drag-without-Cmd preference on. THE one place the drop-side modifier is read, so a
+// platform where JUCE's realtime modifier state is not live during a drag-and-drop has exactly one
+// function to change; tests drive the Cmd half through setMacroJoinCommandOverrideForTests.
+bool GraphEditor::isMacroJoinModifierDown() const {
+    const bool cmdDown = macroJoinCommandOverride_.has_value()
+                             ? *macroJoinCommandOverride_
+                             : juce::ModifierKeys::getCurrentModifiersRealtime().isCommandDown();
+    return cmdDown || macroDragWithoutCmdEnabled;
+}
+
+juce::String GraphEditor::macroJoinTargetAt(juce::Point<int> canvasCentre) const {
+    if (!isMacroJoinModifierDown())
+        return {};
+    return macroController_.macroHullAt(canvasCentre);
+}
+
+// The live drop-target highlight of a LIBRARY drag reuses the join id a canvas reparent drag
+// uses, so GraphEditorCables.cpp draws both the same way. The two gestures never overlap, and the
+// leave id is left alone (a library drag has nothing to leave).
+void GraphEditor::setMacroDropCandidate(const juce::String& macroId) {
+    if (macroId == macroDragJoinId_)
+        return;
+    macroDragJoinId_ = macroId;
+    repaintCanvas();
+}
+
+// The single-undo-step finalize (docs/macros/menu-and-membership.md): modeled on
+// finalizeMacroCardDrag (GraphEditorSelection.cpp) — ONE lambda runs the ordinary position finalize
+// AND the membership mutations, handed to ONE recordGraphAndMacroChange call, so Cmd+Z undoes the
+// whole gesture (position + leave + join + any macro-port splicing addSelectionToMacro/
+// removeSelectionFromMacro do along the way) together. A transfer (`leaveId` and `joinId` both
+// set) is the leave followed by the join inside that same lambda.
 //
 // The graph "before" state is NOT recordGraphAndMacroChange's own default fresh capture — it is
 // whatever ModuleComponent::mouseDown's captureBeforeState() stashed, taken back via
@@ -555,7 +597,7 @@ juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& mac
 // for exactly the same reason (see ModuleComponent::mouseUp's plain-finalize branch).
 //
 // Ordering inside the lambda still matters, independent of the point above: `finalizeModuleDrag`
-// runs BEFORE the membership mutation because addSelectionToMacro/removeSelectionFromMacro's
+// runs BEFORE the membership mutations because addSelectionToMacro/removeSelectionFromMacro's
 // updateComponents() call can add or remove macro PORT nodes for cables that just started/stopped
 // crossing the boundary — never the dragged node itself (its own graph node persists through a
 // membership-only + port-splicing change) — but finalizeModuleDrag still wants to resolve `module`
@@ -563,7 +605,18 @@ juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& mac
 // calls this method LAST and touches nothing on `this` afterwards: defensive practice for the day
 // a future macroController_ change does end up tearing down the dragged component, even though
 // today's addSelectionToMacro/removeSelectionFromMacro never do.
-void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juce::String& macroId, bool isJoin) {
+//
+// TRANSFER ORDERING (FRO168): the leave runs first, then the join, and neither precomputes a
+// port-crossing plan up front. Each call builds its own plan at call time from the graph as it is
+// THEN: macro A's plan is computed off the pre-remove graph (cables from the node to A's members
+// become A's boundary ports), and macro B's plan off the post-remove graph, in which the splice A's
+// leave just did has already rewired those cables. Planning both against the pre-gesture graph
+// instead would hand B a plan describing cables that A's splice has since replaced with port nodes,
+// yielding orphan or duplicate ports. Ids stay valid across the steps because macro ids are stable;
+// removeSelectionFromMacro can dissolve A outright (the node was its last ordinary member) and the
+// join still works because it only ever looks B up by id, lazily, inside its own call.
+void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juce::String& leaveId,
+                                              const juce::String& joinId) {
     if (module == nullptr)
         return;
 
@@ -571,12 +624,12 @@ void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juc
     auto& graph = audioEngine.getGraph();
     const juce::var graphBeforeOverride = undoManager ? undoManager->takeCapturedGraphBeforeState() : juce::var();
 
-    auto doFinalize = [this, module, macroId, uuid, isJoin] {
+    auto doFinalize = [this, module, leaveId, joinId, uuid] {
         finalizeModuleDrag(module);
-        if (isJoin)
-            macroController_.addSelectionToMacro(macroId, {uuid}, /*recordUndo=*/false);
-        else
-            macroController_.removeSelectionFromMacro(macroId, {uuid}, /*recordUndo=*/false);
+        if (leaveId.isNotEmpty())
+            macroController_.removeSelectionFromMacro(leaveId, {uuid}, /*recordUndo=*/false);
+        if (joinId.isNotEmpty())
+            macroController_.addSelectionToMacro(joinId, {uuid}, /*recordUndo=*/false);
     };
 
     if (undoManager)

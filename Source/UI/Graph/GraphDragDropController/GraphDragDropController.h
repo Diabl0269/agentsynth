@@ -84,6 +84,9 @@ public:
     void filesDropped(const juce::StringArray& files, int x, int y);
 
 private:
+    /** The expanded macro a plain-module library drop at `details` would join, or empty. */
+    juce::String macroJoinTargetForDrop(const juce::DragAndDropTarget::SourceDetails& details) const;
+
     GraphCanvasHost& host_;
 
     // Drag-preview state (grid + landing ghost)
@@ -96,6 +99,9 @@ private:
     juce::Rectangle<int> dragPreviewAim_;
     // Library-drag probe: jack metadata for a module that does not exist on the canvas yet.
     bool dragPreviewIsSnippet_ = false;
+    // True only for a plain factory-module library payload (not a snippet or a plugin), the one kind
+    // that can join a macro on drop.
+    bool dragPreviewIsPlainModule_ = false;
     std::unique_ptr<juce::AudioProcessor> dragPreviewProbe_;
 
     std::vector<AlignmentGuide> alignmentGuides_;

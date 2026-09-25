@@ -1,7 +1,8 @@
 # Macro Menu and Membership
 
 Where a macro's own actions are reachable from, and every way a macro's membership changes: the menu
-items, a Cmd-drag across the hull border, and the collapse control on an expanded hull. The port
+items, a Cmd-drag across the hull border (or a plain drag, with the Preferences toggle), a library
+module dropped on a hull, and the collapse control on an expanded hull. The port
 machinery every membership change runs is [`docs/macros/auto-ports.md`](auto-ports.md).
 
 ---
@@ -147,53 +148,65 @@ covers.
 
 ## Cmd drag across a hull border
 
-**Cmd-drag a module across an EXPANDED macro's hull border to add it to, or remove it from, that
-macro** — the drag itself decides membership, with no separate confirmation step. Before this the
-only routes were the menu items above and ungroup-then-regroup, both explicit and several clicks away
-from the drag the user is already doing.
+**Cmd-drag a module across an EXPANDED macro's hull border to add it to, remove it from, or move it
+between macros** — the drag itself decides membership, with no separate confirmation step. Before this
+the only routes were the menu items above and ungroup-then-regroup, both explicit and several clicks
+away from the drag the user is already doing. With the [drag-without-Cmd
+preference](#dragging-without-cmd-the-preference) (on by default) a plain drag of a single module does
+the same.
 
 **The query, `MacroGroupController::macroDragJoinOrLeaveTarget`** (declared beside `macroHullBounds`
 and `macroHullAt`), is given the dragged node's id and its CENTRE — not its top-left — in canvas
-coordinates, and answers with a macro id or empty:
+coordinates, and answers with a `MacroDragTargets { leave, join }` pair, each a macro id or empty:
 
-- **JOIN** — the dragged node is in no macro: test its centre against the plain `macroHullAt()`,
-  which already only considers EXPANDED macros (a collapsed one is never a candidate, since its
-  members are hidden `ModuleComponent`s that cannot be dragged at all) and picks the smallest hull
-  when more than one overlaps.
-- **LEAVE** — the dragged node IS a member of macro X: test its centre against
-  `macroHullBoundsExcluding(X, ownUuid)`. This variant exists because `macroHullBounds()` is a LIVE
-  union of member bounds, so a member dragged OUTWARD keeps inflating its own hull's union and could
-  never test as outside, and so could never leave. One consequence worth knowing: for a two-member
-  macro, `macroHullBoundsExcluding` reduces to just the OTHER member's own footprint, so almost any
-  Cmd-drag of either member reads as outside it — by design, not a bug; the wider the macro, the more
-  room a member has to move before crossing out. With three or more members the exit distance is
-  direction-dependent but never unbounded: three members in a horizontal row is the worst case (the
-  two outer members keep the excluding hull wide along the row), and leaving is still reachable, just
-  further along the row, and short in the perpendicular direction.
+- **JOIN only (`{"", B}`)** — the dragged node is in no macro: test its centre against the plain
+  `macroHullAt()`, which already only considers EXPANDED macros (a collapsed one is never a candidate,
+  since its members are hidden `ModuleComponent`s that cannot be dragged at all) and picks the
+  smallest hull when more than one overlaps.
+- **Staying (`{"", ""}`)** — the dragged node IS a member of macro A and its centre is still inside
+  `macroHullBoundsExcluding(A, ownUuid)` (or that hull is empty, so there is nothing left to leave).
+  This variant exists because `macroHullBounds()` is a LIVE union of member bounds, so a member
+  dragged OUTWARD keeps inflating its own hull's union and could never test as outside, and so could
+  never leave. One consequence worth knowing: for a two-member macro, `macroHullBoundsExcluding`
+  reduces to just the OTHER member's own footprint, so almost any drag of either member reads as
+  outside it — by design, not a bug; the wider the macro, the more room a member has to move before
+  crossing out. With three or more members the exit distance is direction-dependent but never
+  unbounded: three members in a horizontal row is the worst case (the two outer members keep the
+  excluding hull wide along the row), and leaving is still reachable, just further along the row, and
+  short in the perpendicular direction.
+- **LEAVE only (`{A, ""}`)** — the centre is outside A's excluding hull and over no other expanded
+  hull.
+- **Transfer (`{A, B}`)** — the centre is outside A's excluding hull AND inside another expanded macro
+  B's hull: the module leaves A and joins B in the same gesture. The JOIN scan for a member of A
+  deliberately SKIPS A (`macroHullAtExcluding`, a private variant of `macroHullAt`; the public
+  `macroHullAt` that click and right-click hit-testing use is unchanged). A's live hull still
+  contains the dragged module — it is one of the members being unioned — so a plain `macroHullAt`
+  would answer A itself, or something inside A, and never B.
 
-**Membership is checked FIRST, so one continuous drag never does both.** A member dragged out of macro
-A directly into macro B's hull LEAVES A and does not also join B — `macroDragJoinOrLeaveTarget`
-returns the LEAVE target as soon as it finds one and never falls through to test JOIN against B in the
-same call. Joining B is a second, separate drag, started from outside any macro.
+A transfer is one continuous drag from A's hull into B's: the leave test and the join test are both
+answered from the one query, and `finalizeMacroMembershipDrag(module, leaveId, joinId)` applies them
+together (see "One undo step" below).
 
 **The gesture mirrors `ModuleComponent`'s existing Ctrl deferred classification exactly**
 (`ctrlTogglePending`/`ctrlPressSelection`): Cmd-press arms a `cmdReparentPending` flag and
 `cmdPressSelection`, collapses the selection onto the pressed module, and falls through to arm the
 drag like a plain click would; Cmd-click with no movement completes as the deferred additive-select
 toggle, exactly like Ctrl's. `GraphContentComponent::paint()` reads
-`GraphEditor::getMacroDragCandidateId()` and draws the SAME dashed hull stroke heavier and fully
-opaque for whichever macro is the live candidate, rather than inventing a second visual language for
-"about to change".
+`GraphEditor::getMacroDragLeaveId()` and `getMacroDragJoinId()` and draws the SAME dashed hull stroke
+heavier and fully opaque for a macro that is the live leave OR join candidate (a transfer emphasises
+both), rather than inventing a second visual language for "about to change".
 
 **Whether a drag can reparent at all is a THIRD, separate flag — `reparentArmed` — not derived from
 `ctrlTogglePending || cmdReparentPending`.** That OR seemed safe (one of the two is always true
 exactly when a drag might cross a hull) and was wrong: on macOS Ctrl and Cmd are genuinely distinct
 keys, so a plain Ctrl-drag — the shipped insert-between gesture, unrelated to membership — also sets
 `ctrlTogglePending`, and the OR silently let it reparent whenever it happened to cross a hull,
-compounding two gestures nobody asked to combine. `reparentArmed` is set to
-`e.mods.isCommandDown()` alone, unconditionally, at the top of `mouseDown`'s modifier chain, before
-the `isCtrlDown()`/`isCommandDown()` branches, so a click or drag with neither modifier reaches them
-with it already false. The platform matrix that falls out:
+compounding two gestures nobody asked to combine. `reparentArmed` is decided by ONE helper,
+`ModuleComponent::computeReparentArmed`, from `e.mods.isCommandDown()` (or, with the preference on,
+a plain single-module drag — see below) and never from which branch fired, so a click or drag with
+neither modifier and the preference off reaches the branches with it false. The platform matrix that
+falls out (preference off; the preference only adds plain single-module drags to the "reparent" rows
+and never touches Ctrl):
 
 | Platform | Gesture | `reparentArmed` | Result |
 |---|---|---|---|
@@ -202,8 +215,8 @@ with it already false. The platform matrix that falls out:
 | Windows and Linux | Ctrl-drag, which IS Cmd-drag (`commandModifier` is `ctrlModifier`) | true | **both**: insert-between AND reparent, if the drag crosses a hull |
 
 `mouseDrag` recomputes the candidate on every tick but ONLY while `reparentArmed`, via
-`GraphEditor::updateMacroDragCandidate`, which stores it in `macroDragCandidateId_`
-(`getMacroDragCandidateId()` is the public accessor).
+`GraphEditor::updateMacroDragCandidate`, which stores the pair in `macroDragLeaveId_` /
+`macroDragJoinId_` (`getMacroDragLeaveId()` / `getMacroDragJoinId()` are the public accessors).
 
 **`reparentArmed` is re-derived on every `mouseDrag` tick for a SINGLE-module drag, not latched once
 at `mouseDown`.** Sampling only at press time meant the user had to already be holding the modifier
@@ -220,13 +233,14 @@ directly for the module's own about-to-be-left macro made the outline chase the 
 dragged out — pulling a member toward the edge of a two-member macro looked like it was growing the
 hull to stay around it, making "remove from macro" look impossible. `GraphEditor` tracks
 `macroDragDraggedNodeId_`, set and cleared by the exact same
-`updateMacroDragCandidate`/`clearMacroDragCandidate` calls as `macroDragCandidateId_` (one lifetime,
-not two) and set FIRST, unconditionally, before the candidate itself is computed — so the shrink
+`updateMacroDragCandidate`/`clearMacroDragCandidate` calls as the two candidate ids (one lifetime,
+not three) and set FIRST, unconditionally, before the candidate itself is computed — so the shrink
 starts on the very first tick, before any LEAVE candidate has armed.
 `GraphEditor::paintedMacroHullBounds(macroId)` is what `paintExpandedMacroHulls` calls instead of
 `macroHullBounds` directly: it returns `macroHullBoundsExcluding` for the macro the dragged module
 currently belongs to, and the ordinary live `macroHullBounds` for every other macro, including one
-the drag might JOIN, which by definition is not the dragged module's current macro. **Hit-testing
+the drag might JOIN (a transfer's target is by construction a DIFFERENT macro from the one being
+left, so the dragged module contributes nothing to its hull). **Hit-testing
 (`macroHullAt`, used by click-to-select and the hull's right-click menu) is unaffected and keeps
 using `macroHullBounds` — this substitution is paint-only.**
 
@@ -242,8 +256,8 @@ without a second, unrelated modifier.
 
 **One undo step, and it must reuse the mousedown-time graph capture.**
 `GraphEditor::finalizeMacroMembershipDrag` is modelled on `finalizeMacroCardDrag`: one lambda runs the
-ordinary `finalizeModuleDrag` and then the membership mutation, and the whole lambda goes to ONE
-`recordGraphAndMacroChange` call. `addSelectionToMacro`/`removeSelectionFromMacro` both take a
+ordinary `finalizeModuleDrag`, then the leave (if any), then the join (if any), and the whole lambda
+goes to ONE `recordGraphAndMacroChange` call. `addSelectionToMacro`/`removeSelectionFromMacro` both take a
 trailing `recordUndo = true` parameter for this — `recordUndo=false` skips their own
 `recordGraphAndMacroChange` and runs the mutation directly, so the outer finalize owns the one
 transaction.
@@ -264,10 +278,68 @@ position-only undo step from the same capture — and it does not need to discar
 `finalizeMacroMembershipDrag` consumes it via `takeCapturedGraphBeforeState()`, which clears it as a
 side effect.
 
+**Transfer ordering.** In a transfer the leave runs first and the join second, and neither computes a
+port-crossing plan ahead of time: each `addSelectionToMacro`/`removeSelectionFromMacro` call builds
+its own plan when it runs, from the graph as it is THEN. A's plan is computed off the pre-remove
+graph; B's is computed off the post-remove graph, in which A's splice has already rewired the cables
+between the moved module and A's members through port nodes. Planning both against the pre-gesture
+graph would give B a plan describing cables A's splice has since replaced, producing orphan or
+duplicate ports. Macro ids are stable, and `removeSelectionFromMacro` may dissolve A outright (the
+module was its last ordinary member); the join looks B up by id inside its own call, so it still
+lands. One undo removes both ports and both membership changes.
+
 A crossing drag reuses the incremental membership path wholesale
 ([Incremental port splicing](#incremental-port-splicing-on-a-membership-change)), so it gets exactly
 the same auto-port creation and splice-out-when-interior behaviour as the menu-driven add and remove,
 with no new port logic of its own.
+
+## Dragging without Cmd (the preference)
+
+Preferences > graph behaviour has **"Drag modules into and out of macros without Cmd"**
+(`"macroDragWithoutCmd"`, **on by default**; `GraphEditor::setMacroDragWithoutCmdEnabled`). With it on,
+a plain drag of a single module joins, leaves, or transfers exactly like a Cmd-drag; Cmd still works
+either way, and with the preference off only Cmd does.
+
+`ModuleComponent::computeReparentArmed` is the one decision behind both the `mouseDown` latch and the
+live re-derivation in `mouseDrag`. The preference adds two exclusions, both correctness rules:
+
+- **Never a group drag.** A plain press on an already-selected module of a multi-selection keeps the
+  whole group, and a latched `reparentArmed` would then reparent only the grabbed module in `mouseUp`
+  and skip `finalizeSelectionDrag`, leaving the group's drag state armed and the other members
+  unresolved. The preference arms reparent only when the selection is just the dragged module (Cmd
+  cannot hit this: a Cmd press collapses the selection onto the module first), and `mouseDrag` keeps
+  its `!isSelectionDragActive()` guard, so a group drag never reparents and always finalizes as a
+  group.
+- **Never with Ctrl held (macOS).** A macOS Ctrl-drag is the insert-between gesture and stays that
+  alone; the preference does not arm it. (On Windows and Linux Ctrl IS Cmd, so the platform matrix
+  above applies unchanged.)
+
+**Why you may want to turn it off.** With a small macro the "excluding hull" a member is tested
+against is tiny (for two members it is just the other member's footprint), so plainly rearranging a
+member of a two-member macro can read as leaving it. Hold Cmd instead and turn the preference off if
+that gets in the way.
+
+## Dropping a library module into a macro
+
+A module dragged from the library and dropped with its ghost's CENTRE over an expanded macro's hull
+joins that macro, when Cmd is held or the preference above is on
+(`GraphDragDropController::itemDropped`). Details:
+
+- **Modules only.** Snippet and hosted-plugin payloads drop exactly as before and never join.
+- **Hull tested at the ghost's centre before anti-overlap** (`macroHullAt`, so the smallest expanded
+  hull wins) — which is the cursor, since the ghost is centred on it. Not at the card's final landing
+  slot: a hull is mostly member cards, so the free slot the card is pushed to is usually outside it,
+  and testing that would fail exactly when the macro is tight. The card lands at the free slot and,
+  as a member, pulls the live hull out to include it. Dropping outside every hull is an ordinary
+  drop, modifier or not.
+- **One undo step.** `GraphEditor::addModuleAtCanvasPosition` takes an optional macro id; with one it
+  records through `recordGraphAndMacroChange` instead of `recordStructuralChange`, so node creation,
+  its uuid, any smart connections and the membership (with its port splicing) are a single Cmd+Z.
+- **Live highlight.** While a library drag hovers such a hull, `GraphEditor::setMacroDropCandidate`
+  puts that macro in the same join-id emphasis a canvas drag uses; it clears on drag exit and drop.
+- **One seam for the modifier.** `GraphEditor::isMacroJoinModifierDown()` (Cmd realtime state, or the
+  preference) is the only place the drop side reads the modifier; tests drive the Cmd half through
+  `setMacroJoinCommandOverrideForTests`.
 
 ## The expanded hull's collapse button
 
@@ -320,6 +392,11 @@ without ever opening it. That is strictly stronger than asserting against a seco
 menu: the test inspects the exact menu object the click itself produced. A test also guards the wiring
 itself, so a future revert to a direct `showMenuAsync()` call fails there first rather than only as an
 unexplained Linux-only segfault.
+
+The drag gestures (join, leave, transfer, the preference, the library drop) are tested the same way:
+through real `mouseDown`/`mouseDrag`/`mouseUp` (and `itemDragEnter`/`itemDragMove`/`itemDropped`) in
+`Tests/Macros/MacroContainer/MacroDragMembershipTests.cpp` and `MacroDragTransferTests.cpp`, sharing
+their synthesised-event helpers in `MacroDragTestHelpers.h`.
 
 ## Related
 

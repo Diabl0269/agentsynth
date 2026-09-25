@@ -473,6 +473,7 @@ private:
     // cmdReparentPending`, which is also true for a plain macOS Ctrl+drag. Re-derived every
     // mouseDrag tick for a single-module drag, so Cmd pressed/released mid-drag arms/disarms it.
     bool reparentArmed = false;
+    bool computeReparentArmed(const juce::ModifierKeys& mods) const;
 
     // Inline rename editor, alive only between beginTitleRename and finishTitleRename. A child
     // component, so there is no window seam to stub out for a display-less test run.

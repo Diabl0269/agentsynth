@@ -40,6 +40,10 @@ public:
     void setMacroAutoCreatePortsOnDragEnabled(bool enabled);
     bool isMacroAutoDeletePortsOnLastCableEnabled() const;
     void setMacroAutoDeletePortsOnLastCableEnabled(bool enabled);
+    // FRO168 (docs/macros/menu-and-membership.md): reparent a module by dragging it across a macro hull without
+    // holding Cmd. Plain on/off, ON by default (Cmd works either way).
+    bool isMacroDragWithoutCmdEnabled() const;
+    void setMacroDragWithoutCmdEnabled(bool enabled);
     // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): plain on/off, ON by default —
     // same shape as the two T148 toggles above (a brand-new automation, not a replacement for pre-existing silent
     // behaviour).
@@ -175,6 +179,7 @@ private:
     void persistDoubleClickPortDisconnect(bool enabled);
     void persistMacroAutoCreatePortsOnDrag(bool enabled);
     void persistMacroAutoDeletePortsOnLastCable(bool enabled);
+    void persistMacroDragWithoutCmd(bool enabled);
     void persistMixerAutoCreateChannelOnConnect(bool enabled);
     void persistAlignmentGuidesEnabled(bool enabled);
     void persistDefaultDualIOForNewModules(bool enabled);
@@ -233,6 +238,15 @@ private:
     // (which was tripping the function-size ratchet) into its own named step; `groupMatches`/
     // `setGroupVisible`/`beginGroup` are layoutContent's own search-filter helpers, forwarded
     // through rather than duplicated.
+    // The macro toggle group's rows (T148 + FRO168), and their construction; each a named step of
+    // layoutContent / the constructor for the function-size ratchet.
+    void initMacroToggles();
+    bool
+    layoutMacroToggleGroup(int& y, int contentWidth,
+                           const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+                           const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible,
+                           const std::function<void(bool)>& beginGroup);
+
     void layoutMixerDefaultTrackPresetGroup(
         int& y, int contentWidth, const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
         const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible,
@@ -300,6 +314,7 @@ private:
                                                         "boundary"};
     juce::ToggleButton macroAutoDeletePortsOnLastCableToggle{"Auto-delete macro ports when their last cable is "
                                                              "removed"};
+    juce::ToggleButton macroDragWithoutCmdToggle{"Drag modules into and out of macros without Cmd"};
     // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): plain on/off, ON by default —
     // see the getter/setter declarations above for why this is a different shape from a tri-state "ask".
     juce::ToggleButton mixerAutoCreateChannelOnConnectToggle{

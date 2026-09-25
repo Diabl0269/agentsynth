@@ -170,25 +170,30 @@ public:
     // -----------------------
 
     juce::Rectangle<int> macroHullBounds(const juce::String& macroId) const;
-    /** FRO40: `macroHullBounds` above, but with `excludedMemberUuid` left out of the union too —
-     *  the LEAVE half of a Cmd/Ctrl-drag needs this because the plain hull is a LIVE union of
+    /** `macroHullBounds` above, but with `excludedMemberUuid` left out of the union too —
+     *  the LEAVE half of a Cmd-drag needs this because the plain hull is a LIVE union of
      *  member bounds, so the member being dragged OUT keeps inflating its own hull and could never
-     *  cross back out of it (see macroDragJoinOrLeaveTarget's own comment). Empty under the same
+     *  cross back out of it (see macroDragJoinOrLeaveTarget's own comment in the .cpp). Empty under the same
      *  conditions as macroHullBounds (no macro, collapsed, or nothing left to union). */
     juce::Rectangle<int> macroHullBoundsExcluding(const juce::String& macroId,
                                                   const juce::String& excludedMemberUuid) const;
     juce::String macroHullAt(juce::Point<int> canvasPos) const;
-    /** FRO40: the ONE query behind the Cmd/Ctrl-drag-across-a-hull gesture (docs/macros/ports.md).
-     *  `draggedNodeId` not a member of any macro: JOIN test — `canvasCentre` (the dragged module's
-     *  own centre, not its top-left) against `macroHullAt`, which already only considers EXPANDED
-     *  macros, so a collapsed one is never a candidate. `draggedNodeId` already a member of macro
-     *  X: LEAVE test — `canvasCentre` against X's `macroHullBoundsExcluding` its own uuid; outside
-     *  that hull means "would leave X". Returns X's/the candidate's id, or empty for neither
-     *  (no resolvable uuid, inside its own macro's hull, or over no expanded hull at all). The flat
-     *  membership model (Macro's own class comment) means a member of one macro is never a JOIN
-     *  candidate for a different one, so this never tests JOIN for an already-grouped node. */
-    juce::String macroDragJoinOrLeaveTarget(juce::AudioProcessorGraph::NodeID draggedNodeId,
-                                            juce::Point<int> canvasCentre) const;
+    /** The macro membership change a live module drag would make if released now: `leave` is the
+     *  macro the dragged node is a member of and would exit, `join` the expanded macro it would
+     *  enter, each empty for "none". Both set is a one-gesture transfer. */
+    struct MacroDragTargets {
+        juce::String leave;
+        juce::String join;
+        bool isEmpty() const noexcept { return leave.isEmpty() && join.isEmpty(); }
+    };
+    /** The ONE query behind the Cmd-drag-across-a-hull gesture (docs/macros/menu-and-membership.md).
+     *  `canvasCentre` is the dragged module's own centre, not its top-left. No resolvable uuid:
+     *  empty. Not a member of any macro: `join` only, the smallest expanded hull under the centre.
+     *  A member of macro X: staying (empty) while the centre is inside X's hull excluding the
+     *  dragged member; otherwise `leave` is X and `join` is the smallest OTHER expanded hull under
+     *  the centre, if any. Collapsed macros are never a candidate. */
+    MacroDragTargets macroDragJoinOrLeaveTarget(juce::AudioProcessorGraph::NodeID draggedNodeId,
+                                                juce::Point<int> canvasCentre) const;
     juce::Rectangle<int> macroChipBounds(const juce::String& macroId) const;
     juce::String macroChipAt(juce::Point<int> canvasPos) const;
     juce::Rectangle<int> macroCollapseButtonBounds(const juce::String& macroId) const;
@@ -312,6 +317,7 @@ private:
     // ---- Internal-only helpers (no cross-file caller outside this class; original visibility
     // on GraphEditor was private and stays private here) ----
     void applyMacroCollapsed(const juce::String& macroId, bool collapsed);
+    juce::String macroHullAtExcluding(juce::Point<int> canvasPos, const juce::String& excludedMacroId) const;
     std::vector<juce::AudioProcessorGraph::NodeID> resolvedMacroMemberModuleNodes(const juce::String& macroId) const;
     static juce::String macroPortNodeTypeName(bool isInput, synth::MacroPortKind kind);
     static juce::String defaultMacroPortName(bool isInput, synth::MacroPortKind kind);

@@ -63,7 +63,7 @@ void expectNoStuckDragState(GraphEditor& editor, const char* context) {
     EXPECT_FALSE(editor.isMarqueeActive()) << context << ": marquee rectangle left stuck";
     EXPECT_FALSE(editor.isSelectionDragActive()) << context << ": selection-drag bookkeeping left stuck";
     EXPECT_FALSE(editor.isMacroChipDragActive()) << context << ": macro chip drag id left stuck";
-    EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty()) << context << ": macro drag candidate hull left stuck";
+    EXPECT_FALSE(editor.hasMacroDragCandidate()) << context << ": macro drag candidate hull left stuck";
     EXPECT_EQ(editor.getMacroDragDraggedNodeId(), juce::AudioProcessorGraph::NodeID{})
         << context << ": macro drag dragged-node id left stuck";
 }
@@ -156,7 +156,7 @@ TEST(DragStateReset, CtrlInsertDragClearsAllStateOnMouseUp) {
 // called endDragPreview() — only clearMacroDragCandidate()/repaintCanvas() — so a SUCCESSFUL
 // Cmd-drag reparent left the landing ghost and grid overlay on screen until some unrelated later
 // gesture happened to clear them. A drag with no macro to join (as this test originally set up)
-// never takes the reparent branch at all — getMacroDragCandidateId() stays empty, so mouseUp falls
+// never takes the reparent branch at all — hasMacroDragCandidate() stays false, so mouseUp falls
 // through to the PLAIN finalize path, which already called endDragPreview() — so the test passed
 // while testing the wrong branch. Both cases below actually cross a real hull and assert the
 // candidate is armed mid-drag, so a future regression back to "plain path only" fails loudly here
@@ -189,7 +189,7 @@ TEST(DragStateReset, CmdReparentDragJoinClearsAllStateOnMouseUp) {
     ASSERT_TRUE(editor.getDragDropController().isDragPreviewActive()) << "sanity: Cmd+drag arms the ghost preview too";
 
     comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, cmdClick, /*wasDragged=*/true));
-    ASSERT_FALSE(editor.getMacroDragCandidateId().isEmpty())
+    ASSERT_TRUE(editor.hasMacroDragCandidate())
         << "sanity: dragging C's centre into the hull must arm the reparent candidate -- without "
            "this the test below could silently degrade into exercising the plain finalize path";
 
@@ -223,7 +223,7 @@ TEST(DragStateReset, CmdReparentDragLeaveClearsAllStateOnMouseUp) {
     ASSERT_TRUE(editor.getDragDropController().isDragPreviewActive());
 
     comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, cmdClick, /*wasDragged=*/true));
-    ASSERT_FALSE(editor.getMacroDragCandidateId().isEmpty())
+    ASSERT_TRUE(editor.hasMacroDragCandidate())
         << "sanity: dragging A well outside the hull must arm the LEAVE candidate";
 
     comp->mouseUp(realMouseEvent(*comp, dragPos, pressPos, cmdClick, /*wasDragged=*/true));
