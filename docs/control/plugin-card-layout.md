@@ -10,9 +10,9 @@ feature (see [Future: editing any module's layout](#future-editing-any-modules-l
 default, `PluginCardLayoutStore`, the per-instance `"cardLayout"` extra-state key and its undo seam.
 The card unit and `HostedParameterAttachment` (FRO128), described in
 [Card rendering as built](#card-rendering-as-built-fro128). The picker (FRO132), described in
-[Choosing knobs as built](#choosing-knobs-as-built-fro132) -- gesture-only touch-to-add; the value-
-change fallback is FRO241. The MIDI Learn / Automate right-click on a plugin-card knob is still
-designed only.
+[Choosing knobs as built](#choosing-knobs-as-built-fro132) -- touch-to-add now has both a gesture
+path and a burst-filtered value-change fallback (FRO241). The MIDI Learn / Automate right-click on a
+plugin-card knob is still designed only.
 
 ---
 
@@ -238,11 +238,20 @@ card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
   preset copies it into whichever scope *Apply to* selects; *Reset to automatic* removes the
   chosen scope's layout so precedence falls through.
 - **Touch in the plugin editor to add**: while ticked, a parameter that reports a **gesture
-  start** on the instance (`parameterGestureChanged(index, true)`) is appended to the layout. For now it
-  listens to gestures only. Many plugins never emit gestures; a **value-change fallback**
-  (debounced so an automation-driven or preset-load burst — more than 3 distinct parameters
-  within 200 ms — is ignored rather than adding all of them) is deferred to a later ticket. The
-  picker opens the plugin's editor window when this is ticked and it is not already open.
+  start** on the instance (`parameterGestureChanged(index, true)`) is appended to the layout
+  immediately -- a gesture is always a deliberate touch. For a plugin that never emits one, a
+  **value-change fallback** (FRO241) also counts: a `parameterValueChanged` on a parameter NOT
+  already in the layout is a fallback candidate, but it is **debounced against a burst** --
+  candidates are collected for 200 ms from the first one, and only committed once that window closes
+  *without* exceeding 3 distinct parameters (an automation sweep or a preset load can move many
+  parameters near-simultaneously; a deliberate touch moves one, or a couple in quick succession, not
+  four-plus). A value change on a parameter already in the layout (the picker's own tick, or the
+  card's own knob attachment moving it) is ignored outright -- it never opens or extends a window.
+  One known remaining edge: nothing distinguishes the plugin editor's own touch from some other
+  in-process code calling `setValue`/`setValueNotifyingHost` on a not-yet-added parameter for an
+  unrelated reason (there is no such call site in this codebase today, but a future one would be
+  mistaken for a touch). The picker opens the plugin's editor window once, the moment this is ticked,
+  if it is not already open.
 - Changes apply live to the card as they are made (no OK button); closing the popover keeps
   them.
 
@@ -254,7 +263,7 @@ Three units under `Source/UI/Graph/PluginKnobPicker/`, matching the design above
 tick/untick, drag-reorder, label, the one `applyCurrentLayout()` write path) and
 `PluginKnobPickerComponentScope.cpp` (Apply to / presets / Reset to automatic)),
 `PluginKnobPickerRow` (one row's checkbox/name/drag-handle/label controls) and
-`PluginKnobPickerTouchCapture` (touch-to-add's gesture listener).
+`PluginKnobPickerTouchCapture` (touch-to-add's gesture listener + FRO241's value-change fallback).
 
 - **Entry points.** `ModuleComponent::showPluginKnobPicker()` (`ModuleComponentHostedPluginCard.cpp`)
   builds the picker and opens it via a `juce::CallOutBox` anchored to the **Choose knobs...** button
@@ -280,23 +289,43 @@ tick/untick, drag-reorder, label, the one `applyCurrentLayout()` write path) and
   instance's own override), rather than waiting for a further edit -- so the scope switch itself is
   what the design doc's "clears this instance's override so it follows the default" sentence means in
   practice.
-- **Touch to add is gesture-only, as decided** (no value-change fallback -- FRO241).
+- **Touch to add: gesture + value-change fallback (FRO241).**
   `PluginKnobPickerTouchCapture` registers a `juce::AudioProcessorParameter::Listener` on every
-  parameter of the live instance while armed; `parameterGestureChanged` can arrive on ANY thread (the
-  plugin's own editor, a controller), so every callback only queues the touched parameter's index and
-  calls `triggerAsyncUpdate()` -- `onParameterTouched` is invoked only from `handleAsyncUpdate()`, on
-  the message thread, exactly like `HostedParameterAttachment` and `HostedPluginModule::
-  InstanceListener` already do for their own hosted-parameter callbacks. Arming also asks the owner to
-  open the plugin's editor (the same `onOpenPluginEditorRequested` the card's own "Open Editor" button
-  uses, which is idempotent if it is already open).
+  parameter of the live instance while armed. Both `parameterGestureChanged` and
+  `parameterValueChanged` can arrive on ANY thread -- INCLUDING the audio thread, since automation
+  drives `parameterValueChanged` from `processHostBlock` -- so every callback only queues, cheaply and
+  without allocating, and calls `triggerAsyncUpdate()`; `onParameterTouched` is invoked only from
+  `handleAsyncUpdate()`, on the message thread, exactly like `HostedParameterAttachment` and
+  `HostedPluginModule::InstanceListener` already do for their own hosted-parameter callbacks. A gesture
+  is reported immediately, same as v1. A value-change candidate goes through the owner's
+  `isParameterAlreadyInLayout` check first (a value change on a parameter already checked is filtered
+  out before it can even open a window), then into the **burst window**: the first surviving candidate
+  starts a 200 ms `juce::Timer`; every candidate arriving before it fires joins the same window; more
+  than 3 distinct parameters marks the window exceeded. The timer firing is the only thing that commits
+  or discards a window -- `handleAsyncUpdate` only ever accumulates candidates into it. The
+  audio-thread intake itself (`parameterValueChanged`) is a fixed-size array (`kMaxPendingValueChanges
+  = 32`) guarded by a `juce::SpinLock`, never a heap allocation; an intake overflow marks the current
+  window exceeded rather than trying to recover which indices were dropped. Arming also asks the owner
+  to open the plugin's editor (the same `onOpenPluginEditorRequested` the card's own "Open Editor"
+  button uses, which is idempotent if it is already open); disarming cancels any queued gesture, any
+  queued value-change intake, and any open burst window, all before `setArmed(false)` returns.
+  Tests exercise the burst filter with a **forced-close test seam**
+  (`forceBurstWindowCloseForTest()`, which invokes the same `timerCallback()` a real 200 ms tick
+  would) rather than sleeping past the real window -- the practical equivalent of an injectable clock
+  here, since the window's own deadline is entirely owned by `juce::Timer` and nothing else reads
+  wall-clock time.
 - **Missing parameters.** A slot loaded from the resolved layout (or a preset) whose `paramId` does
   not match any of the instance's current parameters gets no row and no checkbox; the picker instead
   shows a "N parameters missing in this plugin version: ..." line naming them. The very next apply
   (any tick, reorder, label, scope switch, or preset load) writes only the resolvable slots, so the
   missing ones are dropped from storage at that point -- "dropped on next save" in practice means
   "dropped the moment the user touches the picker again," since every gesture here already applies.
-- **Tests:** `Tests/UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp`, against the same
-  `StubPluginInstance` fake the FRO126/FRO128 tests use.
+- **Tests:** `Tests/UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp` (the row list, scope,
+  presets, missing parameters, entry points, and the gesture path), plus the sibling
+  `PluginKnobPickerTouchFallbackTests.cpp` (FRO241's burst filter: a single value change past the
+  window, 3-distinct-all-added vs. 4-distinct-none-added, an already-in-layout candidate ignored, the
+  off-thread hop, gesture-and-fallback coexisting, and disarm cancelling a pending window) -- both
+  against the same `StubPluginInstance` fake the FRO126/FRO128 tests use.
 
 ---
 

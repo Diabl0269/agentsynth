@@ -7,6 +7,7 @@
 #include "Plugin/Hosting/HostedPluginCardLayout.h"
 #include "PluginKnobPickerRow.h"
 #include "PluginKnobPickerTouchCapture.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -38,6 +39,17 @@ PluginKnobPickerComponent::PluginKnobPickerComponent(HostedPluginModule& module,
     touchCapture_->onRequestOpenEditor = [this] {
         if (onOpenPluginEditorRequested)
             onOpenPluginEditorRequested();
+    };
+    // FRO241: a value change on a parameter already checked is the picker's own tick (or the card's
+    // own knob attachment moving it), never a new touch -- see the header's isParameterAlreadyInLayout
+    // doc comment. Gestures need no such filter (a gesture start is a deliberate touch either way).
+    touchCapture_->isParameterAlreadyInLayout = [this](int parameterIndex) {
+        auto it = std::find_if(allParams_.begin(), allParams_.end(),
+                               [&](const ParamInfo& p) { return p.index == parameterIndex; });
+        if (it == allParams_.end())
+            return false;
+        return std::any_of(workingSlots_.begin(), workingSlots_.end(),
+                           [&](const CardSlot& s) { return s.paramId == it->paramId; });
     };
 
     buildChrome();
