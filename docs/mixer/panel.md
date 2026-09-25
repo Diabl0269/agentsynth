@@ -116,9 +116,15 @@ separate strip with its own handle, below.
 **Preference changes apply live.** `MixerPlacementController::applyPlacementPreference()` runs once at
 launch (`MainComponent::wireTimelinePanel`) and again on every settings-file write
 (`MainComponent::changeListenerCallback`'s existing `ChangeListener` path, the same one
-`applyNaturalScrollingPreference` uses). **It is idempotent against its own current state**, so a
-`DetachedPanelWindow`'s bounds-persist-on-drag — which fires that same broadcast — never does real
-work.
+`applyNaturalScrollingPreference` uses). **It is idempotent against its own current state, except its
+very FIRST call**, which always runs `applyPlacement()` even when the persisted value already matches
+the Tab default `placement_` starts at: `MainComponent::addCanvasAndPanels()` calls
+`addAndMakeVisible(mixerPlacement_)` before `wireTimelinePanel()` ever runs, making the strip visible
+unconditionally regardless of placement, so Tab/Window placement's own `hideStripAtRest()` (which
+`setVisible(false)`s it) has to run at least once or the strip's `isVisible()` stays wrongly true
+(zero-height, so harmless to look at, but wrong, and a stale flag `isOwnPanelShowing()` relies on).
+Every later call stays idempotent, so a `DetachedPanelWindow`'s bounds-persist-on-drag — which fires
+that same broadcast — never does real work.
 
 `MainComponent::isTimelineVisible` and the persisted `timelinePanelVisible` key open and close the
 whole dock, any of its tabs, while `MixerDockComponent`'s own `bottomDockActiveTab` key persists
