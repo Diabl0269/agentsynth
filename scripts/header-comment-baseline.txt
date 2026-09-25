@@ -37,7 +37,7 @@
 36 Source/Transport/BounceExporter.h
 27 Source/Transport/OfflineTransportDriver.h
 1 Source/Transport/TransportService.h
-62 Source/UI/Assistant/AIChatComponent/AIChatComponent.h
+61 Source/UI/Assistant/AIChatComponent/AIChatComponent.h
 40 Source/UI/Chrome/StatusBarComponent.h
 26 Source/UI/Graph/ModuleComponent/ModuleComponent.h
 1 Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h

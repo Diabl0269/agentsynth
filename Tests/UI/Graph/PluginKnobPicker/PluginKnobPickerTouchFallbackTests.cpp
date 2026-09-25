@@ -43,6 +43,11 @@ bool pumpUntil(Predicate predicate, int timeoutMs = 2000) {
 
 void pump() { juce::MessageManager::getInstance()->runDispatchLoopUntil(30); }
 
+// Every test closes the burst window itself (forceBurstWindowCloseForTest). The real 200 ms timer
+// must never fire on its own: pump() can overrun its 30 ms on a loaded CI runner, and a timer that
+// fires mid-test reports a touch the test expects to still be pending.
+constexpr int kNeverFiresMs = 60 * 60 * 1000;
+
 juce::PluginDescription stubDescription() {
     juce::PluginDescription description;
     description.name = "Fallback Plugin";
@@ -79,6 +84,7 @@ struct TouchFixture {
 TEST(PluginKnobPickerTouchFallbackTest, AValueChangeAddsTheParameterAfterTheWindowCloses) {
     TouchFixture fixture;
     PluginKnobPickerTouchCapture capture(*fixture.module);
+    capture.setBurstWindowMsForTest(kNeverFiresMs);
     std::vector<int> touched;
     capture.onParameterTouched = [&](int index) { touched.push_back(index); };
     capture.setArmed(true);
@@ -97,6 +103,7 @@ TEST(PluginKnobPickerTouchFallbackTest, AValueChangeAddsTheParameterAfterTheWind
 TEST(PluginKnobPickerTouchFallbackTest, MoreThanThreeDistinctParamsInTheWindowAddsNone) {
     TouchFixture fixture(8);
     PluginKnobPickerTouchCapture capture(*fixture.module);
+    capture.setBurstWindowMsForTest(kNeverFiresMs);
     std::vector<int> touched;
     capture.onParameterTouched = [&](int index) { touched.push_back(index); };
     capture.setArmed(true);
@@ -114,6 +121,7 @@ TEST(PluginKnobPickerTouchFallbackTest, MoreThanThreeDistinctParamsInTheWindowAd
 TEST(PluginKnobPickerTouchFallbackTest, ExactlyThreeDistinctParamsInTheWindowAreAllAdded) {
     TouchFixture fixture(8);
     PluginKnobPickerTouchCapture capture(*fixture.module);
+    capture.setBurstWindowMsForTest(kNeverFiresMs);
     std::vector<int> touched;
     capture.onParameterTouched = [&](int index) { touched.push_back(index); };
     capture.setArmed(true);
@@ -134,6 +142,7 @@ TEST(PluginKnobPickerTouchFallbackTest, ExactlyThreeDistinctParamsInTheWindowAre
 TEST(PluginKnobPickerTouchFallbackTest, AParameterAlreadyInTheLayoutIsIgnored) {
     TouchFixture fixture;
     PluginKnobPickerTouchCapture capture(*fixture.module);
+    capture.setBurstWindowMsForTest(kNeverFiresMs);
     std::vector<int> touched;
     capture.onParameterTouched = [&](int index) { touched.push_back(index); };
     capture.isParameterAlreadyInLayout = [](int index) { return index == 1; };
@@ -153,6 +162,7 @@ TEST(PluginKnobPickerTouchFallbackTest, AParameterAlreadyInTheLayoutIsIgnored) {
 TEST(PluginKnobPickerTouchFallbackTest, AnOffThreadValueChangeIsHoppedToTheMessageThread) {
     TouchFixture fixture;
     PluginKnobPickerTouchCapture capture(*fixture.module);
+    capture.setBurstWindowMsForTest(kNeverFiresMs);
     int touchedIndex = -1;
     capture.onParameterTouched = [&](int index) { touchedIndex = index; };
     capture.setArmed(true);
@@ -172,6 +182,7 @@ TEST(PluginKnobPickerTouchFallbackTest, AnOffThreadValueChangeIsHoppedToTheMessa
 TEST(PluginKnobPickerTouchFallbackTest, TheGesturePathStillWorksAlongsideTheValueChangeFallback) {
     TouchFixture fixture;
     PluginKnobPickerTouchCapture capture(*fixture.module);
+    capture.setBurstWindowMsForTest(kNeverFiresMs);
     std::vector<int> touched;
     capture.onParameterTouched = [&](int index) { touched.push_back(index); };
     capture.setArmed(true);
@@ -193,6 +204,7 @@ TEST(PluginKnobPickerTouchFallbackTest, TheGesturePathStillWorksAlongsideTheValu
 TEST(PluginKnobPickerTouchFallbackTest, DisarmingCancelsAPendingBurstWindow) {
     TouchFixture fixture;
     PluginKnobPickerTouchCapture capture(*fixture.module);
+    capture.setBurstWindowMsForTest(kNeverFiresMs);
     std::vector<int> touched;
     capture.onParameterTouched = [&](int index) { touched.push_back(index); };
     capture.setArmed(true);
