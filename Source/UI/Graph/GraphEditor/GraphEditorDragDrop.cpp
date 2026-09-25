@@ -178,14 +178,15 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // ChannelFlowTest.ChannelStripAndMasterHaveAPinnedSizeEstimate.
         return {280, 221};
     if (typeName == "Hosted Plugin")
-        // Bypass and mute live in the header; the only body content is the "Open Editor" button,
-        // one jack a side while empty. The card grows with the loaded plugin's real port count,
+        // Bypass and mute live in the header; a bare card's body is the Open Editor / Choose knobs
+        // button row, one jack a side while empty. The card grows with the loaded plugin's real port count,
         // like the Macro bank and Audio Input; the estimate is the resting size, and
         // finalizeNewDrop re-resolves against the real component anyway. Library-less until the
         // scan list and load UX ship. Measured against the real card by
         // HostedPluginTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        return {280, 131};
+        // +4: FRO128 gave the button row a 6px gap below it (was 2).
+        return {280, 135};
     if (typeName == "Macro In" || typeName == "Macro Out")
         // Founder-review fix F2 (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed /
         // docs/macros/configure-io.md#adding-a-port): no longer a full module card — a small docked widget

@@ -195,6 +195,8 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentEnvelopeCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModTargetTests.cpp
+    UI/Graph/ModuleComponent/HostedPluginCardTests.cpp
+    UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp
     UI/Graph/AutomationUiReflectionTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp
@@ -599,6 +601,14 @@ add_executable(Tests
     ../Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
+    ../Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.cpp
+    ../Source/UI/Graph/ModuleComponent/HostedParameterAttachment.cpp
+    ../Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.cpp
+    ../Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentRows.cpp
+    ../Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentScope.cpp
+    ../Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentTestSeams.cpp
+    ../Source/UI/Graph/PluginKnobPicker/PluginKnobPickerRow.cpp
+    ../Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.cpp
     ../Source/UI/MidiRemote/MidiLearnMenu.cpp
     ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.cpp
     ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelDetect.cpp

@@ -35,8 +35,7 @@ HostedPluginModule::~HostedPluginModule() {
     // retireActiveInstance(). A node delete destroys this module before anything prunes the editor
     // window that owns an editor built on our instance, so the window has to be given the chance to
     // drop that editor synchronously, here, before the lines below free what it was built on.
-    if (onInstanceChanged)
-        onInstanceChanged();
+    fireInstanceEdge(/*live*/ false);
 
     if (ownedInstance_ != nullptr)
         ownedInstance_->releaseResources();
@@ -237,8 +236,7 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
 
     // The "new instance live" edge. Fires AFTER the instance is fully published, so a
     // listener's getActiveInstanceForEditor() call sees it immediately.
-    if (onInstanceChanged)
-        onInstanceChanged();
+    fireInstanceEdge(/*live*/ true);
 
     // The completed-load edge, fired last and separately from the one above — the editor
     // window's observer and the owner's are different objects with different jobs. Synchronous on
@@ -267,8 +265,7 @@ void HostedPluginModule::retireActiveInstance() {
     // publishInstance() when swapping in a replacement (publishInstance() fires onInstanceChanged
     // again, synchronously, once the new instance is live — before that deferred recheck ever
     // runs — so a swap rebuilds rather than closes).
-    if (onInstanceChanged)
-        onInstanceChanged();
+    fireInstanceEdge(/*live*/ false);
 
     if (ownedInstance_ != nullptr)
         retired_.push_back({std::move(ownedInstance_), blockCounter_.load(std::memory_order_acquire)});
@@ -278,6 +275,24 @@ void HostedPluginModule::retireActiveInstance() {
 
     reapRetired();
     scheduleReapRetry();
+}
+
+// The single place both edges of hasInstance() are announced, so onInstanceChanged and the observers can
+// never disagree about ordering. The gone edge (the destructor's included) is ALWAYS fired while the
+// instance is still alive and before reapRetired() can free it: an observer holding parameter listeners
+// (the module card's HostedParameterAttachments) unbinds synchronously from here, and a poll could not
+// win that race. Observers run after the editor window's slot; neither depends on the other. An
+// observer may add or remove itself from inside the call.
+void HostedPluginModule::fireInstanceEdge(bool live) {
+    if (onInstanceChanged)
+        onInstanceChanged();
+
+    instanceObservers_.call([live](InstanceObserver& observer) {
+        if (live)
+            observer.hostedInstanceLive();
+        else
+            observer.hostedInstanceGone();
+    });
 }
 
 void HostedPluginModule::scheduleReapRetry() {

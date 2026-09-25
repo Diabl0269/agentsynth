@@ -3,6 +3,7 @@
 // ModuleComponent.h; the rest of its implementation lives in the sibling ModuleComponent*.cpp
 // units next to this one (FRO65 split of the former single ModuleComponent.cpp).
 #include "ModuleComponent.h"
+#include "ModuleComponentHostedPluginCard.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/ExternalMidiModule.h"
 #include "Modules/ModuleBase.h"
@@ -248,6 +249,10 @@ ModuleComponent::~ModuleComponent() { detachFromProcessor(); }
 void ModuleComponent::detachFromProcessor() {
     stopTimer();
     setVisible(false);
+
+    // Hosted Plugin card: leave the module's observers and unbind every hosted parameter listener FIRST,
+    // while the instance is still alive (the module frees it once its node goes).
+    releaseHostedPluginCard();
 
     // Destroy scope component first — it has its own timer reading from the module's VisualBuffer
     scopeComponent.reset();
@@ -618,17 +623,7 @@ void ModuleComponent::createControls() {
     } else if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(module)) {
         createExternalMidiControls(extMidi);
     } else if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(module)) {
-        // The only body content a Hosted Plugin card has (bypass/mute/delete already live in the
-        // header, and the module exposes no parameters of its own — see the class comment).
-        openPluginEditorButton = std::make_unique<juce::TextButton>("Open Editor");
-        openPluginEditorButton->setComponentID("openPluginEditor");
-        openPluginEditorButton->setTooltip("Open this plugin's editor window");
-        openPluginEditorButton->setEnabled(hostedPlugin->hasInstance());
-        openPluginEditorButton->onClick = [this] {
-            if (owner.onOpenPluginEditorRequested)
-                owner.onOpenPluginEditorRequested(nodeId);
-        };
-        addAndMakeVisible(openPluginEditorButton.get());
+        createHostedPluginControls(*hostedPlugin);
     } else {
         const auto& params = module->getParameters();
 

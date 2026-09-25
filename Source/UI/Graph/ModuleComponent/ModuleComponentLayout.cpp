@@ -145,12 +145,8 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
 
     int y = getContentTopY();
 
-    // --- Hosted Plugin chrome: the "Open Editor" button, the card's only body content ---
-    if (openPluginEditorButton) {
-        if (apply)
-            openPluginEditorButton->setBounds(narrowX, y, narrowW, kRowHeight);
-        y += kRowHeight + 2;
-    }
+    // --- Hosted Plugin chrome: the Open Editor / Choose knobs... row (no-op on every other module) ---
+    y = layoutHostedPluginChrome(y, narrowX, narrowW, apply);
 
     // --- Sampler chrome: waveform overview, then the load button + file-name row ---
     if (sampleWaveform) {

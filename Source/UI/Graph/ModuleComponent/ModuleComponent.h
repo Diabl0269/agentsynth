@@ -4,6 +4,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
+#include "UI/Graph/ModuleComponent/HostedParameterAttachment.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
@@ -33,8 +34,9 @@ class AppLookAndFeel; // Forward declaration — see Theme/AppLookAndFeel.h
 }
 
 namespace synth {
-struct MacroPort; // Forward declaration — see ../MacroSet.h
-}
+struct MacroPort;         // Forward declaration — see ../MacroSet.h
+class HostedPluginModule; // Forward declaration — see Plugin/Hosting/HostedPluginModule.h
+} // namespace synth
 
 class ModuleComponent
     : public juce::Component
@@ -286,6 +288,17 @@ public:
     void setMidiLearnArmedParam(const juce::String& paramId);
 
 public:
+    /** Hosted-plugin card only (FRO132); empty otherwise. See ModuleComponentHostedPluginCard.cpp. */
+    std::function<void()> onChooseKnobsRequested;
+
+    /** No-op unless this is a live Hosted Plugin card. See ModuleComponentHostedPluginCard.cpp. */
+    void showPluginKnobPicker();
+
+protected:
+    /** Virtual test seam; see ModuleComponentHostedPluginCard.cpp. */
+    virtual void launchPluginKnobPickerCallOutBox(std::unique_ptr<juce::Component> picker, juce::Rectangle<int> anchor);
+
+public:
     /** Test/inspection: the param a right-click on `component` would open MIDI Learn for, or null. */
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const {
         return midiLearnableRegistry_.find(component);
@@ -391,6 +404,13 @@ private:
     // HostedPluginWindowManager. Enabled only while the module reports hasInstance() — refreshed
     // each timerCallback() tick, since an async load can flip that at any moment.
     std::unique_ptr<juce::TextButton> openPluginEditorButton;
+
+    // --- Hosted Plugin card body (FRO128, ModuleComponentHostedPluginCard.cpp) ---
+    // Declared AFTER the widget arrays above so the attachments are destroyed before the widgets they point at.
+    std::unique_ptr<juce::TextButton> chooseKnobsButton;
+    juce::OwnedArray<synth::ui::HostedParameterAttachment> hostedAttachments_;
+    class HostedCardBinding;
+    std::unique_ptr<HostedCardBinding> hostedCard_;
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
     std::unique_ptr<ThresholdControlComponent> thresholdControl;
 
@@ -493,6 +513,20 @@ private:
     juce::String outputDeviceInfoText;
 
     void createControls();
+    // Hosted Plugin card (ModuleComponentHostedPluginCard.cpp): builds the chrome, then binds to the module's instance
+    // edges.
+    void createHostedPluginControls(synth::HostedPluginModule& hosted);
+    // Rebuilds the knobs/toggles/choices from the resolved layout; a no-op body while no instance is live.
+    void rebuildHostedPluginCard();
+    // Unbinds every hosted attachment and removes every hosted widget; `paramsAlive` false = never touch a parameter.
+    void unbindHostedPluginCard(bool paramsAlive);
+    // detachFromProcessor()'s half: leaves the module's observers and unbinds; safe after the module is gone.
+    void releaseHostedPluginCard();
+    // Re-measures the card and asks the canvas to accept its new size.
+    void relayoutHostedPluginCard();
+    void handleHostedGesture(const juce::AudioProcessorParameter& param, bool starting);
+    // The Open Editor + Choose knobs... row; returns the y below it, `y` unchanged for any other module.
+    int layoutHostedPluginChrome(int y, int narrowX, int narrowW, bool apply);
     // External MIDI's device + channel combos, extracted out of createControls (FRO117) to keep
     // that function under its own line-count ratchet. Neither combo is
     // ComboBoxParameterAttachment-driven (plain module state, not AudioParameters).
