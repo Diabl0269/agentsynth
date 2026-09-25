@@ -107,7 +107,7 @@ static void resetPanelKeys() {
     if (auto* s = props.getUserSettings()) {
         s->setValue("librarySidebarVisible", "1");
         s->setValue("aiPanelVisible", "0");
-        s->setValue("timelinePanelVisible", "0");
+        s->setValue("bottomDockVisible", "0");
         // Removed, not defaulted: absent is what makes the theme metric the default height.
         s->removeValue(MainComponent::kTimelinePanelHeightKey);
         s->saveIfNeeded();
@@ -249,7 +249,7 @@ TEST_F(PanelSlideLayoutTest, TheTimelineSlidesAgainstAPinnedBottomEdge) {
     MainComponent mc(std::make_unique<MockProviderPAL>());
     mc.setSize(1600, 900);
     mc.simulateToggleTimelineClick();
-    // FRO11 (P9-5): 220 total carve minus MixerDockComponent's 22px tab strip -- see
+    // FRO11 (P9-5): 220 total carve minus BottomDockComponent's 22px tab strip -- see
     // timelinePanelBoundsInMainComponent's own comment.
     ASSERT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 198);
 

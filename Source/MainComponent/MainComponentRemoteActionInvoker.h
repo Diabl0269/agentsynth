@@ -3,7 +3,7 @@
 // FRO127/FRO253/FRO236: synth::midi::RemoteActionInvoker impl, extracted out of MainComponent.h
 // (which sits at the 1,000-line cap -- root CLAUDE.md's Code structure rule) rather than grown in
 // place. See MainComponentSetup.cpp's wireMidiRemoteEngine() for how MainComponent wires it,
-// including onNodeCommandApplied, which is set there (mixerDock doesn't exist yet at this object's
+// including onNodeCommandApplied, which is set there (bottomDock doesn't exist yet at this object's
 // own construction time).
 
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"

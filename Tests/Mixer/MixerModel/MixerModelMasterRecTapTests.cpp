@@ -56,7 +56,7 @@ void pinRecordFlowKeys() {
         s->setValue("librarySidebarVisible", "1");
         s->setValue("aiPanelVisible", "0");
         s->setValue("minimapVisible", "1");
-        s->setValue("timelinePanelVisible", "0");
+        s->setValue("bottomDockVisible", "0");
         s->setValue("timelineCountInBars", 0);
         s->saveIfNeeded();
     }
@@ -78,7 +78,7 @@ TEST_F(MixerModelMasterRecTapTest, RecTapCreatedAfterALimiterLandsAfterTheLimite
     mc.simulateAddAudioTrackClick(); // the first channel creates Master
 
     auto& graph = mc.getAudioEngine().getGraph();
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     mixerPanel.rebuild();
     auto* masterColumn = mixerPanel.getMasterColumnForTest();
     ASSERT_NE(masterColumn, nullptr);

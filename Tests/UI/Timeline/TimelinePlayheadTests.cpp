@@ -349,7 +349,7 @@ protected:
             s->setValue("librarySidebarVisible", "1");
             s->setValue("aiPanelVisible", "0");
             s->setValue("minimapVisible", "1");
-            s->setValue("timelinePanelVisible", "0"); // default: hidden
+            s->setValue("bottomDockVisible", "0"); // default: hidden
             s->saveIfNeeded();
         }
     }
@@ -364,7 +364,7 @@ TEST_F(TimelinePlayheadPollTest, TenHzPollOnlyReachesAVisiblePanel) {
 
     auto& panel = mc.getTimelinePanel();
     // FRO11 (P9-5): timelinePanelIsOpen(), not panel.isVisible() -- the panel now lives inside
-    // MixerDockComponent's tab strip, so its own visibility flag reflects only "the Timeline tab
+    // BottomDockComponent's tab strip, so its own visibility flag reflects only "the Timeline tab
     // is selected" (true by default), not "the dock is open". timelinePanelIsOpen's own comment
     // (TimelinePanelTestFixture.h) explains why this composes the two local isVisible() flags
     // rather than isShowing() (which needs a real Desktop peer this headless test never has).

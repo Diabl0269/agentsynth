@@ -2,7 +2,7 @@
 // panel's own selection state and its null-safety before configure() runs. The three region
 // components (ControllersListComponent/ControllerSurfaceComponent/ControlInspectorComponent) have
 // their own test files; this one covers only what MidiRemotePanelComponent itself owns.
-#include "../Mixer/MixerDockActiveTabResetGuard.h"
+#include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AI/AIProvider.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -76,15 +76,15 @@ TEST(MidiRemotePanelComponentTests, RebuildFromProfilesBeforeConfigureIsANoOp) {
     EXPECT_NO_THROW(panel.rebuildFromProfiles());
 }
 
-// ---- Configured, via a real MainComponent (mirrors MixerDockComponentTests' own fixture shape)
+// ---- Configured, via a real MainComponent (mirrors BottomDockComponentTests' own fixture shape)
 
 TEST(MidiRemotePanelComponentTests, ConfiguredWithNoProfilesRebuildsCleanlyAndHasNoSelection) {
-    MixerDockActiveTabResetGuardMDT resetGuard;
+    BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMRPT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
 
-    auto& panel = mc.getMixerDock().getMidiRemotePanel();
+    auto& panel = mc.getBottomDock().getMidiRemotePanel();
     // wireMidiRemoteEngine() already called configureMidiRemote() during construction -- a second
     // explicit rebuild must still be safe and idempotent.
     EXPECT_NO_THROW(panel.rebuildFromProfiles());
@@ -93,13 +93,13 @@ TEST(MidiRemotePanelComponentTests, ConfiguredWithNoProfilesRebuildsCleanlyAndHa
 }
 
 TEST(MidiRemotePanelComponentTests, SwitchingDockToMidiRemoteTabShowsThePanelAndHidesTheOthers) {
-    MixerDockActiveTabResetGuardMDT resetGuard;
+    BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMRPT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
 
-    auto& dock = mc.getMixerDock();
-    dock.setActiveTab(synth::ui::MixerDockComponent::Tab::MidiRemote);
+    auto& dock = mc.getBottomDock();
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::MidiRemote);
 
     EXPECT_TRUE(dock.isMidiRemoteTabActive());
     EXPECT_TRUE(dock.getMidiRemotePanel().isVisible());

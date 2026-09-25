@@ -30,7 +30,7 @@ class MixerColumnComponent : public juce::Component {
 public:
     MixerColumnComponent();
 
-    /** References must outlive this component -- same lifetime contract MixerDockComponent's own
+    /** References must outlive this component -- same lifetime contract BottomDockComponent's own
      *  constructor threads down through MixerPanelComponent. */
     void configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, synth::MacroSet& macros,
                    GraphEditor& graphEditor, AudioEngine& audioEngine);

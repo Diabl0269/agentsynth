@@ -5,8 +5,8 @@
 // A real off-screen MainComponent in "Own panel" placement, with the on-disk settings keys the
 // placement, the dock and the Own panel's height persist under reset before AND after each test.
 
+#include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h"
-#include "MixerDockActiveTabResetGuard.h"
 #include "UI/Mixer/MixerPlacementController.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
@@ -46,7 +46,7 @@ protected:
     static void useOwnPanelPlacement() { writeSetting("mixerPlacement", "ownPanel"); }
 
 private:
-    MixerDockActiveTabResetGuardMDT tabGuard_; // clears mixerPlacement / bottomDockActiveTab / dock visibility
+    BottomDockActiveTabResetGuardMDT tabGuard_; // clears mixerPlacement / bottomDockActiveTab / dock visibility
 
     static void resetOwnKeys() {
         juce::ApplicationProperties props;

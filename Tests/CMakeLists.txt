@@ -423,8 +423,8 @@ add_executable(Tests
     UI/Mixer/MixerFaderTaperTests.cpp
     UI/Mixer/MixerFaderDragTests.cpp
     UI/Mixer/MixerSendListTests.cpp
-    UI/Mixer/MixerDockComponentTests.cpp
-    UI/Mixer/MixerDockResizeTests.cpp
+    UI/Layout/BottomDockComponentTests.cpp
+    UI/Layout/BottomDockResizeTests.cpp
     UI/Mixer/MixerOwnPanelResizeTests.cpp
     UI/Mixer/MixerOwnPanelSlideTests.cpp
     UI/Layout/PanelResizeHandleTests.cpp
@@ -556,7 +556,7 @@ add_executable(Tests
     ../Source/UI/Mixer/MixerMasterColumn.cpp
     ../Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
     ../Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
-    ../Source/UI/Mixer/MixerDockComponent.cpp
+    ../Source/UI/Layout/BottomDockComponent.cpp
     ../Source/UI/Mixer/MixerPlacementController.cpp
     ../Source/UI/Layout/PanelResizeHandle.cpp
     ../Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.cpp

@@ -108,8 +108,8 @@ audio, playback and every other click keep working; it is not a modal mode.
 
 ## The MIDI Remote panel
 
-A third tab on the bottom dock, `MixerDockComponent::Tab::MidiRemote`, next to Timeline and
-Mixer (`Source/UI/Mixer/MixerDockComponent.h`) — it reuses the dock's slide, persistence
+A third tab on the bottom dock, `BottomDockComponent::Tab::MidiRemote`, next to Timeline and
+Mixer (`Source/UI/Mixer/BottomDockComponent.h`) — it reuses the dock's slide, persistence
 (`"bottomDockActiveTab"`), detach-to-window (`DetachablePanelHost`) and focus-region machinery.
 Toolbar toggle + `ShortcutManager` action `toggleMidiRemotePanel` (category General, default
 unbound). Files: `Source/UI/MidiRemote/MidiRemotePanel/` (`MidiRemotePanelComponent` + one unit
@@ -171,7 +171,7 @@ a parameter or the Solo node command builds already showing that target's curren
 since there is nothing live to read. Clicking a cell selects it (inspector);
 dragging moves it on the grid; Delete removes the control (and its assignments, undoable for the
 project half). Repaint is event-driven from the activity ring at ≤ 30 Hz while the tab is
-showing, gated exactly like `MixerDockComponent::refreshMeters` — no free-running timer.
+showing, gated exactly like `BottomDockComponent::refreshMeters` — no free-running timer.
 
 ### Inspector (right)
 
@@ -231,8 +231,8 @@ project and one global assignment. The overlay is
 children. It draws once (no timer, no animation), resolves the click itself against the candidates every
 surface reports through its own `collectPickCandidates()` (each surface keeps its own registry; no card
 knows the mode exists), clips each outline by its ancestors so a control under the dock's edge is neither
-drawn nor pickable, lets `MixerDockComponent::getTabButtons()` through (`setPickPassThrough`) and re-collects
-on `MixerDockComponent::onActiveTabChanged` (`MidiLearnController::refreshPickTarget`), and ends on Esc, on any graph rebuild (`GraphEditor::onBeforeDetachAllModuleComponents`)
+drawn nor pickable, lets `BottomDockComponent::getTabButtons()` through (`setPickPassThrough`) and re-collects
+on `BottomDockComponent::onActiveTabChanged` (`MidiLearnController::refreshPickTarget`), and ends on Esc, on any graph rebuild (`GraphEditor::onBeforeDetachAllModuleComponents`)
 or on a click that hits nothing. The action picker is `ActionPickerComponent`
 (`Source/UI/MidiRemote/ActionPicker/`).
 

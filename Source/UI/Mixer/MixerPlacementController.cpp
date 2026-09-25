@@ -8,13 +8,13 @@
 namespace synth::ui {
 
 namespace {
-// Same length as MainComponent::kPanelSlideMs, so the Own panel and the Timeline dock move alike.
+// Same length as MainComponent::kPanelSlideMs, so the Own panel and the bottom dock move alike.
 constexpr double kSlideMs = 190.0;
 } // namespace
 
-MixerPlacementController::MixerPlacementController(MixerDockComponent& mixerDock,
+MixerPlacementController::MixerPlacementController(BottomDockComponent& bottomDock,
                                                    juce::ApplicationProperties& appProperties)
-    : mixerDock_(mixerDock)
+    : bottomDock_(bottomDock)
     , appProperties_(appProperties) {
     setVisible(false); // Own-panel's strip; hidden until applyPlacementPreference() says otherwise
     restorePersistedHeight();
@@ -109,25 +109,25 @@ void MixerPlacementController::applyPlacementPreference() {
 }
 
 void MixerPlacementController::applyPlacement(Placement placement) {
-    auto& host = mixerDock_.getMixerHost();
+    auto& host = bottomDock_.getMixerHost();
     switch (placement) {
     case Placement::Tab:
-        mixerDock_.addAndMakeVisible(host); // reclaims it (no-op if already there)
+        bottomDock_.addAndMakeVisible(host); // reclaims it (no-op if already there)
         host.setEmbeddedHeader(true);
-        mixerDock_.setMixerTabEnabled(true);
+        bottomDock_.setMixerTabEnabled(true);
         hideStripAtRest();
         break;
     case Placement::Window:
-        // Stays parented inside mixerDock_ (harmless -- it renders nothing once detached; see
+        // Stays parented inside bottomDock_ (harmless -- it renders nothing once detached; see
         // DetachablePanelHost::resized()), just hidden there via the disabled tab. Never
         // eagerly detached here -- "opened on first reveal", see revealOrToggle().
-        mixerDock_.addAndMakeVisible(host);
+        bottomDock_.addAndMakeVisible(host);
         host.setEmbeddedHeader(true);
-        mixerDock_.setMixerTabEnabled(false);
+        bottomDock_.setMixerTabEnabled(false);
         hideStripAtRest();
         break;
     case Placement::OwnPanel:
-        mixerDock_.setMixerTabEnabled(false);
+        bottomDock_.setMixerTabEnabled(false);
         addAndMakeVisible(host); // reparents INTO this strip
         host.setEmbeddedHeader(false);
         // Shown at once with NO slide: a restore / preference change is not a toggle, and this
@@ -164,14 +164,14 @@ bool MixerPlacementController::revealOrToggle() {
         beginSlide();
         return true;
     case Placement::Window:
-        mixerDock_.getMixerHost().setDetached(!mixerDock_.getMixerHost().isDetached());
+        bottomDock_.getMixerHost().setDetached(!bottomDock_.getMixerHost().isDetached());
         return true;
     }
     return false;
 }
 
 // A toggle only moves the intent and the slide's fraction; the strip's geometry comes out of the
-// fraction in MainComponent::resized() (getCarveHeight()), same as the Timeline dock.
+// fraction in MainComponent::resized() (getCarveHeight()), same as the bottom dock.
 void MixerPlacementController::beginSlide() {
     // Opening: visible BEFORE the first frame. Closing: stays visible for the whole slide and is
     // hidden only in finishSlide(), so "close" is an animation and not a vanish.
@@ -216,7 +216,7 @@ void MixerPlacementController::resized() {
     if (placement_ != Placement::OwnPanel)
         return;
     // The host starts below the handle so a grab never lands on its own header/buttons.
-    mixerDock_.getMixerHost().setBounds(getLocalBounds().withTrimmedTop(PanelResizeHandle::kHeight));
+    bottomDock_.getMixerHost().setBounds(getLocalBounds().withTrimmedTop(PanelResizeHandle::kHeight));
 }
 
 } // namespace synth::ui

@@ -2,7 +2,7 @@
 //
 // The panel's layout at any dock height. The resize gesture itself (one top-edge handle on the
 // bottom DOCK, every tab) and MainComponent's ownership of the value live in
-// Tests/UI/Mixer/MixerDockResizeTests.cpp since FRO231.
+// Tests/UI/Mixer/BottomDockResizeTests.cpp since FRO231.
 
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <gtest/gtest.h>

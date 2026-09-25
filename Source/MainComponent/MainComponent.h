@@ -35,10 +35,10 @@
 #include "UI/Chrome/ToolbarComponent.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/BottomDockComponent.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
-#include "UI/Mixer/MixerDockComponent.h"
 #include "UI/Mixer/MixerPlacementController.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
@@ -199,11 +199,11 @@ public:
     /** Per-press zoom step for the four zoom commands; the out factor is the exact reciprocal. */
     static constexpr double kZoomInFactor = 1.25;
     static constexpr double kZoomOutFactor = 1.0 / kZoomInFactor;
-    bool isTimelineConfiguredVisible() const { return isTimelineVisible; }
+    bool isBottomDockConfiguredVisible() const { return isBottomDockVisible; }
     synth::ui::TimelinePanelComponent& getTimelinePanel() { return timelinePanel; }
-    synth::ui::MixerDockComponent& getMixerDock() { return mixerDock; }
+    synth::ui::BottomDockComponent& getBottomDock() { return bottomDock; }
     // The app's/plugin's real construction site calls setCreatesNativeWindows(true) here, same as
-    // it does for the two detach hosts via getMixerDock() above.
+    // it does for the two detach hosts via getBottomDock() above.
     synth::HostedPluginWindowManager& getPluginWindowManager() { return pluginWindowManager; }
     // Test-only: Own-panel placement reparents the Mixer host INTO this controller (it IS the
     // second strip), not to nullptr -- see MixerPlacementController.h's class comment.
@@ -220,6 +220,9 @@ public:
     /** The settings key the user-dragged timeline height round-trips through; the theme metric is
      *  only the DEFAULT — see clampTimelinePanelHeight(). */
     static constexpr const char* kTimelinePanelHeightKey = "timelinePanelHeight";
+
+    /** Whether the WHOLE bottom dock is open, not just the Timeline tab -- see migrateBottomDockVisibleSettingKey(). */
+    static constexpr const char* kBottomDockVisibleSettingKey = "bottomDockVisible";
 
     /** The panel's current docked height in px, always clamped (see clampTimelinePanelHeight()). */
     int getTimelinePanelHeight() const noexcept { return timelinePanelHeight_; }
@@ -457,7 +460,7 @@ private:
     bool canGroupSelection() const { return graphEditor.getSelectionCount() > 1 || touchesAnyMacro(); }
     bool touchesAnyMacro() const;
     bool isEditSurfaceCommandActive(juce::CommandID id) const; // Copy/Paste/Duplicate/Cut/Repeat
-    bool isTimelineVisibleForSnap() const { return isTimelineVisible; }
+    bool isBottomDockVisibleForSnap() const { return isBottomDockVisible; }
     bool isZoomCommandActive(juce::CommandID id) const;
     bool isWelcomeScreenHidden() const { return welcomeScreen_ == nullptr || !welcomeScreen_->isVisible(); }
 
@@ -648,6 +651,7 @@ private:
     // The call order in initialiseCommon() IS the contract (see the ORDER comments at each call
     // site) — these are declared in that same order for the same reason. Defined across
     // MainComponentSetup.cpp / MainComponentSetupToolbar.cpp / MainComponentSetupTimeline.cpp.
+    void migrateBottomDockVisibleSettingKey(); // one-time "timelinePanelVisible" migration; see the .cpp
     void restorePanelPreferences();
     void restoreGraphEditorPreferences();
     void configureAiProvider(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry);
@@ -812,13 +816,13 @@ private:
     // appProperties/lookAndFeel/shortcutManager are declared earlier so all three are already
     // valid pointers/references here, even though shortcutManager itself finishes constructing
     // later — see DetachablePanelHost.h's "held by reference" contract; only the ADDRESS is taken.
-    synth::ui::MixerDockComponent mixerDock{timelinePanel, audioEngine,   timelineDoc, undoManager,
-                                            graphEditor,   appProperties, lookAndFeel, &shortcutManager};
+    synth::ui::BottomDockComponent bottomDock{timelinePanel, audioEngine,   timelineDoc, undoManager,
+                                              graphEditor,   appProperties, lookAndFeel, &shortcutManager};
     // Mixer placement (Tab/Own panel/Window) + both panels' detach-to-window support (docs/mixer/panel.md) --
-    // ONE collaborator so this header doesn't grow a field per panel. Declared after mixerDock so
+    // ONE collaborator so this header doesn't grow a field per panel. Declared after bottomDock so
     // its Mixer-panel reference stays valid.
-    synth::ui::MixerPlacementController mixerPlacement_{mixerDock, appProperties};
-    bool isTimelineVisible = false;
+    synth::ui::MixerPlacementController mixerPlacement_{bottomDock, appProperties};
+    bool isBottomDockVisible = false;
     // The panel's docked height. Resolved in initialiseCommon() from kTimelinePanelHeightKey (theme
     // metric when absent) and moved by the panel's top-edge drag; 0 only before that.
     int timelinePanelHeight_ = 0;
@@ -948,7 +952,7 @@ private:
     // T159: the focus-region registry (Source/UI/Layout/FocusRegion.h) — a plain member, not a
     // Desktop-global singleton, so a future separate-window mixer/timeline gets its own instance.
     // Populated once in initialiseCommon() after every region root exists; wraps the same
-    // isLibraryVisible/isTimelineVisible/isAiPanelVisible/isModMatrixVisible getters the toolbar
+    // isLibraryVisible/isBottomDockVisible/isAiPanelVisible/isModMatrixVisible getters the toolbar
     // toggles already use rather than migrating them to a new unified enum.
     synth::ui::FocusRegionRegistry focusRegions_;
 

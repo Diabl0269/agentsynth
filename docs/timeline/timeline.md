@@ -81,22 +81,22 @@ and every frame of its slide.
 
 A toolbar toggle (`ToolbarComponent::Slot::ToggleTimeline`, right-hand group, immediately before
 `ToggleTheme`) and the **Cmd+T** shortcut (action id `toggleTimelinePanel`; see
-[`shortcuts.md`](../control/shortcuts.md)) both flip `MainComponent::isTimelineVisible`. Visibility persists
-under the `timelinePanelVisible` key in `juce::ApplicationProperties`, default `false`.
+[`shortcuts.md`](../control/shortcuts.md)) both flip `MainComponent::isBottomDockVisible`. Visibility persists
+under the `bottomDockVisible` key in `juce::ApplicationProperties`, default `false`.
 
 **The key and the flag gate the whole bottom dock, not just this panel.**
-`TimelinePanelComponent` is nested inside `MixerDockComponent` (the Timeline/Mixer tab strip; see
+`TimelinePanelComponent` is nested inside `BottomDockComponent` (the Timeline/Mixer tab strip; see
 [`docs/mixer/panel.md#what-the-mixer-shows`](../mixer/panel.md#what-the-mixer-shows)), and
-`mixerDock.setVisible(isTimelineVisible)` is what the toggle, the shortcut and the persisted key
-actually drive. `isTimelineVisible` / `timelinePanelVisible` mean "the dock is open", regardless of
+`bottomDock.setVisible(isBottomDockVisible)` is what the toggle, the shortcut and the persisted key
+actually drive. `isBottomDockVisible` / `bottomDockVisible` mean "the dock is open", regardless of
 which tab is active; which of the two panels is *showing* inside an open dock is the separate,
-independently persisted `bottomDockActiveTab` key (`MixerDockComponent::kActiveTabKey`, default
+independently persisted `bottomDockActiveTab` key (`BottomDockComponent::kActiveTabKey`, default
 `"timeline"` — see [`docs/mixer/panel.md#what-the-mixer-shows`](../mixer/panel.md#what-the-mixer-shows)).
 
 **Why the names stayed.** They match settings files already on disk. The cost is that a
 component-local `TimelinePanelComponent::isVisible()` check does not tell you whether the dock is
 open — it only reflects "the Timeline tab is selected" — so a caller that needs "is the panel
-actually on screen" composes `timelinePanel.isVisible() && mixerDock.isVisible()`.
+actually on screen" composes `timelinePanel.isVisible() && bottomDock.isVisible()`.
 `MainComponent::timerCallback()`'s 10 Hz poll gate is the reference call site.
 
 ## Panel height
@@ -117,15 +117,15 @@ minimum**:
 - **Persistence**: the `timelinePanelHeight` int key (same name as the metric) in
   `juce::ApplicationProperties`, absent by default — absence is what makes the metric the default.
   Written **once per gesture**, on drag end, never per pixel.
-- **The value is the total dock-carve height** — the whole `MixerDockComponent`, tab strip
-  (`MixerDockComponent::kTabStripHeight`, 22 px) included. The dock's handle is the dock's own and
+- **The value is the total dock-carve height** — the whole `BottomDockComponent`, tab strip
+  (`BottomDockComponent::kTabStripHeight`, 22 px) included. The dock's handle is the dock's own and
   measures from the dock's pinned bottom edge, so it already reports that total and
-  `MainComponentSetupTimeline.cpp`'s `mixerDock.onResizeHeight` / `onResizeHeightCommitted` wiring
+  `MainComponentSetupTimeline.cpp`'s `bottomDock.onResizeHeight` / `onResizeHeightCommitted` wiring
   passes it straight to `setTimelinePanelHeight()` with no translation. A height persisted before
   the dock existed is a total-carve value too and is honoured unchanged.
 - **One grab strip for the whole dock, on every tab** (FRO231). `synth::ui::PanelResizeHandle`
   (`Source/UI/Layout/PanelResizeHandle.h`, `kHeight = 5`, `MouseCursor::UpDownResizeCursor`) is
-  owned by `MixerDockComponent` and spans the dock's full width along ITS top edge, so the dock can
+  owned by `BottomDockComponent` and spans the dock's full width along ITS top edge, so the dock can
   be resized from Timeline, Mixer and MIDI Remote alike (and while the Timeline is detached into
   its own window). It *overlaps* the top 5 px of the 22 px tab strip: the strip keeps its full
   height so the content below never moves, but the tab/detach/`+ Bus`/Reset Meters buttons are laid

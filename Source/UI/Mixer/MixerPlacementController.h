@@ -1,9 +1,9 @@
 #pragma once
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/BottomDockComponent.h"
 #include "UI/Layout/PanelResizeHandle.h"
 #include "UI/Layout/UIAnimation.h"
-#include "UI/Mixer/MixerDockComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -11,37 +11,37 @@
 namespace synth::ui {
 
 // MixerPlacementController.h -- FRO12 (P9-6, docs/mixer/panel.md): owns the Mixer placement
-// preference (Tab beside the Timeline / Own panel / Window) and moves MixerDockComponent's
+// preference (Tab beside the Timeline / Own panel / Window) and moves BottomDockComponent's
 // mixerHost_ (the SAME MixerPanelComponent instance throughout -- DetachablePanelHost's own
 // "never copied" contract) between the three homes it can live in. The ONE collaborator
 // MainComponent.h adds for this ticket (root CLAUDE.md's file-size-budget constraint) -- every
 // placement-specific line lives here, not spread across MainComponent's own members.
 //
-// | Placement     | Mixer lives                                | Timeline dock | Detach state         |
+// | Placement     | Mixer lives                                | Bottom dock   | Detach state         |
 // |---------------|---------------------------------------------|---------------|-----------------------|
-// | Tab (default) | MixerDockComponent's own tab strip           | unaffected    | tab-strip button      |
+// | Tab (default) | BottomDockComponent's own tab strip           | unaffected    | tab-strip button      |
 // | Own panel     | this class's own second bottom strip (IS-A)  | unaffected    | its own header shown  |
 // | Window        | a DetachedPanelWindow, opened on first reveal| unaffected    | detached; lazy at launch|
 //
-// mixerHost_ stays parented inside MixerDockComponent for BOTH Tab and Window placements (in
-// Window mode it is simply hidden there via MixerDockComponent::setMixerTabEnabled(false) -- its
+// mixerHost_ stays parented inside BottomDockComponent for BOTH Tab and Window placements (in
+// Window mode it is simply hidden there via BottomDockComponent::setMixerTabEnabled(false) -- its
 // resized() renders nothing once detached anyway) -- only "Own panel" actually reparents it, into
 // THIS component (which IS the second strip; MainComponent adds and bounds it directly).
 //
-// "Own panel" (FRO231) slides open and closed like the Timeline dock, has a persisted user height
+// "Own panel" (FRO231) slides open and closed like the bottom dock, has a persisted user height
 // ("mixerOwnPanelHeight") and its own top-edge PanelResizeHandle. The slide is this class's own
 // PanelSlide + AnimationDriver (MainComponent's three fractions are not touched); it calls
 // onLayoutNeeded each frame and MainComponent::resized() reads getCarveHeight(). The
-// MixerDockComponent/isTimelineVisible rename mentioned in FRO11's own comments stays deferred --
-// see docs/mixer/panel.md#the-three-placements.
+// BottomDockComponent/isBottomDockVisible rename mentioned in FRO11's own comments is done (FRO232)
+// -- see docs/mixer/panel.md#the-three-placements.
 class MixerPlacementController : public juce::Component {
 public:
     enum class Placement { Tab, OwnPanel, Window };
 
-    // Takes only mixerDock + appProperties -- mixerHost_ already carries its own LookAndFeel/
-    // ShortcutManager pointers (set once, at MixerDockComponent's own construction), so this
+    // Takes only bottomDock + appProperties -- mixerHost_ already carries its own LookAndFeel/
+    // ShortcutManager pointers (set once, at BottomDockComponent's own construction), so this
     // controller never needs either directly.
-    MixerPlacementController(MixerDockComponent& mixerDock, juce::ApplicationProperties& appProperties);
+    MixerPlacementController(BottomDockComponent& bottomDock, juce::ApplicationProperties& appProperties);
 
     /** Re-reads "mixerPlacement" and moves the Mixer to wherever it now says. Call once at launch
      *  (after both panels exist) and again on every settings-file write, so a live Preferences
@@ -106,9 +106,9 @@ private:
     void finishSlide();
     int effectiveHeight() const noexcept;
 
-    MixerDockComponent& mixerDock_;
+    BottomDockComponent& bottomDock_;
     juce::ApplicationProperties& appProperties_;
-    Placement placement_ = Placement::Tab; // matches MixerDockComponent's own already-Tab default
+    Placement placement_ = Placement::Tab; // matches BottomDockComponent's own already-Tab default
     // False until applyPlacementPreference()'s first call: MainComponent's addAndMakeVisible(*this)
     // (addCanvasAndPanels(), before wireTimelinePanel() ever runs) makes the strip visible
     // unconditionally, regardless of placement -- the first applyPlacementPreference() call must

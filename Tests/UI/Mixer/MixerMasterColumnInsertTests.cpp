@@ -297,7 +297,7 @@ TEST(MixerMasterColumnInsertTests, MasterColumnInThePanelShowsItsInsertRowsWitho
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick(); // the first channel creates Master
 
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     mixerPanel.rebuild();
     auto* master = mixerPanel.getMasterColumnForTest();
     ASSERT_NE(master, nullptr);
@@ -335,7 +335,7 @@ TEST(MixerMasterColumnInsertTests, MasterColumnListShrinksToAThirdOfATightColumn
     mc.setSize(1400, 900);
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     mixerPanel.rebuild();
     auto* master = mixerPanel.getMasterColumnForTest();
     ASSERT_NE(master, nullptr);

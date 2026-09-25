@@ -12,7 +12,7 @@
 // drives the Mixer surface through MainComponent::setEditSurfaceOverrideForTest(), the same
 // headless stand-in every other surface in this suite relies on; MixerResolverRoundTripAndGating
 // extends SurfaceResolverRealFocus's own resolver test to cover Mixer, including a best-effort
-// mixerDock.getMixerPanel().grabKeyboardFocus() call that documents the panel-visibility gate wins
+// bottomDock.getMixerPanel().grabKeyboardFocus() call that documents the panel-visibility gate wins
 // regardless of whether that grab actually lands anywhere in this environment.
 #include "FocusArbitrationTestFixture.h"
 
@@ -32,9 +32,9 @@ TEST_F(FocusArbitrationTest, MixerResolverRoundTripAndGating) {
 
     // Best-effort real-focus attempt: the mixer panel is never added to the desktop, so
     // grabKeyboardFocus() may silently no-op here (SurfaceResolverRealFocus's own caveat). Either
-    // way the dock's own open-and-on-the-Mixer-tab gate must win, exactly like isTimelineVisible
+    // way the dock's own open-and-on-the-Mixer-tab gate must win, exactly like isBottomDockVisible
     // gates the two timeline surfaces above.
-    mc.getMixerDock().getMixerPanel().grabKeyboardFocus();
+    mc.getBottomDock().getMixerPanel().grabKeyboardFocus();
     EXPECT_EQ(mc.resolveEditSurface(), MainComponent::EditSurface::Graph)
         << "the dock is closed -- a stale/no-op focus pointer must never resolve to Mixer";
 }

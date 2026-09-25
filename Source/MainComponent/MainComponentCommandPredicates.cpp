@@ -109,7 +109,7 @@ bool MainComponent::isZoomCommandActive(juce::CommandID id) const {
         return !vertical;
     case EditSurface::TimelineClips:
     case EditSurface::PianoRoll:
-        return isTimelineVisible;
+        return isBottomDockVisible;
     case EditSurface::Mixer:
         return false; // no zoom concept at all -- inactive on both axes, unlike Graph above
     }

@@ -69,7 +69,7 @@ moving.**
 
 **"Visible" means showing ANYWHERE, not just docked.** `MainComponent::timerCallback()`'s gate
 ([`docs/layout/rendering.md`](../layout/rendering.md)) is
-`mixerDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing()`:
+`bottomDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing()`:
 
 - `isMixerShowing()` covers both docked-on-the-Mixer-tab-with-the-dock-open **and** detached into its
   own `DetachedPanelWindow` — a detached window is a separate top-level `Component`, so the dock's own
@@ -77,7 +77,7 @@ moving.**
 - `isOwnPanelShowing()` covers the "Own panel" placement.
 
 **A detach or redock toggle reparents the SAME `MixerPanelComponent`, never rebuilds it, and
-deliberately skips `rebuild()`** (`MixerDockComponent::applyTabVisibility(false)` from that one
+deliberately skips `rebuild()`** (`BottomDockComponent::applyTabVisibility(false)` from that one
 caller). Unlike a real tab switch, nothing about which graph nodes the mixer shows has changed, and
 rebuilding would silently reset every column's latched clip-readout state to "-inf" on every detach
 and redock.
@@ -186,7 +186,7 @@ bar.**
 | `Tests/Mixer/ChannelFlow/ChannelFlowTrackChannelLinkTests.cpp` | the channel chip's meter displays a fraction of the dB scale, not the raw linear peak; the per-reader latch's two independent slots are exercised across the render and solo cases |
 | `Tests/Engine/OutputMeterTapTests.cpp` | `AudioEngine::takeOutputMeterPeak`: each leg latches the graph output's own peak (a negative excursion counts) and reads back once, another `MeterReader`'s slot is untouched, a silent graph latches nothing, a mono buffer's right leg follows its left |
 | `Tests/UI/Mixer/MixerMasterColumnInsertTests.cpp` | the Master column's meter source: an empty chain reads Master's own latch and never calls the engine provider, a chain with an insert reads the provider instead (and falls back to Master's latch with none wired); a Limiter added through the column's own list on a hot signal shows the limited level while Master's pre-insert latch still sees the full peak |
-| `Tests/UI/Mixer/MixerDockMeterGatingTests.cpp` | `MixerDockComponent::isMixerShowing()` at its three states; `MainComponent::timerCallback()` actually calls `refreshMeters()` when the mixer is detached with the dock hidden and does NOT when the mixer is showing nowhere; detaching then redocking the SAME column leaves its clip readout's latched state exactly as it was, not reset to "-inf" |
+| `Tests/UI/Mixer/BottomDockMeterGatingTests.cpp` | `BottomDockComponent::isMixerShowing()` at its three states; `MainComponent::timerCallback()` actually calls `refreshMeters()` when the mixer is detached with the dock hidden and does NOT when the mixer is showing nowhere; detaching then redocking the SAME column leaves its clip readout's latched state exactly as it was, not reset to "-inf" |
 | `Tests/UI/Mixer/MeterColourStopsPersistenceTests.cpp` | round-trip at 1, a handful, and the maximum number of stops; strict malformed-token rejection with ANY one bad token failing the whole key; an out-of-order or duplicate but well-formed value still normalising; `load`, `write`, `save` and `clear` against a real `juce::PropertiesFile`; `AppLookAndFeel`'s own cache, including an override surviving a later `applyTheme()` and clearing falling back to the current theme |
 | `Tests/UI/Settings/MeterColourStopsEditorTests.cpp` | the editor driven with synthesized `juce::MouseEvent`s: handle selection writing nothing; the click-versus-drag resolution on a swatch, including the floor's own; a row-body drag's 0.5 dB snap, its live-plus-committed change pair and its clamp at each neighbour; the floor never moving; adding on an empty-space click and its refusals; remove never taking the floor or the last stop; the arrow nudge and its Shift step; `setStops()` from the owner replacing the working set and clearing selection |
 | `Tests/UI/Mixer/MeterColourStopsLiveApplyTests.cpp` | pixel-sampled proof that `MixerMeter::paint` and `ChannelChipComponent::paintButton` read the SAME `AppLookAndFeel` cache — an override changes what each paints, and clearing it reverts both |

@@ -2,9 +2,9 @@
 // set, PNG render smoke test (dark + light built-in theme, per the ticket's own test list), and
 // the column-click-selects-macro gesture. Drives a real, off-screen MainComponent
 // (newPatchForTest() + simulateAddAudioTrackClick(), the ChannelFlow suite's own rig style).
+#include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
-#include "MixerDockActiveTabResetGuard.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
@@ -49,7 +49,7 @@ TEST(MixerPanelComponentTests, MixerPanelRendersOneColumnPerStripPlusDirectPlusM
     mc.simulateAddAudioTrackClick();
     mc.simulateAddAudioTrackClick();
 
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     mixerPanel.rebuild();
 
     EXPECT_EQ(mixerPanel.getColumnCount(), 4)
@@ -59,15 +59,15 @@ TEST(MixerPanelComponentTests, MixerPanelRendersOneColumnPerStripPlusDirectPlusM
 TEST(MixerPanelComponentTests, MixerPanelPngRenderSmokeTestDarkTheme) {
     // Isolates "bottomDockActiveTab" on the shared on-disk settings file -- dock.setActiveTab()
     // below persists it, and left uncleared it would clobber a later test's "Timeline" default
-    // assumption (see the guard's own comment / MixerDockComponentTests.cpp's own use of it).
-    MixerDockActiveTabResetGuardMDT resetGuard;
+    // assumption (see the guard's own comment / BottomDockComponentTests.cpp's own use of it).
+    BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
-    auto& dock = mc.getMixerDock();
-    dock.setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
+    auto& dock = mc.getBottomDock();
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
     dock.setSize(1400, 300);
 
     synth::theme::AppLookAndFeel laf;
@@ -85,14 +85,14 @@ TEST(MixerPanelComponentTests, MixerPanelPngRenderSmokeTestDarkTheme) {
 
 TEST(MixerPanelComponentTests, MixerPanelPngRenderSmokeTestLightTheme) {
     // Same isolation as the dark-theme test above.
-    MixerDockActiveTabResetGuardMDT resetGuard;
+    BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
-    auto& dock = mc.getMixerDock();
-    dock.setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
+    auto& dock = mc.getBottomDock();
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
     dock.setSize(1400, 300);
 
     synth::theme::AppLookAndFeel laf;
@@ -114,7 +114,7 @@ TEST(MixerPanelComponentTests, ClickingAColumnSelectsItsOwningMacroOnTheCanvas) 
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick(); // T173a boxes {Track Audio, Gate, EQ, Compressor, Strip} into one macro
 
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     mixerPanel.rebuild();
     mixerPanel.setSize(1400, 300);
     mixerPanel.resized();

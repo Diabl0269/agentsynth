@@ -629,7 +629,7 @@ protected:
             s->setValue("librarySidebarVisible", "1");
             s->setValue("aiPanelVisible", "0");
             s->setValue("minimapVisible", "1");
-            s->setValue("timelinePanelVisible", "0");
+            s->setValue("bottomDockVisible", "0");
             s->setValue("timelineCountInBars", 0); // no pre-roll: the punch is "now"
             s->saveIfNeeded();
         }

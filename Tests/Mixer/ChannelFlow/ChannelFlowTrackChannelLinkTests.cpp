@@ -543,7 +543,7 @@ TEST_F(ChannelFlowTest, AddAudioTrackProducesALinkedTrackWhoseHeaderShowsAndRena
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
     mc.simulateToggleTimelineClick(); // the panel starts hidden; the headers only lay out once shown
-    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
 
     addAudioTrack(mc);
     ASSERT_EQ(mc.getTimelineDoc().getTracks().size(), 1u);

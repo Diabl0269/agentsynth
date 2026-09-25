@@ -33,7 +33,7 @@ DetachablePanelHost::DetachablePanelHost(juce::Component& panel, juce::String ti
 DetachablePanelHost::~DetachablePanelHost() {
     // If still detached when this host itself is torn down (app/plugin-editor shutdown with a
     // panel open in its own window), just drop the window -- panel_ is owned elsewhere (by
-    // MixerDockComponent/MainComponent) and outlives us regardless; ~DetachedPanelWindow's own
+    // BottomDockComponent/MainComponent) and outlives us regardless; ~DetachedPanelWindow's own
     // destructor drops its reference to the borrowed panel/button/title before unwinding, so this
     // never touches freed memory either way.
     window_.reset();
@@ -78,7 +78,7 @@ void DetachablePanelHost::setDetached(bool detached) {
     } else {
         // Reparents titleLabel_/detachButton_/panel_ back into OUR OWN tree -- addAndMakeVisible
         // auto-detaches a child from whatever parent (the window's Content) currently holds it,
-        // same idiom MixerDockComponent's own constructor uses to take timelinePanel_ in.
+        // same idiom BottomDockComponent's own constructor uses to take timelinePanel_ in.
         addAndMakeVisible(titleLabel_);
         addAndMakeVisible(detachButton_);
         addAndMakeVisible(panel_);

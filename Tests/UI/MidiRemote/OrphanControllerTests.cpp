@@ -5,7 +5,7 @@
 // own rules are MidiLearnControllerOrphanTests.cpp; this file drives them through the panel. Suite names
 // contain "MidiRemote" per the ship-task --gtest_filter convention.
 
-#include "../Mixer/MixerDockActiveTabResetGuard.h"
+#include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "MainComponent/MainComponent.h"
 #include "MidiRemoteMockProvider.h"
 #include "MidiRemotePanelTestFixture.h"
@@ -211,7 +211,7 @@ TEST_F(MidiRemoteOrphanPanelTest, AnOrphanNodeShowsMissingModuleInTheWarningColo
 // refresh is what the real app needed -- the surface stayed stale until a tab switch without it -- but this
 // headless path is also refreshed by the graph reconcile, so it checks the end state, not that hook alone.)
 TEST(MidiRemoteOrphanMainComponentTest, ADeletedModuleShowsAsMissingWithoutATabSwitch) {
-    MixerDockActiveTabResetGuardMDT resetGuard;
+    BottomDockActiveTabResetGuardMDT resetGuard;
     const auto root = juce::File::getSpecialLocation(juce::File::tempDirectory)
                           .getChildFile("agentsynth-orphan-mc-" + juce::Uuid().toString());
     {
@@ -235,8 +235,8 @@ TEST(MidiRemoteOrphanMainComponentTest, ADeletedModuleShowsAsMissingWithoutATabS
         ASSERT_EQ(controller.assignControl("p1", "k", PickTarget::parameter(node->nodeID, "cutoff")),
                   synth::midi::AssignStatus::assigned);
 
-        mc.getMixerDock().setActiveTab(synth::ui::MixerDockComponent::Tab::MidiRemote); // the panel is open
-        auto& panel = mc.getMixerDock().getMidiRemotePanel();
+        mc.getBottomDock().setActiveTab(synth::ui::BottomDockComponent::Tab::MidiRemote); // the panel is open
+        auto& panel = mc.getBottomDock().getMidiRemotePanel();
         panel.selectForTest("p1", "k");
         const auto* before = panel.findSurfaceCellForTest("k");
         ASSERT_NE(before, nullptr);

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "MixerPanelComponent/MixerPanelComponent.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
 #include "UI/Layout/PanelResizeHandle.h"
 #include "UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <functional>
@@ -24,19 +24,19 @@ class RemoteEngine;
 class MidiLearnController;
 } // namespace synth::midi
 
-// MixerDockComponent.h -- FRO11 (P9-5, docs/mixer/panel.md): the bottom dock's own tab strip.
+// BottomDockComponent.h -- FRO11 (P9-5, docs/mixer/panel.md): the bottom dock's own tab strip.
 //
 // The ONE component MainComponent.h holds for this ticket (see the plan's file-size-budget
 // constraint, docs/mixer/panel.md#what-the-mixer-shows): owns `timelinePanel` by reference (NOT a
 // copy/move -- MainComponent still owns and constructs it) and a MixerPanelComponent by value.
 // MainComponent::resized()'s existing dock carve (`timelinePanel.setBounds(...)`) becomes
-// `mixerDock.setBounds(...)` -- one line changed, not two new carve blocks; the open/close slide,
-// height and persisted-visible state stay MainComponent's own (isTimelineVisible/timelineSlide_),
-// unchanged and now gating the whole dock rather than just the Timeline tab (P9-6 owns the rename
-// to a dock-neutral name -- see the plan's own note on this).
+// `bottomDock.setBounds(...)` -- one line changed, not two new carve blocks; the open/close slide,
+// height and persisted-visible state stay MainComponent's own (isBottomDockVisible/timelineSlide_),
+// gating the whole dock rather than just the Timeline tab -- the rename to a dock-neutral name
+// (FRO232) is done; this class and isBottomDockVisible both carry it now.
 namespace synth::ui {
 
-class MixerDockComponent : public juce::Component {
+class BottomDockComponent : public juce::Component {
 public:
     // FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel): MidiRemote is a third,
     // always-offered tab -- unlike Mixer it has no OwnPanel/Window placement variant, so there is
@@ -47,10 +47,10 @@ public:
     // forwarded straight into timelineHost_/mixerHost_ (both DetachablePanelHost) -- see that
     // class for what each is for. `lookAndFeel`/`shortcutManager` may be null in a headless test
     // that never detaches a panel.
-    MixerDockComponent(TimelinePanelComponent& timelinePanel, AudioEngine& audioEngine, synth::TimelineDoc& doc,
-                       AppUndoManager& undoManager, GraphEditor& graphEditor,
-                       juce::ApplicationProperties& appProperties, synth::theme::AppLookAndFeel* lookAndFeel,
-                       ShortcutManager* shortcutManager);
+    BottomDockComponent(TimelinePanelComponent& timelinePanel, AudioEngine& audioEngine, synth::TimelineDoc& doc,
+                        AppUndoManager& undoManager, GraphEditor& graphEditor,
+                        juce::ApplicationProperties& appProperties, synth::theme::AppLookAndFeel* lookAndFeel,
+                        ShortcutManager* shortcutManager);
 
     /** Reads the persisted active tab once ("bottomDockActiveTab", default "timeline" --
      *  docs/layout/chrome.md's "Panel collapse and persistence" table); writes it on every tab switch. */
@@ -71,7 +71,7 @@ public:
     bool isMixerTabActive() const noexcept { return activeTab_ == Tab::Mixer; }
     bool isMidiRemoteTabActive() const noexcept { return activeTab_ == Tab::MidiRemote; }
     /** Switches tabs (persisting the choice) and lays out; a no-op if already on `tab`. Does NOT
-     *  open/close the dock itself -- that stays MainComponent's own isTimelineVisible/
+     *  open/close the dock itself -- that stays MainComponent's own isBottomDockVisible/
      *  beginPanelSlide() (see the class comment). */
     void setActiveTab(Tab tab);
 
@@ -123,7 +123,7 @@ public:
     void setMixerTabEnabled(bool enabled);
 
     /** The Timeline's own detach-to-window host -- always owned and shown here, in every Mixer
-     *  placement (docs/mixer/panel.md's placement table: "Timeline dock: unaffected"). */
+     *  placement (docs/mixer/panel.md's placement table: "Bottom dock: unaffected"). */
     synth::ui::DetachablePanelHost& getTimelineHost() noexcept { return timelineHost_; }
     /** The Mixer's detach-to-window host. Owned here always, but only PARENTED here in Tab
      *  placement -- MixerPlacementController reparents it into its own "Own panel" strip, or
@@ -240,7 +240,7 @@ private:
     juce::ApplicationProperties* appProperties_ = nullptr;
     static constexpr const char* kActiveTabKey = "bottomDockActiveTab";
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerDockComponent)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BottomDockComponent)
 };
 
 } // namespace synth::ui

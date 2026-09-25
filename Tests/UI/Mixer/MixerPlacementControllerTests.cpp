@@ -2,7 +2,7 @@
 // preference (Tab beside the Timeline / Own panel / Window), read once at launch and re-applied
 // live on every settings-file change. Drives a real, off-screen MainComponent, writing
 // "mixerPlacement" into its ApplicationProperties BEFORE construction -- the same "persist first,
-// then construct" shape MixerDockComponentTests.cpp's ActiveTabPersistsAcrossApplicationPropertiesReload
+// then construct" shape BottomDockComponentTests.cpp's ActiveTabPersistsAcrossApplicationPropertiesReload
 // uses for "bottomDockActiveTab".
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
@@ -37,7 +37,7 @@ private:
 };
 
 // Isolates "mixerPlacement" + "bottomDockActiveTab" on the shared on-disk settings file every
-// MainComponent instance in this process reads -- same shape as MixerDockActiveTabResetGuard.h.
+// MainComponent instance in this process reads -- same shape as BottomDockActiveTabResetGuard.h.
 class MixerPlacementResetGuard {
 public:
     MixerPlacementResetGuard() {
@@ -76,9 +76,9 @@ TEST(MixerPlacementControllerTests, TabPlacementIsTheDefaultAtLaunch) {
     MainComponent mc(std::make_unique<MockProviderMPCXT>());
     mc.setSize(1400, 900);
 
-    EXPECT_EQ(mc.getMixerDock().getMixerHost().getParentComponent(), &mc.getMixerDock())
+    EXPECT_EQ(mc.getBottomDock().getMixerHost().getParentComponent(), &mc.getBottomDock())
         << "the mixer host stays parented inside the dock's own tab strip";
-    EXPECT_FALSE(mc.getMixerDock().getMixerHost().isDetached());
+    EXPECT_FALSE(mc.getBottomDock().getMixerHost().isDetached());
 }
 
 TEST(MixerPlacementControllerTests, OwnPanelPlacementHonouredAtLaunch) {
@@ -90,9 +90,9 @@ TEST(MixerPlacementControllerTests, OwnPanelPlacementHonouredAtLaunch) {
 
     // Own panel reparents the Mixer host OUT of the dock and INTO the placement controller itself
     // -- it IS the second strip (MixerPlacementController.h's class comment) -- not to nullptr.
-    EXPECT_EQ(mc.getMixerDock().getMixerHost().getParentComponent(), &mc.getMixerPlacementControllerForTest())
+    EXPECT_EQ(mc.getBottomDock().getMixerHost().getParentComponent(), &mc.getMixerPlacementControllerForTest())
         << "reparented out of the dock, into the controller's own second strip";
-    EXPECT_FALSE(mc.getMixerDock().getMixerHost().isDetached());
+    EXPECT_FALSE(mc.getBottomDock().getMixerHost().isDetached());
 }
 
 TEST(MixerPlacementControllerTests, WindowPlacementNeverEagerlyDetachesAtLaunch) {
@@ -103,18 +103,18 @@ TEST(MixerPlacementControllerTests, WindowPlacementNeverEagerlyDetachesAtLaunch)
     mc.setSize(1400, 900);
 
     // "opened on first reveal, not eagerly" -- the ticket's own scope statement.
-    EXPECT_FALSE(mc.getMixerDock().getMixerHost().isDetached());
+    EXPECT_FALSE(mc.getBottomDock().getMixerHost().isDetached());
 
     // performToggleMixerPanel() is the reveal path (toolbar / Cmd+M) -- the first call opens it.
     mc.performToggleMixerPanel();
-    EXPECT_TRUE(mc.getMixerDock().getMixerHost().isDetached());
+    EXPECT_TRUE(mc.getBottomDock().getMixerHost().isDetached());
 }
 
 TEST(MixerPlacementControllerTests, LivePreferenceChangeAppliesWithoutRestart) {
     MixerPlacementResetGuard guard;
     MainComponent mc(std::make_unique<MockProviderMPCXT>());
     mc.setSize(1400, 900);
-    ASSERT_NE(mc.getMixerDock().getMixerHost().getParentComponent(), nullptr) << "starts in Tab placement";
+    ASSERT_NE(mc.getBottomDock().getMixerHost().getParentComponent(), nullptr) << "starts in Tab placement";
 
     // The same settings-file write path Preferences itself uses -- MainComponent's ChangeListener
     // on appProperties.getUserSettings() is what applies this live (MainComponentCallbacks.cpp).
@@ -125,7 +125,7 @@ TEST(MixerPlacementControllerTests, LivePreferenceChangeAppliesWithoutRestart) {
     // FocusArbitrationZoomGridTests.cpp's NaturalScrollingPreferenceReachesTheTimelineAndTheRoll.
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
 
-    EXPECT_EQ(mc.getMixerDock().getMixerHost().getParentComponent(), &mc.getMixerPlacementControllerForTest())
+    EXPECT_EQ(mc.getBottomDock().getMixerHost().getParentComponent(), &mc.getMixerPlacementControllerForTest())
         << "a live Preferences change must move the Mixer immediately, no restart";
 }
 
@@ -159,7 +159,7 @@ TEST(MixerPlacementControllerTests, LivePlacementChangeRebuildsTheMixerFocusRegi
         << "Window placement has no docked mixer region to Tab-cycle to";
     // Tab-cycling in the main window must never resolve to the now-hidden docked mixer panel.
     for (const auto& region : mc.getFocusRegionsForTest().getRegions())
-        EXPECT_NE(region.root, &mc.getMixerDock().getMixerPanel())
+        EXPECT_NE(region.root, &mc.getBottomDock().getMixerPanel())
             << "region '" << region.id << "' must not point at the hidden docked mixer panel";
 
     // Window -> Tab: the region reappears live, no restart.
@@ -189,7 +189,7 @@ TEST(MixerPlacementControllerTests, OwnPanelPlacementRegistersAnOpenMixerFocusRe
 
     const auto* region = mc.getFocusRegionsForTest().findById("mixer");
     ASSERT_NE(region, nullptr) << "Own panel placement must register its own mixer focus region";
-    EXPECT_EQ(region->root, &mc.getMixerDock().getMixerPanel());
+    EXPECT_EQ(region->root, &mc.getBottomDock().getMixerPanel());
     ASSERT_TRUE(mc.getMixerPlacementControllerForTest().isOwnPanelShowing()) << "visible immediately at launch";
     EXPECT_TRUE(region->isCurrentlyOpen()) << "open while the own-panel strip is showing";
 

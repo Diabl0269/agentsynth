@@ -107,12 +107,12 @@ TEST_F(FocusArbitrationTest, DeletePerSurface) {
 //       must resolve to Graph regardless of what (if anything) getCurrentlyFocusedComponent()
 //       reports, including a best-effort grabKeyboardFocus() call on a component that was never
 //       added to the desktop (which may or may not actually move JUCE's static focus pointer in
-//       this environment — the assertion holds either way, because isTimelineVisible gates the
+//       this environment — the assertion holds either way, because isBottomDockVisible gates the
 //       focus check entirely).
 TEST_F(FocusArbitrationTest, SurfaceResolverRealFocus) {
     MainComponent mc(std::make_unique<FocusMockProvider>());
 
-    ASSERT_FALSE(mc.isTimelineConfiguredVisible()) << "the panel starts hidden by default";
+    ASSERT_FALSE(mc.isBottomDockConfiguredVisible()) << "the panel starts hidden by default";
     EXPECT_EQ(mc.resolveEditSurface(), MainComponent::EditSurface::Graph) << "no override, panel hidden -> Graph";
 
     mc.setEditSurfaceOverrideForTest(MainComponent::EditSurface::TimelineClips);

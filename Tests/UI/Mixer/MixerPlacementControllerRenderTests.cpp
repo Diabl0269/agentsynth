@@ -8,9 +8,9 @@
 //   2. Tab / Window: the strip and its handle stay hidden.
 //   3. Render-to-image: the strip's handle and hosted content both paint non-empty pixels.
 
+#include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
-#include "MixerDockActiveTabResetGuard.h"
 #include "UI/Layout/PanelResizeHandle.h"
 #include "UI/Mixer/MixerPlacementController.h"
 #include "UserSettings.h"
@@ -59,7 +59,7 @@ void writeMixerPlacement(const juce::String& value) {
 // ============================================================================
 
 TEST(MixerPlacementControllerRenderTests, OwnPanelShowsStripWithHandleOnTopEdgeAndCorrectBounds) {
-    MixerDockActiveTabResetGuardMDT guard;
+    BottomDockActiveTabResetGuardMDT guard;
     writeMixerPlacement("ownPanel");
 
     MainComponent mc(std::make_unique<MockProviderMPCRT>());
@@ -75,7 +75,7 @@ TEST(MixerPlacementControllerRenderTests, OwnPanelShowsStripWithHandleOnTopEdgeA
               juce::Rectangle<int>(0, 0, controller.getWidth(), synth::ui::PanelResizeHandle::kHeight))
         << "the handle must sit flush on the strip's top edge, spanning its full width";
 
-    auto& host = mc.getMixerDock().getMixerHost();
+    auto& host = mc.getBottomDock().getMixerHost();
     EXPECT_EQ(host.getParentComponent(), &controller) << "Own panel reparents the mixer host into this strip";
     EXPECT_EQ(host.getBounds(), controller.getLocalBounds().withTrimmedTop(synth::ui::PanelResizeHandle::kHeight))
         << "the hosted mixer must fill everything below the handle";
@@ -93,7 +93,7 @@ TEST(MixerPlacementControllerRenderTests, OwnPanelShowsStripWithHandleOnTopEdgeA
 
 TEST(MixerPlacementControllerRenderTests, TabAndWindowPlacementsHideTheStripAndItsHandle) {
     for (const juce::String placement : {"tab", "window"}) {
-        MixerDockActiveTabResetGuardMDT guard;
+        BottomDockActiveTabResetGuardMDT guard;
         writeMixerPlacement(placement);
 
         MainComponent mc(std::make_unique<MockProviderMPCRT>());
@@ -112,7 +112,7 @@ TEST(MixerPlacementControllerRenderTests, TabAndWindowPlacementsHideTheStripAndI
 // ============================================================================
 
 TEST(MixerPlacementControllerRenderTests, OwnPanelStripRendersNonEmptyHandleAndContentPixels) {
-    MixerDockActiveTabResetGuardMDT guard;
+    BottomDockActiveTabResetGuardMDT guard;
     writeMixerPlacement("ownPanel");
 
     MainComponent mc(std::make_unique<MockProviderMPCRT>());

@@ -1,6 +1,6 @@
 // PanelResizeHandleTests.cpp -- FRO231: synth::ui::PanelResizeHandle in isolation (a stand-in owner
 // component, no MainComponent). The dock-level behaviour on every tab lives in
-// Tests/UI/Mixer/MixerDockResizeTests.cpp.
+// Tests/UI/Mixer/BottomDockResizeTests.cpp.
 
 #include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h" // makeClickEvent / makeDragEvent
 #include "UI/Layout/PanelResizeHandle.h"

@@ -31,9 +31,9 @@ AgentSynthPluginEditor::AgentSynthPluginEditor(AgentSynthAudioProcessor& p)
     // builds an AgentSynthPluginEditor directly) — opt both detach hosts into actually creating a
     // native window on detach, same as Main.cpp's MainWindow does for the standalone app. See
     // DetachablePanelHost::setCreatesNativeWindows()'s doc comment.
-    mainComponent.getMixerDock().getTimelineHost().setCreatesNativeWindows(true);
-    mainComponent.getMixerDock().getMixerHost().setCreatesNativeWindows(true);
-    mainComponent.getMixerDock().getMidiRemoteHost().setCreatesNativeWindows(true);
+    mainComponent.getBottomDock().getTimelineHost().setCreatesNativeWindows(true);
+    mainComponent.getBottomDock().getMixerHost().setCreatesNativeWindows(true);
+    mainComponent.getBottomDock().getMidiRemoteHost().setCreatesNativeWindows(true);
 
     // FRO100: same reasoning, for the hosted-plugin "Open Editor" window. See
     // HostedPluginWindowManager::setCreatesNativeWindows()'s doc comment.

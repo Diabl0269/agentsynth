@@ -71,7 +71,7 @@ struct SendRig {
         panel().rebuild();
     }
 
-    synth::ui::MixerPanelComponent& panel() { return mc->getMixerDock().getMixerPanel(); }
+    synth::ui::MixerPanelComponent& panel() { return mc->getBottomDock().getMixerPanel(); }
     juce::AudioProcessorGraph& graph() { return mc->getAudioEngine().getGraph(); }
 
     /** The track's own strip column -- always the first, since buses are appended after every

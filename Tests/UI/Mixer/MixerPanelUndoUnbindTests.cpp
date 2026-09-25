@@ -91,7 +91,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeAGraphRestoreSoUndoNeverT
     auto& graph = mc.getAudioEngine().getGraph();
     ASSERT_EQ(countChannelStrips(graph), 1);
 
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     auto* column = mixerPanel.getStripColumnForTest(0);
     ASSERT_NE(column, nullptr);
     ASSERT_TRUE(column->isFaderBoundForTest()) << "the strip's fader must be bound before undo";
@@ -101,7 +101,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeAGraphRestoreSoUndoNeverT
 
     // This is the exact repro: undoing the channel creation frees the ChannelStripModule (and its
     // "gain" parameter) the mixer's column is still bound to. Before the fix, the OLD column
-    // (still holding that now-freed pointer) was destroyed by mixerDock.rebuildMixer() AFTER the
+    // (still holding that now-freed pointer) was destroyed by bottomDock.rebuildMixer() AFTER the
     // restore had already freed it -- a crash/deadlock, not an assertion failure, is what a
     // regression here looks like (the process never reaches the EXPECTs below).
     ASSERT_TRUE(mc.getUndoManager().undo());
@@ -124,7 +124,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeNewPatchReplacesTheDocume
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     auto* column = mixerPanel.getStripColumnForTest(0);
     ASSERT_NE(column, nullptr);
     ASSERT_TRUE(column->isFaderBoundForTest());
@@ -160,7 +160,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeDeleteSelectionFreesTheSt
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     auto* column = mixerPanel.getStripColumnForTest(0);
     ASSERT_NE(column, nullptr);
     ASSERT_TRUE(column->isFaderBoundForTest());
@@ -207,7 +207,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeRequestDeleteModuleFreesT
     mc.simulateAddAudioTrackClick();
 
     auto& graph = mc.getAudioEngine().getGraph();
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     auto* column = mixerPanel.getStripColumnForTest(0);
     ASSERT_NE(column, nullptr);
     ASSERT_TRUE(column->isFaderBoundForTest()) << "the strip's fader must be bound before the delete";
@@ -238,7 +238,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeReplaceModuleFreesTheStri
     mc.simulateAddAudioTrackClick();
 
     auto& graph = mc.getAudioEngine().getGraph();
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     auto* column = mixerPanel.getStripColumnForTest(0);
     ASSERT_NE(column, nullptr);
     ASSERT_TRUE(column->isFaderBoundForTest()) << "the strip's fader must be bound before the replace";
@@ -282,7 +282,7 @@ TEST(MixerPanelUndoUnbindTests, MixerColumnsAreReboundAfterAnUnrelatedModuleIsDe
     mc.simulateAddAudioTrackClick();
 
     auto& graph = mc.getAudioEngine().getGraph();
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     ASSERT_NE(mixerPanel.getStripColumnForTest(0), nullptr);
     ASSERT_TRUE(mixerPanel.getStripColumnForTest(0)->isFaderBoundForTest());
 

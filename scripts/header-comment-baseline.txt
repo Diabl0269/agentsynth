@@ -40,11 +40,11 @@
 61 Source/UI/Assistant/AIChatComponent/AIChatComponent.h
 40 Source/UI/Chrome/StatusBarComponent.h
 19 Source/UI/Graph/ModuleComponent/ModuleComponent.h
+13 Source/UI/Layout/BottomDockComponent.h
 1 Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
 125 Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
 70 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h
 24 Source/UI/Mixer/MeterColourStops.h
-13 Source/UI/Mixer/MixerDockComponent.h
 12 Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
 8 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
 84 Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h

@@ -21,12 +21,12 @@
 namespace {
 
 // automateParameter()'s toggle path (and, in principle, any test that ever called
-// simulateToggleTimelineClick()) persists "timelinePanelVisible" to the SAME on-disk properties
+// simulateToggleTimelineClick()) persists "bottomDockVisible" to the SAME on-disk properties
 // file every MainComponent instance reads at construction — reset it before AND after every test
 // in this file so SurfaceResolverRealFocus's "the panel starts hidden" precondition never depends
 // on what ran before it in the same process. Mirrors AutomationEditorTests.cpp's helper of the
 // same name exactly.
-void resetTimelinePanelVisibleKey() {
+void resetBottomDockVisibleKey() {
     juce::PropertiesFile::Options opts;
     opts.applicationName = "Agent Synth";
     opts.folderName = "Agent Synth";
@@ -37,13 +37,13 @@ void resetTimelinePanelVisibleKey() {
     juce::ApplicationProperties props;
     props.setStorageParameters(opts);
     if (auto* s = props.getUserSettings()) {
-        s->setValue("timelinePanelVisible", "0");
+        s->setValue("bottomDockVisible", "0");
         s->saveIfNeeded();
     }
 }
 
 // The one on-disk settings file every MainComponent in this process opens (see
-// synth::userSettingsOptions) — factored out of resetTimelinePanelVisibleKey so the guard below can
+// synth::userSettingsOptions) — factored out of resetBottomDockVisibleKey so the guard below can
 // reach the same file.
 juce::PropertiesFile::Options userSettingsTestOptions() {
     juce::PropertiesFile::Options opts;
@@ -80,7 +80,7 @@ void resetTimelineSnapKeysToDefault() {
 // enough: it would silently change the developer's own preferences, so the original values go back.
 //
 // Both the read and the write use their own short-lived juce::ApplicationProperties, exactly as
-// resetTimelinePanelVisibleKey does: a PropertiesFile saves its WHOLE in-memory property set, so a
+// resetBottomDockVisibleKey does: a PropertiesFile saves its WHOLE in-memory property set, so a
 // long-lived instance held across the test would write back a snapshot taken before the test and
 // clobber every unrelated key the test happened to touch.
 class PersistedKeysGuard {
@@ -167,6 +167,6 @@ bool commandIsActive(MainComponent& mc, juce::CommandID cmdId) {
 
 class FocusArbitrationTest : public ::testing::Test {
 protected:
-    void SetUp() override { resetTimelinePanelVisibleKey(); }
-    void TearDown() override { resetTimelinePanelVisibleKey(); }
+    void SetUp() override { resetBottomDockVisibleKey(); }
+    void TearDown() override { resetBottomDockVisibleKey(); }
 };

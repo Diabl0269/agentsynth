@@ -47,7 +47,7 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 //     docked at its top, a bar/beat grid painted directly by this component below it.
 //
 // The panel has no resize affordance of its own: the bottom dock's one top-edge handle
-// (MixerDockComponent, FRO231) resizes the whole dock from every tab. The panel never sets its
+// (BottomDockComponent, FRO231) resizes the whole dock from every tab. The panel never sets its
 // own bounds.
 //
 // The single synth::ui::TimelineViewState (beat<->pixel mapping — zoom, scroll, snap) is owned

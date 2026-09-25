@@ -72,7 +72,7 @@ constexpr float kLoopZoneY = 5.0f;
 constexpr float kPlayheadZoneY = 18.0f;
 
 // FRO11 (P9-5): mc.getTimelinePanel() is no longer a direct child of MainComponent -- it now
-// lives inside MixerDockComponent (the Timeline/Mixer tab strip), inset by the tab strip's own
+// lives inside BottomDockComponent (the Timeline/Mixer tab strip), inset by the tab strip's own
 // height. getBounds() therefore returns coordinates relative to the DOCK, not MainComponent, so a
 // raw `mc.getTimelinePanel().getBounds()` can no longer be compared directly against another
 // MainComponent-level rect (the status bar, the graph editor...) -- that comparison silently
@@ -86,7 +86,7 @@ inline juce::Rectangle<int> timelinePanelBoundsInMainComponent(MainComponent& mc
 
 // FRO11 (P9-5): "is the timeline panel actually open and on screen" now takes both of
 // timelinePanel's own isVisible() (true only when the Timeline tab is selected) AND
-// mixerDock's isVisible() (true only when the dock itself is open) -- composing the two LOCAL
+// bottomDock's isVisible() (true only when the dock itself is open) -- composing the two LOCAL
 // flags, not juce::Component::isShowing(), because isShowing() additionally requires the ROOT
 // component to have a real Desktop peer (its own implementation walks up to the top-level
 // component and checks getPeer()), which is never true in a headless test: this codebase's own
@@ -94,7 +94,7 @@ inline juce::Rectangle<int> timelinePanelBoundsInMainComponent(MainComponent& mc
 // "test premise: headless, no real window" comment). isVisible() at each level needs no peer, so
 // it composes correctly in both headless tests and the real app.
 inline bool timelinePanelIsOpen(MainComponent& mc) {
-    return mc.getTimelinePanel().isVisible() && mc.getMixerDock().isVisible();
+    return mc.getTimelinePanel().isVisible() && mc.getBottomDock().isVisible();
 }
 
 class TimelinePanelIntegrationTest : public ::testing::Test {
@@ -117,7 +117,7 @@ protected:
             s->setValue("librarySidebarVisible", "1"); // default: visible
             s->setValue("aiPanelVisible", "0");        // default: hidden
             s->setValue("minimapVisible", "1");        // default: visible
-            s->setValue("timelinePanelVisible", "0");  // default: hidden
+            s->setValue("bottomDockVisible", "0");     // default: hidden
             // Removed, not defaulted: absent is what makes the theme metric the default height.
             s->removeValue(MainComponent::kTimelinePanelHeightKey);
             s->saveIfNeeded();

@@ -130,7 +130,7 @@ TEST_F(DetachablePanelHostTest, ClickingTheDetachButtonToggles) {
 }
 
 // ============================================================================
-// 3. Embedded-header suppression (Tab placement's chrome -- see MixerDockComponent)
+// 3. Embedded-header suppression (Tab placement's chrome -- see BottomDockComponent)
 // ============================================================================
 
 TEST_F(DetachablePanelHostTest, EmbeddedHeaderHidesOwnButtonWhileDocked) {
@@ -139,7 +139,7 @@ TEST_F(DetachablePanelHostTest, EmbeddedHeaderHidesOwnButtonWhileDocked) {
 
     host.setEmbeddedHeader(true);
     EXPECT_FALSE(host.isDetachButtonVisibleForTest())
-        << "owner (e.g. MixerDockComponent's tab strip) supplies the control instead";
+        << "owner (e.g. BottomDockComponent's tab strip) supplies the control instead";
 
     // Detaching always shows the REAL button inside the window, regardless of embeddedHeader_.
     host.setDetached(true);

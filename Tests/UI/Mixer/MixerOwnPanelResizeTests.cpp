@@ -1,6 +1,6 @@
 // MixerOwnPanelResizeTests.cpp -- FRO231: the Mixer's "Own panel" strip has a persisted user height
 // ("mixerOwnPanelHeight") and its own top-edge PanelResizeHandle, and shares the window's 3/4 budget
-// with the Timeline dock. Real off-screen MainComponent, synthesized mouse events.
+// with the bottom dock. Real off-screen MainComponent, synthesized mouse events.
 
 #include "MixerOwnPanelTestFixture.h"
 #include "UI/Layout/PanelResizeHandle.h"
@@ -37,11 +37,11 @@ TEST_F(MixerOwnPanelTest, HandleSitsOnTheStripsTopEdgeAndTheHostStartsBelowIt) {
     EXPECT_EQ(handle.getBounds(), juce::Rectangle<int>(0, 0, own.getWidth(), Handle::kHeight));
     EXPECT_TRUE(handle.isVisible());
     EXPECT_TRUE(handle.getMouseCursor() == juce::MouseCursor::UpDownResizeCursor);
-    EXPECT_EQ(mc.getMixerDock().getMixerHost().getY(), Handle::kHeight)
+    EXPECT_EQ(mc.getBottomDock().getMixerHost().getY(), Handle::kHeight)
         << "the hosted panel's own header never sits under the grab strip";
     EXPECT_EQ(own.getComponentAt(10, 2), &handle) << "the handle wins the hit test over the host";
     auto* below = own.getComponentAt(10, Handle::kHeight + 2);
-    EXPECT_TRUE(below == &mc.getMixerDock().getMixerHost() || mc.getMixerDock().getMixerHost().isParentOf(below))
+    EXPECT_TRUE(below == &mc.getBottomDock().getMixerHost() || mc.getBottomDock().getMixerHost().isParentOf(below))
         << "just under the strip is the hosted panel";
 }
 
@@ -133,11 +133,11 @@ TEST_F(MixerOwnPanelTest, AnOpenDockReservesItsMinimumOutOfTheOwnPanelsBudget) {
     auto& own = mc.getMixerPlacementControllerForTest();
 
     mc.simulateToggleTimelineClick(); // open the dock (220 min)
-    ASSERT_TRUE(mc.getMixerDock().isVisible());
+    ASSERT_TRUE(mc.getBottomDock().isVisible());
 
     own.setOwnPanelHeight(5000, false);
     EXPECT_EQ(own.getOwnPanelHeight(), 455) << "675 - the dock's 220 minimum";
-    EXPECT_EQ(mc.getMixerDock().getHeight(), 220) << "the dock gives way to its minimum, no further";
+    EXPECT_EQ(mc.getBottomDock().getHeight(), 220) << "the dock gives way to its minimum, no further";
 
     // Closing the dock hands its reservation back: the stored wish (5000 -> clamped when stored)
     // does not silently shrink, but only what the window allows is laid out.
@@ -188,7 +188,7 @@ TEST_F(MixerOwnPanelTest, DockAndOwnPanelTogetherNeverExceedThreeQuartersOfTheWi
     MainComponent mc(std::make_unique<MockProviderTL>());
     showOwnPanel(mc);
     auto& own = mc.getMixerPlacementControllerForTest();
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
     mc.simulateToggleTimelineClick();
     ASSERT_TRUE(dock.isVisible());
 
@@ -216,7 +216,7 @@ TEST_F(MixerOwnPanelTest, TheOwnPanelSitsAtTheWindowsBottomEdgeUnderTheDock) {
     showOwnPanel(mc);
     mc.simulateToggleTimelineClick();
     auto& own = mc.getMixerPlacementControllerForTest();
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
 
     EXPECT_EQ(own.getBottom(), mc.getStatusBar().getBounds().getY());
     EXPECT_EQ(dock.getBottom(), own.getY()) << "the dock stacks directly above the Own panel";
@@ -229,9 +229,9 @@ TEST_F(MixerOwnPanelTest, TheDocksStoredHeightSurvivesGivingWayToTheOwnPanel) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     showOwnPanel(mc);
     mc.simulateToggleTimelineClick();
-    ASSERT_EQ(mc.getMixerDock().getHeight(), 455) << "500 wished, 675 - the Own panel's 220";
+    ASSERT_EQ(mc.getBottomDock().getHeight(), 455) << "500 wished, 675 - the Own panel's 220";
 
     EXPECT_EQ(mc.getTimelinePanelHeight(), 500) << "the stored/persisted dock height is untouched";
     mc.performToggleMixerPanel(); // close the Own panel (headless: lands at once)
-    EXPECT_EQ(mc.getMixerDock().getHeight(), 500) << "and comes back once the room does";
+    EXPECT_EQ(mc.getBottomDock().getHeight(), 500) << "and comes back once the room does";
 }
