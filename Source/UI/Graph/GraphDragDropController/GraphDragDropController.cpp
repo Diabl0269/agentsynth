@@ -230,6 +230,7 @@ void GraphDragDropController::itemDragEnter(const juce::DragAndDropTarget::Sourc
     // instead of the single-module estimate table.
     juce::Point<int> estSize;
     dragPreviewIsSnippet_ = synth::SnippetManager::isSnippetPayload(name);
+    dragPreviewIsPlainModule_ = !dragPreviewIsSnippet_ && !synth::PluginIdentity::isDragPayload(name);
     dragPreviewProbe_.reset();
     if (dragPreviewIsSnippet_) {
         estSize = host_.estimateSnippetSize(name);
@@ -256,12 +257,28 @@ void GraphDragDropController::itemDragEnter(const juce::DragAndDropTarget::Sourc
     updateDragPreview(ghostTopLeftForCursor(canvasPos));
 }
 
+// The hull is tested at the centre of the ghost BEFORE anti-overlap moves it, which is the cursor
+// (ghostTopLeftForCursor centres the ghost on it), not at where the card finally lands. A macro's
+// hull is the union of its members plus a margin, so it is mostly member cards: the free slot
+// findFreeSlot picks for a new card is usually outside the hull, and testing the landing spot would
+// make "drop it on the macro" fail exactly when the macro is tight. The card still lands at the
+// relocated slot and, as a member, pulls the live hull out to include it.
+juce::String
+GraphDragDropController::macroJoinTargetForDrop(const juce::DragAndDropTarget::SourceDetails& details) const {
+    return host_.macroJoinTargetAt(host_.canvasPositionOfLocalPoint(details.localPosition));
+}
+
 void GraphDragDropController::itemDragMove(const juce::DragAndDropTarget::SourceDetails& dragSourceDetails) {
     auto canvasPos = host_.canvasPositionOfLocalPoint(dragSourceDetails.localPosition);
     updateDragPreview(ghostTopLeftForCursor(canvasPos));
+    // Highlight the hull the drop would join, through the same emphasis a module reparent drag uses.
+    host_.setMacroDropCandidate(dragPreviewIsPlainModule_ ? macroJoinTargetForDrop(dragSourceDetails) : juce::String());
 }
 
-void GraphDragDropController::itemDragExit(const juce::DragAndDropTarget::SourceDetails&) { endDragPreview(); }
+void GraphDragDropController::itemDragExit(const juce::DragAndDropTarget::SourceDetails&) {
+    host_.setMacroDropCandidate({});
+    endDragPreview();
+}
 
 void GraphDragDropController::itemDropped(const juce::DragAndDropTarget::SourceDetails& dragSourceDetails) {
     const juce::String name = dragSourceDetails.description.toString();
@@ -272,6 +289,7 @@ void GraphDragDropController::itemDropped(const juce::DragAndDropTarget::SourceD
     auto dropPos = (dragPreviewActive_ && !dragPreviewGhost_.isEmpty())
                        ? dragPreviewGhost_.getPosition()
                        : ghostTopLeftForCursor(host_.canvasPositionOfLocalPoint(dragSourceDetails.localPosition));
+    host_.setMacroDropCandidate({});
 
     // Snippet drop: resolve the payload to its JSON via the owner and insert the whole group.
     // Checked before the single-module path because both arrive on the same DragAndDrop channel,
@@ -295,7 +313,11 @@ void GraphDragDropController::itemDropped(const juce::DragAndDropTarget::SourceD
         return;
     }
 
-    host_.addModuleAtCanvasPosition(name, dropPos, {});
+    // Modules only: a snippet or plugin payload never reaches here. Cmd (or the drag-without-Cmd
+    // preference) over an expanded hull makes the new module a member, in the same undo step as its
+    // creation.
+    const juce::String joinMacroId = macroJoinTargetForDrop(dragSourceDetails);
+    host_.addModuleAtCanvasPosition(name, dropPos, {}, joinMacroId);
     endDragPreview();
 }
 
@@ -323,10 +345,12 @@ void GraphDragDropController::filesDropped(const juce::StringArray& files, int x
         // Load into the processor BEFORE it joins the graph: recordStructuralChange snapshots the
         // graph afterwards, and that snapshot is what undo/redo replays — so the file path has to be
         // in place by then or the sample is lost on the first Cmd+Z.
-        host_.addModuleAtCanvasPosition("Sampler", canvasPos, [file](juce::AudioProcessor& processor) {
-            if (auto* sampler = dynamic_cast<SamplerModule*>(&processor))
-                sampler->loadSampleFile(file);
-        });
+        host_.addModuleAtCanvasPosition("Sampler", canvasPos,
+                                        [file](juce::AudioProcessor& processor) {
+                                            if (auto* sampler = dynamic_cast<SamplerModule*>(&processor))
+                                                sampler->loadSampleFile(file);
+                                        },
+                                        {});
 
         // Cascade multiple files so they do not all land on the same spot.
         canvasPos += juce::Point<int>(32, 32);

@@ -106,11 +106,12 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         if (hull.isEmpty())
             continue;
 
-        // FRO40: a live Cmd/Ctrl-drag whose candidate (GraphEditor::getMacroDragCandidateId) is
-        // THIS macro gets the SAME dashed hull, just emphasized — heavier, fully opaque, and
-        // topped with a solid stroke — rather than a second visual language for "about to change"
-        // (docs/macros/ports.md).
-        const bool isDragCandidate = macro.id == editor.getMacroDragCandidateId();
+        // FRO40: a live reparent drag whose leave OR join candidate (GraphEditor::getMacroDragLeaveId
+        // / getMacroDragJoinId) is THIS macro gets the SAME dashed hull, just emphasized — heavier,
+        // fully opaque, and topped with a solid stroke — rather than a second visual language for
+        // "about to change" (docs/macros/menu-and-membership.md). A transfer emphasises both.
+        const bool isDragCandidate =
+            macro.id == editor.getMacroDragLeaveId() || macro.id == editor.getMacroDragJoinId();
 
         juce::Path outline;
         outline.addRoundedRectangle(hull.toFloat(), 10.0f);

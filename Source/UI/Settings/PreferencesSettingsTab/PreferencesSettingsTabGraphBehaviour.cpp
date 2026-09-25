@@ -182,6 +182,13 @@ void PreferencesSettingsTab::setMacroAutoDeletePortsOnLastCableEnabled(bool enab
     persistMacroAutoDeletePortsOnLastCable(enabled);
 }
 
+bool PreferencesSettingsTab::isMacroDragWithoutCmdEnabled() const { return macroDragWithoutCmdToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setMacroDragWithoutCmdEnabled(bool enabled) {
+    macroDragWithoutCmdToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistMacroDragWithoutCmd(enabled);
+}
+
 bool PreferencesSettingsTab::isMixerAutoCreateChannelOnConnectEnabled() const {
     return mixerAutoCreateChannelOnConnectToggle.getToggleState();
 }
@@ -238,6 +245,13 @@ void PreferencesSettingsTab::persistMacroAutoDeletePortsOnLastCable(bool enabled
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
         graphEditor->setAutoDeleteMacroPortsOnLastCableEnabled(enabled);
+}
+
+void PreferencesSettingsTab::persistMacroDragWithoutCmd(bool enabled) {
+    appProperties.getUserSettings()->setValue("macroDragWithoutCmd", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->setMacroDragWithoutCmdEnabled(enabled);
 }
 
 void PreferencesSettingsTab::persistMixerAutoCreateChannelOnConnect(bool enabled) {
@@ -341,4 +355,70 @@ std::unique_ptr<juce::Component> PreferencesSettingsTab::buildDualIOPerModuleDef
 
 std::unique_ptr<juce::Component> PreferencesSettingsTab::createDualIOPerModuleDefaultsPopupForTest() {
     return buildDualIOPerModuleDefaultsPopup();
+}
+
+// Builds the macro on/off toggles (T148 auto-create/auto-delete, FRO168 drag without Cmd). Pulled
+// out of the constructor, which is on the function-size ratchet, into its own named step.
+void PreferencesSettingsTab::initMacroToggles() {
+    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): auto-create/auto-delete are plain on/off, unlike the
+    // tri-state preference above — that one defaults to "ask" because it replaced pre-existing
+    // silent behaviour; these two are brand-new automations the founder asked to ship ON by
+    // default, with a plain escape hatch. Same idiom as doubleClickDisconnectToggle above.
+    contentHost.addAndMakeVisible(macroAutoCreatePortsOnDragToggle);
+    macroAutoCreatePortsOnDragToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("macroAutoCreatePortsOnDrag", true), juce::dontSendNotification);
+    macroAutoCreatePortsOnDragToggle.setTooltip(
+        "When on (the default), dragging a cable across an expanded macro's boundary automatically "
+        "creates a matching Mono port and wires it, instead of connecting straight through to the "
+        "interior member.");
+    macroAutoCreatePortsOnDragToggle.onClick = [this] {
+        persistMacroAutoCreatePortsOnDrag(macroAutoCreatePortsOnDragToggle.getToggleState());
+    };
+
+    contentHost.addAndMakeVisible(macroAutoDeletePortsOnLastCableToggle);
+    macroAutoDeletePortsOnLastCableToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("macroAutoDeletePortsOnLastCable", true),
+        juce::dontSendNotification);
+    macroAutoDeletePortsOnLastCableToggle.setTooltip(
+        "When on (the default), a macro port is automatically removed once its last cable is "
+        "disconnected. When off, a cable-less port stays in place until removed by hand (Configure "
+        "I/O or the port's own right-click Delete Port).");
+    macroAutoDeletePortsOnLastCableToggle.onClick = [this] {
+        persistMacroAutoDeletePortsOnLastCable(macroAutoDeletePortsOnLastCableToggle.getToggleState());
+    };
+
+    // FRO168: plain on/off, ON by default (Cmd-drag reparents either way).
+    contentHost.addAndMakeVisible(macroDragWithoutCmdToggle);
+    macroDragWithoutCmdToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("macroDragWithoutCmd", true),
+                                             juce::dontSendNotification);
+    macroDragWithoutCmdToggle.setTooltip(
+        "When on (the default), dragging a single module across an expanded macro's border adds it to "
+        "or removes it from that macro without holding Cmd, and dropping a module from the library "
+        "onto a macro adds it there. Holding Cmd does the same either way. Group drags and Ctrl-drags "
+        "never change membership. With a small macro, plainly rearranging a member can read as "
+        "leaving it; turn this off to require Cmd.");
+    macroDragWithoutCmdToggle.onClick = [this] {
+        persistMacroDragWithoutCmd(macroDragWithoutCmdToggle.getToggleState());
+    };
+}
+
+// Lays out the macro toggle group; returns whether it is visible under the current search filter.
+// `groupMatches`/`setGroupVisible`/`beginGroup` are layoutContent's own search-filter helpers,
+// forwarded through rather than duplicated (same shape as layoutMixerDefaultTrackPresetGroup).
+bool PreferencesSettingsTab::layoutMacroToggleGroup(
+    int& y, int contentWidth, const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+    const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible,
+    const std::function<void(bool)>& beginGroup) {
+    const std::initializer_list<juce::Component*> comps = {
+        &macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle, &macroDragWithoutCmdToggle};
+    const bool visible = groupMatches(comps);
+    setGroupVisible(comps, visible);
+    beginGroup(visible);
+    if (visible) {
+        for (auto* toggle : comps) {
+            toggle->setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+    }
+    return visible;
 }

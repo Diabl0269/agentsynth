@@ -193,10 +193,17 @@ public:
     bool isMacroChipDragActive() const { return macroChipDragId.isNotEmpty(); } // test accessor
     void cancelLiveDragGestures();
 
-    // ---- Cmd/Ctrl-drag macro reparent (docs/macros/ports.md) ----
-    // A live drag JOINS/LEAVES an expanded macro by crossing its hull border; see
+    // ---- Cmd-drag macro reparent (docs/macros/menu-and-membership.md) ----
+    // A live drag JOINS/LEAVES/TRANSFERS between expanded macros by crossing hull borders; see
     // ModuleComponentInteraction.cpp's mouseDrag/mouseUp for the gesture.
-    juce::String getMacroDragCandidateId() const noexcept { return macroDragCandidateId_; }
+    /** The macro a live reparent drag would leave if released now, empty for none. */
+    juce::String getMacroDragLeaveId() const noexcept { return macroDragLeaveId_; }
+    /** The macro a live reparent drag (or a library drag, see setMacroDropCandidate) would join. */
+    juce::String getMacroDragJoinId() const noexcept { return macroDragJoinId_; }
+    /** Whether a live reparent drag currently has any leave or join candidate. */
+    bool hasMacroDragCandidate() const noexcept {
+        return macroDragLeaveId_.isNotEmpty() || macroDragJoinId_.isNotEmpty();
+    }
     /** The module a reparent drag is currently moving, invalid between gestures — see
      *  GraphEditorDragDrop.cpp. */
     juce::AudioProcessorGraph::NodeID getMacroDragDraggedNodeId() const noexcept { return macroDragDraggedNodeId_; }
@@ -205,9 +212,19 @@ public:
     /** Paint-only hull bounds; see GraphEditorDragDrop.cpp for the exclusion rule during a live
      *  reparent drag. Hit-testing keeps using macroHullBounds. */
     juce::Rectangle<int> paintedMacroHullBounds(const juce::String& macroId) const;
-    /** The single-undo-step finalize (position + membership). `module` must not be touched again
+    /** The single-undo-step finalize (position + leave + join). `module` must not be touched again
      *  afterwards — see GraphEditorDragDrop.cpp. */
-    void finalizeMacroMembershipDrag(ModuleComponent* module, const juce::String& macroId, bool isJoin);
+    void finalizeMacroMembershipDrag(ModuleComponent* module, const juce::String& leaveId, const juce::String& joinId);
+
+    /** Preference ("macroDragWithoutCmd"): reparent by drag without holding Cmd. On by default; single-module
+     *  drags only, never a Ctrl-held one. */
+    void setMacroDragWithoutCmdEnabled(bool enabled) { macroDragWithoutCmdEnabled = enabled; }
+    bool getMacroDragWithoutCmdEnabled() const noexcept { return macroDragWithoutCmdEnabled; }
+    /** Test seam for the Cmd read behind a library drop's macro join; unset reads the live keyboard. */
+    void setMacroJoinCommandOverrideForTests(std::optional<bool> down) { macroJoinCommandOverride_ = down; }
+    bool isMacroJoinModifierDown() const override;
+    juce::String macroJoinTargetAt(juce::Point<int> canvasCentre) const override;
+    void setMacroDropCandidate(const juce::String& macroId) override;
 
     // ---- Macros ----
     // See MacroGroupController.h's "Grouping / membership / collapse" section for what a Macro is
@@ -538,9 +555,11 @@ public:
     bool isInterestedInFileDrag(const juce::StringArray& files) override;
     void filesDropped(const juce::StringArray& files, int x, int y) override;
 
-    /** Creates `name` at a canvas position, snapped and anti-overlapped, with undo recorded. */
+    /** Creates `name` at a canvas position, snapped and anti-overlapped, with undo recorded. A
+     *  non-empty `joinMacroId` also adds it to that macro inside the same undo step. */
     void addModuleAtCanvasPosition(const juce::String& name, juce::Point<int> dropPos,
-                                   const std::function<void(juce::AudioProcessor&)>& configure) override;
+                                   const std::function<void(juce::AudioProcessor&)>& configure,
+                                   const juce::String& joinMacroId = {}) override;
 
     /** Creates a Hosted Plugin node already pointed at `identity`. */
     void addHostedPluginAtCanvasPosition(const synth::PluginIdentity& identity, juce::Point<int> dropPos) override;
@@ -726,12 +745,13 @@ private:
     bool selectionDragActive = false;
     std::vector<std::pair<juce::AudioProcessorGraph::NodeID, juce::Point<int>>> selectionDragStartPositions;
 
-    // The macro a live Cmd/Ctrl-drag would JOIN or LEAVE if released now, empty for neither — see
-    // the public accessor/mutators above.
-    juce::String macroDragCandidateId_;
+    // The macros a live Cmd-drag would LEAVE and JOIN if released now, empty for none — see the
+    // public accessors/mutators above.
+    juce::String macroDragLeaveId_;
+    juce::String macroDragJoinId_;
     // Which module that same drag is moving, invalid between gestures — paired lifetime with
-    // macroDragCandidateId_ above (both set/cleared only together), so there is exactly one
-    // lifetime to reason about.
+    // the two ids above (all set/cleared only together), so there is exactly one lifetime to
+    // reason about.
     juce::AudioProcessorGraph::NodeID macroDragDraggedNodeId_;
 
     // True while a click on empty canvas has not yet turned into a pan or marquee drag; a mouseUp
@@ -813,6 +833,8 @@ private:
     bool doubleClickPortDisconnectEnabled = true;
     bool autoCreateMacroPortsOnDragEnabled = true;
     bool autoDeleteMacroPortsOnLastCableEnabled = true;
+    bool macroDragWithoutCmdEnabled = true;
+    std::optional<bool> macroJoinCommandOverride_;
     bool autoCreateChannelOnConnectEnabled = true;
     bool defaultDualIOForNewModules = false;
     std::map<juce::String, bool> dualIOPerModuleOverrides;

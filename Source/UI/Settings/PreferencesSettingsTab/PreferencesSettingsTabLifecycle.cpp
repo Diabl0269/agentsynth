@@ -210,32 +210,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistMacroAutoPortPreference(macroAutoPortPreferenceFromComboId(macroAutoPortCombo_.getSelectedId()));
     };
 
-    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): auto-create/auto-delete are plain on/off, unlike the
-    // tri-state preference above — that one defaults to "ask" because it replaced pre-existing
-    // silent behaviour; these two are brand-new automations the founder asked to ship ON by
-    // default, with a plain escape hatch. Same idiom as doubleClickDisconnectToggle above.
-    contentHost.addAndMakeVisible(macroAutoCreatePortsOnDragToggle);
-    macroAutoCreatePortsOnDragToggle.setToggleState(
-        appProperties.getUserSettings()->getBoolValue("macroAutoCreatePortsOnDrag", true), juce::dontSendNotification);
-    macroAutoCreatePortsOnDragToggle.setTooltip(
-        "When on (the default), dragging a cable across an expanded macro's boundary automatically "
-        "creates a matching Mono port and wires it, instead of connecting straight through to the "
-        "interior member.");
-    macroAutoCreatePortsOnDragToggle.onClick = [this] {
-        persistMacroAutoCreatePortsOnDrag(macroAutoCreatePortsOnDragToggle.getToggleState());
-    };
-
-    contentHost.addAndMakeVisible(macroAutoDeletePortsOnLastCableToggle);
-    macroAutoDeletePortsOnLastCableToggle.setToggleState(
-        appProperties.getUserSettings()->getBoolValue("macroAutoDeletePortsOnLastCable", true),
-        juce::dontSendNotification);
-    macroAutoDeletePortsOnLastCableToggle.setTooltip(
-        "When on (the default), a macro port is automatically removed once its last cable is "
-        "disconnected. When off, a cable-less port stays in place until removed by hand (Configure "
-        "I/O or the port's own right-click Delete Port).");
-    macroAutoDeletePortsOnLastCableToggle.onClick = [this] {
-        persistMacroAutoDeletePortsOnLastCable(macroAutoDeletePortsOnLastCableToggle.getToggleState());
-    };
+    initMacroToggles();
 
     // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): auto-create a mixer channel
     // when a MIDI cable from a Track In node connects to an instrument/macro whose audio reaches the output with no
@@ -558,19 +533,9 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 4c: T148 macro auto-create/auto-delete toggles.
-    {
-        const bool visible = groupMatches({&macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle});
-        setGroupVisible({&macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle}, visible);
-        beginGroup(visible);
-        if (visible) {
-            macroAutoCreatePortsOnDragToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-            macroAutoDeletePortsOnLastCableToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
+    // Group 4c: macro toggles (T148 auto-create/auto-delete, FRO168 drag without Cmd).
+    pendingDivider =
+        layoutMacroToggleGroup(y, contentWidth, groupMatches, setGroupVisible, beginGroup) || pendingDivider;
 
     // Group 4d: T184 mixer auto-create-channel-on-connect toggle.
     {
@@ -695,5 +660,6 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     graphEditor->setMacroAutoPortPreference(macroAutoPortPreferenceFromComboId(macroAutoPortCombo_.getSelectedId()));
     graphEditor->setAutoCreateMacroPortsOnDragEnabled(macroAutoCreatePortsOnDragToggle.getToggleState());
     graphEditor->setAutoDeleteMacroPortsOnLastCableEnabled(macroAutoDeletePortsOnLastCableToggle.getToggleState());
+    graphEditor->setMacroDragWithoutCmdEnabled(macroDragWithoutCmdToggle.getToggleState());
     graphEditor->setAutoCreateChannelOnConnectEnabled(mixerAutoCreateChannelOnConnectToggle.getToggleState());
 }

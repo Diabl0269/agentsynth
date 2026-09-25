@@ -14,8 +14,8 @@
 303 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::rebuildVisibleCables
 208 Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp::GraphEditor::completeStereoPairConnections
 550 Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp::SmartConnectionEngine::refreshSmartSuggestions
-319 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::PreferencesSettingsTab
-234 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::layoutContent
+294 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::PreferencesSettingsTab
+224 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::layoutContent
 286 Source/UI/Theme/ThemeLoader.cpp::ThemeLoader::parseTheme
 255 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp::TimelinePanelComponent::TimelinePanelComponent
 222 Tools/AIPatchHarness/Main.cpp::main

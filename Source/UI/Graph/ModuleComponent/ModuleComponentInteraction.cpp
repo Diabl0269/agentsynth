@@ -614,18 +614,15 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             // SAME reasoning is why the Cmd branch just below can never fire on Windows/Linux either
             // — this Ctrl branch already claimed the press there.
             //
-            // reparentArmed is set from e.mods.isCommandDown() ALONE, unconditionally, before this
-            // whole chain — deliberately NOT from "which branch fired" (ctrlTogglePending ||
-            // cmdReparentPending), which is also true for a PLAIN macOS Ctrl+drag (Ctrl and Cmd are
-            // genuinely distinct keys there). Gating on that instead would silently compound the
-            // shipped insert-between gesture with a join/leave it was never designed to also do —
-            // exactly the FRO40 regression this member exists to prevent. A plain click/drag with
-            // neither modifier reaches the branches below with reparentArmed already correctly
-            // false, same as it always was before this feature. On Windows/Linux the two keys
-            // cannot be told apart at press time at all (isCommandDown() is true whenever Ctrl is),
-            // so reparentArmed is true there and mouseUp arbitrates by whether the drag actually
-            // crossed a hull (see mouseUp's own comment).
-            reparentArmed = e.mods.isCommandDown();
+            // reparentArmed is decided AFTER this chain (see computeReparentArmed), from Cmd or the
+            // drag-without-Cmd preference — deliberately NOT from "which branch fired"
+            // (ctrlTogglePending || cmdReparentPending), which is also true for a PLAIN macOS
+            // Ctrl+drag (Ctrl and Cmd are genuinely distinct keys there). Gating on that instead
+            // would silently compound the shipped insert-between gesture with a join/leave it was
+            // never designed to also do — exactly the FRO40 regression this member exists to
+            // prevent. On Windows/Linux the two keys cannot be told apart at press time at all
+            // (isCommandDown() is true whenever Ctrl is), so reparentArmed is true there and mouseUp
+            // arbitrates by whether the drag actually crossed a hull (see mouseUp's own comment).
 
             if (e.mods.isCtrlDown()) {
                 ctrlTogglePending = true;
@@ -649,6 +646,10 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                 // be dragged; clicking anything else collapses the selection onto it.
                 owner.selectModule(nodeId, false);
             }
+
+            // After the selection handling above, so the preference's single-module gate sees the
+            // selection this press actually leaves behind.
+            reparentArmed = computeReparentArmed(e.mods);
 
             dragStartPosition = getPosition();
             bodyDragActive = true;
@@ -716,6 +717,25 @@ void ModuleComponent::moved() {
         owner.updateModulePosition(this);
 }
 
+// The ONE decision for "can this body drag reparent right now", shared by mouseDown's latch and
+// mouseDrag's live re-derivation so the two can never drift apart.
+//
+// Cmd always arms it. The drag-without-Cmd preference arms it for a plain drag too, with two
+// exclusions that are correctness rules, not taste:
+//  - Ctrl held never arms it via the preference: on macOS a Ctrl+drag is the shipped insert-between
+//    gesture and must stay that alone (on Windows/Linux Ctrl IS Cmd, so isCommandDown() above
+//    already covers it and mouseUp arbitrates by hull crossing).
+//  - Only a SINGLE-module drag arms it. A plain press on an already-selected module of a
+//    multi-selection keeps the whole group (mouseDown), and a latched reparentArmed would then
+//    reparent just the grabbed module in mouseUp and skip finalizeSelectionDrag, leaving the
+//    group's drag state armed and the other members unresolved. Cmd cannot hit this, because a
+//    Cmd press collapses the selection onto the module first.
+bool ModuleComponent::computeReparentArmed(const juce::ModifierKeys& mods) const {
+    if (mods.isCommandDown())
+        return true;
+    return owner.getMacroDragWithoutCmdEnabled() && !mods.isCtrlDown() && owner.getSelectionCount() <= 1;
+}
+
 void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
     if (getPortForPoint(e.getMouseDownPosition())) {
         owner.dragConnection(e.getScreenPosition());
@@ -732,9 +752,10 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
         // Gap 3: re-derive reparentArmed live for a SINGLE-module drag, so Cmd pressed or released
         // mid-drag arms/disarms reparent on the spot instead of only whatever mouseDown latched —
         // see reparentArmed's own comment on ModuleComponent.h. A multi-selection group drag never
-        // touches the flag here; it keeps mouseDown's latch for its whole gesture, unchanged.
+        // touches the flag here; it keeps mouseDown's latch for its whole gesture, unchanged (and
+        // computeReparentArmed never latches it true for a group in the first place).
         if (!owner.isSelectionDragActive())
-            reparentArmed = e.mods.isCommandDown();
+            reparentArmed = computeReparentArmed(e.mods);
 
         // FRO40: gated on reparentArmed, NOT on ctrlTogglePending || cmdReparentPending — the
         // latter is also true for a plain macOS Ctrl+drag, which must never highlight or act on a
@@ -810,15 +831,15 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     // inside finalizeModuleDrag) — on Windows/Linux that means a Ctrl-drag over a cable INSIDE a
     // hull performs BOTH insert-between and join/leave from the one gesture, because the platform
     // has no way to ask for one without the other (docs/macros/menu-and-membership.md#cmd-drag-across-a-hull-border).
-    const juce::String macroCandidate = wasReparentArmed ? owner.getMacroDragCandidateId() : juce::String();
-    if (macroCandidate.isNotEmpty()) {
-        const bool isJoin = owner.getMacroController().macroForNode(nodeId) == nullptr;
+    const juce::String leaveId = wasReparentArmed ? owner.getMacroDragLeaveId() : juce::String();
+    const juce::String joinId = wasReparentArmed ? owner.getMacroDragJoinId() : juce::String();
+    if (leaveId.isNotEmpty() || joinId.isNotEmpty()) {
         // This capture was never going to be consumed by a pushSnapshotFromCapture — the reparent
         // finalize below consumes it itself instead (GraphEditor::finalizeMacroMembershipDrag's
         // own comment has the full story on why it needs the ORIGINAL mousedown-time capture
         // rather than a fresh one). Finalize is the LAST thing this call does — nothing below may
         // touch `this` again.
-        owner.finalizeMacroMembershipDrag(this, macroCandidate, isJoin);
+        owner.finalizeMacroMembershipDrag(this, leaveId, joinId);
         return;
     }
 

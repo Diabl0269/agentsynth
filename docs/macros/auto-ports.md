@@ -339,6 +339,10 @@ sweep.
 `"macroAutoCreatePortsOnDrag"` and `"macroAutoDeletePortsOnLastCable"`, each independent of the other
 and of the grouping-time tri-state above.
 
+A third macro toggle, **"Drag modules into and out of macros without Cmd"** (`"macroDragWithoutCmd"`),
+is unrelated to ports but lives in the same Preferences group and is likewise a plain on/off; unlike
+these two it defaults ON. See [`docs/macros/menu-and-membership.md`](menu-and-membership.md#dragging-without-cmd-the-preference).
+
 **Why not a third tri-state.** These are brand-new automations shipped as the default behaviour, with
 a plain escape hatch for the user who wants the wire-straight-through or leave-a-cableless-port
 behaviour instead. There is no pre-existing silent default to protect an expectation of, which is the

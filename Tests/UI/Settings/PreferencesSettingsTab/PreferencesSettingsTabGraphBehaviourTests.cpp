@@ -13,6 +13,8 @@ TEST_F(PreferencesSettingsTabTest, DefaultsToNewAndUnwiredAndDoubleClickOn) {
     // getMacroAutoPortPreference() default of "ask" — see its own getter/setter comments.
     EXPECT_TRUE(tab.isMacroAutoCreatePortsOnDragEnabled());
     EXPECT_TRUE(tab.isMacroAutoDeletePortsOnLastCableEnabled());
+    // FRO168: dragging modules into/out of macros without Cmd defaults ON (Cmd works either way).
+    EXPECT_TRUE(tab.isMacroDragWithoutCmdEnabled());
     // T184 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): default ON, same shape as the T148 toggles above.
     EXPECT_TRUE(tab.isMixerAutoCreateChannelOnConnectEnabled());
 }
@@ -72,12 +74,37 @@ TEST_F(PreferencesSettingsTabTest, MacroAutoCreateAndAutoDeleteTogglesDefaultOnA
     }
 }
 
+// FRO168: default ON, persisted under its own key, reading the default must not write it, a fresh
+// tab restores what was written -- mirrors MacroAutoCreateAndAutoDeleteTogglesDefaultOnAndRoundTrip.
+TEST_F(PreferencesSettingsTabTest, MacroDragWithoutCmdToggleDefaultsOnAndRoundTrips) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isMacroDragWithoutCmdEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("macroDragWithoutCmd"));
+
+        tab.setMacroDragWithoutCmdEnabled(false);
+        EXPECT_FALSE(tab.isMacroDragWithoutCmdEnabled());
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("macroDragWithoutCmd"), "0");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.isMacroDragWithoutCmdEnabled());
+        tab.setMacroDragWithoutCmdEnabled(true);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("macroDragWithoutCmd"), "1");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isMacroDragWithoutCmdEnabled());
+    }
+}
+
 TEST_F(PreferencesSettingsTabTest, LoadsPersistedValues) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", "Off");
     appProperties.getUserSettings()->setValue("doubleClickPortDisconnect", "0");
     appProperties.getUserSettings()->setValue("defaultDualIOForNewModules", "1");
     appProperties.getUserSettings()->setValue("macroAutoCreatePortsOnDrag", "0");
     appProperties.getUserSettings()->setValue("macroAutoDeletePortsOnLastCable", "0");
+    appProperties.getUserSettings()->setValue("macroDragWithoutCmd", "0");
     appProperties.getUserSettings()->setValue("mixerAutoCreateChannelOnConnect", "0");
 
     PreferencesSettingsTab tab(appProperties);
@@ -86,6 +113,7 @@ TEST_F(PreferencesSettingsTabTest, LoadsPersistedValues) {
     EXPECT_TRUE(tab.getDefaultDualIOForNewModules());
     EXPECT_FALSE(tab.isMacroAutoCreatePortsOnDragEnabled());
     EXPECT_FALSE(tab.isMacroAutoDeletePortsOnLastCableEnabled());
+    EXPECT_FALSE(tab.isMacroDragWithoutCmdEnabled());
     EXPECT_FALSE(tab.isMixerAutoCreateChannelOnConnectEnabled());
 }
 
@@ -132,6 +160,15 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     tab.setMacroAutoDeletePortsOnLastCableEnabled(true);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoDeletePortsOnLastCable"), "1");
     EXPECT_TRUE(editor.getAutoDeleteMacroPortsOnLastCableEnabled());
+
+    // FRO168: the drag-without-Cmd toggle reaches the live editor too.
+    tab.setMacroDragWithoutCmdEnabled(false);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("macroDragWithoutCmd"), "0");
+    EXPECT_FALSE(editor.getMacroDragWithoutCmdEnabled());
+
+    tab.setMacroDragWithoutCmdEnabled(true);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("macroDragWithoutCmd"), "1");
+    EXPECT_TRUE(editor.getMacroDragWithoutCmdEnabled());
 
     // T184 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): a toggle flip must reach the live GraphEditor
     // immediately.
@@ -308,6 +345,7 @@ TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     appProperties.getUserSettings()->setValue("defaultDualIOForNewModules", "1");
     appProperties.getUserSettings()->setValue("macroAutoCreatePortsOnDrag", "0");
     appProperties.getUserSettings()->setValue("macroAutoDeletePortsOnLastCable", "0");
+    appProperties.getUserSettings()->setValue("macroDragWithoutCmd", "0");
     appProperties.getUserSettings()->setValue("mixerAutoCreateChannelOnConnect", "0");
 
     PreferencesSettingsTab tab(appProperties);
@@ -318,6 +356,7 @@ TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     ASSERT_FALSE(editor.getDefaultDualIOForNewModules());
     ASSERT_TRUE(editor.getAutoCreateMacroPortsOnDragEnabled());
     ASSERT_TRUE(editor.getAutoDeleteMacroPortsOnLastCableEnabled());
+    ASSERT_TRUE(editor.getMacroDragWithoutCmdEnabled());
     ASSERT_TRUE(editor.getAutoCreateChannelOnConnectEnabled());
 
     tab.setGraphEditor(&editor);
@@ -326,6 +365,7 @@ TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     EXPECT_TRUE(editor.getDefaultDualIOForNewModules());
     EXPECT_FALSE(editor.getAutoCreateMacroPortsOnDragEnabled());
     EXPECT_FALSE(editor.getAutoDeleteMacroPortsOnLastCableEnabled());
+    EXPECT_FALSE(editor.getMacroDragWithoutCmdEnabled());
     EXPECT_FALSE(editor.getAutoCreateChannelOnConnectEnabled());
 }
 

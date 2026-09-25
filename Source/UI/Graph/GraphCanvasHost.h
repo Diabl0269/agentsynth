@@ -183,7 +183,19 @@ public:
      *  public) addModuleAtCanvasPosition(), simply gaining `override`. Also the drop-side half of
      *  the itemDropped/filesDropped bodies that moved into GraphDragDropController. */
     virtual void addModuleAtCanvasPosition(const juce::String& name, juce::Point<int> dropPos,
-                                           const std::function<void(juce::AudioProcessor&)>& configure) = 0;
+                                           const std::function<void(juce::AudioProcessor&)>& configure,
+                                           const juce::String& joinMacroId) = 0;
+
+    /** Whether a library drag over an expanded macro's hull should join that macro: Cmd held, or the
+     *  drag-without-Cmd preference on. The one place the drop-side modifier is read. */
+    virtual bool isMacroJoinModifierDown() const = 0;
+
+    /** The expanded macro a library module dropped with its centre at `canvasCentre` would join, or
+     *  empty when the join modifier is up or the point is over no expanded hull. */
+    virtual juce::String macroJoinTargetAt(juce::Point<int> canvasCentre) const = 0;
+
+    /** Emphasises `macroId`'s hull as the live drop target (empty clears it). */
+    virtual void setMacroDropCandidate(const juce::String& macroId) = 0;
 
     /** The canvas's active LookAndFeel — plain `Component::getLookAndFeel()`, exposed because
      *  updateDragPreview's grid-metric lookup needs the theme's `AppLookAndFeel` (via dynamic_cast)

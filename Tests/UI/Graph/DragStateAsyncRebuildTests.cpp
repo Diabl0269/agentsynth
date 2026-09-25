@@ -59,7 +59,7 @@ void expectNoStuckDragState(GraphEditor& editor, const char* context) {
     EXPECT_FALSE(editor.isSelectionDragActive()) << context << ": selection-drag bookkeeping left stuck";
     // FRO40: cancelLiveDragGestures() must clear the macro drag-candidate highlight too, or an
     // async rebuild mid-Cmd/Ctrl-drag leaves a hull highlighted with no gesture left to end it.
-    EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty()) << context << ": macro drag candidate hull left stuck";
+    EXPECT_FALSE(editor.hasMacroDragCandidate()) << context << ": macro drag candidate hull left stuck";
     EXPECT_EQ(editor.getMacroDragDraggedNodeId(), juce::AudioProcessorGraph::NodeID{})
         << context << ": macro drag dragged-node id left stuck";
 }
@@ -129,7 +129,7 @@ TEST(DragStateAsyncRebuild, DetachAllModuleComponentsCancelsLiveMacroDragCandida
 
     comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, cmdClick));
     comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, cmdClick, /*wasDragged=*/true));
-    ASSERT_FALSE(editor.getMacroDragCandidateId().isEmpty())
+    ASSERT_TRUE(editor.hasMacroDragCandidate())
         << "sanity: dragging C's centre into the hull must arm the candidate before any mouseUp";
 
     // No mouseUp follows — an AI patch apply (or any other async rebuild) lands mid-drag instead.
