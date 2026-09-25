@@ -41,7 +41,12 @@ protected:
         controller_->onChanged = [this] { panel_.scheduleLiveRefresh(); };
     }
 
-    void TearDown() override { root_.deleteRecursively(); }
+    void TearDown() override {
+        // remoteEngine_ outlives engine_ (declared first): end any open gesture while its parameter
+        // still exists -- RemoteEngine::endAllGestures()'s lifetime contract.
+        remoteEngine_.endAllGestures();
+        root_.deleteRecursively();
+    }
 
     void send(const juce::MidiMessage& message) { remoteEngine_.handleMessage(synth::midi::hostSourceKey(), message); }
     void settle() {

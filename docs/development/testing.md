@@ -68,6 +68,31 @@ Two tripwire suites then apply automatically: a new audio-output module must be 
 `ModuleAdoptionTests.cpp`, and a new float parameter is swept by `AutomationZipperTest` without any
 edit — both fail the build until the module is accounted for.
 
+## Known flaky patterns
+
+- **A test Rig whose `RemoteEngine` outlives its `AudioEngine`/graph segfaults at teardown if a MIDI
+  knob gesture is still open.** The engine holds a bare pointer to the parameter of every gesture
+  until 250 ms after its last event (`kGestureIdleMs`, driven by the Rig's fake clock). Its
+  destructor ends whatever is still open. A Rig that declares `RemoteEngine remote;` *before* the
+  engine destroys it *after* the graph. A test whose last CC didn't advance the clock past the idle
+  window then calls `endChangeGesture()` on a freed parameter from `~RemoteEngine()`.
+
+  Whether that segfaults depends on whether the freed block has been reused yet. So it can pass
+  alone and crash after an unrelated test ran first. FRO137 hit exactly this and blamed an earlier
+  `MainComponent` test, but the `MainComponent` only changed the heap layout. The fix is to call
+  `remote.endAllGestures()` in the Rig's destructor or `TearDown()` (as
+  `MidiRemoteWorkflowE2ETests.cpp`, `MidiLearnControllerTests.cpp` and
+  `MidiRemotePanelTestFixture.h` do), or declare the `RemoteEngine` after the engine. The same bug
+  existed in `~MainComponent()` itself; see
+  [`midi-remote.md`](../control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter).
+- **A local macOS ASan build won't catch a use-after-free inside JUCE.** JUCE's modules compile as
+  Objective-C++ (`.mm`) on macOS, and those take `CMAKE_OBJCXX_FLAGS`, not the
+  `-DCMAKE_CXX_FLAGS=-fsanitize=address` the ASan recipe passes. The bad read above happened inside
+  `juce::AudioProcessorParameter::endChangeGesture()` and passed silently under local ASan. CI's ASan
+  job runs on Linux, where JUCE compiles as `.cpp` and is instrumented. Locally, also pass
+  `-DCMAKE_OBJCXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer"` or reproduce in a Release
+  build under `lldb`.
+
 ## Snapshot testing
 
 `AudioRenderingTests` compares rendered audio against golden reference files in `Tests/reference/`.
