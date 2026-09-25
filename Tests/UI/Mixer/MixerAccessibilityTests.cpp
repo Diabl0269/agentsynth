@@ -306,7 +306,8 @@ TEST(MixerAccessibilityTest, DetachedWindowRealWiringGetsAThemedLookAndFeel) {
     mixerHost.setDetached(true);
     auto* window = mixerHost.getDetachedWindowForTest();
     ASSERT_NE(window, nullptr);
-    EXPECT_EQ(window->getBackgroundColour(), mc.getLookAndFeelForTest().getTheme().colors.surface)
+    const auto& colors = mc.getLookAndFeelForTest().getTheme().colors;
+    EXPECT_EQ(window->getBackgroundColour(), colors.bg0.withAlpha(1.0f).overlaidWith(colors.surface))
         << "the real setDetached(true) path must hand the window the app's OWN AppLookAndFeel, not "
            "a null one silently falling back to the stock ctor colour";
     // FRO228: the redock button VoiceOver lands on inside the window is the SAME borrowed
