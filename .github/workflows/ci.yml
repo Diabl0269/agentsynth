@@ -412,12 +412,12 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
+    # The same script as build-and-test, not awalsh128/cache-apt-pkgs-action: that action's cached
+    # restore dropped libfontconfig1-dev's .pc file and .so symlink, so configure died building
+    # juceaide ("libfontconfig.so ... missing and no known rule") on every labelled run (FRO269/FRO275).
     - name: Install Dependencies
       timeout-minutes: 15
-      uses: awalsh128/cache-apt-pkgs-action@latest
-      with:
-        packages: cmake ninja-build libasound2-dev libx11-dev libxinerama-dev libxext-dev libxcomposite-dev libxcursor-dev libxrandr-dev libxrender-dev libfontconfig1-dev libfreetype6-dev libglu1-mesa-dev libcurl4-openssl-dev libgtk-3-dev libjack-jackd2-dev freeglut3-dev pkg-config clang xvfb
-        version: 1.0
+      run: bash scripts/ci-install-linux-deps.sh
 
     # Restore-only, like every other PR-facing cache step (see the Save FetchContent Dependencies
     # comment in build-and-test above): this job only ever runs on a PR (label-gated, no push:main

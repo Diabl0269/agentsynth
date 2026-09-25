@@ -201,6 +201,9 @@ public:
      *  separately from the apply path so the panel can never steal an event. */
     void drainActivity(const std::function<void(const juce::String& sourceKey, const RemoteEvent&)>& fn);
 
+    /** Owner calls this before the graph goes -- see the definition for the lifetime contract. */
+    void endAllGestures();
+
     // ---- Diagnostics (tests) -------------------------------------------------------------------
 
     const SnapshotPublisher& publisher() const noexcept { return publisher_; }
@@ -225,7 +228,6 @@ private:
     // FRO236: bpm/playhead only -- masterVolume dispatches to applyToParameter above instead.
     void applyToContinuous(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
     void expireIdleGestures();
-    void endAllGestures();
 
     // Feedback (RemoteEngineFeedback.cpp).
     void sendFeedback(const RemoteMappingSnapshot& snapshot);

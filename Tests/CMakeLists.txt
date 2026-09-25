@@ -169,6 +169,7 @@ add_executable(Tests
     App/MainComponent/MainComponentDocumentTests.cpp
     App/MainComponent/MainComponentUnsavedGuardTests.cpp
     App/MainComponent/MainComponentProviderMiscTests.cpp
+    App/MainComponent/MainComponentTeardownTests.cpp
     App/MainComponent/MainComponentCommandTableTests.cpp
     App/MainComponent/MeterColourStopsSettingsIntegrationTests.cpp
     UI/Chrome/WelcomeScreenTests.cpp

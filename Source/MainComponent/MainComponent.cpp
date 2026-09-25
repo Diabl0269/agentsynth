@@ -239,6 +239,10 @@ MainComponent::~MainComponent() {
     // the two calls below, just for a sink whose destructor (unlike MidiRecorder/AutomationRecorder,
     // both owned by MainComponent for the process's whole life) is about to run in THIS destructor.
     audioEngine.setRemoteMessageSink(nullptr);
+    // remoteEngine is destroyed after this body, but audioEngine.shutdown() below clears the graph
+    // first: a MIDI knob gesture still inside its idle window would make ~RemoteEngine() end it on a
+    // freed parameter. End it here, while the parameters exist (see endAllGestures()'s comment).
+    remoteEngine.endAllGestures();
     audioEngine.setAutomationRecorder(nullptr);
     audioEngine.setMidiCaptureSink(nullptr);
     automationRecorder.detach();
