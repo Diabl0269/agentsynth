@@ -74,6 +74,10 @@ private:
     void persistBounds();
     void restoreBoundsOrDefault();
     void globalFocusChanged(juce::Component* focusedComponent) override; // juce::FocusChangeListener
+    /** FRO228: re-applies the header button's themed icon -- see this method's own comment
+     *  (DetachedPanelWindow.cpp) for why DetachablePanelHost::applyIcon() alone isn't enough once
+     *  the button is reparented in here. No-op before content_ exists. */
+    void applyHeaderButtonIcon(synth::theme::AppLookAndFeel& lf);
 
     // The window's own content: a borrowed header strip (title + the detach button, now in "Dock
     // back" state) above the borrowed panel -- symmetric with the docked header

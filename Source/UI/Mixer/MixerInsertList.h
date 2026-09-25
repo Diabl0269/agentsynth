@@ -63,6 +63,13 @@ public:
     int getEntryCountForTest() const noexcept { return (int)entries_.size(); }
     bool isLinearForTest() const noexcept { return linear_; }
 
+    /** FRO228: the transparent, name-only proxy component behind row `rowIndex` -- see
+     *  RowAccessibilityProxy's own comment on why paint() above draws every row itself while
+     *  accessibility still needs a real child Component per row. Null out of range. */
+    juce::Component* getRowAccessibilityComponentForTest(int rowIndex) const noexcept {
+        return rowIndex >= 0 && rowIndex < (int)rowProxies_.size() ? rowProxies_[(size_t)rowIndex].get() : nullptr;
+    }
+
     // ---- Headless test seams -- juce::PopupMenu never runs in a test process (see
     // docs/development/test-patterns.md), so these are the same real methods the async menu
     // callbacks below call, exposed directly (the ChannelFlow suite's own `applyAddTrackMenuChoice`
@@ -78,10 +85,23 @@ public:
 private:
     static constexpr int kRowHeight = 18;
 
+    // FRO228: paint() above draws every row itself (a plain custom-painted list, not real per-row
+    // components), so VoiceOver/NVDA had nothing to land on for a row at all -- one of these, sized
+    // and positioned over its row in resized(), gives each row a real, named, clickable AX child
+    // without touching the existing paint()/rowIndexAt() hit-testing (mouseDown() still owns real
+    // clicks: this stays setInterceptsMouseClicks(false, false), an accessibility-only overlay).
+    class RowAccessibilityProxy : public juce::Component {
+    public:
+        std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override {
+            return std::make_unique<juce::AccessibilityHandler>(*this, juce::AccessibilityRole::button);
+        }
+    };
+
     int rowIndexAt(juce::Point<int> position) const;
     void showRowMenu(int rowIndex);
     void showAddMenu();
     void mutateAndNotify(const std::function<bool()>& mutation);
+    void rebuildRowAccessibilityProxies();
 
     juce::AudioProcessorGraph* graph_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
@@ -93,6 +113,9 @@ private:
     juce::String editOnCanvasTargetUuid_;
     juce::AudioProcessorGraph::NodeID sourceNodeId_;
     juce::AudioProcessorGraph::NodeID stripNodeId_;
+    // FRO228: one per entries_ row, rebuilt (and re-titled "<name>, bypassed"/"<name>") every
+    // setEntries() -- see RowAccessibilityProxy's own comment.
+    std::vector<std::unique_ptr<RowAccessibilityProxy>> rowProxies_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerInsertList)
 };

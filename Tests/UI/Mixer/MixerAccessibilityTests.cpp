@@ -7,12 +7,69 @@
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/ChannelStripModule.h"
+#include "UI/Layout/BottomDockComponent.h"
+#include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
+#include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerColumnHeader.h"
+#include "UI/Mixer/MixerDirectColumn.h"
 #include "UI/Mixer/MixerFader.h"
+#include "UI/Mixer/MixerInsertList.h"
+#include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerMeter.h"
+#include "UI/Mixer/MixerSendList.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <gtest/gtest.h>
+#include <optional>
 
 namespace {
+
+// FRO101/FRO228: detaching a REAL panel off a REAL MainComponent writes "mixerWindowBounds" into
+// the SAME on-disk "Agent Synth" settings file every shipped build reads (DetachedPanelWindow::
+// persistBounds()) -- duplicated here rather than shared, matching how
+// DetachRedockStateTests.cpp/FocusArbitrationTestFixture.h/FocusRegionTests.cpp each already do.
+juce::PropertiesFile::Options userSettingsTestOptionsMACT() {
+    juce::PropertiesFile::Options opts;
+    opts.applicationName = "Agent Synth";
+    opts.folderName = "Agent Synth";
+    opts.filenameSuffix = "settings";
+    opts.osxLibrarySubFolder = "Application Support";
+    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+    return opts;
+}
+
+class PersistedKeysGuardMACT {
+public:
+    explicit PersistedKeysGuardMACT(juce::StringArray keys) {
+        juce::ApplicationProperties props;
+        props.setStorageParameters(userSettingsTestOptionsMACT());
+        auto* settings = props.getUserSettings();
+        for (const auto& key : keys) {
+            std::optional<juce::String> value;
+            if (settings != nullptr && settings->containsKey(key))
+                value = settings->getValue(key);
+            saved_.emplace_back(key, value);
+        }
+    }
+
+    ~PersistedKeysGuardMACT() {
+        juce::ApplicationProperties props;
+        props.setStorageParameters(userSettingsTestOptionsMACT());
+        auto* settings = props.getUserSettings();
+        if (settings == nullptr)
+            return;
+        for (const auto& [key, value] : saved_) {
+            if (value.has_value())
+                settings->setValue(key, *value);
+            else
+                settings->removeValue(key);
+        }
+        settings->saveIfNeeded();
+    }
+
+private:
+    std::vector<std::pair<juce::String, std::optional<juce::String>>> saved_;
+};
 
 class MockProviderMACT : public synth::AIProvider {
 public:
@@ -118,4 +175,143 @@ TEST(MixerAccessibilityTest, MeterAccessibilityValueIsReadOnly) {
     EXPECT_TRUE(value->isReadOnly());
     // FRO146: dBFS text, not a percentage -- a linear 0.5 peak is ~-6.0 dBFS.
     EXPECT_EQ(value->getCurrentValueAsString(), "-6.0 dBFS");
+}
+
+// ============================================================================
+// FRO228: header rename tooltip/help gated on setRenameEnabled(); Master's own title; the pan
+// knob's AX value surviving its param attachment; insert/send rows and "Make channel" becoming
+// real, named AX children; internal ids no longer leaking as button titles.
+// ============================================================================
+
+TEST(MixerAccessibilityTest, HeaderTooltipTracksRenameEnabled) {
+    synth::ui::MixerColumnHeader header;
+    EXPECT_TRUE(header.getNameLabelForTest().getTooltip().isNotEmpty())
+        << "rename is enabled by default -- VoiceOver's help text must say so";
+
+    header.setRenameEnabled(false);
+    EXPECT_TRUE(header.getNameLabelForTest().getTooltip().isEmpty())
+        << "Direct/Master disable rename -- the tooltip (read as AX help text) must not still offer "
+           "\"Double-click to rename\" once the gesture is disabled";
+
+    header.setRenameEnabled(true);
+    EXPECT_TRUE(header.getNameLabelForTest().getTooltip().isNotEmpty())
+        << "re-enabling rename must restore the tooltip";
+}
+
+TEST(MixerAccessibilityTest, MasterColumnHasOwnAccessibleTitle) {
+    synth::ui::MixerMasterColumn master;
+    EXPECT_EQ(master.getTitle(), "Master")
+        << "Master's own group AccessibilityHandler (the default, unspecified-role one Component "
+           "provides) reads Component::getTitle() -- without setTitle(\"Master\") in the ctor this "
+           "was empty, unlike \"Bus 1\"/\"Direct\"";
+}
+
+TEST(MixerAccessibilityTest, PanAccessibilityValueStaysFormattedAfterBinding) {
+    MainComponent mc(std::make_unique<MockProviderMACT>());
+    mc.setSize(1400, 900);
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
+    mixerPanel.rebuild();
+    auto* column = mixerPanel.getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+
+    // juce::SliderParameterAttachment's own constructor unconditionally overwrites
+    // slider.textFromValueFunction with one built from the param's own getText() -- a raw
+    // "0.0000000" for pan, which has no unit label. rebindControls() must reapply the "Center"/
+    // "50% left"/"50% right" formatting AFTER constructing panAttachment_, or this (what a Slider's
+    // own AccessibilityHandler actually reads via getTextFromValue()) regresses to the raw value.
+    auto& pan = column->getPanSliderForTest();
+    ASSERT_TRUE((bool)pan.textFromValueFunction) << "a real pan param must be bound by now";
+    EXPECT_EQ(pan.textFromValueFunction(pan.getValue()), "Center") << "a freshly bound pan param defaults to center";
+}
+
+TEST(MixerAccessibilityTest, InsertListRowsExposeNameAndBypassedStateAsRealAxChildren) {
+    synth::ui::MixerInsertList list;
+    list.setEntries(
+        {{{}, "gate-uuid", "Gate", /*bypassed=*/true}, {{}, "eq-uuid", "Parametric EQ", /*bypassed=*/false}},
+        /*linear=*/true, {}, {}, {});
+    list.setSize(140, list.getPreferredHeight());
+
+    auto* row0 = list.getRowAccessibilityComponentForTest(0);
+    auto* row1 = list.getRowAccessibilityComponentForTest(1);
+    ASSERT_NE(row0, nullptr);
+    ASSERT_NE(row1, nullptr);
+    EXPECT_EQ(row0->getParentComponent(), &list) << "each row proxy must be a real child of the list";
+    EXPECT_EQ(row0->getTitle(), "Gate, bypassed");
+    EXPECT_EQ(row1->getTitle(), "Parametric EQ");
+    EXPECT_EQ(list.getRowAccessibilityComponentForTest(2), nullptr) << "only one proxy per entry";
+}
+
+TEST(MixerAccessibilityTest, SendListExposesAddSendAsAReachableNamedControl) {
+    MainComponent mc(std::make_unique<MockProviderMACT>());
+    mc.setSize(1400, 900);
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
+    mixerPanel.rebuild();
+    auto* column = mixerPanel.getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+
+    auto& sendList = column->getSendListForTest();
+    ASSERT_TRUE(sendList.canAddSend()) << "a freshly added track has a free send slot";
+    auto& addSend = sendList.getAddSendAccessibilityComponentForTest();
+    EXPECT_EQ(addSend.getTitle(), "Add send");
+    EXPECT_TRUE(addSend.isVisible())
+        << "the +Send row painted its own text with no component behind it at all -- this proxy is "
+           "what makes it reachable";
+}
+
+TEST(MixerAccessibilityTest, DirectColumnMakeChannelButtonHasAnExplicitTitle) {
+    synth::ui::MixerDirectColumn direct;
+    EXPECT_EQ(direct.getMakeChannelButtonForTest().getTitle(), "Make channel");
+}
+
+TEST(MixerAccessibilityTest, StatusBarButtonsHaveHumanTitlesNotInternalIds) {
+    MainComponent mc(std::make_unique<MockProviderMACT>());
+    auto& statusBar = mc.getStatusBar();
+    EXPECT_EQ(statusBar.getMasterMuteButton().getTitle(), "Mute master")
+        << "without setTitle(), ButtonAccessibilityHandler::getTitle() falls back to "
+           "getButtonText(), which is the ctor's \"MasterMute\" component-name argument";
+    EXPECT_EQ(statusBar.getTransportButton().getTitle(), "Play / Stop")
+        << "same fallback leak, for \"statusBarTransportPlayStop\"";
+}
+
+TEST(MixerAccessibilityTest, BottomDockDetachButtonHasAHumanTitleNotItsComponentId) {
+    MainComponent mc(std::make_unique<MockProviderMACT>());
+    auto& detachButton = mc.getBottomDock().getDetachButtonForTest();
+    const auto title = detachButton.getTitle();
+    EXPECT_NE(title, juce::String("detachActiveTab"))
+        << "the ctor's component-name argument must never leak through as the AX title";
+    EXPECT_TRUE(title == "Open in window" || title == "Dock back") << "got: " << title;
+}
+
+TEST(MixerAccessibilityTest, DetachedWindowRealWiringGetsAThemedLookAndFeel) {
+    // FRO228: DetachedPanelWindow itself was already covered (DetachedPanelWindowTests.cpp) for a
+    // directly-supplied LookAndFeel -- this instead exercises the REAL wiring path a live detach
+    // goes through (MainComponent -> BottomDockComponent -> DetachablePanelHost::setDetached()),
+    // which is what actually regressed: MainComponent's delegating/test ctor used to assign
+    // `lookAndFeel` in the constructor BODY, too late for bottomDock's own in-class initializer
+    // (which captures `lookAndFeel`'s value while ITS OWN init list is still running) to see
+    // anything but null -- every DetachablePanelHost this ctor ever built then held a permanently
+    // null lookAndFeel_, however themed getLookAndFeelForTest() looked immediately afterwards.
+    PersistedKeysGuardMACT keysGuard({"mixerWindowBounds"});
+
+    MainComponent mc(std::make_unique<MockProviderMACT>());
+    mc.setSize(1400, 900);
+
+    auto& mixerHost = mc.getBottomDock().getMixerHost();
+    mixerHost.setDetached(true);
+    auto* window = mixerHost.getDetachedWindowForTest();
+    ASSERT_NE(window, nullptr);
+    EXPECT_EQ(window->getBackgroundColour(), mc.getLookAndFeelForTest().getTheme().colors.surface)
+        << "the real setDetached(true) path must hand the window the app's OWN AppLookAndFeel, not "
+           "a null one silently falling back to the stock ctor colour";
+    // FRO228: the redock button VoiceOver lands on inside the window is the SAME borrowed
+    // DetachablePanelHost::detachButton_ -- it must not be unnamed just because it's icon-only.
+    EXPECT_TRUE(mixerHost.getDetachButton().getTitle() == "Dock back")
+        << "got: " << mixerHost.getDetachButton().getTitle();
+    mixerHost.setDetached(false);
 }

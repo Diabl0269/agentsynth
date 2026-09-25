@@ -42,8 +42,25 @@ void MixerInsertList::setEntries(const std::vector<synth::MixerInsertEntry>& ent
     editOnCanvasTargetUuid_ = editOnCanvasTargetUuid;
     sourceNodeId_ = sourceNodeId;
     stripNodeId_ = stripNodeId;
+    rebuildRowAccessibilityProxies();
     resized();
     repaint();
+}
+
+void MixerInsertList::rebuildRowAccessibilityProxies() {
+    // Rebuilt wholesale on every setEntries() (same idiom as MixerSendList::rebuildKnobs()) rather
+    // than diffed in place -- the row count and every row's identity can both change on a single
+    // insert/remove/reorder, and this list is never large enough for the rebuild itself to matter.
+    rowProxies_.clear();
+    for (const auto& entry : entries_) {
+        auto proxy = std::make_unique<RowAccessibilityProxy>();
+        // FRO228: an overlay purely for accessibility -- mouseDown() above still owns every real
+        // click via rowIndexAt()/hit-testing on `this`, unchanged.
+        proxy->setInterceptsMouseClicks(false, false);
+        proxy->setTitle(entry.bypassed ? entry.name + ", bypassed" : entry.name);
+        addAndMakeVisible(*proxy);
+        rowProxies_.push_back(std::move(proxy));
+    }
 }
 
 int MixerInsertList::getPreferredHeight() const noexcept {
@@ -90,7 +107,10 @@ void MixerInsertList::paint(juce::Graphics& g) {
     }
 }
 
-void MixerInsertList::resized() {}
+void MixerInsertList::resized() {
+    for (int i = 0; i < (int)rowProxies_.size(); ++i)
+        rowProxies_[(size_t)i]->setBounds(getLocalBounds().withY(i * kRowHeight).withHeight(kRowHeight));
+}
 
 void MixerInsertList::mouseDown(const juce::MouseEvent& event) {
     if (!linear_) {

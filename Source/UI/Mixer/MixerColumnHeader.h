@@ -27,10 +27,11 @@ public:
         setInterceptsMouseClicks(true, false);
         addAndMakeVisible(nameLabel_);
         nameLabel_.setComponentID("mixerColumnHeaderName");
-        nameLabel_.setTooltip("Double-click to rename this channel");
         nameLabel_.setJustificationType(juce::Justification::centredLeft);
         nameLabel_.setMinimumHorizontalScale(1.0f);
-        nameLabel_.setEditable(false, true, false);
+        // FRO228: setRenameEnabled(true) below is what actually arms editing AND the tooltip/AX
+        // help text together -- see that method's own comment for why the two must never diverge.
+        setRenameEnabled(true);
         nameLabel_.onTextChange = [this] {
             // name_ deliberately NOT updated here -- it stays the last value an external
             // setDisplayName() committed until either a rebuild calls setDisplayName() again with
@@ -107,8 +108,14 @@ public:
      *  ChannelStripModule name (Direct has no node; Master is a MasterModule) for a rename to write
      *  to, so MixerDirectColumn/MixerMasterColumn turn this off right after their fixed
      *  setDisplayName() call -- true (the default) is MixerColumnComponent's every Strip/Bus
-     *  column. */
-    void setRenameEnabled(bool enabled) { nameLabel_.setEditable(false, enabled, false); }
+     *  column. FRO228: also gates the tooltip -- VoiceOver reads a juce::TooltipClient's tooltip as
+     *  the label's accessible help text, so a disabled column must never still offer "Double-click
+     *  to rename" (Direct/Master's AX help previously said so even though the label ignores the
+     *  gesture). */
+    void setRenameEnabled(bool enabled) {
+        nameLabel_.setEditable(false, enabled, false);
+        nameLabel_.setTooltip(enabled ? "Double-click to rename this channel" : juce::String());
+    }
 
     /** Test seam: the real juce::Label a double-click opens an editor on -- a test drives it with
      *  Label's own mouseDoubleClick()/showEditor()/getCurrentTextEditor()/hideEditor(), exactly the

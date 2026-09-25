@@ -8,9 +8,11 @@
 //   1. Header/content bounds at several window sizes -- no overlap, content fills the rest.
 //   2. Minimum-size behaviour -- a window shorter than the header strip clips gracefully.
 //   3. Render-to-image -- header and hosted-panel regions each paint non-empty pixels.
+//   4. FRO228 -- themed background + the header button's own icon actually paints.
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <gtest/gtest.h>
 
 using synth::ui::DetachedPanelWindow;
@@ -171,4 +173,49 @@ TEST_F(DetachedPanelWindowLayoutTest, PanelRenderScalesWithSeveralWindowSizes) {
                     panelPainted = true;
         EXPECT_TRUE(panelPainted) << "the panel must still render at " << size.x << "x" << size.y;
     }
+}
+
+// ============================================================================
+// 4. FRO228 -- themed background + the header button's own icon actually paints
+// ============================================================================
+
+namespace {
+// Distinctive from both Theme.h's own default surface and the ctor's juce::Colours::darkgrey
+// fallback -- same reasoning as DetachedPanelWindowTests.cpp's own themeWithDistinctiveSurface.
+synth::theme::Theme themeWithDistinctiveColours() {
+    synth::theme::Theme theme;
+    theme.colors.surface = juce::Colour(0xff7744CC);
+    theme.colors.textMuted = juce::Colour(0xffAABBCC);
+    theme.colors.textPrimary = juce::Colour(0xffFFEE11);
+    return theme;
+}
+} // namespace
+
+TEST_F(DetachedPanelWindowLayoutTest, BackgroundMatchesThemeSurfaceAndHeaderButtonPaintsItsIcon) {
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(themeWithDistinctiveColours());
+
+    DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, &lf, &shortcutManager);
+    window.setBounds(0, 0, 640, 420);
+
+    EXPECT_EQ(window.getBackgroundColour(), juce::Colour(0xff7744CC))
+        << "the window's own background must resolve to the theme's surface token";
+
+    auto* content = window.getContentForTest();
+    ASSERT_NE(content, nullptr);
+    const auto img = content->createComponentSnapshot(content->getLocalBounds());
+
+    // Before FRO228's fix, the reparented header button never had a Drawable assigned to it at
+    // all (an icon-only ImageFitted DrawableButton with none set paints nothing), so every pixel in
+    // its 22x22 bounds was the plain theme surface: AppLookAndFeel::drawDrawableButton() paints NO
+    // fill at all for an enabled, at-rest, non-toggled button (Source/UI/Theme/AppLookAndFeel/
+    // AppLookAndFeelButtons.cpp), so "any non-surface pixel here" is a real proof the icon painted,
+    // not an artifact of some other themed background this test would pass without the fix.
+    bool sawNonSurfacePixel = false;
+    for (int x = button.getX(); x < button.getRight() && !sawNonSurfacePixel; ++x)
+        for (int y = button.getY(); y < button.getBottom() && !sawNonSurfacePixel; ++y)
+            if (img.getPixelAt(x, y) != juce::Colour(0xff7744CC))
+                sawNonSurfacePixel = true;
+    EXPECT_TRUE(sawNonSurfacePixel)
+        << "the header's redock/close button must actually paint its icon, not just its background";
 }

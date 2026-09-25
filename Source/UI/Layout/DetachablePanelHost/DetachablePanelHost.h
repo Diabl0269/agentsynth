@@ -42,6 +42,15 @@ public:
 
     juce::DrawableButton& getDetachButton() noexcept { return detachButton_; }
 
+    /** FRO228: a detached window is a SEPARATE top-level Component, so MainComponent's own
+     *  theme-switch re-skin pass (`getTopLevelComponent()->sendLookAndFeelChange()`) never reaches
+     *  it -- a theme switch while a panel is detached otherwise left its background/icon on
+     *  whatever theme was active when it was last (re)built. A no-op while docked. */
+    void refreshDetachedWindowTheme() {
+        if (window_ != nullptr)
+            window_->sendLookAndFeelChange();
+    }
+
     /** When true, this host draws no header strip of its own while DOCKED -- its owner has
      *  embedded getDetachButton() into its own chrome (BottomDockComponent's tab strip in Tab
      *  placement). Has no effect on the DETACHED window's header, which always shows one

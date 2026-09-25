@@ -192,6 +192,8 @@ public:
     /** FRO146 test seam: the "Reset Meters" button the tab strip shows on the Mixer tab -- resets
      *  every column's (and Master's) clip readout, same as an Option/Alt-click on any one of them. */
     juce::TextButton& getResetMetersButtonForTest() noexcept { return resetMetersButton_; }
+    /** FRO228 test seam: this dock's own detach/redock button. */
+    juce::DrawableButton& getDetachButtonForTest() noexcept { return detachButton_; }
 
 private:
     // FRO146 follow-up: `allowMixerRebuild` is false ONLY from the detach/redock callback

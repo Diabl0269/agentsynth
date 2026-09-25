@@ -147,7 +147,12 @@ DetachablePanelHost& BottomDockComponent::activeHost() noexcept {
 }
 
 void BottomDockComponent::refreshDetachButton() {
-    detachButton_.setTooltip(activeHost().isDetached() ? "Dock back" : "Open in window");
+    // FRO228: same wording as the tooltip -- without an explicit setTitle(), the ctor's
+    // "detachActiveTab" component name leaks as the AX title (ButtonAccessibilityHandler::
+    // getTitle()'s getButtonText() fallback).
+    const juce::String label = activeHost().isDetached() ? "Dock back" : "Open in window";
+    detachButton_.setTooltip(label);
+    detachButton_.setTitle(label);
     // Same dynamic_cast-with-null-fallback convention DetachablePanelHost::applyIcon uses.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     if (lf == nullptr)

@@ -280,6 +280,9 @@ void MainComponent::assembleToolbar() {
 void MainComponent::wireStatusBar() {
     // Master-mute: toggles AudioEngine's master mute (audio keeps running; output is zero-filled).
     statusBar.getMasterMuteButton().setComponentID("masterMute");
+    // FRO228: the ctor's "MasterMute" component name otherwise leaks as the AX title via
+    // ButtonAccessibilityHandler::getTitle()'s getButtonText() fallback.
+    statusBar.getMasterMuteButton().setTitle("Mute master");
     statusBar.getMasterMuteButton().onClick = [this] {
         audioEngine.setMasterMute(!audioEngine.isMasterMuted());
         statusBar.repaint();

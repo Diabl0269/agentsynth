@@ -12,6 +12,7 @@
 //   4. onDetachedStateChanged fires for both directions, including a window-driven redock.
 //   5. Native-window promotion (FRO12 follow-up: setDetached(true) alone never created a peer) --
 //      see DetachablePanelHost.h's setCreatesNativeWindows() doc comment for the bug this guards.
+//   6. FRO228 -- refreshDetachedWindowTheme() re-skins an already-open detached window.
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
@@ -101,12 +102,18 @@ TEST_F(DetachablePanelHostTest, SetDetachedIsIdempotent) {
 TEST_F(DetachablePanelHostTest, SetDetachedTogglesTooltip) {
     DetachablePanelHost host(panel, "Test Panel", "testPanelWindowBounds", &appProperties, nullptr, &shortcutManager);
     EXPECT_EQ(host.getButtonTooltipForTest(), "Open in window");
+    // FRO228: setButtonText({}) clears getButtonText() (ButtonAccessibilityHandler::getTitle()'s
+    // own fallback), so without an explicit title this icon-only button was unnamed to a screen
+    // reader -- same wording as the tooltip, same toggle.
+    EXPECT_EQ(host.getDetachButton().getTitle(), "Open in window");
 
     host.setDetached(true);
     EXPECT_EQ(host.getButtonTooltipForTest(), "Dock back");
+    EXPECT_EQ(host.getDetachButton().getTitle(), "Dock back");
 
     host.setDetached(false);
     EXPECT_EQ(host.getButtonTooltipForTest(), "Open in window");
+    EXPECT_EQ(host.getDetachButton().getTitle(), "Open in window");
 }
 
 TEST_F(DetachablePanelHostTest, ButtonTextAlwaysEmpty) {
@@ -227,4 +234,53 @@ TEST_F(DetachablePanelHostTest, FlagTrueWithAPrimaryDisplayReachesThePromotionCa
     // regardless of whether the machine running this test actually has a display.
     ASSERT_NE(host.getDetachedWindowForTest(), nullptr);
     EXPECT_EQ(host.getDetachedWindowForTest()->getPeer(), nullptr);
+}
+
+// ============================================================================
+// 6. FRO228 -- refreshDetachedWindowTheme() re-skins an already-open detached window
+// ============================================================================
+
+namespace {
+synth::theme::Theme themeWithDistinctiveSurfaceDPHT(juce::Colour surface) {
+    synth::theme::Theme theme;
+    theme.colors.surface = surface;
+    return theme;
+}
+} // namespace
+
+TEST_F(DetachablePanelHostTest, RefreshDetachedWindowThemeIsANoOpWhileDocked) {
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(themeWithDistinctiveSurfaceDPHT(juce::Colour(0xff7744CC)));
+    DetachablePanelHost host(panel, "Test Panel", "testPanelWindowBounds", &appProperties, &lf, &shortcutManager);
+
+    host.refreshDetachedWindowTheme(); // nothing to refresh -- must not crash
+    EXPECT_EQ(host.getDetachedWindowForTest(), nullptr);
+}
+
+TEST_F(DetachablePanelHostTest, RefreshDetachedWindowThemePicksUpATheThemeSwitchMadeWhileDetached) {
+    // A theme switch is IN-PLACE on the SAME AppLookAndFeel instance MainComponent hands every
+    // DetachablePanelHost it owns (see this test's own `lf`, standing in for that shared object) --
+    // never a swap to a different instance. Component::sendLookAndFeelChange() on MainComponent's
+    // own tree never reaches a SEPARATE top-level DetachedPanelWindow, which is exactly why
+    // MainComponent::changeListenerCallback's theme branch calls this method on every host after
+    // its own top->sendLookAndFeelChange().
+    const juce::Colour firstSurface{0xff7744CC};
+    const juce::Colour secondSurface{0xff22AA66};
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(themeWithDistinctiveSurfaceDPHT(firstSurface));
+
+    DetachablePanelHost host(panel, "Test Panel", "testPanelWindowBounds", &appProperties, &lf, &shortcutManager);
+    host.setDetached(true);
+    auto* window = host.getDetachedWindowForTest();
+    ASSERT_NE(window, nullptr);
+    ASSERT_EQ(window->getBackgroundColour(), firstSurface);
+
+    lf.applyTheme(themeWithDistinctiveSurfaceDPHT(secondSurface));
+    // Without refreshDetachedWindowTheme(), nothing tells the already-open window to re-read `lf` --
+    // its background would otherwise still read the FIRST theme's surface here.
+    ASSERT_EQ(window->getBackgroundColour(), firstSurface) << "sanity: applyTheme() alone never re-skins";
+
+    host.refreshDetachedWindowTheme();
+    EXPECT_EQ(window->getBackgroundColour(), secondSurface)
+        << "the already-open window must pick up the new theme immediately";
 }
