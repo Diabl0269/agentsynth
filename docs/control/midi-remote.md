@@ -200,6 +200,12 @@ modulation matrix are for** ([`docs/modules/modulation.md`](../modules/modulatio
 (a constant, `kGestureIdleMs`), so a slow sweep is one undo step and one automation touch, not
 hundreds. A button press is begin+set+end in one drain.
 
+*Lifetime:* until then the open gesture holds a bare pointer to its parameter, and
+`~RemoteEngine()` ends whatever is still open. So an owner whose `RemoteEngine` outlives the graph
+calls `RemoteEngine::endAllGestures()` after detaching the message sink and before the graph is
+cleared. `~MainComponent()` does this before `audioEngine.shutdown()`. Without it, quitting within
+250 ms of turning a mapped knob was a use-after-free.
+
 *Interaction with the automation-record claim:* `AutomationRecorder::isClaimed(param)` /
 `ScopedProgrammaticApply` treat the parameter as "hand on the knob" for the gesture's duration,
 identically to a mouse. Nothing new to design; the point of B is that there is nothing new.

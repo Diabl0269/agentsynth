@@ -216,6 +216,49 @@ TEST(MidiRemoteEngineApplyTest, ExactlyOneGesturePairPerSweep) {
 }
 
 // ============================================================================
+// endAllGestures(): the owner closes open gestures before the graph goes
+// ============================================================================
+
+// An open gesture holds a bare parameter pointer, and ~RemoteEngine() ends whatever is still open.
+// An owner whose engine outlives its graph (MainComponent: audioEngine.shutdown() clears the graph
+// before the remoteEngine member dies) calls endAllGestures() first -- after it, nothing is left for
+// the destructor to touch. Before this existed, a test Rig with that member order segfaulted in
+// ~RemoteEngine() on a freed parameter whenever its last CC was inside the idle window.
+TEST(MidiRemoteEngineApplyTest, EndAllGesturesClosesAnOpenGestureSoTheGraphCanGoFirst) {
+    RemoteEngine engine;
+    double fakeNowMs = 0.0;
+    engine.setClock([&fakeNowMs] { return fakeNowMs; });
+    CountingGestureListener listener;
+    {
+        juce::AudioProcessorGraph graph;
+        auto node = graph.addNode(std::make_unique<FilterModule>());
+        node->properties.set("uuid", juce::String(kNodeUuid));
+        if (auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor()))
+            mb->setNodeUuid(kNodeUuid);
+        auto* cutoff = findParameterByID(node->getProcessor(), "cutoff");
+        cutoff->addListener(&listener);
+
+        engine.setProfiles({makeProfile({makeControl("knob", MessageType::cc, 1, 10, Encoding::abs7)})});
+        engine.setSources({juce::String(kSource)});
+        engine.setAssignments(
+            {makeParamAssignment("a1", "knob", MessageType::cc, 1, 10, Encoding::abs7, "cutoff", Takeover::jump)});
+        engine.reconcile(graph);
+
+        engine.handleMessage(kSource, juce::MidiMessage::controllerEvent(1, 10, 64));
+        engine.drain();
+        ASSERT_EQ(engine.activeGestureCount(), 1) << "inside the idle window the gesture is still open";
+
+        engine.endAllGestures();
+        EXPECT_EQ(listener.starts, 1);
+        EXPECT_EQ(listener.ends, 1) << "the open gesture is ended on the still-alive parameter";
+        EXPECT_EQ(engine.activeGestureCount(), 0);
+
+        cutoff->removeListener(&listener);
+    } // graph (and the parameter) destroyed here, before the engine
+    EXPECT_EQ(listener.ends, 1);
+} // ~RemoteEngine(): nothing left open, so no call into the freed parameter (ASan-visible on Linux CI)
+
+// ============================================================================
 // A button applies begin+set+end within one drain, with no gesture left open
 // ============================================================================
 

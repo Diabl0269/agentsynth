@@ -240,6 +240,12 @@ void RemoteEngine::expireIdleGestures() {
     }
 }
 
+// Ends every in-flight parameter gesture now and forgets it. An open gesture holds a bare pointer to
+// its parameter until kGestureIdleMs after the last event, and ~RemoteEngine() ends whatever is still
+// open -- so an owner whose engine outlives its graph (MainComponent: audioEngine.shutdown() clears
+// the graph before the remoteEngine member dies) must call this BEFORE the graph is cleared, or that
+// destructor call reads freed memory (a knob turned within 250 ms of quitting). Detach the message
+// sink first, so no new event can re-open one. docs/control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter
 void RemoteEngine::endAllGestures() {
     for (auto& entry : gestures_)
         if (entry.second.gestureActive && entry.second.param != nullptr)
