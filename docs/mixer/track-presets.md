@@ -84,7 +84,7 @@ collide.
 extra state before the preset is ever written to disk.** Each one is a real hazard, not hygiene:
 
 - an imported `soloed_=true` would **silence the whole mix render-wide** the moment the file loads
-  (root `CLAUDE.md` tripwire);
+  (`Source/CLAUDE.md` invariant);
 - an imported `isBus=true` would **badge an ordinary track channel as BUS** wherever the preset is
   inserted;
 - captured `"sends"` slot state would restore **with no re-resolved cable target**, because a send's
