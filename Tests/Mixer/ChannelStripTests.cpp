@@ -278,6 +278,34 @@ TEST(ChannelStripTest, ExtraStateRoundTripsShapeAndSolo) {
     EXPECT_EQ(restored.getParameters().size(), original.getParameters().size()) << "solo must never become a parameter";
 }
 
+// FRO225 (docs/mixer/panel.md): the strip's own user-given name -- empty (unset) is the default, and
+// it round-trips through getExtraState()/setExtraState() exactly like shape/solo above, so it
+// survives save/load and presets.
+TEST(ChannelStripTest, StripNameIsUnsetByDefault) {
+    ChannelStripModule strip;
+    EXPECT_TRUE(strip.getStripName().isEmpty());
+}
+
+TEST(ChannelStripTest, ExtraStateRoundTripsStripName) {
+    ChannelStripModule original;
+    original.setStripName("Lead Vox");
+
+    ChannelStripModule restored;
+    restored.setExtraState(original.getExtraState());
+    EXPECT_EQ(restored.getStripName(), "Lead Vox");
+}
+
+TEST(ChannelStripTest, ExtraStateWithNoNamePropertyLeavesTheNameUnset) {
+    // A patch saved before FRO225 (or any state object that never had a "name" key) must not throw
+    // -- setExtraState only ever WRITES the field when the property is present (same
+    // hasProperty()-gated pattern as every other extra-state key on this class).
+    ChannelStripModule strip;
+    auto* state = new juce::DynamicObject();
+    state->setProperty("shape", "mono");
+    strip.setExtraState(juce::var(state));
+    EXPECT_TRUE(strip.getStripName().isEmpty());
+}
+
 // ============================================================================
 // Ports
 // ============================================================================

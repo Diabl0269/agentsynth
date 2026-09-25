@@ -41,6 +41,10 @@ public:
 
     juce::AudioProcessorGraph::NodeID getNodeId() const noexcept { return nodeId_; }
 
+    /** FRO225 test seam: the header this column owns -- a test drives its inline rename through
+     *  MixerColumnHeader::getNameLabelForTest()'s real Label editor gestures. */
+    MixerColumnHeader& getHeaderForTest() noexcept { return header_; }
+
     /** FRO11: unbinds the fader/pan/mute/solo/meter from whatever live processor/parameters they
      *  currently reference, and clears this column's own raw pointers into the graph -- called by
      *  MixerPanelComponent::unbindAllColumns() from GraphEditor::onBeforeDetachAllModuleComponents,
@@ -206,6 +210,11 @@ private:
     void rebindControls();
     void refreshMuteSoloAccessibility(ModuleBase* module, ChannelStripModule* strip);
 
+    /** FRO225 (docs/mixer/panel.md): header_.onNameEdited's handler -- see MixerColumnHeader.h's own
+     *  class comment for the rename design, and this method's definition (MixerColumnComponent.cpp)
+     *  for why a boxed strip's rename goes to its macro instead of a second, competing name. */
+    void commitHeaderRename(const juce::String& newName);
+
     /** Registers `control` as a MIDI-learnable target for `param` (a no-op if `param` is null,
      *  mirroring ModuleComponent::MidiLearnableRegistry::add) and, the FIRST time `control` is
      *  seen, attaches this column as its MouseListener so a right-click on it reaches mouseDown()
@@ -259,6 +268,7 @@ private:
     juce::AudioProcessorGraph* graph_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     AudioEngine* audioEngine_ = nullptr;
+    synth::MacroSet* macros_ = nullptr; // FRO225: commitHeaderRename() only -- everything else already threads its own
 
     juce::AudioProcessorGraph::NodeID nodeId_;
     juce::String uuid_;

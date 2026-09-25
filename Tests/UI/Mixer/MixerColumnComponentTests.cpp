@@ -46,6 +46,19 @@ void synthesizeMouseUp(juce::Component& component) {
                                        centre.toFloat(), juce::Time::getCurrentTime(), 1, false));
 }
 
+// FRO225: fires `component`'s REAL mouseDoubleClick() handler -- for an editable-on-double-click
+// juce::Label (setEditable(false, true, false), same as this file's synthesizeMouseUp() above does
+// for a plain click) that's Label::showEditor()'s own trigger, exactly what a live double-click
+// produces, not a shortcut that skips the gesture and calls showEditor() directly.
+void synthesizeMouseDoubleClick(juce::Component& component) {
+    const juce::Point<int> centre(component.getWidth() / 2, component.getHeight() / 2);
+    const juce::MouseEvent event(juce::Desktop::getInstance().getMainMouseSource(), centre.toFloat(),
+                                 juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f,
+                                 0.0f, &component, &component, juce::Time::getCurrentTime(), centre.toFloat(),
+                                 juce::Time::getCurrentTime(), 2, false);
+    component.mouseDoubleClick(event);
+}
+
 // FRO15 in-app finding: at the dock's real Mixer-tab column height (~181px) a freshly created
 // bus's insert list and EQ thumbnail must actually be visible -- not hidden behind the model bug
 // (buildInsertsForColumn never looking at a bus's own chain; MixerModelBusColumnTests.cpp covers
@@ -235,4 +248,92 @@ TEST(MixerColumnComponentTests, RemovingTheBoundEqRowUnbindsTheThumbnailBeforeTh
     EXPECT_GT(synth::ui::MixerEqThumbnail::getLiveUnbindCallCountForTest(), liveUnbindsBefore)
         << "removing the bound EQ row must unbind the thumbnail from its (now freed) module";
     EXPECT_FALSE(thumbnail.isVisible()) << "the thumbnail must hide once its EQ insert is gone";
+}
+
+// ============================================================================
+// FRO225 (docs/mixer/panel.md): the mixer header's inline rename. Named strips gets its own
+// persisted name; a strip boxed in a macro reuses the macro's rename instead (never two competing
+// names for one column) -- see MixerColumnComponent::commitHeaderRename's own comment.
+// ============================================================================
+
+TEST(MixerColumnComponentTests, DoubleClickingTheHeaderNameRenamesAnUnboxedStrip) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    AppUndoManager undoManager;
+    GraphEditor editor(engine, &undoManager);
+    editor.setSize(900, 600);
+
+    auto stripNode = addUuidNode(graph, std::make_unique<ChannelStripModule>(), "strip-uuid");
+    auto* strip = dynamic_cast<ChannelStripModule*>(stripNode->getProcessor());
+    ASSERT_NE(strip, nullptr);
+    strip->setShape(ChannelStripModule::Shape::Stereo);
+    ASSERT_TRUE(strip->getStripName().isEmpty()) << "unset, so the column shows today's fallback name";
+
+    synth::ui::MixerColumnComponent column;
+    column.configure(graph, undoManager, editor.getMacros(), editor, engine);
+    column.setSize(140, 300);
+
+    synth::MixerColumn model;
+    model.nodeId = stripNode->nodeID;
+    model.uuid = "strip-uuid";
+    model.name = "Channel 1";
+    column.setColumn(model, "");
+
+    auto& nameLabel = column.getHeaderForTest().getNameLabelForTest();
+    ASSERT_EQ(nameLabel.getCurrentTextEditor(), nullptr) << "not editing yet";
+
+    // The real gesture, not a shortcut: double-click opens Label's own editor (Label::showEditor(),
+    // armed by setEditable(false, true, false) in MixerColumnHeader's constructor).
+    synthesizeMouseDoubleClick(nameLabel);
+    auto* textEditor = nameLabel.getCurrentTextEditor();
+    ASSERT_NE(textEditor, nullptr) << "double-click must open the inline editor";
+
+    textEditor->setText("Lead Vox");
+    nameLabel.hideEditor(false); // false = commit (Label::hideEditor's own discard/commit contract)
+
+    EXPECT_EQ(strip->getStripName(), "Lead Vox")
+        << "an unboxed strip's rename writes ChannelStripModule's own persisted name";
+    EXPECT_EQ(nameLabel.getText(), "Lead Vox");
+}
+
+TEST(MixerColumnComponentTests, RenamingABoxedStripGoesToItsMacroNotASecondStripName) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    AppUndoManager undoManager;
+    GraphEditor editor(engine, &undoManager);
+    editor.setSize(900, 600);
+
+    auto stripNode = addUuidNode(graph, std::make_unique<ChannelStripModule>(), "strip-uuid");
+    auto* strip = dynamic_cast<ChannelStripModule*>(stripNode->getProcessor());
+    ASSERT_NE(strip, nullptr);
+    strip->setShape(ChannelStripModule::Shape::Stereo);
+
+    synth::Macro macro;
+    macro.name = "Drum Bus";
+    macro.members.push_back("strip-uuid");
+    const auto macroId = editor.getMacros().add(macro);
+
+    synth::ui::MixerColumnComponent column;
+    column.configure(graph, undoManager, editor.getMacros(), editor, engine);
+    column.setSize(140, 300);
+
+    synth::MixerColumn model;
+    model.nodeId = stripNode->nodeID;
+    model.uuid = "strip-uuid";
+    model.name = "Drum Bus"; // stripColumnName's macro-name priority, same as buildMixerSnapshot would give it
+    column.setColumn(model, "");
+
+    auto& nameLabel = column.getHeaderForTest().getNameLabelForTest();
+    synthesizeMouseDoubleClick(nameLabel);
+    auto* textEditor = nameLabel.getCurrentTextEditor();
+    ASSERT_NE(textEditor, nullptr);
+    textEditor->setText("Drums Bus 2");
+    nameLabel.hideEditor(false);
+
+    EXPECT_EQ(editor.getMacros().find(macroId)->name, "Drums Bus 2")
+        << "a boxed strip's rename goes to its macro, the same one the column's own name already came from";
+    EXPECT_TRUE(strip->getStripName().isEmpty())
+        << "never ALSO written to the strip's own name -- that would be a second, competing name for one column";
 }

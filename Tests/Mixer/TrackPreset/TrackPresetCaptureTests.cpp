@@ -171,6 +171,46 @@ TEST(TrackPresetCapture, IsBusScrubbedFromCapturedChannelStrip) {
     EXPECT_TRUE(foundStrip);
 }
 
+TEST(TrackPresetCapture, NameScrubbedFromCapturedChannelStrip) {
+    // FRO225 follow-up to the solo/isBus scrubs above: a preset captured from a strip with its own
+    // persisted name must not carry "name" -- that's the SOURCE strip's own identity, and applying
+    // the preset to a different channel must not rename it out from under the user.
+    HostedPatchCFT patch;
+    GraphEditor editor(patch.engine);
+    const auto rig = buildSimpleTrackRigCFT(editor, patch.engine, patch.output);
+    ASSERT_NE(rig.macro, nullptr);
+
+    auto* stripNode = findNodeOfTypeCFT(patch.engine.getGraph(), ModuleType::ChannelStrip);
+    ASSERT_NE(stripNode, nullptr);
+    auto* stripModule = dynamic_cast<ChannelStripModule*>(stripNode->getProcessor());
+    ASSERT_NE(stripModule, nullptr);
+    stripModule->setStripName("Lead Vox");
+    ASSERT_EQ(stripModule->getExtraState().getDynamicObject()->getProperty("name").toString(), "Lead Vox")
+        << "getExtraState() must actually carry the name, or the EXPECT_FALSE below would pass "
+           "vacuously instead of proving the scrub ran";
+
+    auto preset = synth::TrackPresetManager::extractTrackPreset(
+        patch.engine.getGraph(), editor.getMacros(), rig.macro->id, synth::TrackPresetKind::Audio, "NameScrub");
+    ASSERT_TRUE(preset.isObject());
+    auto* root = preset.getDynamicObject();
+    ASSERT_NE(root, nullptr);
+    auto* nodes = root->getProperty("nodes").getArray();
+    ASSERT_NE(nodes, nullptr);
+
+    bool foundStrip = false;
+    for (const auto& n : *nodes) {
+        auto* obj = n.getDynamicObject();
+        if (obj == nullptr || obj->getProperty("type").toString() != "Channel Strip")
+            continue;
+        foundStrip = true;
+        auto* state = obj->getProperty("state").getDynamicObject();
+        ASSERT_NE(state, nullptr) << "includeExtraState=true must still carry shape/gain/pan state";
+        EXPECT_FALSE(state->hasProperty("name"))
+            << "a captured strip name must never rename the destination channel wherever the preset lands";
+    }
+    EXPECT_TRUE(foundStrip);
+}
+
 TEST(TrackPresetCapture, SendsScrubbedFromCapturedChannelStrip) {
     // FRO98 follow-up to the solo scrub above: a preset captured from a strip with configured
     // sends must not carry "sends" slot state -- a send's target is a graph edge that is never

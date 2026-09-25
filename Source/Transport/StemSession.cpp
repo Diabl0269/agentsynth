@@ -61,13 +61,19 @@ StemResult failure(juce::String message) {
 // link rule FRO14 decides the same way - see that file. With no TimelineDoc at all (a graph built
 // directly by a test), there is no name to find and every strip keeps its "Channel N" fallback.
 //
-// ChannelStripModule has no user-given name field of its own yet (re-checked at FRO15 time - its
-// getExtraState() carries "shape"/"solo"/"isBus"/"sends" and no name, and docs/mixer/mixer.md#mono-and-stereo /
-// docs/mixer/sends-and-buses.md never added one either; a bus takes its name from its MACRO, not from the strip) - the
-// mixer-UI ticket that might add one is expected to make THIS function prefer it, ahead of the
-// shared track walk, whenever it lands.
+// FRO225 (docs/mixer/panel.md): ChannelStripModule now carries a persisted, user-given name of its
+// own (ChannelStripModule::getStripName()) - set from the mixer column header's inline rename.
+// That name wins ahead of everything below whenever it's set (non-empty); empty (unset, and every
+// strip created before FRO225) falls through to exactly the track-walk/bus-fallback rule this
+// function already had, unchanged.
 juce::String stemStripName(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID stripId, int number,
                            const TimelineDoc* timelineDoc) {
+    if (auto* node = graph.getNodeForId(stripId)) {
+        if (auto* strip = dynamic_cast<ChannelStripModule*>(node->getProcessor());
+            strip != nullptr && strip->getStripName().isNotEmpty())
+            return strip->getStripName();
+    }
+
     // FRO15 (docs/mixer/sends-and-buses.md): a group/send bus is a ChannelStrip too, so collectStemStrips
     // picks it up with no change at all - but it has no feeding track, so "Channel N" would be a
     // lie about what the file holds. Its fallback is "Bus N" instead (MixerSends.h). A bus that IS

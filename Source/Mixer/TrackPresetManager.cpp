@@ -99,14 +99,17 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
     if (!(stripNodeId == NodeID{}))
         root->setProperty("channelMacroId", (int)stripNodeId.uid);
 
-    // Scrub "solo", "isBus", and "sends" from every captured Channel Strip's extra state (root
-    // CLAUDE.md tripwire): an imported soloed_=true would silence the whole mix render-wide,
+    // Scrub "solo", "isBus", "sends", and "name" from every captured Channel Strip's extra state
+    // (root CLAUDE.md tripwire): an imported soloed_=true would silence the whole mix render-wide,
     // regardless of includeExtraState being forced on above for the shape/gain/pan it legitimately
     // carries. "isBus" and "sends" (FRO15) get the same treatment: a preset captured from a bus
     // strip must not badge an ordinary track channel as BUS wherever it's inserted, and a preset
     // captured from a strip with configured sends must not restore slots whose cable target was
     // never captured (a saved send target is a graph edge, never stored, per
     // docs/mixer/sends-and-buses.md) -- carrying the slot state alone would show "No target" rows on every insert.
+    // "name" (FRO225, docs/mixer/panel.md) is the SOURCE strip's own user-given identity -- applying a
+    // preset captured from "Lead Vox" to a brand new "Backing Vox" channel must not rename it out
+    // from under the user; the destination strip keeps whatever name (or none) it already had.
     if (auto* nodesArr = root->getProperty("nodes").getArray()) {
         for (auto& nVar : *nodesArr) {
             auto* nObj = nVar.getDynamicObject();
@@ -116,6 +119,7 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
                 stateObj->removeProperty("solo");
                 stateObj->removeProperty("isBus");
                 stateObj->removeProperty("sends");
+                stateObj->removeProperty("name");
             }
         }
     }

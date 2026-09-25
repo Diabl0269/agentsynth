@@ -28,6 +28,8 @@ juce::AudioParameterFloat* findFloatParam(juce::AudioProcessor& processor, const
 MixerMasterColumn::MixerMasterColumn() {
     addAndMakeVisible(header_);
     header_.setDisplayName("Master");
+    header_.setRenameEnabled(
+        false); // FRO225: Master is a MasterModule, not a ChannelStripModule -- no strip name field
     addAndMakeVisible(insertList_);
     insertList_.onEditOnCanvas = [this](const juce::String& uuid) {
         if (onEditOnCanvas)

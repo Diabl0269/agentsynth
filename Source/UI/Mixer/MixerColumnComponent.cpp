@@ -49,6 +49,7 @@ MixerColumnComponent::MixerColumnComponent() {
         if (onColumnClicked)
             onColumnClicked();
     };
+    header_.onNameEdited = [this](const juce::String& newName) { commitHeaderRename(newName); };
     addAndMakeVisible(sourceLineLabel_);
     sourceLineLabel_.setFont(juce::Font(juce::FontOptions(10.0f)));
     sourceLineLabel_.setJustificationType(juce::Justification::centredLeft);
@@ -122,6 +123,7 @@ void MixerColumnComponent::configure(juce::AudioProcessorGraph& graph, AppUndoMa
     graph_ = &graph;
     undoManager_ = &undoManager;
     audioEngine_ = &audioEngine;
+    macros_ = &macros;
     insertList_.configure(graph, undoManager, macros, graphEditor);
     sendList_.configure(graph, undoManager, macros, graphEditor);
     // FRO133: fires once per send row rebuilt inside sendList_ (MixerSendList::rebuildKnobs(),
@@ -184,6 +186,46 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     // setEntries()) if this ran first.
     sendList_.setEntries(column.sends, column.nodeId);
     resized();
+}
+
+// FRO225 (docs/mixer/panel.md): header_'s inline rename commits here. A boxed strip's column name
+// already comes from its MACRO (stripColumnName's own priority, Source/Mixer/MixerModel/
+// MixerModelSends.cpp) -- reusing the macro's own rename (MacroGroupController::renameMacro, the
+// same path a macro card's own rename uses, and which itself keeps a linked track's name in the SAME
+// undo step) is what keeps this to ONE name per column instead of a second, silently-losing one on
+// ChannelStripModule that stripColumnName would just shadow. Only once the strip has no macro of its
+// own does the strip's own persisted name (ChannelStripModule::setStripName) become the thing being
+// edited at all.
+void MixerColumnComponent::commitHeaderRename(const juce::String& rawNewName) {
+    const juce::String newName = rawNewName.trim();
+    if (graph_ == nullptr || undoManager_ == nullptr) {
+        header_.restoreDisplayName();
+        return;
+    }
+
+    if (const auto* macro = macros_ != nullptr ? macros_->findByMember(uuid_) : nullptr) {
+        if (graphEditor_ != nullptr && newName.isNotEmpty())
+            graphEditor_->getMacroController().renameMacro(macro->id, newName);
+        else
+            header_.restoreDisplayName(); // empty commit or no editor -- never blank a macro
+        if (onMutated)
+            onMutated();
+        return;
+    }
+
+    auto* node = graph_->getNodeForId(nodeId_);
+    auto* strip = node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
+    if (strip == nullptr) {
+        header_.restoreDisplayName(); // Direct/Master never reach here (rename disabled), so this is only a
+        return;                       // stale/detached column mid-unbind
+    }
+
+    const auto before = strip->getExtraState();
+    strip->setStripName(newName); // empty clears it back to today's macro/track-walk/"Channel N" rule
+    const auto after = strip->getExtraState();
+    undoManager_->recordNodeExtraStateChange(*graph_, nodeId_, before, after);
+    if (onMutated)
+        onMutated(); // refreshes the column from a fresh buildMixerSnapshot, same as any other edit here
 }
 
 void MixerColumnComponent::rebindControls() {
