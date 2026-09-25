@@ -78,6 +78,9 @@ public:
     bool isAttachedForTest(int rowIndex) const;
     juce::Slider* getKnobForTest(int rowIndex) const;
     int getRowCountForTest() const noexcept { return (int)entries_.size(); }
+    /** FRO228: the transparent, name-only "Add send" proxy -- see AddSendAccessibilityProxy's own
+     *  comment. Always exists; only actually reachable (setVisible(true)) while canAddSend(). */
+    juce::Component& getAddSendAccessibilityComponentForTest() noexcept { return addSendProxy_; }
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -92,6 +95,16 @@ private:
     struct Row {
         std::unique_ptr<juce::Slider> knob;
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
+    };
+
+    // FRO228: paint() above draws the "+ Send" row itself (plain text, no component), so VoiceOver/
+    // NVDA had nothing to land on -- mirrors MixerInsertList::RowAccessibilityProxy's own comment.
+    // setInterceptsMouseClicks(false, false) keeps mouseDown() below the sole owner of real clicks.
+    class AddSendAccessibilityProxy : public juce::Component {
+    public:
+        std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override {
+            return std::make_unique<juce::AccessibilityHandler>(*this, juce::AccessibilityRole::button);
+        }
     };
 
     int rowIndexAt(juce::Point<int> position) const;
@@ -109,6 +122,7 @@ private:
     std::vector<synth::MixerSendEntry> entries_;
     std::vector<Row> rows_;
     juce::AudioProcessorGraph::NodeID stripNodeId_;
+    AddSendAccessibilityProxy addSendProxy_;
 
     static int liveUnbindCalls_;
 

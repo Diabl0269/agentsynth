@@ -63,7 +63,19 @@ MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLo
 // ---- Delegating constructor for tests / legacy call sites ----
 MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry,
                              synth::ControllerProfileStore profileStore)
-    : ownedAudioEngine(std::make_unique<AudioEngine>(AudioEngine::HostMode::Standalone))
+    // FRO228: ownedThemeManager/ownedLookAndFeel/themeManager/lookAndFeel must be set HERE, in the
+    // member-initializer list, not assigned in the constructor body below -- bottomDock's own
+    // in-class initializer (MainComponent.h) captures `lookAndFeel`'s CURRENT value while THIS list
+    // is still being evaluated (declaration order puts these four members before bottomDock; the
+    // body only runs once every member, bottomDock included, already exists). Assigning in the body
+    // left every DetachablePanelHost/DetachedPanelWindow this ctor's MainComponent ever builds
+    // holding a permanently null lookAndFeel_ -- the detached-window-never-themes bug this ticket
+    // fixes -- even though getLookAndFeelForTest() looked correct immediately afterwards.
+    : ownedThemeManager(std::make_unique<synth::theme::ThemeManager>())
+    , ownedLookAndFeel(std::make_unique<synth::theme::AppLookAndFeel>())
+    , themeManager(ownedThemeManager.get())
+    , lookAndFeel(ownedLookAndFeel.get())
+    , ownedAudioEngine(std::make_unique<AudioEngine>(AudioEngine::HostMode::Standalone))
     , audioEngine(*ownedAudioEngine)
     , graphEditor(audioEngine, &undoManager)
     , aiService(audioEngine.getGraph())
@@ -74,13 +86,6 @@ MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth:
     // initializer (a real ControllerProfileStore()) untouched, since nothing calls them from a test.
     , midiLearnController_(audioEngine, graphEditor, remoteEngine, midiRemoteDoc, undoManager, statusBar,
                            std::move(profileStore)) {
-    // Own a default ThemeManager + LookAndFeel so the code behaves identically
-    // to the primary-ctor path (no special-casing in the rest of the class).
-    ownedThemeManager = std::make_unique<synth::theme::ThemeManager>();
-    ownedLookAndFeel = std::make_unique<synth::theme::AppLookAndFeel>();
-    themeManager = ownedThemeManager.get();
-    lookAndFeel = ownedLookAndFeel.get();
-
     // Setup ApplicationProperties (same as primary ctor)
     propertiesOptions = synth::userSettingsOptions();
     appProperties.setStorageParameters(propertiesOptions);

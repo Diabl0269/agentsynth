@@ -24,7 +24,13 @@ ChannelStripModule* stripAt(juce::AudioProcessorGraph& graph, NodeID id) {
 }
 } // namespace
 
-MixerSendList::MixerSendList() { setInterceptsMouseClicks(true, true); }
+MixerSendList::MixerSendList() {
+    setInterceptsMouseClicks(true, true);
+    addSendProxy_.setInterceptsMouseClicks(false, false);
+    addSendProxy_.setTitle("Add send");
+    addSendProxy_.setVisible(false);
+    addAndMakeVisible(addSendProxy_);
+}
 
 MixerSendList::~MixerSendList() = default;
 
@@ -166,6 +172,12 @@ void MixerSendList::resized() {
         row.removeFromRight(kRemoveWidth + kToggleWidth);
         rows_[(size_t)i].knob->setBounds(row.removeFromRight(kKnobWidth).reduced(1));
     }
+
+    // FRO228: same anchor paint()'s own addRow uses.
+    const bool addVisible = canAddSend();
+    addSendProxy_.setVisible(addVisible);
+    if (addVisible)
+        addSendProxy_.setBounds(getLocalBounds().withY((int)entries_.size() * kRowHeight).withHeight(kRowHeight));
 }
 
 void MixerSendList::mouseDown(const juce::MouseEvent& event) {

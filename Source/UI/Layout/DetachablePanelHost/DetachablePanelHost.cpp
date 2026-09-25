@@ -130,6 +130,14 @@ void DetachablePanelHost::applyIcon() {
     detachButton_.setImages(base.get(), hoverIcon.get(), hoverIcon.get());
 }
 
-void DetachablePanelHost::applyTooltip() { detachButton_.setTooltip(isDetached() ? "Dock back" : "Open in window"); }
+void DetachablePanelHost::applyTooltip() {
+    // FRO228: setButtonText({}) above clears getButtonText() (the ButtonAccessibilityHandler
+    // fallback getTitle() otherwise uses), so without an explicit title this icon-only button was
+    // unnamed to a screen reader both docked AND inside its own DetachedPanelWindow -- same fix as
+    // BottomDockComponent::refreshDetachButton()'s own detach button.
+    const juce::String label = isDetached() ? "Dock back" : "Open in window";
+    detachButton_.setTooltip(label);
+    detachButton_.setTitle(label);
+}
 
 } // namespace synth::ui

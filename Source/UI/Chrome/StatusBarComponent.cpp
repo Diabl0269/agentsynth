@@ -36,6 +36,10 @@ StatusBarComponent::StatusBarComponent() {
     transportButton_.setComponentID("statusBarTransportPlayStop");
     transportButton_.setClickingTogglesState(false); // the transport is the truth — see updateTransport()
     transportButton_.setTooltip("Play / Stop");
+    // FRO228: without this, Button::getButtonText() (this button's ctor "name" argument,
+    // "statusBarTransportPlayStop") leaks as the AX title -- see
+    // ButtonAccessibilityHandler::getTitle()'s own fallback.
+    transportButton_.setTitle("Play / Stop");
 }
 
 // ---------------------------------------------------------------------------

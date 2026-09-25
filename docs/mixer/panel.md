@@ -222,9 +222,12 @@ persisted window geometry.
 ### A detached window follows the theme
 
 `DetachedPanelWindow::lookAndFeelChanged()` calls
-`setBackgroundColour(lf->getTheme().colors.surface)` whenever `getLookAndFeel()` resolves to a real
-`synth::theme::AppLookAndFeel` (the same `dynamic_cast` idiom `DetachablePanelHost::applyIcon()`
-uses) — the same `surface` token the mixer's own column and insert-list `paint()` overrides read.
+`setBackgroundColour(colors.bg0.overlaidWith(colors.surface))` whenever `getLookAndFeel()` resolves
+to a real `synth::theme::AppLookAndFeel` (the same `dynamic_cast` idiom
+`DetachablePanelHost::applyIcon()` uses) — the same `surface` token the mixer's own column and
+insert-list `paint()` overrides read, laid over the opaque page colour. A "glass" theme's `surface`
+is translucent, and a top-level window filled with it directly let the OS window backing show
+through as flat light grey (FRO228); an opaque `surface` overlays to itself.
 `setLookAndFeel()` fires this synchronously, so it applies at construction, on any later theme swap,
 and once more harmlessly as the destructor clears it. Passing `juce::Colours::darkgrey` to
 `juce::DocumentWindow`'s background argument unconditionally instead showed flat stock-JUCE grey in
@@ -233,6 +236,44 @@ any area the hosted panel does not paint, such as an empty Mixer.
 **`Content` needs no `paint()` override of its own**, because
 `ResizableWindow::setBackgroundColour` fills the whole window behind `Content`, so a hosted panel's
 unpainted area already falls through to the corrected colour.
+
+**FRO228: two confirmed null/stale-`LookAndFeel` gaps, found while chasing a manual accessibility
+pass's report of a detached Mixer/Timeline rendering flat light grey.** `DetachedPanelWindow` itself
+was already correct given a real, live `lookAndFeel*` argument (`DetachedPanelWindowTests.cpp`'s
+pre-existing `BackgroundColourMatchesThemeSurfaceWhenLookAndFeelProvided` already covered it), so
+the grey has to come from somewhere the pointer it's handed is null or stale:
+
+1. `MainComponent`'s delegating/test constructor (the one every `MainComponent*Tests.cpp` call site
+   uses) assigned `ownedLookAndFeel`/`lookAndFeel` in the constructor **body**, but `bottomDock`'s
+   own in-class member initializer (`MainComponent.h`) captures `lookAndFeel`'s value while THAT
+   list is still being evaluated — before the body ever runs. Every `DetachablePanelHost` (and so
+   every `DetachedPanelWindow` it later builds on `setDetached(true)`) built through that ctor ended
+   up holding a permanently null `lookAndFeel_`, even though `getLookAndFeelForTest()` looked correct
+   immediately afterwards. Confirmed and fixed by moving `ownedThemeManager`/`ownedLookAndFeel`/
+   `themeManager`/`lookAndFeel`'s initialization into that constructor's own member-initializer
+   list, ahead of `bottomDock` in declaration order. The app's/plugin's own real constructors
+   (`Main.cpp`, `PluginEditor.cpp`) already set `lookAndFeel(&lf)` in their own init lists, ahead of
+   `bottomDock`, so this specific gap was confined to the test/delegating path — but every headless
+   test detaching a panel was exercising a permanently unthemed window until now.
+2. `MainComponent::changeListenerCallback`'s theme-switch re-skin pass only ever called
+   `getTopLevelComponent()->sendLookAndFeelChange()` — a detached Timeline/Mixer/MIDI Remote window
+   is its OWN separate top-level `Component`, so that broadcast never reached it. A theme switch made
+   while a panel was detached left its background (and header icon) on whichever theme was active
+   when the window was last (re)built — a second, independently reachable way to end up staring at
+   the wrong surface colour. Fixed by `DetachablePanelHost::refreshDetachedWindowTheme()`, called on
+   all three hosts from the same re-skin pass, right after the existing broadcast.
+
+**FRO228: the header's own redock/close button needs its icon re-applied by THIS window, not just
+by `DetachablePanelHost`.** `DetachablePanelHost::applyIcon()` sets the button's `Drawable` images
+from its OWN `lookAndFeelChanged()` — but that button (borrowed, see the class comment above) is
+reparented into `Content` the moment `setDetached(true)` runs, and nothing thereafter guarantees
+`DetachablePanelHost`'s own callback fires again for it. A `DrawableButton` with no image ever
+assigned to it paints nothing at all, not a placeholder — exactly the second half of the same manual
+pass's finding. `DetachedPanelWindow::applyHeaderButtonIcon()` re-applies the identical
+`Icon::ActionDetachWindow` icon from THIS window's own `lookAndFeelChanged()` instead, so the button
+is correct regardless of whether the host's own callback ran before or after the reparent; `content_`
+is now built before `setLookAndFeel()` so the synchronous `lookAndFeelChanged()` that call fires
+already has a real `content_->button` to apply it to.
 
 ## Unbinding before a graph change
 
@@ -385,6 +426,36 @@ keyboard focus.
 
 The full key table, the region's open predicate and the accessibility handler details live in
 [`docs/control/shortcuts.md#mixer-column-navigation`](../control/shortcuts.md#mixer-column-navigation).
+
+**FRO228: the header's rename tooltip is gated on `setRenameEnabled()`, not always-on.** Direct and
+Master both disable rename (`setRenameEnabled(false)`); `MixerColumnHeader` clears its name label's
+tooltip in step, since a `TooltipClient`'s tooltip is what VoiceOver reads as that label's AX help
+text — a column that can't be renamed must never still offer "Double-click to rename this channel".
+Master's own column also gets `setTitle("Master")` in its ctor, the same "own component" title
+Direct's ctor already set (its own comment above), so its group `AccessibilityHandler` isn't left
+with an empty title the way it was before.
+
+**The pan knob's AX value must stay the "Center"/"50% left"/"50% right" text, not the raw param
+float.** `juce::SliderParameterAttachment`'s own constructor unconditionally overwrites
+`slider.textFromValueFunction` with one built from the bound parameter's own `getText()` (no unit
+label for pan, so a raw `"0.0000000"`) — `MixerColumnComponent::rebindControls()` reapplies the pan
+formatting immediately after constructing `panAttachment_`, the identical fix `MixerFader::bind()`
+already applies for the fader's own "-3.0 dB" text (see that class's `applyDbAccessibilityText`).
+
+**Insert rows, "+ Send" and "Make channel" are real, named, reachable AX children, not just painted
+text.** `MixerInsertList`/`MixerSendList` draw every row themselves in `paint()` rather than as child
+components, so before FRO228 a screen reader had nothing to land on for a row at all (an unnamed
+`AXGroup`, or nothing). Each now gets a small transparent proxy `Component`
+(`MixerInsertList::RowAccessibilityProxy`, `MixerSendList::AddSendAccessibilityProxy`) sized over its
+row in `resized()`, `setInterceptsMouseClicks(false, false)` so the existing `mouseDown()`/hit-testing
+stays the only path for a real click, titled `"<insert name>, bypassed"`/`"<insert name>"` or `"Add
+send"` and rebuilt on every `setEntries()` (same idiom as `MixerSendList::rebuildKnobs()`). Direct's
+"Make channel" button gets an explicit `setTitle("Make channel")` for the same reason
+`MixerMasterColumn`'s mute button already does — `ButtonAccessibilityHandler::getTitle()` falls back
+to `Button::getButtonText()` only when no title is set, and a bare ctor-argument fallback is one
+accidental rename away from leaking an internal string (`BottomDockComponent`'s own detach button and
+`StatusBarComponent`'s master-mute/transport buttons got the same explicit `setTitle()` fix in this
+ticket, for the identical reason).
 
 ## Related
 

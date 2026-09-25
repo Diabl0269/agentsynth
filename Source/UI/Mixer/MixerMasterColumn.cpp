@@ -26,6 +26,10 @@ juce::AudioParameterFloat* findFloatParam(juce::AudioProcessor& processor, const
 } // namespace
 
 MixerMasterColumn::MixerMasterColumn() {
+    // FRO228: without this, Master's own group AccessibilityHandler (the default, unspecified-role
+    // one Component provides) reads an empty title -- MixerDirectColumn's ctor sets the same "own
+    // component" title for the identical reason (that class's own comment on setTitle("Direct")).
+    setTitle("Master");
     addAndMakeVisible(header_);
     header_.setDisplayName("Master");
     header_.setRenameEnabled(

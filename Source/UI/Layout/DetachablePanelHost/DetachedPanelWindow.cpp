@@ -62,16 +62,18 @@ DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableB
     setUsingNativeTitleBar(true);
     setResizable(true, false);
 
+    // Borrows panel/button/title -- see the header comment on why this is setContentNonOwned, not
+    // setContentOwned: none of the three are ours to delete. Built BEFORE setLookAndFeel() below so
+    // applyHeaderButtonIcon() (called from the lookAndFeelChanged() that setLookAndFeel() fires
+    // synchronously) already has a real content_->button to apply the icon to.
+    content_ = std::make_unique<Content>(panel, headerButton, headerTitle);
+    setContentNonOwned(content_.get(), /*resizeToFit*/ false);
+
     // Plugin-mode seam (docs/mixer/panel.md): our OWN scope, never Desktop::setDefaultLookAndFeel.
     // A null `lookAndFeel` (a headless test that doesn't care) leaves this on JUCE's stock LnF --
     // harmless, since nothing here asserts a themed colour.
     if (lookAndFeel != nullptr)
         setLookAndFeel(lookAndFeel);
-
-    // Borrows panel/button/title -- see the header comment on why this is setContentNonOwned, not
-    // setContentOwned: none of the three are ours to delete.
-    content_ = std::make_unique<Content>(panel, headerButton, headerTitle);
-    setContentNonOwned(content_.get(), /*resizeToFit*/ false);
 
     // MainComponent's TooltipWindow only covers its own component tree -- a second top-level
     // window needs its own, or the detach button's tooltip (and every control inside the hosted
@@ -120,8 +122,33 @@ void DetachedPanelWindow::lookAndFeelChanged() {
     // panel shows the app's themed surface behind it, not a flat stock-JUCE grey. setLookAndFeel()
     // fires this synchronously (Component::sendLookAndFeelChange()), so it applies on construction,
     // on any later setLookAndFeel() swap, and once more (harmlessly) as the destructor clears it.
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        setBackgroundColour(lf->getTheme().colors.surface);
+    // FRO228: laid over the opaque page colour (bg0) -- a "glass" theme's surface is translucent
+    // (docs/layout/theme-authoring.md), and a top-level window filled with it shows the OS window
+    // backing through as flat light grey. An opaque surface overlays to itself, unchanged.
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
+        const auto& colors = lf->getTheme().colors;
+        setBackgroundColour(colors.bg0.withAlpha(1.0f).overlaidWith(colors.surface));
+        applyHeaderButtonIcon(*lf);
+    }
+}
+
+void DetachedPanelWindow::applyHeaderButtonIcon(synth::theme::AppLookAndFeel& lf) {
+    // FRO228: the header button is BORROWED from DetachablePanelHost (this class's own header
+    // comment) -- DetachablePanelHost::applyIcon() only ever runs from ITS OWN lookAndFeelChanged(),
+    // which stops reaching this button the moment setDetached(true) reparents it in here (an
+    // icon-only ImageFitted DrawableButton with no Drawable ever assigned to it paints nothing at
+    // all, not a placeholder). Re-applying the SAME icon that method uses, from THIS window's own
+    // lookAndFeelChanged() instead, keeps the button correct regardless of whether the host's own
+    // callback ran before or after the reparent.
+    if (content_ == nullptr)
+        return;
+    auto base = lf.getIcon(synth::theme::Icon::ActionDetachWindow);
+    if (base == nullptr)
+        return;
+    const auto& colors = lf.getTheme().colors;
+    auto hoverIcon = base->createCopy();
+    hoverIcon->replaceColour(colors.textMuted, colors.textPrimary);
+    content_->button.setImages(base.get(), hoverIcon.get(), hoverIcon.get());
 }
 
 bool DetachedPanelWindow::keyPressed(const juce::KeyPress& key) {
