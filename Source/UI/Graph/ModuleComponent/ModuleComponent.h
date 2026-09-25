@@ -27,7 +27,8 @@ class ExternalMidiModule; // Forward declaration — see Modules/ExternalMidiMod
 
 namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
-}
+class CardKnobSlider;        // Forward declaration — see CardKnobSlider.h
+} // namespace synth::ui
 
 namespace synth::theme {
 class AppLookAndFeel; // Forward declaration — see Theme/AppLookAndFeel.h
@@ -52,6 +53,7 @@ public:
     ~ModuleComponent() override;
 
     void paint(juce::Graphics&) override;
+    void paintOverChildren(juce::Graphics&) override; // hover chip, above the knob labels
     void resized() override;
     void timerCallback() override;
 
@@ -228,6 +230,14 @@ public:
     /** getModRingSliderIndex for a ModulationTarget, via its bound parameter; -1 if no visible knob. */
     int sliderIndexForModTarget(const ModulationTarget& target) const;
 
+    /** FRO288: card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
+    std::optional<juce::Point<float>> getModTargetKnobAnchor(int destChannel) const;
+
+    /** FRO287: true when `e` should start a mod-amount drag on `param`'s knob rather than moving
+     *  it. `bounds` is the knob's own local bounds. See ModuleComponent.cpp for the rule. */
+    bool wantsModAmountGestureFor(juce::RangedAudioParameter* param, juce::Rectangle<float> bounds,
+                                  const juce::MouseEvent& e) const;
+
     /** Applies an automation-driven value to whichever slider/combo was built for `param`,
      *  denormalised via that parameter's own range, via setValue(..., dontSendNotification) — never
      *  touches the parameter, never fires the attachment, so there is no write-back loop and
@@ -342,6 +352,16 @@ private:
     std::optional<juce::Colour> portColourPreview_; // live jack-colour preview; view-layer only
     GraphEditor& owner;
     juce::ComponentDragger dragger;
+
+    // FRO287: in-flight ring-drag gesture state -- see handleModAmountGesture (ModuleComponent.cpp).
+    juce::AudioProcessorGraph::NodeID modAmountGestureAttenuverterId_;
+    juce::Point<int> modAmountGestureLastPos_;
+    juce::AudioProcessorGraph::NodeID firstAttenuverterForParam(juce::RangedAudioParameter* param) const;
+    void handleModAmountGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
+    void wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& knob, juce::RangedAudioParameter* param);
+
+    /** FRO288: the RAW channel `param` is bound to, or -1. See ModuleComponent.cpp. */
+    int destChannelForBoundParam(juce::RangedAudioParameter* param) const;
 
     // Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test replaces
     // it via setShowContextMenuHookForTest() so a real right-click mouseDown() can be driven in a
@@ -565,6 +585,7 @@ private:
     // The pending-drop-target ring and the live Serum-style modulation rings on knobs. Split out of
     // paint() (which was at the function-size ratchet's ceiling) rather than grown further.
     void paintModulationRings(juce::Graphics& g, ModuleBase* mod, juce::Colour jackAccentColour);
+    void paintModHoverChip(juce::Graphics& g); // ModuleComponentModChip.cpp
     static juce::String knobNameForModTarget(const ModuleBase* mod, const ModulationTarget& target);
 
     /** Right-click-any-knob entry point into the automation lane editor. Attached as a

@@ -145,6 +145,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorTypes.h
     Source/UI/Graph/GraphEditor/GraphEditorCables.cpp
     Source/UI/Graph/GraphEditor/GraphEditorConnections.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorModAmount.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorModHover.cpp
     Source/UI/Graph/GraphEditor/GraphEditorModuleTitles.cpp
     Source/UI/Graph/GraphEditor/GraphEditorSmartConnections.cpp
     Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.h
@@ -171,11 +173,14 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponent.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponent.h
     Source/UI/Graph/ModuleComponent/ModuleComponentInternal.h
+    Source/UI/Graph/ModuleComponent/ModuleComponentModBand.h
+    Source/UI/Graph/ModuleComponent/CardKnobSlider.h
     Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentAudioDrop.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp

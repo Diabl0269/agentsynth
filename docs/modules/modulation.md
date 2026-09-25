@@ -357,6 +357,47 @@ had when its page was last laid out — so a ring drawn straight from `sliders[i
 an orange arc over empty card. The rule lives in that one accessor so it can be tested without a
 themed LookAndFeel and a live routing.
 
+### The depth band: how far a routing COULD move the knob
+
+Under the live ring, `paintModulationRings` also draws a **depth band**: the arc between the
+knob's reachable extremes, visible even while the source is at rest (`modSignalValue == 0`) —
+answering "how far could this move", not just "where is it now". One band per routing (two
+routings on one knob draw two separate bands, never summed), at `theme.metrics.modDepthBandAlpha`
+(30%) over the same `modRingPositive`/`modRingNegative` tokens the live ring uses.
+
+The range comes from `ModuleBase::isModSourceBipolar()` (default `true`) and the routing's
+attenuverter `amount` (`AudioEngine::ModulationDisplayInfo::amount`, real range -1..1; `1.0` for a
+DirectCV/PolyBus routing, which has no attenuverter):
+
+- **Bipolar** source (an LFO, a Macro not locked unipolar) → `[base - |amount|, base + |amount|]`.
+  A negative amount inverts phase, not the reachable range, so the band always straddles the
+  knob's current value symmetrically.
+- **Unipolar** source (`ADSRModule`, `EnvelopeFollowerModule` — anything only rising from rest) →
+  `[base, base + amount]`, or `[base + amount, base]` when `amount` is negative (a unipolar source
+  dialled to pull the knob DOWN from rest, which also switches the band to `modRingNegative`).
+
+Both ends clamp to `[0, 1]`. The pure start/end-norm math lives in
+`ModuleComponentModBand.h::modDepthBandRange` so it is unit-testable with no `ModuleComponent` or
+`LookAndFeel` involved (`ModuleComponentModBandTests.cpp`); the ring and the band it sits under
+share ONE angle-mapping helper (`AppLookAndFeel::modRingAngleForNorm`), so they can never drift
+apart geometrically.
+
+### Drag the ring to adjust a routing's amount, without touching the knob
+
+A knob with a live **AttenuverterChain** routing (not DirectCV/PolyBus — those have no attenuverter
+to adjust) can have that routing's `amount` dragged directly from the card: Alt-drag anywhere on
+the knob, or a plain drag starting within the ring's own annulus (+/-5px of its radius). Either
+claims the WHOLE gesture through `CardKnobSlider` (`Source/UI/Graph/ModuleComponent/
+CardKnobSlider.h`) — the knob's own value never moves while it is active, and an ordinary
+centre-of-knob drag (no Alt, not on the ring) still moves the knob exactly as before.
+
+The drag itself goes through `GraphEditor::beginModAmountGesture()` /
+`adjustModAmount(attenuverterNodeID, delta)` / `commitModAmountGesture()`
+(`GraphEditorModAmount.cpp`) — the SAME path the cable's own midpoint amount knob
+(`docs/layout/cables.md`) has always used, so the two gestures can never diverge: same delta/clamp
+math, same undo shape (`captureBeforeState` on the first mouseDown, `pushSnapshotFromCapture` on
+mouseUp).
+
 ### A target binds to its parameter, never to a label
 
 The knob a ring (and a [knob drop](#drag-to-knob-modulation)) resolves to is found through the
@@ -381,6 +422,23 @@ list, with a reason).
 timeline panel's automation strip (creating its lane/track on first use) — see
 [`timeline/automation.md`](../timeline/automation.md#the-knob-entry-point) for the full path
 (`ModuleComponent` → `GraphEditor::onAutomateParameterRequested` → `MainComponent::automateParameter`).
+
+### Hover highlight and the chip
+
+A knob's ring and the cable that drives it are hover-correlated in both directions
+(`GraphEditor::HoveredModTarget`, `docs/layout/cables.md#hover`): hovering the `AttenuverterChain`
+cable that [lands on this knob](../layout/cables.md#knob-landing) highlights the ring, and hovering
+the ring/knob highlights the cable. The ring's highlight is `AppLookAndFeel::drawModulationRing`'s
+`hovered` flag — the stroke widens by `Theme::Metrics::modRingHoverWidthBoost` and the colour gets
+the same `brighter(0.3)` treatment a hovered cable already gets, no new colour token.
+
+While either side of that correlation is hovered, a small chip appears just under the knob's value
+box: `"<source module name> · <signed percent>"`, e.g. `"LFO · +63%"` or `"Env 2 · -40%"`. The
+percent is the attenuverter's `amount` (`ModulationDisplayInfo::amount`) rounded to the nearest
+whole number; the source name is the routing's source node's `getName()` (the same identity the mod
+matrix labels a source with). Formatted by the free function `synth::ui::formatModHoverChipText`
+(`ModuleComponentModChip.h`, unit-tested in isolation the same way `modDepthBandRange` is), drawn in
+the knob-value-box mono font on a `surfaceHi` chip, clipped to the card.
 
 ## Drag-to-knob modulation
 
@@ -413,6 +471,11 @@ Guarded by `GraphEditorTest.DroppingACableOnAKnobCreatesAModRouting` (full LFO o
 `DroppingACableOnAUnitLabelledKnobCreatesAModRouting` (the Flanger's "Rate (Hz)" knob, reached only
 through `paramId`) and `KnobDropIsIgnoredForACableDraggedFromAnInput`; the card-level resolution by
 `ModuleComponentModTargetTests`.
+
+The first time a cable drag starts from a modulation source's output at all (before the user has
+even found a knob to aim at), `GraphEditor::beginConnectionDrag()` shows a one-time status-bar hint
+pointing this out — see [`layout/chrome.md`](../layout/chrome.md#the-mod-drop-hint) for the
+mechanism.
 
 ## Every continuous parameter is a target
 

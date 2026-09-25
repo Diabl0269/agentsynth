@@ -120,6 +120,11 @@ void ModuleComponent::createWavetableTabs() {
             applyWavetableTabVisibility();
             resized();
             repaint();
+            // FRO288: a page switch can change which knob is visible under
+            // sliderIndexForModTarget/getModRingSliderIndex -- an AttenuverterChain cable re-anchored
+            // onto a now-hidden (or newly-visible) knob must recompute, and repaintCanvas() is the
+            // ONE seam that invalidates the memoized cable list (docs/layout/cables.md).
+            owner.notifyModuleContentChanged();
         };
         addAndMakeVisible(tab);
     }

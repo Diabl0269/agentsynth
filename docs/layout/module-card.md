@@ -125,6 +125,18 @@ The header title text is drawn by `AppLookAndFeel::drawModulePanel()` with an as
 `header.withTrimmedLeft(22.0f)`, so the activity LED (`fillEllipse(6, 8, 8, 8)`, x from 6 to 14)
 never overlaps the title regardless of whether the LED is lit.
 
+## Knob modulation-amount gesture
+
+Every rotary knob built by `ModuleComponent::createControls()` (the float- and int-param cases) is
+a `synth::ui::CardKnobSlider` (`CardKnobSlider.h`), not a plain `juce::Slider` — it can redirect its
+own mouseDown/drag/up to `ModuleComponent::handleModAmountGesture()` instead of moving the knob,
+when `wantsModAmountGestureFor()` says the click should adjust a routed AttenuverterChain's amount
+(Alt-drag, or a drag starting on the ring's own annulus). See
+[`modules/modulation.md#drag-the-ring-to-adjust-a-routings-amount-without-touching-the-knob`](../modules/modulation.md#drag-the-ring-to-adjust-a-routings-amount-without-touching-the-knob)
+for the gesture itself and the depth band it moves; hosted-plugin card knobs
+(`ModuleComponentHostedPluginCard.cpp`) stay plain `juce::Slider`s — they are never modulation
+targets.
+
 ## Custom card titles
 
 Double-clicking a card's **header band** (`ModuleComponent::kHeaderHeight`, 24 px) opens an inline

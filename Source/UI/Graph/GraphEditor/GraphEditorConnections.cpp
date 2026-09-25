@@ -8,8 +8,12 @@
 #include "GraphEditorInternal.h"
 
 #include "Modules/MacroMidiInletModule.h"
+#include "Modules/ModuleBase.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Macros/MacroCardComponent.h"
+#include "UserSettings.h"
+
+#include <algorithm>
 
 using namespace detail;
 
@@ -122,7 +126,33 @@ void GraphEditor::beginConnectionDrag(ModuleComponent* sourceModule, int channel
     dragSourceIsInput = isInput;
     dragSourceIsMidi = isMidi;
     dragCurrentPos = screenPos;
+    maybeShowModDropHint(sourceModule, channelIndex, isInput, isMidi);
     repaintCanvas();
+}
+
+// FRO289: the first time a cable drag starts from a modulation source's OUTPUT, point out that it
+// can be dropped straight on a knob -- never again once shown (persisted through propertiesFile_,
+// same as the macro recolour favourites shelf and the piano roll's scale assist). An audio/MIDI
+// output, or any INPUT drag (disconnect-and-redrag), never qualifies.
+void GraphEditor::maybeShowModDropHint(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi) {
+    if (isInput || isMidi || sourceModule == nullptr || propertiesFile_ == nullptr)
+        return;
+    if (propertiesFile_->getBoolValue(synth::kModDropHintShownSettingKey, false))
+        return;
+
+    auto* mb = dynamic_cast<ModuleBase*>(sourceModule->getModule());
+    if (mb == nullptr)
+        return;
+    const auto targets = mb->getJackTargets(channelIndex, false);
+    const bool isModSource =
+        std::any_of(targets.begin(), targets.end(), [](const auto& t) { return t.role == PortRole::ModCV; });
+    if (!isModSource)
+        return;
+
+    if (onStatusMessage)
+        onStatusMessage("Drop it on any knob to modulate that parameter");
+    propertiesFile_->setValue(synth::kModDropHintShownSettingKey, true);
+    propertiesFile_->saveIfNeeded();
 }
 
 void GraphEditor::dragConnection(juce::Point<int> screenPos) {

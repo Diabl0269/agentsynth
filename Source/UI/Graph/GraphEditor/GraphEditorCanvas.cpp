@@ -585,8 +585,9 @@ void GraphEditor::mouseMove(const juce::MouseEvent& e) {
         return;
 
     std::optional<CableId> newId;
-    if (auto cable = getCableAt(localPos.toFloat()))
-        newId = cable->id;
+    std::optional<VisibleCable> newCable = getCableAt(localPos.toFloat());
+    if (newCable)
+        newId = newCable->id;
 
     // Repaint only when the hovered cable actually CHANGES, not on every mouse move. (The canvas
     // already repaints at 30Hz for the wire animation, so this just marks the next frame dirty
@@ -598,6 +599,16 @@ void GraphEditor::mouseMove(const juce::MouseEvent& e) {
 
     hoveredCableId = newId;
     setMouseCursor(newId.has_value() ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+
+    // FRO288: a hovered cable that lands on a knob highlights that knob's ring too, via the same
+    // shared hover-correlation state a knob hover writes the other direction (setHoveredModTarget
+    // repaints only the affected card). docs/modules/modulation.md#modulation-rings-on-knobs.
+    if (newCable.has_value() && newCable->landsOnKnob)
+        setHoveredModTarget(
+            HoveredModTarget{juce::AudioProcessorGraph::NodeID{newCable->destNodeId}, newCable->destChannel});
+    else
+        setHoveredModTarget(std::nullopt);
+
     repaintCanvas();
 }
 
@@ -607,6 +618,7 @@ void GraphEditor::mouseExit(const juce::MouseEvent&) {
     if (!hoveredCableId.has_value() && !wasHoveringChip)
         return;
     hoveredCableId.reset();
+    setHoveredModTarget(std::nullopt);
     setMouseCursor(juce::MouseCursor::NormalCursor);
     repaintCanvas();
 }
@@ -716,8 +728,7 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         auto attenId = getAttenuverterNodeAt(localPos.toFloat());
         if (attenId.uid != 0) {
             draggingAttenuverterNodeId = attenId;
-            if (undoManager)
-                undoManager->captureBeforeState(audioEngine.getGraph());
+            beginModAmountGesture(); // FRO287: shared with the card-knob ring-drag gesture
             return;
         }
 
@@ -755,18 +766,8 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
     if (e.mods.isLeftButtonDown() && !isDraggingConnection) {
         pendingEmptyCanvasClick = false;
         if (draggingAttenuverterNodeId.uid != 0) {
-            auto& graph = audioEngine.getGraph();
-            auto* node = graph.getNodeForId(draggingAttenuverterNodeId);
-            if (node) {
-                if (auto* p =
-                        dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(node->getProcessor(), "amount"))) {
-                    float delta = (e.getPosition().y - lastMousePos.y) * -0.01f;
-                    float currentVal = p->get(); // -1 to 1
-                    currentVal = juce::jlimit(-1.0f, 1.0f, currentVal + delta);
-                    p->setValueNotifyingHost(p->convertTo0to1(currentVal));
-                    repaintCanvas();
-                }
-            }
+            const float delta = (e.getPosition().y - lastMousePos.y) * -0.01f;
+            adjustModAmount(draggingAttenuverterNodeId, delta); // FRO287: shared gesture helper
             lastMousePos = e.getPosition();
             return;
         }
@@ -803,9 +804,8 @@ void GraphEditor::mouseUp(const juce::MouseEvent& e) {
         return;
     }
 
-    if (draggingAttenuverterNodeId.uid != 0 && undoManager) {
-        undoManager->pushSnapshotFromCapture(audioEngine.getGraph());
-    }
+    if (draggingAttenuverterNodeId.uid != 0)
+        commitModAmountGesture(); // FRO287: shared gesture helper
     draggingAttenuverterNodeId = juce::AudioProcessorGraph::NodeID();
 
     // A press on empty canvas that never turned into a pan is a plain click: deselect — UNLESS it

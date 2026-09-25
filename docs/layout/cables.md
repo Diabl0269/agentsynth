@@ -38,6 +38,42 @@ or a graph edit** — any of those can invalidate and rebuild the backing vector
 
 A collapsed macro re-anchors the cables crossing its boundary in a post-process pass at the end of
 `rebuildVisibleCables()` — see [macro-cards](macro-cards.md#cables-re-anchor-around-a-collapsed-macro).
+That pass runs AFTER the knob-landing pass below, so a cable that is both knob-bound and crosses a
+collapsed macro's boundary ends up re-anchored to the macro card.
+
+## Knob landing
+
+An `AttenuverterChain` cable whose destination is a `ModCV` jack with a bound, VISIBLE knob
+(`ModuleComponent::sliderIndexForModTarget` / `getModRingSliderIndex` >= 0) ends at that knob's ring
+start point (the point on the ring circle at norm 0) instead of the gutter jack —
+`GraphEditor::reanchorCablesToKnobTargets` (`GraphEditorModHover.cpp`), a post-pass at the end of
+`rebuildVisibleCables()`. The anchor is found through `ModuleComponent::getModTargetKnobAnchor`,
+which shares `AppLookAndFeel::modRingAngleForNorm` (via `modRingPointForNorm` in
+`ModuleComponentInternal.h`) with the ring drawn at [modulation rings on
+knobs](../modules/modulation.md#modulation-rings-on-knobs), so the cable can never land anywhere the
+ring itself doesn't reach.
+
+`VisibleCable::landsOnKnob` marks a cable that was re-anchored this way; `destNodeId`/`destChannel`
+carry the logical destination as a RAW channel (matching `ModulationTarget::channelIndex`), set for
+every cable kind so they also serve as the [hover-correlation](#hover) key.
+
+**Fallbacks — the gutter jack, unchanged.** `DirectCV`/`ModRouting` (poly bus) cables never
+re-anchor: there is no attenuverter routing to adjust at the far end, so the jack stays the more
+useful landing spot. A knob on a hidden tab page (`getModTargetKnobAnchor` returns `nullopt` the same
+way `getModRingSliderIndex` does) falls back to the jack too, rather than painting a landing dot over
+empty card.
+
+**The landing dot.** `paint()` draws cables BEFORE module cards paint as children, so a cable
+re-anchored deep into a card's knob has its final stretch drawn underneath the opaque card.
+`GraphContentComponent::paintOverChildren` draws a 7px dot, in the cable's own resolved colour, at
+`p2` for every `landsOnKnob` cable — the one part of a knob-landing cable guaranteed to be visible on
+top of the card.
+
+**Invalidation.** The knob-landing pass runs on every `rebuildVisibleCables()`, so it follows a
+moved/resized card automatically (both already call `repaintCanvas()`). A Wavetable tab-page switch
+changes which knob is visible without moving or resizing the card, so it explicitly calls
+`GraphEditor::notifyModuleContentChanged()` (a public wrapper around the otherwise-private
+`repaintCanvas()`) to invalidate the memo too.
 
 ## Hit-testing
 
@@ -62,6 +98,13 @@ dirty rather than adding a new repaint source.
 
 Only the `CableId` is retained between frames. Geometry is rebuilt each paint anyway, and holding a
 stale `VisibleCable` across a graph edit would dangle conceptually — ports move, nodes disappear.
+
+**Knob correlation.** Hovering a cable that `landsOnKnob` also sets
+`GraphEditor::setHoveredModTarget` to its destination — `ModuleComponent`'s ring paint reads it back
+and highlights that knob's ring. The same state runs the other way: hovering the knob itself (its
+`CardKnobSlider`'s `onHoverChanged`) sets the same target, which the cable's own hover treatment
+checks. See [modulation rings on knobs](../modules/modulation.md#modulation-rings-on-knobs) for the
+ring-side treatment and the hover chip.
 
 ## Right-click menu
 

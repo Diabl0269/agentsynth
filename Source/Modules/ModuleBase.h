@@ -549,6 +549,12 @@ public:
     virtual juce::String getInputPortLabel(int channelIndex) const { return "In " + juce::String(channelIndex); }
     virtual int getVisibleInputPortCount() const { return getTotalNumInputChannels(); }
     virtual ModulationCategory getModulationCategory() const { return ModulationCategory::Other; }
+
+    /** Whether this module's modulation output swings both sides of centre (bipolar, e.g. an LFO)
+     *  or only rises from a rest value (unipolar, e.g. an envelope). Drives the reachable-range
+     *  band drawn under a modulation ring (docs/modules/modulation.md#modulation-rings-on-knobs) --
+     *  never consulted for anything audio-thread-side. Default true (most sources are bipolar). */
+    virtual bool isModSourceBipolar() const { return true; }
     virtual ModuleType getModuleType() const = 0;
 
     /** True when raw ch0/ch1 are this module's whole output bus AND it carries the Dual I/O toggle —

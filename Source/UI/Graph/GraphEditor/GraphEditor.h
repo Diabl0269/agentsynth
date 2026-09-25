@@ -91,6 +91,15 @@ public:
     void clearModDropTargets();
     void disconnectPort(ModuleComponent* module, int portIndex, bool isInput, bool isMidi);
 
+    // ---- Mod-amount drag gesture (FRO287) ----
+    // Shared by the cable midpoint knob (GraphEditorCanvas.cpp) and a card knob's ring-annulus/Alt
+    // drag (ModuleComponent's CardKnobSlider) -- ONE path adjusts an attenuverter's "amount", so
+    // the two gestures can never diverge. See GraphEditorModAmount.cpp for the implementation and
+    // its own doc comment on why undo capture happens on begin, not on the first adjust.
+    void beginModAmountGesture();
+    void adjustModAmount(juce::AudioProcessorGraph::NodeID attenuverterNodeID, float delta);
+    void commitModAmountGesture();
+
     // See GraphEditorTypes.h for the PolyLink struct's full field-level doc.
     using PolyLink = graph_editor_types::PolyLink;
 
@@ -616,6 +625,32 @@ public:
     juce::File getLastWavetableFolder() const noexcept { return lastWavetableFolder; }
     std::function<void(const juce::File&)> onWavetableFolderChanged;
 
+    /** FRO288: a card's own content changed in a way that can move where a cable lands (e.g. a
+     *  Wavetable tab-page switch, which shows/hides knobs without moving or resizing the card
+     *  itself, so nothing else invalidates the memo for it) -- repaintCanvas() is private
+     *  (GraphCanvasHost), so this is ModuleComponent's public seam into it. */
+    void notifyModuleContentChanged() { repaintCanvas(); }
+
+    // FRO288: the modulation target (destination node + RAW channel) currently correlated with a
+    // hover, in EITHER direction -- hovering a cable that lands on a knob (mouseMove below) or
+    // hovering the knob/ring itself (ModuleComponent -> here). Cable paint treats it like
+    // hoveredCableId; ModuleComponent's ring paint reads it back to highlight the ring. One shared
+    // piece of state, since both directions mean the same thing: "this routing is what the user is
+    // looking at". docs/modules/modulation.md#modulation-rings-on-knobs.
+    struct HoveredModTarget {
+        juce::AudioProcessorGraph::NodeID nodeId;
+        int channel = 0;
+        bool operator==(const HoveredModTarget& o) const noexcept { return nodeId == o.nodeId && channel == o.channel; }
+    };
+    const std::optional<HoveredModTarget>& getHoveredModTarget() const noexcept { return hoveredModTarget_; }
+    /** Set/cleared by a card knob's mouseEnter/mouseExit (CardKnobSlider::onHoverChanged, wired in
+     *  ModuleComponent) for a knob with a live routing. Repaints only the card(s) actually
+     *  affected -- never the whole canvas -- when the target actually changes. */
+    void setHoveredModTarget(std::optional<HoveredModTarget> target);
+    /** True when the cable itself is under the mouse, or it lands on a knob whose ring is hovered on
+     *  the card (the other direction of the cable <-> ring correlation). */
+    bool isCableHovered(const VisibleCable& cable) const;
+
     // Test accessors.
     int getVisibleCableCount() { return (int)buildVisibleCables().size(); }
     bool hasHoveredCable() const noexcept { return hoveredCableId.has_value(); }
@@ -672,6 +707,7 @@ private:
     bool dragSourceIsInput = false;
     bool dragSourceIsMidi = false;
     juce::Point<int> dragCurrentPos;
+    void maybeShowModDropHint(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi);
 
     void refreshSmartSuggestions() override;
     void clearSmartSuggestions() override;
@@ -859,6 +895,16 @@ private:
     bool cablesCacheValid = false;
     int cableRebuildCount = 0; // test seam, see docs/layout/animation.md#the-paint-count-pattern
     void repaintCanvas() override;
+
+    // ---- Knob-anchored cables + hover correlation (FRO288, GraphEditorModHover.cpp) ----
+    // Post-passes at the end of rebuildVisibleCables(), in this order: the knob re-anchor runs
+    // FIRST so the collapsed-macro pass (which re-anchors again for cables crossing a collapsed
+    // macro's boundary) always wins on top of it for a cable that is both knob-bound AND crosses a
+    // collapsed macro -- see the comment at the collapsed-macro pass's call site.
+    void reanchorCablesToKnobTargets(std::vector<VisibleCable>& cables);
+    void reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>& cables);
+    ModuleComponent* moduleComponentForNode(juce::AudioProcessorGraph::NodeID id);
+    std::optional<HoveredModTarget> hoveredModTarget_;
 
     // ---- Zoom gesture (raster freeze) ----
     // While a zoom gesture is in flight every card's raster scale is pinned, so a wheel tick

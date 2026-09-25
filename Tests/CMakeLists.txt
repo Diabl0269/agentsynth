@@ -174,6 +174,9 @@ add_executable(Tests
     App/MainComponent/MeterColourStopsSettingsIntegrationTests.cpp
     UI/Chrome/WelcomeScreenTests.cpp
     UI/Graph/GraphEditor/GraphEditorTests.cpp
+    UI/Graph/GraphEditor/GraphEditorModDropHintTests.cpp
+    UI/Graph/GraphEditor/GraphEditorKnobAnchorTests.cpp
+    UI/Graph/GraphEditor/GraphEditorModHoverTests.cpp
     UI/Graph/GraphEditor/GraphEditorLayoutTests.cpp
     UI/Graph/GraphEditor/GraphEditorPolyLinkTests.cpp
     UI/Graph/GraphEditor/GraphEditorDualIOTests.cpp
@@ -197,6 +200,9 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentEnvelopeCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModTargetTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentModBandTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentModChipTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentModAmountGestureTests.cpp
     UI/Graph/ModuleComponent/HostedPluginCardTests.cpp
     UI/Graph/ModuleComponent/HostedPluginCardMidiLearnTests.cpp
     UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp
@@ -569,6 +575,8 @@ add_executable(Tests
     ../Source/UI/Graph/GraphEditor/GraphEditor.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorCables.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorConnections.cpp
+    ../Source/UI/Graph/GraphEditor/GraphEditorModAmount.cpp
+    ../Source/UI/Graph/GraphEditor/GraphEditorModHover.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorModuleTitles.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorSmartConnections.cpp
     ../Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.cpp
@@ -607,6 +615,7 @@ add_executable(Tests
     ../Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
+    ../Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp

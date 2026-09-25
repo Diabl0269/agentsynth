@@ -118,10 +118,12 @@ struct Metrics {
     float wireCasingWidth{5.0f}; // connection wire casing (dark underlay) stroke
 
     // --- Visual treatment constants (not parsed from user JSON, code-only defaults) ---
-    int gridSize{8};               // snap quantum (kGridSize in LayoutUtil)
-    float guideAlpha{0.7f};        // alignment guide opacity
-    float guideLineWidth{1.5f};    // alignment guide stroke width
-    float cornerRadiusSmall{4.0f}; // pill / small element radius
+    int gridSize{8};                    // snap quantum (kGridSize in LayoutUtil)
+    float guideAlpha{0.7f};             // alignment guide opacity
+    float guideLineWidth{1.5f};         // alignment guide stroke width
+    float cornerRadiusSmall{4.0f};      // pill / small element radius
+    float modDepthBandAlpha{0.3f};      // reachable-range band under a modulation ring, FRO287; code-only
+    float modRingHoverWidthBoost{1.5f}; // FRO288: ring-width boost when hover-correlated with its cable; code-only
 
     // --- Chrome layout constants (code-only; not parsed from user JSON) ---
     // 44 (was 36): the old height only left room for a 9px icon-band trim and ~7px label text

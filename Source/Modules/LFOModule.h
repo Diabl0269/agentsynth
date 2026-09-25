@@ -242,6 +242,7 @@ public:
     bool producesMidi() const override { return false; }
 
     ModulationCategory getModulationCategory() const override { return ModulationCategory::LFO; }
+    bool isModSourceBipolar() const override { return bipolarParam->get(); }
     juce::String getOutputPortLabel(int) const override { return "CV"; }
     ModuleType getModuleType() const override { return ModuleType::LFO; }
 

@@ -78,6 +78,16 @@ struct VisibleCable {
     bool isPolyBus = false;   // RoutingKind::PolyBus — drives the "xN" bundle badge
     int voiceCount = 1;       // PolyBus bundle size (badge)
     float attenAmount = 0.0f; // AttenuverterChain knob value, -1..1
+
+    // FRO288: the logical destination, RAW channel (matches ModulationTarget::channelIndex /
+    // ModulationRouting::destChannelIndex — NOT dstPort, a visible jack index) — set for every
+    // cable kind, since it also doubles as the hover-correlation key. landsOnKnob is true only when
+    // an AttenuverterChain cable's p2 was re-anchored onto its target knob's ring start point
+    // instead of the gutter jack (docs/layout/cables.md#knob-landing) — DirectCV/PolyBus and a
+    // hidden-page knob keep landsOnKnob false and p2 at the jack.
+    uint32_t destNodeId = 0;
+    int destChannel = 0;
+    bool landsOnKnob = false;
 };
 
 } // namespace graph_editor_types

@@ -6,6 +6,7 @@
 // the former single ModuleComponent.cpp).
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
+#include "ModuleComponentModBand.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/SequencerModule.h"
@@ -283,9 +284,8 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
             continue;
 
         auto sliderBounds = sliders[si]->getBounds().toFloat();
-        float cx = sliderBounds.getCentreX();
-        float cy = sliderBounds.getCentreY() - 10.0f;
-        float radius = std::min(sliderBounds.getWidth(), sliderBounds.getHeight()) / 2.0f - 11.0f;
+        const auto centre = modRingCentreFor(sliderBounds);
+        const float radius = modRingRadiusFor(sliderBounds);
 
         float baseNorm = 0.5f;
         if (const auto* param = mod->parameterForModTarget(*target))
@@ -295,8 +295,26 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
 
         // Serum-style mod ring drawn by the themed LnF (270 degree sweep + theme tokens). Guarded:
         // headless tests without our LnF simply skip the ring.
-        if (lf != nullptr)
-            lf->drawModulationRing(g, {cx, cy}, radius, baseNorm, modNorm, info.modSignalValue >= 0.0f);
+        if (lf == nullptr)
+            continue;
+
+        // FRO287: the reachable-range band goes UNDER the live ring, one per routing (two
+        // routings on one knob -> two bands, never summed) -- visible even at rest, since it
+        // answers "how far could this move", not "where is it now".
+        const auto band = synth::ui::modDepthBandRange(baseNorm, info.amount, info.sourceBipolar);
+        const bool bandNegative = synth::ui::modDepthBandUsesNegativeColour(info.amount, info.sourceBipolar);
+        const auto bandColour =
+            bandNegative ? lf->getTheme().colors.modRingNegative : lf->getTheme().colors.modRingPositive;
+        lf->drawModulationDepthBand(g, centre, radius, band.startNorm, band.endNorm, bandColour);
+
+        // FRO288: this ring's routing is correlated with a hover (either a cable hovered on the
+        // canvas that lands here, or this very knob's ring being hovered) -- widen/brighten it.
+        // docs/modules/modulation.md#modulation-rings-on-knobs.
+        const auto& hovered = owner.getHoveredModTarget();
+        const bool isHovered =
+            hovered.has_value() && hovered->nodeId == nodeId && hovered->channel == info.destChannelIndex;
+
+        lf->drawModulationRing(g, centre, radius, baseNorm, modNorm, info.modSignalValue >= 0.0f, isHovered);
     }
 }
 
@@ -453,6 +471,27 @@ juce::String ModuleComponent::knobNameForModTarget(const ModuleBase* mod, const 
 // jack labelled "Rate" finds the "Rate (Hz)" knob; the visibility rule stays getModRingSliderIndex's.
 int ModuleComponent::sliderIndexForModTarget(const ModulationTarget& target) const {
     return getModRingSliderIndex(knobNameForModTarget(dynamic_cast<const ModuleBase*>(module), target));
+}
+
+// FRO288: see the doc comment on the declaration (ModuleComponent.h) -- this is the ONE place a
+// cable's landing point is computed, shared by GraphEditor's cable re-anchor pass
+// (GraphEditorModHover.cpp) so a click near the drawn ring always hits the cable that lands there.
+std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int destChannel) const {
+    auto* mb = dynamic_cast<ModuleBase*>(module);
+    if (mb == nullptr)
+        return std::nullopt;
+    for (const auto& target : mb->getModulationTargets()) {
+        if (target.channelIndex != destChannel)
+            continue;
+        const int si = sliderIndexForModTarget(target);
+        if (si < 0)
+            return std::nullopt;
+        const auto sliderBounds = sliders[si]->getBounds().toFloat();
+        const auto centre = modRingCentreFor(sliderBounds);
+        const float radius = modRingRadiusFor(sliderBounds);
+        return modRingPointForNorm(centre, radius, 0.0f);
+    }
+    return std::nullopt;
 }
 
 bool ModuleComponent::setModDropTargetChannel(int channelIndex) {

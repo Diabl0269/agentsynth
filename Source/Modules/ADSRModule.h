@@ -297,6 +297,8 @@ public:
     bool producesMidi() const override { return false; }
 
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Envelope; }
+    // An envelope rises from 0, it never swings negative -- the depth band is [base, base+amount].
+    bool isModSourceBipolar() const override { return false; }
     juce::String getInputPortLabel(int i) const override {
         switch (i) {
         case 0:
