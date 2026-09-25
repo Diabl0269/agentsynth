@@ -345,6 +345,15 @@ several controls.
   extracted from the M and S buttons' own `onClick` so a keypress and a real click can never diverge,
   plus an `onArmTrack` callback routed through `MainComponent::performTrackEdit`.
 
+**FRO227: the mixer is its own `MainComponent::EditSurface` (`Mixer`)** — real focus inside
+`MixerPanelComponent` (the panel itself or a column control, since every column control gives focus
+back up) makes `resolveEditSurface()` report `Mixer` while the panel is actually showing. Cmd+C/V/D
+/X/R and their zoom siblings all report **inactive** on this surface and no-op rather than falling
+through to the graph's own clipboard/selection — the mixer's own keyboard verbs above are the
+complete set. Cmd+Shift+A (Select All) stays reachable everywhere but is a deliberate no-op here too
+(no multi-column selection model). See
+[`docs/timeline/focus.md`](../timeline/focus.md#the-one-resolver) for the resolver itself.
+
 **Focus re-resolves after every `rebuild()` by the column's own identity** — a strip's uuid, Direct and
 Master by kind — rather than by raw index, so an unrelated strip insert or removal elsewhere in the
 column order never silently reattaches focus to the wrong column; a deleted focused strip clears focus

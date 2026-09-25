@@ -1,9 +1,10 @@
 # Edit-Surface Focus Arbitration
 
-Three independently-editable surfaces compete for the same physical keys: the graph editor, the
-clip lanes ([clips](clips.md)) and the piano roll ([piano-roll](piano-roll.md)). Each already grabs
-keyboard focus on its own `mouseDown`. This doc is the rule that decides which one Cmd+C/V/D/X/R
-and Cmd+Shift+A act on.
+Four independently-editable surfaces compete for the same physical keys: the graph editor, the
+clip lanes ([clips](clips.md)), the piano roll ([piano-roll](piano-roll.md)) and the mixer
+([mixer](../mixer/mixer.md)). Each of the first three already grabs keyboard focus on its own
+`mouseDown`; the mixer panel wants keyboard focus outright (FRO18). This doc is the rule that
+decides which one Cmd+C/V/D/X/R and Cmd+Shift+A act on.
 
 Cmd+C/V/D are global `ApplicationCommandManager` commands owned by `MainComponent`, so — unlike
 Delete and Escape, which each surface intercepts locally via its own `keyPressed` — something has
@@ -14,13 +15,18 @@ to decide *which* surface's selection and clipboard they mean.
 `MainComponent::resolveEditSurface() const` is the single focus-ownership rule:
 
 ```cpp
-enum class EditSurface { Graph, TimelineClips, PianoRoll };
+enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer };
 ```
 
 It returns `TimelineClips` / `PianoRoll` when the timeline panel is visible AND real keyboard focus
 (`juce::Component::getCurrentlyFocusedComponent()`) sits inside the clip-lane area or piano roll
-respectively, and `Graph` otherwise — including when the timeline panel is hidden outright,
-regardless of what a stale focus pointer inside it might point at.
+respectively; `Mixer` when the mixer panel is actually showing (`MixerDockComponent::
+isMixerShowing()` — covers docked-and-on-the-Mixer-tab and detached-to-a-window — OR
+`MixerPlacementController::isOwnPanelShowing()` for the "Own panel" placement) AND real keyboard
+focus sits inside `MixerPanelComponent` (FRO18: the mixer's single focusable leaf — every column's
+own controls are `setWantsKeyboardFocus(false)`, so a column control's focus resolves here too);
+and `Graph` otherwise — including when every one of those panels is hidden outright, regardless of
+what a stale focus pointer inside one of them might point at.
 
 **Nothing new grabs focus for this.** Every surface already does it on `mouseDown`
 (`GraphEditor::mouseDown` is the idiom's original; `TimelineClipLaneArea`, `PianoRollComponent` and
@@ -78,6 +84,15 @@ getPositionSnapshot().ppq)`) immediately before pasting. That is priming, not a 
 roll only has a playhead position because the overlay pushes one while playing, and a stopped
 transport never does.
 
+**Mixer** — inactive on every one of these five, unconditionally. The mixer has no clipboard or
+repeat model of its own: its own keyboard verbs (Left/Right column walk, Up/Down fader nudge,
+Enter select-on-canvas, the rebindable M/S/R) are resolved directly by
+`MixerPanelComponent::keyPressed`, never routed through `resolveEditSurface()`. Each `perform*()`
+body still carries a `Mixer` case that returns `true`/`false` without touching the graph — belt-
+and-suspenders for a direct/scripted `perform()` call, since `isEditSurfaceCommandActive` already
+reports every one of these ids inactive, so `ApplicationCommandTarget::tryToInvoke` refuses them
+before a keypress or menu click ever reaches `perform()`.
+
 **Paste is active only when the SURFACE-MATCHING clipboard has something in it** —
 `GraphEditor::canPaste()` for Graph, `TimelinePanelComponent::canPasteClips()` for TimelineClips,
 `PianoRollComponent::canPasteNotes()` for PianoRoll (both halves: a non-empty clipboard AND an open
@@ -91,10 +106,13 @@ unconditionally `setActive(false)` on Graph.
 `Cmd+Shift+A` (`AppCommands` / action id `selectAllModules`, kept for a persisted binding's sake
 even though the verb widened) is routed by the SAME resolver:
 `TimelinePanelComponent::selectAllClips()` on TimelineClips, `PianoRollComponent::selectAllNotes()`
-on PianoRoll, `GraphEditor::selectAllModules()` on Graph.
+on PianoRoll, `GraphEditor::selectAllModules()` on Graph, and a deliberate no-op (a status-bar
+message, the graph selection left untouched) on Mixer — there is no multi-column selection model to
+select all of.
 
-Unlike the clipboard verbs it is **always active**, since each surface's own `selectAll*` just
-returns `false` harmlessly when there is nothing to select. See
+Unlike the clipboard verbs it is **always active** on every surface, including Mixer — since each
+surface's own `selectAll*` (or the Mixer no-op) just returns `false`/does nothing harmlessly when
+there is nothing to select. See
 [`shortcuts.md`](../control/shortcuts.md#surface-routing-who-cmdcvdxr-and-cmda-act-on) for the user-facing
 table.
 
@@ -135,6 +153,8 @@ the empty-selection enablement), `FocusArbitrationPlaybackDeleteTests.cpp` (Spac
 surface, per-surface Delete, the resolver's real-focus fallback, and a bare arrow key falling
 through untouched), `FocusArbitrationZoomGridTests.cpp` (snap and zoom commands per focused
 surface, inactive while the panel is hidden, and both scroll preferences reaching the lanes and
-the roll) and `FocusArbitrationShiftedKeysTests.cpp` (shifted symbol key codes reaching the grid
-and vertical-zoom commands, and the locator jump keys from inside and outside the panel), with the
-shared fixture in `FocusArbitrationTestFixture.h`.
+the roll), `FocusArbitrationShiftedKeysTests.cpp` (shifted symbol key codes reaching the grid
+and vertical-zoom commands, and the locator jump keys from inside and outside the panel) and
+`FocusArbitrationMixerSurfaceTests.cpp` (FRO227: the resolver's override round trip plus its
+dock-visibility gate, every clipboard/repeat verb and both zoom axes inactive, and Select All's
+no-op on the graph selection), with the shared fixture in `FocusArbitrationTestFixture.h`.

@@ -118,7 +118,9 @@ public:
     juce::ApplicationCommandManager& getCommandManager() { return commandManager; }
     void updateCommandShortcuts();
 
-    enum class EditSurface { Graph, TimelineClips, PianoRoll };
+    // FRO227: Mixer appended last (never interleaved) so no existing enumerator's value moves --
+    // same convention AppCommands::CommandIDs documents for its own appended ids.
+    enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer };
     EditSurface resolveEditSurface() const;
 
     // Test-only override; consulted before any real focus check. See docs/development/test-patterns.md.

@@ -231,24 +231,30 @@ work, not a rewire of something that already listened for keys.
 
 Cmd+C/V/D/X/R and Cmd+A are global commands (`MainComponent::getAllCommands`/
 `getCommandInfo`/`perform`), but "the canvas" is not the only editable surface once the timeline
-panel is open — the clip lanes and the piano roll are too. `MainComponent::resolveEditSurface()`
-is the **one** focus-ownership rule that decides which surface's clipboard and selection these
-verbs act on:
+panel or the mixer is open — the clip lanes, the piano roll and the mixer are too.
+`MainComponent::resolveEditSurface()` is the **one** focus-ownership rule that decides which
+surface's clipboard and selection these verbs act on:
 
 ```cpp
-enum class EditSurface { Graph, TimelineClips, PianoRoll };
+enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer };
 ```
 
 - **TimelineClips** — the timeline panel is visible AND real keyboard focus
   (`juce::Component::getCurrentlyFocusedComponent()`) sits inside the clip-lane area.
 - **PianoRoll** — same, but focus sits inside the piano roll.
-- **Graph** — every other case (including the timeline panel being hidden entirely, regardless of
-  what a stale focus pointer might point at).
+- **Mixer** — the mixer panel is actually showing (docked-and-active on the tab strip, an "Own
+  panel" strip, or detached into its own window — `MixerDockComponent::isMixerShowing()` /
+  `MixerPlacementController::isOwnPanelShowing()`) AND real keyboard focus sits inside
+  `MixerPanelComponent` (FRO18: the mixer's single focusable leaf — every column control is
+  `setWantsKeyboardFocus(false)`, so a column's own controls resolve here too).
+- **Graph** — every other case (including every one of the panels above being hidden entirely,
+  regardless of what a stale focus pointer might point at).
 
 Every one of those surfaces already grabs keyboard focus on `mouseDown` (`GraphEditor::mouseDown`
 is the original of this idiom; `TimelineClipLaneArea`, `PianoRollComponent` and
-`AutomationLaneEditor` all copy it), so "the surface you last clicked owns the verbs" falls out of
-ordinary JUCE focus tracking — `resolveEditSurface()` adds no bookkeeping of its own beyond reading
+`AutomationLaneEditor` all copy it) or on construction (`MixerPanelComponent` wants keyboard focus
+outright), so "the surface you last clicked/focused owns the verbs" falls out of ordinary JUCE
+focus tracking — `resolveEditSurface()` adds no bookkeeping of its own beyond reading
 `getCurrentlyFocusedComponent()`. Headless tests can't always create a real focus grab (it needs a
 native peer), so `MainComponent::setEditSurfaceOverrideForTest()` short-circuits the resolver for
 `Tests/App/FocusArbitration/FocusArbitrationTests.cpp`.
@@ -260,6 +266,7 @@ What each surface does:
 | Graph | Copies the selected modules (unchanged) | Pastes at the next cascade position | Copies the selection one step down-right, clipboard untouched | Composed from Copy + Delete (`copySelection()` then `deleteSelection()`), one undo step | **Inactive** — a spatial canvas has no time axis to tile copies along; Duplicate is the graph's equivalent gesture (see below) |
 | TimelineClips | Serialises the selected clips — notes (each with its own muted flag), name, length, muted flag and every audio field (`assetRef`, gain, both fades, `sourceStartSeconds`) — into the panel's own clip clipboard, starts relative to the earliest selected clip | Re-inserts every clipboard clip onto **its original track**, re-based so the earliest clip lands at the transport's current position (snapped to the view-state's snap setting); the track fallback is **kind-aware** — a clip lands back only on a track that still plays its payload (audio → `TrackKind::Audio`, MIDI → `TrackKind::Midi`), else the doc's first track of the required kind, else the clip is skipped. Audio fields go back through `setClipAsset`/`setClipGainDb`/`setClipFades` (never a raw struct write), so a clipboard `assetRef` is re-validated exactly like a freshly-loaded file's — a clipboard is only as trustworthy as whatever filled it. One undo step for the whole paste; the pasted clips end up selected. | `TimelineDoc::duplicateClip` per selected clip, batched into one undo step; the new clips end up selected | `TimelinePanelComponent::cutSelectedClips()` — copy, then delete the selection, as ONE `recordTimelineChange` (so undo restores it in a single step) | `repeatSelectedClips(count)` — `count` back-to-back copies of the selection's own span (`max end - min start`, not each clip's own length, so a multi-clip rhythm tiles intact), the first starting one span-length after the selection's start. One undo step; every created clip ends up selected. |
 | PianoRoll | Copies the selected notes (each field, `muted` included) into the roll's OWN note clipboard, offsets stored relative to the earliest selected note — the clipboard is a member of the roll, so it survives switching clips (`openClip`), and a block copied in one clip pastes into another | `pasteNotesAtPlayhead()` anchors the block at the **snapped, clip-relative playhead position** when that lands inside `[0, clip length)`, else at 0.0; `MainComponent::perform` primes the playhead from the live transport (`setPlayheadBeat(transport.getPositionSnapshot().ppq)`) immediately before pasting, so a paste with the transport stopped still lands under the position the user can see rather than wherever a stale internal beat was left. Notes at/after the clip's end are skipped, an overrunning note's length is clamped to the clip's end. One undo step; the pasted notes end up selected. | Copies the selection to immediately after its own span (same pitches), one undo step, selects the copies — does NOT touch the clipboard (duplicating isn't copying, and silently stomping a clipboard the user filled deliberately would be a surprise) | `cutSelectedNotes()` — copy then delete, one undo step (fills the clipboard first, so a cut is always paste-able) | `repeatSelectedNotes(count)` — `count` copies of the selection block, each one span further along, **clipped at the clip's end**: placement stops at the first block that would fall entirely outside the clip rather than piling every remaining copy onto the last beat. One undo step; every created note ends up selected. |
+| Mixer | **Inactive** — the mixer has no clipboard model of its own; its own keyboard verbs (Left/Right column walk, Up/Down fader nudge, Enter select-on-canvas, M/S/R) are resolved directly by `MixerPanelComponent::keyPressed`, not routed through `resolveEditSurface()` | **Inactive** | **Inactive** | **Inactive** | **Inactive** — same "no time axis to tile along" reasoning as Graph, with no equivalent gesture at all |
 
 `getCommandInfo` marks Paste active only when the **surface-matching** clipboard has something in
 it — the Graph clipboard, the TimelineClips clipboard and the PianoRoll's note clipboard are three
@@ -267,7 +274,8 @@ entirely separate stores, so copying modules does not make Paste live on the cli
 roll, or vice versa. Cut shares Copy's enablement predicate on every surface (a cut is a copy that
 also deletes, so anything copyable is cuttable). Repeat is active whenever the acting surface has a
 selection (`hasClipSelection()` / `hasNoteSelection()`) and — uniquely among these verbs — is
-**always inactive on Graph**, regardless of selection.
+**always inactive on Graph**, regardless of selection (Mixer is unconditionally inactive here too,
+same as every other clipboard verb).
 
 `Cmd+A` (`selectAllModules` — the actionId and `AppCommands` name are frozen so a persisted
 user binding keeps resolving, even though the verb widened) is routed by the same
@@ -276,6 +284,9 @@ TimelineClips, every note in the open clip (`PianoRollComponent::selectAllNotes(
 and every module (`GraphEditor::selectAllModules()`) on Graph. Unlike the clipboard verbs it is
 **always active** on every surface — it needs no pre-existing selection, and each surface's own
 `selectAll*` just returns `false` harmlessly (no status-bar lie) when there is nothing to select.
+On Mixer it stays active (there is no per-surface enablement gap to fill) but is a deliberate no-op
+— there is no multi-column selection model to select all of, so it reports "nothing to select"
+rather than falling through to the graph's own Select All.
 
 ### Zoom
 
@@ -291,6 +302,7 @@ verbs use, in/out factor `1.25` / `1 / 1.25` (`MainComponent::kZoomInFactor`/`kZ
 | Graph | `GraphEditor::zoomAroundCentre` — the canvas' one zoom level | **Inactive** — the canvas zooms uniformly (one `zoomLevel`, no separate axes), so a second key that did the same thing under a different modifier would be a trap, not a feature |
 | TimelineClips | `TimelinePanelComponent::zoomTimelineHorizontal` — `TimelineViewState::pixelsPerBeat`, anchored at the visible centre | `zoomTimelineVertical` — `TimelineViewState::rowHeightScale` (track row height), anchored at the visible centre |
 | PianoRoll | `PianoRollComponent::zoomHorizontal` — the roll's OWN `pixelsPerBeat` (never the shared `TimelineViewState` — see [`timeline/piano-roll.md`](../timeline/piano-roll.md#horizontal-mapping)) | `zoomVertical` — `pixelsPerSemitone_` |
+| Mixer | **Inactive** — the column strip has a fixed layout, no zoom concept at all | **Inactive** |
 
 Each keypress reports its own status-bar message ("Canvas: zoom", "Timeline: zoom" / "Timeline:
 track height", "Piano roll: zoom" / "Piano roll: vertical zoom") so a held key's effect is visible
@@ -484,10 +496,6 @@ own handler is a `group` role titled with the channel name; the M/S buttons carr
 on/off state in their title (`"Lead 1 mute, on"`) since they are built with
 `setClickingTogglesState(false)`, which would otherwise report a plain button to a screen reader
 rather than a toggle.
-
-**Known gap:** `MainComponent::resolveEditSurface()` (see **Surface routing** above) knows
-Graph/TimelineClips/PianoRoll only — Cmd+C/V/D/X/R with the Mixer focused falls through to the
-Graph surface. Out of scope for this ticket.
 
 **Snap toggles MAGNETISM, not the grid.** Turning snap off stops edits being pulled onto the
 division; it does **not** change which grid lines are drawn. Paint sites read

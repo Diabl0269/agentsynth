@@ -411,6 +411,7 @@ add_executable(Tests
     App/FocusArbitration/FocusArbitrationPlaybackDeleteTests.cpp
     App/FocusArbitration/FocusArbitrationZoomGridTests.cpp
     App/FocusArbitration/FocusArbitrationShiftedKeysTests.cpp
+    App/FocusArbitration/FocusArbitrationMixerSurfaceTests.cpp
     UI/Layout/FocusRegionTests.cpp
     UI/Timeline/AutomationEditorTests.cpp
     UI/Timeline/TimelineTransportBarTests.cpp
@@ -520,6 +521,7 @@ add_executable(Tests
     ../Source/MainComponent/MainComponentFileIO.cpp
     ../Source/MainComponent/MainComponentCommands.cpp
     ../Source/MainComponent/MainComponentCommandTable.cpp
+    ../Source/MainComponent/MainComponentCommandPredicates.cpp
     ../Source/MainComponent/MainComponentSelectionCommands.cpp
     ../Source/MainComponent/MainComponentPanels.cpp
     ../Source/MainComponent/MainComponentTimeline.cpp
