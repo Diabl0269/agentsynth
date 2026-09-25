@@ -219,3 +219,18 @@ TEST_F(DetachedPanelWindowLayoutTest, BackgroundMatchesThemeSurfaceAndHeaderButt
     EXPECT_TRUE(sawNonSurfacePixel)
         << "the header's redock/close button must actually paint its icon, not just its background";
 }
+
+// FRO228: a "glass" theme's surface is translucent; filling a top-level window with it let the OS
+// window backing show through as flat grey. The background must be the surface laid over bg0, opaque.
+TEST_F(DetachedPanelWindowLayoutTest, TranslucentThemeSurfaceStillGivesAnOpaqueBackground) {
+    synth::theme::Theme theme;
+    theme.colors.bg0 = juce::Colour(0xff101010);
+    theme.colors.surface = juce::Colour(0x997744CC);
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(theme);
+
+    DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, &lf, &shortcutManager);
+
+    EXPECT_TRUE(window.getBackgroundColour().isOpaque());
+    EXPECT_EQ(window.getBackgroundColour(), theme.colors.bg0.overlaidWith(theme.colors.surface));
+}
