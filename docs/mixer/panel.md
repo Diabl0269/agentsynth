@@ -222,9 +222,12 @@ persisted window geometry.
 ### A detached window follows the theme
 
 `DetachedPanelWindow::lookAndFeelChanged()` calls
-`setBackgroundColour(lf->getTheme().colors.surface)` whenever `getLookAndFeel()` resolves to a real
-`synth::theme::AppLookAndFeel` (the same `dynamic_cast` idiom `DetachablePanelHost::applyIcon()`
-uses) — the same `surface` token the mixer's own column and insert-list `paint()` overrides read.
+`setBackgroundColour(colors.bg0.overlaidWith(colors.surface))` whenever `getLookAndFeel()` resolves
+to a real `synth::theme::AppLookAndFeel` (the same `dynamic_cast` idiom
+`DetachablePanelHost::applyIcon()` uses) — the same `surface` token the mixer's own column and
+insert-list `paint()` overrides read, laid over the opaque page colour. A "glass" theme's `surface`
+is translucent, and a top-level window filled with it directly let the OS window backing show
+through as flat light grey (FRO228); an opaque `surface` overlays to itself.
 `setLookAndFeel()` fires this synchronously, so it applies at construction, on any later theme swap,
 and once more harmlessly as the destructor clears it. Passing `juce::Colours::darkgrey` to
 `juce::DocumentWindow`'s background argument unconditionally instead showed flat stock-JUCE grey in
