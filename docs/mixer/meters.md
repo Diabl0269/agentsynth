@@ -148,6 +148,23 @@ A plain click resets that column; Option or Alt-click resets every column
 header's "Reset Meters" button, next to "+ Bus", calls the same fan-out. `reset()` clears both the max
 and the clip colour.
 
+## The Master meter and Master inserts
+
+**With no Master inserts nothing changes:** the column reads `MasterModule::takeMeterPeak(Mixer, leg)`, the
+level at Master's own fader output. **With one or more inserts it reads the level LEAVING the master
+chain instead**, as every DAW's master meter does — so a limiter's ceiling shows on the meter and the
+clip readout, not the hotter signal that went into it. The source is
+`AudioEngine::takeOutputMeterPeak(MeterReader, leg)`: a `std::array<PeakMeterLatch, 2>` the audio thread
+stores straight after `mainProcessorGraph.processBlock()` (`AudioEngineRenderPass.cpp`) — after the
+whole graph, before the metronome click and the master-mute zero-fill — the one point both host modes
+funnel through. It is a `MeterReader::Mixer` consumer like the column itself, so the same per-reader,
+read-and-reset rules apply; leg 1 falls back to leg 0 for a mono buffer. The column switches on
+`MixerMasterColumn::outputPeakProvider` (wired by `MixerPanelComponent` to that engine call) whenever its
+snapshot has an insert; unset, it falls back to Master's own latch.
+
+**Gain reduction stays inside the limiter module** — there is no separate gain-reduction meter on
+the Master column.
+
 ## The track header chip
 
 `ChannelChipComponent` reads its own `TrackHeader` latch slot and applies the same dB mapping and
@@ -167,6 +184,8 @@ bar.**
 | `Tests/UI/Mixer/MixerColumnComponentMeterTests.cpp` | a column's readout reaches through `MixerPanelComponent::resetAllMeterReadouts()` — an Alt-click on ONE column's readout resets every strip column's and Master's; the dock's "Reset Meters" button does the same |
 | `Tests/UI/Theme/ThemeMeterZoneTests.cpp` | `meterMid`, `meterHigh` and `meterClip` parse from JSON, fall back to `Theme.h`'s defaults when the keys are absent, a malformed value rejects the whole theme, and all four built-ins populate the three tokens distinctly |
 | `Tests/Mixer/ChannelFlow/ChannelFlowTrackChannelLinkTests.cpp` | the channel chip's meter displays a fraction of the dB scale, not the raw linear peak; the per-reader latch's two independent slots are exercised across the render and solo cases |
+| `Tests/Engine/OutputMeterTapTests.cpp` | `AudioEngine::takeOutputMeterPeak`: each leg latches the graph output's own peak (a negative excursion counts) and reads back once, another `MeterReader`'s slot is untouched, a silent graph latches nothing, a mono buffer's right leg follows its left |
+| `Tests/UI/Mixer/MixerMasterColumnInsertTests.cpp` | the Master column's meter source: an empty chain reads Master's own latch and never calls the engine provider, a chain with an insert reads the provider instead (and falls back to Master's latch with none wired); a Limiter added through the column's own list on a hot signal shows the limited level while Master's pre-insert latch still sees the full peak |
 | `Tests/UI/Mixer/MixerDockMeterGatingTests.cpp` | `MixerDockComponent::isMixerShowing()` at its three states; `MainComponent::timerCallback()` actually calls `refreshMeters()` when the mixer is detached with the dock hidden and does NOT when the mixer is showing nowhere; detaching then redocking the SAME column leaves its clip readout's latched state exactly as it was, not reset to "-inf" |
 | `Tests/UI/Mixer/MeterColourStopsPersistenceTests.cpp` | round-trip at 1, a handful, and the maximum number of stops; strict malformed-token rejection with ANY one bad token failing the whole key; an out-of-order or duplicate but well-formed value still normalising; `load`, `write`, `save` and `clear` against a real `juce::PropertiesFile`; `AppLookAndFeel`'s own cache, including an override surviving a later `applyTheme()` and clearing falling back to the current theme |
 | `Tests/UI/Settings/MeterColourStopsEditorTests.cpp` | the editor driven with synthesized `juce::MouseEvent`s: handle selection writing nothing; the click-versus-drag resolution on a swatch, including the floor's own; a row-body drag's 0.5 dB snap, its live-plus-committed change pair and its clamp at each neighbour; the floor never moving; adding on an empty-space click and its refusals; remove never taking the floor or the last stop; the arrow nudge and its Shift step; `setStops()` from the owner replacing the working set and clearing selection |

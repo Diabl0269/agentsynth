@@ -28,6 +28,15 @@ juce::AudioParameterFloat* findFloatParam(juce::AudioProcessor& processor, const
 MixerMasterColumn::MixerMasterColumn() {
     addAndMakeVisible(header_);
     header_.setDisplayName("Master");
+    addAndMakeVisible(insertList_);
+    insertList_.onEditOnCanvas = [this](const juce::String& uuid) {
+        if (onEditOnCanvas)
+            onEditOnCanvas(uuid);
+    };
+    insertList_.onMutated = [this] {
+        if (onMutated)
+            onMutated();
+    };
     addAndMakeVisible(fader_);
     fader_.setChannelName("Master");
     addAndMakeVisible(meter_);
@@ -49,10 +58,42 @@ MixerMasterColumn::MixerMasterColumn() {
 }
 
 void MixerMasterColumn::configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager,
-                                  GraphEditor& graphEditor) {
+                                  synth::MacroSet& macros, GraphEditor& graphEditor) {
     graph_ = &graph;
     undoManager_ = &undoManager;
     graphEditor_ = &graphEditor;
+    insertList_.configure(graph, undoManager, macros, graphEditor);
+}
+
+void MixerMasterColumn::setColumn(const synth::MixerColumn& column) {
+    setNodeId(column.nodeId);
+    // Master's chain hangs off Master's own output (column.sourceNodeId == column.nodeId) and feeds the Rec Tap /
+    // Audio Output (column.chainEndNodeId) -- see MixerModelInserts.cpp's buildMasterInsertsForColumn.
+    insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,
+                           column.sourceNodeId, column.chainEndNodeId);
+    const bool hasInserts = !column.inserts.empty();
+    if (hasInserts != hasInserts_) {
+        hasInserts_ = hasInserts;
+        // Both sources are consume-on-read latches that keep the loudest peak since their last read, and only the
+        // active one is ever read -- so the one we just switched TO holds everything since the last time it was
+        // active, which would flash as a bogus clip. Read it once and drop the value.
+        for (int leg = 0; leg < 2; ++leg)
+            takeMeterPeak(leg);
+    }
+    resized();
+}
+
+float MixerMasterColumn::takeMeterPeak(int leg) {
+    // FRO148 (docs/mixer/meters.md): with inserts the meter shows what LEAVES the chain, like every DAW's master
+    // meter; with none it is the same pre-insert MasterModule latch as before.
+    if (hasInserts_ && outputPeakProvider)
+        return outputPeakProvider(leg);
+    if (graph_ == nullptr)
+        return 0.0f;
+    auto* node = graph_->getNodeForId(nodeId_);
+    if (auto* master = dynamic_cast<MasterModule*>(node != nullptr ? node->getProcessor() : nullptr))
+        return master->takeMeterPeak(synth::MeterReader::Mixer, leg);
+    return 0.0f;
 }
 
 void MixerMasterColumn::setNodeId(juce::AudioProcessorGraph::NodeID nodeId) {
@@ -112,14 +153,7 @@ void MixerMasterColumn::unbindFromGraph() {
 }
 
 void MixerMasterColumn::refreshMeter(float elapsedSeconds) {
-    meter_.peakProvider = [this](int leg) -> float {
-        if (graph_ == nullptr)
-            return 0.0f;
-        auto* node = graph_->getNodeForId(nodeId_);
-        if (auto* master = dynamic_cast<MasterModule*>(node != nullptr ? node->getProcessor() : nullptr))
-            return master->takeMeterPeak(synth::MeterReader::Mixer, leg);
-        return 0.0f;
-    };
+    meter_.peakProvider = [this](int leg) { return takeMeterPeak(leg); };
     meter_.refresh(elapsedSeconds);
     meterReadout_.updatePeak(std::max(meter_.getDisplayedDbForTest(0), meter_.getDisplayedDbForTest(1)));
     refreshMidiLearnBadges();
@@ -272,6 +306,8 @@ void MixerMasterColumn::resized() {
 
     auto bounds = getLocalBounds().reduced(2);
     header_.setBounds(bounds.removeFromTop(24));
+    // FRO148: same sizing rule as a strip column's insert list (MixerColumnComponent::resized).
+    insertList_.setBounds(bounds.removeFromTop(juce::jmin(bounds.getHeight() / 3, insertList_.getPreferredHeight())));
     muteButton_.setBounds(bounds.removeFromBottom(20).reduced(2));
     meterReadout_.setBounds(bounds.removeFromTop(kMeterReadoutHeight));
     meter_.setBounds(bounds.removeFromRight(kMeterWidth));

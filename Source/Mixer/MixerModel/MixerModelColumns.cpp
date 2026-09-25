@@ -118,6 +118,7 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
         master.nodeId = masterNode->nodeID;
         master.uuid = masterNode->properties["uuid"].toString();
         master.name = "Master";
+        buildInsertsForColumn(graph, doc, macros, master);
         snapshot.columns.push_back(std::move(master));
     }
 

@@ -303,6 +303,17 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
 
     mainProcessorGraph.processBlock(buffer, midiMessages);
 
+    // FRO148 (docs/mixer/meters.md): the output peak the Master column reads once Master has inserts. Latched HERE --
+    // straight after the graph, before the metronome click -- so it is exactly what left the master chain and never
+    // includes the click. One store per pass (a sliced pass stores once per slice; the latch keeps the loudest), no
+    // allocation, no lock. Right falls back to left for a mono buffer.
+    if (const int numChannels = buffer.getNumChannels(); numChannels > 0 && buffer.getNumSamples() > 0) {
+        const int numSamples = buffer.getNumSamples();
+        const float left = buffer.getMagnitude(0, 0, numSamples);
+        outputMeterLatches_[0].storeBlockPeak(left);
+        outputMeterLatches_[1].storeBlockPeak(numChannels > 1 ? buffer.getMagnitude(1, 0, numSamples) : left);
+    }
+
     transport.setDeviceInputForBlock(nullptr, 0, 0);
 
     // The metronome click, generated from the transport and summed POST-graph — after the

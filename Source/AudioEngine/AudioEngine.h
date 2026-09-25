@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Mixer/PeakMeterLatch.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/AudioClipStreamer.h"
 #include "Timeline/AutomationApplier.h"
@@ -186,6 +187,13 @@ public:
     void refreshSoloGate();
     bool setChannelStripSoloed(juce::AudioProcessorGraph::NodeID node, bool soloed);
     int getSoloedStripCount() const noexcept { return soloedStripCount_.load(std::memory_order_relaxed); }
+
+    // FRO148 (docs/mixer/meters.md): the level leaving the WHOLE graph -- post-graph, pre-metronome -- for the Master
+    // column once it has inserts (a post-fader limiter's ceiling shows here, not in MasterModule's own pre-insert
+    // latch). Consume-on-read per MeterReader, like MasterModule::takeMeterPeak; leg 0 = Left, 1 = Right. Any thread.
+    float takeOutputMeterPeak(synth::MeterReader reader, int leg) noexcept {
+        return outputMeterLatches_[leg == 1 ? 1 : 0].takePeak(reader);
+    }
 
     // The feedback guard's one-shot report: true if the guard tripped since the last call, false
     // otherwise — and an atomic exchange back to false in the same call, so a caller that polls
@@ -718,6 +726,9 @@ private:
     void captureDeviceInput(const float* const* inputChannelData, int numInputChannels, int numSamples) noexcept;
     // AUDIO THREAD, once per render pass. Points the transport at this pass's slice of the capture.
     void publishDeviceInputForPass(int sampleOffset, int numSamples) noexcept;
+
+    // FRO148: audio thread stores once per graph pass (AudioEngineRenderPass.cpp); see takeOutputMeterPeak().
+    std::array<synth::PeakMeterLatch, 2> outputMeterLatches_;
 
     // The feedback guard itself. Called from renderPass, post-graph and pre-master-mute
     // (beside the metronome), ungated like the monitoring flag — an input-path safety feature, not a

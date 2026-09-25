@@ -12,12 +12,16 @@
 namespace synth::ui {
 namespace {
 
-// A small, curated set of insert-eligible effects -- a deliberate scope trim from the plan's
-// "reuse the module library's full category/search picker" (see the PR description's
-// deviations): this ticket's own budget did not fit a second copy of that picker's UI.
-const juce::StringArray kAddableModuleTypes{"Parametric EQ", "Compressor", "Distortion", "Chorus", "Phaser", "Flanger"};
+// The insert-eligible effects the add menu offers -- a curated stereo-in/stereo-out set rather than the plan's "reuse
+// the module library's full category/search picker" (see the PR description's deviations): this ticket's own budget
+// did not fit a second copy of that picker's UI. FRO148: "Limiter" and "Gate" join the set (the Master column's
+// post-fader ceiling, and a strip's gate); the names are the factory's display names (AIStateMapper::createModule).
+const juce::StringArray kAddableModuleTypes{"Parametric EQ", "Compressor", "Limiter", "Gate",
+                                            "Distortion",    "Chorus",     "Phaser",  "Flanger"};
 
 } // namespace
+
+const juce::StringArray& MixerInsertList::getAddableModuleTypes() noexcept { return kAddableModuleTypes; }
 
 MixerInsertList::MixerInsertList() { setInterceptsMouseClicks(true, false); }
 
@@ -197,6 +201,10 @@ void MixerInsertList::removeRow(int rowIndex) {
 
 void MixerInsertList::addModule(const juce::String& moduleTypeName) {
     if (entries_.empty() && sourceNodeId_ == juce::AudioProcessorGraph::NodeID{})
+        return;
+    // FRO148: nothing to splice in front of -- e.g. a Master column whose output never reaches a Rec Tap / Audio
+    // Output.
+    if (stripNodeId_ == juce::AudioProcessorGraph::NodeID{})
         return;
     const auto predecessorId = entries_.empty() ? sourceNodeId_ : entries_.back().nodeId;
     const auto successorId = stripNodeId_;

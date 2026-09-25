@@ -2,13 +2,15 @@
 // its feeding track's source and the strip, in signal order, plus linear-vs-branching classification, plus the three
 // insert-list mutation primitives (splice out / splice in / reorder). Also FRO15 (docs/mixer/sends-and-buses.md): a bus
 // has no feeding track, so its own EQ/Compressor chain is discovered by walking BACKWARD from the strip instead
-// (buildBusInsertsForColumn).
+// (buildBusInsertsForColumn). And FRO148 (docs/mixer/mixer.md#master-inserts): Master's own post-fader chain, walked
+// FORWARD from Master's output to the Rec Tap / Audio Output terminator (buildMasterInsertsForColumn).
 #include "MixerModel.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "MixerModelInternal.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/ModuleBase.h"
+#include "Modules/RecordTapModule.h"
 #include <algorithm>
 
 namespace synth {
@@ -139,12 +141,97 @@ void buildBusInsertsForColumn(juce::AudioProcessorGraph& graph, const std::vecto
         return;
     resolveEditOnCanvasTarget(graph, macros, reverseChain, column);
 }
+
+// FRO148: the two nodes Master's chain can end at -- the master Rec Tap when one is spliced in (it sits in front of
+// Audio Output, see MasterSplice.h), else the graph's Audio Output. Neither is ever an insert.
+bool isMasterChainTerminator(juce::AudioProcessor* processor) {
+    if (processor == nullptr)
+        return false;
+    if (dynamic_cast<RecordTapModule*>(processor) != nullptr)
+        return true;
+    auto* io = dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(processor);
+    return io != nullptr && io->getType() == juce::AudioProcessorGraph::AudioGraphIOProcessor::audioOutputNode;
+}
+
+// FRO148 (docs/mixer/mixer.md#master-inserts): Master's inserts sit AFTER its fader, so the chain is Master's own
+// output -> [inserts] -> terminator. Walked FORWARD from Master along signal edges (a strip's forward walk from its
+// track source, with Master standing in as the source and the Rec Tap/Audio Output as the sink instead of the strip).
+//
+// Deliberately not "branching" when the TERMINATOR has other feeders: a hand-wired audio track can land on the Rec
+// Tap or Audio Output directly, and that shared sink is unaffected by splicing an insert in front of Master's own
+// connection -- unlike an insert, which reordering/removing would drag those other signals through.
+//
+// Master unwired, or wired into something that never reaches a terminator: nothing to splice against, so the list
+// stays empty and read-only with "Edit on canvas" pointing at Master itself.
+void buildMasterInsertsForColumn(juce::AudioProcessorGraph& graph, const std::vector<Connection>& connections,
+                                 const MacroSet& macros, MixerColumn& column) {
+    column.sourceNodeId = column.nodeId;
+
+    bool branching = false;
+    std::vector<NodeID> chain;
+    std::vector<NodeID> visited{column.nodeId};
+    NodeID current = column.nodeId;
+    NodeID terminator;
+
+    for (;;) {
+        if (signalSuccessorCount(graph, connections, current) > 1)
+            branching = true;
+
+        NodeID next;
+        bool haveNext = false;
+        for (const auto& c : connections) {
+            if (c.source.nodeID == current && isSignalEdge(graph, connections, c)) {
+                next = c.destination.nodeID;
+                haveNext = true;
+                break;
+            }
+        }
+        if (!haveNext)
+            break; // Master's reach ends without arriving at a terminator
+
+        if (isMasterChainTerminator(processorFor(graph, next))) {
+            terminator = next;
+            break;
+        }
+        if (signalPredecessorCount(graph, connections, next) > 1)
+            branching = true;
+        if (std::find(visited.begin(), visited.end(), next) != visited.end())
+            break; // cycle guard -- should not happen in a real patch, never hang if it does
+        chain.push_back(next);
+        visited.push_back(next);
+        current = next;
+        if (chain.size() > 64)
+            break; // sane upper bound
+    }
+
+    if (terminator == NodeID{}) {
+        column.insertChainIsLinear = false;
+        column.editOnCanvasTargetUuid = column.uuid;
+        return;
+    }
+
+    column.chainEndNodeId = terminator;
+    column.insertChainIsLinear = !branching;
+    for (auto nodeId : chain)
+        column.inserts.push_back(entryFor(graph, nodeId));
+
+    if (!branching)
+        return;
+    if (chain.empty())
+        column.editOnCanvasTargetUuid = column.uuid;
+    else
+        resolveEditOnCanvasTarget(graph, macros, chain, column);
+}
 } // namespace
 
 void buildInsertsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
                            MixerColumn& column) {
     const auto connections = graph.getConnections();
 
+    if (column.kind == MixerColumn::Kind::Master) {
+        buildMasterInsertsForColumn(graph, connections, macros, column);
+        return;
+    }
     if (column.feedingTracks.empty()) {
         if (column.kind == MixerColumn::Kind::Bus)
             buildBusInsertsForColumn(graph, connections, macros, column);

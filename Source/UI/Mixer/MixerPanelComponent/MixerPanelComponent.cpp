@@ -3,6 +3,7 @@
 #include "MixerPanelComponent.h"
 
 #include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerSends/MixerSends.h"
@@ -46,7 +47,16 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
             onMakeChannelForNode(source);
     };
     masterColumn_ = std::make_unique<MixerMasterColumn>();
-    masterColumn_->configure(graph, undoManager, graphEditor);
+    masterColumn_->configure(graph, undoManager, macros, graphEditor);
+    // FRO148: post-insert level for the Master meter once the chain has inserts (docs/mixer/meters.md).
+    masterColumn_->outputPeakProvider = [this](int leg) -> float {
+        return audioEngine_ != nullptr ? audioEngine_->takeOutputMeterPeak(synth::MeterReader::Mixer, leg) : 0.0f;
+    };
+    masterColumn_->onEditOnCanvas = [this](const juce::String& target) { selectOnCanvas(target); };
+    masterColumn_->onMutated = [this] {
+        if (onGraphMutated)
+            onGraphMutated();
+    };
     masterColumn_->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
 }
 
@@ -166,7 +176,7 @@ void MixerPanelComponent::rebuild() {
         if (snapshot.hasMaster) {
             for (const auto& column : snapshot.columns)
                 if (column.kind == synth::MixerColumn::Kind::Master) {
-                    masterColumn_->setNodeId(column.nodeId);
+                    masterColumn_->setColumn(column);
 
                     ColumnEntry entry;
                     entry.kind = ColumnEntry::Kind::Master;
