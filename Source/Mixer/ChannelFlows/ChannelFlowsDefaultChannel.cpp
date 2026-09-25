@@ -52,18 +52,19 @@ void setProcessorPoly(juce::AudioProcessor* processor, bool poly) {
         setBoolParam(*processor, "poly", poly);
 }
 
-// Builds the factory default mixer channel (docs/mixer/mixer.md#the-factory-default-chain, T173a) that "+ Track ->
-// Audio Track" wires after a freshly-created Track Audio node's stereo output:
+// Builds the factory default mixer channel (docs/mixer/mixer.md#the-factory-default-chain, T173a, FRO226) that
+// "+ Track -> Audio Track" wires after a freshly-created Track Audio node's stereo output:
 //
-//     source 0/1 -> Parametric EQ 0/1 -> Compressor 0/1 -> Channel Strip (Stereo) -> Master (Mix)
+//     source 0/1 -> Gate 0/1 -> Parametric EQ 0/1 -> Compressor 0/1 -> Channel Strip (Stereo) -> Master (Mix)
 //
-// Both inserts are created BYPASSED (docs/mixer/mixer.md's factory-default chain: present but inert until
-// the user opts in). The Channel Strip is Stereo, shape set BEFORE the node is added to the live
+// All three inserts are created BYPASSED (docs/mixer/mixer.md's factory-default chain: present but inert
+// until the user opts in). The Channel Strip is Stereo, shape set BEFORE the node is added to the live
 // graph (ChannelStripModule::setShape()'s own contract — adding to a live graph can prepareToPlay
 // and lock the shape).
 //
 // Channel numbering, verified against the module headers rather than assumed:
-//   - source 0/1 -> EQ 0/1 (Parametric EQ's audio pair sits on raw ch0/ch1);
+//   - source 0/1 -> Gate 0/1 (GateModule's audio pair sits on raw ch0/ch1);
+//   - Gate 0/1 -> EQ 0/1 (Parametric EQ's audio pair sits on raw ch0/ch1);
 //   - EQ 0/1 -> Compressor 0/1 (same, both stereo pairs on raw ch0/ch1);
 //   - Compressor 0/1 -> Strip 0 / ChannelStripModule::kRightBase (=4) — the strip's right leg is
 //     NEVER ch1 (Source/Modules/CLAUDE.md), so this is the one place the raw channel number jumps;
@@ -295,9 +296,9 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
     return result;
 }
 
-// FRO15 (P9-9, docs/mixer/sends-and-buses.md): an EMPTY group/send bus — the same bypassed EQ -> bypassed
-// Compressor -> Channel Strip (Stereo) -> Master (Mix) chain every other channel gets, with nothing
-// feeding the EQ yet, and the strip marked isBus() so the mixer gives its column the BUS badge. This
+// FRO15 (P9-9, docs/mixer/sends-and-buses.md): an EMPTY group/send bus — the same bypassed Gate -> bypassed
+// EQ -> bypassed Compressor -> Channel Strip (Stereo) -> Master (Mix) chain every other channel gets, with
+// nothing feeding the Gate yet, and the strip marked isBus() so the mixer gives its column the BUS badge. This
 // lives here rather than in MixerSends because it IS that shared chain builder with an empty feed
 // list — a bus is an ordinary channel whose inputs happen to be other strips' outputs (D1), so there
 // is deliberately no separate bus node type and no second chain builder.

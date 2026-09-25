@@ -1,11 +1,11 @@
 // ChannelFlowTests.cpp
 //
-// T173a: "+ Track -> Audio Track" now builds a WHOLE mixer channel in one undo step —
+// T173a (FRO226): "+ Track -> Audio Track" now builds a WHOLE mixer channel in one undo step —
 //
-//     Track Audio -> Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel Strip (Stereo)
-//                 -> Master (Mix)
+//     Track Audio -> Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor (bypassed)
+//                 -> Channel Strip (Stereo) -> Master (Mix)
 //
-// with {Track Audio, EQ, Compressor, Strip} boxed into ONE collapsed macro named after the track.
+// with {Track Audio, Gate, EQ, Compressor, Strip} boxed into ONE collapsed macro named after the track.
 // Master stays OUTSIDE the macro and the Strip -> Master cable is a plain graph edge, never a macro
 // port — see MainComponent::addAudioTrack's own comment and Source/Mixer/ChannelFlows/ChannelFlows.h for why.
 //
@@ -53,24 +53,29 @@ TEST_F(ChannelFlowTest, AudioTrackBuildsDefaultChannel) {
     addAudioTrack(mc);
 
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::TimelineAudioSource), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Gate), 1);
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ParametricEQ), 1);
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Compressor), 1);
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 1);
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Master), 1);
 
     auto* trackAudio = findNodeOfTypeCFT(graph, ModuleType::TimelineAudioSource);
+    auto* gate = findNodeOfTypeCFT(graph, ModuleType::Gate);
     auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
     auto* comp = findNodeOfTypeCFT(graph, ModuleType::Compressor);
     auto* strip = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
     auto* master = findNodeOfTypeCFT(graph, ModuleType::Master);
     ASSERT_NE(trackAudio, nullptr);
+    ASSERT_NE(gate, nullptr);
     ASSERT_NE(eq, nullptr);
     ASSERT_NE(comp, nullptr);
     ASSERT_NE(strip, nullptr);
     ASSERT_NE(master, nullptr);
 
-    EXPECT_TRUE(graph.isConnected({{trackAudio->nodeID, 0}, {eq->nodeID, 0}}));
-    EXPECT_TRUE(graph.isConnected({{trackAudio->nodeID, 1}, {eq->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{trackAudio->nodeID, 0}, {gate->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{trackAudio->nodeID, 1}, {gate->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 1}, {eq->nodeID, 1}}));
     EXPECT_TRUE(graph.isConnected({{eq->nodeID, 0}, {comp->nodeID, 0}}));
     EXPECT_TRUE(graph.isConnected({{eq->nodeID, 1}, {comp->nodeID, 1}}));
     EXPECT_TRUE(graph.isConnected({{comp->nodeID, 0}, {strip->nodeID, 0}}));
@@ -100,20 +105,25 @@ TEST_F(ChannelFlowTest, DefaultInsertsAreBypassedAndStripIsStereo) {
 
     addAudioTrack(mc);
 
+    auto* gateNode = findNodeOfTypeCFT(graph, ModuleType::Gate);
     auto* eqNode = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
     auto* compNode = findNodeOfTypeCFT(graph, ModuleType::Compressor);
     auto* stripNode = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
+    ASSERT_NE(gateNode, nullptr);
     ASSERT_NE(eqNode, nullptr);
     ASSERT_NE(compNode, nullptr);
     ASSERT_NE(stripNode, nullptr);
 
+    auto* gateModule = dynamic_cast<ModuleBase*>(gateNode->getProcessor());
     auto* eqModule = dynamic_cast<ModuleBase*>(eqNode->getProcessor());
     auto* compModule = dynamic_cast<ModuleBase*>(compNode->getProcessor());
     auto* stripModule = dynamic_cast<ChannelStripModule*>(stripNode->getProcessor());
+    ASSERT_NE(gateModule, nullptr);
     ASSERT_NE(eqModule, nullptr);
     ASSERT_NE(compModule, nullptr);
     ASSERT_NE(stripModule, nullptr);
 
+    EXPECT_TRUE(gateModule->isBypassed());
     EXPECT_TRUE(eqModule->isBypassed());
     EXPECT_TRUE(compModule->isBypassed());
     EXPECT_FALSE(stripModule->isBypassed());
@@ -140,6 +150,7 @@ TEST_F(ChannelFlowTest, ChannelIsOneCollapsedMacroNamedAfterTrack) {
     EXPECT_EQ(track.bindingUuid, nodeUuid(findNodeOfTypeCFT(graph, ModuleType::TimelineAudioSource)));
 
     std::vector<juce::String> expected = {nodeUuid(findNodeOfTypeCFT(graph, ModuleType::TimelineAudioSource)),
+                                          nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Gate)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Compressor)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ChannelStrip))};
@@ -299,7 +310,7 @@ TEST_F(ChannelFlowTest, ChannelStripAndMasterHaveAPinnedSizeEstimate) {
 // bounds: on the old fixed-300px stride, Parametric EQ's double-width (560px) card overlapped the
 // Compressor, and Master (placed at trackAudioPosition + kSingleWidth + gap, i.e. still inside the
 // expanded chain) landed underneath the EQ card too. addAudioTrack now derives every card's x from
-// GraphEditor::estimateModuleSize, so none of the five cards below should overlap and Master should
+// GraphEditor::estimateModuleSize, so none of the six cards below should overlap and Master should
 // sit to the right of everything else.
 TEST_F(ChannelFlowTest, ChannelCardsDoNotOverlapAndMasterIsRightOfStrip) {
     MainComponent mc(std::make_unique<MockProviderCFT>());
@@ -320,11 +331,13 @@ TEST_F(ChannelFlowTest, ChannelCardsDoNotOverlapAndMasterIsRightOfStrip) {
     ASSERT_FALSE(macros.find(macroId)->collapsed);
 
     auto* trackAudioNode = findNodeOfTypeCFT(graph, ModuleType::TimelineAudioSource);
+    auto* gateNode = findNodeOfTypeCFT(graph, ModuleType::Gate);
     auto* eqNode = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
     auto* compNode = findNodeOfTypeCFT(graph, ModuleType::Compressor);
     auto* stripNode = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
     auto* masterNode = findNodeOfTypeCFT(graph, ModuleType::Master);
     ASSERT_NE(trackAudioNode, nullptr);
+    ASSERT_NE(gateNode, nullptr);
     ASSERT_NE(eqNode, nullptr);
     ASSERT_NE(compNode, nullptr);
     ASSERT_NE(stripNode, nullptr);
@@ -338,15 +351,17 @@ TEST_F(ChannelFlowTest, ChannelCardsDoNotOverlapAndMasterIsRightOfStrip) {
     };
 
     auto* trackAudioComp = findComp(trackAudioNode);
+    auto* gateComp = findComp(gateNode);
     auto* eqComp = findComp(eqNode);
     auto* compComp = findComp(compNode);
     auto* stripComp = findComp(stripNode);
     auto* masterComp = findComp(masterNode);
-    // All five nodes are ordinary graph nodes with their own ModuleComponent (a hidden macro
+    // All six nodes are ordinary graph nodes with their own ModuleComponent (a hidden macro
     // member's component still exists — only setVisible(false) — and expanding just flips that
     // back on), so every lookup above must resolve; a silent nullptr here would make the
     // assertions below pass vacuously.
     ASSERT_NE(trackAudioComp, nullptr) << "Track Audio must have a real ModuleComponent once expanded";
+    ASSERT_NE(gateComp, nullptr) << "Gate must have a real ModuleComponent once expanded";
     ASSERT_NE(eqComp, nullptr) << "Parametric EQ must have a real ModuleComponent once expanded";
     ASSERT_NE(compComp, nullptr) << "Compressor must have a real ModuleComponent once expanded";
     ASSERT_NE(stripComp, nullptr) << "Channel Strip must have a real ModuleComponent once expanded";
@@ -358,7 +373,7 @@ TEST_F(ChannelFlowTest, ChannelCardsDoNotOverlapAndMasterIsRightOfStrip) {
     EXPECT_EQ(trackAudioComp->getX(), static_cast<int>(trackAudioNode->properties.getWithDefault("x", -1)));
     EXPECT_EQ(trackAudioComp->getY(), static_cast<int>(trackAudioNode->properties.getWithDefault("y", -1)));
 
-    const std::array<ModuleComponent*, 5> cards = {trackAudioComp, eqComp, compComp, stripComp, masterComp};
+    const std::array<ModuleComponent*, 6> cards = {trackAudioComp, gateComp, eqComp, compComp, stripComp, masterComp};
     for (size_t i = 0; i < cards.size(); ++i) {
         for (size_t j = i + 1; j < cards.size(); ++j) {
             EXPECT_FALSE(cards[i]->getBounds().intersects(cards[j]->getBounds()))
@@ -367,7 +382,8 @@ TEST_F(ChannelFlowTest, ChannelCardsDoNotOverlapAndMasterIsRightOfStrip) {
         }
     }
 
-    EXPECT_LT(trackAudioComp->getX(), eqComp->getX());
+    EXPECT_LT(trackAudioComp->getX(), gateComp->getX());
+    EXPECT_LT(gateComp->getX(), eqComp->getX());
     EXPECT_LT(eqComp->getX(), compComp->getX());
     EXPECT_LT(compComp->getX(), stripComp->getX());
     EXPECT_LT(stripComp->getX(), masterComp->getX());
@@ -396,4 +412,64 @@ TEST_F(ChannelFlowTest, RefusedAtMaxTracksCreatesNothing) {
     EXPECT_EQ(graph.getNumNodes(), nodesBefore) << "a refused audio track must leave no orphan node";
     EXPECT_EQ(macros.size(), 0) << "a refused audio track must leave no macro";
     EXPECT_FALSE(mc.getUndoManager().canUndo()) << "nothing changed in any domain: no undo step";
+}
+
+// FRO226: an old saved project/preset's own JSON — authored before the Gate was added to the
+// factory default chain — has no Gate node, and loading it must never inject one. This is the one
+// test that actually covers "existing saved projects/presets load unchanged" (buildChannelChain
+// only runs when a NEW channel is built; a trusted applyJSONToGraph load never calls it).
+TEST_F(ChannelFlowTest, LoadingAnOldEqCompressorStripPatchInjectsNoGate) {
+    // A bare graph, not a MainComponent's: this pins the loader alone, and clearing a live
+    // MainComponent's graph under its module cards (without detachAllModuleComponents() first)
+    // leaves the cards attached to deleted parameters -- a teardown hang on Linux CI.
+    juce::AudioProcessorGraph graph;
+
+    // A pre-FRO226 project's chain: Track Audio -> Parametric EQ -> Compressor -> Channel Strip
+    // -> Master, no Gate anywhere. Trusted apply, exactly like ProjectBundle::load's own replaying
+    // of a saved graph.
+    const juce::String oldPatchJson = R"JSON(
+{
+  "schemaVersion": 1,
+  "nodes": [
+    { "id": 1, "type": "Track Audio", "uuid": "track-audio", "params": {} },
+    { "id": 2, "type": "Parametric EQ", "uuid": "eq", "params": { "bypassed": true } },
+    { "id": 3, "type": "Compressor", "uuid": "compressor", "params": { "bypassed": true } },
+    { "id": 4, "type": "Channel Strip", "uuid": "strip",
+      "params": { "bypassed": false, "gain": 0.0, "pan": 0.0, "muted": false },
+      "state": { "shape": "stereo", "solo": false, "isBus": false, "sends": [] } },
+    { "id": 5, "type": "Master", "uuid": "master", "params": { "bypassed": false, "gain": 0.0, "muted": false } },
+    { "id": 6, "type": "Audio Output", "uuid": "audio-output", "params": {} }
+  ],
+  "connections": [
+    { "src": 1, "srcPort": 0, "dst": 2, "dstPort": 0, "isMidi": false },
+    { "src": 1, "srcPort": 1, "dst": 2, "dstPort": 1, "isMidi": false },
+    { "src": 2, "srcPort": 0, "dst": 3, "dstPort": 0, "isMidi": false },
+    { "src": 2, "srcPort": 1, "dst": 3, "dstPort": 1, "isMidi": false },
+    { "src": 3, "srcPort": 0, "dst": 4, "dstPort": 0, "isMidi": false },
+    { "src": 3, "srcPort": 1, "dst": 4, "dstPort": 4, "isMidi": false },
+    { "src": 4, "srcPort": 0, "dst": 5, "dstPort": 0, "isMidi": false },
+    { "src": 4, "srcPort": 4, "dst": 5, "dstPort": 1, "isMidi": false },
+    { "src": 5, "srcPort": 0, "dst": 6, "dstPort": 0, "isMidi": false },
+    { "src": 5, "srcPort": 1, "dst": 6, "dstPort": 1, "isMidi": false }
+  ]
+}
+)JSON";
+    const auto parsed = juce::JSON::parse(oldPatchJson);
+    ASSERT_TRUE(parsed.isObject());
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(parsed, graph, /*clearExisting=*/true, /*trusted=*/true));
+
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Gate), 0) << "loading an old patch must never inject a Gate";
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ParametricEQ), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Compressor), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 1);
+    EXPECT_EQ(graph.getNumNodes(), 6) << "the old chain's node count must be exactly what was saved, nothing added";
+
+    // The graph must still play exactly as it did — the old chain re-wired straight from the
+    // source into the EQ, with no new node spliced in front of it.
+    auto* trackAudio = findNodeOfTypeCFT(graph, ModuleType::TimelineAudioSource);
+    auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
+    ASSERT_NE(trackAudio, nullptr);
+    ASSERT_NE(eq, nullptr);
+    EXPECT_TRUE(graph.isConnected({{trackAudio->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{trackAudio->nodeID, 1}, {eq->nodeID, 1}}));
 }

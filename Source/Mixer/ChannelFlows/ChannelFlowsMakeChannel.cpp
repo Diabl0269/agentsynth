@@ -258,7 +258,7 @@ struct BuiltChain {
 };
 
 // Rebuilds `exits` (onto Master's Mix) and `crossings` (onto their original input pins) through one
-// new EQ -> Compressor -> Strip, with a Voice Mixer ahead of any poly feed. See buildMakeChannel.
+// new Gate -> EQ -> Compressor -> Strip, with a Voice Mixer ahead of any poly feed. See buildMakeChannel.
 BuiltChain buildChainFromEdges(juce::AudioProcessorGraph& graph, const std::vector<Connection>& exits,
                                const std::vector<Connection>& crossings, const ChannelLayoutFn& layoutRightOf) {
     BuiltChain built;
@@ -294,7 +294,7 @@ BuiltChain buildChainFromEdges(juce::AudioProcessorGraph& graph, const std::vect
                         mixer = entry.second;
                 if (mixer == nullptr) {
                     juce::String mixerUuid;
-                    mixer = addVoiceMixerForPolyInstrument(graph, *node, layoutRightOf(*node).eq, mixerUuid);
+                    mixer = addVoiceMixerForPolyInstrument(graph, *node, layoutRightOf(*node).gate, mixerUuid);
                     if (mixer != nullptr) {
                         mixers.emplace_back(feed.nodeID, mixer);
                         built.voiceMixerUuids.push_back(mixerUuid);
@@ -370,7 +370,7 @@ bool isTrackSourceNode(const juce::AudioProcessor* processor) {
 // (audio edges from the own region into shared modules carrying the same signal the exits carry,
 // or — with no exits at all — every audio edge into the shared region, provided each side feeds one
 // consistent signal; otherwise `refusal`). An audio edge into the shared region that carries a
-// DIFFERENT signal from the exits stays a pre-strip send. Channel Strip, bypassed EQ/Compressor
+// DIFFERENT signal from the exits stays a pre-strip send. Channel Strip, bypassed Gate/EQ/Compressor
 // and Master are unity at their defaults, so the rebuilt graph renders identically.
 MakeChannelPlan planMakeChannel(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID source,
                                 const MacroSet& macros) {
@@ -550,7 +550,7 @@ MakeChannelPlan planMakeChannel(juce::AudioProcessorGraph& graph, juce::AudioPro
     return plan;
 }
 
-// Rebuilds the own exits/crossings through EQ (bypassed) -> Compressor (bypassed) -> Channel Strip,
+// Rebuilds the own exits/crossings through Gate (bypassed) -> EQ (bypassed) -> Compressor (bypassed) -> Channel Strip,
 // whose output goes to Master's Mix for the exits (Master spliced exactly as buildChannelForFeeds
 // does) and to the original shared input pins for the crossings — plain edges, never macro ports,
 // see ChannelFlowsDefaultChannel.cpp's buildDefaultAudioChannel comment for why. Then builds each
@@ -574,6 +574,7 @@ MadeChannel buildMakeChannel(juce::AudioProcessorGraph& graph, const MakeChannel
         if (built.channel.stripUuid.isEmpty())
             return made; // a factory/addNode failure partway — same contract as buildDefaultAudioChannel
         members.insert(members.end(), built.voiceMixerUuids.begin(), built.voiceMixerUuids.end());
+        members.push_back(built.channel.gateUuid);
         members.push_back(built.channel.eqUuid);
         members.push_back(built.channel.compressorUuid);
         members.push_back(built.channel.stripUuid);
@@ -592,6 +593,7 @@ MadeChannel buildMakeChannel(juce::AudioProcessorGraph& graph, const MakeChannel
         if (built.channel.stripUuid.isEmpty())
             continue;
         members.insert(members.end(), built.voiceMixerUuids.begin(), built.voiceMixerUuids.end());
+        members.push_back(built.channel.gateUuid);
         members.push_back(built.channel.eqUuid);
         members.push_back(built.channel.compressorUuid);
         members.push_back(built.channel.stripUuid);

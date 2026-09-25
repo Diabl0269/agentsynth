@@ -112,7 +112,7 @@ TEST(MixerPanelComponentTests, ClickingAColumnSelectsItsOwningMacroOnTheCanvas) 
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
-    mc.simulateAddAudioTrackClick(); // T173a boxes {Track Audio, EQ, Compressor, Strip} into one macro
+    mc.simulateAddAudioTrackClick(); // T173a boxes {Track Audio, Gate, EQ, Compressor, Strip} into one macro
 
     auto& mixerPanel = mc.getMixerDock().getMixerPanel();
     mixerPanel.rebuild();

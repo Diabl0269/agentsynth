@@ -131,7 +131,7 @@ DefaultChannel buildChannelForFeeds(juce::AudioProcessorGraph& graph,
     for (const auto& exit : exits)
         graph.removeConnection(exit);
 
-    // Each exit's original source now feeds the new channel's EQ input instead; AudioProcessorGraph
+    // Each exit's original source now feeds the new channel's Gate input instead; AudioProcessorGraph
     // sums multiple sources landing on the same input channel, so more than one exit landing on the
     // same side (e.g. two separate Direct feeds) still sums exactly as it did before, just one hop
     // later — the sound does not change.

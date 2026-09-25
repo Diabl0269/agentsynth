@@ -16,7 +16,7 @@
 
 namespace {
 
-// Horizontal gap (T173a) between each of the expanded channel's cards (Track Audio -> EQ ->
+// Horizontal gap (T173a) between each of the expanded channel's cards (Track Audio -> Gate -> EQ ->
 // Compressor -> Strip -> Master), on top of the real card widths (GraphEditor::estimateModuleSize)
 // — purely cosmetic. addAudioTrack lays every card out left-to-right along this stride so none
 // overlap regardless of how wide an individual card is (e.g. Parametric EQ's double-width card).
@@ -86,11 +86,11 @@ void MainComponent::addAudioTrack() {
     const int index = (int)timelineDoc.getTracks().size();
     juce::String trackName; // set inside the mutation; read afterwards for the status message
 
-    // T173a: "+ Track -> Audio Track" now creates a WHOLE mixer channel in ONE undo step — Track
-    // Audio -> Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel Strip (Stereo) -> Master
-    // (Mix), with {Track Audio, EQ, Compressor, Strip} boxed into one collapsed macro named after the
-    // track, plus the track/binding/colour exactly like addMidiTrack()'s single compound step. A
-    // single Cmd+Z removes every bit of it.
+    // T173a (FRO226): "+ Track -> Audio Track" now creates a WHOLE mixer channel in ONE undo step —
+    // Track Audio -> Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel
+    // Strip (Stereo) -> Master (Mix), with {Track Audio, Gate, EQ, Compressor, Strip} boxed into one
+    // collapsed macro named after the track, plus the track/binding/colour exactly like
+    // addMidiTrack()'s single compound step. A single Cmd+Z removes every bit of it.
     //
     // Master stays OUTSIDE the macro, and the Strip -> Master cable is left a PLAIN graph edge, never
     // a macro port: synth::spliceMasterNode/synth::ensureMasterNode (Source/Mixer/MasterSplice.h)
@@ -144,15 +144,18 @@ void MainComponent::addAudioTrack() {
             // Lay every card of the expanded chain out left-to-right from the real card widths
             // (GraphEditor::estimateModuleSize) rather than a fixed stride — Parametric EQ is
             // double-width, so a fixed stride overlaps it with the Compressor (the bug this fixes).
-            // {Track Audio, EQ, Compressor, Strip} end up boxed into one collapsed macro below, so
-            // only their expanded-state positions matter for not overlapping each other; Master's
+            // {Track Audio, Gate, EQ, Compressor, Strip} end up boxed into one collapsed macro below,
+            // so only their expanded-state positions matter for not overlapping each other; Master's
             // position is only used the first time (it is a singleton afterwards) and sits right of
             // where the collapsed macro card will be.
-            const int eqX = trackAudioPosition.x + GraphEditor::estimateModuleSize("Track Audio").x + kChannelCardGapX;
+            const int gateX =
+                trackAudioPosition.x + GraphEditor::estimateModuleSize("Track Audio").x + kChannelCardGapX;
+            const int eqX = gateX + GraphEditor::estimateModuleSize("Gate").x + kChannelCardGapX;
             const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kChannelCardGapX;
             const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kChannelCardGapX;
             const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x + kChannelCardGapX;
             const synth::DefaultChannelLayout layout{
+                /*gate=*/{gateX, trackAudioPosition.y},
                 /*eq=*/{eqX, trackAudioPosition.y},
                 /*compressor=*/{compressorX, trackAudioPosition.y},
                 /*strip=*/{stripX, trackAudioPosition.y},
@@ -171,8 +174,8 @@ void MainComponent::addAudioTrack() {
             // On the very first channel, Master lands right of this chain (masterX above) but a bare
             // Audio Output still sits wherever it started — the newPatch seed's canvas origin, or
             // wherever the user first dropped one — so the finished chain would cable back across the
-            // whole canvas to reach it. Move it to terminate the row instead: Track Audio -> EQ ->
-            // Compressor -> Strip -> Master -> Audio Output, left to right. Only done once; after
+            // whole canvas to reach it. Move it to terminate the row instead: Track Audio -> Gate ->
+            // EQ -> Compressor -> Strip -> Master -> Audio Output, left to right. Only done once; after
             // Master exists, the canvas is already arranged and nothing here should reshuffle it.
             if (!masterExistedBefore && channel.master != nullptr) {
                 const int outputX = masterX + GraphEditor::estimateModuleSize("Master").x + kChannelCardGapX;
@@ -185,11 +188,11 @@ void MainComponent::addAudioTrack() {
                 }
             }
 
-            // Box {Track Audio, EQ, Compressor, Strip} into ONE collapsed macro named after the
-            // track. Master is deliberately NOT a member — see this method's own comment above.
+            // Box {Track Audio, Gate, EQ, Compressor, Strip} into ONE collapsed macro named after
+            // the track. Master is deliberately NOT a member — see this method's own comment above.
             graphEditor.getMacroController().addMacroForMembers(
-                {trackAudioUuid, channel.eqUuid, channel.compressorUuid, channel.stripUuid}, trackName,
-                trackAudioPosition);
+                {trackAudioUuid, channel.gateUuid, channel.eqUuid, channel.compressorUuid, channel.stripUuid},
+                trackName, trackAudioPosition);
 
             // Inside the mutation, not after: MacroSet::retainOnly() (run by updateComponents())
             // must see every node above still alive to keep the macro's membership.
@@ -201,11 +204,12 @@ void MainComponent::addAudioTrack() {
 }
 
 void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) {
-    // T183 (P9-3b): "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds Track In ->
-    // instrument -> default chain (Parametric EQ bypassed -> Compressor bypassed -> Channel Strip
-    // Stereo -> Master Mix) in ONE undo step, the MIDI-track mirror of addAudioTrack()'s T173a step.
-    // {Track In, instrument, EQ, Compressor, Strip} are boxed into one collapsed macro named after
-    // the track; Master stays outside it for the same spliceMasterNode reason addAudioTrack's own
+    // T183 (P9-3b, FRO226): "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds Track In
+    // -> instrument -> default chain (Gate bypassed -> Parametric EQ bypassed -> Compressor bypassed
+    // -> Channel Strip Stereo -> Master Mix) in ONE undo step, the MIDI-track mirror of
+    // addAudioTrack()'s T173a step. {Track In, instrument, Gate, EQ, Compressor, Strip} are boxed
+    // into one collapsed macro named after the track; Master stays outside it for the same
+    // spliceMasterNode reason addAudioTrack's own
     // comment explains. A single Cmd+Z removes every bit of it. See buildInstrumentTrackAndChain's
     // own comment for the shared tail this delegates to (also used by addInstrumentPluginTrack).
     //
@@ -448,7 +452,7 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
     }
 }
 
-// buildInstrumentTrackAndChain step 4/4: the default EQ/Compressor/Strip channel off
+// buildInstrumentTrackAndChain step 4/4: the default Gate/EQ/Compressor/Strip channel off
 // `chainSource`, boxed with everything built above into one collapsed macro named after the
 // track. Master is deliberately NOT a macro member — same spliceMasterNode reason addAudioTrack's
 // own comment explains. Returns false exactly where the original inline body would have returned
@@ -456,12 +460,14 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
 bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName, InstrumentChainBuild& build) {
     // Lay every card of the expanded chain out left-to-right from the real card widths, the
     // same reason addAudioTrack's own comment gives (Parametric EQ is double-width).
-    const int eqX =
+    const int gateX =
         build.chainSourcePosition.x + GraphEditor::estimateModuleSize(build.chainSourceType).x + kChannelCardGapX;
+    const int eqX = gateX + GraphEditor::estimateModuleSize("Gate").x + kChannelCardGapX;
     const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kChannelCardGapX;
     const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kChannelCardGapX;
     const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x + kChannelCardGapX;
     const synth::DefaultChannelLayout layout{
+        /*gate=*/{gateX, build.chainSourcePosition.y},
         /*eq=*/{eqX, build.chainSourcePosition.y},
         /*compressor=*/{compressorX, build.chainSourcePosition.y},
         /*strip=*/{stripX, build.chainSourcePosition.y},
@@ -474,7 +480,7 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
         return false;
 
     // Box {Track In, instrument, [Voice Mixer if poly], [Poly MIDI if poly Oscillator/
-    // Wavetable], [ADSR+VCA if Oscillator/Wavetable], EQ, Compressor, Strip} into ONE
+    // Wavetable], [ADSR+VCA if Oscillator/Wavetable], Gate, EQ, Compressor, Strip} into ONE
     // collapsed macro named after the track. Master is deliberately NOT a member — same
     // spliceMasterNode reason addAudioTrack's own comment explains.
     std::vector<juce::String> macroMembers{build.trackInUuid, build.instrumentUuid};
@@ -486,6 +492,7 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
         macroMembers.push_back(build.adsrUuid);
     if (!build.vcaUuid.isEmpty())
         macroMembers.push_back(build.vcaUuid);
+    macroMembers.push_back(channel.gateUuid);
     macroMembers.push_back(channel.eqUuid);
     macroMembers.push_back(channel.compressorUuid);
     macroMembers.push_back(channel.stripUuid);

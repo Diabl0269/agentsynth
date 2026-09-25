@@ -62,7 +62,7 @@ TEST(MixerInsertListTests, MovingABusInsertToTheFrontRefusesRatherThanOrphaningI
     editor.setSize(900, 600);
     synth::TimelineDoc doc;
 
-    const synth::DefaultChannelLayout layout{{0, 0}, {100, 0}, {200, 0}, {300, 0}};
+    const synth::DefaultChannelLayout layout{{-100, 0}, {0, 0}, {100, 0}, {200, 0}, {300, 0}};
     const auto channel = synth::buildBusChannel(graph, layout);
     ASSERT_NE(channel.strip, nullptr);
 
@@ -72,7 +72,7 @@ TEST(MixerInsertListTests, MovingABusInsertToTheFrontRefusesRatherThanOrphaningI
         if (column.nodeId == channel.strip->nodeID)
             busColumn = &column;
     ASSERT_NE(busColumn, nullptr);
-    ASSERT_EQ(busColumn->inserts.size(), 2u);
+    ASSERT_EQ(busColumn->inserts.size(), 3u);
     ASSERT_EQ(busColumn->sourceNodeId, juce::AudioProcessorGraph::NodeID{})
         << "a bus's own chain has no external source -- the exact precondition this guards";
     const int nodeCountBefore = graph.getNumNodes();
@@ -85,12 +85,12 @@ TEST(MixerInsertListTests, MovingABusInsertToTheFrontRefusesRatherThanOrphaningI
     bool mutated = false;
     list.onMutated = [&] { mutated = true; };
 
-    // Row 1 is the Compressor (asserted by the model test) -- move it up to row 0, the front of the
+    // Row 1 is the EQ (asserted by the model test) -- move it up to row 0, the front of the
     // bus's own chain, where there is no external predecessor to splice against.
     list.moveRow(1, -1);
 
     EXPECT_FALSE(mutated) << "nothing should have changed -- see spliceInInsert's own contract";
-    EXPECT_EQ(graph.getNumNodes(), nodeCountBefore) << "the Compressor must not be spliced out and left unspliced-in";
+    EXPECT_EQ(graph.getNumNodes(), nodeCountBefore) << "the EQ must not be spliced out and left unspliced-in";
 
     const auto after = synth::buildMixerSnapshot(graph, doc, editor.getMacros());
     const synth::MixerColumn* afterColumn = nullptr;
@@ -98,7 +98,8 @@ TEST(MixerInsertListTests, MovingABusInsertToTheFrontRefusesRatherThanOrphaningI
         if (column.nodeId == channel.strip->nodeID)
             afterColumn = &column;
     ASSERT_NE(afterColumn, nullptr);
-    ASSERT_EQ(afterColumn->inserts.size(), 2u) << "the bus's own chain must still be intact";
-    EXPECT_EQ(afterColumn->inserts[0].name, "Parametric EQ");
-    EXPECT_EQ(afterColumn->inserts[1].name, "Compressor");
+    ASSERT_EQ(afterColumn->inserts.size(), 3u) << "the bus's own chain must still be intact";
+    EXPECT_EQ(afterColumn->inserts[0].name, "Gate");
+    EXPECT_EQ(afterColumn->inserts[1].name, "Parametric EQ");
+    EXPECT_EQ(afterColumn->inserts[2].name, "Compressor");
 }

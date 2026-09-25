@@ -135,11 +135,11 @@ graph+timeline transaction with a third domain, the macro set:
    The direct-to-master-bus auto-wire is now only `createAndBindTrackInNode()`'s behaviour — its ad
    hoc single-node rebind from the binding chip.
 2. `synth::buildDefaultAudioChannel` (Core, `Source/Mixer/ChannelFlows/ChannelFlows.h`) wires the
-   node into the factory default chain — `Track Audio -> Parametric EQ (bypassed) -> Compressor
-   (bypassed) -> Channel Strip (Stereo)` — then splices Master (`synth::spliceMasterNode`, reusing
-   the existing singleton after the first channel; the same "Rec Tap when spliced, else Audio
+   node into the factory default chain — `Track Audio -> Gate (bypassed) -> Parametric EQ (bypassed)
+   -> Compressor (bypassed) -> Channel Strip (Stereo)` — then splices Master (`synth::spliceMasterNode`,
+   reusing the existing singleton after the first channel; the same "Rec Tap when spliced, else Audio
    Output" target the old direct wire used) and wires the strip into Master's Mix input.
-3. `GraphEditor::addMacroForMembers` boxes `{Track Audio, EQ, Compressor, Channel Strip}` into ONE
+3. `GraphEditor::addMacroForMembers` boxes `{Track Audio, Gate, EQ, Compressor, Channel Strip}` into ONE
    collapsed macro named after the track. **Master stays outside the macro**, and the
    Strip → Master cable is left a plain graph edge, deliberately never a macro port — see
    [`docs/mixer/mixer.md`](../mixer/mixer.md#the-factory-default-chain) for why: the Mix-vs-Direct classification `spliceMasterNode`
@@ -180,13 +180,13 @@ audio. One undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`,
    chain — AFTER the Voice Mixer from step 3, never before it. A no-op for **Sampler**, which
    already has its own one-shot playback envelope.
 5. `synth::buildDefaultAudioChannel` wires the instrument (or the Voice Mixer or VCA, whichever
-   step 3 or 4 last produced) into the same `Parametric EQ (bypassed) -> Compressor (bypassed) ->
-   Channel Strip (Stereo)` chain the Audio entry uses, then splices Master. A split-block source
+   step 3 or 4 last produced) into the same `Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor
+   (bypassed) -> Channel Strip (Stereo)` chain the Audio entry uses, then splices Master. A split-block source
    (Oscillator or Wavetable, whose right leg is never ch1) passes its own
    `ModuleBase::rightAudioLegChannel()` — or `VCAModule::kRightBase`, once step 4 has run — as
    `buildDefaultAudioChannel`'s `sourceRightChannel` parameter instead of the ch1 default.
 6. `GraphEditor::addMacroForMembers` boxes `{Track In, instrument, [Voice Mixer if any], [ADSR+VCA
-   if Oscillator/Wavetable], EQ, Compressor, Strip}` into ONE collapsed macro named after the
+   if Oscillator/Wavetable], Gate, EQ, Compressor, Strip}` into ONE collapsed macro named after the
    track, the same way the Audio entry's macro is built — Master stays outside it, for the same
    reason.
 7. Bind the track to the `Track In` node's uuid and give it the palette colour for its index.

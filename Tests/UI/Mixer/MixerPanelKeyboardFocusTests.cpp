@@ -4,7 +4,7 @@
 // TimelineTrackFocusTests.cpp's own drive-keyPressed()-directly style.
 //
 // Drives a real, off-screen MainComponent (MixerPanelComponentTests.cpp's own rig style:
-// newPatchForTest() + simulateAddAudioTrackClick(), which boxes {Track Audio, EQ, Compressor,
+// newPatchForTest() + simulateAddAudioTrackClick(), which boxes {Track Audio, Gate, EQ, Compressor,
 // Strip} into one macro per T173a) rather than a hand-built graph/doc/macros trio, so the arm key
 // exercises the REAL MainComponent::performTrackEdit wiring end to end, not a stub.
 #include "AI/AIProvider.h"

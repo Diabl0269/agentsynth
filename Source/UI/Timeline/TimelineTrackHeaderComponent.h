@@ -120,9 +120,9 @@ struct TrackHeaderHost {
     }
 
     /** FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): the header menu's "Make Channel" — gathers
-     * the track's exclusive chain into a channel macro with the default EQ -> Compressor -> Channel Strip -> Master
-     * chain as ONE undo step (a merge point becomes its own bus channel). A no-op when canMakeChannelForTrack() is
-     * false. Non-pure with an inert no-op default. */
+     * the track's exclusive chain into a channel macro with the default Gate -> EQ -> Compressor -> Channel Strip
+     * -> Master chain as ONE undo step (a merge point becomes its own bus channel). A no-op when
+     * canMakeChannelForTrack() is false. Non-pure with an inert no-op default. */
     virtual void makeChannelForTrack(synth::TrackId track) { juce::ignoreUnused(track); }
 
     /** FRO42 (P9-3h): instrument-capable hosted plugins for the "+ Track -> Instrument -> Plugin"

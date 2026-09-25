@@ -46,7 +46,7 @@ constexpr int kAutoChannelCardGapX = 40;
 } // namespace
 
 // Searches from `searchFrom` for output feeds that don't yet reach a channel and, if it finds
-// any, builds one (EQ/Compressor/Strip, and Master if newly spliced). NO UNDO OF ITS OWN and
+// any, builds one (Gate/EQ/Compressor/Strip, and Master if newly spliced). NO UNDO OF ITS OWN and
 // no updateComponents() call — the caller (already inside its own recordGraphAndMacroChange
 // transaction) does both. See the note below for the BFS/layout/macro-membership
 // rationale.
@@ -55,7 +55,7 @@ constexpr int kAutoChannelCardGapX = 40;
 // a direct module-jack drop, or the MacroMidiInlet port node itself for the collapsed-macro-card
 // existing-jack drop — a port is a plain pass-through, so the BFS reaches the interior instrument
 // through it on its own) and, if it finds any exit, builds a channel there via
-// synth::buildChannelForFeeds. Lays EQ/Compressor/Strip (and Master, if newly spliced) to the
+// synth::buildChannelForFeeds. Lays Gate/EQ/Compressor/Strip (and Master, if newly spliced) to the
 // right of the first exit's source node, using estimateModuleSize() widths and the same
 // real-card-width stride MainComponent::addAudioTrack uses (mirrored here as
 // kAutoChannelCardGapX — the gap constant lives in MainComponent.cpp, which GraphEditor can't
@@ -77,13 +77,15 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
                                             static_cast<int>(firstSourceNode->properties.getWithDefault("y", 0)));
     const juce::String originType = synth::AIStateMapper::getFactoryTypeName(firstSourceNode->getProcessor());
 
-    // Lay EQ/Compressor/Strip (and Master, if it's newly spliced) out left-to-right from the real
-    // card widths, the same reasoning MainComponent::addAudioTrack's own comment gives.
-    const int eqX = originPos.x + estimateModuleSize(originType).x + kAutoChannelCardGapX;
+    // Lay Gate/EQ/Compressor/Strip (and Master, if it's newly spliced) out left-to-right from the
+    // real card widths, the same reasoning MainComponent::addAudioTrack's own comment gives.
+    const int gateX = originPos.x + estimateModuleSize(originType).x + kAutoChannelCardGapX;
+    const int eqX = gateX + estimateModuleSize("Gate").x + kAutoChannelCardGapX;
     const int compressorX = eqX + estimateModuleSize("Parametric EQ").x + kAutoChannelCardGapX;
     const int stripX = compressorX + estimateModuleSize("Compressor").x + kAutoChannelCardGapX;
     const int masterX = stripX + estimateModuleSize("Channel Strip").x + kAutoChannelCardGapX;
     const synth::DefaultChannelLayout layout{
+        /*gate=*/{gateX, originPos.y},
         /*eq=*/{eqX, originPos.y},
         /*compressor=*/{compressorX, originPos.y},
         /*strip=*/{stripX, originPos.y},
@@ -138,6 +140,7 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
         }
     }
     if (boxable && commonMacroId.isNotEmpty()) {
+        macros.addMember(commonMacroId, channel.gateUuid);
         macros.addMember(commonMacroId, channel.eqUuid);
         macros.addMember(commonMacroId, channel.compressorUuid);
         macros.addMember(commonMacroId, channel.stripUuid);
@@ -180,11 +183,12 @@ synth::DefaultChannelLayout channelLayoutRightOf(juce::AudioProcessorGraph::Node
     const int originX = static_cast<int>(node.properties.getWithDefault("x", 0));
     const int originY = static_cast<int>(node.properties.getWithDefault("y", 0));
     const juce::String originType = synth::AIStateMapper::getFactoryTypeName(node.getProcessor());
-    const int eqX = originX + GraphEditor::estimateModuleSize(originType).x + kAutoChannelCardGapX;
+    const int gateX = originX + GraphEditor::estimateModuleSize(originType).x + kAutoChannelCardGapX;
+    const int eqX = gateX + GraphEditor::estimateModuleSize("Gate").x + kAutoChannelCardGapX;
     const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kAutoChannelCardGapX;
     const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kAutoChannelCardGapX;
     const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x + kAutoChannelCardGapX;
-    return {{eqX, originY}, {compressorX, originY}, {stripX, originY}, {masterX, originY}};
+    return {{gateX, originY}, {eqX, originY}, {compressorX, originY}, {stripX, originY}, {masterX, originY}};
 }
 
 bool isAttenuverterNode(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id) {
@@ -196,7 +200,7 @@ bool isAttenuverterNode(juce::AudioProcessorGraph& graph, juce::AudioProcessorGr
 
 // "Make channel" for the chain starting at `source` (a track's own source node, or a trackless
 // chain's root): runs synth::planMakeChannel/buildMakeChannel, then boxes the track's exclusive
-// chain + new EQ/Compressor/Strip into ONE collapsed macro named `channelName`, and each merge
+// chain + new Gate/EQ/Compressor/Strip into ONE collapsed macro named `channelName`, and each merge
 // point's bus channel into its own "<module> Bus" macro.
 //
 // NO UNDO OF ITS OWN and no updateComponents() call — the caller wraps it in one transaction

@@ -190,7 +190,7 @@ TEST(ChannelFlowAutoChannelCore,
     for (const auto& exit : exits)
         EXPECT_EQ(exit.source.nodeID, oscA->nodeID) << "only oscA's own direct path may appear";
 
-    const synth::DefaultChannelLayout layout{{500, 0}, {600, 0}, {700, 0}, {800, 0}};
+    const synth::DefaultChannelLayout layout{{400, 0}, {500, 0}, {600, 0}, {700, 0}, {800, 0}};
     const auto channel = synth::buildChannelForFeeds(graph, exits, layout);
     ASSERT_FALSE(channel.stripUuid.isEmpty());
     ASSERT_NE(channel.master, nullptr);
@@ -235,7 +235,7 @@ TEST(ChannelFlowAutoChannelCore, BuildChannelForFeedsRemovesExitEdgesAndWiresThr
     const auto exits = synth::findUnchanneledOutputFeeds(graph, osc->nodeID);
     ASSERT_EQ(exits.size(), 2u);
 
-    const synth::DefaultChannelLayout layout{{500, 0}, {600, 0}, {700, 0}, {800, 0}};
+    const synth::DefaultChannelLayout layout{{400, 0}, {500, 0}, {600, 0}, {700, 0}, {800, 0}};
     const auto channel = synth::buildChannelForFeeds(graph, exits, layout);
     ASSERT_FALSE(channel.stripUuid.isEmpty());
     ASSERT_NE(channel.master, nullptr) << "no Master existed yet; this call must splice one";
@@ -243,12 +243,16 @@ TEST(ChannelFlowAutoChannelCore, BuildChannelForFeedsRemovesExitEdgesAndWiresThr
     EXPECT_FALSE(graph.isConnected({{osc->nodeID, 0}, {outNode->nodeID, 0}})) << "the exit edges must be gone";
     EXPECT_FALSE(graph.isConnected({{osc->nodeID, 1}, {outNode->nodeID, 1}}));
 
+    auto* gate = findNodeOfTypeCFT(graph, ModuleType::Gate);
     auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
     auto* strip = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
+    ASSERT_NE(gate, nullptr);
     ASSERT_NE(eq, nullptr);
     ASSERT_NE(strip, nullptr);
-    EXPECT_TRUE(graph.isConnected({{osc->nodeID, 0}, {eq->nodeID, 0}}));
-    EXPECT_TRUE(graph.isConnected({{osc->nodeID, 1}, {eq->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{osc->nodeID, 0}, {gate->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{osc->nodeID, 1}, {gate->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 1}, {eq->nodeID, 1}}));
     EXPECT_TRUE(graph.isConnected({{strip->nodeID, 0}, {channel.master->nodeID, MasterModule::kMixLeft}}));
     EXPECT_TRUE(graph.isConnected(
         {{strip->nodeID, ChannelStripModule::kRightBase}, {channel.master->nodeID, MasterModule::kMixRight}}));
@@ -273,7 +277,7 @@ TEST(ChannelFlowAutoChannelCore, BuildChannelForFeedsReusesAnExistingMasterAndCl
     const auto exits = synth::findUnchanneledOutputFeeds(graph, osc->nodeID);
     ASSERT_EQ(exits.size(), 2u);
 
-    const synth::DefaultChannelLayout layout{{500, 0}, {600, 0}, {700, 0}, {800, 0}};
+    const synth::DefaultChannelLayout layout{{400, 0}, {500, 0}, {600, 0}, {700, 0}, {800, 0}};
     const auto channel = synth::buildChannelForFeeds(graph, exits, layout);
     ASSERT_FALSE(channel.stripUuid.isEmpty());
     EXPECT_EQ(channel.master, master) << "the pre-existing Master singleton must be reused, not duplicated";
@@ -282,12 +286,16 @@ TEST(ChannelFlowAutoChannelCore, BuildChannelForFeedsReusesAnExistingMasterAndCl
         << "the exit edges (on Direct) must be gone";
     EXPECT_FALSE(graph.isConnected({{osc->nodeID, 1}, {master->nodeID, MasterModule::kDirectRight}}));
 
+    auto* gate = findNodeOfTypeCFT(graph, ModuleType::Gate);
     auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
     auto* strip = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
+    ASSERT_NE(gate, nullptr);
     ASSERT_NE(eq, nullptr);
     ASSERT_NE(strip, nullptr);
-    EXPECT_TRUE(graph.isConnected({{osc->nodeID, 0}, {eq->nodeID, 0}}));
-    EXPECT_TRUE(graph.isConnected({{osc->nodeID, 1}, {eq->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{osc->nodeID, 0}, {gate->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{osc->nodeID, 1}, {gate->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 1}, {eq->nodeID, 1}}));
     EXPECT_TRUE(graph.isConnected({{strip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}));
     EXPECT_TRUE(graph.isConnected(
         {{strip->nodeID, ChannelStripModule::kRightBase}, {master->nodeID, MasterModule::kMixRight}}));
@@ -509,6 +517,7 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_NewChainNodesJoinTheInstrumentsExis
     auto* macro = mc.getGraphEditor().getMacros().find(macroId);
     ASSERT_NE(macro, nullptr);
     EXPECT_TRUE(macro->hasMember(instrumentUuid));
+    EXPECT_TRUE(macro->hasMember(nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Gate))));
     EXPECT_TRUE(macro->hasMember(nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ))));
     EXPECT_TRUE(macro->hasMember(nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Compressor))));
     auto* strip = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
