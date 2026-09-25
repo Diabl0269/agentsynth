@@ -39,7 +39,7 @@
 1 Source/Transport/TransportService.h
 62 Source/UI/Assistant/AIChatComponent/AIChatComponent.h
 40 Source/UI/Chrome/StatusBarComponent.h
-41 Source/UI/Graph/ModuleComponent/ModuleComponent.h
+39 Source/UI/Graph/ModuleComponent/ModuleComponent.h
 1 Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
 125 Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
 70 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h

@@ -285,9 +285,17 @@ public:
     void setMidiLearnArmedParam(const juce::String& paramId);
 
 public:
-    /** Hosted-plugin card: fired by the "Choose knobs..." button. Empty by default; the picker sets it. */
+    /** Hosted-plugin card only (FRO132); empty otherwise. See ModuleComponentHostedPluginCard.cpp. */
     std::function<void()> onChooseKnobsRequested;
 
+    /** No-op unless this is a live Hosted Plugin card. See ModuleComponentHostedPluginCard.cpp. */
+    void showPluginKnobPicker();
+
+protected:
+    /** Virtual test seam; see ModuleComponentHostedPluginCard.cpp. */
+    virtual void launchPluginKnobPickerCallOutBox(std::unique_ptr<juce::Component> picker, juce::Rectangle<int> anchor);
+
+public:
     /** Test/inspection: the param a right-click on `component` would open MIDI Learn for, or null. */
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const {
         return midiLearnableRegistry_.find(component);

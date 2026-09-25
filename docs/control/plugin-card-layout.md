@@ -9,8 +9,10 @@ feature (see [Future: editing any module's layout](#future-editing-any-modules-l
 **Status:** built. The data layer (FRO126): `CardLayout`, the precedence resolver, the automatic
 default, `PluginCardLayoutStore`, the per-instance `"cardLayout"` extra-state key and its undo seam.
 The card unit and `HostedParameterAttachment` (FRO128), described in
-[Card rendering as built](#card-rendering-as-built-fro128). The picker and the MIDI Learn / Automate
-right-click on a plugin-card knob are still designed only.
+[Card rendering as built](#card-rendering-as-built-fro128). The picker (FRO132), described in
+[Choosing knobs as built](#choosing-knobs-as-built-fro132) -- gesture-only touch-to-add; the value-
+change fallback is FRO241. The MIDI Learn / Automate right-click on a plugin-card knob is still
+designed only.
 
 ---
 
@@ -244,6 +246,58 @@ card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
 - Changes apply live to the card as they are made (no OK button); closing the popover keeps
   them.
 
+### Choosing knobs as built (FRO132)
+
+Three units under `Source/UI/Graph/PluginKnobPicker/`, matching the design above:
+`PluginKnobPickerComponent` (the popover itself, split by concern into
+`PluginKnobPickerComponent.cpp` (chrome/layout), `PluginKnobPickerComponentRows.cpp` (search,
+tick/untick, drag-reorder, label, the one `applyCurrentLayout()` write path) and
+`PluginKnobPickerComponentScope.cpp` (Apply to / presets / Reset to automatic)),
+`PluginKnobPickerRow` (one row's checkbox/name/drag-handle/label controls) and
+`PluginKnobPickerTouchCapture` (touch-to-add's gesture listener).
+
+- **Entry points.** `ModuleComponent::showPluginKnobPicker()` (`ModuleComponentHostedPluginCard.cpp`)
+  builds the picker and opens it via a `juce::CallOutBox` anchored to the **Choose knobs...** button
+  (`createHostedPluginControls()` wires `onChooseKnobsRequested` to it) or the card's own right-click
+  menu item (`ModuleComponentInteraction.cpp::buildModuleContextMenu`, offered only when the node is a
+  `HostedPluginModule`). The actual `juce::CallOutBox::launchAsynchronously` call sits behind a
+  protected virtual, `launchPluginKnobPickerCallOutBox`, so a headless test can drive the real
+  button-click / menu-click handler without constructing a real top-level window.
+- **The row list.** Checked rows (in the layout's own order) first, then the rest in the instance's
+  parameter order, both filtered by the live search text against display name. A checked row shows a
+  drag handle (reordering is scoped to the checked group only) and a label field that commits on
+  focus-lost/Return; empty text means "the parameter's own name", matching the card's own fallback.
+  Every tick, untick, reorder, or label commit calls the same `applyCurrentLayout()`, which writes
+  whichever scope "Apply to" currently names and replays through
+  `AppUndoManager::recordNodeExtraStateChange` with a layout-only patch (`HostedPluginModule::
+  makeCardLayoutPatch`) -- the same undo shape a knob's own drag gesture already uses.
+- **Apply to / presets**, built as designed above, with one simplification: the Preset combo lists
+  only the plugin's SAVED presets (`PluginCardLayoutStore::listPresets`) -- there is no separate
+  "Default" pseudo-entry in the combo, since "Reset to automatic" already covers falling through to
+  the plugin's stored default (or the automatic set) and a combo entry for it would just be a second
+  path to the same place. Switching "Apply to" immediately re-applies the picker's current working set
+  to the newly selected scope (writing the new scope and, for "All instances", clearing this
+  instance's own override), rather than waiting for a further edit -- so the scope switch itself is
+  what the design doc's "clears this instance's override so it follows the default" sentence means in
+  practice.
+- **Touch to add is gesture-only, as decided** (no value-change fallback -- FRO241).
+  `PluginKnobPickerTouchCapture` registers a `juce::AudioProcessorParameter::Listener` on every
+  parameter of the live instance while armed; `parameterGestureChanged` can arrive on ANY thread (the
+  plugin's own editor, a controller), so every callback only queues the touched parameter's index and
+  calls `triggerAsyncUpdate()` -- `onParameterTouched` is invoked only from `handleAsyncUpdate()`, on
+  the message thread, exactly like `HostedParameterAttachment` and `HostedPluginModule::
+  InstanceListener` already do for their own hosted-parameter callbacks. Arming also asks the owner to
+  open the plugin's editor (the same `onOpenPluginEditorRequested` the card's own "Open Editor" button
+  uses, which is idempotent if it is already open).
+- **Missing parameters.** A slot loaded from the resolved layout (or a preset) whose `paramId` does
+  not match any of the instance's current parameters gets no row and no checkbox; the picker instead
+  shows a "N parameters missing in this plugin version: ..." line naming them. The very next apply
+  (any tick, reorder, label, scope switch, or preset load) writes only the resolvable slots, so the
+  missing ones are dropped from storage at that point -- "dropped on next save" in practice means
+  "dropped the moment the user touches the picker again," since every gesture here already applies.
+- **Tests:** `Tests/UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp`, against the same
+  `StubPluginInstance` fake the FRO126/FRO128 tests use.
+
 ---
 
 ## Persistence
@@ -311,9 +365,13 @@ grid, so "edit layout" there means at most hide/reorder of the knobs they *do* e
   pair is one undo step, the instance-gone edge fires before anything can be freed, and the card unbinds on
   unload, replace, node delete, `detachAllModuleComponents` and a detach after its node was freed. The picker
   listing an orphan as missing belongs to the picker's tests.
-- `Tests/UI/Graph/PluginKnobPickerTests.cpp`: search, tick/untick, reorder, label, scope
-  switch, presets, touch-to-add via gesture (the value-change fallback and its burst-ignored
-  debounce are deferred to a follow-up, see [Choosing knobs](#choosing-knobs)).
+- `Tests/UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp`: search, tick/untick, reorder,
+  label, scope switch (clears the override and broadcasts), presets (save/load/delete, reset to
+  automatic), touch-to-add via a real gesture and its off-thread -> message-thread hop, missing
+  parameters, and the two real-gesture entry points (the card button and the context-menu item,
+  each through a real click handler with a stubbed `juce::CallOutBox`). The value-change fallback
+  and its burst-ignored debounce are deferred to a follow-up (FRO241), see
+  [Choosing knobs](#choosing-knobs).
 - `Tests/Plugin/HostedPluginLaneTests.cpp` gains: MIDI Learn and Automate from a plugin-card
   knob produce the same target triple as the lane picker.
 - E2E: add plugin → Choose knobs → tick two → save project → reload → knobs present → set as
