@@ -47,6 +47,7 @@ add_executable(Tests
     Modules/Envelope/EnvelopeGeneratorTests.cpp
     Modules/EnvelopeFollowerModuleTests.cpp
     Modules/ModuleBaseTests.cpp
+    Modules/ModulationTargetBindingTests.cpp
     Engine/VisualBufferTests.cpp
     Modules/AntiClickTests.cpp
     Timeline/AutomationZipperTests.cpp
@@ -193,6 +194,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentPaintTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentEnvelopeCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentModTargetTests.cpp
     UI/Graph/AutomationUiReflectionTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp
@@ -218,6 +220,7 @@ add_executable(Tests
     FX/FXModule/FXModuleLimiterTests.cpp
     FX/FXModule/FXModulePhaserTests.cpp
     FX/FXModule/FXModulePortLabelsTests.cpp
+    FX/FXModule/FXModuleCVJackTests.cpp
     FX/FXModule/FXModuleReverbTests.cpp
     FX/GateModuleTests.cpp
     FX/PitchShifterModuleTests.cpp

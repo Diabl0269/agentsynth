@@ -378,9 +378,19 @@ std::vector<ModulationTarget> WavetableOscillatorModule::getModulationTargets() 
         targets.push_back({jackLabels()[kJackPitch], 0});
 
     for (int jack = 1; jack < kNumJacks; ++jack)
-        targets.push_back({jackLabels()[jack], modCVChannelFor(jack, poly)});
+        targets.push_back({jackLabels()[jack], modCVChannelFor(jack, poly), jackParamIds()[jack]});
 
     return targets;
+}
+
+// The parameter each jack drives, by paramID, so the card can find the knob when the jack label is
+// abbreviated ("Warp" drives Warp Amt, "Rand" drives Rand Phase). Empty for Pitch (no knob: pitch
+// is the fan) and Sync (an audio-rate input whose "knob" is the Sync In combo).
+const juce::String* WavetableOscillatorModule::jackParamIds() {
+    static const juce::String ids[kNumJacks] = {"",           "position", "octave",      "coarse", "fine",   "level",
+                                                "warpAmount", "phase",    "randomPhase", "detune", "spread", "width",
+                                                "blend",      "subLevel", "pan",         ""};
+    return ids;
 }
 
 LogicalPort WavetableOscillatorModule::mapInputChannel(int raw) const {

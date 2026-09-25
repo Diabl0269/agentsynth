@@ -357,6 +357,26 @@ had when its page was last laid out — so a ring drawn straight from `sliders[i
 an orange arc over empty card. The rule lives in that one accessor so it can be tested without a
 themed LookAndFeel and a live routing.
 
+### A target binds to its parameter, never to a label
+
+The knob a ring (and a [knob drop](#drag-to-knob-modulation)) resolves to is found through the
+target's **bound parameter**, `ModuleBase::parameterForModTarget()`, which `ModuleComponent::
+sliderIndexForModTarget()` turns into a knob index:
+
+1. `ModulationTarget::paramId` set → the `RangedAudioParameter` with that `paramID`.
+2. Otherwise → the parameter whose display name equals the jack label `name`.
+3. Neither → no knob (Oscillator's Pitch CV; Wavetable's Sync input).
+
+A module sets `paramId` whenever its jack label is not the knob's name — the jack is "Rate", the
+knob "Rate (Hz)"; the VCA's jack is "CV", its knob "Gain"; Wavetable's "Warp" jack drives
+"Warp Amt". Matching the label against the knob's `componentID` (the parameter's display name) was
+the pre-`paramId` rule, and it silently found nothing on every FX module whose labels carry no
+unit: no ring, and a cable released on the knob fell through to the canvas. `paramId` is a third
+aggregate member, so `{"Depth", 3}` still compiles and still resolves by name — only the
+mismatched jacks needed touching, and `ModulationTargetBindingTests` sweeps every factory module so
+a new mismatch cannot ship (a jack that really has no knob goes in that test's `knoblessTargets()`
+list, with a reason).
+
 **Right-click any knob → "Automate '\<Param\>'"** opens that parameter's automation lane in the
 timeline panel's automation strip (creating its lane/track on first use) — see
 [`timeline/automation.md`](../timeline/automation.md#the-knob-entry-point) for the full path
@@ -368,12 +388,17 @@ A cable released **on a knob** connects the source to that parameter's CV jack. 
 way to patch modulation — aiming at a jack in the gutter still works, but on a module with sixteen CV
 inputs it is the slow path.
 
-- `ModuleComponent::getModTargetPortForPoint()` resolves a point to the visible rotary under it, then
-  maps that knob's `getComponentID()` (the parameter's display name) through `getModulationTargets()`
-  to a channel index, and reports it as the input `Port` its CV jack would be.
+- `ModuleComponent::getModTargetPortForPoint()` walks `getModulationTargets()`, resolves each target
+  to its knob through the [bound parameter](#a-target-binds-to-its-parameter-never-to-a-label)
+  (`sliderIndexForModTarget`, which also says -1 for a knob on a hidden tab page), and reports the
+  first visible rotary containing the point as the input `Port` its CV jack would be.
 - `GraphEditor::endConnectionDrag()` consults it **only as a fallback**, so an actual jack under the
   cursor still wins, and **only for a cable dragged from an output** — a mod source drives a
-  destination, and honouring the reverse would wire it backwards.
+  destination, and honouring the reverse would wire it backwards. The `Port` it gets back names
+  the jack by **raw channel** (the target's `channelIndex`); the drop path speaks in visible jack
+  indices, so it maps through `mapInputChannel().visibleJackIndex` first. On a collapsed stereo
+  pair the two differ by one, and before the mapping a Distortion's Drive knob (raw ch2) wired
+  visible jack 2 — the Mix jack.
 - From there it rejoins the normal drop path, so the connection still goes through
   `AudioEngine::addModRouting()` and still gets an attenuverter auto-promoted onto it. Nothing about
   the routing model changes; this is purely a second way to name the destination.
@@ -384,8 +409,55 @@ inputs it is the slow path.
   mouse-down starts, and a knob has to keep starting a value drag there rather than a cable.
 
 Guarded by `GraphEditorTest.DroppingACableOnAKnobCreatesAModRouting` (full LFO output → Position knob
-→ routing, including the highlight arming and clearing) and
-`KnobDropIsIgnoredForACableDraggedFromAnInput`.
+→ routing, including the highlight arming and clearing),
+`DroppingACableOnAUnitLabelledKnobCreatesAModRouting` (the Flanger's "Rate (Hz)" knob, reached only
+through `paramId`) and `KnobDropIsIgnoredForACableDraggedFromAnInput`; the card-level resolution by
+`ModuleComponentModTargetTests`.
+
+## Every continuous parameter is a target
+
+The rule for a module's CV jacks: **every continuous (`AudioParameterFloat`/`Int`) parameter that
+shapes the sound gets a CV jack and a `ModulationTarget`.** Choice and toggle parameters do not
+(there is no meaningful "half a waveform"), nor does the shared output Level stage (see
+[`fx-modules.md`](fx-modules.md#output-level-shared-stage) for why). A user who can turn a knob
+expects to be able to drop a cable on it — a knob with no jack reads as a bug, not a design choice.
+
+New jacks are **appended** after the module's existing channels, never inserted: connections
+persist by raw channel index, so a saved patch that modulates Pitch Shifter Pitch on ch2 must keep
+modulating Pitch after Fine and Window arrive on ch6/ch7. The Compressor, Gate and Limiter went from
+no CV inputs to a full set the same way (audio pair on ch0/ch1, jacks from ch2). Delay and Reverb
+had listed their targets for a long time — on channels 2-6 of modules that declared two inputs, so
+the jacks never existed and the AI schema advertised ports nothing could connect to;
+`ModulationTargetBindingTests` now checks every target's channel against the declared input count.
+
+Not yet covered, each its own ticket: LFO (Rate, Level, Glide — it has no inputs at all today),
+ADSR times (its poly gate fan owns ch0-7 and Threshold ch8), Parametric EQ's other bands, and the
+mixer modules (Channel Strip, Voice Mixer), whose gain is driven by the mixer rather than by CV.
+
+## CV in normalised units
+
+Every jack added under the rule above reads its CV the same way, through two `ModuleBase` helpers:
+
+```cpp
+static float blockCV(const juce::AudioBuffer<float>& buffer, int channel);            // first sample, 0 if absent
+static float modulateNormalised(const juce::RangedAudioParameter&, float base, float cv);
+```
+
+`modulateNormalised` moves `base` by `cv` **in the parameter's own normalised range** and clamps:
++1.0 sweeps the knob from wherever it sits to its maximum, -1.0 to its minimum, and a skewed range
+(an LFO rate) moves in the knob's skewed units rather than linearly. This is exactly what the
+[modulation ring](#modulation-rings-on-knobs) draws — `baseNorm + modSignalValue` — so a jack
+modulated this way rings exactly as far as it moves, and a bipolar LFO through a full-depth
+attenuverter swings the knob across its whole travel. `base` is the module's current base value:
+the smoothed value for a parameter the module ramps (Compressor Threshold, Chorus Centre Delay),
+`*param` for one it does not.
+
+The read is **once per block** (`blockCV` takes the block's first sample) for these jacks because
+every one of them lands in a per-block quantity — a `juce::dsp` setter, a smoothing target, a
+detector time constant — so a per-sample read would buy nothing and cost a branch per sample.
+Jacks that predate the rule keep their own scaling (Flanger Rate adds `cv * 2.5 Hz`, Pitch Shifter
+Pitch `cv * 24 semitones`, per sample) so no saved patch changes sound; the convention applies to
+what was added, not retroactively.
 
 ## Smart cables, poly-bus wires and the mod matrix
 

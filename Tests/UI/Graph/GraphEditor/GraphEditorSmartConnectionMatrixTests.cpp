@@ -418,7 +418,14 @@ TEST_F(GraphEditorTest, SmartConnectionInsertDoesNotStealFromTheModuleBeingAimed
     editor.connectPorts(occUp->nodeID, 0, occDest->nodeID, 0, false, false);
 
     DummyDragSource ds;
-    juce::DragAndDropTarget::SourceDetails d(juce::var("Chorus"), &ds, juce::Point<int>(660, 450));
+    // The library ghost is centred on the cursor, sized by estimateModuleSize("Chorus"), then
+    // thrown clear of the three cards by findFreeSlot (it lands above them), and each candidate
+    // is ranked by the distance from the ghost's output jack to the neighbour's input jack. With
+    // the cursor at x=660 the free Delay and the insert into the Chorus sit within a few px of
+    // each other on that measure, and the Chorus card growing 60px (a CV jack per parameter)
+    // tipped it the wrong way. x=690 keeps the aim's centre inside the occupied Chorus (so the
+    // insert is still offered) while the free Delay's jack is clearly the nearer.
+    juce::DragAndDropTarget::SourceDetails d(juce::var("Chorus"), &ds, juce::Point<int>(690, 450));
     editor.itemDragEnter(d);
     editor.itemDragMove(d);
 

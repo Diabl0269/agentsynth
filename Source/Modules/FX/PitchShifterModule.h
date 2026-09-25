@@ -34,7 +34,7 @@
 class PitchShifterModule : public ModuleBase {
 public:
     PitchShifterModule()
-        : ModuleBase("Pitch Shifter", 6, 2) // 2 audio + 4 CV (Pitch, Shift, Mix, Feedback)
+        : ModuleBase("Pitch Shifter", 8, 2) // 2 audio + 6 CV (Pitch, Shift, Mix, Feedback, Fine, Window)
     {
         addParameter(modeParam = new juce::AudioParameterChoice("shiftMode", "Mode", {"Pitch", "Frequency"}, 0));
         addParameter(pitchParam = new juce::AudioParameterFloat("pitch", "Pitch (semi)", -24.0f, 24.0f, 0.0f));
@@ -125,9 +125,15 @@ public:
         const bool cvMixActive = isChannelActive(cvMix, numSamples);
         const bool cvFeedbackActive = isChannelActive(cvFeedback, numSamples);
 
-        smoothedPitch.setTargetValue(*pitchParam + *fineParam * 0.01f);
+        // Fine (ch6) and Window (ch7) arrived after the four per-sample CVs above and follow the
+        // normalised convention (docs/modules/modulation.md#cv-in-normalised-units), read once per
+        // block: both only ever set a smoothing TARGET, so per-sample reads would buy nothing.
+        const float fineCents = modulateNormalised(*fineParam, *fineParam, blockCV(buffer, 6));
+        const float windowTargetMs = modulateNormalised(*windowParam, *windowParam, blockCV(buffer, 7));
+
+        smoothedPitch.setTargetValue(*pitchParam + fineCents * 0.01f);
         smoothedShift.setTargetValue(*shiftParam);
-        smoothedWindow.setTargetValue(*windowParam);
+        smoothedWindow.setTargetValue(windowTargetMs);
         smoothedFeedback.setTargetValue(*feedbackParam);
         smoothedMix.setTargetValue(*mixParam);
 
@@ -249,17 +255,21 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String cv[] = {"Pitch", "Shift", "Mix", "Feedback"};
-        return stereoInputLabel(i, 4, cv);
+        const juce::String cv[] = {"Pitch", "Shift", "Mix", "Feedback", "Fine", "Window"};
+        return stereoInputLabel(i, 6, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(4); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(6); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 4); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 6); }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
+    // Every continuous parameter has a CV jack; paramId binds each jack to its knob ("Pitch" is
+    // the jack label, "Pitch (semi)" the knob) so the card rings it and accepts a drop on it.
+    // Fine/Window sit after the original four so every saved patch keeps its channel numbers.
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Pitch", 2}, {"Shift", 3}, {"Mix", 4}, {"Feedback", 5}};
+        return {{"Pitch", 2, "pitch"},       {"Shift", 3, "shiftHz"}, {"Mix", 4, "mix"},
+                {"Feedback", 5, "feedback"}, {"Fine", 6, "fine"},     {"Window", 7, "window"}};
     }
 
     // Pure audio FX — processBlock never touches the MIDI buffer.

@@ -12,7 +12,7 @@
 class PhaserModule : public ModuleBase {
 public:
     PhaserModule()
-        : ModuleBase("Phaser", 4, 2) {
+        : ModuleBase("Phaser", 7, 2) { // 2 audio + 5 CV (Rate, Depth, Centre Freq, Feedback, Mix)
         addParameter(rateParam = new juce::AudioParameterFloat("rate", "Rate (Hz)", 0.1f, 20.0f, 1.0f));
         addParameter(depthParam = new juce::AudioParameterFloat("depth", "Depth", 0.0f, 1.0f, 0.5f));
         addParameter(centreFreqParam =
@@ -91,11 +91,15 @@ public:
 
         phaser.setRate(rate);
         phaser.setDepth(depth);
-        phaser.setCentreFrequency(smoothedCentreFreq.getCurrentValue());
+        // Centre Freq / Feedback / Mix CV (ch4-6) follows the normalised convention
+        // (docs/modules/modulation.md#cv-in-normalised-units): +1.0 sweeps the knob to its maximum.
+        // Read once per block like Rate/Depth above — all three land in juce::dsp::Phaser setters.
+        phaser.setCentreFrequency(
+            modulateNormalised(*centreFreqParam, smoothedCentreFreq.getCurrentValue(), blockCV(buffer, 4)));
         // Feedback and Mix are already ramped inside juce::dsp::Phaser (a per-channel
         // SmoothedValue and a DryWetMixer), so smoothing them again here would only add lag.
-        phaser.setFeedback(*feedbackParam);
-        phaser.setMix(*mixParam);
+        phaser.setFeedback(modulateNormalised(*feedbackParam, *feedbackParam, blockCV(buffer, 5)));
+        phaser.setMix(modulateNormalised(*mixParam, *mixParam, blockCV(buffer, 6)));
 
         juce::dsp::AudioBlock<float> fullBlock(buffer);
         juce::dsp::AudioBlock<float> audioBlock = fullBlock.getSubsetChannelBlock(0, 2);
@@ -114,16 +118,24 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String cv[] = {"Rate", "Depth"};
-        return stereoInputLabel(i, 2, cv);
+        const juce::String cv[] = {"Rate", "Depth", "Centre Freq", "Feedback", "Mix"};
+        return stereoInputLabel(i, 5, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(2); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(5); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 2); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 5); }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
-    std::vector<ModulationTarget> getModulationTargets() const override { return {{"Rate", 2}, {"Depth", 3}}; }
+    // Every continuous parameter has a CV jack; paramId binds each jack to its knob ("Rate" is the
+    // jack label, "Rate (Hz)" the knob) so the card rings it and accepts a cable dropped on it.
+    std::vector<ModulationTarget> getModulationTargets() const override {
+        return {{"Rate", 2, "rate"},
+                {"Depth", 3, "depth"},
+                {"Centre Freq", 4, "centreFreq"},
+                {"Feedback", 5, "feedback"},
+                {"Mix", 6, "mix"}};
+    }
     // Pure audio FX — processBlock never touches the MIDI buffer.
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }

@@ -18,7 +18,7 @@ public:
     static constexpr float kGateHysteresisDb = 3.0f;
 
     GateModule()
-        : ModuleBase("Gate", 2, 2) {
+        : ModuleBase("Gate", 7, 2) { // 2 audio + 5 CV (Threshold, Attack, Hold, Release, Range)
         addParameter(thresholdParam =
                          new juce::AudioParameterFloat("threshold", "Threshold (dB)", -80.0f, 0.0f, -40.0f));
         addParameter(attackParam = new juce::AudioParameterFloat("attack", "Attack (ms)", 0.1f, 200.0f, 2.0f));
@@ -56,7 +56,9 @@ public:
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         if (isBypassed()) {
-            // Pure stereo module — no CV channels to clear; pass dry audio through unchanged
+            // Pass dry audio through; clear CV channels so mod signals don't leak downstream
+            for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
+                buffer.clear(ch, 0, buffer.getNumSamples());
             return;
         }
         if (isMuted()) {
@@ -73,6 +75,16 @@ public:
         smoothedThreshold.setTargetValue(*thresholdParam);
         smoothedRange.setTargetValue(*rangeParam);
 
+        // CV (ch2-6) follows the normalised convention (docs/modules/modulation.md#cv-in-normalised-units),
+        // read once per block: every value below is already a per-block quantity (the smoothed
+        // levels advance a block at a time; the time constants are sampled once per block).
+        const float thresholdDb =
+            modulateNormalised(*thresholdParam, smoothedThreshold.getCurrentValue(), blockCV(buffer, 2));
+        const float attackMs = modulateNormalised(*attackParam, *attackParam, blockCV(buffer, 3));
+        const float holdMs = modulateNormalised(*holdParam, *holdParam, blockCV(buffer, 4));
+        const float releaseMs = modulateNormalised(*releaseParam, *releaseParam, blockCV(buffer, 5));
+        const float rangeDb = modulateNormalised(*rangeParam, smoothedRange.getCurrentValue(), blockCV(buffer, 6));
+
         // Threshold and Range are levels that feed the gain computer directly (opening/closing
         // decision, closed-state floor), so — like Compressor's Threshold/Ratio — they are
         // smoothed a block at a time. Attack/Hold/Release are deliberately NOT smoothed: Attack
@@ -80,14 +92,13 @@ public:
         // moves, never the currently-applied gain — same reasoning as Compressor's own
         // Attack/Release), and Hold is consulted only at the discrete "signal just dropped below
         // the close level" event, the same category as a sequencer's gate length.
-        const float openThreshLin = juce::Decibels::decibelsToGain(smoothedThreshold.getCurrentValue());
-        const float closeThreshLin =
-            juce::Decibels::decibelsToGain(smoothedThreshold.getCurrentValue() - kGateHysteresisDb);
-        const float rangeGainLin = juce::Decibels::decibelsToGain(smoothedRange.getCurrentValue());
+        const float openThreshLin = juce::Decibels::decibelsToGain(thresholdDb);
+        const float closeThreshLin = juce::Decibels::decibelsToGain(thresholdDb - kGateHysteresisDb);
+        const float rangeGainLin = juce::Decibels::decibelsToGain(rangeDb);
 
-        const int attackSamples = juce::jmax(1, (int)(attackParam->get() * 0.001 * sampleRate_));
-        const int releaseSamples = juce::jmax(1, (int)(releaseParam->get() * 0.001 * sampleRate_));
-        const int holdSamples = juce::jmax(0, (int)(holdParam->get() * 0.001 * sampleRate_));
+        const int attackSamples = juce::jmax(1, (int)(attackMs * 0.001 * sampleRate_));
+        const int releaseSamples = juce::jmax(1, (int)(releaseMs * 0.001 * sampleRate_));
+        const int holdSamples = juce::jmax(0, (int)(holdMs * 0.001 * sampleRate_));
 
         // Attack/Release ramp linearly across the full open<->closed span, so "Attack" always
         // means "time to fully open from fully closed" regardless of where Range currently sits.
@@ -135,17 +146,32 @@ public:
         smoothedRange.skip(numSamples);
 
         applyOutputLevel(buffer, 2);
+
+        // Clear CV channels to prevent leaking to downstream modules
+        for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
+            buffer.clear(ch, 0, numSamples);
     }
 
-    juce::String getInputPortLabel(int i) const override { return stereoInputLabel(i, 0, nullptr); }
+    juce::String getInputPortLabel(int i) const override {
+        const juce::String cv[] = {"Threshold", "Attack", "Hold", "Release", "Range"};
+        return stereoInputLabel(i, 5, cv);
+    }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(0); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(5); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 0); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 5); }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
-    // No sidechain input in v1 — out of scope; see docs/modules/fx-modules.md#gate-module.
-    std::vector<ModulationTarget> getModulationTargets() const override { return {}; }
+    // Every continuous parameter has a CV jack (paramId binds "Threshold" to the "Threshold (dB)"
+    // knob, and so on). These are parameter CVs, not a sidechain: the detector still listens to
+    // the audio pair only — no sidechain input in v1, see docs/modules/fx-modules.md#gate-module.
+    std::vector<ModulationTarget> getModulationTargets() const override {
+        return {{"Threshold", 2, "threshold"},
+                {"Attack", 3, "attack"},
+                {"Hold", 4, "hold"},
+                {"Release", 5, "release"},
+                {"Range", 6, "range"}};
+    }
     // Pure audio FX — processBlock never touches the MIDI buffer.
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }

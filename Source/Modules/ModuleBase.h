@@ -9,9 +9,16 @@
 #include <juce_core/juce_core.h>
 #include <vector>
 
+/** One CV jack that modulates a parameter. `name` is the jack label the mod matrix, the AI schema
+    and the port tooltip show; `channelIndex` the raw input channel the jack owns. `paramId`, when
+    set, names the `juce::AudioProcessorParameterWithID` the jack drives, so the card can find the
+    knob even when the jack label is not the parameter's display name ("Rate" vs "Rate (Hz)") —
+    see ModuleBase::parameterForModTarget. Left empty for a jack with no knob (Oscillator's Pitch
+    CV) or whose label already is the display name. */
 struct ModulationTarget {
     juce::String name;
     int channelIndex;
+    juce::String paramId;
 };
 
 enum class ModulationCategory { Envelope, LFO, Oscillator, Sequencer, Filter, FX, Other };
@@ -506,6 +513,39 @@ public:
     const char* getNodeUuid() const noexcept { return nodeUuidSet_.load(std::memory_order_acquire) ? nodeUuid_ : ""; }
 
     virtual std::vector<ModulationTarget> getModulationTargets() const { return {}; }
+
+    /** The parameter a modulation target's knob is attached to: the one whose `paramID` equals
+        `target.paramId` when that is set, else the one whose display name equals `target.name`.
+        Null for a target with no knob of its own (a bare CV jack such as Oscillator's Pitch). */
+    const juce::RangedAudioParameter* parameterForModTarget(const ModulationTarget& target) const {
+        for (auto* param : getParameters()) {
+            auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(param);
+            if (ranged == nullptr)
+                continue;
+            if (target.paramId.isNotEmpty() ? ranged->paramID == target.paramId : ranged->getName(100) == target.name)
+                return ranged;
+        }
+        return nullptr;
+    }
+
+    /** Per-block read of a parameter-CV jack: the block's first sample, or 0 when the graph handed
+        this module fewer channels than `channel` (nothing patched into a jack reads as silence). */
+    static float blockCV(const juce::AudioBuffer<float>& buffer, int channel) {
+        return (channel >= 0 && channel < buffer.getNumChannels() && buffer.getNumSamples() > 0)
+                   ? buffer.getReadPointer(channel)[0]
+                   : 0.0f;
+    }
+
+    /** `base` moved by `cv` in `param`'s own normalised range and clamped to it: +1.0 sweeps the
+        knob from wherever it sits to its maximum, -1.0 to its minimum. This is the convention the
+        card's modulation ring draws (base + CV in normalised units), so a jack modulated this way
+        rings exactly as far as it moves. See docs/modules/modulation.md#cv-in-normalised-units. */
+    static float modulateNormalised(const juce::RangedAudioParameter& param, float base, float cv) {
+        if (cv == 0.0f)
+            return base;
+        const auto& range = param.getNormalisableRange();
+        return range.convertFrom0to1(juce::jlimit(0.0f, 1.0f, range.convertTo0to1(base) + cv));
+    }
     virtual juce::String getInputPortLabel(int channelIndex) const { return "In " + juce::String(channelIndex); }
     virtual int getVisibleInputPortCount() const { return getTotalNumInputChannels(); }
     virtual ModulationCategory getModulationCategory() const { return ModulationCategory::Other; }

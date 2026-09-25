@@ -192,7 +192,7 @@ public:
     void applyDualIOLayoutChange();
 
     /** Serum-style modulation drop: the visible knob under `localPoint`, reported as the input
-     *  Port its CV jack would be.
+     *  Port its CV jack would be. `index` is the jack's RAW channel, not a visible jack index.
      *
      *  Deliberately NOT folded into getPortForPoint — that one also decides what starts a drag
      *  on mouse-down, and a knob has to keep starting a value drag there, not a cable. This is
@@ -222,6 +222,9 @@ public:
      *  page keeps its last bounds, so a ring drawn from them lands on empty card. Public so the
      *  rule can be tested without a themed LookAndFeel and a live modulation routing. */
     int getModRingSliderIndex(const juce::String& paramName) const;
+
+    /** getModRingSliderIndex for a ModulationTarget, via its bound parameter; -1 if no visible knob. */
+    int sliderIndexForModTarget(const ModulationTarget& target) const;
 
     /** Applies an automation-driven value to whichever slider/combo was built for `param`,
      *  denormalised via that parameter's own range, via setValue(..., dontSendNotification) — never
@@ -508,6 +511,7 @@ private:
     // The pending-drop-target ring and the live Serum-style modulation rings on knobs. Split out of
     // paint() (which was at the function-size ratchet's ceiling) rather than grown further.
     void paintModulationRings(juce::Graphics& g, ModuleBase* mod, juce::Colour jackAccentColour);
+    static juce::String knobNameForModTarget(const ModuleBase* mod, const ModulationTarget& target);
 
     /** Right-click-any-knob entry point into the automation lane editor. Attached as a
      *  MouseListener on every generic auto-UI slider (createControls()'s float/int branches) via
