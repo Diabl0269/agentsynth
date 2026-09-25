@@ -94,14 +94,14 @@ look momentarily misleading during that window.
 - **`JUCE_WEB_BROWSER=0`** — drops the unused `WebBrowserComponent` and removes the WebKit/libsoup
   dependencies on Linux.
 - **A separate lint job** — instant formatting feedback without waiting for a full build.
-- **apt package caching** — `awalsh128/cache-apt-pkgs-action` caches Ubuntu packages across runs.
 - **`coverage.sh --report-only`** — in CI, skips redundant configure/build/test steps and only merges
   profdata and generates the report.
 
 ## Dependency install: the apt mirror is not reliable
 
-The Linux job here, and the Linux leg of the release workflow's build matrix, both install their
-build dependencies through `scripts/ci-install-linux-deps.sh`, not a bare `apt-get`.
+The Linux job here, the label-gated ASAN job, and the Linux leg of the release workflow's build
+matrix all install their build dependencies through `scripts/ci-install-linux-deps.sh`, not a bare
+`apt-get`.
 
 **Why.** GitHub's ubuntu runners resolve the archive through `/etc/apt/apt-mirrors.txt` —
 `azure.archive.ubuntu.com` first, `archive.ubuntu.com` as fallback — and when the Azure mirror is
@@ -118,7 +118,9 @@ instead. That action resolves and pins the *exact* currently-available package v
 for its cache key, then installs those exact `.deb`s with no retry — so when the Azure mirror's
 index had already rotated past one pinned version (a routine point-release bump), the fetch 404'd
 and the whole release build failed outright. Same class of mirror flakiness, with no failover at all
-instead of a slow one. Both workflows now share this one script.
+instead of a slow one. The ASAN job used the same action until FRO275: its cached restore left out
+`libfontconfig1-dev`'s `.pc` file and `.so` symlink, so every labelled run died configuring JUCE's
+`juceaide`. All three now share this one script.
 
 The script therefore caps each apt call (15 s per attempt, 2 retries, instead of apt's 120 s
 default, and 60 s total for `update` / 300 s for `install`); on a stall, rewrites the mirror list to
