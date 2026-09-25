@@ -163,7 +163,8 @@ public:
             buffer.clear(ch, 0, numSamples);
     }
 
-    std::vector<ModulationTarget> getModulationTargets() const override { return {{"CV", 1}}; }
+    // The CV jack drives the Gain knob (paramId), so the card rings and knob-drops on Gain.
+    std::vector<ModulationTarget> getModulationTargets() const override { return {{"CV", 1, "gain"}}; }
     /** Audio R sits next to Audio L; CV keeps its raw channel, only its visible slot moves. */
     juce::String getInputPortLabel(int i) const override {
         const int audioJacks = splitAudioJackCount();

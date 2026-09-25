@@ -303,24 +303,26 @@ CV control of Level is deliberately **not** implemented — it would need a new 
 - **Type**: Stereo feedback delay.
 - **Technique**: Fractional delay line with linear interpolation for smooth "time" parameter changes.
 - **Parameters**: Time (ms), Feedback, Mix, Level (0–1). Level sits outside the feedback path — the delay line stores the pre-level signal.
+- **CV Modulation**: Time (ch2), Feedback (ch3), Mix (ch4) under the [normalised convention](modulation.md#cv-in-normalised-units), read once per block into the smoothing targets (Time's own 50 ms ramp is what keeps a modulated time from zipping). These three were declared as targets while the module declared only two input channels, so the jacks did not exist and nothing could be patched into them — `ModulationTargetBindingTests` now pins every target's channel against the declared inputs. CV channels are cleared on the way out, on bypass too.
 - **Smoothing**: Glide-on-time prevents pitch glitches during modulation.
 
 ## Reverb Module
 - **Type**: Algorithmic stereo reverb.
 - **Implementation**: Uses standard Schroeder/Freeverb-inspired techniques for lush acoustic simulation.
 - **Parameters**: Room Size, Damping, Wet, Dry, Width, Level (0–1). Wet/Dry set the balance; Level scales the summed result.
+- **CV Modulation**: Size (ch2), Damping (ch3), Wet (ch4), Dry (ch5), Width (ch6) under the [normalised convention](modulation.md#cv-in-normalised-units), read once per block (`juce::Reverb` takes its parameters per block and ramps them itself). Same history as Delay: five targets declared, two input channels, no jacks — fixed together. CV channels are cleared on the way out, on bypass too.
 - **Wet/Dry can exceed unity gain**: `juce::Reverb::updateParameters()` (JUCE's own code, not this module's) applies internal `wetScaleFactor = 3.0` and `dryScaleFactor = 2.0` multipliers to the 0-1 Wet/Dry knobs before mixing, so neither is a plain 0-1 balance control at the signal level -- maxing Wet feeds the algorithmic tail at up to 3x, and maxing Dry passes the input through at up to 2x, before the tail's own buildup adds more. `ModuleGainAudit` measured a worst-case output/input RMS gain of +8.91 dB (Wet at max) and +7.77 dB (Dry at max) against a continuous, hot test tone -- a typical reverb send stays well under unity in practice, but the buildup itself is real and, until now, undocumented anywhere in this module. Allow-listed in `Tests/Engine/GainStaging/ModuleGainAuditTests.cpp`.
 
 ## Chorus Module
 - **Implementation**: `juce::dsp::Chorus<float>`.
-- **CV Modulation**: Rate (ch2) and Depth (ch3). CV is sampled per block (RMS-gated) and added to the smoothed parameter value.
+- **CV Modulation**: Rate (ch2) and Depth (ch3) — CV is sampled per block (RMS-gated) and added to the smoothed parameter value (Rate: `cv * 5 Hz`). Centre Delay (ch4), Feedback (ch5) and Mix (ch6) follow the [normalised convention](modulation.md#cv-in-normalised-units), read once per block into the `juce::dsp::Chorus` setters. Every continuous parameter has a jack; each jack names its knob via `paramId` ("Rate" → `rate`, i.e. the "Rate (Hz)" knob).
 - **Parameters**: Rate (0.1–10 Hz), Depth (0–1), Centre Delay (1–30 ms), Feedback (-1–1), Mix (0–1), Level (0–1).
 - **Smoothing**: Centre Delay is smoothed over 50 ms (a block at a time) — `juce::dsp::Chorus` adds it straight onto the modulated read position, so a per-block step jumps the read head by `delta_ms × fs / 1000` samples. Feedback and Mix are already ramped inside `juce::dsp::Chorus` (a per-channel `SmoothedValue` and a `DryWetMixer`); smoothing them again here would only add lag.
 - **Feedback can exceed unity gain**: Feedback (-1 to 1) drives `juce::dsp::Chorus`'s internal comb-filter loop; near its extremes a steady tone can build up well past unity before this module's own wet/dry mix and Level stage. `ModuleGainAudit` measured a worst case of +18.90 dB (Feedback at its maximum, continuous test tone) -- allow-listed in `Tests/Engine/GainStaging/ModuleGainAuditTests.cpp` as expected feedback/resonance behaviour, not a gain-control bug.
 
 ## Phaser Module
 - **Implementation**: `juce::dsp::Phaser<float>`.
-- **CV Modulation**: Rate (ch2) and Depth (ch3). CV is sampled per block (RMS-gated) and added to the smoothed parameter value.
+- **CV Modulation**: Rate (ch2) and Depth (ch3) — CV is sampled per block (RMS-gated) and added to the smoothed parameter value (Rate: `cv * 10 Hz`). Centre Freq (ch4), Feedback (ch5) and Mix (ch6) follow the [normalised convention](modulation.md#cv-in-normalised-units), read once per block into the `juce::dsp::Phaser` setters; Centre Freq CV rides on top of the multiplicatively smoothed base, so a knob move still ramps while the CV steps.
 - **Parameters**: Rate (0.1–20 Hz), Depth (0–1), Centre Freq (200–10 000 Hz), Feedback (-1–1), Mix (0–1), Level (0–1).
 - **Smoothing**: Centre Freq is smoothed multiplicatively over 50 ms (a block at a time) — it is the allpass bank's cutoff, so stepping it swaps every stage's coefficients at once. Feedback and Mix are already ramped inside `juce::dsp::Phaser`.
 - **Feedback can exceed unity gain**: Feedback (-1 to 1) drives `juce::dsp::Phaser`'s internal allpass loop; either polarity can resonate, and near the extremes a steady tone builds up well past unity before this module's own wet/dry mix and Level stage. `ModuleGainAudit` measured its worst case of +13.56 dB at Feedback's minimum (-1), not the maximum -- allow-listed in `Tests/Engine/GainStaging/ModuleGainAuditTests.cpp` as expected feedback/resonance behaviour.
@@ -328,20 +330,20 @@ CV control of Level is deliberately **not** implemented — it would need a new 
 ## Compressor Module
 - **Implementation**: `juce::dsp::Compressor<float>`.
 - **Makeup Gain**: Manual, user-controlled. Range: -20 to +40 dB, default 0 dB. Applied per-sample with 5 ms smoothing after the compressor. There is no automatic gain compensation.
-- **CV Modulation**: None — no CV input channels.
+- **CV Modulation**: Threshold (ch2), Ratio (ch3), Attack (ch4), Release (ch5), Makeup (ch6), all under the [normalised convention](modulation.md#cv-in-normalised-units) and read once per block (every one lands in a `juce::dsp::Compressor` setter that is itself per block, or in the per-block makeup dB offset). Threshold/Ratio CV sits on top of the smoothed base, so a knob move still ramps while the CV steps. Only the audio pair goes through the compressor (`getSubsetChannelBlock(0, 2)`) — the CV block behind it is not audio, and the compressor was prepared for 2 channels; CV channels are cleared on the way out, on bypass too.
 - **Parameters**: Threshold (-60–0 dB), Ratio (1–20), Attack (0.1–200 ms), Release (10–1000 ms), Makeup Gain (-20–+40 dB).
 - **Smoothing**: Threshold and Ratio are both smoothed over 10 ms (a block at a time — `juce::dsp::Compressor` only takes them through setters); both set the gain computer, so stepping either steps the applied gain reduction. Attack and Release are detector time constants and are deliberately not smoothed.
 
 ## Flanger Module
 - **Implementation**: `juce::dsp::Chorus<float>` configured for flanger character by constraining the centre-delay range to 1–5 ms (versus Chorus's 1–30 ms). Default centre delay is 2 ms.
-- **CV Modulation**: Rate (ch2) and Depth (ch3). CV is sampled per block (RMS-gated) and added to the smoothed parameter value.
+- **CV Modulation**: Rate (ch2) and Depth (ch3) — CV is sampled per block (RMS-gated) and added to the smoothed parameter value (Rate: `cv * 2.5 Hz`). Centre Delay (ch4), Feedback (ch5) and Mix (ch6) follow the [normalised convention](modulation.md#cv-in-normalised-units), read once per block into the `juce::dsp::Chorus` setters; Centre Delay is still floored at 1 ms after modulation.
 - **Parameters**: Rate (0.05–5 Hz), Depth (0–1), Centre Delay (1–5 ms), Feedback (-1–1), Mix (0–1), Level (0–1).
 - **Smoothing**: same as Chorus — Centre Delay smoothed over 50 ms a block at a time; Feedback and Mix left to `juce::dsp::Chorus`'s own ramps.
 
 ## Limiter Module
 - **Implementation**: Brickwall `juce::dsp::Limiter<float>`.
 - **Input Gain**: Pre-limiter drive parameter. Range: -20 to +20 dB, default 0 dB. Applied per-sample with 5 ms smoothing before the limiter stage.
-- **CV Modulation**: None — no CV input channels.
+- **CV Modulation**: Threshold (ch2), Release (ch3), Input Gain (ch4), all under the [normalised convention](modulation.md#cv-in-normalised-units) and read once per block (Threshold/Release land in `juce::dsp::Limiter` setters; Input Gain CV is a per-block dB offset on the smoothed ramp). Only the audio pair goes through the limiter (`getSubsetChannelBlock(0, 2)`); CV channels are cleared on the way out, on bypass too.
 - **Parameters**: Threshold (-20–0 dB, default -1 dB), Release (1–500 ms), Input Gain (-20–+20 dB).
 - **Smoothing**: Threshold is smoothed over 10 ms (a block at a time) — it is where the gain computer starts pulling the signal down, so stepping it steps the gain reduction. Release is a detector time constant and is deliberately not smoothed.
 - **Threshold bakes in automatic makeup gain**: `juce::dsp::Limiter`'s own `update()` (JUCE's code, not this module's) computes `outputVolume = 10^(10*(1 - 1/ratio)/40) * dB2gain(-threshold)` with a fixed internal ratio of 4, so a LOWER Threshold (more limiting) also raises the automatic makeup gain baked into JUCE's Limiter itself -- a loudness-maximizing limiter, not a passive ceiling. `ModuleGainAudit` measured the net worst case at Threshold's minimum (-20 dB) as +7.61 dB output/input RMS with a 0.5-amplitude test tone. Allow-listed in `Tests/Engine/GainStaging/ModuleGainAuditTests.cpp`, not a LimiterModule bug. (Input Gain is a separate, already-explicit -20..+20 dB drive control and stays well under this ceiling in practice -- measured worst case +6.64 dB.)
@@ -382,9 +384,14 @@ Threshold, with Attack/Hold/Release shaping how it opens and closes and Range se
   the currently-applied gain). Hold is consulted only at the discrete "signal just dropped below
   the close level" event, the same category as a sequencer's gate length, so it is not smoothed
   either.
-- **CV Modulation**: None — no CV input channels, no sidechain input.
-- **Dual I/O**: inherited `StereoAudio::Auto`, same as Compressor/Limiter — plain ch0/ch1 stereo,
-  no CV inputs to share the block with.
+- **CV Modulation**: Threshold (ch2), Attack (ch3), Hold (ch4), Release (ch5), Range (ch6), all
+  under the [normalised convention](modulation.md#cv-in-normalised-units) and read once per block
+  (every value is already a per-block quantity: the smoothed levels advance a block at a time,
+  the time constants are sampled once per block). These are **parameter** CVs, not a sidechain —
+  the detector still listens to the audio pair only; a sidechain input is still out of v1 scope.
+  CV channels are cleared on the way out, on bypass too.
+- **Dual I/O**: inherited `StereoAudio::Auto`, same as Compressor/Limiter — ch0/ch1 stereo pair,
+  then the CV block.
 
 ## Bitcrusher Module
 - **Implementation**: Downsampling and bit-depth quantization effect with dither.
@@ -417,5 +424,5 @@ Two engines behind one Mode switch, because they answer the same question with o
   - **Window**: trades artifacts against latency. Short windows chop the signal at a higher rate (audible as AM sidebands at `|1 - ratio| / window` Hz); long windows smear transients. 50 ms default.
 - **Frequency mode**: Single-sideband modulation. A Hilbert transform pair (two cascaded 4-section 2nd-order allpass chains, `H(z) = (a² - z⁻²)/(1 - a²z⁻²)`, using Olli Niemitalo's wideband 90° coefficients) feeds a quadrature oscillator: `out = I·cos(ωt) + Q·sin(ωt)`. Measured rejection of the unwanted sideband is ~55 dB. A negative Shift runs the oscillator backwards — no separate code path. Harmonics stop being integer multiples of the fundamental, which is what produces the "alien voice" / metallic timbre.
 - **Feedback**: routes the shifted output back into the input, so each pass is shifted again — cascading octaves in Pitch mode, barber-pole / Shepard-tone illusions in Frequency mode. Soft-clipped with `tanh` so the loop stays bounded at the 0.95 maximum. **Can still exceed unity gain**: the `tanh` bounds the loop's amplitude, not its RMS energy relative to the dry input, so `ModuleGainAudit` measures a worst-case output/input RMS gain of +9.73 dB at Feedback's maximum (0.95) against a continuous test tone -- allow-listed in `Tests/Engine/GainStaging/ModuleGainAuditTests.cpp` as expected feedback/resonance behaviour, not a bug to tighten further.
-- **CV Modulation**: Pitch (ch2, ±24 semitones), Shift (ch3, ±1000 Hz), Mix (ch4, ±1), Feedback (ch5, ±0.95). CV is added per-sample to the smoothed parameter value and clamped; Window and Fine have no CV input.
+- **CV Modulation**: Pitch (ch2, ±24 semitones), Shift (ch3, ±1000 Hz), Mix (ch4, ±1), Feedback (ch5, ±0.95) — CV is added per-sample to the smoothed parameter value and clamped. Fine (ch6) and Window (ch7) came later and were **appended** so saved patches keep ch2-5; both follow the [normalised convention](modulation.md#cv-in-normalised-units) and are read once per block, because each only ever sets a smoothing target (Fine folds into the Pitch target as cents; Window into the grain-length target).
 - **Parameters**: Mode (Pitch/Frequency), Pitch (-24–+24 semitones), Fine (-100–+100 cents), Shift (-1000–+1000 Hz), Window (10–100 ms), Feedback (0–0.95), Mix (0–1, default 1).

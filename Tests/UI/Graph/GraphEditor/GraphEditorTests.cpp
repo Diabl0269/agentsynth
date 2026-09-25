@@ -15,6 +15,7 @@
 #include "Modules/FX/ChorusModule.h"
 #include "Modules/FX/DelayModule.h"
 #include "Modules/FX/DistortionModule.h"
+#include "Modules/FX/FlangerModule.h"
 #include "Modules/FX/ReverbModule.h"
 #include "Modules/FX/RingModulatorModule.h"
 #include "Modules/FilterModule.h"
@@ -289,6 +290,55 @@ TEST_F(GraphEditorTest, DroppingACableOnAKnobCreatesAModRouting) {
             r.destChannelIndex == WavetableOscillatorModule::kJackPosition)
             routed = true;
     EXPECT_TRUE(routed) << "dropping on the Position knob must modulate Position";
+}
+
+// The knob's name carries a unit the jack label does not ("Rate (Hz)" vs "Rate"): the drop has to
+// resolve through the target's bound parameter, or the Flanger silently refuses every knob drop.
+TEST_F(GraphEditorTest, DroppingACableOnAUnitLabelledKnobCreatesAModRouting) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+
+    auto lfoNode = engine.getGraph().addNode(std::make_unique<LFOModule>());
+    auto flangerNode = engine.getGraph().addNode(std::make_unique<FlangerModule>());
+    editor.updateComponents();
+
+    ModuleComponent* lfoComp = nullptr;
+    ModuleComponent* flangerComp = nullptr;
+    if (auto* content = editor.getChildComponent(0))
+        for (auto* child : content->getChildren())
+            if (auto* mod = dynamic_cast<ModuleComponent*>(child)) {
+                if (mod->getModule() == lfoNode->getProcessor())
+                    lfoComp = mod;
+                if (mod->getModule() == flangerNode->getProcessor())
+                    flangerComp = mod;
+            }
+    ASSERT_NE(lfoComp, nullptr);
+    ASSERT_NE(flangerComp, nullptr);
+
+    lfoComp->setTopLeftPosition(0, 0);
+    flangerComp->setTopLeftPosition(400, 0);
+
+    juce::Slider* rate = nullptr;
+    for (auto* child : flangerComp->getChildren())
+        if (auto* s = dynamic_cast<juce::Slider*>(child))
+            if (s->getComponentID() == "Rate (Hz)")
+                rate = s;
+    ASSERT_NE(rate, nullptr);
+
+    const auto knobPoint = flangerComp->getBounds().getPosition() + rate->getBounds().getCentre();
+
+    editor.beginConnectionDrag(lfoComp, 0, /*isInput*/ false, /*isMidi*/ false, {0, 0});
+    editor.dragConnection(knobPoint);
+    EXPECT_EQ(flangerComp->getModDropTargetChannel(), 2) << "the Rate (Hz) knob must arm as the drop target";
+    editor.endConnectionDrag(knobPoint);
+    EXPECT_EQ(flangerComp->getModDropTargetChannel(), -1);
+
+    bool routed = false;
+    for (const auto& r : engine.getModulationRoutings())
+        if (r.sourceNodeID == lfoNode->nodeID && r.destNodeID == flangerNode->nodeID && r.destChannelIndex == 2)
+            routed = true;
+    EXPECT_TRUE(routed) << "dropping on the Rate (Hz) knob must modulate the Flanger's Rate jack";
 }
 
 // A knob only accepts a cable coming FROM an output — a mod source drives a destination, and

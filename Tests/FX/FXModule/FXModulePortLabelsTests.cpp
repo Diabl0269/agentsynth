@@ -16,6 +16,7 @@
 #include "Modules/VCAModule.h"
 #include <gtest/gtest.h>
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <vector>
 
 // ---------------------------------------------------------------------------
 // Port Label tests
@@ -86,19 +87,41 @@ static void setDualIO(juce::AudioProcessor& proc, bool dual) {
     }
 }
 
+// The FX modules whose every continuous parameter has a CV jack: the visible jacks are the
+// collapsed Audio (or Left/Right) pair followed by one jack per parameter, in parameter order,
+// and every jack is a modulation target on the matching raw channel (audio pair + jack index).
+static void expectStereoCvJacks(ModuleBase& module, const std::vector<juce::String>& cvLabels) {
+    ASSERT_EQ(module.getVisibleInputPortCount(), 1 + (int)cvLabels.size());
+    EXPECT_EQ(module.getInputPortLabel(0), "Audio");
+    for (size_t i = 0; i < cvLabels.size(); ++i)
+        EXPECT_EQ(module.getInputPortLabel(1 + (int)i), cvLabels[i]);
+
+    const auto targets = module.getModulationTargets();
+    ASSERT_EQ(targets.size(), cvLabels.size());
+    for (size_t i = 0; i < cvLabels.size(); ++i) {
+        EXPECT_EQ(targets[i].name, cvLabels[i]);
+        EXPECT_EQ(targets[i].channelIndex, 2 + (int)i);
+        EXPECT_NE(module.parameterForModTarget(targets[i]), nullptr) << cvLabels[i] << " binds to no knob";
+    }
+    EXPECT_EQ(module.getTotalNumInputChannels(), 2 + (int)cvLabels.size());
+
+    setDualIO(module, true);
+    ASSERT_EQ(module.getVisibleInputPortCount(), 2 + (int)cvLabels.size());
+    EXPECT_EQ(module.getInputPortLabel(0), "Left");
+    EXPECT_EQ(module.getInputPortLabel(1), "Right");
+    for (size_t i = 0; i < cvLabels.size(); ++i)
+        EXPECT_EQ(module.getInputPortLabel(2 + (int)i), cvLabels[i]);
+}
+
 TEST(PortLabelTests, DelayPortLabelsDefaultToSingleAudioJack) {
     DelayModule delay;
     EXPECT_FALSE(delay.isDualIO());
-    EXPECT_EQ(delay.getVisibleInputPortCount(), 1);
     EXPECT_EQ(delay.getVisibleOutputPortCount(), 1);
-    EXPECT_EQ(delay.getInputPortLabel(0), "Audio");
     EXPECT_EQ(delay.getOutputPortLabel(0), "Audio");
-
-    setDualIO(delay, true);
-    EXPECT_EQ(delay.getVisibleInputPortCount(), 2);
+    // Time/Feedback/Mix were declared as targets on ch2-4 while the module declared only two
+    // inputs, so those jacks never existed; expectStereoCvJacks pins that they do now.
+    expectStereoCvJacks(delay, {"Time", "Feedback", "Mix"});
     EXPECT_EQ(delay.getVisibleOutputPortCount(), 2);
-    EXPECT_EQ(delay.getInputPortLabel(0), "Left");
-    EXPECT_EQ(delay.getInputPortLabel(1), "Right");
     EXPECT_EQ(delay.getOutputPortLabel(0), "Left");
     EXPECT_EQ(delay.getOutputPortLabel(1), "Right");
 }
@@ -123,75 +146,40 @@ TEST(PortLabelTests, DistortionPortLabelsCollapseCvJacksInSingleMode) {
 
 TEST(PortLabelTests, ReverbPortLabels) {
     ReverbModule reverb;
-    EXPECT_EQ(reverb.getInputPortLabel(0), "Audio");
     EXPECT_EQ(reverb.getOutputPortLabel(0), "Audio");
-    setDualIO(reverb, true);
-    EXPECT_EQ(reverb.getInputPortLabel(0), "Left");
-    EXPECT_EQ(reverb.getInputPortLabel(1), "Right");
+    // Same history as Delay: five targets on ch2-6 and only two declared inputs, until now.
+    expectStereoCvJacks(reverb, {"Size", "Damping", "Wet", "Dry", "Width"});
     EXPECT_EQ(reverb.getOutputPortLabel(0), "Left");
     EXPECT_EQ(reverb.getOutputPortLabel(1), "Right");
 }
 
 TEST(PortLabelTests, ChorusPortLabels) {
     ChorusModule chorus;
-    EXPECT_EQ(chorus.getInputPortLabel(0), "Audio");
-    EXPECT_EQ(chorus.getInputPortLabel(1), "Rate");
-    EXPECT_EQ(chorus.getInputPortLabel(2), "Depth");
-    setDualIO(chorus, true);
-    EXPECT_EQ(chorus.getInputPortLabel(0), "Left");
-    EXPECT_EQ(chorus.getInputPortLabel(1), "Right");
-    EXPECT_EQ(chorus.getInputPortLabel(2), "Rate");
-    EXPECT_EQ(chorus.getInputPortLabel(3), "Depth");
+    expectStereoCvJacks(chorus, {"Rate", "Depth", "Centre Delay", "Feedback", "Mix"});
 }
 
 TEST(PortLabelTests, PhaserPortLabels) {
     PhaserModule phaser;
-    EXPECT_EQ(phaser.getInputPortLabel(0), "Audio");
-    setDualIO(phaser, true);
-    EXPECT_EQ(phaser.getInputPortLabel(0), "Left");
-    EXPECT_EQ(phaser.getInputPortLabel(1), "Right");
-    EXPECT_EQ(phaser.getInputPortLabel(2), "Rate");
-    EXPECT_EQ(phaser.getInputPortLabel(3), "Depth");
+    expectStereoCvJacks(phaser, {"Rate", "Depth", "Centre Freq", "Feedback", "Mix"});
 }
 
 TEST(PortLabelTests, CompressorPortLabels) {
     CompressorModule comp;
-    EXPECT_EQ(comp.getInputPortLabel(0), "Audio");
-    setDualIO(comp, true);
-    EXPECT_EQ(comp.getInputPortLabel(0), "Left");
-    EXPECT_EQ(comp.getInputPortLabel(1), "Right");
+    expectStereoCvJacks(comp, {"Threshold", "Ratio", "Attack", "Release", "Makeup"});
 }
 
 TEST(PortLabelTests, FlangerPortLabels) {
     FlangerModule flanger;
-    EXPECT_EQ(flanger.getInputPortLabel(0), "Audio");
-    setDualIO(flanger, true);
-    EXPECT_EQ(flanger.getInputPortLabel(0), "Left");
-    EXPECT_EQ(flanger.getInputPortLabel(1), "Right");
-    EXPECT_EQ(flanger.getInputPortLabel(2), "Rate");
-    EXPECT_EQ(flanger.getInputPortLabel(3), "Depth");
+    expectStereoCvJacks(flanger, {"Rate", "Depth", "Centre Delay", "Feedback", "Mix"});
 }
 
 TEST(PortLabelTests, LimiterPortLabels) {
     LimiterModule limiter;
-    EXPECT_EQ(limiter.getInputPortLabel(0), "Audio");
-    setDualIO(limiter, true);
-    EXPECT_EQ(limiter.getInputPortLabel(0), "Left");
-    EXPECT_EQ(limiter.getInputPortLabel(1), "Right");
+    expectStereoCvJacks(limiter, {"Threshold", "Release", "Input Gain"});
 }
 
 TEST(PortLabelTests, PitchShifterPortLabels) {
     PitchShifterModule shifter;
-    EXPECT_EQ(shifter.getInputPortLabel(0), "Audio");
-    EXPECT_EQ(shifter.getInputPortLabel(1), "Pitch");
-    EXPECT_EQ(shifter.getInputPortLabel(2), "Shift");
-    EXPECT_EQ(shifter.getInputPortLabel(3), "Mix");
-    EXPECT_EQ(shifter.getInputPortLabel(4), "Feedback");
-    setDualIO(shifter, true);
-    EXPECT_EQ(shifter.getInputPortLabel(0), "Left");
-    EXPECT_EQ(shifter.getInputPortLabel(1), "Right");
-    EXPECT_EQ(shifter.getInputPortLabel(2), "Pitch");
-    EXPECT_EQ(shifter.getInputPortLabel(3), "Shift");
-    EXPECT_EQ(shifter.getInputPortLabel(4), "Mix");
-    EXPECT_EQ(shifter.getInputPortLabel(5), "Feedback");
+    // Fine/Window came after the original four, so they sit LAST — saved patches keep ch2-5.
+    expectStereoCvJacks(shifter, {"Pitch", "Shift", "Mix", "Feedback", "Fine", "Window"});
 }

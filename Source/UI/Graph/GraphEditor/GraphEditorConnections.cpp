@@ -223,8 +223,16 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         // Serum-style modulation drop: a cable released on a KNOB connects to that parameter's
         // CV jack. Only as a fallback, so an actual jack under the cursor still wins, and only
         // for a cable coming from an output — a mod source drives a destination, not the reverse.
-        if (!port && !dragSourceIsInput && !dragSourceIsMidi && comp != dragSourceModule)
+        if (!port && !dragSourceIsInput && !dragSourceIsMidi && comp != dragSourceModule) {
             port = comp->getModTargetPortForPoint(localPos);
+            // A knob names its CV jack by RAW channel (the ModulationTarget's channelIndex), while
+            // everything below speaks in VISIBLE jack indices. On a collapsed stereo pair the two
+            // differ by one (raw ch0/ch1 are the single "Audio" jack), so without this mapping a
+            // Distortion's Drive knob (raw ch2) wired visible jack 2, which is Mix.
+            if (port)
+                if (auto* mb = dynamic_cast<ModuleBase*>(comp->getModule()))
+                    port->index = mb->mapInputChannel(port->index).visibleJackIndex;
+        }
 
         if (port) {
             if (comp == dragSourceModule)

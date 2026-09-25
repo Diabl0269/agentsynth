@@ -14,7 +14,7 @@ namespace {
 
 constexpr double kSampleRate = 44100.0;
 constexpr int kBlockSize = 512;
-constexpr int kNumChannels = 6; // 2 audio + 4 CV
+constexpr int kNumChannels = 8; // 2 audio + 6 CV
 
 void setFloatParam(juce::AudioProcessor& proc, const juce::String& id, float value) {
     for (auto* p : proc.getParameters()) {
@@ -140,14 +140,14 @@ TEST(PitchShifterModuleTest, ModuleTypeAndCategoryAreCorrect) {
 
 TEST(PitchShifterModuleTest, ChannelLayoutMatchesPortLabels) {
     PitchShifterModule module;
-    EXPECT_EQ(module.getTotalNumInputChannels(), 6);
+    EXPECT_EQ(module.getTotalNumInputChannels(), 8);
     EXPECT_EQ(module.getTotalNumOutputChannels(), 2);
 }
 
 TEST(PitchShifterModuleTest, ModulationTargetsMatchCVChannels) {
     PitchShifterModule module;
     const auto targets = module.getModulationTargets();
-    ASSERT_EQ(targets.size(), 4u);
+    ASSERT_EQ(targets.size(), 6u);
     EXPECT_EQ(targets[0].name, "Pitch");
     EXPECT_EQ(targets[0].channelIndex, 2);
     EXPECT_EQ(targets[1].name, "Shift");
@@ -156,6 +156,11 @@ TEST(PitchShifterModuleTest, ModulationTargetsMatchCVChannels) {
     EXPECT_EQ(targets[2].channelIndex, 4);
     EXPECT_EQ(targets[3].name, "Feedback");
     EXPECT_EQ(targets[3].channelIndex, 5);
+    // Added later, so appended: a patch saved with Pitch on ch2 still modulates Pitch.
+    EXPECT_EQ(targets[4].name, "Fine");
+    EXPECT_EQ(targets[4].channelIndex, 6);
+    EXPECT_EQ(targets[5].name, "Window");
+    EXPECT_EQ(targets[5].channelIndex, 7);
 }
 
 // ---------------------------------------------------------------------------

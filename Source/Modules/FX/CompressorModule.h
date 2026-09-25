@@ -6,7 +6,7 @@
 class CompressorModule : public ModuleBase {
 public:
     CompressorModule()
-        : ModuleBase("Compressor", 2, 2) {
+        : ModuleBase("Compressor", 7, 2) { // 2 audio + 5 CV (Threshold, Ratio, Attack, Release, Makeup)
         addParameter(thresholdParam =
                          new juce::AudioParameterFloat("threshold", "Threshold (dB)", -60.0f, 0.0f, -12.0f));
         addParameter(ratioParam = new juce::AudioParameterFloat("ratio", "Ratio", 1.0f, 20.0f, 4.0f));
@@ -37,7 +37,9 @@ public:
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         if (isBypassed()) {
-            // Pure stereo module — no CV channels to clear; pass dry audio through unchanged
+            // Pass dry audio through; clear CV channels so mod signals don't leak downstream
+            for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
+                buffer.clear(ch, 0, buffer.getNumSamples());
             return;
         }
         if (isMuted()) {
@@ -55,36 +57,61 @@ public:
         smoothedMakeupGain.setTargetValue(*makeupGainParam);
         smoothedRatio.setTargetValue(*ratioParam);
 
-        compressor.setThreshold(smoothedThreshold.getCurrentValue());
-        compressor.setRatio(smoothedRatio.getCurrentValue());
+        // CV (ch2-6) follows the normalised convention (docs/modules/modulation.md#cv-in-normalised-units)
+        // and is read once per block — every target lands in a juce::dsp::Compressor setter that
+        // is itself only consulted per block. Threshold/Ratio CV rides on top of the smoothed
+        // base, so a knob move still ramps while the CV steps.
+        compressor.setThreshold(
+            modulateNormalised(*thresholdParam, smoothedThreshold.getCurrentValue(), blockCV(buffer, 2)));
+        compressor.setRatio(modulateNormalised(*ratioParam, smoothedRatio.getCurrentValue(), blockCV(buffer, 3)));
         // Attack/Release are detector time constants, not levels: stepping one changes how fast
         // the envelope follower tracks, never the current gain. Deliberately not smoothed.
-        compressor.setAttack(*attackParam);
-        compressor.setRelease(*releaseParam);
+        compressor.setAttack(modulateNormalised(*attackParam, *attackParam, blockCV(buffer, 4)));
+        compressor.setRelease(modulateNormalised(*releaseParam, *releaseParam, blockCV(buffer, 5)));
 
-        juce::dsp::AudioBlock<float> block(buffer);
-        juce::dsp::ProcessContextReplacing<float> context(block);
+        // Only the audio pair goes through the compressor: it was prepared for 2 channels, and the
+        // CV block behind it is not audio.
+        juce::dsp::AudioBlock<float> fullBlock(buffer);
+        juce::dsp::AudioBlock<float> audioBlock = fullBlock.getSubsetChannelBlock(0, 2);
+        juce::dsp::ProcessContextReplacing<float> context(audioBlock);
         compressor.process(context);
 
-        // Apply makeup gain per-sample (smoothed)
+        // Apply makeup gain per-sample (smoothed); the CV offset is a per-block dB shift on top.
+        const float makeupCV = blockCV(buffer, 6);
         for (int i = 0; i < numSamples; ++i) {
-            float linearGain = juce::Decibels::decibelsToGain(smoothedMakeupGain.getNextValue());
+            const float makeupDb = modulateNormalised(*makeupGainParam, smoothedMakeupGain.getNextValue(), makeupCV);
+            const float linearGain = juce::Decibels::decibelsToGain(makeupDb);
             buffer.getWritePointer(0)[i] *= linearGain;
             buffer.getWritePointer(1)[i] *= linearGain;
         }
 
         smoothedThreshold.skip(numSamples);
         smoothedRatio.skip(numSamples);
+
+        // Clear CV channels to prevent leaking to downstream modules
+        for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
+            buffer.clear(ch, 0, numSamples);
     }
 
-    juce::String getInputPortLabel(int i) const override { return stereoInputLabel(i, 0, nullptr); }
+    juce::String getInputPortLabel(int i) const override {
+        const juce::String cv[] = {"Threshold", "Ratio", "Attack", "Release", "Makeup"};
+        return stereoInputLabel(i, 5, cv);
+    }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(0); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(5); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 0); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 5); }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
-    std::vector<ModulationTarget> getModulationTargets() const override { return {}; }
+    // Every continuous parameter has a CV jack; paramId binds each jack to its knob ("Threshold"
+    // is the jack label, "Threshold (dB)" the knob) so the card rings it and accepts a drop on it.
+    std::vector<ModulationTarget> getModulationTargets() const override {
+        return {{"Threshold", 2, "threshold"},
+                {"Ratio", 3, "ratio"},
+                {"Attack", 4, "attack"},
+                {"Release", 5, "release"},
+                {"Makeup", 6, "makeupGain"}};
+    }
     // Pure audio FX — processBlock never touches the MIDI buffer.
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }

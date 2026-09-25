@@ -143,7 +143,7 @@ public:
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Rate", 2}, {"Depth", 3}, {"Mix", 4}};
+        return {{"Rate", 2, "rate"}, {"Depth", 3, "depth"}, {"Mix", 4, "mix"}};
     }
 
     // Pure audio FX — processBlock never touches the MIDI buffer.

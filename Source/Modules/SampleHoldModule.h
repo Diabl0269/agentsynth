@@ -221,7 +221,11 @@ public:
     }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Rate", 2}, {"Slew", 3}, {"Level", 4}, {"Offset", 5}, {"Threshold", 6}};
+        return {{"Rate", 2, "rate"},
+                {"Slew", 3, "slew"},
+                {"Level", 4, "level"},
+                {"Offset", 5, "offset"},
+                {"Threshold", 6, "trigThreshold"}};
     }
 
     juce::String getInputPortLabel(int i) const override {
