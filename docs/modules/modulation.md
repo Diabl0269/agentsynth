@@ -430,8 +430,13 @@ had listed their targets for a long time — on channels 2-6 of modules that dec
 the jacks never existed and the AI schema advertised ports nothing could connect to;
 `ModulationTargetBindingTests` now checks every target's channel against the declared input count.
 
-Not yet covered, each its own ticket: LFO (Rate, Level, Glide — it has no inputs at all today),
-ADSR times (its poly gate fan owns ch0-7 and Threshold ch8), Parametric EQ's other bands, and the
+Also covered, appended after each module's existing channels so saved patches keep theirs: the
+LFO (Rate ch0, Level ch1, Glide ch2; Rate CV applies in Hz mode only), the ADSR (Attack ch9, Hold
+ch10, Decay ch11, Sustain ch12, Release ch13, after Threshold ch8; a tempo-synced stage ignores its
+time CV) and every remaining Parametric EQ parameter (B1/B4 Freq+Gain, each band's Q, Output on
+ch6-14) — see [`modules.md#lfo-module`](modules.md#lfo-module),
+[`modules.md#adsr-envelope-module`](modules.md#adsr-envelope-module) and
+[`fx-modules.md#parametric-eq-module`](fx-modules.md#parametric-eq-module). Not yet covered: the
 mixer modules (Channel Strip, Voice Mixer), whose gain is driven by the mixer rather than by CV.
 
 ## CV in normalised units

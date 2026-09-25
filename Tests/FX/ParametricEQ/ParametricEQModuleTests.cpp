@@ -8,144 +8,13 @@
 //   • analytic response helpers (bandMagnitudeDb / responseDb) against known anchor points
 //   • RBJ biquad coefficients agree with the analytic prototype they are derived from
 //   • real audio: enabling/boosting/cutting a band actually moves that band's energy
-//   • CV mapping helpers and end-to-end CV modulation of the two bell bands
 //   • edge cases: zero-length buffer, mono buffer, no prepareToPlay, state round-trip
+// CV modulation lives in ParametricEQCVTests.cpp; shared helpers in ParametricEQTestHelpers.h.
 
-#include "Modules/FX/ParametricEQModule.h"
-#include <cmath>
-#include <functional>
+#include "ParametricEQTestHelpers.h"
 #include <gtest/gtest.h>
-#include <juce_dsp/juce_dsp.h>
 
-namespace {
-
-using BandType = ParametricEQModule::BandType;
-
-constexpr double kSampleRate = 48000.0;
-constexpr int kBlockSize = 512;
-constexpr int kNumBands = ParametricEQModule::kNumBands;
-
-juce::AudioParameterFloat* floatParamById(ParametricEQModule& eq, const juce::String& id) {
-    for (auto* p : eq.getParameters())
-        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(p))
-            if (withId->paramID == id)
-                return dynamic_cast<juce::AudioParameterFloat*>(p);
-    return nullptr;
-}
-
-juce::AudioParameterBool* boolParamById(ParametricEQModule& eq, const juce::String& id) {
-    for (auto* p : eq.getParameters())
-        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(p))
-            if (withId->paramID == id)
-                return dynamic_cast<juce::AudioParameterBool*>(p);
-    return nullptr;
-}
-
-juce::String bandId(int band, const juce::String& suffix) { return "band" + juce::String(band + 1) + suffix; }
-
-void setFloatParam(ParametricEQModule& eq, const juce::String& id, float value) {
-    auto* p = floatParamById(eq, id);
-    ASSERT_NE(p, nullptr) << "missing parameter: " << id.toStdString();
-    p->setValueNotifyingHost(p->convertTo0to1(value));
-}
-
-/** Turns a band on and parks it at the given shape, using the module's own setters. */
-void enableBand(ParametricEQModule& eq, int band, float freqHz, float gainDb, float q = ParametricEQModule::kDefaultQ) {
-    eq.setBandFreq(band, freqHz);
-    eq.setBandGain(band, gainDb);
-    eq.setBandQ(band, q);
-    eq.setBandEnabled(band, true);
-}
-
-constexpr float kSineAmplitude = 0.5f;
-// RMS of a kSineAmplitude sine: 0.5 / sqrt(2).
-constexpr float kFlatRMS = 0.35355339f;
-
-// Warm-up blocks (filter transient + 20 ms parameter smoothing) then the measurement window.
-// 8 x 512 = 4096 samples = 85 ms at 48 kHz — enough whole cycles that even a 50 Hz tone's RMS
-// is within ~0.1 dB of the ideal, so phase shift through the filter can't skew the comparison.
-constexpr int kWarmupBlocks = 12;
-constexpr int kMeasureBlocks = 8;
-
-// Fills `buffer` (channels 0..min(2,numCh)-1) with a sine at `freq`, continuing the phase from
-// absolute sample index `startSample` so successive blocks form one unbroken tone.
-void fillSine(juce::AudioBuffer<float>& buffer, float freq, double sampleRate, int startSample = 0,
-              float amplitude = kSineAmplitude) {
-    const int numSamples = buffer.getNumSamples();
-    const int audioCh = std::min(2, buffer.getNumChannels());
-    for (int i = 0; i < numSamples; ++i) {
-        const float s = amplitude * std::sin(juce::MathConstants<float>::twoPi * freq *
-                                             static_cast<float>(startSample + i) / static_cast<float>(sampleRate));
-        for (int ch = 0; ch < audioCh; ++ch)
-            buffer.setSample(ch, i, s);
-    }
-}
-
-/** Drives `eq` with a continuous sine at `freq` and returns the output RMS of channel 0 over the
- *  measurement window. `prepBlock`, if given, runs after the sine is written and before
- *  processBlock, so a test can stamp CV values into channels 2-5.
- */
-float measureRMS(ParametricEQModule& eq, float freq, int numChannels = 6,
-                 const std::function<void(juce::AudioBuffer<float>&)>& prepBlock = {}) {
-    juce::MidiBuffer midi;
-    juce::AudioBuffer<float> buffer(numChannels, kBlockSize);
-    double sumSquares = 0.0;
-    int measuredSamples = 0;
-
-    for (int b = 0; b < kWarmupBlocks + kMeasureBlocks; ++b) {
-        buffer.clear();
-        fillSine(buffer, freq, kSampleRate, b * kBlockSize);
-        if (prepBlock)
-            prepBlock(buffer);
-        eq.processBlock(buffer, midi);
-
-        if (b >= kWarmupBlocks && buffer.getNumChannels() > 0) {
-            const auto* out = buffer.getReadPointer(0);
-            for (int i = 0; i < kBlockSize; ++i)
-                sumSquares += static_cast<double>(out[i]) * out[i];
-            measuredSamples += kBlockSize;
-        }
-    }
-
-    if (measuredSamples == 0)
-        return 0.0f;
-    return static_cast<float>(std::sqrt(sumSquares / measuredSamples));
-}
-
-/** Level change in dB that `eq` applies to a `freq` tone, relative to a flat (all-off) EQ. */
-float measureGainDb(ParametricEQModule& eq, float freq, int numChannels = 6,
-                    const std::function<void(juce::AudioBuffer<float>&)>& prepBlock = {}) {
-    const float rms = measureRMS(eq, freq, numChannels, prepBlock);
-    return 20.0f * std::log10(std::max(rms, 1.0e-9f) / kFlatRMS);
-}
-
-// Magnitude in dB of the digital biquad that writeBiquad() produces, evaluated at `freq`.
-// Uses juce::dsp::IIR::Coefficients to do the z-plane evaluation so the check is independent
-// of our own maths.
-float digitalMagnitudeDb(BandType type, float centreHz, float gainDb, float q, float freq) {
-    float raw[5] = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-    ParametricEQModule::writeBiquad(type, centreHz, gainDb, q, kSampleRate, raw);
-    juce::dsp::IIR::Coefficients<float> coefs(raw[0], raw[1], raw[2], 1.0f, raw[3], raw[4]);
-    const double mag = coefs.getMagnitudeForFrequency(freq, kSampleRate);
-    return 20.0f * std::log10(static_cast<float>(std::max(mag, 1.0e-12)));
-}
-
-/** An all-off snapshot with one band enabled at the given shape — for responseDb tests. */
-std::array<ParametricEQModule::BandSnapshot, kNumBands> oneBandSnapshot(int band, float freqHz, float gainDb, float q) {
-    std::array<ParametricEQModule::BandSnapshot, kNumBands> bands{};
-    for (int b = 0; b < kNumBands; ++b) {
-        bands[(size_t)b].type = ParametricEQModule::bandTypeFor(b);
-        bands[(size_t)b].enabled = false;
-        bands[(size_t)b].freqHz = ParametricEQModule::defaultFreqFor(b);
-    }
-    bands[(size_t)band].enabled = true;
-    bands[(size_t)band].freqHz = freqHz;
-    bands[(size_t)band].gainDb = gainDb;
-    bands[(size_t)band].q = q;
-    return bands;
-}
-
-} // namespace
+using namespace eqtest;
 
 // ============================================================================
 // Identity / metadata
@@ -158,31 +27,42 @@ TEST(ParametricEQModuleTest, NameTypeAndCategory) {
     EXPECT_EQ(eq.getModulationCategory(), ModulationCategory::Filter);
 }
 
-TEST(ParametricEQModuleTest, ChannelLayoutIsStereoPlusFourCV) {
+TEST(ParametricEQModuleTest, ChannelLayoutIsStereoPlusThirteenCV) {
     ParametricEQModule eq;
-    EXPECT_EQ(eq.getTotalNumInputChannels(), 6);
+    EXPECT_EQ(eq.getTotalNumInputChannels(), 15);
     EXPECT_EQ(eq.getTotalNumOutputChannels(), 2);
-    EXPECT_EQ(eq.getVisibleInputPortCount(), 5);
+    EXPECT_EQ(eq.getVisibleInputPortCount(), 14);
     EXPECT_EQ(eq.getVisibleOutputPortCount(), 1);
 }
 
-TEST(ParametricEQModuleTest, PortLabelsNameTheTwoBellBands) {
+TEST(ParametricEQModuleTest, PortLabelsNameAllFifteenInputs) {
     ParametricEQModule eq;
     EXPECT_EQ(eq.getInputPortLabel(0), "Audio");
     EXPECT_EQ(eq.getInputPortLabel(1), "B2 Freq");
     EXPECT_EQ(eq.getInputPortLabel(2), "B2 Gain");
     EXPECT_EQ(eq.getInputPortLabel(3), "B3 Freq");
     EXPECT_EQ(eq.getInputPortLabel(4), "B3 Gain");
+    EXPECT_EQ(eq.getInputPortLabel(5), "B1 Freq");
+    EXPECT_EQ(eq.getInputPortLabel(6), "B1 Gain");
+    EXPECT_EQ(eq.getInputPortLabel(7), "B4 Freq");
+    EXPECT_EQ(eq.getInputPortLabel(8), "B4 Gain");
+    EXPECT_EQ(eq.getInputPortLabel(9), "B1 Q");
+    EXPECT_EQ(eq.getInputPortLabel(10), "B2 Q");
+    EXPECT_EQ(eq.getInputPortLabel(11), "B3 Q");
+    EXPECT_EQ(eq.getInputPortLabel(12), "B4 Q");
+    EXPECT_EQ(eq.getInputPortLabel(13), "Output");
     EXPECT_EQ(eq.getOutputPortLabel(0), "Audio");
 }
 
-TEST(ParametricEQModuleTest, ModulationTargetsMatchCVChannels) {
+TEST(ParametricEQModuleTest, ModulationTargetsCoverEveryContinuousParameter) {
     ParametricEQModule eq;
     const auto targets = eq.getModulationTargets();
-    ASSERT_EQ(targets.size(), 4u);
-    for (int i = 0; i < 4; ++i) {
+    ASSERT_EQ(targets.size(), 13u);
+    for (int i = 0; i < 13; ++i) {
         EXPECT_EQ(targets[(size_t)i].channelIndex, 2 + i);
         EXPECT_TRUE(eq.isAutoPromotableModTarget(targets[(size_t)i].channelIndex));
+        EXPECT_TRUE(targets[(size_t)i].paramId.isNotEmpty()) << "target " << i << " has no paramId";
+        EXPECT_NE(eq.parameterForModTarget(targets[(size_t)i]), nullptr) << "target " << i << " does not bind";
     }
 }
 
@@ -200,7 +80,7 @@ TEST(ParametricEQModuleTest, LogicalPortRolesSplitAudioFromCV) {
     EXPECT_EQ(in1.visibleJackIndex, 0);
     EXPECT_FALSE(in1.isPolyGroupHead);
 
-    for (int raw = 2; raw < 6; ++raw) {
+    for (int raw = 2; raw < 15; ++raw) {
         EXPECT_EQ(eq.mapInputChannel(raw).role, PortRole::ModCV) << "raw " << raw;
         EXPECT_EQ(eq.mapInputChannel(raw).visibleJackIndex, raw - 1) << "raw " << raw;
     }
@@ -724,140 +604,6 @@ TEST(ParametricEQAudio, StereoChannelsAreFilteredIdentically) {
     }
     for (int i = 0; i < kBlockSize; ++i)
         EXPECT_FLOAT_EQ(buffer.getSample(0, i), buffer.getSample(1, i)) << "sample " << i;
-}
-
-// ============================================================================
-// CV modulation (channels 2-5 drive the two bell bands)
-// ============================================================================
-
-TEST(ParametricEQCV, FreqCVSweepsTheFullRangeExponentially) {
-    constexpr float lo = ParametricEQModule::kMinFreq;
-    constexpr float hi = ParametricEQModule::kMaxFreq;
-    EXPECT_NEAR(ParametricEQModule::applyFreqCV(500.0f, 0.0f), 500.0f, 0.01f);
-    EXPECT_NEAR(ParametricEQModule::applyFreqCV(500.0f, 1.0f), hi, 1.0f);
-    EXPECT_NEAR(ParametricEQModule::applyFreqCV(500.0f, -1.0f), lo, 0.1f);
-    // Half-way up is the geometric mean of the base and the top — an exponential sweep.
-    EXPECT_NEAR(ParametricEQModule::applyFreqCV(500.0f, 0.5f), std::sqrt(500.0f * hi), 1.0f);
-    // Out-of-range CV is clamped, not extrapolated.
-    EXPECT_NEAR(ParametricEQModule::applyFreqCV(500.0f, 4.0f), hi, 1.0f);
-    EXPECT_NEAR(ParametricEQModule::applyFreqCV(500.0f, -4.0f), lo, 0.1f);
-}
-
-TEST(ParametricEQCV, GainCVAddsOntoTheKnobAndClamps) {
-    EXPECT_FLOAT_EQ(ParametricEQModule::applyGainCV(0.0f, 0.0f), 0.0f);
-    EXPECT_FLOAT_EQ(ParametricEQModule::applyGainCV(0.0f, 0.5f), 12.0f);
-    EXPECT_FLOAT_EQ(ParametricEQModule::applyGainCV(0.0f, -1.0f), -ParametricEQModule::kMaxGainDb);
-    // Knob at +12 dB plus full CV saturates at the +24 dB ceiling.
-    EXPECT_FLOAT_EQ(ParametricEQModule::applyGainCV(12.0f, 1.0f), ParametricEQModule::kMaxGainDb);
-}
-
-TEST(ParametricEQCV, GainCVOnChannel3ModulatesTheFirstBell) {
-    ParametricEQModule eq;
-    enableBand(eq, 1, 1000.0f, 0.0f, 1.0f);
-    eq.prepareToPlay(kSampleRate, kBlockSize);
-
-    // +50% of the +/-24 dB range == +12 dB on band 2 (the first bell).
-    const float gainDb = measureGainDb(eq, 1000.0f, 6, [](juce::AudioBuffer<float>& buffer) {
-        for (int i = 0; i < buffer.getNumSamples(); ++i)
-            buffer.setSample(3, i, 0.5f);
-    });
-
-    EXPECT_NEAR(eq.getBandSnapshots()[1].gainDb, 12.0f, 0.2f);
-    EXPECT_NEAR(gainDb, 12.0f, 0.7f) << "CV gain boost should show up in the output level";
-}
-
-TEST(ParametricEQCV, SilentCVJackLeavesTheBandAtItsKnobValue) {
-    ParametricEQModule eq;
-    enableBand(eq, 1, 1000.0f, 5.0f);
-    eq.prepareToPlay(kSampleRate, kBlockSize);
-    measureRMS(eq, 1000.0f); // CV channels stay silent, i.e. nothing patched in
-
-    EXPECT_NEAR(eq.getBandSnapshots()[1].gainDb, 5.0f, 0.1f);
-}
-
-TEST(ParametricEQCV, NearSilentCVIsGatedToZero) {
-    // An unconnected jack can still carry a tiny amount of numerical dirt; it must not nudge the
-    // band at all. The gate threshold is a mean-square of 1e-6, i.e. ~1e-3 amplitude.
-    // Compared against the no-CV case rather than literal 0.0, because a JUCE parameter
-    // round-tripped through NormalisableRange::convertTo0to1 lands a few ULPs off its nominal
-    // value — that offset is the baseline here, not part of what is being tested.
-    ParametricEQModule baseline;
-    enableBand(baseline, 1, 1000.0f, 0.0f);
-    baseline.prepareToPlay(kSampleRate, kBlockSize);
-    measureRMS(baseline, 1000.0f);
-    const float baselineGain = baseline.getBandSnapshots()[1].gainDb;
-
-    ParametricEQModule eq;
-    enableBand(eq, 1, 1000.0f, 0.0f);
-    eq.prepareToPlay(kSampleRate, kBlockSize);
-    measureRMS(eq, 1000.0f, 6, [](juce::AudioBuffer<float>& buffer) {
-        for (int i = 0; i < buffer.getNumSamples(); ++i)
-            buffer.setSample(3, i, 1.0e-5f);
-    });
-
-    EXPECT_FLOAT_EQ(eq.getBandSnapshots()[1].gainDb, baselineGain);
-}
-
-TEST(ParametricEQCV, CVAboveTheGateThresholdIsApplied) {
-    // The complement of the test above: CV loud enough to clear the gate must get through, so
-    // the gate can't be silently swallowing real modulation.
-    ParametricEQModule eq;
-    enableBand(eq, 1, 1000.0f, 0.0f);
-    eq.prepareToPlay(kSampleRate, kBlockSize);
-    measureRMS(eq, 1000.0f, 6, [](juce::AudioBuffer<float>& buffer) {
-        for (int i = 0; i < buffer.getNumSamples(); ++i)
-            buffer.setSample(3, i, 0.25f);
-    });
-
-    EXPECT_NEAR(eq.getBandSnapshots()[1].gainDb, 6.0f, 0.2f);
-}
-
-TEST(ParametricEQCV, FreqCVOnChannel2MovesTheFirstBell) {
-    ParametricEQModule eq;
-    enableBand(eq, 1, 500.0f, 12.0f);
-    eq.prepareToPlay(kSampleRate, kBlockSize);
-
-    // Sweep the bell to the top of the 20 Hz - 20 kHz range.
-    measureRMS(eq, 1000.0f, 6, [](juce::AudioBuffer<float>& buffer) {
-        for (int i = 0; i < buffer.getNumSamples(); ++i)
-            buffer.setSample(2, i, 1.0f);
-    });
-
-    EXPECT_GT(eq.getBandSnapshots()[1].freqHz, 500.0f);
-    EXPECT_NEAR(eq.getBandSnapshots()[1].freqHz, ParametricEQModule::kMaxFreq, 500.0f);
-}
-
-TEST(ParametricEQCV, NegativeFreqCVOnChannel4MovesTheSecondBellDown) {
-    ParametricEQModule eq;
-    enableBand(eq, 2, 3000.0f, 0.0f);
-    eq.prepareToPlay(kSampleRate, kBlockSize);
-
-    measureRMS(eq, 1000.0f, 6, [](juce::AudioBuffer<float>& buffer) {
-        for (int i = 0; i < buffer.getNumSamples(); ++i)
-            buffer.setSample(4, i, -1.0f);
-    });
-
-    EXPECT_NEAR(eq.getBandSnapshots()[2].freqHz, ParametricEQModule::kMinFreq, 5.0f);
-}
-
-TEST(ParametricEQCV, ShelvesAreNotCVModulated) {
-    // Only the two bells take CV; stamping every CV channel must leave the shelves put.
-    ParametricEQModule eq;
-    enableBand(eq, 0, 150.0f, 6.0f);
-    enableBand(eq, 3, 9000.0f, -6.0f);
-    eq.prepareToPlay(kSampleRate, kBlockSize);
-
-    measureRMS(eq, 1000.0f, 6, [](juce::AudioBuffer<float>& buffer) {
-        for (int ch = 2; ch < 6; ++ch)
-            for (int i = 0; i < buffer.getNumSamples(); ++i)
-                buffer.setSample(ch, i, 1.0f);
-    });
-
-    const auto bands = eq.getBandSnapshots();
-    EXPECT_NEAR(bands[0].freqHz, 150.0f, 1.0f);
-    EXPECT_NEAR(bands[0].gainDb, 6.0f, 0.1f);
-    EXPECT_NEAR(bands[3].freqHz, 9000.0f, 5.0f);
-    EXPECT_NEAR(bands[3].gainDb, -6.0f, 0.1f);
 }
 
 // ============================================================================

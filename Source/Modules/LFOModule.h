@@ -4,10 +4,26 @@
 #include <juce_core/juce_core.h>
 #include <random>
 
+/** Low-frequency oscillator / CV source.
+ *
+ *  Channel layout (mono):
+ *    In  ch0 Rate CV | ch1 Level CV | ch2 Glide CV
+ *    Out ch0 CV      | ch1-2 silent pass-throughs (prevent AudioProcessorGraph buffer aliasing,
+ *                       docs/modules/poly-channel-layout.md)
+ *
+ *  ch0 carries the Rate CV input on the way in and the LFO's own CV output on the way out — read
+ *  before overwrite, the same shared-channel convention as Oscillator/Wavetable ch0 and
+ *  Sample & Hold ch0.
+ */
 class LFOModule : public ModuleBase {
 public:
+    // Declared output count must be >= the highest CV input channel this module reads (Glide,
+    // ch2), per docs/modules/poly-channel-layout.md, or JUCE aliases ch1/ch2 onto ch0's buffer.
+    static constexpr int kNumInputs = 3;
+    static constexpr int kNumOutputs = 3;
+
     LFOModule()
-        : ModuleBase("LFO", 0, 1) { // 0 Audio Inputs, 1 Control Output
+        : ModuleBase("LFO", kNumInputs, kNumOutputs) { // Rate/Level/Glide CV in, 1 Control Output
         // Enable visual buffer for scope display
         enableVisualBuffer(true);
 
@@ -52,10 +68,27 @@ public:
     void releaseResources() override {}
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        if (isBypassed() || isMuted() || buffer.getNumSamples() == 0 || buffer.getNumChannels() == 0) {
+        // Two separate branches, per docs/architecture/module-base.md#bypassmute-contract. A pure
+        // source has no dry audio path to pass through, so bypass clears here rather than
+        // returning early — but it stays its own branch so the two cases can never be conflated.
+        if (isBypassed()) {
             buffer.clear();
             return;
         }
+
+        if (isMuted()) {
+            buffer.clear();
+            return;
+        }
+
+        if (buffer.getNumSamples() == 0 || buffer.getNumChannels() == 0)
+            return;
+
+        // Rate/Level/Glide CV, read once per block (docs/modules/modulation.md#cv-in-normalised-units).
+        // ch0 must be read before the sample loop below overwrites it with the CV output.
+        const float rateCv = blockCV(buffer, 0);
+        const float levelCv = blockCV(buffer, 1);
+        const float glideCv = blockCV(buffer, 2);
 
         auto* channelData0 = buffer.getWritePointer(0);
 
@@ -71,8 +104,12 @@ public:
 
         float rate = 0.0f;
         if (!modeParam->get()) { // Hz
-            rate = rateHzParam->get();
+            // Rate CV only applies in Hz mode: it moves rateHz in its own (skewed) normalised
+            // range, same convention as every other block-rate CV jack.
+            rate = modulateNormalised(*rateHzParam, rateHzParam->get(), rateCv);
         } else { // Sync
+            // Sync mode's rate is a tempo division, not a knob value — there is nothing for Rate
+            // CV to move against, so it is deliberately ignored here.
             // Calculate rate from BPM
             // For now, assume 120 if no PlayHead or BPM is available.
             // Ideally get from PlayHead.
@@ -128,7 +165,7 @@ public:
         // Rate is a frequency: stepping it changes the phase increment while the phase itself
         // stays continuous, so it cannot click. Deliberately not smoothed.
         float phaseIncrement = rate / (float)currentSampleRate;
-        smoothedLevel.setTargetValue(levelParam->get());
+        smoothedLevel.setTargetValue(modulateNormalised(*levelParam, levelParam->get(), levelCv));
         int shape = shapeParam->getIndex();
 
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
@@ -165,8 +202,9 @@ public:
                     lastRandomSample = (random.nextFloat() * 2.0f) - 1.0f;
 
                     // Glide is read only at this S&H step edge, where it re-times the ramp to the
-                    // next held value — a discrete event, nothing to smooth.
-                    float glideValue = glideParam->get();
+                    // next held value — a discrete event, nothing to smooth. glideCv was captured
+                    // once per block above, the same convention as every other CV jack.
+                    float glideValue = modulateNormalised(*glideParam, glideParam->get(), glideCv);
                     if (glideValue <= 0.0f) {
                         shSmoother.setCurrentAndTargetValue(lastRandomSample);
                     } else {
@@ -193,6 +231,11 @@ public:
             if (auto* vb = getVisualBuffer())
                 vb->pushSample(outputSample);
         }
+
+        // ch1/ch2 (Level/Glide CV in) are silent pass-throughs on the way out, same as Sample &
+        // Hold's ch1-6 — clearing them stops the raw CV values leaking downstream as output.
+        for (int ch = 1; ch < buffer.getNumChannels(); ++ch)
+            buffer.clear(ch, 0, buffer.getNumSamples());
     }
 
     bool acceptsMidi() const override { return true; }
@@ -201,6 +244,48 @@ public:
     ModulationCategory getModulationCategory() const override { return ModulationCategory::LFO; }
     juce::String getOutputPortLabel(int) const override { return "CV"; }
     ModuleType getModuleType() const override { return ModuleType::LFO; }
+
+    juce::String getInputPortLabel(int i) const override {
+        const juce::String labels[] = {"Rate", "Level", "Glide"};
+        return (i >= 0 && i < kNumInputs) ? labels[i] : ModuleBase::getInputPortLabel(i);
+    }
+
+    // Only ch0 (CV out) is visible; ch1/ch2 are silent pass-throughs (see class comment).
+    int getVisibleOutputPortCount() const override { return 1; }
+
+    // Every raw input channel this module declares must be claimed here, or an unclaimed one
+    // below getVisibleInputPortCount() becomes a phantom poly-group head
+    // (docs/modules/modulation.md#logical-port-api).
+    LogicalPort mapInputChannel(int raw) const override {
+        if (raw >= 0 && raw < kNumInputs) {
+            LogicalPort p;
+            p.visibleJackIndex = raw;
+            p.role = PortRole::ModCV;
+            p.isPolyGroupHead = true;
+            p.polyVoiceSpan = 1;
+            return p;
+        }
+        return ModuleBase::mapInputChannel(raw);
+    }
+
+    LogicalPort mapOutputChannel(int raw) const override {
+        if (raw == 0) {
+            LogicalPort p;
+            p.visibleJackIndex = 0;
+            p.role = PortRole::ModCV;
+            p.isPolyGroupHead = true;
+            p.polyVoiceSpan = 1;
+            return p;
+        }
+        return ModuleBase::mapOutputChannel(raw); // ch1/ch2: hidden pass-throughs, not a jack
+    }
+
+    // Every continuous parameter gets a CV jack
+    // (docs/modules/modulation.md#every-continuous-parameter-is-a-target). paramId binds each
+    // jack to its knob; "Rate" vs the knob name "Rate (Hz)" would not match without it.
+    std::vector<ModulationTarget> getModulationTargets() const override {
+        return {{"Rate", 0, "rateHz"}, {"Level", 1, "level"}, {"Glide", 2, "glide"}};
+    }
 
 private:
     juce::AudioParameterChoice* shapeParam;

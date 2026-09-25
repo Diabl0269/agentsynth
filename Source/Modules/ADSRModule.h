@@ -16,7 +16,10 @@ class ADSRModule
     , public ThresholdMeterSource {
 public:
     ADSRModule(const juce::String& name = "ADSR")
-        : ModuleBase(name, 9, 9) // 8 gate CV per voice + shared Threshold CV; 8 env + silent ch8
+        : ModuleBase(name, 14, 14) // 8 gate CV per voice + shared Threshold/Attack/Hold/Decay/Sustain/Release
+                                   // CV (ch8-13, FRO285); 8 env + silent ch8-13. Outputs match inputs so the
+                                   // highest CV channel read (13) never aliases a live graph buffer -- see
+                                   // docs/modules/poly-channel-layout.md.
     {
         // Times move to a LINEAR [0, 5] range; the retired minimum-time clamps (2 ms attack /
         // 5 ms release) are gone from the PARAMETER on purpose -- 0 ms is a real, reachable,
@@ -136,34 +139,23 @@ public:
         // to hand a block larger than the `samplesPerBlock` given to `prepareToPlay`, and the
         // audio callback must never allocate (root CLAUDE.md), so there is deliberately no
         // scratch vector here to resize.
-        smoothedSustain.setTargetValue(*sustainParam);
+        // Sustain CV (FRO285): a LEVEL, not a stage time, so tempo sync -- which only recomputes
+        // the four *time* params below -- never gates it; it always applies. Read once per block
+        // like every other parameter-CV jack added under the normalised-CV convention
+        // (docs/modules/modulation.md#cv-in-normalised-units), then fed into the same per-sample
+        // smoother the base parameter already used.
+        smoothedSustain.setTargetValue(
+            modulateNormalised(*sustainParam, *sustainParam, blockCV(buffer, kSustainChannel)));
 
         const bool poly = *polyParam;
         const float baseThreshold = thresholdParam->get();
         const float* thresholdCV = numChannels > kThresholdChannel ? buffer.getReadPointer(kThresholdChannel) : nullptr;
 
-        // Tempo sync (FRO113): recomputed once per block, same cadence LFOModule uses for its
-        // own sync mode -- a live tempo change is picked up within one block, and because
-        // EnvelopeGenerator turns a stage-time change mid-ramp into a slope change (never a
-        // level jump), flipping tempoSync itself mid-note is exactly as click-free as automating
-        // one of the ms params already was.
-        float attack = *attackParam;
-        float hold = *holdParam;
-        float decay = *decayParam;
-        float release = *releaseParam;
-        if (*tempoSyncParam) {
-            double bpm = 120.0;
-            if (auto* ph = getPlayHead()) {
-                if (auto pos = ph->getPosition()) {
-                    if (pos->getBpm().hasValue())
-                        bpm = *pos->getBpm();
-                }
-            }
-            attack = synth::envelopeNoteDivisionSeconds(attackDivParam->getIndex(), bpm);
-            hold = synth::envelopeNoteDivisionSeconds(holdDivParam->getIndex(), bpm);
-            decay = synth::envelopeNoteDivisionSeconds(decayDivParam->getIndex(), bpm);
-            release = synth::envelopeNoteDivisionSeconds(releaseDivParam->getIndex(), bpm);
-        }
+        const StageTimes times = resolveStageTimes(buffer);
+        const float attack = times.attack;
+        const float hold = times.hold;
+        const float decay = times.decay;
+        const float release = times.release;
         const float attackCurve = *attackCurveParam;
         const float decayCurve = *decayCurveParam;
         const float releaseCurve = *releaseCurveParam;
@@ -306,14 +298,37 @@ public:
 
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Envelope; }
     juce::String getInputPortLabel(int i) const override {
-        return i == 0 ? "Gate" : i == 1 ? "Threshold" : ModuleBase::getInputPortLabel(i);
+        switch (i) {
+        case 0:
+            return "Gate";
+        case 1:
+            return "Threshold";
+        case 2:
+            return "Attack";
+        case 3:
+            return "Hold";
+        case 4:
+            return "Decay";
+        case 5:
+            return "Sustain";
+        case 6:
+            return "Release";
+        default:
+            return ModuleBase::getInputPortLabel(i);
+        }
     }
     juce::String getOutputPortLabel(int) const override { return "Env"; }
-    int getVisibleInputPortCount() const override { return 2; }
+    int getVisibleInputPortCount() const override {
+        return 7;
+    } // Gate, Threshold, Attack, Hold, Decay, Sustain, Release
     int getVisibleOutputPortCount() const override { return 1; }
     ModuleType getModuleType() const override { return ModuleType::ADSR; }
 
-    std::vector<ModulationTarget> getModulationTargets() const override { return {{"Threshold", kThresholdChannel}}; }
+    std::vector<ModulationTarget> getModulationTargets() const override {
+        return {{"Threshold", kThresholdChannel},        {"Attack", kAttackChannel, "attack"},
+                {"Hold", kHoldChannel, "hold"},          {"Decay", kDecayChannel, "decay"},
+                {"Sustain", kSustainChannel, "sustain"}, {"Release", kReleaseChannel, "release"}};
+    }
 
     LogicalPort mapInputChannel(int raw) const override {
         LogicalPort p;
@@ -332,12 +347,26 @@ public:
             p.polyVoiceSpan = 1;
             return p;
         }
-        if (raw == kThresholdChannel) {
-            p.visibleJackIndex = 1;
-            p.role = PortRole::ModCV;
-            p.isPolyGroupHead = true;
-            p.polyVoiceSpan = 1;
-            return p;
+        // Threshold + the five stage-time/level CV jacks (FRO285): shared across every voice,
+        // exactly like Threshold -- each is its own mono jack, never a poly fan, so a signal on
+        // ch9-13 alone is never mistaken for a poly gate head (mapInputChannel is what decides
+        // that, not the raw channel range alone -- see docs/modules/poly-channel-layout.md).
+        struct SharedCvJack {
+            int channel;
+            int jack;
+        };
+        static constexpr SharedCvJack kSharedCvJacks[] = {
+            {kThresholdChannel, 1}, {kAttackChannel, 2},  {kHoldChannel, 3},
+            {kDecayChannel, 4},     {kSustainChannel, 5}, {kReleaseChannel, 6},
+        };
+        for (const auto& jack : kSharedCvJacks) {
+            if (raw == jack.channel) {
+                p.visibleJackIndex = jack.jack;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
         }
         return ModuleBase::mapInputChannel(raw);
     }
@@ -379,8 +408,56 @@ public:
     float getPlayheadLevel() const noexcept { return playheadLevel.load(std::memory_order_relaxed); }
 
 private:
+    struct StageTimes {
+        float attack, hold, decay, release;
+    };
+
+    // Per-block stage times: the ms knobs (plus their CV), or the tempo-synced divisions.
+    StageTimes resolveStageTimes(const juce::AudioBuffer<float>& buffer) {
+        // Tempo sync (FRO113): recomputed once per block, same cadence LFOModule uses for its
+        // own sync mode -- a live tempo change is picked up within one block, and because
+        // EnvelopeGenerator turns a stage-time change mid-ramp into a slope change (never a
+        // level jump), flipping tempoSync itself mid-note is exactly as click-free as automating
+        // one of the ms params already was.
+        float attack = *attackParam;
+        float hold = *holdParam;
+        float decay = *decayParam;
+        float release = *releaseParam;
+        if (*tempoSyncParam) {
+            double bpm = 120.0;
+            if (auto* ph = getPlayHead()) {
+                if (auto pos = ph->getPosition()) {
+                    if (pos->getBpm().hasValue())
+                        bpm = *pos->getBpm();
+                }
+            }
+            attack = synth::envelopeNoteDivisionSeconds(attackDivParam->getIndex(), bpm);
+            hold = synth::envelopeNoteDivisionSeconds(holdDivParam->getIndex(), bpm);
+            decay = synth::envelopeNoteDivisionSeconds(decayDivParam->getIndex(), bpm);
+            release = synth::envelopeNoteDivisionSeconds(releaseDivParam->getIndex(), bpm);
+        } else {
+            // Attack/Hold/Decay/Release CV (FRO285): IGNORED while tempo-synced. A synced stage's
+            // effective time already comes from its *Div param and the live tempo above -- a CV
+            // jack expressed in seconds has no meaning overlaid on a beat-locked division, so the
+            // jack stays visibly patchable but is a no-op until the module goes back to MS mode.
+            attack = modulateNormalised(*attackParam, attack, blockCV(buffer, kAttackChannel));
+            hold = modulateNormalised(*holdParam, hold, blockCV(buffer, kHoldChannel));
+            decay = modulateNormalised(*decayParam, decay, blockCV(buffer, kDecayChannel));
+            release = modulateNormalised(*releaseParam, release, blockCV(buffer, kReleaseChannel));
+        }
+        return {attack, hold, decay, release};
+    }
+
     static constexpr int MAX_VOICES = 8;
     static constexpr int kThresholdChannel = 8;
+    // Stage-time/level CV jacks (FRO285), appended after Threshold -- never inserted, so a saved
+    // patch that modulates Threshold on ch8 keeps doing so once these arrive on ch9-13. See
+    // docs/modules/modulation.md#every-continuous-parameter-is-a-target.
+    static constexpr int kAttackChannel = 9;
+    static constexpr int kHoldChannel = 10;
+    static constexpr int kDecayChannel = 11;
+    static constexpr int kSustainChannel = 12;
+    static constexpr int kReleaseChannel = 13;
 
     // Readout formatting for attack/hold/decay/release: below 1 s in milliseconds, at or above
     // 1 s in seconds. Decimal count shrinks as the magnitude grows so "0.10 ms" and "4999 ms"
