@@ -9,7 +9,7 @@ What a channel is lives in [`docs/mixer/mixer.md`](mixer.md).
 ## A bus is a Channel Strip
 
 Three mechanisms already treat a bus as one: "Make channel"'s merge-point buses build the same
-EQ, Compressor, Strip, Master chain
+Gate, EQ, Compressor, Strip, Master chain
 ([`docs/mixer/mixer.md`](mixer.md#make-channel-and-shared-modules)), `collectStemStrips` scans for
 `ChannelStripModule` ([`docs/mixer/stem-export.md`](stem-export.md)), and the mixer's orphan-strip pass
 already renders one as a column.
@@ -135,8 +135,8 @@ delay-compensated per-edge mute node, which is out of scope.
 
 A bus column is an ordinary strip column with three differences: a **"BUS" badge** instead of the
 linked badge, a source line listing the feeding strips' names instead of tracks, and no track chip or
-colour link. Its insert list works exactly like any other column's — including the bypassed EQ and
-Compressor "Add bus" builds — via the backward walk
+colour link. Its insert list works exactly like any other column's — including the bypassed Gate, EQ
+and Compressor "Add bus" builds — via the backward walk
 [`docs/mixer/mixer.md`](mixer.md#inserts-in-a-free-form-graph) describes for a column with no feeding
 track. **Buses sit after the track-driven strips and before Direct**, which is exactly where the
 existing orphan-strip append puts them.
@@ -157,8 +157,8 @@ hand on the canvas. **A refusal changes nothing at all, so no empty undo step is
 same holds for every other refusal (a non-strip target, self, out of slots).
 
 **"Add bus"** — `+ Bus` on the dock's tab strip, and "New bus..." in every send menu — builds a
-bypassed EQ, bypassed Compressor, Stereo Strip, Master(Mix) chain via the shared chain builder, boxed
-in a macro named "Bus N". A boxed bus takes its macro's name.
+bypassed Gate, bypassed EQ, bypassed Compressor, Stereo Strip, Master(Mix) chain via the shared chain
+builder, boxed in a macro named "Bus N". A boxed bus takes its macro's name.
 
 ## Stems
 

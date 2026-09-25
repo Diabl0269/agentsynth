@@ -258,7 +258,7 @@ struct BuiltChain {
 };
 
 // Rebuilds `exits` (onto Master's Mix) and `crossings` (onto their original input pins) through one
-// new EQ -> Compressor -> Strip, with a Voice Mixer ahead of any poly feed. See buildMakeChannel.
+// new Gate -> EQ -> Compressor -> Strip, with a Voice Mixer ahead of any poly feed. See buildMakeChannel.
 BuiltChain buildChainFromEdges(juce::AudioProcessorGraph& graph, const std::vector<Connection>& exits,
                                const std::vector<Connection>& crossings, const ChannelLayoutFn& layoutRightOf) {
     BuiltChain built;
@@ -550,7 +550,7 @@ MakeChannelPlan planMakeChannel(juce::AudioProcessorGraph& graph, juce::AudioPro
     return plan;
 }
 
-// Rebuilds the own exits/crossings through EQ (bypassed) -> Compressor (bypassed) -> Channel Strip,
+// Rebuilds the own exits/crossings through Gate (bypassed) -> EQ (bypassed) -> Compressor (bypassed) -> Channel Strip,
 // whose output goes to Master's Mix for the exits (Master spliced exactly as buildChannelForFeeds
 // does) and to the original shared input pins for the crossings — plain edges, never macro ports,
 // see ChannelFlowsDefaultChannel.cpp's buildDefaultAudioChannel comment for why. Then builds each

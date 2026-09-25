@@ -85,12 +85,12 @@ TEST(MixerInsertListTests, MovingABusInsertToTheFrontRefusesRatherThanOrphaningI
     bool mutated = false;
     list.onMutated = [&] { mutated = true; };
 
-    // Row 0 is the Gate (asserted by the model test) -- move it up further still, to before the
-    // front of the bus's own chain, where there is no external predecessor to splice against.
-    list.moveRow(0, -1);
+    // Row 1 is the EQ (asserted by the model test) -- move it up to row 0, the front of the
+    // bus's own chain, where there is no external predecessor to splice against.
+    list.moveRow(1, -1);
 
     EXPECT_FALSE(mutated) << "nothing should have changed -- see spliceInInsert's own contract";
-    EXPECT_EQ(graph.getNumNodes(), nodeCountBefore) << "the Gate must not be spliced out and left unspliced-in";
+    EXPECT_EQ(graph.getNumNodes(), nodeCountBefore) << "the EQ must not be spliced out and left unspliced-in";
 
     const auto after = synth::buildMixerSnapshot(graph, doc, editor.getMacros());
     const synth::MixerColumn* afterColumn = nullptr;
