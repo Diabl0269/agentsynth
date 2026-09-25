@@ -361,7 +361,9 @@ Nothing special — that is the point of binding real hosted parameters rather t
 - **MIDI Learn** on a plugin-card knob creates a project assignment targeting
   `(nodeUuid, paramId, indexHint)`, resolved by `resolveLaneParameter`'s hosted rules.
 - **Automate** on a plugin-card knob calls the existing `onAutomateParameterRequested` with the
-  hosted parameter, which the lane picker already supports.
+  hosted paramId. `MainComponent::automateParameter` finds no `RangedAudioParameter` for it and
+  hands it to the lane picker's own hosted path (`addPluginAutomationLane`), so the lane gets the
+  same 0..1 range and `paramIndexHint` as one added from the lane picker.
 - A parameter removed from the layout keeps its lanes and assignments — the layout is
   presentation, never a binding.
 
@@ -467,7 +469,9 @@ grid, so "edit layout" there means at most hide/reorder of the knobs they *do* e
   round-trips through a full project save/load.
 - E2E (`Tests/App/E2EPluginCardWorkflowTests.cpp`, FRO137): add plugin → choose two knobs → save
   project → reload → knobs present → "Apply to all instances" → a second instance shows them too →
-  a real right-click MIDI Learn on a hosted knob → a fake CC drives the hosted parameter.
+  a real right-click MIDI Learn on a hosted knob → a fake CC drives the hosted parameter; and a
+  real right-click "Automate" on a hosted knob creates a lane bound to the hosted parameter, through
+  the production `onAutomateParameterRequested` wiring.
 
 ---
 

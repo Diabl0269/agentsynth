@@ -22,6 +22,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/Hosting/PluginCardLayoutStore.h"
 #include "ProjectBundle.h"
+#include "Timeline/AutomationBinding.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
@@ -274,6 +275,29 @@ TEST_F(E2EPluginCardWorkflowTest, ApplyToAllInstancesShowsTheChosenKnobsOnASecon
     EXPECT_NE(secondCard->findChildWithID("hostedKnob:cutoff"), nullptr)
         << "a fresh instance of the same plugin resolves the type default with no override of its own";
     EXPECT_NE(secondCard->findChildWithID("hostedKnob:resonance"), nullptr);
+}
+
+// A real right-click "Automate" on a hosted card knob, through the production wiring
+// (GraphEditor::onAutomateParameterRequested -> MainComponent::automateParameter). A hosted
+// parameter is not a RangedAudioParameter, so automateParameter must hand it to the lane picker's
+// hosted path; before that fix this item only printed "Can't automate: parameter not found".
+TEST_F(E2EPluginCardWorkflowTest, AutomateOnAHostedKnobCreatesALaneBoundToTheHostedParameter) {
+    auto* hosted = addPlugin(*mainComp_);
+    ASSERT_NE(hosted, nullptr);
+    auto* card = cardFor(*mainComp_, hosted);
+    ASSERT_NE(card, nullptr);
+    auto* knob = card->findChildWithID("hostedKnob:resonance");
+    ASSERT_NE(knob, nullptr);
+
+    ASSERT_TRUE(invokeMenuItem(rightClick(*card, *knob), "Automate 'Resonance'"));
+
+    const juce::String uuid(hosted->getNodeUuid());
+    ASSERT_TRUE(uuid.isNotEmpty()) << "automating assigns the node a uuid";
+    const auto* lane = mainComp_->getTimelineDoc().getLaneForParam(uuid, "resonance");
+    ASSERT_NE(lane, nullptr) << "Automate created a lane for the hosted parameter";
+    EXPECT_EQ(lane->paramIndexHint, synth::captureParamIndexHint(hosted, "resonance"))
+        << "the lane carries the hosted index hint, like one added from the lane picker";
+    EXPECT_FALSE(lane->orphaned);
 }
 
 // ============================================================================
