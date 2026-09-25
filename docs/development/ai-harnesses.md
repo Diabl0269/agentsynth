@@ -3,8 +3,10 @@
 Two opt-in tools that measure model behaviour rather than assert on it. Neither is a test and
 neither is ever *run* by CI: both need a live Ollama, so they sit behind `ENABLE_AI_HARNESS`. Only
 the Linux CI job builds them, purely to catch one that stops compiling; the macOS and Windows jobs
-leave the flag off because the harness targets add 183 translation units to those builds. The
-offline, always-run counterpart is the fixture-replay suite in
+leave the flag off because one platform is enough for that. Each harness links the `AppUI` and `Core`
+libraries through `synth_add_harness()` in `cmake/AiHarness.cmake` and compiles only its own `Main.cpp`,
+so a new app source file is registered once in `cmake/AppUISources.cmake` and never in a harness's own
+`CMakeLists.txt`. The offline, always-run counterpart is the fixture-replay suite in
 [`test-layers.md`](test-layers.md#ai-patch-fixture-replay-corpus-driven-offline), which is built
 from this patch harness's recorded output.
 

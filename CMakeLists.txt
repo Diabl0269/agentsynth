@@ -989,7 +989,8 @@ endif()
 # need a live Ollama; TimelineOpsHarness replays recorded fixtures instead and needs none, but is
 # gated the same way for consistency (it is a measurement instrument, not something CI gates on —
 # see Tests/Timeline/TimelineOpsFixtureTests.cpp for the CI-enforced twin). None of the three is in
-# the default build (READMEs under Tools/); in CI only Linux builds them (+183 TUs), to catch rot.
+# the default build (READMEs under Tools/); in CI only Linux builds them, to catch rot. Each links
+# AppUI/Core through cmake/AiHarness.cmake, so it adds just its own Main.cpp (FRO290).
 if(ENABLE_AI_HARNESS)
     add_subdirectory(Tools/AIPatchHarness)
     add_subdirectory(Tools/AIEvalHarness)
