@@ -101,12 +101,14 @@ protected:
 
     juce::File root_;
     double fakeNowMs_ = 0.0;
-    RemoteEngine remoteEngine_;
     synth::MidiRemoteProjectDoc doc_;
     AppUndoManager undo_;
     StatusBarComponent statusBar_;
     StubBackend backend_;
     std::unique_ptr<AudioEngine> engine_;
+    // Declared after engine_ so it is destroyed first, while the hosted parameters any open gesture
+    // points at are still alive (docs/development/testing.md#known-flaky-patterns).
+    RemoteEngine remoteEngine_;
     std::unique_ptr<GraphEditor> graphEditor_;
     std::unique_ptr<MidiLearnController> controller_;
     juce::AudioProcessorGraph::Node::Ptr builtInNode_;

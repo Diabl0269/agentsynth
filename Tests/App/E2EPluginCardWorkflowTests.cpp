@@ -1,11 +1,9 @@
 // E2EPluginCardWorkflowTests.cpp -- FRO137 (docs/control/plugin-card-layout.md): the whole
 // plugin-card-knob story end to end, against the fake hosted instance (Tests/StubPluginInstance.h)
 // since no real plugin binary can live in this repo. Sibling of Tests/App/E2EWorkflowTests.cpp,
-// reusing its MainComponent-based setup for every test here, including the MIDI Learn one -- a
-// single MainComponent for the whole test's lifetime, never a second one alongside a raw
-// GraphEditor Rig, which was found (while writing this suite) to corrupt process-wide JUCE state in
-// a way that crashes a LATER, unrelated test; see docs/development/testing.md#known-flaky-patterns
-// for the write-up and the follow-up ticket.
+// reusing its MainComponent-based setup for every test here, including the MIDI Learn one. The
+// MIDI Learn test waits out RemoteEngine's gesture idle before teardown; see
+// docs/development/testing.md#known-flaky-patterns for why an open gesture at teardown crashes.
 //
 // One flow: add a hosted plugin -> choose two knobs (the outcome the picker's applyCurrentLayout()
 // produces, written directly -- PluginKnobPickerTests.cpp already drives the popover itself) ->
