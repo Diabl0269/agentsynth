@@ -1,6 +1,6 @@
 # Docs map
 
-One topic per doc, split at section boundaries. Every doc below is the mechanism and history behind a rule; the rules themselves live in the per-directory `CLAUDE.md` files and the tripwire index in the root [`CLAUDE.md`](../CLAUDE.md). When you change behaviour, update the doc as part of the change, and keep this map current (a new doc gets a line here).
+One topic per doc, split at section boundaries. Every doc below is the mechanism and history behind a rule; the rules themselves live in the per-directory `CLAUDE.md` files, mapped by area in the root [`CLAUDE.md`](../CLAUDE.md). When you change behaviour, update the doc as part of the change, and keep this map current (a new doc gets a line here).
 
 ## Architecture & engine
 

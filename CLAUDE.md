@@ -5,7 +5,7 @@ and marketing assets (`marketing/`) live in sibling repos under the workspace ro
 [`../CLAUDE.md`](../CLAUDE.md) for the cross-repo map when a task touches more than this
 codebase. This file stays scoped to `agentsynth/` only.
 
-Guidance for Claude Code (claude.ai/code) in this repository. Keep this file **lean** — it is always loaded, so it holds only commands, conventions, and a tripwire index of the critical traps. The rules themselves live in per-directory `CLAUDE.md` files (`Source/`, `Source/Modules/`, `Source/Timeline/`, `Source/AI/`, `Source/UI/`, `Source/Plugin/`, `.github/`), auto-loaded when you work under that directory; the mechanism and history live in `docs/` (map: [`docs/README.md`](docs/README.md)). When you change behavior, update the relevant doc, not this file — docs must never go stale, so treat updating them as part of the change itself, not a follow-up.
+Guidance for Claude Code (claude.ai/code) in this repository. Keep this file **lean** — it is always loaded, so it holds only commands, conventions, and a map of which area `CLAUDE.md` guards which topics. The rules themselves live in per-directory `CLAUDE.md` files (`Source/`, `Source/Modules/`, `Source/Timeline/`, `Source/AI/`, `Source/UI/`, `Source/Plugin/`, `.github/`), auto-loaded when you work under that directory; the mechanism and history live in `docs/` (map: [`docs/README.md`](docs/README.md)). When you change behavior, update the relevant doc, not this file — docs must never go stale, so treat updating them as part of the change itself, not a follow-up.
 
 ## Project
 
@@ -20,11 +20,7 @@ Modular synthesizer (JUCE, C++20) with a node-based graph editor for sound desig
 
 ```bash
 # Build (ENABLE_PLUGIN defaults ON, so this also builds the VST3/AU plugin — pass -DENABLE_PLUGIN=OFF for an app-only loop)
-# NOTE: bare `cmake --build` defaults to the Unix Makefiles generator (serial, no -j) unless
-# ninja is installed and -G Ninja is passed — CI always uses Ninja (see .github/workflows/ci.yml).
-# scripts/ci-local.sh already does this right (auto-picks Ninja, passes --parallel); for a quick
-# manual build, do the same: `brew install ninja` once, then
-#   cmake -S . -B build -G Ninja && cmake --build build
+# For a Ninja build matching CI's speed, see docs/development/testing.md#build-flags
 cmake -S . -B build && cmake --build build
 
 # Test  (ENABLE_TESTS defaults OFF — must opt in)
@@ -83,58 +79,14 @@ Three rules stated in full because they're cheap to follow and catastrophic to m
 - **Never relax `validatePatch` to raise the AI pass rate** — it is the security boundary for untrusted model output. Fix validity on the *generation* side, most upstream first: schema → bounded retry → narrow repair → prompt; measure with `Tools/AIPatchHarness` first. A node's `"state"` object (`ModuleBase::setExtraState`) is applied on the **trusted path only** — honouring it for provider output makes a patch suggestion an arbitrary file read. → [`docs/ai/patch-safety.md`](docs/ai/patch-safety.md)
 - **`trusted=true` on `applyJSONToGraph` is about parameter fidelity, not skipping checks** — the untrusted path rescales in-`[0,1]` values against wider ranges (a heuristic for models), which corrupts app-authored values like a 0.5 Hz LFO rate. Replaying our own `graphToJSON` output applies trusted; if it came off disk, run `validatePatch(..., trusted=false)` as a separate gate first (`SnippetManager::insertSnippet` / `ProjectBundle::load` are the reference pairing). → [`docs/layout/snippets-clipboard.md`](docs/layout/snippets-clipboard.md)
 
-Everything else below is a tripwire index. The full rule lives in the named area `CLAUDE.md` (auto-loaded when you work under that directory); the mechanism and history live in the linked doc — **read it before touching the area**. A new invariant gets one line here, its rule in the area file, and its detail in the doc.
+Everything else lives in the named area `CLAUDE.md` — full rule, mechanism, and doc links — auto-loaded when you read a file under that directory. **Open the area file before editing cross-area code**, since it does not load until something under it does. A new invariant goes in the area file (+ its doc); the map below only changes when a new area or topic appears.
 
-**Engine & threading** (`Source/CLAUDE.md`):
-
-- `HostMode::Hosted` never opens an audio device or MIDI input. → [`docs/architecture/plugin-layer.md#host-modes-audioenginehostmode`](docs/architecture/plugin-layer.md#host-modes-audioenginehostmode)
-- The device callback's render buffer is shared in-place with the graph; never allocate in the callback; audio input stays opt-in (restore requests 0 inputs). → [`docs/architecture/audio-engine.md#audioengine`](docs/architecture/audio-engine.md#audioengine)
-- A device/sample-rate change goes through the ONE hook (`AudioEngine::handleStreamFormatChange`), and a recording take never spans it. → [`docs/architecture/app-wiring.md#device--sample-rate-changes`](docs/architecture/app-wiring.md#device--sample-rate-changes)
-- Timeline data crosses threads only via `EpochExchange`: opened once per render pass, published snapshot-first/bindings-second, republished after any graph change. → [`docs/architecture/timeline.md#timelinesnapshot-the-audio-threads-view-of-the-timeline`](docs/architecture/timeline.md#timelinesnapshot-the-audio-threads-view-of-the-timeline)
-- Never a lock on the MIDI path: MIDI Remote's mapping table is an immutable snapshot published by atomic pointer swap guarded by a reader count, and the only thing a MIDI/audio thread writes is its own source's lock-free FIFO. No `CriticalSection`, no allocation, no `AsyncUpdater`, no `juce::String` construction there. → [`docs/control/midi-remote.md#threading-the-mapping-table-crosses-threads`](docs/control/midi-remote.md#threading-the-mapping-table-crosses-threads)
-- `MainComponent` owns the app's live `TimelineDoc`; every graph change must reach `MainComponent::timelineChanged` / the reconcile pass (hook inventory: [`docs/architecture/app-wiring.md`](docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step)); a binding is never re-established automatically. → [`docs/timeline/tracks.md`](docs/timeline/tracks.md#a-binding-is-never-re-established-automatically)
-- Every node-uuid write mirrors into the processor via `ModuleBase::setNodeUuid`; written once, never rewritten. → [`docs/architecture/module-base.md#node-uuid-mirror-setnodeuuid--getnodeuuid`](docs/architecture/module-base.md#node-uuid-mirror-setnodeuuid--getnodeuuid)
-- Mixer solo is a render-time **per-leg** gate, never a `setMuted` fan-out: the engine recounts soloed strips AND republishes each strip's audible-leg mask inside `publishTimeline`, and a graph-replacing path that skips it calls `AudioEngine::refreshSoloGate()`. → [`docs/mixer/mixer.md#solo-is-a-render-time-gate`](docs/mixer/mixer.md#solo-is-a-render-time-gate) · [`docs/mixer/sends-and-buses.md`](docs/mixer/sends-and-buses.md) · [`docs/architecture/audio-engine.md#mixer-solo-gate`](docs/architecture/audio-engine.md#mixer-solo-gate)
-- A send is a strip-owned output leg and a bus is an ordinary `ChannelStrip` — no `SendModule`, no bus node type; a send's target is the graph edge itself and is never stored (node ids are reassigned on every rebuild-from-JSON). → [`docs/mixer/sends-and-buses.md`](docs/mixer/sends-and-buses.md)
-- Scrub `ChannelStripModule`'s `"solo"`, `"isBus"`, and `"sends"` extra-state keys before writing a trusted-apply-carrying format to disk — an imported `soloed_=true` would silence the whole mix render-wide, an imported `isBus=true` badges an ordinary track channel as BUS, and captured `"sends"` slot state has no re-resolved cable target, all the moment the file loads. → [`docs/mixer/track-presets.md`](docs/mixer/track-presets.md)
-- Every document-replacing action goes through `MainComponent::guardUnsavedChanges` (async — hand it the work, never do it then ask), and any path that replaces the document with something that is not a bundle drops `currentBundleDir_`. → [`docs/architecture/project-bundle.md#dirty-state-and-the-unsaved-changes-guard`](docs/architecture/project-bundle.md#dirty-state-and-the-unsaved-changes-guard)
-- Autosave writes a sidecar (`autosave.json`), never `project.json`, and rotates a configurable number of numbered backups; gates on edit-serial movement (not `isDirty_`) and never fires during a recording take or a bounce. → [`docs/architecture/project-bundle.md#autosave-and-crash-recovery`](docs/architecture/project-bundle.md#autosave-and-crash-recovery)
-- No non-ASCII bytes in a `Source/` string literal — `juce::String`'s `const char*` ctor decodes as Latin-1, so `"Rename…"` (or its hex-escape spelling) ships mojibake; use ASCII or `juce::CharPointer_UTF8`/`String::fromUTF8`. Guarded by `scripts/tests/check-nonascii-literals.test.sh`. → [`docs/development/ascii-literal-guard.md`](docs/development/ascii-literal-guard.md)
-- `AudioEngine::renderNextBlock` is the last write to the render buffer in both host modes — anything summed post-graph (the metronome click, a future stage) must run before it, never after, or it bypasses the non-finite (NaN/Inf) output scrub. → [`docs/architecture/audio-engine.md#audioengine`](docs/architecture/audio-engine.md#audioengine)
-
-**Modules & channels** (`Source/Modules/CLAUDE.md`):
-
-- A second audio leg goes on a new `kRightBase` block, never ch1; pan is a balance law (unity centre); Dual I/O is **inherited** from channel shape (`hasStereoOutputPairShape`), never per-module registered, and "off" drops cables on the hidden right block. → [`docs/modules/fx-modules.md#stereo-io-dual-io-toggle`](docs/modules/fx-modules.md#stereo-io-dual-io-toggle)
-- A module's channel count is fixed for its lifetime; variable-port modules declare their maximum and vary only the visible count; an over-wide hosted plugin is refused, never truncated. → [`docs/modules/modules.md#hosted-plugin-module-third-party-vst3--au-hidden`](docs/modules/modules.md#hosted-plugin-module-third-party-vst3--au-hidden)
-- Every Wavetable warp mode must prove it doesn't alias (a documented defence + a parameterised-test entry). → [`docs/modules/wavetable.md#warp`](docs/modules/wavetable.md#warp)
-- Only gain controls may add gain: every module parameter is swept by `ModuleGainAudit`, and anything above +6 dB must be allow-listed with a reason. → [`docs/development/gain-staging.md`](docs/development/gain-staging.md)
-
-**Timeline** (`Source/Timeline/CLAUDE.md`):
-
-- Audio clips STREAM; only the prefetch thread may touch a reader; nothing on the audio path opens a file. → [`docs/architecture/app-wiring.md#audioclipstreamer-disk-streaming-clip-playback`](docs/architecture/app-wiring.md#audioclipstreamer-disk-streaming-clip-playback) · [`docs/modules/modules.md#track-audio-module-timeline-audio-source-hidden`](docs/modules/modules.md#track-audio-module-timeline-audio-source-hidden)
-- Hosted-plugin automation lanes resolve only through `synth::resolveLaneParameter`, never by index alone. → [`docs/modules/modulation.md#hosted-plugin-parameters-as-automation-lanes`](docs/modules/modulation.md#hosted-plugin-parameters-as-automation-lanes) · [`docs/modules/modules.md#load-ux`](docs/modules/modules.md#load-ux)
-
-**AI & trust boundaries** (`Source/AI/CLAUDE.md`):
-
-- `applyJSONToGraph` merge mode auto-connects new nodes; exact-sub-graph callers pass `autoConnectNewNodes=false`. → [`docs/layout/snippets-clipboard.md`](docs/layout/snippets-clipboard.md)
-- Patch-format reserved fields stay reserved (`"timeline"`, `"macros"` (P8-12) and `"midiRemote"` (FRO124) all refused untrusted; flat scalar params; `uuid` trusted-only). → [`docs/ai/patch-format.md`](docs/ai/patch-format.md) · [`docs/layout/macro-cards.md`](docs/layout/macro-cards.md) · [`docs/control/midi-remote.md#persistence-and-the-trust-boundary`](docs/control/midi-remote.md#persistence-and-the-trust-boundary)
-- Conversation-history persistence is resolved server-side from the entitlement, never trusted from a client header. → [`docs/ai/history.md`](docs/ai/history.md#server-side-conversation-history)
-- Persist a rotated refresh token before using the access token that came with it (`AccountService::completeSignIn` is the funnel). → [`docs/ai/accounts.md`](docs/ai/accounts.md#rotation-before-use)
-- Installing an AI provider after construction requires calling `refreshModels()` again, or every `/api/chat` gets a 400. → [`docs/ai/chat-component.md`](docs/ai/chat-component.md#model-discovery-ordering-contract)
-
-**UI & theming** (`Source/UI/CLAUDE.md`, `Source/Plugin/CLAUDE.md`):
-
-- No unconditional per-tick repaint; all animations use `AnimationDriver`; exactly two blessed exceptions. → [`docs/layout/rendering.md`](docs/layout/rendering.md) · [`docs/layout/animation.md`](docs/layout/animation.md)
-- A component rebuild mid-gesture (an async apply, or the dragged node/macro vanishing) cancels any live drag via `GraphEditor::cancelLiveDragGestures()` rather than leaving it waiting on a `mouseUp` that can no longer arrive. → [`docs/layout/selection.md`](docs/layout/selection.md)
-- A cable is not a graph edge — enumerate via `GraphEditor::buildVisibleCables()`, colour via `synth::ui::resolveCableColour`. → [`docs/layout/cables.md`](docs/layout/cables.md)
-- Themes never swap font families (JUCE 8 + CoreText corrupts text); colour/treatment/glow only. → [`docs/layout/theming.md`](docs/layout/theming.md)
-- A plugin editor never calls `Desktop::setDefaultLookAndFeel` — it's process-global inside the host. → [`docs/architecture/plugin-layer.md#who-owns-what`](docs/architecture/plugin-layer.md#who-owns-what)
-- No per-sample / per-frame / per-parameter logging — a global Logger pipes into a UI-thread console. → [`docs/ai/chat-component.md`](docs/ai/chat-component.md#logging-rules)
-
-**CI** (`.github/CLAUDE.md`):
-
-- The CI cache is load-bearing and fails silently: per-language compiler launchers, keep the `push: main` trigger, key `build/_deps` on `cmake/DependencyVersions.cmake` only (pin new dependencies there), explicit `CCACHE_DIR` per job. → [`docs/development/ci-caching.md`](docs/development/ci-caching.md)
-- PR titles are conventional-commit subjects (`type(scope)!: subject`, scope = ticket id, breaking change marked `!`) — a required check as of FRO170 (landed non-required in FRO182). → [`docs/development/pr-title-convention.md`](docs/development/pr-title-convention.md)
+- `Source/CLAUDE.md` — audio thread, host modes, `EpochExchange`, MIDI Remote threading, timeline ownership, solo/sends, unsaved-changes guard, autosave, ASCII literals, NaN/Inf scrub
+- `Source/Modules/CLAUDE.md` — stereo/Dual I/O legs, fixed channel counts, Wavetable warp aliasing, gain staging
+- `Source/Timeline/CLAUDE.md` — audio-clip streaming, automation-lane binding
+- `Source/AI/CLAUDE.md` — `applyJSONToGraph` auto-connect, patch-format reserved fields, conversation-history entitlement, refresh-token rotation, AI model discovery ordering
+- `Source/UI/CLAUDE.md`, `Source/Plugin/CLAUDE.md` — repaint/animation budget, cable identity, theming, plugin editor look-and-feel, logging limits, `GraphEditor` collaborator ownership, mixer-column/parameter unbinding, MIDI Learn registry
+- `.github/CLAUDE.md` — CI cache correctness, PR title convention, required status checks
 
 ## Docs map
 

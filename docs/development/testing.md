@@ -48,6 +48,12 @@ cmake --build build
   shared-code change that silently breaks the plugin wrapper fails the same job as the app, with no
   separate opt-in required.
 
+- **Generator**: a bare `cmake --build` defaults to Unix Makefiles (serial, no `-j`) unless Ninja is
+  installed and `-G Ninja` is passed. CI always uses Ninja (`.github/workflows/ci.yml`), and
+  `scripts/ci-local.sh` already picks it automatically and passes `--parallel`. For a quick manual
+  build that matches CI's speed: `brew install ninja` once, then
+  `cmake -S . -B build -G Ninja && cmake --build build`.
+
 ## Adding tests for a new module
 
 1. **Unit tests** in `Tests/Modules/<ModuleName>Tests.cpp`, or `Tests/FX/` for an FX module — DSP
