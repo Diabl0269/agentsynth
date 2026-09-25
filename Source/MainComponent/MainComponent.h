@@ -356,6 +356,11 @@ public:
     bool hasTracksNeedingChannelsForTest() const { return hasTracksNeedingChannels(); }
     int getStatusBarTickCountForTest() const { return statusBarTickCount_; }
     void simulateLoadFactoryPresetForTest(int index);
+    // "Insert Track Preset from File..." has no real FileChooser in a headless test process (same
+    // reasoning as every other *ForTest file-injection wrapper here, e.g. relinkClipAssetForTest) —
+    // this drives insertTrackPresetFromFile() directly with an injected file. Returns the inserted
+    // track's name, or empty on rejection/failure (nothing added).
+    juce::String insertTrackPresetFromFileForTest(const juce::File& file) { return insertTrackPresetFromFile(file); }
     void openPresetFromFile();
     void openProjectFromFile();
     synth::AIIntegrationService& getAiServiceForTest() { return aiService; }
@@ -494,6 +499,10 @@ private:
     // Shared insert path; NO UNDO TRANSACTION OF ITS OWN — see MainComponentTrackPresets.cpp.
     juce::String insertTrackFromPresetVar(const juce::var& preset, synth::TrackPresetKind kind,
                                           const juce::String& trackNamePrefix);
+    // "Insert Track Preset from File..."'s shared body, factored out of addTrackFromPresetFile()'s
+    // FileChooser callback so a headless test can inject a file directly — see
+    // insertTrackPresetFromFileForTest() below and MainComponentTrackPresets.cpp's own comment.
+    juce::String insertTrackPresetFromFile(const juce::File& file);
 
     // Hosted-plugin instrument loads in flight — see addInstrumentPluginTrack's own comment for
     // why this external owner holds the staged processor. A failed/refused load is dropped via

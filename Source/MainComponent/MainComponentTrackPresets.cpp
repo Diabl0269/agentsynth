@@ -223,6 +223,34 @@ void MainComponent::addTrackFromPreset(const juce::String& presetName, synth::Tr
                                                            : "Could not insert track preset \"" + presetName + "\"");
 }
 
+// Shared by addTrackFromPresetFile()'s FileChooser callback and the headless test seam
+// (insertTrackPresetFromFileForTest, MainComponent.h) -- there is no real display in a test
+// process for a juce::FileChooser to be positioned on (same reason openAddTrackMenu() below is a
+// protected virtual), so tests inject the file directly here instead of driving a chooser.
+// Returns the inserted track's name, or an empty string on rejection/failure (unreadable file, or
+// insertTrackFromPresetVar's own rejection) -- nothing is added to the timeline or the graph in
+// that case.
+juce::String MainComponent::insertTrackPresetFromFile(const juce::File& file) {
+    auto preset = synth::TrackPresetManager::loadTrackPresetFile(file);
+    if (!preset.isObject()) {
+        statusBar.showMessage("Could not load \"" + file.getFileName() + "\"");
+        return {};
+    }
+    const auto kind = synth::TrackPresetManager::getPresetKind(preset);
+    const juce::String prefix =
+        kind == synth::TrackPresetKind::Instrument ? juce::String("Instrument") : juce::String("Audio");
+
+    juce::String trackName;
+    const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
+        audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
+        [this, &preset, kind, prefix, &trackName] { trackName = insertTrackFromPresetVar(preset, kind, prefix); });
+
+    reconcileTimelineAfterGraphChange();
+    statusBar.showMessage(pushed && trackName.isNotEmpty() ? "Added " + trackName
+                                                           : "Could not insert \"" + file.getFileName() + "\"");
+    return trackName;
+}
+
 void MainComponent::addTrackFromPresetFile() {
     fileChooser = std::make_unique<juce::FileChooser>("Insert Track Preset from File...",
                                                       synth::TrackPresetManager::getDefaultTrackPresetsDirectory(),
@@ -236,27 +264,6 @@ void MainComponent::addTrackFromPresetFile() {
                                  auto file = fc.getResult();
                                  if (file == juce::File())
                                      return;
-
-                                 auto preset = synth::TrackPresetManager::loadTrackPresetFile(file);
-                                 if (!preset.isObject()) {
-                                     self->statusBar.showMessage("Could not load \"" + file.getFileName() + "\"");
-                                     return;
-                                 }
-                                 const auto kind = synth::TrackPresetManager::getPresetKind(preset);
-                                 const juce::String prefix = kind == synth::TrackPresetKind::Instrument
-                                                                 ? juce::String("Instrument")
-                                                                 : juce::String("Audio");
-
-                                 juce::String trackName;
-                                 const bool pushed = self->undoManager.recordGraphTimelineAndMacroChange(
-                                     self->audioEngine.getGraph(), self->timelineDoc, self->graphEditor.getMacros(),
-                                     [self, &preset, kind, prefix, &trackName] {
-                                         trackName = self->insertTrackFromPresetVar(preset, kind, prefix);
-                                     });
-
-                                 self->reconcileTimelineAfterGraphChange();
-                                 self->statusBar.showMessage(pushed && trackName.isNotEmpty()
-                                                                 ? "Added " + trackName
-                                                                 : "Could not insert \"" + file.getFileName() + "\"");
+                                 self->insertTrackPresetFromFile(file);
                              });
 }
