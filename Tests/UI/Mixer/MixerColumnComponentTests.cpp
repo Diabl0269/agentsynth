@@ -73,7 +73,7 @@ void expectBusColumnShowsItsInserts(int height) {
     editor.setSize(900, 600);
     synth::TimelineDoc doc;
 
-    const synth::DefaultChannelLayout layout{{0, 0}, {100, 0}, {200, 0}, {300, 0}};
+    const synth::DefaultChannelLayout layout{{-100, 0}, {0, 0}, {100, 0}, {200, 0}, {300, 0}};
     const auto channel = synth::buildBusChannel(graph, layout);
     ASSERT_NE(channel.strip, nullptr);
 
@@ -83,15 +83,15 @@ void expectBusColumnShowsItsInserts(int height) {
         if (column.nodeId == channel.strip->nodeID)
             busColumn = &column;
     ASSERT_NE(busColumn, nullptr);
-    ASSERT_EQ(busColumn->inserts.size(), 2u) << "the model half of this fix must already hold";
+    ASSERT_EQ(busColumn->inserts.size(), 3u) << "the model half of this fix must already hold";
 
     synth::ui::MixerColumnComponent column;
     column.configure(graph, undoManager, editor.getMacros(), editor, engine);
     column.setSize(140, height);
     column.setColumn(*busColumn, "");
 
-    EXPECT_EQ(column.getInsertListForTest().getEntryCountForTest(), 2)
-        << "at height " << height << ", both the EQ and Compressor rows must show";
+    EXPECT_EQ(column.getInsertListForTest().getEntryCountForTest(), 3)
+        << "at height " << height << ", the Gate, EQ and Compressor rows must show";
     EXPECT_TRUE(column.getInsertListForTest().isLinearForTest());
     EXPECT_TRUE(column.getEqThumbnailForTest().isVisible())
         << "at height " << height << ", the bus's own EQ must get the curve thumbnail";

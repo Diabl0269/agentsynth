@@ -80,7 +80,7 @@ struct ColumnFixture {
         graph.setPlayConfigDetails(0, 2, 44100.0, 512);
         editor.setSize(900, 600);
 
-        const synth::DefaultChannelLayout layout{{0, 0}, {100, 0}, {200, 0}, {300, 0}};
+        const synth::DefaultChannelLayout layout{{-100, 0}, {0, 0}, {100, 0}, {200, 0}, {300, 0}};
         const auto channel = synth::buildBusChannel(graph, layout);
         strip = dynamic_cast<ChannelStripModule*>(channel.strip->getProcessor());
 

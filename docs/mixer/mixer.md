@@ -350,7 +350,7 @@ downstream of it; the track's own strip feeds the bus's original input pins, **n
 so nothing is summed twice**. **A node that would move but is already in a macro refuses the whole
 action** (the flat model).
 
-**The conversion is sample-identical.** Strip, bypassed EQ and Compressor, Master and macro ports are
+**The conversion is sample-identical.** Strip, bypassed Gate, EQ and Compressor, Master and macro ports are
 all unity pass-throughs at their defaults, proven offline for the shared-LFO and merge cases. The one
 intended exception is a chain ending on a poly jack, which gets a Voice Mixer ahead of the strip
 (`addVoiceMixerForPolyInstrument`) and so carries every voice where a bare poly jack wired to a mono
@@ -376,20 +376,22 @@ no-op first, so neither pushes an empty undo step, then run
 ## Building a channel
 
 Every flow that creates a channel shares one chain builder rather than a parallel implementation.
-The factory default chain is **Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel Strip
-(Stereo) -> Master (Mix)**, added bypassed so a new channel costs no CPU until the user engages it.
+The factory default chain is **Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor (bypassed)
+-> Channel Strip (Stereo) -> Master (Mix)**, added bypassed so a new channel costs no CPU until the
+user engages it.
 
-**Why EQ and Compressor rather than nothing, or live at neutral settings.** Live-at-neutral means
-paying CPU on every channel regardless of use; empty means no baseline at all. Bypassed gives the
-baseline with neither cost.
+**Why Gate, EQ and Compressor rather than nothing, or live at neutral settings.** Live-at-neutral
+means paying CPU on every channel regardless of use; empty means no baseline at all. Bypassed gives
+the baseline with neither cost. FRO226 added Gate ahead of EQ as the chain's first stage — a noise
+gate belongs upstream of tone-shaping and dynamics, so it sees the source signal directly.
 
 ### The factory default chain
 
 `synth::buildDefaultAudioChannel` (`Source/Mixer/ChannelFlows/ChannelFlows.h`) splices Master
 (`synth::spliceMasterNode`, reusing the existing singleton after the first channel) and wires the
-strip into it. "+ Track -> Audio Track" builds the whole channel — Track Audio, EQ, Compressor, Strip,
-Master — in ONE undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`), and
-`{Track Audio, EQ, Compressor, Strip}` are boxed into ONE collapsed macro named after the track
+strip into it. "+ Track -> Audio Track" builds the whole channel — Track Audio, Gate, EQ, Compressor,
+Strip, Master — in ONE undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`), and
+`{Track Audio, Gate, EQ, Compressor, Strip}` are boxed into ONE collapsed macro named after the track
 (`GraphEditor::addMacroForMembers`).
 
 **Master stays OUTSIDE the macro, and the Strip to Master cable is left a plain graph edge,
@@ -409,8 +411,8 @@ is never ch1 (`Source/Modules/CLAUDE.md`).
 Sampler, **deliberately not every `isMidiInstrumentType()` member**, since Poly MIDI, Sequencer and
 Poly Sequencer generate CV or MIDI rather than audio — and builds Track In, the chosen instrument, and
 the same default chain, in ONE undo step (`MainComponent::addInstrumentTrack`).
-`{Track In, instrument, [Voice Mixer if poly], EQ, Compressor, Strip}` are boxed into one collapsed
-macro; Master stays outside it for the same classification reason.
+`{Track In, instrument, [Voice Mixer if poly], Gate, EQ, Compressor, Strip}` are boxed into one
+collapsed macro; Master stays outside it for the same classification reason.
 
 `synth::addVoiceMixerForPolyInstrument` sums a poly instrument's ch0 to ch7 into a Voice Mixer first,
 gated on the instrument's own live `poly` parameter and **never forced on**: a factory-created
@@ -424,7 +426,7 @@ headless seam are in [`docs/timeline/add-track.md`](../timeline/add-track.md).
 Oscillator and Wavetable have no envelope of their own, so a held — or even released — note drones
 forever. `synth::addEnvelopeAndVCAForRawInstrument` (`Source/Mixer/ChannelFlows/ChannelFlows.h`)
 inserts an ADSR and a VCA ahead of the rest of the chain:
-`Track In --MIDI--> ADSR --Env--> VCA's Gain CV`, then `chainSource -> VCA Audio -> EQ`.
+`Track In --MIDI--> ADSR --Env--> VCA's Gain CV`, then `chainSource -> VCA Audio -> Gate`.
 
 **Inserted AFTER any Voice Mixer stage, never before it**, and both nodes are forced non-poly
 regardless of the instrument's own `poly` parameter: `ADSRModule`'s poly branch is CV-gate-only — it
@@ -433,7 +435,7 @@ fed only Track In's MIDI would output a permanent zero envelope. ADSR's `sustain
 0.7, independently of its own stock default, so this auto-wired chain settles at a musical level;
 VCA's `gain` is overridden to 1.0 so the envelope alone governs level. **Sampler is untouched** — it
 already has its own one-shot playback envelope.
-`{Track In, instrument, [Voice Mixer if poly], ADSR, VCA, EQ, Compressor, Strip}` join the same one
+`{Track In, instrument, [Voice Mixer if poly], ADSR, VCA, Gate, EQ, Compressor, Strip}` join the same one
 collapsed macro.
 
 ### A poly instrument gets a per-voice envelope
@@ -461,7 +463,7 @@ a stereo-shaped pair itself (ch0 the left sum, ch1 its own legacy duplicate), so
 instrument this does not apply to, such as a poly Sampler. **The instrument's R-octet is deliberately
 NOT wired into the VCA's own Audio R poly block (ch16 to ch23)** — the same known stereo limitation
 `addVoiceMixerForPolyInstrument` documents for the non-envelope poly path.
-`{Track In, instrument, Poly MIDI, ADSR, VCA, EQ, Compressor, Strip}` join the same one collapsed
+`{Track In, instrument, Poly MIDI, ADSR, VCA, Gate, EQ, Compressor, Strip}` join the same one collapsed
 macro. The menu's "Oscillator (Poly)" and "Wavetable (Poly)" entries set the new instrument's `poly`
 `AudioParameterBool` via `synth::setProcessorPoly()` before this branch check runs; Sampler has no
 poly parameter and therefore no poly entry.
@@ -534,7 +536,7 @@ first track's call builds it and removes the exit edges, so the second track's c
 bookkeeping, since it is the same per-node builder live connects already run.
 
 **Reusing that builder unchanged carries over its macro-boxing rule**, and that has a visible
-consequence: the new EQ, Compressor and Strip only join the source's existing macro when every exit
+consequence: the new Gate, EQ, Compressor and Strip only join the source's existing macro when every exit
 source is an ordinary, non-port member of the SAME macro. A genuinely legacy track's node was never a
 macro member at all, so that condition fails and the sweep's new channel ships as loose cards on the
 canvas rather than boxed. That is an accepted consequence of reusing the connect-triggered builder as
@@ -584,7 +586,7 @@ On the very first channel, `MainComponent::addAudioTrack()` also relocates that 
 bare one the user dropped manually before adding a track — to sit immediately right of the
 newly-spliced Master, once it knows this call is the one that splices Master (checked via
 `synth::findMasterNode` before building the chain). Master already lands right of the chain by design,
-so the row reads `Track Audio -> EQ -> Compressor -> Strip -> Master -> Audio Output` left to right;
+so the row reads `Track Audio -> Gate -> EQ -> Compressor -> Strip -> Master -> Audio Output` left to right;
 without the move, Audio Output stayed at the newPatch seed's canvas origin while Master jumped to the
 far side of the chain, and the output cable had to run back across the whole canvas. **Only fires the
 first time Master is created** — once it exists, later tracks do not reshuffle the canvas.

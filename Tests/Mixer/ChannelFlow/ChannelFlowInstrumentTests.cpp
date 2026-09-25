@@ -35,12 +35,12 @@
 #include <thread>
 
 // ---------------------------------------------------------------------------------------------
-// T183 (P9-3b): "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds
+// T183 (P9-3b, FRO226): "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds
 //
-//     Track In -> instrument -> Parametric EQ (bypassed) -> Compressor (bypassed)
+//     Track In -> instrument -> Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor (bypassed)
 //              -> Channel Strip (Stereo) -> Master (Mix)
 //
-// as ONE undo step, with {Track In, instrument, EQ, Compressor, Strip} boxed into one collapsed
+// as ONE undo step, with {Track In, instrument, Gate, EQ, Compressor, Strip} boxed into one collapsed
 // macro named after the track — the MIDI-track mirror of the Audio Track tests above. See
 // MainComponent::addInstrumentTrack's own comment for why this stays a TrackKind::Midi track
 // rather than a new TrackKind, and Source/Mixer/ChannelFlows/ChannelFlows.h for the poly/Voice Mixer contract.
@@ -58,6 +58,7 @@ TEST_F(ChannelFlowTest, InstrumentTrackSamplerBuildsDefaultChannelDirectlyOnACon
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Sampler), 1);
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::VoiceMixer), 0)
         << "Sampler is a contiguous stereo pair — no Voice Mixer needed";
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Gate), 1);
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ParametricEQ), 1);
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Compressor), 1);
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 1);
@@ -65,9 +66,11 @@ TEST_F(ChannelFlowTest, InstrumentTrackSamplerBuildsDefaultChannelDirectlyOnACon
 
     auto* trackIn = findNodeOfTypeCFT(graph, ModuleType::TimelineMidiSource);
     auto* sampler = findNodeOfTypeCFT(graph, ModuleType::Sampler);
+    auto* gate = findNodeOfTypeCFT(graph, ModuleType::Gate);
     auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
     ASSERT_NE(trackIn, nullptr);
     ASSERT_NE(sampler, nullptr);
+    ASSERT_NE(gate, nullptr);
     ASSERT_NE(eq, nullptr);
 
     EXPECT_TRUE(graph.isConnected({{trackIn->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
@@ -76,8 +79,10 @@ TEST_F(ChannelFlowTest, InstrumentTrackSamplerBuildsDefaultChannelDirectlyOnACon
     auto* samplerModule = dynamic_cast<ModuleBase*>(sampler->getProcessor());
     ASSERT_NE(samplerModule, nullptr);
     ASSERT_EQ(samplerModule->rightAudioLegChannel(), 1) << "Sampler's legs ARE the contiguous ch0/ch1 pair";
-    EXPECT_TRUE(graph.isConnected({{sampler->nodeID, 0}, {eq->nodeID, 0}}));
-    EXPECT_TRUE(graph.isConnected({{sampler->nodeID, 1}, {eq->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{sampler->nodeID, 0}, {gate->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{sampler->nodeID, 1}, {gate->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 1}, {eq->nodeID, 1}}));
 }
 
 TEST_F(ChannelFlowTest, InstrumentTrackOscillatorWiresSplitBlockRightLegNeverCh1) {
@@ -112,13 +117,17 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorWiresSplitBlockRightLegNeverCh1
     EXPECT_FALSE(graph.isConnected({{oscillator->nodeID, 1}, {vca->nodeID, 1}}))
         << "must never assume ch1 for a split-block source, and ch1 on the VCA is its Gain CV";
 
-    // VCA -> EQ, now that the VCA sits between the instrument and the rest of the chain.
+    // VCA -> Gate -> EQ, now that the VCA sits between the instrument and the rest of the chain.
+    auto* gate = findNodeOfTypeCFT(graph, ModuleType::Gate);
     auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
+    ASSERT_NE(gate, nullptr);
     ASSERT_NE(eq, nullptr);
-    EXPECT_TRUE(graph.isConnected({{vca->nodeID, 0}, {eq->nodeID, 0}}));
-    EXPECT_TRUE(graph.isConnected({{vca->nodeID, VCAModule::kRightBase}, {eq->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{vca->nodeID, 0}, {gate->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{vca->nodeID, VCAModule::kRightBase}, {gate->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 1}, {eq->nodeID, 1}}));
     EXPECT_FALSE(graph.isConnected({{oscillator->nodeID, 0}, {eq->nodeID, 0}}))
-        << "Oscillator must no longer feed EQ directly — it goes through the VCA";
+        << "Oscillator must no longer feed EQ directly — it goes through the VCA and Gate";
 }
 
 // P9-3i (FRO43): the ADSR gating the VCA above is driven by the same Track In MIDI as the
@@ -237,14 +246,17 @@ TEST_F(ChannelFlowTest, InstrumentTrackDefaultInsertsAreBypassedAndStripIsStereo
 
     addInstrumentTrack(mc, "Sampler");
 
+    auto* gateModule = dynamic_cast<ModuleBase*>(findNodeOfTypeCFT(graph, ModuleType::Gate)->getProcessor());
     auto* eqModule = dynamic_cast<ModuleBase*>(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ)->getProcessor());
     auto* compModule = dynamic_cast<ModuleBase*>(findNodeOfTypeCFT(graph, ModuleType::Compressor)->getProcessor());
     auto* stripModule =
         dynamic_cast<ChannelStripModule*>(findNodeOfTypeCFT(graph, ModuleType::ChannelStrip)->getProcessor());
+    ASSERT_NE(gateModule, nullptr);
     ASSERT_NE(eqModule, nullptr);
     ASSERT_NE(compModule, nullptr);
     ASSERT_NE(stripModule, nullptr);
 
+    EXPECT_TRUE(gateModule->isBypassed());
     EXPECT_TRUE(eqModule->isBypassed());
     EXPECT_TRUE(compModule->isBypassed());
     EXPECT_FALSE(stripModule->isBypassed());
@@ -273,11 +285,11 @@ TEST_F(ChannelFlowTest, InstrumentTrackSamplerGetsNoEnvelopeOrVCA) {
     EXPECT_EQ(findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA), nullptr);
 
     auto* sampler = findNodeOfTypeCFT(graph, ModuleType::Sampler);
-    auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
+    auto* gate = findNodeOfTypeCFT(graph, ModuleType::Gate);
     ASSERT_NE(sampler, nullptr);
-    ASSERT_NE(eq, nullptr);
-    EXPECT_TRUE(graph.isConnected({{sampler->nodeID, 0}, {eq->nodeID, 0}}))
-        << "Sampler must still feed EQ directly, unchanged by P9-3i";
+    ASSERT_NE(gate, nullptr);
+    EXPECT_TRUE(graph.isConnected({{sampler->nodeID, 0}, {gate->nodeID, 0}}))
+        << "Sampler must still feed the chain directly, unchanged by P9-3i";
 }
 
 TEST_F(ChannelFlowTest, InstrumentTrackIsOneCollapsedMacroNamedAfterTrackAndStaysMidiKind) {
@@ -304,6 +316,7 @@ TEST_F(ChannelFlowTest, InstrumentTrackIsOneCollapsedMacroNamedAfterTrackAndStay
 
     std::vector<juce::String> expected = {nodeUuid(findNodeOfTypeCFT(graph, ModuleType::TimelineMidiSource)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Sampler)),
+                                          nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Gate)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Compressor)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ChannelStrip))};
@@ -337,6 +350,7 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorMacroIncludesEnvelopeAndVCA) {
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Oscillator)),
                                           nodeUuid(findMacroMemberOfTypeCFT(graph, macro, ModuleType::ADSR)),
                                           nodeUuid(findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA)),
+                                          nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Gate)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Compressor)),
                                           nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ChannelStrip))};
@@ -403,6 +417,7 @@ TEST_F(ChannelFlowTest, InstrumentTrackWavetableCardsDoNotOverlap) {
     auto* wavetableNode = findNodeOfTypeCFT(graph, ModuleType::Wavetable);
     auto* adsrNode = findMacroMemberOfTypeCFT(graph, macro, ModuleType::ADSR);
     auto* vcaNode = findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA);
+    auto* gateNode = findNodeOfTypeCFT(graph, ModuleType::Gate);
     auto* eqNode = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
     auto* compNode = findNodeOfTypeCFT(graph, ModuleType::Compressor);
     auto* stripNode = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
@@ -411,6 +426,7 @@ TEST_F(ChannelFlowTest, InstrumentTrackWavetableCardsDoNotOverlap) {
     ASSERT_NE(wavetableNode, nullptr);
     ASSERT_NE(adsrNode, nullptr) << "P9-3i: Wavetable also has no envelope of its own";
     ASSERT_NE(vcaNode, nullptr);
+    ASSERT_NE(gateNode, nullptr);
     ASSERT_NE(eqNode, nullptr);
     ASSERT_NE(compNode, nullptr);
     ASSERT_NE(stripNode, nullptr);
@@ -423,9 +439,9 @@ TEST_F(ChannelFlowTest, InstrumentTrackWavetableCardsDoNotOverlap) {
         return nullptr;
     };
 
-    const std::array<ModuleComponent*, 8> cards = {findComp(trackInNode), findComp(wavetableNode), findComp(adsrNode),
-                                                   findComp(vcaNode),     findComp(eqNode),        findComp(compNode),
-                                                   findComp(stripNode),   findComp(masterNode)};
+    const std::array<ModuleComponent*, 9> cards = {
+        findComp(trackInNode), findComp(wavetableNode), findComp(adsrNode),  findComp(vcaNode),   findComp(gateNode),
+        findComp(eqNode),      findComp(compNode),      findComp(stripNode), findComp(masterNode)};
     for (auto* card : cards)
         ASSERT_NE(card, nullptr) << "every macro member must have a real ModuleComponent once expanded";
 

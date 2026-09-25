@@ -68,11 +68,13 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackBuildsDefaultChannelWithNoAdsr) {
 
     auto* trackIn = findNodeOfTypeCFT(graph, ModuleType::TimelineMidiSource);
     auto* plugin = findNodeOfTypeCFT(graph, ModuleType::HostedPlugin);
+    auto* gate = findNodeOfTypeCFT(graph, ModuleType::Gate);
     auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
     auto* comp = findNodeOfTypeCFT(graph, ModuleType::Compressor);
     auto* strip = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
     ASSERT_NE(trackIn, nullptr);
     ASSERT_NE(plugin, nullptr);
+    ASSERT_NE(gate, nullptr);
     ASSERT_NE(eq, nullptr);
     ASSERT_NE(comp, nullptr);
     ASSERT_NE(strip, nullptr);
@@ -83,12 +85,12 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackBuildsDefaultChannelWithNoAdsr) {
     EXPECT_EQ(findMacroMemberOfTypeCFT(graph, macro, ModuleType::ADSR), nullptr)
         << "a hosted synth has its own envelope — no P9-3i ADSR+VCA for it";
     EXPECT_EQ(findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA), nullptr);
-    std::vector<juce::String> expectedMembers{nodeUuid(trackIn), nodeUuid(plugin), nodeUuid(eq), nodeUuid(comp),
-                                              nodeUuid(strip)};
+    std::vector<juce::String> expectedMembers{nodeUuid(trackIn), nodeUuid(plugin), nodeUuid(gate),
+                                              nodeUuid(eq),      nodeUuid(comp),   nodeUuid(strip)};
     auto actualMembers = macro.members;
     std::sort(expectedMembers.begin(), expectedMembers.end());
     std::sort(actualMembers.begin(), actualMembers.end());
-    EXPECT_EQ(actualMembers, expectedMembers) << "exactly Track In/plugin/EQ/Compressor/Strip, nothing else";
+    EXPECT_EQ(actualMembers, expectedMembers) << "exactly Track In/plugin/Gate/EQ/Compressor/Strip, nothing else";
 
     bool midiWired = false;
     for (const auto& c : graph.getConnections())
@@ -102,15 +104,15 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackBuildsDefaultChannelWithNoAdsr) {
     bool leftWired = false;
     bool rightWired = false;
     for (const auto& c : graph.getConnections()) {
-        if (c.source.nodeID != plugin->nodeID || c.destination.nodeID != eq->nodeID)
+        if (c.source.nodeID != plugin->nodeID || c.destination.nodeID != gate->nodeID)
             continue;
         if (c.source.channelIndex == 0 && c.destination.channelIndex == 0)
             leftWired = true;
         if (c.source.channelIndex == 1 && c.destination.channelIndex == 1)
             rightWired = true;
     }
-    EXPECT_TRUE(leftWired) << "the plugin's L output must reach EQ L";
-    EXPECT_TRUE(rightWired) << "the plugin's real published R output (raw ch1) must reach EQ R — "
+    EXPECT_TRUE(leftWired) << "the plugin's L output must reach Gate L";
+    EXPECT_TRUE(rightWired) << "the plugin's real published R output (raw ch1) must reach Gate R — "
                                "rightAudioLegChannel() read AFTER the load completed, never assumed ch1 blind";
 }
 
@@ -457,16 +459,16 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackMonoInstanceDuplicatesOntoBothChann
         << "the async load/chain-build never completed";
 
     auto* plugin = findNodeOfTypeCFT(graph, ModuleType::HostedPlugin);
-    auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
+    auto* gate = findNodeOfTypeCFT(graph, ModuleType::Gate);
     ASSERT_NE(plugin, nullptr);
-    ASSERT_NE(eq, nullptr);
+    ASSERT_NE(gate, nullptr);
     auto* hostedModule = dynamic_cast<ModuleBase*>(plugin->getProcessor());
     ASSERT_NE(hostedModule, nullptr);
     EXPECT_EQ(hostedModule->rightAudioLegChannel(), 0) << "a genuinely mono instance's right leg is its own ch0";
 
     bool leftWired = false, rightFromCh0Wired = false, rightFromCh1Wired = false;
     for (const auto& c : graph.getConnections()) {
-        if (c.source.nodeID != plugin->nodeID || c.destination.nodeID != eq->nodeID)
+        if (c.source.nodeID != plugin->nodeID || c.destination.nodeID != gate->nodeID)
             continue;
         if (c.source.channelIndex == 0 && c.destination.channelIndex == 0)
             leftWired = true;
@@ -475,8 +477,8 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackMonoInstanceDuplicatesOntoBothChann
         if (c.source.channelIndex == 1 && c.destination.channelIndex == 1)
             rightFromCh1Wired = true;
     }
-    EXPECT_TRUE(leftWired) << "the plugin's one real output must reach EQ L";
-    EXPECT_TRUE(rightFromCh0Wired) << "the SAME ch0 output must also reach EQ R — a mono instance duplicates "
+    EXPECT_TRUE(leftWired) << "the plugin's one real output must reach Gate L";
+    EXPECT_TRUE(rightFromCh0Wired) << "the SAME ch0 output must also reach Gate R — a mono instance duplicates "
                                       "onto both legs rather than going silent on the right";
     EXPECT_FALSE(rightFromCh1Wired) << "there is no real ch1 to wire from on a mono instance";
 }
@@ -550,15 +552,15 @@ TEST_F(ChannelFlowTest, PolyInstrumentGetsVoiceMixerAheadOfStripAndFeedsTheChann
         EXPECT_TRUE(graph.isConnected({{oscNode->nodeID, voice}, {voiceMixer->nodeID, voice}}))
             << "voice " << voice << " must be summed into the Voice Mixer";
 
-    const synth::DefaultChannelLayout layout{{100, 0}, {200, 0}, {300, 0}, {400, 0}};
+    const synth::DefaultChannelLayout layout{{0, 0}, {100, 0}, {200, 0}, {300, 0}, {400, 0}};
     const auto channel = synth::buildDefaultAudioChannel(graph, *voiceMixer, layout);
     ASSERT_FALSE(channel.stripUuid.isEmpty());
 
-    auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
-    ASSERT_NE(eq, nullptr);
-    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 0}, {eq->nodeID, 0}}))
+    auto* gate = findNodeOfTypeCFT(graph, ModuleType::Gate);
+    ASSERT_NE(gate, nullptr);
+    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 0}, {gate->nodeID, 0}}))
         << "Voice Mixer's own ch0/ch1 output satisfies buildDefaultAudioChannel's default contiguous-pair contract";
-    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 1}, {eq->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 1}, {gate->nodeID, 1}}));
 }
 
 TEST_F(ChannelFlowTest, NonPolyInstrumentGetsNoVoiceMixer) {
@@ -623,7 +625,7 @@ TEST_F(ChannelFlowTest, EnvelopeAndVCAComposeAfterVoiceMixerForPolyInstrument) {
     EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 0}, {envAndVca.vca->nodeID, 0}}));
     EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 1}, {envAndVca.vca->nodeID, VCAModule::kRightBase}}));
 
-    const synth::DefaultChannelLayout layout{{400, 0}, {500, 0}, {600, 0}, {700, 0}};
+    const synth::DefaultChannelLayout layout{{300, 0}, {400, 0}, {500, 0}, {600, 0}, {700, 0}};
     const auto channel = synth::buildDefaultAudioChannel(graph, *envAndVca.vca, layout, VCAModule::kRightBase);
     ASSERT_FALSE(channel.stripUuid.isEmpty()) << "the VCA's output must satisfy buildDefaultAudioChannel too";
 }
@@ -696,7 +698,7 @@ TEST_F(ChannelFlowTest, PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNoVo
             << "voice " << voice << ": the instrument's poly Audio L must feed the VCA's poly Audio L in";
     }
 
-    const synth::DefaultChannelLayout layout{{400, 0}, {500, 0}, {600, 0}, {700, 0}};
+    const synth::DefaultChannelLayout layout{{300, 0}, {400, 0}, {500, 0}, {600, 0}, {700, 0}};
     const auto channel = synth::buildDefaultAudioChannel(graph, *polyEnv.vca, layout, /*sourceRightChannel=*/1);
     ASSERT_FALSE(channel.stripUuid.isEmpty())
         << "the VCA's summed ch0/ch1 output must satisfy buildDefaultAudioChannel";

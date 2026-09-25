@@ -49,9 +49,9 @@ TEST(TrackPreset, InsertingTwiceProducesTwoIndependentCopies) {
     const auto first = synth::TrackPresetManager::insertTrackPreset(preset, target, {0, 0});
     const auto second = synth::TrackPresetManager::insertTrackPreset(preset, target, {900, 0});
 
-    // Track In + Oscillator + Filter + the default EQ -> Compressor -> Channel Strip chain
+    // Track In + Oscillator + Filter + the default Gate -> EQ -> Compressor -> Channel Strip chain
     // makeChannelFromNode folds the region into (T173a's default channel build-out).
-    ASSERT_EQ(first.size(), 6u);
+    ASSERT_EQ(first.size(), 7u);
     EXPECT_EQ(second.size(), first.size());
     EXPECT_EQ(countNodesOfTypeCFT(target, ModuleType::Oscillator), 2);
     EXPECT_EQ(countNodesOfTypeCFT(target, ModuleType::Filter), 2);

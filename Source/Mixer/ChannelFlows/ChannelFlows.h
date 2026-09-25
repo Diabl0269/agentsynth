@@ -15,6 +15,7 @@ struct Macro;
  *  long as the graph node itself is (same lifetime rule every other `Node*` in this codebase
  *  follows). */
 struct DefaultChannel {
+    juce::String gateUuid;
     juce::String eqUuid;
     juce::String compressorUuid;
     juce::String stripUuid;
@@ -22,13 +23,14 @@ struct DefaultChannel {
     juce::AudioProcessorGraph::Node* master = nullptr;
 };
 
-/** Canvas positions for the four cards buildDefaultAudioChannel() may place. Core cannot size UI
+/** Canvas positions for the five cards buildDefaultAudioChannel() may place. Core cannot size UI
  *  cards itself (no dependency on Source/UI/LayoutUtil or GraphEditor::estimateModuleSize), so the
  *  caller — which CAN size them — works out non-overlapping positions and hands them in. `master`
  *  is used only when Master is newly spliced (ignored when it already exists — see
  *  ChannelFlowsDefaultChannel.cpp's buildDefaultAudioChannel comment for the splice-vs-reuse
  *  ordering). */
 struct DefaultChannelLayout {
+    juce::Point<int> gate;
     juce::Point<int> eq;
     juce::Point<int> compressor;
     juce::Point<int> strip;
@@ -36,8 +38,9 @@ struct DefaultChannelLayout {
 };
 
 /**
- * Builds the factory default mixer channel (docs/mixer/mixer.md#the-factory-default-chain, T173a): EQ (bypassed) ->
- * Compressor (bypassed) -> Channel Strip (Stereo) -> Master (Mix), after `source`. See
+ * Builds the factory default mixer channel (docs/mixer/mixer.md#the-factory-default-chain, T173a, FRO226): Gate
+ * (bypassed) -> EQ (bypassed) -> Compressor (bypassed) -> Channel Strip (Stereo) -> Master (Mix),
+ * after `source`. See
  * ChannelFlowsDefaultChannel.cpp for the channel-numbering derivation, the Master-splice ordering,
  * and why Strip->Master is a plain edge.
  *
@@ -46,8 +49,8 @@ struct DefaultChannelLayout {
  * @param source must already be live in `graph`, with its stereo pair on raw ch0 and
  *               `sourceRightChannel` (Track Audio, today's only caller, is a contiguous ch0/ch1 pair
  *               — the default), and an assigned "uuid"/"x"/"y" set of properties.
- * @param layout canvas positions for EQ/Compressor/Strip, and for Master if this call is the one
- *               that splices it (ignored otherwise — see the DefaultChannelLayout comment).
+ * @param layout canvas positions for Gate/EQ/Compressor/Strip, and for Master if this call is the
+ *               one that splices it (ignored otherwise — see the DefaultChannelLayout comment).
  * @param sourceRightChannel the raw channel carrying `source`'s right leg. Defaults to 1 (a
  *               contiguous stereo pair); a split-block source (T183: Oscillator/Wavetable) passes
  *               `ModuleBase::rightAudioLegChannel()` instead — Source/Modules/CLAUDE.md: "pair legs
@@ -161,8 +164,9 @@ std::vector<juce::AudioProcessorGraph::Connection> findUnchanneledOutputFeeds(ju
                                                                               juce::AudioProcessorGraph::NodeID start);
 
 /**
- * Builds a channel — the same EQ (bypassed) -> Compressor (bypassed) -> Channel Strip -> Master
- * (Mix) chain and ordering as buildDefaultAudioChannel documents (shared internal builder) — from
+ * Builds a channel — the same Gate (bypassed) -> EQ (bypassed) -> Compressor (bypassed) -> Channel
+ * Strip -> Master (Mix) chain and ordering as buildDefaultAudioChannel documents (shared internal
+ * builder) — from
  * `exits` (as returned by findUnchanneledOutputFeeds), instead of from one fixed stereo-pair source.
  * See ChannelFlowsAutoChannel.cpp for how `exits` is classified and rewired.
  *
@@ -171,8 +175,8 @@ std::vector<juce::AudioProcessorGraph::Connection> findUnchanneledOutputFeeds(ju
  *
  * @param exits must be non-empty (the caller checks findUnchanneledOutputFeeds's result first) and
  *              every connection in it must still be live in `graph`.
- * @param layout canvas positions for EQ/Compressor/Strip, and for Master if this call is the one
- *               that splices it — same contract as DefaultChannelLayout above.
+ * @param layout canvas positions for Gate/EQ/Compressor/Strip, and for Master if this call is the
+ *               one that splices it — same contract as DefaultChannelLayout above.
  * @return the created chain's uuids/nodes, empty-string/null on a partial factory/addNode failure
  *         — same contract as buildDefaultAudioChannel.
  */
@@ -230,7 +234,7 @@ using ChannelLayoutFn = std::function<DefaultChannelLayout(juce::AudioProcessorG
 /** The nodes buildMakeChannel built, as macro member lists ready for the caller's boxing pass.
  *  `memberUuids` is empty when this track got no strip of its own (a MIDI-only merge: the shared
  *  instrument's bus is the one channel). Each list holds pre-existing members first, then any
- *  Voice Mixer, then EQ, Compressor, Strip — Master is never a member. */
+ *  Voice Mixer, then Gate, EQ, Compressor, Strip — Master is never a member. */
 struct MadeChannel {
     DefaultChannel channel;
     std::vector<juce::String> memberUuids;

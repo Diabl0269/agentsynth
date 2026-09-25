@@ -155,9 +155,10 @@ TEST(MixerSendFlowTest, BuildBusChannelMakesAFlaggedEmptyChannelIntoMaster) {
     const auto output = addFactoryNode(graph, "Audio Output");
     ASSERT_NE(output, NodeID{});
 
-    const auto channel = synth::buildBusChannel(graph, {{0, 0}, {100, 0}, {200, 0}, {300, 0}});
+    const auto channel = synth::buildBusChannel(graph, {{-100, 0}, {0, 0}, {100, 0}, {200, 0}, {300, 0}});
     ASSERT_NE(channel.strip, nullptr);
     ASSERT_NE(channel.master, nullptr);
+    EXPECT_TRUE(channel.gateUuid.isNotEmpty());
     EXPECT_TRUE(channel.eqUuid.isNotEmpty());
     EXPECT_TRUE(channel.compressorUuid.isNotEmpty());
 
@@ -171,9 +172,10 @@ TEST(MixerSendFlowTest, BuildBusChannelMakesAFlaggedEmptyChannelIntoMaster) {
     EXPECT_TRUE(synth::isBusStrip(graph, channel.strip->nodeID));
     EXPECT_EQ(synth::busFallbackName(graph, channel.strip->nodeID), "Bus 1");
 
-    // The EQ and Compressor ship bypassed, same as every other channel's factory default.
+    // The Gate, EQ and Compressor ship bypassed, same as every other channel's factory default.
     for (auto* node : graph.getNodes())
-        if (node->properties["uuid"].toString() == channel.eqUuid ||
+        if (node->properties["uuid"].toString() == channel.gateUuid ||
+            node->properties["uuid"].toString() == channel.eqUuid ||
             node->properties["uuid"].toString() == channel.compressorUuid)
             EXPECT_TRUE(dynamic_cast<ModuleBase*>(node->getProcessor())->isBypassed());
 }

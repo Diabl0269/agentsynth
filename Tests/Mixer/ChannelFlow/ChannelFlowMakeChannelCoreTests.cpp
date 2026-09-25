@@ -64,19 +64,24 @@ TEST(ChannelFlowMakeChannelCore, ExclusiveChainAndItsOwnLfoMoveIntoTheChannelMac
     for (auto* outside : {rig.sharedLfo, rig.trackInB, rig.oscB, rig.filterB})
         EXPECT_FALSE(macro->hasMember(nodeUuid(outside))) << "another track's modules never move";
 
+    auto* gate = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::Gate);
     auto* eq = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::ParametricEQ);
     auto* compressor = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::Compressor);
     auto* strip = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::ChannelStrip);
+    ASSERT_NE(gate, nullptr);
     ASSERT_NE(eq, nullptr);
     ASSERT_NE(compressor, nullptr);
     ASSERT_NE(strip, nullptr);
+    EXPECT_TRUE(dynamic_cast<ModuleBase*>(gate->getProcessor())->isBypassed());
     EXPECT_TRUE(dynamic_cast<ModuleBase*>(eq->getProcessor())->isBypassed());
     EXPECT_TRUE(dynamic_cast<ModuleBase*>(compressor->getProcessor())->isBypassed());
-    EXPECT_TRUE(graph.isConnected({{rig.filterA->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{rig.filterA->nodeID, 0}, {gate->nodeID, 0}}));
     EXPECT_TRUE(graph.isConnected(
         {{rig.filterA->nodeID, dynamic_cast<ModuleBase*>(rig.filterA->getProcessor())->rightAudioLegChannel()},
-         {eq->nodeID, 1}}))
+         {gate->nodeID, 1}}))
         << "the right leg is read off rightAudioLegChannel(), never assumed to be ch1";
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 1}, {eq->nodeID, 1}}));
 
     auto* master = findNodeOfTypeCFT(graph, ModuleType::Master);
     ASSERT_NE(master, nullptr);

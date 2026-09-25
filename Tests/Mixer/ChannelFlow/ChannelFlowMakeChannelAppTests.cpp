@@ -169,13 +169,17 @@ TEST_F(ChannelFlowTest, PolyChainGetsAVoiceMixerAheadOfTheStripInOneUndoStep) {
     const auto* macro = mc.getGraphEditor().getMacros().findByMember(trackInUuid);
     ASSERT_NE(macro, nullptr);
     auto* voiceMixer = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::VoiceMixer);
+    auto* gate = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::Gate);
     auto* eq = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::ParametricEQ);
     ASSERT_NE(voiceMixer, nullptr) << "a chain ending poly gets a Voice Mixer ahead of the strip";
+    ASSERT_NE(gate, nullptr);
     ASSERT_NE(eq, nullptr);
     for (int voice = 0; voice < 8; ++voice)
         EXPECT_TRUE(graph.isConnected({{osc->nodeID, voice}, {voiceMixer->nodeID, voice}}));
-    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 0}, {eq->nodeID, 0}}));
-    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 1}, {eq->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 0}, {gate->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 1}, {gate->nodeID, 1}}));
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{gate->nodeID, 1}, {eq->nodeID, 1}}));
     EXPECT_FALSE(graph.isConnected({{osc->nodeID, 0}, {eq->nodeID, 0}}));
     EXPECT_TRUE(synth::isProcessorPoly(osc->getProcessor())) << "poly is never forced on or off";
     expectOneUndoStepCFT(mc, before);

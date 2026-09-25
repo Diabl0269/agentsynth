@@ -157,7 +157,7 @@ TEST(MixerModelBusColumnTests, ANewlyCreatedBusListsItsBypassedEqAndCompressorIn
     synth::TimelineDoc doc;
     synth::MacroSet macros;
 
-    const synth::DefaultChannelLayout layout{{0, 0}, {100, 0}, {200, 0}, {300, 0}};
+    const synth::DefaultChannelLayout layout{{-100, 0}, {0, 0}, {100, 0}, {200, 0}, {300, 0}};
     const auto channel = synth::buildBusChannel(graph, layout);
     ASSERT_NE(channel.strip, nullptr) << "buildBusChannel must succeed with a fresh graph";
 
@@ -167,11 +167,13 @@ TEST(MixerModelBusColumnTests, ANewlyCreatedBusListsItsBypassedEqAndCompressorIn
     EXPECT_EQ(busColumn.kind, synth::MixerColumn::Kind::Bus);
     EXPECT_TRUE(busColumn.feedingTracks.empty()) << "a bus has no feeding track to walk forward from";
 
-    ASSERT_EQ(busColumn.inserts.size(), 2u) << "the bypassed EQ -> Compressor chain must show up";
-    EXPECT_EQ(busColumn.inserts[0].name, "Parametric EQ");
+    ASSERT_EQ(busColumn.inserts.size(), 3u) << "the bypassed Gate -> EQ -> Compressor chain must show up";
+    EXPECT_EQ(busColumn.inserts[0].name, "Gate");
     EXPECT_TRUE(busColumn.inserts[0].bypassed);
-    EXPECT_EQ(busColumn.inserts[1].name, "Compressor");
+    EXPECT_EQ(busColumn.inserts[1].name, "Parametric EQ");
     EXPECT_TRUE(busColumn.inserts[1].bypassed);
+    EXPECT_EQ(busColumn.inserts[2].name, "Compressor");
+    EXPECT_TRUE(busColumn.inserts[2].bypassed);
     EXPECT_TRUE(busColumn.insertChainIsLinear) << "no send is wired in yet -- nothing branches";
     EXPECT_EQ(busColumn.sourceNodeId, NodeID{}) << "a bus's own chain has no external source";
 }
@@ -191,7 +193,7 @@ TEST(MixerModelBusColumnTests, ASendWiredIntoABusIsNeverListedAsAnInsertAndStays
     const auto rig = buildLinearChannelRigMMT(graph, doc, track);
     ASSERT_NE(rig.strip, nullptr);
 
-    const synth::DefaultChannelLayout layout{{0, 0}, {100, 0}, {200, 0}, {300, 0}};
+    const synth::DefaultChannelLayout layout{{-100, 0}, {0, 0}, {100, 0}, {200, 0}, {300, 0}};
     const auto channel = synth::buildBusChannel(graph, layout);
     ASSERT_NE(channel.strip, nullptr);
 
@@ -202,8 +204,9 @@ TEST(MixerModelBusColumnTests, ASendWiredIntoABusIsNeverListedAsAnInsertAndStays
     const auto* busColumn = columnFor(snapshot, channel.strip->nodeID);
     ASSERT_NE(busColumn, nullptr);
 
-    ASSERT_EQ(busColumn->inserts.size(), 2u) << "still just the bus's own EQ/Compressor";
-    EXPECT_EQ(busColumn->inserts[0].name, "Parametric EQ");
-    EXPECT_EQ(busColumn->inserts[1].name, "Compressor");
+    ASSERT_EQ(busColumn->inserts.size(), 3u) << "still just the bus's own Gate/EQ/Compressor";
+    EXPECT_EQ(busColumn->inserts[0].name, "Gate");
+    EXPECT_EQ(busColumn->inserts[1].name, "Parametric EQ");
+    EXPECT_EQ(busColumn->inserts[2].name, "Compressor");
     EXPECT_TRUE(busColumn->insertChainIsLinear) << "a feeding send is a source, not a branch";
 }

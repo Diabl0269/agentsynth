@@ -207,7 +207,7 @@ juce::AudioProcessorGraph::NodeID MixerPanelComponent::createBus() {
             rightmost = juce::jmax(rightmost, (int)node->properties["x"]);
     const int x = rightmost + kBusCardGap;
     const synth::DefaultChannelLayout layout{
-        {x, 0}, {x + kBusCardGap, 0}, {x + 2 * kBusCardGap, 0}, {x + 3 * kBusCardGap, 0}};
+        {x, 0}, {x + kBusCardGap, 0}, {x + 2 * kBusCardGap, 0}, {x + 3 * kBusCardGap, 0}, {x + 4 * kBusCardGap, 0}};
 
     juce::AudioProcessorGraph::NodeID created;
     undoManager_->recordGraphAndMacroChange(*graph_, *macros_, [&] {
@@ -218,7 +218,7 @@ juce::AudioProcessorGraph::NodeID MixerPanelComponent::createBus() {
 
         synth::Macro macro;
         macro.name = synth::busFallbackName(*graph_, created);
-        macro.members = {channel.eqUuid, channel.compressorUuid, channel.stripUuid};
+        macro.members = {channel.gateUuid, channel.eqUuid, channel.compressorUuid, channel.stripUuid};
         macros_->add(macro);
         graphEditor_->updateComponents();
     });

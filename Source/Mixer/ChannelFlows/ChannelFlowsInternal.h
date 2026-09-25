@@ -21,7 +21,7 @@ extern bool isMacroPortNode(const juce::AudioProcessor* p);
 
 // Shared internals behind ChannelFlows.cpp's several concern units (ChannelFlowsDefaultChannel.cpp,
 // ChannelFlowsAutoChannel.cpp, ChannelFlowsMakeChannel.cpp): the one node-creation helper and the one
-// EQ->Compressor->Strip chain builder every one of them calls into.
+// Gate->EQ->Compressor->Strip chain builder every one of them calls into.
 namespace {
 
 // Creates one node through the factory (so it round-trips through graphToJSON/applyJSONToGraph,
@@ -50,11 +50,17 @@ juce::AudioProcessorGraph::Node* addChainNode(juce::AudioProcessorGraph& graph, 
 
 // The shared builder behind both buildDefaultAudioChannel (one fixed stereo-pair source) and
 // buildChannelForFeeds (T184: an arbitrary set of left/right feeds gathered from
-// findUnchanneledOutputFeeds). Builds EQ(bypassed) -> Compressor(bypassed) -> Channel Strip
-// (Stereo) -> Master (Mix) and wires every entry in `leftFeeds`/`rightFeeds` into the EQ's ch0/ch1
-// respectively (AudioProcessorGraph sums multiple sources landing on the same input channel, so
-// more than one feed a side is fine). Same ordering as buildDefaultAudioChannel's own contract:
-// chain wired first, THEN spliceMasterNode, THEN Strip->Master as plain edges.
+// findUnchanneledOutputFeeds). Builds Gate(bypassed) -> EQ(bypassed) -> Compressor(bypassed) ->
+// Channel Strip (Stereo) -> Master (Mix) and wires every entry in `leftFeeds`/`rightFeeds` into the
+// Gate's ch0/ch1 respectively (AudioProcessorGraph sums multiple sources landing on the same input
+// channel, so more than one feed a side is fine). Same ordering as buildDefaultAudioChannel's own
+// contract: chain wired first, THEN spliceMasterNode, THEN Strip->Master as plain edges.
+//
+// FRO226: Gate is added exactly like EQ/Compressor below (bypassed, same node-creation helper) so
+// every flow through this one builder gets it uniformly, matching this file's "one chain builder,
+// no parallel implementations" rule (docs/mixer/mixer.md#building-a-channel). An old saved
+// project/preset's own JSON has no Gate node and is never migrated to add one (docs/mixer/track-presets.md)
+// — this only changes what a NEW channel is built from.
 //
 // FRO25 (P9-3d): `sink` says where the strip's output goes. The default (toMaster, no extra
 // destinations) is every pre-FRO25 caller's behaviour. "Make channel" on a track that merges into a
@@ -72,10 +78,20 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
                                  const DefaultChannelLayout& layout, const ChannelSink& sink = {}) {
     DefaultChannel result;
 
+    juce::String gateUuid;
+    auto* gate = addChainNode(graph, "Gate", layout.gate, gateUuid);
+    if (gate == nullptr)
+        return result;
+    // Factory default: present but bypassed until the user opts in (docs/mixer/mixer.md#the-factory-default-chain).
+    if (auto* module = dynamic_cast<ModuleBase*>(gate->getProcessor()))
+        module->setBypassed(true);
+
     juce::String eqUuid;
     auto* eq = addChainNode(graph, "Parametric EQ", layout.eq, eqUuid);
-    if (eq == nullptr)
+    if (eq == nullptr) {
+        result.gateUuid = gateUuid;
         return result;
+    }
     // Factory default: present but bypassed until the user opts in (docs/mixer/mixer.md#the-factory-default-chain).
     if (auto* module = dynamic_cast<ModuleBase*>(eq->getProcessor()))
         module->setBypassed(true);
@@ -83,6 +99,7 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
     juce::String compressorUuid;
     auto* compressor = addChainNode(graph, "Compressor", layout.compressor, compressorUuid);
     if (compressor == nullptr) {
+        result.gateUuid = gateUuid;
         result.eqUuid = eqUuid;
         return result;
     }
@@ -93,6 +110,7 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
     // prepareToPlay and lock the shape (see that method's own contract).
     auto stripProcessor = AIStateMapper::createModule("Channel Strip");
     if (stripProcessor == nullptr) {
+        result.gateUuid = gateUuid;
         result.eqUuid = eqUuid;
         result.compressorUuid = compressorUuid;
         return result;
@@ -101,6 +119,7 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
         stripModule->setShape(ChannelStripModule::Shape::Stereo);
     auto stripNode = graph.addNode(std::move(stripProcessor));
     if (stripNode == nullptr) {
+        result.gateUuid = gateUuid;
         result.eqUuid = eqUuid;
         result.compressorUuid = compressorUuid;
         return result;
@@ -113,14 +132,16 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
     strip->properties.set("x", layout.strip.x);
     strip->properties.set("y", layout.strip.y);
 
-    // feeds -> EQ. Stereo on raw ch0/ch1 throughout, except the strip's right leg, which is
+    // feeds -> Gate. Stereo on raw ch0/ch1 throughout, except the strip's right leg, which is
     // ChannelStripModule::kRightBase — NEVER ch1 (Source/Modules/CLAUDE.md), see
     // ChannelFlowsDefaultChannel.cpp's buildDefaultAudioChannel comment for why that's the one place
     // the number jumps.
     for (const auto& feed : leftFeeds)
-        graph.addConnection({feed, {eq->nodeID, 0}});
+        graph.addConnection({feed, {gate->nodeID, 0}});
     for (const auto& feed : rightFeeds)
-        graph.addConnection({feed, {eq->nodeID, 1}});
+        graph.addConnection({feed, {gate->nodeID, 1}});
+    graph.addConnection({{gate->nodeID, 0}, {eq->nodeID, 0}});
+    graph.addConnection({{gate->nodeID, 1}, {eq->nodeID, 1}});
     graph.addConnection({{eq->nodeID, 0}, {compressor->nodeID, 0}});
     graph.addConnection({{eq->nodeID, 1}, {compressor->nodeID, 1}});
     graph.addConnection({{compressor->nodeID, 0}, {strip->nodeID, 0}});
@@ -143,6 +164,7 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
     for (const auto& dest : sink.rightDests)
         graph.addConnection({{strip->nodeID, ChannelStripModule::kRightBase}, dest});
 
+    result.gateUuid = gateUuid;
     result.eqUuid = eqUuid;
     result.compressorUuid = compressorUuid;
     result.stripUuid = stripUuid;
