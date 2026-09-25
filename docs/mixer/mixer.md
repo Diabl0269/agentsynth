@@ -60,8 +60,10 @@ how the golden test catches this exact addition.
 every audio connection that fed the output re-routed through it. The ordering becomes:
 
 ```
-... channel strips ... -> Master -> Rec Tap -> Audio Output
+... channel strips ... -> Master -> [Master inserts] -> Rec Tap -> Audio Output
 ```
+
+The bracketed part is empty until the user adds something to it — see [Master inserts](#master-inserts).
 
 `Master` exposes a **Direct** input block that receives whatever cables previously went straight to
 the output — the same re-routing `ensureMasterRecordTap()` already does for the record tap, one level
@@ -270,6 +272,43 @@ own.
 anchors at `jmax(1, entries_.size()) * kRowHeight` in both `paint()` and `mouseDown()`, matching
 `getPreferredHeight()`'s own maths; anchoring at `entries_.size() * kRowHeight` puts it at row 0 when
 the list is empty, which is exactly where the "(no inserts)" placeholder draws.
+
+## Master inserts
+
+**Master has an insert list like a strip's, off by default.** Right-click the Master column's list to add a
+Limiter, EQ, Compressor, Gate and the rest of the mixer's add menu; move and remove work the same way,
+and each gesture is one undo step. Nothing is added unless the user asks.
+
+**Post-fader, one list.** Master's inserts sit AFTER its fader — the chain is
+`strips -> Master (fader inside MasterModule) -> [inserts] -> Rec Tap (if any) -> Audio Output` — the way Pro
+Tools, Cubase and Studio One put the limiter and dither, so a fader move can never push the signal past
+the ceiling. The graph is flat in both host modes, so the plugin behaves exactly like the standalone app.
+The known cost of post-fader: a compressor's effective threshold moves during a master fade-out, since
+the level it sees falls with the fader.
+
+**The Limiter module is a level maximiser, not a hard ceiling.** Its threshold carries automatic makeup
+gain ([`docs/modules/fx-modules.md`](../modules/fx-modules.md#limiter-module)), so a Master Limiter holds the
+signal under full scale but a -6 dB threshold does not hold it at -6 dBFS.
+
+**How the chain is found.** `buildMasterInsertsForColumn` (`Source/Mixer/MixerModel/MixerModelInserts.cpp`)
+walks FORWARD from Master's output along signal edges until it reaches the Rec Tap or the Audio Output
+node — the terminator, recorded as `MixerColumn::chainEndNodeId` and never itself an insert. The nodes
+in between are the inserts, in signal order; `MixerColumn::sourceNodeId` is Master's own node, so the
+same `MixerInsertList` splice code that serves a strip runs unchanged (predecessor = the last entry or
+Master, successor = the terminator). A node with more than one signal successor, or an insert with more
+than one signal predecessor, makes the list read-only with "Edit on canvas", exactly as for a strip. Other
+feeders on the terminator itself do NOT: a hand-wired source landing on the Rec Tap or Audio Output does
+not stop the user adding a Limiter in front of Master's own connection. A Master whose output never
+reaches a terminator has nothing to splice against, so its list is empty and read-only, and "Edit on
+canvas" selects Master itself.
+
+**Rec Tap ordering.** The tap is spliced in front of Audio Output whenever it is first needed, and
+`ensureMasterRecordTap()` re-routes whatever fed the output into it — so a Limiter added earlier ends
+up ahead of the tap, and one added afterwards goes in between Master and the tap. Either way the take
+records the limited signal and the list stays exactly what the user added.
+
+**The column's meter shows the level LEAVING the chain** — see
+[`docs/mixer/meters.md`](meters.md#the-master-meter-and-master-inserts).
 
 ## Make channel and shared modules
 

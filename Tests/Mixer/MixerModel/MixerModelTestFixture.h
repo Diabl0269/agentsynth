@@ -9,6 +9,8 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MacroSet.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "Mixer/MasterSplice.h"
+#include "Mixer/MixerModel/MixerModel.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
@@ -79,4 +81,36 @@ inline LinearChannelRigMMT buildLinearChannelRigMMT(juce::AudioProcessorGraph& g
 
     doc.setTrackBinding(trackId, rig.trackAudioUuid);
     return rig;
+}
+
+// FRO148: Master -> [Rec Tap ->] Audio Output, built the way production builds it -- Audio Output (and the Rec Tap when
+// asked for) first, then synth::spliceMasterNode() puts Master in front of whichever is first in the chain. Nothing
+// feeds Master, which is all a Master column's insert query needs.
+struct MasterRigMMT {
+    juce::AudioProcessorGraph::Node* master = nullptr;
+    juce::AudioProcessorGraph::Node* recTap = nullptr; // null unless withRecTap
+    juce::AudioProcessorGraph::Node* output = nullptr;
+};
+
+inline MasterRigMMT buildMasterRigMMT(juce::AudioProcessorGraph& graph, bool withRecTap) {
+    MasterRigMMT rig;
+    juce::String unused;
+    rig.output = addPlainNodeMMT(graph, "Audio Output", unused);
+    if (withRecTap && rig.output != nullptr) {
+        rig.recTap = addPlainNodeMMT(graph, "Rec Tap", unused);
+        if (rig.recTap != nullptr)
+            for (int channel = 0; channel < 2; ++channel)
+                graph.addConnection({{rig.recTap->nodeID, channel}, {rig.output->nodeID, channel}});
+    }
+    if (rig.output != nullptr)
+        rig.master = synth::spliceMasterNode(graph, {0, 0});
+    return rig;
+}
+
+/** The Kind::Master column of a fresh snapshot, or nullptr. */
+inline const synth::MixerColumn* findMasterColumnMMT(const synth::MixerSnapshot& snapshot) {
+    for (const auto& column : snapshot.columns)
+        if (column.kind == synth::MixerColumn::Kind::Master)
+            return &column;
+    return nullptr;
 }

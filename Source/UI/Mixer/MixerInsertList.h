@@ -9,6 +9,8 @@ class AppUndoManager;
 class GraphEditor;
 
 // MixerInsertList.h -- FRO11 (P9-5, docs/mixer/mixer.md#inserts-in-a-free-form-graph): a column's module list.
+// FRO148: the Master column owns one too -- there the "source" is Master's own node and the "strip" end is the
+// chain terminator (Rec Tap / Audio Output); nothing here is ChannelStrip-specific.
 //
 // Linear chain: a plain list, right-click for "Add...", "Move Up"/"Move Down"/"Remove" on one
 // entry -- a menu-driven reorder rather than the plan's own drag-to-reorder idiom (scope trim: no
@@ -29,6 +31,7 @@ public:
     void configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, synth::MacroSet& macros,
                    GraphEditor& graphEditor);
 
+    /** `stripNodeId` is the node the chain feeds: the strip itself, or (FRO148) Master's chain terminator. */
     void setEntries(const std::vector<synth::MixerInsertEntry>& entries, bool linear,
                     const juce::String& editOnCanvasTargetUuid, juce::AudioProcessorGraph::NodeID sourceNodeId,
                     juce::AudioProcessorGraph::NodeID stripNodeId);
@@ -49,6 +52,10 @@ public:
     std::function<void(juce::AudioProcessorGraph::NodeID)> onBeforeNodeRemoved;
 
     int getPreferredHeight() const noexcept;
+
+    /** The module type names the "Add..." menu offers (FRO148: includes Limiter and Gate) -- exposed so a test can
+     *  check every one resolves through AIStateMapper::createModule without a popup menu. */
+    static const juce::StringArray& getAddableModuleTypes() noexcept;
 
     /** FRO15 test seams: what setEntries() last recorded, without a juce::Image round-trip --
      *  Tests/UI/Mixer/MixerColumnComponentTests.cpp's bus-column layout cases and

@@ -11,7 +11,9 @@ namespace synth {
 /** Fills `column.inserts`/`insertChainIsLinear`/`editOnCanvasTargetUuid` by walking forward from
  *  `column`'s first feeding track's source node to `column.nodeId` along signal edges (see
  *  MixerModelInserts.cpp). No-op (leaves the column's insert fields at their defaults) when
- *  `column.feedingTracks` is empty -- an orphan strip has no track-anchored chain to walk. */
+ *  `column.feedingTracks` is empty -- an orphan strip has no track-anchored chain to walk. FRO148: for
+ *  Kind::Master it instead walks forward from Master's own node to `column.chainEndNodeId` (the Rec Tap or Audio
+ *  Output) and sets `column.sourceNodeId` to Master. */
 void buildInsertsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
                            MixerColumn& column);
 

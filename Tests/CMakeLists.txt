@@ -667,6 +667,11 @@ add_executable(Tests
     ../Source/UI/ModuleViews/CurveEditor/CurveEditorGeometry.cpp
     ../Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.cpp
     ../Source/UI/ModuleViews/CurveEditor/CurveEditorPaint.cpp
+    # FRO148: Master inserts
+    Mixer/MixerModel/MixerModelMasterInsertTests.cpp
+    Mixer/MixerModel/MixerModelMasterRecTapTests.cpp
+    UI/Mixer/MixerMasterColumnInsertTests.cpp
+    Engine/OutputMeterTapTests.cpp
 )
 
 # MainComponent.h (included by the MainComponent/*.cpp units above) pulls in

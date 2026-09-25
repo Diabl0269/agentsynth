@@ -59,6 +59,7 @@ struct MasterColumnFixture {
     AppUndoManager undoManager;
     GraphEditor editor{engine, &undoManager};
     synth::ui::MixerMasterColumn column;
+    synth::MacroSet macros;
     juce::AudioProcessorGraph::Node::Ptr masterNode;
 
     MasterColumnFixture() {
@@ -67,7 +68,7 @@ struct MasterColumnFixture {
         editor.setSize(900, 600);
 
         masterNode = graph.addNode(std::make_unique<MasterModule>());
-        column.configure(graph, undoManager, editor);
+        column.configure(graph, undoManager, macros, editor);
         column.setSize(140, 300);
         column.setNodeId(masterNode->nodeID);
     }

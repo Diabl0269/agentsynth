@@ -18,8 +18,11 @@ track by node id, then Direct, then Master. Each column holds a `MixerFader`
 ([`docs/mixer/fader.md`](fader.md)), a pan control, M and S buttons, a peak meter
 ([`docs/mixer/meters.md`](meters.md)), an insert list
 ([`docs/mixer/mixer.md`](mixer.md#inserts-in-a-free-form-graph)) and, on a source column, a compact
-send list. Its column model — ordering, kinds and queries — is headless, in
-`Source/Mixer/MixerModel/`.
+send list. **Master's column has the fader, mute button, meter and an insert list, and no pan, solo or
+sends** — its list is the post-fader chain between Master and the Rec Tap or Audio Output
+([`docs/mixer/mixer.md`](mixer.md#master-inserts)), sized and placed under the header exactly like a
+strip's, and `MixerMasterColumn::setColumn()` feeds it from the snapshot. Its column model — ordering,
+kinds and queries — is headless, in `Source/Mixer/MixerModel/`.
 
 **Solo always routes through the engine.** The S button calls
 `AudioEngine::setChannelStripSoloed`, never the module directly

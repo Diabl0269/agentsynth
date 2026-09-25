@@ -56,8 +56,8 @@ struct MixerColumn {
     std::vector<TrackId> feedingTracks;
 
     /** The feeding track's own source node -- the insert chain's implicit predecessor (needed to
-     *  splice a new FIRST insert in ahead of an empty/one-entry chain). Invalid for Direct/Master,
-     *  for a non-bus orphan strip, and for a Kind::Bus column (FRO15: a bus's own chain has no
+     *  splice a new FIRST insert in ahead of an empty/one-entry chain). Master's own node for Kind::Master (FRO148);
+     *  invalid for Direct, for a non-bus orphan strip, and for a Kind::Bus column (FRO15: a bus's own chain has no
      *  external source -- nothing feeds its EQ from outside -- so MixerInsertList::moveRow refuses
      *  to move a row to the very front of a bus's chain rather than splice against an invalid id). */
     juce::AudioProcessorGraph::NodeID sourceNodeId;
@@ -67,9 +67,12 @@ struct MixerColumn {
      * docs/mixer/sends-and-buses.md) the strip's own EQ/Compressor chain walked BACKWARD for a Kind::Bus column, which
      * has no feeding track to walk forward from. A send feeding the bus (landing on the same strip input channels an
      *  insert's own output would) is excluded from this walk, never counted as a bus insert or as
-     *  branching. Empty for Direct/Master and for a non-bus orphan strip with no track to walk
-     *  from. */
+     *  branching. Master's (FRO148) is the forward walk to `chainEndNodeId`. Empty for Direct and for a non-bus orphan
+     *  strip. */
     std::vector<MixerInsertEntry> inserts;
+
+    /** Kind::Master only (FRO148): the Rec Tap / Audio Output the chain feeds -- its terminator, never an insert. */
+    juce::AudioProcessorGraph::NodeID chainEndNodeId;
 
     /** False => `inserts` is read-only (a branch, a shared node, or -- for a bus -- more than one
      *  send/insert landing on the same strip input sits upstream); the column shows "Edit on
