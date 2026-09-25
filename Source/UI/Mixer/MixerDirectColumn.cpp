@@ -14,6 +14,7 @@ MixerDirectColumn::MixerDirectColumn() {
     setTitle("Direct");
     addAndMakeVisible(header_);
     header_.setDisplayName("Direct");
+    header_.setRenameEnabled(false); // FRO225: Direct has no node, so no strip/macro name to write a rename to
     addAndMakeVisible(makeChannelButton_);
     // FRO18: MixerPanelComponent is the single focusable leaf -- see
     // MixerColumnComponent.cpp's ctor comment for why every child control does this.

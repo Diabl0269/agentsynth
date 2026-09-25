@@ -277,3 +277,58 @@ TEST(StemExportNamingTest, DuplicateTrackNamesStillProduceUniqueStemFiles) {
     EXPECT_TRUE(result.stemFiles[0].existsAsFile());
     EXPECT_TRUE(result.stemFiles[1].existsAsFile());
 }
+
+// ============================================================================
+// 5. FRO225 (docs/mixer/panel.md, docs/mixer/stem-export.md): a strip's own persisted name wins
+//    ahead of the track-walk rule above, and an empty (unset) one falls straight back to it.
+// ============================================================================
+
+TEST(StemExportNamingTest, StripsOwnNameWinsAheadOfTheFeedingTrack) {
+    NamingRig rig;
+    ASSERT_TRUE(rig.start());
+    auto& graph = rig.engine.getGraph();
+
+    const auto channel = buildTrackChannel(graph);
+    wireStripToMaster(graph, channel.strip, rig.master);
+    auto* strip = dynamic_cast<ChannelStripModule*>(graph.getNodeForId(channel.strip)->getProcessor());
+    ASSERT_NE(strip, nullptr);
+    strip->setStripName("Lead Vox");
+
+    ASSERT_TRUE(rig.finish());
+
+    TimelineDoc doc;
+    // The feeding track has its OWN, different name - if the walk still won, the file would be
+    // "01 - Rhythm Gtr.wav" instead.
+    const auto track = doc.addTrack(TrackKind::Audio, "Rhythm Gtr");
+    ASSERT_TRUE(doc.setTrackBinding(track, channel.trackUuid));
+
+    ScopedTempDir out("agentsynth_stem_naming_strip_name_wins");
+    const auto result = StemExporter::exportStems(rig.engine, out.dir, oneBeatOptions(), {}, &doc);
+    ASSERT_TRUE(result.ok) << result.message;
+    ASSERT_EQ(result.stemFiles.size(), 1);
+    EXPECT_EQ(result.stemFiles[0].getFileName(), "01 - Lead Vox.wav");
+}
+
+TEST(StemExportNamingTest, AnEmptyStripNameFallsBackToTheFeedingTrack) {
+    NamingRig rig;
+    ASSERT_TRUE(rig.start());
+    auto& graph = rig.engine.getGraph();
+
+    const auto channel = buildTrackChannel(graph);
+    wireStripToMaster(graph, channel.strip, rig.master);
+    auto* strip = dynamic_cast<ChannelStripModule*>(graph.getNodeForId(channel.strip)->getProcessor());
+    ASSERT_NE(strip, nullptr);
+    EXPECT_TRUE(strip->getStripName().isEmpty()) << "unset by default - see ChannelStripTest.StripNameIsUnsetByDefault";
+
+    ASSERT_TRUE(rig.finish());
+
+    TimelineDoc doc;
+    const auto track = doc.addTrack(TrackKind::Audio, "Rhythm Gtr");
+    ASSERT_TRUE(doc.setTrackBinding(track, channel.trackUuid));
+
+    ScopedTempDir out("agentsynth_stem_naming_strip_name_unset");
+    const auto result = StemExporter::exportStems(rig.engine, out.dir, oneBeatOptions(), {}, &doc);
+    ASSERT_TRUE(result.ok) << result.message;
+    ASSERT_EQ(result.stemFiles.size(), 1);
+    EXPECT_EQ(result.stemFiles[0].getFileName(), "01 - Rhythm Gtr.wav") << "today's track-walk rule, unchanged";
+}

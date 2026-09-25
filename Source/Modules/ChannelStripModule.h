@@ -331,6 +331,22 @@ public:
     void setIsBus(bool isBus) noexcept { isBus_.store(isBus, std::memory_order_relaxed); }
     bool isBus() const noexcept { return isBus_.load(std::memory_order_relaxed); }
 
+    // ---- User-given name (message thread only; FRO225, docs/mixer/panel.md#what-the-mixer-shows) ----
+    //
+    // Named setStripName/getStripName, not setName/getName -- juce::AudioProcessor already declares
+    // getName() (overridden above via ModuleBase::moduleName to return the module TYPE name, "Channel
+    // Strip"), and shadowing its meaning here would be exactly the trap MixerColumnHeader's own
+    // setDisplayName/getDisplayName comment warns about. Never read on the audio thread (display and
+    // stem-file naming only), so a plain juce::String is enough -- no atomic, unlike shape_/isBus_
+    // above, which the audio thread does read.
+
+    /** Empty (the default) means unset -- the mixer header and stem export both fall back to their
+     *  existing name (today's macro/track-walk/"Channel N" rule) exactly as if this had never been
+     *  called. Set from the mixer column header's inline rename (MixerColumnComponent); persisted in
+     *  the trusted extra state so it survives save/load and presets. */
+    void setStripName(const juce::String& name) { stripName_ = name; }
+    juce::String getStripName() const { return stripName_; }
+
     /** Activates the lowest free slot and returns it, or -1 when all kMaxSends are in use. A new
      *  send is post-fader at unity (see the class comment's "audible rather than looking broken"). */
     int addSend() {
@@ -417,6 +433,7 @@ public:
         obj->setProperty("shape", getShape() == Shape::Mono ? "mono" : "stereo");
         obj->setProperty("solo", isSoloed());
         obj->setProperty("isBus", isBus());
+        obj->setProperty("name", stripName_);
         juce::Array<juce::var> sends;
         for (int slot = 0; slot < kMaxSends; ++slot) {
             if (!isSendActive(slot))
@@ -438,6 +455,8 @@ public:
                 setSoloed(static_cast<bool>(obj->getProperty("solo")));
             if (obj->hasProperty("isBus"))
                 setIsBus(static_cast<bool>(obj->getProperty("isBus")));
+            if (obj->hasProperty("name"))
+                setStripName(obj->getProperty("name").toString());
             if (obj->hasProperty("sends"))
                 readSendsState(obj->getProperty("sends"));
         }
@@ -600,6 +619,8 @@ private:
     std::atomic<bool> shapeLocked_{false};
     std::atomic<bool> soloed_{false};
     std::atomic<bool> isBus_{false};
+
+    juce::String stripName_; // message thread only -- see setStripName()'s own comment above
 
     // Send slot bookkeeping. Message-thread writes (the send flows, setExtraState), audio-thread
     // reads — one relaxed load each per block, so a strip's own slots are always self-consistent.

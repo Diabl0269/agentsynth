@@ -24,6 +24,13 @@ juce::String stripColumnName(juce::AudioProcessorGraph& graph, const TimelineDoc
     const juce::String uuid = node->properties["uuid"].toString();
     if (const auto* macro = macros.findByMember(uuid))
         return macro->name;
+    // FRO225 (docs/mixer/panel.md): a strip's own persisted name comes right after the macro (a
+    // boxed strip's name IS its macro's -- see the mixer header's inline-rename comment on why
+    // there are never two competing names for one column) and ahead of the bus/track-walk fallback
+    // below. Empty (unset) falls straight through, unchanged from before FRO225.
+    if (auto* strip = dynamic_cast<ChannelStripModule*>(node->getProcessor());
+        strip != nullptr && strip->getStripName().isNotEmpty())
+        return strip->getStripName();
     if (isBusStrip(graph, stripId))
         return busFallbackName(graph, stripId); // a bus has no feeding track to name it
     return channelDisplayName(graph, stripId, doc, "Channel");

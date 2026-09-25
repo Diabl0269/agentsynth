@@ -36,6 +36,35 @@ the strip's `gain` parameter via `juce::SliderParameterAttachment` and brackets 
 press when the dock is already open on Mixer — mirroring the Toggle Timeline button's own open and
 close symmetry.
 
+### Renaming a channel
+
+Double-click a column's header name to rename it in place — `MixerColumnHeader`'s `nameLabel_` reuses
+the exact `juce::Label(false, true, false)` + `onTextChange` pattern
+`TimelineTrackHeaderComponent::nameLabel_` already established for track renaming, so the app's two
+"double-click a name to rename it" surfaces behave alike. Direct and Master have no name to rename
+(Direct has no node; Master is a `MasterModule`, not a `ChannelStripModule`) and turn the gesture off
+outright (`MixerColumnHeader::setRenameEnabled(false)`).
+
+For a strip or bus column, what a commit actually renames depends on whether the column is already
+boxed in a macro:
+
+- **Boxed in a macro** — the column's name already comes from the macro
+  ([`docs/macros/macros.md`](../macros/macros.md)), so the rename goes to the macro
+  (`MacroGroupController::renameMacro`), the same path a macro card's own rename uses (and which
+  itself keeps a linked track's name in sync in the same undo step,
+  [`docs/timeline/tracks.md`](../timeline/tracks.md#the-channel-chip)). The strip's own name (below)
+  is never also written — one name per column, not two competing ones.
+- **Not boxed** — the rename writes `ChannelStripModule`'s own persisted name (FRO225,
+  `setStripName`/`getStripName`), serialized in the strip's trusted extra state
+  (`"name"`) so it survives save/load and presets exactly like `"shape"`/`"solo"`/`"isBus"` do. Empty
+  (unset, the default, and every strip created before FRO225) falls back to today's column-name rule
+  — the track-walk name, or `"Channel N"`/`"Bus N"` — unchanged. A track preset's own capture
+  (`TrackPresetManager::extractTrackPreset`) scrubs `"name"` the same way it scrubs `"solo"`/`"isBus"`/
+  `"sends"`: the SOURCE strip's identity must never rename whatever channel the preset is applied to.
+
+The strip's own name is also what `docs/mixer/stem-export.md#stem-naming` prefers ahead of its
+track-walk rule, so renaming a channel here renames its stem file too.
+
 ## Placement and detachable windows
 
 Panel placement is a **Preferences setting** with three options: **Tab beside the Timeline**

@@ -28,10 +28,15 @@ whose ORDER has no dependency on the timeline or track model — and named `"NN 
 
 ## Stem naming
 
-`<name>` is **the ONE track** — `TimelineMidiSource` or `TimelineAudioSource`, "Track In" or "Track
-Audio" — whose signal feeds that strip, **not the strip's own graph-node instance name**, which is
-identical across every strip in a patch and therefore useless as a stem name once more than one
-channel exists.
+`<name>` prefers, in order:
+
+1. **The strip's own persisted name** (FRO225, `ChannelStripModule::getStripName()`) — set from the
+   mixer column header's inline rename ([`docs/mixer/panel.md#renaming-a-channel`](panel.md#renaming-a-channel)).
+   Empty (unset, and every strip created before FRO225) falls through to the rule below, unchanged.
+2. **The ONE track** — `TimelineMidiSource` or `TimelineAudioSource`, "Track In" or "Track Audio" —
+   whose signal feeds that strip, **not the strip's own graph-node instance name**, which is identical
+   across every strip in a patch and therefore useless as a stem name once more than one channel
+   exists.
 
 `StemSession` walks the graph upstream from the strip, **along signal edges only**, mirroring
 `synth::ChannelFlows`' `isSignalEdge` rule: **never through an `AttenuverterModule`, never through a
@@ -43,7 +48,8 @@ Exactly one track found this way contributes its `TimelineDoc` name ("Bass", "Au
 several tracks, or no `TimelineDoc` at all (a headless caller), fall back to `"Channel N"`**, with `N`
 matching the strip's own `NN` position so it agrees with the file's own number and is unique on its
 own even with no `TimelineDoc` available. `StemSession`'s constructor takes an optional
-`const TimelineDoc*` for this; null means every strip falls back to `"Channel N"`.
+`const TimelineDoc*` for this; null means every strip without its own persisted name falls back to
+`"Channel N"`.
 
 ## Buses are stems too
 
@@ -56,7 +62,8 @@ in the bus's stem and nowhere else. The sum identity survives exactly:
 `sum(stems) = source main outs + bus outs = everything Master receives on Mix`.
 
 A bus has no feeding track, so **its stem name falls back to `"Bus N"`** (`synth::busFallbackName`)
-rather than the misleading `"Channel N"`.
+rather than the misleading `"Channel N"` — unless the bus has its own persisted name (FRO225), which
+still wins ahead of this fallback, same as any other strip.
 
 ## What sums back to the mix
 
