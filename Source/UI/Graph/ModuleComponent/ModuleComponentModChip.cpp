@@ -52,7 +52,10 @@ void ModuleComponent::paintModHoverChip(juce::Graphics& g) {
             // Clipped to the card, never squashed or re-centred.
             juce::Graphics::ScopedSaveState clipScope(g);
             g.reduceClipRegion(getLocalBounds());
-            g.setColour(lf->getTheme().colors.surfaceHi);
+            // Opaque even when a theme's surfaceHi is translucent -- the chip sits over the next
+            // row's knob label and must hide it, not show it through.
+            const auto& colors = lf->getTheme().colors;
+            g.setColour(colors.surface.overlaidWith(colors.surfaceHi).withAlpha(1.0f));
             g.fillRoundedRectangle(chipBounds, lf->getTheme().metrics.cornerRadiusSmall);
             g.setColour(lf->getTheme().colors.textPrimary);
             g.setFont(chipFont);
