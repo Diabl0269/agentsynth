@@ -298,6 +298,13 @@ TEST_F(E2EPluginCardWorkflowTest, AutomateOnAHostedKnobCreatesALaneBoundToTheHos
     EXPECT_EQ(lane->paramIndexHint, synth::captureParamIndexHint(hosted, "resonance"))
         << "the lane carries the hosted index hint, like one added from the lane picker";
     EXPECT_FALSE(lane->orphaned);
+
+    // The lane picker names the lane after the parameter, not its opaque hosted paramId.
+    bool labelled = false;
+    for (const auto& option : mainComp_->getTimelinePanel().collectAutomationLaneOptions())
+        if (!option.isAddEntry && option.label.endsWith("Resonance"))
+            labelled = true;
+    EXPECT_TRUE(labelled) << "an existing hosted lane is labelled with the parameter's display name";
 }
 
 // ============================================================================

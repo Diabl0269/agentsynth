@@ -16,10 +16,12 @@ track-header column are untouched.
 
 - four tool `juce::TextButton`s (glyphs `P` / `✎` / `╱` / `⌫`, radio-grouped so exactly one is
   down; `kAutomationToolButtonWidth` is 28 px),
-- a lane-picker `juce::ComboBox` — every doc lane, labelled `"NodeName · paramId"` via
-  `TrackHeaderHost::getNodeDisplayName(lane.nodeUuid)`, falling back to the uuid's first 8
-  characters when it does not resolve. That is the SAME interface the track-header binding chip
-  uses, so no second graph-aware seam was added.
+- a lane-picker `juce::ComboBox` — every doc lane, labelled `"NodeName · Parameter name"` via
+  `TrackHeaderHost::getNodeDisplayName(lane.nodeUuid)` (falling back to the uuid's first 8
+  characters when it does not resolve) and `TrackHeaderHost::getParameterDisplayName` (falling
+  back to the raw `paramId`; a hosted plugin's paramIds are opaque, e.g. a VST3's are numbers).
+  That is the SAME interface the track-header binding chip uses, so no second graph-aware seam
+  was added.
 - a record-mode `juce::ComboBox` (Off/Read/Touch/Latch/Write, 1-based combo id = `LaneRecordMode` +
   1) bound to `TimelineDoc::setLaneRecordMode` through `AppUndoManager::recordTimelineChange` — a
   manual selector change IS a user gesture, unlike `AutomationRecorder`'s own programmatic
