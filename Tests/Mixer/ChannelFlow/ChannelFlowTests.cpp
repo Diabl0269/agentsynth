@@ -419,10 +419,10 @@ TEST_F(ChannelFlowTest, RefusedAtMaxTracksCreatesNothing) {
 // test that actually covers "existing saved projects/presets load unchanged" (buildChannelChain
 // only runs when a NEW channel is built; a trusted applyJSONToGraph load never calls it).
 TEST_F(ChannelFlowTest, LoadingAnOldEqCompressorStripPatchInjectsNoGate) {
-    MainComponent mc(std::make_unique<MockProviderCFT>());
-    mc.setSize(1600, 900);
-    mc.getAudioEngine().suspendDeviceCallback();
-    auto& graph = mc.getAudioEngine().getGraph();
+    // A bare graph, not a MainComponent's: this pins the loader alone, and clearing a live
+    // MainComponent's graph under its module cards (without detachAllModuleComponents() first)
+    // leaves the cards attached to deleted parameters -- a teardown hang on Linux CI.
+    juce::AudioProcessorGraph graph;
 
     // A pre-FRO226 project's chain: Track Audio -> Parametric EQ -> Compressor -> Channel Strip
     // -> Master, no Gate anywhere. Trusted apply, exactly like ProjectBundle::load's own replaying
