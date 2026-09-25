@@ -54,7 +54,9 @@ public:
     };
 
     ParametricEQModule()
-        : ModuleBase("Parametric EQ", 6, 2) { // 0-1 audio, 2-5 CV (B2 Freq/Gain, B3 Freq/Gain)
+        : ModuleBase("Parametric EQ", 15, 2) { // 0-1 audio, 2-14 CV: B2/B3 Freq+Gain (2-5, bespoke
+                                               // exponential/linear curves), then B1/B4 Freq+Gain,
+                                               // every band's Q, and Output (6-14, normalised CV)
         // Parameters are grouped band-by-band so the custom module layout can walk them in rows.
         // The on/off parameter's display name doubles as the row's label, which is why it reads
         // "1 Low Shelf" rather than "Band 1 On".
@@ -144,9 +146,45 @@ public:
             smoothedGain[(size_t)kBellBandIndex[i]].setTargetValue(applyGainCV(band.gain->get(), cvGain));
             // readCV returns exactly 0 for an unpatched (gated) jack, so this also tells the
             // visualiser whether to show the CV-modulated value or the plain knob value.
-            bellCVActive[(size_t)i].store(cvFreq != 0.0f || cvGain != 0.0f, std::memory_order_relaxed);
+            const bool bellActive = (cvFreq != 0.0f || cvGain != 0.0f);
+            freqCVActive[(size_t)kBellBandIndex[i]].store(bellActive, std::memory_order_relaxed);
+            gainCVActive[(size_t)kBellBandIndex[i]].store(bellActive, std::memory_order_relaxed);
         }
-        smoothedOutputGain.setTargetValue(juce::Decibels::decibelsToGain(outputGainParam->get()));
+
+        // ---- Remaining continuous parameters (ch6-14): B1/B4 Freq+Gain, every band's Q, and
+        // Output. These follow the normalised CV convention (base + CV in the parameter's own
+        // 0-1 range, docs/modules/modulation.md#cv-in-normalised-units) rather than the bells'
+        // bespoke exponential/linear curves above, which stay exactly as they were so no saved
+        // patch changes sound. `base` is each parameter's current smoothed value, same as every
+        // other smoothed CV target in the FX suite (e.g. Compressor Threshold/Ratio).
+        // Each active flag is published so getBandSnapshots() can overlay the CV-resolved value
+        // instead of the raw knob — otherwise the visualiser (and any headless caller) never
+        // sees these jacks do anything, even though they are already driving the audio below.
+        const float freq0Cv = blockCV(buffer, 6);
+        smoothedFreq[0].setTargetValue(modulateNormalised(*bands[0].freq, smoothedFreq[0].getCurrentValue(), freq0Cv));
+        freqCVActive[0].store(freq0Cv != 0.0f, std::memory_order_relaxed);
+
+        const float gain0Cv = blockCV(buffer, 7);
+        smoothedGain[0].setTargetValue(modulateNormalised(*bands[0].gain, smoothedGain[0].getCurrentValue(), gain0Cv));
+        gainCVActive[0].store(gain0Cv != 0.0f, std::memory_order_relaxed);
+
+        const float freq3Cv = blockCV(buffer, 8);
+        smoothedFreq[3].setTargetValue(modulateNormalised(*bands[3].freq, smoothedFreq[3].getCurrentValue(), freq3Cv));
+        freqCVActive[3].store(freq3Cv != 0.0f, std::memory_order_relaxed);
+
+        const float gain3Cv = blockCV(buffer, 9);
+        smoothedGain[3].setTargetValue(modulateNormalised(*bands[3].gain, smoothedGain[3].getCurrentValue(), gain3Cv));
+        gainCVActive[3].store(gain3Cv != 0.0f, std::memory_order_relaxed);
+
+        for (int b = 0; b < kNumBands; ++b) {
+            const float qCv = blockCV(buffer, 10 + b);
+            smoothedQ[(size_t)b].setTargetValue(
+                modulateNormalised(*bands[(size_t)b].q, smoothedQ[(size_t)b].getCurrentValue(), qCv));
+            qCVActive[(size_t)b].store(qCv != 0.0f, std::memory_order_relaxed);
+        }
+
+        smoothedOutputGain.setTargetValue(juce::Decibels::decibelsToGain(
+            modulateNormalised(*outputGainParam, outputGainParam->get(), blockCV(buffer, 14))));
 
         // Coefficients update once per block from the smoothed values. With 20 ms smoothing the
         // per-block step is small enough that swapping coefficients wholesale is inaudible, and
@@ -191,17 +229,24 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String cv[] = {"B2 Freq", "B2 Gain", "B3 Freq", "B3 Gain"};
-        return stereoInputLabel(i, 4, cv);
+        // Appended after the original four (ch2-5) so saved patches that modulate B2/B3 keep
+        // working; see docs/modules/modulation.md#every-continuous-parameter-is-a-target.
+        const juce::String cv[] = {"B2 Freq", "B2 Gain", "B3 Freq", "B3 Gain", "B1 Freq", "B1 Gain", "B4 Freq",
+                                   "B4 Gain", "B1 Q",    "B2 Q",    "B3 Q",    "B4 Q",    "Output"};
+        return stereoInputLabel(i, kNumCvInputs, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(4); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(kNumCvInputs); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 4); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, kNumCvInputs); }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"B2 Freq", 2}, {"B2 Gain", 3}, {"B3 Freq", 4}, {"B3 Gain", 5}};
+        return {{"B2 Freq", 2, "band2Freq"}, {"B2 Gain", 3, "band2Gain"}, {"B3 Freq", 4, "band3Freq"},
+                {"B3 Gain", 5, "band3Gain"}, {"B1 Freq", 6, "band1Freq"}, {"B1 Gain", 7, "band1Gain"},
+                {"B4 Freq", 8, "band4Freq"}, {"B4 Gain", 9, "band4Gain"}, {"B1 Q", 10, "band1Q"},
+                {"B2 Q", 11, "band2Q"},      {"B3 Q", 12, "band3Q"},      {"B4 Q", 13, "band4Q"},
+                {"Output", 14, "outputGain"}};
     }
     // Pure audio FX — processBlock never touches the MIDI buffer.
     bool acceptsMidi() const override { return false; }
@@ -228,12 +273,17 @@ public:
             out[(size_t)b].gainDb = bands[(size_t)b].gain->get();
             out[(size_t)b].q = bands[(size_t)b].q->get();
         }
-        for (int i = 0; i < kNumBellBands; ++i) {
-            if (!bellCVActive[(size_t)i].load(std::memory_order_relaxed))
-                continue;
-            auto& bell = out[(size_t)kBellBandIndex[i]];
-            bell.freqHz = bellCVFreq[(size_t)i].load(std::memory_order_relaxed);
-            bell.gainDb = bellCVGain[(size_t)i].load(std::memory_order_relaxed);
+        // Every band's Freq/Gain/Q can be CV-modulated now (bells via ch2-5, everything else via
+        // the normalised ch6-14 jacks) — overlay the CV-resolved value per-parameter, band by
+        // band, but only while that parameter's own jack is actually driving it; otherwise the
+        // knob value stands, which is what lets the curve track a drag with no audio running.
+        for (int b = 0; b < kNumBands; ++b) {
+            if (freqCVActive[(size_t)b].load(std::memory_order_relaxed))
+                out[(size_t)b].freqHz = resolvedFreq[(size_t)b].load(std::memory_order_relaxed);
+            if (gainCVActive[(size_t)b].load(std::memory_order_relaxed))
+                out[(size_t)b].gainDb = resolvedGain[(size_t)b].load(std::memory_order_relaxed);
+            if (qCVActive[(size_t)b].load(std::memory_order_relaxed))
+                out[(size_t)b].q = resolvedQ[(size_t)b].load(std::memory_order_relaxed);
         }
         return out;
     }
@@ -454,6 +504,8 @@ public:
 
 private:
     static constexpr int kNumAudioChannels = 2;
+    /** Every band's Freq/Gain/Q plus Output — ch2-14. See getInputPortLabel for the CV order. */
+    static constexpr int kNumCvInputs = 13;
     /** The two Peak slots are the CV-modulated ones — the musically useful sweep targets. */
     static constexpr int kNumBellBands = 2;
     static constexpr int kBellBandIndex[kNumBellBands] = {1, 2};
@@ -547,10 +599,11 @@ private:
                 writeUnity(coefficients[(size_t)b]->getRawCoefficients());
         }
 
-        // Publish the CV-resolved bell values for the visualiser to overlay.
-        for (int i = 0; i < kNumBellBands; ++i) {
-            bellCVFreq[(size_t)i].store(bandFreq[kBellBandIndex[i]], std::memory_order_relaxed);
-            bellCVGain[(size_t)i].store(bandGain[kBellBandIndex[i]], std::memory_order_relaxed);
+        // Publish the CV-resolved values for every band for the visualiser to overlay.
+        for (int b = 0; b < kNumBands; ++b) {
+            resolvedFreq[(size_t)b].store(bandFreq[b], std::memory_order_relaxed);
+            resolvedGain[(size_t)b].store(bandGain[b], std::memory_order_relaxed);
+            resolvedQ[(size_t)b].store(bandQ[b], std::memory_order_relaxed);
         }
     }
 
@@ -584,10 +637,15 @@ private:
     std::array<BandParams, kNumBands> bands{};
     juce::AudioParameterFloat* outputGainParam = nullptr;
 
-    // Written from the audio thread each block, read by EQCurveComponent on the message thread.
-    // Only the two CV-modulated bells need this; every other displayed value comes straight from
-    // its parameter, which is what lets the curve track an edit with no audio running.
-    std::array<std::atomic<float>, kNumBellBands> bellCVFreq{};
-    std::array<std::atomic<float>, kNumBellBands> bellCVGain{};
-    std::array<std::atomic<bool>, kNumBellBands> bellCVActive{};
+    // Written from the audio thread each block, read by EQCurveComponent (and getBandSnapshots)
+    // on the message thread. Every band's Freq/Gain/Q can be CV-modulated (bells via ch2-5,
+    // everything else via ch6-14), so these are sized to kNumBands, not just the two bells; the
+    // *Active flags gate the overlay so a band with no CV patched keeps tracking its knob live,
+    // which is what lets the curve track an edit with no audio running.
+    std::array<std::atomic<float>, kNumBands> resolvedFreq{};
+    std::array<std::atomic<float>, kNumBands> resolvedGain{};
+    std::array<std::atomic<float>, kNumBands> resolvedQ{};
+    std::array<std::atomic<bool>, kNumBands> freqCVActive{};
+    std::array<std::atomic<bool>, kNumBands> gainCVActive{};
+    std::array<std::atomic<bool>, kNumBands> qCVActive{};
 };

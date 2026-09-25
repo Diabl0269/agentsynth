@@ -89,7 +89,13 @@ than running to `getNumChannels()`, or it erases the right leg.
 | **VCA (mono)** | ch16 | In/Out | `Audio R` (`kRightBase`) in / gated out |
 | **ADSR (poly)** | ch0-7 | In | Per-voice gate CV |
 | **ADSR** | ch8 | In | Threshold CV (shared) |
+| **ADSR** | ch9 | In | Shared Attack CV |
+| **ADSR** | ch10 | In | Shared Hold CV |
+| **ADSR** | ch11 | In | Shared Decay CV |
+| **ADSR** | ch12 | In | Shared Sustain CV |
+| **ADSR** | ch13 | In | Shared Release CV |
 | **ADSR (poly)** | ch0-7 | Out | Per-voice envelope (0–1) |
+| **ADSR** | ch8-13 | Out | Silent pass-throughs (prevent buffer aliasing) |
 | **Sample & Hold** | ch0 | In/Out | Signal in / held CV out (shared channel; read before overwrite) |
 | **Sample & Hold** | ch1 | In | Trigger / gate |
 | **Sample & Hold** | ch2 | In | Rate CV |

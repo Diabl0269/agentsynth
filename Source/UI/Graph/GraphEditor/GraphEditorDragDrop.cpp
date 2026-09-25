@@ -45,7 +45,10 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
         return {280, 443};
     if (typeName == "LFO")
-        return {280, 361}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        // FRO281: +40 for the Rate/Level/Glide CV jacks (3 input jacks, one row shared per pair
+        // with the mono CV output already there — see ModuleComponentTest.
+        // EstimatedModuleSizesMatchTheRealComponents, which pins this to the real component).
+        return {280, 401}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "VCA")
         return {280, 253}; // +20 in #219: the Audio L/R input pair adds a jack row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
@@ -55,7 +58,9 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // params moved onto the collapsed-by-default envelope graph's bend handles, and a
         // collapsed graph adds one row (its disclosure toggle + BPM|MS). Below 2 jacks + Poly
         // toggle + threshold control + knob grid (2 rows) + disclosure row, collapsed.
-        return {280, 389};
+        // FRO281: +100 for the five Attack/Hold/Decay/Sustain/Release CV jacks appended after
+        // Threshold (see ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents).
+        return {280, 489};
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
         // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
         return {synth::LayoutUtil::kDoubleWidth, 406};

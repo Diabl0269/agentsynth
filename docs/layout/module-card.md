@@ -65,9 +65,9 @@ type and fails if this table drifts from what `layoutDefaultContent()` actually 
 |---|---|---|---|
 | Oscillator | 553 | Sample & Hold | 571 |
 | Filter | 463 | Comparator | 205 |
-| LFO | 361 | Sampler | 665 |
+| LFO | 401 | Sampler | 665 |
 | VCA | 273 | Chorus / Phaser / Flanger | 297 |
-| ADSR | 359 | Bitcrusher | 343 |
+| ADSR | 489 | Bitcrusher | 343 |
 | Poly MIDI | 205 | Pitch Shifter | 487 |
 | Distortion | 343 | Compressor | 257 |
 | Ring Modulator | 411 | Limiter | 181 |

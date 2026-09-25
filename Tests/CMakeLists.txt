@@ -44,6 +44,7 @@ add_executable(Tests
     Modules/ADSR/ADSRClickDiagnosticsTests.cpp
     Modules/ADSR/ADSRReadoutFormattingTests.cpp
     Modules/ADSR/ADSRTempoSyncTests.cpp
+    Modules/ADSR/ADSRCVTests.cpp
     Modules/Envelope/EnvelopeGeneratorTests.cpp
     Modules/EnvelopeFollowerModuleTests.cpp
     Modules/ModuleBaseTests.cpp
@@ -227,7 +228,8 @@ add_executable(Tests
     FX/FXModule/FXModuleReverbTests.cpp
     FX/GateModuleTests.cpp
     FX/PitchShifterModuleTests.cpp
-    FX/ParametricEQModuleTests.cpp
+    FX/ParametricEQ/ParametricEQModuleTests.cpp
+    FX/ParametricEQ/ParametricEQCVTests.cpp
     Modules/VoiceMixerModuleTests.cpp
     FX/BitcrusherModuleTests.cpp
     FX/RingModulatorModuleTests.cpp
