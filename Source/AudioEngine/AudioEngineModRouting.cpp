@@ -247,6 +247,32 @@ std::vector<AudioEngine::ModulationDisplayInfo>
 AudioEngine::getModulationDisplayInfo(const std::vector<ModulationRouting>& allRoutings) const {
     std::vector<ModulationDisplayInfo> result;
 
+    // FRO287: whether the routing's source swings both sides of centre (LFO) or only rises from
+    // rest (an envelope) -- read straight off the live source module, cheap enough for the 30 Hz
+    // message-thread poll this feeds (two params at most, this call plus the attenuverter's own).
+    // Defaults true (unresolved source, e.g. a dangling routing) so a missing source still bands
+    // like the historically-assumed bipolar case.
+    auto sourceBipolarFor = [this](const ModulationRouting& r) -> bool {
+        if (!r.hasSource)
+            return true;
+        auto* node = mainProcessorGraph.getNodeForId(r.sourceNodeID);
+        if (auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr)
+            return mb->isModSourceBipolar();
+        return true;
+    };
+
+    // The attenuverter's own "amount" (-1..1); read here rather than in getModulationRoutings
+    // (whose loop is at the function-size ratchet's ceiling) since this is the only caller that
+    // needs it as a display value.
+    auto attenuverterAmount = [this](juce::AudioProcessorGraph::NodeID attenuverterNodeID) -> float {
+        auto* node = mainProcessorGraph.getNodeForId(attenuverterNodeID);
+        if (node == nullptr)
+            return 1.0f;
+        if (auto* p = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(node->getProcessor(), "amount")))
+            return p->get();
+        return 1.0f;
+    };
+
     // Attenuverter routings first (as before)
     for (const auto& r : allRoutings) {
         if (r.kind != RoutingKind::AttenuverterChain)
@@ -260,6 +286,8 @@ AudioEngine::getModulationDisplayInfo(const std::vector<ModulationRouting>& allR
         info.modSignalValue = r.modSignalValue;
         info.modSignalPeak = r.modSignalPeak;
         info.isBypassed = r.isBypassed;
+        info.amount = attenuverterAmount(r.attenuverterNodeID);
+        info.sourceBipolar = sourceBipolarFor(r);
         result.push_back(info);
     }
 
@@ -280,6 +308,8 @@ AudioEngine::getModulationDisplayInfo(const std::vector<ModulationRouting>& allR
         info.modSignalValue = r.modSignalValue;
         info.modSignalPeak = r.modSignalPeak;
         info.isBypassed = false;
+        info.amount = r.amount; // 1.0 -- DirectCV/PolyBus have no attenuverter to attenuate with
+        info.sourceBipolar = sourceBipolarFor(r);
         result.push_back(info);
     }
 

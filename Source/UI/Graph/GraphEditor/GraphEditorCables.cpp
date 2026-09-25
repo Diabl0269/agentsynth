@@ -329,6 +329,8 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
             cable.p2 = portPos(dstComp, realDstJack, true);
             cable.signal = synth::ui::CableSignal::ModCV;
             cable.sourceCategory = categoryForNode(node1);
+            cable.destNodeId = realDstNode->nodeID.uid;
+            cable.destChannel = realDstPort;
 
             for (auto& info : cachedModDisplayInfo) {
                 if (info.attenuverterNodeID == node2->nodeID) {
@@ -363,6 +365,8 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                              : portPos(dstComp, dstJack, true);
         cable.signal = (srcIsMidi || dstIsMidi) ? synth::ui::CableSignal::Midi : synth::ui::CableSignal::Audio;
         cable.sourceCategory = categoryForNode(node1);
+        cable.destNodeId = node2->nodeID.uid;
+        cable.destChannel = connection.destination.channelIndex;
         cables.push_back(cable);
     }
 
@@ -398,9 +402,26 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
         cable.activity = routing.modSignalPeak;
         cable.isPolyBus = routing.kind == AudioEngine::RoutingKind::PolyBus;
         cable.voiceCount = routing.voiceCount;
+        cable.destNodeId = routing.destNodeID.uid;
+        cable.destChannel = routing.destChannelIndex;
         cables.push_back(cable);
     }
 
+    // FRO288: re-anchor AttenuverterChain cables onto their bound, visible target knob's ring
+    // start point (docs/layout/cables.md#knob-landing) BEFORE the collapsed-macro pass below, so
+    // a macro-crossing cable still gets the macro's own boundary anchor on top.
+    reanchorCablesToKnobTargets(cables);
+    reanchorCablesAroundCollapsedMacros(cables);
+
+    return cables;
+}
+
+// Post-pass extracted from rebuildVisibleCables() (FRO288) purely to keep that function under
+// its ratchet -- no behavior change. Runs AFTER reanchorCablesToKnobTargets so a cable that is
+// BOTH knob-bound and crosses a collapsed macro's boundary ends up re-anchored to the macro card
+// (this pass wins), matching the pre-FRO288 rule that a collapsed macro always owns its boundary
+// cables' endpoints.
+void GraphEditor::reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>& cables) {
     // ---- Collapsed-macro cable treatment (P8-12, generalized for ports in P8-15c/T141) ----
     //
     // A collapsed macro hides its member ModuleComponents (setVisible(false) in syncMacroCards),
@@ -498,8 +519,6 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
             cables = std::move(filtered);
         }
     }
-
-    return cables;
 }
 
 // Resolved colour for a cable under the current mode + overrides + active theme.
@@ -711,7 +730,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     // the mouse can hit. Colour comes from GraphEditor::colourForCable so the active mode and any
     // user overrides are applied in exactly one place.
     for (const auto& cable : editor.buildVisibleCables()) {
-        const bool hovered = editor.hoveredCableId.has_value() && *editor.hoveredCableId == cable.id;
+        const bool hovered = editor.isCableHovered(cable);
         const juce::Colour colour = editor.colourForCable(cable);
         const bool isModulation = cable.kind != GraphEditor::VisibleCable::Kind::Direct;
 
@@ -796,6 +815,20 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
 void GraphEditor::GraphContentComponent::resized() {}
 
 void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
+    // ---- Knob-landing dots (FRO288) ----
+    // Cables are drawn in paint(), which runs BEFORE children -- an AttenuverterChain cable
+    // re-anchored onto a knob (reanchorCablesToKnobTargets) therefore has its final stretch drawn
+    // UNDER the opaque module card. Painting a small dot here, on top of every child, is what
+    // actually shows the cable landing on the ring: docs/layout/cables.md#knob-landing.
+    for (const auto& cable : editor.buildVisibleCables()) {
+        if (!cable.landsOnKnob)
+            continue;
+        g.setColour(editor.colourForCable(cable));
+        static constexpr float kKnobLandingDotDiameter = 7.0f;
+        g.fillEllipse(cable.p2.x - kKnobLandingDotDiameter * 0.5f, cable.p2.y - kKnobLandingDotDiameter * 0.5f,
+                      kKnobLandingDotDiameter, kKnobLandingDotDiameter);
+    }
+
     // ---- Drag-preview landing ghost (on top of module cards) ----
     // Draw a translucent rounded rect at the exact snapped+anti-overlapped landing position.
     if (editor.getDragDropController().isDragPreviewActive() &&

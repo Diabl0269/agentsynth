@@ -134,6 +134,8 @@ public:
     bool producesMidi() const override { return false; }
 
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Envelope; }
+    // Tracks an incoming signal's amplitude, 0 and up -- never negative, see ADSRModule's override.
+    bool isModSourceBipolar() const override { return false; }
     ModuleType getModuleType() const override { return ModuleType::EnvelopeFollower; }
 
     LogicalPort mapInputChannel(int raw) const override {

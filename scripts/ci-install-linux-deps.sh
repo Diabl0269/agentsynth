@@ -43,7 +43,7 @@ MIRROR_FILES="${MIRROR_FILES:-/etc/apt/apt-mirrors.txt}"
 UPDATE_TIMEOUT="${UPDATE_TIMEOUT:-60}"
 INSTALL_TIMEOUT="${INSTALL_TIMEOUT:-300}"
 
-# The one package list for every Linux CI job: build-and-test, the ASAN job and the release build.
+# Keep this list in sync with the ASAN job's cache-apt-pkgs-action package list in ci.yml.
 PACKAGES=(
     cmake ninja-build libasound2-dev libx11-dev libxinerama-dev libxext-dev libxcomposite-dev
     libxcursor-dev libxrandr-dev libxrender-dev libfontconfig1-dev libfreetype6-dev

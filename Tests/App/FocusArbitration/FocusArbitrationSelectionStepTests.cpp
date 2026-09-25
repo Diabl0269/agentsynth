@@ -43,10 +43,6 @@ TEST_F(FocusArbitrationTest, SelectNextAndPreviousModuleStepTheGraphSelectionFro
 TEST_F(FocusArbitrationTest, SelectModuleCommandsReportFalseOnAnEmptyCanvas) {
     MainComponent mc(std::make_unique<FocusMockProvider>());
     mc.setSize(1600, 900);
-    // Detach every card first, the way every graph-replacing seam does: clearing the graph under
-    // live cards frees the keyboard module whose MidiKeyboardState a card's keyboard still listens
-    // to, and the card's destructor then reads freed memory (a heap-use-after-free under ASAN).
-    mc.getGraphEditor().detachAllModuleComponents();
     mc.getAudioEngine().getGraph().clear();
     mc.getGraphEditor().updateComponents();
     ASSERT_EQ(mc.getGraphEditor().getModuleComponents().size(), 0);

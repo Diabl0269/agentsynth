@@ -3,6 +3,7 @@
 // ModuleComponent.h; the rest of its implementation lives in the sibling ModuleComponent*.cpp
 // units next to this one (FRO65 split of the former single ModuleComponent.cpp).
 #include "ModuleComponent.h"
+#include "CardKnobSlider.h"
 #include "ModuleComponentHostedPluginCard.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/ExternalMidiModule.h"
@@ -670,7 +671,8 @@ void ModuleComponent::createControls() {
             } else if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param)) {
                 if (shouldSkipGenericFloatSlider(module, *floatParam))
                     continue;
-                auto* slider = sliders.add(new juce::Slider());
+                auto* knob = new synth::ui::CardKnobSlider();
+                auto* slider = sliders.add(knob);
                 slider->setComponentID(param->getName(100)); // ID for lookup
                 setAdsrAwareSliderStyle(*slider, getType(module));
                 addAndMakeVisible(slider);
@@ -679,7 +681,8 @@ void ModuleComponent::createControls() {
                 // object finishes destructing), so attaching `this` as the listener rather than a
                 // separately-owned object has no dangling-pointer window to reason about.
                 slider->addMouseListener(this, false);
-                registerMidiLearnable(*slider, floatParam); // FRO130: right-click MIDI Learn
+                registerMidiLearnable(*slider, floatParam);      // FRO130: right-click MIDI Learn
+                wireCardKnobModAmountGesture(*knob, floatParam); // FRO287
 
                 auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*floatParam, *slider));
                 applyAdsrTimeSliderSkew(*slider, *floatParam);
@@ -689,15 +692,17 @@ void ModuleComponent::createControls() {
                 label->setJustificationType(juce::Justification::centred);
                 addAndMakeVisible(label);
             } else if (auto* intParam = dynamic_cast<juce::AudioParameterInt*>(param)) {
-                auto* slider = sliders.add(new juce::Slider());
+                auto* knob = new synth::ui::CardKnobSlider();
+                auto* slider = sliders.add(knob);
                 slider->setComponentID(param->getName(100)); // ID for lookup
                 slider->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
                 slider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
                 // slider->setRange(intParam->getRange().start,
                 // intParam->getRange().end, 1.0); // Attachment handles range
                 addAndMakeVisible(slider);
-                slider->addMouseListener(this, false);    // right-click-any-knob, see above
-                registerMidiLearnable(*slider, intParam); // FRO130: right-click MIDI Learn
+                slider->addMouseListener(this, false);         // right-click-any-knob, see above
+                registerMidiLearnable(*slider, intParam);      // FRO130: right-click MIDI Learn
+                wireCardKnobModAmountGesture(*knob, intParam); // FRO287
 
                 auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*intParam, *slider));
                 sliderParams.add(intParam); // param -> control mapping for reflection
@@ -767,6 +772,103 @@ void ModuleComponent::createControls() {
     }
 
     updateLayout();
+}
+
+// FRO287: the first live AttenuverterChain routing landing on `param`'s knob, in
+// getCachedModDisplayInfo() order (several routings on one knob all target the same first one --
+// docs/modules/modulation.md#drag-to-knob-modulation). An invalid NodeID means either `param` isn't
+// a modulation target at all, or it is but nothing is currently routed to it through an
+// attenuverter (a DirectCV/PolyBus routing has none to adjust).
+// FRO288: shared by firstAttenuverterForParam and the knob-hover -> cable-hover wiring in
+// wireCardKnobModAmountGesture, so the two can never resolve a different channel for the same
+// param.
+int ModuleComponent::destChannelForBoundParam(juce::RangedAudioParameter* param) const {
+    auto* mod = dynamic_cast<ModuleBase*>(module);
+    if (mod == nullptr || param == nullptr)
+        return -1;
+    for (const auto& t : mod->getModulationTargets())
+        if (mod->parameterForModTarget(t) == param)
+            return t.channelIndex;
+    return -1;
+}
+
+juce::AudioProcessorGraph::NodeID ModuleComponent::firstAttenuverterForParam(juce::RangedAudioParameter* param) const {
+    const int destChannel = destChannelForBoundParam(param);
+    if (destChannel < 0)
+        return {};
+
+    for (const auto& info : owner.getCachedModDisplayInfo()) {
+        if (info.destNodeID == nodeId && info.destChannelIndex == destChannel && info.attenuverterNodeID.uid != 0)
+            return info.attenuverterNodeID;
+    }
+    return {};
+}
+
+// CardKnobSlider::wantsModAmountGesture: claim the gesture when this knob drives an attenuverter
+// AND the click is either Alt-modified or lands within +-5px of the ring's own radius (the same
+// geometry paintModulationRings draws it at -- see modRingCentreFor/modRingRadiusFor). `bounds` is
+// the knob's own local bounds (CardKnobSlider hands this its getLocalBounds()).
+bool ModuleComponent::wantsModAmountGestureFor(juce::RangedAudioParameter* param, juce::Rectangle<float> bounds,
+                                               const juce::MouseEvent& e) const {
+    if (firstAttenuverterForParam(param).uid == 0)
+        return false;
+    if (e.mods.isAltDown())
+        return true;
+
+    const float radius = modRingRadiusFor(bounds);
+    if (radius <= 0.0f)
+        return false;
+    const auto centre = modRingCentreFor(bounds);
+    const float dist = centre.getDistanceFrom(e.position);
+    return std::abs(dist - radius) <= 5.0f;
+}
+
+// CardKnobSlider::onModAmountGesture: phase 0 (down) captures undo and remembers which
+// attenuverter this gesture targets (recomputed fresh, not reused across gestures, in case the
+// routing changed since the last drag); phase 1 (drag) adjusts it by the same per-event Y delta
+// the cable midpoint knob has always used; phase 2 (up) commits the undo snapshot. The knob's own
+// juce::Slider value is never touched here -- CardKnobSlider only forwards to Slider when this
+// function is NOT what claimed the gesture.
+void ModuleComponent::handleModAmountGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase) {
+    if (phase == 0) {
+        modAmountGestureAttenuverterId_ = firstAttenuverterForParam(param);
+        modAmountGestureLastPos_ = e.getPosition();
+        owner.beginModAmountGesture();
+        return;
+    }
+    if (modAmountGestureAttenuverterId_.uid == 0)
+        return;
+    if (phase == 1) {
+        const float delta = (e.getPosition().y - modAmountGestureLastPos_.y) * -0.01f;
+        modAmountGestureLastPos_ = e.getPosition();
+        owner.adjustModAmount(modAmountGestureAttenuverterId_, delta);
+        return;
+    }
+    owner.commitModAmountGesture(); // phase 2
+    modAmountGestureAttenuverterId_ = {};
+}
+
+void ModuleComponent::wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& knob, juce::RangedAudioParameter* param) {
+    knob.wantsModAmountGesture = [this, param, &knob](const juce::MouseEvent& e) {
+        return wantsModAmountGestureFor(param, knob.getLocalBounds().toFloat(), e);
+    };
+    knob.onModAmountGesture = [this, param](const juce::MouseEvent& e, int phase) {
+        handleModAmountGesture(param, e, phase);
+    };
+    // FRO288: knob-hover -> cable-hover, the reverse direction of the cable-hover -> ring-highlight
+    // wiring in GraphEditorCanvas.cpp's mouseMove. Only correlates while a live AttenuverterChain
+    // routing actually lands here (same gate wantsModAmountGestureFor uses) -- a DirectCV/PolyBus
+    // target has no cable re-anchored onto it to highlight.
+    knob.onHoverChanged = [this, param](bool entered) {
+        if (!entered || firstAttenuverterForParam(param).uid == 0) {
+            owner.setHoveredModTarget(std::nullopt);
+            return;
+        }
+        const int destChannel = destChannelForBoundParam(param);
+        if (destChannel < 0)
+            return;
+        owner.setHoveredModTarget(GraphEditor::HoveredModTarget{nodeId, destChannel});
+    };
 }
 
 void ModuleComponent::setRasterFrozen(bool frozen) {

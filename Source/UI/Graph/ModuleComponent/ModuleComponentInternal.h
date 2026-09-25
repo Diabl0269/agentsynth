@@ -9,6 +9,7 @@
 
 #include "Modules/ModuleBase.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -23,6 +24,29 @@ namespace detail {
 // tabbed card has replaced the flat combo grid.
 inline constexpr int kTabPinned = -1; // always visible, above the strip
 inline constexpr int kTabChrome = -2; // laid out with the display band instead
+
+// ---- Modulation-ring geometry (FRO287) --------------------------------------------------------
+// The ONE place the ring/band centre and radius are computed from a knob's bounds -- shared by
+// paintModulationRings (ModuleComponentPaint.cpp) and CardKnobSlider's annulus hit-test
+// (wantsModAmountGesture, wired up in ModuleComponent::createControls), so a drag gesture's "am I
+// on the ring" test can never drift from what actually gets painted there.
+inline juce::Point<float> modRingCentreFor(juce::Rectangle<float> sliderBounds) {
+    return {sliderBounds.getCentreX(), sliderBounds.getCentreY() - 10.0f};
+}
+inline float modRingRadiusFor(juce::Rectangle<float> sliderBounds) {
+    return std::min(sliderBounds.getWidth(), sliderBounds.getHeight()) / 2.0f - 11.0f;
+}
+
+// FRO288: a point on the ring's own circle for a given 0..1 norm, in the SAME coordinate space as
+// `centre` -- shared with AppLookAndFeel::drawModulationRing via modRingAngleForNorm (the ONE
+// angle-mapping helper) so a cable re-anchored onto a knob (ModuleComponent::getModTargetKnobAnchor,
+// GraphEditorModHover.cpp) always lands exactly on the drawn ring, never a hand-rolled
+// approximation. JUCE's addCentredArc angle convention is clockwise from 12 o'clock (angle 0 is
+// straight up), hence (sin, -cos) rather than the usual (cos, sin).
+inline juce::Point<float> modRingPointForNorm(juce::Point<float> centre, float radius, float norm) {
+    const float angle = synth::theme::AppLookAndFeel::modRingAngleForNorm(norm);
+    return {centre.x + radius * std::sin(angle), centre.y - radius * std::cos(angle)};
+}
 
 // ---- Default body-layout metrics (see layoutDefaultContent) ----------------------------------
 // Three knobs per row instead of two: the body sits below every jack, so it can use nearly the

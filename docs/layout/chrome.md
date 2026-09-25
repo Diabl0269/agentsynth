@@ -188,6 +188,23 @@ A transient message (`showMessage()`) suppresses every tooltip on the row —
 `getTooltipForPosition` returns `""` immediately — since it visually covers the segments it would
 otherwise explain.
 
+### The mod drop hint
+
+`GraphEditor::beginConnectionDrag()` shows one status-bar message, ONCE per install: the first time
+a cable drag starts from a modulation source's OUTPUT (`ModuleBase::getJackTargets(channel,
+false)`'s role is `PortRole::ModCV`), it fires `onStatusMessage("Drop it on any knob to modulate
+that parameter")` — reaching the status bar through the same `onStatusMessage` callback
+[`docs/modules/modulation.md#drag-to-knob-modulation`](../modules/modulation.md#drag-to-knob-modulation)
+routes every other macro/mod refusal through, MainComponent wires it to `statusBar.showMessage()`.
+An INPUT drag (re-aiming an existing cable) and a plain audio/MIDI output drag never qualify.
+
+Shown-once state is `synth::kModDropHintShownSettingKey` (`UserSettings.h`), persisted through
+`GraphEditor::propertiesFile_` — the same `juce::PropertiesFile*` the macro recolour favourites
+shelf and the piano roll's scale-assist panel persist through (see those members' own doc
+comments) — set via `GraphEditor::setPropertiesFile()`, wired by `MainComponent` to
+`appProperties.getUserSettings()`. A `nullptr` (e.g. a headless test that never calls the setter)
+means the hint never fires and the flag never gets written, rather than crashing.
+
 ## Panel collapse and persistence
 
 The library sidebar and the AI panel can each be fully hidden (width 0). State persists across

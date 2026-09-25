@@ -121,8 +121,21 @@ public:
     // Draw the outer Serum-style modulation ring around a knob (replaces the inline logic in
     // ModuleComponent.cpp:551-564). centre/radius in the SAME coordinate space the caller paints
     // in. baseNorm/modNorm are 0..1 parameter positions; positive determines ring color.
+    // hovered (FRO288): the routing driving this ring is correlated with a hovered cable (or vice
+    // versa, docs/modules/modulation.md#modulation-rings-on-knobs) -- widens the stroke by
+    // Theme::Metrics::modRingHoverWidthBoost and brightens the colour, the same brighter(0.3)
+    // treatment a hovered cable already gets (docs/layout/cables.md#hover).
     void drawModulationRing(juce::Graphics&, juce::Point<float> centre, float radius, float baseNorm, float modNorm,
-                            bool positive);
+                            bool positive, bool hovered = false);
+
+    // Draw the reachable-range band under a modulation ring (FRO287): the arc between
+    // [startNorm, endNorm] (already clamped to 0..1 by the caller -- see modDepthBandRange in
+    // ModuleComponentModBand.h), same geometry as drawModulationRing, at theme.metrics
+    // .modDepthBandAlpha. `colour` is the caller's already-resolved ring colour (modRingPositive
+    // or modRingNegative) -- this helper does not pick it, so two bands on one knob (two
+    // routings) can each carry their own colour.
+    void drawModulationDepthBand(juce::Graphics&, juce::Point<float> centre, float radius, float startNorm,
+                                 float endNorm, juce::Colour colour);
 
     // Fill a themed background (bg0 for windows/panels, bg1 for the graph canvas). When
     // `isCanvas` is true also stamps the dotted grid (matches the mockups' radial-dot grid).
@@ -131,6 +144,15 @@ public:
     // 270° rotary sweep constants shared by knob + ring drawing (see constraint #7).
     static constexpr float kRotaryStart = -juce::MathConstants<float>::pi * 0.75f;
     static constexpr float kRotaryEnd = juce::MathConstants<float>::pi * 0.75f;
+
+    // Shared angle mapping for drawModulationRing/drawModulationDepthBand -- a 0..1 norm to a point
+    // on the same 270 degree rotary sweep, clamped. Keeping this ONE place is what keeps the ring,
+    // the band it's drawn under, and (FRO288) a knob's mod-target ring-anchor point from ever
+    // drifting apart geometrically. Public so ModuleComponent::getModTargetKnobAnchor can reuse it
+    // (see UI/Graph/ModuleComponent/ModuleComponentInternal.h's modRingPointForNorm).
+    static float modRingAngleForNorm(float norm) {
+        return kRotaryStart + juce::jlimit(0.0f, 1.0f, norm) * (kRotaryEnd - kRotaryStart);
+    }
 
 private:
     void refreshTypefaces();          // (re)load cached typefaces for theme.type.uiFamily/monoFamily

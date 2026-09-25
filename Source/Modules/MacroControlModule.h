@@ -103,6 +103,7 @@ public:
     bool producesMidi() const override { return false; }
 
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Other; }
+    bool isModSourceBipolar() const override { return isBipolar(); }
     ModuleType getModuleType() const override { return ModuleType::MacroControl; }
 
     //==============================================================================

@@ -260,3 +260,60 @@ TEST_F(AudioEngineModRoutingTests, DirectCVRoutingProducesDisplayInfo) {
     EXPECT_TRUE(found)
         << "Expected at least one ModulationDisplayInfo for VCA destChannelIndex==8 (ADSR->VCA poly bus)";
 }
+
+// FRO287: ModulationDisplayInfo::amount/sourceBipolar, which the depth band is drawn from.
+TEST_F(AudioEngineModRoutingTests, DisplayInfoAmountReadsTheAttenuverterAndSourceBipolarReadsTheLfo) {
+    auto& graph = engine.getGraph();
+    auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
+    auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
+    auto attenId = engine.addModRouting(lfoNode->nodeID, 0, vcaNode->nodeID, 1);
+
+    // Dial the attenuverter's amount away from addModRouting's default of 1.0.
+    auto* attenNode = graph.getNodeForId(attenId);
+    ASSERT_NE(attenNode, nullptr);
+    auto* amountParam =
+        dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(attenNode->getProcessor(), "amount"));
+    ASSERT_NE(amountParam, nullptr);
+    amountParam->setValueNotifyingHost(amountParam->convertTo0to1(0.4f));
+
+    auto displayInfos = engine.getModulationDisplayInfo();
+    const AudioEngine::ModulationDisplayInfo* info = nullptr;
+    for (const auto& i : displayInfos)
+        if (i.destNodeID == vcaNode->nodeID && i.destChannelIndex == 1)
+            info = &i;
+    ASSERT_NE(info, nullptr);
+    EXPECT_NEAR(info->amount, 0.4f, 1e-4f);
+    EXPECT_TRUE(info->sourceBipolar) << "an LFO (default bipolar=true) must read as bipolar";
+}
+
+TEST_F(AudioEngineModRoutingTests, DisplayInfoSourceBipolarReadsFalseForAnAdsrSource) {
+    auto& graph = engine.getGraph();
+    auto adsrNode = graph.addNode(std::make_unique<ADSRModule>());
+    auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
+    engine.addModRouting(adsrNode->nodeID, 0, vcaNode->nodeID, 1);
+
+    auto displayInfos = engine.getModulationDisplayInfo();
+    const AudioEngine::ModulationDisplayInfo* info = nullptr;
+    for (const auto& i : displayInfos)
+        if (i.destNodeID == vcaNode->nodeID && i.destChannelIndex == 1)
+            info = &i;
+    ASSERT_NE(info, nullptr);
+    EXPECT_FALSE(info->sourceBipolar) << "an ADSR envelope only rises from rest -- never bipolar";
+}
+
+TEST_F(AudioEngineModRoutingTests, DisplayInfoAmountDefaultsToOneForADirectCvRouting) {
+    auto& graph = engine.getGraph();
+    graph.clear();
+    bool loaded = synth::PresetManager::loadPreset(6, graph);
+    ASSERT_TRUE(loaded) << "Preset 6 (Poly Pad) failed to load";
+
+    auto displayInfos = engine.getModulationDisplayInfo();
+    bool checkedOne = false;
+    for (const auto& info : displayInfos) {
+        if (info.attenuverterNodeID.uid == 0) { // DirectCV/PolyBus: no attenuverter
+            EXPECT_FLOAT_EQ(info.amount, 1.0f);
+            checkedOne = true;
+        }
+    }
+    EXPECT_TRUE(checkedOne) << "Poly Pad must have at least one DirectCV/PolyBus display info";
+}

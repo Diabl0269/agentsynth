@@ -469,6 +469,8 @@ public:
         float modSignalValue;
         float modSignalPeak;
         bool isBypassed;
+        float amount = 1.0f;       // attenuverter "amount" (-1..1); 1.0 for DirectCV/PolyBus (no attenuverter)
+        bool sourceBipolar = true; // source's ModuleBase::isModSourceBipolar() -- see AudioEngineModRouting.cpp
     };
 
     enum class RoutingKind { AttenuverterChain, DirectCV, PolyBus };

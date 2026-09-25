@@ -198,22 +198,50 @@ void AppLookAndFeel::drawConnectionWire(juce::Graphics& g, juce::Point<float> p1
 }
 
 void AppLookAndFeel::drawModulationRing(juce::Graphics& g, juce::Point<float> centre, float radius, float baseNorm,
-                                        float modNorm, bool positive) {
+                                        float modNorm, bool positive, bool hovered) {
     if (radius <= 0.0f)
         return;
 
     const auto& m = theme.metrics;
-    const auto ringColour = positive ? theme.colors.modRingPositive : theme.colors.modRingNegative;
+    auto ringColour = positive ? theme.colors.modRingPositive : theme.colors.modRingNegative;
+    // FRO288: same brighter(0.3) treatment a hovered cable gets (docs/layout/cables.md#hover) --
+    // a wider stroke on top of the brighten so the highlight reads even at a glance.
+    float width = m.knobRingWidth;
+    if (hovered) {
+        ringColour = ringColour.brighter(0.3f);
+        width += m.modRingHoverWidthBoost;
+    }
 
-    const float baseAngle = kRotaryStart + juce::jlimit(0.0f, 1.0f, baseNorm) * (kRotaryEnd - kRotaryStart);
-    const float modAngle = kRotaryStart + juce::jlimit(0.0f, 1.0f, modNorm) * (kRotaryEnd - kRotaryStart);
+    const float baseAngle = modRingAngleForNorm(baseNorm);
+    const float modAngle = modRingAngleForNorm(modNorm);
 
     juce::Path ring;
     ring.addCentredArc(centre.x, centre.y, radius, radius, 0.0f, juce::jmin(baseAngle, modAngle),
                        juce::jmax(baseAngle, modAngle), true);
 
     g.setColour(ringColour);
-    g.strokePath(ring,
+    g.strokePath(ring, juce::PathStrokeType(width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
+// FRO287: the reachable-range band drawn UNDER the live ring above -- same arc geometry (shared
+// via modRingAngleForNorm so the two can never drift apart), just wider alpha-blended stroke so it
+// reads as a track rather than a second live indicator. Visible even at rest (modSignalValue 0),
+// which is the whole point: it answers "how far COULD this knob move", not "where is it now".
+void AppLookAndFeel::drawModulationDepthBand(juce::Graphics& g, juce::Point<float> centre, float radius,
+                                             float startNorm, float endNorm, juce::Colour colour) {
+    if (radius <= 0.0f)
+        return;
+
+    const auto& m = theme.metrics;
+    const float startAngle = modRingAngleForNorm(startNorm);
+    const float endAngle = modRingAngleForNorm(endNorm);
+
+    juce::Path band;
+    band.addCentredArc(centre.x, centre.y, radius, radius, 0.0f, juce::jmin(startAngle, endAngle),
+                       juce::jmax(startAngle, endAngle), true);
+
+    g.setColour(colour.withAlpha(m.modDepthBandAlpha));
+    g.strokePath(band,
                  juce::PathStrokeType(m.knobRingWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 

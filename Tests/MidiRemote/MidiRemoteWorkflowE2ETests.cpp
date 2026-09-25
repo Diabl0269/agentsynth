@@ -119,12 +119,7 @@ struct Rig {
         engine.setRemoteMessageSink(&remote);
     }
 
-    // `remote` outlives `engine` (declared first), so end any gesture a test left inside its idle
-    // window while the parameter still exists -- RemoteEngine::endAllGestures()'s lifetime contract.
-    ~Rig() {
-        engine.setRemoteMessageSink(nullptr);
-        remote.endAllGestures();
-    }
+    ~Rig() { engine.setRemoteMessageSink(nullptr); }
 
     juce::AudioProcessorGraph::Node::Ptr addFilter(const juce::String& uuid) {
         auto node = engine.getGraph().addNode(std::make_unique<FilterModule>());
