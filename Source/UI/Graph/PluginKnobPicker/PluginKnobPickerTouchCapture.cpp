@@ -1,5 +1,8 @@
-// PluginKnobPickerTouchCapture.cpp -- gesture-only "touch to add" (v1; see the header's FRO241 note).
+// PluginKnobPickerTouchCapture.cpp -- gesture (FRO132) + value-change fallback (FRO241) "touch to
+// add". See the header's class comment for the two-signal / any-thread contract.
 #include "PluginKnobPickerTouchCapture.h"
+#include <algorithm>
+#include <utility>
 
 namespace synth::ui {
 
@@ -11,8 +14,8 @@ PluginKnobPickerTouchCapture::~PluginKnobPickerTouchCapture() { setArmed(false);
 // Message thread. Iterates getParameters() on the CURRENT instance only -- if the instance is
 // replaced while armed, the new instance's parameters are never listened to (a known v1 limitation;
 // the picker popover is short-lived enough that this has not been worth solving yet). Disarming
-// cancels any update already queued, so a gesture reported just before the checkbox is unticked can
-// never fire after this call returns.
+// cancels any update already queued AND any open burst window, so a touch reported just before the
+// checkbox is unticked can never fire after this call returns.
 void PluginKnobPickerTouchCapture::setArmed(bool armed) {
     if (armed == armed_)
         return;
@@ -28,8 +31,19 @@ void PluginKnobPickerTouchCapture::setArmed(bool armed) {
 
     if (!armed) {
         cancelPendingUpdate();
-        const juce::ScopedLock sl(queueLock_);
-        pendingIndices_.clear();
+        {
+            const juce::ScopedLock sl(queueLock_);
+            pendingIndices_.clear();
+        }
+        {
+            const juce::SpinLock::ScopedLockType sl(valueChangeLock_);
+            pendingValueChangeCount_ = 0;
+            valueChangeOverflowed_ = false;
+        }
+        stopTimer();
+        burstCandidates_.clear();
+        burstWindowOpen_ = false;
+        burstExceeded_ = false;
     } else if (onRequestOpenEditor) {
         onRequestOpenEditor();
     }
@@ -48,16 +62,88 @@ void PluginKnobPickerTouchCapture::parameterGestureChanged(int parameterIndex, b
     triggerAsyncUpdate();
 }
 
-// Message thread. Drains whatever queued since the last run and reports each index in order; a
-// parameter touched twice before this ran is reported twice, which the owner (a set-membership
-// check before it adds a slot) already treats as a no-op the second time.
+// ANY thread, INCLUDING the audio thread (automation drives this from processHostBlock). Never
+// allocates: `pendingValueChangeIndices_` is a fixed-size array, and the SpinLock never blocks on the
+// OS. A full ring just marks the batch overflowed rather than growing -- handleAsyncUpdate treats an
+// overflow as "burst, definitely" rather than trying to recover which indices got dropped.
+void PluginKnobPickerTouchCapture::parameterValueChanged(int parameterIndex, float) {
+    const juce::SpinLock::ScopedLockType sl(valueChangeLock_);
+    if (pendingValueChangeCount_ < kMaxPendingValueChanges)
+        pendingValueChangeIndices_[static_cast<size_t>(pendingValueChangeCount_++)] = parameterIndex;
+    else
+        valueChangeOverflowed_ = true;
+    triggerAsyncUpdate();
+}
+
+// Message thread. Drains both queues:
+//  - Gesture indices are reported immediately, as v1 always has (a gesture never debounces).
+//  - Value-change candidates go through the burst filter: a candidate already in the layout (the
+//    owner's own tick, or the card's own knob attachment moving a value that's already a slot) is
+//    dropped before it can open or extend a window at all. A genuinely new candidate opens the window
+//    (starting a `kBurstWindowMs` timer) if none is open, or joins the current one; more than
+//    `kBurstMaxDistinctParams` distinct candidates marks the window exceeded. The window's own
+//    `timerCallback` -- not this function -- decides whether to report or discard once it closes, so
+//    a candidate arriving late in the window still counts against the same deadline the first one set.
 void PluginKnobPickerTouchCapture::handleAsyncUpdate() {
-    std::vector<int> indices;
+    std::vector<int> gestureIndices;
     {
         const juce::ScopedLock sl(queueLock_);
-        indices.swap(pendingIndices_);
+        gestureIndices.swap(pendingIndices_);
     }
-    for (int index : indices)
+    for (int index : gestureIndices)
+        if (onParameterTouched)
+            onParameterTouched(index);
+
+    std::array<int, kMaxPendingValueChanges> drained{};
+    int drainedCount = 0;
+    bool overflowed = false;
+    {
+        const juce::SpinLock::ScopedLockType sl(valueChangeLock_);
+        drainedCount = pendingValueChangeCount_;
+        drained = pendingValueChangeIndices_;
+        overflowed = valueChangeOverflowed_;
+        pendingValueChangeCount_ = 0;
+        valueChangeOverflowed_ = false;
+    }
+    if (drainedCount == 0 && !overflowed)
+        return;
+
+    if (overflowed)
+        burstExceeded_ = true;
+
+    for (int i = 0; i < drainedCount; ++i) {
+        const int parameterIndex = drained[static_cast<size_t>(i)];
+        if (isParameterAlreadyInLayout && isParameterAlreadyInLayout(parameterIndex))
+            continue;
+        if (std::find(burstCandidates_.begin(), burstCandidates_.end(), parameterIndex) != burstCandidates_.end())
+            continue; // already counted in this window
+
+        burstCandidates_.push_back(parameterIndex);
+        if (!burstWindowOpen_) {
+            burstWindowOpen_ = true;
+            startTimer(kBurstWindowMs);
+        }
+        if (static_cast<int>(burstCandidates_.size()) > kBurstMaxDistinctParams)
+            burstExceeded_ = true;
+    }
+}
+
+// Message thread. Fires once, `kBurstWindowMs` after the window's first candidate (or immediately,
+// via forceBurstWindowCloseForTest -- the test clock seam). More than kBurstMaxDistinctParams
+// distinct parameters in the window means NONE of them are reported (a burst is either an automation
+// sweep or a preset load, never a deliberate touch); kBurstMaxDistinctParams or fewer are all reported.
+void PluginKnobPickerTouchCapture::timerCallback() {
+    stopTimer();
+    if (!burstWindowOpen_)
+        return;
+    const bool exceeded = burstExceeded_;
+    const std::vector<int> candidates = std::move(burstCandidates_);
+    burstCandidates_.clear();
+    burstWindowOpen_ = false;
+    burstExceeded_ = false;
+    if (exceeded)
+        return;
+    for (int index : candidates)
         if (onParameterTouched)
             onParameterTouched(index);
 }

@@ -195,6 +195,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
     UI/Graph/ModuleComponent/HostedPluginCardTests.cpp
     UI/Graph/PluginKnobPicker/PluginKnobPickerTests.cpp
+    UI/Graph/PluginKnobPicker/PluginKnobPickerTouchFallbackTests.cpp
     UI/Graph/AutomationUiReflectionTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp
