@@ -12,6 +12,21 @@
 #include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
+// FRO232: the dock's persisted-visible flag used to be keyed "timelinePanelVisible" from back when
+// the dock only ever showed the Timeline. Runs once, before restorePanelPreferences() ever reads
+// kBottomDockVisibleSettingKey: if the new key is already there (a previously-migrated install, or
+// a fresh one) the old key -- if some leftover of it exists -- is left alone rather than
+// re-migrated; otherwise the old key's value (default false if neither key has ever been written)
+// is copied under the new key and the old key is removed, so an existing user's open/closed state
+// survives the rename.
+void MainComponent::migrateBottomDockVisibleSettingKey() {
+    auto* settings = appProperties.getUserSettings();
+    if (settings == nullptr || settings->containsKey(kBottomDockVisibleSettingKey))
+        return;
+    settings->setValue(kBottomDockVisibleSettingKey, settings->getBoolValue("timelinePanelVisible", false));
+    settings->removeValue("timelinePanelVisible");
+}
+
 void MainComponent::restorePanelPreferences() {
     // Route AI patch applies through the app undo manager so Apply/Merge on a patch card is Cmd+Z-able.
     // Safe in both ctors: undoManager is declared before aiService, so it is already constructed here.
@@ -25,16 +40,18 @@ void MainComponent::restorePanelPreferences() {
 
     // ORDERING CONTRACT: read the persisted panel-visibility flags FIRST, before any
     // setVisible()/addAndMakeVisible() call that depends on them. These override the member
-    // initialisers (isLibraryVisible{true}, isAiPanelVisible=false).
+    // initialisers (isLibraryVisible{true}, isAiPanelVisible=false). The dock-visible migration
+    // runs before its own read, same ordering contract.
     isLibraryVisible = appProperties.getUserSettings()->getBoolValue("librarySidebarVisible", true);
     isAiPanelVisible = appProperties.getUserSettings()->getBoolValue("aiPanelVisible", false);
-    isTimelineVisible = appProperties.getUserSettings()->getBoolValue("timelinePanelVisible", false);
+    migrateBottomDockVisibleSettingKey();
+    isBottomDockVisible = appProperties.getUserSettings()->getBoolValue(kBottomDockVisibleSettingKey, false);
     // ...and snap the fractions resized() lays the panels out from onto them. A restore must never
     // itself look like a panel sliding open, and the first resized() (setSize() at the end of this
     // function) runs before any window exists — see beginPanelSlide().
     librarySlide_.snapTo(isLibraryVisible ? 1.0f : 0.0f);
     aiPanelSlide_.snapTo(isAiPanelVisible ? 1.0f : 0.0f);
-    timelineSlide_.snapTo(isTimelineVisible ? 1.0f : 0.0f);
+    timelineSlide_.snapTo(isBottomDockVisible ? 1.0f : 0.0f);
     // The theme metric is the DEFAULT height, not the law: a height the user dragged wins. Clamped
     // here and on every resized() — see clampTimelinePanelHeight().
     timelinePanelHeight_ = clampTimelinePanelHeight(
@@ -263,14 +280,14 @@ void MainComponent::wireGraphEditorCallbacks() {
         const juce::String nodeUuid = node != nullptr ? node->properties["uuid"].toString() : juce::String();
         if (nodeUuid.isEmpty())
             return;
-        if (!isTimelineVisible) {
-            isTimelineVisible = true;
-            appProperties.getUserSettings()->setValue("timelinePanelVisible", "1");
+        if (!isBottomDockVisible) {
+            isBottomDockVisible = true;
+            appProperties.getUserSettings()->setValue("bottomDockVisible", "1");
             appProperties.getUserSettings()->saveIfNeeded();
             applyToolbarIcons();
             beginPanelSlide();
         }
-        mixerDock.selectMidiRemoteAssignment(nodeUuid, paramId);
+        bottomDock.selectMidiRemoteAssignment(nodeUuid, paramId);
     };
     graphEditor.snippetProvider = [this](const juce::String& name) -> juce::var {
         return synth::SnippetManager::loadSnippet(
@@ -428,13 +445,13 @@ void MainComponent::wireMidiRemoteEngine() {
     // -- it never told the panel. MidiRemotePanelComponent::rebuildFromProfiles() computes each
     // Controllers-list row's present/absent state from audioEngine.getOpenMidiInputIdentifiers() at
     // rebuild time, so a device that newly opens while the panel tab is already showing stayed
-    // greyed until MixerDockComponent::applyTabVisibility()'s tab-switch-in catch-up ran it.
+    // greyed until BottomDockComponent::applyTabVisibility()'s tab-switch-in catch-up ran it.
     // scheduleLiveRefresh() (FRO263) is the same deferred/coalesced entry point
     // midiLearnController_.onChanged below uses, so this reuses that seam rather than adding a
     // second seam.
     audioEngine.onMidiDevicesChanged = [this] {
         midiLearnController_.refreshSources();
-        mixerDock.getMidiRemotePanel().scheduleLiveRefresh();
+        bottomDock.getMidiRemotePanel().scheduleLiveRefresh();
         // FRO139: the device set changed, so any cached juce::MidiOutput/remembered-failure is
         // stale, and every mapped parameter needs to re-announce its value to whatever is open now.
         remoteFeedbackOutputs_.closeAll();
@@ -444,15 +461,15 @@ void MainComponent::wireMidiRemoteEngine() {
     // FRO133: the mixer panel and transport bar are plain MainComponent members, already fully
     // constructed by the time any constructor-body wiring function runs (member-init order, not
     // this function's own call order) -- so it's safe to hand MidiLearnController their addresses
-    // here regardless of whether mixerDock/timelinePanel have run their own configure() yet. See
+    // here regardless of whether bottomDock/timelinePanel have run their own configure() yet. See
     // MidiLearnController::setMixerPanel()/setTransportBar()'s own doc comment for why this exists:
     // GraphEditor::setMidiLearnArmed() only reaches the canvas card, not the mixer column or the
     // transport bar's own breathing outline for the SAME/an action target.
-    midiLearnController_.setMixerPanel(&mixerDock.getMixerPanel());
+    midiLearnController_.setMixerPanel(&bottomDock.getMixerPanel());
     midiLearnController_.setTransportBar(&timelinePanel.getTransportBar());
     midiLearnController_.setPickOverlayHost(this); // FRO135: the pick-target overlay covers canvas, dock and transport
-    midiLearnController_.setPickPassThrough(mixerDock.getTabButtons());
-    mixerDock.onActiveTabChanged = [this] {
+    midiLearnController_.setPickPassThrough(bottomDock.getTabButtons());
+    bottomDock.onActiveTabChanged = [this] {
         midiLearnController_.refreshPickTarget();
         // Rebuilds and layout the switch queued land after this call; re-measure once they have.
         juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)] {
@@ -463,17 +480,19 @@ void MainComponent::wireMidiRemoteEngine() {
 
     // FRO131: same "wire it once everything it needs is alive" reasoning as the two calls above --
     // the MIDI Remote panel needs remoteEngine/midiLearnController_/midiRemoteDoc, none of which
-    // exist yet at MixerDockComponent's own construction time (see MixerDockComponent::
+    // exist yet at BottomDockComponent's own construction time (see BottomDockComponent::
     // configureMidiRemote()'s doc comment).
-    mixerDock.configureMidiRemote(audioEngine, remoteEngine, midiLearnController_, midiRemoteDoc, graphEditor);
-    mixerDock.getMidiRemotePanel().onLocateNode = [this](const juce::String& nodeUuid) { selectNodeInGraph(nodeUuid); };
+    bottomDock.configureMidiRemote(audioEngine, remoteEngine, midiLearnController_, midiRemoteDoc, graphEditor);
+    bottomDock.getMidiRemotePanel().onLocateNode = [this](const juce::String& nodeUuid) {
+        selectNodeInGraph(nodeUuid);
+    };
 
     // FRO263: keep the panel live while it's open, not just on its own tab-switch-in --
     // MidiLearnController::onChanged fires after every mutation that changes what the panel shows
     // (see its own doc comment), so wiring it here covers Learn/Forget/Undo/Redo/a panel-side profile
-    // edit without a callback per mutation site. midiLearnController_ is declared after mixerDock in
-    // MainComponent.h, so it destructs first -- this lambda's `this` capture never outlives mixerDock.
-    midiLearnController_.onChanged = [this] { mixerDock.getMidiRemotePanel().scheduleLiveRefresh(); };
+    // edit without a callback per mutation site. midiLearnController_ is declared after bottomDock in
+    // MainComponent.h, so it destructs first -- this lambda's `this` capture never outlives bottomDock.
+    midiLearnController_.onChanged = [this] { bottomDock.getMidiRemotePanel().scheduleLiveRefresh(); };
 
     // Transport-bar right-click MIDI Learn (FRO133) -- action targets, so these three forward to
     // MidiLearnController's action-keyed overloads rather than GraphEditor's node-keyed ones (see
@@ -491,7 +510,7 @@ void MainComponent::wireMidiRemoteEngine() {
     // forward to MidiLearnController's node-command-keyed overloads (mirrors the transport-bar
     // action wiring immediately above; unlike a parameter target, Solo has no
     // GraphEditor::onMidiLearnRequested sibling to reuse -- see MixerColumnMidiLearn.cpp).
-    auto& mixerPanel = mixerDock.getMixerPanel();
+    auto& mixerPanel = bottomDock.getMixerPanel();
     mixerPanel.onQuerySoloMidiMapping = [this](juce::AudioProcessorGraph::NodeID nodeId) -> juce::String {
         const auto mappings = midiLearnController_.queryNodeCommandMappings(nodeId);
         const auto found = mappings.find(synth::NodeCommandKind::toggleSolo);
@@ -609,7 +628,7 @@ void MainComponent::registerFocusRegions() {
     // Repaint whichever region gains/loses focus — see FocusRegion.h's comment on
     // paintFocusRegionOutline for why nothing repaints on its own. Removed in the destructor.
     // ONE-TIME registration: rebuildFocusRegions() re-runs on every detach/redock (FRO12), but
-    // this listener must not — see that method's own call site (mixerDock.onPanelDetachStateChanged).
+    // this listener must not — see that method's own call site (bottomDock.onPanelDetachStateChanged).
     juce::Desktop::getInstance().addFocusChangeListener(this);
 }
 
@@ -624,7 +643,7 @@ void MainComponent::rebuildFocusRegions() {
     //
     // FRO12 (P9-6): cleared and rebuilt on every call so re-running it after a detach/redock never
     // duplicates entries -- see the class-level call site in wireTimelinePanel()
-    // (mixerDock.onPanelDetachStateChanged). Each hosted panel's ONE detached-window focus region
+    // (bottomDock.onPanelDetachStateChanged). Each hosted panel's ONE detached-window focus region
     // is registered once on its host, not here -- see DetachablePanelHost::setHostedPanelFocusRegion.
     focusRegions_.clear();
 
@@ -636,7 +655,7 @@ void MainComponent::rebuildFocusRegions() {
     // The canvas has no closed state at all -- null isOpen/open, so it is always in the open list.
     focusRegions_.addRegion({"canvas", &graphEditor, nullptr, nullptr});
     // FRO18 (plan (a)): "timeline" and "mixer" now share the SAME dock, one tab visible at a time
-    // -- isTimelineVisible alone (the dock's own open/closed state) is no longer enough to say the
+    // -- isBottomDockVisible alone (the dock's own open/closed state) is no longer enough to say the
     // Timeline region is open, since the dock can be open on the MIXER tab instead. Both regions'
     // `open` re-select their own tab first (mirroring modMatrix's "no open state of its own to
     // open" precedent for the case that's already showing) before falling through to the shared
@@ -648,15 +667,15 @@ void MainComponent::rebuildFocusRegions() {
     // FRO131: the dock grew a third tab (MidiRemote) -- excluding only Mixer here is no longer
     // enough to say Timeline is the one actually showing, or this region reports open while the
     // MidiRemote tab is the one on screen.
-    if (!mixerDock.getTimelineHost().isDetached())
+    if (!bottomDock.getTimelineHost().isDetached())
         focusRegions_.addRegion({"timeline", &timelinePanel,
                                  [this] {
-                                     return isTimelineVisible && !mixerDock.isMixerTabActive() &&
-                                            !mixerDock.isMidiRemoteTabActive();
+                                     return isBottomDockVisible && !bottomDock.isMixerTabActive() &&
+                                            !bottomDock.isMidiRemoteTabActive();
                                  },
                                  [this] {
-                                     mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::Timeline);
-                                     if (!isTimelineVisible && toggleTimelineButton.onClick)
+                                     bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
+                                     if (!isBottomDockVisible && toggleTimelineButton.onClick)
                                          toggleTimelineButton.onClick();
                                  }});
     // FRO18 plan (a)'s "FRO12 seam": the actual registration (open predicate + no `open` callback
@@ -677,24 +696,24 @@ void MainComponent::rebuildFocusRegions() {
     //    always false once the dock's Mixer tab is disabled for this placement (see
     //    MixerPlacementController::applyPlacement), so this is a direct addRegion against
     //    mixerPlacement_'s own visibility instead of that helper.
-    if (!mixerDock.getMixerHost().isDetached()) {
+    if (!bottomDock.getMixerHost().isDetached()) {
         if (mixerPlacement_.getPlacement() == synth::ui::MixerPlacementController::Placement::Tab)
-            synth::ui::registerMixerFocusRegion(focusRegions_, mixerDock, [this] { return isTimelineVisible; });
+            synth::ui::registerMixerFocusRegion(focusRegions_, bottomDock, [this] { return isBottomDockVisible; });
         else if (mixerPlacement_.getPlacement() == synth::ui::MixerPlacementController::Placement::OwnPanel)
-            focusRegions_.addRegion(
-                {"mixer", &mixerDock.getMixerPanel(), [this] { return mixerPlacement_.isOwnPanelShowing(); }, nullptr});
+            focusRegions_.addRegion({"mixer", &bottomDock.getMixerPanel(),
+                                     [this] { return mixerPlacement_.isOwnPanelShowing(); }, nullptr});
     }
     // FRO131: same guard shape as "timeline" above -- MidiRemote has no placement variant (no
     // Own-panel/Window controller like Mixer's mixerPlacement_), so it is always parented here
     // unless detached to its own window, in which case that window's own one-region registry
     // covers it (DetachablePanelHost::setHostedPanelFocusRegion, wired alongside the other two in
     // wireTimelinePanelServicesAndShortcuts() below).
-    if (!mixerDock.getMidiRemoteHost().isDetached())
-        focusRegions_.addRegion({"midiRemote", &mixerDock.getMidiRemotePanel(),
-                                 [this] { return isTimelineVisible && mixerDock.isMidiRemoteTabActive(); },
+    if (!bottomDock.getMidiRemoteHost().isDetached())
+        focusRegions_.addRegion({"midiRemote", &bottomDock.getMidiRemotePanel(),
+                                 [this] { return isBottomDockVisible && bottomDock.isMidiRemoteTabActive(); },
                                  [this] {
-                                     mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::MidiRemote);
-                                     if (!isTimelineVisible && toggleMidiRemoteButton.onClick)
+                                     bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::MidiRemote);
+                                     if (!isBottomDockVisible && toggleMidiRemoteButton.onClick)
                                          toggleMidiRemoteButton.onClick();
                                  }});
     focusRegions_.addRegion({"aiPanel", &aiChatComponent, [this] { return isAiPanelVisible; },

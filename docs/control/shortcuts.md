@@ -61,7 +61,7 @@ when reasoning about a key that "does nothing."
 | Cmd+F | Focus Library Search — opens the Module Library first if it's closed, then focuses its search field specifically. See [**Library keyboard navigation**](#library-keyboard-navigation) below |
 
 Cmd+T and Space are always active (see [`timeline/timeline.md`](../timeline/timeline.md#always-compiled-never-gated)). The grid
-and zoom commands below are inactive whenever the panel itself isn't open (`isTimelineVisible`),
+and zoom commands below are inactive whenever the panel itself isn't open (`isBottomDockVisible`),
 the same as any other timeline-only command.
 
 `Cmd+A` is the platform-standard Select All (the way Cubase and every text field read it), so it
@@ -98,13 +98,13 @@ track header rows (below); both build on top of it without changing the registry
 singleton — a host process can run multiple plugin instances, and a future separate-window
 mixer/timeline would need its own registry), populated with eight regions once every root component
 exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisible`), **Canvas**
-(always open — the `graphEditor`), **Timeline** (`isTimelineVisible && !mixerDock.isMixerTabActive() && !mixerDock.isMidiRemoteTabActive()`),
-**Mixer** (`isTimelineVisible && mixerDock.isMixerTabActive()`, no `open` callback — like Mod
-Matrix, no direct-focus shortcut targets it), **MIDI Remote** (`isTimelineVisible &&
-mixerDock.isMidiRemoteTabActive()`, FRO131 — same dock-tab shape as Mixer, but does take a direct
+(always open — the `graphEditor`), **Timeline** (`isBottomDockVisible && !bottomDock.isMixerTabActive() && !bottomDock.isMidiRemoteTabActive()`),
+**Mixer** (`isBottomDockVisible && bottomDock.isMixerTabActive()`, no `open` callback — like Mod
+Matrix, no direct-focus shortcut targets it), **MIDI Remote** (`isBottomDockVisible &&
+bottomDock.isMidiRemoteTabActive()`, FRO131 — same dock-tab shape as Mixer, but does take a direct
 `open` callback), **AI Panel** (`isAiPanelVisible`) and **Mod Matrix**
 (`graphEditor.isModMatrixVisible()`). Timeline, Mixer and MIDI Remote share one dock
-(`MixerDockComponent`) with one tab visible at a time, so `isTimelineVisible` alone (the dock's own
+(`BottomDockComponent`) with one tab visible at a time, so `isBottomDockVisible` alone (the dock's own
 open/closed state) stopped being enough to say the Timeline region is on screen the moment a second
 tab exists — each region's `isOpen` also checks which of the dock's tabs is active, and each
 region's `open` re-selects its own tab before falling through to the same "open the dock if it's
@@ -243,7 +243,7 @@ enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer };
   (`juce::Component::getCurrentlyFocusedComponent()`) sits inside the clip-lane area.
 - **PianoRoll** — same, but focus sits inside the piano roll.
 - **Mixer** — the mixer panel is actually showing (docked-and-active on the tab strip, an "Own
-  panel" strip, or detached into its own window — `MixerDockComponent::isMixerShowing()` /
+  panel" strip, or detached into its own window — `BottomDockComponent::isMixerShowing()` /
   `MixerPlacementController::isOwnPanelShowing()`) AND real keyboard focus sits inside
   `MixerPanelComponent` (FRO18: the mixer's single focusable leaf — every column control is
   `setWantsKeyboardFocus(false)`, so a column's own controls resolve here too).

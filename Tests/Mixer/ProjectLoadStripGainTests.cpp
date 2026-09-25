@@ -212,7 +212,7 @@ TEST_F(ProjectLoadStripGainTest, CheckpointBC_RealAppOpenAndMixerPanelPreserveEa
     EXPECT_NEAR(getDenormalizedParam(*stripB, "gain"), kStripBGainDb, 0.01f)
         << "strip-b's gain after the real open-project flow must still be what was saved, not +12 dB";
 
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     mixerPanel.rebuild();
 
     const auto stripANodeId = findNodeIdByUuid(mc.getAudioEngine().getGraph(), "strip-a");

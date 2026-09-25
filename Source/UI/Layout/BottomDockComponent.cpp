@@ -1,7 +1,7 @@
-// Concern: FRO11 (P9-5) -- MixerDockComponent's tab strip, persistence and layout. FRO12 (P9-6,
+// Concern: FRO11 (P9-5) -- BottomDockComponent's tab strip, persistence and layout. FRO12 (P9-6,
 // docs/mixer/panel.md) extends this with both panels' detach-to-window hosts and the tab strip's
 // own icon-only detach button.
-#include "MixerDockComponent.h"
+#include "BottomDockComponent.h"
 
 #include "AudioEngine/AudioEngine.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -13,10 +13,10 @@ constexpr int kAddBusButtonWidth = 54;
 constexpr int kResetMetersButtonWidth = 84;
 } // namespace
 
-MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, AudioEngine& audioEngine,
-                                       synth::TimelineDoc& doc, AppUndoManager& undoManager, GraphEditor& graphEditor,
-                                       juce::ApplicationProperties& appProperties,
-                                       synth::theme::AppLookAndFeel* lookAndFeel, ShortcutManager* shortcutManager)
+BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, AudioEngine& audioEngine,
+                                         synth::TimelineDoc& doc, AppUndoManager& undoManager, GraphEditor& graphEditor,
+                                         juce::ApplicationProperties& appProperties,
+                                         synth::theme::AppLookAndFeel* lookAndFeel, ShortcutManager* shortcutManager)
     : timelinePanel_(timelinePanel)
     , timelineHost_(timelinePanel_, "Timeline", "timelineWindowBounds", &appProperties, lookAndFeel, shortcutManager)
     , mixerHost_(mixer_, "Mixer", "mixerWindowBounds", &appProperties, lookAndFeel, shortcutManager)
@@ -94,7 +94,7 @@ MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, Au
     applyTabVisibility();
 }
 
-void MixerDockComponent::setApplicationProperties(juce::ApplicationProperties* properties) {
+void BottomDockComponent::setApplicationProperties(juce::ApplicationProperties* properties) {
     appProperties_ = properties;
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
@@ -103,22 +103,22 @@ void MixerDockComponent::setApplicationProperties(juce::ApplicationProperties* p
     applyTabVisibility();
 }
 
-void MixerDockComponent::setOnGraphTopologyChanged(std::function<void()> callback) {
+void BottomDockComponent::setOnGraphTopologyChanged(std::function<void()> callback) {
     // Forwards straight through: MixerInsertList::onMutated -> MixerColumnComponent::onMutated ->
     // MixerPanelComponent::onGraphMutated (wired per-column in MixerPanelComponent::rebuild()) ->
     // this callback.
     mixer_.onGraphMutated = std::move(callback);
 }
 
-void MixerDockComponent::setOnMakeChannelForNode(std::function<void(juce::AudioProcessorGraph::NodeID)> callback) {
+void BottomDockComponent::setOnMakeChannelForNode(std::function<void(juce::AudioProcessorGraph::NodeID)> callback) {
     mixer_.onMakeChannelForNode = std::move(callback);
 }
 
-void MixerDockComponent::setOnArmTrack(std::function<void(synth::TrackId)> callback) {
+void BottomDockComponent::setOnArmTrack(std::function<void(synth::TrackId)> callback) {
     mixer_.onArmTrack = std::move(callback);
 }
 
-void MixerDockComponent::setActiveTab(Tab tab) {
+void BottomDockComponent::setActiveTab(Tab tab) {
     if (activeTab_ == tab)
         return;
     activeTab_ = tab;
@@ -128,7 +128,7 @@ void MixerDockComponent::setActiveTab(Tab tab) {
         onActiveTabChanged();
 }
 
-void MixerDockComponent::setMixerTabEnabled(bool enabled) {
+void BottomDockComponent::setMixerTabEnabled(bool enabled) {
     if (mixerTabEnabled_ == enabled)
         return;
     mixerTabEnabled_ = enabled;
@@ -138,7 +138,7 @@ void MixerDockComponent::setMixerTabEnabled(bool enabled) {
         applyTabVisibility();
 }
 
-DetachablePanelHost& MixerDockComponent::activeHost() noexcept {
+DetachablePanelHost& BottomDockComponent::activeHost() noexcept {
     if (activeTab_ == Tab::Mixer && mixerTabEnabled_)
         return mixerHost_;
     if (activeTab_ == Tab::MidiRemote)
@@ -146,7 +146,7 @@ DetachablePanelHost& MixerDockComponent::activeHost() noexcept {
     return timelineHost_;
 }
 
-void MixerDockComponent::refreshDetachButton() {
+void BottomDockComponent::refreshDetachButton() {
     detachButton_.setTooltip(activeHost().isDetached() ? "Dock back" : "Open in window");
     // Same dynamic_cast-with-null-fallback convention DetachablePanelHost::applyIcon uses.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
@@ -161,7 +161,7 @@ void MixerDockComponent::refreshDetachButton() {
     detachButton_.setImages(base.get(), hoverIcon.get(), hoverIcon.get());
 }
 
-void MixerDockComponent::applyTabVisibility(bool allowMixerRebuild) {
+void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     const bool mixerActive = activeTab_ == Tab::Mixer && mixerTabEnabled_;
     const bool midiRemoteActive = activeTab_ == Tab::MidiRemote;
     const bool timelineActive = !mixerActive && !midiRemoteActive;
@@ -202,7 +202,7 @@ void MixerDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     resized();
 }
 
-void MixerDockComponent::persistActiveTab() {
+void BottomDockComponent::persistActiveTab() {
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
     const char* value = "timeline";
@@ -214,12 +214,12 @@ void MixerDockComponent::persistActiveTab() {
     appProperties_->getUserSettings()->saveIfNeeded();
 }
 
-bool MixerDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID stripId) {
+bool BottomDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID stripId) {
     setActiveTab(Tab::Mixer);
     return mixer_.revealColumn(stripId);
 }
 
-void MixerDockComponent::resized() {
+void BottomDockComponent::resized() {
     // The grab strip runs the dock's full width along its top edge, OVERLAPPING the tab strip: the
     // strip keeps its full kTabStripHeight (the content below never moves), but its buttons are
     // laid out below the handle so a resize grab never lands on one.
@@ -255,6 +255,6 @@ void MixerDockComponent::resized() {
     midiRemoteHost_.setBounds(bounds);
 }
 
-void MixerDockComponent::lookAndFeelChanged() { refreshDetachButton(); }
+void BottomDockComponent::lookAndFeelChanged() { refreshDetachButton(); }
 
 } // namespace synth::ui

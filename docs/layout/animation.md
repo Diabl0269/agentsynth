@@ -86,7 +86,7 @@ void MainComponent::beginPanelSlide() {
     const bool canAnimate = isShowing();                       // no VBlank reaches an off-screen
     const bool a = librarySlide_ .retarget(isLibraryVisible  ? 1.0f : 0.0f, canAnimate);
     const bool b = aiPanelSlide_ .retarget(isAiPanelVisible  ? 1.0f : 0.0f, canAnimate);
-    const bool c = timelineSlide_.retarget(isTimelineVisible ? 1.0f : 0.0f, canAnimate);
+    const bool c = timelineSlide_.retarget(isBottomDockVisible ? 1.0f : 0.0f, canAnimate);
     if (! (a || b || c)) { finishPanelSlide(); return; }        // landed synchronously
 
     resized();                                                 // frame 0, before the first VBlank

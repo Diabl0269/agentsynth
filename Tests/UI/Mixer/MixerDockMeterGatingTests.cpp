@@ -1,22 +1,22 @@
 // MixerDockMeterGatingTests.cpp -- FRO146 follow-up: a detached mixer window's meters never
 // ticked, because MainComponent::timerCallback()'s gate only ever looked at the DOCKED
-// MixerDockComponent's own tab/visibility state (`isMixerTabActive() && isVisible()`), which stays
+// BottomDockComponent's own tab/visibility state (`isMixerTabActive() && isVisible()`), which stays
 // false the instant the mixer is reparented into its own DetachedPanelWindow (Window placement's
 // setMixerTabEnabled(false) forces it false outright) or the docked bottom dock is closed. Covers
 // both halves of the fix:
-//   1. MixerDockComponent::isMixerShowing() (docked-active-visible OR detached) is the real gate
+//   1. BottomDockComponent::isMixerShowing() (docked-active-visible OR detached) is the real gate
 //      MainComponent::timerCallback() now checks (ORed with mixerPlacement_.isOwnPanelShowing()).
 //   2. The detach/redock callback (onEitherHostDetachStateChanged) must NOT rebuild the mixer's
 //      columns -- see DetachRedockStateTests.cpp's own header comment on why detach/redock must
-//      never disturb a panel's live state; MixerDockComponent::applyTabVisibility()'s
+//      never disturb a panel's live state; BottomDockComponent::applyTabVisibility()'s
 //      `allowMixerRebuild` parameter is what stops that specific caller (unlike a real tab switch)
 //      from silently wiping every column's latched clip-readout state back to "-inf".
 //
 // Drives a real, off-screen MainComponent, same rig style as MixerColumnComponentMeterTests.cpp /
 // DetachRedockStateTests.cpp.
+#include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
-#include "MixerDockActiveTabResetGuard.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include <gtest/gtest.h>
 #include <optional>
@@ -96,44 +96,44 @@ private:
 
 } // namespace
 
-TEST(MixerDockMeterGatingTests, IsMixerShowingIsFalseWhenNeitherDockedActiveNorDetached) {
-    MixerDockActiveTabResetGuardMDT resetGuard;
+TEST(BottomDockMeterGatingTests, IsMixerShowingIsFalseWhenNeitherDockedActiveNorDetached) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDMGT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
 
-    dock.setActiveTab(synth::ui::MixerDockComponent::Tab::Timeline);
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
     dock.setVisible(false); // simulates the bottom dock being closed entirely
     EXPECT_FALSE(dock.isMixerShowing());
 }
 
-TEST(MixerDockMeterGatingTests, IsMixerShowingIsTrueWhenDockedOnTheMixerTabAndTheDockIsOpen) {
-    MixerDockActiveTabResetGuardMDT resetGuard;
+TEST(BottomDockMeterGatingTests, IsMixerShowingIsTrueWhenDockedOnTheMixerTabAndTheDockIsOpen) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDMGT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
 
-    dock.setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
     dock.setVisible(true);
     EXPECT_TRUE(dock.isMixerShowing());
 }
 
-TEST(MixerDockMeterGatingTests, IsMixerShowingStaysTrueWhenDetachedEvenWithTheDockedTabOnTimelineAndTheDockClosed) {
+TEST(BottomDockMeterGatingTests, IsMixerShowingStaysTrueWhenDetachedEvenWithTheDockedTabOnTimelineAndTheDockClosed) {
     PersistedKeysGuardMDMGT boundsGuard({"mixerWindowBounds"});
-    MixerDockActiveTabResetGuardMDT resetGuard;
+    BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDMGT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
 
     // The exact scenario the coordinator hit in the real app: detach the mixer, then close the
     // docked bottom dock entirely (its own tab left on Timeline) to reclaim space -- the detached
     // window is still fully on screen and must keep ticking.
     dock.getMixerHost().setDetached(true);
     ASSERT_TRUE(dock.getMixerHost().isDetached());
-    dock.setActiveTab(synth::ui::MixerDockComponent::Tab::Timeline);
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
     dock.setVisible(false);
 
     EXPECT_TRUE(dock.isMixerShowing()) << "a detached window doesn't care what the docked tab strip is doing";
@@ -141,19 +141,19 @@ TEST(MixerDockMeterGatingTests, IsMixerShowingStaysTrueWhenDetachedEvenWithTheDo
     dock.getMixerHost().setDetached(false); // redock, so the fixture's own teardown is a normal dock
 }
 
-TEST(MixerDockMeterGatingTests, TimerCallbackRefreshesMetersWhenTheMixerIsDetachedEvenWithTheDockHidden) {
+TEST(BottomDockMeterGatingTests, TimerCallbackRefreshesMetersWhenTheMixerIsDetachedEvenWithTheDockHidden) {
     PersistedKeysGuardMDMGT boundsGuard({"mixerWindowBounds"});
-    MixerDockActiveTabResetGuardMDT resetGuard;
+    BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDMGT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
     auto& mixerPanel = dock.getMixerPanel();
     mixerPanel.rebuild();
 
     dock.getMixerHost().setDetached(true);
-    dock.setActiveTab(synth::ui::MixerDockComponent::Tab::Timeline);
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
     dock.setVisible(false);
     ASSERT_TRUE(dock.isMixerShowing());
 
@@ -165,17 +165,17 @@ TEST(MixerDockMeterGatingTests, TimerCallbackRefreshesMetersWhenTheMixerIsDetach
     dock.getMixerHost().setDetached(false); // redock for a clean teardown
 }
 
-TEST(MixerDockMeterGatingTests, TimerCallbackDoesNotRefreshMetersWhenTheMixerIsShowingNowhereAtAll) {
-    MixerDockActiveTabResetGuardMDT resetGuard;
+TEST(BottomDockMeterGatingTests, TimerCallbackDoesNotRefreshMetersWhenTheMixerIsShowingNowhereAtAll) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDMGT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
     auto& mixerPanel = dock.getMixerPanel();
     mixerPanel.rebuild();
 
-    dock.setActiveTab(synth::ui::MixerDockComponent::Tab::Timeline);
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
     dock.setVisible(false);
     ASSERT_FALSE(dock.isMixerShowing());
     ASSERT_FALSE(mc.getMixerPlacementControllerForTest().isOwnPanelShowing());
@@ -186,16 +186,16 @@ TEST(MixerDockMeterGatingTests, TimerCallbackDoesNotRefreshMetersWhenTheMixerIsS
         << "no work while the mixer isn't showing anywhere -- docs/layout/rendering.md";
 }
 
-TEST(MixerDockMeterGatingTests, DetachingAndRedockingTheMixerPreservesEveryColumnsLatchedReadoutState) {
+TEST(BottomDockMeterGatingTests, DetachingAndRedockingTheMixerPreservesEveryColumnsLatchedReadoutState) {
     PersistedKeysGuardMDMGT boundsGuard({"mixerWindowBounds"});
-    MixerDockActiveTabResetGuardMDT resetGuard;
+    BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDMGT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
-    auto& dock = mc.getMixerDock();
-    dock.setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
+    auto& dock = mc.getBottomDock();
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
     auto& mixerPanel = dock.getMixerPanel();
     mixerPanel.rebuild();
 

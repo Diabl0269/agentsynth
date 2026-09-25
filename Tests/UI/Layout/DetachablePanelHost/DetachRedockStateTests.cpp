@@ -1,5 +1,5 @@
 // DetachRedockStateTests.cpp -- FRO12 (P9-6, docs/mixer/panel.md): proves detach/redock preserves
-// REAL, production panel state end to end through MixerDockComponent/MainComponent, not just the
+// REAL, production panel state end to end through BottomDockComponent/MainComponent, not just the
 // generic identity/mutation invariant DetachablePanelHostTests.cpp pins against a stub panel.
 // Drives a real, off-screen MainComponent (newPatchForTest() + simulateAddAudioTrackClick(), the
 // ChannelFlow suite's own rig style -- see MixerPanelComponentTests.cpp).
@@ -113,7 +113,7 @@ TEST(DetachRedockStateTests, TimelineZoomAndScrollSurviveDetachAndRedock) {
     viewState.pixelsPerBeat = 48.0;
     viewState.firstVisibleBeat = 12.5;
 
-    auto& host = mc.getMixerDock().getTimelineHost();
+    auto& host = mc.getBottomDock().getTimelineHost();
     host.setDetached(true);
     ASSERT_TRUE(host.isDetached());
     EXPECT_EQ(&mc.getTimelinePanel(), &host.getPanelForTest()) << "the SAME instance, never rebuilt";
@@ -134,7 +134,7 @@ TEST(DetachRedockStateTests, MixerColumnSelectionSurvivesDetachAndRedock) {
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     mixerPanel.rebuild();
     ASSERT_GT(mixerPanel.getColumnCount(), 0);
     auto* column = mixerPanel.getStripColumnForTest(0);
@@ -143,7 +143,7 @@ TEST(DetachRedockStateTests, MixerColumnSelectionSurvivesDetachAndRedock) {
     column->setSelected(true);
     ASSERT_TRUE(column->isSelectedForTest());
 
-    auto& host = mc.getMixerDock().getMixerHost();
+    auto& host = mc.getBottomDock().getMixerHost();
     host.setDetached(true);
     ASSERT_TRUE(host.isDetached());
     EXPECT_EQ(&mixerPanel, &host.getPanelForTest()) << "the SAME MixerPanelComponent, never rebuilt";
@@ -220,9 +220,9 @@ TEST(DetachRedockStateTests, MixerAndTimelineWindowBoundsKeysAreRestoredAfterAGu
         // The exact production path that leaked these two keys before FRO101/this guard: detach
         // both real panels against a real MainComponent, which persistBounds()'s each into the
         // real settings file.
-        auto& mixerHost = mc.getMixerDock().getMixerHost();
+        auto& mixerHost = mc.getBottomDock().getMixerHost();
         mixerHost.setDetached(true);
-        mc.getMixerDock().getTimelineHost().setDetached(true);
+        mc.getBottomDock().getTimelineHost().setDetached(true);
         // The sentinel is itself a plausible rect, so restoreBoundsOrDefault() reads it straight
         // back and persistBounds() re-persists that SAME string -- not a discriminating check on
         // its own. Force an actual interactive-style resize (moved()+resized() -> persistBounds())

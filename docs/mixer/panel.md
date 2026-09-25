@@ -93,7 +93,7 @@ scoped per window.
 
 The mechanism is `Source/UI/Layout/DetachablePanelHost/` (`DetachablePanelHost` plus
 `DetachedPanelWindow`): a slot that moves a panel **by reference** — never copied or rebuilt —
-between its dock and a `DetachedPanelWindow`. `MixerDockComponent` owns three hosts,
+between its dock and a `DetachedPanelWindow`. `BottomDockComponent` owns three hosts,
 `timelineHost_`/`mixerHost_`/`midiRemoteHost_`, each wrapping the SAME `TimelinePanelComponent`/
 `MixerPanelComponent`/`MidiRemotePanelComponent` instance it already held, so scroll, zoom and
 selection survive a detach untouched. `midiRemoteHost_` (FRO131) is always Tab placement — no
@@ -102,14 +102,14 @@ Own-panel/Window placement variant like Mixer's own, so it has no third row in t
 `synth::ui::MixerPlacementController` (the one collaborator `MainComponent.h` adds for this) moves
 `mixerHost_` between its three homes:
 
-| Placement | Mixer lives | Timeline dock | Detach state |
+| Placement | Mixer lives | Bottom dock | Detach state |
 |---|---|---|---|
-| Tab (default) | `MixerDockComponent`'s own tab strip | unaffected | tab-strip button |
-| Own panel | `MixerPlacementController` itself, a second independent bottom strip below the Timeline dock; slides, resizable | unaffected | its own header (embedded=false) |
+| Tab (default) | `BottomDockComponent`'s own tab strip | unaffected | tab-strip button |
+| Own panel | `MixerPlacementController` itself, a second independent bottom strip below the bottom dock; slides, resizable | unaffected | its own header (embedded=false) |
 | Window | a `DetachedPanelWindow`, opened on first reveal, never eagerly at launch | unaffected | `mixerHost_` stays parented and hidden inside the dock until revealed |
 
 **In Tab placement neither host draws its own header** (`setEmbeddedHeader(true)`): the dock's
-22 px tab strip (`MixerDockComponent::kTabStripHeight`) carries a single icon-only detach button that
+22 px tab strip (`BottomDockComponent::kTabStripHeight`) carries a single icon-only detach button that
 acts on whichever tab is active, and the header — with the real button, now reading "Dock back" —
 appears only on the DETACHED window itself. That is a deliberate simplification over reparenting
 either host's own button through three different parents.
@@ -118,7 +118,7 @@ either host's own button through three different parents.
 dock's own top edge — not inside the Timeline panel — so the Mixer and MIDI Remote tabs resize the
 dock exactly like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays
 22 px; the tab, detach, `+ Bus` and Reset Meters buttons are laid out below it, so a grab never
-lands on a button) and reports the total dock height through `MixerDockComponent::onResizeHeight` /
+lands on a button) and reports the total dock height through `BottomDockComponent::onResizeHeight` /
 `onResizeHeightCommitted`. The rules (clamp, persistence, live relayout) are in
 [`docs/timeline/timeline.md`](../timeline/timeline.md#panel-height); Own-panel placement is a
 separate strip with its own handle, below.
@@ -155,8 +155,8 @@ unconditionally regardless of placement, so Tab/Window placement's own `hideStri
 Every later call stays idempotent, so a `DetachedPanelWindow`'s bounds-persist-on-drag — which fires
 that same broadcast — never does real work.
 
-`MainComponent::isTimelineVisible` and the persisted `timelinePanelVisible` key open and close the
-whole dock, any of its tabs, while `MixerDockComponent`'s own `bottomDockActiveTab` key persists
+`MainComponent::isBottomDockVisible` and the persisted `bottomDockVisible` key open and close the
+whole dock, any of its tabs, while `BottomDockComponent`'s own `bottomDockActiveTab` key persists
 which tab is showing (`"timeline"` default, or `"mixer"`/`"midiRemote"`) — see
 [`docs/timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock).
 
@@ -171,8 +171,8 @@ command table uses. Two independent registries never cross-resolve.
 `MainComponent`'s own registry **drops a region while its panel is detached**:
 `registerFocusRegions()` is split into a one-time `addFocusChangeListener` call plus
 `rebuildFocusRegions()` (clear and re-add, wrapping the `"timeline"` `addRegion` call in
-`!mixerDock.getTimelineHost().isDetached()`), re-run via
-`MixerDockComponent::onPanelDetachStateChanged` after every detach and redock.
+`!bottomDock.getTimelineHost().isDetached()`), re-run via
+`BottomDockComponent::onPanelDetachStateChanged` after every detach and redock.
 
 ### Creating the native window
 
@@ -360,9 +360,9 @@ column order never silently reattaches focus to the wrong column; a deleted focu
 instead.
 
 **The region registration is a free helper, not an inlined lambda.**
-`registerMixerFocusRegion(FocusRegionRegistry&, MixerDockComponent&, std::function<bool()> dockOpen)`
+`registerMixerFocusRegion(FocusRegionRegistry&, BottomDockComponent&, std::function<bool()> dockOpen)`
 (`MixerFocusRegion.h`, beside `MixerPanelComponent.h`) is called by
-`MainComponent::registerFocusRegions()` with `dockOpen` reading `isTimelineVisible`, so a detached
+`MainComponent::registerFocusRegions()` with `dockOpen` reading `isBottomDockVisible`, so a detached
 mixer window can call the SAME helper against its own registry with a different `dockOpen` — for
 example always-open — instead of re-deriving the logic. A null `dockOpen` is treated as always open.
 

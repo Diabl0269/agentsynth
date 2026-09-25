@@ -306,8 +306,8 @@ void MainComponent::promptRepeatSelection() {
 // pointer" shape, but the mixer has THREE placements (MixerPlacementController::Placement) —
 // docked on the tab strip, an "Own panel" strip, or detached into its own window — so its
 // showing check is the same OR MainComponent::timerCallback already uses to gate meter ticks
-// (mixerDock.isMixerShowing() covers Tab-docked-and-active and Window; mixerPlacement_.
-// isOwnPanelShowing() covers Own panel), not the plain isTimelineVisible gate the two timeline
+// (bottomDock.isMixerShowing() covers Tab-docked-and-active and Window; mixerPlacement_.
+// isOwnPanelShowing() covers Own panel), not the plain isBottomDockVisible gate the two timeline
 // surfaces use. MixerPanelComponent is the mixer's single focusable leaf (FRO18: every column's
 // own controls are setWantsKeyboardFocus(false)), so isOrIsChildOf covers a column's controls
 // too, not just the panel root itself. Public: both perform()/getCommandInfo() and
@@ -318,7 +318,7 @@ MainComponent::EditSurface MainComponent::resolveEditSurface() const {
 
     // A hidden panel never owns the verbs, whatever a stale focus pointer inside it points at —
     // check visibility BEFORE even asking what's focused.
-    if (isTimelineVisible) {
+    if (isBottomDockVisible) {
         if (auto* focused = juce::Component::getCurrentlyFocusedComponent()) {
             if (isOrIsChildOf(focused, timelinePanel.getPianoRoll()))
                 return EditSurface::PianoRoll;
@@ -326,9 +326,9 @@ MainComponent::EditSurface MainComponent::resolveEditSurface() const {
                 return EditSurface::TimelineClips;
         }
     }
-    if (mixerDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing()) {
+    if (bottomDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing()) {
         if (auto* focused = juce::Component::getCurrentlyFocusedComponent()) {
-            if (isOrIsChildOf(focused, mixerDock.getMixerPanel()))
+            if (isOrIsChildOf(focused, bottomDock.getMixerPanel()))
                 return EditSurface::Mixer;
         }
     }
@@ -380,7 +380,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     // panel resolves would make its bare letters and tool digits (J/L/P/F, 1/3/4/5/7/8) fire while
     // the graph canvas has focus, which is a different feature with its own design question. These
     // two act on the transport, are chorded, and mean nothing on any other surface.
-    if (isTimelineVisible) {
+    if (isBottomDockVisible) {
         static const juce::StringArray forwardsToTimelinePanel{"timelineJumpToLocator1", "timelineJumpToLocator2"};
         for (const auto& action : shortcutManager.getActionsForKeyPress(key))
             if (forwardsToTimelinePanel.contains(action))
@@ -438,14 +438,14 @@ void MainComponent::resized() {
     // A panel that is both closed AND hidden is skipped entirely — its bounds are dead state, and
     // removeFrom*(0) would carve nothing from the canvas anyway.
     // FRO12 (P9-6): the Mixer's "Own panel" placement -- a second, INDEPENDENT bottom strip BELOW
-    // the Timeline dock carved next. FRO231: it slides and has a user height like the dock, but
+    // the bottom dock carved next. FRO231: it slides and has a user height like the dock, but
     // through its OWN PanelSlide inside MixerPlacementController (which calls back into this pass
     // each frame), so its carve is asked for rather than derived from a member here. Same "|| showing"
-    // frame-0 guard as every other panel above. Carved FIRST (before the Timeline dock below)
+    // frame-0 guard as every other panel above. Carved FIRST (before the bottom dock below)
     // so it claims the window's actual bottom edge -- carving it second would instead stack it
-    // ABOVE the Timeline dock, the opposite of docs/mixer/panel.md's own layout.
+    // ABOVE the bottom dock, the opposite of docs/mixer/panel.md's own layout.
     const int dockMinHeight = defaultTimelinePanelHeight();
-    const bool dockOpen = timelineSlide_.getProgress() > 0.0f || mixerDock.isVisible();
+    const bool dockOpen = timelineSlide_.getProgress() > 0.0f || bottomDock.isVisible();
     mixerPlacement_.setLayoutContext(getHeight(), dockOpen ? dockMinHeight : 0);
     const int ownCarve = mixerPlacement_.getCarveHeight();
     if (ownCarve > 0 || mixerPlacement_.isOwnPanelShowing())
@@ -461,7 +461,7 @@ void MainComponent::resized() {
         const int dockHeight =
             getHeight() > 0 ? std::min(timelinePanelHeight_, std::max(dockMinHeight, (getHeight() * 3) / 4 - ownCarve))
                             : timelinePanelHeight_;
-        mixerDock.setBounds(bounds.removeFromBottom(timelineSlide_.sizeBetween(0, dockHeight)));
+        bottomDock.setBounds(bounds.removeFromBottom(timelineSlide_.sizeBetween(0, dockHeight)));
     }
 
     if (aiW > 0 || aiChatComponent.isVisible())
@@ -552,8 +552,8 @@ void MainComponent::applyToolbarIcons() {
     toggleMinimapButton.setToggleState(graphEditor.isMinimapVisible(), juce::dontSendNotification);
     toggleModMatrixButton.setToggleState(graphEditor.isModMatrixVisible(), juce::dontSendNotification);
     toggleAiPanelButton.setToggleState(isAiPanelVisible, juce::dontSendNotification);
-    toggleTimelineButton.setToggleState(isTimelineVisible, juce::dontSendNotification);
-    toggleMidiRemoteButton.setToggleState(isTimelineVisible && mixerDock.isMidiRemoteTabActive(),
+    toggleTimelineButton.setToggleState(isBottomDockVisible, juce::dontSendNotification);
+    toggleMidiRemoteButton.setToggleState(isBottomDockVisible && bottomDock.isMidiRemoteTabActive(),
                                           juce::dontSendNotification);
 
     // Text: cleared in narrow mode; stateful for the toggles in wide mode.
@@ -569,10 +569,10 @@ void MainComponent::applyToolbarIcons() {
     toggleMinimapButton.setButtonText(iconOnly ? ""
                                                : (graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"));
     toggleAiPanelButton.setButtonText(iconOnly ? "" : (isAiPanelVisible ? "Hide AI" : "Show AI"));
-    toggleTimelineButton.setButtonText(iconOnly ? "" : (isTimelineVisible ? "Hide Timeline" : "Show Timeline"));
+    toggleTimelineButton.setButtonText(iconOnly ? "" : (isBottomDockVisible ? "Hide Timeline" : "Show Timeline"));
     toggleMidiRemoteButton.setButtonText(
         iconOnly ? ""
-                 : ((isTimelineVisible && mixerDock.isMidiRemoteTabActive()) ? "Hide MIDI Remote" : "MIDI Remote"));
+                 : ((isBottomDockVisible && bottomDock.isMidiRemoteTabActive()) ? "Hide MIDI Remote" : "MIDI Remote"));
     toggleLibraryButton.setButtonText(iconOnly ? "" : (isLibraryVisible ? "Hide Library" : "Show Library"));
     themeToggleButton.setButtonText(
         iconOnly ? ""
@@ -607,11 +607,11 @@ void MainComponent::applyToolbarIcons() {
     const juce::String aiBase = isAiPanelVisible ? "Hide AI Panel" : "Show AI Panel";
     toggleAiPanelButton.setTooltip(hint(aiBase, "toggleAiPanel"));
 
-    const juce::String timelineBase = isTimelineVisible ? "Hide Timeline" : "Show Timeline";
+    const juce::String timelineBase = isBottomDockVisible ? "Hide Timeline" : "Show Timeline";
     toggleTimelineButton.setTooltip(hint(timelineBase, "toggleTimelinePanel"));
 
     const juce::String midiRemoteBase =
-        (isTimelineVisible && mixerDock.isMidiRemoteTabActive()) ? "Hide MIDI Remote" : "Show MIDI Remote";
+        (isBottomDockVisible && bottomDock.isMidiRemoteTabActive()) ? "Hide MIDI Remote" : "Show MIDI Remote";
     toggleMidiRemoteButton.setTooltip(hint(midiRemoteBase, "toggleMidiRemotePanel"));
 
     const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";
@@ -684,8 +684,8 @@ void MainComponent::beginPanelSlide() {
         moduleLibrary.setVisible(true);
     if (isAiPanelVisible)
         aiChatComponent.setVisible(true);
-    if (isTimelineVisible)
-        mixerDock.setVisible(true);
+    if (isBottomDockVisible)
+        bottomDock.setVisible(true);
 
     // No VBlank reaches an off-screen component, so an off-screen toggle has to land NOW rather
     // than wait for frames that will never arrive (headless tests; a restore before the window
@@ -696,7 +696,7 @@ void MainComponent::beginPanelSlide() {
     const bool canAnimate = isShowing();
     const bool libTweening = librarySlide_.retarget(isLibraryVisible ? 1.0f : 0.0f, canAnimate);
     const bool aiTweening = aiPanelSlide_.retarget(isAiPanelVisible ? 1.0f : 0.0f, canAnimate);
-    const bool timelineTweening = timelineSlide_.retarget(isTimelineVisible ? 1.0f : 0.0f, canAnimate);
+    const bool timelineTweening = timelineSlide_.retarget(isBottomDockVisible ? 1.0f : 0.0f, canAnimate);
 
     if (!(libTweening || aiTweening || timelineTweening)) {
         finishPanelSlide();
@@ -740,65 +740,65 @@ void MainComponent::finishPanelSlide() {
         moduleLibrary.setVisible(false);
     if (!isAiPanelVisible)
         aiChatComponent.setVisible(false);
-    if (!isTimelineVisible)
-        mixerDock.setVisible(false);
+    if (!isBottomDockVisible)
+        bottomDock.setVisible(false);
 
     resized();
 }
 
 // FRO11 (P9-5): mirrors toggleTimelineButton's own open/close symmetry (plan (f)) -- closed ->
 // open on the Mixer tab; open on Timeline -> switch to Mixer without closing; open on Mixer ->
-// close. The dock's own open/close state (isTimelineVisible/timelineSlide_) stays keyed to "is
-// the DOCK open" regardless of which tab is active (see MixerDockComponent's own class comment).
+// close. The dock's own open/close state (isBottomDockVisible/timelineSlide_) stays keyed to "is
+// the DOCK open" regardless of which tab is active (see BottomDockComponent's own class comment).
 void MainComponent::performToggleMixerPanel() {
-    // FRO12 (P9-6): Own-panel/Window placements have nothing to do with the Timeline dock's own
+    // FRO12 (P9-6): Own-panel/Window placements have nothing to do with the bottom dock's own
     // open/close state below -- mixerPlacement_ handles the reveal itself and says so by
     // returning true. Tab placement (the default) returns false and falls through to the
     // unchanged FRO11 behaviour.
     if (mixerPlacement_.revealOrToggle())
         return;
-    if (!isTimelineVisible) {
-        isTimelineVisible = true;
-        appProperties.getUserSettings()->setValue("timelinePanelVisible", "1");
+    if (!isBottomDockVisible) {
+        isBottomDockVisible = true;
+        appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, "1");
         appProperties.getUserSettings()->saveIfNeeded();
-        mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
+        bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
         applyToolbarIcons();
         beginPanelSlide();
         return;
     }
-    if (mixerDock.isMixerTabActive()) {
-        isTimelineVisible = false;
-        appProperties.getUserSettings()->setValue("timelinePanelVisible", "0");
+    if (bottomDock.isMixerTabActive()) {
+        isBottomDockVisible = false;
+        appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, "0");
         appProperties.getUserSettings()->saveIfNeeded();
         applyToolbarIcons();
         beginPanelSlide();
         return;
     }
-    mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
+    bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
 }
 
 // FRO131: same open/close symmetry as performToggleMixerPanel() above -- MidiRemote has no
 // placement-controller detour (unlike Mixer's mixerPlacement_.revealOrToggle()), since it offers
 // no Own-panel/Window placement variant.
 void MainComponent::performToggleMidiRemotePanel() {
-    if (!isTimelineVisible) {
-        isTimelineVisible = true;
-        appProperties.getUserSettings()->setValue("timelinePanelVisible", "1");
+    if (!isBottomDockVisible) {
+        isBottomDockVisible = true;
+        appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, "1");
         appProperties.getUserSettings()->saveIfNeeded();
-        mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::MidiRemote);
+        bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::MidiRemote);
         applyToolbarIcons();
         beginPanelSlide();
         return;
     }
-    if (mixerDock.isMidiRemoteTabActive()) {
-        isTimelineVisible = false;
-        appProperties.getUserSettings()->setValue("timelinePanelVisible", "0");
+    if (bottomDock.isMidiRemoteTabActive()) {
+        isBottomDockVisible = false;
+        appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, "0");
         appProperties.getUserSettings()->saveIfNeeded();
         applyToolbarIcons();
         beginPanelSlide();
         return;
     }
-    mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::MidiRemote);
+    bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::MidiRemote);
 }
 
 // ---- Collapsible library sidebar (slides, persisted) ----
@@ -909,13 +909,13 @@ void MainComponent::applyMidiRemotePreferences() {
         return;
     const auto defaultTakeover = synth::midi::loadDefaultTakeover(*settings);
     remoteEngine.setDefaultTakeover(defaultTakeover);
-    mixerDock.getMidiRemotePanel().setDefaultTakeover(defaultTakeover);
+    bottomDock.getMidiRemotePanel().setDefaultTakeover(defaultTakeover);
 
     const bool showBadges = synth::midi::loadShowBadges(*settings);
     if (showBadges == synth::ui::midilearn::areMappedBadgesVisible())
         return;
     synth::ui::midilearn::setMappedBadgesVisible(showBadges);
     graphEditor.repaintMidiLearnBadges();
-    mixerDock.getMixerPanel().repaint();
+    bottomDock.getMixerPanel().repaint();
     timelinePanel.repaint();
 }

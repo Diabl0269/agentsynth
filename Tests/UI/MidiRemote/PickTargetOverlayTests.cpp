@@ -6,7 +6,7 @@
 // candidates are the live registries of a real ModuleComponent (via GraphEditor) and the real transport
 // bar. Suite name contains "MidiRemote" per the ship-task --gtest_filter convention.
 
-#include "../Mixer/MixerDockActiveTabResetGuard.h"
+#include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "MainComponent/MainComponent.h"
 #include "MidiRemoteMockProvider.h"
 #include "MidiRemotePanelTestFixture.h"
@@ -265,7 +265,7 @@ TEST_F(MidiRemotePickTargetTest, RefreshPickTargetRecollectsCandidatesAfterATabS
 // ---- The wiring MainComponent gives the session (not the test doubles above) ----------------------------
 
 TEST(MidiRemotePickTargetMainComponentTest, TheOverlayCoversTheWholeWindowAndEscapeAndACanvasRebuildEndTheSession) {
-    MixerDockActiveTabResetGuardMDT resetGuard;
+    BottomDockActiveTabResetGuardMDT resetGuard;
     const auto root = juce::File::getSpecialLocation(juce::File::tempDirectory)
                           .getChildFile("agentsynth-pickoverlay-mc-" + juce::Uuid().toString());
     {
@@ -302,10 +302,10 @@ TEST(MidiRemotePickTargetMainComponentTest, TheOverlayCoversTheWholeWindowAndEsc
 
         // The dock's tab buttons let clicks through, and a tab switch keeps the session and re-collects.
         ASSERT_TRUE(controller.beginPickTarget("p1", "knob"));
-        EXPECT_EQ(mc.getMixerDock().getTabButtons().size(), 3u);
-        ASSERT_TRUE(static_cast<bool>(mc.getMixerDock().onActiveTabChanged));
+        EXPECT_EQ(mc.getBottomDock().getTabButtons().size(), 3u);
+        ASSERT_TRUE(static_cast<bool>(mc.getBottomDock().onActiveTabChanged));
         // Calling the real tab-change hook must leave the session up (it re-collects, never ends).
-        mc.getMixerDock().onActiveTabChanged();
+        mc.getBottomDock().onActiveTabChanged();
         EXPECT_TRUE(controller.isPickingTarget()) << "switching dock tabs must not end the pick";
         controller.cancelPickTarget();
     }

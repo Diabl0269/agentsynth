@@ -16,7 +16,7 @@ namespace {
 
 // This test writes "meterColourStops" into the SAME real "Agent Synth" settings file every
 // MainComponent in this process (and a real shipped build) reads -- same idiom
-// DetachRedockStateTests.cpp/MixerDockMeterGatingTests.cpp use for their own persisted keys.
+// DetachRedockStateTests.cpp/BottomDockMeterGatingTests.cpp use for their own persisted keys.
 class PersistedMeterColourStopsKeyGuard {
 public:
     PersistedMeterColourStopsKeyGuard() {

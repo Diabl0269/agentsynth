@@ -299,7 +299,7 @@ protected:
         // FRO101: DetachingAPanelDropsItFromMainComponentsRegistryUntilRedocked (below) detaches
         // the real timeline host against a real MainComponent, which persists "timelineWindowBounds"
         // into the same real on-disk settings file every other key here already guards.
-        guard_.emplace(juce::StringArray{"showWelcomeScreenAtLaunch", "librarySidebarVisible", "timelinePanelVisible",
+        guard_.emplace(juce::StringArray{"showWelcomeScreenAtLaunch", "librarySidebarVisible", "bottomDockVisible",
                                          "aiPanelVisible", "timelineWindowBounds"});
         // A known baseline every test in this fixture starts from: welcome screen hidden (out of the
         // way for the Tab-cycle/registration tests), Library open, Toolbar/Canvas always open,
@@ -307,7 +307,7 @@ protected:
         // at construction.
         writePref("showWelcomeScreenAtLaunch", "0");
         writePref("librarySidebarVisible", "1");
-        writePref("timelinePanelVisible", "0");
+        writePref("bottomDockVisible", "0");
         writePref("aiPanelVisible", "0");
     }
     void TearDown() override { guard_.reset(); }
@@ -336,8 +336,8 @@ TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheEightDocumentedRegionsIn
     EXPECT_EQ(regs.findById("toolbar")->root, &mc.getToolbar());
     EXPECT_EQ(regs.findById("canvas")->root, &mc.getGraphEditor());
     EXPECT_EQ(regs.findById("timeline")->root, &mc.getTimelinePanel());
-    EXPECT_EQ(regs.findById("mixer")->root, &mc.getMixerDock().getMixerPanel());
-    EXPECT_EQ(regs.findById("midiRemote")->root, &mc.getMixerDock().getMidiRemotePanel());
+    EXPECT_EQ(regs.findById("mixer")->root, &mc.getBottomDock().getMixerPanel());
+    EXPECT_EQ(regs.findById("midiRemote")->root, &mc.getBottomDock().getMidiRemotePanel());
     EXPECT_EQ(regs.findById("aiPanel")->root, &mc.getAiChatComponent());
     EXPECT_EQ(regs.findById("modMatrix")->root, &mc.getGraphEditor().getModMatrix());
 }
@@ -370,14 +370,14 @@ TEST_F(FocusRegionMainComponentTest, EveryRegionRootWantsKeyboardFocusItself) {
 }
 
 // The acceptance criterion, exercised against the REAL registered regions and real
-// isLibraryVisible/isTimelineVisible-backed getters (no fake Components involved): Tab-cycling only
+// isLibraryVisible/isBottomDockVisible-backed getters (no fake Components involved): Tab-cycling only
 // ever visits what's open, and opening a previously-closed region splices it back into the cycle.
 TEST_F(FocusRegionMainComponentTest, TabCycleOnlyVisitsOpenRegionsAndWraps) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
     auto& regs = mc.getFocusRegionsForTest();
 
     ASSERT_TRUE(mc.isLibraryConfiguredVisible());
-    ASSERT_FALSE(mc.isTimelineConfiguredVisible());
+    ASSERT_FALSE(mc.isBottomDockConfiguredVisible());
     ASSERT_FALSE(mc.isAiPanelConfiguredVisible());
     ASSERT_FALSE(mc.getGraphEditor().isModMatrixVisible());
 
@@ -390,7 +390,7 @@ TEST_F(FocusRegionMainComponentTest, TabCycleOnlyVisitsOpenRegionsAndWraps) {
 
     // Opening the timeline (via the real command, not a fake) adds it at its registered position.
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusTimeline, false));
-    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
     EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "timeline");
     EXPECT_EQ(regs.nextOpenRegionId("timeline", true), "toolbar") << "wraps back to the top";
 }
@@ -443,7 +443,7 @@ TEST_F(FocusRegionMainComponentTest, TabCyclingSuppressedWhileWelcomeScreenIsVis
 // side effects rather than asserting real OS focus moved.
 TEST_F(FocusRegionMainComponentTest, CmdShiftTOpensTheTimelinePanelIfClosedThenDispatches) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
-    ASSERT_FALSE(mc.isTimelineConfiguredVisible()) << "SetUp forced timelinePanelVisible=0";
+    ASSERT_FALSE(mc.isBottomDockConfiguredVisible()) << "SetUp forced bottomDockVisible=0";
 
     const auto binding = mc.getShortcutManager().getBinding("focusTimeline");
     ASSERT_TRUE(binding.isValid());
@@ -452,17 +452,17 @@ TEST_F(FocusRegionMainComponentTest, CmdShiftTOpensTheTimelinePanelIfClosedThenD
     // ASYNCHRONOUSLY, like every other command it dispatches (see keyPressed's own loop) -- so
     // perform() runs on the next message-loop pump, not synchronously inside keyPressed() itself.
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
-    EXPECT_TRUE(mc.isTimelineConfiguredVisible()) << "Cmd+Shift+T must open a closed Timeline panel";
+    EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "Cmd+Shift+T must open a closed Timeline panel";
 }
 
 // Cmd+Shift+T on an ALREADY-open Timeline must not close it (it is a focus command, not a toggle).
 TEST_F(FocusRegionMainComponentTest, CmdShiftTOnAnAlreadyOpenTimelineLeavesItOpen) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusTimeline, false));
-    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
 
     EXPECT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusTimeline, false));
-    EXPECT_TRUE(mc.isTimelineConfiguredVisible()) << "a second Focus Timeline must not toggle it closed";
+    EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "a second Focus Timeline must not toggle it closed";
 }
 
 // Cmd+Shift+L: same contract as Cmd+Shift+T, for the Library sidebar.
@@ -536,10 +536,10 @@ TEST_F(FocusRegionMainComponentTest, DetachingAPanelDropsItFromMainComponentsReg
 
     // addToDesktop=false internally (DetachedPanelWindow's own contract) -- this never creates a
     // native peer, so it is safe on a headless CI runner exactly like every other detach test here.
-    mc.getMixerDock().getTimelineHost().setDetached(true);
+    mc.getBottomDock().getTimelineHost().setDetached(true);
     EXPECT_EQ(mc.getFocusRegionsForTest().findById("timeline"), nullptr)
         << "a panel detached to its own window has nothing docked here to Tab-cycle to";
 
-    mc.getMixerDock().getTimelineHost().setDetached(false);
+    mc.getBottomDock().getTimelineHost().setDetached(false);
     EXPECT_NE(mc.getFocusRegionsForTest().findById("timeline"), nullptr) << "redocking must re-register it";
 }

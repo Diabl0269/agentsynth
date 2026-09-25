@@ -323,8 +323,8 @@ private:
                !model_.isOrphaned;
     }
 
-    // Same dynamic_cast-with-null-fallback convention MixerDockComponent::refreshDetachButton()
-    // uses (Source/UI/Mixer/MixerDockComponent.cpp) -- resolved once here rather than in paint(),
+    // Same dynamic_cast-with-null-fallback convention BottomDockComponent::refreshDetachButton()
+    // uses (Source/UI/Mixer/BottomDockComponent.cpp) -- resolved once here rather than in paint(),
     // since only isOrphaned (fixed for the row's lifetime, set on rebuild) drives it.
     void refreshFromModel() {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());

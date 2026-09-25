@@ -42,7 +42,7 @@ void MainComponent::addCanvasAndPanels() {
         reconcileTimelineBindingsOnly();
         // FRO135: a canvas delete orphans MIDI Remote assignments; the open panel shows "(missing module)"
         // only once it rebuilds. Deferred and coalesced, so a burst of structural changes is one rebuild.
-        mixerDock.getMidiRemotePanel().scheduleLiveRefresh();
+        bottomDock.getMidiRemotePanel().scheduleLiveRefresh();
         // FRO103: the other half of onBeforeDetachAllModuleComponents. A single-node removal
         // (deleteSelection, requestDeleteModule, replaceModule) unbinds the WHOLE mixer before it
         // frees anything, and has no rebuild of its own -- reconcileTimelineBindingsOnly() above
@@ -50,22 +50,22 @@ void MainComponent::addCanvasAndPanels() {
         // attached to nothing until an unrelated later change rebuilt the panel. This re-binds
         // against the settled graph, and is a no-op unless the columns are actually detached, so
         // it does NOT turn every structural change into a full mixer rebuild.
-        mixerDock.getMixerPanel().rebuildIfUnbound();
+        bottomDock.getMixerPanel().rebuildIfUnbound();
     };
     addAndMakeVisible(aiChatComponent);
     aiChatComponent.setVisible(isAiPanelVisible);
     moduleLibrary.setVisible(isLibraryVisible);
-    // Added unconditionally — isTimelineVisible stays false forever in a flag-OFF build
+    // Added unconditionally — isBottomDockVisible stays false forever in a flag-OFF build
     // (the only code that ever flips it, the toggle button's onClick, is gated below), so this is
     // an inert invisible child there, same as any other never-shown component.
-    // FRO11 (P9-5): mixerDock is timelinePanel's new direct parent -- it adds timelinePanel as
+    // FRO11 (P9-5): bottomDock is timelinePanel's new direct parent -- it adds timelinePanel as
     // ITS OWN child in its constructor (docs/mixer/panel.md#what-the-mixer-shows), so MainComponent
-    // parents mixerDock here instead of timelinePanel directly. Unchanged: which of the dock's two
-    // tabs is visible stays keyed to isTimelineVisible/timelineSlide_ regardless of active tab.
-    addAndMakeVisible(mixerDock);
-    mixerDock.setVisible(isTimelineVisible);
+    // parents bottomDock here instead of timelinePanel directly. Unchanged: which of the dock's two
+    // tabs is visible stays keyed to isBottomDockVisible/timelineSlide_ regardless of active tab.
+    addAndMakeVisible(bottomDock);
+    bottomDock.setVisible(isBottomDockVisible);
     // FRO12 (P9-6): the Mixer's "Own panel" placement is a second independent bottom strip --
-    // added here (Own-panel visibility is unrelated to isTimelineVisible above) and given real
+    // added here (Own-panel visibility is unrelated to isBottomDockVisible above) and given real
     // bounds only by resized(), gated on mixerPlacement_.isOwnPanelShowing().
     addAndMakeVisible(mixerPlacement_);
     // FRO231: the Own panel's slide/height changes are laid out by THIS component's carve.
@@ -185,9 +185,9 @@ void MainComponent::addToolbarToggleButtons() {
     addAndMakeVisible(toggleTimelineButton);
     toggleTimelineButton.setComponentID("toggleTimeline");
     toggleTimelineButton.onClick = [this] {
-        isTimelineVisible = !isTimelineVisible;
+        isBottomDockVisible = !isBottomDockVisible;
         // Persist BEFORE the slide so a crash during layout doesn't lose the user's choice.
-        appProperties.getUserSettings()->setValue("timelinePanelVisible", isTimelineVisible ? "1" : "0");
+        appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, isBottomDockVisible ? "1" : "0");
         appProperties.getUserSettings()->saveIfNeeded();
         applyToolbarIcons();
         beginPanelSlide();

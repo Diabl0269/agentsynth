@@ -101,9 +101,9 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     // FRO263: an assignment's target can flip between resolved and orphaned ("(missing module)") by
     // the reconcile() call just above -- publishAssignments()'s own onChanged notify never reaches
     // this path (it's not a MIDI Remote doc/profile mutation), so the panel needs its own catch-up
-    // call here, same "cheap enough for every graph change" contract mixerDock.rebuildMixer() below
+    // call here, same "cheap enough for every graph change" contract bottomDock.rebuildMixer() below
     // already relies on.
-    mixerDock.rebuildMidiRemote();
+    bottomDock.rebuildMidiRemote();
 
     // FRO14: a LINKED track's M/S live on its channel strip, not in the doc, so a graph change (an
     // undo of a channel mute/solo included) moves state no doc notification would ever report.
@@ -117,7 +117,7 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     // own insert-list mutations -- so it rebuilds unconditionally here too, the same "cheap enough
     // to call on every change" contract buildMixerSnapshot documents (a handful of strips, never
     // per-frame).
-    mixerDock.rebuildMixer();
+    bottomDock.rebuildMixer();
 }
 
 // The cheap half of the above, with no republish of its own: installed on
@@ -776,8 +776,8 @@ void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, 
         return;
 
     // Reuse the toggle path exactly (same call simulateToggleTimelineClick() makes) rather than
-    // duplicating what it does to isTimelineVisible/persistence/layout.
-    if (!isTimelineVisible && toggleTimelineButton.onClick)
+    // duplicating what it does to isBottomDockVisible/persistence/layout.
+    if (!isBottomDockVisible && toggleTimelineButton.onClick)
         toggleTimelineButton.onClick();
     timelinePanel.showAutomationLane(laneId);
 }

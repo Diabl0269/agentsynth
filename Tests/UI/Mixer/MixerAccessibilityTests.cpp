@@ -66,7 +66,7 @@ TEST(MixerAccessibilityTest, ColumnTitleIsTheChannelName) {
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     mixerPanel.rebuild();
 
     auto* column = mixerPanel.getStripColumnForTest(0);
@@ -87,7 +87,7 @@ TEST(MixerAccessibilityTest, MuteSoloButtonsMirrorToggleState) {
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     mixerPanel.rebuild();
     auto* column = mixerPanel.getStripColumnForTest(0);
     ASSERT_NE(column, nullptr);

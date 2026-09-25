@@ -20,7 +20,7 @@ enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer };
 
 It returns `TimelineClips` / `PianoRoll` when the timeline panel is visible AND real keyboard focus
 (`juce::Component::getCurrentlyFocusedComponent()`) sits inside the clip-lane area or piano roll
-respectively; `Mixer` when the mixer panel is actually showing (`MixerDockComponent::
+respectively; `Mixer` when the mixer panel is actually showing (`BottomDockComponent::
 isMixerShowing()` — covers docked-and-on-the-Mixer-tab and detached-to-a-window — OR
 `MixerPlacementController::isOwnPanelShowing()` for the "Own panel" placement) AND real keyboard
 focus sits inside `MixerPanelComponent` (FRO18: the mixer's single focusable leaf — every column's

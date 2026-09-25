@@ -1,10 +1,10 @@
 #pragma once
 
-// MixerDockActiveTabResetGuard.h -- FRO11 (P9-5), extended FRO255. Shared by
-// MixerDockComponentTests.cpp and MixerPanelComponentTests.cpp (header-only; not compiled on its
+// BottomDockActiveTabResetGuard.h -- FRO11 (P9-5), extended FRO255. Shared by
+// BottomDockComponentTests.cpp and MixerPanelComponentTests.cpp (header-only; not compiled on its
 // own and not registered in Tests/CMakeLists.txt).
 //
-// Any test that calls MixerDockComponent::setActiveTab(Mixer) on a real, non-isolated
+// Any test that calls BottomDockComponent::setActiveTab(Mixer) on a real, non-isolated
 // MainComponent persists "bottomDockActiveTab" to the SAME shared on-disk "Agent Synth" settings
 // file every MainComponent test instance reads -- ChannelFlowTestFixture.h's own "settings-file
 // hygiene" comment explains why (the delegating MainComponent ctor always wires the real
@@ -17,17 +17,17 @@
 // FRO255: "bottomDockActiveTab" alone was not enough -- two separate, confirmed-by-repro gaps:
 //
 // 1. ActiveTabPersistsAcrossApplicationPropertiesReload:103 (the ticket's own failure) -- its
-//    SECOND MainComponent reads MixerDockComponent::isMixerTabActive() right after construction.
+//    SECOND MainComponent reads BottomDockComponent::isMixerTabActive() right after construction.
 //    setApplicationProperties() restores "bottomDockActiveTab" ("mixer") first, but
 //    MainComponent::wireTimelinePanel() then calls mixerPlacement_.applyPlacementPreference()
 //    (MainComponentSetupTimeline.cpp), which reads the separate "mixerPlacement" key
 //    (MixerPlacementController.cpp). When that key is "window" or "ownPanel",
-//    MixerPlacementController::applyPlacement() calls mixerDock.setMixerTabEnabled(false), which
-//    unconditionally forces activeTab_ back to Timeline (MixerDockComponent.cpp:112-113) and
+//    MixerPlacementController::applyPlacement() calls bottomDock.setMixerTabEnabled(false), which
+//    unconditionally forces activeTab_ back to Timeline (BottomDockComponent.cpp:112-113) and
 //    RE-PERSISTS "bottomDockActiveTab" as "timeline", overwriting the restore this test just made
 //    -- so mc2.isMixerTabActive() reads false. Confirmed by direct injection: writing
 //    mixerPlacement="window" into the real on-disk settings file and re-running
-//    `--gtest_filter='MixerDockComponentTests.ActiveTab*'` ALONE reproduces the exact failure at
+//    `--gtest_filter='BottomDockComponentTests.ActiveTab*'` ALONE reproduces the exact failure at
 //    :103 ("the persisted tab must survive a relaunch"); removing that key makes it pass again.
 //    This key is never written by any test in this binary without its own reset guard
 //    (MixerPlacementControllerTests.cpp's MixerPlacementResetGuard clears it before/after), so in
@@ -38,10 +38,10 @@
 //
 // 2. ToggleMixerCommandOpensDockOnMixerTabThenClosesOnSecondPress:69 (a second, independently
 //    reproduced order-sensitivity) -- MainComponent's ctor (MainComponentSetup.cpp's
-//    restorePanelPreferences()) seeds isTimelineVisible from "timelinePanelVisible" BEFORE this
+//    restorePanelPreferences()) seeds isBottomDockVisible from "bottomDockVisible" BEFORE this
 //    guard's OWN dock-tab reset ever runs, and the test's own ASSERT_FALSE(dock starts closed)
 //    assumes that key's documented default (MainComponentSetup.cpp:
-//    getBoolValue("timelinePanelVisible", false)). Left dirty ("1") by an earlier
+//    getBoolValue("bottomDockVisible", false)). Left dirty ("1") by an earlier
 //    dock-opening test in the same binary run (or, again, a developer's real usage), the assert
 //    fails before this test even reaches the Mixer-tab assertions the guard was written for.
 //    Hard-reset to "0" -- the documented default -- rather than snapshot/restore:
@@ -51,9 +51,9 @@
 //    established convention rather than inventing a new one.
 #include "MainComponent/MainComponent.h"
 
-struct MixerDockActiveTabResetGuardMDT {
-    MixerDockActiveTabResetGuardMDT() { resetKey(); }
-    ~MixerDockActiveTabResetGuardMDT() { resetKey(); }
+struct BottomDockActiveTabResetGuardMDT {
+    BottomDockActiveTabResetGuardMDT() { resetKey(); }
+    ~BottomDockActiveTabResetGuardMDT() { resetKey(); }
 
     static void resetKey() {
         juce::PropertiesFile::Options opts;
@@ -69,7 +69,7 @@ struct MixerDockActiveTabResetGuardMDT {
             s->removeValue("bottomDockActiveTab");
             // FRO255: see the class comment -- both gaps confirmed by direct repro.
             s->removeValue("mixerPlacement");
-            s->setValue("timelinePanelVisible", "0");
+            s->setValue("bottomDockVisible", "0");
             s->saveIfNeeded();
         }
     }

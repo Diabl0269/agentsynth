@@ -15,7 +15,7 @@ TEST_F(FocusArbitrationTest, SnapCommandsDriveThePanelsSharedGrid) {
     MainComponent mc(std::make_unique<FocusMockProvider>());
     mc.setSize(1200, 800);
     mc.simulateToggleTimelineClick();
-    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
 
     auto& cm = mc.getCommandManager();
     auto& view = mc.getTimelinePanel().getViewState();
@@ -72,7 +72,7 @@ TEST_F(FocusArbitrationTest, ZoomCommandsRoutePerFocusedSurface) {
     MainComponent mc(std::make_unique<FocusMockProvider>());
     mc.setSize(1200, 800);
     mc.simulateToggleTimelineClick();
-    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
 
     auto& cm = mc.getCommandManager();
     auto& panel = mc.getTimelinePanel();
@@ -136,7 +136,7 @@ TEST_F(FocusArbitrationTest, ZoomCommandsRoutePerFocusedSurface) {
 TEST_F(FocusArbitrationTest, GridAndTimelineZoomCommandsAreInactiveWhileThePanelIsHidden) {
     MainComponent mc(std::make_unique<FocusMockProvider>());
     mc.setSize(1200, 800);
-    ASSERT_FALSE(mc.isTimelineConfiguredVisible()) << "the panel starts hidden by default";
+    ASSERT_FALSE(mc.isBottomDockConfiguredVisible()) << "the panel starts hidden by default";
 
     auto& cm = mc.getCommandManager();
     auto& view = mc.getTimelinePanel().getViewState();

@@ -95,8 +95,8 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerFocusRegion.h
-    Source/UI/Mixer/MixerDockComponent.h
-    Source/UI/Mixer/MixerDockComponent.cpp
+    Source/UI/Layout/BottomDockComponent.h
+    Source/UI/Layout/BottomDockComponent.cpp
     Source/UI/Mixer/MixerPlacementController.h
     Source/UI/Mixer/MixerPlacementController.cpp
     Source/UI/Layout/PanelResizeHandle.h

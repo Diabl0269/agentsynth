@@ -472,11 +472,11 @@ private:
     int requestTimeoutMs = 240000;
 };
 
-// automateParameter()'s toggle path persists "timelinePanelVisible" to the SAME on-disk
+// automateParameter()'s toggle path persists "bottomDockVisible" to the SAME on-disk
 // properties file every MainComponent instance reads at construction (MainComponentTests.cpp's
 // own MainComponentTest fixture guards against exactly this cross-test leak) — reset the one key
 // this file touches before and after, so this test's outcome never depends on execution order.
-void resetTimelinePanelVisibleKey() {
+void resetBottomDockVisibleKey() {
     juce::PropertiesFile::Options opts;
     opts.applicationName = "Agent Synth";
     opts.folderName = "Agent Synth";
@@ -487,7 +487,7 @@ void resetTimelinePanelVisibleKey() {
     juce::ApplicationProperties props;
     props.setStorageParameters(opts);
     if (auto* s = props.getUserSettings()) {
-        s->setValue("timelinePanelVisible", "0");
+        s->setValue("bottomDockVisible", "0");
         s->saveIfNeeded();
     }
 }
@@ -495,8 +495,8 @@ void resetTimelinePanelVisibleKey() {
 
 class AutomationEditorMainComponentTest : public ::testing::Test {
 protected:
-    void SetUp() override { resetTimelinePanelVisibleKey(); }
-    void TearDown() override { resetTimelinePanelVisibleKey(); }
+    void SetUp() override { resetBottomDockVisibleKey(); }
+    void TearDown() override { resetBottomDockVisibleKey(); }
 };
 
 TEST_F(AutomationEditorMainComponentTest, KnobAutomateHookCreatesLaneOnAutomationTrack) {
@@ -540,7 +540,7 @@ TEST_F(AutomationEditorMainComponentTest, KnobAutomateHookCreatesLaneOnAutomatio
         EXPECT_FLOAT_EQ(lane->range.maxValue, cutoffParam->getNormalisableRange().end);
     }
 
-    EXPECT_TRUE(mc.isTimelineConfiguredVisible());
+    EXPECT_TRUE(mc.isBottomDockConfiguredVisible());
     EXPECT_TRUE(mc.getTimelinePanel().isAutomationStripVisible());
     EXPECT_EQ(mc.getTimelinePanel().getSelectedAutomationLane(), cutoffLaneId);
 

@@ -38,13 +38,13 @@ public:
     void configure(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc, synth::MacroSet& macros,
                    AppUndoManager& undoManager, GraphEditor& graphEditor, AudioEngine& audioEngine);
 
-    /** Forwarded from MixerDirectColumn -- MixerDockComponent wires this to
+    /** Forwarded from MixerDirectColumn -- BottomDockComponent wires this to
      *  MainComponent::makeChannelForNode, the same "Make channel" entry point every other trigger
      *  (header menu, canvas menu, module-card menu) already uses. */
     std::function<void(juce::AudioProcessorGraph::NodeID)> onMakeChannelForNode;
 
     /** Forwarded from every column's insert list after an add/reorder/remove mutation --
-     *  MixerDockComponent wires this to MainComponent::reconcileTimelineAfterGraphChange. */
+     *  BottomDockComponent wires this to MainComponent::reconcileTimelineAfterGraphChange. */
     std::function<void()> onGraphMutated;
 
     /** FRO15 (docs/mixer/sends-and-buses.md): creates a group/send bus channel -- bypassed EQ -> bypassed
@@ -54,7 +54,7 @@ public:
     juce::AudioProcessorGraph::NodeID createBus();
 
     /** FRO18: fires when the Arm key (rebindable "timelineArmFocusedTrack") is pressed with a
-     *  linked strip focused -- MixerDockComponent wires this to
+     *  linked strip focused -- BottomDockComponent wires this to
      *  MainComponent::performTrackEdit([&doc,id]{ doc.setTrackArmed(id, !doc.getTrack(id)->armed); }),
      *  never a direct TimelineDoc write (that would skip timelineChanged/reconcile -- root
      *  CLAUDE.md's "every graph change must reach MainComponent::timelineChanged" invariant, which

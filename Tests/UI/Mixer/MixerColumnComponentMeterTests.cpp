@@ -3,9 +3,9 @@
 // AND Master's readout) plus a PNG render-to-file inspection of a clipped meter. Drives a real,
 // off-screen MainComponent (MixerPanelComponentTests.cpp's own rig style) so the columns exist
 // through the real MixerPanelComponent::rebuild() wiring, not a hand-built stand-in.
+#include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
-#include "MixerDockActiveTabResetGuard.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -52,14 +52,14 @@ void synthesizeMouseUp(juce::Component& component, bool altDown) {
 } // namespace
 
 TEST(MixerColumnComponentMeterTests, AnAltClickOnOneColumnsReadoutResetsEveryColumnAndMaster) {
-    MixerDockActiveTabResetGuardMDT resetGuard;
+    BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMCMT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
     mc.simulateAddAudioTrackClick();
 
-    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     mixerPanel.rebuild();
     ASSERT_GE(mixerPanel.getColumnCount(), 4) << "2 strips + Direct + Master";
 
@@ -89,14 +89,14 @@ TEST(MixerColumnComponentMeterTests, AnAltClickOnOneColumnsReadoutResetsEveryCol
 }
 
 TEST(MixerColumnComponentMeterTests, TheResetMetersButtonResetsEveryColumn) {
-    MixerDockActiveTabResetGuardMDT resetGuard;
+    BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMCMT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
-    auto& dock = mc.getMixerDock();
-    dock.setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
+    auto& dock = mc.getBottomDock();
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
     auto& mixerPanel = dock.getMixerPanel();
     mixerPanel.rebuild();
 
@@ -111,14 +111,14 @@ TEST(MixerColumnComponentMeterTests, TheResetMetersButtonResetsEveryColumn) {
 }
 
 TEST(MixerColumnComponentMeterTests, ClippedMeterRendersToPngForVisualInspection) {
-    MixerDockActiveTabResetGuardMDT resetGuard;
+    BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMCMT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
     mc.simulateAddAudioTrackClick();
 
-    auto& dock = mc.getMixerDock();
-    dock.setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
+    auto& dock = mc.getBottomDock();
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
     dock.setSize(1400, 300);
     auto& mixerPanel = dock.getMixerPanel();
     mixerPanel.rebuild();

@@ -24,7 +24,7 @@ bool stepTrack(MainComponent& m, int direction) {
 } // namespace
 
 std::vector<MainComponent::CommandSpec> MainComponent::buildSelectionStepCommandRows() {
-    const auto timelineOpen = [](const MainComponent& m) { return m.isTimelineVisible; };
+    const auto timelineOpen = [](const MainComponent& m) { return m.isBottomDockVisible; };
     return {
         {AppCommands::selectNextModule,
          "Select Next Module",

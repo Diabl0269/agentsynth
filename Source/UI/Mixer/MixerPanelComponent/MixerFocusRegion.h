@@ -1,8 +1,8 @@
 #pragma once
 
 #include "MixerPanelComponent.h"
+#include "UI/Layout/BottomDockComponent.h"
 #include "UI/Layout/FocusRegion.h"
-#include "UI/Mixer/MixerDockComponent.h"
 #include <functional>
 
 // MixerFocusRegion.h -- FRO18 plan (a)'s "FRO12 seam": registers the "mixer" T159 focus region
@@ -14,7 +14,7 @@
 namespace synth::ui {
 
 /** Open only when both `dockOpen()` (the dock's own open/closed state -- MainComponent's
- *  isTimelineVisible today, always-true for a future undockable window with no closed state of
+ *  isBottomDockVisible today, always-true for a future undockable window with no closed state of
  *  its own) AND `dock`'s Mixer tab is the one active -- the docked Timeline/Mixer tabs share one
  *  root, so `dockOpen()` alone is no longer enough to say the mixer region is open (the dock can
  *  be open on the OTHER tab). No `open` callback: no direct-focus shortcut targets the mixer today
@@ -23,7 +23,7 @@ namespace synth::ui {
  *
  *  A null `dockOpen` means "always open", matching FocusRegion::isOpen's own null-means-always-open
  *  contract, rather than crashing on an empty std::function call. */
-inline void registerMixerFocusRegion(FocusRegionRegistry& registry, MixerDockComponent& dock,
+inline void registerMixerFocusRegion(FocusRegionRegistry& registry, BottomDockComponent& dock,
                                      std::function<bool()> dockOpen) {
     registry.addRegion(
         {"mixer", &dock.getMixerPanel(),

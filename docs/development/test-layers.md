@@ -201,19 +201,19 @@ rig's style):
 
 | File | Covers |
 |------|--------|
-| `MixerDockComponentTests.cpp` | tab strip switches without closing the dock; `toggleMixerPanel` (Cmd+Alt+M) opens on Mixer then closes on a second press; actionId round-trips to `AppCommands::toggleMixerPanel`; active tab persists across an `ApplicationProperties` reload |
-| `MixerDockResizeTests.cpp` | FRO231: the dock-wide resize handle on each of the Timeline / Mixer / MIDI Remote tabs (parameterized) — bounds and cursor, hit-test priority over the tab buttons, hover, total-height drag, live vs commit, stray click; plus `MainComponent`'s ownership of the height (default, persisted, clamp, smaller-window reclamp, hide/show, detached Timeline) |
+| `BottomDockComponentTests.cpp` | tab strip switches without closing the dock; `toggleMixerPanel` (Cmd+Alt+M) opens on Mixer then closes on a second press; actionId round-trips to `AppCommands::toggleMixerPanel`; active tab persists across an `ApplicationProperties` reload |
+| `BottomDockResizeTests.cpp` | FRO231: the dock-wide resize handle on each of the Timeline / Mixer / MIDI Remote tabs (parameterized) — bounds and cursor, hit-test priority over the tab buttons, hover, total-height drag, live vs commit, stray click; plus `MainComponent`'s ownership of the height (default, persisted, clamp, smaller-window reclamp, hide/show, detached Timeline) |
 | `MixerPanelComponentTests.cpp` | one column per strip plus Direct plus Master; themed PNG render smoke test (Obsidian plus Daylight, see the [`createComponentSnapshot` pattern](test-patterns.md#component-snapshot-smoke-tests)); clicking a column selects its owning macro (the clip-readout PNG inspection test is in [`../mixer/meters.md#test-coverage`](../mixer/meters.md#test-coverage)) |
 | `MixerFaderTests.cpp` | the fader's `SliderParameterAttachment` binding and dB readout, plus a regression test for a `MixerFader::parameterValueChanged` use-after-free (a `callAsync` lambda captured raw `this`; fixed with `SafePointer`) |
 
-Tests calling `dock.setActiveTab(...)` use `MixerDockActiveTabResetGuardMDT` (see the
+Tests calling `dock.setActiveTab(...)` use `BottomDockActiveTabResetGuardMDT` (see the
 [reset-guard pattern](test-patterns.md#shared-settings-file-reset-guard)). Every
 `Tests/UI/Timeline/TimelinePanel/*Tests.cpp` case, plus `PanelAnimationAndLoadingTests.cpp` and
 `TimelinePlayheadTests.cpp`, asserts the timeline panel's bounds and visibility through
 `TimelinePanelTestFixture.h`'s `timelinePanelBoundsInMainComponent(mc)` (`getLocalArea`, bounds are
-dock-relative) and `timelinePanelIsOpen(mc)` (`isVisible() && mixerDock.isVisible()`; `isShowing()`
+dock-relative) and `timelinePanelIsOpen(mc)` (`isVisible() && bottomDock.isVisible()`; `isShowing()`
 needs a real Desktop peer, unavailable headless), because `TimelinePanelComponent` nests inside
-`MixerDockComponent` rather than being `MainComponent`'s direct child.
+`BottomDockComponent` rather than being `MainComponent`'s direct child.
 
 ## MIDI Remote panel
 
@@ -229,8 +229,8 @@ The engine/model/learn-controller test suite this panel sits on top of lives in 
 | `ControllerSurfaceTests.cpp` | grid layout from `col`/`row`; activity decode onto the display-only widgets; drag-to-move reporting; a themed PNG render smoke test gated on `MIDI_SURFACE_PNG` |
 | `ControlInspectorTests.cpp` | Project vs Global assignment rows; takeover/range editing gated to a parameter target (`isTakeoverEditable()`) |
 
-Tests using `MixerDockComponent::Tab::MidiRemote` share the same
-`MixerDockActiveTabResetGuardMDT` reset guard as the Mixer panel tests above (`bottomDockActiveTab`
+Tests using `BottomDockComponent::Tab::MidiRemote` share the same
+`BottomDockActiveTabResetGuardMDT` reset guard as the Mixer panel tests above (`bottomDockActiveTab`
 is one shared on-disk settings key across all three tabs).
 
 ## Audio clip playback

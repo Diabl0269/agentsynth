@@ -39,17 +39,18 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // (docs/layout/chrome.md's "Panel collapse and persistence" table); the graph-topology-mutated and
     // Direct's "Make channel" callbacks route the mixer's own actions through the SAME funnels
     // every other "Make channel" trigger and every other graph-structural edit already use.
-    mixerDock.setApplicationProperties(&appProperties);
-    mixerDock.setOnGraphTopologyChanged([this] { reconcileTimelineAfterGraphChange(); });
-    mixerDock.setOnMakeChannelForNode([this](juce::AudioProcessorGraph::NodeID source) { makeChannelForNode(source); });
+    bottomDock.setApplicationProperties(&appProperties);
+    bottomDock.setOnGraphTopologyChanged([this] { reconcileTimelineAfterGraphChange(); });
+    bottomDock.setOnMakeChannelForNode(
+        [this](juce::AudioProcessorGraph::NodeID source) { makeChannelForNode(source); });
     // FRO12 (P9-6): each panel's ONE detached-window focus region (docs/control/shortcuts.md) --
     // stored on the host now, applied to whichever DetachedPanelWindow it builds later. Re-running
     // MainComponent's own registration pass on every detach/redock (rather than reordering/renaming
     // anything already registered above) is the guard rule the plan's focus section spells out.
-    mixerDock.getMidiRemoteHost().setHostedPanelFocusRegion("midiRemote", mixerDock.getMidiRemotePanel());
-    mixerDock.getTimelineHost().setHostedPanelFocusRegion("timeline", timelinePanel);
-    mixerDock.getMixerHost().setHostedPanelFocusRegion("mixer", mixerDock.getMixerPanel());
-    mixerDock.onPanelDetachStateChanged = [this] { rebuildFocusRegions(); };
+    bottomDock.getMidiRemoteHost().setHostedPanelFocusRegion("midiRemote", bottomDock.getMidiRemotePanel());
+    bottomDock.getTimelineHost().setHostedPanelFocusRegion("timeline", timelinePanel);
+    bottomDock.getMixerHost().setHostedPanelFocusRegion("mixer", bottomDock.getMixerPanel());
+    bottomDock.onPanelDetachStateChanged = [this] { rebuildFocusRegions(); };
     // Placement preference (Tab/Own panel/Window, docs/mixer/panel.md) -- read once here (both
     // panels already exist by this point in initialiseCommon()'s ORDER) and again on every
     // settings-file write, see MainComponent::changeListenerCallback's settings branch.
@@ -60,7 +61,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // top of detachAllModuleComponents() -- every graph-replacing path funnels through it,
     // undo/redo's lazy preRestore included). Without this, a graph-structural undo/redo that frees
     // a ChannelStripModule while the mixer still held its gain param destroys the stale
-    // MixerColumnComponent from mixerDock.rebuildMixer() (reconcileTimelineAfterGraphChange(),
+    // MixerColumnComponent from bottomDock.rebuildMixer() (reconcileTimelineAfterGraphChange(),
     // called from the AFTER-restore hook) AFTER the restore already freed the param --
     // MixerFader::unbind()'s removeListener() on that freed memory is what hung the Linux CI build
     // (deadlock inside CriticalSection::enter on freed memory) that this fixes.
@@ -68,21 +69,21 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // about to free, and a click on one must never assign to a node that no longer exists.
     graphEditor.onBeforeDetachAllModuleComponents = [this] {
         midiLearnController_.cancelPickTarget();
-        mixerDock.getMixerPanel().unbindAllColumns();
+        bottomDock.getMixerPanel().unbindAllColumns();
     };
     // The channel chip's click (TrackChannelLinkSurface::revealChannelForTrack, "THE P9-5 HOOK"
     // per its own comment): open the dock (same sequence performToggleMixerPanel's own "closed"
     // branch runs) before revealColumnForStrip switches tabs and scrolls to the column -- a closed
     // dock has nothing on screen to scroll to yet.
     trackChannelLink_.setMixerRevealHook([this](juce::AudioProcessorGraph::NodeID stripId) {
-        if (!isTimelineVisible) {
-            isTimelineVisible = true;
-            appProperties.getUserSettings()->setValue("timelinePanelVisible", "1");
+        if (!isBottomDockVisible) {
+            isBottomDockVisible = true;
+            appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, "1");
             appProperties.getUserSettings()->saveIfNeeded();
             applyToolbarIcons();
             beginPanelSlide();
         }
-        return mixerDock.revealColumnForStrip(stripId);
+        return bottomDock.revealColumnForStrip(stripId);
     });
 
     // The user's bindings for the three surfaces that resolve their OWN keys (see
@@ -102,13 +103,13 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // letters with no manager installed (MixerPanelComponent::matchesAction), same "no manager
     // installed" contract every other surface action in this app follows, rather than requiring
     // every id it consults to be pre-registered.
-    mixerDock.getMixerPanel().setShortcutManager(&shortcutManager);
+    bottomDock.getMixerPanel().setShortcutManager(&shortcutManager);
     // FRO18: Arm reaches the focused strip's linked track through the SAME performTrackEdit
     // one-undo-step path the Timeline header row's own R key uses -- never a direct TimelineDoc
     // write (that would skip the undo bracket every other track edit goes through). Routed through
     // setOnArmTrack, the sibling forwarder to setOnGraphTopologyChanged/setOnMakeChannelForNode
     // above, rather than reaching through getMixerPanel() to set the panel's callback directly.
-    mixerDock.setOnArmTrack([this](synth::TrackId id) {
+    bottomDock.setOnArmTrack([this](synth::TrackId id) {
         performTrackEdit([this, id] {
             if (auto* track = timelineDoc.getTrack(id))
                 timelineDoc.setTrackArmed(id, !track->armed);
@@ -119,8 +120,8 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // reports a desired TOTAL dock-carve height, measured from the dock's pinned bottom edge --
     // exactly what setTimelinePanelHeight owns, so no translation. THIS component clamps it, lays
     // out live, and persists once the drag ends (not per pixel).
-    mixerDock.onResizeHeight = [this](int desiredHeight) { setTimelinePanelHeight(desiredHeight, /*persist=*/false); };
-    mixerDock.onResizeHeightCommitted = [this](int desiredHeight) {
+    bottomDock.onResizeHeight = [this](int desiredHeight) { setTimelinePanelHeight(desiredHeight, /*persist=*/false); };
+    bottomDock.onResizeHeightCommitted = [this](int desiredHeight) {
         setTimelinePanelHeight(desiredHeight, /*persist=*/true);
     };
 }

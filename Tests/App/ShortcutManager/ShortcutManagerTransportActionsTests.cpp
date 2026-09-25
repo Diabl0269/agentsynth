@@ -55,7 +55,7 @@ private:
 // TransportToggleMetronomeFlipsMetronomeAndPersists writes "timelineMetronomeEnabled"/
 // "timelineCountInBars" into the SAME on-disk "Agent Synth" settings file every MainComponent in
 // this process reads (see TimelineTransportBar::setApplicationProperties) -- reset before AND
-// after, the same idiom FocusArbitrationTestFixture.h's resetTimelinePanelVisibleKey uses, so this
+// after, the same idiom FocusArbitrationTestFixture.h's resetBottomDockVisibleKey uses, so this
 // test can never leak into another test's defaults or the developer's own real settings.
 void resetMetronomeKeys() {
     juce::PropertiesFile::Options opts;

@@ -1,11 +1,11 @@
-// MixerDockResizeTests.cpp -- FRO231: the bottom dock resizes from ONE top-edge handle on every
+// BottomDockResizeTests.cpp -- FRO231: the bottom dock resizes from ONE top-edge handle on every
 // tab (Timeline, Mixer, MIDI Remote), and MainComponent owns the value the drag reports: default
 // from the theme metric, clamp, live relayout, persistence on drag end.
 
 #include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h"
-#include "MixerDockActiveTabResetGuard.h"
+#include "BottomDockActiveTabResetGuard.h"
+#include "UI/Layout/BottomDockComponent.h"
 #include "UI/Layout/PanelResizeHandle.h"
-#include "UI/Mixer/MixerDockComponent.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -13,7 +13,7 @@
 
 namespace {
 
-using Dock = synth::ui::MixerDockComponent;
+using Dock = synth::ui::BottomDockComponent;
 using Handle = synth::ui::PanelResizeHandle;
 
 // Leaves a height in the shared settings file the way an earlier session would have.
@@ -32,22 +32,22 @@ int readPersistedDockHeight(MainComponent& mc) {
 
 // Timeline-panel fixture (clears the height key) plus the dock-tab reset guard, since these tests
 // switch the persisted active tab.
-class MixerDockResizeTest : public TimelinePanelIntegrationTest {
+class BottomDockResizeTest : public TimelinePanelIntegrationTest {
 protected:
-    MixerDockActiveTabResetGuardMDT tabGuard_;
+    BottomDockActiveTabResetGuardMDT tabGuard_;
 };
 
-class MixerDockResizeOnEveryTabTest
-    : public MixerDockResizeTest
+class BottomDockResizeOnEveryTabTest
+    : public BottomDockResizeTest
     , public ::testing::WithParamInterface<Dock::Tab> {
 protected:
     // An open dock at the default height, on the tab under test.
     void openDockOnTab(MainComponent& mc) {
         mc.setSize(1600, 900);
         mc.simulateToggleTimelineClick();
-        mc.getMixerDock().setActiveTab(GetParam());
-        ASSERT_EQ(mc.getMixerDock().getActiveTab(), GetParam());
-        ASSERT_EQ(mc.getMixerDock().getHeight(), 220);
+        mc.getBottomDock().setActiveTab(GetParam());
+        ASSERT_EQ(mc.getBottomDock().getActiveTab(), GetParam());
+        ASSERT_EQ(mc.getBottomDock().getHeight(), 220);
     }
 };
 
@@ -65,13 +65,13 @@ std::string tabName(const ::testing::TestParamInfo<Dock::Tab>& info) {
 
 } // namespace
 
-INSTANTIATE_TEST_SUITE_P(EveryTab, MixerDockResizeOnEveryTabTest,
+INSTANTIATE_TEST_SUITE_P(EveryTab, BottomDockResizeOnEveryTabTest,
                          ::testing::Values(Dock::Tab::Timeline, Dock::Tab::Mixer, Dock::Tab::MidiRemote), tabName);
 
-TEST_P(MixerDockResizeOnEveryTabTest, HandleCoversTheDockTopEdgeAndKeepsTheTabButtonsClear) {
+TEST_P(BottomDockResizeOnEveryTabTest, HandleCoversTheDockTopEdgeAndKeepsTheTabButtonsClear) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     openDockOnTab(mc);
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
 
     auto& handle = dock.getResizeHandle();
     EXPECT_EQ(handle.getBounds(), juce::Rectangle<int>(0, 0, dock.getWidth(), Handle::kHeight));
@@ -90,10 +90,10 @@ TEST_P(MixerDockResizeOnEveryTabTest, HandleCoversTheDockTopEdgeAndKeepsTheTabBu
     EXPECT_EQ(dock.getMidiRemoteHost().getY(), Dock::kTabStripHeight);
 }
 
-TEST_P(MixerDockResizeOnEveryTabTest, HandleWinsTheHitTestAtTheTopEdgeOverEveryTabButton) {
+TEST_P(BottomDockResizeOnEveryTabTest, HandleWinsTheHitTestAtTheTopEdgeOverEveryTabButton) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     openDockOnTab(mc);
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
     auto& handle = dock.getResizeHandle();
 
     EXPECT_EQ(dock.getComponentAt(10, 2), &handle);
@@ -107,10 +107,10 @@ TEST_P(MixerDockResizeOnEveryTabTest, HandleWinsTheHitTestAtTheTopEdgeOverEveryT
     }
 }
 
-TEST_P(MixerDockResizeOnEveryTabTest, HoverStateFlipsOnlyOnEnterAndExit) {
+TEST_P(BottomDockResizeOnEveryTabTest, HoverStateFlipsOnlyOnEnterAndExit) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     openDockOnTab(mc);
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
     auto& handle = dock.getResizeHandle();
 
     EXPECT_FALSE(dock.isResizeHandleHovered());
@@ -124,10 +124,10 @@ TEST_P(MixerDockResizeOnEveryTabTest, HoverStateFlipsOnlyOnEnterAndExit) {
 
 // The dock reports a DESIRED TOTAL height measured from its fixed bottom edge, unclamped -- no
 // tab-strip translation, clamping and layout belong to the owner; commit fires once, on mouse-up.
-TEST_P(MixerDockResizeOnEveryTabTest, DragReportsTheTotalDockHeightAndCommitsOnlyOnMouseUpAfterMoving) {
+TEST_P(BottomDockResizeOnEveryTabTest, DragReportsTheTotalDockHeightAndCommitsOnlyOnMouseUpAfterMoving) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     openDockOnTab(mc);
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
 
     std::vector<int> live, committed;
     dock.onResizeHeight = [&live](int h) { live.push_back(h); };
@@ -166,10 +166,10 @@ TEST_P(MixerDockResizeOnEveryTabTest, DragReportsTheTotalDockHeightAndCommitsOnl
     EXPECT_TRUE(committed.empty());
 }
 
-TEST_P(MixerDockResizeOnEveryTabTest, DraggingResizesLiveAndPersistsOnDragEnd) {
+TEST_P(BottomDockResizeOnEveryTabTest, DraggingResizesLiveAndPersistsOnDragEnd) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     openDockOnTab(mc);
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
     auto& handle = dock.getResizeHandle();
 
     handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
@@ -194,10 +194,10 @@ TEST_P(MixerDockResizeOnEveryTabTest, DraggingResizesLiveAndPersistsOnDragEnd) {
     EXPECT_EQ(mc2.getTimelinePanelHeight(), 362);
 }
 
-TEST_P(MixerDockResizeOnEveryTabTest, AStrayClickOnTheHandleNeverPersists) {
+TEST_P(BottomDockResizeOnEveryTabTest, AStrayClickOnTheHandleNeverPersists) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     openDockOnTab(mc);
-    auto& handle = mc.getMixerDock().getResizeHandle();
+    auto& handle = mc.getBottomDock().getResizeHandle();
 
     handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
     handle.mouseUp(makeClickEvent(handle, {10.0f, 2.0f}));
@@ -207,11 +207,11 @@ TEST_P(MixerDockResizeOnEveryTabTest, AStrayClickOnTheHandleNeverPersists) {
 
 // The height belongs to the dock, not to whichever panel is showing: resizing on one tab carries
 // to every other one.
-TEST_F(MixerDockResizeTest, AHeightDraggedOnOneTabHoldsWhenSwitchingTabs) {
+TEST_F(BottomDockResizeTest, AHeightDraggedOnOneTabHoldsWhenSwitchingTabs) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
     mc.simulateToggleTimelineClick();
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
 
     dock.setActiveTab(Dock::Tab::Mixer);
     auto& handle = dock.getResizeHandle();
@@ -229,11 +229,11 @@ TEST_F(MixerDockResizeTest, AHeightDraggedOnOneTabHoldsWhenSwitchingTabs) {
 // The handle belongs to the dock, so a detached Timeline (its panel now lives in its own window)
 // no longer takes the resize gesture with it: the dock stays resizable, and the panel has no
 // handle of its own left to drag.
-TEST_F(MixerDockResizeTest, ADetachedTimelineStillLeavesTheDockResizable) {
+TEST_F(BottomDockResizeTest, ADetachedTimelineStillLeavesTheDockResizable) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
     mc.simulateToggleTimelineClick();
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
 
     dock.getTimelineHost().setDetached(true);
     ASSERT_TRUE(dock.getTimelineHost().isDetached());
@@ -251,7 +251,7 @@ TEST_F(MixerDockResizeTest, ADetachedTimelineStillLeavesTheDockResizable) {
 
 // The transport controls now use their whole strip: nothing inside the Timeline panel gives up
 // rows to a handle any more.
-TEST_F(MixerDockResizeTest, TheTimelinePanelHasNoHandleOfItsOwnAndItsTransportBarUsesTheFullStrip) {
+TEST_F(BottomDockResizeTest, TheTimelinePanelHasNoHandleOfItsOwnAndItsTransportBarUsesTheFullStrip) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
     mc.simulateToggleTimelineClick();
@@ -266,19 +266,19 @@ TEST_F(MixerDockResizeTest, TheTimelinePanelHasNoHandleOfItsOwnAndItsTransportBa
 
 // ---- MainComponent owns the height the dock reports ----
 
-TEST_F(MixerDockResizeTest, AbsentSettingFallsBackToTheThemeMetric) {
+TEST_F(BottomDockResizeTest, AbsentSettingFallsBackToTheThemeMetric) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
     mc.simulateToggleTimelineClick();
 
     EXPECT_EQ(mc.getTimelinePanelHeight(), 220); // Metrics::timelinePanelHeight literal default
-    EXPECT_EQ(mc.getMixerDock().getHeight(), 220);
+    EXPECT_EQ(mc.getBottomDock().getHeight(), 220);
     // The panel's own local height is the dock's total carve minus the tab strip.
     EXPECT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 220 - Dock::kTabStripHeight);
     EXPECT_EQ(readPersistedDockHeight(mc), -1) << "showing the panel writes no height";
 }
 
-TEST_F(MixerDockResizeTest, PersistedHeightIsHonouredAtStartup) {
+TEST_F(BottomDockResizeTest, PersistedHeightIsHonouredAtStartup) {
     persistDockHeight(400);
 
     MainComponent mc(std::make_unique<MockProviderTL>());
@@ -286,19 +286,19 @@ TEST_F(MixerDockResizeTest, PersistedHeightIsHonouredAtStartup) {
     mc.simulateToggleTimelineClick();
     ASSERT_TRUE(timelinePanelIsOpen(mc));
 
-    const auto& dock = mc.getMixerDock();
+    const auto& dock = mc.getBottomDock();
     EXPECT_EQ(mc.getTimelinePanelHeight(), 400);
     EXPECT_EQ(dock.getHeight(), 400);
     EXPECT_EQ(dock.getBottom(), mc.getStatusBar().getBounds().getY());
     EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), dock.getY());
 }
 
-TEST_F(MixerDockResizeTest, HeightIsClampedToTheMetricFloorAndThreeQuartersOfTheWindow) {
+TEST_F(BottomDockResizeTest, HeightIsClampedToTheMetricFloorAndThreeQuartersOfTheWindow) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
     mc.simulateToggleTimelineClick();
 
-    auto& dock = mc.getMixerDock();
+    auto& dock = mc.getBottomDock();
     ASSERT_TRUE(dock.onResizeHeight != nullptr);
 
     dock.onResizeHeight(5000);
@@ -316,7 +316,7 @@ TEST_F(MixerDockResizeTest, HeightIsClampedToTheMetricFloorAndThreeQuartersOfThe
     EXPECT_EQ(readPersistedDockHeight(mc), 675) << "the committed value is the clamped one";
 }
 
-TEST_F(MixerDockResizeTest, ASmallerWindowReclampsTheHeightSoTheCanvasSurvives) {
+TEST_F(BottomDockResizeTest, ASmallerWindowReclampsTheHeightSoTheCanvasSurvives) {
     persistDockHeight(600);
 
     MainComponent mc(std::make_unique<MockProviderTL>());
@@ -326,9 +326,9 @@ TEST_F(MixerDockResizeTest, ASmallerWindowReclampsTheHeightSoTheCanvasSurvives) 
 
     mc.setSize(1000, 400);
     EXPECT_EQ(mc.getTimelinePanelHeight(), 300) << "75% of the 400 px window";
-    EXPECT_EQ(mc.getMixerDock().getHeight(), 300);
+    EXPECT_EQ(mc.getBottomDock().getHeight(), 300);
     EXPECT_GT(mc.getGraphEditor().getBounds().getHeight(), 0);
-    EXPECT_EQ(mc.getMixerDock().getBottom(), mc.getStatusBar().getBounds().getY());
+    EXPECT_EQ(mc.getBottomDock().getBottom(), mc.getStatusBar().getBounds().getY());
 
     // Shorter than 4/3 of the floor (below the enforced minWindowHeight, so a corner case only):
     // the floor wins rather than the cap.
@@ -336,15 +336,15 @@ TEST_F(MixerDockResizeTest, ASmallerWindowReclampsTheHeightSoTheCanvasSurvives) 
     EXPECT_EQ(mc.getTimelinePanelHeight(), 220);
 }
 
-TEST_F(MixerDockResizeTest, HidingTheDockReturnsTheCanvasAndReshowingKeepsTheDraggedHeight) {
+TEST_F(BottomDockResizeTest, HidingTheDockReturnsTheCanvasAndReshowingKeepsTheDraggedHeight) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
     const auto canvasWithNoPanel = mc.getGraphEditor().getBounds();
 
     mc.simulateToggleTimelineClick();
     // The dock reports TOTAL height, so 420 here is exactly the dock's carve.
-    mc.getMixerDock().onResizeHeight(420);
-    ASSERT_EQ(mc.getMixerDock().getHeight(), 420);
+    mc.getBottomDock().onResizeHeight(420);
+    ASSERT_EQ(mc.getBottomDock().getHeight(), 420);
 
     mc.simulateToggleTimelineClick();      // hide
     EXPECT_FALSE(timelinePanelIsOpen(mc)); // see HiddenByDefaultAndCarvesNothing's comment
@@ -352,6 +352,6 @@ TEST_F(MixerDockResizeTest, HidingTheDockReturnsTheCanvasAndReshowingKeepsTheDra
     EXPECT_EQ(mc.getTimelinePanelHeight(), 420) << "the height outlives a hide";
 
     mc.simulateToggleTimelineClick(); // show again
-    EXPECT_EQ(mc.getMixerDock().getHeight(), 420);
-    EXPECT_EQ(mc.getMixerDock().getBottom(), mc.getStatusBar().getBounds().getY());
+    EXPECT_EQ(mc.getBottomDock().getHeight(), 420);
+    EXPECT_EQ(mc.getBottomDock().getBottom(), mc.getStatusBar().getBounds().getY());
 }

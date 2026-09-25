@@ -140,7 +140,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
         // from inside the tab is not guaranteed to resolve back to THIS AppLookAndFeel instance,
         // especially in the plugin build. Re-reading here on every settings write, same idiom as
         // the two calls above, reaches the one shared AppLookAndFeel unconditionally instead.
-        // Repainting mixerDock.getMixerPanel()/timelinePanel directly (not via the component tree)
+        // Repainting bottomDock.getMixerPanel()/timelinePanel directly (not via the component tree)
         // works whether each is currently docked or reparented into its own DetachedPanelWindow —
         // both are stable MainComponent-owned objects; Component::repaint() resolves the correct
         // top-level peer to invalidate wherever the object currently lives, not where it was
@@ -149,7 +149,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
         // branch is expected to fire at drag-frame rate without hammering disk.
         lookAndFeel->setMeterColourStopsOverride(
             synth::ui::loadMeterColourStopsOverride(*appProperties.getUserSettings()));
-        mixerDock.getMixerPanel().repaint();
+        bottomDock.getMixerPanel().repaint();
         timelinePanel.repaint();
         return;
     }
@@ -278,15 +278,15 @@ void MainComponent::timerCallback() {
     // what it did before). This is what starts/stops the playhead's playing-only 30 Hz strip
     // repaint; see docs/layout/animation.md.
     //
-    // FRO11 (P9-5): timelinePanel is now nested inside mixerDock (the Timeline/Mixer tab
+    // FRO11 (P9-5): timelinePanel is now nested inside bottomDock (the Timeline/Mixer tab
     // strip), so its own isVisible() flag only reflects "the Timeline tab is selected", not "the
-    // dock is open" -- AND mixerDock.isVisible(), composing both local flags without walking up
-    // to a real OS peer, matching mixerDock's own isMixerTabActive() && isVisible() gate for the
+    // dock is open" -- AND bottomDock.isVisible(), composing both local flags without walking up
+    // to a real OS peer, matching bottomDock's own isMixerTabActive() && isVisible() gate for the
     // meters just below. Deliberately not isShowing(): it additionally requires the ROOT
     // component to have a real Desktop peer (juce::Component::isShowing()'s own implementation),
     // which is never true in a headless test -- this codebase's own tests construct MainComponent
     // without ever calling addToDesktop().
-    if (timelinePanel.isVisible() && mixerDock.isVisible()) {
+    if (timelinePanel.isVisible() && bottomDock.isVisible()) {
         // Device-buffer latency only. The graph's own reported latency is deliberately left out:
         // it is report-only, patch-dependent and mostly zero, whereas the output buffer is the term
         // that actually separates "rendered" from "heard".
@@ -321,15 +321,15 @@ void MainComponent::timerCallback() {
     // (mixerPlacement_.isOwnPanelShowing()) -- a detached/own-panel mixer previously never ticked
     // at all, even fully on screen, because the OLD check only ever looked at this DOCKED
     // component's own tab/visibility state.
-    if (mixerDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing())
-        mixerDock.refreshMeters();
+    if (bottomDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing())
+        bottomDock.refreshMeters();
 
     // FRO131 (docs/control/midi-remote-ui.md#surface-centre): same "existing 10 Hz tick, only
     // while showing" shape as the mixer meters above -- well under the design doc's <=30 Hz cap,
     // and no free-running timer of its own. MidiRemote has no Own-panel-style placement, so
     // isMidiRemoteShowing() alone (docked-and-active OR detached) is the whole gate.
-    if (mixerDock.isMidiRemoteShowing())
-        mixerDock.refreshMidiRemoteActivity();
+    if (bottomDock.isMidiRemoteShowing())
+        bottomDock.refreshMidiRemoteActivity();
 
     // Status bar polls at 5 Hz (every 2nd tick of the 10 Hz timer). update() is gated — it
     // only repaints the status bar when a displayed value actually changes. ZERO logging.

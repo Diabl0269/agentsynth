@@ -232,7 +232,7 @@ protected:
             s->setValue("librarySidebarVisible", "1");
             s->setValue("aiPanelVisible", "0");
             s->setValue("minimapVisible", "1");
-            s->setValue("timelinePanelVisible", "0");
+            s->setValue("bottomDockVisible", "0");
             // T184: pinned ON (the default) so an earlier PreferencesSettingsTabTests run that
             // persisted "0" to this same shared on-disk settings file can't silently flip these
             // tests' trigger condition off.

@@ -20,7 +20,7 @@ namespace synth::ui {
 // Docked, this draws a small header strip (title + a right-aligned icon-only detach button) above
 // the slot where `panel` lives -- UNLESS setEmbeddedHeader(true) is set, in which case this host
 // draws NO header of its own while docked (its owner has embedded its own equivalent control into
-// its own chrome instead -- see MixerDockComponent's tab strip in Tab placement). Detached, `panel`
+// its own chrome instead -- see BottomDockComponent's tab strip in Tab placement). Detached, `panel`
 // (and the header's button + title) are reparented into a DetachedPanelWindow, which carries its
 // own copy of the header strip with the button now in "Dock back" state; closing that window (or
 // clicking the button again) redocks everything here.
@@ -43,7 +43,7 @@ public:
     juce::DrawableButton& getDetachButton() noexcept { return detachButton_; }
 
     /** When true, this host draws no header strip of its own while DOCKED -- its owner has
-     *  embedded getDetachButton() into its own chrome (MixerDockComponent's tab strip in Tab
+     *  embedded getDetachButton() into its own chrome (BottomDockComponent's tab strip in Tab
      *  placement). Has no effect on the DETACHED window's header, which always shows one
      *  regardless. Safe to flip at runtime (a live Preferences placement change). */
     void setEmbeddedHeader(bool embedded);
@@ -58,7 +58,7 @@ public:
      *  addToDesktop() call -- never from setVisible()). `Main.cpp`'s `MainWindow` and
      *  `PluginEditor.cpp`'s `AgentSynthPluginEditor` -- the app's and the plugin's only REAL
      *  construction sites for a `MainComponent` -- call this true, once, right after construction.
-     *  Every headless test builds a `MainComponent`/`MixerDockComponent`/`DetachablePanelHost`
+     *  Every headless test builds a `MainComponent`/`BottomDockComponent`/`DetachablePanelHost`
      *  directly and leaves this at its default of false, so `setDetached(true)` there stays exactly
      *  as before: no native peer, ever (`DetachRedockStateTests.cpp` detaches a real, off-screen
      *  `MainComponent` this way). */
@@ -72,7 +72,7 @@ public:
     void setHostedPanelFocusRegion(juce::String id, juce::Component& root);
 
     /** Fires after every setDetached() call completes (docked or detached), including one driven
-     *  by the DETACHED window's own close button -- e.g. so MixerDockComponent can refresh its tab
+     *  by the DETACHED window's own close button -- e.g. so BottomDockComponent can refresh its tab
      *  strip, or the owner can re-run registerFocusRegions(). */
     std::function<void()> onDetachedStateChanged;
 
@@ -80,7 +80,7 @@ public:
     void paint(juce::Graphics&) override;
     void lookAndFeelChanged() override;
 
-    static constexpr int kHeaderStripHeight = 22; // == MixerDockComponent::kTabStripHeight
+    static constexpr int kHeaderStripHeight = 22; // == BottomDockComponent::kTabStripHeight
 
     // ---- Testing hooks (DetachablePanelHostTests.cpp) ----
     DetachedPanelWindow* getDetachedWindowForTest() const { return window_.get(); }

@@ -76,9 +76,9 @@ TEST_F(TimelinePanelIntegrationTest, HiddenByDefaultAndCarvesNothing) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
 
-    EXPECT_FALSE(mc.isTimelineConfiguredVisible());
+    EXPECT_FALSE(mc.isBottomDockConfiguredVisible());
     // FRO11 (P9-5): timelinePanelIsOpen(), not isVisible() -- the panel now lives inside
-    // MixerDockComponent (see its own comment), and its own visibility flag reflects only "the
+    // BottomDockComponent (see its own comment), and its own visibility flag reflects only "the
     // Timeline tab is selected" (true by default), not "the dock is open".
     EXPECT_FALSE(timelinePanelIsOpen(mc));
     // No carve: the graph editor still reaches all the way down to the status bar.
@@ -93,17 +93,17 @@ TEST_F(TimelinePanelIntegrationTest, ToggleCarvesFullWidthAboveStatusBar) {
     const int graphRight = mc.getGraphEditor().getBounds().getRight();
 
     mc.simulateToggleTimelineClick();
-    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
     ASSERT_TRUE(timelinePanelIsOpen(mc));
 
     // FRO11 (P9-5): MainComponent-relative bounds -- see timelinePanelBoundsInMainComponent's own
     // comment for why a raw mc.getTimelinePanel().getBounds() can no longer be compared directly
     // against the status bar / graph editor (different coordinate origins now that the panel is
-    // nested inside MixerDockComponent).
+    // nested inside BottomDockComponent).
     const auto panelBounds = timelinePanelBoundsInMainComponent(mc);
     EXPECT_EQ(panelBounds.getX(), 0);
     EXPECT_EQ(panelBounds.getWidth(), 1600);
-    // Metrics::timelinePanelHeight literal default (220) minus MixerDockComponent's own 22px tab
+    // Metrics::timelinePanelHeight literal default (220) minus BottomDockComponent's own 22px tab
     // strip -- the dock's TOTAL carve is still 220, but the tab strip now eats part of it.
     EXPECT_EQ(panelBounds.getHeight(), 198);
     // Sits directly above the status bar.
@@ -124,25 +124,25 @@ TEST_F(TimelinePanelIntegrationTest, ToggleBackRestores) {
     const auto initialBounds = mc.getGraphEditor().getBounds();
 
     mc.simulateToggleTimelineClick();
-    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
 
     mc.simulateToggleTimelineClick();
-    EXPECT_FALSE(mc.isTimelineConfiguredVisible());
+    EXPECT_FALSE(mc.isBottomDockConfiguredVisible());
     EXPECT_FALSE(timelinePanelIsOpen(mc)); // see HiddenByDefaultAndCarvesNothing's comment
     EXPECT_EQ(mc.getGraphEditor().getBounds(), initialBounds);
 }
 
 TEST_F(TimelinePanelIntegrationTest, VisibilityPersists) {
     MainComponent mc(std::make_unique<MockProviderTL>());
-    ASSERT_FALSE(mc.isTimelineConfiguredVisible());
+    ASSERT_FALSE(mc.isBottomDockConfiguredVisible());
 
     mc.simulateToggleTimelineClick();
-    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
-    EXPECT_TRUE(mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("timelinePanelVisible", false));
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
+    EXPECT_TRUE(mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("bottomDockVisible", false));
 
     // A second MainComponent reads the same on-disk properties file — visible from startup.
     MainComponent mc2(std::make_unique<MockProviderTL>());
-    EXPECT_TRUE(mc2.isTimelineConfiguredVisible());
+    EXPECT_TRUE(mc2.isBottomDockConfiguredVisible());
     EXPECT_TRUE(mc2.getTimelinePanel().isVisible());
 }
 

@@ -59,7 +59,7 @@ TEST_F(FocusArbitrationTest, SelectTrackCommandsAreInactiveWhileTheTimelineIsHid
     MainComponent mc(std::make_unique<FocusMockProvider>());
     mc.setSize(1600, 900);
     mc.getTimelineDoc().addTrack(synth::TrackKind::Midi, "A");
-    ASSERT_FALSE(mc.isTimelineConfiguredVisible());
+    ASSERT_FALSE(mc.isBottomDockConfiguredVisible());
 
     EXPECT_FALSE(commandIsActive(mc, AppCommands::selectNextTrack));
     EXPECT_FALSE(commandIsActive(mc, AppCommands::selectPreviousTrack));
@@ -74,7 +74,7 @@ TEST_F(FocusArbitrationTest, SelectNextAndPreviousTrackMoveTheFocusedTrackRow) {
     doc.addTrack(synth::TrackKind::Midi, "B");
     doc.addTrack(synth::TrackKind::Midi, "C");
     mc.simulateToggleTimelineClick();
-    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
     auto& panel = mc.getTimelinePanel();
     ASSERT_EQ(panel.getTrackHeaderCount(), 3);
     ASSERT_EQ(panel.getFocusedTrackIndexForTest(), -1);
@@ -94,7 +94,7 @@ TEST_F(FocusArbitrationTest, SelectTrackCommandsReportFalseWithNoTracks) {
     MainComponent mc(std::make_unique<FocusMockProvider>());
     mc.setSize(1600, 900);
     mc.simulateToggleTimelineClick();
-    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
     ASSERT_EQ(mc.getTimelinePanel().getTrackHeaderCount(), 0);
 
     EXPECT_FALSE(invoke(mc, AppCommands::selectNextTrack));

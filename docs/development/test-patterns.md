@@ -144,8 +144,8 @@ setting leaks into every other such test.
 The fix is a local RAII guard per affected test that opens the same `ApplicationProperties`/
 `Options` and `removeValue()`s only the key or keys that suite touches, in both its constructor and
 destructor, so it is safe regardless of test order or a prior crashed run.
-`ChannelFlowTestFixture.h`'s `ChannelFlowTest::resetKeys()` and `MixerDockActiveTabResetGuard.h` are
-the two implementations; `MixerDockActiveTabResetGuardMDT` resets `"bottomDockActiveTab"` so a
+`ChannelFlowTestFixture.h`'s `ChannelFlowTest::resetKeys()` and `BottomDockActiveTabResetGuard.h` are
+the two implementations; `BottomDockActiveTabResetGuardMDT` resets `"bottomDockActiveTab"` so a
 PNG-snapshot test's Mixer-tab switch cannot leak into a later test's "Timeline is the default"
 assumption.
 
