@@ -549,6 +549,7 @@ private:
     // ---- TrackHeaderHost ----
     std::vector<BindingOption> getAvailableTrackInNodes(synth::TrackId forTrack) override;
     juce::String getNodeDisplayName(const juce::String& uuid) override;
+    juce::String getParameterDisplayName(const juce::String& uuid, const juce::String& paramId) override;
     void bindTrackTo(synth::TrackId track, const juce::String& uuid) override;
     void createAndBindTrackInNode(synth::TrackId track) override;
     void selectNodeInGraph(const juce::String& uuid) override;

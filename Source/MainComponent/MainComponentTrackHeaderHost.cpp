@@ -86,6 +86,21 @@ juce::String MainComponent::getNodeDisplayName(const juce::String& uuid) {
     return describeNodeForBinding(findNodeByUuid(uuid));
 }
 
+// A lane's parameter name for the automation lane picker. Built-in paramIds read fine ("cutoff"),
+// but a hosted plugin's are opaque (a VST3's are numbers), so resolve the live parameter through
+// the lane binding's own rules (exact id, then index-hint rescue) and use its name.
+juce::String MainComponent::getParameterDisplayName(const juce::String& uuid, const juce::String& paramId) {
+    auto* node = findNodeByUuid(uuid);
+    if (node == nullptr)
+        return {};
+    auto* processor = node->getProcessor();
+    const int hint = synth::captureParamIndexHint(processor, paramId);
+    const auto resolution = synth::resolveLaneParameter(processor, paramId, hint);
+    if (auto* param = resolution.liveParameter())
+        return param->getName(64);
+    return {};
+}
+
 void MainComponent::bindTrackTo(synth::TrackId track, const juce::String& uuid) {
     if (uuid.isEmpty())
         return;

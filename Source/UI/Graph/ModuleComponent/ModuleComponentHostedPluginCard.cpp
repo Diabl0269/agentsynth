@@ -137,7 +137,13 @@ void ModuleComponent::HostedCardBinding::addKnob(const synth::ResolvedCardSlot& 
     slider->setComponentID("hostedKnob:" + resolved.slot.paramId);
     styleHostedKnob(*slider);
     card_.addAndMakeVisible(slider);
-    card_.sliderParams.add(nullptr);
+    // FRO137: mirrors createControls()'s own addMouseListener(this) for a generic auto-UI slider --
+    // without it a right-click never reaches ModuleComponent::mouseDown at all, which is exactly
+    // why a hosted knob was inert to right-click before this (docs/control/plugin-card-layout.md's
+    // "Not yet wired" note).
+    slider->addMouseListener(&card_, false);
+    card_.sliderParams.add(nullptr); // a hosted parameter is not a RangedAudioParameter
+    card_.registerHostedMidiLearnable(*slider, *resolved.param, resolved.slot.paramId);
 
     auto* label = card_.sliderLabels.add(new juce::Label(text, text));
     label->setJustificationType(juce::Justification::centred);
@@ -151,6 +157,8 @@ void ModuleComponent::HostedCardBinding::addToggle(const synth::ResolvedCardSlot
     auto* toggle = card_.toggles.add(new detail::MidiLearnableToggleButton(text));
     toggle->setComponentID("hostedToggle:" + resolved.slot.paramId);
     card_.addAndMakeVisible(toggle);
+    toggle->addMouseListener(&card_, false); // FRO137: see addKnob()'s own comment
+    card_.registerHostedMidiLearnable(*toggle, *resolved.param, resolved.slot.paramId);
 
     wireGestures(*card_.hostedAttachments_.add(new HostedParameterAttachment(*resolved.param, *toggle)),
                  *resolved.param);
@@ -160,7 +168,9 @@ void ModuleComponent::HostedCardBinding::addChoice(const synth::ResolvedCardSlot
     auto* combo = card_.comboBoxes.add(new juce::ComboBox());
     combo->setComponentID("hostedChoice:" + resolved.slot.paramId);
     card_.addAndMakeVisible(combo);
-    card_.comboParams.add(nullptr);
+    combo->addMouseListener(&card_, false); // FRO137: see addKnob()'s own comment
+    card_.comboParams.add(nullptr);         // a hosted parameter is not a RangedAudioParameter
+    card_.registerHostedMidiLearnable(*combo, *resolved.param, resolved.slot.paramId);
 
     card_.addAndMakeVisible(card_.comboLabels.add(new juce::Label(text, text)));
 
@@ -272,6 +282,11 @@ void ModuleComponent::unbindHostedPluginCard(bool paramsAlive) {
             attachment->abandon();
     }
     hostedAttachments_.clear();
+
+    // FRO137: drop every hosted registry entry BEFORE the widgets below are destroyed, or an entry
+    // is left pointing at a freed Component until the next rebuild's add() calls overwrite it (see
+    // MidiLearnableRegistry::clearHosted()'s own comment).
+    clearHostedMidiLearnable();
 
     sliderLabels.clear();
     sliders.clear();

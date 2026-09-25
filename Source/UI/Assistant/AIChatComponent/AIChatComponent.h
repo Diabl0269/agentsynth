@@ -232,6 +232,7 @@ public:
 
 private:
     void timerCallback() override;
+    void applyFetchedModels(const juce::StringArray& models, bool success); // message thread
 
     // Refreshes the in-flight thinking label with the current elapsed wait (no full redraw).
     void refreshWaitingStatusLabel();

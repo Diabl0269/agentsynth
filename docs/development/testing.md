@@ -68,6 +68,17 @@ Two tripwire suites then apply automatically: a new audio-output module must be 
 `ModuleAdoptionTests.cpp`, and a new float parameter is swept by `AutomationZipperTest` without any
 edit — both fail the build until the module is accounted for.
 
+## Known flaky patterns
+
+- **A test rig that owns a `RemoteEngine` must end its gestures before the graph dies.**
+  `RemoteEngine` keeps a raw parameter pointer for each open change gesture until 250 ms after the
+  last MIDI event, and `~RemoteEngine()` ends any gesture still open. A fixture that declares its
+  `RemoteEngine` BEFORE its `AudioEngine` destroys it after the graph has freed those parameters,
+  so a test whose last CC left a gesture open crashes in `endChangeGesture` at teardown. It can look
+  like an order-dependent crash, because a heap layout left by an earlier test decides whether the
+  freed memory still reads as valid. Declare the `RemoteEngine` after the `AudioEngine`, or end its
+  gestures in teardown.
+
 ## Snapshot testing
 
 `AudioRenderingTests` compares rendered audio against golden reference files in `Tests/reference/`.
