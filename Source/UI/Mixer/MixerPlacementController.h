@@ -109,6 +109,12 @@ private:
     MixerDockComponent& mixerDock_;
     juce::ApplicationProperties& appProperties_;
     Placement placement_ = Placement::Tab; // matches MixerDockComponent's own already-Tab default
+    // False until applyPlacementPreference()'s first call: MainComponent's addAndMakeVisible(*this)
+    // (addCanvasAndPanels(), before wireTimelinePanel() ever runs) makes the strip visible
+    // unconditionally, regardless of placement -- the first applyPlacementPreference() call must
+    // still run applyPlacement() even when the persisted value already matches placement_'s Tab
+    // default, or Tab/Window placement's hideStripAtRest() (setVisible(false)) never happens.
+    bool everApplied_ = false;
     // Added last in the constructor so it wins the hit test over the hosted panel's own header.
     PanelResizeHandle ownHandle_{*this};
     PanelSlide slide_;

@@ -94,10 +94,17 @@ MixerPlacementController::Placement MixerPlacementController::readPersistedPlace
 void MixerPlacementController::applyPlacementPreference() {
     restorePersistedHeight();
     const auto desired = readPersistedPlacement();
-    if (desired == placement_)
+    // The FIRST call must run applyPlacement() even when `desired` already matches placement_'s
+    // Tab default: MainComponent's addAndMakeVisible(*this) (addCanvasAndPanels(), which runs
+    // before this is ever called) makes the strip visible unconditionally, so Tab/Window
+    // placement's own hideStripAtRest() has to run at least once to correct that, or the strip's
+    // isVisible() stays stuck true (zero-height, so harmless to look at, but wrong -- and a stale
+    // flag callers like isOwnPanelShowing() rely on).
+    if (everApplied_ && desired == placement_)
         return; // already there -- also what stops this from doing real work on every window
                 // move/resize's persist-triggered ChangeListener re-notification (see
                 // DetachedPanelWindow::persistBounds)
+    everApplied_ = true;
     applyPlacement(desired);
 }
 
