@@ -57,6 +57,15 @@ AssignStatus MidiLearnController::assignControl(const juce::String& profileId, c
         target.kind = synth::Target::Kind::continuous;
         target.continuous.kind = pick.continuous;
         targetName = synth::continuousTargetDisplayName(pick.continuous);
+    } else if (pick.kind == PickTarget::Kind::page) {
+        // FRO142 (docs/control/midi-remote.md#pages): engine-internal, GLOBAL like an action --
+        // never resolved through ShortcutManager/ActionCommandLookup (PageCommand's own comment).
+        target.kind = synth::Target::Kind::page;
+        target.page.command = pick.pageCommand;
+        target.page.page = pick.pageNumber;
+        targetName = pick.pageCommand == synth::PageCommand::next       ? juce::String("Next page")
+                     : pick.pageCommand == synth::PageCommand::previous ? juce::String("Previous page")
+                                                                        : "Page " + juce::String(pick.pageNumber);
     } else {
         const juce::String uuid = ensureNodeUuid(pick.nodeId);
         if (uuid.isEmpty())
@@ -100,12 +109,18 @@ AssignStatus MidiLearnController::assignControl(const juce::String& profileId, c
         }
     }
 
-    const Assignment assignment = makeAssignmentForControl(*profile, control, target);
+    // FRO142 (docs/control/midi-remote.md#pages): a PROJECT-scope assignment (parameter/nodeCommand)
+    // created while the profile's page N is active belongs to page N; a GLOBAL target
+    // (action/continuous) ignores Assignment::page entirely, so it stays at the default (1).
+    const bool projectScoped = target.isParameter() || target.isNodeCommand();
+    const int assignmentPage = projectScoped ? remoteEngine_.getActivePage(profileId) : 1;
+    const Assignment assignment = makeAssignmentForControl(*profile, control, target, assignmentPage);
 
     // FRO236: a continuous target is GLOBAL, exactly like an action (docs/control/midi-remote.md#continuous-targets
     // -- it means the same thing in every project), so it shares this branch and mirrors the action
-    // rule verbatim, just keyed on ContinuousTargetKind instead of an actionId.
-    if (target.isAction() || target.isContinuous()) {
+    // rule verbatim, just keyed on ContinuousTargetKind instead of an actionId. FRO142: a page target
+    // joins them -- it too is engine-internal and active on every page (PageCommand's own comment).
+    if (target.isAction() || target.isContinuous() || target.isPage()) {
         ControllerProfile updated = *profile;
         auto& actions = updated.actions;
         actions.erase(std::remove_if(actions.begin(), actions.end(),
@@ -115,7 +130,12 @@ AssignStatus MidiLearnController::assignControl(const juce::String& profileId, c
                                              return true;
                                          if (target.isAction())
                                              return a.target.isAction() && a.target.action.actionId == pick.actionId;
-                                         return a.target.isContinuous() && a.target.continuous.kind == pick.continuous;
+                                         if (target.isContinuous())
+                                             return a.target.isContinuous() &&
+                                                    a.target.continuous.kind == pick.continuous;
+                                         return a.target.isPage() && a.target.page.command == pick.pageCommand &&
+                                                (pick.pageCommand != synth::PageCommand::go ||
+                                                 a.target.page.page == pick.pageNumber);
                                      }),
                       actions.end());
         actions.push_back(assignment);
@@ -123,8 +143,13 @@ AssignStatus MidiLearnController::assignControl(const juce::String& profileId, c
     } else {
         const juce::var beforeJson = doc_.toVar();
         auto& assignments = doc_.assignments;
+        // FRO142 (docs/control/midi-remote.md#pages): scoped to the SAME page as the new assignment
+        // -- a mapping on page 1 must survive assigning that control (or that target) again on
+        // page 2; each page owns its own "one assignment per control/target" rule independently.
         assignments.erase(std::remove_if(assignments.begin(), assignments.end(),
                                          [&](const Assignment& a) {
+                                             if (a.page != assignment.page)
+                                                 return false;
                                              return sameProjectTarget(a.target, target) ||
                                                     (a.control.profileId == profileId &&
                                                      a.control.controlId == controlId);
@@ -241,6 +266,65 @@ juce::String MidiLearnController::recreateController(const juce::String& orphanP
     statusBar_.showMessage("Recreated " + profile.name + " with " +
                            juce::String(static_cast<int>(profile.controls.size())) + " controls");
     return profile.id;
+}
+
+// FRO142 (docs/control/midi-remote.md#pages): see MidiLearnController.h's own doc comment on why
+// this widens by the EFFECTIVE count (getEffectivePageCount), not profile.pageCount alone -- a
+// project assignment may already reference a page beyond what the profile itself declares, and
+// "+" must always reveal a genuinely new, empty page.
+bool MidiLearnController::addPage(const juce::String& profileId) {
+    const auto* profile = findProfile(profileId);
+    if (profile == nullptr)
+        return false;
+    const int effective = remoteEngine_.getEffectivePageCount(profileId);
+    if (effective >= 16)
+        return false;
+
+    ControllerProfile updated = *profile;
+    updated.pageCount = effective + 1;
+    if (!updateProfile(updated, "Add page"))
+        return false;
+    remoteEngine_.setActivePage(profileId, updated.pageCount);
+    statusBar_.showMessage("Added page " + juce::String(updated.pageCount));
+    return true;
+}
+
+bool MidiLearnController::deletePage(const juce::String& profileId, int page) {
+    const auto* profile = findProfile(profileId);
+    if (profile == nullptr || page <= 1 || page > remoteEngine_.getEffectivePageCount(profileId))
+        return false;
+
+    // The project half: every assignment THIS page owns is gone, and every higher page shifts down
+    // by one so no page number is ever skipped -- one AppUndoManager step, same as any other
+    // project-doc mutation in this file.
+    const juce::var beforeJson = doc_.toVar();
+    auto& assignments = doc_.assignments;
+    assignments.erase(
+        std::remove_if(assignments.begin(), assignments.end(),
+                       [&](const Assignment& a) { return a.control.profileId == profileId && a.page == page; }),
+        assignments.end());
+    for (auto& a : assignments)
+        if (a.control.profileId == profileId && a.page > page)
+            --a.page;
+    const juce::var afterJson = doc_.toVar();
+    undo_.recordMidiRemoteChange(doc_, beforeJson, afterJson, [this] { publishAssignments(); });
+    publishAssignments();
+
+    // The profile half: pageCount shrinks by one too, whenever the deleted page was within it --
+    // deleting the profile's OWN last declared page (rather than one only assignments pushed the
+    // effective count up to) must not leave a phantom empty page at the end. A separate controller-
+    // history step, same split recreateController() already uses for its own project+profile pair.
+    if (profile->pageCount >= page) {
+        ControllerProfile updated = *profile;
+        updated.pageCount = juce::jmax(1, updated.pageCount - 1);
+        updateProfile(updated, "Delete page");
+    }
+
+    if (remoteEngine_.getActivePage(profileId) >= page)
+        remoteEngine_.setActivePage(profileId, juce::jmax(1, remoteEngine_.getActivePage(profileId) - 1));
+
+    statusBar_.showMessage("Deleted page " + juce::String(page));
+    return true;
 }
 
 } // namespace synth::midi

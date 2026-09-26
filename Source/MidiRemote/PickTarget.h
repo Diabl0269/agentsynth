@@ -12,7 +12,7 @@
 namespace synth::midi {
 
 struct PickTarget {
-    enum class Kind { parameter, action, nodeCommand, continuous };
+    enum class Kind { parameter, action, nodeCommand, continuous, page };
 
     Kind kind = Kind::parameter;
     juce::AudioProcessorGraph::NodeID nodeId; // parameter / nodeCommand
@@ -20,6 +20,11 @@ struct PickTarget {
     juce::String actionId;                    // action
     NodeCommandKind command = NodeCommandKind::toggleSolo;
     ContinuousTargetKind continuous = ContinuousTargetKind::bpm; // continuous
+    // FRO142 (docs/control/midi-remote.md#pages): no node, like continuous above -- a page target
+    // acts on the profile that owns the control that fired it, resolved by MidiLearnController at
+    // assignment time, never a graph uuid.
+    PageCommand pageCommand = PageCommand::next;
+    int pageNumber = 1; // valid iff pageCommand == go
 
     static PickTarget parameter(juce::AudioProcessorGraph::NodeID node, const juce::String& id) {
         PickTarget t;
@@ -47,6 +52,14 @@ struct PickTarget {
         PickTarget t;
         t.kind = Kind::continuous;
         t.continuous = kind;
+        return t;
+    }
+    // FRO142: `page` is only meaningful for command == go (mirrors Target::Page::page).
+    static PickTarget pageTarget(PageCommand command, int page = 1) {
+        PickTarget t;
+        t.kind = Kind::page;
+        t.pageCommand = command;
+        t.pageNumber = page;
         return t;
     }
 };

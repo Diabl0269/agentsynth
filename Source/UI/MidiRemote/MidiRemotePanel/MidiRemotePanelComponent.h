@@ -4,6 +4,7 @@
 #include "MidiRemote/PickTarget.h"
 #include "UI/MidiRemote/AddController/AddControllerPopover.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.h"
+#include "UI/MidiRemote/ControllerSurface/ControllerSurfacePageStrip.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceToolbar.h"
 #include "UI/MidiRemote/ControllersList/ControllersListComponent.h"
 #include "UI/MidiRemote/Detect/DetectModeController.h"
@@ -157,6 +158,9 @@ public:
     /** FRO236 (docs/control/midi-remote.md#continuous-targets): the picker's "Continuous" choice.
      *  False if nothing is selected. */
     bool assignSelectedControlToContinuous(synth::ContinuousTargetKind kind);
+    /** FRO142 (docs/control/midi-remote.md#pages): the picker's "Pages" choice. False if nothing is
+     *  selected. */
+    bool assignSelectedControlToPage(synth::PageCommand command, int page);
 
     /** An orphan controller row (a project reference with no local profile) is selected. */
     bool isOrphanSelected() const;
@@ -177,6 +181,10 @@ public:
         return controllerSurface_.findCellForTest(controlId);
     }
     ControllerSurfaceToolbar& getToolbarForTest() { return toolbar_; }
+    /** FRO142 test seam: drives the real page strip without exposing controllerSurface_'s own
+     *  internals -- ControllerSurfacePageStripTests.cpp's own suite covers the strip in isolation;
+     *  this is for the panel-level "does switching pages change the surface" tests. */
+    ControllerSurfacePageStrip& getPageStripForTest() { return pageStrip_; }
     void selectForTest(const juce::String& profileId, const juce::String& controlId) {
         selectProfile(profileId);
         if (controlId.isNotEmpty())
@@ -207,6 +215,12 @@ public:
      *  jump to the module on the canvas via the existing locate path. MainComponent wires this to
      *  selectNodeInGraph(nodeUuid) the same way TrackChannelLinkController's reveal hook does. */
     std::function<void(const juce::String& nodeUuid)> onLocateNode;
+
+    /** FRO142 (docs/control/midi-remote.md#pages): fired after a page switch actually changes what
+     *  the selected controller shows -- MainComponent wires this to the status bar, same as every
+     *  other MIDI Remote status line (StatusBarComponent::showMessage, plain text -- this panel has
+     *  no StatusBarComponent of its own, Core's RemoteEngine even less so). */
+    std::function<void(const juce::String& message)> onStatusMessage;
 
     // ---- FRO273: undo routing + cue (MidiRemotePanelUndo.cpp) ----
     /** True while keyboard focus is inside this panel (docked or detached): Cmd+Z then acts on the
@@ -319,6 +333,7 @@ private:
 
     ControllersListComponent controllersList_;
     ControllerSurfaceToolbar toolbar_;
+    ControllerSurfacePageStrip pageStrip_;
     ControllerSurfaceComponent controllerSurface_;
     ControlInspectorComponent inspector_;
     OrphanControllerComponent orphanView_;

@@ -395,3 +395,29 @@ TEST(MidiRemoteEngineFeedbackTest, NrpnSlotSendsNothing) {
 
     EXPECT_TRUE(h.sink.sent.empty());
 }
+
+// FRO142 (docs/control/midi-remote.md#pages): two pages map the same knob to different parameters;
+// only the active page's value is echoed, and a page switch echoes the new page's value.
+TEST(MidiRemoteEngineFeedbackTest, OnlyTheActivePageIsEchoedAndASwitchEchoesTheNewPage) {
+    FeedbackHarness h;
+    auto page1 = makeParamAssignment("a1", "knob", MessageType::cc, 1, 10, Encoding::abs7, "cutoff");
+    auto page2 = makeParamAssignment("a2", "knob", MessageType::cc, 1, 10, Encoding::abs7, "resonance");
+    page2.page = 2;
+    h.publish({makeProfile({makeControl("knob", MessageType::cc, 1, 10, Encoding::abs7)}, true)}, {page1, page2});
+
+    auto* resonance = findParameterByID(h.node->getProcessor(), "resonance");
+    ASSERT_NE(resonance, nullptr);
+    h.cutoff()->setValueNotifyingHost(0.5f);
+    resonance->setValueNotifyingHost(0.2f);
+    h.engine.drain();
+
+    ASSERT_EQ(h.sink.sent.size(), 1u);
+    EXPECT_EQ(h.sink.sent[0].message.getControllerValue(), juce::roundToInt(h.cutoff()->getValue() * 127.0f));
+
+    h.sink.sent.clear();
+    h.engine.setActivePage("profile", 2);
+    h.engine.drain();
+
+    ASSERT_EQ(h.sink.sent.size(), 1u);
+    EXPECT_EQ(h.sink.sent[0].message.getControllerValue(), juce::roundToInt(resonance->getValue() * 127.0f));
+}

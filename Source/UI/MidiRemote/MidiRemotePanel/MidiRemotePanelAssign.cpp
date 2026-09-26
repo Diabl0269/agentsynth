@@ -35,6 +35,11 @@ void MidiRemotePanelComponent::showActionPicker(juce::Component& anchor) {
     if (selectedControlId_.isEmpty())
         return;
     auto picker = std::make_unique<ActionPickerComponent>();
+    // FRO142 (docs/control/midi-remote.md#pages): the "Page N" rows must match the selected
+    // control's OWN controller, set before the picker is shown -- ActionPickerComponent's own
+    // header comment on why this can't just default to 1.
+    picker->setEffectivePageCount(remoteEngine_ != nullptr ? remoteEngine_->getEffectivePageCount(selectedProfileId_)
+                                                           : 1);
     juce::Component::SafePointer<MidiRemotePanelComponent> safePanel(this);
     auto& box = juce::CallOutBox::launchAsynchronously(std::move(picker), anchor.getScreenBounds(), nullptr);
     if (auto* content = dynamic_cast<ActionPickerComponent*>(box.getChildComponent(0))) {
@@ -49,6 +54,13 @@ void MidiRemotePanelComponent::showActionPicker(juce::Component& anchor) {
         content->onContinuousChosen = [safePanel, safeBox](synth::ContinuousTargetKind kind) {
             if (safePanel != nullptr)
                 safePanel->assignSelectedControlToContinuous(kind);
+            if (safeBox != nullptr)
+                safeBox->dismiss();
+        };
+        // FRO142: the picker's "Pages" group.
+        content->onPageChosen = [safePanel, safeBox](synth::PageCommand command, int page) {
+            if (safePanel != nullptr)
+                safePanel->assignSelectedControlToPage(command, page);
             if (safeBox != nullptr)
                 safeBox->dismiss();
         };
@@ -75,6 +87,20 @@ bool MidiRemotePanelComponent::assignSelectedControlToContinuous(synth::Continuo
         return false;
     const auto status = learnController_->assignControl(selectedProfileId_, selectedControlId_,
                                                         synth::midi::PickTarget::continuousTarget(kind));
+    if (status != synth::midi::AssignStatus::assigned)
+        return false;
+    refreshSurfaceForSelectedProfile();
+    controllerSurface_.setSelectedControlId(selectedControlId_);
+    refreshInspectorForSelection();
+    return true;
+}
+
+// FRO142 (docs/control/midi-remote.md#pages): mirrors assignSelectedControlToContinuous above.
+bool MidiRemotePanelComponent::assignSelectedControlToPage(synth::PageCommand command, int page) {
+    if (learnController_ == nullptr || selectedProfileId_.isEmpty() || selectedControlId_.isEmpty())
+        return false;
+    const auto status = learnController_->assignControl(selectedProfileId_, selectedControlId_,
+                                                        synth::midi::PickTarget::pageTarget(command, page));
     if (status != synth::midi::AssignStatus::assigned)
         return false;
     refreshSurfaceForSelectedProfile();

@@ -185,12 +185,16 @@ void addLookupEntry(const std::vector<ControllerProfile>& profiles,
 
 // FRO140: a paired-CC slot at CC n is ALSO reached by its LSB partner CC n+32, so the LSB key routes
 // to the same slot. Appended after every primary entry (see the stable_sort below): an explicit
-// assignment on CC n+32 keeps that message.
+// assignment on CC n+32 keeps that message. FRO142: `lookupEligible[i]` mirrors addSlot's own
+// "on the active page, or not a page-scoped assignment at all" test -- an alias must never reach a
+// slot that inactive-page filtering itself would refuse to route to.
 void addPairedAliasEntries(const std::vector<ControllerProfile>& profiles,
                            const std::vector<RemoteMappingSnapshot::SourceEntry>& sources,
-                           const RemoteMappingSnapshot& fresh,
+                           const RemoteMappingSnapshot& fresh, const std::vector<bool>& lookupEligible,
                            std::vector<std::pair<std::uint32_t, std::int32_t>>& pending) {
     for (std::size_t i = 0; i < fresh.slots.size(); ++i) {
+        if (!lookupEligible[i])
+            continue;
         const auto& slot = fresh.slots[i];
         if (!isPairedEncoding(slot.encoding) || slot.spec.type != MessageType::cc ||
             slot.spec.number + kPairedLsbOffset > 63)
@@ -205,12 +209,16 @@ void addPairedAliasEntries(const std::vector<ControllerProfile>& profiles,
 }
 
 // One parameter-, action- or nodeCommand-target assignment -> one Slot, appended to `fresh`, plus
-// its pending lookup-table entry (if its profile's device is currently open).
+// its pending lookup-table entry -- unless `includeInLookup` is false (FRO142: an inactive-page
+// project assignment). It still gets a real, resolved Slot either way -- see rebuildAndPublish's
+// own comment on why an excluded page must still be resolved -- just no way for the MIDI path to
+// ever reach it.
 void addSlot(const Assignment& assignment, juce::AudioProcessorGraph* graph, const ProcessorByUuid& processorByUuid,
              const NodeIdByUuid& nodeIdByUuid, const PreviousResolution& previousResolution,
              const std::vector<ControllerProfile>& profiles, const ActionCommandLookup& actionLookup,
              const ContinuousParameterLookup& continuousLookup, RemoteMappingSnapshot& fresh,
-             std::vector<std::pair<std::uint32_t, std::int32_t>>& lookupPending) {
+             std::vector<std::pair<std::uint32_t, std::int32_t>>& lookupPending, std::vector<bool>& lookupEligible,
+             bool includeInLookup) {
     if (!assignment.enabled)
         return;
 
@@ -243,12 +251,15 @@ void addSlot(const Assignment& assignment, juce::AudioProcessorGraph* graph, con
     const Control* control = findControl(profiles, assignment.control.profileId, assignment.control.controlId);
     const bool controlIsButtonLike =
         control != nullptr && (control->kind == ControlKind::button || control->kind == ControlKind::pad);
-    slot.buttonLike = assignment.target.isAction() || assignment.target.isNodeCommand() || controlIsButtonLike ||
-                      dynamic_cast<juce::AudioParameterBool*>(slot.param) != nullptr;
+    slot.buttonLike = assignment.target.isAction() || assignment.target.isNodeCommand() || assignment.target.isPage() ||
+                      controlIsButtonLike || dynamic_cast<juce::AudioParameterBool*>(slot.param) != nullptr;
 
+    slot.onActivePage = includeInLookup;
     const int slotIndex = static_cast<int>(fresh.slots.size());
     fresh.slots.push_back(slot);
-    addLookupEntry(profiles, fresh.sources, assignment, slotIndex, lookupPending);
+    lookupEligible.push_back(includeInLookup);
+    if (includeInLookup)
+        addLookupEntry(profiles, fresh.sources, assignment, slotIndex, lookupPending);
 }
 
 } // namespace
@@ -280,16 +291,31 @@ void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
     }
 
     std::vector<std::pair<std::uint32_t, std::int32_t>> lookupPending;
+    // FRO142: parallel to fresh->slots -- whether the MIDI path may ever reach that slot at all
+    // (addPairedAliasEntries' own guard). See addSlot's comment for why a page-excluded assignment
+    // still gets a Slot pushed here, just with this false.
+    std::vector<bool> lookupEligible;
 
-    for (const auto& assignment : assignments_)
+    // FRO142 (docs/control/midi-remote.md#pages): a PROJECT assignment is resolved every real
+    // reconcile regardless of page (a setActivePage()-only rebuild has graph == nullptr and can only
+    // carry a resolution FORWARD from the last real one -- RemoteEngineReconcile.cpp's file header
+    // comment -- so an assignment that never had a Slot before its page became active would stay
+    // unresolved until some unrelated graph change happened to reach reconcile()). Only its own
+    // page's assignment gets a LOOKUP entry, though -- that's what makes the MIDI-path table already
+    // page-filtered, with no page awareness needed in the apply path itself. A GLOBAL profile action
+    // (the loop below) carries no page and is always lookup-eligible -- that's what keeps a page
+    // Target's own button reachable no matter which page is active.
+    for (const auto& assignment : assignments_) {
+        const bool onActivePage = assignment.page == getActivePage(assignment.control.profileId);
         addSlot(assignment, graph, processorByUuid, nodeIdByUuid, previousResolution, profiles_, actionLookup_,
-                continuousLookup_, *fresh, lookupPending);
+                continuousLookup_, *fresh, lookupPending, lookupEligible, onActivePage);
+    }
     for (const auto& profile : profiles_)
         for (const auto& assignment : profile.actions)
             addSlot(assignment, graph, processorByUuid, nodeIdByUuid, previousResolution, profiles_, actionLookup_,
-                    continuousLookup_, *fresh, lookupPending);
+                    continuousLookup_, *fresh, lookupPending, lookupEligible, /*includeInLookup=*/true);
 
-    addPairedAliasEntries(profiles_, fresh->sources, *fresh, lookupPending);
+    addPairedAliasEntries(profiles_, fresh->sources, *fresh, lookupEligible, lookupPending);
 
     // Sorted lookup table, first-inserted wins on a duplicate key (stable_sort keeps ties in
     // insertion order).

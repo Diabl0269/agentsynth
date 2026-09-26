@@ -219,6 +219,8 @@ set(APPUI_SOURCES
     Source/UI/MidiRemote/ControllersList/ControllersListComponent.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.h
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.cpp
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfacePageStrip.h
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfacePageStrip.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceSelection.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceMarquee.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceGroupDrag.cpp

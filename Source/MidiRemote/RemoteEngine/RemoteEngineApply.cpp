@@ -20,6 +20,8 @@ void RemoteEngine::applyEvent(const RemoteMappingSnapshot& snapshot, const Remot
         applyToAction(slot, event);
     else if (slot.target.isNodeCommand())
         applyToNodeCommand(slot, event);
+    else if (slot.target.isPage())
+        applyToPage(slot, event);
     else if (slot.target.isContinuous() && slot.continuous != ContinuousTargetKind::masterVolume)
         // FRO236: masterVolume falls through to applyToParameter below, exactly like a parameter
         // target -- it resolves to the SAME juce::AudioProcessorParameter* the mixer's master fader
@@ -47,6 +49,30 @@ void RemoteEngine::applyToNodeCommand(const RemoteMappingSnapshot::Slot& slot, c
     if (slot.orphaned || actionInvoker_ == nullptr)
         return;
     actionInvoker_->invokeNodeCommand(slot.nodeId, slot.target.nodeCommand.command);
+}
+
+// FRO142 (docs/control/midi-remote.md#pages): press only, momentary and toggle alike -- same rule
+// as applyToAction/applyToNodeCommand above. Acts on the profile that owns the control that fired
+// it (slot.profileId, resolved at snapshot-build time exactly like every other per-slot field).
+void RemoteEngine::applyToPage(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event) {
+    if (event.kind != RemoteEventKind::buttonPress)
+        return;
+
+    const int effective = getEffectivePageCount(slot.profileId);
+    const int current = getActivePage(slot.profileId);
+    int next = current;
+    switch (slot.target.page.command) {
+    case PageCommand::next:
+        next = current >= effective ? 1 : current + 1;
+        break;
+    case PageCommand::previous:
+        next = current <= 1 ? effective : current - 1;
+        break;
+    case PageCommand::go:
+        next = slot.target.page.page;
+        break;
+    }
+    setActivePage(slot.profileId, next); // clamps and republishes; a no-op if unchanged
 }
 
 void RemoteEngine::applyToParameter(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event) {
