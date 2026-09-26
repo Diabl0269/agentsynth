@@ -77,6 +77,9 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 
 - [`docs/control/midi-input.md`](control/midi-input.md) · [`docs/control/shortcuts.md`](control/shortcuts.md) — external MIDI routing, keyboard shortcuts
 - [`docs/control/midi-remote.md`](control/midi-remote.md) · [`docs/control/midi-remote-ui.md`](control/midi-remote-ui.md) — MIDI Remote: external controller profiles, drawn surfaces, right-click MIDI Learn on every control, message-thread apply with gestures, scope-by-target-type persistence; the panel and coverage table
+- [`docs/control/midi-remote-mpe.md`](control/midi-remote-mpe.md) — MIDI Remote v2 design (not built): MPE zone detection, member channels kept out of mappings, per-note bend/pressure/timbre into Poly MIDI
+- [`docs/control/midi-remote-mcu-hui.md`](control/midi-remote-mcu-hui.md) — MIDI Remote v2 design (not built): Mackie Control / HUI protocol surfaces, sourced protocol tables, a source-routing sink, the motor-fader/LCD renderer
+- [`docs/control/midi-remote-osc.md`](control/midi-remote-osc.md) — MIDI Remote v2 design (not built): OSC as a second source, with address keys, learn by address, feedback to host:port and the network trust boundary
 - [`docs/control/plugin-card-layout.md`](control/plugin-card-layout.md) — hosted plugin cards showing a chosen set of parameters as knobs: `CardLayout`, instance/type/automatic precedence, `HostedParameterAttachment`, the knob picker with presets; and what carries over to editing any module's layout
 
 ## AI
