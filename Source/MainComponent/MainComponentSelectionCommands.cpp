@@ -4,6 +4,7 @@
 // resolveEditSurface(): moving track focus itself changes what that reports, so a routed pair would
 // flip surfaces between two presses of the same pad.
 #include "MainComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 namespace {
 

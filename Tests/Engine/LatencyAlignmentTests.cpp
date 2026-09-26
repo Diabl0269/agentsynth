@@ -26,6 +26,7 @@
 #include "Modules/RecordTapModule.h"
 #include "Timeline/TakePlacement.h"
 #include "UI/Chrome/StatusBarComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_audio_formats/juce_audio_formats.h>

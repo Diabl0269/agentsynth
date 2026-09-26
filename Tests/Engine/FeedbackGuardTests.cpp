@@ -19,6 +19,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/AudioInputModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>

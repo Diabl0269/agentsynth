@@ -3,6 +3,7 @@
 // updates + its own play/stop button).
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 // ===========================================================================
 // Phase-3 chrome: toolbar layout, min window size, collapsible panels, status bar

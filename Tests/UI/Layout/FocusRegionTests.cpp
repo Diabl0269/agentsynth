@@ -19,6 +19,7 @@
 #include "../../TestSettingsHelpers.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/FocusRegion.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

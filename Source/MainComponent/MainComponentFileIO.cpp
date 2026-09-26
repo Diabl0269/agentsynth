@@ -6,6 +6,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 #include "Branding.h"
 #include "ProjectBundle.h"

@@ -33,7 +33,6 @@
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Chrome/ToolbarComponent.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
-#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/BottomDockComponent.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/UIAnimation.h"
@@ -53,6 +52,7 @@
 #include <vector>
 
 class AudioEngine;
+class GraphEditor;
 class MainComponent
     : public juce::Component
     , public juce::DragAndDropContainer
@@ -381,7 +381,6 @@ public:
     ModuleLibraryComponent& getModuleLibrary() { return moduleLibrary; }
 
     // ---- Hosted plugins ----
-    //
     // MainComponent owns a scan list (Core must not touch settings; a scan is refused outright on a
     // Hosted engine, so a DAW session can never trigger a nested scan) but it is not always the list
     // in use: on the plugin path AgentSynthAudioProcessor installs its OWN, longer-lived service
@@ -457,8 +456,8 @@ private:
 
     // Named isActive predicates shared by more than one row.
     bool isExportAvailable() const { return !isBounceInProgress_; }
-    bool hasSelection() const { return graphEditor.getSelectionCount() > 0; }
-    bool canGroupSelection() const { return graphEditor.getSelectionCount() > 1 || touchesAnyMacro(); }
+    bool hasSelection() const;
+    bool canGroupSelection() const;
     bool touchesAnyMacro() const;
     bool isEditSurfaceCommandActive(juce::CommandID id) const; // Copy/Paste/Duplicate/Cut/Repeat
     bool isBottomDockVisibleForSnap() const { return isBottomDockVisible; }
@@ -742,7 +741,8 @@ private:
 
     // Declared BEFORE graphEditor so it is destroyed after it: every hosted card holds a listener on it.
     synth::PluginCardLayoutStore pluginCardLayoutStore;
-    GraphEditor graphEditor;
+    std::unique_ptr<GraphEditor> graphEditorOwner_; // heap-held so this header need not include GraphEditor.h
+    GraphEditor& graphEditor;
 
     // The startup overlay offering New/Open Default/Open Existing/Recent instead of silently
     // auto-loading the factory preset. Null in Hosted mode (host-owned document, see

@@ -7,6 +7,7 @@
 #include "MainComponent.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include <cmath>
 

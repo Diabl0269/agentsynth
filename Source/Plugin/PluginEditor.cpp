@@ -1,4 +1,6 @@
 #include "PluginEditor.h"
+#include "MainComponent/MainComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 namespace synth {
 
@@ -13,7 +15,8 @@ constexpr int kMaxHeight = 8192;
 AgentSynthPluginEditor::AgentSynthPluginEditor(AgentSynthAudioProcessor& p)
     : juce::AudioProcessorEditor(&p)
     , processor(p)
-    , mainComponent(p.getThemeManager(), p.getLookAndFeel(), p.getAudioEngine()) {
+    , mainComponentOwner_(std::make_unique<MainComponent>(p.getThemeManager(), p.getLookAndFeel(), p.getAudioEngine()))
+    , mainComponent(*mainComponentOwner_) {
     // Scope the LookAndFeel to this editor's subtree. Children resolve it through the normal
     // Component lookup chain, so MainComponent sees the themed LnF without us touching the
     // process-wide Desktop default that the host and sibling plugins also read.

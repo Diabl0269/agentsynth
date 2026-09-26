@@ -4,8 +4,13 @@
 // declared in MainComponent.h; the table itself and the named perform() bodies stay in
 // MainComponentCommandTable.cpp.
 #include "MainComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 // ---- Named isActive predicates shared by more than one row ----
+
+bool MainComponent::hasSelection() const { return graphEditor.getSelectionCount() > 0; }
+
+bool MainComponent::canGroupSelection() const { return graphEditor.getSelectionCount() > 1 || touchesAnyMacro(); }
 
 bool MainComponent::touchesAnyMacro() const {
     for (auto nodeId : graphEditor.getSelectedNodes()) {

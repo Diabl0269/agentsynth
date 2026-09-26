@@ -5,6 +5,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "MidiRemote/ControllerProfileStore.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 TEST_F(MainComponentTest, AiProviderGetsModelSelectedOnStartup) {
     auto ownedProvider = std::make_unique<ModelTrackingMockProvider>();

@@ -25,6 +25,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>

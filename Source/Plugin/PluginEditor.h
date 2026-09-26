@@ -1,8 +1,10 @@
 #pragma once
 
-#include "MainComponent/MainComponent.h"
 #include "PluginProcessor.h"
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <memory>
+
+class MainComponent;
 
 namespace synth {
 
@@ -31,7 +33,9 @@ public:
 
 private:
     AgentSynthAudioProcessor& processor;
-    MainComponent mainComponent;
+    std::unique_ptr<MainComponent>
+        mainComponentOwner_; // heap-held so PluginProcessor.cpp need not include MainComponent.h
+    MainComponent& mainComponent;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AgentSynthPluginEditor)
 };
