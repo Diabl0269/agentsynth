@@ -49,6 +49,7 @@
 //    ChannelFlowTestFixture.h's own resetKeys() all reset this same key to this same fixed "0"
 //    before/after their own MainComponent-constructing tests, so a fixed reset here matches the
 //    established convention rather than inventing a new one.
+#include "../../TestSettingsHelpers.h"
 #include "MainComponent/MainComponent.h"
 
 struct BottomDockActiveTabResetGuardMDT {
@@ -56,15 +57,8 @@ struct BottomDockActiveTabResetGuardMDT {
     ~BottomDockActiveTabResetGuardMDT() { resetKey(); }
 
     static void resetKey() {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
-
         juce::ApplicationProperties props;
-        props.setStorageParameters(opts);
+        props.setStorageParameters(synth::test::userSettingsTestOptions());
         if (auto* s = props.getUserSettings()) {
             s->removeValue("bottomDockActiveTab");
             // FRO255: see the class comment -- both gaps confirmed by direct repro.

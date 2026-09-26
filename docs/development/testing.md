@@ -16,6 +16,11 @@ cmake --build build --target Tests
 bash scripts/coverage.sh
 ```
 
+**Never run two suites at once on one machine without a lock** — they collide through the shared
+on-disk settings file and fail cases that are perfectly healthy. `scripts/ci-local.sh` takes that
+lock for you (shared across every worktree of the repo, waits visibly): see
+[`local-ci.md`](local-ci.md#running-suites-in-parallel).
+
 [`test-layers.md`](test-layers.md) is the catalogue of what each suite covers.
 [`test-patterns.md`](test-patterns.md) is the conventions every test here follows — read it before
 writing one. To reproduce what CI will check without waiting on a CI round-trip, run

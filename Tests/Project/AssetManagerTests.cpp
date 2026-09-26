@@ -15,6 +15,7 @@
 //   4. Recordings/ adoption on save — file+ref rewrite, project.json, stability, source-start
 //      preservation, and that the original Recordings/ file is never touched.
 
+#include "../TestSettingsHelpers.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
 #include "PatchDocument.h"
@@ -177,54 +178,10 @@ private:
 
 namespace {
 
-// The ONE on-disk settings file every MainComponent in this process opens (synth::
-// userSettingsOptions()) -- same shape as DetachRedockStateTests.cpp's userSettingsTestOptions().
-juce::PropertiesFile::Options userSettingsTestOptions() {
-    juce::PropertiesFile::Options opts;
-    opts.applicationName = "Agent Synth";
-    opts.folderName = "Agent Synth";
-    opts.filenameSuffix = "settings";
-    opts.osxLibrarySubFolder = "Application Support";
-    opts.storageFormat = juce::PropertiesFile::storeAsXML;
-    return opts;
-}
-
-// Saves the named settings keys on construction and restores them EXACTLY on destruction
-// (including "the key did not exist at all") -- same idiom as DetachRedockStateTests.cpp's
-// PersistedKeysGuard, duplicated locally here rather than shared, matching how that file and
-// FocusArbitrationTestFixture.h / E2EWorkflowTests.cpp / FocusRegionTests.cpp already do it.
-class PersistedKeysGuard {
-public:
-    explicit PersistedKeysGuard(juce::StringArray keys) {
-        juce::ApplicationProperties props;
-        props.setStorageParameters(userSettingsTestOptions());
-        auto* settings = props.getUserSettings();
-        for (const auto& key : keys) {
-            std::optional<juce::String> value;
-            if (settings != nullptr && settings->containsKey(key))
-                value = settings->getValue(key);
-            saved_.emplace_back(key, value);
-        }
-    }
-
-    ~PersistedKeysGuard() {
-        juce::ApplicationProperties props;
-        props.setStorageParameters(userSettingsTestOptions());
-        auto* settings = props.getUserSettings();
-        if (settings == nullptr)
-            return;
-        for (const auto& [key, value] : saved_) {
-            if (value.has_value())
-                settings->setValue(key, *value);
-            else
-                settings->removeValue(key);
-        }
-        settings->saveIfNeeded();
-    }
-
-private:
-    std::vector<std::pair<juce::String, std::optional<juce::String>>> saved_;
-};
+// The real on-disk settings file and the save/restore guard around it live in
+// Tests/TestSettingsHelpers.h (FRO58) -- one copy for every test that opens it.
+using synth::test::PersistedKeysGuard;
+using synth::test::userSettingsTestOptions;
 
 } // namespace
 
@@ -233,15 +190,8 @@ protected:
     // Same on-disk-settings hygiene every other MainComponent-instantiating test file uses
     // (RecordTapTests.cpp / AudioClipPlaybackTests.cpp / TimelinePanelTests.cpp).
     void resetKeys() {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
-
         juce::ApplicationProperties props;
-        props.setStorageParameters(opts);
+        props.setStorageParameters(userSettingsTestOptions());
         if (auto* s = props.getUserSettings()) {
             s->setValue("librarySidebarVisible", "1");
             s->setValue("aiPanelVisible", "0");

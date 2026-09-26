@@ -96,6 +96,14 @@ jobs:
     # the cache-check unit tests, which are equally a PR-time concern.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    env:
+      # FRO220/FRO221: the runner image's default locale is UTF-8, under which awk aborts on the
+      # first non-ASCII byte it meets (an em dash in a comment) and a text-scanning guard silently
+      # examines a fraction of the tree while still exiting 0 -- check-function-sizes.sh scanned
+      # 45 percent of it that way for three days. The affected scripts now export LC_ALL=C
+      # themselves; this pins the whole job so a guard added later cannot inherit the image's
+      # locale by accident. C, not C.UTF-8: the guards' regexes are written for byte semantics.
+      LC_ALL: C
     steps:
     - uses: actions/checkout@v6
     - name: Set up Python
@@ -144,6 +152,12 @@ jobs:
       # (scripts/lib/deps-reuse.sh) is only ever exercised locally otherwise -- this runs the
       # reuse/no-reuse decision against fixture directory trees, no cmake or compiler involved.
       run: bash scripts/tests/ci-local-deps-reuse.test.sh
+    - name: Test ci-local shared test lock
+      # FRO192: scripts/ci-local.sh serialises its test run behind a lock shared by every worktree
+      # (scripts/lib/test-lock.sh) so two local suites cannot collide through the shared settings
+      # file. Only ever exercised locally otherwise -- this checks the lock path, serialisation,
+      # timeout status and exit-code passthrough with shell stand-ins, no compiler. A few seconds.
+      run: bash scripts/tests/ci-local-test-lock.test.sh
     - name: Check for un-decoded UTF-8 escapes
       # juce::String(const char*) decodes as ASCII, not UTF-8 -- a "\xe2\x80\x94"-style escape
       # passed straight to a String-taking API silently renders as mojibake (P6-16, 2026-08-26).

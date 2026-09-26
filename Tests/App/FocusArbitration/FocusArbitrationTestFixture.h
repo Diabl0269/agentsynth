@@ -3,6 +3,7 @@
 // Shared test infrastructure for FocusArbitration*Tests.cpp: the persisted-settings guards, the
 // headless AI provider stub, and the FocusArbitrationTest fixture itself. See
 // FocusArbitrationClipboardTests.cpp for the one-focus-ownership-rule background comment.
+#include "../../TestSettingsHelpers.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
@@ -20,6 +21,11 @@
 
 namespace {
 
+// The real on-disk settings file and the save/restore guard around it live in
+// Tests/TestSettingsHelpers.h (FRO58) -- one copy for every test that opens it.
+using synth::test::PersistedKeysGuard;
+using synth::test::userSettingsTestOptions;
+
 // automateParameter()'s toggle path (and, in principle, any test that ever called
 // simulateToggleTimelineClick()) persists "bottomDockVisible" to the SAME on-disk properties
 // file every MainComponent instance reads at construction — reset it before AND after every test
@@ -27,32 +33,12 @@ namespace {
 // on what ran before it in the same process. Mirrors AutomationEditorTests.cpp's helper of the
 // same name exactly.
 void resetBottomDockVisibleKey() {
-    juce::PropertiesFile::Options opts;
-    opts.applicationName = "Agent Synth";
-    opts.folderName = "Agent Synth";
-    opts.filenameSuffix = "settings";
-    opts.osxLibrarySubFolder = "Application Support";
-    opts.storageFormat = juce::PropertiesFile::storeAsXML;
-
     juce::ApplicationProperties props;
-    props.setStorageParameters(opts);
+    props.setStorageParameters(userSettingsTestOptions());
     if (auto* s = props.getUserSettings()) {
         s->setValue("bottomDockVisible", "0");
         s->saveIfNeeded();
     }
-}
-
-// The one on-disk settings file every MainComponent in this process opens (see
-// synth::userSettingsOptions) — factored out of resetBottomDockVisibleKey so the guard below can
-// reach the same file.
-juce::PropertiesFile::Options userSettingsTestOptions() {
-    juce::PropertiesFile::Options opts;
-    opts.applicationName = "Agent Synth";
-    opts.folderName = "Agent Synth";
-    opts.filenameSuffix = "settings";
-    opts.osxLibrarySubFolder = "Application Support";
-    opts.storageFormat = juce::PropertiesFile::storeAsXML;
-    return opts;
 }
 
 // Removes "timelineSnap"/"timelineSnapEnabled" so the NEXT MainComponent constructed in this process
@@ -70,51 +56,6 @@ void resetTimelineSnapKeysToDefault() {
         s->saveIfNeeded();
     }
 }
-
-// Saves the named settings keys on construction and restores them EXACTLY on destruction, including
-// the case where a key did not exist at all.
-//
-// Needed because the commands under test persist as a side effect: setSnapValue() writes
-// "timelineSnap"/"timelineSnapEnabled", and the Preferences toggle writes "naturalScrolling" — all
-// into the REAL user settings file this machine's app reads. Clearing them afterwards would not be
-// enough: it would silently change the developer's own preferences, so the original values go back.
-//
-// Both the read and the write use their own short-lived juce::ApplicationProperties, exactly as
-// resetBottomDockVisibleKey does: a PropertiesFile saves its WHOLE in-memory property set, so a
-// long-lived instance held across the test would write back a snapshot taken before the test and
-// clobber every unrelated key the test happened to touch.
-class PersistedKeysGuard {
-public:
-    explicit PersistedKeysGuard(juce::StringArray keys) {
-        juce::ApplicationProperties props;
-        props.setStorageParameters(userSettingsTestOptions());
-        auto* settings = props.getUserSettings();
-        for (const auto& key : keys) {
-            std::optional<juce::String> value;
-            if (settings != nullptr && settings->containsKey(key))
-                value = settings->getValue(key);
-            saved_.emplace_back(key, value);
-        }
-    }
-
-    ~PersistedKeysGuard() {
-        juce::ApplicationProperties props;
-        props.setStorageParameters(userSettingsTestOptions());
-        auto* settings = props.getUserSettings();
-        if (settings == nullptr)
-            return;
-        for (const auto& [key, value] : saved_) {
-            if (value.has_value())
-                settings->setValue(key, *value);
-            else
-                settings->removeValue(key);
-        }
-        settings->saveIfNeeded();
-    }
-
-private:
-    std::vector<std::pair<juce::String, std::optional<juce::String>>> saved_;
-};
 
 // A provider that never touches the network — this file only exercises the graph/timeline/command
 // plumbing, never the AI chat itself. Mirrors NullAIProvider (PluginProcessorTests.cpp) exactly.

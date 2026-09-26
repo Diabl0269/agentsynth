@@ -4,6 +4,7 @@
 // the latter needs a native peer this suite never creates (the same headless-focus gap
 // TimelineTrackFocusTests.cpp documents), where the former is a plain virtual callable either way
 // and returns a fresh handler wrapping live state.
+#include "../../TestSettingsHelpers.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/ChannelStripModule.h"
@@ -24,52 +25,10 @@
 
 namespace {
 
-// FRO101/FRO228: detaching a REAL panel off a REAL MainComponent writes "mixerWindowBounds" into
-// the SAME on-disk "Agent Synth" settings file every shipped build reads (DetachedPanelWindow::
-// persistBounds()) -- duplicated here rather than shared, matching how
-// DetachRedockStateTests.cpp/FocusArbitrationTestFixture.h/FocusRegionTests.cpp each already do.
-juce::PropertiesFile::Options userSettingsTestOptionsMACT() {
-    juce::PropertiesFile::Options opts;
-    opts.applicationName = "Agent Synth";
-    opts.folderName = "Agent Synth";
-    opts.filenameSuffix = "settings";
-    opts.osxLibrarySubFolder = "Application Support";
-    opts.storageFormat = juce::PropertiesFile::storeAsXML;
-    return opts;
-}
-
-class PersistedKeysGuardMACT {
-public:
-    explicit PersistedKeysGuardMACT(juce::StringArray keys) {
-        juce::ApplicationProperties props;
-        props.setStorageParameters(userSettingsTestOptionsMACT());
-        auto* settings = props.getUserSettings();
-        for (const auto& key : keys) {
-            std::optional<juce::String> value;
-            if (settings != nullptr && settings->containsKey(key))
-                value = settings->getValue(key);
-            saved_.emplace_back(key, value);
-        }
-    }
-
-    ~PersistedKeysGuardMACT() {
-        juce::ApplicationProperties props;
-        props.setStorageParameters(userSettingsTestOptionsMACT());
-        auto* settings = props.getUserSettings();
-        if (settings == nullptr)
-            return;
-        for (const auto& [key, value] : saved_) {
-            if (value.has_value())
-                settings->setValue(key, *value);
-            else
-                settings->removeValue(key);
-        }
-        settings->saveIfNeeded();
-    }
-
-private:
-    std::vector<std::pair<juce::String, std::optional<juce::String>>> saved_;
-};
+// The real on-disk settings file and the save/restore guard around it live in
+// Tests/TestSettingsHelpers.h (FRO58) -- one copy for every test that opens it.
+using synth::test::PersistedKeysGuard;
+using synth::test::userSettingsTestOptions;
 
 class MockProviderMACT : public synth::AIProvider {
 public:
@@ -274,11 +233,17 @@ TEST(MixerAccessibilityTest, SendKnobHasATitleNamingItsTargetAndReadsDbValues) {
     mc.simulateAddAudioTrackClick();
 
     auto& mixerPanel = mc.getBottomDock().getMixerPanel();
-    auto* column = mixerPanel.getStripColumnForTest(0);
-    ASSERT_NE(column, nullptr);
     const auto bus = mixerPanel.createBus();
     ASSERT_NE(bus, juce::AudioProcessorGraph::NodeID{}) << "createBus must build a channel";
 
+    // Fetch the strip column only AFTER createBus(): it reports the new channel through
+    // onGraphMutated, and MainComponent answers that with a synchronous
+    // bottomDock.rebuildMixer(), which destroys and recreates every column. A pointer taken before
+    // the call is dangling by here -- addSendTo() on it read freed memory, which passed by luck on
+    // macOS/Windows Release and segfaulted on roughly every other Linux Debug+coverage run
+    // (std::function::operator() on the freed MixerSendList's onMutated, agentsynth#498/#500).
+    auto* column = mixerPanel.getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
     column->getSendListForTest().addSendTo(bus);
     mixerPanel.rebuild();
 
@@ -327,7 +292,7 @@ TEST(MixerAccessibilityTest, DetachedWindowRealWiringGetsAThemedLookAndFeel) {
     // (which captures `lookAndFeel`'s value while ITS OWN init list is still running) to see
     // anything but null -- every DetachablePanelHost this ctor ever built then held a permanently
     // null lookAndFeel_, however themed getLookAndFeelForTest() looked immediately afterwards.
-    PersistedKeysGuardMACT keysGuard({"mixerWindowBounds"});
+    PersistedKeysGuard keysGuard({"mixerWindowBounds"});
 
     MainComponent mc(std::make_unique<MockProviderMACT>());
     mc.setSize(1400, 900);

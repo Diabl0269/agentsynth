@@ -14,6 +14,7 @@
 //
 // Drives a real, off-screen MainComponent, same rig style as MixerColumnComponentMeterTests.cpp /
 // DetachRedockStateTests.cpp.
+#include "../../TestSettingsHelpers.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
@@ -48,51 +49,10 @@ private:
     int requestTimeoutMs = 240000;
 };
 
-// Same on-disk-settings-leak guard DetachRedockStateTests.cpp uses -- detaching the mixer host for
-// real writes "mixerWindowBounds" into the SAME settings file every MainComponent in this process
-// (and a real shipped build) reads.
-juce::PropertiesFile::Options userSettingsTestOptions() {
-    juce::PropertiesFile::Options opts;
-    opts.applicationName = "Agent Synth";
-    opts.folderName = "Agent Synth";
-    opts.filenameSuffix = "settings";
-    opts.osxLibrarySubFolder = "Application Support";
-    opts.storageFormat = juce::PropertiesFile::storeAsXML;
-    return opts;
-}
-
-class PersistedKeysGuardMDMGT {
-public:
-    explicit PersistedKeysGuardMDMGT(juce::StringArray keys) {
-        juce::ApplicationProperties props;
-        props.setStorageParameters(userSettingsTestOptions());
-        auto* settings = props.getUserSettings();
-        for (const auto& key : keys) {
-            std::optional<juce::String> value;
-            if (settings != nullptr && settings->containsKey(key))
-                value = settings->getValue(key);
-            saved_.emplace_back(key, value);
-        }
-    }
-
-    ~PersistedKeysGuardMDMGT() {
-        juce::ApplicationProperties props;
-        props.setStorageParameters(userSettingsTestOptions());
-        auto* settings = props.getUserSettings();
-        if (settings == nullptr)
-            return;
-        for (const auto& [key, value] : saved_) {
-            if (value.has_value())
-                settings->setValue(key, *value);
-            else
-                settings->removeValue(key);
-        }
-        settings->saveIfNeeded();
-    }
-
-private:
-    std::vector<std::pair<juce::String, std::optional<juce::String>>> saved_;
-};
+// The real on-disk settings file and the save/restore guard around it live in
+// Tests/TestSettingsHelpers.h (FRO58) -- one copy for every test that opens it.
+using synth::test::PersistedKeysGuard;
+using synth::test::userSettingsTestOptions;
 
 } // namespace
 
@@ -121,7 +81,7 @@ TEST(BottomDockMeterGatingTests, IsMixerShowingIsTrueWhenDockedOnTheMixerTabAndT
 }
 
 TEST(BottomDockMeterGatingTests, IsMixerShowingStaysTrueWhenDetachedEvenWithTheDockedTabOnTimelineAndTheDockClosed) {
-    PersistedKeysGuardMDMGT boundsGuard({"mixerWindowBounds"});
+    PersistedKeysGuard boundsGuard({"mixerWindowBounds"});
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDMGT>());
     mc.setSize(1400, 900);
@@ -142,7 +102,7 @@ TEST(BottomDockMeterGatingTests, IsMixerShowingStaysTrueWhenDetachedEvenWithTheD
 }
 
 TEST(BottomDockMeterGatingTests, TimerCallbackRefreshesMetersWhenTheMixerIsDetachedEvenWithTheDockHidden) {
-    PersistedKeysGuardMDMGT boundsGuard({"mixerWindowBounds"});
+    PersistedKeysGuard boundsGuard({"mixerWindowBounds"});
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDMGT>());
     mc.setSize(1400, 900);
@@ -187,7 +147,7 @@ TEST(BottomDockMeterGatingTests, TimerCallbackDoesNotRefreshMetersWhenTheMixerIs
 }
 
 TEST(BottomDockMeterGatingTests, DetachingAndRedockingTheMixerPreservesEveryColumnsLatchedReadoutState) {
-    PersistedKeysGuardMDMGT boundsGuard({"mixerWindowBounds"});
+    PersistedKeysGuard boundsGuard({"mixerWindowBounds"});
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDMGT>());
     mc.setSize(1400, 900);
