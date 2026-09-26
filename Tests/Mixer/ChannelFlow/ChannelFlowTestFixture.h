@@ -12,6 +12,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UserSettings.h"
 
 class ChannelFlowTest : public ::testing::Test {
 protected:
@@ -20,12 +21,7 @@ protected:
     // the shared on-disk "Agent Synth" settings, so pin the keys this flow depends on before AND
     // after every test.
     void resetKeys() {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);

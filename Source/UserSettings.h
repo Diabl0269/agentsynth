@@ -5,6 +5,22 @@
 
 namespace synth {
 
+namespace detail {
+
+// FRO305: Tests-only settings-dir override, rationale in test-patterns.md's "on-disk path"
+// section. Nothing but Tests/TestMain.cpp ever sets this.
+inline juce::String& settingsDirOverride() {
+    static juce::String dir;
+    return dir;
+}
+
+} // namespace detail
+
+/** Test-only: redirects every later synth::userSettingsOptions()/userSettingsRootDirectory() call
+ *  in this process under `dir`. Call once, before any ApplicationProperties is constructed
+ *  (Tests/TestMain.cpp, before RUN_ALL_TESTS()). Empty string restores normal behaviour. */
+inline void setSettingsDirOverrideForTests(const juce::String& dir) { detail::settingsDirOverride() = dir; }
+
 /**
  * The ONE user settings file this product reads and writes, plus the keys more than one owner
  * touches.
@@ -21,11 +37,27 @@ namespace synth {
 inline juce::PropertiesFile::Options userSettingsOptions() {
     juce::PropertiesFile::Options options;
     options.applicationName = branding::kProductName;
-    options.folderName = branding::kSettingsFolderName;
     options.filenameSuffix = "settings";
     options.osxLibrarySubFolder = "Application Support";
     options.storageFormat = juce::PropertiesFile::storeAsXML;
+    // Options::folderName accepts an absolute path (see test-patterns.md for why); FRO305's
+    // override rides on that.
+    const auto& overrideDir = detail::settingsDirOverride();
+    options.folderName = overrideDir.isNotEmpty() ? overrideDir : juce::String(branding::kSettingsFolderName);
     return options;
+}
+
+/** The app-data root Themes/Snippets/AI history/device id/feedback logs/track presets/unsaved-
+ *  project Recordings nest a named subfolder under. NOT the settings file's own parent directory
+ *  (see test-patterns.md for why these are different real locations) — every one of those stores
+ *  must resolve its root through this function rather than reconstructing the path itself, so the
+ *  Tests-only override above reaches it too. */
+inline juce::File userSettingsRootDirectory() {
+    const auto& overrideDir = detail::settingsDirOverride();
+    if (overrideDir.isNotEmpty())
+        return juce::File(overrideDir);
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile(branding::kSettingsFolderName);
 }
 
 /** The scan list (PluginScanService::toXml) that the app writes after a scan and BOTH the app and

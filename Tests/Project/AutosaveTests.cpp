@@ -16,6 +16,7 @@
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
 #include "Transport/BounceExporter.h"
+#include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -50,12 +51,7 @@ protected:
     // Same on-disk "Agent Synth" ApplicationProperties file MainComponentTests.cpp's
     // resetPanelKeys() resets — autosaveEnabled forced OFF here too, for the same reason.
     void resetAutosaveKey() {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);
@@ -69,7 +65,7 @@ protected:
 
     void SetUp() override {
         resetAutosaveKey();
-        tempRoot = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-autosave-tests");
+        tempRoot = synth::userSettingsRootDirectory().getChildFile("agentsynth-autosave-tests");
         tempRoot.deleteRecursively();
         tempRoot.createDirectory();
     }

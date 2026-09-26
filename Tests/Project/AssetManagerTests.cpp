@@ -23,6 +23,7 @@
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UserSettings.h"
 #include <functional>
 #include <gtest/gtest.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -75,7 +76,7 @@ bool writeWav(const juce::File& file, juce::int64 numFrames, int numChannels, do
 class AssetManagerImportTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        root = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-assetmanager-import");
+        root = synth::userSettingsRootDirectory().getChildFile("agentsynth-assetmanager-import");
         root.deleteRecursively();
         root.createDirectory();
     }
@@ -209,7 +210,7 @@ protected:
         // so without this guard the entry outlives the directory it points at.
         recentProjectsGuard_.emplace(juce::StringArray{"recentProjects"});
         resetKeys();
-        root = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-assetmanager-relink");
+        root = synth::userSettingsRootDirectory().getChildFile("agentsynth-assetmanager-relink");
         root.deleteRecursively();
         root.createDirectory();
     }
@@ -357,8 +358,7 @@ TEST_F(AssetManagerRelinkTest, DroppedAudioFileOnUnsavedProjectUsesTheRecordings
     const auto ref = track->clips[0].assetRef;
     ASSERT_TRUE(ref.startsWith("Recordings/")) << "unsaved project ref prefix (see MainComponent::chooseTakeFiles)";
 
-    const auto imported = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                              .getChildFile("Agent Synth")
+    const auto imported = synth::userSettingsRootDirectory()
                               .getChildFile("Recordings")
                               .getChildFile(ref.fromLastOccurrenceOf("/", false, false));
     EXPECT_TRUE(imported.existsAsFile()) << "the file itself is copied into app data, not referenced in place";
@@ -406,8 +406,7 @@ TEST_F(AssetManagerRelinkTest, FailedImportMutatesNothing) {
 class AssetManagerCollectTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        root =
-            juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-assetmanager-collect");
+        root = synth::userSettingsRootDirectory().getChildFile("agentsynth-assetmanager-collect");
         root.deleteRecursively();
         bundleRoot = root.getChildFile("Bundle.agsproj");
         bundleRoot.createDirectory();
@@ -473,7 +472,7 @@ TEST_F(AssetManagerCollectTest, EmptyDocMeansEverythingIsUnused) {
 class AssetManagerAdoptionTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        root = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-assetmanager-adopt");
+        root = synth::userSettingsRootDirectory().getChildFile("agentsynth-assetmanager-adopt");
         root.deleteRecursively();
         root.createDirectory();
         appData = root.getChildFile("AppData");

@@ -1,9 +1,9 @@
 #include "TrackPresetManager.h"
 
-#include "Branding.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/ChannelStripModule.h"
 #include "SnippetManager.h"
+#include "UserSettings.h"
 #include <algorithm>
 #include <map>
 
@@ -28,9 +28,7 @@ struct TrackPresetNameComparator {
 // ---------------------------------------------------------------------------------------
 
 juce::File TrackPresetManager::getDefaultTrackPresetsDirectory() {
-    juce::File folder = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                            .getChildFile(synth::branding::kSettingsFolderName)
-                            .getChildFile("TrackPresets");
+    juce::File folder = synth::userSettingsRootDirectory().getChildFile("TrackPresets");
 
     if (!folder.exists())
         folder.createDirectory();

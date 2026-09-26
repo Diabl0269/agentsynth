@@ -14,6 +14,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UserSettings.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -58,12 +59,7 @@ private:
 // after, the same idiom FocusArbitrationTestFixture.h's resetBottomDockVisibleKey uses, so this
 // test can never leak into another test's defaults or the developer's own real settings.
 void resetMetronomeKeys() {
-    juce::PropertiesFile::Options opts;
-    opts.applicationName = "Agent Synth";
-    opts.folderName = "Agent Synth";
-    opts.filenameSuffix = "settings";
-    opts.osxLibrarySubFolder = "Application Support";
-    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+    juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
     juce::ApplicationProperties props;
     props.setStorageParameters(opts);

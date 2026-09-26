@@ -9,7 +9,6 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "Branding.h"
 #include "Modules/TimelineAudioSourceModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
@@ -17,6 +16,7 @@
 #include "Timeline/AutomationBinding.h"
 #include "Timeline/TakePlacement.h"
 #include "Timeline/TimelineReconciler.h"
+#include "UserSettings.h"
 #include <algorithm>
 #include <map>
 
@@ -274,9 +274,7 @@ bool MainComponent::chooseTakeFiles(AudioTake& take) const {
         // project.json never carries a "Recordings/" ref. Until saved, the ref is still
         // bundle-RELATIVE in form (isValidAssetRef accepts it), which is what keeps the one path
         // rule — no absolute paths, ever — true for both cases.
-        auto root = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                        .getChildFile(synth::branding::kSettingsFolderName)
-                        .getChildFile(detail::kRecordingsFolderName);
+        auto root = synth::userSettingsRootDirectory().getChildFile(detail::kRecordingsFolderName);
         audioDir = root;
         peaksDir = root;
         refPrefix = juce::String(detail::kRecordingsFolderName) + "/";
@@ -544,9 +542,7 @@ void MainComponent::refreshAssetRoots() {
                                                                                                  : juce::File();
     // The SAME folder chooseTakeFiles() writes unsaved-project takes into — kept in one expression
     // on each side rather than a shared helper so a change to either is visible at the other.
-    const juce::File recordingsRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                                          .getChildFile(synth::branding::kSettingsFolderName)
-                                          .getChildFile(detail::kRecordingsFolderName);
+    const juce::File recordingsRoot = synth::userSettingsRootDirectory().getChildFile(detail::kRecordingsFolderName);
 
     audioEngine.getAudioClipStreamer().setAssetRoots(bundleRoot, recordingsRoot);
 }
@@ -586,9 +582,7 @@ void MainComponent::relinkClipAsset(synth::ClipId id, const juce::File& chosenFi
     } else {
         // No bundle yet (unsaved project) — the SAME app-data Recordings/ convention
         // chooseTakeFiles() uses for a take recorded before the first save.
-        const auto recordingsRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                                        .getChildFile(synth::branding::kSettingsFolderName)
-                                        .getChildFile(detail::kRecordingsFolderName);
+        const auto recordingsRoot = synth::userSettingsRootDirectory().getChildFile(detail::kRecordingsFolderName);
         const auto name = synth::AssetManager::importAudioFileToDirectory(chosenFile, recordingsRoot, &error);
         if (name.isNotEmpty())
             newRef = juce::String(detail::kRecordingsFolderName) + "/" + name;
@@ -660,9 +654,7 @@ void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat
     if (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
         newRef = synth::AssetManager::importAudioFile(sourceFile, currentBundleDir_, &error);
     } else {
-        const auto recordingsRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                                        .getChildFile(synth::branding::kSettingsFolderName)
-                                        .getChildFile(detail::kRecordingsFolderName);
+        const auto recordingsRoot = synth::userSettingsRootDirectory().getChildFile(detail::kRecordingsFolderName);
         const auto name = synth::AssetManager::importAudioFileToDirectory(sourceFile, recordingsRoot, &error);
         if (name.isNotEmpty())
             newRef = juce::String(detail::kRecordingsFolderName) + "/" + name;

@@ -1,5 +1,5 @@
 #include "DeviceIdStore.h"
-#include "../Branding.h"
+#include "../UserSettings.h"
 
 namespace synth {
 
@@ -28,11 +28,7 @@ bool isPlausibleDeviceId(const juce::String& value) {
     return hexCount >= 32;
 }
 
-juce::File defaultDeviceIdFile() {
-    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile(synth::branding::kSettingsFolderName)
-        .getChildFile("device_id");
-}
+juce::File defaultDeviceIdFile() { return synth::userSettingsRootDirectory().getChildFile("device_id"); }
 
 } // namespace
 

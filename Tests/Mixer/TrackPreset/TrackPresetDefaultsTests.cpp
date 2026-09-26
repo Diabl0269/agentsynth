@@ -10,6 +10,7 @@
 
 #include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "TrackPresetTestFixture.h"
+#include "UserSettings.h"
 
 #include <gtest/gtest.h>
 
@@ -28,12 +29,7 @@ constexpr const char* kTestPresetName = "__FRO13_Test_Default_Audio_Preset__";
 class TrackPresetDefaultsTest : public MainComponentTest {
 protected:
     void resetDefaultKey() {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);

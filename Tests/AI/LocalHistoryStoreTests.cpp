@@ -1,4 +1,5 @@
 #include "AI/LocalHistoryStore.h"
+#include "UserSettings.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 
@@ -90,7 +91,7 @@ TEST(LocalHistoryStoreTransform, SummaryFromVarRejectsMissingId) {
 class LocalHistoryStorePersistence : public ::testing::Test {
 protected:
     void SetUp() override {
-        dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-history-tests");
+        dir = synth::userSettingsRootDirectory().getChildFile("agentsynth-history-tests");
         dir.deleteRecursively();
         dir.createDirectory();
     }
@@ -177,8 +178,7 @@ TEST_F(LocalHistoryStorePersistence, DeleteAllRemovesEveryFileAndReturnsCount) {
 class LocalHistoryStoreRetention : public ::testing::TestWithParam<int> {
 protected:
     void SetUp() override {
-        dir = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                  .getChildFile("agentsynth-history-retention-tests");
+        dir = synth::userSettingsRootDirectory().getChildFile("agentsynth-history-retention-tests");
         dir.deleteRecursively();
         dir.createDirectory();
     }

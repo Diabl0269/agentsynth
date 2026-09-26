@@ -1,5 +1,5 @@
 #include "LocalHistoryStore.h"
-#include "../Branding.h"
+#include "../UserSettings.h"
 #include <algorithm>
 
 namespace synth {
@@ -24,9 +24,7 @@ bool tryParseIso(const juce::String& iso, juce::Time& out) {
 } // namespace
 
 juce::File LocalHistoryStore::getDefaultHistoryDirectory() {
-    juce::File folder = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                            .getChildFile(synth::branding::kSettingsFolderName)
-                            .getChildFile("History");
+    juce::File folder = synth::userSettingsRootDirectory().getChildFile("History");
 
     if (!folder.exists())
         folder.createDirectory();

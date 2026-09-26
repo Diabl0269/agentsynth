@@ -1,14 +1,10 @@
 #include "GeneralFeedbackStore.h"
-#include "Branding.h"
+#include "UserSettings.h"
 
 namespace synth {
 
 namespace {
-juce::File defaultFeedbackFile() {
-    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile(synth::branding::kSettingsFolderName)
-        .getChildFile("general_feedback.jsonl");
-}
+juce::File defaultFeedbackFile() { return synth::userSettingsRootDirectory().getChildFile("general_feedback.jsonl"); }
 
 const char* categoryToString(GeneralFeedbackStore::Category category) {
     switch (category) {

@@ -23,8 +23,7 @@ juce::File makeBundleDir(const juce::File& root, const juce::String& name) {
 class RecentProjectsTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        tempRoot =
-            juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-recent-projects-tests");
+        tempRoot = synth::userSettingsRootDirectory().getChildFile("agentsynth-recent-projects-tests");
         tempRoot.deleteRecursively();
         tempRoot.createDirectory();
     }

@@ -8,9 +8,9 @@
 #include "MainComponentInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
-#include "Branding.h"
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
+#include "UserSettings.h"
 
 namespace {
 
@@ -45,9 +45,7 @@ bool MainComponent::saveToFile(const juce::File& file) {
         // inside a saved bundle. A plain, direct doc mutation: saving must never create undo
         // history (see synth::AssetManager::adoptRecordingsAssets's own comment). Safe to call
         // every save, including a resave with nothing left to adopt (a no-op — see that method).
-        const auto recordingsRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                                        .getChildFile(synth::branding::kSettingsFolderName)
-                                        .getChildFile(detail::kRecordingsFolderName);
+        const auto recordingsRoot = synth::userSettingsRootDirectory().getChildFile(detail::kRecordingsFolderName);
         synth::AssetManager::adoptRecordingsAssets(timelineDoc, recordingsRoot, file);
 
         // The bundle carries the graph, timeline AND macros; PatchDocument comes from the graph

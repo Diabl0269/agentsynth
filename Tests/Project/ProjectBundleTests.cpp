@@ -6,6 +6,7 @@
 #include "PatchDocument.h"
 #include "ProjectBundle.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <map>
@@ -87,7 +88,7 @@ juce::var makeKnownOnlyPatch() {
 class ProjectBundleTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        root = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-projectbundle-tests");
+        root = synth::userSettingsRootDirectory().getChildFile("agentsynth-projectbundle-tests");
         root.deleteRecursively();
         root.createDirectory();
     }

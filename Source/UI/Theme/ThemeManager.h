@@ -48,8 +48,9 @@ public:
     // Sets isUserTheme=true. Does not change the active selection. Does not broadcast.
     void addUserTheme(Theme theme);
 
-    // Cross-platform: <userApplicationDataDirectory>/<synth::branding::kSettingsFolderName>/Themes .
-    // Creates it if absent.
+    // Cross-platform: synth::userSettingsRootDirectory()/Themes (Source/UserSettings.h) --
+    // that root also honours the Tests-only settings-dir override (FRO305), so a test run never
+    // touches the developer's real Themes folder. Creates it if absent.
     static juce::File getUserThemesFolder();
 
     // Scan the user themes folder for "*.gtheme.json", parse each, addUserTheme() the valid
