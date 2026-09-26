@@ -23,8 +23,13 @@ int orderIndex(const juce::String& id) {
     return static_cast<int>(std::size(kOrder));
 }
 
-// Parses one BinaryData resource (by its symbol name) into a ControllerProfile.
-bool parseResource(const char* resourceName, ControllerProfile& out) {
+// Parses one BinaryData resource (by its symbol name) into a ControllerProfile. `vendor`/`source`
+// are optional out-params: ControllerProfile::fromVar only reads the keys it knows about, so the
+// template-only "vendor"/"source" metadata is read straight off the parsed juce::var rather than
+// living on ControllerProfile itself (applyControllerTemplate copies Controls only -- template
+// metadata must never leak into a user's saved profile).
+bool parseResource(const char* resourceName, ControllerProfile& out, juce::String* vendor = nullptr,
+                   juce::String* source = nullptr) {
     int size = 0;
     const char* data = BinaryData::getNamedResource(resourceName, size);
     if (data == nullptr || size <= 0)
@@ -34,6 +39,12 @@ bool parseResource(const char* resourceName, ControllerProfile& out) {
     if (!profile.fromVar(parsed))
         return false;
     out = std::move(profile);
+    if (auto* obj = parsed.getDynamicObject()) {
+        if (vendor != nullptr)
+            *vendor = obj->getProperty("vendor").toString();
+        if (source != nullptr)
+            *source = obj->getProperty("source").toString();
+    }
     return true;
 }
 
@@ -59,9 +70,10 @@ std::vector<TemplateInfo> listControllerTemplates() {
         if (!isTemplateResource(resourceName))
             continue;
         ControllerProfile profile;
-        if (!parseResource(resourceName, profile))
+        juce::String vendor, source;
+        if (!parseResource(resourceName, profile, &vendor, &source))
             continue;
-        result.push_back({profile.id, profile.name});
+        result.push_back({profile.id, profile.name, vendor, source});
     }
     std::stable_sort(result.begin(), result.end(), [](const TemplateInfo& a, const TemplateInfo& b) {
         const int ia = orderIndex(a.id);
@@ -71,6 +83,32 @@ std::vector<TemplateInfo> listControllerTemplates() {
         return a.id < b.id;
     });
     return result;
+}
+
+std::vector<TemplateGroup> groupControllerTemplatesByVendor(const std::vector<TemplateInfo>& templates) {
+    std::vector<TemplateGroup> groups;
+    // Generic (vendor == "") first, then one group per vendor in first-seen order below, sorted
+    // alphabetically afterwards -- Generic is kept out of that sort so it always leads.
+    TemplateGroup generic;
+    generic.vendor = juce::String();
+    for (const auto& info : templates) {
+        if (info.vendor.isEmpty()) {
+            generic.templates.push_back(info);
+            continue;
+        }
+        auto it =
+            std::find_if(groups.begin(), groups.end(), [&](const TemplateGroup& g) { return g.vendor == info.vendor; });
+        if (it == groups.end()) {
+            groups.push_back({info.vendor, {info}});
+        } else {
+            it->templates.push_back(info);
+        }
+    }
+    std::stable_sort(groups.begin(), groups.end(),
+                     [](const TemplateGroup& a, const TemplateGroup& b) { return a.vendor < b.vendor; });
+    if (!generic.templates.empty())
+        groups.insert(groups.begin(), std::move(generic));
+    return groups;
 }
 
 bool loadControllerTemplate(const juce::String& id, ControllerProfile& out) {

@@ -297,14 +297,49 @@ encoding is ever inferred — the runtime never guesses.
 
 ### Templates and import/export
 
-**Templates ▾** applies a shipped generic layout (8 knobs; 8 faders + 8 buttons; transport
-strip; keyboard-with-8-knobs) to an empty profile or **merges** it into a non-empty one
-(existing message keys win; the additions get fresh ids and are stacked below the existing rows). **⋯** has *Import controller…* / *Export controller…* (JSON file,
+**Templates ▾** applies a shipped layout (the generic ones: 8 knobs; 8 faders + 8 buttons; transport
+strip; keyboard-with-8-knobs; plus real-hardware templates for popular controllers) to an empty
+profile or **merges** it into a non-empty one
+(existing message keys win; the additions get fresh ids and are stacked below the existing rows).
+The menu groups templates by vendor (**Generic** first, then one section per manufacturer,
+alphabetically — `synth::midi::groupControllerTemplatesByVendor`), so picking e.g. Korg →
+nanoKONTROL2 draws that device's knobs/sliders/buttons correctly without running Detect. **⋯** has *Import controller…* / *Export controller…* (JSON file,
 the profile document of [`midi-remote.md`](midi-remote.md#data-model)). Importing a document whose id is already set up on this
 machine prompts **Replace / Cancel** (a replace keeps the project's assignments linked, since they
 reference the profile by id). Shipped templates are JSON resources under
 `assets/midi-remote-templates/`, embedded through the `Assets` binary-data library and enumerated
 by `synth::midi::listControllerTemplates()` (`Source/MidiRemote/ControllerTemplates.h`).
+
+#### Contribute a template
+
+A template file is an ordinary `ControllerProfile` document (`midi-remote.md#data-model`'s JSON
+shape — `version`, `id`, `name`, `input`, `controls[]`, `actions: []`), plus two keys the profile
+schema itself doesn't know about (`ControllerProfile::fromVar` reads named keys only, so it
+tolerates and ignores them):
+
+- `"vendor"` — the manufacturer, e.g. `"Korg"`. Omit it (or leave it `""`) for a generic template;
+  it groups under **Generic** in the Templates menu. Set it for a real device and it groups under
+  that manufacturer's name instead.
+- `"source"` — **required whenever `"vendor"` is set.** The exact manual or MIDI-implementation
+  document the CC/note numbers were read from, with a URL and the section/page — e.g. *"Korg
+  nanoKONTROL2 MIDI Implementation, https://cdn.korg.com/…, section 4 'Native KORG Mode
+  Messages'"*. Every number in a vendor template's `controls[]` must trace back to the vendor's own
+  manual or official MIDI-implementation chart, in the device's factory-default mode — never
+  memory, a forum post, or a reverse-engineered third-party doc. If no such authoritative document
+  is fetchable for a device, it doesn't get a template.
+
+Drop the new file under `assets/midi-remote-templates/` (filename `template-<name>.json`,
+hyphen-separated — an underscore collides with the `Assets` library's BinaryData symbol
+separator), add it to the `Assets` file list in the root `CMakeLists.txt` (next to the existing
+`template-*.json` entries) — the most common way a new template passes locally and fails CI is
+forgetting this step — and give its layout `col`/`row`s that mirror the physical device's
+arrangement without any two controls sharing a cell.
+
+`Tests/MidiRemote/ControllerTemplatesVendorTests.cpp` guards the contract: every template parses,
+template ids are unique across the whole library, control ids are unique within a template, no two
+controls' layout cells overlap, every vendor template has a non-empty `source`, and
+`groupControllerTemplatesByVendor` puts Generic first then vendors alphabetically. Register a new
+test file in `Tests/CMakeLists.txt` the same way (see that file's `MidiRemote/` entries).
 
 ---
 

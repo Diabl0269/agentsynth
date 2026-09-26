@@ -1,0 +1,335 @@
+{
+  "version": 1,
+  "id": "template-arturia-minilab-3",
+  "name": "MiniLab 3",
+  "vendor": "Arturia",
+  "source": "Arturia MiniLab 3 User Manual, https://dl.arturia.net/products/minilab-3/manual/minilab-3_Manual_1_0_5_EN.pdf, factory ARTURIA-mode default mapping: knobs 1-4 sec 5.4.1 (CC 74/71/76/77), knobs 5-8 sec 5.4.2 (CC 93/18/19/16), faders 1-4 sec 5.4.3 (CC 82/83/85/17), pads Bank A sec 4.4.1/5.4.4 (notes 36-43, channel 10 -- the manual states pads always transmit on channel 10). The manual does not state a MIDI channel for the fixed ARTURIA-mode knob/fader mapping (channel is a per-control user setting for custom User Programs -- MIDI Control Center manual, https://dl.arturia.net/products/minilab-3/manual/minilab-3-mcc_Manual_1_14_1_EN.pdf, section 3.1), so channel 0 (any) is used here for knobs and faders.",
+  "input": {
+    "identifier": "",
+    "name": ""
+  },
+  "passMapped": false,
+  "controls": [
+    {
+      "id": "knob1",
+      "name": "Knob 1",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 74
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob2",
+      "name": "Knob 2",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 71
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob3",
+      "name": "Knob 3",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 76
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob4",
+      "name": "Knob 4",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 77
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob5",
+      "name": "Knob 5",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 93
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob6",
+      "name": "Knob 6",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 18
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob7",
+      "name": "Knob 7",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 19
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob8",
+      "name": "Knob 8",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 16
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 0
+      }
+    },
+    {
+      "id": "fader1",
+      "name": "Fader 1",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 82
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 1
+      }
+    },
+    {
+      "id": "fader2",
+      "name": "Fader 2",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 83
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 1
+      }
+    },
+    {
+      "id": "fader3",
+      "name": "Fader 3",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 85
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 1
+      }
+    },
+    {
+      "id": "fader4",
+      "name": "Fader 4",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 17
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 1
+      }
+    },
+    {
+      "id": "pad1",
+      "name": "Pad 1",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 10,
+        "number": 36
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad2",
+      "name": "Pad 2",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 10,
+        "number": 37
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad3",
+      "name": "Pad 3",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 10,
+        "number": 38
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad4",
+      "name": "Pad 4",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 10,
+        "number": 39
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad5",
+      "name": "Pad 5",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 10,
+        "number": 40
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad6",
+      "name": "Pad 6",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 10,
+        "number": 41
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad7",
+      "name": "Pad 7",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 10,
+        "number": 42
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad8",
+      "name": "Pad 8",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 10,
+        "number": 43
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 2
+      }
+    }
+  ],
+  "actions": []
+}

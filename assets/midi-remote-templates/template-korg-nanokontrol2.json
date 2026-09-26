@@ -1,0 +1,831 @@
+{
+  "version": 1,
+  "id": "template-korg-nanokontrol2",
+  "name": "nanoKONTROL2",
+  "vendor": "Korg",
+  "source": "Korg nanoKONTROL2 MIDI Implementation (factory CC mode / \"Native KORG Mode\" table), https://cdn.korg.com/us/support/download/files/aeb2862daf0cb7db826d8c62f51ec28d.txt (linked from https://www.korg.com/us/support/download/manual/0/159/2710/), section 4 \"Native KORG Mode Messages\" (1)-(3): sliders CC0-7, knobs CC16-23, Solo CC32-39, Mute CC48-55, Rec CC64-71, transport buttons CC41-46, track/marker buttons CC58-62. The MIDI channel each control transmits on is a user-configurable Global/Group MIDI Channel setting with no documented factory value (nanoKONTROL2 Parameter Guide p.4, https://cdn.korg.com/us/support/download/files/c8d0cd6808e12d3672845cadcdbbfe9b.pdf), so channel 0 (any) is used here.",
+  "input": {
+    "identifier": "",
+    "name": ""
+  },
+  "passMapped": false,
+  "controls": [
+    {
+      "id": "knob1",
+      "name": "Knob 1",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 16
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob2",
+      "name": "Knob 2",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 17
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob3",
+      "name": "Knob 3",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 18
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob4",
+      "name": "Knob 4",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 19
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob5",
+      "name": "Knob 5",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 20
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob6",
+      "name": "Knob 6",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 21
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob7",
+      "name": "Knob 7",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 22
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 0
+      }
+    },
+    {
+      "id": "knob8",
+      "name": "Knob 8",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 23
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 0
+      }
+    },
+    {
+      "id": "slider1",
+      "name": "Slider 1",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 0
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 1
+      }
+    },
+    {
+      "id": "slider2",
+      "name": "Slider 2",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 1
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 1
+      }
+    },
+    {
+      "id": "slider3",
+      "name": "Slider 3",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 2
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 1
+      }
+    },
+    {
+      "id": "slider4",
+      "name": "Slider 4",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 3
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 1
+      }
+    },
+    {
+      "id": "slider5",
+      "name": "Slider 5",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 4
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 1
+      }
+    },
+    {
+      "id": "slider6",
+      "name": "Slider 6",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 5
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 1
+      }
+    },
+    {
+      "id": "slider7",
+      "name": "Slider 7",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 6
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 1
+      }
+    },
+    {
+      "id": "slider8",
+      "name": "Slider 8",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 7
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 1
+      }
+    },
+    {
+      "id": "solo1",
+      "name": "Solo 1",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 32
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 2
+      }
+    },
+    {
+      "id": "solo2",
+      "name": "Solo 2",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 33
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 2
+      }
+    },
+    {
+      "id": "solo3",
+      "name": "Solo 3",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 34
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 2
+      }
+    },
+    {
+      "id": "solo4",
+      "name": "Solo 4",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 35
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 2
+      }
+    },
+    {
+      "id": "solo5",
+      "name": "Solo 5",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 36
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 2
+      }
+    },
+    {
+      "id": "solo6",
+      "name": "Solo 6",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 37
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 2
+      }
+    },
+    {
+      "id": "solo7",
+      "name": "Solo 7",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 38
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 2
+      }
+    },
+    {
+      "id": "solo8",
+      "name": "Solo 8",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 39
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 2
+      }
+    },
+    {
+      "id": "mute1",
+      "name": "Mute 1",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 48
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 3
+      }
+    },
+    {
+      "id": "mute2",
+      "name": "Mute 2",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 49
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 3
+      }
+    },
+    {
+      "id": "mute3",
+      "name": "Mute 3",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 50
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 3
+      }
+    },
+    {
+      "id": "mute4",
+      "name": "Mute 4",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 51
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 3
+      }
+    },
+    {
+      "id": "mute5",
+      "name": "Mute 5",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 52
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 3
+      }
+    },
+    {
+      "id": "mute6",
+      "name": "Mute 6",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 53
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 3
+      }
+    },
+    {
+      "id": "mute7",
+      "name": "Mute 7",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 54
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 3
+      }
+    },
+    {
+      "id": "mute8",
+      "name": "Mute 8",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 55
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 3
+      }
+    },
+    {
+      "id": "rec1",
+      "name": "Rec 1",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 64
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 4
+      }
+    },
+    {
+      "id": "rec2",
+      "name": "Rec 2",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 65
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 4
+      }
+    },
+    {
+      "id": "rec3",
+      "name": "Rec 3",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 66
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 4
+      }
+    },
+    {
+      "id": "rec4",
+      "name": "Rec 4",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 67
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 4
+      }
+    },
+    {
+      "id": "rec5",
+      "name": "Rec 5",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 68
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 4
+      }
+    },
+    {
+      "id": "rec6",
+      "name": "Rec 6",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 69
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 4
+      }
+    },
+    {
+      "id": "rec7",
+      "name": "Rec 7",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 70
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 4
+      }
+    },
+    {
+      "id": "rec8",
+      "name": "Rec 8",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 71
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 4
+      }
+    },
+    {
+      "id": "cycle",
+      "name": "Cycle",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 46
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 5
+      }
+    },
+    {
+      "id": "rew",
+      "name": "Rew",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 43
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 5
+      }
+    },
+    {
+      "id": "ff",
+      "name": "FF",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 44
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 5
+      }
+    },
+    {
+      "id": "stop",
+      "name": "Stop",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 42
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 5
+      }
+    },
+    {
+      "id": "play",
+      "name": "Play",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 41
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 5
+      }
+    },
+    {
+      "id": "transportRecord",
+      "name": "Record",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 45
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 5
+      }
+    },
+    {
+      "id": "trackPrev",
+      "name": "Track <<",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 58
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 6
+      }
+    },
+    {
+      "id": "trackNext",
+      "name": "Track >>",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 59
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 6
+      }
+    },
+    {
+      "id": "markerSet",
+      "name": "Marker Set",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 60
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 6
+      }
+    },
+    {
+      "id": "markerPrev",
+      "name": "Marker <<",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 61
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 6
+      }
+    },
+    {
+      "id": "markerNext",
+      "name": "Marker >>",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 62
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 6
+      }
+    }
+  ],
+  "actions": []
+}

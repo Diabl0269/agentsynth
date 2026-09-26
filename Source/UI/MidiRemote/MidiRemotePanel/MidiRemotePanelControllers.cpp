@@ -103,11 +103,15 @@ int MidiRemotePanelComponent::applyTemplateToSelectedProfile(const juce::String&
 void MidiRemotePanelComponent::showTemplatesMenu(juce::Component& anchor) {
     juce::PopupMenu menu;
     juce::Component::SafePointer<MidiRemotePanelComponent> safeThis(this);
-    for (const auto& info : synth::midi::listControllerTemplates()) {
-        menu.addItem(info.name, [safeThis, id = info.id] {
-            if (safeThis != nullptr)
-                safeThis->applyTemplateToSelectedProfile(id);
-        });
+    const auto templates = synth::midi::listControllerTemplates();
+    for (const auto& group : synth::midi::groupControllerTemplatesByVendor(templates)) {
+        menu.addSectionHeader(group.vendor.isEmpty() ? juce::String("Generic") : group.vendor);
+        for (const auto& info : group.templates) {
+            menu.addItem(info.name, [safeThis, id = info.id] {
+                if (safeThis != nullptr)
+                    safeThis->applyTemplateToSelectedProfile(id);
+            });
+        }
     }
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&anchor));
 }
