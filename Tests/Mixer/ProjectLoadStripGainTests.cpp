@@ -25,6 +25,7 @@
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerFader.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -141,7 +142,7 @@ private:
 class ProjectLoadStripGainTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        root = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-striploadgain-tests");
+        root = synth::userSettingsRootDirectory().getChildFile("agentsynth-striploadgain-tests");
         root.deleteRecursively();
         root.createDirectory();
     }

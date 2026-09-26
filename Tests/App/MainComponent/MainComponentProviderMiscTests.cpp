@@ -6,6 +6,7 @@
 #include "MainComponentTestFixture.h"
 #include "MidiRemote/ControllerProfileStore.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UserSettings.h"
 
 TEST_F(MainComponentTest, AiProviderGetsModelSelectedOnStartup) {
     auto ownedProvider = std::make_unique<ModelTrackingMockProvider>();
@@ -57,12 +58,7 @@ TEST(MainComponentDefaultProviderIdTest, ExistingInstallKeepsLocalOllamaDefault)
 // actually asked to construct, not just the pure decision function in isolation.
 TEST_F(MainComponentTest, ExistingInstallWithNoAiProviderKeyRequestsOllamaFromRegistry) {
     {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);

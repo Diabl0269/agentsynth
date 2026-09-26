@@ -1,8 +1,8 @@
 #include "SnippetManager.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "Branding.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/AudioInputModule.h"
+#include "UserSettings.h"
 #include <limits>
 #include <map>
 #include <set>
@@ -77,9 +77,7 @@ struct SnippetNameComparator {
 // ---------------------------------------------------------------------------------------
 
 juce::File SnippetManager::getDefaultSnippetsDirectory() {
-    juce::File folder = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                            .getChildFile(synth::branding::kSettingsFolderName)
-                            .getChildFile("Snippets");
+    juce::File folder = synth::userSettingsRootDirectory().getChildFile("Snippets");
 
     if (!folder.exists())
         folder.createDirectory();

@@ -1,5 +1,5 @@
 #include "ThemeManager.h"
-#include "../../Branding.h"
+#include "../../UserSettings.h"
 #include "BuiltInThemes.h"
 #include "ThemeLoader.h"
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -201,9 +201,7 @@ void ThemeManager::addUserTheme(Theme theme) {
 
 // static
 juce::File ThemeManager::getUserThemesFolder() {
-    juce::File folder = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                            .getChildFile(synth::branding::kSettingsFolderName)
-                            .getChildFile("Themes");
+    juce::File folder = synth::userSettingsRootDirectory().getChildFile("Themes");
 
     if (!folder.exists())
         folder.createDirectory();

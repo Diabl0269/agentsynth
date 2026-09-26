@@ -26,6 +26,29 @@ lock for you (shared across every worktree of the repo, waits visibly): see
 writing one. To reproduce what CI will check without waiting on a CI round-trip, run
 [`local-ci.md`](local-ci.md)'s `scripts/ci-local.sh`.
 
+## CI sharding (macOS)
+
+`Build and Test (macOS)`'s "Run Tests" step (FRO305) runs the ~5530-test suite as 3 concurrent
+processes instead of one serial run — GoogleTest's own `GTEST_TOTAL_SHARDS`/`GTEST_SHARD_INDEX`
+env-var sharding, 3 because `macos-latest` (arm64) runners have 3 vCPUs. That turned "two suites at
+once" (the paragraph above) from a rule about accidents into something the CI step does on purpose,
+so each shard also gets its own `AGENTSYNTH_SETTINGS_DIR` — a Tests-only environment variable
+`Tests/TestMain.cpp` reads once at startup and feeds to `synth::setSettingsDirOverrideForTests()`
+(`Source/UserSettings.h`), which redirects `synth::userSettingsOptions()` to store its settings
+file under that directory instead of the real per-user location for the rest of the process. Every
+sibling on-disk store this app owns (Themes, Snippets, AI local history, the device id, track
+presets, feedback logs, MIDI Remote controller profiles, unsaved-project recordings) is rooted
+under `synth::userSettingsRootDirectory()`, the settings file's own parent directory, so the one
+override reaches all of them — nothing in the shipped app or plugin ever calls the setter or reads
+that env var, so a shipped binary can never be redirected this way. Overriding `$HOME` does not
+work for this: on macOS, JUCE expands `~` via the OS user record
+(`File::getSpecialLocation(userHomeDirectory)`), not `getenv("HOME")`.
+
+A local unsharded run needs no env var and behaves exactly as before this ticket. To reproduce the
+sharded CI step locally: run `./Tests` 3 times concurrently with `GTEST_TOTAL_SHARDS=3`,
+`GTEST_SHARD_INDEX` set to 0/1/2 and `AGENTSYNTH_SETTINGS_DIR` set to 3 different directories — see
+the macOS job's "Run Tests" step in `.github/workflows/ci.yml` for the exact script.
+
 ## Build flags
 
 ```bash

@@ -10,6 +10,7 @@
 #include "MainComponent/MainComponent.h"
 #include "TimelinePanelTestEvents.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -75,12 +76,7 @@ protected:
     // panel-visibility keys are reset to their documented defaults before AND after every test to
     // keep persistence tests hermetic regardless of execution order.
     void resetPanelKeys() {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);

@@ -167,6 +167,66 @@ re-hardcoded copy (FRO58 replaced seven byte-identical private copies with that 
 This matters beyond one process: concurrent suites in sibling worktrees share that same settings
 file, which is why [`local-ci.md`](local-ci.md#running-suites-in-parallel) says to serialise them.
 
+## Every on-disk path a test writes must go through the override seam
+
+FRO305 (macOS CI's 3-way GTest shard, [`testing.md`](testing.md#ci-sharding-macos)) runs 3 `Tests`
+processes concurrently in one job, each with its own `AGENTSYNTH_SETTINGS_DIR`. That only isolates a
+shard if EVERY read/write of the settings file and its sibling on-disk stores (Themes, Snippets, AI
+local history, the device id, track presets, feedback logs, unsaved-project Recordings) resolves the
+path through `synth::userSettingsOptions()` / `synth::userSettingsRootDirectory()`
+(`Source/UserSettings.h`) — never a literal re-hardcoded `PropertiesFile::Options`, and never
+`juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Agent
+Synth")` written out again by hand, however small the second copy looks. FRO305 found three separate
+production call sites and roughly thirty test call sites doing exactly that — each one invisible in
+an unsharded run (it happens to agree with the real function's answer there) and a real, silent
+false failure once a shard's `AGENTSYNTH_SETTINGS_DIR` diverges from the hand-copied literal. A test
+that needs to independently VERIFY where a file landed (not just set one up) is the case most likely
+to get this wrong, since "assert against the real path" reads as more rigorous than "assert against
+the same function under test" — it is the opposite: only the shared function stays right when the
+seam gains a new override.
+
+**Why the override is a runtime setter, not a compile-time define.** `userSettingsOptions()` is
+`inline` and included from both AppUI (`MainComponent.cpp`, `PluginProcessor.cpp` — compiled once
+into the AppUI static library the shipped app AND Tests both link) and Tests' own `.cpp` files that
+call it directly. A Tests-only `target_compile_definitions` macro would never reach the
+AppUI-compiled call sites (already-built objects; the define is only ever set on the Tests target),
+and branching the header on it would give two different bodies for the same inline function in one
+program — an ODR violation. `detail::settingsDirOverride()`'s function-local static sidesteps both:
+one definition everywhere, gated on a value only `Tests/TestMain.cpp` ever sets (reading
+`AGENTSYNTH_SETTINGS_DIR`). Nothing in the shipped app or plugin calls the setter or reads that env
+var, so a shipped binary can never be redirected via it — the same "never wired up" guarantee
+`Branding.h::resolveApiBaseUrl()`'s `AGENTSYNTH_LOCAL_API_URL` gets by being compiled out of Release
+entirely, adapted here because Tests IS a Release build and needs the seam present.
+
+**Why `userSettingsOptions()`'s override works by setting `folderName` to an absolute path.**
+`juce::File::getChildFile()` (`juce_File.cpp`) returns an absolute argument as-is, discarding
+whatever base it was called on: `if (isAbsolutePath(r)) return File(String(r));`.
+`Options::getDefaultFile()` builds the real path as
+`"~/Library/Application Support".getChildFile(folderName).getChildFile(applicationName + suffix)`,
+so an absolute `folderName` replaces the whole `"~/Library/..."` prefix with the override directory
+— on every platform this repo ships for, with no reliance on `$HOME` (which macOS JUCE resolves via
+the OS user record, not `getenv`).
+
+**Why `userSettingsRootDirectory()` is a SECOND function, not
+`userSettingsOptions().getDefaultFile().getParentDirectory()`.** That expression is a real,
+already-shipped location (`~/Library/Application Support/Agent Synth` on macOS — where
+`ControllerProfileStore`/`PluginCardLayoutStore` intentionally put a shareable document "beside the
+settings file"). Themes/Snippets/History/device-id/feedback-logs/track-presets/Recordings have
+always used plain `userApplicationDataDirectory` instead (`~/Library/Agent Synth`, no "Application
+Support") — an existing inconsistency `userSettingsRootDirectory()` preserves bit-for-bit rather
+than silently unifying, since that would move a live user's Themes/Recordings/etc to a folder
+nothing has ever written there before. Confirmed by breakage: a first version of this helper that
+returned the settings-file convention here instead failed `DeviceChangeFlowTest`/
+`AssetManagerRelinkTest` for real.
+
+A fixed directory name reused across more than one `TEST`/`TEST_F` in a suite (a shared fixture
+`SetUp()` root, or a file-scope helper like `resetPanelKeys()`) has the same failure mode one level
+up: GTest's sharding assigns individual tests, not whole suites, to a shard, so two tests of the same
+fixture can land in different concurrent shard processes and race each other's `deleteRecursively()`
+/ `createDirectory()` on that fixed path. Route it through `synth::userSettingsRootDirectory()` too
+(shard-isolated when the override is set, the original location otherwise) or suffix it with
+`juce::Uuid().toString()` per test the way most of this repo's fixtures already do.
+
 ## End-to-end workflow conventions
 
 `Tests/App/E2EWorkflowTests.cpp` constructs a complete `MainComponent` per test. Four conventions

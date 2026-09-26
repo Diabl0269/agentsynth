@@ -8,6 +8,7 @@
 #include "MainComponent/MainComponent.h"
 #include "Modules/MasterModule.h"
 #include "UI/Chrome/ToolbarComponent.h"
+#include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -73,12 +74,7 @@ protected:
     // hermetic regardless of execution order, reset those keys to their documented defaults
     // before AND after every test. We open the same PropertiesFile location MainComponent uses.
     void resetPanelKeys() {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);
@@ -101,8 +97,7 @@ protected:
 
     void SetUp() override {
         resetPanelKeys();
-        tempRoot =
-            juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-maincomponent-tests");
+        tempRoot = synth::userSettingsRootDirectory().getChildFile("agentsynth-maincomponent-tests");
         tempRoot.deleteRecursively();
         tempRoot.createDirectory();
     }

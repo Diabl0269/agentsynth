@@ -22,6 +22,7 @@
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineViewState.h"
+#include "UserSettings.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -478,12 +479,7 @@ private:
 // own MainComponentTest fixture guards against exactly this cross-test leak) — reset the one key
 // this file touches before and after, so this test's outcome never depends on execution order.
 void resetBottomDockVisibleKey() {
-    juce::PropertiesFile::Options opts;
-    opts.applicationName = "Agent Synth";
-    opts.folderName = "Agent Synth";
-    opts.filenameSuffix = "settings";
-    opts.osxLibrarySubFolder = "Application Support";
-    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+    juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
     juce::ApplicationProperties props;
     props.setStorageParameters(opts);

@@ -18,6 +18,7 @@
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"
+#include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -264,12 +265,7 @@ protected:
     // Same hermetic reset as TimelinePanelTests.cpp/TimelinePlayheadTests.cpp: MainComponent's
     // delegating ctor reads the shared on-disk "Agent Synth" properties.
     void resetPanelKeys() {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);

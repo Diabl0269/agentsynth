@@ -3,6 +3,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "PluginScanTestHelpers.h"
+#include "UserSettings.h"
 
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
@@ -46,12 +47,7 @@ private:
 class PluginScanPersistenceTest : public ::testing::Test {
 protected:
     static void clearScanList() {
-        juce::PropertiesFile::Options options;
-        options.applicationName = "Agent Synth";
-        options.folderName = "Agent Synth";
-        options.filenameSuffix = "settings";
-        options.osxLibrarySubFolder = "Application Support";
-        options.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options options = synth::userSettingsOptions();
 
         juce::ApplicationProperties properties;
         properties.setStorageParameters(options);
@@ -296,12 +292,7 @@ TEST_F(PluginScanPersistenceTest, DestroyingMainComponentMidScanPersistsWhatWasF
 
     main.reset(); // ~MainComponent(): cancels the scan, then must still save what it already had.
 
-    juce::PropertiesFile::Options options;
-    options.applicationName = "Agent Synth";
-    options.folderName = "Agent Synth";
-    options.filenameSuffix = "settings";
-    options.osxLibrarySubFolder = "Application Support";
-    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    juce::PropertiesFile::Options options = synth::userSettingsOptions();
     juce::ApplicationProperties properties;
     properties.setStorageParameters(options);
     auto savedList = juce::parseXML(properties.getUserSettings()->getValue(MainComponent::kPluginScanListKey));

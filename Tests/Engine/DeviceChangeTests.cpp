@@ -31,6 +31,7 @@
 #include "Modules/RecordTapModule.h"
 #include "Transport/OfflineTransportDriver.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UserSettings.h"
 #include <cmath>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -422,12 +423,7 @@ protected:
     // same hygiene as LatencyAlignmentTests.cpp's LatencyFlowTest / MetronomeTests.cpp's
     // MetronomeCountInTest. No count-in, so a take's punch is exactly its record-on beat.
     void writeKeys() {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);
@@ -493,8 +489,7 @@ TEST_F(DeviceChangeFlowTest, AudioTakeCommittedAtFormatChange) {
 
     const auto& clip = doc.getTrack(track)->clips[0];
     ASSERT_TRUE(clip.assetRef.startsWith("Recordings/")) << "unsaved project ref prefix";
-    const auto takeFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                              .getChildFile("Agent Synth")
+    const auto takeFile = synth::userSettingsRootDirectory()
                               .getChildFile("Recordings")
                               .getChildFile(clip.assetRef.fromLastOccurrenceOf("/", false, false));
     const auto wav = readWavInfo(takeFile);
@@ -579,8 +574,7 @@ TEST_F(DeviceChangeFlowTest, AudioTakeCapturesNothingAfterTheRateBoundary) {
     ASSERT_EQ(doc.getTrack(track)->clips.size(), 1u);
 
     const auto& clip = doc.getTrack(track)->clips[0];
-    const auto takeFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                              .getChildFile("Agent Synth")
+    const auto takeFile = synth::userSettingsRootDirectory()
                               .getChildFile("Recordings")
                               .getChildFile(clip.assetRef.fromLastOccurrenceOf("/", false, false));
     const auto wav = readWavInfo(takeFile);

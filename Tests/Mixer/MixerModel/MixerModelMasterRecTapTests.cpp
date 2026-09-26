@@ -13,6 +13,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UserSettings.h"
 
 namespace {
 
@@ -44,12 +45,7 @@ private:
 // Same shared-settings-file hygiene as RecordTapTests.cpp's RecordFlowTest: the MainComponent ctor reads the on-disk
 // "Agent Synth" settings, so the keys the record flow depends on are pinned before AND after.
 void pinRecordFlowKeys() {
-    juce::PropertiesFile::Options opts;
-    opts.applicationName = "Agent Synth";
-    opts.folderName = "Agent Synth";
-    opts.filenameSuffix = "settings";
-    opts.osxLibrarySubFolder = "Application Support";
-    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+    juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
     juce::ApplicationProperties props;
     props.setStorageParameters(opts);

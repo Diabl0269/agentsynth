@@ -10,6 +10,7 @@
 #include "MainComponentTestFixture.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Theme/BuiltInThemes.h"
+#include "UserSettings.h"
 #include <optional>
 
 namespace {
@@ -42,12 +43,7 @@ public:
 
 private:
     static juce::PropertiesFile::Options options() {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
         return opts;
     }
 

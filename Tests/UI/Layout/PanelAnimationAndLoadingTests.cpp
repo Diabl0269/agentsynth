@@ -16,6 +16,7 @@
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/UIAnimation.h"
+#include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -96,12 +97,7 @@ struct TestPropsOwner {
 
 // Helper to reset panel-visibility keys so tests are hermetic.
 static void resetPanelKeys() {
-    juce::PropertiesFile::Options opts;
-    opts.applicationName = "Agent Synth";
-    opts.folderName = "Agent Synth";
-    opts.filenameSuffix = "settings";
-    opts.osxLibrarySubFolder = "Application Support";
-    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+    juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
     juce::ApplicationProperties props;
     props.setStorageParameters(opts);

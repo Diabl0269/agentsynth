@@ -36,6 +36,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
+#include "UserSettings.h"
 #include <cmath>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -830,12 +831,7 @@ protected:
     // the keys this flow depends on are pinned before AND after every test — same hygiene as
     // RecordTapTests.cpp / TimelinePanelTests.cpp.
     void resetKeys() {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);

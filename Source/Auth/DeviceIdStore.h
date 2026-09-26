@@ -22,9 +22,8 @@ namespace synth {
  */
 class DeviceIdStore {
 public:
-    /** Production use: stores the id under the app's standard settings folder (same
-        userApplicationDataDirectory/<kSettingsFolderName> convention as ThemeManager and
-        SnippetManager). */
+    /** Production use: stores the id under synth::userSettingsRootDirectory() (Source/UserSettings.h),
+        the same root ThemeManager and SnippetManager use. */
     DeviceIdStore();
 
     /** Test use (and any caller that wants an explicit location): reads/writes the id at exactly

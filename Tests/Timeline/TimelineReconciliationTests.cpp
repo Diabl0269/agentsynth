@@ -7,6 +7,7 @@
 #include "ProjectBundle.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineReconciler.h"
+#include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <initializer_list>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -287,8 +288,7 @@ TEST_F(TimelineReconciliationTest, RebindLaneRules) {
 // =============================================================================
 
 TEST(TimelineReconciliationBundleTest, BundleLoadSetsOrphanFlags) {
-    auto root =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-timeline-reconcile-tests");
+    auto root = synth::userSettingsRootDirectory().getChildFile("agentsynth-timeline-reconcile-tests");
     root.deleteRecursively();
     root.createDirectory();
     auto dir = root.getChildFile("Bundle.agsproj");

@@ -17,6 +17,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "MacroContainerTestHelpers.h"
+#include "UserSettings.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
@@ -146,8 +147,7 @@ TEST(MacroWrap, RefusesNestingAnAlreadyGroupedModule) {
 // ============================================================================
 
 TEST(MacroPersistence, MembershipAndPresentationSurviveProjectBundleSaveAndLoad) {
-    auto root =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-macrocontainer-tests");
+    auto root = synth::userSettingsRootDirectory().getChildFile("agentsynth-macrocontainer-tests");
     root.deleteRecursively();
     root.createDirectory();
     auto dir = root.getChildFile(juce::String("Macro") + synth::ProjectBundle::kBundleExtension);

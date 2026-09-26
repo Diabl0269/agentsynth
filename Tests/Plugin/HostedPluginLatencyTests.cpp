@@ -35,6 +35,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/PluginProcessor.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UserSettings.h"
 #include <chrono>
 #include <cmath>
 #include <gtest/gtest.h>
@@ -536,12 +537,7 @@ protected:
     // The delegating MainComponent ctor reads the shared on-disk "Agent Synth" settings — same
     // hygiene as LatencyAlignmentTests.cpp's LatencyFlowTest.
     void writeKeys() {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);

@@ -1,6 +1,7 @@
 // Concern: snippet name sanitisation, the drag-payload encoding, and on-disk persistence
 // (save/load/list/delete).
 #include "SnippetManagerTestHelpers.h"
+#include "UserSettings.h"
 
 TEST(SnippetName, TrimsAndKeepsOrdinaryNames) {
     EXPECT_EQ(SnippetManager::sanitiseName("  My Supersaw Lead  "), "My Supersaw Lead");
@@ -45,7 +46,7 @@ TEST(SnippetPayload, PlainModuleNamesAreNotSnippetPayloads) {
 class SnippetPersistence : public ::testing::Test {
 protected:
     void SetUp() override {
-        dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-snippet-tests");
+        dir = synth::userSettingsRootDirectory().getChildFile("agentsynth-snippet-tests");
         dir.deleteRecursively();
         dir.createDirectory();
 

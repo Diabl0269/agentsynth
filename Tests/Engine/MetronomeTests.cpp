@@ -14,6 +14,7 @@
 #include "Transport/BounceExporter.h"
 #include "Transport/Metronome.h"
 #include "Transport/OfflineTransportDriver.h"
+#include "UserSettings.h"
 #include <cmath>
 #include <cstdint>
 #include <gtest/gtest.h>
@@ -408,12 +409,7 @@ protected:
     // Same hermetic reset as TimelineTransportBarTests.cpp/TimelinePanelTests.cpp: MainComponent's
     // delegating ctor reads the shared on-disk "Agent Synth" properties.
     void resetPanelKeys() {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);

@@ -689,10 +689,65 @@ jobs:
 
     # Pull-request only — a push run seeds the cache (see the note above the `lint` job). This is
     # the starkest case: an 8-second cached build was carrying 118 seconds of test execution.
+    #
+    # FRO305: run as 3 concurrent shards via GoogleTest's built-in GTEST_TOTAL_SHARDS/
+    # GTEST_SHARD_INDEX env-var sharding (~5530 tests serially took 8m43s; 3-way sharding is the
+    # whole point of this step). 3, because macos-latest (arm64) runners have 3 vCPUs — a 4th
+    # shard would only context-switch against the other three, not add real parallelism.
+    # AGENTSYNTH_SETTINGS_DIR gives each shard its own on-disk settings folder
+    # (synth::userSettingsOptions(), Source/UserSettings.h, Tests-only override) instead of the
+    # one real settings file every Tests process opens — three shards writing that file at once
+    # produced false failures (docs/development/testing.md's "never run two suites at once"),
+    # confirmed unfixable by overriding $HOME (JUCE resolves "~" via the OS user record on macOS,
+    # not the environment).
     - name: Run Tests
       if: github.event_name == 'pull_request'
       working-directory: ./build/Tests
-      run: ./Tests
+      run: |
+        set -uo pipefail
+        total_shards=3
+        pids=()
+        logs=()
+        for i in $(seq 0 $((total_shards - 1))); do
+          shard_dir="$RUNNER_TEMP/agentsynth-settings-$i"
+          log="$RUNNER_TEMP/agentsynth-tests-shard-$i.log"
+          mkdir -p "$shard_dir"
+          GTEST_TOTAL_SHARDS="$total_shards" GTEST_SHARD_INDEX="$i" \
+            AGENTSYNTH_SETTINGS_DIR="$shard_dir" \
+            ./Tests >"$log" 2>&1 &
+          pids+=("$!")
+          logs+=("$log")
+        done
+
+        overall_rc=0
+        for i in $(seq 0 $((total_shards - 1))); do
+          pid="${pids[$i]}"
+          log="${logs[$i]}"
+          shard_rc=0
+          wait "$pid" || shard_rc=$?
+
+          echo "::group::Shard $i (pid $pid, exit $shard_rc)"
+          cat "$log"
+          echo "::endgroup::"
+
+          # GoogleTest's own summary line, e.g. "[==========] 1843 tests from 210 test suites
+          # ran. (12345 ms total)" -- its absence, or a "0 tests" count, means the binary crashed
+          # or the shard's slice of the split was empty, either of which a nonzero process exit
+          # code alone would not always catch (a segfault does; a hung/killed runner step might
+          # not surface as this shard's own exit code).
+          ran_count="$(grep -oE '^\[==========\] [0-9]+ tests? from' "$log" | grep -oE '[0-9]+' | head -1 || true)"
+
+          if [ "$shard_rc" -ne 0 ]; then
+            echo "::error::Shard $i failed (exit $shard_rc) -- see the log group above"
+            overall_rc=1
+          fi
+          if [ -z "$ran_count" ] || [ "$ran_count" -eq 0 ]; then
+            echo "::error::Shard $i reported no tests ran -- see the log group above"
+            overall_rc=1
+          fi
+        done
+
+        exit "$overall_rc"
 
   build-and-test-windows:
     name: Build and Test (Windows)

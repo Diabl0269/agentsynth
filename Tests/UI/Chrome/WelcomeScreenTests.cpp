@@ -19,6 +19,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UserSettings.h"
 #include "WhatsNewData.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -91,12 +92,7 @@ void makeDirty(MainComponent& mc) {
  *  in Source/UserSettings.h (single-owner, MainComponent only — see its header comment), so this
  *  test file uses the same literal string MainComponent.cpp does. */
 void writeShowWelcomeAtLaunchPref(const char* value) {
-    juce::PropertiesFile::Options opts;
-    opts.applicationName = "Agent Synth";
-    opts.folderName = "Agent Synth";
-    opts.filenameSuffix = "settings";
-    opts.osxLibrarySubFolder = "Application Support";
-    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+    juce::PropertiesFile::Options opts = synth::userSettingsOptions();
     juce::ApplicationProperties props;
     props.setStorageParameters(opts);
     if (auto* s = props.getUserSettings()) {
@@ -115,8 +111,14 @@ protected:
         // (shown) before AND after each test so run order can't leak a false-hidden welcome screen
         // into an unrelated test.
         writeShowWelcomeAtLaunchPref("1");
-        tempRoot =
-            juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-welcome-screen-tests");
+        // FRO305: this whole fixture (SetUp/TearDown, every TEST_F below) shares ONE fixed
+        // directory name -- fine for a single process, but GTest shard sharding can and does split
+        // individual tests of the SAME suite across different shard processes, so 3 concurrent
+        // shards deleteRecursively()-ing and recreating the identical real temp path would race
+        // each other. synth::userSettingsRootDirectory() is already per-shard-isolated when
+        // AGENTSYNTH_SETTINGS_DIR is set (Source/UserSettings.h) and falls back to the ORIGINAL
+        // system temp location otherwise, so this only changes behaviour for the sharded case.
+        tempRoot = synth::userSettingsRootDirectory().getChildFile("agentsynth-welcome-screen-tests");
         tempRoot.deleteRecursively();
         tempRoot.createDirectory();
     }

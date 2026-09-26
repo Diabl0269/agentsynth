@@ -27,6 +27,7 @@
 #include "Timeline/TakePlacement.h"
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UserSettings.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -448,12 +449,7 @@ protected:
     // The delegating MainComponent ctor reads/writes the shared on-disk "Agent Synth" settings —
     // same hygiene as RecordTapTests.cpp's RecordFlowTest, plus the count-in this file needs.
     void writeKeys(int countInBars) {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
 
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);
@@ -556,8 +552,7 @@ TEST_F(LatencyFlowTest, CountInPunchTrimsViaSourceStart) {
     // into app data under the reserved "Recordings/" ref prefix, and the take number is whichever
     // was free — so the file is resolved from the clip's own assetRef, never guessed.
     ASSERT_TRUE(clip.assetRef.startsWith("Recordings/")) << "unsaved project ref prefix";
-    const auto takeFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                              .getChildFile("Agent Synth")
+    const auto takeFile = synth::userSettingsRootDirectory()
                               .getChildFile("Recordings")
                               .getChildFile(clip.assetRef.fromLastOccurrenceOf("/", false, false));
     ASSERT_TRUE(takeFile.existsAsFile()) << "an unsaved project records into app data";

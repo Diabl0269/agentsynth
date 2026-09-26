@@ -4,6 +4,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UserSettings.h"
 
 // The jack-layout preference has to reach the patch the app OPENS with, not just modules created
 // later. AudioEngine loads the default preset inside its own constructor, so by the time
@@ -12,12 +13,7 @@
 // launch.
 TEST_F(MainComponentTest, StartupAppliesTheDualIOPreferenceToTheOpeningPatch) {
     auto writeDualIOPref = [](const char* value) {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);
         if (auto* s = props.getUserSettings()) {
@@ -70,12 +66,7 @@ TEST_F(MainComponentTest, StartupAppliesTheDualIOPreferenceToTheOpeningPatch) {
 // preference silently reverts to the default on every app launch.
 TEST_F(MainComponentTest, StartupRestoresThePersistedAiRequestTimeout) {
     auto writeTimeoutPref = [](const char* value) {
-        juce::PropertiesFile::Options opts;
-        opts.applicationName = "Agent Synth";
-        opts.folderName = "Agent Synth";
-        opts.filenameSuffix = "settings";
-        opts.osxLibrarySubFolder = "Application Support";
-        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::PropertiesFile::Options opts = synth::userSettingsOptions();
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);
         if (auto* s = props.getUserSettings()) {
