@@ -59,7 +59,9 @@ public:
     void tickHighlight();
     bool hasLiveHighlightForTest() const noexcept { return pulseSinceMs_ != 0.0 || flashUntilMs_ != 0.0; }
 
-    std::function<void()> onSelected;
+    /** FRO270: `mods` distinguishes a plain click (owner replaces the selection with just this
+     *  cell) from shift (add) or cmd (toggle) -- see ControllerSurfaceSelection.cpp. */
+    std::function<void(const juce::ModifierKeys& mods)> onSelected;
     /** Fired on drag once the pointer has crossed into a new cell -- (dCols, dRows) is the delta
      *  from the drag's START cell, so the owner can compute newCol/newRow = startCol/startRow +
      *  delta and clamp once, rather than accumulating per-pixel drift. */

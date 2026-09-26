@@ -6,6 +6,7 @@
 // Tests/UI/Graph/ModuleComponent/ModuleComponentLayoutTests.cpp's AdsrCardRendersToPngForVisualInspection
 // exactly, per this doc's own "Tests" section.
 
+#include "ControllerSurfaceTestHelpers.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -14,6 +15,9 @@
 #include <cstdlib>
 #include <iostream>
 
+using midiremote_surface_test::fourControlModel;
+using midiremote_surface_test::makeCellModel;
+using midiremote_surface_test::surfaceMouseEvent;
 using synth::Control;
 using synth::ControlKind;
 using synth::ui::ControllerSurfaceCell;
@@ -21,54 +25,8 @@ using synth::ui::ControllerSurfaceComponent;
 
 namespace {
 
-Control makeControl(const juce::String& id, const juce::String& name, ControlKind kind, int col, int row) {
-    Control control;
-    control.id = id;
-    control.name = name;
-    control.kind = kind;
-    control.layout.col = col;
-    control.layout.row = row;
-    return control;
-}
-
-ControllerSurfaceComponent::CellModel makeCellModel(const juce::String& id, const juce::String& name, ControlKind kind,
-                                                    int col, int row, const juce::String& assignmentLabel = "-",
-                                                    bool isWarning = false, bool isMapped = false,
-                                                    float initialValue = 0.0f) {
-    ControllerSurfaceComponent::CellModel model;
-    model.control = makeControl(id, name, kind, col, row);
-    model.assignmentLabel = assignmentLabel;
-    model.isWarning = isWarning;
-    model.isMapped = isMapped;
-    model.initialValue = initialValue;
-    return model;
-}
-
-// Four synthetic controls covering knob/fader/pad/button at distinct grid positions, used by
-// most tests below. Kept small (4 cells) rather than the full 8-knob template -- nothing here
-// exercises a real ControllerProfile, just the surface's own layout/selection/drag/activity code.
-std::vector<ControllerSurfaceComponent::CellModel> fourControlModel() {
-    return {
-        makeCellModel("knob1", "Cutoff", ControlKind::knob, 0, 0, "Filter - Cutoff"),
-        makeCellModel("fader1", "Volume", ControlKind::fader, 1, 0, "-"),
-        makeCellModel("pad1", "Play", ControlKind::pad, 0, 1, "Play"),
-        makeCellModel("button1", "Mute", ControlKind::button, 1, 1, "(missing module)", true),
-    };
-}
-
-juce::MouseEvent surfaceMouseEvent(juce::Component& comp, juce::Point<float> pos, juce::Point<float> mouseDownPos,
-                                   bool wasDragged) {
-    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, juce::ModifierKeys(), 0.0f, 0.0f,
-                            0.0f, 0.0f, 0.0f, &comp, &comp, juce::Time::getCurrentTime(), mouseDownPos,
-                            juce::Time::getCurrentTime(), 1, wasDragged);
-}
-
 ControllerSurfaceCell* findCell(ControllerSurfaceComponent& surface, const juce::String& controlId) {
-    for (auto* child : surface.getChildren())
-        if (auto* cell = dynamic_cast<ControllerSurfaceCell*>(child);
-            cell != nullptr && cell->getControlId() == controlId)
-            return cell;
-    return nullptr;
+    return midiremote_surface_test::findCell(surface, controlId);
 }
 
 juce::Slider* findSliderChild(juce::Component& parent) {
@@ -113,13 +71,13 @@ TEST(ControllerSurfaceComponentTest, SetControlsBuildsOneCellPerModelPositionedB
     EXPECT_EQ(surface.getProfileId(), "profileA");
 }
 
-TEST(ControllerSurfaceComponentTest, ClickingACellFiresOnSelectControlAndHighlightsIt) {
+TEST(ControllerSurfaceComponentTest, ClickingACellFiresOnSelectionChangedAndHighlightsIt) {
     ControllerSurfaceComponent surface;
     surface.setSize(400, 400);
     surface.setControls("profileA", fourControlModel());
 
-    juce::String selected;
-    surface.onSelectControl = [&](const juce::String& id) { selected = id; };
+    std::vector<juce::String> selected;
+    surface.onSelectionChanged = [&](const std::vector<juce::String>& ids) { selected = ids; };
 
     auto* fader = findCell(surface, "fader1");
     ASSERT_NE(fader, nullptr);
@@ -129,20 +87,21 @@ TEST(ControllerSurfaceComponentTest, ClickingACellFiresOnSelectControlAndHighlig
     fader->mouseDown(surfaceMouseEvent(*fader, pos, pos, false));
     fader->mouseUp(surfaceMouseEvent(*fader, pos, pos, false));
 
-    EXPECT_EQ(selected, "fader1");
+    ASSERT_EQ(selected.size(), 1u);
+    EXPECT_EQ(selected[0], "fader1");
     EXPECT_TRUE(fader->isSelected());
     EXPECT_EQ(surface.getSelectedControlId(), "fader1");
 
     // A plain click (no movement between mouseDown/mouseUp) must not also report a drag.
 }
 
-TEST(ControllerSurfaceComponentTest, PlainClickWithNoMovementDoesNotFireOnControlMoved) {
+TEST(ControllerSurfaceComponentTest, PlainClickWithNoMovementDoesNotFireOnControlsMoved) {
     ControllerSurfaceComponent surface;
     surface.setSize(400, 400);
     surface.setControls("profileA", fourControlModel());
 
     bool movedFired = false;
-    surface.onControlMoved = [&](const juce::String&, int, int) { movedFired = true; };
+    surface.onControlsMoved = [&](const std::vector<ControllerSurfaceComponent::MovedCell>&) { movedFired = true; };
 
     auto* knob = findCell(surface, "knob1");
     ASSERT_NE(knob, nullptr);
@@ -150,41 +109,38 @@ TEST(ControllerSurfaceComponentTest, PlainClickWithNoMovementDoesNotFireOnContro
     knob->mouseDown(surfaceMouseEvent(*knob, pos, pos, false));
     knob->mouseUp(surfaceMouseEvent(*knob, pos, pos, false));
 
-    EXPECT_FALSE(movedFired) << "a plain click must never fire a spurious onControlMoved(...,0,0)";
+    EXPECT_FALSE(movedFired) << "a plain click must never fire a spurious onControlsMoved(...)";
 }
 
-TEST(ControllerSurfaceComponentTest, RealDragPastAFullCellFiresOnControlMovedWithPlausiblePosition) {
+TEST(ControllerSurfaceComponentTest, RealDragPastAFullCellFiresOnControlsMovedWithPlausiblePosition) {
     ControllerSurfaceComponent surface;
     surface.setSize(400, 400);
     surface.setControls("profileA", fourControlModel());
 
-    juce::String movedId;
-    int movedCol = -1;
-    int movedRow = -1;
-    surface.onControlMoved = [&](const juce::String& id, int col, int row) {
-        movedId = id;
-        movedCol = col;
-        movedRow = row;
-    };
-    bool selectFired = false;
-    surface.onSelectControl = [&](const juce::String&) { selectFired = true; };
+    std::vector<ControllerSurfaceComponent::MovedCell> moves;
+    surface.onControlsMoved = [&](const std::vector<ControllerSurfaceComponent::MovedCell>& m) { moves = m; };
+    std::vector<juce::String> selected;
+    surface.onSelectionChanged = [&](const std::vector<juce::String>& ids) { selected = ids; };
 
     auto* knob = findCell(surface, "knob1"); // starts at (col 0, row 0)
     ASSERT_NE(knob, nullptr);
 
     const juce::Point<float> downPos = knob->getLocalBounds().getCentre().toFloat();
     const int cellSize = ControllerSurfaceCell::kCellSize;
-    // One full cell width right, no vertical movement -- expect newCol == 1, newRow == 0.
-    const juce::Point<float> dragPos = downPos + juce::Point<float>((float)cellSize, 0.0f);
+    // Two full cell widths right, no vertical movement -- (2,0) is empty in fourControlModel()'s
+    // 2x2 layout (unlike (1,0), which fader1 occupies -- a drag landing on another control is
+    // refused, see ControllerSurfaceGroupDragTests.cpp), so expect newCol == 2, newRow == 0.
+    const juce::Point<float> dragPos = downPos + juce::Point<float>((float)cellSize * 2.0f, 0.0f);
 
     knob->mouseDown(surfaceMouseEvent(*knob, downPos, downPos, false));
-    EXPECT_TRUE(selectFired) << "mouseDown must still select even though a drag follows";
+    EXPECT_EQ(selected, std::vector<juce::String>{"knob1"}) << "mouseDown must still select even though a drag follows";
     knob->mouseDrag(surfaceMouseEvent(*knob, dragPos, downPos, true));
     knob->mouseUp(surfaceMouseEvent(*knob, dragPos, downPos, true));
 
-    EXPECT_EQ(movedId, "knob1");
-    EXPECT_EQ(movedCol, 1);
-    EXPECT_EQ(movedRow, 0);
+    ASSERT_EQ(moves.size(), 1u);
+    EXPECT_EQ(moves[0].controlId, "knob1");
+    EXPECT_EQ(moves[0].col, 2);
+    EXPECT_EQ(moves[0].row, 0);
 }
 
 TEST(ControllerSurfaceComponentTest, NoteActivityAbsoluteSetsSliderValue) {
@@ -308,26 +264,42 @@ TEST(ControllerSurfaceComponentTest, NoteActivityForUnknownControlIdIsANoOp) {
     EXPECT_NO_THROW(surface.noteActivity("no-such-control", synth::midi::RemoteEventKind::absolute, 1.0f));
 }
 
-TEST(ControllerSurfaceComponentTest, DeleteKeyWithSelectionFiresOnDeleteControlRequested) {
+TEST(ControllerSurfaceComponentTest, DeleteKeyWithSelectionFiresOnDeleteControlsRequested) {
     ControllerSurfaceComponent surface;
     surface.setSize(400, 400);
     surface.setControls("profileA", fourControlModel());
 
-    juce::String deleteRequestedId;
-    surface.onDeleteControlRequested = [&](const juce::String& id) { deleteRequestedId = id; };
+    std::vector<juce::String> deleteRequestedIds;
+    surface.onDeleteControlsRequested = [&](const std::vector<juce::String>& ids) { deleteRequestedIds = ids; };
 
     // No selection yet -- Delete must do nothing.
     EXPECT_FALSE(surface.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey)));
-    EXPECT_TRUE(deleteRequestedId.isEmpty());
+    EXPECT_TRUE(deleteRequestedIds.empty());
 
     surface.setSelectedControlId("button1");
     EXPECT_TRUE(surface.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey)));
-    EXPECT_EQ(deleteRequestedId, "button1");
+    EXPECT_EQ(deleteRequestedIds, std::vector<juce::String>{"button1"});
 
-    deleteRequestedId.clear();
+    deleteRequestedIds.clear();
     surface.setSelectedControlId("pad1");
     EXPECT_TRUE(surface.keyPressed(juce::KeyPress(juce::KeyPress::backspaceKey)));
-    EXPECT_EQ(deleteRequestedId, "pad1");
+    EXPECT_EQ(deleteRequestedIds, std::vector<juce::String>{"pad1"});
+}
+
+TEST(ControllerSurfaceComponentTest, EscClearsSelection) {
+    ControllerSurfaceComponent surface;
+    surface.setSize(400, 400);
+    surface.setControls("profileA", fourControlModel());
+
+    surface.setSelectedControlId("button1");
+    ASSERT_EQ(surface.getSelectedControlId(), "button1");
+
+    EXPECT_TRUE(surface.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_TRUE(surface.getSelectedControlIds().empty());
+
+    // Nothing selected -- Esc is a no-op, reported as unhandled so it doesn't swallow a key some
+    // other focus region might want.
+    EXPECT_FALSE(surface.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
 }
 
 TEST(ControllerSurfaceComponentTest, SurfaceRendersToPngForVisualInspection) {

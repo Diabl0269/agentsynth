@@ -491,7 +491,11 @@ void ControlInspectorComponent::setControl(const ControlModel& model) {
     rebuildRows();
 
     if (!model_.hasControl) {
-        nameLabel_.setText("No control selected", juce::dontSendNotification);
+        // FRO270: a 2+ multi-selection overrides the ordinary empty-state text; every field below
+        // stays hidden either way, since neither state has one control's own fields to show.
+        nameLabel_.setText(model_.selectedCount >= 2 ? juce::String(model_.selectedCount) + " controls selected"
+                                                     : juce::String("No control selected"),
+                           juce::dontSendNotification);
         nameLabel_.setVisible(true);
         kindCombo_.setVisible(false);
         messageSpecLabel_.setVisible(false);

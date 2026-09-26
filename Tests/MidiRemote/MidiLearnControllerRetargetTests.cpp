@@ -50,6 +50,10 @@ protected:
 
         engine_ = std::make_unique<AudioEngine>(AudioEngine::HostMode::Hosted);
         graphEditor_ = std::make_unique<GraphEditor>(*engine_, &undo_);
+        // As MainComponentSetup.cpp does: without it an undo/redo restore frees processors without
+        // detaching their cards first, and a card left on a freed (then reused) address crashes
+        // ~GraphEditor.
+        undo_.setGraphEditor(graphEditor_.get());
         controller_ = std::make_unique<MidiLearnController>(*engine_, *graphEditor_, remoteEngine_, doc_, undo_,
                                                             statusBar_, synth::ControllerProfileStore(root_));
         remoteEngine_.setClock([this] { return fakeNowMs_; });
@@ -68,6 +72,11 @@ protected:
 
     void TearDown() override {
         remoteEngine_.endAllGestures();
+        // Cards before the processors they bind: filterNode_ (declared last, so destroyed first) can
+        // be the only owner of a replaced module's processor.
+        controller_.reset();
+        graphEditor_.reset();
+        filterNode_ = nullptr;
         root_.deleteRecursively();
     }
 

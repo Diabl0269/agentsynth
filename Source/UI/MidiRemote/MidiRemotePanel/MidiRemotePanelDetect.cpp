@@ -43,8 +43,10 @@ void MidiRemotePanelComponent::commitDetectStep(const std::optional<synth::Contr
 
 // ---- Encoder auto-detect ---------------------------------------------------------------------------
 
+// `confirmLabel` names the OK button of a cancellable prompt: "Next" suits auto-detect's steps, but a
+// destructive confirm must say what it does ("Delete", "Replace").
 void MidiRemotePanelComponent::showPrompt(const juce::String& title, const juce::String& message, bool cancellable,
-                                          std::function<void(bool ok)> done) {
+                                          std::function<void(bool ok)> done, const juce::String& confirmLabel) {
     if (promptHook_) {
         promptHook_(title, message, cancellable, std::move(done));
         return;
@@ -54,7 +56,7 @@ void MidiRemotePanelComponent::showPrompt(const juce::String& title, const juce:
     const auto options =
         cancellable
             ? juce::MessageBoxOptions::makeOptionsOkCancel(juce::MessageBoxIconType::QuestionIcon, title, message,
-                                                           "Next", "Cancel", this)
+                                                           confirmLabel, "Cancel", this)
             : juce::MessageBoxOptions::makeOptionsOk(juce::MessageBoxIconType::InfoIcon, title, message, "OK", this);
     juce::Component::SafePointer<MidiRemotePanelComponent> safeThis(this);
     juce::AlertWindow::showAsync(options, [safeThis, done = std::move(done)](int result) {

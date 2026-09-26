@@ -590,43 +590,69 @@ bool MidiLearnController::deleteProfile(const juce::String& profileId) {
 // profile.actions, and removes any PROJECT assignment referencing it. The two halves land on the
 // two histories (docs/control/midi-remote.md#undo): the profile half is one controller-history
 // step, the project half one AppUndoManager step (mirroring forget()'s before/after-JSON snapshot),
-// so restoring both needs an undo in the panel AND one on the canvas.
+// so restoring both needs an undo in the panel AND one on the canvas. A single-control delete is
+// just deleteControlsWithLabel() for one id -- FRO270's group delete (deleteControls() below) is
+// the same body for many, so there is exactly one place this two-history split is implemented.
 bool MidiLearnController::deleteControl(const juce::String& profileId, const juce::String& controlId) {
+    return deleteControlsWithLabel(profileId, {controlId}, "Delete control");
+}
+
+// FRO270: the surface's group delete. `controlIds` not found on the profile are silently ignored
+// (a selection that survived a live rebuild can still name a control removed meanwhile); returns
+// false only if NONE of them were found.
+bool MidiLearnController::deleteControls(const juce::String& profileId, const std::vector<juce::String>& controlIds) {
+    return deleteControlsWithLabel(profileId, controlIds,
+                                   controlIds.size() == 1u ? "Delete control" : "Delete controls");
+}
+
+bool MidiLearnController::deleteControlsWithLabel(const juce::String& profileId,
+                                                  const std::vector<juce::String>& controlIds,
+                                                  const juce::String& editLabel) {
     auto profileIt =
         std::find_if(profiles_.begin(), profiles_.end(), [&](const ControllerProfile& p) { return p.id == profileId; });
     if (profileIt == profiles_.end())
         return false;
 
-    auto& controls = profileIt->controls;
-    const auto controlIt =
-        std::find_if(controls.begin(), controls.end(), [&](const Control& c) { return c.id == controlId; });
-    if (controlIt == controls.end())
-        return false;
     auto before = std::optional<ControllerProfile>(*profileIt);
-    controls.erase(controlIt);
-
-    // Drop any global action assignment on it too -- part of the same controller-history step.
+    auto& controls = profileIt->controls;
     auto& actions = profileIt->actions;
-    actions.erase(std::remove_if(actions.begin(), actions.end(),
-                                 [&](const synth::Assignment& a) { return a.control.controlId == controlId; }),
-                  actions.end());
+    bool anyRemoved = false;
+    for (const auto& controlId : controlIds) {
+        const auto controlIt =
+            std::find_if(controls.begin(), controls.end(), [&](const Control& c) { return c.id == controlId; });
+        if (controlIt == controls.end())
+            continue;
+        controls.erase(controlIt);
+        anyRemoved = true;
+        // Drop any global action assignment on it too -- part of the same controller-history step.
+        actions.erase(std::remove_if(actions.begin(), actions.end(),
+                                     [&](const synth::Assignment& a) { return a.control.controlId == controlId; }),
+                      actions.end());
+    }
+    if (!anyRemoved)
+        return false;
+
     profileStore_.save(*profileIt);
     remoteEngine_.setProfiles(profiles_);
-    recordProfileEdit("Delete control", profileId, std::move(before));
+    recordProfileEdit(editLabel, profileId, std::move(before));
 
-    // The project half goes on AppUndoManager, mirroring forget()'s own before/after-JSON snapshot.
+    // The project half goes on AppUndoManager, mirroring forget()'s own before/after-JSON snapshot --
+    // still ONE step for every id, so one undo on the canvas restores every removed assignment.
     const juce::var beforeJson = doc_.toVar();
     auto& assignments = doc_.assignments;
     const auto sizeBefore = assignments.size();
     assignments.erase(std::remove_if(assignments.begin(), assignments.end(),
-                                     [&](const synth::Assignment& a) { return a.control.controlId == controlId; }),
+                                     [&](const synth::Assignment& a) {
+                                         return std::find(controlIds.begin(), controlIds.end(), a.control.controlId) !=
+                                                controlIds.end();
+                                     }),
                       assignments.end());
     if (assignments.size() != sizeBefore) {
         const juce::var afterJson = doc_.toVar();
         undo_.recordMidiRemoteChange(doc_, beforeJson, afterJson, [this] { publishAssignments(); });
         publishAssignments(); // already notifies onChanged -- see below
     } else if (onChanged) {
-        // The profile half above (the control's removal from profiles_) always notifies, even when
+        // The profile half above (the controls' removal from profiles_) always notifies, even when
         // there was no project assignment to remove -- publishAssignments() only covers the branch
         // above.
         onChanged();

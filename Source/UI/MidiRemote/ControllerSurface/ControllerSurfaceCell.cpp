@@ -253,7 +253,7 @@ void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
     // to be a plain click, which reverts it in mouseUp() below just as promptly.
     setMouseCursor(juce::MouseCursor::DraggingHandCursor);
     if (onSelected)
-        onSelected();
+        onSelected(event.mods);
 }
 
 // Reports a DELTA (in whole kCellSize units from the drag's start), not a running total, and only
