@@ -85,3 +85,22 @@ everything over the cap.
 
 How to split an over-cap function is the root `CLAUDE.md`'s "Code structure" rule: extract a named
 step, or a real collaborator class when the concern has its own state.
+
+## Locale: the scanner fails open under UTF-8
+
+`check-function-sizes.sh` exports `LC_ALL=C` before scanning (FRO220, PR #433). Under the runner
+image's default UTF-8 locale, awk aborts with `towc: multibyte conversion failure` on the first
+non-ASCII byte it meets — an em dash in a comment, which the ASCII-literal guard does not police
+because it only covers string literals — and every path after that file goes unscanned while the
+script still exits 0. Measured on the same tree: 12,451 functions scanned under `LC_ALL=C`, 5,620
+under `en_US.UTF-8`. A guard that passes because it scanned less than half the tree looks identical
+to one that passes honestly, so `scripts/tests/check-function-sizes.test.sh` asserts the scanned
+count is the same under both locales, and the Lint job pins `LC_ALL=C` for every step so a guard
+added later cannot inherit the image's locale by accident.
+
+**The baseline was audited after the fix (FRO221).** The bug was live in CI from the guard's
+arrival (2026-09-15, #369) until the fix (2026-09-18, #433); six merges in that window ran
+`--update`. Re-scanning each of those six commits with the fixed scanner reproduced its committed
+baseline exactly — 20, 20, 18, 18, 18 and 17 entries, no entry falsely dropped as stale and no
+over-cap function left unlisted — and the 17 entries on `main` at the time of the audit matched a
+full scan line for line. Nothing slipped through; the ratchet's history is sound.
