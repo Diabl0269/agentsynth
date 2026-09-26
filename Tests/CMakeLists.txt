@@ -200,6 +200,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentWavetableTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentPaintTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentEnvelopeCardTests.cpp
+    UI/Graph/ModuleComponent/EnvelopeCardTempoSyncTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModTargetTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentKnobCoverageTests.cpp
