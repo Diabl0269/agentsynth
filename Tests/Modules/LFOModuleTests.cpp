@@ -356,8 +356,10 @@ TEST_F(LFOModuleTest, RateCvChangesPeriodInHzMode) {
     // Square wave makes zero crossings (and thus period) trivial to count.
     auto params = lfo->getParameters();
     dynamic_cast<juce::AudioParameterBool*>(params[2])->setValueNotifyingHost(0.0f); // Hz mode
-    // Square is choice index 3 of 5 (Sine, Triangle, Sawtooth, Square, S&H) -> normalised 3/4.
-    dynamic_cast<juce::AudioParameterChoice*>(params[1])->setValueNotifyingHost(0.75f);
+    // Square is choice index 3 (Sine, Triangle, Sawtooth, Square, S&H, Custom) -- set the index
+    // directly (FRO114 appended "Custom" at index 5, which moved this fixed choice's normalised
+    // fraction) rather than a hardcoded normalised literal that drifts with the choice count.
+    *dynamic_cast<juce::AudioParameterChoice*>(params[1]) = 3;
     dynamic_cast<juce::AudioParameterFloat*>(params[4])->setValueNotifyingHost(
         dynamic_cast<juce::AudioParameterFloat*>(params[4])->getNormalisableRange().convertTo0to1(
             1.0f)); // base rate 1 Hz
