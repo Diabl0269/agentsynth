@@ -99,6 +99,9 @@ TEST(MidiRemoteActionPickerTest, ListsTheCursorAndLoopActionsAndTheRenamedPlaySt
     EXPECT_EQ(labelOf("transportNudgeForwardBar"), "Move Cursor Forward (Bar)");
     EXPECT_EQ(labelOf("transportJumpToLoopStart"), "Jump to Loop Start");
     EXPECT_EQ(labelOf("transportJumpToLoopEnd"), "Jump to Loop End");
+    // FRO277: jump to the next/previous timeline marker.
+    EXPECT_EQ(labelOf("transportJumpToNextMarker"), "Jump to Next Marker");
+    EXPECT_EQ(labelOf("transportJumpToPreviousMarker"), "Jump to Previous Marker");
     EXPECT_EQ(labelOf("togglePlayback"), "Play / Stop");
     // FRO278: selection stepping.
     EXPECT_EQ(labelOf("selectNextModule"), "Select Next Module");

@@ -158,6 +158,11 @@ enum CommandIDs {
     transportNudgeForwardBar,
     transportJumpToLoopStart,
     transportJumpToLoopEnd,
+    // FRO277: jump to the next/previous timeline marker relative to the current position. Same
+    // command-dispatched, unbound-by-default reasoning as the FRO271 family above -- appended
+    // after transportJumpToLoopEnd, never interleaved.
+    transportJumpToNextMarker,
+    transportJumpToPreviousMarker,
     // FRO94: opens the site's contribute page (branding::kContributeUrl) in the default browser --
     // no dialog, no prompt, no analytics event. Menu-only like showWelcomeScreen/whatsNew (no
     // ShortcutManager actionId/binding) and registered unconditionally. Appended last per the snapSet
@@ -304,6 +309,10 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return transportJumpToLoopStart;
     if (actionId == "transportJumpToLoopEnd")
         return transportJumpToLoopEnd;
+    if (actionId == "transportJumpToNextMarker")
+        return transportJumpToNextMarker;
+    if (actionId == "transportJumpToPreviousMarker")
+        return transportJumpToPreviousMarker;
     if (actionId == "selectNextModule")
         return selectNextModule;
     if (actionId == "selectPreviousModule")

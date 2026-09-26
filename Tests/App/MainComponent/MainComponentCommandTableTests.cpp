@@ -88,6 +88,9 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::transportNudgeForwardBar,
     AppCommands::transportJumpToLoopStart,
     AppCommands::transportJumpToLoopEnd,
+    // FRO277: jump to the next/previous timeline marker, appended after the FRO271 rows.
+    AppCommands::transportJumpToNextMarker,
+    AppCommands::transportJumpToPreviousMarker,
     // FRO278: buildSelectionStepCommandRows(), appended after the transport rows.
     AppCommands::selectNextModule,
     AppCommands::selectPreviousModule,

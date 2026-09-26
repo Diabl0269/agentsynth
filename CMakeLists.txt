@@ -296,6 +296,7 @@ add_library(Core STATIC
     Source/Transport/StemSession.h
     Source/Transport/TempoMap.h
     Source/Transport/TransportService.cpp
+    Source/Transport/MarkerJump.h
     Source/Transport/TransportNudge.h
     Source/Transport/TransportService.h
     # Timeline

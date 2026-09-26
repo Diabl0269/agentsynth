@@ -73,6 +73,9 @@ const juce::StringArray& intentionallyUnboundActionIds() {
         "transportNudgeForwardBar",
         "transportJumpToLoopStart",
         "transportJumpToLoopEnd",
+        // FRO277: jump to the next/previous timeline marker.
+        "transportJumpToNextMarker",
+        "transportJumpToPreviousMarker",
         // FRO278: selection stepping.
         "selectNextModule",
         "selectPreviousModule",

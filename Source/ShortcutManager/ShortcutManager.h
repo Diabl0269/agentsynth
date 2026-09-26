@@ -349,6 +349,9 @@ public:
         bindings["transportNudgeForwardBar"] = juce::KeyPress();
         bindings["transportJumpToLoopStart"] = juce::KeyPress();
         bindings["transportJumpToLoopEnd"] = juce::KeyPress();
+        // FRO277: jump to the next/previous timeline marker -- same unbound-by-default reasoning.
+        bindings["transportJumpToNextMarker"] = juce::KeyPress();
+        bindings["transportJumpToPreviousMarker"] = juce::KeyPress();
         // FRO278: selection stepping -- unbound like the transport family, reachable from MIDI Remote.
         bindings["selectNextModule"] = juce::KeyPress();
         bindings["selectPreviousModule"] = juce::KeyPress();
@@ -730,6 +733,9 @@ private:
             {"transportNudgeForwardBar", ShortcutCategory::General},
             {"transportJumpToLoopStart", ShortcutCategory::General},
             {"transportJumpToLoopEnd", ShortcutCategory::General},
+            // FRO277: jump to the next/previous timeline marker, unbound by default.
+            {"transportJumpToNextMarker", ShortcutCategory::General},
+            {"transportJumpToPreviousMarker", ShortcutCategory::General},
             // FRO278: selection stepping, unbound by default.
             {"selectNextModule", ShortcutCategory::General},
             {"selectPreviousModule", ShortcutCategory::General},

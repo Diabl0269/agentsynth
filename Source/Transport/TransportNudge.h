@@ -35,14 +35,22 @@ inline double beatsPerBarOf(const TransportService::PositionSnapshot& snap) noex
     return v > 0.0 ? v : 4.0;
 }
 
+/** Whether `state` still holds an unapplied request computed from exactly this snapshot, inside
+ *  the accumulate window -- shared by every accumulate-on-last-request action (cursor nudges here,
+ *  and MarkerJump.h's next/previous-marker jumps) so a burst of presses inside one audio block all
+ *  build on each other instead of the stale once-per-block snapshot. */
+inline bool isPendingRequestUnconsumed(const TransportNudgeState& state, const TransportService::PositionSnapshot& snap,
+                                       std::uint32_t nowMs) noexcept {
+    return state.pending && state.baseSample == snap.samplePosition && state.basePpq == snap.ppq &&
+           (std::uint32_t)(nowMs - state.requestedAtMs) <= kNudgeAccumulateWindowMs;
+}
+
 /** The beat a nudge of `deltaBeats` should locate to, clamped at 0. Builds on the previous
  *  request while the snapshot is still the one it was based on (the audio thread has not applied
  *  it yet), else on the snapshot's own position. Records the new request in `state`. */
 inline double computeNudgeTarget(TransportNudgeState& state, const TransportService::PositionSnapshot& snap,
                                  double deltaBeats, std::uint32_t nowMs) noexcept {
-    const bool unconsumed = state.pending && state.baseSample == snap.samplePosition && state.basePpq == snap.ppq &&
-                            (std::uint32_t)(nowMs - state.requestedAtMs) <= kNudgeAccumulateWindowMs;
-    const double from = unconsumed ? state.target : snap.ppq;
+    const double from = isPendingRequestUnconsumed(state, snap, nowMs) ? state.target : snap.ppq;
     const double target = std::max(0.0, from + deltaBeats);
     state = {true, snap.ppq, snap.samplePosition, target, nowMs};
     return target;

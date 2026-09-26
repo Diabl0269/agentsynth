@@ -177,10 +177,13 @@ path.
 
 `transportPlay` / `transportStop` / `transportReturnToStart` call `TransportService` directly:
 play and stop are guarded on the current snapshot so each is idempotent, and return-to-start is
-`locateBeat(0)` with no implicit stop. The cursor moves (`transportNudge*Beat` / `*Bar`) and loop
-jumps (`transportJumpToLoopStart` / `transportJumpToLoopEnd`) also relocate through
+`locateBeat(0)` with no implicit stop. The cursor moves (`transportNudge*Beat` / `*Bar`), loop
+jumps (`transportJumpToLoopStart` / `transportJumpToLoopEnd`) and marker jumps
+(`transportJumpToNextMarker` / `transportJumpToPreviousMarker`) also relocate through
 `locateBeat` without changing play state; see `Source/Transport/TransportNudge.h` for how nudges
-fired inside one audio block accumulate. `transportToggleLoop` and `transportToggleMetronome` reuse
+fired inside one audio block accumulate, and `Source/Transport/MarkerJump.h` (same accumulate
+state, searching `TimelineDoc::getMarkers()` for the nearest marker ahead of / behind the current
+position — never wrapping past the first or last). `transportToggleLoop` and `transportToggleMetronome` reuse
 the loop and metronome buttons' own `triggerClick()` the same way `transportRecord` reuses
 Record's — see [`shortcuts.md`](../control/shortcuts.md#transport-family) for the full action-id table. All
 of them ship unbound by default; only `togglePlayback` keeps a default key (Space).
