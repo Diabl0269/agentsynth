@@ -45,36 +45,27 @@ runs are what seed the cache.
 | **Build, Test, and Coverage** | `ubuntu-latest` | Debug + clang + `ENABLE_COVERAGE=ON` | Runs tests, then `bash scripts/coverage.sh --report-only` (skips the re-build; only merges profdata and checks the 85% line-coverage threshold). |
 | **Build and Test (ASAN)** | `ubuntu-latest` | `RelWithDebInfo` + `-fsanitize=address` | **Label-gated** — only runs when the PR carries the `run-asan` label. `ASAN_OPTIONS=detect_leaks=0`. Has its own PR-scoped ccache (the one exception to "PR runs never save", see [`ci-caching.md`](ci-caching.md#six-rules-each-learned-from-an-outage) rule 6): the first labelled run of a PR is cold (~48 min), later pushes to it are warm. There is no ThreadSanitizer job; see [`test-patterns.md`](test-patterns.md#sanitizers). |
 | **Build and Test (macOS)** | `macos-latest` | Release | Catches UB, segfaults and cross-platform issues. |
-| **Build and Test (Windows)** | `windows-latest` | Release | **Push to `main` and `workflow_dispatch` only, not pull requests** (since 2026-09-26, see below). Catches Windows-only compile breakage after merge; its test step is advisory until FRO242. |
+| **Build and Test (Windows)** | `windows-latest` | Release | Catches UB, segfaults and cross-platform issues. |
 
 ## Required status checks
 
-> **Do not rename the `Lint`, `Build, Test, and Coverage`, `Build and Test (macOS)`, `Docs`, or
-> `PR Title` jobs.** Those five strings are configured as required status checks in `main`'s branch
-> protection; renaming one leaves a required check permanently pending and blocks every merge.
-> Skipping a job on `push` is safe — protection only gates pull requests. Renaming it is not.
+> **Do not rename the `Lint`, `Build, Test, and Coverage`, `Build and Test (macOS)`, `Build and Test
+> (Windows)`, `Docs`, or `PR Title` jobs.** Those six strings are configured as required status
+> checks in `main`'s branch protection; renaming one leaves a required check permanently pending and
+> blocks every merge. Skipping a job on `push` is safe — protection only gates pull requests.
+> Renaming it is not.
 
 `Docs` comes from `.github/workflows/docs.yml` and `PR Title` from
-`.github/workflows/pr-title.yml`; the other three are `ci.yml`'s own.
+`.github/workflows/pr-title.yml`; the other four are `ci.yml`'s own.
 `.github/CLAUDE.md` carries the same list beside the workflows themselves.
-
-**Windows is not a required check and does not run on pull requests** (decision 2026-09-26). Measured
-that week, `Build and Test (Windows)` was the slowest check on every PR: 13m46s of build with a warm
-cache and 47m11s when a PR touched `MainComponent.h`, against 6 to 9 minutes for Linux and macOS, so
-it set the wall-clock of every PR. FRO242 had also established that its test step could never fail
-on a test failure (GNU `find -exec` swallows the exit status), so those minutes gated nothing. The
-job now runs on every push to `main` and on `workflow_dispatch`: a Windows-only compile breakage
-surfaces on `main`'s run and in the release build rather than never, and it costs no PR any time. What
-this gives up: a Windows-only breakage lands before it is seen. Making the test step's exit status
-honest, and deciding what to do about the paint/render tests it currently hides, is FRO242.
 
 ## Docs-only pull requests
 
 `ci.yml`'s `paths:` filter deliberately excludes `docs/**` and `*.md`.
 
 **Why.** Including them would trigger the full three-platform build matrix for a docs-only change,
-which is exactly what the filter exists to avoid. The consequence is that `ci.yml`'s three PR jobs —
-including Lint, and every guard that rides in it — never run for a docs-only PR, and three required
+which is exactly what the filter exists to avoid. The consequence is that `ci.yml`'s four jobs —
+including Lint, and every guard that rides in it — never run for a docs-only PR, and four required
 checks would sit permanently pending.
 
 Two workflows close that:
@@ -84,14 +75,14 @@ Two workflows close that:
   unconditionally, so a docs-only PR is gated in CI, not only by the pre-commit hook and
   `scripts/ci-local.sh` (which still run both guards against the whole tree, catching a violation
   before it is ever pushed).
-- **`.github/workflows/ci-passthrough.yml`** posts a synthetic success under `ci.yml`'s three
+- **`.github/workflows/ci-passthrough.yml`** posts a synthetic success under `ci.yml`'s four
   required job names whenever `ci.yml`'s own `paths:` filter does not match, so a docs-only PR's
   required checks all post a real status and it merges normally — no `gh pr merge --admin` override,
   and a red Docs job actually blocks the merge it should.
 
 A mixed code-and-docs PR is gated by both. This repo's convention requires updating docs in the same
 PR as the behaviour change, so that is the common case, not the rare one — it produces a duplicate
-check run under each of the three shared job names. See `ci-passthrough.yml`'s own header for why
+check run under each of the four shared job names. See `ci-passthrough.yml`'s own header for why
 that duplication cannot be removed with a path-filter tweak, and why it is harmless:
 `mergeStateStatus` was confirmed live to stay non-`CLEAN` while any run under a required context
 name is still non-terminal, so the real job's result is never shadowed by an earlier synthetic

@@ -1,8 +1,7 @@
 name: CI Passthrough
 
-# WHY THIS EXISTS: `main`'s branch protection requires three ci.yml contexts (`Lint`,
-# `Build, Test, and Coverage`, `Build and Test (macOS)`; `Build and Test (Windows)` runs on push
-# to main only since 2026-09-26 and is not required — see
+# WHY THIS EXISTS: `main`'s branch protection requires four ci.yml contexts (`Lint`,
+# `Build, Test, and Coverage`, `Build and Test (macOS)`, `Build and Test (Windows)` — see
 # docs/development/ci-pipeline.md and .github/CLAUDE.md). ci.yml's own `pull_request`
 # trigger is `paths:`-filtered to Source/**, Tests/**, Tools/**, the CMake files, scripts/**,
 # .clang-format*, and its own two workflow files — deliberately, so a docs-only PR doesn't pay
@@ -13,7 +12,7 @@ name: CI Passthrough
 # routine workaround was `gh pr merge --admin`, which bypasses ALL required checks, including a
 # red Docs job — see docs/development/docs-guard.md. This workflow closes that hole: whenever
 # ci.yml's own trigger paths don't match, this one does, and posts an immediate success under
-# each of the three job names ci.yml would have used, so the PR becomes normally mergeable.
+# each of the four job names ci.yml would have used, so the PR becomes normally mergeable.
 #
 # `paths-ignore:` below is a byte-for-byte copy of ci.yml's `pull_request.paths:` list — the
 # complement of a `paths:` filter's "any changed file matches" is exactly a `paths-ignore:`
@@ -87,6 +86,12 @@ jobs:
 
   build-and-test-macos:
     name: "Build and Test (macOS)"
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — no build/test/coverage applies."
+
+  build-and-test-windows:
+    name: "Build and Test (Windows)"
     runs-on: ubuntu-latest
     steps:
       - run: echo "Docs-only change — no build/test/coverage applies."
