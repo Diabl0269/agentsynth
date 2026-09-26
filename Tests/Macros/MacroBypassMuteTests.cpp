@@ -20,6 +20,7 @@
 //                        macroCardPortLayout applies to port jacks)
 
 #include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MacroInletModule.h"

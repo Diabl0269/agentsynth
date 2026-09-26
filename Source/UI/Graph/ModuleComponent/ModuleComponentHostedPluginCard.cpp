@@ -5,6 +5,7 @@
 // ModuleComponentEnvelopeCard.cpp, and it takes the HostedPlugin branch OUT of createControls(), which is
 // at the function-size ratchet ceiling. See docs/control/plugin-card-layout.md#card-rendering-as-built-fro128.
 #include "ModuleComponentHostedPluginCard.h"
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/CardLayout.h"

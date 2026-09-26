@@ -1,6 +1,7 @@
 // Persistence via the owner (MainComponent stores the list under "pluginScanList", a hosted build
 // resolves but never scans) and the eager startup scan (FRO44) that populates the sidebar unasked.
 
+#include "AudioEngine/AudioEngine.h"
 #include "PluginScanTestHelpers.h"
 
 #include "AI/AIProvider.h"

@@ -17,6 +17,7 @@
 // event JUCE's mouse capture is supposed to keep routed to the original target regardless of
 // where the cursor ends up.
 
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "AppUndoManager.h"
-#include "AudioEngine/AudioEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "UI/Graph/ModuleComponent/HostedParameterAttachment.h"
@@ -22,6 +21,7 @@
 #include <optional>
 #include <vector>
 
+class AudioEngine;
 class GraphEditor;        // Forward declaration
 class ExternalMidiModule; // Forward declaration — see Modules/ExternalMidiModule.h
 

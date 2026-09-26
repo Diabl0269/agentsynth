@@ -11,6 +11,7 @@
 // path (buildChannelStripMacroBox / duplicateChannelStrip) used to call by their original name —
 // every call below goes through macroController_ directly.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
 

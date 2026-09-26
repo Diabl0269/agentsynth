@@ -3,6 +3,7 @@
 // summed-pair-fed jack, and the full gesture-matrix contract table.
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 
 #include "AppUndoManager.h"

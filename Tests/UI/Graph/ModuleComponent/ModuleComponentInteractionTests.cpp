@@ -1,5 +1,6 @@
 // ModuleComponent interaction tests: parameter attachment, timer, header buttons, delete.
 
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"

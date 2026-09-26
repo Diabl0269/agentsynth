@@ -4,7 +4,6 @@
 #include "AI/AIProviderRegistry.h"
 #include "AI/AccountService.h"
 #include "AppUndoManager.h"
-#include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
 #include "MainComponentRemoteActionInvoker.h"
 #include "MidiRemote/MidiLearnController.h"
@@ -53,6 +52,7 @@
 #include <optional>
 #include <vector>
 
+class AudioEngine;
 class MainComponent
     : public juce::Component
     , public juce::DragAndDropContainer

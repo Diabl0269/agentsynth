@@ -1,5 +1,6 @@
 // ModuleComponent port geometry/hit-testing tests: port-column bounds, getPortCenter/getPortForPoint.
 
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
 #include "Modules/ADSRModule.h"

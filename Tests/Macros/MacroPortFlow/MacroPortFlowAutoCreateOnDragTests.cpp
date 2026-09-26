@@ -1,3 +1,4 @@
+#include "AudioEngine/AudioEngine.h"
 #include "MacroPortFlowTestHelpers.h"
 
 // Topic: T148 — auto-creating a macro port when a dragged cable crosses an EXPANDED macro's

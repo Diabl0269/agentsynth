@@ -1,5 +1,6 @@
 // ModuleComponent audio-file drag-and-drop tests: Sampler chrome/load path, Wavetable file drag.
 
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
 #include "Modules/OscillatorModule.h"

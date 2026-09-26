@@ -5,6 +5,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/MacroInletModule.h"

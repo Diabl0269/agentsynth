@@ -8,6 +8,7 @@
 // MacroContainerTests.cpp; geometry/canvas behaviour (collapse, hull/chip, chip drag, undo,
 // cables, trust) lives in MacroContainerGeometryTests.cpp.
 
+#include "AudioEngine/AudioEngine.h"
 #include "MacroContainerTestHelpers.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"

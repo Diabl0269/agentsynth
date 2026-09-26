@@ -1,6 +1,7 @@
 // Concern: startup preferences (dual-I/O jack layout, AI request timeout), the AI Panel/Mod
 // Matrix/Library/Minimap visibility toggles and their buttons, the ApplicationCommandManager
 // command table, the Redo shortcut, and copy/paste/duplicate reaching the canvas.
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 
 // The jack-layout preference has to reach the patch the app OPENS with, not just modules created

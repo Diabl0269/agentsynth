@@ -5,6 +5,7 @@
 // declared in GraphEditor.h; sibling GraphEditor*.cpp files in this directory hold the rest of
 // the class.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
 

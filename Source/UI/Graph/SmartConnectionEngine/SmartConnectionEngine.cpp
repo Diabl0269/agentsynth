@@ -10,6 +10,7 @@
 // doing that is not a cycle, only the engine's own header must stay narrow.
 
 #include "SmartConnectionEngine.h"
+#include "AudioEngine/AudioEngine.h"
 
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"

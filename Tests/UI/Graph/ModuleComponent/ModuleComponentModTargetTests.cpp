@@ -4,6 +4,7 @@
 // and its knob "Rate (Hz)"; matching those two strings found nothing, so the card drew no ring and
 // swallowed no drop on every module whose jack labels carry no unit.
 
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
 #include "Modules/FX/CompressorModule.h"

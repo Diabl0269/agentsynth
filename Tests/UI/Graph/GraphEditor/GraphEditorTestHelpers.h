@@ -3,6 +3,7 @@
 // Shared fixture and helpers for the GraphEditor test suite (Tests/UI/Graph/GraphEditor/GraphEditor*Tests.cpp).
 // Header-only; not compiled on its own and not registered in Tests/CMakeLists.txt.
 
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/DelayModule.h"
 #include "Modules/FX/ReverbModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"

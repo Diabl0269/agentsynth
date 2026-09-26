@@ -10,6 +10,7 @@
 // unreachable by mouse and calls finalizeMacroMembershipDrag itself.
 
 #include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MacroDragTestHelpers.h"
 #include <algorithm>
 #include <gtest/gtest.h>

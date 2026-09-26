@@ -5,6 +5,7 @@
 // gesture must never steal an ordinary drag.
 
 #include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
 #include "../GraphEditor/GraphEditorTestHelpers.h"

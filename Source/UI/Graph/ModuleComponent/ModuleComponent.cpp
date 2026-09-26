@@ -3,6 +3,7 @@
 // ModuleComponent.h; the rest of its implementation lives in the sibling ModuleComponent*.cpp
 // units next to this one (FRO65 split of the former single ModuleComponent.cpp).
 #include "ModuleComponent.h"
+#include "AudioEngine/AudioEngine.h"
 #include "CardKnobSlider.h"
 #include "ModuleComponentHostedPluginCard.h"
 #include "ModuleComponentInternal.h"

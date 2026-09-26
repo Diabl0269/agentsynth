@@ -6,6 +6,7 @@
 // Header-only; not compiled on its own and not registered in Tests/CMakeLists.txt.
 
 #include "AI/AIProvider.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

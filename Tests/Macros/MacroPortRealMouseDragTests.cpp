@@ -9,6 +9,7 @@
 // correctly-held-fixed mouseDownPosition, closing that gap (see docs/development/test-patterns.md's real-mouse-path
 // guidance).
 
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"

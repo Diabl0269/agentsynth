@@ -1,6 +1,7 @@
 // Concern: Phase-3 chrome -- toolbar layout at every width bucket, minimum window size, the
 // collapsible library/AI-panel sidebars, and the status bar (bounds + timer-gated transport
 // updates + its own play/stop button).
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 
 // ===========================================================================

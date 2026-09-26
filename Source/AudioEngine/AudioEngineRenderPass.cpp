@@ -144,6 +144,15 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     renderNextBlock(buffer, midiMessages);
 }
 
+// Returns once every render pass that had already started has finished — the handshake an owner
+// needs before destroying anything the audio thread borrows. Both borrowed-pointer setters
+// (setMidiCaptureSink / setAutomationRecorder) call it, so once a setter has returned, no audio
+// callback can still be inside code that read the OLD pointer. That matters most on the plugin path,
+// where the engine (owned by the processor) keeps rendering after the editor and its MainComponent —
+// which own the recorder and the capture sink — have been destroyed.
+//
+// A no-op when nothing is rendering, which is every headless test and the standalone teardown path
+// (its device callback is already detached).
 void AudioEngine::drainAudioCallbacks() noexcept {
     // MESSAGE THREAD. The other half of ScopedRenderPass's handshake. The caller has already
     // published its new pointer with a seq_cst store, so every pass that STARTS from here on reads

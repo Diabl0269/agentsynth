@@ -3,6 +3,7 @@
 // (GraphEditor::reanchorCablesToKnobTargets, GraphEditorModHover.cpp) --
 // docs/layout/cables.md#knob-landing. DirectCV cables and a hidden-page knob keep the jack.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 #include "Modules/FX/FlangerModule.h"
 #include "Modules/LFOModule.h"

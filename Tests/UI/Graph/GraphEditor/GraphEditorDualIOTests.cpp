@@ -3,6 +3,7 @@
 // render-identity checks that the rendered mix does not move sideways when Dual I/O flips.
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 
 #include "AppUndoManager.h"

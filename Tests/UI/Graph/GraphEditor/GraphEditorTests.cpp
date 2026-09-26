@@ -4,6 +4,7 @@
 // audio/MIDI connection preservation).
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"

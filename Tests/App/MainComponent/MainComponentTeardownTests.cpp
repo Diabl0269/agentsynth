@@ -3,6 +3,7 @@
 // is destroyed only after it -- so a MIDI knob gesture still inside RemoteEngine's 250 ms idle window
 // must be ended in the body, or ~RemoteEngine() ends it on a freed parameter (quitting right after
 // turning a mapped knob). See RemoteEngine::endAllGestures().
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "Modules/FilterModule.h"

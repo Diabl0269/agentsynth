@@ -18,6 +18,7 @@
 // guard, not as evidence of where a bug was fixed.
 
 #include "AI/AIProvider.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/ChannelStripModule.h"
 #include "ProjectBundle.h"

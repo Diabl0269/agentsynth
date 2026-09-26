@@ -10,6 +10,7 @@
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"

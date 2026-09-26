@@ -8,6 +8,15 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <map>
 
+// Builds the snapshot, resolves every automation lane against the CURRENT graph, and publishes the
+// snapshot FIRST and the binding table SECOND — that order is what makes a table's snapshot pointer
+// at most one publish behind the snapshot exchange (see AutomationApplier.h's lifetime argument).
+//
+// Callers MUST re-call this after any graph change that adds, removes or replaces nodes (undo /
+// redo, patch apply, preset load, a module delete): bindings are resolved once, here, and a stale
+// table keeps automating the nodes it already resolved — safe, because each binding holds a
+// refcounted Node::Ptr, but a node added since the last publish is not automated until the next one.
+// Re-calling it with an unchanged doc is cheap and always correct.
 void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
     // Every graph change already has to reach this call
     // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step), which
@@ -134,6 +143,19 @@ void openEverySoloAudibleMask(juce::AudioProcessorGraph& graph) {
 }
 } // namespace
 
+// The engine owns "how many ChannelStrips are soloed?". Recounted by scanning the graph —
+// refreshSoloGate() runs inside publishTimeline(), which every graph change already has to call, so
+// a deleted/replaced/undone soloed strip can never leave the mix stuck silent. Any path that changes
+// the graph WITHOUT reaching publishTimeline (the plugin's setStateInformation) calls
+// refreshSoloGate() itself. The audio thread reads the count once per render pass and publishes "any
+// soloed?" to TransportService::setMixerSoloActiveForBlock.
+//
+// WHAT is silenced while the gate is closed is decided PER LEG, not per strip (FRO15,
+// docs/mixer/sends-and-buses.md): refreshSoloGate() also runs synth::computeSoloAudibleLegs() and
+// hands each strip its own audible-leg mask, open-before-close, so soloing a send bus keeps its
+// sources' SEND legs open while their dry main legs close, and soloing a source keeps the buses it
+// feeds audible. The count itself stays a plain global "is anything soloed?" — that is still what
+// MasterModule's Direct gate needs.
 void AudioEngine::refreshSoloGate() {
     // Masks first, count second: while the count is still 0 the gate is open and the masks are not
     // consulted at all, so this order can never expose a half-published mask set.
@@ -141,6 +163,10 @@ void AudioEngine::refreshSoloGate() {
     soloedStripCount_.store(countSoloedStrips(mainProcessorGraph), std::memory_order_relaxed);
 }
 
+// The one call a UI should make: it flips the strip's own flag and recounts, ordered so no render
+// pass ever sees the gate closed with nothing soloed. Returns false when `node` is not a Channel
+// Strip in this graph. Not undoable and not a parameter write, by design
+// (docs/mixer/mixer.md#solo-is-a-render-time-gate).
 bool AudioEngine::setChannelStripSoloed(juce::AudioProcessorGraph::NodeID nodeId, bool soloed) {
     auto* node = mainProcessorGraph.getNodeForId(nodeId);
     auto* strip = node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;

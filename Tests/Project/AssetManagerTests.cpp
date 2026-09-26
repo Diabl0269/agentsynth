@@ -17,6 +17,7 @@
 
 #include "../TestSettingsHelpers.h"
 #include "AI/AIProvider.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "PatchDocument.h"
 #include "ProjectBundle.h"

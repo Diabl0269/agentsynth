@@ -3,6 +3,7 @@
 // ModuleComponent is declared in ModuleComponent.h; the rest of its implementation lives in the
 // sibling ModuleComponent*.cpp units next to this one (FRO65 split of the former single
 // ModuleComponent.cpp).
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 

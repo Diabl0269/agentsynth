@@ -1,5 +1,6 @@
 // ModuleComponent layout/sizing tests: initialization, estimated-size parity, knob grid, per-module layout branches.
 
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"

@@ -10,6 +10,7 @@
 //      auto-commit-on-stop poll).
 
 #include "AI/AIProvider.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportService.h"

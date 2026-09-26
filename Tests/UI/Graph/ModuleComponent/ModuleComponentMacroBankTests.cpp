@@ -1,5 +1,6 @@
 // ModuleComponent Macro Control bank layout tests: knob-count sizing, jack rows, gutter, paging.
 
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
 #include "Modules/MacroControlModule.h"

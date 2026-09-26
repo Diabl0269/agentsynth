@@ -3,6 +3,7 @@
 // — actions and identity checks that target one existing node/card rather than graph wiring.
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"

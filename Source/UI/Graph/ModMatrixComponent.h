@@ -1,9 +1,11 @@
 #pragma once
 
 #include "AppUndoManager.h"
-#include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/ModulationRoutingTypes.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+
+class AudioEngine;
 
 class ModMatrixComponent
     : public juce::Component
@@ -124,7 +126,7 @@ private:
         std::map<int, float> gestureStartValues;
 
         void detach();
-        void refresh(const AudioEngine::ModRoutingInfo& info);
+        void refresh(const ModRoutingInfo& info);
         void populateCombos();
     };
 

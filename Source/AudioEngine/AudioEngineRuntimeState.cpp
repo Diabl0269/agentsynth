@@ -36,10 +36,22 @@ bool AudioEngine::isInputMonitoringEnabled() const noexcept {
     return inputMonitoringEnabled_.load(std::memory_order_relaxed);
 }
 
+// An atomic exchange back to false in the same call, so a caller that polls (MainComponent's 10 Hz
+// timer) consumes a trip exactly once however many ticks pass before it reads it.
 bool AudioEngine::consumeFeedbackGuardTripped() noexcept {
     return feedbackGuardTripped_.exchange(false, std::memory_order_relaxed);
 }
 
+// Run the whole per-block sequence (transport tick, snapshot open, MIDI capture, automation apply,
+// graph render) once per 64-sample slice instead of once per callback, so block-rate automation
+// becomes control-rate automation.
+//
+// Default OFF, and it must stay that way until measured per patch: slicing is not audio-neutral.
+// Time-invariant processing doesn't care about block size, but anything with a per-block LFO update
+// or an FFT hop (Chorus, Phaser, PitchShifter …) renders audibly differently at 64 samples than at
+// 512 — see AutomationSlicingTest.SliceParityTimeInvariantChain, which measures exactly that
+// difference. It also multiplies the per-block overhead (graph traversal, playhead re-application,
+// transport tick) by blockSize/64.
 void AudioEngine::setAutomationSlicingEnabled(bool enabled) noexcept {
     automationSlicingEnabled_.store(enabled, std::memory_order_relaxed);
 }

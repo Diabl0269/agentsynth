@@ -3,6 +3,10 @@
 
 #include "AudioEngine.h"
 
+// Detaches this engine from the device callback so nothing clocks the graph, and returns true if it
+// actually detached (false when it wasn't attached in the first place — Hosted mode, before
+// initialise(), after shutdown(), or already suspended). Mirrors exactly how initialise() attached
+// it.
 bool AudioEngine::suspendDeviceCallback() {
     if (!deviceCallbackAttached_)
         return false;
@@ -16,6 +20,8 @@ bool AudioEngine::suspendDeviceCallback() {
     return true;
 }
 
+// Undoes suspendDeviceCallback(). A no-op in Hosted mode or if already attached; callers must not
+// re-apply the device's sample rate / block size by hand — this re-prepares the graph itself.
 void AudioEngine::resumeDeviceCallback() {
     if (isHosted() || deviceCallbackAttached_)
         return;

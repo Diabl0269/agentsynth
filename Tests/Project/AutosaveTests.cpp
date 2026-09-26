@@ -12,6 +12,7 @@
 // test file in the same binary run is affected by what this one leaves behind.
 
 #include "AI/AIProvider.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
 #include "Transport/BounceExporter.h"

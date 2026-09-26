@@ -6,6 +6,7 @@
 //   3. The canvas integration: cable enumeration, hit-testing and disconnect on a real graph.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CableColour.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"

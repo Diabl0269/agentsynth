@@ -2,6 +2,7 @@
 // memoization + zoom-gesture raster freeze.
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 
 #include "Modules/FilterModule.h"

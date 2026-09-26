@@ -2,6 +2,7 @@
 // post-setProvider() refresh regression lock), toolbar button bounds after construction,
 // the Locate Master command reached through the real Cmd+Shift+M key path, and (FRO193) that a
 // test-constructed MainComponent never touches the real MIDI Remote controller profiles folder.
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "MidiRemote/ControllerProfileStore.h"
 

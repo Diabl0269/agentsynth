@@ -9,6 +9,7 @@
 // This file is NOT registered in CMakeLists.txt (per OWNER instructions).
 
 #include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/LayoutUtil.h"

@@ -3,6 +3,7 @@
 // (open/save dialogs, factory presets, patch/audio/stems export). MainComponent is declared in
 // MainComponent.h; the rest of its implementation lives in the sibling MainComponent*.cpp units
 // next to this one.
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"

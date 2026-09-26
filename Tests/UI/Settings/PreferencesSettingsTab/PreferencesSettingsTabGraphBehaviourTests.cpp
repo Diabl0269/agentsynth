@@ -1,3 +1,4 @@
+#include "AudioEngine/AudioEngine.h"
 #include "PreferencesSettingsTabTestFixture.h"
 
 // Topic: the editor/canvas-behaviour preferences — smart connections, double-click disconnect,

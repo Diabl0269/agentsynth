@@ -60,6 +60,16 @@ void AudioEngine::initialise() {
     }
 }
 
+// Hands the engine the device setup an earlier session persisted (a juce::AudioDeviceManager
+// "DEVICESETUP" element, as produced by getDeviceManager().createStateXml() and handed to the
+// owner through onDeviceStateChanged below). With a state set, initialise() restores it; with none
+// — a fresh install, or any install whose user has never touched the Audio tab — initialise() takes
+// exactly the path it always took, so audio INPUT stays off until the user opts in. There is no
+// migration step for existing users: "no saved state" IS the legacy behaviour.
+//
+// A setter rather than an initialise(const XmlElement*) overload because both of MainComponent's
+// initialise() call sites (the runtime-permission callback and the direct one) would otherwise have
+// to carry the argument, and because the engine keeps the state for any later re-initialise.
 void AudioEngine::setSavedDeviceState(std::unique_ptr<juce::XmlElement> state) { savedDeviceState_ = std::move(state); }
 
 void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {

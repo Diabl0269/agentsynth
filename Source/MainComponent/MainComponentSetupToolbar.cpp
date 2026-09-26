@@ -2,6 +2,7 @@
 // steps (buttons, the load menu, toolbar assembly, status bar) and the app-only welcome-screen
 // setup. Split out of the former single MainComponent.cpp (FRO76) -- see
 // MainComponent::initialiseCommon in MainComponent.cpp for the ordered call sequence.
+#include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
 #include "MainComponent.h"
 #include "UI/Settings/SettingsWindow.h"

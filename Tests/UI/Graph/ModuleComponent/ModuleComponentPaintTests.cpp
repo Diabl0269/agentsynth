@@ -1,5 +1,6 @@
 // ModuleComponent paint/theme tests: Wavetable paint smoke, MIDI keyboard theming, Audio Output card identity.
 
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
 #include "Modules/MidiKeyboardModule.h"
