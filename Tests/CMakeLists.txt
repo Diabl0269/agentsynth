@@ -340,6 +340,7 @@ add_executable(Tests
     UI/ModuleViews/CurveEditor/CurveEditorGeometryTests.cpp
     UI/ModuleViews/CurveEditor/CurveEditorInteractionTests.cpp
     UI/ModuleViews/CurveEditor/CurveEditorPaintTests.cpp
+    UI/ModuleViews/CurveEditor/CurveEditorGridSnapTests.cpp
     UI/Layout/UIAnimationTests.cpp
     UI/Graph/GraphEditorOnboardingTests.cpp
     UI/Library/ModuleLibraryComponentTests.cpp

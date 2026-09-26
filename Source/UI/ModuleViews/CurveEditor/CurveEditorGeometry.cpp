@@ -31,14 +31,14 @@ void CurveEditorGeometry::buildSegmentPixelSpans() {
     if (visibleRange_ <= 0.0)
         visibleRange_ = 1.0;
 
-    const float zeroPx = kZeroSegmentPx * (float)zeroCount;
+    const float zeroPx = config_.zeroSegmentPx * (float)zeroCount;
     const float nonZeroPx = juce::jmax(0.0f, bounds_.getWidth() - zeroPx);
 
     float x = bounds_.getX();
     nodeXPx_[0] = x;
     for (int seg = 0; seg < numSegments; ++seg) {
         const double d = model_.segmentDuration(seg);
-        const float width = (d <= 0.0) ? kZeroSegmentPx : (float)(nonZeroPx * (d / visibleRange_));
+        const float width = (d <= 0.0) ? config_.zeroSegmentPx : (float)(nonZeroPx * (d / visibleRange_));
         x += width;
         nodeXPx_[(size_t)seg + 1] = x;
     }

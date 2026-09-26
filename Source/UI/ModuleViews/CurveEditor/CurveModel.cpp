@@ -115,6 +115,26 @@ MoveResult CurveModel::setNodeXFree(int index, double newX) {
     return {index}; // unreachable: the moved entry always survives the sort
 }
 
+CurvePlayhead CurveModel::playheadForX(double x) const {
+    const int numSegments = getNumSegments();
+    for (int seg = 0; seg < numSegments; ++seg) {
+        const double segEndX = entries_[(size_t)seg + 1].node.x;
+        const double duration = segmentDuration(seg);
+        if (duration <= 0.0)
+            continue; // a zero-length (step) segment is never "the current one" -- the next
+                      // non-zero segment claims x at the step, same right-continuity rule as
+                      // synth::LfoCustomWave::evaluate.
+        if (x <= segEndX) {
+            const double segStartX = entries_[(size_t)seg].node.x;
+            const float progress = (float)juce::jlimit(0.0, 1.0, (x - segStartX) / duration);
+            return {seg, progress};
+        }
+    }
+    if (numSegments <= 0)
+        return {0, 0.0f};
+    return {numSegments - 1, 1.0f}; // x past the last node: pin to the end of the last real segment
+}
+
 bool CurveModel::canRemovePoint(int index) const {
     if (mode_ != CurveMode::Free)
         return false;

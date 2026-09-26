@@ -62,4 +62,22 @@ inline juce::MouseEvent curveDoubleClick(juce::Component& comp, juce::Point<floa
     return makeCurveMouseEvent(comp, pos, juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), false, pos);
 }
 
+inline juce::MouseEvent curveRightClick(juce::Component& comp, juce::Point<float> pos) {
+    return makeCurveMouseEvent(comp, pos, juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier), false, pos);
+}
+
+/** Shift-held variant of `curveLeftDrag` -- bypasses grid snap for the drag (or, fed to
+ *  mouseDoubleClick, for the add). */
+inline juce::MouseEvent curveLeftDragShift(juce::Component& comp, juce::Point<float> pos, juce::Point<float> anchor) {
+    return makeCurveMouseEvent(
+        comp, pos, juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::shiftModifier), true,
+        anchor);
+}
+
+inline juce::MouseEvent curveDoubleClickShift(juce::Component& comp, juce::Point<float> pos) {
+    return makeCurveMouseEvent(
+        comp, pos, juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::shiftModifier),
+        false, pos);
+}
+
 } // namespace synth::ui::test

@@ -1,4 +1,5 @@
 #include "CurveEditorComponent.h"
+#include <cmath>
 
 namespace synth::ui {
 
@@ -47,8 +48,25 @@ void CurveEditorComponent::setVisibleRangeOverride(std::optional<double> range) 
     repaint();
 }
 
+void CurveEditorComponent::setZeroSegmentPx(float px) {
+    geometryConfig_.zeroSegmentPx = px;
+    repaint();
+}
+
 void CurveEditorComponent::setTimeLabelFormatter(std::function<juce::String(double)> formatter) {
     timeLabelFormatter_ = formatter ? std::move(formatter) : &CurveEditorGeometry::defaultTimeLabel;
+    repaint();
+}
+
+void CurveEditorComponent::setGrid(std::optional<CurveGrid> grid) {
+    grid_ = grid;
+    repaint();
+}
+
+void CurveEditorComponent::setSnapToGrid(bool enabled) { snapToGrid_ = enabled; }
+
+void CurveEditorComponent::setFillBaselineLevel(float level) {
+    fillBaselineLevel_ = level;
     repaint();
 }
 
@@ -73,21 +91,41 @@ CurveHitResult CurveEditorComponent::hitTest(juce::Point<float> point) const {
     return currentGeometry().hitTest(point);
 }
 
-int CurveEditorComponent::dragNodeTo(int index, juce::Point<float> point) {
+juce::Point<double> CurveEditorComponent::snapModelPoint(const CurveEditorGeometry&, juce::Point<double> point,
+                                                         bool bypassSnap) const {
+    if (!snapToGrid_ || !grid_.has_value() || bypassSnap)
+        return point;
+
+    const double minX = model_.getMinX();
+    const double maxX = model_.getMaxX();
+    const double xDiv = (double)juce::jmax(1, grid_->xDivisions);
+    const double yDiv = (double)juce::jmax(1, grid_->yDivisions);
+
+    double x = point.x;
+    if (maxX > minX) {
+        const double frac = juce::jlimit(0.0, 1.0, (x - minX) / (maxX - minX));
+        x = minX + (std::round(frac * xDiv) / xDiv) * (maxX - minX);
+    }
+    const double y = std::round(juce::jlimit(0.0, 1.0, point.y) * yDiv) / yDiv;
+    return {x, y};
+}
+
+int CurveEditorComponent::dragNodeTo(int index, juce::Point<float> point, bool bypassSnap) {
     if (index < 0 || index >= model_.getNumNodes())
         return index;
 
     const auto geometry = currentGeometry();
     const CurveNode constraints = model_.getNode(index);
 
+    const juce::Point<double> snapped =
+        snapModelPoint(geometry, {geometry.timeForX(point.x), (double)geometry.levelForY(point.y)}, bypassSnap);
+
     if (constraints.yMovable)
-        model_.setNodeY(index, geometry.levelForY(point.y));
+        model_.setNodeY(index, (float)snapped.y);
 
     int newIndex = index;
-    if (constraints.xMovable) {
-        const double time = geometry.timeForX(point.x);
-        newIndex = model_.setNodeX(index, time).newIndex;
-    }
+    if (constraints.xMovable)
+        newIndex = model_.setNodeX(index, snapped.x).newIndex;
 
     if (onNodeChanged)
         onNodeChanged(newIndex);
@@ -130,27 +168,26 @@ void CurveEditorComponent::resetBend(int segment) {
 
     beginGesture();
     model_.setBend(segment, 0.0f);
-    endGesture();
     if (onBendChanged)
         onBendChanged(segment);
+    endGesture(); // change callback fires before the gesture closes -- see CurveEditorGridSnapTests
     repaint();
 }
 
-int CurveEditorComponent::addPointAt(juce::Point<float> point) {
+int CurveEditorComponent::addPointAt(juce::Point<float> point, bool bypassSnap) {
     if (model_.getMode() != CurveMode::Free)
         return -1;
 
     const auto geometry = currentGeometry();
-    const double time = geometry.timeForX(point.x);
-    const float level = geometry.levelForY(point.y);
+    const juce::Point<double> snapped =
+        snapModelPoint(geometry, {geometry.timeForX(point.x), (double)geometry.levelForY(point.y)}, bypassSnap);
 
     beginGesture();
-    const int index = model_.addPoint(time, level);
-    endGesture();
-
+    const int index = model_.addPoint(snapped.x, (float)snapped.y);
     selectedIndex_ = index;
     if (onPointsChanged)
         onPointsChanged();
+    endGesture(); // change callback fires before the gesture closes -- see CurveEditorGridSnapTests
     repaint();
     return index;
 }
@@ -163,15 +200,16 @@ bool CurveEditorComponent::removeNode(int index) {
 
     beginGesture();
     const bool removed = model_.removePoint(index);
-    endGesture();
-
     if (removed) {
         if (selectedIndex_ == index)
             selectedIndex_ = -1;
         if (onPointsChanged)
             onPointsChanged();
-        repaint();
     }
+    endGesture(); // change callback fires before the gesture closes -- see CurveEditorGridSnapTests
+
+    if (removed)
+        repaint();
     return removed;
 }
 
@@ -188,9 +226,20 @@ void CurveEditorComponent::updateHover(juce::Point<float> point) {
 }
 
 void CurveEditorComponent::mouseDown(const juce::MouseEvent& e) {
+    const CurveHitResult hit = hitTest(e.position);
+
+    // A right-click starts no drag and opens no gesture -- it either shows a context menu (if a
+    // caller installed one) or is a plain no-op.
+    if (e.mods.isPopupMenu()) {
+        dragKind_ = DragKind::None;
+        dragIndex_ = -1;
+        if (onContextMenu)
+            onContextMenu(e, hit);
+        return;
+    }
+
     // No gesture opened here -- a plain click that never becomes a drag would otherwise push an
     // empty undo step. beginGesture happens on the first mouseDrag (mirrors EQCurveComponent).
-    const CurveHitResult hit = hitTest(e.position);
     dragKind_ = (hit.kind == CurveHitKind::Node)         ? DragKind::Node
                 : (hit.kind == CurveHitKind::BendHandle) ? DragKind::Bend
                                                          : DragKind::None;
@@ -218,7 +267,7 @@ void CurveEditorComponent::mouseDrag(const juce::MouseEvent& e) {
     }
 
     if (dragKind_ == DragKind::Node) {
-        dragIndex_ = dragNodeTo(dragIndex_, e.position);
+        dragIndex_ = dragNodeTo(dragIndex_, e.position, e.mods.isShiftDown());
     } else if (dragKind_ == DragKind::Bend) {
         const float deltaY = e.position.y - lastDragPos_.y;
         dragBendBy(dragIndex_, deltaY);
@@ -261,7 +310,7 @@ void CurveEditorComponent::mouseDoubleClick(const juce::MouseEvent& e) {
     if (hit.kind == CurveHitKind::Node)
         removeNode(hit.index);
     else
-        addPointAt(e.position);
+        addPointAt(e.position, e.mods.isShiftDown());
 }
 
 void CurveEditorComponent::resized() { repaint(); }
