@@ -102,5 +102,5 @@ added later cannot inherit the image's locale by accident.
 arrival (2026-09-15, #369) until the fix (2026-09-18, #433); six merges in that window ran
 `--update`. Re-scanning each of those six commits with the fixed scanner reproduced its committed
 baseline exactly — 20, 20, 18, 18, 18 and 17 entries, no entry falsely dropped as stale and no
-over-cap function left unlisted — and the 17 entries on `main` at the time of the audit matched a
+over-cap function left unlisted — and the 16 entries on `main` at the time of the audit matched a
 full scan line for line. Nothing slipped through; the ratchet's history is sound.
