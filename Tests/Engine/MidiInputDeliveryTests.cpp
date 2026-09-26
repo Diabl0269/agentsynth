@@ -85,10 +85,12 @@ TEST(MidiInputDeliveryTest, OneMessageFromAnOpenedSourceIsDeliveredOnce) {
     engine.drainRemoteSinkCalls();
 }
 
-// MainComponent::wireMidiRemoteEngine opens a profile's controller by name BEFORE
-// initialiseAudioEngine() runs initialiseDevices()'s open-everything loop, so a controller with a
-// saved profile is reached by both. It must still be one open input, or every message is applied
-// twice (a relative encoder at double speed, a toggle that flips back).
+// FRO279 originally hit this with MainComponent::wireMidiRemoteEngine opening a profile's
+// controller by name BEFORE initialiseAudioEngine() ran initialiseDevices()'s open-everything
+// loop, so a controller with a saved profile was reached by both. The identifier-keyed dedupe in
+// AudioEngine::openMidiInput must keep this a single open input regardless of which side runs
+// first (a relative encoder at double speed, a toggle that flips back, otherwise) -- this test
+// keeps that historical ordering covered.
 TEST(MidiInputDeliveryTest, ProfileOpenFollowedByLaunchLoopOpensTheSourceOnce) {
     const juce::String name = "FRO279 Launch Order Test Source";
     auto virtualSource = makeVirtualSource(name);
@@ -103,6 +105,37 @@ TEST(MidiInputDeliveryTest, ProfileOpenFollowedByLaunchLoopOpensTheSourceOnce) {
     if (engine.getOpenMidiInputIdentifiers().empty())
         GTEST_SKIP() << "the virtual source did not enumerate as an input";
     engine.runLaunchLoop();
+
+    const auto identifiers = engine.getOpenMidiInputIdentifiers();
+    EXPECT_EQ(std::count(identifiers.begin(), identifiers.end(), identifiers.front()), 1);
+
+    virtualSource->sendMessageNow(juce::MidiMessage::controllerEvent(1, 23, 127));
+    settle(sink.calls, 1);
+
+    EXPECT_EQ(sink.calls.load(), 1);
+    engine.setRemoteMessageSink(nullptr);
+    engine.drainRemoteSinkCalls();
+}
+
+// FRO260: MainComponent::openMidiRemoteDevices() (the profile-open half split out of
+// wireMidiRemoteEngine) now runs AFTER initialiseAudioEngine() has brought the engine up, so
+// initialiseDevices()'s open-everything loop is the one that runs FIRST in production -- the
+// mirror image of the historical ordering above. Same dedupe, same single-delivery guarantee,
+// covering the order MainComponent actually uses today.
+TEST(MidiInputDeliveryTest, LaunchLoopFollowedByProfileOpenOpensTheSourceOnce) {
+    const juce::String name = "FRO260 Launch Order Test Source";
+    auto virtualSource = makeVirtualSource(name);
+    if (virtualSource == nullptr)
+        GTEST_SKIP() << "no OS MIDI service: cannot create a virtual source";
+
+    LaunchLoopEngine engine(AudioEngine::HostMode::Standalone);
+    CountingSink sink;
+    engine.setRemoteMessageSink(&sink);
+
+    engine.runLaunchLoop();
+    if (engine.getOpenMidiInputIdentifiers().empty())
+        GTEST_SKIP() << "the virtual source did not enumerate as an input";
+    engine.openMidiDevicesForRemote({name});
 
     const auto identifiers = engine.getOpenMidiInputIdentifiers();
     EXPECT_EQ(std::count(identifiers.begin(), identifiers.end(), identifiers.front()), 1);
