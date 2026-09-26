@@ -45,7 +45,7 @@ runs are what seed the cache.
 | **Build, Test, and Coverage** | `ubuntu-latest` | Debug + clang + `ENABLE_COVERAGE=ON` | Runs tests, then `bash scripts/coverage.sh --report-only` (skips the re-build; only merges profdata and checks the 85% line-coverage threshold). |
 | **Build and Test (ASAN)** | `ubuntu-latest` | `RelWithDebInfo` + `-fsanitize=address` | **Label-gated** — only runs when the PR carries the `run-asan` label. `ASAN_OPTIONS=detect_leaks=0`. Has its own PR-scoped ccache (the one exception to "PR runs never save", see [`ci-caching.md`](ci-caching.md#six-rules-each-learned-from-an-outage) rule 6): the first labelled run of a PR is cold (~48 min), later pushes to it are warm. There is no ThreadSanitizer job; see [`test-patterns.md`](test-patterns.md#sanitizers). |
 | **Build and Test (macOS)** | `macos-latest` | Release | Catches UB, segfaults and cross-platform issues. |
-| **Build and Test (Windows)** | `windows-latest` | Release | Catches UB, segfaults and cross-platform issues. |
+| **Build and Test (Windows)** | `windows-latest` | Release | Catches UB, segfaults and cross-platform issues. Its test step runs `Tests.exe` directly and fails on a test failure or a missing binary (FRO242; it used to run it through `find -exec`, which hid both). |
 
 ## Required status checks
 

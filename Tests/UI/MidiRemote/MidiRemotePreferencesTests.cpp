@@ -193,7 +193,10 @@ TEST(MidiRemotePreferencesTests, BadgeSwitchReachesThePainterLive) {
 namespace {
 // Alpha of the pixel inside the 6 px dot at the top-right of a 20 x 20 control.
 float dotAlphaAfter(bool viaDot) {
-    juce::Image image(juce::Image::ARGB, 20, 20, true);
+    // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
+    // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
+    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    juce::Image image(juce::Image::ARGB, 20, 20, true, juce::SoftwareImageType());
     juce::Graphics g(image);
     if (viaDot)
         synth::ui::midilearn::paintMidiMappedDot(g, {0, 0, 20, 20}, juce::Colours::red);
@@ -238,7 +241,7 @@ TEST_F(MidiRemotePanelLiveRefreshTest, FlippingTheBadgeSwitchInvalidatesEachCard
     auto* cache = dynamic_cast<synth::ui::ZoomFrozenCachedImage*>(card->getCachedComponentImage());
     ASSERT_NE(cache, nullptr) << "cards are cached; if this changes, the test's premise has too";
 
-    juce::Image target(juce::Image::ARGB, card->getWidth(), card->getHeight(), true);
+    juce::Image target(juce::Image::ARGB, card->getWidth(), card->getHeight(), true, juce::SoftwareImageType());
     juce::Graphics g(target);
     cache->paint(g);
     const int rastersAfterFirstPaint = cache->getRasterCountForTest();

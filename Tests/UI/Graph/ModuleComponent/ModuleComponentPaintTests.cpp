@@ -22,7 +22,11 @@ TEST_F(ModuleComponentTest, WavetableCardPaintsAndTicksWithoutCrashing) {
 
     EXPECT_NO_THROW(moduleComponent.timerCallback());
 
-    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true);
+    // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
+    // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
+    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true,
+                    juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(moduleComponent.paint(g));
     EXPECT_TRUE(img.isValid());
@@ -92,7 +96,8 @@ TEST_F(ModuleComponentTest, AudioOutputCardHasNoDeviceInfoTextUntilSet) {
     EXPECT_TRUE(moduleComponent.getOutputDeviceInfoTextForTest().isEmpty());
 
     // Headless: no themed LookAndFeel, so the CatIO icon is absent — must still not crash.
-    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true);
+    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true,
+                    juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(moduleComponent.paint(g));
 }
@@ -112,7 +117,8 @@ TEST_F(ModuleComponentTest, AudioOutputCardStoresAndPaintsDeviceInfoText) {
     moduleComponent.setOutputDeviceInfoText(deviceText);
     EXPECT_EQ(moduleComponent.getOutputDeviceInfoTextForTest(), deviceText);
 
-    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true);
+    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true,
+                    juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(moduleComponent.paint(g));
 
@@ -227,7 +233,8 @@ TEST_F(ModuleComponentTest, AudioOutputCardIconTintsToTheTitleColourNotTheLibrar
     lf.applyTheme(synth::theme::makeObsidian());
     moduleComponent.setLookAndFeel(&lf);
 
-    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true);
+    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true,
+                    juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(moduleComponent.paint(g));
 

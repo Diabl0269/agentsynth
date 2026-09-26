@@ -37,7 +37,10 @@ TEST(MixerMeterPaintTest, PaintsPositionalBandsNotOneFlatColourAcrossTheBar) {
     ASSERT_GT(meter.getDisplayedDbForTest(0), MeterColourStops::kClipFromDb)
         << "the bar must actually reach the clip zone for this test to mean anything";
 
-    juce::Image img(juce::Image::ARGB, kWidth, kHeight, true);
+    // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
+    // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
+    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    juce::Image img(juce::Image::ARGB, kWidth, kHeight, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(meter.paint(g));
 
@@ -71,7 +74,7 @@ TEST(MixerMeterPaintTest, ABarThatNeverLeavesTheLowZonePaintsOnlyThatOneColour) 
     meter.refresh(1.0f);
     ASSERT_LT(meter.getDisplayedDbForTest(0), MeterColourStops::kMidFromDb);
 
-    juce::Image img(juce::Image::ARGB, kWidth, kHeight, true);
+    juce::Image img(juce::Image::ARGB, kWidth, kHeight, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     meter.paint(g);
 

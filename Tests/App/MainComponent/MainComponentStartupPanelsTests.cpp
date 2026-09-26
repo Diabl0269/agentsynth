@@ -272,8 +272,9 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     // command behind it, or its key fires and nothing happens (MainComponent::keyPressed resolves
     // action -> command -> perform). A new action with no command here would otherwise ship silent.
     ShortcutManager shortcuts;
-    // checkForUpdates (macOS only, AppCommands::checkForUpdates) is deliberately absent from the
-    // shortcut table — Sparkle's own convention is a menu-only "Check for Updates…" item with no
+    // checkForUpdates (macOS AND Windows, AppCommands::checkForUpdates, registered
+    // "#if JUCE_MAC || JUCE_WINDOWS" in MainComponentCommandTable.cpp) is deliberately absent from
+    // the shortcut table — Sparkle's own convention is a menu-only "Check for Updates…" item with no
     // keyboard shortcut, so the "keypress fires and nothing happens" risk this invariant guards
     // against doesn't apply to it.
     //
@@ -287,8 +288,8 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
         if (AppCommands::getCommandForAction(actionId) != AppCommands::kNoCommand)
             expectedActions.add(actionId);
     auto expectedCommandCount = expectedActions.size();
-#if JUCE_MAC
-    expectedCommandCount += 1;
+#if JUCE_MAC || JUCE_WINDOWS
+    expectedCommandCount += 1; // checkForUpdates
 #endif
     // T114/P8-10: showWelcomeScreen and whatsNew are two more menu-only commands with no
     // shortcut-table entry (same "no chord" treatment as checkForUpdates above), but registered

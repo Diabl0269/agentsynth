@@ -37,7 +37,10 @@ TEST(MeterColourStopsLiveApplyTest, MixerMeterPaintsTheOverrideStopsOnceOneIsSet
     const juce::Colour customLow(0xffAA00AA);
     laf.setMeterColourStopsOverride(MeterColourStops({{kMeterMinDb, customLow}, {0.0f, juce::Colour(0xff00AAAA)}}));
 
-    juce::Image img(juce::Image::ARGB, kWidth, kHeight, true);
+    // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
+    // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
+    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    juce::Image img(juce::Image::ARGB, kWidth, kHeight, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     meter.paint(g);
 
@@ -60,7 +63,7 @@ TEST(MeterColourStopsLiveApplyTest, MixerMeterFollowsTheThemeAgainOnceTheOverrid
     meter.peakProvider = [](int leg) { return leg == 0 ? juce::Decibels::decibelsToGain(-40.0f) : 0.0f; };
     meter.refresh(1.0f);
 
-    juce::Image img(juce::Image::ARGB, kWidth, kHeight, true);
+    juce::Image img(juce::Image::ARGB, kWidth, kHeight, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     meter.paint(g);
 
@@ -85,7 +88,7 @@ TEST(MeterColourStopsLiveApplyTest, ChannelChipReadsTheSameOverrideAsMixerMeter)
     const juce::Colour customLow(0xff00FF88);
     laf.setMeterColourStopsOverride(MeterColourStops({{kMeterMinDb, customLow}, {0.0f, juce::Colour(0xffFF0088)}}));
 
-    juce::Image img(juce::Image::ARGB, chip.getWidth(), chip.getHeight(), true);
+    juce::Image img(juce::Image::ARGB, chip.getWidth(), chip.getHeight(), true, juce::SoftwareImageType());
     juce::Graphics g(img);
     chip.paintButton(g, false, false);
 

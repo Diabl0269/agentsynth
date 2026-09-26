@@ -268,7 +268,10 @@ TEST_F(ModuleComponentTest, AdsrCardRendersToPngForVisualInspection) {
     ASSERT_GT(width, 0);
     ASSERT_GT(height, 0);
 
-    juce::Image img(juce::Image::ARGB, width, height, true);
+    // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
+    // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
+    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    juce::Image img(juce::Image::ARGB, width, height, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     // paintEntireComponent recurses into children (paint() + paintOverChildren() + each child's
     // own paintEntireComponent), unlike a bare paint() call -- this is the same call
