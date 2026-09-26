@@ -685,27 +685,38 @@ bool MainComponent::initialiseAudioEngine() {
         return false;
     }
 
-    // FRO29: automation launch skips the mic-permission request entirely (that is the whole
-    // point -- requesting it is what triggers the TCC prompt an agent can't dismiss) and always
-    // takes the direct, synchronous initialise() branch below, exactly like a platform that never
-    // requires the permission in the first place.
-    if (!noAudioDevice && juce::RuntimePermissions::isRequired(juce::RuntimePermissions::recordAudio) &&
-        !juce::RuntimePermissions::isGranted(juce::RuntimePermissions::recordAudio)) {
-        juce::RuntimePermissions::request(juce::RuntimePermissions::recordAudio, [&](bool granted) {
-            if (granted) {
-                audioEngine.initialise();
-                applyStoredDualIOPreferenceToPatch();
-                graphEditor.updateComponents();
-                graphEditor.refreshOutputDeviceInfo();
-                openMidiRemoteDevices(); // FRO260: engine is up now -- see this function's own comment
-            }
-        });
-    } else {
+    // FRO27: one shared startup sequence for both branches below, as a local lambda rather than a
+    // new member or free helper -- MainComponent.h is already at its 1,000-line cap. The point of
+    // sharing it: the permission callback used to run this ONLY on a granted permission, so a
+    // denial left audioEngine.initialise() never called at all and the app had no audio output
+    // even though nothing about output ever needed the mic. A denial now reaches the exact same
+    // sequence as a grant -- the only difference is that AudioInputModule then renders silence for
+    // a device it was never allowed to open.
+    auto bringUpEngine = [this] {
         audioEngine.initialise();
         applyStoredDualIOPreferenceToPatch();
         graphEditor.updateComponents();
         graphEditor.refreshOutputDeviceInfo();
-        openMidiRemoteDevices(); // FRO260: same reasoning as the async branch above
+        openMidiRemoteDevices(); // FRO260: engine is up now -- see this function's own comment
+    };
+
+    // FRO29: automation launch skips the mic-permission request entirely (that is the whole
+    // point -- requesting it is what triggers the TCC prompt an agent can't dismiss) and always
+    // takes the direct, synchronous branch below, exactly like a platform that never requires the
+    // permission in the first place.
+    //
+    // FRO27: also skipped whenever the saved device state would not open an input device anyway --
+    // an output-only launch (no saved state at all, or one that only ever named an output device)
+    // needs no microphone access, and asking regardless is exactly the unwanted TCC prompt this
+    // ticket removes. If the user later ticks an input channel in the Audio tab, macOS prompts for
+    // it on its own the moment that input stream actually opens; this gate is only about launch.
+    if (!noAudioDevice && juce::RuntimePermissions::isRequired(juce::RuntimePermissions::recordAudio) &&
+        !juce::RuntimePermissions::isGranted(juce::RuntimePermissions::recordAudio) &&
+        audioEngine.savedDeviceStateEnablesInput()) {
+        juce::RuntimePermissions::request(juce::RuntimePermissions::recordAudio,
+                                          [bringUpEngine](bool /*granted*/) { bringUpEngine(); });
+    } else {
+        bringUpEngine();
     }
     return true;
 }
