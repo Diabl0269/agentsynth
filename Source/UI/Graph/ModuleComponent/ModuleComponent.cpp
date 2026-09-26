@@ -8,6 +8,7 @@
 #include "ModuleComponentHostedPluginCard.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/ExternalMidiModule.h"
+#include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/PolySequencerModule.h"
 #include "Modules/SequencerModule.h"
@@ -253,6 +254,8 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         applyEnvelopeKnobShortLabels();
         createEnvelopeCardControls();
     }
+    if (getType(module) == ModuleType::LFO)
+        createLfoCardControls();
     createWavetableTabs(); // after createControls(): it groups the sliders/combos that call made
     applyHeaderButtonIcons();
     startTimerHz(15); // 15 FPS is plenty for activity glow / step indicator; lower CPU than 30
@@ -271,6 +274,13 @@ void ModuleComponent::detachFromProcessor() {
     // Destroy scope component first — it has its own timer reading from the module's VisualBuffer
     scopeComponent.reset();
     scopeToggle.reset();
+    // FRO114: the LFO wave graph holds no module reference of its own, but its onGestureStart/
+    // onGestureEnd lambdas capture a SafePointer<ModuleComponent> and reach back into `module` --
+    // reset alongside every other module-referencing child.
+    lfoCurveEditor.reset();
+    lfoGridCombo.reset();
+    lfoShapesButton.reset();
+    lfoToolsButton.reset();
     // The pop-out EQ editor holds the module by reference and runs its own timer, so it must be
     // torn down before the processor goes away. The dialog is self-owning; deleting it closes it.
     if (eqWindow != nullptr)
@@ -497,6 +507,15 @@ void ModuleComponent::timerCallback() {
     // itself no-ops when the (segment, progress) pair is unchanged, so an idle or collapsed card
     // costs nothing beyond the guard check.
     updateEnvelopePlayhead();
+    // FRO114: reverse-sync the LFO wave graph from an undo/redo or preset load this card didn't
+    // itself just write (writeLfoWaveFromCurve/applyLfoWavePreset/applyLfoWaveTool already keep
+    // lfoLastSeenWaveGeneration current for their OWN writes), then poll the playhead -- same
+    // gated 15 Hz tick as everything else here.
+    if (auto* lfo = dynamic_cast<LFOModule*>(module)) {
+        if (!lfoCurveGestureActive && lfo->getCustomWaveGeneration() != lfoLastSeenWaveGeneration)
+            syncLfoCurveFromModule();
+    }
+    updateLfoWavePlayhead();
 
     // Gate repaint: only invalidate the buffered image when something has
     // visually changed.  Idle modules (no signal, no modulation) produce no

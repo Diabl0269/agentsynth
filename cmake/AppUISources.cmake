@@ -189,6 +189,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.h
