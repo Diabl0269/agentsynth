@@ -746,6 +746,47 @@ bool AppUndoManager::recordCombinedChange(juce::AudioProcessorGraph& graph, synt
     return true;
 }
 
+// FRO240 (docs/control/midi-remote.md#replace-and-duplicate): same shape as recordCombinedChange
+// just above (graph + TimelineDoc), for graph + MidiRemoteProjectDoc instead -- GraphEditor's
+// replaceModule() is the one caller today (a module replace that re-targets the old node's
+// assignments onto the new one, inside the SAME mutation lambda this brackets). `postRestore` is
+// passed straight through to the MidiRemoteSnapshotAction this pushes (mirrors
+// recordMidiRemoteChange's own contract): the graph half already re-resolves live targets against
+// the restored graph via createGraphSnapshotAction's afterRestore hook, but RemoteEngine's own
+// assignment cache only follows a restored doc if the caller's postRestore republishes it (e.g.
+// MidiLearnController::publishAssignments()).
+bool AppUndoManager::recordGraphAndMidiRemoteChange(juce::AudioProcessorGraph& graph, synth::MidiRemoteProjectDoc& doc,
+                                                    const std::function<void()>& mutation,
+                                                    std::function<void()> postRestore) {
+    if (!mutation)
+        return false;
+
+    undoManager.beginNewTransaction();
+
+    const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var midiRemoteBefore = doc.toVar();
+
+    mutation();
+
+    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var midiRemoteAfter = doc.toVar();
+
+    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
+    const bool midiRemoteChanged = juce::JSON::toString(midiRemoteBefore) != juce::JSON::toString(midiRemoteAfter);
+
+    if (!graphChanged && !midiRemoteChanged)
+        return false; // neither domain changed: no transaction pushed
+
+    // Both perform() calls land in the same transaction (no beginNewTransaction between them), so a
+    // single undo()/redo() reverts or re-applies whichever of the two actually changed, together.
+    if (graphChanged)
+        performAction(createGraphSnapshotAction(graph, graphBefore, graphAfter));
+    if (midiRemoteChanged)
+        performAction(new MidiRemoteSnapshotAction(doc, midiRemoteBefore, midiRemoteAfter, postRestore));
+
+    return true;
+}
+
 void AppUndoManager::pushGraphAndMacroActions(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
                                               const juce::var& graphBefore, const juce::var& graphAfter,
                                               const juce::var& macrosBefore, const juce::var& macrosAfter,

@@ -274,6 +274,7 @@ add_executable(Tests
     MidiRemote/ControllerDetectTests.cpp
     MidiRemote/EncoderAutoDetectTests.cpp
     MidiRemote/MidiLearnControllerTests.cpp
+    MidiRemote/MidiLearnControllerRetargetTests.cpp
     MidiRemote/MidiLearnControllerHostedParameterTests.cpp
     MidiRemote/ProfileEditHistoryTests.cpp
     App/E2EWorkflowTests.cpp
@@ -511,6 +512,7 @@ add_executable(Tests
     ../Source/MidiRemote/MidiLearnControllerPick.cpp
     ../Source/MidiRemote/MidiLearnControllerHistory.cpp
     ../Source/MidiRemote/ProfileEditHistory.cpp
+    ../Source/MidiRemote/MidiLearnControllerRetarget.cpp
     ../Source/UI/Graph/PickTargetOverlay/GraphPickCandidates.cpp
     ../Source/UI/Graph/PickTargetOverlay/PickTargetOverlay.cpp
     # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those six units are
