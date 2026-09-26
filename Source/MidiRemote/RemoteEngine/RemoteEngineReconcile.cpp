@@ -262,6 +262,28 @@ void addSlot(const Assignment& assignment, juce::AudioProcessorGraph* graph, con
         addLookupEntry(profiles, fresh.sources, assignment, slotIndex, lookupPending);
 }
 
+// FRO141 (docs/control/midi-remote.md#focus-bank): a transient binding never overrides an explicit
+// one on the same control -- true when `transientAssignment`'s (profileId, controlId) already has
+// an enabled project assignment on that profile's ACTIVE page, or an enabled GLOBAL profile action
+// on that control. A transient binding is itself page-independent, so this ignores its own `page`
+// field entirely (rebuildAndPublish leaves it at the makeAssignmentForControl default).
+bool transientBlockedByExplicit(const Assignment& transientAssignment,
+                                const std::vector<Assignment>& projectAssignments,
+                                const std::vector<ControllerProfile>& profiles, int activePage) {
+    for (const auto& a : projectAssignments)
+        if (a.enabled && a.page == activePage && a.control.profileId == transientAssignment.control.profileId &&
+            a.control.controlId == transientAssignment.control.controlId)
+            return true;
+    for (const auto& profile : profiles) {
+        if (profile.id != transientAssignment.control.profileId)
+            continue;
+        for (const auto& action : profile.actions)
+            if (action.enabled && action.control.controlId == transientAssignment.control.controlId)
+                return true;
+    }
+    return false;
+}
+
 } // namespace
 
 void RemoteEngine::reconcile(juce::AudioProcessorGraph& graph) { rebuildAndPublish(&graph); }
@@ -314,6 +336,18 @@ void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
         for (const auto& assignment : profile.actions)
             addSlot(assignment, graph, processorByUuid, nodeIdByUuid, previousResolution, profiles_, actionLookup_,
                     continuousLookup_, *fresh, lookupPending, lookupEligible, /*includeInLookup=*/true);
+
+    // FRO141: a transient focus-bank binding is resolved and routed exactly like a project
+    // assignment, except it is always lookup-eligible regardless of page (page-independent) and is
+    // dropped entirely -- no Slot at all -- when an explicit assignment on the same control already
+    // claims it (transientBlockedByExplicit above).
+    for (const auto& assignment : transientAssignments_) {
+        const int activePage = getActivePage(assignment.control.profileId);
+        if (transientBlockedByExplicit(assignment, assignments_, profiles_, activePage))
+            continue;
+        addSlot(assignment, graph, processorByUuid, nodeIdByUuid, previousResolution, profiles_, actionLookup_,
+                continuousLookup_, *fresh, lookupPending, lookupEligible, /*includeInLookup=*/true);
+    }
 
     addPairedAliasEntries(profiles_, fresh->sources, *fresh, lookupEligible, lookupPending);
 

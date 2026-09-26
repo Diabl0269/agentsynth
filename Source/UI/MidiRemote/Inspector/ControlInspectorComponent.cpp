@@ -472,6 +472,23 @@ ControlInspectorComponent::ControlInspectorComponent() {
     buttonModeLabel_.setComponentID("buttonModeLabel");
     addAndMakeVisible(buttonModeLabel_);
 
+    // FRO141 (docs/control/midi-remote.md#focus-bank): membership only -- the CURRENT binding is
+    // never shown/edited here, it lives on the surface cell (ControllerSurfaceComponent).
+    focusBankToggle_.setComponentID("focusBankToggle");
+    focusBankToggle_.setTooltip("This control drives whichever module is selected on the canvas");
+    focusBankToggle_.onClick = [this] {
+        if (!model_.hasControl)
+            return;
+        // Computed from the model, not focusBankToggle_.getToggleState() -- calling onClick()
+        // directly in a test (this codebase's established substitute for a real headless click,
+        // AssignmentRow::toggleInvert()'s own comment) never runs JUCE's own toggle-flip first, so
+        // the widget's own state can't be trusted as already flipped.
+        model_.control.focusBank = !model_.control.focusBank;
+        focusBankToggle_.setToggleState(model_.control.focusBank, juce::dontSendNotification);
+        fireControlEdited();
+    };
+    addAndMakeVisible(focusBankToggle_);
+
     learnTargetButton_.setComponentID("learnTargetButton");
     learnTargetButton_.setTooltip("Choose what this control drives: a control on the canvas, or an action");
     learnTargetButton_.onClick = [this] {
@@ -503,6 +520,7 @@ void ControlInspectorComponent::setControl(const ControlModel& model) {
         encodingCombo_.setVisible(false);
         autoDetectButton_.setVisible(false);
         buttonModeLabel_.setVisible(false);
+        focusBankToggle_.setVisible(false);
         learnTargetButton_.setVisible(false);
         resized();
         repaint();
@@ -530,6 +548,10 @@ void ControlInspectorComponent::setControl(const ControlModel& model) {
     buttonModeLabel_.setText(model_.control.buttonMode == synth::ButtonMode::toggle ? "Toggle" : "Momentary",
                              juce::dontSendNotification);
     buttonModeLabel_.setVisible(true);
+
+    focusBankToggle_.setToggleState(model_.control.focusBank, juce::dontSendNotification);
+    focusBankToggle_.setVisible(true);
+
     learnTargetButton_.setVisible(true);
 
     resized();
@@ -592,6 +614,8 @@ void ControlInspectorComponent::resized() {
 
     buttonModeLabel_.setBounds(bounds.removeFromTop(kHeaderLineHeight));
 
+    focusBankToggle_.setBounds(bounds.removeFromTop(kHeaderRowHeight));
+
     bounds.removeFromTop(kDividerGap);
     learnTargetButton_.setBounds(bounds.removeFromTop(kLearnTargetRowHeight).removeFromLeft(120).reduced(0, 3));
     for (auto* row : assignmentRows_) {
@@ -610,7 +634,7 @@ void ControlInspectorComponent::paint(juce::Graphics& g) {
 
     const juce::Colour lineColour = lf != nullptr ? lf->getTheme().colors.border : juce::Colours::grey;
     g.setColour(lineColour);
-    const int dividerY = buttonModeLabel_.getBottom() + kDividerGap / 2;
+    const int dividerY = focusBankToggle_.getBottom() + kDividerGap / 2;
     g.drawHorizontalLine(dividerY, static_cast<float>(getLocalBounds().getX()),
                          static_cast<float>(getLocalBounds().getRight()));
 }

@@ -356,6 +356,11 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
     pageStrip_.setPages(effectivePageCount, activePage);
     pageStrip_.setVisible(true);
 
+    // FRO141 (docs/control/midi-remote.md#focus-bank): the engine's own transient bindings, for
+    // display only -- fetched once per rebuild rather than per control below.
+    const auto transientAssignments =
+        remoteEngine_ != nullptr ? remoteEngine_->getTransientAssignments() : std::vector<synth::Assignment>{};
+
     std::vector<ControllerSurfaceComponent::CellModel> cells;
     for (const auto& control : profile->controls) {
         ControllerSurfaceComponent::CellModel cell;
@@ -430,6 +435,26 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
         } else if (actionIt != profile->actions.end()) {
             cell.isMapped = true;
             cell.assignmentLabel = globalActionDisplayName(*actionIt);
+        } else if (const auto transientIt = std::find_if(transientAssignments.begin(), transientAssignments.end(),
+                                                         [&](const synth::Assignment& a) {
+                                                             return a.control.profileId == profile->id &&
+                                                                    a.control.controlId == control.id;
+                                                         });
+                   transientIt != transientAssignments.end() && transientIt->target.isParameter()) {
+            // FRO141 (docs/control/midi-remote.md#focus-bank): only reached when neither branch
+            // above matched, exactly mirroring RemoteEngineReconcile.cpp's explicit-wins rule --
+            // an active project/global mapping on this control always shows first.
+            cell.isMapped = true;
+            juce::String paramName;
+            if (auto* processor = resolveProcessor(*audioEngine_, transientIt->target.parameter.nodeUuid)) {
+                auto resolution = synth::resolveLaneParameter(processor, transientIt->target.parameter.paramId,
+                                                              transientIt->target.parameter.paramIndexHint);
+                if (resolution.resolved())
+                    paramName = resolution.liveParameter()->getName(64);
+            }
+            cell.assignmentLabel = "Focus: " + (paramName.isEmpty() ? transientIt->specControlName : paramName);
+        } else if (control.focusBank) {
+            cell.assignmentLabel = "Follows selection";
         } else {
             cell.assignmentLabel = "-";
         }

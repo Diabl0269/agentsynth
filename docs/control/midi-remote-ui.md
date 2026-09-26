@@ -164,7 +164,10 @@ snapped) using the app's own widgets: a rotary for `knob`/`encoder`, a vertical 
 `fader`, a square for `pad`, a round button for `button`, a horizontal strip for `wheel`.
 Each cell shows the control's name above and its **assignment label** below (parameter:
 *"Filter · Cutoff"*, node command (FRO253's Solo): *"Kick · Solo"*, action: *"Play"*, none: *"—"*,
-orphaned node: *"(missing module)"* in the warning colour). Widgets are **display-only** — they move with the hardware (activity events,
+orphaned node: *"(missing module)"* in the warning colour; a [focus-bank](midi-remote.md#focus-bank)
+control with nothing currently selected: *"Follows selection"*; while bound: *"Focus: <param
+name>"* — the same label text a normal parameter mapping shows, just prefixed so it reads as
+transient rather than a fixed mapping). Widgets are **display-only** — they move with the hardware (activity events,
 [`midi-remote.md`](midi-remote.md#the-engine)) and are never dragged to send MIDI. A cell mapped to
 a parameter or the Solo node command builds already showing that target's current value
 (FRO262) rather than always at rest — an unmapped, orphaned, or action-target cell still shows 0/off,
@@ -234,6 +237,11 @@ kind and encoding are editable (FRO134/FRO264); each edit is a profile edit — 
 controller edit history ([`midi-remote.md`](midi-remote.md#undo)) —
 and is copied onto every assignment that references the control, because the engine reads the
 encoding from the assignment. **Relearn** is still a disabled placeholder.
+
+A **"Follow selection (focus bank)"** toggle sets [`Control::focusBank`](midi-remote.md#focus-bank)
+— membership only, never the current binding (there is nothing to show here about *what* the
+control currently drives; that lives on the surface cell above). Same profile-edit path as
+name/kind/encoding: one step on the controller edit history, undoable.
 
 The **encoding dropdown** offers different options depending on the message type and CC number
 (see [`midi-remote.md#14-bit-and-nrpn-encodings`](midi-remote.md#14-bit-and-nrpn-encodings)):

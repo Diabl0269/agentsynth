@@ -54,6 +54,20 @@ void RemoteEngine::setAssignments(std::vector<Assignment> assignments) {
     rebuildAndPublish(nullptr);
 }
 
+// FRO141 (docs/control/midi-remote.md#focus-bank): rebuilt from scratch by MidiLearnController
+// whenever the canvas selection changes -- never written to a project doc or a ControllerProfile.
+// An explicit project assignment on the same (profileId, controlId) on that profile's ACTIVE page,
+// or a GLOBAL profile action on that control, always wins over a transient one
+// (RemoteEngineReconcile.cpp's addSlot/transientBlockedByExplicit) -- a transient binding itself is
+// page-independent, unlike a project assignment. Republishes with graph == nullptr, same as every
+// other setter here; the caller (MidiLearnController::rebuildFocusBankAssignments) calls reconcile()
+// right afterwards to resolve a freshly bound assignment against the live graph immediately, rather
+// than waiting for an unrelated graph change to reach it.
+void RemoteEngine::setTransientAssignments(std::vector<Assignment> assignments) {
+    transientAssignments_ = std::move(assignments);
+    rebuildAndPublish(nullptr);
+}
+
 void RemoteEngine::setDefaultTakeover(Takeover takeover) {
     // Called on every settings-file write (a drag elsewhere in the app writes at frame rate), so an
     // unchanged value must not republish the snapshot; useDefault is meaningless as a default.

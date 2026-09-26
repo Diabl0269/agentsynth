@@ -90,6 +90,8 @@ private:
     juce::TextButton autoDetectButton_{"Auto-detect..."};
     juce::TextButton learnTargetButton_{"Learn target"};
     juce::Label buttonModeLabel_;
+    // FRO141 (docs/control/midi-remote.md#focus-bank): "Follow selection (focus bank)".
+    juce::ToggleButton focusBankToggle_{"Follow selection (focus bank)"};
 
     juce::OwnedArray<AssignmentRow> assignmentRows_;
 

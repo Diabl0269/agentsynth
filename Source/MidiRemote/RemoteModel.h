@@ -119,6 +119,14 @@ struct Control {
         int row = 0;
     } layout;
 
+    // FRO141 (docs/control/midi-remote.md#focus-bank): membership in the controller setup's "focus
+    // bank" -- the set of controls that follow the canvas selection instead of holding a fixed
+    // mapping. This is the only thing about the focus bank that persists; the CURRENT binding
+    // (which control drives which parameter right now) never does -- see RemoteEngine::
+    // setTransientAssignments(). Written to JSON only when true, so a pre-FRO141 profile round-trips
+    // byte-identical.
+    bool focusBank = false;
+
     juce::var toVar() const;
     /** All-or-nothing: a malformed field (including an empty id) leaves `out` untouched and
      *  returns false. */
