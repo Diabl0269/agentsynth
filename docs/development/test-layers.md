@@ -615,6 +615,44 @@ origin/attack-peak/hold-end/sustain/release-end topology the envelope card uses:
 - **CurveEditorPaintTest** — a themed paint smoke test (accent-coloured curve pixels vs. plain
   background) plus an opt-in `CURVE_EDITOR_SNAPSHOT` PNG dump (the same pattern as `ADSR_CARD_PNG`
   in `ModuleComponentLayoutTests.cpp`).
+- **CurveEditorGridSnapTest** (FRO114) — the LFO card's generic additions: an added/dragged point
+  snaps to a set `CurveGrid`'s nearest cell (in model units) unless Shift bypasses it for that one
+  gesture; a bend drag is never snapped, coarse grid or not; `zeroSegmentPx == 0` draws a step as a
+  true vertical line (no plateau); `setGrid` actually paints division lines (`SoftwareImageType`);
+  a right-click invokes `onContextMenu` with the real hit result and arms no drag; `CurveModel::
+  playheadForX` maps across a zero-length (step) segment the same way `segmentForTime` already
+  does; `addPointAt`/`removeNode`/`resetBend` fire their change callback before `onGestureEnd`.
+
+`Tests/Modules/Lfo/` and `Tests/UI/Graph/ModuleComponent/ModuleComponentLfoCardTests.cpp` (FRO114,
+LFO's Custom waveform — see [`../modules/modules.md`](../modules/modules.md#lfo-module)):
+
+- **LfoCustomWaveTest** (`Modules/Lfo/LfoCustomWaveTests.cpp`) — `synth::LfoCustomWave`, headless:
+  the Triangle default and its JSON round-trip; `toVar`'s shape; `sanitise`'s clamp/sort/pin/
+  truncate/drop-invalid/fall-back-to-default rules (a version newer than `kVersion`, a non-object,
+  missing/non-array points, fewer than 2 valid points); right-continuous `evaluate` at a step;
+  `evaluate` actually bending via `EnvelopeGenerator::shape`; `renderTable`'s wrap guard and a
+  monotonic Ramp Up; Invert preserving bends and Reverse negating them; every preset valid and
+  pairwise distinct.
+- **LFOModuleCustomShapeTest** (`Modules/Lfo/LFOModuleCustomShapeTests.cpp`) — the appended
+  "Custom" choice at index 5 and the param order around it; bipolar output matching the rendered
+  table and unipolar output equalling the curve's own `y`; the ctor's own default-Triangle table is
+  already playable before any `setCustomWave` call; a set wave is adopted (and audible) the very
+  next block; Retrig resets custom phase to the wave's own start; `getExtraState()` omitted only
+  while the wave is the Triangle default, and carried regardless of the CURRENT shape;
+  `setExtraState` sanitises hostile JSON; the generation counter bumps on every `setCustomWave`; a
+  factory-preset-shaped patch naming its shape by string ("Triangle") still resolves to the same
+  index after Custom was appended.
+- **ModuleComponentLfoCardTest** (`ModuleComponentTest` fixture, `ModuleComponentLfoCardTests.cpp`)
+  — the Custom-wave section hidden for every built-in shape (card height unchanged, matching
+  `EstimatedModuleSizesMatchTheRealComponents`'s existing "LFO" entry); showing/growing the card
+  for Custom and shrinking back; the curve model matching the module's wave on construction; a
+  REAL mouse drag writing the wave with exactly one undo step, undone by `AppUndoManager::undo()`
+  and re-synced into the graph via the next `timerCallback()`; a double-click add likewise one
+  undo step that undo actually reverses; a double-click remove and a bend drag round-tripping
+  through the module; the Grid combo defaulting to 1/8 and "Off" actually disabling snap; presets
+  and tools applying and being undoable; the card's OWN write never triggering a spurious
+  generation resync; the playhead following the module's phase only while the section is visible;
+  the right-click menu's Delete Point/Shapes/Tools/Grid content (enabled only on an interior hit).
 
 ## Minimap
 

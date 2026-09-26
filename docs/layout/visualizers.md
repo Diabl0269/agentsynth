@@ -215,7 +215,9 @@ It is wired into the ADSR envelope card (`ModuleComponentEnvelopeCard.cpp` — s
 [modules.md](../modules/modules.md#adsr-envelope-module)'s ADSR "Card UI" entry for the two-way sync, undo and playhead details)
 using `CurveMode::Fixed`, the fixed origin / attack-peak / hold-end / sustain / release-end topology
 this component was built for. `CurveMode::Free` (add, remove and reorder points) is the second
-supported topology.
+supported topology, and now has a real caller: the LFO card's Custom-waveform section
+(`ModuleComponentLfoCard.cpp` — see [modules.md](../modules/modules.md#lfo-module)'s "Card UI"
+entry, FRO114).
 
 **Bend is `EnvelopeGenerator::shape`.** A segment's value at `progress` is
 `start + (end - start) * shape(progress, bend)`, using `synth::EnvelopeGenerator::shape` by default;
@@ -250,6 +252,37 @@ Five display and interaction rules:
   range, resets that state, pairing a still-open gesture's `onGestureEnd` right there. This is what
   lets a host push a fresh model back mid-drag — the envelope card's own parameter round trip, for
   example — without cancelling the user's gesture after its first event.
+
+**FRO114 additions, all opt-in and no-ops for the envelope card's existing usage:**
+
+- **`CurveGeometryConfig::zeroSegmentPx`** (default `kZeroSegmentPx`, 12 px) replaces the constant
+  `buildSegmentPixelSpans` used to use for a zero-duration segment's pixel width. The LFO card sets
+  it to 0 (`CurveEditorComponent::setZeroSegmentPx`) so a step in a custom waveform draws as a true
+  vertical line rather than a visible plateau.
+- **`setGrid(std::optional<CurveGrid>)` / `setSnapToGrid(bool)`.** `CurveGrid{xDivisions,
+  yDivisions}` replaces the default nice-tick time grid with a fixed division count when set;
+  `paintGrid` then draws `xDivisions + 1` vertical and `yDivisions + 1` horizontal lines (the
+  middle horizontal line, when `yDivisions` is even, at 0.7 alpha — the zero/centre reference).
+  With snap enabled, `dragNodeTo`/`addPointAt` round the target to the nearest grid cell in MODEL
+  units (after `timeForX`/`levelForY`), unless their `bypassSnap` parameter is set — the mouse
+  handlers pass `e.mods.isShiftDown()` for it. A bend drag is never snapped, coarse grid or not.
+- **`onContextMenu`** (`std::function<void(const juce::MouseEvent&, CurveHitResult)>`): `mouseDown`
+  calls it and returns with no drag armed when `e.mods.isPopupMenu()` — the LFO card's right-click
+  Shapes/Tools/Grid menu, via `ModuleComponent::showContextMenuHook_` so it stays testable
+  headlessly, same as every other menu that component builds.
+- **`setFillBaselineLevel(float)`** (default 0): `paintCurve` fills down (or up) to this level
+  instead of always 0. The LFO card sets 0.5 for a bipolar wave (fill from the zero line) and 0 for
+  unipolar.
+- **`CurveModel::playheadForX(double x)`**: the first segment with `x <=` its end node's `x` and a
+  non-zero duration (the same convention `CurveEditorGeometry::segmentForTime` already used for
+  drawing/hit-testing — a boundary value still belongs to the segment ENDING there, not the one
+  starting there), progress clamped to `[0, 1]`, `{0, 0}` for an empty model. Turns a raw phase
+  into the `CurvePlayhead` `setPlayhead` takes, without a caller re-deriving segment search.
+- **Gesture-ordering fix**: `addPointAt`, `removeNode` and `resetBend` now fire their change
+  callback (`onPointsChanged`/`onBendChanged`) BEFORE `endGesture()`, not after — so a card's
+  `onGestureEnd` handler (which reads the just-written state, e.g. to diff before/after for an
+  undo record) always sees the change already applied. The envelope card never reads state inside
+  its own `onGestureEnd`, so this is invisible to it.
 
 **No `juce::Timer` of its own.** It repaints only when the model, hover/selection, or playhead
 actually change. `setPlayhead(std::optional<Playhead>)`, where

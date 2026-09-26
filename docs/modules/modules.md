@@ -565,7 +565,50 @@ Hand-played MIDI rarely repeats a pitch inside an envelope's attack; **machine-g
 
 ## LFO Module
 - **Source file**: `Source/Modules/LFOModule.h`
-- **Waveforms**: 5 shapes — Sine, Triangle, Sawtooth, Square, S&H (Sample-and-Hold).
+- **Waveforms**: 6 shapes — Sine, Triangle, Sawtooth, Square, S&H (Sample-and-Hold), Custom
+  (FRO114, `LFOModule::kCustomShapeIndex == 5`).
+- **Custom waveform** (FRO114): a small breakpoint list (`synth::LfoCustomWave`, `Source/Modules/
+  Lfo/LfoCustomWave.h`, headless/Core) — up to 64 `(x, y, bend)` points, `x`/`y` in `[0, 1]`,
+  `bend` the outgoing segment's shape amount evaluated with the same `synth::EnvelopeGenerator::
+  shape` function the envelope card's bend handles use. `evaluate(phase)` is right-continuous at
+  a zero-length (step) segment — the segment STARTING at the step wins, not the one ending there.
+  `renderTable` bakes it into a 1024-entry lookup table (`renderTable`'s `[1024]` duplicates
+  `[0]`, a wrap guard so linear interpolation across the phase = 1 seam needs no modulo);
+  `processBlock`'s case 5 interpolates linearly between adjacent table entries. The message
+  thread renders a fresh table on every `setCustomWave` and crosses it to the audio thread with a
+  fixed-size array under a `juce::SpinLock` try-lock (`publishCustomTable`/
+  `adoptPendingCustomTable`, mirroring `WavetableOscillatorModule`'s own publish/adopt — see
+  `Source/Modules/CLAUDE.md`), adopted once per block before the sample loop. Phase and retrig are
+  unchanged from every other shape (a shared `phase` in `[0, 1)`, reset to 0 by Retrig). The
+  default (and what a freshly-appended Custom shape starts as) is the Triangle preset. Unipolar
+  output equals the curve's own `y`; bipolar maps it to `-1..1` like every other shape.
+- **Extra state** (FRO114): `LFOModule::getExtraState()`/`setExtraState()` carry the custom wave
+  as `{"version":1,"points":[{"x":..,"y":..,"bend":..}, ...]}` — emitted only when the wave is
+  non-default, and regardless of the CURRENT shape (a sculpted wave survives switching to another
+  shape and back). `setExtraState` always resolves via `LfoCustomWave::fromVar`'s sanitise rules
+  (a non-object/bad-version/malformed input falls back to the Triangle default) and, like every
+  module's extra state, is applied on the **trusted path only** (`docs/ai/patch-safety.md`) — the
+  AI may author `"shape":"Custom"` (`AIStateMapper`'s schema is generated from the live choice
+  list) but a model-authored node always gets the default Triangle wave, never a caller-supplied
+  points array.
+- **Card UI** (FRO114, `Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp`): the
+  Custom-wave section (a Grid/Shapes/Tools toolbar + a `CurveEditorComponent` in
+  `CurveMode::Free`) shows only while shape == Custom, driven by `parameterValueChanged("shape"/
+  "bipolar")` and synced once at construction. Grid: Off/1/4/1/8 (default)/1/16/1/32, with snap-
+  to-grid on for every setting but Off; holding Shift bypasses snap for that one drag/add. Shapes
+  replaces the whole wave with a named preset (Triangle/Ramp Up/Ramp Down/Square/Pulse 1/4/
+  Steps (4)/Soft Sine); Tools apply Invert/Reverse/Straighten/Clear/Reset to Default to it — each
+  one whole undo step. Every drag, add, remove, bend-reset, preset and tool funnels through
+  `AppUndoManager::recordNodeExtraStateChange` at gesture end: `before` is the module's
+  `getExtraState()` captured at gesture start, `after` is read only once the card's own write has
+  landed. Reverse sync (undo/redo, a preset load, automation) polls `LFOModule::
+  getCustomWaveGeneration()` against the card's own last-seen value on the existing gated 15 Hz
+  timer and rebuilds the graph from the module when they differ — never while a gesture the card
+  itself started is still open. The playhead is `LFOModule::getPhaseForUI()` (a lock-free
+  `std::atomic<float>`, written once per block, the same pattern as `ADSRModule::
+  playheadProgress`) mapped through `CurveModel::playheadForX`, polled from the same 15 Hz timer
+  only while the section is visible, and pixel-quantised so `CurveEditorComponent::setPlayhead`'s
+  unchanged-value early return skips redundant repaints.
 - **Rate modes**:
     - **Hz mode**: Free-running, 0.01–20.0 Hz (default 1.0 Hz, skewed range). Rate CV (ch0) applies here.
     - **Sync mode**: Tempo-locked to host BPM (falls back to 120 BPM if no PlayHead). Subdivisions: 1/1, 1/2, 1/4 (default), 1/8, 1/16, 1/32. The rate is the tempo division, not the `rateHz` knob, so Rate CV is deliberately ignored in this mode.
