@@ -1,6 +1,7 @@
 // Concern: FRO278's next/previous module selection -- the pure ordering rule in
 // UI/Graph/ModuleStepOrder.h, and GraphEditor::selectAdjacentModule() driving it against real cards.
 #include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"

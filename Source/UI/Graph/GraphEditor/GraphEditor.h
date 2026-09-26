@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AppUndoManager.h"
-#include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/ModulationRoutingTypes.h"
 #include "MacroSet.h"
 #include "Modules/MacroPortShape.h"
 #include "PatchDocument.h"
@@ -21,6 +21,7 @@
 #include <optional>
 #include <vector>
 
+class AudioEngine;
 class ModuleComponent;
 class MacroCardComponent;
 namespace synth {
@@ -733,7 +734,7 @@ private:
     void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor, const juce::String& moduleType) const override;
 
     // ---- GraphCanvasHost (private: only code holding a GraphCanvasHost& can call these) ----
-    juce::AudioProcessorGraph& graph() override { return audioEngine.getGraph(); }
+    juce::AudioProcessorGraph& graph() override;
     AudioEngine& engine() override { return audioEngine; }
     ModuleComponent* moduleComponentFor(juce::AudioProcessorGraph::NodeID nodeId) override;
     juce::OwnedArray<ModuleComponent>& modules() override { return content.getModules(); }
@@ -876,8 +877,8 @@ private:
 
     MacroAutoPortPreference macroAutoPortPreference_ = MacroAutoPortPreference::Unset;
 
-    std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
-    std::vector<AudioEngine::ModulationRouting> cachedModRoutings;
+    std::vector<ModulationDisplayInfo> cachedModDisplayInfo;
+    std::vector<ModulationRouting> cachedModRoutings;
 
     // ---- Animation members ----
     // Drop-landing tween: animates the newly dropped module from drop point to snapped position.
@@ -944,11 +945,9 @@ private:
     void setModuleRasterFrozen(bool frozen);
 
 public:
-    const std::vector<AudioEngine::ModulationDisplayInfo>& getCachedModDisplayInfo() const {
-        return cachedModDisplayInfo;
-    }
+    const std::vector<ModulationDisplayInfo>& getCachedModDisplayInfo() const { return cachedModDisplayInfo; }
 
-    const std::vector<AudioEngine::ModulationRouting>& getCachedModRoutings() const { return cachedModRoutings; }
+    const std::vector<ModulationRouting>& getCachedModRoutings() const { return cachedModRoutings; }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphEditor)
 };

@@ -2,6 +2,7 @@
 // from GraphEditor::beginConnectionDrag the first time a drag starts from a modulation source's
 // OUTPUT -- never again once shown, never for an audio/MIDI output, never for an INPUT drag.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 #include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"

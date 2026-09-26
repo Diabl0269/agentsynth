@@ -6,6 +6,7 @@
 // selection, macros, channels, commands, drag/drop, stereo wiring, persistence).
 
 #include "GraphEditor.h"
+#include "AudioEngine/AudioEngine.h"
 // ~GraphEditor()/~GraphContentComponent() are defined here, so the OwnedArrays of these types
 // (declared in GraphEditor.h with only a forward declaration) need their full definitions
 // wherever the implicit member destructors are instantiated.
@@ -53,6 +54,8 @@ GraphEditor::GraphContentComponent::GraphContentComponent(GraphEditor& ed)
 // ---- GraphCanvasHost (see GraphEditor.h's private section for the rest, defined inline there) ----
 // Out-of-line only because it needs ModuleComponent's full definition (getNodeId()), which
 // GraphEditor.h deliberately keeps forward-declared.
+juce::AudioProcessorGraph& GraphEditor::graph() { return audioEngine.getGraph(); }
+
 ModuleComponent* GraphEditor::moduleComponentFor(juce::AudioProcessorGraph::NodeID nodeId) {
     for (auto* c : content.getModules())
         if (c != nullptr && c->getNodeId() == nodeId)

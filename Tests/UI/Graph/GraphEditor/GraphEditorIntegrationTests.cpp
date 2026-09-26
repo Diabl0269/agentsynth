@@ -2,6 +2,7 @@
 // rewiring, exercised through a full graph with drag/toggle interactions.
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 
 #include "Modules/ADSRModule.h"

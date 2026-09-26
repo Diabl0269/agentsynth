@@ -18,6 +18,7 @@
 // showMacroAutoPortModal's buildMacroPortCrossingPlan() call (a private, no-forwarder method now
 // owned outright by MacroGroupController), rewritten to go through macroController_ directly.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"

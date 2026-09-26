@@ -11,6 +11,7 @@
 // SmartConnectionEngineTests.cpp's own isolation approach (FRO77 PR1).
 
 #include "../GraphEditor/GraphEditorTestHelpers.h"
+#include "AudioEngine/AudioEngine.h"
 
 #include "UI/Graph/GraphDragDropController/GraphDragDropController.h"
 

@@ -4,6 +4,7 @@
 // Split out of the former single MainComponent.cpp (FRO76) -- see MainComponent::initialiseCommon
 // in MainComponent.cpp for the ordered call sequence these steps implement.
 #include "AI/AIProviderRegistry.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/MasterModule.h"

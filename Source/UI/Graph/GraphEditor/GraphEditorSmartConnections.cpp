@@ -17,6 +17,7 @@
 // (Custom module titles, formerly also in this file, moved to GraphEditorModuleTitles.cpp —
 // titles were never a smart-connections concern.)
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 
 #include "Modules/MacroControlModule.h"

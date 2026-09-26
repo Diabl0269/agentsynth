@@ -1,6 +1,7 @@
 // Concern: larger end-to-end undo/redo scenarios -- the unit-interval parameter double-
 // conversion regression, poly-pad routing surviving a round trip, and auto-arrange as a single
 // undo step.
+#include "AudioEngine/AudioEngine.h"
 #include "UndoRedoTestFixture.h"
 
 /**

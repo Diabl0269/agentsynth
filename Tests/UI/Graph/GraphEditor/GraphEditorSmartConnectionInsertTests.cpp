@@ -2,6 +2,7 @@
 // terminal sink, and Ctrl insert-in-series (including stereo fan correctness) at any module.
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"

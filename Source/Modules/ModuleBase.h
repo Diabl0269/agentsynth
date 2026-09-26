@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PortRole.h"
 #include "VisualBuffer.h"
 #include <algorithm>
 #include <atomic>
@@ -22,8 +23,6 @@ struct ModulationTarget {
 };
 
 enum class ModulationCategory { Envelope, LFO, Oscillator, Sequencer, Filter, FX, Other };
-
-enum class PortRole { Audio, ModCV, Pitch, Gate, Midi, Other };
 
 struct LogicalPort {
     int visibleJackIndex =

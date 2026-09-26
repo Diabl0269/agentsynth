@@ -13,6 +13,7 @@
 //
 // Suite name contains "MidiRemote" per the ship-task --gtest_filter convention.
 
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"

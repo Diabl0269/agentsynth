@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioEngine/ModulationRoutingTypes.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/AudioClipStreamer.h"
@@ -52,17 +53,7 @@ public:
 
     // ---- Persisted device state (Standalone only) ----
     // MESSAGE THREAD, before initialise(). Hands the engine the device setup an earlier session
-    // persisted (a juce::AudioDeviceManager "DEVICESETUP" element, as produced by
-    // getDeviceManager().createStateXml() and handed to the owner through onDeviceStateChanged
-    // below). With a state set, initialise() restores it; with none — a fresh install, or any
-    // install whose user has never touched the Audio tab — initialise() takes exactly the path it
-    // always took, so audio INPUT stays off until the user opts in. There is no migration step for
-    // existing users: "no saved state" IS the legacy behaviour.
-    //
-    // A setter rather than an initialise(const XmlElement*) overload because both of
-    // MainComponent's initialise() call sites (the runtime-permission callback and the direct one)
-    // would otherwise have to carry the argument, and because the engine keeps the state for any
-    // later re-initialise.
+    // persisted; see the .cpp definition for the restore-path and no-saved-state argument.
     void setSavedDeviceState(std::unique_ptr<juce::XmlElement> state);
     bool hasSavedDeviceState() const noexcept { return savedDeviceState_ != nullptr; }
 
@@ -117,18 +108,11 @@ public:
     // synth::OfflineTransportDriver and synth::BounceExporter.
     bool isReceivingDeviceCallbacks() const noexcept { return deviceCallbackAttached_; }
 
-    // MESSAGE THREAD. Detaches this engine from the device callback so nothing clocks the graph,
-    // and returns true if it actually detached (false when it wasn't attached in the first place —
-    // Hosted mode, before initialise(), after shutdown(), or already suspended). Mirrors exactly
-    // how initialise() attached it. juce::AudioDeviceManager calls audioDeviceStopped() on the way
-    // out, which releases the graph's resources, so whoever suspends owns re-preparing the graph
-    // for whatever it renders next.
+    // MESSAGE THREAD. Detaches this engine from the device callback; whoever suspends owns
+    // re-preparing the graph for whatever it renders next. See the .cpp definition.
     bool suspendDeviceCallback();
 
-    // MESSAGE THREAD. Undoes suspendDeviceCallback(). juce::AudioDeviceManager::addAudioCallback
-    // calls audioDeviceAboutToStart() on the callback it is adding whenever a device is open, so
-    // this also re-applies the DEVICE's sample rate / block size to the transport and re-prepares
-    // the graph — callers must not do that by hand. A no-op in Hosted mode or if already attached.
+    // MESSAGE THREAD. Undoes suspendDeviceCallback(); see the .cpp definition.
     void resumeDeviceCallback();
 
     // ---- External MIDI interlock (Standalone only) ----
@@ -166,24 +150,9 @@ public:
     bool isInputMonitoringEnabled() const noexcept;
 
     // ---- Mixer solo gate (docs/mixer/mixer.md#solo-is-a-render-time-gate) ----
-    // The engine owns "how many ChannelStrips are soloed?". MESSAGE THREAD: recounted by scanning
-    // the graph — refreshSoloGate() runs inside publishTimeline(), which every graph change already
-    // has to call, so a deleted/replaced/undone soloed strip can never leave the mix stuck silent.
-    // Any path that changes the graph WITHOUT reaching publishTimeline (the plugin's
-    // setStateInformation) calls refreshSoloGate() itself. The audio thread reads the count once
-    // per render pass and publishes "any soloed?" to TransportService::setMixerSoloActiveForBlock.
-    //
-    // WHAT is silenced while the gate is closed is decided PER LEG, not per strip (FRO15,
-    // docs/mixer/sends-and-buses.md): refreshSoloGate() also runs synth::computeSoloAudibleLegs() and hands
-    // each strip its own audible-leg mask, open-before-close, so soloing a send bus keeps its
-    // sources' SEND legs open while their dry main legs close, and soloing a source keeps the buses
-    // it feeds audible. The count itself stays a plain global "is anything soloed?" — that is still
-    // what MasterModule's Direct gate needs.
-    //
-    // setChannelStripSoloed() is the one call a UI should make: it flips the strip's own flag and
-    // recounts, ordered so no render pass ever sees the gate closed with nothing soloed. Returns
-    // false when `node` is not a Channel Strip in this graph. Not undoable and not a parameter
-    // write, by design (docs/mixer/mixer.md#solo-is-a-render-time-gate).
+    // MESSAGE THREAD. The engine owns "how many ChannelStrips are soloed?"; setChannelStripSoloed()
+    // is the one call a UI should make. See the .cpp definitions for the recount/mask-publish
+    // ordering argument.
     void refreshSoloGate();
     bool setChannelStripSoloed(juce::AudioProcessorGraph::NodeID node, bool soloed);
     int getSoloedStripCount() const noexcept { return soloedStripCount_.load(std::memory_order_relaxed); }
@@ -196,9 +165,7 @@ public:
     }
 
     // The feedback guard's one-shot report: true if the guard tripped since the last call, false
-    // otherwise — and an atomic exchange back to false in the same call, so a caller that polls
-    // (MainComponent's 10 Hz timer) consumes a trip exactly once however many ticks pass before it
-    // reads it.
+    // otherwise. See the .cpp definition for the consume-exactly-once contract.
     bool consumeFeedbackGuardTripped() noexcept;
 
     // The one-shot report that a device/sample-rate change happened while a take (audio or
@@ -284,44 +251,22 @@ public:
     synth::AutomationUiFeed& getAutomationUiFeed() noexcept { return automationUiFeed_; }
     const synth::AutomationUiFeed& getAutomationUiFeed() const noexcept { return automationUiFeed_; }
 
-    // MESSAGE THREAD: the one call that hands a TimelineDoc to the audio thread. Builds the
-    // snapshot, resolves every automation lane against the CURRENT graph, and publishes the
-    // snapshot FIRST and the binding table SECOND — that order is what makes a table's snapshot
-    // pointer at most one publish behind the snapshot exchange (see AutomationApplier.h's lifetime
-    // argument).
-    //
-    // Callers MUST re-call this after any graph change that adds, removes or replaces nodes (undo /
-    // redo, patch apply, preset load, a module delete): bindings are resolved once, here, and a
-    // stale table keeps automating the nodes it already resolved — safe, because each binding holds
-    // a refcounted Node::Ptr, but a node added since the last publish is not automated until the
-    // next one. Re-calling it with an unchanged doc is cheap and always correct.
+    // MESSAGE THREAD: the one call that hands a TimelineDoc to the audio thread. Callers MUST
+    // re-call this after any graph change that adds, removes or replaces nodes (undo / redo, patch
+    // apply, preset load, a module delete). Re-calling it with an unchanged doc is cheap and always
+    // correct. See the .cpp definition for the publish-ordering argument.
     void publishTimeline(const synth::TimelineDoc& doc);
 
-    // Run the whole per-block sequence (transport tick, snapshot open, MIDI capture,
-    // automation apply, graph render) once per 64-sample slice instead of once per callback, so
-    // block-rate automation becomes control-rate automation.
-    //
-    // Default OFF, and it must stay that way until measured per patch: slicing is not audio-neutral.
-    // Time-invariant processing doesn't care about block size, but anything with a per-block LFO
-    // update or an FFT hop (Chorus, Phaser, PitchShifter …) renders audibly differently at 64
-    // samples than at 512 — see AutomationSlicingTest.SliceParityTimeInvariantChain, which measures
-    // exactly that difference. It also multiplies the per-block overhead (graph traversal, playhead
-    // re-application, transport tick) by blockSize/64.
+    // Runs the per-block sequence once per 64-sample slice instead of once per callback, so
+    // block-rate automation becomes control-rate automation. Default OFF and not audio-neutral —
+    // see the .cpp definition before flipping it for a patch.
     void setAutomationSlicingEnabled(bool enabled) noexcept;
     bool isAutomationSlicingEnabled() const noexcept;
 
     // MESSAGE THREAD. Returns once every render pass that had already started has finished — the
-    // handshake an owner needs before destroying anything the audio thread borrows. Both
-    // borrowed-pointer setters below call it, so once a setter has returned, no audio callback can
-    // still be inside code that read the OLD pointer. That matters most on the plugin path, where
-    // the engine (owned by the processor) keeps rendering after the editor and its MainComponent —
-    // which own the recorder and the capture sink — have been destroyed. It deliberately does NOT
-    // wait for the audio thread to go idle: inside a host it never is.
-    //
-    // Bounded (see the implementation's timeout): a device thread that never returns must degrade
-    // into "carry on" rather than hang teardown. A no-op when nothing is rendering, which is every
-    // headless test and the standalone teardown path (its device callback is already detached).
-    // Never call it from the audio thread — it would wait on itself.
+    // handshake an owner needs before destroying anything the audio thread borrows. Bounded (a
+    // wedged device thread degrades into "carry on" rather than hanging teardown). Never call it
+    // from the audio thread — it would wait on itself. See the .cpp definition.
     void drainAudioCallbacks() noexcept;
 
     // MESSAGE THREAD. setRemoteMessageSink()'s other half for the two ScopedRemoteSinkCall sites
@@ -453,46 +398,12 @@ public:
     // instead of waiting for the audio thread to render a block with the new layout.
     int getDeviceInputChannelCount() const noexcept { return deviceInputChannelCount_.load(std::memory_order_relaxed); }
 
-    struct ModRoutingInfo {
-        juce::AudioProcessorGraph::NodeID attenuverterNodeID;
-        juce::AudioProcessorGraph::NodeID sourceNodeID;
-        int sourceChannelIndex;
-        juce::AudioProcessorGraph::NodeID destNodeID;
-        int destChannelIndex;
-        bool isBypassed;
-    };
-
-    struct ModulationDisplayInfo {
-        juce::AudioProcessorGraph::NodeID attenuverterNodeID;
-        juce::AudioProcessorGraph::NodeID destNodeID;
-        int destChannelIndex;
-        float modSignalValue;
-        float modSignalPeak;
-        bool isBypassed;
-        float amount = 1.0f;       // attenuverter "amount" (-1..1); 1.0 for DirectCV/PolyBus (no attenuverter)
-        bool sourceBipolar = true; // source's ModuleBase::isModSourceBipolar() -- see AudioEngineModRouting.cpp
-    };
-
-    enum class RoutingKind { AttenuverterChain, DirectCV, PolyBus };
-
-    struct ModulationRouting {
-        RoutingKind kind = RoutingKind::AttenuverterChain;
-        juce::AudioProcessorGraph::NodeID sourceNodeID;
-        int sourceChannelIndex = 0;
-        int sourceVisibleJack = 0;
-        juce::AudioProcessorGraph::NodeID destNodeID;
-        int destChannelIndex = 0;
-        int destVisibleJack = 0;
-        juce::AudioProcessorGraph::NodeID attenuverterNodeID; // valid only for AttenuverterChain
-        int voiceCount = 1;
-        float amount = 1.0f;
-        bool isBypassed = false;
-        bool hasSource = false;
-        bool hasDest = false;
-        float modSignalValue = 0.0f;
-        float modSignalPeak = 0.0f;
-        PortRole role = PortRole::ModCV;
-    };
+    // Value types shared with the graph UI; defined in ModulationRoutingTypes.h so UI headers can
+    // hold them without including this header.
+    using ModRoutingInfo = ::ModRoutingInfo;
+    using ModulationDisplayInfo = ::ModulationDisplayInfo;
+    using RoutingKind = ::ModulationRoutingKind;
+    using ModulationRouting = ::ModulationRouting;
 
     std::vector<ModulationRouting> getModulationRoutings() const;
     std::vector<ModRoutingInfo> getActiveModRoutings() const;

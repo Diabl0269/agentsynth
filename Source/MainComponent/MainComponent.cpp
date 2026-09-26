@@ -1,5 +1,6 @@
 #include "MainComponent.h"
 #include "AI/AIProviderRegistry.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"

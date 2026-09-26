@@ -1,3 +1,4 @@
+#include "AudioEngine/AudioEngine.h"
 #include "MacroPortFlowTestHelpers.h"
 
 // Topic: adding a port (Mono/Stereo/Poly-N/MIDI), one undo step, plus the four macro node

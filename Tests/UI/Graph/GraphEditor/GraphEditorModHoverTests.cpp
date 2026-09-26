@@ -2,6 +2,7 @@
 // on (GraphEditor::HoveredModTarget / setHoveredModTarget, GraphEditorModHover.cpp) --
 // docs/modules/modulation.md#modulation-rings-on-knobs.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 #include "Modules/FX/FlangerModule.h"
 #include "Modules/LFOModule.h"

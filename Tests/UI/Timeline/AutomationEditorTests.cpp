@@ -16,6 +16,7 @@
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/AutomationLaneEditor.h"

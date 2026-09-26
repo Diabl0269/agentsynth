@@ -508,196 +508,21 @@ add_executable(Tests
     Project/RecentProjectsTests.cpp
     Project/AssetManagerTests.cpp
     App/BrandingTests.cpp
-    ../Source/ShortcutManager/ShortcutManagerActionNames.cpp
-    ../Source/MidiRemote/ControllerProfileStore.cpp
-    ../Source/MidiRemote/MidiRemoteFeedbackOutputs.cpp
-    ../Source/MidiRemote/MidiLearnController.cpp
-    ../Source/MidiRemote/MidiLearnControllerMapping.cpp
-    ../Source/MidiRemote/MidiLearnControllerPick.cpp
-    ../Source/MidiRemote/MidiLearnControllerHistory.cpp
-    ../Source/MidiRemote/ProfileEditHistory.cpp
-    ../Source/MidiRemote/MidiLearnControllerRetarget.cpp
-    ../Source/UI/Graph/PickTargetOverlay/GraphPickCandidates.cpp
-    ../Source/UI/Graph/PickTargetOverlay/PickTargetOverlay.cpp
     # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those six units are
     # registered in the root CMakeLists.txt (Core), same as RemoteModel.h/RemoteModelJson.cpp right
     # above them there, because Core's own AudioEngineMidi.cpp/AudioEngineHostMode.cpp call into
     # synth::midi::RemoteMessageSink/hostSourceKey(). Tests links Core directly (see the
     # MeterColourStops.cpp comment above), so re-listing them here would double-compile/duplicate-
     # symbol them exactly like that comment warns against.
-    ../Source/MainComponent/MainComponent.cpp
-    ../Source/MainComponent/MainComponentRemoteActionInvoker.cpp
-    ../Source/MainComponent/MainComponentSetup.cpp
-    ../Source/MainComponent/MainComponentSetupToolbar.cpp
-    ../Source/MainComponent/MainComponentSetupTimeline.cpp
-    ../Source/MainComponent/MainComponentCallbacks.cpp
-    ../Source/MainComponent/MainComponentFileIO.cpp
-    ../Source/MainComponent/MainComponentCommands.cpp
-    ../Source/MainComponent/MainComponentCommandTable.cpp
-    ../Source/MainComponent/MainComponentCommandPredicates.cpp
-    ../Source/MainComponent/MainComponentSelectionCommands.cpp
-    ../Source/MainComponent/MainComponentPanels.cpp
-    ../Source/MainComponent/MainComponentTimeline.cpp
-    ../Source/MainComponent/MainComponentTrackHeaderHost.cpp
-    ../Source/MainComponent/MainComponentTrackCreation.cpp
-    ../Source/MainComponent/MainComponentTrackPresets.cpp
-    ../Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
-    ../Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp
-    ../Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
-    ../Source/UI/Timeline/TimelinePanelComponent/TimelinePanelShortcuts.cpp
-    ../Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
-    ../Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
-    ../Source/UI/Timeline/TimelineRulerComponent.cpp
-    ../Source/UI/Timeline/TimelinePlayheadOverlay.cpp
-    ../Source/UI/Timeline/TimelineTrackHeaderComponent.cpp
-    ../Source/UI/Timeline/ChannelChipComponent.cpp
-    ../Source/UI/Timeline/TrackChannelLinkController.cpp
-    ../Source/UI/Timeline/TimelineTransportBar.cpp
-    ../Source/UI/Timeline/TimelineTransportBarMidiLearn.cpp
-    ../Source/UI/Mixer/MixerMeter.cpp
     # MeterColourStops.cpp is now compiled into Core (root CMakeLists.txt, FRO147) -- Tests links
     # Core directly, so it must NOT also be listed here (would double-compile/duplicate-symbol it).
-    ../Source/UI/Mixer/MixerMeterReadout.cpp
-    ../Source/UI/Mixer/MixerFader.cpp
-    ../Source/UI/Mixer/MixerFaderSlider.cpp
-    ../Source/UI/Mixer/MixerInsertList.cpp
-    ../Source/UI/Mixer/MixerEqThumbnail.cpp
-    ../Source/UI/Mixer/MixerSendList.cpp
-    ../Source/UI/Mixer/MixerColumnComponent.cpp
-    ../Source/UI/Mixer/MixerColumnMidiLearn.cpp
-    ../Source/UI/Mixer/MixerDirectColumn.cpp
-    ../Source/UI/Mixer/MixerMasterColumn.cpp
-    ../Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
-    ../Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
-    ../Source/UI/Layout/BottomDockComponent.cpp
-    ../Source/UI/Mixer/MixerPlacementController.cpp
-    ../Source/UI/Layout/PanelResizeHandle.cpp
-    ../Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.cpp
-    ../Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.cpp
-    ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
-    ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLanePainting.cpp
-    ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneMouse.cpp
-    ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneSelection.cpp
-    ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneEditTools.cpp
-    ../Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.cpp
-    ../Source/UI/PianoRoll/PianoRollComponent/PianoRollScaleAssist.cpp
-    ../Source/UI/PianoRoll/PianoRollComponent/PianoRollPainting.cpp
-    ../Source/UI/PianoRoll/PianoRollComponent/PianoRollEditTools.cpp
-    ../Source/UI/PianoRoll/PianoRollComponent/PianoRollAudition.cpp
-    ../Source/UI/PianoRoll/PianoRollComponent/PianoRollClipboardAndKeys.cpp
-    ../Source/UI/PianoRoll/PianoRollComponent/PianoRollMouse.cpp
-    ../Source/UI/PianoRoll/PianoRollComponent/PianoRollZoom.cpp
-    ../Source/UI/Timeline/AutomationLaneEditor.cpp
+    # The same holds for every AppUI source (cmake/AppUISources.cmake): Tests links AppUI (see the
+    # target_link_libraries below), so only the plugin wrapper's two units, which live in no
+    # library, are compiled here.
     ../Source/Plugin/PluginProcessor.cpp
     ../Source/Plugin/PluginEditor.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditor.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorCables.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorConnections.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorModAmount.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorModHover.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorModuleTitles.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorSmartConnections.cpp
-    ../Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.cpp
-    ../Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorCanvas.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorSelection.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorMacroApi.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorMacroCards.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
     ../Source/UI/Graph/MacroGroupController/MacroGroupController.h
-    ../Source/UI/Graph/MacroGroupController/MacroGroupControllerGeometry.cpp
-    ../Source/UI/Graph/MacroGroupController/MacroGroupControllerGrouping.cpp
-    ../Source/UI/Graph/MacroGroupController/MacroGroupControllerBypassMute.cpp
-    ../Source/UI/Graph/MacroGroupController/MacroGroupControllerPortSplice.cpp
-    ../Source/UI/Graph/MacroGroupController/MacroGroupControllerPorts.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp
     ../Source/UI/Graph/GraphDragDropController/GraphDragDropController.h
-    ../Source/UI/Graph/GraphDragDropController/GraphDragDropController.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorPersistence.cpp
-    ../Source/UI/Chrome/ExportAudioDialog.cpp
-    ../Source/UI/Graph/ModMatrixComponent.cpp
-    ../Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp
-    ../Source/UI/Assistant/AIChatComponent/AIChatComponentMessageList.cpp
-    ../Source/UI/Assistant/AIChatComponent/AIChatComponentSending.cpp
-    ../Source/UI/Assistant/AIChatComponent/AIChatComponentProvider.cpp
-    ../Source/UI/Assistant/AIChatComponent/AIChatComponentHistory.cpp
-    ../Source/UI/Assistant/AccountRow.cpp
-    ../Source/UI/Assistant/PlanBadge.cpp
-    ../Source/UI/Assistant/SignInDialog.cpp
-    ../Source/UI/Graph/ModuleComponent/ModuleComponent.cpp
-    ../Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp
-    ../Source/UI/Graph/ModuleComponent/ModuleComponentAudioDrop.cpp
-    ../Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
-    ../Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
-    ../Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
-    ../Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp
-    ../Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
-    ../Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
-    ../Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
-    ../Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.cpp
-    ../Source/UI/Graph/ModuleComponent/HostedParameterAttachment.cpp
-    ../Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.cpp
-    ../Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentRows.cpp
-    ../Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentScope.cpp
-    ../Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentTestSeams.cpp
-    ../Source/UI/Graph/PluginKnobPicker/PluginKnobPickerRow.cpp
-    ../Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.cpp
-    ../Source/UI/MidiRemote/MidiLearnMenu.cpp
-    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.cpp
-    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelDetect.cpp
-    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelHosted.cpp
-    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelControllers.cpp
-    ../Source/UI/MidiRemote/Detect/DetectModeController.cpp
-    ../Source/UI/MidiRemote/AddController/AddControllerPopover.cpp
-    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceToolbar.cpp
-    ../Source/UI/MidiRemote/ControllersList/ControllersListComponent.cpp
-    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.cpp
-    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceSelection.cpp
-    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceMarquee.cpp
-    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceGroupDrag.cpp
-    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.cpp
-    ../Source/UI/MidiRemote/Inspector/ControlInspectorComponent.cpp
-    ../Source/UI/MidiRemote/ActionPicker/ActionPickerComponent.cpp
-    ../Source/UI/MidiRemote/Orphan/OrphanControllerComponent.cpp
-    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelAssign.cpp
-    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelOrphans.cpp
-    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelUndo.cpp
-    ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
-    ../Source/UI/Library/ModuleLibraryComponent/ModuleLibrarySearch.cpp
-    ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryRows.cpp
-    ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryCollapse.cpp
-    ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryLayout.cpp
-    ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryPainting.cpp
-    ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryInput.cpp
-    ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryHelpPopover.cpp
-    ../Source/UI/Macros/MacroCardComponent.cpp
-    ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
-    ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp
-    ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogTestSeams.cpp
-    ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogAutoPortPrompt.cpp
-    ../Source/Plugin/Hosting/PluginCardLayoutStore.cpp
-    ../Source/Plugin/Hosting/HostedPluginCardLayout.cpp
-    ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
-    ../Source/UI/Settings/AudioSettingsTab.cpp
-    ../Source/UI/Settings/SettingsWindow.cpp
-    ../Source/UI/Settings/AppearanceSettingsTab.cpp
-    ../Source/UI/Settings/MeterColourStopsEditor.cpp
-    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp
-    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviour.cpp
-    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp
-    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosave.cpp
-    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
-    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp
-    ../Source/UI/Settings/ShortcutsSettingsTab.cpp
-    ../Source/UI/Settings/FeedbackSettingsTab.cpp
-    ../Source/UI/Chrome/WelcomeScreenComponent.cpp
-    ../Source/UI/ModuleViews/CurveEditor/CurveModel.cpp
-    ../Source/UI/ModuleViews/CurveEditor/CurveEditorGeometry.cpp
-    ../Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.cpp
-    ../Source/UI/ModuleViews/CurveEditor/CurveEditorPaint.cpp
     # FRO148: Master inserts
     Mixer/MixerModel/MixerModelMasterInsertTests.cpp
     Mixer/MixerModel/MixerModelMasterRecTapTests.cpp
@@ -705,10 +530,9 @@ add_executable(Tests
     Engine/OutputMeterTapTests.cpp
 )
 
-# MainComponent.h (included by the MainComponent/*.cpp units above) pulls in
-# synth::update::UpdateManager (Source/Update/UpdateManager.h) on macOS — Tests compiles those
-# units directly rather than linking the AgentSynth target, so it needs the same Sparkle
-# sources/linking AgentSynth gets in the top-level CMakeLists.txt.
+# MainComponent.h (AppUI) pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h)
+# on macOS, whose implementation lives in the AgentSynth target rather than AppUI, so Tests needs
+# the same Sparkle sources/linking AgentSynth gets in the top-level CMakeLists.txt.
 if(APPLE)
     target_sources(Tests PRIVATE ../Source/Update/SparkleUpdateManager.mm)
     set_source_files_properties(../Source/Update/SparkleUpdateManager.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
@@ -746,21 +570,21 @@ endif()
 
 target_link_libraries(Tests PRIVATE
     GTest::gtest
-    Core
+    # AppUI links Core PUBLIC. Linking the library instead of recompiling its sources here halves
+    # what a change to a UI header (MainComponent.h, GraphEditor.h, ...) rebuilds (FRO307).
+    AppUI
 )
-
-# Sources are now in Core, so we don't need to add them here manually
-# except for the test files themselves.
 
 target_include_directories(Tests PRIVATE
     ${CMAKE_SOURCE_DIR}/Source
     # WhatsNewData.h (generated at configure time by the root CMakeLists.txt's "What's New"
-    # block) — Tests compiles the MainComponent/*.cpp units directly (see the comment above), so
-    # it needs the same generated-header include path AppUI gets.
+    # block), which UI/Chrome/WelcomeScreenTests.cpp includes directly.
     ${SYNTH_WHATSNEW_GENERATED_DIR}
 )
 
 target_compile_definitions(Tests PRIVATE
+    # For MessageManager::runDispatchLoopUntil in the fixtures. Only the test sources (and Tests'
+    # own copy of the JUCE modules) see it; Core and AppUI are linked in built without it.
     JUCE_MODAL_LOOPS_PERMITTED=1
     THEMES_DIR="${CMAKE_SOURCE_DIR}/themes"
     # Tests/ itself, for data resolved relative to the test tree (Tests/reference/) — a test file's own

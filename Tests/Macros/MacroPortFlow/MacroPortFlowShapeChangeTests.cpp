@@ -1,3 +1,4 @@
+#include "AudioEngine/AudioEngine.h"
 #include "MacroPortFlowTestHelpers.h"
 
 // Topic: shape change — the load-bearing case (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed):

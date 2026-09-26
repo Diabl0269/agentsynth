@@ -1,5 +1,6 @@
 // ModuleComponent Wavetable card tests: display/load chrome, jack columns, mod-drop targets, tab paging.
 
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"

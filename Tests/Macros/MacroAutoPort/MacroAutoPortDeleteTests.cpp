@@ -7,6 +7,7 @@
 // Creation tests live in MacroAutoPortCreationTests.cpp; ungroup/presentation/modal-preference
 // tests live in MacroAutoPortUngroupTests.cpp.
 
+#include "AudioEngine/AudioEngine.h"
 #include "MacroAutoPortTestHelpers.h"
 
 #include "AppUndoManager.h"

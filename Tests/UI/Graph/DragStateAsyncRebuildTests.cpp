@@ -17,6 +17,7 @@
 // cancelLiveDragGestures() existed / before its call sites were wired in) DragPreviewLeaks... and
 // SelectionDragLeaks... below fail with the ghost/selection-drag flag still true.
 
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"

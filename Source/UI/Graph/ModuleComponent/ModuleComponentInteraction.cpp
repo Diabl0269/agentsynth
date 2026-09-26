@@ -5,6 +5,7 @@
 // sibling ModuleComponent*.cpp units next to this one (FRO65 split of the former single
 // ModuleComponent.cpp).
 #include "AI/AIStateMapper/AIStateMapper.h" // kMaxModuleDisplayNameChars — one cap for typed and loaded titles
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"

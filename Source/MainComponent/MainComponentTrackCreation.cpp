@@ -3,6 +3,7 @@
 // duplicateIntoChannel). MainComponent is declared in MainComponent.h; the rest of its
 // implementation lives in the sibling MainComponent*.cpp units next to this one, including the
 // TrackHeaderHost query/binding surface in MainComponentTrackHeaderHost.cpp.
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"

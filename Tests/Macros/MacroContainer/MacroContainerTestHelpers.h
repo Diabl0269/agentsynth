@@ -3,6 +3,7 @@
 // Shared helpers for the MacroContainer test suite (Tests/Macros/MacroContainer/MacroContainer*Tests.cpp).
 // Header-only; not compiled on its own and not registered in Tests/CMakeLists.txt.
 
+#include "AudioEngine/AudioEngine.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <juce_audio_processors/juce_audio_processors.h>

@@ -8,6 +8,7 @@
 // Strip} into one macro per T173a) rather than a hand-built graph/doc/macros trio, so the arm key
 // exercises the REAL MainComponent::performTrackEdit wiring end to end, not a stub.
 #include "AI/AIProvider.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/ChannelStripModule.h"
 #include "ShortcutManager/ShortcutManager.h"

@@ -2,6 +2,7 @@
 // Dual I/O toggle tests for keeping/completing both stereo legs.
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 
 #include "Modules/ADSRModule.h"

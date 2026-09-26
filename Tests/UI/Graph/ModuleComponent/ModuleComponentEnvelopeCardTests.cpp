@@ -5,6 +5,7 @@
 // doc comment on why a direct dragNodeTo() call exercises different geometry than a real drag),
 // undo-gesture bracketing, and the playhead stage/segment mapping.
 
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
 #include "Modules/ADSRModule.h"

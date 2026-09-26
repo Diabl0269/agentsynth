@@ -8,6 +8,7 @@
 //   • snippet drop       — a library snippet payload inserts a group and leaves it selected
 
 #include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"

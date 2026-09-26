@@ -1,3 +1,4 @@
+#include "AudioEngine/AudioEngine.h"
 #include "MacroPortFlowTestHelpers.h"
 
 // Topic: dragging a cable onto a collapsed macro card creates a port and wires it, with no

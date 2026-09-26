@@ -7,6 +7,7 @@
 // Creation tests live in MacroAutoPortCreationTests.cpp; the T148/T154 auto-delete suite lives in
 // MacroAutoPortDeleteTests.cpp.
 
+#include "AudioEngine/AudioEngine.h"
 #include "MacroAutoPortTestHelpers.h"
 
 #include "AppUndoManager.h"

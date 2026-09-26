@@ -8,6 +8,7 @@
 // The existing Tests/Macros/MacroContainer/*Tests.cpp files cover the same behaviour through
 // GraphEditor's forwarders and are unchanged by this PR.
 
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/VCAModule.h"

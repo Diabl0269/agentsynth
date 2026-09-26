@@ -9,6 +9,7 @@
 // MacroContainerTests.cpp; chrome/interaction (collapse button, recolour, card double-click,
 // context menus) lives in MacroContainerInteractionTests.cpp.
 
+#include "AudioEngine/AudioEngine.h"
 #include "MacroContainerTestHelpers.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"

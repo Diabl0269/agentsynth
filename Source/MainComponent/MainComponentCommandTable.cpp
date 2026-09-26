@@ -4,6 +4,7 @@
 // one ordered table -- the row order below IS getAllCommands()'s order (menu order), and every
 // name/description/category/actionId/isActive/perform body is preserved from the pre-FRO76
 // switches (see git history for MainComponentCommands.cpp) except where explicitly noted.
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "Transport/MarkerJump.h"
 

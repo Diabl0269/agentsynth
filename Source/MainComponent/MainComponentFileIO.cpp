@@ -3,6 +3,7 @@
 // (dirty tracking, guardUnsavedChanges, autosave scheduling). MainComponent is declared in
 // MainComponent.h; the rest of its implementation lives in the sibling MainComponent*.cpp units
 // next to this one.
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
 

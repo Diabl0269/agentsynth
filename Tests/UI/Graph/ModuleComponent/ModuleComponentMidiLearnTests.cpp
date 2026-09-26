@@ -6,6 +6,7 @@
 // repo-wide idiom TimelineTrackHeaderContextMenuTests.cpp documents (this file keeps its own copy,
 // per that convention).
 
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
 #include "Modules/FX/ParametricEQModule.h"

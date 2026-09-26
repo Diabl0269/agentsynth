@@ -1,3 +1,4 @@
+#include "AudioEngine/AudioEngine.h"
 #include "MacroPortFlowTestHelpers.h"
 
 // Topic: editing an existing port without changing its identity — remove, rename, reorder

@@ -3,6 +3,7 @@
 // live-preview (view-layer-only) behaviour of the ColourPickerPopup-driven picker. Split out of
 // MacroPortWidgetTests.cpp to stay under the 1,000-line cap; shares its helpers via
 // MacroPortWidgetTestHelpers.h.
+#include "AudioEngine/AudioEngine.h"
 #include "MacroPortWidgetTestHelpers.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"

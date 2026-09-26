@@ -3,6 +3,7 @@
 // the next row's knob labels instead of under them. docs/modules/modulation.md#modulation-rings-on-knobs.
 
 #include "ModuleComponentModChip.h"
+#include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/ModuleBase.h"

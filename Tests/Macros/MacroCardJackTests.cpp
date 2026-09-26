@@ -12,6 +12,7 @@
 // last reworked, and adversarial review caught 3 real integration bugs there).
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "Modules/OscillatorModule.h"

@@ -16,6 +16,7 @@
 //      preservation, and that the original Recordings/ file is never touched.
 
 #include "AI/AIProvider.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "PatchDocument.h"
 #include "ProjectBundle.h"

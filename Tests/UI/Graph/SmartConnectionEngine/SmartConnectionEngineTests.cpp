@@ -9,6 +9,7 @@
 // cover the full gesture chain through GraphEditor's forwarders and are unchanged by this PR.
 
 #include "../GraphEditor/GraphEditorTestHelpers.h"
+#include "AudioEngine/AudioEngine.h"
 
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"

@@ -1,4 +1,5 @@
 #include "ModMatrixComponent.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
 #include "UI/Layout/FocusRegion.h"

@@ -197,6 +197,7 @@ endif()
 # Create the core library
 add_library(Core STATIC
     Source/AudioEngine/AudioEngine.h
+    Source/AudioEngine/ModulationRoutingTypes.h
     Source/AudioEngine/AudioEngineBounceSuspend.cpp
     Source/AudioEngine/AudioEngineDeviceLifecycle.cpp
     Source/AudioEngine/AudioEngineHostMode.cpp
@@ -342,6 +343,7 @@ add_library(Core STATIC
     Source/Timeline/TimelineValidator.h
     # Modules
     Source/Modules/ModuleBase.h
+    Source/Modules/PortRole.h
     Source/Modules/AudioInputModule.h
     Source/Modules/OscillatorModule.h
     Source/Modules/ADSRModule.h
@@ -605,9 +607,9 @@ target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 # Split out of the AgentSynth app target so the standalone app AND the audio-plugin wrapper build
 # ONE copy of this code from ONE source list — a plugin whose UI drifts from the app's is the
 # exact failure mode this library exists to prevent.
-# Deliberately NOT folded into Core: Core is the headless-testable layer, and the Tests target
-# still compiles these sources itself with JUCE_MODAL_LOOPS_PERMITTED=1, which this library is
-# not built with.
+# Deliberately NOT folded into Core: Core is the headless-testable layer. Tests links this library
+# (built without Tests' JUCE_MODAL_LOOPS_PERMITTED=1, like Core) rather than compiling its sources
+# a second time.
 # Main.cpp stays out — it is the standalone entry point (JUCEApplication + the generated
 # JuceHeader.h) and has no meaning inside a plugin.
 # Source list in cmake/AppUISources.cmake (APPUI_SOURCES) -- split out to keep this file

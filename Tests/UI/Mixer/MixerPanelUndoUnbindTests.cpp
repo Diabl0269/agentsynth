@@ -19,6 +19,7 @@
 // live parameter (not a defensive no-op on an already-unbound fader), which is what lets these
 // tests prove the pre-restore hook actually ran and did real work -- not just that nothing crashed.
 #include "AI/AIProvider.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"

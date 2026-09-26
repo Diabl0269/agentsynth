@@ -5,6 +5,7 @@
 // (FRO77 PR1) from GraphEditorSmartConnections.cpp, where they had been misplaced — titles are
 // not a smart-connections concern. GraphEditor is declared in GraphEditor.h.
 
+#include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h" // kMaxModuleDisplayNameChars

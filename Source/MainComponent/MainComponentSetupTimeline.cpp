@@ -2,6 +2,7 @@
 // (wireTimelinePanel), split by concern into services/shortcuts, the 4-hook TimelineDoc
 // inventory, clip-lane callbacks, and the transport-bar record toggle. Split out of the former
 // single MainComponent.cpp (FRO76) -- see MainComponent::initialiseCommon in MainComponent.cpp.
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
 #include <algorithm>
