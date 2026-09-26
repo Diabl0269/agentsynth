@@ -1,0 +1,783 @@
+{
+  "version": 1,
+  "id": "template-novation-launch-control-xl-3",
+  "name": "Launch Control XL 3",
+  "vendor": "Novation",
+  "source": "Novation Launch Control XL 3 appendix, https://userguides.novationmusic.com/hc/en-gb/articles/26260540230162-Launch-Control-XL-3-appendix, section 'Default Mode (16) parameters' (Mode 16, the fixed default mode; all controls on MIDI channel 16: encoders CC13-36, faders CC5-12, button rows CC37-44 and CC45-52). The encoders' relative/absolute encoding is not stated there, so abs7 is used; use Auto-detect in the inspector if yours sends relative values.",
+  "input": {
+    "identifier": "",
+    "name": ""
+  },
+  "passMapped": false,
+  "controls": [
+    {
+      "id": "enc1",
+      "name": "Encoder 1",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 13
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc2",
+      "name": "Encoder 2",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 14
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc3",
+      "name": "Encoder 3",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 15
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc4",
+      "name": "Encoder 4",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 16
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc5",
+      "name": "Encoder 5",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 17
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc6",
+      "name": "Encoder 6",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 18
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc7",
+      "name": "Encoder 7",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 19
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc8",
+      "name": "Encoder 8",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 20
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc9",
+      "name": "Encoder 9",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 21
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc10",
+      "name": "Encoder 10",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 22
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc11",
+      "name": "Encoder 11",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 23
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc12",
+      "name": "Encoder 12",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 24
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc13",
+      "name": "Encoder 13",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 25
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc14",
+      "name": "Encoder 14",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 26
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc15",
+      "name": "Encoder 15",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 27
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc16",
+      "name": "Encoder 16",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 28
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc17",
+      "name": "Encoder 17",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 29
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 2
+      }
+    },
+    {
+      "id": "enc18",
+      "name": "Encoder 18",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 30
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 2
+      }
+    },
+    {
+      "id": "enc19",
+      "name": "Encoder 19",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 31
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 2
+      }
+    },
+    {
+      "id": "enc20",
+      "name": "Encoder 20",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 32
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 2
+      }
+    },
+    {
+      "id": "enc21",
+      "name": "Encoder 21",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 33
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 2
+      }
+    },
+    {
+      "id": "enc22",
+      "name": "Encoder 22",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 34
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 2
+      }
+    },
+    {
+      "id": "enc23",
+      "name": "Encoder 23",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 35
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 2
+      }
+    },
+    {
+      "id": "enc24",
+      "name": "Encoder 24",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 36
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 2
+      }
+    },
+    {
+      "id": "fader1",
+      "name": "Fader 1",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 5
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 3
+      }
+    },
+    {
+      "id": "fader2",
+      "name": "Fader 2",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 6
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 3
+      }
+    },
+    {
+      "id": "fader3",
+      "name": "Fader 3",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 7
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 3
+      }
+    },
+    {
+      "id": "fader4",
+      "name": "Fader 4",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 8
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 3
+      }
+    },
+    {
+      "id": "fader5",
+      "name": "Fader 5",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 9
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 3
+      }
+    },
+    {
+      "id": "fader6",
+      "name": "Fader 6",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 10
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 3
+      }
+    },
+    {
+      "id": "fader7",
+      "name": "Fader 7",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 11
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 3
+      }
+    },
+    {
+      "id": "fader8",
+      "name": "Fader 8",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 12
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 3
+      }
+    },
+    {
+      "id": "btnTop1",
+      "name": "Top 1",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 37
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 4
+      }
+    },
+    {
+      "id": "btnTop2",
+      "name": "Top 2",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 38
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 4
+      }
+    },
+    {
+      "id": "btnTop3",
+      "name": "Top 3",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 39
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 4
+      }
+    },
+    {
+      "id": "btnTop4",
+      "name": "Top 4",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 40
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 4
+      }
+    },
+    {
+      "id": "btnTop5",
+      "name": "Top 5",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 41
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 4
+      }
+    },
+    {
+      "id": "btnTop6",
+      "name": "Top 6",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 42
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 4
+      }
+    },
+    {
+      "id": "btnTop7",
+      "name": "Top 7",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 43
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 4
+      }
+    },
+    {
+      "id": "btnTop8",
+      "name": "Top 8",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 44
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 4
+      }
+    },
+    {
+      "id": "btnBottom1",
+      "name": "Bottom 1",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 45
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 5
+      }
+    },
+    {
+      "id": "btnBottom2",
+      "name": "Bottom 2",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 46
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 5
+      }
+    },
+    {
+      "id": "btnBottom3",
+      "name": "Bottom 3",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 47
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 5
+      }
+    },
+    {
+      "id": "btnBottom4",
+      "name": "Bottom 4",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 48
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 5
+      }
+    },
+    {
+      "id": "btnBottom5",
+      "name": "Bottom 5",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 49
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 5
+      }
+    },
+    {
+      "id": "btnBottom6",
+      "name": "Bottom 6",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 50
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 5
+      }
+    },
+    {
+      "id": "btnBottom7",
+      "name": "Bottom 7",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 51
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 5
+      }
+    },
+    {
+      "id": "btnBottom8",
+      "name": "Bottom 8",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 16,
+        "number": 52
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 5
+      }
+    }
+  ],
+  "actions": []
+}

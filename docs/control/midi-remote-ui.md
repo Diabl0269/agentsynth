@@ -338,7 +338,7 @@ profile or **merges** it into a non-empty one
 (existing message keys win; the additions get fresh ids and are stacked below the existing rows).
 The menu groups templates by vendor (**Generic** first, then one section per manufacturer,
 alphabetically — `synth::midi::groupControllerTemplatesByVendor`), so picking e.g. Korg →
-nanoKONTROL2 draws that device's knobs/sliders/buttons correctly without running Detect. **⋯** has *Import controller…* / *Export controller…* (JSON file,
+nanoKONTROL2 draws that device's knobs/sliders/buttons correctly without running Detect. Hardware templates shipped: Arturia BeatStep and MiniLab 3, Korg nanoKONTROL2, Novation Launch Control XL 3 (its fixed default Mode 16). Devices whose vendor publishes no default CC/note chart (e.g. Novation Launchkey Mini MK3, Akai MPK Mini MK3) have no template; set them up with Detect. **⋯** has *Import controller…* / *Export controller…* (JSON file,
 the profile document of [`midi-remote.md`](midi-remote.md#data-model)). Importing a document whose id is already set up on this
 machine prompts **Replace / Cancel** (a replace keeps the project's assignments linked, since they
 reference the profile by id). Shipped templates are JSON resources under
