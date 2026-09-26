@@ -5,6 +5,7 @@
 
 #include "AppUndoManager.h"
 #include "Mixer/MixerSends/MixerSends.h"
+#include "MixerDbAccessibilityText.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -63,6 +64,12 @@ void MixerSendList::rebuildKnobs() {
         row.knob = std::make_unique<juce::Slider>();
         row.knob->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         row.knob->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+        // FRO301: the entry may have no valid target (its cable cut on the canvas), in which case
+        // entry.targetName is already the "no target" placeholder -- name the knob by slot instead
+        // of repeating that placeholder as if it were a real destination.
+        row.knob->setTitle(entry.targetNodeId != juce::AudioProcessorGraph::NodeID{}
+                               ? "Send to " + entry.targetName
+                               : "Send " + juce::String(entry.slot + 1) + " (no target)");
         addAndMakeVisible(*row.knob);
         if (auto* param = strip->getSendLevelParameter(entry.slot)) {
             const auto range = param->getNormalisableRange();
@@ -70,6 +77,12 @@ void MixerSendList::rebuildKnobs() {
                                                                            (double)range.interval, (double)range.skew,
                                                                            range.symmetricSkew));
             row.attachment = std::make_unique<juce::SliderParameterAttachment>(*param, *row.knob);
+            // FRO301: juce::SliderParameterAttachment's own constructor unconditionally overwrites
+            // textFromValueFunction with one built from the param's own getText() (a raw
+            // "0.0000000", sendNLevel has no unit label) -- must be reapplied AFTER constructing
+            // row.attachment or the ctor's own copy gets silently undone (see
+            // MixerColumnComponent.cpp's applyPanAccessibilityText comment for the same fix).
+            applyDbAccessibilityText(*row.knob);
             // FRO133: lets the owning MixerColumnComponent register this row's knob in its OWN
             // MIDI-learn registry -- this list stays free of a second registry/menu of its own
             // (see MixerColumnMidiLearn.cpp's file comment).

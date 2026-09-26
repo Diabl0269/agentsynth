@@ -396,3 +396,87 @@ TEST_F(GraphEditorTest, AClampedZoomTickDoesNotStartAGesture) {
     editor.zoomAroundCentre(0.1f); // already clamped: must be a no-op on zoomLevel
     EXPECT_FALSE(editor.isZoomGestureActive());
 }
+
+// ============================================================================
+// FRO300: cards panned outside the visible canvas rect leave the accessibility tree
+// ============================================================================
+
+namespace {
+
+// Any Slider child of `card` — proves a covered card's CHILDREN lose their handler too, not just
+// the card itself (Component::isAccessible() walks the parent chain, so this is what confirms
+// setAccessible() on the card alone is enough).
+juce::Slider* findAnySlider(ModuleComponent& card) {
+    for (auto* child : card.getChildren())
+        if (auto* slider = dynamic_cast<juce::Slider*>(child))
+            return slider;
+    return nullptr;
+}
+
+} // namespace
+
+// A card entirely outside getVisibleCanvasRect() (panned away) is marked inaccessible, along with
+// its children; panning back restores both.
+TEST_F(GraphEditorTest, CardPannedOutsideVisibleRectLosesAccessibilityAndChildrenFollow) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(300, 300); // small viewport so a modest pan clears the card entirely
+
+    auto& graph = engine.getGraph();
+    auto node = graph.addNode(std::make_unique<OscillatorModule>());
+    node->properties.set("x", 50);
+    node->properties.set("y", 50);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    ModuleComponent* card = nullptr;
+    for (auto* mc : editor.getModuleComponents())
+        if (mc->getModule() == node->getProcessor())
+            card = mc;
+    ASSERT_NE(card, nullptr);
+    auto* slider = findAnySlider(*card);
+    ASSERT_NE(slider, nullptr);
+
+    // Initial viewport (identity zoom/pan) overlaps the card at (50,50) — starts accessible.
+    ASSERT_TRUE(card->isAccessible());
+    ASSERT_TRUE(slider->isAccessible());
+
+    // Pan the visible rect far from the card — fully outside, on every edge.
+    editor.centreViewOn({5000.0f, 5000.0f});
+    EXPECT_FALSE(card->isAccessible());
+    EXPECT_FALSE(slider->isAccessible()) << "a covered card's children must lose their handler too";
+
+    // Pan back onto the card — both recover.
+    editor.centreViewOn(card->getBounds().getCentre().toFloat());
+    EXPECT_TRUE(card->isAccessible());
+    EXPECT_TRUE(slider->isAccessible());
+}
+
+// A card only PARTIALLY covered (its bounds still intersect the visible rect on one edge) stays
+// accessible — this is a visibility clip, not an all-or-nothing viewport membership test.
+TEST_F(GraphEditorTest, PartiallyVisibleCardStaysAccessible) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(300, 300);
+
+    auto& graph = engine.getGraph();
+    auto node = graph.addNode(std::make_unique<OscillatorModule>());
+    node->properties.set("x", 50);
+    node->properties.set("y", 50);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    ModuleComponent* card = nullptr;
+    for (auto* mc : editor.getModuleComponents())
+        if (mc->getModule() == node->getProcessor())
+            card = mc;
+    ASSERT_NE(card, nullptr);
+
+    // Centre the viewport just past the card's right/bottom edge: the rect still overlaps the
+    // card's near corner, so it must stay accessible.
+    const auto cardBounds = card->getBounds();
+    editor.centreViewOn(juce::Point<float>(static_cast<float>(cardBounds.getRight()) - 5.0f,
+                                           static_cast<float>(cardBounds.getBottom()) - 5.0f));
+    ASSERT_TRUE(editor.getVisibleCanvasRect().intersects(cardBounds.toFloat()));
+    EXPECT_TRUE(card->isAccessible());
+}

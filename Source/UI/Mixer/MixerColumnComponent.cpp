@@ -56,6 +56,61 @@ juce::AudioParameterBool* findBoolParam(juce::AudioProcessor& processor, const j
             return boolParam;
     return nullptr;
 }
+
+constexpr int kPanHeight = 28;
+constexpr int kEqThumbnailHeight = 28;
+constexpr int kMsRowHeight = 20;
+
+// FRO298: the heights resized() gives the insert list, send list, EQ thumbnail and pan knob --
+// everything ABOVE the M/S row/meter readout/fader in the column's priority order (highest first:
+// header + source line, M/S row, meter readout + fader/meter with its guaranteed kMinFaderHeight,
+// then pan, then inserts, then sends, then the EQ thumbnail). See docs/mixer/panel.md.
+struct ColumnBudgets {
+    int insertHeight = 0;
+    int sendHeight = 0;
+    int eqHeight = 0;
+    int panHeight = 0;
+};
+
+// `heightAfterHeaderAndSource`: the column's height once header_/sourceLineLabel_ are already
+// carved off -- everything this function returns is taken out of that. With plenty of room this
+// reproduces exactly what resized() did before FRO298 (insert/send capped to a third of what's
+// left, same as always; EQ and pan at their fixed heights): the reclaim loop below only ever
+// touches something when the column is too short to also leave kMinFaderHeight for the fader, and
+// even then it takes from the LOWEST-priority part first (EQ, then sends, then inserts, then pan)
+// so the fader is the last thing to give up space, never the first.
+ColumnBudgets computeColumnBudgets(int heightAfterHeaderAndSource, int insertPreferredHeight, int sendPreferredHeight,
+                                   bool eqVisible, int minFaderHeight) {
+    ColumnBudgets budgets;
+    int remaining = juce::jmax(0, heightAfterHeaderAndSource);
+
+    budgets.insertHeight = juce::jmin(remaining / 3, insertPreferredHeight);
+    remaining -= budgets.insertHeight;
+    budgets.sendHeight = juce::jmin(remaining / 3, sendPreferredHeight);
+    remaining -= budgets.sendHeight;
+    budgets.eqHeight = eqVisible ? kEqThumbnailHeight : 0;
+    remaining -= budgets.eqHeight;
+    budgets.panHeight = kPanHeight;
+    remaining -= budgets.panHeight;
+
+    // What's left after the above must still cover the M/S row, the meter readout and the fader's
+    // own minimum -- reclaim any shortfall from the budgets above, lowest priority first, rather
+    // than letting the fader (sized from whatever remains once resized() lays these back out) drop
+    // under minFaderHeight.
+    int deficit = (kMsRowHeight + kMeterReadoutHeight + minFaderHeight) - remaining;
+    auto reclaim = [&deficit](int& budget) {
+        if (deficit <= 0)
+            return;
+        const int taken = juce::jmin(budget, deficit);
+        budget -= taken;
+        deficit -= taken;
+    };
+    reclaim(budgets.eqHeight);
+    reclaim(budgets.sendHeight);
+    reclaim(budgets.insertHeight);
+    reclaim(budgets.panHeight);
+    return budgets;
+}
 } // namespace
 
 MixerColumnComponent::MixerColumnComponent() {
@@ -440,16 +495,23 @@ void MixerColumnComponent::resized() {
     auto bounds = getLocalBounds().reduced(2);
     header_.setBounds(bounds.removeFromTop(24));
     sourceLineLabel_.setBounds(bounds.removeFromTop(14));
-    insertList_.setBounds(bounds.removeFromTop(juce::jmin(bounds.getHeight() / 3, insertList_.getPreferredHeight())));
-    sendList_.setBounds(bounds.removeFromTop(juce::jmin(bounds.getHeight() / 3, sendList_.getPreferredHeight())));
 
-    // Reserves 0 px when there is no EQ to show -- MixerEqThumbnail::setEqModule(nullptr) already
-    // hid it, this just keeps the layout from leaving a gap behind it.
+    // FRO298: the bottom dock's default height starves the fader down to ~0px -- see
+    // computeColumnBudgets()'s own comment for the priority order this enforces.
+    const auto budgets =
+        computeColumnBudgets(bounds.getHeight(), insertList_.getPreferredHeight(), sendList_.getPreferredHeight(),
+                             eqThumbnail_.isVisible(), kMinFaderHeight);
+    insertList_.setBounds(bounds.removeFromTop(budgets.insertHeight));
+    sendList_.setBounds(bounds.removeFromTop(budgets.sendHeight));
+
+    // Reserves 0 px when there is no EQ to show (or none fit) -- MixerEqThumbnail::setEqModule(nullptr)
+    // already hid it when there's no EQ insert at all, this just keeps the layout from leaving a gap
+    // behind it either way; isVisible() itself is never toggled here (it means "has EQ").
     if (eqThumbnail_.isVisible())
-        eqThumbnail_.setBounds(bounds.removeFromTop(28));
+        eqThumbnail_.setBounds(bounds.removeFromTop(budgets.eqHeight));
 
     auto controls = bounds;
-    panSlider_.setBounds(controls.removeFromTop(28).reduced(8, 0));
+    panSlider_.setBounds(controls.removeFromTop(budgets.panHeight).reduced(8, 0));
 
     auto msRow = controls.removeFromBottom(20);
     muteButton_.setBounds(msRow.removeFromLeft(msRow.getWidth() / 2).reduced(2));

@@ -76,6 +76,10 @@ visible**, so a hidden minimap costs nothing: no graph walk, no model diffing.
 `setViewport()`, because panning and zooming change what is visible, not where modules or cables
 are. Rebuilding the full model on every drag frame would re-walk every graph edge for nothing.
 
+**Cards scrolled or covered out of `getVisibleCanvasRect()` are skipped by screen readers until
+they're back in view** (FRO300, `CanvasAccessibilityClip.h`) — panning or zooming a card fully
+off-screen also removes it and its children from the accessibility tree, not just from the paint.
+
 ## GraphEditor API
 
 | Member | Purpose |

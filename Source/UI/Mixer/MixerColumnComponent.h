@@ -28,6 +28,11 @@ namespace synth::ui {
 
 class MixerColumnComponent : public juce::Component {
 public:
+    /** FRO298: the fader's own minimum draggable height (MixerFader.cpp's 16px dB readout plus a
+     *  slider left at least ~40px tall) -- resized() guarantees this by shrinking the insert/send
+     *  lists, the EQ thumbnail and the pan knob first, in that order, before this ever gives way. */
+    static constexpr int kMinFaderHeight = 56;
+
     MixerColumnComponent();
 
     /** References must outlive this component -- same lifetime contract BottomDockComponent's own

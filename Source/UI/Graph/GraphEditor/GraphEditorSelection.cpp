@@ -6,8 +6,10 @@
 
 #include "GraphEditor.h"
 
+#include "CanvasAccessibilityClip.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleStepOrder.h"
+#include "UI/Macros/MacroCardComponent.h"
 
 // ---------------------------------------------------------------------------------------
 // Selection (issue #156)
@@ -295,6 +297,9 @@ void GraphEditor::finalizeSelectionDrag() {
     // that same delta, desyncing the port from its dock. Re-deriving here (idempotent — a no-op for the whole-macro
     // case, which already agrees) is the P8-15 fix F2 guard for that gap.
     macroController_.dockMacroPortWidgets();
+
+    // FRO300: a group drag can carry the whole selection outside the visible rect in one gesture.
+    detail::applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
 
     selectionDragActive = false;
     selectionDragStartPositions.clear();

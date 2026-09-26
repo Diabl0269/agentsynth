@@ -264,6 +264,36 @@ TEST(MixerAccessibilityTest, SendListExposesAddSendAsAReachableNamedControl) {
            "what makes it reachable";
 }
 
+// FRO301: rebuildKnobs() gave every send-level knob no setTitle at all, and
+// juce::SliderParameterAttachment's own constructor overwrites textFromValueFunction with the
+// param's raw getText() (see MixerSendList.cpp's own comment on the fix).
+TEST(MixerAccessibilityTest, SendKnobHasATitleNamingItsTargetAndReadsDbValues) {
+    MainComponent mc(std::make_unique<MockProviderMACT>());
+    mc.setSize(1400, 900);
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
+    auto* column = mixerPanel.getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+    const auto bus = mixerPanel.createBus();
+    ASSERT_NE(bus, juce::AudioProcessorGraph::NodeID{}) << "createBus must build a channel";
+
+    column->getSendListForTest().addSendTo(bus);
+    mixerPanel.rebuild();
+
+    auto* refreshedColumn = mixerPanel.getStripColumnForTest(0);
+    ASSERT_NE(refreshedColumn, nullptr);
+    auto& sendList = refreshedColumn->getSendListForTest();
+    ASSERT_TRUE(sendList.isAttachedForTest(0));
+    auto* knob = sendList.getKnobForTest(0);
+    ASSERT_NE(knob, nullptr);
+
+    EXPECT_EQ(knob->getTitle(), "Send to Bus 1");
+    ASSERT_TRUE((bool)knob->textFromValueFunction) << "a real sendNLevel param must be bound by now";
+    EXPECT_EQ(knob->textFromValueFunction(-6.0), "-6.0 dB");
+}
+
 TEST(MixerAccessibilityTest, DirectColumnMakeChannelButtonHasAnExplicitTitle) {
     synth::ui::MixerDirectColumn direct;
     EXPECT_EQ(direct.getMakeChannelButtonForTest().getTitle(), "Make channel");

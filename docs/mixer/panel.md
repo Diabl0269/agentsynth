@@ -24,6 +24,24 @@ sends** — its list is the post-fader chain between Master and the Rec Tap or A
 strip's, and `MixerMasterColumn::setColumn()` feeds it from the snapshot. Its column model — ordering,
 kinds and queries — is headless, in `Source/Mixer/MixerModel/`.
 
+Direct only shows once the graph has an Audio Input or MIDI-in tap for it (`snapshot.hasDirect`),
+and Master only shows once a `MasterModule` node exists (`snapshot.hasMaster`) — a brand-new project
+has neither, and no strip either, so the panel would otherwise render nothing at all. **FRO299:**
+`MixerPanelComponent` shows a muted, centred hint instead whenever `columnEntries_` ends up empty
+after a rebuild — a direct child of the panel itself (never `content_`/`viewport_`, so it neither
+scrolls nor takes keyboard focus or mouse clicks), naming the controls that are actually reachable
+from every mixer placement: the Timeline's own "+ Track" button, and "+ Bus" in the bottom panel.
+
+**A strip/bus column's own resized() protects the fader first, everything else second (FRO298).**
+The column's parts have a fixed priority, highest first: the header and source line, the M/S row,
+the meter readout plus the fader/meter row (kept at least `MixerColumnComponent::kMinFaderHeight`
+tall so the slider itself stays draggable), then the pan knob, then the insert list, then the send
+list, then the EQ thumbnail. At the bottom dock's default height the lower-priority parts give way
+first — the insert/send lists clip to fewer rows and the EQ thumbnail can drop to zero height
+(never toggled invisible, since `isVisible()` means "has EQ") — so the fader only ever shrinks
+below the others, never before them. With plenty of room every part still gets exactly what it
+asked for, same as before this guarantee existed.
+
 **Solo always routes through the engine.** The S button calls
 `AudioEngine::setChannelStripSoloed`, never the module directly
 ([`docs/mixer/mixer.md`](mixer.md#solo-is-a-render-time-gate)).

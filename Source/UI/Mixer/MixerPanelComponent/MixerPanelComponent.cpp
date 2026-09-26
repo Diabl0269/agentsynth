@@ -9,6 +9,7 @@
 #include "Mixer/MixerSends/MixerSends.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
 
@@ -17,6 +18,16 @@ constexpr int kColumnWidth = 140;
 constexpr int kColumnGap = 4;
 // Horizontal step between the four cards a new bus channel places on the canvas.
 constexpr int kBusCardGap = 220;
+
+// FRO299: "+ Bus" only exists on BottomDockComponent's tab strip, shown only while the Mixer tab
+// is the active, enabled tab there (BottomDockComponent::updateTabVisuals's own `mixerActive`) --
+// MixerPlacementController::applyPlacement disables that tab for both the Own-panel and detached
+// Window placements, so this panel (shared by all three placements) cannot name a location that is
+// reachable from every one of them; "in the bottom panel" is accurate for the common Tab placement
+// and at worst points at where the control lives when it IS visible. "+ Track" lives on the
+// Timeline's track header instead, unaffected by mixer placement, so it is named unconditionally.
+const char* const kEmptyHintText =
+    "No channels yet. Add a track from the Timeline's + Track button, or a bus with + Bus in the bottom panel.";
 } // namespace
 
 MixerPanelComponent::MixerPanelComponent() {
@@ -28,6 +39,16 @@ MixerPanelComponent::MixerPanelComponent() {
     addAndMakeVisible(viewport_);
     viewport_.setViewedComponent(&content_, false);
     viewport_.setScrollBarsShown(false, true);
+
+    // FRO299: a direct child of THIS panel, not content_/viewport_ (which scroll and would clip or
+    // slide it). This panel is the single focusable leaf, so the hint is purely decorative: no
+    // keyboard focus, no mouse hit-testing.
+    addChildComponent(emptyHint_);
+    emptyHint_.setWantsKeyboardFocus(false);
+    emptyHint_.setInterceptsMouseClicks(false, false);
+    emptyHint_.setJustificationType(juce::Justification::centred);
+    emptyHint_.setText(kEmptyHintText, juce::dontSendNotification);
+    emptyHint_.setTitle(kEmptyHintText); // accessibility: name equals the visible text
 }
 
 MixerPanelComponent::~MixerPanelComponent() = default;
@@ -189,6 +210,10 @@ void MixerPanelComponent::rebuild() {
         }
     }
 
+    // FRO299: an empty graph (no strips, no Direct, no Master -- a brand-new project) otherwise
+    // rendered a blank panel with nothing telling the user how to get started.
+    emptyHint_.setVisible(columnEntries_.empty());
+
     resolveFocusAfterRebuild(hadFocus, previousKind, previousUuid);
     syncFocusVisuals();
 
@@ -346,6 +371,16 @@ void MixerPanelComponent::resetAllMeterReadouts() {
 
 void MixerPanelComponent::resized() {
     viewport_.setBounds(getLocalBounds());
+
+    // FRO299: same "muted" colour source as MixerInsertList::paint()'s empty-state text -- resolved
+    // here (rather than once in the ctor) so a theme switch's re-skin pass is picked up the next
+    // time this panel lays out, the same staleness window MixerColumnHeader/sourceLineLabel_ accept
+    // for their own theme-derived text colours.
+    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    const auto muted = laf != nullptr ? laf->getTheme().colors.textMuted : juce::Colour(0xff8A93A0);
+    emptyHint_.setColour(juce::Label::textColourId, muted);
+    emptyHint_.setFont(juce::Font(juce::FontOptions(13.0f)));
+    emptyHint_.setBounds(getLocalBounds().reduced(24));
 
     int totalColumns = (int)stripColumns_.size();
     if (directColumn_ != nullptr && directColumn_->isVisible())

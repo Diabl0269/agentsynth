@@ -3,25 +3,11 @@
 #include "MixerFader.h"
 
 #include "AppUndoManager.h"
+#include "MixerDbAccessibilityText.h"
 #include "MixerFaderTaper.h"
 #include <cmath>
 
 namespace synth::ui {
-
-namespace {
-
-// FRO18: what VoiceOver reads for the slider's current value, e.g. "-3.0 dB" (spoken "minus 3
-// dB") -- same formatting as MixerFader's own readout_ label, so the visible text and the
-// accessible value never drift apart. Applied twice: once by the constructor (so an unbound
-// fader's slider already has it -- MixerAccessibilityTests.cpp checks exactly this), and again by
-// bind() AFTER constructing attachment_ (FRO150: juce::SliderParameterAttachment's own constructor
-// unconditionally overwrites textFromValueFunction with one built from the param's own getText(),
-// which has no " dB" suffix -- ChannelStripModule/MasterModule's gain param has no unit label).
-void applyDbAccessibilityText(juce::Slider& slider) {
-    slider.textFromValueFunction = [](double db) { return juce::String(db, 1) + " dB"; };
-}
-
-} // namespace
 
 int MixerFader::liveUnbindCallCountForTest_ = 0;
 

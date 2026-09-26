@@ -110,6 +110,9 @@ public:
     MixerDirectColumn* getDirectColumnForTest() const { return directColumn_.get(); }
     MixerMasterColumn* getMasterColumnForTest() const { return masterColumn_.get(); }
 
+    /** FRO299: the empty-state hint (see emptyHint_). */
+    const juce::Label& getEmptyHintForTest() const noexcept { return emptyHint_; }
+
     /** FRO18: -1 when nothing is focused, else an index into the same left-to-right order
      *  rebuild() lays out (strips, then Direct if visible, then Master if visible). */
     int getFocusedColumnIndexForTest() const noexcept { return focusedColumnIndex_; }
@@ -218,6 +221,9 @@ private:
 
     juce::Viewport viewport_;
     juce::Component content_;
+
+    /** FRO299: shown only while there are no columns; see the ctor and rebuild(). */
+    juce::Label emptyHint_;
 
     juce::AudioProcessorGraph* graph_ = nullptr;
     synth::TimelineDoc* doc_ = nullptr;
