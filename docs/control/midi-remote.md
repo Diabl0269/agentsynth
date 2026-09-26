@@ -100,8 +100,9 @@ a **note path only** ([`midi-input.md`](midi-input.md)):
    mappings on the host-supplied MIDI stream still work.
 
 **Non-goals (for now)** — each a planned extension tracked separately, not an accident:
-MCU/HUI protocol surfaces, MPE per-note expression, a "focused module" bank that follows selection,
-a device template library beyond a few generic ones, OSC. (Feedback to the controller shipped —
+MCU/HUI protocol surfaces ([design](midi-remote-mcu-hui.md)), MPE per-note expression
+([design](midi-remote-mpe.md)), a "focused module" bank that follows selection, a device template
+library beyond a few generic ones, OSC ([design](midi-remote-osc.md)). (Feedback to the controller shipped —
 see [Controller feedback](#controller-feedback); 14-bit CC and NRPN encodings shipped — see
 [14-bit and NRPN encodings](#14-bit-and-nrpn-encodings).)
 
@@ -278,9 +279,9 @@ panel side, a **control** is armed and the target is picked next — [`midi-remo
 *Resolution rule:* the engine opens a **300 ms settle window** at the first eligible message and
 binds the **message key with the most messages** in that window (a knob sweep produces many
 CCs; a stray touch-strip blip produces one). Eligible: CC, note-on, pitch-bend, channel
-pressure, program change. **Ignored while learning:** note-off, per-note (poly) aftertouch,
-clock/active-sensing/sysex, and any message on a channel the profile marks as MPE member
-channels (MPE is out of scope for now; this rule just stops MPE traffic from binding garbage). A learn
+pressure, program change (a note-off only adds to its note-on's tally). **Ignored while
+learning:** per-note (poly) aftertouch, clock/active-sensing/sysex. MPE member channels are **not** filtered today, despite an earlier
+version of this doc saying so; [`midi-remote-mpe.md`](midi-remote-mpe.md) designs that rule. A learn
 on a *button-like* target (bool param, action) prefers note-on / CC 0-or-127 patterns and sets
 `buttonMode` from the observed behaviour (a CC that returns to 0 on release → momentary).
 
