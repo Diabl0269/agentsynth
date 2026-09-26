@@ -300,7 +300,7 @@ TEST_F(MidiLearnControllerTest, QueryActionMappingsReturnsALabelForEachMappedAct
 // FRO253: node command targets (docs/control/midi-remote.md#node-command-targets) --
 // armNodeCommand()/forgetNodeCommand()/queryNodeCommandMappings() mirror arm()/forget()/
 // queryMappings() above (PROJECT-scoped, undoable, "learn again" replaces), unlike the action
-// overloads (GLOBAL, not undoable).
+// overloads (GLOBAL, on the controller edit history instead).
 // ============================================================================
 
 TEST_F(MidiLearnControllerTest, ArmNodeCommandMakesTheEngineArmed) {
@@ -487,7 +487,7 @@ TEST_F(MidiLearnControllerTest, LearnNodeCommandThenImmediatePressTogglesSoloWit
 // ============================================================================
 // FRO131: MIDI Remote panel profile mutations (updateProfile, countProjectAssignmentsForProfile,
 // deleteProfile, deleteControl, updateAssignment) -- FRO130 arm/forget/learn paths handle
-// the project doc half (undoable) and auto-profiles (saved unconditionally, not undoable);
+// the project doc half (project history) and auto-profiles (controller edit history);
 // these five panel-side methods route profile edits and project-doc removals through one
 // seam so the engine's published snapshot never goes stale.
 // ============================================================================
@@ -681,7 +681,7 @@ TEST_F(MidiLearnControllerTest, DeleteControlRemovesGlobalActionAssignmentOnThat
 
     EXPECT_TRUE(controller_->getProfiles()[0].controls.empty());
     EXPECT_TRUE(controller_->getProfiles()[0].actions.empty())
-        << "the action assignment on that control is dropped (profile edit, not undoable)";
+        << "the action assignment on that control is dropped (part of the profile edit)";
 }
 
 TEST_F(MidiLearnControllerTest, DeleteControlReturnsFalseForUnknownProfileOrControl) {

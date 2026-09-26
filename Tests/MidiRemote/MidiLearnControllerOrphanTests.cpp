@@ -132,7 +132,8 @@ TEST_F(MidiRemoteOrphanTest, RecreateMintsOneControlPerSpecFromTheAssignmentsAnd
     undo_.undo();
     EXPECT_EQ(assignmentFor("cutoff")->control.profileId, "orphan-1") << "undo puts the orphan back";
     EXPECT_TRUE(hasControllerRef("orphan-1"));
-    EXPECT_EQ(controller_->getProfiles().size(), 1u) << "the minted profile stays (profile edits are not undoable)";
+    EXPECT_EQ(controller_->getProfiles().size(), 1u)
+        << "the minted profile stays (its add is on the controller history, not the project one)";
 }
 
 TEST_F(MidiRemoteOrphanTest, RecreateRefusesAControllerThatIsNotAnOrphan) {

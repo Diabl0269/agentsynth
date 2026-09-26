@@ -197,7 +197,19 @@ public:
      *  selectNodeInGraph(nodeUuid) the same way TrackChannelLinkController's reveal hook does. */
     std::function<void(const juce::String& nodeUuid)> onLocateNode;
 
+    // ---- FRO273: undo routing + cue (MidiRemotePanelUndo.cpp) ----
+    /** True while keyboard focus is inside this panel (docked or detached): Cmd+Z then acts on the
+     *  controller edit history instead of the project's. */
+    bool holdsUndoFocus() const;
+    /** Headless stand-in for real focus (no native peer in tests); nullopt = use real focus. */
+    void setHoldsUndoFocusForTest(std::optional<bool> focused);
+    /** Re-derives the toolbar's "Cmd+Z undoes: ..." hint; repaints only if the text changed. */
+    void refreshUndoHint();
+
     void resized() override;
+    void focusGained(FocusChangeType cause) override;
+    void focusLost(FocusChangeType cause) override;
+    void focusOfChildComponentChanged(FocusChangeType cause) override;
 
     static constexpr int kListWidth = 200;
     static constexpr int kInspectorWidth = 240;
@@ -261,6 +273,19 @@ private:
     // (e.g. a Learn's profile write followed by its project-assignment write) collapse into one
     // rebuild rather than one per notification.
     bool liveRefreshPending_ = false;
+
+    /** Gives the panel keyboard focus on a press anywhere inside it (MidiRemotePanelUndo.cpp). */
+    class FocusOnClick final : public juce::MouseListener {
+    public:
+        explicit FocusOnClick(MidiRemotePanelComponent& owner)
+            : owner_(owner) {}
+        void mouseDown(const juce::MouseEvent& e) override;
+
+    private:
+        MidiRemotePanelComponent& owner_;
+    };
+    FocusOnClick focusOnClick_{*this};
+    std::optional<bool> holdsUndoFocusForTest_;
 
     DetectModeController detect_;
     synth::midi::EncoderAutoDetect encoderDetect_;

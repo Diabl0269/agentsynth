@@ -27,7 +27,7 @@ void MidiRemotePanelComponent::commitDetectStep(const std::optional<synth::Contr
                                                 bool profileChanged, const std::vector<juce::String>& litControlIds,
                                                 const std::vector<synth::midi::RemoteEvent>& events) {
     if (profileChanged && working.has_value() && learnController_ != nullptr) {
-        learnController_->updateProfile(*working);
+        learnController_->updateProfile(*working, "Detect");
         refreshSurfaceForSelectedProfile();
         controllerSurface_.setSelectedControlId(selectedControlId_);
         for (const auto& event : events)

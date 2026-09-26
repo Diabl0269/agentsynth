@@ -3,6 +3,7 @@
 #include "MidiRemote/ControllerProfileStore.h"
 #include "MidiRemote/MidiRemoteLearnBinder.h"
 #include "MidiRemote/PickTarget.h"
+#include "MidiRemote/ProfileEditHistory.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "MidiRemote/RemoteModel.h"
 #include <functional>
@@ -11,6 +12,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <memory>
+#include <optional>
 #include <vector>
 
 // MidiLearnController.h -- FRO130 (docs/control/midi-remote-ui.md#the-learn-interaction): the
@@ -156,19 +158,28 @@ public:
     // ---- FRO131: MIDI Remote panel profile mutations ----
     // Every panel-side edit to a ControllerProfile routes through ONE of these rather than the
     // panel writing ControllerProfileStore directly, so the engine's published snapshot can never
-    // go stale relative to what's on disk (docs/control/midi-remote.md's "assignment exists ->
-    // consumed" rule means a deleted control that never reaches setProfiles() would keep consuming
-    // messages). All are profile edits, so -- like arm()/armAction()'s own profile writes -- NONE
-    // of these are undoable (docs/control/midi-remote.md#undo: "Profile edits ... not undoable").
+    // go stale relative to what's on disk. Each records one step on the controller edit history
+    // (below), never on AppUndoManager (docs/control/midi-remote.md#undo).
 
     /** Rename, or a drag-to-move layout change: saves `profile` verbatim (it must already carry
-     *  the caller's edit) and republishes. Returns false if `profile.id` doesn't match a known
-     *  profile. */
-    bool updateProfile(const ControllerProfile& profile);
+     *  the caller's edit) and republishes. `editLabel` names the history step ("Move control").
+     *  Returns false if `profile.id` doesn't match a known profile. */
+    bool updateProfile(const ControllerProfile& profile, const juce::String& editLabel = "Edit controller");
 
     /** FRO134: adds a brand-new profile (Add controller, Detect-from-scratch). Saved, published to
      *  the engine and announced via onChanged. Returns false if `profile.id` is empty or already known. */
-    bool addProfile(const ControllerProfile& profile);
+    bool addProfile(const ControllerProfile& profile, const juce::String& editLabel = "Add controller");
+
+    // ---- FRO273: controller edit history (MidiLearnControllerHistory.cpp). Message thread only. ----
+    bool canUndoProfileEdit() const noexcept { return profileHistory_.canUndo(); }
+    bool canRedoProfileEdit() const noexcept { return profileHistory_.canRedo(); }
+    /** Empty when there is nothing to undo / redo. */
+    juce::String getUndoProfileEditLabel() const { return profileHistory_.getUndoLabel(); }
+    juce::String getRedoProfileEditLabel() const { return profileHistory_.getRedoLabel(); }
+    /** False (nothing changed) when there is nothing to undo / redo. */
+    bool undoProfileEdit();
+    bool redoProfileEdit();
+    const ProfileEditHistory& getProfileEditHistory() const noexcept { return profileHistory_; }
 
     enum class ImportStatus { imported, replaced, conflict, invalid };
     struct ImportResult {
@@ -183,8 +194,8 @@ public:
     /** FRO134/FRO264: the Inspector's edit of an existing control's name, kind or encoding. Replaces
      *  the control (matched by id; its message key and layout are kept as they are on the stored
      *  one) and re-copies the denormalised name/encoding/button-mode onto every assignment that
-     *  references it, since the engine reads those from the assignment. A profile edit, so not
-     *  undoable. Returns false if the profile or control is unknown. */
+     *  references it, since the engine reads those from the assignment. Returns false if the
+     *  profile or control is unknown. */
     bool updateControl(const juce::String& profileId, const Control& edited);
 
     /** How many project ("midiRemote") assignments reference `profileId` -- for the Delete
@@ -246,6 +257,11 @@ private:
     juce::String ensureNodeUuid(juce::AudioProcessorGraph::NodeID nodeId) const;
     juce::String deviceNameForSourceKey(const juce::String& sourceKey) const;
     const ControllerProfile* findProfile(const juce::String& id) const;
+    std::optional<ControllerProfile> profileSnapshot(const juce::String& id) const;
+    void recordProfileEdit(const juce::String& label, const juce::String& profileId,
+                           std::optional<ControllerProfile> before);
+    bool applyProfileState(const juce::String& profileId, const std::optional<ControllerProfile>& state);
+    void resyncAssignmentCopies(const ControllerProfile& profile);
 
     AudioEngine& engine_;
     GraphEditor& graphEditor_;
@@ -256,6 +272,8 @@ private:
 
     ControllerProfileStore profileStore_;
     std::vector<ControllerProfile> profiles_;
+    ProfileEditHistory profileHistory_;
+    bool applyingProfileHistory_ = false; // recording is suppressed while an undo/redo applies
 
     synth::ui::MixerPanelComponent* mixerPanel_ = nullptr;
     synth::ui::TimelineTransportBar* transportBar_ = nullptr;

@@ -169,8 +169,9 @@ orphaned node: *"(missing module)"* in the warning colour). Widgets are **displa
 a parameter or the Solo node command builds already showing that target's current value
 (FRO262) rather than always at rest — an unmapped, orphaned, or action-target cell still shows 0/off,
 since there is nothing live to read. Clicking a cell selects it (inspector);
-dragging moves it on the grid; Delete removes the control (and its assignments, undoable for the
-project half). Repaint is event-driven from the activity ring at ≤ 30 Hz while the tab is
+dragging moves it on the grid; Delete removes the control (and its assignments). Both are undoable:
+the control from the controller edit history (Cmd+Z with the panel focused), its project assignments
+from the project history ([`midi-remote.md`](midi-remote.md#undo)). Repaint is event-driven from the activity ring at ≤ 30 Hz while the tab is
 showing, gated exactly like `BottomDockComponent::refreshMeters` — no free-running timer.
 
 ### Inspector (right)
@@ -178,7 +179,8 @@ showing, gated exactly like `BottomDockComponent::refreshMeters` — no free-run
 For the selected control: name, kind, message spec (editable, with a **Relearn** button that
 re-detects the message), encoding (with **Auto-detect…** for encoders: "turn left… now right",
 which observes the two value patterns and picks the encoding), button mode. Name (double-click),
-kind and encoding are editable (FRO134/FRO264); each edit is a profile edit — global, not undoable —
+kind and encoding are editable (FRO134/FRO264); each edit is a profile edit — global, one step on the
+controller edit history ([`midi-remote.md`](midi-remote.md#undo)) —
 and is copied onto every assignment that references the control, because the engine reads the
 encoding from the assignment. **Relearn** is still a disabled placeholder.
 
@@ -223,7 +225,7 @@ Select a control → **Assign…** (toolbar) or **Learn target** (inspector) →
 
 Where it lives: the assignment is made by `MidiLearnController::assignControl` (a parameter or Solo →
 project scope, one `recordMidiRemoteChange` step; an action or a continuous target, e.g. a transport
-button or Tempo (BPM) → global, written into the profile and not undoable). It replaces whatever the
+button or Tempo (BPM) → global, written into the profile, one controller-history step). It replaces whatever the
 target was mapped to and whatever the control drove in the same scope, so a control has at most one
 project and one global assignment. The overlay is
 `synth::ui::PickTargetOverlay` (`Source/UI/Graph/PickTargetOverlay/`), a transparent layer added to
@@ -429,7 +431,8 @@ fake message source (no real `juce::MidiInput`):
   inspector render from a profile; Detect adds cells in order (`ControllerSurfaceDetectTests.cpp`); pick-target overlay assigns and
   cancels (`PickTargetOverlayTests.cpp`, `ActionPickerTests.cpp`, `MidiRemotePanelAssignTests.cpp`); orphan
   controller Re-link/Recreate and the orphan node (`OrphanControllerTests.cpp`,
-  `Tests/MidiRemote/MidiLearnControllerOrphanTests.cpp`); PNG render of the surface for visual inspection
+  `Tests/MidiRemote/MidiLearnControllerOrphanTests.cpp`); the controller edit history and its Cmd+Z routing by
+  panel focus (`Tests/MidiRemote/ProfileEditHistoryTests.cpp`, `MidiRemoteUndoRoutingTests.cpp`); PNG render of the surface for visual inspection
   (`MIDI_SURFACE_PNG=<path>`, like the ADSR card's).
 - **E2E** (`Tests/MidiRemote/MidiRemoteWorkflowE2ETests.cpp`): one workflow through the real seams (messages enter
   `AudioEngine::handleIncomingMidiMessageFromSource`, `RemoteEngine::drain()` applies them on a fake clock). Fake

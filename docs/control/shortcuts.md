@@ -33,8 +33,8 @@ when reasoning about a key that "does nothing."
 | Cmd+O | Open Project - a `.agsproj` bundle (patch + timeline). This was split from the former combined "Load from file..." chooser; it took Cmd+O from the old combined open, which is now the menu-only "Open Patch" |
 | (menu only) | Open Patch - a plain `.json` preset (graph only). A menu-only `AppCommands::openPreset` (the Load icon's **Patches** submenu and the top-bar **File** menu), with no default shortcut, like `checkForUpdates` |
 | (menu only) | Contribute to Agent Synth... — **Help** menu (macOS and Windows; the app has no menu on the plugin path). `AppCommands::contribute` opens `branding::kContributeUrl` (agentsynth.app/contribute) in the default browser: no dialog, no startup prompt, no analytics event, no shortcut. Always enabled; a test replaces the browser launch via `MainComponent::setUrlOpenerForTest`. |
-| Cmd+Z | Undo |
-| Cmd+Shift+Z | Redo |
+| Cmd+Z | Undo — the project history, or the controller edit history while the MIDI Remote panel holds focus (see [`midi-remote.md`](midi-remote.md#undo)) |
+| Cmd+Shift+Z | Redo — routed the same way as Undo |
 | Cmd+M | Toggle Mod Matrix |
 | Cmd+K | Toggle Minimap |
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |

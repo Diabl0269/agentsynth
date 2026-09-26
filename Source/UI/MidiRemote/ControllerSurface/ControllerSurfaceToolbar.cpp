@@ -56,6 +56,13 @@ ControllerSurfaceToolbar::ControllerSurfaceToolbar() {
     hintLabel_.setMinimumHorizontalScale(0.8f);
     addChildComponent(hintLabel_);
 
+    undoHintLabel_.setComponentID("undoHintLabel");
+    undoHintLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
+    undoHintLabel_.setJustificationType(juce::Justification::centredRight);
+    undoHintLabel_.setMinimumHorizontalScale(0.7f);
+    undoHintLabel_.setInterceptsMouseClicks(false, false);
+    addChildComponent(undoHintLabel_);
+
     setProfileSelected(false);
     setControlSelected(false);
 }
@@ -80,6 +87,17 @@ void ControllerSurfaceToolbar::setDetectOn(bool on) {
     repaint();
 }
 
+// Called on every focus change and every history change, so it must stay cheap: an unchanged
+// text touches nothing (Source/UI/CLAUDE.md's repaint-only-on-change rule). The cue sits in the
+// button row's leftover width, so showing it never changes getPreferredHeight() and never makes
+// the panel re-layout the surface underneath.
+void ControllerSurfaceToolbar::setUndoHint(const juce::String& text) {
+    if (text == undoHintLabel_.getText() && undoHintLabel_.isVisible() == text.isNotEmpty())
+        return;
+    undoHintLabel_.setText(text, juce::dontSendNotification);
+    undoHintLabel_.setVisible(text.isNotEmpty());
+}
+
 int ControllerSurfaceToolbar::getPreferredHeight() const noexcept { return kRowHeight + (detectOn_ ? kHintHeight : 0); }
 
 void ControllerSurfaceToolbar::resized() {
@@ -92,6 +110,8 @@ void ControllerSurfaceToolbar::resized() {
     templatesButton_.setBounds(row.removeFromLeft(110));
     row.removeFromLeft(6);
     moreButton_.setBounds(row.removeFromLeft(40));
+    row.removeFromLeft(8);
+    undoHintLabel_.setBounds(row);
     hintLabel_.setBounds(bounds.reduced(8, 0));
     hintLabel_.setVisible(detectOn_);
 }

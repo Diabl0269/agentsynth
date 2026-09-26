@@ -164,8 +164,8 @@ specs). Re-link matches each assignment's denormalised spec to a control of the 
 exact `MessageSpec` (type, channel, number); the assignments with no match stay orphaned and the panel
 says how many. Recreate mints a profile under a fresh id, bound to a MIDI input the user picks (Host MIDI in
 the plugin build), named from `controllers[].name`, with one control per distinct spec and the
-assignments repointed at it. Both are one undo step for the project half (Recreate's new profile file is
-a profile edit and stays). Mappings never silently die because a settings folder is elsewhere. This is the same
+assignments repointed at it. Both are one project-history step for the project half (Recreate's new
+profile file is a profile edit, a separate step on the controller edit history — see [Undo](#undo)). Mappings never silently die because a settings folder is elsewhere. This is the same
 shape as the timeline's rule that a binding is never re-established automatically
 ([`timeline/tracks.md`](../timeline/tracks.md#a-binding-is-never-re-established-automatically)): degrade visibly, repair explicitly.
 
@@ -714,17 +714,47 @@ without an assignment.
 
 ## Undo
 
+Two separate histories, because a project edit and a controller edit have different owners — the
+project file versus a global profile shared by every project:
+
 - **Parameter values** driven from hardware: one undo step per gesture, produced by the existing
   gesture listeners — nothing new (see [How does a hardware value reach a parameter](#how-does-a-hardware-value-reach-a-parameter)).
   A sweep over a lane armed for automation Touch records a take, which is its own undo step, so it
   costs two — exactly what a mouse drag over the same lane does.
-- **Project assignments** (create via Learn, edit, delete, re-link): undoable through a new
-  `AppUndoManager::recordMidiRemoteChange(before, after)` snapshotting the `"midiRemote"`
-  document, the same before/after-JSON shape as `recordTimelineChange`. A Learn that also
-  auto-creates a profile records only the project half; the profile stays.
-- **Profile edits** (rename, retype, rearrange, templates, delete controller): global settings,
-  **not undoable**, same as keyboard-shortcut rebinds. The panel confirms destructive ones
-  (delete controller with N assignments in this project).
+- **Project assignments** (create via Learn, edit, delete, re-link): the **project history**,
+  through `AppUndoManager::recordMidiRemoteChange(before, after)` snapshotting the `"midiRemote"`
+  document, the same before/after-JSON shape as `recordTimelineChange`.
+- **Profile edits** (add, import, rename, retype, move, Detect, apply template, set feedback
+  output, delete control, delete controller, a global action/continuous Learn, Assign or Forget):
+  the **controller edit history**, `synth::midi::ProfileEditHistory`
+  (`Source/MidiRemote/ProfileEditHistory.{h,cpp}`). ONE history for every profile, owned by
+  `MidiLearnController`, capped at 100 steps, in memory only — never persisted, gone on quit. Each
+  step holds the profile's state before and after the edit (either may be absent: absent before =
+  the step created the profile, absent after = it deleted it) plus a short label ("Apply template",
+  "Move control", "Delete control", ...). Recording happens inside `MidiLearnController`'s own
+  profile mutation methods (`MidiLearnControllerHistory.cpp`), so every UI path is covered by one
+  seam. Undo restores the before-state and Redo the after-state through the same mutation path —
+  saved to disk, republished to the engine, `onChanged` refreshing the panel — with recording
+  suppressed while they apply. A new edit after an undo drops the redo tail. A Detect burst is one
+  step per drain (one `updateProfile`), a drag-to-move one step at drag end, and an edit that
+  changes nothing records nothing. Undoing a control edit also re-syncs the name/encoding/button
+  mode copied onto that control's project assignments (see the Data model's denormalised copy).
+- **Edits that touch both** split across the two: **Delete control** removes the control (a
+  controller-history step) and any project assignment on it (a project-history step); a Learn that
+  auto-creates a profile or control, and an orphan's **Recreate**, likewise record the profile half
+  on the controller history and the assignments on the project history. Restoring both halves
+  takes one undo in the panel and one outside it.
+
+**Routing.** Cmd+Z / Cmd+Shift+Z and the Edit menu's Undo/Redo (the `AppCommands::undo` / `redo`
+command rows, `MainComponentCommandTable.cpp`) act on the controller history while keyboard focus
+is inside the MIDI Remote panel — docked or detached — and on the project history otherwise. Any
+press inside the panel (list, surface, cells, empty space) gives it focus; a press on the canvas
+takes focus back (`GraphEditor::mouseDown` grabs it). A focused panel with nothing left to undo
+does nothing rather than undoing a canvas edit the user is not looking at. The main toolbar's
+Undo/Redo buttons always act on the project history.
+
+**Cue.** While the panel holds focus and the controller history can undo, the panel toolbar shows
+`Cmd+Z undoes: <label>` (`Ctrl+Z` on Windows/Linux); it is hidden otherwise.
 
 ---
 

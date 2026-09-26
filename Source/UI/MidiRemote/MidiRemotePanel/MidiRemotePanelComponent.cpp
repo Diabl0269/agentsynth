@@ -51,6 +51,7 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     // this so grabKeyboardFocus() lands deterministically here, not on whichever child JUCE would
     // otherwise pick by Y/X position).
     setWantsKeyboardFocus(true);
+    addMouseListener(&focusOnClick_, true); // FRO273: any press inside routes Cmd+Z here
 
     addAndMakeVisible(controllersList_);
     addAndMakeVisible(toolbar_);
@@ -118,7 +119,7 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     orphanView_.onRecreateRequested = [this](juce::Component& anchor) { showRecreateMenu(anchor); };
 }
 
-MidiRemotePanelComponent::~MidiRemotePanelComponent() = default;
+MidiRemotePanelComponent::~MidiRemotePanelComponent() { removeMouseListener(&focusOnClick_); }
 
 void MidiRemotePanelComponent::configure(AudioEngine& audioEngine, synth::midi::RemoteEngine& remoteEngine,
                                          synth::midi::MidiLearnController& learnController,
@@ -167,6 +168,7 @@ void MidiRemotePanelComponent::rebuildFromProfiles() {
     toolbar_.setProfileSelected(isSelectedProfileUsable());
     refreshSurfaceForSelectedProfile();
     refreshInspectorForSelection();
+    refreshUndoHint(); // every history change reaches here through onChanged -> scheduleLiveRefresh
 }
 
 void MidiRemotePanelComponent::scheduleLiveRefresh() {
@@ -470,7 +472,7 @@ void MidiRemotePanelComponent::handleRenameRequested(const juce::String& profile
         return;
     auto updated = *it;
     updated.name = newName;
-    learnController_->updateProfile(updated);
+    learnController_->updateProfile(updated, "Rename controller");
     rebuildFromProfiles();
 }
 
@@ -510,7 +512,8 @@ void MidiRemotePanelComponent::setFeedbackOutput(const juce::String& profileId,
     auto updated = *it;
     updated.hasOutput = device.has_value();
     updated.output = device.value_or(synth::ControllerProfile::Input{});
-    learnController_->updateProfile(updated); // saves, republishes to the engine (setProfiles clears feedback_)
+    // Saves, republishes to the engine (setProfiles clears feedback_) and records one history step.
+    learnController_->updateProfile(updated, "Set feedback output");
     rebuildFromProfiles();
 }
 
@@ -525,7 +528,7 @@ void MidiRemotePanelComponent::handleControlMoved(const juce::String& controlId,
         return;
     it->layout.col = col;
     it->layout.row = row;
-    learnController_->updateProfile(updated);
+    learnController_->updateProfile(updated, "Move control");
 
     // Source/UI/CLAUDE.md's rebuild-mid-gesture rule: onControlMoved fires from
     // ControllerSurfaceCell::onDragEnded, still on that cell's own mouseUp call stack -- rebuilding

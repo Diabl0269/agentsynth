@@ -229,9 +229,9 @@ const ControllerProfile* MidiLearnController::findProfile(const juce::String& id
     return nullptr;
 }
 
-// A learn that also auto-creates a profile/control persists that half to disk unconditionally and
-// OUTSIDE the undo step -- docs/control/midi-remote.md#undo: "the profile stays" even if the
-// project-doc half is later undone.
+// A learn that also auto-creates a profile/control splits across the two histories
+// (docs/control/midi-remote.md#undo): the profile half is one controller-history step, the
+// project-doc half one AppUndoManager step, so undoing the assignment leaves the profile.
 void MidiLearnController::handleLearned(const LearnResult& result) {
     const juce::String deviceName = deviceNameForSourceKey(result.sourceKey);
     auto outcome = bindLearnResult(result, deviceName, profiles_);
@@ -242,6 +242,7 @@ void MidiLearnController::handleLearned(const LearnResult& result) {
     }
 
     if (outcome.profileIsNew || outcome.controlIsNew) {
+        auto before = profileSnapshot(outcome.profile.id);
         profileStore_.save(outcome.profile);
         auto existing = std::find_if(profiles_.begin(), profiles_.end(),
                                      [&](const ControllerProfile& p) { return p.id == outcome.profile.id; });
@@ -250,6 +251,8 @@ void MidiLearnController::handleLearned(const LearnResult& result) {
         else
             profiles_.push_back(outcome.profile);
         remoteEngine_.setProfiles(profiles_);
+        recordProfileEdit(outcome.profileIsNew ? "Add controller" : "Learn control", outcome.profile.id,
+                          std::move(before));
     }
 
     const juce::var beforeJson = doc_.toVar();
@@ -287,8 +290,8 @@ void MidiLearnController::handleLearned(const LearnResult& result) {
 
 // FRO133: an action assignment is a GLOBAL setting stored on the profile itself
 // (ControllerProfile::actions, docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project),
-// never the project doc, and -- like every other profile edit -- is NOT undoable
-// (docs/control/midi-remote.md#undo: "Profile edits ... global settings, not undoable"). Unlike
+// never the project doc, so -- like every other profile edit -- it is a controller-history step,
+// not an AppUndoManager one (docs/control/midi-remote.md#undo). Unlike
 // the parameter path above, the profile is saved UNCONDITIONALLY here: even an existing
 // control's re-learn changes the profile (a new/replaced action assignment in its `actions`
 // list), not just a brand-new profile/control.
@@ -302,6 +305,7 @@ void MidiLearnController::handleLearnedAction(const LearnResult& result, LearnBi
                   actions.end());
     actions.push_back(outcome.assignment);
 
+    auto before = profileSnapshot(outcome.profile.id);
     profileStore_.save(outcome.profile);
     auto existing = std::find_if(profiles_.begin(), profiles_.end(),
                                  [&](const ControllerProfile& p) { return p.id == outcome.profile.id; });
@@ -310,6 +314,7 @@ void MidiLearnController::handleLearnedAction(const LearnResult& result, LearnBi
     else
         profiles_.push_back(outcome.profile);
     remoteEngine_.setProfiles(profiles_);
+    recordProfileEdit("Learn action", outcome.profile.id, std::move(before));
 
     const juce::String deviceName = deviceNameForSourceKey(result.sourceKey);
     endArmedUi();
@@ -367,6 +372,7 @@ void MidiLearnController::forgetAction(const juce::String& actionId) {
     bool removedAny = false;
     for (auto& profile : profiles_) {
         auto& actions = profile.actions;
+        auto beforeActions = actions;
         const auto sizeBefore = actions.size();
         actions.erase(std::remove_if(actions.begin(), actions.end(),
                                      [&](const synth::Assignment& a) {
@@ -377,6 +383,9 @@ void MidiLearnController::forgetAction(const juce::String& actionId) {
             continue;
         removedAny = true;
         profileStore_.save(profile);
+        auto before = profile;
+        before.actions = std::move(beforeActions);
+        recordProfileEdit("Forget action", profile.id, std::move(before)); // one step per profile touched
     }
     if (!removedAny)
         return; // nothing was mapped
@@ -443,25 +452,28 @@ MidiLearnController::queryNodeCommandMappings(juce::AudioProcessorGraph::NodeID 
     return result;
 }
 
-bool MidiLearnController::updateProfile(const ControllerProfile& profile) {
+bool MidiLearnController::updateProfile(const ControllerProfile& profile, const juce::String& editLabel) {
     auto existing = std::find_if(profiles_.begin(), profiles_.end(),
                                  [&](const ControllerProfile& p) { return p.id == profile.id; });
     if (existing == profiles_.end())
         return false;
+    auto before = std::optional<ControllerProfile>(*existing);
     *existing = profile;
     profileStore_.save(profile);
     remoteEngine_.setProfiles(profiles_);
+    recordProfileEdit(editLabel, profile.id, std::move(before));
     if (onChanged)
         onChanged();
     return true;
 }
 
-bool MidiLearnController::addProfile(const ControllerProfile& profile) {
+bool MidiLearnController::addProfile(const ControllerProfile& profile, const juce::String& editLabel) {
     if (profile.id.isEmpty() || findProfile(profile.id) != nullptr)
         return false;
     profileStore_.save(profile);
     profiles_.push_back(profile);
     remoteEngine_.setProfiles(profiles_);
+    recordProfileEdit(editLabel, profile.id, std::nullopt);
     if (onChanged)
         onChanged();
     return true;
@@ -485,6 +497,7 @@ MidiLearnController::ImportResult MidiLearnController::importProfile(const juce:
         return result;
     }
 
+    auto before = existing != profiles_.end() ? std::optional<ControllerProfile>(*existing) : std::nullopt;
     profileStore_.save(parsed);
     if (existing != profiles_.end()) {
         *existing = parsed;
@@ -494,15 +507,17 @@ MidiLearnController::ImportResult MidiLearnController::importProfile(const juce:
         result.status = ImportStatus::imported;
     }
     remoteEngine_.setProfiles(profiles_);
+    recordProfileEdit("Import controller", parsed.id, std::move(before));
     if (onChanged)
         onChanged();
     return result;
 }
 
-// The assignment copies are rewritten IN PLACE, outside any undo step: a control edit is a global
-// profile edit (docs/control/midi-remote.md#undo: "Profile edits ... not undoable"), so undoing an
-// older project edit past this one can restore the previous encoding/name on an assignment until it
-// is edited again -- the same profile-vs-project seam deleteControl() has.
+// The assignment copies are rewritten IN PLACE, outside any project undo step: a control edit is a
+// global profile edit (one controller-history step, docs/control/midi-remote.md#undo), so undoing
+// an older PROJECT edit past this one can restore the previous encoding/name on an assignment until
+// it is edited again -- the same profile-vs-project seam deleteControl() has. Undoing the control
+// edit itself re-syncs the copies (resyncAssignmentCopies, MidiLearnControllerHistory.cpp).
 bool MidiLearnController::updateControl(const juce::String& profileId, const Control& edited) {
     auto profileIt =
         std::find_if(profiles_.begin(), profiles_.end(), [&](const ControllerProfile& p) { return p.id == profileId; });
@@ -513,6 +528,7 @@ bool MidiLearnController::updateControl(const juce::String& profileId, const Con
     if (controlIt == profileIt->controls.end())
         return false;
 
+    auto before = std::optional<ControllerProfile>(*profileIt);
     controlIt->name = edited.name;
     controlIt->kind = edited.kind;
     controlIt->encoding = edited.encoding;
@@ -536,6 +552,7 @@ bool MidiLearnController::updateControl(const juce::String& profileId, const Con
 
     profileStore_.save(*profileIt);
     remoteEngine_.setProfiles(profiles_);
+    recordProfileEdit("Edit control", profileId, std::move(before));
     if (projectChanged)
         publishAssignments(); // notifies onChanged
     else if (onChanged)
@@ -557,17 +574,21 @@ bool MidiLearnController::deleteProfile(const juce::String& profileId) {
         std::find_if(profiles_.begin(), profiles_.end(), [&](const ControllerProfile& p) { return p.id == profileId; });
     if (existing == profiles_.end())
         return false;
+    auto before = std::optional<ControllerProfile>(*existing);
     profileStore_.deleteProfile(profileId);
     profiles_.erase(existing);
     remoteEngine_.setProfiles(profiles_);
+    recordProfileEdit("Delete controller", profileId, std::move(before));
     if (onChanged)
         onChanged();
     return true;
 }
 
 // Drops the control from profile.controls, drops any global action assignment on it from
-// profile.actions (not undoable, same as every other profile edit), and removes any PROJECT
-// assignment referencing it (undoable, mirroring forget()'s own before/after-JSON snapshot).
+// profile.actions, and removes any PROJECT assignment referencing it. The two halves land on the
+// two histories (docs/control/midi-remote.md#undo): the profile half is one controller-history
+// step, the project half one AppUndoManager step (mirroring forget()'s before/after-JSON snapshot),
+// so restoring both needs an undo in the panel AND one on the canvas.
 bool MidiLearnController::deleteControl(const juce::String& profileId, const juce::String& controlId) {
     auto profileIt =
         std::find_if(profiles_.begin(), profiles_.end(), [&](const ControllerProfile& p) { return p.id == profileId; });
@@ -579,17 +600,19 @@ bool MidiLearnController::deleteControl(const juce::String& profileId, const juc
         std::find_if(controls.begin(), controls.end(), [&](const Control& c) { return c.id == controlId; });
     if (controlIt == controls.end())
         return false;
+    auto before = std::optional<ControllerProfile>(*profileIt);
     controls.erase(controlIt);
 
-    // Not undoable, same as every other profile edit -- drop any global action assignment on it too.
+    // Drop any global action assignment on it too -- part of the same controller-history step.
     auto& actions = profileIt->actions;
     actions.erase(std::remove_if(actions.begin(), actions.end(),
                                  [&](const synth::Assignment& a) { return a.control.controlId == controlId; }),
                   actions.end());
     profileStore_.save(*profileIt);
     remoteEngine_.setProfiles(profiles_);
+    recordProfileEdit("Delete control", profileId, std::move(before));
 
-    // The project half IS undoable, mirroring forget()'s own before/after-JSON snapshot.
+    // The project half goes on AppUndoManager, mirroring forget()'s own before/after-JSON snapshot.
     const juce::var beforeJson = doc_.toVar();
     auto& assignments = doc_.assignments;
     const auto sizeBefore = assignments.size();
@@ -614,17 +637,19 @@ bool MidiLearnController::deleteControl(const juce::String& profileId, const juc
 // job) and a nodeCommand target (routes through armNodeCommand/forgetNodeCommand instead).
 bool MidiLearnController::updateAssignment(const Assignment& updated) {
     // FRO236 (docs/control/midi-remote.md#continuous-targets): a continuous target is GLOBAL, like
-    // an action, so its takeover/range edit is a profile edit -- NOT undoable, mirroring
-    // updateControl()'s own in-place rewrite, rather than this method's project-scope undo step.
+    // an action, so its takeover/range edit is a profile edit -- a controller-history step,
+    // mirroring updateControl(), rather than this method's project-scope undo step.
     if (updated.target.isContinuous()) {
         for (auto& profile : profiles_) {
             auto it = std::find_if(profile.actions.begin(), profile.actions.end(),
                                    [&](const synth::Assignment& a) { return a.id == updated.id; });
             if (it == profile.actions.end())
                 continue;
+            auto before = std::optional<ControllerProfile>(profile);
             *it = updated;
             profileStore_.save(profile);
             remoteEngine_.setProfiles(profiles_);
+            recordProfileEdit("Edit assignment", profile.id, std::move(before));
             if (onChanged)
                 onChanged();
             return true;
@@ -649,7 +674,7 @@ bool MidiLearnController::updateAssignment(const Assignment& updated) {
 }
 
 // FRO263: onChanged fires here, and at the end of every profile-only mutation (updateProfile,
-// deleteProfile, deleteControl, forgetAction, handleLearnedAction) that calls
+// deleteProfile, deleteControl, forgetAction, handleLearnedAction, and FRO273's undo/redo) that calls
 // remoteEngine_.setProfiles() WITHOUT going through this function -- those never touch
 // doc_.assignments, so they'd otherwise leave the panel stale for a rename/retype/delete/action-
 // Learn/Forget the same way a project assignment change would. Wired once, in
