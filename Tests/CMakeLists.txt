@@ -269,6 +269,7 @@ add_executable(Tests
     MidiRemote/MidiLearnControllerAssignTests.cpp
     MidiRemote/MidiLearnControllerOrphanTests.cpp
     MidiRemote/ControllerTemplatesTests.cpp
+    MidiRemote/ControllerTemplatesVendorTests.cpp
     MidiRemote/ControllerDetectTests.cpp
     MidiRemote/EncoderAutoDetectTests.cpp
     MidiRemote/MidiLearnControllerTests.cpp

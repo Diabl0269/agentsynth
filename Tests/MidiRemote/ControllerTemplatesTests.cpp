@@ -19,6 +19,11 @@ const std::vector<std::pair<juce::String, size_t>> kExpected = {
     {"template-8-faders-8-buttons", 16u},
     {"template-transport-strip", 4u},
     {"template-keyboard-8-knobs", 11u},
+    // Vendor templates (FRO143): not in ControllerTemplates.cpp's kOrder table, so they sort after
+    // the generic ones, alphabetically by id -- see ControllerTemplatesVendorTests.cpp for their
+    // vendor/source coverage.
+    {"template-arturia-minilab-3", 20u},
+    {"template-korg-nanokontrol2", 51u},
 };
 
 ControllerProfile loadOrFail(const juce::String& id) {
@@ -43,7 +48,7 @@ const Control* findByCc(const ControllerProfile& p, int cc) {
 
 } // namespace
 
-TEST(ControllerTemplatesTest, ListReturnsTheFourTemplatesInDocumentedOrder) {
+TEST(ControllerTemplatesTest, ListReturnsEveryTemplateInDocumentedOrder) {
     const auto list = listControllerTemplates();
     ASSERT_EQ(list.size(), kExpected.size());
     for (size_t i = 0; i < kExpected.size(); ++i) {
@@ -54,6 +59,17 @@ TEST(ControllerTemplatesTest, ListReturnsTheFourTemplatesInDocumentedOrder) {
     EXPECT_EQ(list[1].name, "8 faders + 8 buttons");
     EXPECT_EQ(list[2].name, "Transport strip");
     EXPECT_EQ(list[3].name, "Keyboard with 8 knobs");
+    EXPECT_EQ(list[4].name, "MiniLab 3");
+    EXPECT_EQ(list[5].name, "nanoKONTROL2");
+    // The 4 generic templates carry no vendor/source; the 2 hardware templates do.
+    for (size_t i = 0; i < 4; ++i) {
+        EXPECT_TRUE(list[i].vendor.isEmpty()) << list[i].id.toStdString();
+        EXPECT_TRUE(list[i].source.isEmpty()) << list[i].id.toStdString();
+    }
+    for (size_t i = 4; i < list.size(); ++i) {
+        EXPECT_FALSE(list[i].vendor.isEmpty()) << list[i].id.toStdString();
+        EXPECT_FALSE(list[i].source.isEmpty()) << list[i].id.toStdString();
+    }
 }
 
 TEST(ControllerTemplatesTest, EveryTemplateLoadsWithTheDocumentedControlCountAndNoDuplicateKeys) {
