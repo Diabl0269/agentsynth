@@ -28,6 +28,7 @@ namespace {
 // least once (matches this codebase's established way of driving a real Timer in a headless test --
 // see MidiLearnControllerHostedParameterTests.cpp).
 constexpr int kTickWaitMs = 260;
+constexpr int kMaxTickWaitMs = 3000;
 
 class MidiLearnControllerFocusBankTest : public ::testing::Test {
 protected:
@@ -78,7 +79,21 @@ protected:
         root_.deleteRecursively();
     }
 
-    static void tick() { juce::MessageManager::getInstance()->runDispatchLoopUntil(kTickWaitMs); }
+    // Lets the 200 ms focus-bank poll run. A fixed wait was flaky on slow CI runners (the timer
+    // hadn't fired yet), so this waits until the bindings actually change, up to kMaxTickWaitMs. A
+    // call that expects no change always pays the full cap.
+    void tick() {
+        const auto signature = [this] {
+            juce::String s;
+            for (const auto& a : remoteEngine_.getTransientAssignments())
+                s << a.id << '=' << a.target.parameter.nodeUuid << '/' << a.target.parameter.paramId << ';';
+            return s;
+        };
+        const auto before = signature();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(kTickWaitMs);
+        for (int waited = kTickWaitMs; signature() == before && waited < kMaxTickWaitMs; waited += 50)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    }
 
     juce::String nodeUuid(juce::AudioProcessorGraph::Node::Ptr node) { return node->properties["uuid"].toString(); }
 
