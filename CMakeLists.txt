@@ -364,6 +364,8 @@ add_library(Core STATIC
     Source/Modules/SequencerModule.h
     Source/Modules/MidiKeyboardModule.h
     Source/Modules/LFOModule.h
+    Source/Modules/Lfo/LfoCustomWave.h
+    Source/Modules/Lfo/LfoCustomWave.cpp
     Source/Modules/SampleHoldModule.h
     Source/Modules/SchmittTrigger.h
     Source/Modules/ThresholdMeterSource.h
