@@ -531,8 +531,25 @@ jobs:
       # its own bump here, which could disagree with the dry run above if a tag landed on main
       # between the two (the workflow's concurrency group above serializes runs on main, so that
       # race can't happen in practice, but pinning the value removes the possibility entirely).
-      - name: Bump version and push tag
-        id: tag_version
+      #
+      # FRO315: this step used to call the action for real (no dry_run) and let it push the tag
+      # itself. Its first API call, octokit's `createRef` for refs/tags/<version>, intermittently
+      # answered 403 "Resource not accessible by integration" about 1.2s in — 3 of 5 build-artifacts
+      # runs on main failed this way on 2026-09-26 (#380, #383, #384; #381 and #385 succeeded).
+      # All five runs had byte-identical actor, triggering_actor, committer and GITHUB_TOKEN scope
+      # (this workflow's own `permissions: contents: write` above overrides the org's
+      # `default_workflow_permissions: read`, unchanged across all five), and every run's *read*
+      # calls (this same token, via the `version` job's dry run below) succeeded — so this is a
+      # transient GitHub-side hiccup on the write path, not a real permissions gap, and not
+      # something a config change fixes. The action itself can't retry (a single non-looping node
+      # action; continue-on-error + re-invoking it could recompute a different tag on attempt 2),
+      # so instead: compute the tag/changelog here with dry_run: true (still calls
+      # core.setOutput for new_tag/new_version/changelog before it would call createRef —
+      # confirmed against v6.2's lib/action.js — it just returns before making that call), then
+      # push the tag ourselves in the bounded-retry bash step below, mirroring the "Upload release
+      # assets" step's shape (FRO151).
+      - name: Compute release tag
+        id: compute_tag
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -544,11 +561,63 @@ jobs:
           # With patch, an explicit "feat:" still earns a minor and everything else -- docs, CI,
           # refactors, tooling -- takes a patch. Tradeoff: a feature whose subject is a bare
           # "FROnnn: ..." also takes a patch, so a real feature has to say feat: to earn its
-          # minor. Both call sites (the dry run above and the real tag below) must stay equal.
+          # minor. Both call sites (the dry run in the `version` job above and this one) must
+          # stay equal.
           default_bump: patch
           tag_prefix: "v"
           fetch_all_tags: true
           custom_tag: ${{ needs.version.outputs.version }}
+          dry_run: true
+
+      # FRO315: pushes the tag `compute_tag` above only computed. `-f` makes this a POST, matching
+      # the action's own lightweight (non-annotated) createRef call. 3 attempts, 10s/30s backoff —
+      # same shape as "Upload release assets" below (FRO151). Kept as id `tag_version` (not
+      # `compute_tag`) because `steps.tag_version.outcome == 'success'` downstream — in "Verify
+      # published release assets" below and in docs/development/releases.md — means "the tag was
+      # actually pushed", which is this step, not the dry run above. A 422 "Reference already
+      # exists" is only treated as success if the existing ref already points at $GITHUB_SHA (a
+      # prior attempt's createRef landed server-side even though the client saw an error); pointing
+      # at any other commit is a real conflict and fails immediately rather than retrying into a
+      # release built on the wrong tag.
+      - name: Create release tag
+        id: tag_version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.compute_tag.outputs.new_tag }}
+        run: |
+          set -uo pipefail
+          echo "new_tag=$TAG" >> "$GITHUB_OUTPUT"
+          ok=0
+          for attempt in 1 2 3; do
+            if out="$(gh api "repos/${{ github.repository }}/git/refs" \
+                        -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" 2>&1)"; then
+              ref_name="$(printf '%s' "$out" | jq -r '.ref // empty' 2>/dev/null)"
+              echo "Create ref attempt $attempt/3: succeeded (${ref_name:-refs/tags/$TAG})"
+              ok=1
+              break
+            fi
+            echo "Create ref attempt $attempt/3 failed: $out"
+            if printf '%s' "$out" | grep -qi "Reference already exists"; then
+              existing_sha="$(gh api "repos/${{ github.repository }}/git/ref/tags/$TAG" --jq .object.sha 2>/dev/null || true)"
+              if [ "$existing_sha" = "$GITHUB_SHA" ]; then
+                echo "Tag $TAG already points at $GITHUB_SHA (an earlier attempt landed server-side) -- treating as success."
+                ok=1
+                break
+              fi
+              echo "::error::Tag $TAG already exists but points at $existing_sha, not this run's $GITHUB_SHA -- not retrying."
+              break
+            fi
+            echo "::warning::Create ref attempt $attempt/3 failed for $TAG"
+            if [ "$attempt" -lt 3 ]; then
+              backoff=$([ "$attempt" -eq 1 ] && echo 10 || echo 30)
+              echo "Retrying in ${backoff}s..."
+              sleep "$backoff"
+            fi
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::Giving up creating tag $TAG after 3 attempts"
+            exit 1
+          fi
 
       - name: Download All Artifacts
         uses: actions/download-artifact@v8
@@ -607,7 +676,7 @@ jobs:
         with:
           tag_name: ${{ steps.tag_version.outputs.new_tag }}
           name: Release ${{ steps.tag_version.outputs.new_tag }}
-          body: ${{ steps.tag_version.outputs.changelog }}
+          body: ${{ steps.compute_tag.outputs.changelog }}
           draft: false
           prerelease: true
 
