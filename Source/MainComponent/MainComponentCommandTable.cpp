@@ -5,6 +5,7 @@
 // name/description/category/actionId/isActive/perform body is preserved from the pre-FRO76
 // switches (see git history for MainComponentCommands.cpp) except where explicitly noted.
 #include "MainComponent.h"
+#include "Transport/MarkerJump.h"
 
 namespace {
 
@@ -36,6 +37,17 @@ juce::String snapDivisionLabel(synth::ui::TimelineViewState::Snap snap) {
         return "1/128";
     }
     return "Off";
+}
+
+// FRO277: the current marker beats, for jumpToAdjacentMarker (MarkerJump.h) -- getMarkers() is
+// already sorted by beat, but the search itself doesn't require that, so this stays a plain copy
+// rather than trusting the ordering invariant twice.
+std::vector<double> markerBeats(const synth::TimelineDoc& doc) {
+    std::vector<double> beats;
+    beats.reserve(doc.getMarkers().size());
+    for (const auto& marker : doc.getMarkers())
+        beats.push_back(marker.beat);
+    return beats;
 }
 
 // GraphEditor's public zoom entry point (zoomAroundCentre) takes a WHEEL DELTA, because that is
@@ -889,6 +901,29 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          {},
          [](MainComponent& m) {
              return synth::jumpToLoopLocator(m.audioEngine.getTransport(), m.transportNudge_, true);
+         }},
+        // FRO277: jump to the next/previous timeline marker relative to the current position, using
+        // the same transportNudge_ accumulate state as the cursor moves above (see MarkerJump.h) so
+        // repeated presses step marker-by-marker even before the audio thread applies the first jump.
+        {AppCommands::transportJumpToNextMarker,
+         "Jump to Next Marker",
+         "Locate the transport to the next timeline marker (no-op past the last one)",
+         "Transport",
+         "transportJumpToNextMarker",
+         {},
+         [](MainComponent& m) {
+             return synth::jumpToAdjacentMarker(m.audioEngine.getTransport(), m.transportNudge_,
+                                                markerBeats(m.getTimelineDoc()), true);
+         }},
+        {AppCommands::transportJumpToPreviousMarker,
+         "Jump to Previous Marker",
+         "Locate the transport to the previous timeline marker (no-op before the first one)",
+         "Transport",
+         "transportJumpToPreviousMarker",
+         {},
+         [](MainComponent& m) {
+             return synth::jumpToAdjacentMarker(m.audioEngine.getTransport(), m.transportNudge_,
+                                                markerBeats(m.getTimelineDoc()), false);
          }},
     };
 }

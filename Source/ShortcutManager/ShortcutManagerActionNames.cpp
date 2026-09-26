@@ -40,6 +40,11 @@ juce::String transportAndSelectionActionName(const juce::String& actionId) {
         return "Jump to Loop Start";
     if (actionId == "transportJumpToLoopEnd")
         return "Jump to Loop End";
+    // FRO277: jump to the next/previous timeline marker relative to the current position.
+    if (actionId == "transportJumpToNextMarker")
+        return "Jump to Next Marker";
+    if (actionId == "transportJumpToPreviousMarker")
+        return "Jump to Previous Marker";
     // FRO278: selection stepping.
     if (actionId == "selectNextModule")
         return "Select Next Module";

@@ -294,6 +294,7 @@ add_executable(Tests
     App/ShortcutManager/ShortcutManagerKeyMatchingTests.cpp
     App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp
     App/ShortcutManager/ShortcutManagerCursorActionsTests.cpp
+    App/ShortcutManager/ShortcutManagerMarkerActionsTests.cpp
     App/ShortcutManager/ShortcutManagerSelectionStepTests.cpp
     UI/Settings/ShortcutsSettingsTabTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviourTests.cpp

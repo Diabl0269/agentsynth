@@ -49,7 +49,7 @@ when reasoning about a key that "does nothing."
 | Cmd+X | Cut — Copy then delete, as ONE undo step (Selected Modules, or the timeline's selected clips/notes; see "Surface routing" below) |
 | Cmd+R | Repeat — prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
 | Space | Play / Stop (toggle the timeline transport) |
-| *(unbound)* | Play / Stop / Record / Toggle Looping / Toggle Metronome / Return to Start / Move Cursor Back or Forward (Beat, Bar) / Jump to Loop Start or End — see [**Transport family**](#transport-family) below |
+| *(unbound)* | Play / Stop / Record / Toggle Looping / Toggle Metronome / Return to Start / Move Cursor Back or Forward (Beat, Bar) / Jump to Loop Start or End / Jump to Next or Previous Marker — see [**Transport family**](#transport-family) below |
 | *(unbound)* | Select Next / Previous Module, Select Next / Previous Track — see [**Selection stepping**](#selection-stepping) below |
 | Cmd+= | Zoom In (routed per focused surface — see [**Zoom**](#zoom) below) |
 | Cmd+- | Zoom Out |
@@ -328,11 +328,14 @@ still bind one from Settings like any other action:
 | `transportNudgeBackBeat` / `transportNudgeForwardBeat` | Move Cursor Back (Beat) / Move Cursor Forward (Beat) | Relocates one beat (a quarter note) back or forward from the current position, clamped at beat 0. Works playing or stopped; never starts or stops the transport |
 | `transportNudgeBackBar` / `transportNudgeForwardBar` | Move Cursor Back (Bar) / Move Cursor Forward (Bar) | As above, by one bar of the current time signature (`numerator × 4 / denominator` beats — 4 in 4/4, 3 in 3/4, 3 in 6/8) |
 | `transportJumpToLoopStart` / `transportJumpToLoopEnd` | Jump to Loop Start / Jump to Loop End | Relocates to the left / right loop locator. A no-op when the locators span no range (end at or before start) |
+| `transportJumpToNextMarker` / `transportJumpToPreviousMarker` | Jump to Next Marker / Jump to Previous Marker | Relocates to the nearest `TimelineDoc` marker strictly ahead of / behind the current position. A no-op past the last marker (next) or before the first (previous) — it never wraps |
 
 The label "Play / Stop" is shared by `togglePlayback` and its alias so the toggle sits next to
 "Play" and "Stop" in the MIDI Remote action picker. Cursor moves posted faster than the audio thread
 applies them (a jog wheel, key repeat) accumulate — each builds on the previous request rather than
 on the once-per-block position snapshot, so no step is lost (`Source/Transport/TransportNudge.h`).
+The marker jumps share that same accumulate state (`Source/Transport/MarkerJump.h`), so pressing
+next/previous twice in quick succession steps two markers rather than losing the first press.
 
 See [`timeline/transport.md`](../timeline/transport.md) for the transport bar itself.
 

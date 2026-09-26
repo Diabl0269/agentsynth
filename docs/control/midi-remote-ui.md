@@ -332,7 +332,7 @@ tolerates and ignores them):
 
 Drop the new file under `assets/midi-remote-templates/` (filename `template-<name>.json`,
 hyphen-separated — an underscore collides with the `Assets` library's BinaryData symbol
-separator), add it to the `Assets` file list in the root `CMakeLists.txt` (next to the existing
+separator), add it to the `Assets` file list in `cmake/Assets.cmake` (next to the existing
 `template-*.json` entries) — the most common way a new template passes locally and fails CI is
 forgetting this step — and give its layout `col`/`row`s that mirror the physical device's
 arrangement without any two controls sharing a cell.
