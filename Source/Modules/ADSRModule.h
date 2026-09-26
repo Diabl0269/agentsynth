@@ -104,6 +104,7 @@ public:
         playheadStage.store(synth::EnvelopeStage::Idle, std::memory_order_relaxed);
         playheadProgress.store(0.0f, std::memory_order_relaxed);
         playheadLevel.store(0.0f, std::memory_order_relaxed);
+        lastSeenBpm.store(120.0, std::memory_order_relaxed);
         // Sustain is the one envelope parameter that is a LEVEL, not a stage time:
         // EnvelopeGenerator reads it fresh every sample (as Decay's live target and as the flat
         // Sustain output), so a per-sample smoother lets automation retarget an in-flight decay
@@ -409,6 +410,11 @@ public:
     float getPlayheadProgress() const noexcept { return playheadProgress.load(std::memory_order_relaxed); }
     float getPlayheadLevel() const noexcept { return playheadLevel.load(std::memory_order_relaxed); }
 
+    // The tempo (BPM) resolveStageTimes last read off the playhead, refreshed every block whether
+    // or not tempoSync is on; default 120 before the first processBlock. FRO118: the envelope
+    // card's BPM-mode graph/pickers read this rather than touching getPlayHead() themselves.
+    double getLastSeenBpm() const noexcept { return lastSeenBpm.load(std::memory_order_relaxed); }
+
 private:
     struct StageTimes {
         float attack, hold, decay, release;
@@ -425,14 +431,18 @@ private:
         float hold = *holdParam;
         float decay = *decayParam;
         float release = *releaseParam;
-        if (*tempoSyncParam) {
-            double bpm = 120.0;
-            if (auto* ph = getPlayHead()) {
-                if (auto pos = ph->getPosition()) {
-                    if (pos->getBpm().hasValue())
-                        bpm = *pos->getBpm();
-                }
+        double bpm = 120.0;
+        if (auto* ph = getPlayHead()) {
+            if (auto pos = ph->getPosition()) {
+                if (pos->getBpm().hasValue())
+                    bpm = *pos->getBpm();
             }
+        }
+        // Published for the UI (FRO118's BPM-mode graph/pickers): read via getLastSeenBpm(), never
+        // getPlayHead() directly -- TransportService's block-only lifetime (Source/CLAUDE.md) makes
+        // it unsafe to hold or call from the message thread.
+        lastSeenBpm.store(bpm, std::memory_order_relaxed);
+        if (*tempoSyncParam) {
             attack = synth::envelopeNoteDivisionSeconds(attackDivParam->getIndex(), bpm);
             hold = synth::envelopeNoteDivisionSeconds(holdDivParam->getIndex(), bpm);
             decay = synth::envelopeNoteDivisionSeconds(decayDivParam->getIndex(), bpm);
@@ -561,4 +571,5 @@ private:
     std::atomic<synth::EnvelopeStage> playheadStage{synth::EnvelopeStage::Idle};
     std::atomic<float> playheadProgress{0.0f};
     std::atomic<float> playheadLevel{0.0f};
+    std::atomic<double> lastSeenBpm{120.0};
 };

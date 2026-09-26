@@ -482,15 +482,18 @@ private:
     // frequency-response toggles, not Macro Group's collapse; docs/modules/modules.md#adsr-envelope-module).
     std::unique_ptr<synth::ui::CurveEditorComponent> envelopeCurveEditor;
     std::unique_ptr<juce::ToggleButton> envelopeGraphToggle;
-    // BPM|MS segmented control, wired to FRO113's `tempoSync` bool param (FRO117). The four
-    // *Div note-division params FRO113 also added have no UI yet (FRO118) — they're excluded
-    // from the generic per-param grid but not otherwise surfaced.
+    // BPM|MS segmented control, wired to FRO113's `tempoSync` bool param (FRO117).
     std::unique_ptr<juce::TextButton> envelopeMsButton;
     std::unique_ptr<juce::TextButton> envelopeBpmButton;
     // True between the curve editor's onGestureStart/onGestureEnd (a live node/bend drag): the
     // graph is the gesture's source of truth for that span, so parameterValueChanged's reverse
     // sync (params -> graph) skips rebuilding the model out from under the drag.
     bool envelopeCurveGestureActive = false;
+    // FRO118: attackDiv/holdDiv/decayDiv/releaseDiv pickers, created lazily on first entry to BPM
+    // mode (never for a card that stays in MS) — see ensureEnvelopeDivCombosCreated().
+    juce::OwnedArray<juce::ComboBox> envelopeDivCombos_;
+    // Destroyed before envelopeDivCombos_ (declared after, so members unwind in reverse).
+    juce::OwnedArray<juce::ComboBoxParameterAttachment> envelopeDivAttachments_;
 
     std::unique_ptr<WavetableDisplayComponent> wavetableDisplay;
     std::unique_ptr<juce::TextButton> loadWavetableButton;
@@ -799,6 +802,13 @@ private:
     // ratchet. A no-op returning `y` unchanged when envelopeGraphToggle is null (every non-ADSR
     // module). Mirrors the freqResponseToggle/scopeToggle blocks it sits beside.
     int layoutEnvelopeGraphSection(int y, int contentX, int contentW, bool apply);
+    // FRO118: lazily builds the four *Div combos + attachments on first entry to BPM mode; a
+    // later no-op, and never called for a card that stays in MS. See ModuleComponentEnvelopeCard.cpp.
+    void ensureEnvelopeDivCombosCreated();
+    // FRO118: BPM mode shows the four *Div combos and hides ATK/HOLD/DEC/REL (SUS stays a knob).
+    void applyEnvelopeSyncModeToControls(bool bpmMode);
+    // FRO118: positions each *Div combo over its slider's bounds; called after layoutKnobGrid.
+    void applyEnvelopeDivComboBounds();
 
     // Apply SVG icons to bypass/mute/delete DrawableButtons from the active LnF.
     // No-op when the themed LnF is not installed (headless tests).

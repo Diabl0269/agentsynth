@@ -80,9 +80,10 @@ bool shouldSkipGenericBoolToggle(juce::AudioProcessor* module, const juce::Audio
 }
 
 // True for a choice param createControls()'s generic auto-combo loop must NOT build a combo for:
-// ADSR's four note-division params (FRO113's attackDiv/holdDiv/decayDiv/releaseDiv). They have no
-// UI of their own yet (tracked separately, FRO118) but must not leak into the generic per-param
-// grid in the meantime -- each one otherwise renders an extra combo+label row nothing here uses.
+// ADSR's four note-division params (FRO113's attackDiv/holdDiv/decayDiv/releaseDiv). The envelope
+// card builds its own picker for each of these (FRO118, ModuleComponentEnvelopeCard.cpp's
+// ensureEnvelopeDivCombosCreated), swapped in over the matching knob's own grid cell in BPM mode
+// -- excluded here so they never ALSO render as an extra combo+label row in the generic grid.
 bool shouldSkipGenericChoiceCombo(juce::AudioProcessor* module, const juce::AudioParameterChoice& choiceParam) {
     return getType(module) == ModuleType::ADSR &&
            (choiceParam.paramID == "attackDiv" || choiceParam.paramID == "holdDiv" ||
@@ -341,6 +342,7 @@ void ModuleComponent::detachFromProcessor() {
         sliderAttachments.clear();
         comboAttachments.clear();
         buttonAttachments.clear();
+        envelopeDivAttachments_.clear(); // FRO118: same live-processor-pointer contract as comboAttachments
         for (auto* param : module->getParameters())
             param->removeListener(this);
     } else {
@@ -356,6 +358,8 @@ void ModuleComponent::detachFromProcessor() {
             (void)comboAttachments.removeAndReturn(comboAttachments.size() - 1);
         while (buttonAttachments.size() > 0)
             (void)buttonAttachments.removeAndReturn(buttonAttachments.size() - 1);
+        while (envelopeDivAttachments_.size() > 0)
+            (void)envelopeDivAttachments_.removeAndReturn(envelopeDivAttachments_.size() - 1);
     }
 
     module = nullptr;
