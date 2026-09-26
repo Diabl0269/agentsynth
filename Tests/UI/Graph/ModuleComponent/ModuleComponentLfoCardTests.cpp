@@ -11,6 +11,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -223,7 +224,7 @@ TEST_F(ModuleComponentTest, SnapOnCardDefaultsToEighthsAndOffDisablesIt) {
 
     auto* combo = findLfoGridCombo(moduleComponent);
     ASSERT_NE(combo, nullptr);
-    EXPECT_EQ(combo->getText(), "1/8") << "1/8 is the documented default";
+    EXPECT_EQ(combo->getText(), "Grid 1/8") << "1/8 is the documented default";
 
     auto* curve = findLfoCurveEditor(moduleComponent);
     ASSERT_NE(curve, nullptr);
@@ -351,4 +352,34 @@ TEST_F(ModuleComponentTest, ContextMenuBuildsShapesToolsGridItems) {
                                       0.0f, 0.0f, curve, curve, juce::Time::getCurrentTime(), originPos,
                                       juce::Time::getCurrentTime(), 1, false));
     EXPECT_FALSE(deletePointEnabled) << "an endpoint can never be deleted";
+}
+
+// Opt-in visual check, the LFO twin of AdsrCardRendersToPngForVisualInspection: renders a Custom
+// LFO card (Soft Sine preset) with the app's real LookAndFeel. Set LFO_CARD_PNG=<path> to write it.
+TEST_F(ModuleComponentTest, LfoCustomCardRendersToPngForVisualInspection) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    LFOModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+    selectShape(processor, LFOModule::kCustomShapeIndex);
+    processor.setCustomWave(synth::LfoCustomWave::preset(synth::LfoCustomWave::Preset::SoftSine));
+    moduleComponent.timerCallback(); // generation poll re-syncs the editor from the module
+
+    synth::theme::AppLookAndFeel lf;
+    moduleComponent.setLookAndFeel(&lf);
+    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true,
+                    juce::SoftwareImageType());
+    juce::Graphics g(img);
+    moduleComponent.paintEntireComponent(g, true);
+    moduleComponent.setLookAndFeel(nullptr);
+
+    const char* pngPath = std::getenv("LFO_CARD_PNG");
+    if (pngPath == nullptr || juce::String(pngPath).isEmpty())
+        GTEST_SKIP() << "set LFO_CARD_PNG=<path> to write the rendered card for visual inspection";
+    juce::File outFile(pngPath);
+    outFile.deleteFile();
+    juce::FileOutputStream stream(outFile);
+    ASSERT_TRUE(stream.openedOk());
+    juce::PNGImageFormat png;
+    ASSERT_TRUE(png.writeImageToStream(img, stream));
 }

@@ -31,7 +31,7 @@ LfoCustomWave LfoCustomWave::preset(Preset p) {
         break;
     case Preset::SoftSine:
         w.points = {
-            {0.0f, 0.5f, -0.6f}, {0.25f, 1.0f, 0.6f}, {0.5f, 0.5f, -0.6f}, {0.75f, 0.0f, 0.6f}, {1.0f, 0.5f, 0.0f}};
+            {0.0f, 0.5f, 0.6f}, {0.25f, 1.0f, -0.6f}, {0.5f, 0.5f, 0.6f}, {0.75f, 0.0f, -0.6f}, {1.0f, 0.5f, 0.0f}};
         break;
     }
     w.sanitise();
