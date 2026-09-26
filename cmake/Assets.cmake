@@ -84,4 +84,6 @@ juce_add_binary_data(Assets SOURCES
     ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-keyboard-8-knobs.json
     ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-korg-nanokontrol2.json
     ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-arturia-minilab-3.json
+    ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-novation-launch-control-xl-3.json
+    ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-arturia-beatstep.json
 )

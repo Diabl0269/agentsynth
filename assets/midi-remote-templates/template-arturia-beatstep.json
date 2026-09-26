@@ -1,0 +1,527 @@
+{
+  "version": 1,
+  "id": "template-arturia-beatstep",
+  "name": "BeatStep",
+  "vendor": "Arturia",
+  "source": "Arturia BeatStep User's Manual v1.0.1, https://downloads.arturia.com/products/beatstep/manual/BeatStep_Manual_1_0_1_EN.pdf, chapter 8 'Default Settings' (p.37): encoders CC7/74/71/76/77/93/73/75/114/18/19/16/17/91/79/72 (Absolute), pads notes 44-51 and 36-43, Global MIDI channel 1. STOP/PLAY send MMC and the large encoder has no tabulated default CC, so neither is included.",
+  "input": {
+    "identifier": "",
+    "name": ""
+  },
+  "passMapped": false,
+  "controls": [
+    {
+      "id": "enc1",
+      "name": "Encoder 1",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 7
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc2",
+      "name": "Encoder 2",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 74
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc3",
+      "name": "Encoder 3",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 71
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc4",
+      "name": "Encoder 4",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 76
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc5",
+      "name": "Encoder 5",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 77
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc6",
+      "name": "Encoder 6",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 93
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc7",
+      "name": "Encoder 7",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 73
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc8",
+      "name": "Encoder 8",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 75
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 0
+      }
+    },
+    {
+      "id": "enc9",
+      "name": "Encoder 9",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 114
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc10",
+      "name": "Encoder 10",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 18
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc11",
+      "name": "Encoder 11",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 19
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc12",
+      "name": "Encoder 12",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 16
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc13",
+      "name": "Encoder 13",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 17
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc14",
+      "name": "Encoder 14",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 91
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc15",
+      "name": "Encoder 15",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 79
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 1
+      }
+    },
+    {
+      "id": "enc16",
+      "name": "Encoder 16",
+      "kind": "encoder",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 72
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 1
+      }
+    },
+    {
+      "id": "pad1",
+      "name": "Pad 1",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 44
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad2",
+      "name": "Pad 2",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 45
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad3",
+      "name": "Pad 3",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 46
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad4",
+      "name": "Pad 4",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 47
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad5",
+      "name": "Pad 5",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 48
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad6",
+      "name": "Pad 6",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 49
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad7",
+      "name": "Pad 7",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 50
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad8",
+      "name": "Pad 8",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 51
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 2
+      }
+    },
+    {
+      "id": "pad9",
+      "name": "Pad 9",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 36
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 3
+      }
+    },
+    {
+      "id": "pad10",
+      "name": "Pad 10",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 37
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 3
+      }
+    },
+    {
+      "id": "pad11",
+      "name": "Pad 11",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 38
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 3
+      }
+    },
+    {
+      "id": "pad12",
+      "name": "Pad 12",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 39
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 3
+      }
+    },
+    {
+      "id": "pad13",
+      "name": "Pad 13",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 40
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 3
+      }
+    },
+    {
+      "id": "pad14",
+      "name": "Pad 14",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 41
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 3
+      }
+    },
+    {
+      "id": "pad15",
+      "name": "Pad 15",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 42
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 3
+      }
+    },
+    {
+      "id": "pad16",
+      "name": "Pad 16",
+      "kind": "pad",
+      "message": {
+        "type": "note",
+        "channel": 1,
+        "number": 43
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 3
+      }
+    }
+  ],
+  "actions": []
+}
