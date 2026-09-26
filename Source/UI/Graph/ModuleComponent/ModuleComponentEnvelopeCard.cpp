@@ -398,6 +398,20 @@ void ModuleComponent::applyEnvelopeDivComboBounds() {
     }
 }
 
+// FRO118 UX fix: a hidden knob whose own *Div combo has swapped in over it (BPM mode) keeps the
+// exact same cell a cable/jack already lands on -- unlike a Wavetable inactive-tab knob (whose
+// bounds are stale, from whichever page was last laid out), it must still count as knob-bound so
+// getModRingSliderIndex/drawnInputJackIndices don't fall back to an ordinary gutter jack and grow
+// the card the moment BPM mode is entered.
+bool ModuleComponent::isEnvelopeDivSwappedForSlider(int sliderIndex) const {
+    if (sliderIndex < 0 || sliderIndex >= sliders.size())
+        return false;
+    const int slot = envelopeDivSlotForSliderCaption(sliders[sliderIndex]->getComponentID());
+    if (slot < 0 || slot >= envelopeDivCombos_.size() || envelopeDivCombos_[slot] == nullptr)
+        return false;
+    return envelopeDivCombos_[slot]->isVisible();
+}
+
 void ModuleComponent::syncEnvelopeCurveFromParams() {
     // Message-thread only -- callers (parameterValueChanged, which can fire off the audio
     // thread) are responsible for marshalling, exactly like every other reverse-sync path in

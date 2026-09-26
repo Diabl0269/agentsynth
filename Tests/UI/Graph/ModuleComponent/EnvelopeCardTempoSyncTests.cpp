@@ -129,12 +129,20 @@ TEST_F(ModuleComponentTest, BpmClickSwapsKnobsForCombosInTheSameBoundsAndMsResto
     ASSERT_NE(decaySlider, nullptr);
     ASSERT_NE(releaseSlider, nullptr);
     ASSERT_NE(sustainSlider, nullptr);
+    // Captured BEFORE the click: a swapped-in *Div combo keeps the EXACT SAME cell its knob had
+    // (the UX-regression fix -- BPM mode must not grow the card by falling back to a gutter jack
+    // for a hidden-but-still-knob-bound CV input), so the combo must land on these bounds unchanged.
+    const auto attackBounds = attackSlider->getBounds();
+    const auto holdBounds = holdSlider->getBounds();
+    const auto decayBounds = decaySlider->getBounds();
+    const auto releaseBounds = releaseSlider->getBounds();
 
     auto* bpmButton = findTextButtonByText(moduleComponent, "BPM");
     auto* msButton = findTextButtonByText(moduleComponent, "MS");
     ASSERT_NE(bpmButton, nullptr);
     ASSERT_NE(msButton, nullptr);
 
+    const int heightBeforeBpm = moduleComponent.getHeight();
     clickButton(*bpmButton);
 
     EXPECT_TRUE(bpmButton->getToggleState()) << "the real click must have registered";
@@ -143,16 +151,13 @@ TEST_F(ModuleComponentTest, BpmClickSwapsKnobsForCombosInTheSameBoundsAndMsResto
     EXPECT_FALSE(decaySlider->isVisible());
     EXPECT_FALSE(releaseSlider->isVisible());
     EXPECT_TRUE(sustainSlider->isVisible()) << "SUS stays a knob in BPM mode";
+    EXPECT_EQ(moduleComponent.getHeight(), heightBeforeBpm)
+        << "BPM mode must not grow the card (the swapped knobs must still count as knob-bound)";
 
-    // Read the sliders' bounds only NOW, after the mode swap has fully re-laid the card: a hidden
-    // knob is no longer knob-bound for its own modulation-target CV jack (getModRingSliderIndex's
-    // documented isVisible() rule, shared with the Wavetable tab strip), so the jack falls back to
-    // an ordinary gutter row and the whole body shifts down -- the combo must land in the SAME
-    // (now-current) cell the knob is in, not a pixel position snapshotted before that shift.
-    auto* attackCombo = findComboAtBounds(moduleComponent, attackSlider->getBounds());
-    auto* holdCombo = findComboAtBounds(moduleComponent, holdSlider->getBounds());
-    auto* decayCombo = findComboAtBounds(moduleComponent, decaySlider->getBounds());
-    auto* releaseCombo = findComboAtBounds(moduleComponent, releaseSlider->getBounds());
+    auto* attackCombo = findComboAtBounds(moduleComponent, attackBounds);
+    auto* holdCombo = findComboAtBounds(moduleComponent, holdBounds);
+    auto* decayCombo = findComboAtBounds(moduleComponent, decayBounds);
+    auto* releaseCombo = findComboAtBounds(moduleComponent, releaseBounds);
     ASSERT_NE(attackCombo, nullptr) << "a combo must occupy the attack knob's exact cell";
     ASSERT_NE(holdCombo, nullptr);
     ASSERT_NE(decayCombo, nullptr);
@@ -173,6 +178,67 @@ TEST_F(ModuleComponentTest, BpmClickSwapsKnobsForCombosInTheSameBoundsAndMsResto
     EXPECT_FALSE(holdCombo->isVisible());
     EXPECT_FALSE(decayCombo->isVisible());
     EXPECT_FALSE(releaseCombo->isVisible());
+    EXPECT_EQ(moduleComponent.getHeight(), heightBeforeBpm) << "MS must restore the original card height";
+}
+
+// The set of jacks a module draws must not change with tempoSync: a swapped-in *Div combo must
+// still read as knob-bound, exactly like the knob it replaced, in both directions.
+TEST_F(ModuleComponentTest, VisibleInputPortSetIsIdenticalInMsAndBpmMode) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ADSRModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    const auto drawnBeforeBpm = moduleComponent.drawnInputJackIndices();
+
+    auto* bpmButton = findTextButtonByText(moduleComponent, "BPM");
+    auto* msButton = findTextButtonByText(moduleComponent, "MS");
+    ASSERT_NE(bpmButton, nullptr);
+    ASSERT_NE(msButton, nullptr);
+
+    clickButton(*bpmButton);
+    EXPECT_EQ(moduleComponent.drawnInputJackIndices(), drawnBeforeBpm)
+        << "BPM mode must draw exactly the same set of gutter jacks as MS -- the four *Div-backed "
+           "CV inputs must stay knob-bound (landing on the combo), not fall back to a gutter row";
+
+    clickButton(*msButton);
+    EXPECT_EQ(moduleComponent.drawnInputJackIndices(), drawnBeforeBpm);
+}
+
+// A cable connected to the Attack modulation target in BPM mode must still resolve to the knob's
+// (now the combo's) cell, not a gutter row -- the anchor a cable lands on and hit-tests against.
+TEST_F(ModuleComponentTest, AttackModTargetStillResolvesToTheKnobCellInBpmMode) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ADSRModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    auto* attackSlider = findSliderByCaption(moduleComponent, "Attack");
+    ASSERT_NE(attackSlider, nullptr);
+    const auto attackBounds = attackSlider->getBounds();
+
+    auto* mod = dynamic_cast<ModuleBase*>(&processor);
+    ASSERT_NE(mod, nullptr);
+    int attackChannel = -1;
+    for (const auto& target : mod->getModulationTargets())
+        if (target.paramId == "attack")
+            attackChannel = target.channelIndex;
+    ASSERT_GE(attackChannel, 0) << "ADSR must expose Attack as a modulation target";
+
+    auto* tempoSyncParam = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&processor, "tempoSync"));
+    ASSERT_NE(tempoSyncParam, nullptr);
+    tempoSyncParam->setValueNotifyingHost(1.0f);
+
+    EXPECT_TRUE(moduleComponent.isInputJackKnobBound(mod->mapInputChannel(attackChannel).visibleJackIndex))
+        << "the Attack CV jack must still be knob-bound in BPM mode";
+
+    // getModTargetPortForPoint is what a released cable resolves against -- clicking inside the
+    // (unchanged) attack cell must still report it as the Attack target's port.
+    const auto centre = attackBounds.getCentre();
+    const auto port = moduleComponent.getModTargetPortForPoint(centre);
+    ASSERT_TRUE(port.has_value());
+    EXPECT_EQ(port->index, attackChannel);
+    EXPECT_EQ(port->area, attackBounds);
 }
 
 // A tempoSync write via the param itself (what a preset load / undo restore / automation lane
@@ -185,6 +251,7 @@ TEST_F(ModuleComponentTest, ExternalTempoSyncParamWriteSwapsTheUI) {
 
     auto* attackSlider = findSliderByCaption(moduleComponent, "Attack");
     ASSERT_NE(attackSlider, nullptr);
+    const auto attackBounds = attackSlider->getBounds();
 
     auto* tempoSyncParam = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&processor, "tempoSync"));
     ASSERT_NE(tempoSyncParam, nullptr);
@@ -192,7 +259,7 @@ TEST_F(ModuleComponentTest, ExternalTempoSyncParamWriteSwapsTheUI) {
     tempoSyncParam->setValueNotifyingHost(1.0f);
 
     EXPECT_FALSE(attackSlider->isVisible());
-    auto* attackCombo = findComboAtBounds(moduleComponent, attackSlider->getBounds());
+    auto* attackCombo = findComboAtBounds(moduleComponent, attackBounds);
     ASSERT_NE(attackCombo, nullptr);
     EXPECT_TRUE(attackCombo->isVisible());
 
@@ -216,13 +283,15 @@ TEST_F(ModuleComponentTest, ComboPickWritesTheDivParamAsOneUndoStepAndExternalWr
     AppUndoManager undoManager;
     ModuleComponent moduleComponent(adsr, node->nodeID, editor, &undoManager);
 
+    auto* attackSlider = findSliderByCaption(moduleComponent, "Attack");
+    ASSERT_NE(attackSlider, nullptr);
+    const auto attackBounds = attackSlider->getBounds();
+
     auto* tempoSyncParam = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(adsr, "tempoSync"));
     ASSERT_NE(tempoSyncParam, nullptr);
     tempoSyncParam->setValueNotifyingHost(1.0f);
 
-    auto* attackSlider = findSliderByCaption(moduleComponent, "Attack");
-    ASSERT_NE(attackSlider, nullptr);
-    auto* attackCombo = findComboAtBounds(moduleComponent, attackSlider->getBounds());
+    auto* attackCombo = findComboAtBounds(moduleComponent, attackBounds);
     ASSERT_NE(attackCombo, nullptr);
 
     auto* attackDivParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(adsr, "attackDiv"));

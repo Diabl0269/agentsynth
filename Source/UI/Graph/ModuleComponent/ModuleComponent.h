@@ -809,6 +809,8 @@ private:
     void applyEnvelopeSyncModeToControls(bool bpmMode);
     // FRO118: positions each *Div combo over its slider's bounds; called after layoutKnobGrid.
     void applyEnvelopeDivComboBounds();
+    // FRO118: true when the slider is hidden only because its *Div combo swapped in over it.
+    bool isEnvelopeDivSwappedForSlider(int sliderIndex) const;
 
     // Apply SVG icons to bypass/mute/delete DrawableButtons from the active LnF.
     // No-op when the themed LnF is not installed (headless tests).
