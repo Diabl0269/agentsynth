@@ -46,7 +46,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Same inputs as the "Bump version and push tag" step in the release job below, plus
+      # Same inputs as the "Compute release tag" step in the release job below, plus
       # dry_run: true — this only computes the next tag, it doesn't create or push it. The real
       # tag/push happens once, in the release job, using THIS computed value via custom_tag (see
       # below) so there's exactly one source of truth for the version, not two independent
@@ -64,7 +64,7 @@ jobs:
           # With patch, an explicit "feat:" still earns a minor and everything else -- docs, CI,
           # refactors, tooling -- takes a patch. Tradeoff: a feature whose subject is a bare
           # "FROnnn: ..." also takes a patch, so a real feature has to say feat: to earn its
-          # minor. Both call sites (the dry run above and the real tag below) must stay equal.
+          # minor. Both call sites (this one and "Compute release tag" in the release job) must stay equal.
           default_bump: patch
           tag_prefix: "v"
           fetch_all_tags: true
@@ -591,7 +591,7 @@ jobs:
           for attempt in 1 2 3; do
             if out="$(gh api "repos/${{ github.repository }}/git/refs" \
                         -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" 2>&1)"; then
-              ref_name="$(printf '%s' "$out" | jq -r '.ref // empty' 2>/dev/null)"
+              ref_name="$(printf '%s' "$out" | jq -r '.ref // empty' 2>/dev/null || true)"
               echo "Create ref attempt $attempt/3: succeeded (${ref_name:-refs/tags/$TAG})"
               ok=1
               break
