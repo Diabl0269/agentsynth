@@ -345,6 +345,7 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
     if (profile == nullptr || doc_ == nullptr || audioEngine_ == nullptr) {
         controllerSurface_.setControls({}, {});
         pageStrip_.setPages(1, 1);
+        pageStrip_.setVisible(false); // no controller -> no pages to switch or add
         return;
     }
 
@@ -353,6 +354,7 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
     const int activePage = remoteEngine_ != nullptr ? remoteEngine_->getActivePage(profile->id) : 1;
     const int effectivePageCount = remoteEngine_ != nullptr ? remoteEngine_->getEffectivePageCount(profile->id) : 1;
     pageStrip_.setPages(effectivePageCount, activePage);
+    pageStrip_.setVisible(true);
 
     std::vector<ControllerSurfaceComponent::CellModel> cells;
     for (const auto& control : profile->controls) {

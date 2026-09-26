@@ -84,3 +84,12 @@ TEST_F(MidiRemotePanelPagesTest, ClickingPageTwoSwitchesTheEngineActivePageAndCe
     EXPECT_TRUE(cellAfter->getAssignmentLabelForTest().containsIgnoreCase("resonance"))
         << "page 2's target must now show on the same cell";
 }
+
+TEST_F(MidiRemotePanelPagesTest, StripIsHiddenWhenNoControllerIsSelected) {
+    auto& strip = panel_.getPageStripForTest();
+    EXPECT_TRUE(strip.isVisible());
+    panel_.selectForTest({}, {});
+    EXPECT_FALSE(strip.isVisible()) << "no controller selected -> no pages to switch or add";
+    panel_.selectForTest("p1", "knob");
+    EXPECT_TRUE(strip.isVisible());
+}
