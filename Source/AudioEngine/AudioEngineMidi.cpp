@@ -12,12 +12,16 @@ juce::Array<juce::MidiDeviceInfo> AudioEngine::availableMidiInputs() const {
 }
 
 // FRO279: the header promises "unless already open", but this used to open unconditionally, and two
-// callers reach the same device: MainComponent::wireMidiRemoteEngine opens a saved profile's
-// controller by name (ensureMidiDeviceOpen), and initialiseDevices() -- which runs AFTER it, by
-// design -- then opens EVERY available input. A second juce::MidiInput on the same endpoint is a
-// second OS connection with this engine as the callback, so every message was delivered (and
-// applied) twice: a relative encoder at double speed, a toggle that flipped straight back. Keyed on
-// the identifier, like reconcileMidiInputs(), since that is what the MIDI Remote source key is.
+// callers reach the same device: initialiseDevices() opens EVERY available input at engine
+// bring-up, and MainComponent::openMidiRemoteDevices (FRO260: moved out of wireMidiRemoteEngine,
+// which ran before the engine existed) then opens a saved profile's controller by name
+// (ensureMidiDeviceOpen) -- normally finding it already open by the time it runs, since
+// initialiseDevices() now runs FIRST by construction. A second juce::MidiInput on the same
+// endpoint is a second OS connection with this engine as the callback, so every message was
+// delivered (and applied) twice: a relative encoder at double speed, a toggle that flipped
+// straight back. The identifier-keyed dedupe below is what actually guards this regardless of
+// which caller happens to run first -- keyed like reconcileMidiInputs(), since that is what the
+// MIDI Remote source key is.
 bool AudioEngine::openMidiInput(const juce::MidiDeviceInfo& info) {
     const bool alreadyOpen = std::any_of(midiInputs.begin(), midiInputs.end(),
                                          [&](const auto& open) { return open->getIdentifier() == info.identifier; });

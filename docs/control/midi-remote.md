@@ -660,11 +660,16 @@ see [Threading](#threading-the-mapping-table-crosses-threads)).
 
 Device opening: the standalone engine opens every input device that has a profile
 (`ensureMidiDeviceOpen`) at startup, in addition to the Audio tab's ticked devices — a profiled
-controller must never need a second checkbox to work. Ticking a device in the Audio tab (or a
-controller reconnecting) after that startup priming also opens it live: `AudioEngine::changeListenerCallback`
-reconciles the open set against the Audio tab's checkboxes on every device-manager change
-broadcast (FRO262 — see [`docs/architecture/audio-engine.md`](../architecture/audio-engine.md#audioengine)),
-and `MidiLearnController::refreshSources()` republishes the resulting source list to
+controller must never need a second checkbox to work. This profile priming is
+`MainComponent::openMidiRemoteDevices()` (FRO260), called once `AudioEngine::initialise()` has
+actually brought the engine up — MIDI Remote itself wires up earlier, in
+`MainComponent::wireMidiRemoteEngine()` (before `initialiseAudioEngine()`, so it still runs for a
+Hosted plugin build too), but opening real devices and reading back what's open needs a live
+engine, so that half waits. Ticking a device in the Audio tab (or a controller reconnecting) after
+that startup priming also opens it live: `AudioEngine::changeListenerCallback` reconciles the open
+set against the Audio tab's checkboxes on every device-manager change broadcast (FRO262 — see
+[`docs/architecture/audio-engine.md`](../architecture/audio-engine.md#audioengine)), and
+`MidiLearnController::refreshSources()` republishes the resulting source list to
 `RemoteEngine::setSources()` so an armed Learn sees the new source without waiting for its own
 next arm. Unticking a device does **not** close it live — only a physical disconnect does; see
 `AudioEngine::reconcileMidiInputs()`'s own comment (`Source/AudioEngine/AudioEngineMidi.cpp`) for
@@ -672,10 +677,11 @@ why treating "unticked" as a close signal would regress every user who has never
 tab at all.
 
 A device is opened **at most once**: `AudioEngine::openMidiInput` skips an identifier that is already
-open. That matters because the profile priming above runs *before* `initialiseDevices()`'s
-open-every-available-input loop, so a profiled controller is reached by both — a second
-`juce::MidiInput` on the same endpoint delivers every message twice and doubled each hardware
-gesture (a jog wheel at double speed, a toggle that flipped straight back; FRO279).
+open. That matters because `AudioEngine::initialise()`'s own `initialiseDevices()` already opens
+EVERY available input as part of engine bring-up, *before* `openMidiRemoteDevices()`'s profile
+priming runs — so a profiled controller is normally reached by both, and the second call is a
+no-op thanks to the identifier dedupe (guarding regardless of which caller happened to run first;
+FRO279 first hit this the other way around, when the profile priming ran before engine bring-up).
 `Tests/Engine/MidiInputDeliveryTests.cpp` drives a real virtual OS MIDI source through that launch
 order (it skips where the OS offers no virtual devices).
 

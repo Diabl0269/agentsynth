@@ -38,11 +38,13 @@ MidiLearnController::~MidiLearnController() { juce::Desktop::getInstance().remov
 bool MidiLearnController::isArmed() const noexcept { return remoteEngine_.isLearnArmed(); }
 
 // A device opened after startup (or a hosted build's host-MIDI source) must be visible to the
-// engine before a learn can hear it -- wireMidiRemoteEngine() only ever primed this once, at
-// launch. Every arm() below still calls this defensively before a fresh learn; FRO262 gave it a
-// second, now-primary caller -- AudioEngine::onMidiDevicesChanged, wired in wireMidiRemoteEngine()
-// -- so a device opened via a live Settings tick reaches RemoteEngine::setSources() immediately,
-// not just the next time the user arms a Learn.
+// engine before a learn can hear it -- wireMidiRemoteEngine() primes Hosted's fixed hostSourceKey()
+// source once, at launch (FRO260: Standalone's real devices aren't open yet at that point, so
+// openMidiRemoteDevices() -- called once the engine is up -- primes Standalone's instead, calling
+// this same function). Every arm() below still calls this defensively before a fresh learn; FRO262
+// gave it a second, now-primary caller -- AudioEngine::onMidiDevicesChanged, wired in
+// wireMidiRemoteEngine() -- so a device opened via a live Settings tick reaches
+// RemoteEngine::setSources() immediately, not just the next time the user arms a Learn.
 void MidiLearnController::refreshSources() {
     auto sources = engine_.getOpenMidiInputIdentifiers();
     if (engine_.isHosted())

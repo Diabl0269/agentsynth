@@ -96,6 +96,7 @@ public:
     static void setControllerProfileTestDirectory(const juce::File& dir); // test-only; see .cpp
     synth::midi::MidiLearnController& getMidiLearnControllerForTest() noexcept { return midiLearnController_; }
     synth::midi::RemoteEngine& getRemoteEngineForTest() noexcept { return remoteEngine; }
+    bool midiRemoteDevicesOpenedAfterEngineUpForTest() const noexcept { return midiRemoteDevicesOpenedAfterEngineUp_; }
 
     void timerCallback() override;
 
@@ -675,12 +676,10 @@ private:
     void assembleToolbar();
     void wireStatusBar();
     bool initialiseAudioEngine();
+    void openMidiRemoteDevices(); // standalone-only continuation of wireMidiRemoteEngine(); see the .cpp
     void createWelcomeScreen();
     void registerFocusRegions();
-    // The clear+rebuild half of registerFocusRegions(), re-run after every detach/redock so a
-    // region currently detached to its own window stops appearing in the DOCKED window's Tab-cycle
-    // order — split out so registerFocusRegions()'s one-time addFocusChangeListener(this) call
-    // never re-registers.
+    /** The clear+rebuild half of registerFocusRegions() — call only from there or after a detach/redock. */
     void rebuildFocusRegions();
 
     void applyToolbarIcons();
@@ -948,6 +947,7 @@ private:
                                                           midiRemoteDoc, undoManager, statusBar};
     // Consulted first by resolveEditSurface(); std::nullopt means "use real focus".
     std::optional<EditSurface> editSurfaceOverrideForTest_;
+    bool midiRemoteDevicesOpenedAfterEngineUp_ = false; // set by openMidiRemoteDevices(); test-only read
 
     // T159: the focus-region registry (Source/UI/Layout/FocusRegion.h) — a plain member, not a
     // Desktop-global singleton, so a future separate-window mixer/timeline gets its own instance.

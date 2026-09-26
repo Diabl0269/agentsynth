@@ -377,9 +377,14 @@ void MainComponent::wireCommandsAndShortcuts() {
 // through it) and deliberately BEFORE initialiseAudioEngine() below: that function returns early
 // in Hosted mode (only the app-only welcome screen/focus regions depend on it), and MIDI Remote
 // must still wire up for a hosted plugin (docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host's
-// hostSourceKey exists exactly for that case). openMidiDevicesForRemote/getOpenMidiInputIdentifiers are both
-// no-ops/empty in Hosted mode regardless of whether the real audio device has been opened yet, so nothing here depends
-// on initialiseAudioEngine() having run first.
+// hostSourceKey exists exactly for that case).
+//
+// FRO260: only the sink install and the Hosted source key (hostSourceKey(), via
+// midiLearnController_.refreshSources() below) belong here. Opening the saved profiles' standalone
+// devices depends on the real AudioEngine being up (its MIDI input list means nothing before
+// audioEngine.initialise() has run) — that half is openMidiRemoteDevices() below, called from
+// initialiseAudioEngine() itself once the engine is actually up (see that function's own comment
+// for why it isn't simply "after initialiseAudioEngine() returns").
 void MainComponent::wireMidiRemoteEngine() {
     applyMidiRemotePreferences(); // the Preferences group's default takeover + badge switch
     remoteEngine.setActionInvoker(&remoteActionInvoker_);
@@ -421,25 +426,24 @@ void MainComponent::wireMidiRemoteEngine() {
     remoteEngine.setProfiles(profiles);
     remoteEngine.setAssignments(midiRemoteDoc.assignments);
 
-    std::vector<juce::String> deviceNames;
-    deviceNames.reserve(profiles.size());
-    for (const auto& profile : profiles)
-        deviceNames.push_back(profile.input.name);
-    audioEngine.openMidiDevicesForRemote(deviceNames); // no-op in Hosted mode
+    // FRO260: this used to also build deviceNames and call audioEngine.openMidiDevicesForRemote()
+    // + getOpenMidiInputIdentifiers() right here — both no-ops/empty in Hosted mode, but in
+    // Standalone mode the AudioEngine hasn't been initialise()'d yet at this point, so its MIDI
+    // input list is meaningless. That half now lives in openMidiRemoteDevices() (below), called
+    // once the engine is actually up. refreshSources() below does exactly what that early code
+    // did for Hosted mode (empty getOpenMidiInputIdentifiers() + hostSourceKey()), and is the same
+    // seam openMidiRemoteDevices() calls again once Standalone's real devices are open.
+    midiLearnController_.refreshSources();
 
-    auto sources = audioEngine.getOpenMidiInputIdentifiers(); // empty in Hosted mode
-    if (audioEngine.isHosted())
-        sources.push_back(synth::midi::hostSourceKey());
-    remoteEngine.setSources(sources);
-
-    // FRO262: the priming above only ever runs once, here. A device ticked in the Audio tab (or one
-    // that reappears after a reconnect) afterwards needs the SAME re-registration --
-    // AudioEngine::reconcileMidiInputs() (changeListenerCallback) decides WHICH devices end up
-    // open, and refreshSources() just republishes the resulting set through the identical
-    // getOpenMidiInputIdentifiers -> RemoteEngine::setSources() path used above. A no-op assignment
-    // in Hosted mode: the callback that would invoke it can structurally never fire there
-    // (changeListenerCallback's own isHosted() guard) -- cleared in MainComponent's destructor
-    // beside onDeviceStateChanged.
+    // FRO262: the priming above only ever primes Hosted's fixed source (or, in Standalone,
+    // whatever openMidiRemoteDevices() has opened by the time it runs). A device ticked in the
+    // Audio tab (or one that reappears after a reconnect) afterwards needs the SAME
+    // re-registration -- AudioEngine::reconcileMidiInputs() (changeListenerCallback) decides WHICH
+    // devices end up open, and refreshSources() just republishes the resulting set through the
+    // identical getOpenMidiInputIdentifiers -> RemoteEngine::setSources() path used above. A no-op
+    // assignment in Hosted mode: the callback that would invoke it can structurally never fire
+    // there (changeListenerCallback's own isHosted() guard) -- cleared in MainComponent's
+    // destructor beside onDeviceStateChanged.
     //
     // FRO262 (follow-up): refreshSources() alone only fixes MIDI Learn actually hearing the device
     // -- it never told the panel. MidiRemotePanelComponent::rebuildFromProfiles() computes each
@@ -529,13 +533,56 @@ void MainComponent::wireMidiRemoteEngine() {
         mixerPanel.refreshMuteSoloVisuals();
     };
 
-    // Installed last: nothing may reach the sink before it has profiles/assignments/sources.
+    // Installed last: nothing may reach the sink before it has profiles/assignments and at least a
+    // placeholder source set (Hosted's real hostSourceKey(), or Standalone's still-empty set until
+    // openMidiRemoteDevices() below republishes it once the engine is up -- no message can arrive
+    // on a Standalone source before its device is open anyway, so an empty interim set is safe).
     audioEngine.setRemoteMessageSink(&remoteEngine);
+}
+
+// FRO260: the standalone-only continuation of wireMidiRemoteEngine() above -- opening the saved
+// controller profiles' devices and re-publishing the engine's real open-input set to RemoteEngine
+// both need a live AudioEngine (its MIDI input list is meaningless before audioEngine.initialise()
+// has run), so this cannot run any earlier than initialiseAudioEngine() actually bringing the
+// engine up. Called from there (see that function's own comment on why), never from
+// initialiseCommon() directly -- Hosted mode never reaches this at all: initialiseAudioEngine()
+// returns before calling it, and openMidiDevicesForRemote/getOpenMidiInputIdentifiers are
+// no-ops/empty for Hosted regardless.
+void MainComponent::openMidiRemoteDevices() {
+    // Test-only: proves this really ran with the engine already up (MainComponentMidiRemoteStartupTests.cpp)
+    // without depending on real MIDI hardware -- isReceivingDeviceCallbacks() flips true inside
+    // AudioEngine::initialiseDevices(), which audioEngine.initialise() (this function's one caller's
+    // precondition) has always already run by the time we get here.
+    midiRemoteDevicesOpenedAfterEngineUp_ = audioEngine.isReceivingDeviceCallbacks();
+
+    std::vector<juce::String> deviceNames;
+    const auto& profiles = midiLearnController_.getProfiles();
+    deviceNames.reserve(profiles.size());
+    for (const auto& profile : profiles)
+        deviceNames.push_back(profile.input.name);
+    audioEngine.openMidiDevicesForRemote(deviceNames);
+
+    // Same seam wireMidiRemoteEngine() primed with Hosted's placeholder source above, and the one
+    // AudioEngine::onMidiDevicesChanged (wired there too) re-runs on every later device-list
+    // change -- this is just the first real Standalone publish, now that the engine actually knows
+    // what's open.
+    midiLearnController_.refreshSources();
 }
 
 // Returns false exactly where initialiseCommon() used to `return;` early on the plugin path
 // (ownedAudioEngine == nullptr) — the caller mirrors that with `if (!initialiseAudioEngine())
 // return;`. True means the rest of initialiseCommon() (welcome screen, focus regions) still runs.
+// FRO260: also the one caller of openMidiRemoteDevices() -- called from INSIDE the engine-lifecycle
+// block below, right after audioEngine.initialise() itself, rather than from initialiseCommon()
+// after this function returns. The permission-request branch below defers audioEngine.initialise()
+// into an async callback (real on macOS, where mic access needs a runtime prompt even though MIDI
+// input doesn't touch it -- juce::RuntimePermissions::recordAudio still gates initialiseDevices()'s
+// whole device-open pass) — this function returns `true` immediately regardless of whether that
+// callback has fired yet, so a call site after `if (!initialiseAudioEngine()) return;` would still
+// run before the engine is up on that branch, reintroducing the exact bug this split fixes. Calling
+// it at the tail of BOTH branches below, right after audioEngine.initialise(), is what keeps
+// openMidiRemoteDevices()'s own "the engine is up by the time this runs" contract true regardless
+// of which branch (or how late the async one) actually runs it.
 bool MainComponent::initialiseAudioEngine() {
     // Audio device state. Guarded the same way the engine-lifecycle block below is: on the plugin
     // path the host owns the device (there is not even an Audio tab), so this app's settings file
@@ -611,6 +658,7 @@ bool MainComponent::initialiseAudioEngine() {
                 applyStoredDualIOPreferenceToPatch();
                 graphEditor.updateComponents();
                 graphEditor.refreshOutputDeviceInfo();
+                openMidiRemoteDevices(); // FRO260: engine is up now -- see this function's own comment
             }
         });
     } else {
@@ -618,6 +666,7 @@ bool MainComponent::initialiseAudioEngine() {
         applyStoredDualIOPreferenceToPatch();
         graphEditor.updateComponents();
         graphEditor.refreshOutputDeviceInfo();
+        openMidiRemoteDevices(); // FRO260: same reasoning as the async branch above
     }
     return true;
 }
