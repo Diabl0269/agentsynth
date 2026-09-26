@@ -101,10 +101,11 @@ a **note path only** ([`midi-input.md`](midi-input.md)):
 
 **Non-goals (for now)** — each a planned extension tracked separately, not an accident:
 MCU/HUI protocol surfaces ([design](midi-remote-mcu-hui.md)), MPE per-note expression
-([design](midi-remote-mpe.md)), a "focused module" bank that follows selection, a device template
-library beyond a few generic ones, OSC ([design](midi-remote-osc.md)). (Feedback to the controller shipped —
+([design](midi-remote-mpe.md)), a device template library beyond a few generic ones, OSC
+([design](midi-remote-osc.md)). (Feedback to the controller shipped —
 see [Controller feedback](#controller-feedback); 14-bit CC and NRPN encodings shipped — see
-[14-bit and NRPN encodings](#14-bit-and-nrpn-encodings).)
+[14-bit and NRPN encodings](#14-bit-and-nrpn-encodings); a "focused module" bank that follows
+selection shipped — see [Focus bank](#focus-bank).)
 
 ---
 
@@ -478,6 +479,51 @@ since it ignores `page` entirely). An explicit assignment only replaces another 
 same control (or the same project target) when that one is on the SAME page — each page owns its
 "one assignment per control" rule independently, so mapping a control on page 2 never disturbs its
 page-1 mapping.
+
+### Focus bank
+
+**Decision:** a controller's own controls can be marked "follow selection" — the *focus bank* —
+so they drive whichever module is currently selected on the canvas instead of a fixed mapping,
+Cubase Quick Controls / Bitwig device pages style. `Control` (GLOBAL profile) gains `bool
+focusBank = false`, written to JSON only when true so a pre-FRO141 profile round-trips
+byte-identical. Membership in the bank is a property of the controller setup, so it persists in
+the profile — the CURRENT binding (which control drives which parameter right now) is never
+stored anywhere: deselecting a module, or reopening the project, starts with every bank control
+driving nothing.
+
+**Bank order is layout order** — a profile's focus-bank controls, sorted by `(row, col)` — paired
+with the selected module's own on-card parameter order (`ModuleComponent::collectPickCandidates`'s
+registry order, the same list the pick-target overlay reads, filtered to parameter candidates whose
+component is actually on screen). Bank control *i* drives on-card parameter *i*; a bank with more
+controls than the module has parameters leaves the extra ones idle, and vice versa.
+
+**The app layer polls the canvas selection, not the other way round.** `MidiLearnController`
+already runs a 200 ms `UiWatcher` timer for a learn's silent timeout; a second, always-running
+instance of the same timer (`focusBankWatcher_`) reads `GraphEditor::getSelectedNodes()` every
+tick and rebuilds the bank's bindings only when the selection actually changed. Exactly one
+selected module (and no [pick-target](#action-targets) session in progress) binds the bank;
+anything else — nothing selected, several modules selected — clears it. A pick-target session in
+progress leaves the bank's current bindings exactly as they were: the poll is skipped entirely
+until the session ends.
+
+**A bound bank control becomes a transient `Assignment`**, id `"focus:<profileId>:<controlId>"`
+(stable for as long as the same control on the same profile stays bound, so a mid-gesture
+`RemoteMappingSnapshot` republish and the takeover/gesture state keyed on assignment id survive a
+selection-driven rebuild that doesn't actually change anything), target `parameter`, spec/encoding
+denormalised from the control exactly like an ordinary learn (`makeAssignmentForControl`), takeover
+`useDefault`. These are handed to `RemoteEngine::setTransientAssignments()` — held in their own
+vector, alongside `assignments_`/`profiles_.actions`, **never written into `MidiRemoteProjectDoc` or
+a `ControllerProfile`** — and `RemoteEngine::reconcile()` is called immediately afterwards against
+the live graph so a freshly selected module's parameters resolve without waiting for an unrelated
+graph change to reach `MainComponent`'s reconcile funnel (the same reason `publishAssignments()`
+reconciles after a learn settles).
+
+**Explicit wins.** `RemoteEngineReconcile.cpp`'s `rebuildAndPublish` only turns a transient
+assignment into a `Slot` when the control it binds has no enabled PROJECT assignment on that
+profile's *active* page and no enabled GLOBAL profile action — an explicit mapping (project or
+global) on a focus-bank control always shadows the transient one, never the reverse. A transient
+binding is otherwise **page-independent**: unlike a project assignment it is always lookup-eligible
+regardless of which page is active, since it names no page of its own.
 
 ### 14-bit and NRPN encodings
 

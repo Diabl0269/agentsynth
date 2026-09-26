@@ -67,6 +67,17 @@ bool readBool(const juce::var& v, bool& out) {
     return true;
 }
 
+// FRO141: a missing "focusBank" means the pre-FRO141 default (false); a PRESENT one must be a
+// strict bool (never a truthy int/string) or the whole load fails, same all-or-nothing rule as
+// every other field in this file.
+bool readOptionalBool(const juce::var& v, bool& out) {
+    if (v.isVoid()) {
+        out = false;
+        return true;
+    }
+    return readBool(v, out);
+}
+
 // -- Enum <-> doc-exact camelCase string ------------------------------------------------------
 // docs/control/midi-remote.md#data-model names every enumerator exactly this way; a string this build doesn't
 // recognise is a hard failure, never a silent default (docs/control/midi-remote.md#persistence-and-the-trust-boundary
@@ -428,6 +439,10 @@ juce::var Control::toVar() const {
     layoutObj->setProperty("row", layout.row);
     obj->setProperty("layout", juce::var(layoutObj));
 
+    // FRO141: written only when true, so a pre-FRO141 control round-trips byte-identical.
+    if (focusBank)
+        obj->setProperty("focusBank", true);
+
     return juce::var(obj);
 }
 
@@ -465,6 +480,10 @@ bool Control::fromVar(const juce::var& v, Control& out) {
         return false;
     if (!readInt(layoutObj->getProperty("col"), parsed.layout.col) ||
         !readInt(layoutObj->getProperty("row"), parsed.layout.row))
+        return false;
+
+    // FRO141: missing == false (every pre-FRO141 control); present must be a strict bool.
+    if (!readOptionalBool(obj->getProperty("focusBank"), parsed.focusBank))
         return false;
 
     out = parsed;

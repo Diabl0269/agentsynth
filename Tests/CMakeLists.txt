@@ -254,8 +254,11 @@ add_executable(Tests
     Project/UndoRedo/UndoRedoMidiRemoteTests.cpp
     MidiRemote/RemoteModelTests.cpp
     MidiRemote/RemoteModelPagesTests.cpp
+    MidiRemote/RemoteModelFocusBankTests.cpp
     MidiRemote/RemoteEnginePagesTests.cpp
+    MidiRemote/RemoteEngineFocusBankTests.cpp
     MidiRemote/MidiLearnControllerPagesTests.cpp
+    MidiRemote/MidiLearnControllerFocusBankTests.cpp
     MidiRemote/RemoteEngineDecodeTests.cpp
     MidiRemote/RemoteEngineTwoHalfDecodeTests.cpp
     MidiRemote/RemoteEngineApplyTests.cpp
@@ -448,6 +451,7 @@ add_executable(Tests
     UI/MidiRemote/ControllerSurfaceTests.cpp
     UI/MidiRemote/ControllerSurfacePageStripTests.cpp
     UI/MidiRemote/MidiRemotePanelPagesTests.cpp
+    UI/MidiRemote/MidiRemotePanelFocusBankTests.cpp
     UI/MidiRemote/ControllerSurfaceSelectionTests.cpp
     UI/MidiRemote/ControllerSurfaceGroupDragTests.cpp
     UI/MidiRemote/ControlInspectorTests.cpp

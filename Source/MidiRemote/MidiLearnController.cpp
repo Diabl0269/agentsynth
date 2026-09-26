@@ -31,6 +31,12 @@ MidiLearnController::MidiLearnController(AudioEngine& engine, GraphEditor& graph
     , profileStore_(std::move(profileStore)) {
     profiles_ = profileStore_.loadAll().profiles;
     remoteEngine_.onLearned = [this](const LearnResult& result) { handleLearned(result); };
+
+    // FRO141 (docs/control/midi-remote.md#focus-bank): starts immediately and runs for this
+    // object's whole life -- see focusBankWatcher_'s own comment on why it is a separate instance
+    // from watcher_.
+    focusBankWatcher_.onTick = [this] { pollFocusBankSelection(); };
+    focusBankWatcher_.start();
 }
 
 MidiLearnController::~MidiLearnController() { juce::Desktop::getInstance().removeGlobalMouseListener(&watcher_); }
@@ -535,6 +541,7 @@ bool MidiLearnController::updateControl(const juce::String& profileId, const Con
     controlIt->kind = edited.kind;
     controlIt->encoding = edited.encoding;
     controlIt->buttonMode = edited.buttonMode;
+    controlIt->focusBank = edited.focusBank; // FRO141: the Inspector's "Follow selection" toggle
 
     const auto syncAssignment = [&](Assignment& a) {
         a.specControlName = controlIt->name;

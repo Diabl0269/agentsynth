@@ -143,6 +143,12 @@ public:
     /** The project's parameter assignments (the "midiRemote" project key). */
     void setAssignments(std::vector<Assignment> assignments);
 
+    /** FRO141 (docs/control/midi-remote.md#focus-bank): replaces the focus bank's transient
+     *  bindings -- never persisted; see the .cpp. */
+    void setTransientAssignments(std::vector<Assignment> assignments);
+    /** Panel display only; the MIDI path reads the engine's own lookup table, never this. */
+    const std::vector<Assignment>& getTransientAssignments() const noexcept { return transientAssignments_; }
+
     // ---- Message thread: pages (FRO142, docs/control/midi-remote.md#pages) ---------------------
 
     /** 1-based; 1 for a profile never switched away from its default. Message thread only, never persisted. */
@@ -300,6 +306,8 @@ private:
     std::uint32_t snapshotGeneration_ = 0;
     std::vector<ControllerProfile> profiles_;
     std::vector<Assignment> assignments_;
+    /** FRO141: never persisted -- see setTransientAssignments()'s own comment. */
+    std::vector<Assignment> transientAssignments_;
     Takeover defaultTakeover_ = Takeover::scale;
 
     /** FRO142: profileId -> active page (1-based). Message thread only, never persisted; a missing

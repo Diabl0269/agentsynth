@@ -512,6 +512,32 @@ TEST_F(ControlInspectorComponentTest, KindComboRetypesTheControl) {
     EXPECT_EQ(edits[0].kind, synth::ControlKind::fader);
 }
 
+// FRO141 (docs/control/midi-remote.md#focus-bank): the "Follow selection (focus bank)" toggle.
+TEST_F(ControlInspectorComponentTest, FocusBankToggleFlipsTheControlAndFiresOnControlEdited) {
+    inspector.setControl(makeModel({}));
+    std::vector<synth::Control> edits;
+    inspector.onControlEdited = [&](const synth::Control& c) { edits.push_back(c); };
+
+    auto* toggle = dynamic_cast<juce::ToggleButton*>(findComponentWithID(inspector, "focusBankToggle"));
+    ASSERT_NE(toggle, nullptr);
+    EXPECT_TRUE(toggle->isVisible());
+    EXPECT_FALSE(toggle->getToggleState()) << "the fixture's control starts with focusBank == false";
+
+    // A real click can't be completed headlessly (the same reason AssignmentRow's own Invert
+    // toggle is driven this way, per this file's header comment) -- call the button's own onClick
+    // directly.
+    toggle->onClick();
+
+    ASSERT_EQ(edits.size(), 1u);
+    EXPECT_TRUE(edits[0].focusBank);
+    EXPECT_EQ(edits[0].id, "control-1");
+    EXPECT_TRUE(toggle->getToggleState()) << "the widget itself reflects the new state too";
+
+    toggle->onClick();
+    ASSERT_EQ(edits.size(), 2u);
+    EXPECT_FALSE(edits[1].focusBank) << "a second click flips it back off";
+}
+
 TEST_F(ControlInspectorComponentTest, NameLabelCommitsARenameButRejectsAnEmptyName) {
     inspector.setControl(makeModel({}));
     std::vector<synth::Control> edits;

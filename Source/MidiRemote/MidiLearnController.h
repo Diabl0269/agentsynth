@@ -270,6 +270,10 @@ private:
         std::function<void()> onAnyClick;
         std::function<bool()> stillArmed;
         std::function<void()> onExternallyCancelled;
+        /** FRO141: fires on every tick regardless of `stillArmed`, for a watcher instance used to
+         *  poll something other than a learn's silent timeout (see focusBankWatcher_ below). Left
+         *  null for the learn-armed watcher_ instance, which only ever wires the fields above. */
+        std::function<void()> onTick;
         void start() { startTimer(200); }
         void stop() { stopTimer(); }
 
@@ -279,10 +283,21 @@ private:
                 onAnyClick();
         }
         void timerCallback() override {
+            if (onTick)
+                onTick();
             if (stillArmed && !stillArmed() && onExternallyCancelled)
                 onExternallyCancelled();
         }
     };
+
+    // ---- FRO141 (docs/control/midi-remote.md#focus-bank): MidiLearnControllerFocusBank.cpp ------
+
+    /** focusBankWatcher_'s onTick: re-reads the canvas selection and, if it changed since the last
+     *  poll, rebuilds the transient bindings. */
+    void pollFocusBankSelection();
+    void rebuildFocusBankAssignments();
+    /** `profile`'s focusBank controls, in bank order (row then col). */
+    std::vector<const Control*> collectFocusBankControls(const ControllerProfile& profile) const;
 
     void handleLearned(const LearnResult& result);
     void handleLearnedAction(const LearnResult& result, LearnBindOutcome& outcome);
@@ -315,6 +330,19 @@ private:
     synth::ui::TimelineTransportBar* transportBar_ = nullptr;
 
     UiWatcher watcher_;
+
+    // FRO141: a SEPARATE always-running UiWatcher instance -- watcher_ above only runs while a
+    // learn is armed (its start()/stop() are called from arm()/endArmedUi()), but the focus bank
+    // must keep tracking the canvas selection whether or not a learn is in progress. Never
+    // registered as a global mouse listener (it only needs the 200 ms tick), so it needs no
+    // juce::Desktop::removeGlobalMouseListener() companion in ~MidiLearnController() the way
+    // watcher_ does.
+    UiWatcher focusBankWatcher_;
+    /** The single node the focus bank is currently bound to; only meaningful while
+     *  focusBankHasSelection_ is true. Message thread only, set from pollFocusBankSelection(). */
+    bool focusBankHasSelection_ = false;
+    juce::AudioProcessorGraph::NodeID focusBankSelectedNode_;
+    juce::String focusBankSignature_;
 
     juce::Component::SafePointer<juce::Component> pickOverlayHost_;
     std::unique_ptr<synth::ui::PickTargetOverlay> pickOverlay_;
