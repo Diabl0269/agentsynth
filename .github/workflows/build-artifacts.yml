@@ -163,6 +163,9 @@ jobs:
     # macOS Dependencies
     - name: Install macOS Dependencies
       if: runner.os == 'macOS'
+      # Same backstop as ci.yml's macOS job: a package manager with no ceiling stalls until the
+      # 6-hour job limit instead of failing (FRO104 audit of bare installs in this workflow).
+      timeout-minutes: 15
       run: |
         brew install cmake ninja ccache
 
@@ -225,28 +228,26 @@ jobs:
         ccache --zero-stats
 
     # NSIS (P5-6): windows-latest doesn't ship it, and it's only needed to build the installer,
-    # so this step is a no-op cost on the other two matrix legs' runners were it there — guard by
-    # OS to avoid an unnecessary choco call on Linux/macOS.
+    # so this step is guarded by OS to avoid an unnecessary call on the Linux/macOS legs.
     #
-    # `choco install` points the machine's registry PATH at NSIS, but every later step in this job
-    # is a fresh pwsh process that inherited its environment at job start — it never re-reads the
-    # registry, so makensis stayed invisible to "Build Windows installer" on every release build
-    # since this step was added (PR #241): "makensis: The term ... is not recognized as the name of
-    # a cmdlet...". $GITHUB_PATH is the one channel GitHub Actions re-reads before each step, so
-    # resolve makensis.exe's install directory explicitly and publish it through that instead of
-    # relying on $env:Path.
+    # Through scripts/ci-install-nsis.sh, not a bare `choco install nsis -y` (FRO104): on
+    # 2026-09-16 community.chocolatey.org answered 503, choco "installed 0/0 packages" and exited
+    # 0, and the whole Windows release -- Tag and Release plus both appcast jobs -- was skipped on
+    # a main-branch build; a re-run passed with no code change. The script retries choco with a
+    # per-attempt timeout, then falls back to the installer pinned by version and SHA-256 on
+    # SourceForge, and judges success by makensis.exe existing, never by choco's exit status.
+    #
+    # It also resolves makensis.exe's directory and appends it to $GITHUB_PATH: `choco install`
+    # only updates the machine registry PATH, but every later step in this job is a fresh process
+    # that inherited its environment at job start and never re-reads the registry, so makensis
+    # stayed invisible to "Build Windows installer" on every release build since PR #241
+    # ("makensis: The term ... is not recognized"). $GITHUB_PATH is the one channel Actions
+    # re-reads before each step. timeout-minutes is the backstop the script's own caps sit under.
     - name: Install NSIS
       if: runner.os == 'Windows'
-      shell: pwsh
-      run: |
-        choco install nsis -y
-        $searchRoots = @("$env:ProgramFiles\NSIS", "${env:ProgramFiles(x86)}\NSIS")
-        $makensis = Get-ChildItem -Path $searchRoots -Filter makensis.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (-not $makensis) {
-          Write-Error "makensis.exe not found under $($searchRoots -join ', ') after choco install nsis"
-          exit 1
-        }
-        Add-Content -Path $env:GITHUB_PATH -Value $makensis.DirectoryName
+      timeout-minutes: 15
+      shell: bash
+      run: bash scripts/ci-install-nsis.sh
 
     # Configure CMake — Ninja on every OS so this matches the PR CI build path
     # (see the "Setup MSVC" note above for why Ninja and not the VS generator).

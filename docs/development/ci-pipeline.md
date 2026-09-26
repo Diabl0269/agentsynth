@@ -136,10 +136,14 @@ outage the first `update` burned its whole cap, the rewrite took milliseconds, a
 and it wants to be the smallest value that cannot fire on a slow-but-alive mirror.
 
 `timeout-minutes: 15` on the step is the backstop, not the mechanism. Every package-manager step has
-one — Linux apt, macOS brew, the ASAN job's cached-apt action — because a package manager with no
-ceiling stalls until the 6-hour job limit instead of failing. Failover itself is covered by
+one — Linux apt, macOS brew (here and in the release workflow), the ASAN job's install, and the
+release workflow's Windows NSIS install — because a package manager with no ceiling stalls until the
+6-hour job limit instead of failing. Failover itself is covered by
 `scripts/tests/ci-install-linux-deps.test.sh` against a fake `apt-get`: a path that only runs during
-an outage otherwise gets tested by the outage. One of those cases exists because `sed -i` takes a
+an outage otherwise gets tested by the outage. The Windows leg's Chocolatey install has the same
+shape of protection — retries, then a checksum-pinned direct download — in `scripts/ci-install-nsis.sh`,
+tested by `scripts/tests/ci-install-nsis.test.sh` against a fake `choco`; see
+[`releases.md`](releases.md). One of those cases exists because `sed -i` takes a
 mandatory backup suffix on BSD sed and none on GNU sed, so the original rewrite edited the file in
 CI and silently did nothing on macOS.
 
