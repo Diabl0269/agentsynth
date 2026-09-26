@@ -44,6 +44,22 @@ bool parameterTargetResolves(AudioEngine& audioEngine, const synth::Target::Para
            synth::resolveLaneParameter(processor, target.paramId, target.paramIndexHint).resolved();
 }
 
+// A GLOBAL profile action's display name -- shared by the surface cell label and the inspector's
+// "Drives" row so the two can never disagree. FRO142: a page target's own name mirrors
+// MidiLearnControllerMapping.cpp's assignControl() targetName exactly.
+juce::String globalActionDisplayName(const synth::Assignment& action) {
+    if (action.target.isContinuous())
+        return synth::continuousTargetDisplayName(action.target.continuous.kind);
+    if (action.target.isPage()) {
+        if (action.target.page.command == synth::PageCommand::next)
+            return "Next page";
+        if (action.target.page.command == synth::PageCommand::previous)
+            return "Previous page";
+        return "Page " + juce::String(action.target.page.page);
+    }
+    return ShortcutManager::getActionDescription(action.target.action.actionId);
+}
+
 } // namespace
 
 MidiRemotePanelComponent::MidiRemotePanelComponent() {
@@ -55,6 +71,7 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
 
     addAndMakeVisible(controllersList_);
     addAndMakeVisible(toolbar_);
+    addAndMakeVisible(pageStrip_);
     addAndMakeVisible(controllerSurface_);
     addAndMakeVisible(inspector_);
     addChildComponent(orphanView_);
@@ -118,6 +135,21 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     inspector_.onLearnTargetRequested = [this](juce::Component& anchor) { showAssignMenu(anchor); };
     orphanView_.onRelinkRequested = [this](juce::Component& anchor) { showRelinkMenu(anchor); };
     orphanView_.onRecreateRequested = [this](juce::Component& anchor) { showRecreateMenu(anchor); };
+
+    // FRO142 (docs/control/midi-remote.md#pages): the strip acts on the SELECTED profile, never a
+    // profile id of its own -- it knows nothing about which controller is showing.
+    pageStrip_.onPageSelected = [this](int page) {
+        if (remoteEngine_ != nullptr && selectedProfileId_.isNotEmpty())
+            remoteEngine_->setActivePage(selectedProfileId_, page); // onActivePageChanged refreshes the panel
+    };
+    pageStrip_.onAddPageRequested = [this] {
+        if (learnController_ != nullptr && selectedProfileId_.isNotEmpty())
+            learnController_->addPage(selectedProfileId_);
+    };
+    pageStrip_.onDeletePageRequested = [this](int page) {
+        if (learnController_ != nullptr && selectedProfileId_.isNotEmpty())
+            learnController_->deletePage(selectedProfileId_, page);
+    };
 }
 
 MidiRemotePanelComponent::~MidiRemotePanelComponent() { removeMouseListener(&focusOnClick_); }
@@ -130,6 +162,17 @@ void MidiRemotePanelComponent::configure(AudioEngine& audioEngine, synth::midi::
     learnController_ = &learnController;
     doc_ = &doc;
     graphEditor_ = &graphEditor;
+    // FRO142: a page switch (the strip, or a hardware page button) republishes the surface's cell
+    // labels and the strip's own highlighted button -- only for the profile currently shown, since
+    // switching one controller's page must not disturb what another controller's cells display.
+    remoteEngine_->onActivePageChanged = [this](const juce::String& profileId, int newPage) {
+        if (profileId != selectedProfileId_)
+            return;
+        refreshSurfaceForSelectedProfile();
+        if (onStatusMessage != nullptr)
+            onStatusMessage("Page " + juce::String(newPage) + " of " +
+                            juce::String(remoteEngine_->getEffectivePageCount(profileId)));
+    };
     rebuildFromProfiles();
 }
 
@@ -301,8 +344,17 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
     const auto* profile = findSelectedProfile();
     if (profile == nullptr || doc_ == nullptr || audioEngine_ == nullptr) {
         controllerSurface_.setControls({}, {});
+        pageStrip_.setPages(1, 1);
+        pageStrip_.setVisible(false); // no controller -> no pages to switch or add
         return;
     }
+
+    // FRO142 (docs/control/midi-remote.md#pages): the strip always shows this controller's
+    // effective page count, even with only one page (discoverability, docs/control/midi-remote-ui.md#pages).
+    const int activePage = remoteEngine_ != nullptr ? remoteEngine_->getActivePage(profile->id) : 1;
+    const int effectivePageCount = remoteEngine_ != nullptr ? remoteEngine_->getEffectivePageCount(profile->id) : 1;
+    pageStrip_.setPages(effectivePageCount, activePage);
+    pageStrip_.setVisible(true);
 
     std::vector<ControllerSurfaceComponent::CellModel> cells;
     for (const auto& control : profile->controls) {
@@ -311,10 +363,11 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
 
         // FRO253's Target::Kind::nodeCommand (Solo mapping) can also live in doc_->assignments,
         // alongside parameter targets -- find whichever one this control has, if any, then branch
-        // on .target.kind to read the right union member.
+        // on .target.kind to read the right union member. FRO142: only the ACTIVE page's project
+        // assignment counts -- a control's page-1 and page-2 mapping never both show at once.
         auto projectIt =
             std::find_if(doc_->assignments.begin(), doc_->assignments.end(), [&](const synth::Assignment& a) {
-                return a.control.profileId == profile->id && a.control.controlId == control.id;
+                return a.control.profileId == profile->id && a.control.controlId == control.id && a.page == activePage;
             });
         auto actionIt = std::find_if(profile->actions.begin(), profile->actions.end(),
                                      [&](const synth::Assignment& a) { return a.control.controlId == control.id; });
@@ -376,10 +429,7 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
             }
         } else if (actionIt != profile->actions.end()) {
             cell.isMapped = true;
-            // FRO236: profile->actions also carries continuous assignments now -- branch on kind.
-            cell.assignmentLabel = actionIt->target.isContinuous()
-                                       ? synth::continuousTargetDisplayName(actionIt->target.continuous.kind)
-                                       : ShortcutManager::getActionDescription(actionIt->target.action.actionId);
+            cell.assignmentLabel = globalActionDisplayName(*actionIt);
         } else {
             cell.assignmentLabel = "-";
         }
@@ -435,9 +485,13 @@ void MidiRemotePanelComponent::refreshInspectorForSelection() {
     model.control = *controlIt;
     toolbar_.setControlSelected(true);
 
+    const int activePage = remoteEngine_ != nullptr ? remoteEngine_->getActivePage(profile->id) : 1;
     if (doc_ != nullptr) {
         for (const auto& a : doc_->assignments) {
-            if (a.control.profileId != profile->id || a.control.controlId != selectedControlId_)
+            // FRO142 (docs/control/midi-remote.md#pages): only the active page's own project
+            // assignment shows here -- the same control's mapping on another page is invisible
+            // until that page becomes active, same rule the surface cell label follows.
+            if (a.control.profileId != profile->id || a.control.controlId != selectedControlId_ || a.page != activePage)
                 continue;
             // FRO253's Target::Kind::nodeCommand (Solo mapping) shares this list with parameter
             // targets -- read the right union member for whichever kind this row actually is.
@@ -472,9 +526,7 @@ void MidiRemotePanelComponent::refreshInspectorForSelection() {
         ControlInspectorComponent::AssignmentRowModel row;
         row.assignment = a;
         row.scopeLabel = "Global";
-        // FRO236: profile->actions also carries continuous assignments now -- branch on kind.
-        row.drivesLabel = a.target.isContinuous() ? synth::continuousTargetDisplayName(a.target.continuous.kind)
-                                                  : ShortcutManager::getActionDescription(a.target.action.actionId);
+        row.drivesLabel = globalActionDisplayName(a);
         model.assignments.push_back(row);
     }
 
@@ -656,6 +708,7 @@ void MidiRemotePanelComponent::resized() {
     inspector_.setBounds(bounds.removeFromRight(kInspectorWidth));
     orphanView_.setBounds(inspector_.getBounds());
     toolbar_.setBounds(bounds.removeFromTop(toolbar_.getPreferredHeight()));
+    pageStrip_.setBounds(bounds.removeFromTop(ControllerSurfacePageStrip::kHeight).reduced(6, 1));
     controllerSurface_.setBounds(bounds);
 }
 

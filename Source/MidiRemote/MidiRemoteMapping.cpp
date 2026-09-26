@@ -32,7 +32,8 @@ void copyControlOntoAssignment(Assignment& a, const ControllerProfile& profile, 
 
 } // namespace
 
-Assignment makeAssignmentForControl(const ControllerProfile& profile, const Control& control, const Target& target) {
+Assignment makeAssignmentForControl(const ControllerProfile& profile, const Control& control, const Target& target,
+                                    int page) {
     Assignment a;
     a.id = juce::Uuid().toDashedString();
     copyControlOntoAssignment(a, profile, control);
@@ -41,6 +42,7 @@ Assignment makeAssignmentForControl(const ControllerProfile& profile, const Cont
     a.range.min = 0.0;
     a.range.max = 1.0;
     a.enabled = true;
+    a.page = page;
     return a;
 }
 

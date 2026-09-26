@@ -63,6 +63,14 @@ enum class NodeCommandKind { toggleSolo };
 // own master fader binds, so it reuses applyToParameter/RemoteEngineFeedback.cpp verbatim.
 enum class ContinuousTargetKind { bpm, playhead, masterVolume };
 
+// FRO142 (docs/control/midi-remote.md#pages): what a Target::Page button asks the engine to do to
+// the ACTIVE PAGE of the profile that owns the control that fired it (never routed through
+// ShortcutManager / ActionCommandLookup -- this is engine-internal, unlike Kind::action). `go`
+// is the only command that reads Target::Page::page; next/previous wrap around the profile's
+// effective page count (ControllerProfile::pageCount, widened by the highest `page` any project
+// assignment on that profile uses).
+enum class PageCommand { next, previous, go };
+
 // -- MessageSpec ----------------------------------------------------------------------------------
 /** The engine's lookup key for a hardware message (docs/control/midi-remote.md#data-model): (type, channel,
  *  number). `channel` == 0 means "any channel", else 1..16. `number` is the cc/note number and is
@@ -127,7 +135,7 @@ struct Control {
  *  carrying more than one of "parameter"/"action"/"nodeCommand"/"continuous", or none, as a single
  *  well-defined check. */
 struct Target {
-    enum class Kind { parameter, action, nodeCommand, continuous };
+    enum class Kind { parameter, action, nodeCommand, continuous, page };
 
     struct Parameter {
         juce::String nodeUuid;
@@ -147,22 +155,30 @@ struct Target {
     struct Continuous {
         ContinuousTargetKind kind = ContinuousTargetKind::bpm;
     };
+    // FRO142 (docs/control/midi-remote.md#pages): a button-like, engine-internal target -- see
+    // PageCommand's own comment. `page` is 1-based and only meaningful for command == go.
+    struct Page {
+        PageCommand command = PageCommand::next;
+        int page = 1;
+    };
 
     Kind kind = Kind::parameter;
     Parameter parameter;
     Action action;
     NodeCommand nodeCommand;
     Continuous continuous;
+    Page page;
 
     bool isParameter() const noexcept { return kind == Kind::parameter; }
     bool isAction() const noexcept { return kind == Kind::action; }
     bool isNodeCommand() const noexcept { return kind == Kind::nodeCommand; }
     bool isContinuous() const noexcept { return kind == Kind::continuous; }
+    bool isPage() const noexcept { return kind == Kind::page; }
 
     // Only the payload matching `kind` is written — see fromVar for the "exactly one" rejection.
     juce::var toVar() const;
     /** All-or-nothing: rejects (returns false, leaves `out` untouched) unless the JSON object
-     *  carries EXACTLY ONE of "parameter"/"action"/"nodeCommand"/"continuous". */
+     *  carries EXACTLY ONE of "parameter"/"action"/"nodeCommand"/"continuous"/"page". */
     static bool fromVar(const juce::var& v, Target& out);
 };
 
@@ -197,6 +213,12 @@ struct Assignment {
 
     bool enabled = true;
 
+    // FRO142 (docs/control/midi-remote.md#pages): 1-based. Meaningful for a PROJECT assignment
+    // only (MidiRemoteProjectDoc::assignments) -- a GLOBAL profile action (ControllerProfile::actions)
+    // ignores it entirely, since an action is active on every page. Missing on load == 1, so every
+    // pre-FRO142 document round-trips unchanged.
+    int page = 1;
+
     juce::var toVar() const;
     /** All-or-nothing: a malformed field (including an invalid Target, per Target::fromVar's own
      *  rule) leaves `out` untouched and returns false. */
@@ -229,10 +251,18 @@ struct ControllerProfile {
     bool passMapped = false;
 
     std::vector<Control> controls;
-    // GLOBAL assignments: target.kind == action or continuous only (FRO236: a continuous target
-    // means the same thing in every project -- there is exactly one transport/master volume --
-    // exactly like an action, so it lives here rather than in a project's MidiRemoteProjectDoc).
+    // GLOBAL assignments: target.kind == action, continuous, or page only (FRO236: a continuous
+    // target means the same thing in every project -- there is exactly one transport/master
+    // volume -- exactly like an action, so it lives here rather than in a project's
+    // MidiRemoteProjectDoc; FRO142: a page target is likewise engine-internal and active on every
+    // page, so it belongs beside the other GLOBAL action kinds).
     std::vector<Assignment> actions;
+
+    // FRO142 (docs/control/midi-remote.md#pages): how many mapping pages this controller has, 1..16.
+    // A project assignment's own `page` (Assignment::page) may exceed this -- see
+    // RemoteEngine::getEffectivePageCount -- so this is a floor, not a hard cap on what a project
+    // can reference.
+    int pageCount = 1;
 
     int version = 1;
 

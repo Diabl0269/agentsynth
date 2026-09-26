@@ -112,8 +112,8 @@ void RemoteEngine::sendFeedback(const RemoteMappingSnapshot& snapshot) {
         const bool isParameterLike =
             slot.target.isParameter() ||
             (slot.target.isContinuous() && slot.continuous == ContinuousTargetKind::masterVolume);
-        if (!isParameterLike || slot.orphaned || slot.param == nullptr)
-            continue;
+        if (!isParameterLike || slot.orphaned || slot.param == nullptr || !slot.onActivePage)
+            continue; // FRO142: an inactive page never echoes (RemoteMappingSnapshot::Slot::onActivePage)
         // An nrpn slot is skipped like every other type without a feedback encoding: echoing an NRPN
         // means re-sending its address CCs first, which the controller may not accept.
         if (slot.spec.type != MessageType::cc && slot.spec.type != MessageType::note &&

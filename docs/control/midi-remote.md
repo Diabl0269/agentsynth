@@ -436,6 +436,49 @@ echoes a *parameter* slot's value; masterVolume qualifies (it has one) and is ec
 any other mapped parameter, but bpm/playhead have no `juce::AudioProcessorParameter` to read back
 from, so nothing lights an LED ring for them today.
 
+### Pages
+
+**Decision:** one controller can hold several *pages* of mappings, switched with a button. A
+`ControllerProfile` gains `pageCount` (1..16, default 1 — a pre-FRO142 profile is a one-page
+profile); a PROJECT assignment (`MidiRemoteProjectDoc::assignments` — parameter/nodeCommand
+targets only) gains `page` (1..16, default 1). Pages apply to PROJECT assignments ONLY — a GLOBAL
+profile action (`ControllerProfile::actions` — action/continuous/page targets) is active on
+**every** page, which is exactly what keeps the page-switch button itself reachable no matter which
+page is showing. A profile's *effective* page count is `max(pageCount, the highest page any current
+project assignment on it uses)` — a project can reference a page beyond what the profile itself
+declares (an imported document, or another machine's wider profile).
+
+A fifth `Target` kind, **`page`** — `{ command: next | previous | go, page }` (`page` only means
+anything for `go`). Like `nodeCommand`, it is engine-internal: never routed through
+`ShortcutManager`/`ActionCommandLookup` — pressing it acts directly on `RemoteEngine`'s own active-
+page state for the profile that owns the control that fired it. `next`/`previous` wrap around the
+profile's effective page count; a press only (momentary and toggle alike, same rule as action/node-
+command targets) — release does nothing.
+
+**Active page is message-thread-only state on `RemoteEngine`, never persisted.** A fresh app start,
+and every project load, begins every profile on page 1 (`RemoteEngine::resetActivePages()`, called
+from the project-load path only — `setAssignments()` itself is also the ordinary-edit path (Learn,
+Forget, undo/redo) and must never jump the user back to page 1 mid-session). A page switch —
+whether from the UI's page strip or a hardware page button — sets the active page and republishes
+the snapshot exactly like any other reconcile (`RemoteEngine::setActivePage`): a PROJECT assignment
+is resolved on every REAL reconcile regardless of page (so it never sits unresolved the first time
+its page becomes active), but only its own page's assignment gets a lookup-table entry — that is
+what makes the MIDI-path lookup already page-filtered, with no page awareness needed in the apply
+path itself, and it is also why per-assignment takeover state never jumps after a switch: a page-2
+assignment has its own assignment id (and therefore its own [takeover](#takeover) state), so the
+first hardware event after a switch is that assignment's first-ever event, handled exactly like any
+other brand-new gesture. Switching also re-sends [controller feedback](#controller-feedback) for
+the newly active page (`RemoteEngine::resendFeedback()`, same call a reopened output device already
+uses) so a motor fader/LED ring re-syncs to what is now mapped.
+
+**Learn/assign tags a new PROJECT assignment with whatever page is active at assignment time** —
+`MidiLearnController::assignControl`'s one call to `makeAssignmentForControl` passes the profile's
+current active page for a parameter/nodeCommand target (a GLOBAL target stays at the default, 1,
+since it ignores `page` entirely). An explicit assignment only replaces another assignment on the
+same control (or the same project target) when that one is on the SAME page — each page owns its
+"one assignment per control" rule independently, so mapping a control on page 2 never disturbs its
+page-1 mapping.
+
 ### 14-bit and NRPN encodings
 
 Two additions let 14-bit controllers map without stair-steps: a message type (`nrpn`) and two paired encodings (`abs14`, `abs14LsbFirst`).
@@ -563,7 +606,8 @@ ControllerProfile                         // GLOBAL — one per physical control
   output        : { identifier, name } | null   // controller feedback's destination -- see Controller feedback
   passMapped    : bool (default false)    // see Are mapped messages consumed
   controls[]    : Control
-  actions[]     : Assignment              // GLOBAL assignments: target.kind == action or continuous only
+  actions[]     : Assignment              // GLOBAL assignments: target.kind == action, continuous, or page only
+  pageCount     : 1..16 (default 1)       // see Pages -- a floor; the effective count can be higher
   version       : 1
 
 Control
@@ -588,12 +632,14 @@ Assignment
   takeover      : jump | pickup | scale | default   // "default" = the Preferences value
   range         : { min: 0.0, max: 1.0 }   // normalised; invert = min > max
   enabled       : bool
+  page          : 1..16 (default 1)        // PROJECT assignments only -- see Pages; a GLOBAL assignment ignores this
 
 Target (exactly one)
   parameter     : { nodeUuid, paramId, paramIndexHint }   // same triple as an automation lane
   action        : { actionId }                            // ShortcutManager action id
   nodeCommand   : { nodeUuid, command }                   // command: toggleSolo -- see Node command targets
   continuous    : { kind }                                // kind: bpm | playhead | masterVolume -- see Continuous targets
+  page          : { command, page }                       // command: next | previous | go -- see Pages
 
 Project "midiRemote" (reserved top-level key in project.json)
   version       : 1

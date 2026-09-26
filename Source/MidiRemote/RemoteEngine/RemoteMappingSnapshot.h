@@ -87,6 +87,10 @@ struct RemoteMappingSnapshot {
         // RemoteEngineReconcile.cpp.
         juce::AudioProcessorGraph::NodeID nodeId;
         bool orphaned = false;
+        // FRO142 (docs/control/midi-remote.md#pages): false for a project assignment on a page that
+        // isn't its profile's active one. Such a slot is resolved but has no lookup entry, and
+        // feedback skips it too, so the controller only ever echoes the page it is actually driving.
+        bool onActivePage = true;
         // FRO236: target.continuous.kind, copied out here so the apply path never has to reach
         // through `target` -- masterVolume resolves `param` above through the injected
         // ContinuousParameterLookup and is otherwise identical to a parameter slot; bpm/playhead

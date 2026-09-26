@@ -169,6 +169,10 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
         return false;
     }
 
+    // FRO142 (docs/control/midi-remote.md#pages): a freshly loaded project starts every profile on
+    // page 1 -- this is a NEW project's assignments, not the ordinary edits publishAssignments()
+    // below also handles, which must never jump the user's active page.
+    remoteEngine.resetActivePages();
     // FRO127/FRO130: ProjectBundle::load just replaced midiRemoteDoc wholesale — the engine's
     // own copy (and the module cards' MIDI Learn badges) must follow before the reconcile below
     // re-resolves targets against it.
@@ -212,6 +216,8 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
         return false;
     }
 
+    // FRO142: same "new project's assignments, reset to page 1" rule as loadBundleFromFile above.
+    remoteEngine.resetActivePages();
     // FRO127/FRO130: loadAutosave just replaced midiRemoteDoc wholesale, same as loadBundleFromFile above.
     midiLearnController_.publishAssignments();
     reconcileTimelineAfterGraphChange();

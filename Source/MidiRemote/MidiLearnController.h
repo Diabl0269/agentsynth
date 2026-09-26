@@ -170,6 +170,20 @@ public:
      *  the engine and announced via onChanged. Returns false if `profile.id` is empty or already known. */
     bool addProfile(const ControllerProfile& profile, const juce::String& editLabel = "Add controller");
 
+    // ---- FRO142 (docs/control/midi-remote.md#pages): the page strip's "+" and "Delete page" ----
+
+    /** "+": widens `profileId`'s effective page count by one (clamped at 16) through updateProfile()
+     *  -- one controller-history step, undoable there -- then switches the engine's active page to
+     *  the new one. False at the 16-page ceiling or an unknown profile. */
+    bool addPage(const juce::String& profileId);
+    /** Right-click a page button (not page 1) -> "Delete page": removes every PROJECT assignment
+     *  `profileId` has on `page` (one AppUndoManager step, the project's own undo), shifts every
+     *  higher page down by one on both the remaining project assignments and the profile's own
+     *  pageCount (a second, controller-history step -- same two-histories split
+     *  recreateController() already uses), and moves the active page back if it was at or past the
+     *  deleted one. False for page <= 1, page beyond the effective count, or an unknown profile. */
+    bool deletePage(const juce::String& profileId, int page);
+
     // ---- FRO273: controller edit history (MidiLearnControllerHistory.cpp). Message thread only. ----
     bool canUndoProfileEdit() const noexcept { return profileHistory_.canUndo(); }
     bool canRedoProfileEdit() const noexcept { return profileHistory_.canRedo(); }

@@ -10,7 +10,7 @@
 
 namespace synth::ui {
 
-std::vector<ActionPickerRow> buildActionPickerRows(const juce::String& filter) {
+std::vector<ActionPickerRow> buildActionPickerRows(const juce::String& filter, int effectivePageCount) {
     std::vector<ActionPickerRow> rows;
     const auto needle = filter.trim();
     for (const auto category : ShortcutManager::getCategoryOrder()) {
@@ -21,11 +21,17 @@ std::vector<ActionPickerRow> buildActionPickerRows(const juce::String& filter) {
             const auto label = ShortcutManager::getActionDescription(id);
             if (needle.isNotEmpty() && !label.containsIgnoreCase(needle))
                 continue;
-            group.push_back({false, false, id, label, {}});
+            ActionPickerRow row;
+            row.actionId = id;
+            row.label = label;
+            group.push_back(row);
         }
         if (group.empty())
             continue;
-        rows.push_back({true, false, {}, ShortcutManager::getCategoryName(category), {}});
+        ActionPickerRow header;
+        header.isHeader = true;
+        header.label = ShortcutManager::getCategoryName(category);
+        rows.push_back(header);
         rows.insert(rows.end(), group.begin(), group.end());
     }
 
@@ -39,11 +45,44 @@ std::vector<ActionPickerRow> buildActionPickerRows(const juce::String& filter) {
         const auto label = synth::continuousTargetDisplayName(kind);
         if (needle.isNotEmpty() && !label.containsIgnoreCase(needle))
             continue;
-        continuousGroup.push_back({false, true, {}, label, kind});
+        ActionPickerRow row;
+        row.isContinuous = true;
+        row.label = label;
+        row.continuousKind = kind;
+        continuousGroup.push_back(row);
     }
     if (!continuousGroup.empty()) {
-        rows.push_back({true, false, {}, "Continuous", {}});
+        ActionPickerRow header;
+        header.isHeader = true;
+        header.label = "Continuous";
+        rows.push_back(header);
         rows.insert(rows.end(), continuousGroup.begin(), continuousGroup.end());
+    }
+
+    // FRO142 (docs/control/midi-remote.md#pages): Next page / Previous page always offered, then one
+    // "Page N" row per page the selected control's controller currently has -- filtered the same way
+    // as every other row above.
+    std::vector<ActionPickerRow> pageGroup;
+    auto addPageRow = [&](const juce::String& label, synth::PageCommand command, int pageNumber) {
+        if (needle.isNotEmpty() && !label.containsIgnoreCase(needle))
+            return;
+        ActionPickerRow row;
+        row.isPage = true;
+        row.label = label;
+        row.pageCommand = command;
+        row.pageNumber = pageNumber;
+        pageGroup.push_back(row);
+    };
+    addPageRow("Next page", synth::PageCommand::next, 1);
+    addPageRow("Previous page", synth::PageCommand::previous, 1);
+    for (int page = 1; page <= effectivePageCount; ++page)
+        addPageRow("Page " + juce::String(page), synth::PageCommand::go, page);
+    if (!pageGroup.empty()) {
+        ActionPickerRow header;
+        header.isHeader = true;
+        header.label = "Pages";
+        rows.push_back(header);
+        rows.insert(rows.end(), pageGroup.begin(), pageGroup.end());
     }
     return rows;
 }
@@ -60,14 +99,14 @@ ActionPickerComponent::ActionPickerComponent() {
     list_.setRowHeight(24);
     addAndMakeVisible(list_);
 
-    rows_ = buildActionPickerRows({});
+    rows_ = buildActionPickerRows({}, effectivePageCount_);
     list_.updateContent();
 }
 
 ActionPickerComponent::~ActionPickerComponent() = default;
 
 void ActionPickerComponent::setFilter(const juce::String& filter) {
-    rows_ = buildActionPickerRows(filter);
+    rows_ = buildActionPickerRows(filter, effectivePageCount_);
     list_.updateContent();
     list_.repaint();
 }
@@ -81,8 +120,21 @@ void ActionPickerComponent::chooseRow(int row) {
             onContinuousChosen(chosen.continuousKind);
         return;
     }
+    if (chosen.isPage) {
+        if (onPageChosen)
+            onPageChosen(chosen.pageCommand, chosen.pageNumber);
+        return;
+    }
     if (onChosen)
         onChosen(chosen.actionId);
+}
+
+void ActionPickerComponent::setEffectivePageCount(int count) {
+    count = juce::jmax(1, count);
+    if (count == effectivePageCount_)
+        return;
+    effectivePageCount_ = count;
+    setFilter(searchEditor_.getText()); // rebuilds rows_ under the current filter
 }
 
 void ActionPickerComponent::paintListBoxItem(int row, juce::Graphics& g, int width, int height, bool selected) {

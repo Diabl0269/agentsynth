@@ -207,6 +207,24 @@ With 2+ controls selected the inspector shows *"N controls selected"* and disabl
 per-control field (name, kind, encoding, button mode, learn target, Forget) — there is no one
 control's own fields left to show.
 
+### Pages
+
+A row of page buttons ("1", "2", …, one per the selected controller's effective page count — see
+[`midi-remote.md#pages`](midi-remote.md#pages)) above the surface grid, plus a trailing "+" that
+widens the profile's page count and switches to the new page. Shown even with a single page (just
+"1" and "+") so the feature is discoverable rather than hidden until a second page exists. The
+active page is highlighted with the theme's accent colour, same token every other selected-state
+paint in this panel reads. Right-click a page button other than "1" (page 1 always exists — there
+is nothing to delete) for "Delete page", which removes that page's project assignments and shifts
+every higher page down by one, both undoable (the project half on the project history, the profile's
+own page-count shrink on the controller edit history — the same two-histories split
+[Orphan controllers](#orphan-controllers)' Recreate already uses for its own project+profile pair).
+Both buttons carry an accessible title ("Page 2", "Add page") for a screen reader. Clicking an
+inactive page switches `RemoteEngine`'s active page for the selected profile, which republishes the
+surface's cell labels (only the newly active page's project assignments show) and posts a status-bar
+line ("Page 2 of 3"). Implemented in `Source/UI/MidiRemote/ControllerSurface/ControllerSurfacePageStrip.{h,cpp}`,
+reusing `juce::TextButton` (no ad-hoc drawing) the same way `ControllerSurfaceToolbar`'s row does.
+
 ### Inspector (right)
 
 For the selected control: name, kind, message spec (editable, with a **Relearn** button that
@@ -253,8 +271,11 @@ Select a control → **Assign…** (toolbar) or **Learn target** (inspector) →
   tab's display names (`ShortcutManager::getActionDescription`), command-dispatched actions only
   (`AppCommands::getCommandForAction` is not `kNoCommand`), plus one more group appended last —
   **Continuous** — with a fixed three rows (Tempo (BPM), Playhead Position, Master Volume; named by
-  `synth::continuousTargetDisplayName`, docs/control/midi-remote.md#continuous-targets), filtered by
-  the same search box.
+  `synth::continuousTargetDisplayName`, docs/control/midi-remote.md#continuous-targets), then one
+  more group — **Pages** (FRO142, [`midi-remote.md#pages`](midi-remote.md#pages)) — "Next page",
+  "Previous page", and one "Page N" row per page the selected control's OWN controller currently
+  has (`ActionPickerComponent::setEffectivePageCount`, set right before the picker is shown), all
+  filtered by the same search box.
 
 Where it lives: the assignment is made by `MidiLearnController::assignControl` (a parameter or Solo →
 project scope, one `recordMidiRemoteChange` step; an action or a continuous target, e.g. a transport
@@ -438,12 +459,15 @@ one live controller is the pseudo-controller **Host MIDI**, fed from the MIDI bu
 Mirroring the source layout (`Tests/MidiRemote/…`, `Tests/UI/MidiRemote/…`), headless, with a
 fake message source (no real `juce::MidiInput`):
 
-- **Model / serialisation** (`Tests/MidiRemote/RemoteModelTests.cpp`): round-trip every type;
-  `version` refusal; a profile with duplicate message keys is rejected; `"midiRemote"` is
-  stashed and carried by `ProjectBundle` and refused by `validatePatch` untrusted
-  (`AIStateMapperTest.MidiRemoteKeyIsRefusedUntrusted`).
+- **Model / serialisation** (`Tests/MidiRemote/RemoteModelTests.cpp`,
+  `RemoteModelPagesTests.cpp`): round-trip every type; `version` refusal; a profile with
+  duplicate message keys is rejected; `"midiRemote"` is stashed and carried by `ProjectBundle`
+  and refused by `validatePatch` untrusted (`AIStateMapperTest.MidiRemoteKeyIsRefusedUntrusted`);
+  FRO142's `pageCount`/`page`/page `Target` -- a pre-FRO142 document round-trips byte-identical,
+  an invalid page (0, 17, a string) is rejected all-or-nothing, and a `Target` with a page payload
+  plus any other is rejected same as every other combination.
 - **Engine** (`RemoteEngineDecodeTests.cpp`, `RemoteEngineApplyTests.cpp`,
-  `RemoteEngineLearnTests.cpp`, `RemoteEngineReconcileTests.cpp`): abs7 / the three relative
+  `RemoteEngineLearnTests.cpp`, `RemoteEngineReconcileTests.cpp`, `RemoteEnginePagesTests.cpp`): abs7 / the three relative
   encodings / button momentary vs toggle; takeover Jump/Pick-up/Scale sequences; gesture
   begin/end timing (`kGestureIdleMs`) produces exactly one undo step and one
   `parameterGestureChanged` pair; consumed vs passed messages reach / don't reach the collector
@@ -471,7 +495,13 @@ fake message source (no real `juce::MidiInput`):
   (`ControllerSurfaceSelectionTests.cpp`); group drag (relative layout kept, block-clamped at the
   grid edge, refused onto an unselected control) (`ControllerSurfaceGroupDragTests.cpp`); group
   delete's one confirm and one undo step per history (`Tests/MidiRemote/ProfileEditHistoryTests.cpp`'s
-  `DeleteControlsRemovesAGroupInOneStepPerHistory`, `MidiRemotePanelGroupDeleteTests.cpp`).
+  `DeleteControlsRemovesAGroupInOneStepPerHistory`, `MidiRemotePanelGroupDeleteTests.cpp`);
+  FRO142's page strip -- one button per effective page, the active one highlighted, "+" adds a page
+  and is undoable, right-click offers "Delete page" on every page but the first
+  (`ControllerSurfacePageStripTests.cpp`), and clicking a page button through the real panel
+  switches the engine's active page and the surface's cell labels (`MidiRemotePanelPagesTests.cpp`);
+  learning/assigning while a non-default page is active tags the new assignment with it and never
+  disturbs another page's mapping of the same control (`Tests/MidiRemote/MidiLearnControllerPagesTests.cpp`).
 - **E2E** (`Tests/MidiRemote/MidiRemoteWorkflowE2ETests.cpp`): one workflow through the real seams (messages enter
   `AudioEngine::handleIncomingMidiMessageFromSource`, `RemoteEngine::drain()` applies them on a fake clock). Fake
   device → a real right-click "MIDI Learn 'Cutoff'..." on the Filter card → sweep → the CC settles, the assignment

@@ -503,6 +503,11 @@ void MainComponent::wireMidiRemoteEngine() {
     bottomDock.getMidiRemotePanel().onLocateNode = [this](const juce::String& nodeUuid) {
         selectNodeInGraph(nodeUuid);
     };
+    // FRO142 (docs/control/midi-remote.md#pages): plain text, same as every other MIDI Remote
+    // status line -- there is no "MIDI Remote:" prefix convention to match here.
+    bottomDock.getMidiRemotePanel().onStatusMessage = [this](const juce::String& message) {
+        statusBar.showMessage(message);
+    };
 
     // FRO263: keep the panel live while it's open, not just on its own tab-switch-in --
     // MidiLearnController::onChanged fires after every mutation that changes what the panel shows

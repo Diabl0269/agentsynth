@@ -37,6 +37,21 @@ bool readInt(const juce::var& v, int& out) {
 
 bool readOptionalInt(const juce::var& v, int& out) { return v.isVoid() || readInt(v, out); }
 
+// FRO142: a missing "page"/"pageCount" property means the pre-FRO142 default (1); a PRESENT one
+// must be a well-formed int in [lo, hi] or the whole load fails, same all-or-nothing rule as every
+// other field in this file.
+bool readOptionalRangedInt(const juce::var& v, int& out, int lo, int hi) {
+    if (v.isVoid()) {
+        out = lo;
+        return true;
+    }
+    int parsed = 0;
+    if (!readInt(v, parsed) || parsed < lo || parsed > hi)
+        return false;
+    out = parsed;
+    return true;
+}
+
 bool readDouble(const juce::var& v, double& out) {
     if (v.isDouble() || v.isInt() || v.isInt64()) {
         out = static_cast<double>(v);
@@ -277,6 +292,36 @@ bool continuousTargetKindFromString(const juce::String& s, ContinuousTargetKind&
     return false;
 }
 
+// FRO142 (docs/control/midi-remote.md#pages): doc-exact camelCase, same hard-fail-on-unknown-
+// string rule as every other enum in this file.
+const char* toString(PageCommand c) {
+    switch (c) {
+    case PageCommand::next:
+        return "next";
+    case PageCommand::previous:
+        return "previous";
+    case PageCommand::go:
+        return "go";
+    }
+    return "next";
+}
+
+bool pageCommandFromString(const juce::String& s, PageCommand& out) {
+    if (s == "next") {
+        out = PageCommand::next;
+        return true;
+    }
+    if (s == "previous") {
+        out = PageCommand::previous;
+        return true;
+    }
+    if (s == "go") {
+        out = PageCommand::go;
+        return true;
+    }
+    return false;
+}
+
 bool takeoverFromString(const juce::String& s, Takeover& out) {
     if (s == "jump") {
         out = Takeover::jump;
@@ -445,10 +490,15 @@ juce::var Target::toVar() const {
         n->setProperty("nodeUuid", nodeCommand.nodeUuid);
         n->setProperty("command", toString(nodeCommand.command));
         obj->setProperty("nodeCommand", juce::var(n));
-    } else {
+    } else if (kind == Kind::continuous) {
         auto* c = new juce::DynamicObject();
         c->setProperty("kind", toString(continuous.kind));
         obj->setProperty("continuous", juce::var(c));
+    } else {
+        auto* p = new juce::DynamicObject();
+        p->setProperty("command", toString(page.command));
+        p->setProperty("page", page.page);
+        obj->setProperty("page", juce::var(p));
     }
     return juce::var(obj);
 }
@@ -462,9 +512,10 @@ bool Target::fromVar(const juce::var& v, Target& out) {
     const bool hasAction = obj->hasProperty("action");
     const bool hasNodeCommand = obj->hasProperty("nodeCommand");
     const bool hasContinuous = obj->hasProperty("continuous");
-    // Reject anything but EXACTLY ONE of the four present (docs/control/midi-remote.md#data-model).
-    const int presentCount =
-        (hasParameter ? 1 : 0) + (hasAction ? 1 : 0) + (hasNodeCommand ? 1 : 0) + (hasContinuous ? 1 : 0);
+    const bool hasPage = obj->hasProperty("page");
+    // Reject anything but EXACTLY ONE of the five present (docs/control/midi-remote.md#data-model).
+    const int presentCount = (hasParameter ? 1 : 0) + (hasAction ? 1 : 0) + (hasNodeCommand ? 1 : 0) +
+                             (hasContinuous ? 1 : 0) + (hasPage ? 1 : 0);
     if (presentCount != 1)
         return false;
 
@@ -509,7 +560,7 @@ bool Target::fromVar(const juce::var& v, Target& out) {
 
         parsed.kind = Target::Kind::nodeCommand;
         parsed.nodeCommand = cmd;
-    } else {
+    } else if (hasContinuous) {
         auto* c = obj->getProperty("continuous").getDynamicObject();
         if (c == nullptr)
             return false;
@@ -521,6 +572,20 @@ bool Target::fromVar(const juce::var& v, Target& out) {
 
         parsed.kind = Target::Kind::continuous;
         parsed.continuous = cont;
+    } else {
+        auto* p = obj->getProperty("page").getDynamicObject();
+        if (p == nullptr)
+            return false;
+
+        juce::String commandStr;
+        Target::Page pg;
+        if (!readString(p->getProperty("command"), commandStr) || !pageCommandFromString(commandStr, pg.command))
+            return false;
+        if (!readInt(p->getProperty("page"), pg.page) || pg.page < 1 || pg.page > 16)
+            return false;
+
+        parsed.kind = Target::Kind::page;
+        parsed.page = pg;
     }
 
     out = parsed;
@@ -552,6 +617,10 @@ juce::var Assignment::toVar() const {
     obj->setProperty("range", juce::var(rangeObj));
 
     obj->setProperty("enabled", enabled);
+
+    // FRO142: written only when != 1, so a pre-FRO142 assignment round-trips byte-identical.
+    if (page != 1)
+        obj->setProperty("page", page);
 
     return juce::var(obj);
 }
@@ -610,6 +679,10 @@ bool Assignment::fromVar(const juce::var& v, Assignment& out) {
     if (!readBool(obj->getProperty("enabled"), parsed.enabled))
         return false;
 
+    // FRO142: missing == 1 (every pre-FRO142 assignment); present must be 1..16.
+    if (!readOptionalRangedInt(obj->getProperty("page"), parsed.page, 1, 16))
+        return false;
+
     out = parsed;
     return true;
 }
@@ -647,6 +720,10 @@ juce::var ControllerProfile::toVar() const {
     for (const auto& a : actions)
         actionArr.add(a.toVar());
     obj->setProperty("actions", actionArr);
+
+    // FRO142: written only when > 1, so a pre-FRO142 profile round-trips byte-identical.
+    if (pageCount > 1)
+        obj->setProperty("pageCount", pageCount);
 
     return juce::var(obj);
 }
@@ -705,6 +782,10 @@ bool ControllerProfile::fromVar(const juce::var& state) {
                 return false;
 
     if (!readAssignmentList(obj->getProperty("actions"), parsed.actions))
+        return false;
+
+    // FRO142: missing == 1 (every pre-FRO142 profile); present must be 1..16.
+    if (!readOptionalRangedInt(obj->getProperty("pageCount"), parsed.pageCount, 1, 16))
         return false;
 
     *this = std::move(parsed);

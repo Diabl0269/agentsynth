@@ -18,7 +18,10 @@ TEST(MidiRemoteActionPickerTest, ListsOnlyCommandDispatchedActions) {
     const auto rows = buildActionPickerRows({});
     int actions = 0;
     for (const auto& row : rows) {
-        if (row.isHeader || row.isContinuous) // FRO236: the Continuous group has its own rows below
+        // FRO236/FRO142: the Continuous and Pages groups have their own rows below, with no
+        // actionId (a page/continuous target invokes through neither ShortcutManager nor a
+        // juce::CommandID at all).
+        if (row.isHeader || row.isContinuous || row.isPage)
             continue;
         ++actions;
         EXPECT_NE(AppCommands::getCommandForAction(row.actionId), AppCommands::kNoCommand) << row.actionId;
@@ -44,7 +47,7 @@ TEST(MidiRemoteActionPickerTest, GroupsByCategoryInTheShortcutsTabOrderWithAHead
             headers.push_back(row.label);
             continue;
         }
-        if (row.isContinuous) // FRO236: the Continuous group is not a ShortcutCategory
+        if (row.isContinuous || row.isPage) // FRO236/FRO142: neither group is a ShortcutCategory
             continue;
         current = ShortcutManager::getCategory(row.actionId);
         ASSERT_FALSE(headers.empty());
@@ -53,15 +56,16 @@ TEST(MidiRemoteActionPickerTest, GroupsByCategoryInTheShortcutsTabOrderWithAHead
     }
 
     // Headers appear in getCategoryOrder() order (skipping any category with nothing invokable),
-    // with "Continuous" (FRO236) appended last.
+    // with "Continuous" (FRO236) then "Pages" (FRO142) appended last, in that order.
     std::vector<juce::String> expectedOrder;
     for (const auto category : ShortcutManager::getCategoryOrder())
         if (std::find(headers.begin(), headers.end(), ShortcutManager::getCategoryName(category)) != headers.end())
             expectedOrder.push_back(ShortcutManager::getCategoryName(category));
     expectedOrder.push_back("Continuous");
+    expectedOrder.push_back("Pages");
     EXPECT_EQ(headers, expectedOrder);
     EXPECT_EQ(headers.front(), "General");
-    EXPECT_EQ(headers.back(), "Continuous");
+    EXPECT_EQ(headers.back(), "Pages");
 }
 
 TEST(MidiRemoteActionPickerTest, SearchFiltersByDescriptionCaseInsensitivelyAndDropsEmptyGroups) {
@@ -176,4 +180,47 @@ TEST(MidiRemoteActionPickerTest, ChoosingAnActionRowFiresOnChosenAndAHeaderDoesN
     chosen.clear();
     picker.chooseRowForTest(0);
     EXPECT_TRUE(chosen.isEmpty());
+}
+
+// -- FRO142 (docs/control/midi-remote.md#pages) -------------------------------------------------
+
+TEST(MidiRemoteActionPickerTest, PagesGroupOffersNextPreviousAndOnePageRowPerExistingPage) {
+    const auto rows = buildActionPickerRows({}, 3);
+    std::vector<juce::String> pageLabels;
+    for (const auto& row : rows)
+        if (row.isPage)
+            pageLabels.push_back(row.label);
+    EXPECT_EQ(pageLabels, (std::vector<juce::String>{"Next page", "Previous page", "Page 1", "Page 2", "Page 3"}));
+}
+
+TEST(MidiRemoteActionPickerTest, SetEffectivePageCountRebuildsThePagesGroup) {
+    ActionPickerComponent picker;
+    int pagesBefore = 0;
+    for (int i = 0; i < picker.getRowCountForTest(); ++i)
+        pagesBefore += picker.getRowForTest(i).isPage ? 1 : 0;
+    EXPECT_EQ(pagesBefore, 3) << "1 page controller: Next page, Previous page, Page 1";
+
+    picker.setEffectivePageCount(2);
+    int pagesAfter = 0;
+    for (int i = 0; i < picker.getRowCountForTest(); ++i)
+        pagesAfter += picker.getRowForTest(i).isPage ? 1 : 0;
+    EXPECT_EQ(pagesAfter, 4) << "Next page, Previous page, Page 1, Page 2";
+}
+
+TEST(MidiRemoteActionPickerTest, ChoosingAPageRowFiresOnPageChosen) {
+    ActionPickerComponent picker;
+    picker.setEffectivePageCount(2);
+    std::optional<std::pair<synth::PageCommand, int>> chosen;
+    picker.onPageChosen = [&](synth::PageCommand command, int page) { chosen = {command, page}; };
+
+    int goPage2Row = -1;
+    for (int i = 0; i < picker.getRowCountForTest(); ++i)
+        if (picker.getRowForTest(i).isPage && picker.getRowForTest(i).label == "Page 2")
+            goPage2Row = i;
+    ASSERT_GE(goPage2Row, 0);
+
+    picker.chooseRowForTest(goPage2Row);
+    ASSERT_TRUE(chosen.has_value());
+    EXPECT_EQ(chosen->first, synth::PageCommand::go);
+    EXPECT_EQ(chosen->second, 2);
 }

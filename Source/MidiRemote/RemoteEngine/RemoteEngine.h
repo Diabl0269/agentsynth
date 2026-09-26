@@ -143,6 +143,19 @@ public:
     /** The project's parameter assignments (the "midiRemote" project key). */
     void setAssignments(std::vector<Assignment> assignments);
 
+    // ---- Message thread: pages (FRO142, docs/control/midi-remote.md#pages) ---------------------
+
+    /** 1-based; 1 for a profile never switched away from its default. Message thread only, never persisted. */
+    int getActivePage(const juce::String& profileId) const;
+    /** Clamped to 1..getEffectivePageCount(profileId); a no-op for an unchanged page. */
+    void setActivePage(const juce::String& profileId, int page);
+    /** A floor, not a hard cap -- see the .cpp. */
+    int getEffectivePageCount(const juce::String& profileId) const;
+    /** Call only from the project-load path -- see the .cpp for why. */
+    void resetActivePages();
+    /** Fired on the message thread whenever setActivePage actually changes a profile's page. */
+    std::function<void(const juce::String& profileId, int newPage)> onActivePageChanged;
+
     /** Preferences' default takeover, used by assignments set to Takeover::useDefault. Scale until
      *  set; a no-op for the current value and for useDefault itself. */
     void setDefaultTakeover(Takeover takeover);
@@ -227,6 +240,8 @@ private:
     void applyToNodeCommand(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
     // FRO236: bpm/playhead only -- masterVolume dispatches to applyToParameter above instead.
     void applyToContinuous(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
+    // FRO142: next/previous/go on the slot's own profile's active page.
+    void applyToPage(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
     void expireIdleGestures();
 
     // Feedback (RemoteEngineFeedback.cpp).
@@ -286,6 +301,10 @@ private:
     std::vector<ControllerProfile> profiles_;
     std::vector<Assignment> assignments_;
     Takeover defaultTakeover_ = Takeover::scale;
+
+    /** FRO142: profileId -> active page (1-based). Message thread only, never persisted; a missing
+     *  entry means page 1 (see getActivePage). */
+    std::map<juce::String, int> activePages_;
 
     std::map<juce::String, GestureState> gestures_;
 
