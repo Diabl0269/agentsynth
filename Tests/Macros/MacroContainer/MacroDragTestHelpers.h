@@ -42,10 +42,14 @@ void dragBodyBy(ModuleComponent& comp, juce::Point<int> delta, juce::ModifierKey
 }
 
 /** Sets up a 2-member macro (Oscillator + Filter, both unconnected), expanded so its hull is
- *  live, and returns the macro id. */
+ *  live, and returns the macro id. B's y is chosen so its own padded hull comfortably reaches
+ *  A's card centre (the relationship PaintedHullOfOwnMacroExcludesDraggedMemberFromTheFirstTick
+ *  depends on) -- originally y=400 against a 533px-tall A; FRO312 shrank Oscillator's real height
+ *  to 433 (its Level/Pan/etc. CV jacks are knob-bound now), moving A's centre up by the same 100px,
+ *  so B moves up by that same 100px to preserve the original relative geometry exactly. */
 juce::String makeExpandedTwoMemberMacro(GraphEditor& editor, AudioEngine& engine, NodeID& outA, NodeID& outB) {
     outA = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
-    outB = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
+    outB = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 300);
     editor.setSelectedNodes({outA, outB});
     const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     if (!macroId.isEmpty())

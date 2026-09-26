@@ -37,23 +37,26 @@
 // Estimated (w, h) footprint for a module type name, used for the library drag ghost before a
 // real component exists. Public so a test can hold it to the real component sizes — see
 // ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents.
-juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
+// Split out of GraphEditor::estimateModuleSize (FRO312, see its own comment below for why) purely
+// so that method can carry the FRO312 explanation beside its one-line body instead of above this
+// ~30-branch table.
+static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName) {
     if (typeName == "Oscillator")
-        return {280, 533}; // +96 in #219: an Audio R output jack row and the Pan knob row
+        return {280, 433}; // +96 in #219: an Audio R output jack row and the Pan knob row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Filter")
         // +1 knob row: the Level knob took it from 3 sliders to 4 (issue #122).
         // +20 in #219: the Audio L/R input pair adds a jack row to the port gutter.
         // −128: frequency-response chart is opt-in via "Show Response" (was always reserved).
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        return {280, 443};
+        return {280, 383};
     if (typeName == "LFO")
         // FRO281: +40 for the Rate/Level/Glide CV jacks (3 input jacks, one row shared per pair
         // with the mono CV output already there — see ModuleComponentTest.
         // EstimatedModuleSizesMatchTheRealComponents, which pins this to the real component).
-        return {280, 401}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 361}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "VCA")
-        return {280, 253}; // +20 in #219: the Audio L/R input pair adds a jack row
+        return {280, 233}; // +20 in #219: the Audio L/R input pair adds a jack row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
         // FRO112: five rotary knobs (attack/hold/decay/sustain/release) now flow through the
@@ -63,7 +66,13 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // toggle + threshold control + knob grid (2 rows) + disclosure row, collapsed.
         // FRO281: +100 for the five Attack/Hold/Decay/Sustain/Release CV jacks appended after
         // Threshold (see ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents).
-        return {280, 489};
+        // FRO312: -100 -- those five jacks all resolve to a bound generic rotary knob now, so
+        // each draws no gutter row at all (isInputJackKnobBound). Threshold keeps its jack (it has
+        // no generic slider, see the comment on estimateModuleSize below), so it's still 1 row.
+        // (No Attack/Decay/Release Curve CV jacks here -- those three curve amounts have no knob
+        // to land on, so adding a jack for them would just be a knob-less gutter jack, the exact
+        // shape FRO312 exists to remove; see docs/modules/modulation.md.)
+        return {280, 389};
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
         // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
         return {synth::LayoutUtil::kDoubleWidth, 406};
@@ -78,15 +87,15 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // for the Vel → Gate switch. +8: header-to-first-port gap grew 1px -> 9px (base 30->38).
         return {280, 185};
     if (typeName == "Distortion")
-        return {280, 323}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 283}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Ring Modulator")
-        return {280, 391}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 331}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Delay")
-        return {280, 297}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
+        return {280, 237}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
                            // +60: Time/Feedback/Mix CV jacks finally exist (4 port rows)
     if (typeName == "Reverb")
-        return {280, 337}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
+        return {280, 237}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
                            // +100: Size/Damping/Wet/Dry/Width CV jacks finally exist (6 port rows)
     if (typeName == "AudioInput" || typeName == "Audio Input")
@@ -102,15 +111,15 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Attenuverter")
         return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
     if (typeName == "Noise")
-        return {280, 281}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 261}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Envelope Follower")
         // Noise's control count (3 floats + a choice) plus a taller port gutter for 4 input jacks.
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        return {280, 295};
+        return {280, 235};
     if (typeName == "Math")
         return {280, 239}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Sample & Hold")
-        return {280, 551}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 451}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Comparator")
         return {280, 185}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Macros")
@@ -118,20 +127,20 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {synth::LayoutUtil::kSingleWidth,
                 synth::LayoutUtil::macroBankHeight(MacroControlModule::kDefaultMacros)};
     if (typeName == "Sampler")
-        return {280, 645}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 545}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Wavetable")
         // Double-width since issue #180. The 16 CV jacks run in two left-hand columns and the 23
         // controls are paged behind a tab strip (only Position and Warp stay pinned), so neither
         // the gutter nor the control count sets the height on its own.
-        return {synth::LayoutUtil::kDoubleWidth, 554};
+        return {synth::LayoutUtil::kDoubleWidth, 565};
     if (typeName == "Chorus" || typeName == "Phaser" || typeName == "Flanger")
         // +60: every continuous parameter has a CV jack now (Audio + 5 CV = 6 port rows), and
         // the port gutter, not the 2-row knob grid, sets the height.
-        return {280, 337};
+        return {280, 237};
     if (typeName == "Bitcrusher")
-        return {280, 323}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 263}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Pitch Shifter")
-        return {280, 507}; // Dual I/O off: one Audio jack + Level knob row
+        return {280, 387}; // Dual I/O off: one Audio jack + Level knob row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
                            // +40: Fine and Window CV jacks (Audio + 6 CV = 7 port rows)
     if (typeName == "Parametric EQ")
@@ -139,14 +148,14 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().
         return {synth::LayoutUtil::kDoubleWidth, 592};
     if (typeName == "Compressor")
-        return {280, 337}; // +100: a CV jack per parameter (Audio + 5 CV = 6 port rows) sets it
+        return {280, 237}; // +100: a CV jack per parameter (Audio + 5 CV = 6 port rows) sets it
     if (typeName == "Limiter")
-        return {280, 221}; // +60: a CV jack per parameter (Audio + 3 CV = 4 port rows) sets it
+        return {280, 161}; // +60: a CV jack per parameter (Audio + 3 CV = 4 port rows) sets it
     if (typeName == "Gate")
         // 6 float sliders (Threshold/Attack/Hold/Release/Range/Level): same row count as
         // Compressor's 5 (3+3 wraps to the same number of rows as 6 in a 3-per-row grid).
         // +100: a CV jack per parameter (Audio + 5 CV = 6 port rows) sets it, as for Compressor.
-        return {280, 337};
+        return {280, 237};
     if (typeName == "Voice Mixer")
         return {280, 301}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "External MIDI")
@@ -211,6 +220,22 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {ModuleComponent::kMacroPortWidgetWidth,
                 ModuleComponent::kMacroPortWidgetHeaderY + ModuleComponent::kMacroPortWidgetBottomPad};
     return {280, 360};
+}
+
+juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
+    // FRO312: every continuous parameter with a CV jack used to cost the jack column one full
+    // row; a jack whose target resolves to a bound, GENERIC ROTARY knob (ModuleComponent::
+    // isInputJackKnobBound's live rule) now draws no gutter row at all, so several of the literals
+    // in estimateModuleSizeBaseTable() shrank. Replicating that rule exactly here (without a live
+    // ModuleComponent to ask) turned out to need the SAME slider-style/exclusion knowledge only
+    // createControls() has (a choice/bool-bound target like Oscillator's "Waveform" gets a combo,
+    // never a rotary; ADSR's Threshold/curve targets have bound float parameters but no generic
+    // slider at all, see ModuleComponent.cpp's shouldSkipGenericFloatSlider) -- an approximation
+    // here would only trade one hand-kept table (this one) for a second, subtly different one.
+    // ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents (which builds a REAL
+    // ModuleComponent per library type and measures it) is what actually keeps this table honest;
+    // it caught every FRO312 height change below when the table was updated by hand against it.
+    return estimateModuleSizeBaseTable(typeName);
 }
 
 // ---- DragAndDropTarget / FileDragAndDropTarget overrides ----------------------------------

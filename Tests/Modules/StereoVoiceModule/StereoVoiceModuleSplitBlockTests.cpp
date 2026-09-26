@@ -95,9 +95,11 @@ TEST(SplitBlockDualIO, CollapsingDoesNotDisturbTheCVChannelMap) {
         OscillatorModule osc;
         setBoolParam(osc, "dualIO", dual);
         auto oscTargets = osc.getModulationTargets();
-        ASSERT_EQ(oscTargets.size(), 7u);
+        ASSERT_EQ(oscTargets.size(), 9u); // FRO314 appended Unison/Detune
         EXPECT_EQ(oscTargets[1].channelIndex, 1) << "Waveform CV, dual=" << dual;
         EXPECT_EQ(oscTargets[6].channelIndex, 6) << "Pan CV, dual=" << dual;
+        EXPECT_EQ(oscTargets[7].channelIndex, 14) << "Unison CV, dual=" << dual;
+        EXPECT_EQ(oscTargets[8].channelIndex, 15) << "Detune CV, dual=" << dual;
     }
 }
 

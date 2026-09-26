@@ -16,7 +16,11 @@ TEST(OscillatorStereo, AudioRLivesAboveTheCVBlockNotOnChannelOne) {
     EXPECT_EQ(OscillatorModule::kNumOutputs, 22);
 
     OscillatorModule osc;
-    EXPECT_EQ(osc.getTotalNumInputChannels(), 14) << "the input side must not grow — CV routings key off it";
+    // FRO314: grew 14 -> 16 (Unison/Detune CV, appended). kRightBase/kNumOutputs above are
+    // unaffected -- they are a LITERAL, not derived from the input count (see the class-level
+    // channel-map comment on OscillatorModule::kRightBase) -- so existing routings into/out of
+    // Audio R still key off the same raw channel.
+    EXPECT_EQ(osc.getTotalNumInputChannels(), OscillatorModule::kNumInputs);
     EXPECT_EQ(osc.getTotalNumOutputChannels(), OscillatorModule::kNumOutputs);
     EXPECT_EQ(osc.getVisibleOutputPortCount(), 2);
 }
@@ -41,8 +45,10 @@ TEST(OscillatorStereo, ExistingCVTargetChannelsAreUnchangedAndPanIsAppended) {
 
     // Mono: every pre-#219 target keeps its raw channel; Pan takes ch6, which was already declared
     // and unused.
-    const std::vector<std::pair<juce::String, int>> expectedMono = {
-        {"Pitch", 0}, {"Waveform", 1}, {"Octave", 2}, {"Coarse", 3}, {"Fine", 4}, {"Level", 5}, {"Pan", 6}};
+    // FRO314 appended Unison/Detune (ch14/15, same raw channel in both voice modes).
+    const std::vector<std::pair<juce::String, int>> expectedMono = {{"Pitch", 0},  {"Waveform", 1}, {"Octave", 2},
+                                                                    {"Coarse", 3}, {"Fine", 4},     {"Level", 5},
+                                                                    {"Pan", 6},    {"Unison", 14},  {"Detune", 15}};
     auto mono = osc.getModulationTargets();
     ASSERT_EQ(mono.size(), expectedMono.size());
     for (size_t i = 0; i < mono.size(); ++i) {
@@ -52,7 +58,8 @@ TEST(OscillatorStereo, ExistingCVTargetChannelsAreUnchangedAndPanIsAppended) {
 
     setBoolParam(osc, "poly", true);
     const std::vector<std::pair<juce::String, int>> expectedPoly = {{"Waveform", 8}, {"Octave", 9}, {"Coarse", 10},
-                                                                    {"Fine", 11},    {"Level", 12}, {"Pan", 13}};
+                                                                    {"Fine", 11},    {"Level", 12}, {"Pan", 13},
+                                                                    {"Unison", 14},  {"Detune", 15}};
     auto poly = osc.getModulationTargets();
     ASSERT_EQ(poly.size(), expectedPoly.size());
     for (size_t i = 0; i < poly.size(); ++i) {

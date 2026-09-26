@@ -229,7 +229,7 @@ public:
     // were, which is exactly why the base infers the output pair only.
 
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Mix", 2}, {"Drive", 3}, {"Character", 4}};
+        return {{"Mix", 2, "mix"}, {"Drive", 3, "drive"}, {"Character", 4, "character"}};
     }
 
     // Pure audio FX — processBlock never touches the MIDI buffer.

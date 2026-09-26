@@ -145,7 +145,7 @@ TEST_F(SamplerModuleTest, DefaultParameterValues) {
 
 TEST_F(SamplerModuleTest, ModulationTargetsExcludeTriggerJack) {
     auto targets = module->getModulationTargets();
-    EXPECT_EQ(targets.size(), 6u);
+    EXPECT_EQ(targets.size(), 7u); // FRO312 added Root Note CV as the 7th target
     for (const auto& t : targets)
         EXPECT_NE(t.channelIndex, SamplerModule::kTriggerCh) << "the gate jack must never be auto-attenuverted";
 
@@ -290,6 +290,31 @@ TEST_F(SamplerModuleTest, PitchParameterSetsPlaybackRate) {
 
     for (int i = SamplerModule::kFadeSamples; i < 512; ++i)
         EXPECT_NEAR(out.getSample(0, i), rampValue(2 * i, kFrames), 1e-4f) << "frame " << i;
+    file.deleteFile();
+}
+
+// FRO312: Root Note CV (ch7) modulates the same rootNoteParam a direct knob turn would, once per
+// block (never smoothed/glided -- see the class's own comment on effectiveRootNote). A constant CV
+// of (72-60)/127 pushes the effective root from the default 60 up to exactly 72, matching
+// modulateNormalised's own "base + cv, in the parameter's own normalised range" contract -- so a
+// Note-On at 72 should now play at unity rate, exactly as MidiNoteTransposesRelativeToRootNote's
+// Note-On at 72 does against the UNMODULATED default root of 60.
+TEST_F(SamplerModuleTest, RootNoteCVModulatesEffectiveRootNote) {
+    constexpr int kFrames = 8192;
+    auto file = writeRampWav("sampler-rootnotecv-312.wav", kFrames);
+    ASSERT_TRUE(module->loadSampleFile(file));
+    level()->setValueNotifyingHost(1.0f);
+    ASSERT_EQ(rootNote()->get(), 60);
+
+    const float cvToShiftRootBy12 = 12.0f / 127.0f; // rootNoteParam's range is 0-127
+    auto midi = TestAudioHelpers::createNoteOnMidi(72);
+    auto out = render(*module, 1, 512, /*cvChannel*/ SamplerModule::kRootNoteCVCh, cvToShiftRootBy12, midi);
+
+    for (int i = SamplerModule::kFadeSamples; i < 512; ++i)
+        EXPECT_NEAR(out.getSample(0, i), rampValue(i, kFrames), 1e-4f)
+            << "frame " << i
+            << " -- Root Note CV should have shifted the effective root to 72, "
+               "making a Note-On at 72 play at unity rate";
     file.deleteFile();
 }
 

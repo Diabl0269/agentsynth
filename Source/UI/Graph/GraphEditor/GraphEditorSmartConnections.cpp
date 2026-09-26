@@ -57,7 +57,24 @@ bool GraphEditor::nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const 
 // GraphCanvasHost pure-virtual override — see refreshSmartSuggestions() above.
 void GraphEditor::seedInsertModifierSample() { smartConnections_.seedInsertModifierSample(); }
 
-// Port centre inside a bounds rect — must agree with ModuleComponent::getPortCenter.
+// FRO312: the drop-in-a-live-component check ModuleComponent::isInputJackKnobBound makes (a
+// ModulationTarget resolving to a VISIBLE slider) isn't available for a ghost preview, which has
+// no live component -- there is no tab-page/poly-visibility state to ask. "Has a bound parameter
+// at all" (parameterForModTarget != nullptr) is the same proxy GraphEditor::estimateModuleSize
+// uses for the same reason: it agrees with the live check for every module in practice (the only
+// divergence is a knob on a currently-hidden tab page, where the ghost estimate is very slightly
+// optimistic about how much the column has packed) and needs nothing but the processor itself.
+static bool jackIsKnobBoundForEstimate(ModuleBase* mb, int visibleIndex) {
+    for (const auto& t : mb->getModulationTargets())
+        if (mb->mapInputChannel(t.channelIndex).visibleJackIndex == visibleIndex &&
+            mb->parameterForModTarget(t) != nullptr)
+            return true;
+    return false;
+}
+
+// Port centre inside a bounds rect — must agree with ModuleComponent::getPortCenter (this ghost
+// preview ages the real thing before a component exists, so the two can never fully share code,
+// but every rule getPortCenter follows this mirrors, including FRO312's knob-jack packing).
 juce::Point<int> GraphEditor::estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
                                                  bool isInput, bool isMidi) {
     if (proc == nullptr)
@@ -79,8 +96,9 @@ juce::Point<int> GraphEditor::estimatePortCenter(juce::AudioProcessor* proc, juc
     if (proc->producesMidi())
         portOffset = 20;
 
+    auto* mb = dynamic_cast<ModuleBase*>(proc);
     int visible = 0;
-    if (auto* mb = dynamic_cast<ModuleBase*>(proc))
+    if (mb != nullptr)
         visible = isInput ? mb->getVisibleInputPortCount() : mb->getVisibleOutputPortCount();
     else
         visible = isInput ? proc->getTotalNumInputChannels() : proc->getTotalNumOutputChannels();
@@ -94,17 +112,40 @@ juce::Point<int> GraphEditor::estimatePortCenter(juce::AudioProcessor* proc, juc
     }
 
     if (isInput) {
+        // FRO312: a knob-bound jack draws no gutter dot -- its ghost preview cable lands on the
+        // (not-yet-real) knob's own estimated position instead. Since there is no live slider to
+        // ask, this falls back to the ring geometry directly: a default-radius rotary knob sits in
+        // the standard 3-per-row body grid, which for a drag ghost is close enough (the exact spot
+        // only matters once the drop lands and the real component measures itself).
+        if (mb != nullptr && jackIsKnobBoundForEstimate(mb, clamped))
+            return bounds.getCentre(); // approximate -- a real card resolves the exact knob anchor
+
+        int packedIndex = 0;
+        int drawnCount = 0;
+        if (mb != nullptr) {
+            for (int i = 0; i < visible; ++i) {
+                const bool bound = jackIsKnobBoundForEstimate(mb, i);
+                if (!bound) {
+                    if (i == clamped)
+                        packedIndex = drawnCount;
+                    ++drawnCount;
+                }
+            }
+        } else {
+            packedIndex = clamped;
+            drawnCount = visible;
+        }
+
         int columns = 1;
-        if (auto* mb = dynamic_cast<ModuleBase*>(proc))
-            if (mb->getVisibleInputPortCount() > 10 && bounds.getWidth() >= synth::LayoutUtil::kDoubleWidth)
-                columns = 2;
-        if (columns > 1 && visible > 0) {
-            const int rows = (visible + columns - 1) / columns;
-            const int col = clamped / rows;
-            const int row = clamped % rows;
+        if (drawnCount > 10 && bounds.getWidth() >= synth::LayoutUtil::kDoubleWidth)
+            columns = 2;
+        if (columns > 1 && drawnCount > 0) {
+            const int rows = (drawnCount + columns - 1) / columns;
+            const int col = packedIndex / rows;
+            const int row = packedIndex % rows;
             return {bounds.getX() + 10 + col * 100, bounds.getY() + headerHeight + portOffset + row * yStep + 20};
         }
-        return {bounds.getX() + 10, bounds.getY() + headerHeight + portOffset + clamped * yStep + 20};
+        return {bounds.getX() + 10, bounds.getY() + headerHeight + portOffset + packedIndex * yStep + 20};
     }
     return {bounds.getRight() - 10, bounds.getY() + headerHeight + portOffset + clamped * yStep + 20};
 }

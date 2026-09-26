@@ -11,10 +11,12 @@
 #include "Mixer/MasterSplice.h"
 #include "Modules/FX/ChorusModule.h"
 #include "Modules/FX/DelayModule.h"
+#include "Modules/LFOModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/VCAModule.h"
+#include <algorithm>
 
 // --- Double-click module title to rename (custom card titles) ----------------
 //
@@ -196,6 +198,173 @@ TEST_F(GraphEditorTest, UntrustedPatchDisplayNameIsCappedAndDisplayOnly) {
         }
     }
     EXPECT_EQ(chorusCount, 1) << "the title must not have changed which module type was created";
+}
+
+// --- Knob-landing cables survive a save/load round trip (FRO312) -------------
+//
+// FRO312 hides a knob-bound jack's gutter dot entirely and re-anchors its cable onto the knob's
+// own ring instead (GraphEditorKnobAnchorTests.cpp proves this for a LIVE graph). A saved project
+// reloads through the SAME applyJSONToGraph path a preset/session file uses, on brand-new node
+// ids and processor instances, so these prove the knob-landing survives that path too rather than
+// only ever being exercised against the graph that created the cable in the first place.
+
+namespace {
+/** First ModuleComponent in `editor` whose module is a T*, or nullptr. Needed after a JSON
+ *  reload: the reloaded nodes are new NodeIDs/processor instances, so findModuleComp's
+ *  by-processor-pointer lookup can't be seeded from the pre-reload objects. */
+template <typename T>
+ModuleComponent* findModuleCompByType(GraphEditor& editor, juce::AudioProcessorGraph& graph) {
+    for (auto* node : graph.getNodes())
+        if (dynamic_cast<T*>(node->getProcessor()) != nullptr)
+            return findModuleComp(editor, node->getProcessor());
+    return nullptr;
+}
+} // namespace
+
+TEST_F(GraphEditorTest, ModulationCablesLandOnOscillatorKnobsAfterASaveLoadRoundTrip) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+
+    auto& graph = engine.getGraph();
+    auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
+    auto oscMonoNode = graph.addNode(std::make_unique<OscillatorModule>()); // mono by default
+    auto oscPolyNode = graph.addNode(std::make_unique<OscillatorModule>());
+    setPolyParam(*oscPolyNode->getProcessor(), true);
+    editor.updateComponents();
+
+    // AttenuverterChain: LFO CV (ch0) -> mono Oscillator's Level CV (ch5) -- a knob-bound target.
+    engine.addModRouting(lfoNode->nodeID, 0, oscMonoNode->nodeID, 5);
+    // DirectCV: LFO CV (ch0) -> the POLY Oscillator's Pan CV (ch13), bypassing addModRouting
+    // entirely -- a different VisibleCable::Kind, so the round trip is proven for both landing
+    // paths. Poly mode specifically: OscillatorModule::isAutoPromotableModTarget always returns
+    // false there, so applyJSONToGraph's connections-array auto-promotion (which would otherwise
+    // wrap ANY mono raw connection into a mod target through an attenuverter on reload -- see
+    // AIStateMapper.cpp's "Auto-detect modulation targets") leaves this one a plain connection,
+    // same as before the round trip.
+    graph.addConnection({{lfoNode->nodeID, 0}, {oscPolyNode->nodeID, 13}});
+
+    const auto json = synth::AIStateMapper::graphToJSON(graph);
+
+    AudioEngine reloaded;
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, reloaded.getGraph(), /*clearExisting=*/true,
+                                                       /*trusted=*/true));
+
+    GraphEditor reloadedEditor(reloaded);
+    reloadedEditor.setSize(1200, 900);
+    reloadedEditor.updateComponents();
+
+    ModuleComponent* monoComp = nullptr;
+    ModuleComponent* polyComp = nullptr;
+    for (auto* node : reloaded.getGraph().getNodes()) {
+        auto* osc = dynamic_cast<OscillatorModule*>(node->getProcessor());
+        if (osc == nullptr)
+            continue;
+        auto* comp = findModuleComp(reloadedEditor, node->getProcessor());
+        bool isPoly = false;
+        for (auto* p : osc->getParameters())
+            if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(p))
+                if (boolParam->name == "Poly")
+                    isPoly = boolParam->get();
+        (isPoly ? polyComp : monoComp) = comp;
+    }
+    ASSERT_NE(monoComp, nullptr);
+    ASSERT_NE(polyComp, nullptr);
+    auto* monoOsc = dynamic_cast<OscillatorModule*>(monoComp->getModule());
+    auto* polyOsc = dynamic_cast<OscillatorModule*>(polyComp->getModule());
+    ASSERT_NE(monoOsc, nullptr);
+    ASSERT_NE(polyOsc, nullptr);
+
+    reloadedEditor.timerCallback(); // refreshes cachedModRoutings, which rebuildVisibleCables reads
+
+    bool foundLevel = false, foundPan = false;
+    for (const auto& c : reloadedEditor.buildVisibleCables()) {
+        ModuleComponent* comp = nullptr;
+        int rawChannel = -1;
+        if (c.destNodeId == monoComp->getNodeId().uid && c.destChannel == 5) {
+            foundLevel = true;
+            comp = monoComp;
+            rawChannel = 5;
+            EXPECT_EQ(c.kind, GraphEditor::VisibleCable::Kind::AttenuverterChain);
+        } else if (c.destNodeId == polyComp->getNodeId().uid && c.destChannel == 13) {
+            foundPan = true;
+            comp = polyComp;
+            rawChannel = 13;
+            EXPECT_EQ(c.kind, GraphEditor::VisibleCable::Kind::ModRouting) << "a plain DirectCV connection, not "
+                                                                              "routed through an attenuverter";
+        } else {
+            continue;
+        }
+
+        EXPECT_TRUE(c.landsOnKnob) << "channel " << c.destChannel << " has a bound knob to land on";
+        const auto anchor = comp->getModTargetKnobAnchor(rawChannel);
+        ASSERT_TRUE(anchor.has_value());
+        const auto expected = comp->getBounds().getPosition().toFloat() + *anchor;
+        EXPECT_NEAR(c.p2.x, expected.x, 0.5f);
+        EXPECT_NEAR(c.p2.y, expected.y, 0.5f);
+    }
+    EXPECT_TRUE(foundLevel) << "expected the reloaded mono Level AttenuverterChain routing (ch5)";
+    EXPECT_TRUE(foundPan) << "expected the reloaded poly Pan DirectCV routing (ch13)";
+
+    // Neither channel draws a gutter jack any more -- both resolve to a bound knob.
+    const auto monoDrawn = monoComp->drawnInputJackIndices();
+    EXPECT_EQ(std::find(monoDrawn.begin(), monoDrawn.end(), monoOsc->mapInputChannel(5).visibleJackIndex),
+              monoDrawn.end())
+        << "Level's jack must not be drawn -- its cable lands on the knob instead";
+    const auto polyDrawn = polyComp->drawnInputJackIndices();
+    EXPECT_EQ(std::find(polyDrawn.begin(), polyDrawn.end(), polyOsc->mapInputChannel(13).visibleJackIndex),
+              polyDrawn.end())
+        << "Pan's jack must not be drawn -- its cable lands on the knob instead";
+}
+
+// A hand-authored patch using the OLD raw channel number directly (rather than one derived from a
+// live graphToJSON snapshot) -- proving a project saved before FRO312 existed, whose "destPort" is
+// simply "5" (Oscillator's mono Level CV, unchanged since before FRO285), still lands on the Level
+// knob today instead of silently doing nothing because the jack it used to draw is now hidden.
+TEST_F(GraphEditorTest, APreFRO312PatchModulatingOscillatorMonoLevelOnRawChannelFiveLandsOnTheKnob) {
+    AudioEngine engine;
+    const juce::String patch = R"({
+        "nodes": [
+            {"id": 1, "type": "LFO"},
+            {"id": 2, "type": "Oscillator"}
+        ],
+        "connections": [],
+        "modulations": [
+            {"source": 1, "sourcePort": 0, "dest": 2, "destPort": 5, "amount": 1.0}
+        ]
+    })";
+    const auto json = juce::JSON::parse(patch);
+    ASSERT_TRUE(
+        synth::AIStateMapper::applyJSONToGraph(json, engine.getGraph(), /*clearExisting=*/true, /*trusted=*/true));
+
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+    editor.updateComponents();
+
+    auto* oscComp = findModuleCompByType<OscillatorModule>(editor, engine.getGraph());
+    ASSERT_NE(oscComp, nullptr);
+    auto* osc = dynamic_cast<OscillatorModule*>(oscComp->getModule());
+    ASSERT_NE(osc, nullptr);
+
+    editor.timerCallback();
+
+    bool found = false;
+    for (const auto& c : editor.buildVisibleCables()) {
+        if (c.destNodeId != oscComp->getNodeId().uid || c.destChannel != 5)
+            continue;
+        found = true;
+        EXPECT_TRUE(c.landsOnKnob);
+        const auto anchor = oscComp->getModTargetKnobAnchor(5);
+        ASSERT_TRUE(anchor.has_value());
+        const auto expected = oscComp->getBounds().getPosition().toFloat() + *anchor;
+        EXPECT_NEAR(c.p2.x, expected.x, 0.5f);
+        EXPECT_NEAR(c.p2.y, expected.y, 0.5f);
+    }
+    EXPECT_TRUE(found) << "the hand-authored raw-channel-5 modulation must still resolve to a cable";
+
+    const auto drawn = oscComp->drawnInputJackIndices();
+    EXPECT_EQ(std::find(drawn.begin(), drawn.end(), osc->mapInputChannel(5).visibleJackIndex), drawn.end())
+        << "old raw ch5 still maps to Level, whose jack is knob-bound and not drawn";
 }
 
 TEST_F(GraphEditorTest, AutoNumberingStillAppliesAlongsideCustomTitles) {

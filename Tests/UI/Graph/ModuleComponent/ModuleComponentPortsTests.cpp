@@ -4,6 +4,7 @@
 #include "ModuleComponentTestFixture.h"
 
 #include "Modules/ADSRModule.h"
+#include "Modules/FX/FlangerModule.h"
 #include "Modules/MathModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/SamplerModule.h"
@@ -11,6 +12,7 @@
 #include "Modules/VoiceMixerModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include <algorithm>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -108,14 +110,22 @@ TEST_F(ModuleComponentTest, VoiceMixerLastInputJackOverflowsBounds) {
 // regression guard for the reported overlap: the old layout started content at 30 + numInputs*20 + 10
 // while getPortCenter() puts the first jack at y=70, so a 7-input module drew its body straight over
 // the last jack.
+//
+// FRO312: "the lowest input jack" means the lowest DRAWN one -- the Sampler's CV jacks are
+// knob-bound (their gutter dots are hidden; see SamplerHasLoadButtonWaveformAndKnownHeight's own
+// FRO312 note), so getPortCenter() for the raw last VISIBLE index now returns a knob's landing
+// anchor deep in the body itself, not a gutter position — using it here would demand body content
+// start below content that has not been laid out yet.
 TEST_F(ModuleComponentTest, BodyContentClearsEveryPortLabel) {
     AudioEngine engine;
     GraphEditor editor(engine);
     SamplerModule processor;
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
-    // Lowest visible jack on either side, plus the half-height of its label box.
-    const int lastInputY = moduleComponent.getPortCenter(processor.getVisibleInputPortCount() - 1, true).y;
+    // Lowest DRAWN jack on either side, plus the half-height of its label box.
+    const auto drawnInputs = moduleComponent.drawnInputJackIndices();
+    ASSERT_FALSE(drawnInputs.empty());
+    const int lastInputY = moduleComponent.getPortCenter(drawnInputs.back(), true).y;
     const int lastOutputY = moduleComponent.getPortCenter(processor.getVisibleOutputPortCount() - 1, false).y;
     const int portsBottom = std::max(lastInputY, lastOutputY) + 10;
 
@@ -198,4 +208,82 @@ TEST_F(ModuleComponentTest, GetPortCenter_ClampsOutOfRangeToLastVisibleJack) {
 
     EXPECT_EQ(p_out_5.y, p_out_1.y)
         << "getPortCenter(5,false).y should clamp to getPortCenter(1,false).y (last visible output jack)";
+}
+
+// FRO312: VCA's CV jack drives Gain (see ModuleComponentModTargetTests.cpp's
+// VCAGainKnobIsTheCVJacksTarget), so it is knob-bound and must be excluded from the drawn/hit-test
+// list; the remaining jacks (Audio L/R) must still be there, packed with no gap.
+TEST_F(ModuleComponentTest, KnobBoundInputJackIsExcludedFromTheDrawnAndHitTestedList) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    VCAModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(2), editor);
+
+    int knobBoundIndex = -1;
+    for (int i = 0; i < processor.getVisibleInputPortCount(); ++i)
+        if (moduleComponent.isInputJackKnobBound(i))
+            knobBoundIndex = i;
+    ASSERT_GE(knobBoundIndex, 0) << "expected VCA's Gain-bound CV jack to be knob-bound";
+
+    const auto drawn = moduleComponent.drawnInputJackIndices();
+    EXPECT_EQ(std::find(drawn.begin(), drawn.end(), knobBoundIndex), drawn.end())
+        << "a knob-bound jack must not appear in the drawn/hit-tested list";
+    EXPECT_EQ((int)drawn.size(), processor.getVisibleInputPortCount() - 1);
+
+    // getPortForPoint must never report the knob-bound jack, wherever it would have been drawn.
+    const auto p = moduleComponent.getPortCenter(knobBoundIndex, true);
+    auto hit = moduleComponent.getPortForPoint(p);
+    EXPECT_FALSE(hit.has_value() && hit->isInput && hit->index == knobBoundIndex)
+        << "a knob-bound jack must never be hit-tested as a gutter port";
+}
+
+// FRO312: the remaining (drawn) input jacks pack with no gap where the hidden knob-bound jack used
+// to sit -- consecutive DRAWN rows are exactly one yStep (20px) apart, not spaced as if the hidden
+// jack still occupied a row.
+TEST_F(ModuleComponentTest, DrawnInputJacksPackWithNoGapAroundAHiddenKnobBoundJack) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    VCAModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(2), editor);
+
+    const auto drawn = moduleComponent.drawnInputJackIndices();
+    ASSERT_GE((int)drawn.size(), 2) << "need at least two drawn jacks to check spacing";
+
+    for (size_t i = 1; i < drawn.size(); ++i) {
+        const auto prev = moduleComponent.getPortCenter(drawn[i - 1], true);
+        const auto cur = moduleComponent.getPortCenter(drawn[i], true);
+        EXPECT_EQ(cur.y - prev.y, 20) << "consecutive drawn jacks (visible indices " << drawn[i - 1] << " and "
+                                      << drawn[i] << ") must pack with exactly one row step, no gap";
+    }
+}
+
+// FRO312: a card whose only inputs are knob-bound reserves no dead gutter space for them -- the
+// body content starts right after the last DRAWN jack, not the last visible one (getContentTopY,
+// private, is exercised indirectly here through where the first body child actually lands, exactly
+// like BodyContentClearsEveryPortLabel above does for the pre-FRO312 case).
+TEST_F(ModuleComponentTest, ContentTopClearsOnlyTheLastDrawnJackNotEveryVisibleOne) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    FlangerModule flanger;
+    ModuleComponent card(&flanger, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    const auto drawn = card.drawnInputJackIndices();
+    ASSERT_FALSE(drawn.empty()) << "Flanger has at least the Audio input jack, which is never knob-bound";
+    ASSERT_LT((int)drawn.size(), flanger.getVisibleInputPortCount())
+        << "expected at least one of Flanger's CV jacks (Rate/Depth/...) to be knob-bound";
+
+    // The topmost body child (first slider/combo/toggle) must sit no lower than just past the last
+    // DRAWN jack's label -- if content were still reserving a row for every hidden knob-bound jack,
+    // this would land noticeably further down.
+    const auto lastDrawn = card.getPortCenter(drawn.back(), true);
+    int topmostChildY = card.getHeight();
+    for (auto* child : card.getChildren()) {
+        if (dynamic_cast<juce::DrawableButton*>(child) != nullptr)
+            continue; // header buttons
+        if (!child->isVisible() || child->getBounds().isEmpty())
+            continue;
+        topmostChildY = std::min(topmostChildY, child->getY());
+    }
+    EXPECT_LE(topmostChildY, lastDrawn.y + 30)
+        << "body content starts too far below the last drawn jack -- dead space for a hidden jack?";
 }

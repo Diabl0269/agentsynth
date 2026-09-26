@@ -11,6 +11,7 @@
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/LFOModule.h"
+#include "Modules/ModuleBase.h"
 #include "Modules/VCAModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -161,4 +162,65 @@ TEST_F(ModuleComponentTest, PlainDragInTheKnobCentreStillMovesTheKnob) {
     f.gainKnob->mouseUp(makeModuleClickWithMods(*f.gainKnob, (centre + juce::Point<float>(0, 60)).toInt(), plain));
 
     EXPECT_NE(f.gainKnob->getValue(), gainBefore) << "an ordinary centre drag must not be stolen by the gesture";
+}
+
+// FRO312: the VCA's CV jack (drives Gain) is knob-bound and therefore hidden -- the ONLY way left
+// to pick up its landed cable and redirect it is a click on the landing dot, right on the knob
+// itself. A REAL synthesized mouseDown/drag/up delivered to the knob's CardKnobSlider, landing
+// on a second LFO's output jack, must wire that new source in exactly like a real (visible) input
+// jack always could -- proving the pickup gesture reaches the SAME GraphEditor::beginConnectionDrag/
+// dragConnection/endConnectionDrag machinery, not a bespoke stand-in.
+TEST_F(ModuleComponentTest, PickupGestureOnTheLandingDotStartsARealConnectionDrag) {
+    Fixture f;
+    ASSERT_NE(f.gainKnob, nullptr);
+    ASSERT_NE(f.vcaCard, nullptr);
+
+    auto& graph = f.engine.getGraph();
+    auto lfo2Node = graph.addNode(std::make_unique<LFOModule>());
+    f.editor->updateComponents();
+    sizeModuleComponents(*f.editor);
+    auto* lfo2Comp = findModuleComp(*f.editor, lfo2Node->getProcessor());
+    ASSERT_NE(lfo2Comp, nullptr);
+
+    // Resolved dynamically rather than hardcoded: VCA's exact raw channel numbering is Source/
+    // Modules territory and can shift independently of this test. Whatever channel Gain's
+    // ModulationTarget names, it must be knob-bound -- there is no gutter dot to hit-test any more.
+    auto* vcaBase = dynamic_cast<ModuleBase*>(f.vcaCard->getModule());
+    ASSERT_NE(vcaBase, nullptr);
+    int gainDestChannel = -1;
+    for (const auto& t : vcaBase->getModulationTargets())
+        if (t.paramId == "gain")
+            gainDestChannel = t.channelIndex;
+    ASSERT_GE(gainDestChannel, 0) << "expected a ModulationTarget driving VCA's Gain parameter";
+    // isInputJackKnobBound takes a VISIBLE jack index, not the raw channel -- VCA's Dual I/O split
+    // state can make the two differ (the CV jack's raw channel is fixed at 1, but its visible slot
+    // moves with the Audio L/R jack count), so this maps through mapInputChannel first, exactly as
+    // getPortCenter/drawnInputJackIndices do internally.
+    const int gainVisibleJack = vcaBase->mapInputChannel(gainDestChannel).visibleJackIndex;
+    EXPECT_TRUE(f.vcaCard->isInputJackKnobBound(gainVisibleJack))
+        << "the Gain CV jack (raw channel " << gainDestChannel << ", visible jack " << gainVisibleJack
+        << ") must be knob-bound for this test to be meaningful";
+
+    // The landing point, converted from the card's own local frame (getModTargetKnobAnchor's
+    // contract) into the knob's -- exactly what a real click on the dot looks like.
+    const auto cardLocalAnchor = f.vcaCard->getModTargetKnobAnchor(gainDestChannel);
+    ASSERT_TRUE(cardLocalAnchor.has_value());
+    const auto knobLocalDown = f.gainKnob->getLocalPoint(f.vcaCard, cardLocalAnchor->roundToInt());
+
+    const auto lfo2OutputGlobal = lfo2Comp->getBounds().getPosition() + lfo2Comp->getPortCenter(0, /*isInput*/ false);
+    const auto knobLocalDrop = f.gainKnob->getLocalPoint(nullptr, lfo2OutputGlobal);
+
+    const auto plain = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+    const int connectionsBefore = (int)graph.getConnections().size();
+
+    f.gainKnob->mouseDown(makeModuleClickWithMods(*f.gainKnob, knobLocalDown, plain));
+    f.gainKnob->mouseDrag(makeModuleClickWithMods(*f.gainKnob, knobLocalDrop, plain));
+    f.gainKnob->mouseUp(makeModuleClickWithMods(*f.gainKnob, knobLocalDrop, plain));
+
+    EXPECT_GT((int)graph.getConnections().size(), connectionsBefore)
+        << "the pickup gesture must start a real INPUT connection drag and wire the new source when dropped";
+
+    // The pre-existing LFO1 -> atten -> Gain routing is a separate thing entirely -- picking up
+    // the landed cable to redirect it is a NEW drag, never a teardown of what was already there.
+    EXPECT_NE(attenuverterAmountParam(graph, f.attenId), nullptr);
 }

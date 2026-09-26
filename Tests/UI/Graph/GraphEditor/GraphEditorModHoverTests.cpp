@@ -6,6 +6,7 @@
 #include "GraphEditorTestHelpers.h"
 #include "Modules/FX/FlangerModule.h"
 #include "Modules/LFOModule.h"
+#include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -155,6 +156,68 @@ TEST_F(GraphEditorTest, ModulatedKnobRendersToPngForVisualInspection) {
     if (pngPath == nullptr || juce::String(pngPath).isEmpty())
         GTEST_SKIP() << "set MOD_KNOB_PNG=<path> to write the rendered patch for visual inspection";
     juce::File outFile(pngPath);
+    outFile.deleteFile();
+    juce::FileOutputStream stream(outFile);
+    juce::PNGImageFormat().writeImageToStream(img, stream);
+}
+
+// FRO312/FRO313 visual check: an Oscillator card with an LFO cable landing on its Level knob --
+// the Level CV jack is knob-bound, so its gutter jack is hidden and the cable's own drop endpoint
+// is the pushed-out landing dot on the ring. Mirrors ModulatedKnobRendersToPngForVisualInspection's
+// own pattern (headless render, only written to disk when an env var names a path) but keyed off
+// AGENTSYNTH_SNAPSHOT_DIR/osc-card.png per this task's ask, rather than a per-test path var.
+TEST_F(GraphEditorTest, OscillatorLevelKnobLandingRendersToPngForVisualInspection) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+    synth::theme::AppLookAndFeel lf;
+    editor.setLookAndFeel(&lf);
+
+    auto lfoNode = engine.getGraph().addNode(std::make_unique<LFOModule>());
+    auto oscNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    editor.updateComponents();
+
+    ModuleComponent* lfoComp = nullptr;
+    ModuleComponent* oscComp = nullptr;
+    juce::Slider* levelKnob = nullptr;
+    if (auto* content = editor.getChildComponent(0))
+        for (auto* child : content->getChildren())
+            if (auto* mod = dynamic_cast<ModuleComponent*>(child)) {
+                if (mod->getModule() == lfoNode->getProcessor())
+                    lfoComp = mod;
+                if (mod->getModule() == oscNode->getProcessor()) {
+                    oscComp = mod;
+                    for (auto* c : mod->getChildren())
+                        if (auto* s = dynamic_cast<juce::Slider*>(c))
+                            if (s->getComponentID() == "Level")
+                                levelKnob = s;
+                }
+            }
+    ASSERT_NE(lfoComp, nullptr);
+    ASSERT_NE(oscComp, nullptr);
+    ASSERT_NE(levelKnob, nullptr);
+    lfoComp->setTopLeftPosition(0, 0);
+    oscComp->setTopLeftPosition(400, 0);
+
+    // Level's CV jack is knob-bound (raw channel 5, mono) -- confirms the gutter jack is really
+    // hidden for this test to be exercising what it claims to.
+    EXPECT_TRUE(oscComp->isInputJackKnobBound(5));
+
+    const auto knobPoint = oscComp->getBounds().getPosition() + levelKnob->getBounds().getCentre();
+    editor.beginConnectionDrag(lfoComp, 0, /*isInput*/ false, /*isMidi*/ false, {0, 0});
+    editor.dragConnection(knobPoint);
+    editor.endConnectionDrag(knobPoint);
+    editor.timerCallback();
+
+    juce::Image img(juce::Image::ARGB, 800, 420, true);
+    juce::Graphics g(img);
+    EXPECT_NO_THROW(editor.paintEntireComponent(g, true));
+    editor.setLookAndFeel(nullptr);
+
+    const char* snapshotDir = std::getenv("AGENTSYNTH_SNAPSHOT_DIR");
+    if (snapshotDir == nullptr || juce::String(snapshotDir).isEmpty())
+        GTEST_SKIP() << "set AGENTSYNTH_SNAPSHOT_DIR=<dir> to write osc-card.png for visual inspection";
+    juce::File outFile = juce::File(snapshotDir).getChildFile("osc-card.png");
     outFile.deleteFile();
     juce::FileOutputStream stream(outFile);
     juce::PNGImageFormat().writeImageToStream(img, stream);

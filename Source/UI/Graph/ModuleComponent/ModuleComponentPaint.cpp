@@ -166,10 +166,8 @@ void ModuleComponent::paint(juce::Graphics& g) {
     juce::Colour audioJackColour = (lf != nullptr) ? lf->getTheme().colors.audioWire : juce::Colours::white;
     juce::Colour labelColour = (lf != nullptr) ? lf->getTheme().colors.textMuted : juce::Colours::white;
 
-    int numIns = module->getTotalNumInputChannels();
     int numOuts = module->getTotalNumOutputChannels();
     if (auto* mb = dynamic_cast<ModuleBase*>(module)) {
-        numIns = mb->getVisibleInputPortCount();
         numOuts = mb->getVisibleOutputPortCount();
     }
     bool midiOutDrawn = false; // Reintroduced
@@ -190,8 +188,11 @@ void ModuleComponent::paint(juce::Graphics& g) {
         g.drawText("Midi In", p.x + 10, p.y - 5, 60, 10, juce::Justification::left, false);
     }
 
-    // Inputs
-    for (int i = 0; i < numIns; ++i) {
+    // Inputs -- FRO312: a knob-bound jack (isInputJackKnobBound) draws no gutter dot/label at all;
+    // its cable lands on the knob's own ring instead (see the landing-dot paint in
+    // GraphEditorCables.cpp's paintOverChildren). drawnInputJackIndices() is the single list of
+    // which raw indices remain.
+    for (int i : drawnInputJackIndices()) {
         auto p = getPortCenter(i, true);
         g.setColour(jackAccentColour);
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
@@ -476,6 +477,27 @@ int ModuleComponent::sliderIndexForModTarget(const ModulationTarget& target) con
 // FRO288: see the doc comment on the declaration (ModuleComponent.h) -- this is the ONE place a
 // cable's landing point is computed, shared by GraphEditor's cable re-anchor pass
 // (GraphEditorModHover.cpp) so a click near the drawn ring always hits the cable that lands there.
+// FRO313: the anchor sits just OUTSIDE the ring's own arc rather than on it -- at the same
+// rotary-start angle (norm 0.0f, lower-left), radius pushed out by half the ring's stroke width
+// (clearing the drawn arc itself) + half the landing dot's own diameter (so the dot's edge, not
+// its centre, clears the arc) + a 2px gap, so the dot and the arc never visually overlap. Falls
+// back to the default theme's metrics when there is no themed LnF (headless tests) -- the same
+// guarded-cast pattern paint() uses.
+// FRO313: half the ring's own stroke width (clears the drawn arc itself) + half the landing dot's
+// own diameter (so the dot's EDGE, not its centre, clears the arc) + a 2px gap -- the amount the
+// landing radius is pushed OUTWARD from the ring's plain radius. A free function of the LnF alone
+// (never the knob's bounds), so both a CARD-local caller (getModTargetKnobAnchor) and a
+// KNOB-local one (wantsCablePickupGestureFor's hit-test, which compares against a MouseEvent
+// delivered to the knob itself, not the card) can add it to whichever radius they already have in
+// their own frame, rather than only being expressible in one specific frame.
+float ModuleComponent::knobLandingRadiusOffset() const {
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    static const synth::theme::Metrics fallbackMetrics{};
+    const float ringStroke = (lf != nullptr) ? lf->getTheme().metrics.knobRingWidth : fallbackMetrics.knobRingWidth;
+    constexpr float kLandingGap = 2.0f;
+    return ringStroke * 0.5f + kKnobLandingDotDiameter * 0.5f + kLandingGap;
+}
+
 std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int destChannel) const {
     auto* mb = dynamic_cast<ModuleBase*>(module);
     if (mb == nullptr)
@@ -486,12 +508,57 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
         const int si = sliderIndexForModTarget(target);
         if (si < 0)
             return std::nullopt;
+        // CARD-local: sliders[si]->getBounds() is relative to this card (its parent), matching
+        // this method's own CARD-local contract (see the declaration's comment).
         const auto sliderBounds = sliders[si]->getBounds().toFloat();
         const auto centre = modRingCentreFor(sliderBounds);
-        const float radius = modRingRadiusFor(sliderBounds);
-        return modRingPointForNorm(centre, radius, 0.0f);
+        const float landingRadius = modRingRadiusFor(sliderBounds) + knobLandingRadiusOffset();
+        return modRingPointForNorm(centre, landingRadius, 0.0f);
     }
     return std::nullopt;
+}
+
+// FRO312: true when visible input jack `index` is a ModulationTarget whose knob resolves on this
+// card RIGHT NOW -- recomputed live off getModulationTargets()/mapInputChannel()/
+// sliderIndexForModTarget() every call (poly toggle, Dual I/O and tab pages all change what
+// resolves), never cached across a layout. A module with no ModulationTarget mapping to `index`
+// (an audio/pitch/gate/MIDI jack, or a CV jack with no bound knob, e.g. Oscillator's Pitch CV) is
+// never knob-bound, matching the pre-FRO312 gutter behaviour exactly.
+bool ModuleComponent::isInputJackKnobBound(int index) const { return knobAnchorForVisibleInputJack(index).has_value(); }
+
+// Shared by isInputJackKnobBound (the "is it hidden" question) and getPortCenter's redirect
+// branch (the "where does it land" question) so the two can never resolve a different target for
+// the same visible index -- see the declaration's comment (ModuleComponent.h).
+std::optional<juce::Point<float>> ModuleComponent::knobAnchorForVisibleInputJack(int index) const {
+    auto* mb = dynamic_cast<ModuleBase*>(module);
+    if (mb == nullptr)
+        return std::nullopt;
+    for (const auto& target : mb->getModulationTargets()) {
+        if (mb->mapInputChannel(target.channelIndex).visibleJackIndex != index)
+            continue;
+        return getModTargetKnobAnchor(target.channelIndex);
+    }
+    return std::nullopt;
+}
+
+// FRO312: paint()'s input loop, getPortForPoint()'s input loop, and getInputPortColumns() all read
+// THIS list rather than re-deriving "which jacks are hidden" each their own way, so they can never
+// disagree about what's actually on screen. Never cached across a call -- isInputJackKnobBound
+// recomputes live off current slider visibility every time (poly toggle, Dual I/O, tab pages).
+std::vector<int> ModuleComponent::drawnInputJackIndices() const {
+    std::vector<int> drawn;
+    if (module == nullptr)
+        return drawn;
+    int visible = 0;
+    if (auto* mb = dynamic_cast<ModuleBase*>(module))
+        visible = mb->getVisibleInputPortCount();
+    else
+        visible = module->getTotalNumInputChannels(); // no ModuleBase (e.g. Audio Input/Output) -- never knob-bound
+    drawn.reserve(visible);
+    for (int i = 0; i < visible; ++i)
+        if (!isInputJackKnobBound(i))
+            drawn.push_back(i);
+    return drawn;
 }
 
 bool ModuleComponent::setModDropTargetChannel(int channelIndex) {
@@ -569,6 +636,27 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
     int clamped = (visible > 0) ? juce::jlimit(0, visible - 1, index) : 0;
 
     if (isInput) {
+        // FRO312: a knob-bound jack (its ModulationTarget resolves to a visible knob on this card)
+        // draws no gutter dot at all -- a cable/routing that names it by this same visible index
+        // (portPos in GraphEditorCables.cpp calls this exact function) lands on the knob's own
+        // ring-landing anchor instead. This is the ONE place that redirect happens, so every
+        // caller -- paint(), getPortForPoint(), and every cable kind's endpoint resolution -- gets
+        // it for free without knowing knob-hiding exists.
+        if (auto anchor = knobAnchorForVisibleInputJack(clamped))
+            return anchor->roundToInt();
+
+        // Not knob-bound: its drawn ROW is its rank among the other non-knob-bound jacks, not its
+        // raw visible index -- a knob-bound jack ahead of it in the index order takes no row, so
+        // the column packs with no gap where that jack would have sat.
+        const auto drawn = drawnInputJackIndices();
+        int packedIndex = 0;
+        for (int d : drawn) {
+            if (d == clamped)
+                break;
+            ++packedIndex;
+        }
+        const int drawnCount = (int)drawn.size();
+
         // Multi-column gutter: a 16-jack stack in one column costs ~390px of card height before a
         // single control is placed. Both columns stay on the LEFT: inputs-left / outputs-right is
         // the convention that makes signal flow read left to right, and splitting inputs across
@@ -576,13 +664,13 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
         // partly covered by its own module while you drag a cable at it is solved by dropping
         // straight onto the destination knob instead (see GraphEditor's mod-drop).
         const int columns = getInputPortColumns();
-        if (columns > 1 && visible > 0) {
-            const int rows = (visible + columns - 1) / columns;
-            const int col = clamped / rows;
-            const int row = clamped % rows;
+        if (columns > 1 && drawnCount > 0) {
+            const int rows = (drawnCount + columns - 1) / columns;
+            const int col = packedIndex / rows;
+            const int row = packedIndex % rows;
             return {10 + col * kPortColumnStride, headerHeight + portOffset + row * yStep + 20};
         }
-        return {10, headerHeight + portOffset + clamped * yStep + 20}; // Left side, apply offset
+        return {10, headerHeight + portOffset + packedIndex * yStep + 20}; // Left side, apply offset
     } else {
         // No additional midiOffset for outputs here, as MIDI out is now fixed.
         return {getWidth() - 10, headerHeight + portOffset + clamped * yStep + 20}; // Right side, apply offset
@@ -597,10 +685,8 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
         return std::nullopt; // Users cannot manually drag connections from the smart wire knob
     }
 
-    int numIns = module->getTotalNumInputChannels();
     int numOuts = module->getTotalNumOutputChannels();
     if (auto* mb = dynamic_cast<ModuleBase*>(module)) {
-        numIns = mb->getVisibleInputPortCount();
         numOuts = mb->getVisibleOutputPortCount();
     }
 
@@ -624,8 +710,10 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
         }
     }
 
-    // Inputs
-    for (int i = 0; i < numIns; ++i) {
+    // Inputs -- FRO312: a knob-bound jack is never hit-tested here at all (it draws no gutter dot
+    // to click); the knob claims that click via CardKnobSlider's own gesture wiring instead
+    // (wireCardKnobModAmountGesture / wantsCablePickupGestureFor, ModuleComponent.cpp).
+    for (int i : drawnInputJackIndices()) {
         auto p = getPortCenter(i, true);
         if (localPoint.getDistanceFrom(p) < 10) {
             return Port{{p.x - 5, p.y - 5, 10, 10}, i, true, false};
