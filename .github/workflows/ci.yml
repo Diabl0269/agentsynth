@@ -96,6 +96,14 @@ jobs:
     # the cache-check unit tests, which are equally a PR-time concern.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    env:
+      # FRO220/FRO221: the runner image's default locale is UTF-8, under which awk aborts on the
+      # first non-ASCII byte it meets (an em dash in a comment) and a text-scanning guard silently
+      # examines a fraction of the tree while still exiting 0 -- check-function-sizes.sh scanned
+      # 45 percent of it that way for three days. The affected scripts now export LC_ALL=C
+      # themselves; this pins the whole job so a guard added later cannot inherit the image's
+      # locale by accident. C, not C.UTF-8: the guards' regexes are written for byte semantics.
+      LC_ALL: C
     steps:
     - uses: actions/checkout@v6
     - name: Set up Python
