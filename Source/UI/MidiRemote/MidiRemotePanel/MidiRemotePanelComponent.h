@@ -247,7 +247,7 @@ private:
 
     // FRO134
     void showPrompt(const juce::String& title, const juce::String& message, bool cancellable,
-                    std::function<void(bool ok)> done);
+                    std::function<void(bool ok)> done, const juce::String& confirmLabel = "Next");
     void showTemplatesMenu(juce::Component& anchor);
     void showMoreMenu(juce::Component& anchor);
     void showImportChooser();

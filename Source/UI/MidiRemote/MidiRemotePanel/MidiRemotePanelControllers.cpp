@@ -147,13 +147,16 @@ void MidiRemotePanelComponent::showImportChooser() {
 void MidiRemotePanelComponent::importControllerFile(const juce::File& file) {
     switch (importControllerFileNow(file, false)) {
     case ImportOutcome::conflict:
-        showPrompt("Import controller",
-                   "A controller with this ID is already set up on this machine. Replace it with the imported "
-                   "one? Its assignments in your projects stay linked.",
-                   true, [this, file](bool ok) {
-                       if (ok)
-                           importControllerFileNow(file, true);
-                   });
+        showPrompt(
+            "Import controller",
+            "A controller with this ID is already set up on this machine. Replace it with the imported "
+            "one? Its assignments in your projects stay linked.",
+            true,
+            [this, file](bool ok) {
+                if (ok)
+                    importControllerFileNow(file, true);
+            },
+            "Replace");
         break;
     case ImportOutcome::invalid:
         showPrompt("Import controller", "That file isn't a valid controller profile.", false, {});

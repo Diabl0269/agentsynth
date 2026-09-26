@@ -607,22 +607,26 @@ void MidiRemotePanelComponent::handleDeleteControlsRequested(const std::vector<j
                   juce::String(assignmentCount) + (assignmentCount == 1 ? " assignment." : " assignments.");
 
     juce::Component::SafePointer<MidiRemotePanelComponent> safeThis(this);
-    showPrompt("Delete controls", message, true, [safeThis, profileId, controlIds](bool ok) {
-        if (!ok || safeThis == nullptr || safeThis->learnController_ == nullptr)
-            return;
-        safeThis->learnController_->deleteControls(profileId, controlIds);
-        for (const auto& id : controlIds)
-            if (safeThis->selectedControlId_ == id)
-                safeThis->selectedControlId_.clear();
-        safeThis->selectedControlIds_.erase(
-            std::remove_if(safeThis->selectedControlIds_.begin(), safeThis->selectedControlIds_.end(),
-                           [&](const juce::String& id) {
-                               return std::find(controlIds.begin(), controlIds.end(), id) != controlIds.end();
-                           }),
-            safeThis->selectedControlIds_.end());
-        safeThis->refreshSurfaceForSelectedProfile();
-        safeThis->refreshInspectorForSelection();
-    });
+    const juce::String title = controlIds.size() == 1u ? "Delete control" : "Delete controls";
+    showPrompt(
+        title, message, true,
+        [safeThis, profileId, controlIds](bool ok) {
+            if (!ok || safeThis == nullptr || safeThis->learnController_ == nullptr)
+                return;
+            safeThis->learnController_->deleteControls(profileId, controlIds);
+            for (const auto& id : controlIds)
+                if (safeThis->selectedControlId_ == id)
+                    safeThis->selectedControlId_.clear();
+            safeThis->selectedControlIds_.erase(
+                std::remove_if(safeThis->selectedControlIds_.begin(), safeThis->selectedControlIds_.end(),
+                               [&](const juce::String& id) {
+                                   return std::find(controlIds.begin(), controlIds.end(), id) != controlIds.end();
+                               }),
+                safeThis->selectedControlIds_.end());
+            safeThis->refreshSurfaceForSelectedProfile();
+            safeThis->refreshInspectorForSelection();
+        },
+        "Delete");
 }
 
 void MidiRemotePanelComponent::handleForgetRequested(const juce::String& assignmentId) {
