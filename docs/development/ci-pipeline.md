@@ -160,5 +160,20 @@ CI and silently did nothing on macOS.
 
 - **Unity builds** (`CMAKE_UNITY_BUILD`) — incompatible with JUCE: Objective-C++ `.mm` files cannot
   be merged into C++ unity translation units.
-- **Precompiled headers** — JUCE module `.cpp` files guard against being pre-included, and on macOS
-  `.mm` files also require Objective-C++ mode, which conflicts with a C++ PCH.
+- **Precompiled headers** — rejected twice. The first reason given, that JUCE module `.cpp` files
+  refuse to be pre-included and `.mm` files need Objective-C++, turned out to be solvable. The second
+  attempt (FRO250, 2026-09-26) got past it: `SKIP_PRECOMPILE_HEADERS` on the JUCE unity files, a
+  PCH limited to C++ and Objective-C++ (`$<COMPILE_LANGUAGE:CXX,OBJCXX>`, since the plugin also
+  compiles C files), and `-Xclang -fno-pch-timestamp` plus ccache `sloppiness=pch_defines` so ccache
+  can cache it. It still needs work for `.mm` files built with `-fobjc-arc` (clang refuses a PCH
+  whose ARC setting differs). Measured locally on macOS (Release, every target, empty ccache
+  directory each time):
+  - The cold build was about 36% faster (367 s down to 234 s).
+  - A second build at the same path hit ccache 100% of the time, so the PCH is byte-stable.
+  - **The ccache grew from 124 MB to 295 MB**, 2.4 times as large, because each target's PCH is about
+    55 MB before compression.
+
+  That growth decides it: the macOS job's cache already holds about 461 MB under a `max_size` of
+  512 MB, and the repo's Actions cache budget leaves no room to raise it. The cache would evict
+  entries mid-build and every build would get slower. Worth revisiting only if the macOS cache
+  gets room of its own, or with a PCH small enough to add less than about 50 MB.
