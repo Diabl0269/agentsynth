@@ -15,7 +15,7 @@ on:
     types: [opened, synchronize, reopened, labeled]
     # NOTE: GitHub Actions does not support YAML anchors, so this list is duplicated verbatim
     # under `push:` below, AND (inverted, as `paths-ignore:`) in ci-passthrough.yml, which posts
-    # a synthetic success under each of this workflow's four required job names when a PR's
+    # a synthetic success under each of this workflow's three required job names when a PR's
     # changes don't match this filter (FRO170 — see that file's header for why). Keep all three
     # in sync.
     paths:
@@ -598,6 +598,16 @@ jobs:
 
   build-and-test-windows:
     name: Build and Test (Windows)
+    # Push-to-main and workflow_dispatch only, not pull requests (decision 2026-09-26, FRO242/FRO54):
+    # this was the slowest required check on every PR -- 13m46s of build warm, 47m11s when a PR
+    # touched MainComponent.h (run 36174228657) against 6-9 min for the other two platforms -- and
+    # FRO242 established it could never fail on a test failure anyway (the `find -exec` below
+    # swallows Tests.exe's exit status), so it gated nothing for 14-47 min per PR. It still builds
+    # and runs the suite on every push to main, so a Windows-only breakage surfaces on main's run
+    # and in the release build (build-artifacts.yml) rather than never; it is no longer a
+    # required status check (branch protection lists five). Making the exit status honest, and
+    # dealing with the 20 paint/render tests it currently hides, is FRO242.
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     # See build-and-test's permissions comment: actions: write is only for the cache-pruning step.
     permissions:
@@ -727,9 +737,10 @@ jobs:
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
         prune "${{ runner.os }}-deps3-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
-    # Pull-request only — a push run seeds the cache (see the note above the `lint` job).
+    # Runs on every push to main (this job no longer runs on pull requests, see its `if:`), so main
+    # keeps a Windows test signal. Advisory until FRO242: GNU find's exit status never reflects the
+    # command run by -exec, so a failing Tests.exe cannot fail this step.
     - name: Run Tests
-      if: github.event_name == 'pull_request'
       shell: bash
       run: |
         find build -name "Tests.exe" -exec {} \;
