@@ -141,13 +141,20 @@ A headless `MainComponent` built through `newPatchForTest()` has no `getAppPrope
 seam — it hits the real, shared on-disk "Agent Synth" `ApplicationProperties` file, so a persisted
 setting leaks into every other such test.
 
-The fix is a local RAII guard per affected test that opens the same `ApplicationProperties`/
-`Options` and `removeValue()`s only the key or keys that suite touches, in both its constructor and
-destructor, so it is safe regardless of test order or a prior crashed run.
-`ChannelFlowTestFixture.h`'s `ChannelFlowTest::resetKeys()` and `BottomDockActiveTabResetGuard.h` are
-the two implementations; `BottomDockActiveTabResetGuardMDT` resets `"bottomDockActiveTab"` so a
-PNG-snapshot test's Mixer-tab switch cannot leak into a later test's "Timeline is the default"
-assumption.
+Two RAII shapes exist, both opening the file through `Tests/TestSettingsHelpers.h`'s
+`synth::test::userSettingsTestOptions()` — the production `synth::userSettingsOptions()`, never a
+re-hardcoded copy (FRO58 replaced seven byte-identical private copies with that header):
+
+- **Save and restore** — `synth::test::PersistedKeysGuard` (same header) snapshots the named keys on
+  construction and puts the developer's exact values back on destruction, including "the key did
+  not exist". Use it whenever the test writes a key a developer legitimately has their own value
+  for (snap division, panel visibility, detached window bounds).
+- **Hard reset to the documented default** — `ChannelFlowTestFixture.h`'s
+  `ChannelFlowTest::resetKeys()` and `BottomDockActiveTabResetGuard.h`, which `removeValue()` or
+  fix only the keys that suite touches, in both constructor and destructor, so a prior crashed run
+  cannot leak either. `BottomDockActiveTabResetGuardMDT` resets `"bottomDockActiveTab"` so a
+  PNG-snapshot test's Mixer-tab switch cannot leak into a later test's "Timeline is the default"
+  assumption.
 
 This matters beyond one process: concurrent suites in sibling worktrees share that same settings
 file, which is why [`local-ci.md`](local-ci.md#running-suites-in-parallel) says to serialise them.
