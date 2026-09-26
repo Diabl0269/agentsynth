@@ -116,7 +116,10 @@ TEST(FrequencyResponseTest, PaintSmoke) {
     FrequencyResponseComponent comp(filter);
     comp.setBounds(0, 0, 400, 200);
 
-    juce::Image img(juce::Image::ARGB, 400, 200, true);
+    // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
+    // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
+    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    juce::Image img(juce::Image::ARGB, 400, 200, true, juce::SoftwareImageType());
     juce::Graphics g(img);
 
     // Must not crash.
@@ -174,7 +177,7 @@ TEST(FrequencyResponseTest, LowpassRollOffDoesNotStrokeBottomEdge) {
     comp.setBounds(0, 0, W, H);
     comp.timerCallback(); // recompute magnitudes from defaults (LPF24 @ 440 Hz)
 
-    juce::Image img(juce::Image::ARGB, W, H, true);
+    juce::Image img(juce::Image::ARGB, W, H, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     comp.paint(g);
 

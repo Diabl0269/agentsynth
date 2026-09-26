@@ -593,7 +593,10 @@ TEST(TimelinePanelDividerTest, AColumnDividerSeparatesTheHeaderColumnFromTheLane
 
     // Painted, not a child component: the panel draws it, so nothing has to be laid out for it and
     // no sidebar can forget to.
-    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true);
+    // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
+    // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
+    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true, juce::SoftwareImageType());
     juce::Graphics g(image);
     EXPECT_NO_THROW(panel.paintEntireComponent(g, true));
 
@@ -619,7 +622,7 @@ TEST(TimelinePanelDividerTest, MarkerStemsPaintThroughTheLanesAndFollowTheDoc) {
     panel.getViewState().firstVisibleBeat = 0.0;
     doc.addTrack(synth::TrackKind::Midi, "Track 1");
 
-    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true);
+    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true, juce::SoftwareImageType());
     juce::Graphics g(image);
     EXPECT_NO_THROW(panel.paintEntireComponent(g, true)) << "no markers: nothing to draw, no crash";
 
@@ -655,7 +658,7 @@ TEST(TimelinePanelGridDrawingTest, SnapOffKeepsTheSubdivisionLinesDrawn) {
 
     // Paint both ways: the point is that it does not throw and the panel keeps drawing. The pure
     // assertion above is what actually pins which helper the paint site must use.
-    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true);
+    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true, juce::SoftwareImageType());
     juce::Graphics g(image);
     EXPECT_NO_THROW(panel.paintEntireComponent(g, true));
     view.snapEnabled = true;
@@ -702,7 +705,7 @@ TEST(TimelineRulerMarkerTest, PanelPaintsMarkersWithNoTimerAndTheAddMarkerMenuEn
     EXPECT_EQ(doc.getMarkers()[1].text, "Marker 2");
 
     // Paint smoke: the flags are drawn by the ruler's own paint(), no timer involved.
-    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true);
+    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true, juce::SoftwareImageType());
     juce::Graphics g(image);
     EXPECT_NO_THROW(panel.paintEntireComponent(g, true));
 

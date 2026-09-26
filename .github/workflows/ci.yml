@@ -826,8 +826,14 @@ jobs:
         prune "${{ runner.os }}-deps3-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
     # Pull-request only — a push run seeds the cache (see the note above the `lint` job).
+    # Runs Tests.exe directly (FRO242): this used to be `find build -name Tests.exe -exec {} \;`,
+    # whose exit status is find's own, never the test binary's, so failures were invisible and a
+    # missing binary passed silently.
     - name: Run Tests
       if: github.event_name == 'pull_request'
       shell: bash
       run: |
-        find build -name "Tests.exe" -exec {} \;
+        set -euo pipefail
+        exe=$(find build -name Tests.exe | head -n 1)
+        test -n "$exe" || { echo "::error::Tests.exe not found under build/"; exit 1; }
+        "$exe"

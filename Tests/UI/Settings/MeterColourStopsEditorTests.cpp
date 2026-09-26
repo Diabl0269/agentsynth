@@ -440,7 +440,10 @@ TEST_F(MeterColourStopsEditorTest, RendersToPngForVisualInspection) {
     editor.setStops(MeterColourStops::fromTheme(synth::theme::makeObsidian().colors));
     editor.selectForTest(2);
 
-    juce::Image img(juce::Image::ARGB, editor.getWidth(), editor.getHeight(), true);
+    // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
+    // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
+    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    juce::Image img(juce::Image::ARGB, editor.getWidth(), editor.getHeight(), true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(editor.paint(g));
 

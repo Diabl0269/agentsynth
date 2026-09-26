@@ -296,7 +296,10 @@ TEST(ModuleLibraryPaintSmoke, PaintWithNoHoverNoCrash) {
     ModuleLibraryComponent comp;
     comp.setSize(200, 600);
 
-    juce::Image img(juce::Image::ARGB, 200, 600, true);
+    // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
+    // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
+    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    juce::Image img(juce::Image::ARGB, 200, 600, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(comp.paint(g));
 
@@ -317,7 +320,7 @@ TEST(ModuleLibraryPaintSmoke, PaintWithHoveredIndexNoCrash) {
     simulateMouseMoveAt(comp, firstDraggableRowY(comp));
     ASSERT_GE(comp.getHoveredIndex(), 0);
 
-    juce::Image img(juce::Image::ARGB, 200, 600, true);
+    juce::Image img(juce::Image::ARGB, 200, 600, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     // This exercises the highlight-fill branch in paint().
     EXPECT_NO_THROW(comp.paint(g));
@@ -331,7 +334,7 @@ TEST(ModuleLibraryPaintSmoke, PaintAfterMouseExitNoCrash) {
     simulateMouseExit(comp);
     ASSERT_EQ(comp.getHoveredIndex(), -1);
 
-    juce::Image img(juce::Image::ARGB, 200, 600, true);
+    juce::Image img(juce::Image::ARGB, 200, 600, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(comp.paint(g));
 }

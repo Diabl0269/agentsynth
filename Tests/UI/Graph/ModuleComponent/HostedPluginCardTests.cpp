@@ -827,7 +827,10 @@ TEST(HostedPluginCardTest, CardRendersToPngForVisualInspection) {
     ASSERT_GT(card->getWidth(), 0);
     ASSERT_GT(card->getHeight(), 0);
 
-    juce::Image image(juce::Image::ARGB, card->getWidth(), card->getHeight(), true);
+    // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
+    // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
+    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    juce::Image image(juce::Image::ARGB, card->getWidth(), card->getHeight(), true, juce::SoftwareImageType());
     juce::Graphics g(image);
     EXPECT_NO_THROW(card->paintEntireComponent(g, true));
 

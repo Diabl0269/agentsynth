@@ -119,6 +119,14 @@ eyes on it — `ModuleComponentLayoutTests.cpp`'s `AdsrCardRendersToPngForVisual
 `CurveEditorPaintTest`'s opt-in `CURVE_EDITOR_SNAPSHOT` dump are opt-in, env-gated versions of the
 same pattern.
 
+**A test that paints and then reads pixels back creates its image with `juce::SoftwareImageType()`**
+— `juce::Image img(juce::Image::ARGB, w, h, true, juce::SoftwareImageType());`. The default
+(native) image type is Direct2D-backed on Windows, and on the GPU-less Windows CI runner a
+`getPixelAt()` on it reads all zeros, so the assertion fails there only (22 tests did until
+FRO242). `createComponentSnapshot` also builds a native image, so sample pixels from your own
+software image painted with `paintEntireComponent`, not from a snapshot; a snapshot is fine for
+"doesn't crash / has a size" smoke checks and PNG dumps viewed on macOS.
+
 ## AppProperties isolation
 
 Tests that read or write `ApplicationProperties` use an isolated temporary directory so they cannot

@@ -34,7 +34,10 @@ bool hasOpaquePixel(const juce::Image& img) {
 
 void paintInto(EQCurveComponent& comp, int w = kCurveWidth, int h = kCurveHeight) {
     comp.setBounds(0, 0, w, h);
-    juce::Image img(juce::Image::ARGB, std::max(1, w), std::max(1, h), true);
+    // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
+    // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
+    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    juce::Image img(juce::Image::ARGB, std::max(1, w), std::max(1, h), true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(comp.paint(g));
     if (w > 0 && h > 0)
@@ -518,13 +521,13 @@ TEST(EQCurveTest, PaintAtDegenerateSizesDoesNotCrash) {
 
     // Zero size: paint must bail out rather than divide by a zero width/height.
     comp.setBounds(0, 0, 0, 0);
-    juce::Image tiny(juce::Image::ARGB, 1, 1, true);
+    juce::Image tiny(juce::Image::ARGB, 1, 1, true, juce::SoftwareImageType());
     juce::Graphics gTiny(tiny);
     EXPECT_NO_THROW(comp.paint(gTiny));
 
     // Narrower than the readout/hint threshold: text is skipped, nothing overflows.
     comp.setBounds(0, 0, 20, 40);
-    juce::Image narrow(juce::Image::ARGB, 20, 40, true);
+    juce::Image narrow(juce::Image::ARGB, 20, 40, true, juce::SoftwareImageType());
     juce::Graphics gNarrow(narrow);
     EXPECT_NO_THROW(comp.paint(gNarrow));
 }
@@ -579,7 +582,7 @@ TEST(EQWindowTest, PaintSmoke) {
     window.setSize(700, 400);
     window.resized();
 
-    juce::Image img(juce::Image::ARGB, 700, 400, true);
+    juce::Image img(juce::Image::ARGB, 700, 400, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(window.paintEntireComponent(g, false));
 }
