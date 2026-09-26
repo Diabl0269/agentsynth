@@ -599,13 +599,9 @@ target_compile_definitions(Tests PRIVATE
     AI_PATCH_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tests/fixtures/ai-patches"
 )
 
-# Link JUCE specifics if needed
-target_link_libraries(Tests PRIVATE
-    juce::juce_core
-    juce::juce_events
-    juce::juce_audio_basics
-    juce::juce_dsp
-)
+# JUCE comes through Core's PUBLIC link to JuceModules (cmake/JuceModules.cmake): headers and
+# definitions only, with the module code taken from libJuceModules.a. Linking juce::juce_* here
+# would compile a second copy of those modules into this target.
 
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for

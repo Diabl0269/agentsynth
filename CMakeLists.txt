@@ -484,37 +484,20 @@ add_library(Core STATIC
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelCanvasTreatments.cpp
 )
 
-# Link Core against JUCE
-target_link_libraries(Core PUBLIC
-    juce::juce_core
-    juce::juce_events
-    juce::juce_graphics
-    juce::juce_data_structures
-    juce::juce_audio_basics
-    juce::juce_audio_devices
-    juce::juce_audio_formats
-    juce::juce_audio_processors
-    juce::juce_audio_utils
-    juce::juce_gui_basics
-    juce::juce_gui_extra
-    juce::juce_animation
-    juce::juce_dsp
-)
-
-target_compile_definitions(Core PUBLIC JUCE_WEB_BROWSER=0)
+# Link Core against JUCE: the headers and definitions of every module, and one shared compiled copy
+# of the module code (cmake/JuceModules.cmake, FRO306).
+include(cmake/JuceModules.cmake)
+target_link_libraries(Core PUBLIC JuceModules)
 
 # TL7-1/TL7-2: host third-party plugins. JUCE's built-in hosting only — no new dependency pins, and
 # therefore no new licences to clear (the VST3 and AU host code ships inside juce_audio_processors,
 # which we already link). CLAP is deliberately deferred: it would mean vendoring clap-juce-extensions
 # or the CLAP headers, i.e. exactly the new dependency this decision avoids.
 #
-# PUBLIC, on Core, beside the other JUCE defines: HostedPluginBackend is compiled into Core, and
-# every consumer (AppUI, Tests, the plugin wrapper) must agree on these values or the format list in
-# DefaultHostedPluginBackend's constructor differs between translation units.
-target_compile_definitions(Core PUBLIC JUCE_PLUGINHOST_VST3=1)
-if(APPLE)
-    target_compile_definitions(Core PUBLIC JUCE_PLUGINHOST_AU=1)
-endif()
+# The JUCE_PLUGINHOST_* switches are set PUBLIC on JuceModules (cmake/JuceModules.cmake), which
+# Core links PUBLIC: the module code must be compiled with them, and every consumer (AppUI, Tests,
+# the plugin wrapper) must agree on these values or the format list in DefaultHostedPluginBackend's
+# constructor differs between translation units.
 
 if(UNIX AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
@@ -805,7 +788,11 @@ if(ENABLE_PLUGIN)
         AppUI # Editor UI, shared with the standalone app
         Core
         Assets # Embedded font binary data
+        # Every module the app uses, so the plugin compiles all of them itself with its JucePlugin_*
+        # definitions; audio_utils brings the rest. Core only forwards headers (JuceModules.cmake).
         juce::juce_audio_utils
+        juce::juce_animation
+        juce::juce_dsp
     )
 
     target_compile_definitions(AgentSynthPlugin PUBLIC
