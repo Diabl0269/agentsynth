@@ -56,11 +56,10 @@ TEST_F(ADSRTest, HysteresisRejectsDitherAroundThreshold) {
 
 TEST_F(ADSRTest, ChannelLayoutIncludesThresholdCv) {
     // FRO285 raised the declared channel count to 14 (Threshold plus the five stage-time/level
-    // CV jacks on ch9-13); FRO314 raised it again to 17 (Attack/Decay/Release Curve CV on
-    // ch14-16) -- see ADSRCVTests.cpp for the new jacks' own coverage.
-    EXPECT_EQ(adsr.getTotalNumInputChannels(), 17);
-    EXPECT_EQ(adsr.getTotalNumOutputChannels(), 17);
-    EXPECT_EQ(adsr.getVisibleInputPortCount(), 10);
+    // CV jacks on ch9-13) -- see ADSRCVTests.cpp for the new jacks' own coverage.
+    EXPECT_EQ(adsr.getTotalNumInputChannels(), 14);
+    EXPECT_EQ(adsr.getTotalNumOutputChannels(), 14);
+    EXPECT_EQ(adsr.getVisibleInputPortCount(), 7);
     EXPECT_EQ(adsr.getVisibleOutputPortCount(), 1);
     EXPECT_EQ(adsr.getInputPortLabel(0), "Gate");
     EXPECT_EQ(adsr.getInputPortLabel(1), "Threshold");

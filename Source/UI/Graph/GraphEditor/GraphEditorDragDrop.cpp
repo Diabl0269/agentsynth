@@ -66,7 +66,13 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         // toggle + threshold control + knob grid (2 rows) + disclosure row, collapsed.
         // FRO281: +100 for the five Attack/Hold/Decay/Sustain/Release CV jacks appended after
         // Threshold (see ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents).
-        return {280, 449};
+        // FRO312: -100 -- those five jacks all resolve to a bound generic rotary knob now, so
+        // each draws no gutter row at all (isInputJackKnobBound). Threshold keeps its jack (it has
+        // no generic slider, see the comment on estimateModuleSize below), so it's still 1 row.
+        // (No Attack/Decay/Release Curve CV jacks here -- those three curve amounts have no knob
+        // to land on, so adding a jack for them would just be a knob-less gutter jack, the exact
+        // shape FRO312 exists to remove; see docs/modules/modulation.md.)
+        return {280, 389};
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
         // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
         return {synth::LayoutUtil::kDoubleWidth, 406};

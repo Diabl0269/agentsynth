@@ -139,12 +139,14 @@ void setPolyIfPresent(ModuleBase& mb, bool poly) {
 //     generic slider -- ModuleComponent.cpp's shouldSkipGenericFloatSlider skips building one for
 //     the rest, because the value lives inside ThresholdControlComponent instead; that widget's
 //     own drop anchor is what getModTargetPortForPoint special-cases already.
-//   - ADSR's three Curve amounts (FRO112, attackCurve/decayCurve/releaseCurve): edited only via
-//     the envelope graph's bend handles. The CV jack itself is real -- this ticket added it and
-//     Tests/Modules/ADSR/ADSRCVTests.cpp proves the parameter reads it -- but a bend-handle drop
-//     anchor (matching Threshold's) lives in ModuleComponentPaint.cpp, out of scope here since
-//     Source/UI/Graph/** is another session's concurrent edit in this worktree (see this task's
-//     final report).
+//
+// ADSR's three Curve amounts (FRO112, attackCurve/decayCurve/releaseCurve) need no entry here at
+// all: they are edited only via the envelope graph's bend handles, have no CV jack (a jack with
+// no knob to land on is exactly the visible-truncated-gutter-jack shape FRO312 exists to remove --
+// see docs/modules/modulation.md), and so are never declared as ModulationTargets in the first
+// place -- check (a) below never iterates them. Check (b) also can't false-positive on them:
+// shouldSkipGenericFloatSlider means they never get a rotary Slider component either, so
+// continuousKnobParamNames() never picks them up.
 bool targetHasNoGenericKnobByDesign(const ModuleBase& mb, const ModulationTarget& target) {
     const auto* param = mb.parameterForModTarget(target);
     if (param == nullptr)
@@ -154,7 +156,7 @@ bool targetHasNoGenericKnobByDesign(const ModuleBase& mb, const ModulationTarget
     if (auto* threshold = dynamic_cast<const ThresholdMeterSource*>(&mb))
         if (mb.getModuleType() != ModuleType::SampleHold && param->paramID == threshold->getThresholdParamID())
             return true;
-    return param->paramID == "attackCurve" || param->paramID == "decayCurve" || param->paramID == "releaseCurve";
+    return false;
 }
 
 bool hasPolyParameter(const ModuleBase& mb) {

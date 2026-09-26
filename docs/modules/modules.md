@@ -359,17 +359,15 @@ Loads an audio file from disk and plays it back one of two ways.
   a synced stage's effective time already comes from its `*Div` param and the live tempo, and a
   CV value expressed in the linear `[0, 5]` range has no meaning overlaid on a beat-locked
   division, so the jack stays visibly patchable but is a no-op until the module goes back to MS
-  mode. Declaring the output count to match (17, matching the highest CV channel read) keeps
+  mode. Declaring the output count to match (14, matching the highest CV channel read) keeps
   these silent per [`poly-channel-layout.md`](poly-channel-layout.md#rule-for-new-poly-modules).
-- **Curve CV (FRO314)**: `attackCurve` ch14, `decayCurve` ch15, `releaseCurve` ch16 — appended
-  after the stage-time/level block, same shared-across-every-voice / `blockCV`+
-  `modulateNormalised` convention as the stage times above. These three curve amounts have **no
-  generic rotary knob** — `ModuleComponent.cpp`'s `shouldSkipGenericFloatSlider` skips them on
-  purpose because they are edited only via the envelope graph's bend handles (FRO112) — so a
-  dropped cable currently has no visible knob to ring for them (patching the jack itself still
-  works through the mod matrix / AI-authored connections). Giving them a bend-handle drop anchor,
-  matching how `getModTargetPortForPoint` already special-cases the Threshold control, is tracked
-  as a UI follow-up.
+  The three curve amounts (`attackCurve`/`decayCurve`/`releaseCurve`) deliberately get **no CV
+  jack**: they have no generic rotary knob (`ModuleComponent.cpp`'s `shouldSkipGenericFloatSlider`
+  skips them on purpose because they are edited only via the envelope graph's bend handles,
+  FRO112), and a jack for a knob-less parameter is just a bare gutter row with nothing for a
+  dropped cable to ring. A bend-handle drop anchor for them, matching how
+  `getModTargetPortForPoint` already special-cases the Threshold control, is tracked as a UI
+  follow-up, not a CV jack.
 - **Smoothing**: Sustain is smoothed over 20 ms, read fresh **per sample** (not a block at a
   time) and fed to `EnvelopeGenerator` as both Decay's live target and the flat Sustain output,
   so an in-flight decay or a held note retargets smoothly instead of stepping. It is the one
@@ -914,7 +912,6 @@ Declare your per-voice **output** fan in `mapOutputChannel()` if the module actu
 | **ADSR (poly)** | ch0-7 | In | Per-voice gate CV |
 | **ADSR** | ch8 | In | Threshold CV (shared) |
 | **ADSR** | ch9-13 | In | Attack/Hold/Decay/Sustain/Release CV (shared, FRO285) |
-| **ADSR** | ch14-16 | In | Attack/Decay/Release Curve CV (shared, FRO314; no generic knob — see above) |
 | **ADSR (poly)** | ch0-7 | Out | Per-voice envelope (0–1) |
 | **Sample & Hold** | ch0 | In/Out | Signal in / held CV out (shared channel; read before overwrite) |
 | **Sample & Hold** | ch1 | In | Trigger / gate |

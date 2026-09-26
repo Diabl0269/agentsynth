@@ -16,10 +16,9 @@ class ADSRModule
     , public ThresholdMeterSource {
 public:
     ADSRModule(const juce::String& name = "ADSR")
-        : ModuleBase(name, 17, 17) // 8 gate CV per voice + shared Threshold/Attack/Hold/Decay/Sustain/Release
-                                   // CV (ch8-13, FRO285) + Attack/Decay/Release Curve CV (ch14-16,
-                                   // FRO314); 8 env + silent ch8-16. Outputs match inputs so the
-                                   // highest CV channel read (16) never aliases a live graph buffer -- see
+        : ModuleBase(name, 14, 14) // 8 gate CV per voice + shared Threshold/Attack/Hold/Decay/Sustain/Release
+                                   // CV (ch8-13, FRO285); 8 env + silent ch8-13. Outputs match inputs so the
+                                   // highest CV channel read (13) never aliases a live graph buffer -- see
                                    // docs/modules/poly-channel-layout.md.
     {
         // Times move to a LINEAR [0, 5] range; the retired minimum-time clamps (2 ms attack /
@@ -157,15 +156,9 @@ public:
         const float hold = times.hold;
         const float decay = times.decay;
         const float release = times.release;
-        // Curve CV (FRO314): same once-per-block, blockCV/modulateNormalised convention as
-        // Sustain CV above -- these are bipolar shape amounts, not stage times, so tempo sync
-        // (resolveStageTimes) never touches them.
-        const float attackCurve =
-            modulateNormalised(*attackCurveParam, *attackCurveParam, blockCV(buffer, kAttackCurveChannel));
-        const float decayCurve =
-            modulateNormalised(*decayCurveParam, *decayCurveParam, blockCV(buffer, kDecayCurveChannel));
-        const float releaseCurve =
-            modulateNormalised(*releaseCurveParam, *releaseCurveParam, blockCV(buffer, kReleaseCurveChannel));
+        const float attackCurve = *attackCurveParam;
+        const float decayCurve = *decayCurveParam;
+        const float releaseCurve = *releaseCurveParam;
 
         float meterPeak = 0.0f;
         float lastThreshold = baseThreshold;
@@ -322,33 +315,21 @@ public:
             return "Sustain";
         case 6:
             return "Release";
-        case 7:
-            return "Attack Curve";
-        case 8:
-            return "Decay Curve";
-        case 9:
-            return "Release Curve";
         default:
             return ModuleBase::getInputPortLabel(i);
         }
     }
     juce::String getOutputPortLabel(int) const override { return "Env"; }
     int getVisibleInputPortCount() const override {
-        return 10;
-    } // Gate, Threshold, Attack, Hold, Decay, Sustain, Release, Attack/Decay/Release Curve
+        return 7;
+    } // Gate, Threshold, Attack, Hold, Decay, Sustain, Release
     int getVisibleOutputPortCount() const override { return 1; }
     ModuleType getModuleType() const override { return ModuleType::ADSR; }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Threshold", kThresholdChannel},
-                {"Attack", kAttackChannel, "attack"},
-                {"Hold", kHoldChannel, "hold"},
-                {"Decay", kDecayChannel, "decay"},
-                {"Sustain", kSustainChannel, "sustain"},
-                {"Release", kReleaseChannel, "release"},
-                {"Attack Curve", kAttackCurveChannel, "attackCurve"},
-                {"Decay Curve", kDecayCurveChannel, "decayCurve"},
-                {"Release Curve", kReleaseCurveChannel, "releaseCurve"}};
+        return {{"Threshold", kThresholdChannel},        {"Attack", kAttackChannel, "attack"},
+                {"Hold", kHoldChannel, "hold"},          {"Decay", kDecayChannel, "decay"},
+                {"Sustain", kSustainChannel, "sustain"}, {"Release", kReleaseChannel, "release"}};
     }
 
     LogicalPort mapInputChannel(int raw) const override {
@@ -377,9 +358,8 @@ public:
             int jack;
         };
         static constexpr SharedCvJack kSharedCvJacks[] = {
-            {kThresholdChannel, 1},   {kAttackChannel, 2},     {kHoldChannel, 3},
-            {kDecayChannel, 4},       {kSustainChannel, 5},    {kReleaseChannel, 6},
-            {kAttackCurveChannel, 7}, {kDecayCurveChannel, 8}, {kReleaseCurveChannel, 9},
+            {kThresholdChannel, 1}, {kAttackChannel, 2},  {kHoldChannel, 3},
+            {kDecayChannel, 4},     {kSustainChannel, 5}, {kReleaseChannel, 6},
         };
         for (const auto& jack : kSharedCvJacks) {
             if (raw == jack.channel) {
@@ -471,9 +451,6 @@ private:
     }
 
     static constexpr int MAX_VOICES = 8;
-    static constexpr int kAttackCurveChannel = 14;
-    static constexpr int kDecayCurveChannel = 15;
-    static constexpr int kReleaseCurveChannel = 16;
     static constexpr int kThresholdChannel = 8;
     // Stage-time/level CV jacks (FRO285), appended after Threshold -- never inserted, so a saved
     // patch that modulates Threshold on ch8 keeps doing so once these arrive on ch9-13. See

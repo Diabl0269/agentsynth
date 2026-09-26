@@ -96,11 +96,8 @@ than running to `getNumChannels()`, or it erases the right leg.
 | **ADSR** | ch11 | In | Shared Decay CV |
 | **ADSR** | ch12 | In | Shared Sustain CV |
 | **ADSR** | ch13 | In | Shared Release CV |
-| **ADSR** | ch14 | In | Shared Attack Curve CV (FRO314, no generic knob) |
-| **ADSR** | ch15 | In | Shared Decay Curve CV (FRO314, no generic knob) |
-| **ADSR** | ch16 | In | Shared Release Curve CV (FRO314, no generic knob) |
 | **ADSR (poly)** | ch0-7 | Out | Per-voice envelope (0–1) |
-| **ADSR** | ch8-16 | Out | Silent pass-throughs (prevent buffer aliasing) |
+| **ADSR** | ch8-13 | Out | Silent pass-throughs (prevent buffer aliasing) |
 | **Sample & Hold** | ch0 | In/Out | Signal in / held CV out (shared channel; read before overwrite) |
 | **Sample & Hold** | ch1 | In | Trigger / gate |
 | **Sample & Hold** | ch2 | In | Rate CV |

@@ -535,15 +535,17 @@ mixer modules (Channel Strip, Voice Mixer, Master), whose gain is driven by the 
 than by CV — deliberately out of scope for FRO314's sweep below, since Channel Strip's channel
 layout is frozen-once-set with fixed send legs (`Source/Modules/CLAUDE.md`).
 
-**FRO314** closed two gaps this rule had let through silently: Oscillator's targets had no
+**FRO314** closed a gap this rule had let through silently: Oscillator's targets had no
 `paramId` (falling back to fragile jack-label/knob-name string matching — harmless only because
 every label happened to already match its knob's name) and its Unison/Detune knobs had **no CV
-jack at all**, so a dropped cable was refused outright. It also gave the ADSR's three Curve
-amounts (`attackCurve`/`decayCurve`/`releaseCurve`, ch14-16, appended after the stage-time/level
-block) a CV jack for the first time — these have no generic rotary knob (they are edited only via
-the envelope graph's bend handles, FRO112), so the jack is patchable through the mod matrix and
-AI-authored connections, but dropping a cable onto a visible knob for them still needs its own
-bend-handle drop anchor (tracked as a UI follow-up, not done as part of FRO314).
+jack at all**, so a dropped cable was refused outright. It deliberately did **not** give the
+ADSR's three Curve amounts (`attackCurve`/`decayCurve`/`releaseCurve`) a CV jack: they have no
+generic rotary knob (edited only via the envelope graph's bend handles, FRO112), and this rule is
+about every knob getting a jack, not every *parameter* — a jack for a parameter with no knob to
+land on is just a bare gutter row (this ticket added, then reverted, exactly that: three visible
+truncated jacks — "Attack Cu", "Decay Cur", "Release C" — with nothing for a dropped cable to
+ring). A bend-handle drop anchor for these three would need its own UI work (tracked as a
+follow-up, not folded into this rule).
 
 `Tests/UI/Graph/ModuleComponent/ModuleComponentKnobCoverageTests.cpp` is the regression guard for
 this rule: it iterates every module the factory can create (both voice modes, where applicable)
@@ -551,8 +553,8 @@ and asserts every declared target resolves to a bound knob AND every continuous-
 a target pointing at it, so a NEW module (or a new knob on an old one) with the same gap fails the
 build instead of shipping. Its explicit, commented exclusion list documents which module types are
 legitimately out of scope (paged tab cards, port widgets, per-step pattern data, mixer gain
-stages, hosted-plugin parameters, and the two ADSR knob-less targets above) rather than absorbing
-them silently.
+stages, hosted-plugin parameters) rather than absorbing them silently — the ADSR Curve amounts need
+no entry there at all, since they are never declared targets in the first place.
 
 ## CV in normalised units
 
