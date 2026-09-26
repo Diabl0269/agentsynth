@@ -267,7 +267,9 @@ the selected profile; the additions are persisted once per drain (`MidiLearnCont
 and the drain's events are replayed onto the rebuilt cells so the control the user just touched
 shows its value. The engine mirrors every eligible message from a profile's device onto the activity
 ring whether or not a control or assignment exists (`pushActivityOnly`), which is the only thing
-Detect needs from it. Details a reader would not guess:
+Detect needs from it. An event is credited to **every** profile bound to that device (two can share
+one input, e.g. an imported copy), so whichever one is selected moves live (FRO272). Details a reader
+would not guess:
 
 - A note-off, a program change and a learn candidate never create a cell (the press already did;
   each program number is its own message key). A detected control keeps the channel it arrived on.
