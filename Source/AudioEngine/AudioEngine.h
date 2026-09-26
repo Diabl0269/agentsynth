@@ -57,6 +57,10 @@ public:
     void setSavedDeviceState(std::unique_ptr<juce::XmlElement> state);
     bool hasSavedDeviceState() const noexcept { return savedDeviceState_ != nullptr; }
 
+    // Standalone only; call before initialise(). Skips opening any audio/MIDI device (automation launch, FRO29).
+    void setAudioDeviceDisabled(bool disabled) noexcept;
+    bool isAudioDeviceDisabled() const noexcept;
+
     // MESSAGE THREAD, installed by the OWNER (MainComponent on the standalone path) before
     // initialise(). Called whenever the AudioDeviceManager reports a change — the user picking a
     // device, a sample rate, or ticking an input channel in the Audio tab — with the manager's
@@ -592,6 +596,9 @@ private:
     // The device setup restored by initialise(), or null for "use JUCE's defaults, inputs
     // off". Message thread only (setSavedDeviceState / initialise).
     std::unique_ptr<juce::XmlElement> savedDeviceState_;
+
+    // Message thread only (setAudioDeviceDisabled / initialise).
+    bool audioDeviceDisabled_ = false;
 
     // Device-callback scratch, both sized in audioDeviceAboutToStart and never resized from
     // the audio thread. `deviceChannelPointers_` backs the juce::AudioBuffer the callback renders

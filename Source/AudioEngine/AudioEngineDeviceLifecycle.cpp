@@ -35,14 +35,25 @@ void AudioEngine::initialise() {
     // skip device/MIDI acquisition entirely and only build the initial patch. prepareForHost()
     // supplies the real sample rate/channel count later, since there is no device to ask.
     if (!isHosted()) {
-        initialiseDevices(savedDeviceState_.get());
-        // A machine with NO usable audio device (headless Linux, CI) never receives the
-        // audioDeviceAboutToStart() that normally configures the graph before the patch is built
-        // below. Unconfigured, the "Audio Output" IO node snapshots 0 channels and every
-        // connection into it is rejected as out-of-range — silently gutting the default patch.
-        // Mirror the hosted placeholder; a device appearing later reconfigures on start.
-        if (deviceManager.getCurrentAudioDevice() == nullptr)
+        if (audioDeviceDisabled_) {
+            // FRO29 automation launch: skip initialiseDevices() entirely, so no audio device,
+            // no MIDI input, and no mic-permission prompt is ever touched. Take the exact same
+            // no-device placeholder the "no usable audio device" branch below falls back to, and
+            // reset the MIDI collector the same way initialiseDevices() would for a device-less
+            // engine (it asserts on a 0 Hz rate; nothing ever drains it here since a render pass
+            // never runs without a device, but keep it in the state every other code path expects).
             mainProcessorGraph.setPlayConfigDetails(0, 2, 44100.0, 512);
+            midiMessageCollector.reset(44100.0);
+        } else {
+            initialiseDevices(savedDeviceState_.get());
+            // A machine with NO usable audio device (headless Linux, CI) never receives the
+            // audioDeviceAboutToStart() that normally configures the graph before the patch is
+            // built below. Unconfigured, the "Audio Output" IO node snapshots 0 channels and every
+            // connection into it is rejected as out-of-range — silently gutting the default patch.
+            // Mirror the hosted placeholder; a device appearing later reconfigures on start.
+            if (deviceManager.getCurrentAudioDevice() == nullptr)
+                mainProcessorGraph.setPlayConfigDetails(0, 2, 44100.0, 512);
+        }
     } else {
         // A default-constructed AudioProcessorGraph reports 0 output channels until something
         // sets its channel layout. The graph's "Audio Output" IO node snapshots that count once,
@@ -71,6 +82,14 @@ void AudioEngine::initialise() {
 // initialise() call sites (the runtime-permission callback and the direct one) would otherwise have
 // to carry the argument, and because the engine keeps the state for any later re-initialise.
 void AudioEngine::setSavedDeviceState(std::unique_ptr<juce::XmlElement> state) { savedDeviceState_ = std::move(state); }
+
+// FRO29: an automation launch (--no-audio-device / AGENTSYNTH_NO_AUDIO_DEVICE) must never trigger
+// the macOS mic-permission TCC prompt or fight an agent for the audio hardware, so this has to stop
+// initialise() from calling initialiseDevices() at all -- opening a device and then immediately
+// closing it would still have shown the prompt. Message-thread only, and must be called before
+// initialise(); flipping it afterward has no effect on an already-initialised engine.
+void AudioEngine::setAudioDeviceDisabled(bool disabled) noexcept { audioDeviceDisabled_ = disabled; }
+bool AudioEngine::isAudioDeviceDisabled() const noexcept { return audioDeviceDisabled_; }
 
 void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
     if (savedDeviceState != nullptr) {

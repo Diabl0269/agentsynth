@@ -208,6 +208,8 @@ add_library(Core STATIC
     Source/AudioEngine/AudioEngineTimelinePublish.cpp
     Source/AppUndoManager.cpp
     Source/AppUndoManager.h
+    Source/AutomationLaunch.cpp
+    Source/AutomationLaunch.h
     Source/Branding.h
     Source/GeneralFeedbackStore.cpp
     Source/GeneralFeedbackStore.h

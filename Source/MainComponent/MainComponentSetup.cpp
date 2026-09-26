@@ -5,6 +5,7 @@
 // in MainComponent.cpp for the ordered call sequence these steps implement.
 #include "AI/AIProviderRegistry.h"
 #include "AudioEngine/AudioEngine.h"
+#include "AutomationLaunch.h"
 #include "MainComponent.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/MasterModule.h"
@@ -596,6 +597,14 @@ void MainComponent::openMidiRemoteDevices() {
 // openMidiRemoteDevices()'s own "the engine is up by the time this runs" contract true regardless
 // of which branch (or how late the async one) actually runs it.
 bool MainComponent::initialiseAudioEngine() {
+    // FRO29: an automation launch must never open a device (or the saved one), so it also must
+    // never touch the "audioDeviceState" key below -- reading OR writing it. Computed once, up
+    // front, so both the saved-state block and the initialise()-branch choice further down share
+    // the same answer; harmless to compute on the Hosted (plugin) path too, where it is unused.
+    const bool noAudioDevice =
+        synth::isNoAudioDeviceLaunch(juce::JUCEApplicationBase::getCommandLineParameterArray(),
+                                     juce::SystemStats::getEnvironmentVariable(synth::kNoAudioDeviceEnvVar, {}));
+
     // Audio device state. Guarded the same way the engine-lifecycle block below is: on the plugin
     // path the host owns the device (there is not even an Audio tab), so this app's settings file
     // has no say over it.
@@ -605,11 +614,20 @@ bool MainComponent::initialiseAudioEngine() {
     // can itself broadcast a change. MainComponent owns the ApplicationProperties round trip and
     // the engine owns the device: Core never reads or writes settings.
     if (ownedAudioEngine != nullptr) {
-        const juce::String savedDeviceXml =
-            appProperties.getUserSettings()->getValue("audioDeviceState", juce::String());
-        if (savedDeviceXml.isNotEmpty()) {
-            if (auto parsed = juce::parseXML(savedDeviceXml))
-                audioEngine.setSavedDeviceState(std::move(parsed));
+        if (noAudioDevice) {
+            // Leave the stored "audioDeviceState" key untouched on disk -- the next normal launch
+            // must still restore the user's real device, so this launch must neither read it into
+            // the engine nor let onDeviceStateChanged (installed below regardless -- it is
+            // harmless here, since a device-less engine never broadcasts a change) overwrite it.
+            audioEngine.setAudioDeviceDisabled(true);
+            DBG("Audio device disabled (--no-audio-device / AGENTSYNTH_NO_AUDIO_DEVICE)");
+        } else {
+            const juce::String savedDeviceXml =
+                appProperties.getUserSettings()->getValue("audioDeviceState", juce::String());
+            if (savedDeviceXml.isNotEmpty()) {
+                if (auto parsed = juce::parseXML(savedDeviceXml))
+                    audioEngine.setSavedDeviceState(std::move(parsed));
+            }
         }
 
         audioEngine.onDeviceStateChanged = [this](std::unique_ptr<juce::XmlElement> state) {
@@ -662,7 +680,11 @@ bool MainComponent::initialiseAudioEngine() {
         return false;
     }
 
-    if (juce::RuntimePermissions::isRequired(juce::RuntimePermissions::recordAudio) &&
+    // FRO29: automation launch skips the mic-permission request entirely (that is the whole
+    // point -- requesting it is what triggers the TCC prompt an agent can't dismiss) and always
+    // takes the direct, synchronous initialise() branch below, exactly like a platform that never
+    // requires the permission in the first place.
+    if (!noAudioDevice && juce::RuntimePermissions::isRequired(juce::RuntimePermissions::recordAudio) &&
         !juce::RuntimePermissions::isGranted(juce::RuntimePermissions::recordAudio)) {
         juce::RuntimePermissions::request(juce::RuntimePermissions::recordAudio, [&](bool granted) {
             if (granted) {
