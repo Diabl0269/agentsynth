@@ -242,13 +242,13 @@ that would fail is caught locally before it's ever pushed.
 ## Enforcement
 
 Running the check is not the same as it gating a merge. The "Docs" job is a required status check
-in `main`'s branch protection, and `.github/workflows/ci-passthrough.yml` covers `ci.yml`'s four
+in `main`'s branch protection, and `.github/workflows/ci-passthrough.yml` covers `ci.yml`'s three
 path-filtered jobs on a docs-only PR — see
 [`ci-pipeline.md`](ci-pipeline.md#docs-only-pull-requests) for both mechanisms and the required
 check names.
 
 **Why both are needed.** While the Docs job ran on every PR but was not required, a red Docs job
-blocked nothing — and a docs-only PR was blocked anyway, because `ci.yml`'s four required jobs never
+blocked nothing — and a docs-only PR was blocked anyway, because `ci.yml`'s three required jobs never
 post a status when its `paths:` filter excludes `docs/**` and `*.md`. The routine workaround, `gh pr
 merge --admin`, bypassed every check including a red Docs job. Making "Docs" required without the
 passthrough would have left docs-only PRs unmergeable; adding the passthrough without making "Docs"
