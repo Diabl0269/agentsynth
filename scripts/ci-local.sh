@@ -41,7 +41,11 @@
 #      top of CMakeLists.txt), so repeat runs are incremental.
 #   9. Dev-sign the built app bundle with scripts/dev-sign-app.sh (macOS only -- not a CI check,
 #      but the point where a local build exists to sign; see that script's header for why).
-#   10. Run the full suite: build-ci-local/Tests/Tests.
+#   10. Run the full suite: build-ci-local/Tests/Tests -- behind the shared test lock
+#       (scripts/lib/test-lock.sh, FRO192): two suites running at once on one machine collide
+#       through the shared on-disk settings file and produce false failures, so this step waits
+#       (up to CI_LOCAL_TEST_LOCK_TIMEOUT seconds, default 3600) for any other suite of this
+#       repository -- in any worktree -- to finish first, printing a "waiting" line meanwhile.
 #
 # NOT reproduced here (deliberately -- see docs/development/local-ci.md): the Ubuntu coverage gate
 # (a separate opt-in, `bash scripts/coverage.sh`), the label-gated ASAN job, and actual
@@ -93,6 +97,8 @@ full mapping to what CI actually runs.
                 (macOS only). Default off, since this also runs headless
                 in the pre-push hook.
   --skip-tests  Skip the Tests suite (step 10), often the slowest step.
+                The suite runs behind a lock shared by every worktree of this
+                repository (CI_LOCAL_TEST_LOCK_TIMEOUT, default 3600 s).
                 Everything else still runs, including the dev-sign step,
                 so a rebuild still keeps the same TCC identity for a
                 live/manual app run. Default off -- the pre-push hook and
@@ -265,7 +271,20 @@ else
     if [ ! -x "$TESTS_BIN" ]; then
         fail "$TESTS_BIN not found or not executable -- the Tests target did not build."
     fi
-    "$TESTS_BIN" || fail "test suite failed (see above)."
+    # Serialise against every other suite of this repository (any worktree): see the header of
+    # scripts/lib/test-lock.sh for the false-failure story. The lock covers only the test run --
+    # concurrent BUILDS are fine, ccache is safe under contention -- so a waiting session still
+    # gets its compile errors immediately.
+    # shellcheck source=scripts/lib/test-lock.sh
+    source "$REPO_ROOT/scripts/lib/test-lock.sh"
+    test_lock="$(test_lock_path "$REPO_ROOT")"
+    test_lock_run "$test_lock" "${CI_LOCAL_TEST_LOCK_TIMEOUT:-3600}" "$TESTS_BIN"
+    tests_rc=$?
+    if [ "$tests_rc" -eq "$TEST_LOCK_TIMEOUT_STATUS" ]; then
+        fail "gave up waiting for the shared test lock ($test_lock) -- another suite is still running; re-run, or raise CI_LOCAL_TEST_LOCK_TIMEOUT."
+    elif [ "$tests_rc" -ne 0 ]; then
+        fail "test suite failed (see above)."
+    fi
 fi
 
 # --- Done: point at a build the user can actually launch ---------------------------------------
