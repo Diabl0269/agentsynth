@@ -429,6 +429,7 @@ add_executable(Tests
     UI/Mixer/MixerOwnPanelSlideTests.cpp
     UI/Layout/PanelResizeHandleTests.cpp
     UI/MidiRemote/MidiRemotePanelTests.cpp
+    UI/MidiRemote/MidiRemotePanelLiveActivityTests.cpp
     UI/MidiRemote/MidiRemotePreferencesTests.cpp
     UI/MidiRemote/MidiRemotePanelHostedTests.cpp
     UI/MidiRemote/ControllerSurfaceDetectTests.cpp

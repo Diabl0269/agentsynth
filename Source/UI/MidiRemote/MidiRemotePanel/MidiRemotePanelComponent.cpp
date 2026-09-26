@@ -199,15 +199,18 @@ void MidiRemotePanelComponent::refreshActivity() {
     std::vector<synth::midi::RemoteEvent> selectedEvents;
 
     remoteEngine_->drainActivity([&](const juce::String& sourceKey, const synth::midi::RemoteEvent& event) {
-        auto profileIt = std::find_if(profiles.begin(), profiles.end(),
-                                      [&](const auto& p) { return p.input.identifier == sourceKey; });
-        if (profileIt == profiles.end())
-            return;
-        const auto* profile = &*profileIt;
-
-        profileLastActivityMs_[profile->id] = static_cast<juce::int64>(now);
-
-        if (profile->id != selectedProfileId_)
+        // FRO272: every profile bound to this device hears it, not just the first one found -- two
+        // profiles can share an input (an imported copy, a file carried over from another machine),
+        // and matching only the first left the other's surface frozen until a tab switch re-seeded it.
+        const synth::ControllerProfile* profile = nullptr;
+        for (const auto& candidate : profiles) {
+            if (candidate.input.identifier != sourceKey)
+                continue;
+            profileLastActivityMs_[candidate.id] = static_cast<juce::int64>(now);
+            if (candidate.id == selectedProfileId_)
+                profile = &candidate;
+        }
+        if (profile == nullptr)
             return;
 
         encoderDetect_.feed(event);
