@@ -28,6 +28,11 @@ public:
         synth::Control control;
         bool hasControl = false; // false = "no control selected" empty state
         std::vector<AssignmentRowModel> assignments;
+        /** FRO270: 2+ when the surface has a multi-selection -- overrides the empty state's "No
+         *  control selected" with "N controls selected" instead; every per-control field stays
+         *  hidden exactly as it does for `hasControl == false`, since there is no single control's
+         *  name/kind/encoding/etc. to show. 0 or 1 -- the ordinary single-control states below. */
+        int selectedCount = 0;
     };
 
     ControlInspectorComponent();
@@ -61,6 +66,10 @@ public:
     std::function<void(juce::Component& anchor)> onLearnTargetRequested;
     /** "Forget" on the row for `assignmentId`. */
     std::function<void(const juce::String& assignmentId)> onForgetRequested;
+
+    /** FRO270 test seam: the model setControl() last built, for asserting selectedCount/hasControl
+     *  without a real screenshot. */
+    const ControlModel& getModelForTest() const noexcept { return model_; }
 
     void resized() override;
     void paint(juce::Graphics& g) override;

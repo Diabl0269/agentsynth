@@ -94,12 +94,13 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     toolbar_.onTemplatesRequested = [this](juce::Component& anchor) { showTemplatesMenu(anchor); };
     toolbar_.onMoreRequested = [this](juce::Component& anchor) { showMoreMenu(anchor); };
 
-    controllerSurface_.onSelectControl = [this](const juce::String& controlId) { selectControl(controlId); };
-    controllerSurface_.onControlMoved = [this](const juce::String& controlId, int col, int row) {
-        handleControlMoved(controlId, col, row);
-    };
-    controllerSurface_.onDeleteControlRequested = [this](const juce::String& controlId) {
-        handleDeleteControlRequested(controlId);
+    controllerSurface_.onSelectionChanged = [this](const std::vector<juce::String>& ids) { selectControls(ids); };
+    controllerSurface_.onControlsMoved =
+        [this](const std::vector<synth::ui::ControllerSurfaceComponent::MovedCell>& moves) {
+            handleControlsMoved(moves);
+        };
+    controllerSurface_.onDeleteControlsRequested = [this](const std::vector<juce::String>& controlIds) {
+        handleDeleteControlsRequested(controlIds);
     };
 
     inspector_.onLocateRequested = [this](const juce::String& nodeUuid) {
@@ -269,6 +270,7 @@ void MidiRemotePanelComponent::selectProfile(const juce::String& profileId) {
         orphanStatus_.clear();
     selectedProfileId_ = profileId;
     selectedControlId_.clear();
+    selectedControlIds_.clear();
     controllersList_.setSelectedProfileId(profileId);
     toolbar_.setProfileSelected(isSelectedProfileUsable());
     refreshSurfaceForSelectedProfile();
@@ -276,8 +278,14 @@ void MidiRemotePanelComponent::selectProfile(const juce::String& profileId) {
 }
 
 void MidiRemotePanelComponent::selectControl(const juce::String& controlId) {
-    selectedControlId_ = controlId;
-    controllerSurface_.setSelectedControlId(controlId);
+    controllerSurface_.setSelectedControlId(controlId); // fans back into selectControls() below
+}
+
+// FRO270: the surface's onSelectionChanged -- see the header's doc comment on why
+// selectedControlId_ is kept as this set's single member only while size() == 1.
+void MidiRemotePanelComponent::selectControls(const std::vector<juce::String>& controlIds) {
+    selectedControlIds_ = controlIds;
+    selectedControlId_ = controlIds.size() == 1u ? controlIds.front() : juce::String();
     refreshInspectorForSelection();
 }
 
@@ -399,6 +407,16 @@ void MidiRemotePanelComponent::refreshInspectorForSelection() {
 
     const auto* profile = findSelectedProfile();
     ControlInspectorComponent::ControlModel model;
+    // FRO270: 2+ selected -- "N controls selected", every per-control field disabled. selectedControlId_
+    // is empty in this case (the header's own contract: it's the single-selection anchor only), so
+    // this must be checked BEFORE the "nothing selected" empty state below, which would otherwise
+    // look identical.
+    if (selectedControlIds_.size() >= 2u) {
+        model.selectedCount = static_cast<int>(selectedControlIds_.size());
+        toolbar_.setControlSelected(false);
+        inspector_.setControl(model);
+        return;
+    }
 
     if (profile == nullptr || selectedControlId_.isEmpty()) {
         toolbar_.setControlSelected(false);
@@ -517,43 +535,94 @@ void MidiRemotePanelComponent::setFeedbackOutput(const juce::String& profileId,
     rebuildFromProfiles();
 }
 
-void MidiRemotePanelComponent::handleControlMoved(const juce::String& controlId, int col, int row) {
+// FRO270: `moves` is one entry per moved control, whether the drag was a lone selection or a
+// group -- one updateProfile() call either way, so one undo on the controller history restores
+// every moved control's PREVIOUS position at once.
+void MidiRemotePanelComponent::handleControlsMoved(
+    const std::vector<synth::ui::ControllerSurfaceComponent::MovedCell>& moves) {
     const auto* profile = findSelectedProfile();
-    if (profile == nullptr || learnController_ == nullptr)
+    if (profile == nullptr || learnController_ == nullptr || moves.empty())
         return;
     auto updated = *profile;
-    auto it = std::find_if(updated.controls.begin(), updated.controls.end(),
-                           [&](const auto& c) { return c.id == controlId; });
-    if (it == updated.controls.end())
+    bool anyFound = false;
+    for (const auto& move : moves) {
+        auto it = std::find_if(updated.controls.begin(), updated.controls.end(),
+                               [&](const auto& c) { return c.id == move.controlId; });
+        if (it == updated.controls.end())
+            continue;
+        it->layout.col = move.col;
+        it->layout.row = move.row;
+        anyFound = true;
+    }
+    if (!anyFound)
         return;
-    it->layout.col = col;
-    it->layout.row = row;
-    learnController_->updateProfile(updated, "Move control");
+    learnController_->updateProfile(updated, moves.size() == 1u ? "Move control" : "Move controls");
 
-    // Source/UI/CLAUDE.md's rebuild-mid-gesture rule: onControlMoved fires from
+    // Source/UI/CLAUDE.md's rebuild-mid-gesture rule: onControlsMoved fires from
     // ControllerSurfaceCell::onDragEnded, still on that cell's own mouseUp call stack -- rebuilding
     // the grid synchronously here (setControls() clears and reallocates every cell) would free the
     // very cell whose mouseUp is still executing. Defer to the next message-loop iteration instead,
     // same fix shape as a live-drag survivor elsewhere in this codebase. SafePointer guards against
     // the panel itself being torn down before the deferred call runs (dock closed mid-drag).
+    // FRO270: no explicit re-selection call is needed here -- ControllerSurfaceComponent::setControls()
+    // preserves the CURRENT selection across a same-profile rebuild on its own (the automatic
+    // pruning FRO270 added), and re-applying just selectedControlId_ here would wrongly collapse a
+    // still-live multi-selection down to empty (selectedControlId_ is only the single-selection
+    // anchor -- see the header's doc comment).
     juce::Component::SafePointer<MidiRemotePanelComponent> safeThis(this);
     juce::MessageManager::callAsync([safeThis] {
         if (safeThis == nullptr)
             return;
         safeThis->refreshSurfaceForSelectedProfile();
-        safeThis->controllerSurface_.setSelectedControlId(safeThis->selectedControlId_);
     });
 }
 
-void MidiRemotePanelComponent::handleDeleteControlRequested(const juce::String& controlId) {
+// FRO270: `controlIds` is every id to delete, whether the request came from a lone selection or a
+// group -- confirmed ONCE (mirroring ControllersListComponent's own profile-delete confirm, the
+// only existing confirm-before-delete in this panel) with the total assignment count across all of
+// them, then MidiLearnController::deleteControls() in one call so a single undo on either history
+// restores the whole group.
+void MidiRemotePanelComponent::handleDeleteControlsRequested(const std::vector<juce::String>& controlIds) {
     const auto* profile = findSelectedProfile();
-    if (profile == nullptr || learnController_ == nullptr)
+    if (profile == nullptr || learnController_ == nullptr || doc_ == nullptr || controlIds.empty())
         return;
-    learnController_->deleteControl(profile->id, controlId);
-    if (selectedControlId_ == controlId)
-        selectedControlId_.clear();
-    refreshSurfaceForSelectedProfile();
-    refreshInspectorForSelection();
+    const juce::String profileId = profile->id;
+
+    int assignmentCount = 0;
+    for (const auto& controlId : controlIds) {
+        for (const auto& a : doc_->assignments)
+            if (a.control.profileId == profileId && a.control.controlId == controlId)
+                ++assignmentCount;
+        for (const auto& a : profile->actions)
+            if (a.control.controlId == controlId)
+                ++assignmentCount;
+    }
+
+    const juce::String message =
+        controlIds.size() == 1u
+            ? (assignmentCount == 0 ? juce::String("Delete this control?")
+                                    : "Delete this control? This removes " + juce::String(assignmentCount) +
+                                          (assignmentCount == 1 ? " assignment." : " assignments."))
+            : "Delete " + juce::String((int)controlIds.size()) + " controls? This removes " +
+                  juce::String(assignmentCount) + (assignmentCount == 1 ? " assignment." : " assignments.");
+
+    juce::Component::SafePointer<MidiRemotePanelComponent> safeThis(this);
+    showPrompt("Delete controls", message, true, [safeThis, profileId, controlIds](bool ok) {
+        if (!ok || safeThis == nullptr || safeThis->learnController_ == nullptr)
+            return;
+        safeThis->learnController_->deleteControls(profileId, controlIds);
+        for (const auto& id : controlIds)
+            if (safeThis->selectedControlId_ == id)
+                safeThis->selectedControlId_.clear();
+        safeThis->selectedControlIds_.erase(
+            std::remove_if(safeThis->selectedControlIds_.begin(), safeThis->selectedControlIds_.end(),
+                           [&](const juce::String& id) {
+                               return std::find(controlIds.begin(), controlIds.end(), id) != controlIds.end();
+                           }),
+            safeThis->selectedControlIds_.end());
+        safeThis->refreshSurfaceForSelectedProfile();
+        safeThis->refreshInspectorForSelection();
+    });
 }
 
 void MidiRemotePanelComponent::handleForgetRequested(const juce::String& assignmentId) {

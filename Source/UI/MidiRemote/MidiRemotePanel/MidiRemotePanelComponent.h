@@ -182,6 +182,17 @@ public:
         if (controlId.isNotEmpty())
             selectControl(controlId);
     }
+    /** FRO270 test seam: selects `controlIds` on the surface without driving real shift/cmd clicks
+     *  (those are ControllerSurfaceSelectionTests.cpp's job) -- the panel-level group move/delete
+     *  tests only need a known multi-selection to already exist. */
+    void selectControlsForTest(const std::vector<juce::String>& controlIds) {
+        controllerSurface_.setSelectedControlIds(controlIds); // fans back into selectControls()
+    }
+    /** FRO270 test seam: the surface's Delete key / group delete UI, without a real KeyPress. */
+    void requestDeleteControlsForTest(const std::vector<juce::String>& controlIds) {
+        handleDeleteControlsRequested(controlIds);
+    }
+    const std::vector<juce::String>& getSelectedControlIdsForTest() const noexcept { return selectedControlIds_; }
 
     /** GraphEditor::onEditMidiAssignmentRequested's target, via BottomDockComponent -- resolves the
      *  project assignment for (nodeUuid, paramId), selects its controller/control and switches the
@@ -217,13 +228,20 @@ public:
 private:
     void selectProfile(const juce::String& profileId);
     void selectControl(const juce::String& controlId);
+    /** FRO270: the surface's onSelectionChanged -- mirrors the full id set into
+     *  selectedControlIds_, and selectedControlId_ (the legacy single-control anchor every other
+     *  member here still reads) tracks it only while exactly one is selected. */
+    void selectControls(const std::vector<juce::String>& controlIds);
     void refreshSurfaceForSelectedProfile();
     void refreshInspectorForSelection();
     void handleRenameRequested(const juce::String& profileId, const juce::String& newName);
     void handleExportRequested(const juce::String& profileId);
     void handleDeleteProfileRequested(const juce::String& profileId);
-    void handleControlMoved(const juce::String& controlId, int col, int row);
-    void handleDeleteControlRequested(const juce::String& controlId);
+    void handleControlsMoved(const std::vector<synth::ui::ControllerSurfaceComponent::MovedCell>& moves);
+    /** FRO270: the surface's Delete/Backspace or the inspector's own group Delete -- confirms once
+     *  (showPrompt/promptHook_, MidiRemotePanelDetect.cpp's mechanism) with the total assignment
+     *  count across every id, then MidiLearnController::deleteControls() in one step. */
+    void handleDeleteControlsRequested(const std::vector<juce::String>& controlIds);
     void handleForgetRequested(const juce::String& assignmentId);
     void handleControlEdited(const synth::Control& control);
 
@@ -262,6 +280,13 @@ private:
 
     juce::String selectedProfileId_;
     juce::String selectedControlId_;
+    // FRO270: the surface's full selection, mirrored here so handleControlsMoved()/
+    // handleDeleteControlsRequested() and the inspector's "N controls selected" state don't have to
+    // read it back out of controllerSurface_. selectedControlId_ above is kept in step as this
+    // set's only member whenever its size is exactly 1 (empty otherwise) -- every OTHER member
+    // (Assign, Detect, encoder auto-detect...) still only ever reads/writes selectedControlId_ and
+    // is unaffected by a 2+ selection existing.
+    std::vector<juce::String> selectedControlIds_;
     // Rising/falling-edge tracking so refreshActivity() repaints an activity dot only on change
     // (Source/UI/CLAUDE.md's "no unconditional per-tick repaint" rule), not on every 10 Hz tick.
     std::map<juce::String, bool> profileActivityLit_;

@@ -210,6 +210,12 @@ public:
      *  Returns false if the control isn't found. See the .cpp for undo-scope details. */
     bool deleteControl(const juce::String& profileId, const juce::String& controlId);
 
+    /** FRO270: the MIDI Remote surface's group delete -- like deleteControl() but for several ids
+     *  at once, in ONE controller-history step and ONE project-history step (so a single undo on
+     *  either restores the whole group). Ids not found on the profile are ignored; returns false
+     *  if `profileId` is unknown or none of `controlIds` were found. */
+    bool deleteControls(const juce::String& profileId, const std::vector<juce::String>& controlIds);
+
     /** Plain file-copy passthrough to the underlying store, for the Controllers list's right-click
      *  "Export...". */
     bool exportProfile(const juce::String& profileId, const juce::File& destFile) const {
@@ -276,6 +282,8 @@ private:
                            std::optional<ControllerProfile> before);
     bool applyProfileState(const juce::String& profileId, const std::optional<ControllerProfile>& state);
     void resyncAssignmentCopies(const ControllerProfile& profile);
+    bool deleteControlsWithLabel(const juce::String& profileId, const std::vector<juce::String>& controlIds,
+                                 const juce::String& editLabel);
 
     AudioEngine& engine_;
     GraphEditor& graphEditor_;

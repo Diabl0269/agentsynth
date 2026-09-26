@@ -119,6 +119,33 @@ TEST_F(MidiRemoteProfileHistoryTest, DeleteControlSplitsAcrossTheTwoHistories) {
     EXPECT_EQ(doc_.assignments[0].control.controlId, "k1");
 }
 
+// FRO270: the surface's group delete -- deleteControls() removes BOTH controls (and both project
+// assignments) in ONE step on each history, so a single undo on either restores the whole pair.
+TEST_F(MidiRemoteProfileHistoryTest, DeleteControlsRemovesAGroupInOneStepPerHistory) {
+    auto withSecondControl = *find("p1");
+    withSecondControl.controls.push_back(makeControl("k2", 101, "Knob 2"));
+    ASSERT_TRUE(controller_->updateProfile(withSecondControl, "Add control"));
+
+    ASSERT_EQ(controller_->assignControl("p1", "k1", PickTarget::parameter(node_->nodeID, "cutoff")),
+              synth::midi::AssignStatus::assigned);
+    ASSERT_EQ(controller_->assignControl("p1", "k2", PickTarget::parameter(node_->nodeID, "resonance")),
+              synth::midi::AssignStatus::assigned);
+    ASSERT_EQ(doc_.assignments.size(), 2u);
+
+    ASSERT_TRUE(controller_->deleteControls("p1", {"k1", "k2"}));
+    EXPECT_TRUE(find("p1")->controls.empty());
+    EXPECT_TRUE(doc_.assignments.empty());
+    EXPECT_EQ(controller_->getUndoProfileEditLabel(), "Delete controls");
+
+    ASSERT_TRUE(controller_->undoProfileEdit());
+    ASSERT_EQ(find("p1")->controls.size(), 2u) << "ONE undo restores both controls";
+    EXPECT_TRUE(doc_.assignments.empty()) << "the project half is not the controller history's to restore";
+
+    ASSERT_TRUE(undo_.canUndo());
+    undo_.undo();
+    ASSERT_EQ(doc_.assignments.size(), 2u) << "ONE project undo restores both assignments";
+}
+
 TEST_F(MidiRemoteProfileHistoryTest, ANewEditAfterAnUndoDropsTheRedoTail) {
     rename("A");
     rename("B");

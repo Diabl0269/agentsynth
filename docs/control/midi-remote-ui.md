@@ -174,6 +174,39 @@ the control from the controller edit history (Cmd+Z with the panel focused), its
 from the project history ([`midi-remote.md`](midi-remote.md#undo)). Repaint is event-driven from the activity ring at ≤ 30 Hz while the tab is
 showing, gated exactly like `BottomDockComponent::refreshMeters` — no free-running timer.
 
+**Multi-select (FRO270).** Plain click replaces the selection with one control; shift-click adds a
+control to it (never removes one — there is no natural linear order on a 2D grid to "extend" a
+range along); cmd-click (`ModifierKeys::commandModifier`) toggles a control in/out. Pressing on
+EMPTY grid space and dragging draws a marquee rectangle — every control whose cell it intersects
+becomes the selection on release (shift held adds to whatever was already selected); a press with
+no drag on empty space, or Esc, clears it. The selection is owned by the surface itself and
+survives a live refresh rebuild (Detect, a move, an undo/redo) — any id no longer present is
+silently dropped, and switching to a different controller clears it, same as before FRO270.
+
+**Group move.** Dragging any cell that is part of a multi-selection moves the whole selection
+together as one block, keeping every member's relative layout, snapped to cells the same way a
+single control always has been, and clamped together against the grid's top-left bound (col/row
+≥ 0) rather than clamping one member alone, which would break the relative layout. Landing the
+block on a cell an UNselected control already occupies refuses the whole move (every cell springs
+back) instead of overlapping it — as of FRO270 this rule applies to a lone drag too, closing a gap
+where a single control could previously be dropped onto another (never intentional; nothing
+described or tested it, and a group makes the same mistake far easier to trigger by accident, so
+there is one drag-to-move rule, not a single-cell exception). One `updateProfile(..., "Move
+control"/"Move controls")` at drag end either way — one step on the controller edit history, so one
+Cmd+Z restores every moved control's previous position.
+
+**Group delete.** The Delete key and the inspector's own Delete (when it has one) act on the whole
+selection. A confirm names the control count and the total project + global assignment count that
+will be removed, once, for one selected control same as for many (`MidiLearnController::deleteControls`,
+mirroring `deleteControl` for one). It is ONE controller-history step (`"Delete control"`/`"Delete
+controls"`) removing every selected control from the profile, and ONE project-history step removing
+every one of their project assignments — a single Cmd+Z on either history restores the whole group,
+not one control at a time.
+
+With 2+ controls selected the inspector shows *"N controls selected"* and disables every
+per-control field (name, kind, encoding, button mode, learn target, Forget) — there is no one
+control's own fields left to show.
+
 ### Inspector (right)
 
 For the selected control: name, kind, message spec (editable, with a **Relearn** button that
@@ -433,7 +466,12 @@ fake message source (no real `juce::MidiInput`):
   controller Re-link/Recreate and the orphan node (`OrphanControllerTests.cpp`,
   `Tests/MidiRemote/MidiLearnControllerOrphanTests.cpp`); the controller edit history and its Cmd+Z routing by
   panel focus (`Tests/MidiRemote/ProfileEditHistoryTests.cpp`, `MidiRemoteUndoRoutingTests.cpp`); PNG render of the surface for visual inspection
-  (`MIDI_SURFACE_PNG=<path>`, like the ADSR card's).
+  (`MIDI_SURFACE_PNG=<path>`, like the ADSR card's); FRO270 multi-select (plain/shift/cmd-click,
+  Esc/empty-click-to-clear, selection surviving a live rebuild) and the empty-space marquee
+  (`ControllerSurfaceSelectionTests.cpp`); group drag (relative layout kept, block-clamped at the
+  grid edge, refused onto an unselected control) (`ControllerSurfaceGroupDragTests.cpp`); group
+  delete's one confirm and one undo step per history (`Tests/MidiRemote/ProfileEditHistoryTests.cpp`'s
+  `DeleteControlsRemovesAGroupInOneStepPerHistory`, `MidiRemotePanelGroupDeleteTests.cpp`).
 - **E2E** (`Tests/MidiRemote/MidiRemoteWorkflowE2ETests.cpp`): one workflow through the real seams (messages enter
   `AudioEngine::handleIncomingMidiMessageFromSource`, `RemoteEngine::drain()` applies them on a fake clock). Fake
   device → a real right-click "MIDI Learn 'Cutoff'..." on the Filter card → sweep → the CC settles, the assignment

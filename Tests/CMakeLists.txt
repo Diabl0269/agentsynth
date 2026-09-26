@@ -439,9 +439,12 @@ add_executable(Tests
     UI/MidiRemote/MidiRemotePanelHostedTests.cpp
     UI/MidiRemote/ControllerSurfaceDetectTests.cpp
     UI/MidiRemote/MidiRemotePanelControllersTests.cpp
+    UI/MidiRemote/MidiRemotePanelGroupDeleteTests.cpp
     UI/MidiRemote/AddControllerPopoverTests.cpp
     UI/MidiRemote/ControllersListTests.cpp
     UI/MidiRemote/ControllerSurfaceTests.cpp
+    UI/MidiRemote/ControllerSurfaceSelectionTests.cpp
+    UI/MidiRemote/ControllerSurfaceGroupDragTests.cpp
     UI/MidiRemote/ControlInspectorTests.cpp
     UI/MidiRemote/PickTargetOverlayTests.cpp
     UI/MidiRemote/ActionPickerTests.cpp
@@ -652,6 +655,9 @@ add_executable(Tests
     ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceToolbar.cpp
     ../Source/UI/MidiRemote/ControllersList/ControllersListComponent.cpp
     ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.cpp
+    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceSelection.cpp
+    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceMarquee.cpp
+    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceGroupDrag.cpp
     ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.cpp
     ../Source/UI/MidiRemote/Inspector/ControlInspectorComponent.cpp
     ../Source/UI/MidiRemote/ActionPicker/ActionPickerComponent.cpp

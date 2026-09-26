@@ -1,17 +1,20 @@
 // ControllerSurfaceComponent.cpp -- FRO131 (docs/control/midi-remote-ui.md#surface-centre): builds
-// and positions the grid of ControllerSurfaceCells, forwards activity/selection, and turns a
-// completed drag into onControlMoved.
+// and positions the grid of ControllerSurfaceCells, forwards activity, and owns the grid-level
+// paint/keyboard plumbing shared by every FRO270 concern. Selection (click/shift/cmd) lives in
+// ControllerSurfaceSelection.cpp, the empty-space marquee in ControllerSurfaceMarquee.cpp, and
+// drag-to-move (single or group) in ControllerSurfaceGroupDrag.cpp -- this file only wires each
+// cell's callbacks to those units' handlers.
 //
-// MID-GESTURE REBUILD HAZARD (Source/UI/CLAUDE.md's rebuild rule): onControlMoved is fired from
+// MID-GESTURE REBUILD HAZARD (Source/UI/CLAUDE.md's rebuild rule): onControlsMoved is fired from
 // inside a cell's own mouseUp() call stack (ControllerSurfaceCell::mouseUp -> onDragEnded ->
-// the lambda below -> onControlMoved). If THIS component reacted by synchronously calling
+// handleCellDragEnded -> onControlsMoved). If THIS component reacted by synchronously calling
 // setControls() (which clears cells_, destroying the very cell whose mouseUp is still on the
 // stack), the cell would finish its own mouseUp on a freed `this` -- the exact crash class
 // GraphEditor::cancelLiveDragGestures() exists to avoid on the canvas side. So this component does
-// nothing destructive in response to its own onControlMoved/onDragEnded: it only computes the
-// clamped new grid position and invokes the callback, then returns. The caller
+// nothing destructive in response to its own onControlsMoved/onDragEnded: it only computes the
+// clamped new grid position(s) and invokes the callback, then returns. The caller
 // (MidiRemotePanelComponent, one level up) is the one that owns the deferral -- it defers its OWN
-// setControls() rebuild via juce::MessageManager::callAsync after receiving onControlMoved, per
+// setControls() rebuild via juce::MessageManager::callAsync after receiving onControlsMoved, per
 // this ticket's brief -- so by the time cells_ is ever rebuilt, the gesture's call stack has long
 // since unwound.
 
@@ -19,33 +22,25 @@
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
-#include <memory>
+#include <algorithm>
 
 namespace synth::ui {
 
-namespace {
-// Per-cell drag accumulator, shared between a cell's onDraggedByCells (fires many times per drag)
-// and its onDragEnded (fires once, computes the final clamped position). Lives in a shared_ptr
-// captured by both lambdas rather than as component/cell state, since ControllerSurfaceComponent.h
-// and ControllerSurfaceCell.h are both locked contracts for this ticket -- see their own header
-// comments -- so no new private member can carry it.
-struct CellDragState {
-    int startCol = 0;
-    int startRow = 0;
-    int deltaCol = 0;
-    int deltaRow = 0;
-};
-} // namespace
-
 ControllerSurfaceComponent::ControllerSurfaceComponent() {
-    // Delete/Backspace must reach THIS component's keyPressed(), not go looking for a focused
+    // Delete/Backspace/Esc must reach THIS component's keyPressed(), not go looking for a focused
     // cell -- cells are mouse-inert display widgets and never take focus themselves.
     setWantsKeyboardFocus(true);
 }
 
 ControllerSurfaceComponent::~ControllerSurfaceComponent() = default;
 
+// FRO270: switching to a different controller drops any control selection (matches the pre-FRO270
+// behaviour of the panel's own selectedControlId_.clear()); rebuilding the SAME profile (a live
+// refresh -- Detect, a move, a delete, an undo/redo) instead prunes the existing selection down to
+// whatever ids still exist, so the caller doesn't have to re-apply it after every mutation.
 void ControllerSurfaceComponent::setControls(const juce::String& profileId, const std::vector<CellModel>& cells) {
+    if (profileId != profileId_)
+        selectedIds_.clear();
     profileId_ = profileId;
     cells_.clear();
 
@@ -60,38 +55,25 @@ void ControllerSurfaceComponent::setControls(const juce::String& profileId, cons
         addAndMakeVisible(cell);
 
         const juce::String controlId = cellModel.control.id;
-
-        cell->onSelected = [this, controlId]() {
-            setSelectedControlId(controlId);
-            if (onSelectControl)
-                onSelectControl(controlId);
-            // Delete/Backspace must reach keyPressed() below -- grab focus at the moment of
-            // selection, per the header's own doc comment on onDeleteControlRequested.
-            grabKeyboardFocus();
+        cell->onSelected = [this, controlId](const juce::ModifierKeys& mods) { handleCellSelected(controlId, mods); };
+        cell->onDraggedByCells = [this, controlId](int dCols, int dRows) {
+            handleCellDragged(controlId, dCols, dRows);
         };
+        cell->onDragEnded = [this, controlId]() { handleCellDragEnded(controlId); };
 
-        auto dragState = std::make_shared<CellDragState>();
-        dragState->startCol = cellModel.control.layout.col;
-        dragState->startRow = cellModel.control.layout.row;
-
-        cell->onDraggedByCells = [dragState](int dCols, int dRows) {
-            dragState->deltaCol = dCols;
-            dragState->deltaRow = dRows;
-        };
-
-        cell->onDragEnded = [this, controlId, dragState]() {
-            const int newCol = juce::jmax(0, dragState->startCol + dragState->deltaCol);
-            const int newRow = juce::jmax(0, dragState->startRow + dragState->deltaRow);
-            dragState->deltaCol = 0;
-            dragState->deltaRow = 0;
-            // See this file's top-of-file comment: fire and return, never rebuild cells_ here.
-            if (onControlMoved)
-                onControlMoved(controlId, newCol, newRow);
-        };
-
-        cell->setSelected(controlId == selectedControlId_);
+        cell->setSelected(std::find(selectedIds_.begin(), selectedIds_.end(), controlId) != selectedIds_.end());
         if (controlId == pulseControlId_)
             cell->setDetectPulse(pulseSinceMs_);
+    }
+
+    std::vector<juce::String> pruned;
+    for (const auto& id : selectedIds_)
+        if (findCellForTest(id) != nullptr)
+            pruned.push_back(id);
+    if (pruned.size() != selectedIds_.size()) {
+        selectedIds_ = std::move(pruned);
+        if (onSelectionChanged)
+            onSelectionChanged(selectedIds_);
     }
 }
 
@@ -132,12 +114,6 @@ void ControllerSurfaceComponent::noteActivity(const juce::String& controlId, syn
     }
     // Not on the currently shown grid -- the caller doesn't pre-filter (header contract), so this
     // is an ordinary no-op, not an error.
-}
-
-void ControllerSurfaceComponent::setSelectedControlId(const juce::String& controlId) {
-    selectedControlId_ = controlId;
-    for (auto* cell : cells_)
-        cell->setSelected(cell->getControlId() == controlId);
 }
 
 float ControllerSurfaceComponent::getCellValueForTest(const juce::String& controlId) const {
@@ -183,11 +159,19 @@ void ControllerSurfaceComponent::paint(juce::Graphics& g) {
 }
 
 bool ControllerSurfaceComponent::keyPressed(const juce::KeyPress& key) {
-    if (selectedControlId_.isEmpty())
+    // FRO270: Esc clears the selection regardless of how many are selected -- checked first since
+    // it is valid even with nothing selected (a no-op, reported as unhandled below).
+    if (key == juce::KeyPress::escapeKey) {
+        if (selectedIds_.empty())
+            return false;
+        setSelectionInternal({});
+        return true;
+    }
+    if (selectedIds_.empty())
         return false;
     if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey) {
-        if (onDeleteControlRequested)
-            onDeleteControlRequested(selectedControlId_);
+        if (onDeleteControlsRequested)
+            onDeleteControlsRequested(selectedIds_);
         return true;
     }
     return false;
