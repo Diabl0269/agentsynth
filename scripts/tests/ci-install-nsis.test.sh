@@ -61,6 +61,23 @@ mkdir -p "$WORK/root/NSIS" && : >"$WORK/root/NSIS/makensis.exe"
 FAKE
 chmod +x "$WORK/bin/fake-install"
 
+# The script caps each choco attempt with `timeout` (GNU coreutils). The Linux Lint runner has it,
+# but macOS has neither `timeout` nor `gtimeout`, so running scripts/ci-local.sh on a Mac found no
+# timeout binary, never ran the fake choco, and failed every choco-count check. Use the real one
+# when present; otherwise a perl alarm shim with the same "<seconds> <command...>" shape.
+if command -v timeout >/dev/null 2>&1; then
+    TIMEOUT_FOR_TESTS="timeout"
+else
+    cat >"$WORK/bin/timeout" <<'FAKE'
+#!/usr/bin/env bash
+secs="$1"
+shift
+exec perl -e 'alarm shift; exec @ARGV' "$secs" "$@"
+FAKE
+    chmod +x "$WORK/bin/timeout"
+    TIMEOUT_FOR_TESTS="$WORK/bin/timeout"
+fi
+
 # The "downloaded" installer is a fixture file served over file://, which curl handles natively.
 printf 'not really an installer\n' >"$WORK/nsis-fixture.exe"
 FIXTURE_SHA="$(sha256sum "$WORK/nsis-fixture.exe" | awk '{print $1}')"
@@ -75,7 +92,7 @@ reset() { # reset <choco plan lines...>
 }
 
 run_script() { # run_script [extra VAR=value...] -- runs the script with the fakes wired in
-    env WORK="$WORK" CHOCO="$WORK/bin/choco" CHOCO_BACKOFF=0 CHOCO_TIMEOUT=2 \
+    env WORK="$WORK" TIMEOUT_BIN="$TIMEOUT_FOR_TESTS" CHOCO="$WORK/bin/choco" CHOCO_BACKOFF=0 CHOCO_TIMEOUT=2 \
         NSIS_URL="file://$WORK/nsis-fixture.exe" NSIS_SHA256="$FIXTURE_SHA" \
         NSIS_INSTALLER_RUN="$WORK/bin/fake-install" NSIS_SEARCH_ROOTS="$WORK/root/NSIS;$WORK/root/other" \
         GITHUB_PATH="$WORK/github_path" "$@" bash "$SCRIPT" >"$WORK/out" 2>&1
