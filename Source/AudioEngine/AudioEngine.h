@@ -57,6 +57,9 @@ public:
     void setSavedDeviceState(std::unique_ptr<juce::XmlElement> state);
     bool hasSavedDeviceState() const noexcept { return savedDeviceState_ != nullptr; }
 
+    // FRO27: false when there is no saved state. See the .cpp definition.
+    bool savedDeviceStateEnablesInput() const;
+
     // Standalone only; call before initialise(). Skips opening any audio/MIDI device (automation launch, FRO29).
     void setAudioDeviceDisabled(bool disabled) noexcept;
     bool isAudioDeviceDisabled() const noexcept;

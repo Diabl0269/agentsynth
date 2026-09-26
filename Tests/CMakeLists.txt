@@ -479,6 +479,7 @@ add_executable(Tests
     Plugin/PluginProcessorTests.cpp
     Engine/AudioEngineTransportTests.cpp
     Engine/AudioInputTests.cpp
+    Engine/DeviceStateInputsTests.cpp
     Modules/AudioInputModuleTests.cpp
     Engine/FeedbackGuardTests.cpp
     Engine/NonFiniteOutputGuardTests.cpp

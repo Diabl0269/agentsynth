@@ -245,6 +245,14 @@ therefore not by itself a regression of the opt-in contract — check the defaul
 (`system_profiler SPAudioDataType`) before debugging the app. Signing makes one Allow persist; it
 does not stop the first ask.
 
+**FRO27.** A saved device state can no longer name an input device it did not actually enable —
+`synth::stripUnusedInputDevice` (`Source/AudioEngine/DeviceStateInputs.h`) strips one on save and
+on load, working around a JUCE quirk where `AudioDeviceManager` can fill in a default microphone
+name even for an output-only change. The app also only asks for the mic-permission runtime prompt
+when a saved state actually enables input; a plain output-only launch asks for nothing, and a
+denied prompt no longer stops audio output — it only means the input side stays silent. If you
+still see a prompt on such a launch, it's the combined-I/O-default-device case above, not this bug.
+
 **Launching for computer-use with no device prompt at all.** Dev-signing only makes the prompt
 *stable*, not absent — if computer-use is driving the app (see
 [`docs/architecture/audio-engine.md#automation-launch-no-audio-device`](../architecture/audio-engine.md#automation-launch-no-audio-device)),
