@@ -224,6 +224,20 @@ public:
     // MESSAGE THREAD (FRO262). Republishes the engine's open MIDI inputs to RemoteEngine::setSources().
     void refreshSources();
 
+    /** FRO240 (docs/control/midi-remote.md#replace-and-duplicate, MidiLearnControllerRetarget.cpp):
+     *  wired to GraphEditor::onModuleReplaced -- re-targets every project assignment (parameter or
+     *  node command) whose target nodeUuid is `oldNodeUuid` onto `newNodeId`'s uuid (assigned
+     *  lazily if it has none yet), but ONLY where the new module still supports the target: a
+     *  parameter assignment only if `newNodeId`'s processor still resolves that paramId
+     *  (synth::resolveLaneParameter); a node command only if the new module supports that command
+     *  (toggleSolo: both nodes must be a ChannelStripModule). Anything that doesn't move is left
+     *  exactly where it was -- orphaned, same as today's plain delete/replace. Mutates `doc_`
+     *  in-place with NO undo recording of its own: the caller (GraphEditor::replaceModule, via
+     *  onModuleReplaced) must already be inside a single AppUndoManager::recordGraphAndMidiRemoteChange
+     *  transaction that brackets doc_'s own before/after JSON around this call, so the retarget
+     *  lands in the SAME undo step as the module replace. Returns true if anything moved. */
+    bool retargetNode(const juce::String& oldNodeUuid, juce::AudioProcessorGraph::NodeID newNodeId);
+
 private:
     /** Forwards MouseListener clicks and polls RemoteEngine::isLearnArmed() for the silent-timeout
      *  cancel path, which fires no callback of its own

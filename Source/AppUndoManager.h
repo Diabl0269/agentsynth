@@ -169,6 +169,11 @@ public:
     bool recordCombinedChange(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc,
                               const std::function<void()>& mutation);
 
+    /** FRO240: recordCombinedChange's shape for graph + MidiRemoteProjectDoc (see the .cpp).
+     *  `postRestore` mirrors recordMidiRemoteChange's own. */
+    bool recordGraphAndMidiRemoteChange(juce::AudioProcessorGraph& graph, synth::MidiRemoteProjectDoc& doc,
+                                        const std::function<void()>& mutation, std::function<void()> postRestore = {});
+
     /**
      * @brief Records a mutation that may touch the graph and/or a synth::MacroSet as ONE undo
      *        step (the canonical case: deleting a collapsed macro card, which removes both its

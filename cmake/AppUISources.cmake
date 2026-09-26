@@ -34,6 +34,7 @@ set(APPUI_SOURCES
     Source/MidiRemote/MidiLearnControllerHistory.cpp
     Source/MidiRemote/ProfileEditHistory.h
     Source/MidiRemote/ProfileEditHistory.cpp
+    Source/MidiRemote/MidiLearnControllerRetarget.cpp
     Source/UI/Graph/PickTargetOverlay/GraphPickCandidates.cpp
     Source/UI/Graph/PickTargetOverlay/PickTargetOverlay.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h

@@ -270,6 +270,17 @@ void MainComponent::wireGraphEditorCallbacks() {
     graphEditor.onMidiForgetRequested = [this](juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
         midiLearnController_.forget(nodeId, paramId);
     };
+    // FRO240 (docs/control/midi-remote.md#replace-and-duplicate): "Replace with..." keeps a
+    // module's MIDI Remote mappings -- setMidiRemoteProjectDocForUndo folds midiRemoteDoc's own
+    // before/after JSON into replaceModule()'s undo transaction, onModuleReplaced does the actual
+    // retarget (inside that same transaction), and onMidiRemoteDocRestored republishes to the
+    // engine after an undo/redo of it, exactly like every other MidiLearnController mutation.
+    graphEditor.setMidiRemoteProjectDocForUndo(&midiRemoteDoc);
+    graphEditor.onModuleReplaced = [this](const juce::String& oldNodeUuid,
+                                          juce::AudioProcessorGraph::NodeID newNodeId) {
+        midiLearnController_.retargetNode(oldNodeUuid, newNodeId);
+    };
+    graphEditor.onMidiRemoteDocRestored = [this] { midiLearnController_.publishAssignments(); };
     // FRO131 decision (2026-09-22): "Edit MIDI assignment..." -- open the dock (same sequence
     // performToggleMidiRemotePanel()'s own "closed" branch runs, mirroring
     // trackChannelLink_.setMixerRevealHook()'s own "open before reveal" shape above) before asking

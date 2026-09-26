@@ -25,7 +25,8 @@ class ModuleComponent;
 class MacroCardComponent;
 namespace synth {
 class PluginCardLayoutStore; // hosted-plugin card layouts, see setPluginCardLayoutStore
-}
+class MidiRemoteProjectDoc;  // FRO240, see setMidiRemoteProjectDocForUndo
+} // namespace synth
 namespace synth::ui {
 class ColourPickerPopup; // a unique_ptr return type only; 89 files include this header
 }
@@ -395,6 +396,24 @@ public:
     // The per-plugin card-layout store hosted cards resolve against. Not owned, may be null, must outlive this editor.
     void setPluginCardLayoutStore(synth::PluginCardLayoutStore* store) noexcept { pluginCardLayoutStore_ = store; }
     synth::PluginCardLayoutStore* getPluginCardLayoutStore() const noexcept { return pluginCardLayoutStore_; }
+
+    // ---- FRO240: "Replace with..." keeps a module's MIDI Remote mappings ----
+    // GraphEditor stays free of MidiLearnController/RemoteEngine (thin-owner rule); these three
+    // members are the hook MainComponent wires MidiLearnController through. See replaceModule()'s
+    // own doc comment (GraphEditorCommands.cpp) for how they combine into one undo step.
+
+    /** Fires from inside replaceModule(), after the new node exists and the old node (and its
+     *  uuid) are gone, with the OLD node's uuid and the NEW node's id. May be null. */
+    std::function<void(const juce::String& oldNodeUuid, juce::AudioProcessorGraph::NodeID newNodeId)> onModuleReplaced;
+
+    /** Fires as the postRestore of the combined undo/redo this doc participates in (see
+     *  setMidiRemoteProjectDocForUndo) -- never for the initial replace itself. May be null. */
+    std::function<void()> onMidiRemoteDocRestored;
+
+    /** Non-owning; null (the default, and every headless test) means replaceModule() falls back to
+     *  its plain graph-only undo step and onModuleReplaced/onMidiRemoteDocRestored never fire. Must
+     *  outlive this editor. */
+    void setMidiRemoteProjectDocForUndo(synth::MidiRemoteProjectDoc* doc) noexcept { midiRemoteDocForUndo_ = doc; }
 
     // ---- Copy / paste / duplicate ----
     // All three run through the snippet pipeline (self-contained connections, modulation as
@@ -818,8 +837,14 @@ private:
 
     void applySelectionChange(const std::vector<juce::AudioProcessorGraph::NodeID>& newSelection) override;
 
+    // FRO240: replaceModule()'s own named step -- picks the plain graph-only recordStructuralChange
+    // or, when MainComponent has wired a doc up, the combined recordGraphAndMidiRemoteChange, so
+    // replaceModule() itself doesn't have to inline both branches (see GraphEditorCommands.cpp).
+    void recordReplaceModuleUndo(juce::AudioProcessorGraph& graph, const std::function<void()>& doReplace);
+
     AppUndoManager* undoManager = nullptr;
     synth::PluginCardLayoutStore* pluginCardLayoutStore_ = nullptr;
+    synth::MidiRemoteProjectDoc* midiRemoteDocForUndo_ = nullptr; // FRO240, see setMidiRemoteProjectDocForUndo
 
     // Where the macro recolour picker's favourites shelf persists to — see setPropertiesFile.
     // Null (the default) keeps favourites in-memory only, which is what a headless test with no

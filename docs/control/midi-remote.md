@@ -608,10 +608,11 @@ Rules:
 - A parameter assignment resolves through `synth::resolveLaneParameter` and nothing else — the
   hosted-plugin rules (exact id, index hint rescue, drift → orphan) come for free.
 - Deleting a node orphans its assignments (they stay in the project, flagged; the control does
-  nothing). Deleting the assignment is explicit. Duplicating / pasting a module does **not**
-  copy its assignments yet. Engine-side a deleted node simply leaves the slot's parameter
-  unresolved (`Slot::orphaned` is the separate flag for hosted-plugin drift and node commands);
-  the panel shows either state as "(missing module)".
+  nothing). Deleting the assignment is explicit. "Replace with..." is the one exception — see
+  [Replace and duplicate](#replace-and-duplicate) below. Duplicating / pasting a module does
+  **not** copy its assignments (deliberately — see the same section). Engine-side a deleted node
+  simply leaves the slot's parameter unresolved (`Slot::orphaned` is the separate flag for
+  hosted-plugin drift and node commands); the panel shows either state as "(missing module)".
 - A **relative** encoding delivers a signed delta; the engine applies `delta × sensitivity` to
   the *current* normalised value (sensitivity per assignment, default 1/127 per detent). Takeover
   is skipped. Auto-detect of the encoding is a Detect-mode helper ("turn it left, now right"),
@@ -762,6 +763,34 @@ Undo/Redo buttons always act on the project history.
 
 **Cue.** While the panel holds focus and the controller history can undo, the panel toolbar shows
 `Cmd+Z undoes: <label>` (`Ctrl+Z` on Windows/Linux); it is hidden otherwise.
+
+### Replace and duplicate
+
+FRO240: **"Replace with..."** (`GraphEditor::replaceModule`, FRO103) re-targets every project
+assignment whose target `nodeUuid` is the replaced node onto the new node's uuid (assigned lazily
+if it had none yet) — but only where the new module still supports it:
+
+- A **parameter** target moves only if the new module's processor still resolves that `paramId`
+  (the same `synth::resolveLaneParameter` call every other resolution site uses). Replacing a
+  Filter's mapped "cutoff" knob with another Filter follows the mapping across; replacing it with a
+  VCA (no "cutoff") leaves the assignment exactly where it was — orphaned, same as a plain delete.
+- A **node command** target (Solo) moves only if the new module supports that command (today:
+  both nodes are a `ChannelStripModule`); otherwise it is left alone too.
+
+The retarget (`MidiLearnController::retargetNode`, `Source/MidiRemote/MidiLearnControllerRetarget.cpp`)
+happens inside the SAME undo transaction as the module replace —
+`AppUndoManager::recordGraphAndMidiRemoteChange`, the graph+MidiRemoteProjectDoc sibling of
+`recordCombinedChange` (graph+TimelineDoc) — so one Cmd+Z restores the old module AND its
+assignment's old target together, and one Cmd+Shift+Z re-applies both. `GraphEditor` stays free of
+any MIDI Remote type (thin-owner rule): the wiring is two small hooks
+(`GraphEditor::onModuleReplaced`, `onMidiRemoteDocRestored`) MainComponent connects to
+`MidiLearnController`, not a new forwarder on `GraphEditor` itself. The engine is republished
+(`MidiLearnController::publishAssignments()`) right after a retarget, and again as the combined
+undo/redo's `postRestore`, so hardware always drives whatever the assignment currently resolves to.
+
+**Duplicate / copy-paste does NOT copy assignments** — one hardware control driving two modules at
+once would be surprising, not useful — and this is unchanged by FRO240; pinned by
+`MidiLearnControllerRetargetTests.cpp`'s `DuplicatingAMappedModuleDoesNotCopyItsAssignment`.
 
 ---
 

@@ -409,6 +409,10 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
         // 2. Snapshot old module's properties
         int posX = oldNode->properties.getWithDefault("x", 0);
         int posY = oldNode->properties.getWithDefault("y", 0);
+        // FRO240: captured before removeNode() frees this node, so onModuleReplaced below can
+        // still tell MidiLearnController which uuid its assignments used to target. Empty is a
+        // normal case (a node MIDI Remote never touched) -- retargetNode() below is a no-op then.
+        const juce::String oldNodeUuid = oldNode->properties["uuid"].toString();
         auto* oldProc = oldNode->getProcessor();
         int oldNumInputs = oldProc->getTotalNumInputChannels();
         int oldNumOutputs = oldProc->getTotalNumOutputChannels();
@@ -557,14 +561,32 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
         // 9. Refresh UI
         updateComponents();
         audioEngine.updateModuleNames();
+
+        // FRO240 (docs/control/midi-remote.md#replace-and-duplicate): re-target the old node's
+        // MIDI Remote assignments onto the new one, INSIDE this mutation -- so whichever undo
+        // recorder wraps doReplace (below) sees the doc's own before/after JSON bracket this call
+        // exactly like it brackets the graph edit above, and one Cmd+Z reverts both together.
+        if (onModuleReplaced)
+            onModuleReplaced(oldNodeUuid, newNodeId);
     };
 
-    if (undoManager) {
-        undoManager->recordStructuralChange(graph, doReplace);
-    } else {
+    if (undoManager)
+        recordReplaceModuleUndo(graph, doReplace);
+    else
         doReplace();
-    }
     repaint();
+}
+
+// FRO240: a plain recordStructuralChange here would leave onModuleReplaced's MIDI Remote doc edit
+// either unrecorded or, if MidiLearnController pushed its own undo action, a second undo step the
+// user would have to Cmd+Z separately -- so this folds the doc into the SAME transaction as the
+// graph replace whenever MainComponent has wired one up (setMidiRemoteProjectDocForUndo). Headless
+// callers/tests that never call it keep the original graph-only behaviour.
+void GraphEditor::recordReplaceModuleUndo(juce::AudioProcessorGraph& graph, const std::function<void()>& doReplace) {
+    if (midiRemoteDocForUndo_ != nullptr)
+        undoManager->recordGraphAndMidiRemoteChange(graph, *midiRemoteDocForUndo_, doReplace, onMidiRemoteDocRestored);
+    else
+        undoManager->recordStructuralChange(graph, doReplace);
 }
 
 void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool isInput, bool isMidi) {
