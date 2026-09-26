@@ -14,8 +14,10 @@
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/BottomDockComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerEqThumbnail.h"
+#include "UI/Theme/Theme.h"
 #include <gtest/gtest.h>
 
 // buildLinearChannelRigMMT/connectStereoMMT -- a real, signal-connected TrackAudio->EQ->Strip
@@ -105,6 +107,91 @@ TEST(MixerColumnComponentTests, BusColumnShowsInsertsAndEqThumbnailAtTheDockMixe
 
 TEST(MixerColumnComponentTests, BusColumnShowsInsertsAndEqThumbnailAtATallerHeight) {
     expectBusColumnShowsItsInserts(420);
+}
+
+namespace {
+
+/** Builds a bus column with 3 inserts (buildBusChannel's Gate/EQ/Compressor chain) plus one send
+ *  slot -- everything that competes with the fader for space in a real column. */
+synth::MixerColumn buildStarvedColumnModel(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc,
+                                           synth::MacroSet& macros, const synth::DefaultChannel& channel) {
+    const auto snapshot = synth::buildMixerSnapshot(graph, doc, macros);
+    synth::MixerColumn column;
+    for (const auto& candidate : snapshot.columns)
+        if (candidate.nodeId == channel.strip->nodeID)
+            column = candidate;
+    synth::MixerSendEntry send;
+    send.slot = 0;
+    send.targetName = "Bus";
+    column.sends.push_back(send);
+    return column;
+}
+
+} // namespace
+
+// FRO298 (docs/mixer/panel.md): at the bottom dock's OWN default column height (Theme's default
+// timelinePanelHeight minus the dock's own tab strip, BottomDockComponent::kTabStripHeight -- never
+// a magic 220), the insert list, send list, EQ thumbnail and pan knob used to reserve their own
+// space FIRST, leaving the fader ~0px. With 2+ inserts, a send and pan all competing for the same
+// short column, the fader must still keep at least kMinFaderHeight, with a real, draggable slider.
+TEST(MixerColumnComponentTests, FaderKeepsItsMinimumHeightAtTheDockDefaultColumnHeight) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    AppUndoManager undoManager;
+    GraphEditor editor(engine, &undoManager);
+    editor.setSize(900, 600);
+    synth::TimelineDoc doc;
+
+    const synth::DefaultChannelLayout layout{{-100, 0}, {0, 0}, {100, 0}, {200, 0}, {300, 0}};
+    const auto channel = synth::buildBusChannel(graph, layout);
+    ASSERT_NE(channel.strip, nullptr);
+
+    auto columnModel = buildStarvedColumnModel(graph, doc, editor.getMacros(), channel);
+    ASSERT_GE(columnModel.inserts.size(), 2u) << "the model half of this fix must already hold";
+    ASSERT_EQ(columnModel.sends.size(), 1u);
+
+    synth::ui::MixerColumnComponent column;
+    column.configure(graph, undoManager, editor.getMacros(), editor, engine);
+    const int dockColumnHeight =
+        synth::theme::Metrics{}.timelinePanelHeight - synth::ui::BottomDockComponent::kTabStripHeight;
+    column.setSize(140, dockColumnHeight);
+    column.setColumn(columnModel, "");
+
+    EXPECT_GE(column.getFaderForTest().getHeight(), synth::ui::MixerColumnComponent::kMinFaderHeight)
+        << "at the dock's default column height (" << dockColumnHeight
+        << "px), the fader must never drop under its own minimum draggable height";
+    EXPECT_FALSE(column.getFaderForTest().getSlider().getBounds().isEmpty())
+        << "the fader's own slider (not just its dB readout) must stay usable, not squeezed to nothing";
+}
+
+// FRO298: the flip side of the guarantee above -- with plenty of room, every part still gets
+// exactly what it asked for, same as before this fix (only a too-short column ever trims anything).
+TEST(MixerColumnComponentTests, InsertAndSendListsKeepPreferredHeightWhenColumnIsTall) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    AppUndoManager undoManager;
+    GraphEditor editor(engine, &undoManager);
+    editor.setSize(900, 600);
+    synth::TimelineDoc doc;
+
+    const synth::DefaultChannelLayout layout{{-100, 0}, {0, 0}, {100, 0}, {200, 0}, {300, 0}};
+    const auto channel = synth::buildBusChannel(graph, layout);
+    ASSERT_NE(channel.strip, nullptr);
+
+    auto columnModel = buildStarvedColumnModel(graph, doc, editor.getMacros(), channel);
+    ASSERT_GE(columnModel.inserts.size(), 2u);
+
+    synth::ui::MixerColumnComponent column;
+    column.configure(graph, undoManager, editor.getMacros(), editor, engine);
+    column.setSize(140, 600);
+    column.setColumn(columnModel, "");
+
+    EXPECT_EQ(column.getInsertListForTest().getHeight(), column.getInsertListForTest().getPreferredHeight())
+        << "plenty of room: the insert list must still get exactly its preferred height";
+    EXPECT_EQ(column.getSendListForTest().getHeight(), column.getSendListForTest().getPreferredHeight())
+        << "plenty of room: the send list must still get exactly its preferred height";
 }
 
 TEST(MixerColumnComponentTests, ClickForwardsEqUuidThroughOnClicked) {

@@ -18,10 +18,12 @@
 #include "GraphEditor.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "CanvasAccessibilityClip.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroControlModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Macros/MacroCardComponent.h"
 
 // Returns an estimated (w, h) footprint for a module type name.
 // Used when the component does not yet exist (e.g. on drag-drop before layout).
@@ -501,6 +503,10 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     if (smartConnections_.shouldOfferSmartConnections(dragDropController_.buildDragPreviewState()) &&
         smartConnections_.getSmartSuggestionCount() > 0)
         smartConnections_.applySmartSuggestions(module->getNodeId(), /*recordUndo=*/false);
+
+    // FRO300: a single-module drag can land the module fully outside the visible rect (drag it
+    // under the bottom dock, or past the edge while zoomed in) without any pan/zoom of its own.
+    detail::applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
 
     repaintCanvas();
 }

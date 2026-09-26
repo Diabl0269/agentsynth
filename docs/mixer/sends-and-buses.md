@@ -143,7 +143,11 @@ existing orphan-strip append puts them.
 
 On a source column a compact `MixerSendList` sits under the insert list: one row per active slot — a
 target-bus button, a rotary level knob attached straight onto `sendNLevel`, a `PRE`/`POST` toggle and
-an `x` — plus a `+ Send` row while a slot is free. **Each mutation is ONE
+an `x` — plus a `+ Send` row while a slot is free. **FRO301: a screen reader names each level knob by
+its target** — "Send to Bus 1", or "Send 2 (no target)" once its cable is cut — and speaks its value
+the same "-6.0 dB" format as the fader and pan knob
+([`docs/mixer/panel.md`](panel.md#keyboard-navigation-and-accessibility)). **Each
+mutation is ONE
 `recordGraphAndMacroChange`** around `Source/Mixer/MixerSends`' Core flows, and **the rows unbind
 before a graph-replacing undo frees their parameters**
 ([`docs/mixer/panel.md`](panel.md#unbinding-before-a-graph-change)).

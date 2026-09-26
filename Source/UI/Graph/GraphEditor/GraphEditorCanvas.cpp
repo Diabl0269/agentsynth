@@ -8,6 +8,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
 
+#include "CanvasAccessibilityClip.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -154,6 +155,11 @@ void GraphEditor::updateComponents() {
     // rasterizes once at the pre-gesture scale and then again at thaw instead of just once.
     if (zoomGestureActive)
         setModuleRasterFrozen(true);
+
+    // FRO300: cards can appear/disappear/reposition here (new node, deleted node, position synced
+    // from properties) without a pan/zoom in between, so updateTransform()'s own call wouldn't
+    // see it until the next frame.
+    applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
 
     repaint();
 }
@@ -311,6 +317,11 @@ void GraphEditor::updateTransform() {
     // re-walk every graph edge for nothing. The 30 Hz tick owns node/cable changes.
     if (minimap.isVisible())
         minimap.setViewport(getVisibleCanvasRect());
+
+    // FRO300: updateTransform() runs every wheel/pan/zoom frame, so a card that just left or
+    // re-entered the visible rect gets its accessibility flipped immediately -- the per-card guard
+    // inside makes every other frame here a no-op.
+    applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
 }
 
 // Shared zoom math for mouseWheelMove and zoomAroundCentre — keeps the formula (and the

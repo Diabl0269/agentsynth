@@ -140,3 +140,38 @@ TEST(MixerPanelComponentTests, ClickingAColumnSelectsItsOwningMacroOnTheCanvas) 
 
     EXPECT_TRUE(mc.getGraphEditor().getMacroController().isMacroSelected(macroId));
 }
+
+// FRO299: an empty graph (the default new patch, before any track or bus exists) shows a hint
+// instead of a blank panel; adding a channel hides it again, and removing that channel brings it
+// back -- exercised with createBus() (public, and the smallest path to a column) rather than
+// simulateAddAudioTrackClick()'s full track/macro/channel-flow machinery.
+TEST(MixerPanelComponentTests, EmptyHintShowsWithNoChannelsAndHidesOnceOneExists) {
+    MainComponent mc(std::make_unique<MockProviderMPCT>());
+    mc.setSize(1400, 900);
+    mc.newPatchForTest();
+
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
+    mixerPanel.rebuild();
+
+    ASSERT_EQ(mixerPanel.getColumnCount(), 0) << "the default new patch starts with no channels";
+    EXPECT_TRUE(mixerPanel.getEmptyHintForTest().isVisible());
+    EXPECT_TRUE(mixerPanel.getEmptyHintForTest().getText().isNotEmpty());
+
+    const auto busId = mixerPanel.createBus();
+    ASSERT_NE(busId, juce::AudioProcessorGraph::NodeID{});
+    mixerPanel.rebuild();
+
+    EXPECT_GT(mixerPanel.getColumnCount(), 0);
+    EXPECT_FALSE(mixerPanel.getEmptyHintForTest().isVisible());
+
+    // Undoing createBus()'s ONE recordGraphAndMacroChange step is what actually gets back to zero
+    // columns: it also spliced in a Master node (buildChannelChain's own spliceMasterNode, ahead of
+    // this new strip), which a `deleteMacroAndMembers` on the bus's own macro would leave behind (the
+    // Master is not one of that macro's members). The restore's after-hook rebuilds the mixer itself
+    // (MixerPanelUndoUnbindTests.cpp's own precedent), unbinding the freed strip's fader first.
+    ASSERT_TRUE(mc.getUndoManager().canUndo());
+    ASSERT_TRUE(mc.getUndoManager().undo());
+
+    EXPECT_EQ(mixerPanel.getColumnCount(), 0);
+    EXPECT_TRUE(mixerPanel.getEmptyHintForTest().isVisible());
+}
