@@ -233,11 +233,17 @@ TEST(MixerAccessibilityTest, SendKnobHasATitleNamingItsTargetAndReadsDbValues) {
     mc.simulateAddAudioTrackClick();
 
     auto& mixerPanel = mc.getBottomDock().getMixerPanel();
-    auto* column = mixerPanel.getStripColumnForTest(0);
-    ASSERT_NE(column, nullptr);
     const auto bus = mixerPanel.createBus();
     ASSERT_NE(bus, juce::AudioProcessorGraph::NodeID{}) << "createBus must build a channel";
 
+    // Fetch the strip column only AFTER createBus(): it reports the new channel through
+    // onGraphMutated, and MainComponent answers that with a synchronous
+    // bottomDock.rebuildMixer(), which destroys and recreates every column. A pointer taken before
+    // the call is dangling by here -- addSendTo() on it read freed memory, which passed by luck on
+    // macOS/Windows Release and segfaulted on roughly every other Linux Debug+coverage run
+    // (std::function::operator() on the freed MixerSendList's onMutated, agentsynth#498/#500).
+    auto* column = mixerPanel.getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
     column->getSendListForTest().addSendTo(bus);
     mixerPanel.rebuild();
 
