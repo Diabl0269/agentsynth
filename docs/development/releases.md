@@ -20,6 +20,13 @@ job tags with that exact same version, via `custom_tag`, and creates a GitHub re
 platform artifacts. The published tag is therefore guaranteed to equal the version every artifact
 was built with.
 
+The `release` job itself only *computes* the tag with `mathieudutour/github-tag-action@v6.2`
+(`dry_run: true`, so it still returns `new_tag`/`changelog` but makes no API write); a separate
+`Create release tag` bash step actually pushes it via `gh api .../git/refs`, with 3 bounded attempts
+(10s/30s backoff) — FRO315: the action's own real invocation intermittently got a 403 "Resource not
+accessible by integration" on that first write call, and a single-shot node action can't retry
+itself.
+
 The tag-and-release step runs **only on `push` to `main`**: a manual `workflow_dispatch` run is a
 build-only dry run, useful for validating the matrix (including the Windows build) before merging.
 
