@@ -38,6 +38,31 @@ Manages audio device I/O (via `juce::AudioIODeviceCallback`), the `juce::AudioPr
 - **MIDI recording** — `synth::MidiRecorder` (`Source/Timeline/MidiRecorder.h/.cpp`) records external MIDI into a new timeline clip as one undo step. `AudioEngine::setMidiCaptureSink(MidiRecorder*)` stores a `std::atomic<MidiRecorder*>` (null by default); `AudioEngine::renderPass` calls `recorder->captureBlock(midiMessages, transport.getCurrentBlockInfo())` unconditionally, right after the snapshot is opened and just before the automation applier. This is the **single** capture point, and deliberately so: `handleIncomingMidiMessage` forwards every external MIDI message to two places — a direct `pushMidiMessage()` into any bound `ExternalMidiModule`, and `midiMessageCollector`, which is what `midiMessages` here actually is (collector-drained in standalone mode, delivered directly by the host in hosted mode). Recording from the `ExternalMidiModule` push-path copies too would double-record any note whose source also has an ExternalMidi node bound to it — those copies stay internal to that module's own `processBlock` and never reach this buffer, so capturing only here is what makes "recorded once, from the single collector-merged stream" true. `captureBlock` is lock-free and allocation-free: it pushes a POD `{beat, pitch, velocity, channel, isNoteOn}` per NoteOn/NoteOff into a fixed 4096-slot `juce::AbstractFifo` ring (dropping and setting an atomic overrun flag if full, never blocking); `stopAndCommit` (message thread) drains the ring, pairs NoteOn/NoteOff by `(pitch, channel)`, and commits a single new "Take" clip via `AppUndoManager::recordTimelineChange`. See [`docs/control/midi-input.md`](../control/midi-input.md) for the two-paths detail this taps into.
 - Requires `#include <bit>` for `std::popcount` (C++20).
 
+### Automation launch (no audio device)
+
+`Source/AutomationLaunch.h/.cpp` (`synth::isNoAudioDeviceLaunch`) — an automation-driving agent
+(computer-use, CI) can't dismiss a macOS microphone-permission (TCC) prompt, so the standalone app
+offers a launch mode that never opens an audio device or the engine's MIDI inputs, so the prompt
+can never fire. MIDI Remote controller ports (`openMidiRemoteDevices()`) still open as usual; MIDI
+raises no permission prompt. Triggered by the command-line flag `--no-audio-device` or the
+environment variable `AGENTSYNTH_NO_AUDIO_DEVICE` set to `1`/`true`/`yes` (trimmed, case-
+insensitive) — `MainComponent::initialiseAudioEngine()` checks both once, up front.
+
+- **What it skips.** `AudioEngine::setAudioDeviceDisabled(true)`, called before `initialise()`,
+  makes `initialise()` skip `initialiseDevices()` entirely — the one place Standalone mode ever
+  opens hardware. No audio device, no MIDI input, no mic-permission request, and none of the
+  runtime-permission ceremony `initialiseAudioEngine()` otherwise goes through: the direct,
+  synchronous `initialise()` branch runs unconditionally. The default patch is still built exactly
+  as any other launch — an automation launch gets a real, editable graph, just with nothing
+  clocking it.
+- **Saved device state is left alone.** The persisted `"audioDeviceState"` settings key is neither
+  read into the engine nor overwritten on this launch (a device-less engine never broadcasts a
+  device change, so there is nothing to write anyway) — the next normal launch still restores
+  whatever device the user actually had configured.
+- **The Output card** (`MainComponent::computeOutputDeviceInfoText`) reads
+  `"Audio off (automation launch)"` instead of a device name, so this mode is visible in the UI
+  rather than looking like a device silently failed to open.
+
 ## TransportService (the one clock)
 
 `Source/Transport/TransportService.h/.cpp`, `Source/Transport/TempoMap.h`, `Source/Transport/BlockTimeInfo.h`

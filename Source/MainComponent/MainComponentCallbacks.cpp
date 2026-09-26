@@ -70,6 +70,12 @@ juce::String MainComponent::computeOutputDeviceInfoText() const {
     if (audioEngine.isHosted())
         return "Host audio";
 
+    // FRO29: an automation launch never opens a device on purpose -- say so explicitly rather
+    // than falling through to the "no device open yet" blank line below, which reads as a
+    // transient headless/CI state rather than a deliberate one.
+    if (audioEngine.isAudioDeviceDisabled())
+        return "Audio off (automation launch)";
+
     auto* device = audioEngine.getDeviceManager().getCurrentAudioDevice();
     if (device == nullptr)
         return {}; // No device open yet (headless/CI, or between devices) — the card hides the line.

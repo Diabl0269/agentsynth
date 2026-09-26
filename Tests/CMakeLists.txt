@@ -508,6 +508,7 @@ add_executable(Tests
     Project/RecentProjectsTests.cpp
     Project/AssetManagerTests.cpp
     App/BrandingTests.cpp
+    App/AutomationLaunchTests.cpp
     # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those six units are
     # registered in the root CMakeLists.txt (Core), same as RemoteModel.h/RemoteModelJson.cpp right
     # above them there, because Core's own AudioEngineMidi.cpp/AudioEngineHostMode.cpp call into

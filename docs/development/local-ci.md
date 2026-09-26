@@ -244,3 +244,17 @@ device for output appears to be enough for macOS to ask. A mic prompt at launch 
 therefore not by itself a regression of the opt-in contract — check the default device
 (`system_profiler SPAudioDataType`) before debugging the app. Signing makes one Allow persist; it
 does not stop the first ask.
+
+**Launching for computer-use with no device prompt at all.** Dev-signing only makes the prompt
+*stable*, not absent — if computer-use is driving the app (see
+[`docs/architecture/audio-engine.md#automation-launch-no-audio-device`](../architecture/audio-engine.md#automation-launch-no-audio-device)),
+skip the device entirely instead:
+
+```bash
+open -n "<path>/Agent Synth.app" --args --no-audio-device
+# or, running the binary directly:
+AGENTSYNTH_NO_AUDIO_DEVICE=1 "<path>/Agent Synth.app/Contents/MacOS/Agent Synth"
+```
+
+No audio or MIDI device is opened and no TCC prompt of any kind can fire, so there is nothing for
+an agent to dismiss.
