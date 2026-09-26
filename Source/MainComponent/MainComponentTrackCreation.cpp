@@ -5,6 +5,7 @@
 // TrackHeaderHost query/binding surface in MainComponentTrackHeaderHost.cpp.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Branding.h"

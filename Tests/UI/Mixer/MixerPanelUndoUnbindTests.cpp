@@ -22,6 +22,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/ChannelStripModule.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerFader.h"

@@ -7,6 +7,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "Transport/MarkerJump.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 namespace {
 

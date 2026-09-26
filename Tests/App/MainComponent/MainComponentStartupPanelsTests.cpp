@@ -3,6 +3,7 @@
 // command table, the Redo shortcut, and copy/paste/duplicate reaching the canvas.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 // The jack-layout preference has to reach the patch the app OPENS with, not just modules created
 // later. AudioEngine loads the default preset inside its own constructor, so by the time

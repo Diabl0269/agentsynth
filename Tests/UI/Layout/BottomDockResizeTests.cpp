@@ -4,6 +4,7 @@
 
 #include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h"
 #include "BottomDockActiveTabResetGuard.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/BottomDockComponent.h"
 #include "UI/Layout/PanelResizeHandle.h"
 #include "UserSettings.h"

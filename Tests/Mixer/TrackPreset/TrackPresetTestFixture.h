@@ -4,12 +4,14 @@
 //
 // Shared fixtures/helpers for the TrackPreset test suite (Tests/Mixer/TrackPreset/TrackPreset*Tests.cpp).
 // Header-only; not compiled on its own and not registered in Tests/CMakeLists.txt. Reuses
-// ChannelFlowTestFixture.h's HostedPatchCFT/addPlainNodeCFT/modulatesCFT/isModuleOfTypeCFT rather
-// than duplicating them.
+// ChannelFlowTestRigs.h's HostedPatchCFT/addPlainNodeCFT/modulatesCFT/isModuleOfTypeCFT rather
+// than duplicating them (FRO307: split out of ChannelFlowTestFixture.h, which this suite never
+// needed -- none of these tests build a MainComponent).
 
-#include "../ChannelFlow/ChannelFlowTestFixture.h"
+#include "../ChannelFlow/ChannelFlowTestRigs.h"
 #include "Mixer/TrackPresetManager.h"
 #include "Modules/ChannelStripModule.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 // A minimal track (Track In -> Oscillator -> Filter, boxed via "Make Channel", no outside
 // modulator) -- for tests that only need SOME channel to save/insert, not the outside-modulator-

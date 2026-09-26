@@ -3,6 +3,7 @@
 // with the bottom dock. Real off-screen MainComponent, synthesized mouse events.
 
 #include "MixerOwnPanelTestFixture.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/PanelResizeHandle.h"
 
 namespace {

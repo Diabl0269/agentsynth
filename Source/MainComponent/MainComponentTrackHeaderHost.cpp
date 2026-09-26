@@ -10,6 +10,7 @@
 #include "Modules/TimelineMidiSourceModule.h" // auditionTrackNote pushes into the bound Track In node
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Timeline/AutomationBinding.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <map>
 #include <set>
 

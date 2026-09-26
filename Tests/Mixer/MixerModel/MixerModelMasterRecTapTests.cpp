@@ -10,6 +10,7 @@
 #include "MainComponent/MainComponent.h"
 #include "MixerModelTestFixture.h"
 #include "Modules/RecordTapModule.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 

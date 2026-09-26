@@ -30,6 +30,7 @@
 #include "Modules/AudioInputModule.h"
 #include "Modules/RecordTapModule.h"
 #include "Transport/OfflineTransportDriver.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <cmath>
 #include <cstring>
 #include <gtest/gtest.h>

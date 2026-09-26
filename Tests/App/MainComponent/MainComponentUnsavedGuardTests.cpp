@@ -3,6 +3,7 @@
 // install mc.unsavedChangesPrompt before touching a dirty document.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 // ---------------------------------------------------------------------------
 // P8-2: dirty-state tracking and the unsaved-changes guard.

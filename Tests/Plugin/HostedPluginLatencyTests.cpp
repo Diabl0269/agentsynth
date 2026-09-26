@@ -34,6 +34,7 @@
 #include "Modules/AudioInputModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/PluginProcessor.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <chrono>
 #include <cmath>
 #include <gtest/gtest.h>

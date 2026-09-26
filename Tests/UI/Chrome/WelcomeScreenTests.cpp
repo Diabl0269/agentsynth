@@ -16,6 +16,7 @@
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "WhatsNewData.h"

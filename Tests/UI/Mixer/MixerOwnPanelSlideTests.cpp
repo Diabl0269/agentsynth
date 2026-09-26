@@ -3,6 +3,7 @@
 // Headless there is no VBlank, so the slide's frames are stood in for by the controller's test seams.
 
 #include "MixerOwnPanelTestFixture.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 TEST_F(MixerOwnPanelTest, HeadlessToggleLandsSynchronouslyBothWays) {
     useOwnPanelPlacement();

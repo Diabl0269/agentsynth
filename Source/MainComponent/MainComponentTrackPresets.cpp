@@ -6,6 +6,7 @@
 // sibling MainComponent*.cpp units next to this one.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
