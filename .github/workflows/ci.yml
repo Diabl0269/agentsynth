@@ -139,6 +139,12 @@ jobs:
       # (scripts/lib/deps-reuse.sh) is only ever exercised locally otherwise -- this runs the
       # reuse/no-reuse decision against fixture directory trees, no cmake or compiler involved.
       run: bash scripts/tests/ci-local-deps-reuse.test.sh
+    - name: Test ci-local shared test lock
+      # FRO192: scripts/ci-local.sh serialises its test run behind a lock shared by every worktree
+      # (scripts/lib/test-lock.sh) so two local suites cannot collide through the shared settings
+      # file. Only ever exercised locally otherwise -- this checks the lock path, serialisation,
+      # timeout status and exit-code passthrough with shell stand-ins, no compiler. A few seconds.
+      run: bash scripts/tests/ci-local-test-lock.test.sh
     - name: Check for un-decoded UTF-8 escapes
       # juce::String(const char*) decodes as ASCII, not UTF-8 -- a "\xe2\x80\x94"-style escape
       # passed straight to a String-taking API silently renders as mojibake (P6-16, 2026-08-26).

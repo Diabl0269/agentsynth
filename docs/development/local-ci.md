@@ -44,10 +44,11 @@ Fast checks first, so a lint failure does not wait on a full build.
 9. Dev-sign the built app bundle (macOS only): `bash scripts/dev-sign-app.sh "$APP_PATH"`. Not a CI
    check — it runs only locally, after the build and before the test suite, so a signing failure
    surfaces early rather than after a multi-minute test run.
-10. Run the full suite: `build-ci-local/Tests/Tests`. Skippable with `--skip-tests` (default off —
-   the pre-push hook and CI both expect the full suite) for a faster local loop; every earlier step,
-   including dev-signing, still runs, so a `--skip-tests` rebuild keeps the same TCC identity for a
-   live or manual app run.
+10. Run the full suite: `build-ci-local/Tests/Tests`, behind the shared test lock described in
+   [Running suites in parallel](#running-suites-in-parallel) below. Skippable with `--skip-tests`
+   (default off — the pre-push hook and CI both expect the full suite) for a faster local loop;
+   every earlier step, including dev-signing, still runs, so a `--skip-tests` rebuild keeps the
+   same TCC identity for a live or manual app run.
 
 On success it prints the path to the built `Agent Synth.app` bundle under `build-ci-local/`, found
 the same way the release workflow locates it for packaging, so a green terminal is not the only
@@ -62,8 +63,6 @@ see [`testing.md`](testing.md)), the label-gated ASAN job (opt-in per PR, not so
 every push), and actual cross-platform compilation — this only exercises the toolchain installed on
 the machine it runs on, so Linux and Windows failures still need CI or a VM.
 
-`ci-local.sh` also does **not** take the lock described in
-[Running suites in parallel](#running-suites-in-parallel) below.
 
 ## Git hooks
 
@@ -155,8 +154,29 @@ cmake, no compiler and no real worktree needed:
 **Two test binaries running at once on the same machine collide through the shared on-disk "Agent
 Synth" `ApplicationProperties` file**, even from separate worktrees with separate build
 directories — see [`test-patterns.md`](test-patterns.md#shared-settings-file-reset-guard). A
-concurrent run can therefore fail a suite that is perfectly healthy. Serialise the test step behind
-a lock file shared by every checkout before believing a failure that a re-run does not reproduce.
+concurrent run can therefore fail a suite that is perfectly healthy: FRO192 hit exactly that, a
+`ProjectLoadStripGainTest` case reported FAILED by one of two sessions running their suites at the
+same time, green alone and green again under a lock.
+
+`scripts/ci-local.sh` therefore takes a lock around its test step (step 10) — `scripts/lib/test-lock.sh`,
+unit-tested by `scripts/tests/ci-local-test-lock.test.sh` in the Lint job:
+
+- **One lock file per repository, shared by every worktree.** The path is resolved from `git
+  rev-parse --git-common-dir`, which every linked worktree of the same checkout shares, so two
+  worktrees serialise against each other without knowing the other exists. Nothing to configure.
+- **Uses the platform's advisory lock tool**: `flock` on Linux, `lockf` on macOS. Neither present
+  (not a supported setup) — the suite runs unlocked with a loud warning rather than failing.
+- **Waits, visibly.** When the lock is held it prints `waiting for another test run to finish`
+  so a session watching the output does not look hung, and gives up after
+  `CI_LOCAL_TEST_LOCK_TIMEOUT` seconds (default 3600) with a distinct message and exit status
+  `75`, never conflated with a red suite.
+- **Only the test run is locked.** Builds run concurrently as before — ccache is safe under
+  contention — so a waiting session still gets its compile errors immediately.
+
+So there is no longer a `lockf` wrapper to hand-roll around `build-ci-local/Tests/Tests`; run
+`bash scripts/ci-local.sh` and let it wait. Running the binary directly (a single filtered suite
+while iterating) is still unlocked, so keep such runs short or take the same lock by hand:
+`flock`/`lockf` on the path `test_lock_path` prints.
 
 **ccache settings for parallel worktrees.** The dependency-source reuse above only covers the
 FetchContent download; the compiler cache is a separate concern and needs its own configuration to
