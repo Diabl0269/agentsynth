@@ -37,8 +37,20 @@ namespace rather than merged with `ci.yml`'s, for the GoogleTest race described 
 steps carry the same `github.ref == 'refs/heads/main'` gate as `ci.yml`'s, so a
 `workflow_dispatch` dry run from a branch does not write a cache under that branch's scope.
 
-**The Windows leg's `Install NSIS` step** installs via `choco install nsis -y` and then explicitly
-resolves `makensis.exe`'s directory and appends it to `$GITHUB_PATH`. This is not optional plumbing:
+**The Windows leg's `Install NSIS` step** runs `scripts/ci-install-nsis.sh`, which installs via
+Chocolatey and then explicitly resolves `makensis.exe`'s directory and appends it to
+`$GITHUB_PATH`. It is not a bare `choco install nsis -y` because that had no retry, no fallback and
+no ceiling: on 2026-09-16 `community.chocolatey.org` answered 503, choco "installed 0/0 packages"
+and exited 0, and the whole Windows release — Tag and Release plus both appcast jobs — was skipped
+on a main-branch build; a re-run passed with no code change (FRO104). The script retries choco with
+a per-attempt timeout and backoff, then falls back to the NSIS installer pinned by version and
+SHA-256 on SourceForge (a mismatch is fatal; it never runs an unverified installer), and judges
+success by `makensis.exe` existing afterwards rather than by choco's exit status, since that 0/0 run
+proved the status lies. `scripts/tests/ci-install-nsis.test.sh` covers the retry, the 0/0 case, a
+hanging choco killed by the timeout, the fallback, a bad checksum and a failed download against a
+fake choco in the Lint job, because a path that only runs during an outage otherwise gets tested by
+the outage. Bumping the pin means changing `NSIS_VERSION` and `NSIS_SHA256` together at the top of
+the script. The `$GITHUB_PATH` step is not optional plumbing:
 `choco install` only updates the *machine registry* PATH, and every later step in a GitHub Actions
 job is a fresh process that inherited its environment at job start — it never re-reads the registry
 mid-job. Without this, `makensis` was invisible to the very next step and **every single release
