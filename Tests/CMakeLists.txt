@@ -202,6 +202,8 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentEnvelopeCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModTargetTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentKnobCoverageTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentLifecycleTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModBandTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModChipTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModAmountGestureTests.cpp
@@ -290,6 +292,7 @@ add_executable(Tests
     Engine/VisualSignalFlowTests.cpp
     FX/DistortionSweepTests.cpp
     Modules/OscillatorCVModulationTests.cpp
+    Modules/OscillatorUnisonDetuneCVAliasingTests.cpp
     UI/Settings/SettingsWindowTests.cpp
     App/ShortcutManager/ShortcutManagerActionRegressionTests.cpp
     App/ShortcutManager/ShortcutManagerApiTests.cpp

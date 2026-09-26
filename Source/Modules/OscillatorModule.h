@@ -8,33 +8,53 @@ public:
     // -------------------------------------------------------------------------
     // Channel map
     //
-    // Inputs (14, unchanged since the module was mono): mono mode puts jack j on raw ch j
-    // (Pitch, Waveform, Octave, Coarse, Fine, Level, Pan); poly mode fans Pitch across ch0-7 and
-    // puts the shared mod-CV block at kPolyModCVBase, so jack j (j >= 1) lands on
-    // kPolyModCVBase + j - 1. Pan (#219) took the channels that were already declared and
-    // unused — ch6 in mono, ch13 in poly — so every pre-#219 CV routing keeps its raw channel.
+    // Inputs (16): mono mode puts jack j on raw ch j for j 0-6 (Pitch, Waveform, Octave, Coarse,
+    // Fine, Level, Pan); poly mode fans Pitch across ch0-7 and puts the shared mod-CV block at
+    // kPolyModCVBase, so jack j (1 <= j <= 6) lands on kPolyModCVBase + j - 1. Pan (#219) took the
+    // channels that were already declared and unused — ch6 in mono, ch13 in poly — so every
+    // pre-#219 CV routing keeps its raw channel.
+    //
+    // Unison and Detune (FRO314) are appended AFTER the poly shared-CV block, at the SAME raw
+    // channel in both voice modes (kUnisonCVChannel/kDetuneCVChannel, ch14/15) — they are global
+    // params, not per-voice, so there is no separate poly variant to place. ch14/15 alias the
+    // Audio R output block's first two channels (kRightBase/kRightBase+1): exactly the same
+    // shared-channel pattern ch0 already uses for Pitch CV in vs. Audio L out, so it is safe on
+    // the same condition — the CV must be cached before this module writes any output to that
+    // channel (see processMonoMode / processPolyMode).
     //
     // Outputs: Audio L on the voice block (ch0, or ch0-7 in poly) and Audio R on a dedicated
     // block at kRightBase. R deliberately does NOT live on ch1: that is the Waveform CV input,
     // and relabelling it would break both the CV routing and every saved patch using it.
     // -------------------------------------------------------------------------
     static constexpr int kNumVoices = 8;
-    static constexpr int kJackPan = 6;                          // last visible input jack
-    static constexpr int kNumJacks = kJackPan + 1;              // Pitch..Pan
-    static constexpr int kPolyModCVBase = kNumVoices;           // poly shared-CV block start
-    static constexpr int kNumInputs = 14;                       // 8 pitch fan + 6 shared mod CV
-    static constexpr int kRightBase = kNumInputs;               // Audio R block starts here
-    static constexpr int kNumOutputs = kRightBase + kNumVoices; // 22
+    static constexpr int kJackPan = 6; // last of the original (pre-FRO314) jacks
+    static constexpr int kJackUnison = 7;
+    static constexpr int kJackDetune = 8;
+    static constexpr int kNumJacks = kJackDetune + 1; // Pitch..Detune
+    static constexpr int kPolyModCVBase = kNumVoices; // poly shared-CV block start
+    static constexpr int kNumInputs = 16;             // 8 pitch fan + 6 shared mod CV + Unison/Detune CV
+    static constexpr int kUnisonCVChannel = 14;       // same raw channel, mono and poly
+    static constexpr int kDetuneCVChannel = 15;
+    // Audio R's OUTPUT channel index. Deliberately a LITERAL, not derived from kNumInputs: it is a
+    // different JUCE channel-index space (output channels vs. input channels), and growing
+    // kNumInputs must never move it — every patch already routed FROM Audio R depends on raw
+    // output channel 14 staying 14.
+    static constexpr int kRightBase = 14;
+    static constexpr int kNumOutputs = kRightBase + kNumVoices; // 22, unchanged by FRO314
 
-    /** Raw channel carrying jack `jack`'s CV, for the current voice mode. */
+    /** Raw channel carrying jack `jack`'s CV, for the current voice mode. Only valid for the
+        original Pitch..Pan jacks (1 <= jack <= kJackPan) — Unison/Detune use the fixed
+        kUnisonCVChannel/kDetuneCVChannel constants instead, the same in both voice modes. */
     static constexpr int modCVChannelFor(int jack, bool poly) { return poly ? (kPolyModCVBase + jack - 1) : jack; }
 
     OscillatorModule()
-        // 14 in: 8 per-voice pitch CV (0-7) + 6 shared mod CV (8-13).
+        // 16 in: 8 per-voice pitch CV (0-7) + 6 shared mod CV (8-13) + Unison/Detune CV (14-15).
         // 22 out: Audio L on 0-7, silent pass-throughs on 8-13, Audio R on 14-21. Declaring outputs
-        // ABOVE every CV input channel is what makes JUCE copy shared-mod-CV input buffers when they
-        // fan out to several downstream nodes, so our post-render clear cannot corrupt them — see the
-        // processPolyMode clear note. Do NOT reduce this below 14.
+        // ABOVE every CV input channel below kRightBase is what makes JUCE copy shared-mod-CV input
+        // buffers when they fan out to several downstream nodes, so our post-render clear cannot
+        // corrupt them — see the processPolyMode clear note. ch14/15 are the one exception (they
+        // alias Audio R, see the channel-map comment above): those two are cached before any write,
+        // exactly like ch0's Pitch-CV/Audio-L sharing. Do NOT reduce kNumOutputs below kRightBase + 1.
         //
         // StereoAudio::Declared: with 22 outputs the Auto shape test cannot see the stereo pair —
         // Audio R is the kRightBase block, not ch1. Ships SPLIT.
@@ -117,11 +137,27 @@ public:
 
     std::vector<ModulationTarget> getModulationTargets() const override {
         if (polyParam->get())
-            return {{"Waveform", 8}, {"Octave", 9}, {"Coarse", 10}, {"Fine", 11}, {"Level", 12}, {"Pan", 13}};
-        return {{"Pitch", 0}, {"Waveform", 1}, {"Octave", 2}, {"Coarse", 3}, {"Fine", 4}, {"Level", 5}, {"Pan", 6}};
+            return {{"Waveform", 8, "waveform"},
+                    {"Octave", 9, "octave"},
+                    {"Coarse", 10, "coarse"},
+                    {"Fine", 11, "fine"},
+                    {"Level", 12, "level"},
+                    {"Pan", 13, "pan"},
+                    {"Unison", kUnisonCVChannel, "unison"},
+                    {"Detune", kDetuneCVChannel, "detune"}};
+        return {{"Pitch", 0},
+                {"Waveform", 1, "waveform"},
+                {"Octave", 2, "octave"},
+                {"Coarse", 3, "coarse"},
+                {"Fine", 4, "fine"},
+                {"Level", 5, "level"},
+                {"Pan", 6, "pan"},
+                {"Unison", kUnisonCVChannel, "unison"},
+                {"Detune", kDetuneCVChannel, "detune"}};
     }
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Pitch", "Waveform", "Octave", "Coarse", "Fine", "Level", "Pan"};
+        const juce::String labels[] = {"Pitch", "Waveform", "Octave", "Coarse", "Fine",
+                                       "Level", "Pan",      "Unison", "Detune"};
         return (i >= 0 && i < kNumJacks) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
     juce::String getOutputPortLabel(int i) const override { return splitAudioLabel(i); }
@@ -191,14 +227,32 @@ public:
                 return p;
             }
         } else {
-            // Mono mode: raw 0-6 = ModCV jacks 0-6 (Pitch..Pan)
-            if (raw >= 0 && raw < kNumJacks) {
+            // Mono mode: raw 0-6 = ModCV jacks 0-6 (Pitch..Pan). Deliberately kJackPan + 1, not
+            // kNumJacks: Unison/Detune (jacks 7-8) do NOT live at raw 7-8 in mono, they share
+            // kUnisonCVChannel/kDetuneCVChannel with poly (handled below).
+            if (raw >= 0 && raw < kJackPan + 1) {
                 p.visibleJackIndex = raw;
                 p.role = PortRole::ModCV;
                 p.isPolyGroupHead = true;
                 p.polyVoiceSpan = 1;
                 return p;
             }
+        }
+        // Unison/Detune CV: same raw channel in both voice modes (see the class-level channel-map
+        // comment) — checked after the mode-specific blocks so neither can shadow it.
+        if (raw == kUnisonCVChannel) {
+            p.visibleJackIndex = kJackUnison;
+            p.role = PortRole::ModCV;
+            p.isPolyGroupHead = true;
+            p.polyVoiceSpan = 1;
+            return p;
+        }
+        if (raw == kDetuneCVChannel) {
+            p.visibleJackIndex = kJackDetune;
+            p.role = PortRole::ModCV;
+            p.isPolyGroupHead = true;
+            p.polyVoiceSpan = 1;
+            return p;
         }
         return ModuleBase::mapInputChannel(raw);
     }
@@ -289,6 +343,46 @@ private:
             panRamp[(size_t)i] = smoothedPan.getNextValue();
     }
 
+    /** RMS-over-64-samples "is anything patched here" guard, shared by processMonoMode and
+        processPolyMode (and readUnisonDetuneCV below) -- the exact same test all three used to
+        carry as their own private lambda. */
+    static bool channelHasSignal(const juce::AudioBuffer<float>& buffer, int ch, int numSamples) {
+        if (ch >= buffer.getNumChannels())
+            return false;
+        auto* data = buffer.getReadPointer(ch);
+        float rms = 0.0f;
+        const int checkLen = std::min(numSamples, 64);
+        for (int i = 0; i < checkLen; ++i)
+            rms += data[i] * data[i];
+        return (rms / (float)checkLen) > 1e-6f;
+    }
+
+    /** Modulated Unison/Detune, shared by processMonoMode and processPolyMode. Unison/Detune CV
+        (ch14/15) alias the Audio R output block (kRightBase = 14) in both voice modes (see the
+        class-level channel-map comment), so the caller MUST read this before it clears/writes
+        those channels -- same "read before this module overwrites its own input channel" rule
+        ch0's Pitch-CV/Audio-L sharing already relies on. Block-level only (first sample): Unison
+        and Detune are global, unsmoothed per-block values, never per-sample. Detune is a
+        frequency RATIO, not a level: a step in it changes each unison oscillator's phase
+        increment while the phase itself stays continuous, so it cannot produce a discontinuity --
+        deliberately not smoothed either. */
+    struct UnisonDetuneCV {
+        int unisonCount;
+        float detuneCents;
+    };
+    UnisonDetuneCV readUnisonDetuneCV(const juce::AudioBuffer<float>& buffer, int numSamples) const {
+        const float cvUnisonFirst =
+            channelHasSignal(buffer, kUnisonCVChannel, numSamples) ? buffer.getReadPointer(kUnisonCVChannel)[0] : 0.0f;
+        const float cvDetuneFirst =
+            channelHasSignal(buffer, kDetuneCVChannel, numSamples) ? buffer.getReadPointer(kDetuneCVChannel)[0] : 0.0f;
+
+        UnisonDetuneCV result;
+        result.unisonCount = juce::jlimit(
+            1, 8, (int)std::round(modulateNormalised(*unisonParam, (float)unisonParam->get(), cvUnisonFirst)));
+        result.detuneCents = modulateNormalised(*detuneParam, detuneParam->get(), cvDetuneFirst);
+        return result;
+    }
+
     // -------------------------------------------------------------------------
     // Mono mode processing (voice 0 only, MIDI driven)
     // -------------------------------------------------------------------------
@@ -320,15 +414,7 @@ private:
         juce::FloatVectorOperations::clear(cvPanSaved, numSamples);
 
         // Helper to check if a channel is active
-        auto isChannelActive = [&](int ch) {
-            if (ch >= numCh)
-                return false;
-            auto* data = buffer.getReadPointer(ch);
-            float rms = 0.0f;
-            for (int i = 0; i < std::min(numSamples, 64); ++i)
-                rms += data[i] * data[i];
-            return (rms / std::min(numSamples, 64)) > 1e-6f;
-        };
+        auto isChannelActive = [&](int ch) { return channelHasSignal(buffer, ch, numSamples); };
 
         if (isChannelActive(1))
             juce::FloatVectorOperations::copy(cvWaveformSaved, buffer.getReadPointer(1), numSamples);
@@ -343,6 +429,10 @@ private:
         if (isChannelActive(modCVChannelFor(kJackPan, /*poly*/ false)))
             juce::FloatVectorOperations::copy(cvPanSaved, buffer.getReadPointer(modCVChannelFor(kJackPan, false)),
                                               numSamples);
+
+        // Unison/Detune CV (ch14/15) alias the Audio R output block -- must be read before the
+        // clear below touches those channels. See readUnisonDetuneCV's own doc comment.
+        const UnisonDetuneCV unisonDetune = readUnisonDetuneCV(buffer, numSamples);
 
         // Clear output channels 0..getTotalNumOutputChannels()-1 (==14). This range includes the
         // shared mod-CV input channels (1-5 mono), but clearing them here is SAFE because:
@@ -372,11 +462,10 @@ private:
         const float* cvLevelCh = (numCh > 5) ? cvLevelSaved.get() : nullptr;
         auto* ch0 = buffer.getWritePointer(0);
 
-        int unisonCount = unisonParam->get();
-        // Detune is a frequency RATIO, not a level: a step in it changes each unison
-        // oscillator's phase increment while the phase itself stays continuous, so it
-        // cannot produce a discontinuity. Deliberately not smoothed.
-        float detuneCents = detuneParam->get();
+        // modulateNormalised is a no-op when cv == 0.0f, so an unpatched jack reproduces the
+        // pre-FRO314 behaviour exactly.
+        const int unisonCount = unisonDetune.unisonCount;
+        const float detuneCents = unisonDetune.detuneCents;
 
         const int levelLen = std::max(1, std::min(numSamples, 4096));
         fillLevelRamp(levelLen);
@@ -524,16 +613,7 @@ private:
         int ns = std::min(numSamples, 4096);
 
         // Helper to check if a channel is active (same RMS guard as mono mode)
-        auto isChannelActive = [&](int ch) {
-            if (ch >= numChannels)
-                return false;
-            auto* data = buffer.getReadPointer(ch);
-            float rms = 0.0f;
-            int checkLen = std::min(numSamples, 64);
-            for (int i = 0; i < checkLen; ++i)
-                rms += data[i] * data[i];
-            return (rms / (float)checkLen) > 1e-6f;
-        };
+        auto isChannelActive = [&](int ch) { return channelHasSignal(buffer, ch, numSamples); };
 
         // Save pitch CVs (channels 0-7) before clearing buffer
         for (int v = 0; v < MAX_VOICES; ++v) {
@@ -584,6 +664,10 @@ private:
         else
             std::fill_n(panCVCache.data(), ns, 0.0f);
 
+        // Unison/Detune CV (ch14/15) alias the Audio R output block -- must be read before the
+        // clear below writes to those channels. See readUnisonDetuneCV's own doc comment.
+        const UnisonDetuneCV unisonDetune = readUnisonDetuneCV(buffer, numSamples);
+
         bool pitchMod = hasOctCV || hasCoarseCV || hasFineCV;
 
         // Materialised once, before the voice loop — see fillLevelRamp.
@@ -631,9 +715,9 @@ private:
             float freq = juce::jlimit(20.0f, 20000.0f, basePitchHz);
             float baseDt = freq / (float)currentSampleRate;
             int wf = waveformParam->getIndex();
-            int unisonCount = unisonParam->get();
-            // See processMonoMode: Detune is a ratio, phase-continuous, deliberately unsmoothed.
-            float detuneCents = detuneParam->get();
+            // Unison/Detune are global (not per-voice) params -- read once per block above.
+            const int unisonCount = unisonDetune.unisonCount;
+            const float detuneCents = unisonDetune.detuneCents;
 
             if (!pitchMod) {
                 // ---- FAST PATH (no pitch CV): precomputed uniDts, byte-identical to original ----

@@ -43,31 +43,47 @@ collapsed macro's boundary ends up re-anchored to the macro card.
 
 ## Knob landing
 
-An `AttenuverterChain` cable whose destination is a `ModCV` jack with a bound, VISIBLE knob
-(`ModuleComponent::sliderIndexForModTarget` / `getModRingSliderIndex` >= 0) ends at that knob's ring
-start point (the point on the ring circle at norm 0) instead of the gutter jack —
-`GraphEditor::reanchorCablesToKnobTargets` (`GraphEditorModHover.cpp`), a post-pass at the end of
-`rebuildVisibleCables()`. The anchor is found through `ModuleComponent::getModTargetKnobAnchor`,
-which shares `AppLookAndFeel::modRingAngleForNorm` (via `modRingPointForNorm` in
+FRO312: a `ModCV` jack with a bound, VISIBLE knob (`ModuleComponent::sliderIndexForModTarget` /
+`getModRingSliderIndex` >= 0) draws no gutter dot at all — see
+[the drag-to-knob doc](../modules/modulation.md#drag-to-knob-modulation) for why the jack is hidden
+and how the input column packs around the gap. A cable of ANY kind (`AttenuverterChain`, `DirectCV`,
+or `ModRouting`/poly bus) whose destination is such a jack therefore has nowhere else to land: it
+ends at the knob's ring-landing point instead, the same for every kind, because
+`ModuleComponent::getPortCenter` itself returns that point for a knob-bound visible index — there is
+no separate "gutter position" left to choose between. `GraphEditor::reanchorCablesToKnobTargets`
+(`GraphEditorModHover.cpp`) still runs as a post-pass at the end of `rebuildVisibleCables()` and sets
+`VisibleCable::landsOnKnob`, but by the time it runs `cable.p2` is normally already correct — the
+pass exists to flag every kind uniformly rather than to move the point.
+
+FRO313: the anchor (`ModuleComponent::getModTargetKnobAnchor`) sits just OUTSIDE the ring's own
+drawn arc, not on it — same rotary-start angle (norm 0, lower-left) as before, but the radius is
+pushed out by half the ring's stroke width (clears the arc itself) + half the landing dot's own
+diameter + a 2px gap, so the dot never visually overlaps the arc it used to sit directly on. It
+still shares `AppLookAndFeel::modRingAngleForNorm` (via `modRingPointForNorm` in
 `ModuleComponentInternal.h`) with the ring drawn at [modulation rings on
-knobs](../modules/modulation.md#modulation-rings-on-knobs), so the cable can never land anywhere the
-ring itself doesn't reach.
+knobs](../modules/modulation.md#modulation-rings-on-knobs), so the cable always lands at a fixed,
+predictable offset from the ring, never a hand-rolled approximation.
 
-`VisibleCable::landsOnKnob` marks a cable that was re-anchored this way; `destNodeId`/`destChannel`
-carry the logical destination as a RAW channel (matching `ModulationTarget::channelIndex`), set for
-every cable kind so they also serve as the [hover-correlation](#hover) key.
+`destNodeId`/`destChannel` carry the logical destination as a RAW channel (matching
+`ModulationTarget::channelIndex`), set for every cable kind so they also serve as the
+[hover-correlation](#hover) key.
 
-**Fallbacks — the gutter jack, unchanged.** `DirectCV`/`ModRouting` (poly bus) cables never
-re-anchor: there is no attenuverter routing to adjust at the far end, so the jack stays the more
-useful landing spot. A knob on a hidden tab page (`getModTargetKnobAnchor` returns `nullopt` the same
-way `getModRingSliderIndex` does) falls back to the jack too, rather than painting a landing dot over
-empty card.
+**Fallback — the gutter jack, unchanged.** A knob on a hidden tab page (`getModTargetKnobAnchor`
+returns `nullopt` the same way `getModRingSliderIndex` does) is not knob-bound for layout purposes
+either — `ModuleComponent::isInputJackKnobBound` says false, so the jack stays drawn and a cable
+still lands there, rather than painting a landing dot over empty card.
 
 **The landing dot.** `paint()` draws cables BEFORE module cards paint as children, so a cable
 re-anchored deep into a card's knob has its final stretch drawn underneath the opaque card.
-`GraphContentComponent::paintOverChildren` draws a 7px dot, in the cable's own resolved colour, at
-`p2` for every `landsOnKnob` cable — the one part of a knob-landing cable guaranteed to be visible on
-top of the card.
+`GraphContentComponent::paintOverChildren` draws a dot (`ModuleComponent::kKnobLandingDotDiameter`,
+7px), in the cable's own resolved colour, at `p2` for every `landsOnKnob` cable — the one part of a
+knob-landing cable guaranteed to be visible on top of the card. The same dot is also the pickup
+target: since the gutter jack a cable used to be picked up/disconnected from no longer exists for a
+knob-bound target, a click within a few px of the dot claims the same
+begin/drag/endConnectionDrag gesture a real input jack starts — see
+`ModuleComponent::wantsCablePickupGestureFor`/`handleCablePickupGesture`, wired onto the knob itself
+(`CardKnobSlider::wantsCablePickupGesture`/`onCablePickupGesture`) rather than into
+`getPortForPoint`, exactly like the ring-amount-drag gesture already sitting on the same knob.
 
 **Invalidation.** The knob-landing pass runs on every `rebuildVisibleCables()`, so it follows a
 moved/resized card automatically (both already call `repaintCanvas()`). A Wavetable tab-page switch

@@ -40,7 +40,11 @@ TEST_F(ModuleComponentTest, SamplerHasLoadButtonWaveformAndKnownHeight) {
     EXPECT_TRUE(foundNameLabel) << "an empty Sampler should say so rather than showing a blank label";
 
     EXPECT_EQ(moduleComponent.getWidth(), 280);
-    EXPECT_EQ(moduleComponent.getHeight(), 645)
+    // FRO312: was 645 -- five of the Sampler's CV jacks are knob-bound and now draw no gutter row
+    // (100px, 5 rows * 20px), packing the input column. estimateModuleSize("Sampler") derives this
+    // adjustment itself (GraphEditor::adjustEstimateForHiddenKnobJacks), so it stays in sync
+    // automatically; ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents still pins it.
+    EXPECT_EQ(moduleComponent.getHeight(), 545)
         << "keep estimateModuleSize(\"Sampler\") in GraphEditor.cpp in sync with this";
 
     EXPECT_NO_THROW(moduleComponent.timerCallback());

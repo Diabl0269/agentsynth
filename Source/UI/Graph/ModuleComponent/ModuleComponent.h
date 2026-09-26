@@ -177,6 +177,17 @@ public:
     std::optional<Port> getPortForPoint(juce::Point<int> localPoint);
     juce::Point<int> getPortCenter(int index, bool isInput);
 
+    /** FRO312: drawn/hit-tested visible INPUT jack indices, packed (gap-free) order. See .cpp. */
+    std::vector<int> drawnInputJackIndices() const;
+
+    /** True when visible input `index` renders as a knob's landing dot, not a gutter jack. See .cpp. */
+    bool isInputJackKnobBound(int index) const;
+
+private:
+    /** getModTargetKnobAnchor for whichever target maps to visible input `index`, or nullopt. */
+    std::optional<juce::Point<float>> knobAnchorForVisibleInputJack(int index) const;
+
+public:
     /** Fixed MIDI jack anchor, in local coordinates — MIDI In sits top-left, MIDI Out top-right,
      *  at kPortGutterHeaderHeight on an ordinary card or kMacroPortWidgetHeaderY on a macro-port
      *  widget (no header of its own); they don't participate in the ordinary audio jack stack
@@ -230,8 +241,14 @@ public:
     /** getModRingSliderIndex for a ModulationTarget, via its bound parameter; -1 if no visible knob. */
     int sliderIndexForModTarget(const ModulationTarget& target) const;
 
-    /** FRO288: card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
+    /** FRO288/FRO313: card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
     std::optional<juce::Point<float>> getModTargetKnobAnchor(int destChannel) const;
+
+    /** FRO313: diameter of the knob cable-landing dot. See GraphEditorCables.cpp's paintOverChildren. */
+    static constexpr float kKnobLandingDotDiameter = 7.0f;
+
+    /** FRO313: how far outside the ring's radius the landing point sits. See .cpp. */
+    float knobLandingRadiusOffset() const;
 
     /** FRO287: true when `e` should start a mod-amount drag on `param`'s knob rather than moving
      *  it. `bounds` is the knob's own local bounds. See ModuleComponent.cpp for the rule. */
@@ -349,6 +366,7 @@ private:
 
     juce::AudioProcessor* module;
     juce::AudioProcessorGraph::NodeID nodeId;
+    bool nodeWasInGraphAtConstruction_ = false;     // see detachFromProcessor()'s own comment (FRO312)
     std::optional<juce::Colour> portColourPreview_; // live jack-colour preview; view-layer only
     GraphEditor& owner;
     juce::ComponentDragger dragger;
@@ -359,6 +377,11 @@ private:
     juce::AudioProcessorGraph::NodeID firstAttenuverterForParam(juce::RangedAudioParameter* param) const;
     void handleModAmountGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
     void wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& knob, juce::RangedAudioParameter* param);
+
+    /** FRO312: pick up / redrag / disconnect a knob-landed cable, since its gutter jack is hidden. See .cpp. */
+    bool wantsCablePickupGestureFor(juce::RangedAudioParameter* param, juce::Rectangle<float> bounds,
+                                    const juce::MouseEvent& e) const;
+    void handleCablePickupGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
 
     /** FRO288: the RAW channel `param` is bound to, or -1. See ModuleComponent.cpp. */
     int destChannelForBoundParam(juce::RangedAudioParameter* param) const;

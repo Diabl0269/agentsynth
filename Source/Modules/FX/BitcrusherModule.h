@@ -5,7 +5,7 @@
 class BitcrusherModule : public ModuleBase {
 public:
     BitcrusherModule()
-        : ModuleBase("Bitcrusher", 5, 2) // 2 Audio + 3 CV (Rate, Depth, Mix)
+        : ModuleBase("Bitcrusher", 6, 2) // 2 Audio + 4 CV (Rate, Depth, Mix, Dither -- FRO314)
     {
         addParameter(rateParam = new juce::AudioParameterFloat("rate", "Rate Reduction", 1.0f, 50.0f, 1.0f));
         addParameter(depthParam = new juce::AudioParameterFloat("depth", "Bit Depth", 1.0f, 24.0f, 24.0f));
@@ -66,10 +66,12 @@ public:
         const float* cvRate = (numChannels > 2) ? buffer.getReadPointer(2) : nullptr;
         const float* cvDepth = (numChannels > 3) ? buffer.getReadPointer(3) : nullptr;
         const float* cvMix = (numChannels > 4) ? buffer.getReadPointer(4) : nullptr;
+        const float* cvDither = (numChannels > 5) ? buffer.getReadPointer(5) : nullptr;
 
         bool cvRateActive = isChannelActive(cvRate, numSamples);
         bool cvDepthActive = isChannelActive(cvDepth, numSamples);
         bool cvMixActive = isChannelActive(cvMix, numSamples);
+        bool cvDitherActive = isChannelActive(cvDither, numSamples);
 
         smoothedRate.setTargetValue(*rateParam);
         smoothedDepth.setTargetValue(*depthParam);
@@ -88,11 +90,12 @@ public:
             float rateMod = cvRateActive ? cvRate[i] * 25.0f : 0.0f;
             float depthMod = cvDepthActive ? cvDepth[i] * 12.0f : 0.0f;
             float mixMod = cvMixActive ? cvMix[i] : 0.0f;
+            float ditherMod = cvDitherActive ? cvDither[i] : 0.0f;
 
             float currentRate = juce::jlimit(1.0f, 50.0f, smoothedRate.getNextValue() + rateMod) * rateScale;
             float currentDepth = juce::jlimit(1.0f, 24.0f, smoothedDepth.getNextValue() + depthMod);
             float currentMix = juce::jlimit(0.0f, 1.0f, smoothedMix.getNextValue() + mixMod);
-            float currentDither = smoothedDither.getNextValue();
+            float currentDither = juce::jlimit(0.0f, 1.0f, smoothedDither.getNextValue() + ditherMod);
 
             float steps = std::pow(2.0f, currentDepth);
 
@@ -133,17 +136,17 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String cv[] = {"Rate", "Depth", "Mix"};
-        return stereoInputLabel(i, 3, cv);
+        const juce::String cv[] = {"Rate", "Depth", "Mix", "Dither"};
+        return stereoInputLabel(i, 4, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(3); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(4); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 3); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 4); }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Rate", 2, "rate"}, {"Depth", 3, "depth"}, {"Mix", 4, "mix"}};
+        return {{"Rate", 2, "rate"}, {"Depth", 3, "depth"}, {"Mix", 4, "mix"}, {"Dither", 5, "dither"}};
     }
 
     // Pure audio FX — processBlock never touches the MIDI buffer.

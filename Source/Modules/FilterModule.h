@@ -132,8 +132,8 @@ public:
 
     std::vector<ModulationTarget> getModulationTargets() const override {
         if (polyParam->get())
-            return {{"Cutoff", 8}, {"Resonance", 9}, {"Drive", 10}};
-        return {{"Cutoff", 1}, {"Resonance", 2}, {"Drive", 3}};
+            return {{"Cutoff", 8, "cutoff"}, {"Resonance", 9, "resonance"}, {"Drive", 10, "drive"}};
+        return {{"Cutoff", 1, "cutoff"}, {"Resonance", 2, "resonance"}, {"Drive", 3, "drive"}};
     }
     /** Audio R sits next to Audio L rather than after Drive, so the two legs read as a pair. Visible
         jack order is presentation only — connections persist by raw channel index, so the CV jacks

@@ -14,18 +14,21 @@ TEST(BitcrusherModuleTest, PortLabelsAreCorrect) {
     EXPECT_EQ(module.getInputPortLabel(1), "Rate");
     EXPECT_EQ(module.getInputPortLabel(2), "Depth");
     EXPECT_EQ(module.getInputPortLabel(3), "Mix");
+    EXPECT_EQ(module.getInputPortLabel(4), "Dither");
     EXPECT_EQ(module.getOutputPortLabel(0), "Audio");
-    EXPECT_EQ(module.getVisibleInputPortCount(), 4);
+    EXPECT_EQ(module.getVisibleInputPortCount(), 5);
     EXPECT_EQ(module.getVisibleOutputPortCount(), 1);
 
     auto targets = module.getModulationTargets();
-    ASSERT_EQ(targets.size(), 3u);
+    ASSERT_EQ(targets.size(), 4u);
     EXPECT_EQ(targets[0].name, "Rate");
     EXPECT_EQ(targets[0].channelIndex, 2);
     EXPECT_EQ(targets[1].name, "Depth");
     EXPECT_EQ(targets[1].channelIndex, 3);
     EXPECT_EQ(targets[2].name, "Mix");
     EXPECT_EQ(targets[2].channelIndex, 4);
+    EXPECT_EQ(targets[3].name, "Dither");
+    EXPECT_EQ(targets[3].channelIndex, 5);
 }
 
 TEST(BitcrusherModuleTest, QuantizationAndRoundingWithoutBias) {
@@ -155,8 +158,27 @@ TEST(BitcrusherModuleTest, DitherAddsNoise) {
         }
     }
 
-    juce::AudioBuffer<float> buffer(5, 512);
+    juce::AudioBuffer<float> buffer(6, 512);
     buffer.clear();
+
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    float rms = buffer.getRMSLevel(0, 0, 512);
+    EXPECT_GT(rms, 0.0f);
+}
+
+// FRO314: Dither CV (ch5) must move the dither amount the same way the knob does -- proven by
+// driving it from 0 via CV alone (knob left at its 0.0 default) and confirming noise appears,
+// the same assertion DitherAddsNoise above makes via the parameter directly.
+TEST(BitcrusherModuleTest, DitherCVAddsNoiseWithTheKnobAtZero) {
+    BitcrusherModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(6, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i)
+        buffer.setSample(5, i, 1.0f); // full-scale Dither CV, knob stays at default 0.0
 
     juce::MidiBuffer midi;
     module.processBlock(buffer, midi);

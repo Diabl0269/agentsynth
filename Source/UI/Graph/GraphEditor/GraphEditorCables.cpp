@@ -825,9 +825,11 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         if (!cable.landsOnKnob)
             continue;
         g.setColour(editor.colourForCable(cable));
-        static constexpr float kKnobLandingDotDiameter = 7.0f;
-        g.fillEllipse(cable.p2.x - kKnobLandingDotDiameter * 0.5f, cable.p2.y - kKnobLandingDotDiameter * 0.5f,
-                      kKnobLandingDotDiameter, kKnobLandingDotDiameter);
+        // FRO313: shared with ModuleComponent::getModTargetKnobAnchor's own push-out math, so the
+        // anchor point and the dot drawn on it can never disagree on the dot's own size.
+        g.fillEllipse(cable.p2.x - ModuleComponent::kKnobLandingDotDiameter * 0.5f,
+                      cable.p2.y - ModuleComponent::kKnobLandingDotDiameter * 0.5f,
+                      ModuleComponent::kKnobLandingDotDiameter, ModuleComponent::kKnobLandingDotDiameter);
     }
 
     // ---- Drag-preview landing ghost (on top of module cards) ----

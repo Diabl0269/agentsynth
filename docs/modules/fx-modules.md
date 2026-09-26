@@ -397,7 +397,7 @@ Threshold, with Attack/Hold/Release shaping how it opens and closes and Range se
 - **Implementation**: Downsampling and bit-depth quantization effect with dither.
 - **Quantization**: Rounds input signal to `2^depth` discrete levels with `std::round` (clamped to ±1.0) to eliminate DC quantization bias.
 - **Sample Rate Reduction**: Holds sample values for `rate` sample clocks (scaled relative to 44.1 kHz for device independence).
-- **CV Modulation**: Rate (ch2), Depth (ch3), Mix (ch4). CV presence is detected via non-zero sample checking.
+- **CV Modulation**: Rate (ch2), Depth (ch3), Mix (ch4), Dither (ch5, FRO314 -- appended, same additive-CV convention as Mix). CV presence is detected via non-zero sample checking.
 - **Parameters**: Rate (1–50), Depth (1–24 bits), Mix (0–1), Dither (0–1).
 
 ## Parametric EQ Module

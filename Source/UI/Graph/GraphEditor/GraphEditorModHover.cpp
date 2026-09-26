@@ -1,5 +1,5 @@
-// GraphEditorModHover.cpp -- FRO288: re-anchoring an AttenuverterChain cable's destination
-// endpoint onto its target knob's modulation-ring start point (docs/layout/cables.md#knob-landing),
+// GraphEditorModHover.cpp -- FRO288/FRO312: re-anchoring a cable's destination endpoint onto its
+// target knob's modulation-ring landing point (docs/layout/cables.md#knob-landing),
 // and the two-directional hover correlation between a cable and the knob it lands on
 // (docs/modules/modulation.md#modulation-rings-on-knobs). GraphEditor is declared in GraphEditor.h;
 // sibling GraphEditor*.cpp files in this directory hold the rest of the class.
@@ -26,15 +26,19 @@ ModuleComponent* GraphEditor::moduleComponentForNode(juce::AudioProcessorGraph::
     return nullptr;
 }
 
-// For every AttenuverterChain cable, ask the destination card whether its logical destination
-// channel (cable.destChannel, a RAW channel) resolves to a bound, visible knob; if so, re-anchor
-// cable.p2 onto that knob's ring-start point (canvas space) and mark landsOnKnob so paint can draw
-// the landing dot (GraphEditorCables.cpp's paintOverChildren). DirectCV/PolyBus cables and a
-// hidden-page knob are left alone -- they keep the gutter jack pass 1/2 already gave them.
+// For every cable (FRO312: every KIND now, not just AttenuverterChain -- once a knob-bound jack's
+// gutter dot is hidden, ANY routing landing on it -- DirectCV, PolyBus or AttenuverterChain --
+// lands on the knob, since there is no gutter position left for it to draw at; portPos
+// (GraphEditorCables.cpp) already resolves this through ModuleComponent::getPortCenter's own
+// knob-redirect, so cable.p2 is normally already correct by the time this runs), ask the
+// destination card whether its logical destination channel (cable.destChannel, a RAW channel)
+// resolves to a bound, visible knob; if so, re-anchor cable.p2 onto that knob's ring-landing point
+// (canvas space, defensively recomputed here too -- cheap, and the one source of truth either way)
+// and mark landsOnKnob so paint can draw the landing dot (GraphEditorCables.cpp's
+// paintOverChildren). A hidden-page knob (sliderIndexForModTarget says -1) is left alone -- it
+// keeps the gutter jack pass 1/2 already gave it, exactly as before.
 void GraphEditor::reanchorCablesToKnobTargets(std::vector<VisibleCable>& cables) {
     for (auto& cable : cables) {
-        if (cable.kind != VisibleCable::Kind::AttenuverterChain)
-            continue;
         auto* dstComp = moduleComponentForNode(juce::AudioProcessorGraph::NodeID{cable.destNodeId});
         if (dstComp == nullptr)
             continue;

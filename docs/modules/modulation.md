@@ -443,8 +443,39 @@ the knob-value-box mono font on a `surfaceHi` chip, clipped to the card.
 ## Drag-to-knob modulation
 
 A cable released **on a knob** connects the source to that parameter's CV jack. This is the primary
-way to patch modulation — aiming at a jack in the gutter still works, but on a module with sixteen CV
-inputs it is the slow path.
+way to patch modulation, and for a knob-bound jack (FRO312, below) it is the ONLY way — the gutter
+jack it used to also be reachable from is gone.
+
+### FRO312: a knob-bound gutter jack is hidden
+
+A visible input jack is **knob-bound** when it is a `ModulationTarget` whose knob resolves on this
+card right now (`ModuleComponent::isInputJackKnobBound`, `sliderIndexForModTarget(target) >= 0`) —
+recomputed live on every call (never cached across a layout), so a poly toggle, Dual I/O change or
+Wavetable tab switch that changes which knob is visible changes which jacks are hidden on the very
+next repaint. A knob-bound jack:
+
+- draws no gutter dot or label at all (`ModuleComponent::paint`'s input loop iterates
+  `drawnInputJackIndices()`, not every visible index);
+- is never hit-tested by `getPortForPoint` (same list), so a mouse-down there falls through to the
+  knob's own gesture handling instead of starting a jack drag;
+- still fully participates in the routing model — an existing or saved connection into that raw
+  channel is never torn down, unlike the macro bank's hidden-jack precedent
+  (`GraphEditorLayoutTests.ShrinkingTheMacroBankDropsRoutingsOnTheJacksItHides`). Its cable simply
+  lands on the knob instead of the (now absent) jack — see [knob
+  landing](../layout/cables.md#knob-landing) for how every cable kind resolves this through
+  `ModuleComponent::getPortCenter` itself.
+
+The remaining jacks — audio, pitch, gate, MIDI, and any CV jack with no bound knob (Oscillator's
+Pitch CV, still a bare jack) — draw packed with no gaps, so a card whose knob-bound jacks were the
+only inputs it had gets an empty left column and reserves no dead space for them
+(`ModuleComponent::getContentTopY` clears the last DRAWN jack, not the last visible one).
+`ModuleComponent::drawnInputJackIndices()` is the one list every caller (paint, hit-testing,
+`getInputPortColumns`) reads, so they can never disagree about which jacks are actually on screen.
+
+Dropping a cable directly on the knob still works exactly as described below
+(`getModTargetPortForPoint`); picking up or disconnecting an existing knob-landed cable now goes
+through the same near-the-landing-dot click the ring-amount-drag gesture already claims clicks
+near — see [the landing dot](../layout/cables.md#knob-landing).
 
 - `ModuleComponent::getModTargetPortForPoint()` walks `getModulationTargets()`, resolves each target
   to its knob through the [bound parameter](#a-target-binds-to-its-parameter-never-to-a-label)
@@ -500,7 +531,28 @@ time CV) and every remaining Parametric EQ parameter (B1/B4 Freq+Gain, each band
 ch6-14) — see [`modules.md#lfo-module`](modules.md#lfo-module),
 [`modules.md#adsr-envelope-module`](modules.md#adsr-envelope-module) and
 [`fx-modules.md#parametric-eq-module`](fx-modules.md#parametric-eq-module). Not yet covered: the
-mixer modules (Channel Strip, Voice Mixer), whose gain is driven by the mixer rather than by CV.
+mixer modules (Channel Strip, Voice Mixer, Master), whose gain is driven by the mixer panel rather
+than by CV — deliberately out of scope for FRO314's sweep below, since Channel Strip's channel
+layout is frozen-once-set with fixed send legs (`Source/Modules/CLAUDE.md`).
+
+**FRO314** closed two gaps this rule had let through silently: Oscillator's targets had no
+`paramId` (falling back to fragile jack-label/knob-name string matching — harmless only because
+every label happened to already match its knob's name) and its Unison/Detune knobs had **no CV
+jack at all**, so a dropped cable was refused outright. It also gave the ADSR's three Curve
+amounts (`attackCurve`/`decayCurve`/`releaseCurve`, ch14-16, appended after the stage-time/level
+block) a CV jack for the first time — these have no generic rotary knob (they are edited only via
+the envelope graph's bend handles, FRO112), so the jack is patchable through the mod matrix and
+AI-authored connections, but dropping a cable onto a visible knob for them still needs its own
+bend-handle drop anchor (tracked as a UI follow-up, not done as part of FRO314).
+
+`Tests/UI/Graph/ModuleComponent/ModuleComponentKnobCoverageTests.cpp` is the regression guard for
+this rule: it iterates every module the factory can create (both voice modes, where applicable)
+and asserts every declared target resolves to a bound knob AND every continuous-parameter knob has
+a target pointing at it, so a NEW module (or a new knob on an old one) with the same gap fails the
+build instead of shipping. Its explicit, commented exclusion list documents which module types are
+legitimately out of scope (paged tab cards, port widgets, per-step pattern data, mixer gain
+stages, hosted-plugin parameters, and the two ADSR knob-less targets above) rather than absorbing
+them silently.
 
 ## CV in normalised units
 

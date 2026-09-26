@@ -100,18 +100,19 @@ int ModuleComponent::getContentTopY() {
     if (module->acceptsMidi())
         y += 30; // the "Midi In"/"Midi Out" row
 
-    int numIns = module->getTotalNumInputChannels();
     int numOuts = module->getTotalNumOutputChannels();
     if (auto* mb = dynamic_cast<ModuleBase*>(module)) {
-        numIns = mb->getVisibleInputPortCount();
         numOuts = mb->getVisibleOutputPortCount();
     }
 
-    // Ask for the real jack positions instead of recomputing them: a port label box spans
-    // centre ± 10, so clear the lowest jack by a little more than that. The LAST input is not
-    // necessarily the lowest once the gutter has more than one column (an odd jack count leaves
-    // the second column a row short), so take the maximum over all of them.
-    for (int i = 0; i < numIns; ++i)
+    // FRO312: clears the last DRAWN input jack, not the last VISIBLE one -- a knob-bound jack (see
+    // isInputJackKnobBound) draws no gutter row at all, so a card whose only inputs are knob-bound
+    // reserves no dead space here for them. Ask for the real jack positions instead of
+    // recomputing them: a port label box spans centre ± 10, so clear the lowest jack by a little
+    // more than that. The LAST drawn input is not necessarily the lowest once the gutter has more
+    // than one column (an odd jack count leaves the second column a row short), so take the
+    // maximum over all of them.
+    for (int i : drawnInputJackIndices())
         y = std::max(y, getPortCenter(i, true).y + kPortLabelClearance);
     if (numOuts > 0)
         y = std::max(y, getPortCenter(numOuts - 1, false).y + kPortLabelClearance);
@@ -121,10 +122,11 @@ int ModuleComponent::getContentTopY() {
 
 int ModuleComponent::getInputPortColumns() const {
     // Only the Wavetable card needs this today: 16 CV jacks in one column would set a ~390px
-    // floor on the card height before any control is placed. Keyed off the jack count rather
-    // than the type so a future high-jack module gets the same treatment for free.
-    if (auto* mb = dynamic_cast<ModuleBase*>(module))
-        if (mb->getVisibleInputPortCount() > 10 && getWidth() >= synth::LayoutUtil::kDoubleWidth)
+    // floor on the card height before any control is placed. Keyed off the DRAWN jack count
+    // (FRO312: a knob-bound jack draws no gutter row, so it must not count towards this threshold)
+    // rather than the type so a future high-jack module gets the same treatment for free.
+    if (getWidth() >= synth::LayoutUtil::kDoubleWidth)
+        if ((int)drawnInputJackIndices().size() > 10)
             return 2;
     return 1;
 }

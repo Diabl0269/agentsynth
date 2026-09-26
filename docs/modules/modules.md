@@ -71,8 +71,9 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 - **Pan is a balance law, not equal-power** (`ModuleBase::panGains`): centre leaves both legs at unity and panning attenuates only the leg you move away from. At the default Pan of 0, `Audio L` carries bit-for-bit what it carried while the module was mono and `Audio R` is an identical copy — an equal-power centre would have quietened every existing patch by 3 dB. Pinned by `StereoPanLaw.CentreLeavesBothLegsAtUnity` and `OscillatorStereo.CentrePanDoesNotAttenuateAudioL`.
 - **Stereo and Poly are independent axes** — there is deliberately no three-way `mono / stereo / poly` switch. Poly is voice count, stereo is spatial placement, and you want both at once (a chord spread across the panorama).
 - **Poly `processBlock` CV-save order**: In poly mode, both the per-voice pitch CVs (ch0-7) and the shared mod CVs (ch8-13) are copied into pre-allocated `std::array` caches (`pitchCVCache`, `waveformCVCache`, `octaveCVCache`, `coarseCVCache`, `fineCVCache`, `levelCVCache`, `panCVCache`) **before** the output buffer is cleared. This is necessary because ch0-7 carry both output audio (written after the clear) and input pitch CV, so they must be read first.
-- **Buffer aliasing note**: Declared with **22** output channels (14 before #219) so JUCE's `AudioProcessorGraph` correctly copies shared mod-CV input channels (8-13) when they fan out to multiple downstream nodes. What matters is that the output count stays **above every CV input channel index** — the Audio R block raising it from 14 to 22 preserves that. Channels 8-13 of the output remain silent pass-throughs.
+- **Buffer aliasing note**: Declared with **22** output channels (14 before #219) so JUCE's `AudioProcessorGraph` correctly copies shared mod-CV input channels (8-13) when they fan out to multiple downstream nodes. What matters is that the output count stays **above every CV input channel index** below `kRightBase` — the Audio R block raising it from 14 to 22 preserves that. Channels 8-13 of the output remain silent pass-throughs.
 - **The poly CV clear is bounded at `kRightBase`.** It used to run to the end of the buffer; with Audio R sitting above the CV block, an unbounded clear would erase the right leg.
+- **Unison and Detune CV (FRO314)**: declared inputs grew 14 -> 16 to add a CV jack for each — they had knobs but no way to modulate them, which is why a dropped cable used to be refused. Both are global (not per-voice) params, so they use a fixed pair of raw channels, `kUnisonCVChannel`/`kDetuneCVChannel` (ch14/15), the SAME in mono and poly — unlike the Waveform/Octave/.../Pan jacks, there is no separate poly variant to place. `kRightBase` stays a **literal 14**, not derived from the input count, so growing the inputs never moves Audio R's raw channel and no existing patch routed from it breaks. ch14/15 alias the Audio R output block exactly like ch0 already aliases Pitch CV in / `Audio L` out — both are read (a single first-sample `blockCV`-style capture; Unison/Detune are already read once per block, unsmoothed, same as the parameter itself) before this module writes anything to those channels. Unison CV moves the knob via `ModuleBase::modulateNormalised` (rounded to the nearest integer voice count, clamped 1-8); Detune CV moves it the same way as a plain float.
 
 ## Wavetable Module
 Serum / Vital-style wavetable oscillator (`Source/Modules/WavetableOscillatorModule/`). Type-name string: `"Wavetable"`.
@@ -236,8 +237,8 @@ Loads an audio file from disk and plays it back one of two ways.
   3. **Drop an audio file onto empty canvas** — `GraphEditor` creates a Sampler already holding it (dropping several files cascades one Sampler each). The file is loaded into the processor *before* it joins the graph, because `recordStructuralChange` snapshots the graph afterwards and that snapshot is what undo/redo replays.
 - **Waveform overview**: peaks are cached per (sample, width) and drawn as a single filled path, not one `drawVerticalLine` per column — the canvas renders module cards under GraphEditor's zoom transform, and per-column 1 px lines do not tile at any zoom ≠ 1 (visible gaps and moiré striping). The 15 Hz timer repaints only when the sample changes or the playhead crosses a whole pixel.
 - **Parameters**: `playMode` (choice), `pitch` (±24 semitones), `rootNote` (0-127, default 60), `loop` (bool, default on), `start` (0-1), `grainSize` (5-500 ms), `density` (1-100 grains/sec), `spray` (0-1), `level` (0-1, default 0.8).
-- **Channel layout** (mono module — no poly mode): in ch0 = Trigger/Gate, ch1 = Pitch CV, ch2 = Position CV, ch3 = Grain Size CV, ch4 = Density CV, ch5 = Spray CV, ch6 = Level CV. Out ch0/ch1 = Audio L/R; ch2-6 are silent pass-throughs.
-- **Buffer aliasing note**: 7 outputs are declared even though only ch0-1 carry audio, so JUCE copies the CV input channels instead of letting the post-cache clear scribble on a buffer another node still needs — the same constraint as the Oscillator's 14-channel declaration.
+- **Channel layout** (mono module — no poly mode): in ch0 = Trigger/Gate, ch1 = Pitch CV, ch2 = Position CV, ch3 = Grain Size CV, ch4 = Density CV, ch5 = Spray CV, ch6 = Level CV, ch7 = Root Note CV. Out ch0/ch1 = Audio L/R; ch2-7 are silent pass-throughs.
+- **Buffer aliasing note**: 8 outputs are declared even though only ch0-1 carry audio, so JUCE copies the CV input channels instead of letting the post-cache clear scribble on a buffer another node still needs — the same constraint as the Oscillator's 22-channel declaration. Root Note CV (ch7, FRO312) was appended last rather than inserted earlier, so no existing saved-patch routing shifts.
 - **Gate precedence**: trigger CV > MIDI note > free-run. "A trigger cable is connected" is *latched* on the first non-zero sample rather than re-derived per block: a legitimately-low gate is an all-zero channel, indistinguishable from an unpatched jack, so re-deriving it would let a closed gate silently fall back to free-running. With nothing patched and no MIDI, a loaded sample plays immediately — dropping the module in and picking a file makes sound with no wiring.
 - **MIDI gate is a `heldNotes` bitset, and every Note-On retriggers** (FRO246): the gate reads open while *any* note is held, and a Note-On event always cuts and restarts the sample (playhead back to `start`), even if the gate never reads a falling edge — a legato Note-On with no Note-Off first, or a Note-Off immediately followed by a Note-On in the same block (a transport loop restart landing inside one block), both used to be silently dropped; the very first MIDI note after the module had been free-running is likewise now a real retrigger rather than a continuation of the free-run playhead at the new pitch. Two consequences: with two notes held and the more recently pressed one released, playback keeps going rather than stopping — but at the *released* note's pitch (`midiNote` only updates on a Note-On, so nothing hands pitch back to the still-held note); there is no last-note-priority.
 - **Pitch**: `2^((pitch + pitchCV×24 + (midiNote − rootNote)) / 12)`, times the file-rate/device-rate ratio so a 48 kHz file plays at the right speed on a 44.1 kHz device. Reads are 4-point Catmull-Rom interpolated.
@@ -358,8 +359,17 @@ Loads an audio file from disk and plays it back one of two ways.
   a synced stage's effective time already comes from its `*Div` param and the live tempo, and a
   CV value expressed in the linear `[0, 5]` range has no meaning overlaid on a beat-locked
   division, so the jack stays visibly patchable but is a no-op until the module goes back to MS
-  mode. Declaring the output count to match (14, matching the highest CV channel read) keeps
+  mode. Declaring the output count to match (17, matching the highest CV channel read) keeps
   these silent per [`poly-channel-layout.md`](poly-channel-layout.md#rule-for-new-poly-modules).
+- **Curve CV (FRO314)**: `attackCurve` ch14, `decayCurve` ch15, `releaseCurve` ch16 — appended
+  after the stage-time/level block, same shared-across-every-voice / `blockCV`+
+  `modulateNormalised` convention as the stage times above. These three curve amounts have **no
+  generic rotary knob** — `ModuleComponent.cpp`'s `shouldSkipGenericFloatSlider` skips them on
+  purpose because they are edited only via the envelope graph's bend handles (FRO112) — so a
+  dropped cable currently has no visible knob to ring for them (patching the jack itself still
+  works through the mod matrix / AI-authored connections). Giving them a bend-handle drop anchor,
+  matching how `getModTargetPortForPoint` already special-cases the Threshold control, is tracked
+  as a UI follow-up.
 - **Smoothing**: Sustain is smoothed over 20 ms, read fresh **per sample** (not a block at a
   time) and fed to `EnvelopeGenerator` as both Decay's live target and the flat Sustain output,
   so an in-flight decay or a held note retargets smoothly instead of stepping. It is the one
@@ -851,9 +861,11 @@ Declare your per-voice **output** fan in `mapOutputChannel()` if the module actu
 | **Oscillator (poly)** | ch11 | In | Shared Fine CV |
 | **Oscillator (poly)** | ch12 | In | Shared Level CV |
 | **Oscillator (poly)** | ch13 | In | Shared Pan CV |
+| **Oscillator (poly/mono)** | ch14 | In | Unison CV (FRO314, same channel both modes) |
+| **Oscillator (poly/mono)** | ch15 | In | Detune CV (FRO314, same channel both modes) |
 | **Oscillator (poly)** | ch0-7 | Out | Per-voice audio — `Audio L` |
 | **Oscillator (poly)** | ch8-13 | Out | Silent pass-throughs (prevent buffer aliasing) |
-| **Oscillator (poly)** | ch14-21 | Out | Per-voice audio — `Audio R` (`kRightBase`) |
+| **Oscillator (poly)** | ch14-21 | Out | Per-voice audio — `Audio R` (`kRightBase`); ch14/15 alias the Unison/Detune CV inputs above |
 | **Oscillator (mono)** | ch0 | In/Out | Pitch CV in / `Audio L` out (shared channel, CV saved before clear) |
 | **Oscillator (mono)** | ch1 | In | Waveform CV |
 | **Oscillator (mono)** | ch2 | In | Octave CV |
@@ -861,7 +873,7 @@ Declare your per-voice **output** fan in `mapOutputChannel()` if the module actu
 | **Oscillator (mono)** | ch4 | In | Fine CV |
 | **Oscillator (mono)** | ch5 | In | Level CV |
 | **Oscillator (mono)** | ch6 | In | Pan CV |
-| **Oscillator (mono)** | ch14 | Out | `Audio R` (`kRightBase`) |
+| **Oscillator (mono)** | ch14 | Out | `Audio R` (`kRightBase`); aliases the Unison CV input above |
 | **Wavetable (poly)** | ch0-7 | In | Per-voice pitch CV (Hz) |
 | **Wavetable (poly)** | ch8 | In | Shared Position CV |
 | **Wavetable (poly)** | ch9 | In | Shared Octave CV |
@@ -901,6 +913,8 @@ Declare your per-voice **output** fan in `mapOutputChannel()` if the module actu
 | **VCA (mono)** | ch16 | In/Out | `Audio R` (`kRightBase`) in / gated out |
 | **ADSR (poly)** | ch0-7 | In | Per-voice gate CV |
 | **ADSR** | ch8 | In | Threshold CV (shared) |
+| **ADSR** | ch9-13 | In | Attack/Hold/Decay/Sustain/Release CV (shared, FRO285) |
+| **ADSR** | ch14-16 | In | Attack/Decay/Release Curve CV (shared, FRO314; no generic knob — see above) |
 | **ADSR (poly)** | ch0-7 | Out | Per-voice envelope (0–1) |
 | **Sample & Hold** | ch0 | In/Out | Signal in / held CV out (shared channel; read before overwrite) |
 | **Sample & Hold** | ch1 | In | Trigger / gate |

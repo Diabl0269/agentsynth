@@ -65,7 +65,7 @@ public:
         }
     }
 
-    std::vector<ModulationTarget> getModulationTargets() const override { return {{"Amount", 1}}; }
+    std::vector<ModulationTarget> getModulationTargets() const override { return {{"Amount", 1, "amount"}}; }
     juce::String getInputPortLabel(int i) const override { return i == 0 ? "Signal" : "Amount"; }
     juce::String getOutputPortLabel(int) const override { return "Out"; }
 

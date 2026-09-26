@@ -113,7 +113,7 @@ public:
                 vb->pushSample(gateOut[s]);
     }
 
-    std::vector<ModulationTarget> getModulationTargets() const override { return {{"Threshold", 1}}; }
+    std::vector<ModulationTarget> getModulationTargets() const override { return {{"Threshold", 1, "trigThreshold"}}; }
 
     juce::String getInputPortLabel(int i) const override {
         return i == 0 ? "Signal" : i == 1 ? "Threshold" : ModuleBase::getInputPortLabel(i);

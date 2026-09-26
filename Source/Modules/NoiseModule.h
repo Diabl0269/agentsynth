@@ -49,7 +49,9 @@ public:
         }
     }
 
-    std::vector<ModulationTarget> getModulationTargets() const override { return {{"Color", 8}, {"Level", 9}}; }
+    std::vector<ModulationTarget> getModulationTargets() const override {
+        return {{"Color", 8, "color"}, {"Level", 9, "level"}};
+    }
 
     juce::String getInputPortLabel(int i) const override {
         const juce::String labels[] = {"Color", "Level"};

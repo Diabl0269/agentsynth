@@ -7,6 +7,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/LayoutUtil.h"
+#include <algorithm>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -100,6 +101,13 @@ TEST_F(ModuleComponentTest, WavetableCardBuildsFolderBrowserChrome) {
 // The 16 CV jacks run in two columns so the gutter stops dictating the card height — but BOTH
 // stay on the left. Inputs-left / outputs-right is what makes signal flow read left to right,
 // and splitting inputs across both edges costs more in comprehension than the height saves.
+//
+// FRO312: this only holds for the DRAWN (non-knob-bound) jacks. A CV jack whose target resolves to
+// a bound, VISIBLE knob (only the pinned Position/Warp knobs, which never sit behind the tab strip
+// -- docs/modules/modulation.md#drag-to-knob-modulation) draws no gutter dot at all;
+// getPortCenter(i, true) for that `i` returns the knob's own landing anchor instead, which
+// legitimately sits wherever that knob is in the body grid, including past the card's midline.
+// `drawnInputJackIndices()` is the one list of which indices are still real gutter jacks.
 TEST_F(ModuleComponentTest, WavetableCardKeepsEveryInputJackOnTheLeft) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -110,28 +118,47 @@ TEST_F(ModuleComponentTest, WavetableCardKeepsEveryInputJackOnTheLeft) {
     const int numOuts = processor.getVisibleOutputPortCount();
     ASSERT_EQ(numJacks, WavetableOscillatorModule::kNumJacks);
 
+    const auto drawn = moduleComponent.drawnInputJackIndices();
+    ASSERT_LT((int)drawn.size(), numJacks)
+        << "expected at least the pinned Position/Warp CV jacks to be knob-bound on the default tab page";
+
     std::set<std::pair<int, int>> seen;
     std::set<int> columns;
-    for (int i = 0; i < numJacks; ++i) {
+    for (int i : drawn) {
         const auto p = moduleComponent.getPortCenter(i, true);
         EXPECT_TRUE(seen.insert({p.x, p.y}).second) << "jack " << i << " overlaps another jack";
         EXPECT_TRUE(moduleComponent.getLocalBounds().contains(p)) << "jack " << i << " sits outside the card";
         EXPECT_LT(p.x, moduleComponent.getWidth() / 2) << "input jack " << i << " must stay on the left half";
         columns.insert(p.x);
     }
-    EXPECT_EQ(columns.size(), 2u) << "expected exactly two jack columns";
+    EXPECT_LE(columns.size(), 2u) << "expected at most two jack columns among the drawn jacks";
+
+    // Every knob-bound jack (excluded above) must still resolve to SOME point on the card -- it
+    // simply is not a gutter jack any more.
+    for (int i = 0; i < numJacks; ++i) {
+        if (std::find(drawn.begin(), drawn.end(), i) != drawn.end())
+            continue;
+        const auto p = moduleComponent.getPortCenter(i, true);
+        EXPECT_TRUE(moduleComponent.getLocalBounds().contains(p)) << "knob-bound jack " << i << " landed off-card";
+    }
 
     // Outputs keep the right edge to themselves.
     for (int o = 0; o < numOuts; ++o)
         EXPECT_GT(moduleComponent.getPortCenter(o, false).x, moduleComponent.getWidth() / 2);
 
-    // Column-major: the first half runs down column 0, so jack 0 and the midpoint jack share a row.
-    EXPECT_EQ(moduleComponent.getPortCenter(0, true).y, moduleComponent.getPortCenter(numJacks / 2, true).y);
-    EXPECT_LT(moduleComponent.getPortCenter(0, true).x, moduleComponent.getPortCenter(numJacks / 2, true).x);
+    // Column-major: the first half of the DRAWN jacks runs down column 0, so the first and the
+    // midpoint-of-drawn jack share a row (only meaningful once there are enough drawn jacks to
+    // actually fill two columns).
+    if (drawn.size() > 10) {
+        const int mid = (int)drawn.size() / 2;
+        EXPECT_EQ(moduleComponent.getPortCenter(drawn[0], true).y, moduleComponent.getPortCenter(drawn[mid], true).y);
+        EXPECT_LT(moduleComponent.getPortCenter(drawn[0], true).x, moduleComponent.getPortCenter(drawn[mid], true).x);
+    }
 
-    // The body must clear the LOWEST jack, which is not necessarily the last one.
+    // The body must clear the LOWEST drawn jack, which is not necessarily the last one -- a
+    // knob-bound jack's anchor sits inside the body itself, so it must not be folded into this max.
     int lowest = 0;
-    for (int i = 0; i < numJacks; ++i)
+    for (int i : drawn)
         lowest = std::max(lowest, moduleComponent.getPortCenter(i, true).y);
     for (auto* child : moduleComponent.getChildren())
         if (child->isVisible() && dynamic_cast<juce::Slider*>(child) != nullptr)

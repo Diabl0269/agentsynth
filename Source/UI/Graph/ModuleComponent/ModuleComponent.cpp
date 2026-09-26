@@ -102,6 +102,17 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     , owner(owner)
     , undoManager(undoMgr) {
 
+    // FRO312: see the member's own comment and detachFromProcessor() for why this is captured
+    // up front rather than re-derived later (by the time detachFromProcessor() runs, the node may
+    // legitimately have been removed -- that's the case this flag has to tell apart from "never
+    // was in a graph to begin with").
+    for (auto* node : owner.getAudioEngine().getGraph().getNodes()) {
+        if (node->nodeID == nodeId) {
+            nodeWasInGraphAtConstruction_ = true;
+            break;
+        }
+    }
+
     showContextMenuHook_ = [](juce::PopupMenu& menu) { menu.showMenuAsync(juce::PopupMenu::Options()); };
 
     if (auto* modBase = dynamic_cast<ModuleBase*>(module)) {
@@ -292,15 +303,34 @@ void ModuleComponent::detachFromProcessor() {
     if (auto* parent = getParentComponent())
         parent->removeChildComponent(this);
 
-    // Destroy attachments ONLY if the processor is still alive (node exists in graph).
-    // During undo, graph.clear() may have already freed the processor and its parameters.
-    // If the processor is gone, release ownership to avoid use-after-free in ~ParameterAttachment.
+    // Destroy attachments and remove our own parameter listener ONLY if the processor is still
+    // alive. During undo, graph.clear() may have already freed the processor and its parameters
+    // by the time this runs — if so, touching it (even just to call removeListener) is a
+    // use-after-free, so we release/leak instead.
+    //
+    // "Still alive" means something different depending on how this card came to exist:
+    //  - The normal case: this card's node WAS part of `owner`'s graph when the card was built
+    //    (nodeWasInGraphAtConstruction_, captured once in the ctor — see FRO312's comment there).
+    //    A later single-node removal (GraphEditor::deleteSelection / requestDeleteModule /
+    //    replaceModule) frees the processor before this destructor runs, so we confirm liveness
+    //    by re-checking the CURRENT graph for a node whose processor still matches `module`.
+    //  - The card was built directly on a bare processor that was never added to any graph at all
+    //    (never true in production — GraphEditor only ever builds a card for an existing node —
+    //    but exactly what ModuleComponentKnobCoverageTests.cpp and ModuleComponentLifecycleTests.cpp
+    //    do). There the graph can never have freed it out from under us, because the graph never
+    //    owned it in the first place, so it is always safe to detach (FRO312: this used to be
+    //    treated as "gone", which left our listener registration dangling on the still-live
+    //    processor — a real, reproducible heap-use-after-free on the next parameter write).
     bool processorAlive = false;
     if (module != nullptr) {
-        for (auto* node : owner.getAudioEngine().getGraph().getNodes()) {
-            if (node->getProcessor() == module) {
-                processorAlive = true;
-                break;
+        if (!nodeWasInGraphAtConstruction_) {
+            processorAlive = true;
+        } else {
+            for (auto* node : owner.getAudioEngine().getGraph().getNodes()) {
+                if (node->getProcessor() == module) {
+                    processorAlive = true;
+                    break;
+                }
             }
         }
     }
@@ -311,9 +341,12 @@ void ModuleComponent::detachFromProcessor() {
         sliderAttachments.clear();
         comboAttachments.clear();
         buttonAttachments.clear();
+        for (auto* param : module->getParameters())
+            param->removeListener(this);
     } else {
-        // Processor already freed — leak attachments to avoid use-after-free
-        // in ~ParameterAttachment which calls parameter->removeListener()
+        // Processor already freed — leak attachments (and skip removeListener entirely) to avoid
+        // use-after-free in ~ParameterAttachment / our own removeListener call, both of which
+        // would otherwise dereference the freed processor's parameters.
         (void)bypassAttachment.release();
         (void)muteAttachment.release();
         (void)dualIOAttachment.release();
@@ -323,14 +356,6 @@ void ModuleComponent::detachFromProcessor() {
             (void)comboAttachments.removeAndReturn(comboAttachments.size() - 1);
         while (buttonAttachments.size() > 0)
             (void)buttonAttachments.removeAndReturn(buttonAttachments.size() - 1);
-    }
-
-    if (module == nullptr)
-        return;
-
-    if (auto* node = owner.getAudioEngine().getGraph().getNodeForId(nodeId)) {
-        for (auto* param : node->getProcessor()->getParameters())
-            param->removeListener(this);
     }
 
     module = nullptr;
@@ -849,6 +874,59 @@ void ModuleComponent::handleModAmountGesture(juce::RangedAudioParameter* param, 
     modAmountGestureAttenuverterId_ = {};
 }
 
+// FRO312: claims a click on `param`'s knob when its CV jack is knob-bound (hidden -- getPortForPoint
+// can no longer offer this parameter's jack as a pickup point, whether or not a cable currently
+// lands here, exactly like a real, empty gutter jack still accepts a click to START a drag) and the
+// click is within a few px of the landing dot GraphEditorCables.cpp paints there -- never inside
+// the ring's own annulus, which wantsModAmountGestureFor above already claimed first. `bounds` is
+// the knob's own LOCAL bounds (CardKnobSlider hands this its getLocalBounds(), same as
+// wantsModAmountGestureFor) -- `e.position` arrives in that same local frame, so the landing point
+// must be computed from `bounds` too, NOT from getModTargetKnobAnchor (which is CARD-local).
+bool ModuleComponent::wantsCablePickupGestureFor(juce::RangedAudioParameter* param, juce::Rectangle<float> bounds,
+                                                 const juce::MouseEvent& e) const {
+    if (destChannelForBoundParam(param) < 0)
+        return false;
+    const float ringRadius = modRingRadiusFor(bounds);
+    if (ringRadius <= 0.0f)
+        return false;
+    const auto centre = modRingCentreFor(bounds);
+    const float landingRadius = ringRadius + knobLandingRadiusOffset();
+    const auto anchor = modRingPointForNorm(centre, landingRadius, 0.0f);
+
+    // A generous pad around the small dot -- it is only 7px across, and a precise pixel-perfect
+    // hit target is unfriendly. Still comfortably clear of the ring annulus (see
+    // knobLandingRadiusOffset's push-out math): the dot sits well beyond the ring, so this pad
+    // never reaches back into the ring's own +-5px zone.
+    constexpr float kPickupHitPad = 4.0f;
+    return anchor.getDistanceFrom(e.position) <= (kKnobLandingDotDiameter * 0.5f + kPickupHitPad);
+}
+
+// CardKnobSlider::onCablePickupGesture: forwards straight into the SAME connection-drag machinery
+// a click on a real (visible) input jack starts -- GraphEditor::beginConnectionDrag/dragConnection/
+// endConnectionDrag, as an INPUT drag (dragSourceIsInput = true), keyed by the target's VISIBLE
+// jack index (mapInputChannel, matching what routing.destVisibleJack/getPortForPoint speak in
+// everywhere else). Whatever disconnect-and-redrag behaviour that machinery already gives a real
+// input jack, this knob now gets for free, unchanged.
+void ModuleComponent::handleCablePickupGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e,
+                                               int phase) {
+    auto* mb = dynamic_cast<ModuleBase*>(module);
+    if (mb == nullptr)
+        return;
+    if (phase == 0) {
+        const int destChannel = destChannelForBoundParam(param);
+        if (destChannel < 0)
+            return;
+        const int visibleJack = mb->mapInputChannel(destChannel).visibleJackIndex;
+        owner.beginConnectionDrag(this, visibleJack, /*isInput*/ true, /*isMidi*/ false, e.getScreenPosition());
+        return;
+    }
+    if (phase == 1) {
+        owner.dragConnection(e.getScreenPosition());
+        return;
+    }
+    owner.endConnectionDrag(e.getScreenPosition()); // phase 2
+}
+
 void ModuleComponent::wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& knob, juce::RangedAudioParameter* param) {
     knob.wantsModAmountGesture = [this, param, &knob](const juce::MouseEvent& e) {
         return wantsModAmountGestureFor(param, knob.getLocalBounds().toFloat(), e);
@@ -869,6 +947,18 @@ void ModuleComponent::wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& kn
         if (destChannel < 0)
             return;
         owner.setHoveredModTarget(GraphEditor::HoveredModTarget{nodeId, destChannel});
+    };
+
+    // FRO312: this knob's own CV jack is hidden when it's a bound modulation target (see
+    // isInputJackKnobBound) -- a click near where the cable lands (getModTargetKnobAnchor, just
+    // outside the ring, never inside its annulus, so this never fights wantsModAmountGestureFor
+    // above) is the only way left to pick the cable back up. `&knob` is safe the same way it is
+    // above: the lambda only ever runs while `knob` is alive, from `knob`'s own mouseDown.
+    knob.wantsCablePickupGesture = [this, param, &knob](const juce::MouseEvent& e) {
+        return wantsCablePickupGestureFor(param, knob.getLocalBounds().toFloat(), e);
+    };
+    knob.onCablePickupGesture = [this, param](const juce::MouseEvent& e, int phase) {
+        handleCablePickupGesture(param, e, phase);
     };
 }
 

@@ -27,11 +27,14 @@
  *   | 4      | Density CV        | silent pass-through        |
  *   | 5      | Spray CV          | silent pass-through        |
  *   | 6      | Level CV          | silent pass-through        |
+ *   | 7      | Root Note CV      | silent pass-through        |
  *
- * 7 outputs are declared even though only 0-1 carry audio: JUCE's AudioProcessorGraph only makes a
+ * 8 outputs are declared even though only 0-1 carry audio: JUCE's AudioProcessorGraph only makes a
  * private copy of an input channel when `inputChan < numOutputs`, so declaring fewer outputs than
  * the highest CV channel we read would let our post-cache clear scribble on a buffer another node
- * still needs (see OscillatorModule for the same constraint).
+ * still needs (see OscillatorModule for the same constraint). Root Note CV (ch7) was APPENDED
+ * after every other channel (FRO312) rather than inserted earlier, so no existing saved-patch
+ * routing shifts.
  *
  * Thread safety: the sample is owned by a reference-counted SampleData. loadSampleFile() (message
  * thread) publishes a new one under a SpinLock; processBlock() takes the *try*-lock, so the audio
@@ -48,7 +51,8 @@ public:
     static constexpr int kDensityCVCh = 4;
     static constexpr int kSprayCVCh = 5;
     static constexpr int kLevelCVCh = 6;
-    static constexpr int kNumChannels = 7;
+    static constexpr int kRootNoteCVCh = 7; // FRO312: appended last, see the class comment above
+    static constexpr int kNumChannels = 8;
 
     // ---- Limits --------------------------------------------------------------
     static constexpr int kMaxGrains = 24;
@@ -253,6 +257,7 @@ public:
         const bool hasDensityCV = cacheChannel(buffer, kDensityCVCh, ns, numSamples, densityCache);
         const bool hasSprayCV = cacheChannel(buffer, kSprayCVCh, ns, numSamples, sprayCache);
         const bool hasLevelCV = cacheChannel(buffer, kLevelCVCh, ns, numSamples, levelCache);
+        const bool hasRootNoteCV = cacheChannel(buffer, kRootNoteCVCh, ns, numSamples, rootNoteCVCache);
 
         // ---- 2. Clear every declared output channel -----------------------------------------
         for (int ch = 0; ch < getTotalNumOutputChannels() && ch < numCh; ++ch)
@@ -274,9 +279,15 @@ public:
 
         // Source-rate correction: a 48k file on a 44.1k device must read slightly faster than 1.0.
         const double rateRatio = sample->sourceSampleRate / currentSampleRate;
+        // Root Note is a discrete "which key is unison pitch" choice, not a per-sample signal (a
+        // glide through it would just make every already-playing grain/read-head jump pitch
+        // mid-flight) -- read once per block, exactly like Oscillator's Unison/Detune CV. A retrigger
+        // mid-block (below) re-reads it too, so a same-block Note-On always uses the current value.
+        const float rootNoteCV = hasRootNoteCV ? rootNoteCVCache[0] : 0.0f;
+        const float effectiveRootNote = modulateNormalised(*rootNoteParam, (float)rootNoteParam->get(), rootNoteCV);
         // Mutable: a same-block Note-On (legato, or a loop-restart Note-Off+Note-On pair) updates
         // these mid-loop so the retriggered note plays at its own pitch, not the block's stale one.
-        float midiSemis = midiEverReceived ? (midiNote - (float)rootNoteParam->get()) : 0.0f;
+        float midiSemis = midiEverReceived ? (midiNote - effectiveRootNote) : 0.0f;
         // Pitch is a playback *rate* (the read head stays continuous through a change), and Start /
         // Grain Size / Density / Spray are only consulted when a grain spawns or a loop wraps —
         // discrete events. None of them can put a step in the rendered signal, so all five are
@@ -313,7 +324,7 @@ public:
                 if (metadata.samplePosition != i)
                     continue;
                 if (applyHeldNoteMessage(metadata.getMessage())) {
-                    midiSemis = midiNote - (float)rootNoteParam->get();
+                    midiSemis = midiNote - effectiveRootNote;
                     baseIncrement = std::pow(2.0, (double)(basePitch + midiSemis) / 12.0) * rateRatio;
                     midiNoteOnThisSample = true;
                 }
@@ -412,12 +423,18 @@ public:
     std::vector<ModulationTarget> getModulationTargets() const override {
         // Trigger (ch 0) is deliberately absent: a gate must arrive un-attenuated, so it must not
         // be auto-wrapped in an attenuverter.
-        return {{"Pitch", kPitchCVCh},     {"Start", kPositionCVCh}, {"Grain Size", kGrainSizeCVCh},
-                {"Density", kDensityCVCh}, {"Spray", kSprayCVCh},    {"Level", kLevelCVCh}};
+        return {{"Pitch", kPitchCVCh},
+                {"Start", kPositionCVCh},
+                {"Grain Size", kGrainSizeCVCh},
+                {"Density", kDensityCVCh},
+                {"Spray", kSprayCVCh},
+                {"Level", kLevelCVCh},
+                {"Root Note", kRootNoteCVCh, "rootNote"}};
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Trig", "Pitch", "Start", "Grain Size", "Density", "Spray", "Level"};
+        const juce::String labels[] = {"Trig",    "Pitch", "Start", "Grain Size",
+                                       "Density", "Spray", "Level", "Root Note"};
         return (i >= 0 && i < kNumChannels) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
 
@@ -707,6 +724,7 @@ private:
     std::array<float, kMaxBlock> densityCache{};
     std::array<float, kMaxBlock> sprayCache{};
     std::array<float, kMaxBlock> levelCache{};
+    std::array<float, kMaxBlock> rootNoteCVCache{};
 
     juce::AudioParameterChoice* playModeParam = nullptr;
     juce::AudioParameterFloat* pitchParam = nullptr;

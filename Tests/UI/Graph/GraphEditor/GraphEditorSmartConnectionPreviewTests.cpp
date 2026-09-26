@@ -341,6 +341,47 @@ TEST_F(GraphEditorTest, GhostPortEstimateMatchesTheRealJackCentre) {
     // The drag ghost's jack positions come from GraphEditor::estimatePortCenter while a real card's
     // come from ModuleComponent::getPortCenter. They carried separate header literals (30 vs 38), so
     // every preview cable terminated 8px ABOVE the jack dot it claimed to land on.
+    //
+    // FRO312: a KNOB-BOUND input jack is excluded from this exact check -- estimatePortCenter has
+    // no live component to ask which knob a target resolves to (no slider, no tab-page/poly
+    // visibility), so it can only approximate that case (see GhostEstimateForAKnobBoundJackIsInsideTheCard
+    // below); every jack this loop still checks (audio, and any CV jack with no bound knob) must
+    // still land exactly, unchanged from before FRO312.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 700);
+
+    auto& graph = engine.getGraph();
+    auto node = graph.addNode(std::make_unique<DelayModule>());
+    node->properties.set("x", 200);
+    node->properties.set("y", 120);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* comp = findModuleComp(editor, node->getProcessor());
+    ASSERT_NE(comp, nullptr);
+    const auto bounds = comp->getBounds();
+    auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
+    ASSERT_NE(mb, nullptr);
+
+    for (bool isInput : {true, false}) {
+        for (int jack = 0; jack < 2; ++jack) {
+            if (isInput && comp->isInputJackKnobBound(jack))
+                continue;
+            const auto real = bounds.getPosition() + comp->getPortCenter(jack, isInput);
+            const auto ghost = GraphEditor::estimatePortCenter(node->getProcessor(), bounds, jack, isInput, false);
+            EXPECT_EQ(ghost, real) << "ghost estimate drifted from the real jack centre for "
+                                   << (isInput ? "input" : "output") << " jack " << jack;
+        }
+    }
+}
+
+// FRO312: a knob-bound input jack draws no gutter dot, so its ghost preview during a library drag
+// (no live component yet to resolve the exact knob anchor from) can only approximate -- it lands
+// somewhere inside the card rather than exactly on the eventual knob. Once the drop lands and a
+// real ModuleComponent exists, getPortCenter resolves the exact anchor and the preview cable's
+// approximation is replaced.
+TEST_F(GraphEditorTest, GhostEstimateForAKnobBoundJackIsInsideTheCard) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1000, 700);
@@ -356,14 +397,15 @@ TEST_F(GraphEditorTest, GhostPortEstimateMatchesTheRealJackCentre) {
     ASSERT_NE(comp, nullptr);
     const auto bounds = comp->getBounds();
 
-    for (bool isInput : {true, false}) {
-        for (int jack = 0; jack < 2; ++jack) {
-            const auto real = bounds.getPosition() + comp->getPortCenter(jack, isInput);
-            const auto ghost = GraphEditor::estimatePortCenter(node->getProcessor(), bounds, jack, isInput, false);
-            EXPECT_EQ(ghost, real) << "ghost estimate drifted from the real jack centre for "
-                                   << (isInput ? "input" : "output") << " jack " << jack;
-        }
+    bool checkedAtLeastOne = false;
+    for (int jack = 0; jack < 2; ++jack) {
+        if (!comp->isInputJackKnobBound(jack))
+            continue;
+        checkedAtLeastOne = true;
+        const auto ghost = GraphEditor::estimatePortCenter(node->getProcessor(), bounds, jack, true, false);
+        EXPECT_TRUE(bounds.contains(ghost)) << "ghost for knob-bound jack " << jack << " must still land on the card";
     }
+    EXPECT_TRUE(checkedAtLeastOne) << "expected the Delay to have at least one knob-bound input jack (e.g. Time)";
 }
 
 TEST_F(GraphEditorTest, MidiCableAnchorsOnTheDrawnJackNotTheAudioPortStack) {
