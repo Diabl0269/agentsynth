@@ -5,10 +5,9 @@
 #
 # synth_add_harness(<target> <own sources...>)
 #   Links the harness against the AppUI and Core static libraries (which already carry the app code
-#   and GraphEditor, so a new .cpp only ever needs registering in cmake/AppUISources.cmake), and
-#   stops it recompiling the JUCE module unity files: Core links the same modules and already
-#   compiled them into libCore.a, which the harness links. Compile flags, includes and definitions
-#   still arrive through the usual PUBLIC link to Core, so the headers see the same configuration.
+#   and GraphEditor, so a new .cpp only ever needs registering in cmake/AppUISources.cmake). JUCE's
+#   includes and definitions arrive through Core's PUBLIC link to JuceModules, and the module code
+#   from libJuceModules.a (cmake/JuceModules.cmake), so the harness compiles no JUCE unity files.
 function(synth_add_harness target)
     add_executable(${target} ${ARGN})
 
@@ -25,16 +24,4 @@ function(synth_add_harness target)
 
     target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/Source)
 
-    # JUCE attaches each module's unity file(s) to the module's INTERFACE_SOURCES, so every target
-    # that links a module compiles its own copy. Mark them header-only in this harness's directory
-    # (source file properties are directory-scoped, one harness per directory) so ninja skips them.
-    get_target_property(core_libs Core LINK_LIBRARIES)
-    foreach(lib IN LISTS core_libs)
-        if(lib MATCHES "^juce::juce_")
-            get_target_property(module_sources ${lib} INTERFACE_JUCE_MODULE_SOURCES)
-            if(module_sources)
-                set_source_files_properties(${module_sources} PROPERTIES HEADER_FILE_ONLY TRUE)
-            endif()
-        endif()
-    endforeach()
 endfunction()
