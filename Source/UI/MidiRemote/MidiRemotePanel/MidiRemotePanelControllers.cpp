@@ -93,7 +93,7 @@ int MidiRemotePanelComponent::applyTemplateToSelectedProfile(const juce::String&
     auto updated = *profile;
     const auto result = synth::midi::applyControllerTemplate(updated, tmpl);
     if (result.added > 0) {
-        learnController_->updateProfile(updated);
+        learnController_->updateProfile(updated, "Apply template");
         refreshSurfaceForSelectedProfile();
         controllerSurface_.setSelectedControlId(selectedControlId_);
     }

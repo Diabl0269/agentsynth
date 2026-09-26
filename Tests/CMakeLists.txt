@@ -275,6 +275,7 @@ add_executable(Tests
     MidiRemote/EncoderAutoDetectTests.cpp
     MidiRemote/MidiLearnControllerTests.cpp
     MidiRemote/MidiLearnControllerHostedParameterTests.cpp
+    MidiRemote/ProfileEditHistoryTests.cpp
     App/E2EWorkflowTests.cpp
     App/E2EPluginCardWorkflowTests.cpp
     Modules/ExternalMidiModuleTests.cpp
@@ -444,6 +445,7 @@ add_executable(Tests
     UI/MidiRemote/ActionPickerTests.cpp
     UI/MidiRemote/OrphanControllerTests.cpp
     UI/MidiRemote/MidiRemotePanelAssignTests.cpp
+    UI/MidiRemote/MidiRemoteUndoRoutingTests.cpp
     UI/Mixer/MixerDockMeterGatingTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
@@ -507,6 +509,8 @@ add_executable(Tests
     ../Source/MidiRemote/MidiLearnController.cpp
     ../Source/MidiRemote/MidiLearnControllerMapping.cpp
     ../Source/MidiRemote/MidiLearnControllerPick.cpp
+    ../Source/MidiRemote/MidiLearnControllerHistory.cpp
+    ../Source/MidiRemote/ProfileEditHistory.cpp
     ../Source/UI/Graph/PickTargetOverlay/GraphPickCandidates.cpp
     ../Source/UI/Graph/PickTargetOverlay/PickTargetOverlay.cpp
     # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those six units are
@@ -651,6 +655,7 @@ add_executable(Tests
     ../Source/UI/MidiRemote/Orphan/OrphanControllerComponent.cpp
     ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelAssign.cpp
     ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelOrphans.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelUndo.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibrarySearch.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryRows.cpp

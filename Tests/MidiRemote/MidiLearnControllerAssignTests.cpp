@@ -88,7 +88,7 @@ TEST_F(MidiRemoteAssignTest, ActionTargetIsGlobalAndStoredOnTheProfileNotTheProj
     const auto stored = synth::ControllerProfileStore(root_).loadAll().profiles;
     ASSERT_EQ(stored.size(), 1u);
     EXPECT_EQ(stored[0].actions.size(), 1u) << "written to disk";
-    EXPECT_FALSE(undo_.canUndo()) << "a profile edit is not undoable";
+    EXPECT_FALSE(undo_.canUndo()) << "a profile edit is never a project undo step";
 
     ASSERT_EQ(controller_->assignControl("p1", "knob", PickTarget::action("togglePlayback")), AssignStatus::assigned);
     ASSERT_EQ(profile().actions.size(), 1u) << "the action has one driver";
@@ -119,7 +119,7 @@ TEST_F(MidiRemoteAssignTest, ContinuousTargetIsGlobalAndStoredOnTheProfileNotThe
     const auto stored = synth::ControllerProfileStore(root_).loadAll().profiles;
     ASSERT_EQ(stored.size(), 1u);
     EXPECT_EQ(stored[0].actions.size(), 1u) << "written to disk";
-    EXPECT_FALSE(undo_.canUndo()) << "a profile edit is not undoable";
+    EXPECT_FALSE(undo_.canUndo()) << "a profile edit is never a project undo step";
     EXPECT_EQ(statusBar_.getTransientMessageForTest(), "'Pad 1' now drives Tempo (BPM)");
 }
 

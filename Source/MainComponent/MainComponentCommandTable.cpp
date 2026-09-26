@@ -403,6 +403,12 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildGeneralCommandRows()
     };
 }
 
+// FRO273 (docs/control/midi-remote.md#undo): Undo/Redo (Cmd+Z / Cmd+Shift+Z and the Edit menu)
+// act on the controller edit history while keyboard focus is inside the MIDI Remote panel (docked
+// or detached -- the same panel object either way), and on the project's AppUndoManager everywhere
+// else. The toolbar's Undo/Redo buttons do not come through here and always mean the project. A
+// focused panel with nothing left to undo does nothing rather than falling through to the project:
+// the user is looking at the panel, and silently undoing a canvas edit instead would be a surprise.
 std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandRows() {
     return {
         {AppCommands::undo,
@@ -412,7 +418,9 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "undo",
          {},
          [](MainComponent& m) {
-             if (m.undoManager.canUndo())
+             if (m.bottomDock.getMidiRemotePanel().holdsUndoFocus())
+                 m.midiLearnController_.undoProfileEdit();
+             else if (m.undoManager.canUndo())
                  m.undoManager.undo();
              return true;
          }},
@@ -423,7 +431,9 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "redo",
          {},
          [](MainComponent& m) {
-             if (m.undoManager.canRedo())
+             if (m.bottomDock.getMidiRemotePanel().holdsUndoFocus())
+                 m.midiLearnController_.redoProfileEdit();
+             else if (m.undoManager.canRedo())
                  m.undoManager.redo();
              return true;
          }},

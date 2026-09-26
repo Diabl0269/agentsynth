@@ -22,6 +22,10 @@ public:
     void setDetectOn(bool on);
     bool isDetectOn() const noexcept { return detectOn_; }
 
+    /** FRO273: the right-aligned undo cue on the button row; empty hides it. */
+    void setUndoHint(const juce::String& text);
+    juce::String getUndoHint() const { return undoHintLabel_.getText(); }
+
     /** Height this toolbar wants right now (the hint row adds to it). */
     int getPreferredHeight() const noexcept;
 
@@ -44,6 +48,7 @@ private:
     juce::TextButton templatesButton_;
     juce::TextButton moreButton_;
     juce::Label hintLabel_;
+    juce::Label undoHintLabel_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControllerSurfaceToolbar)
 };
