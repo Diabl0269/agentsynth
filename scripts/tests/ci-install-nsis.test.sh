@@ -91,6 +91,11 @@ reset() { # reset <choco plan lines...>
     printf '%s\n' "$@" >"$WORK/choco.plan"
 }
 
+# macOS ships no `timeout`, so the script's default per-attempt cap would fail every choco call
+# there; run uncapped when it is missing (the cap itself is only exercised where `timeout` exists).
+TIMEOUT_FOR_TESTS="timeout"
+command -v timeout >/dev/null 2>&1 || TIMEOUT_FOR_TESTS=""
+
 run_script() { # run_script [extra VAR=value...] -- runs the script with the fakes wired in
     env WORK="$WORK" TIMEOUT_BIN="$TIMEOUT_FOR_TESTS" CHOCO="$WORK/bin/choco" CHOCO_BACKOFF=0 CHOCO_TIMEOUT=2 \
         NSIS_URL="file://$WORK/nsis-fixture.exe" NSIS_SHA256="$FIXTURE_SHA" \
