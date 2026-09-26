@@ -71,9 +71,19 @@ break in ways that look exactly like a healthy build, just slower — which is w
    enough to LRU-evict main's seeded macOS/Windows deps caches, so the next PR restored nothing and
    `scripts/ci-cache-check.sh` failed it by design; only a rerun, which itself saved a PR-scoped
    cache, passed. Every `Save FetchContent Dependencies` / `Save ccache` step's `if:` now adds
-   `github.ref == 'refs/heads/main'`; the label-gated ASAN job (which never runs on `push: main`)
-   was switched from the combined `actions/cache` action to `actions/cache/restore` outright, since
-   it can only ever restore.
+   `github.ref == 'refs/heads/main'`; the label-gated ASAN job's *deps* cache is restore-only the
+   same way. **The ASAN job's ccache is the one deliberate exception** (2026-09-26): that job never
+   runs on `push: main`, so nothing can seed a main-scoped cache for it, and without any cache every
+   labelled run compiled the whole tree cold in RelWithDebInfo+ASAN — 48 minutes of a 54-minute
+   run against 19 minutes for the same PR unlabelled. It now saves its ccache under the PR's own
+   ref, which GitHub lets only later runs of that same pull request read: the first labelled run of
+   a PR stays cold, every push after it is warm. Two guards keep that from re-creating the
+   accumulation this rule exists for: the job's own prune step keeps a single generation per PR
+   (deletes only entries under that PR's ref, only after a successful save, only ones older than
+   the key just saved), and **`.github/workflows/cache-cleanup.yml` deletes every cache scoped to a
+   PR's ref the moment the PR closes**, merged or not — the FRO209 automation, which also covers
+   any other PR-scoped entry a future job might leave (the seven dead `cache-apt-pkgs_*` entries
+   FRO209 found by hand were that kind).
 
    Saving to main does not itself solve accumulation, since a ccache key is per-commit and cache
    entries are **immutable** — every merge mints a new `<os>-ccache-main-<sha>` generation instead of

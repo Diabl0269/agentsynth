@@ -1,0 +1,50 @@
+name: Cache cleanup
+
+# WHY THIS EXISTS (FRO209): GitHub scopes every Actions cache to the ref that wrote it, and a
+# pull request's ref (refs/pull/<n>/merge) outlives nothing -- once the PR closes, no run can ever
+# read those entries again, yet GitHub keeps them until its 7-day / 10 GB-budget GC gets there.
+# Dead PR-scoped entries were measured at 489 MB on 2026-09-22 (a stale Windows ccache and seven
+# cache-apt-pkgs entries from PRs merged days earlier) against a repo budget that sat at 92.6
+# percent, and PR-scoped accumulation is exactly what LRU-evicted main's seeded caches in the FRO86
+# incident. ci.yml's PR jobs restore only (docs/development/ci-caching.md rule 6), so today the only
+# PR-scoped entries are the label-gated ASAN job's ccache (its one deliberate exception) plus
+# anything a future job adds -- this deletes all of them for the PR that just closed, merged or not.
+#
+# Same-repo PRs only, by construction: the GITHUB_TOKEN of a pull_request event from a fork is
+# read-only, so `gh cache delete` would fail there; a fork PR cannot write caches into this repo
+# in the first place, so there is nothing of its own to delete. Failures are logged, never fatal --
+# a missed cleanup costs cache budget, not correctness, and GC still runs.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    name: Delete the closed PR's caches
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete every cache scoped to this PR's ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          set -uo pipefail
+          if ! list="$(gh cache list --repo "$REPO" --ref "$REF" --limit 100 --json id,key,sizeInBytes 2>&1)" \
+              || [ -z "$list" ] || [ "$list" = "[]" ]; then
+            echo "No caches under $REF (or listing failed): $list"
+            exit 0
+          fi
+          echo "$list" | jq -r '.[] | "\(.id) \(.sizeInBytes) \(.key)"' | while read -r id size key; do
+            [ -n "$id" ] || continue
+            if gh cache delete "$id" --repo "$REPO"; then
+              echo "deleted $key ($size bytes)"
+            else
+              echo "::warning::could not delete cache $key (id $id); GitHub's GC will get it"
+            fi
+          done

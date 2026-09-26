@@ -427,6 +427,10 @@ jobs:
     name: Build and Test (ASAN)
     if: contains(github.event.pull_request.labels.*.name, 'run-asan')
     runs-on: ubuntu-latest
+    # actions: write only for the Prune step below (gh cache delete), same as build-and-test.
+    permissions:
+      contents: read
+      actions: write
 
     steps:
     - uses: actions/checkout@v6
@@ -438,12 +442,13 @@ jobs:
       timeout-minutes: 15
       run: bash scripts/ci-install-linux-deps.sh
 
-    # Restore-only, like every other PR-facing cache step (see the Save FetchContent Dependencies
-    # comment in build-and-test above): this job only ever runs on a PR (label-gated, no push:main
-    # trigger of its own), so it can never be the ref that legitimately saves. It shares the exact
-    # same key as build-and-test's Linux deps cache, so it restores from that job's main-seeded
-    # entry with no save step of its own needed here.
+    # Restore-only for the DEPS cache (see the Save FetchContent Dependencies comment in
+    # build-and-test above): this job only ever runs on a PR (label-gated, no push:main trigger of
+    # its own), so it can never be the ref that legitimately saves. It shares the exact same key as
+    # build-and-test's Linux deps cache, so it restores from that job's main-seeded entry with no
+    # save step of its own needed here. Its ccache is the deliberate exception, below.
     - name: Restore FetchContent Dependencies
+      id: deps-cache
       uses: actions/cache/restore@v5
       with:
         path: build/_deps
@@ -451,6 +456,34 @@ jobs:
         key: ${{ runner.os }}-deps3-${{ hashFiles('cmake/DependencyVersions.cmake') }}
         restore-keys: |
           ${{ runner.os }}-deps3-
+
+    # The ONE exception to rule 6 of docs/development/ci-caching.md ("PR runs restore only"). This
+    # job never runs on push:main, so nothing can seed a main-scoped cache for it, and until
+    # 2026-09-26 it had no ccache at all: every labelled run compiled the whole tree cold in
+    # RelWithDebInfo+ASAN, 48m31s of a 54-minute run (run 36133531096) against 19 minutes for the
+    # same PR without the label. It now saves its own ccache under the PR's ref -- which GitHub
+    # scopes so that only later runs of the SAME pull request can read it, so the first labelled
+    # run of a PR is still cold and every push after it is warm. Two things keep this from
+    # re-creating the 10 GB-budget eviction that rule 6 exists for: the Prune step below keeps only
+    # the newest generation per PR, and .github/workflows/cache-cleanup.yml deletes every cache
+    # under refs/pull/<n>/merge the moment the PR closes (FRO209).
+    - name: Restore ccache
+      id: asan-ccache
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ runner.os }}-asan-ccache-${{ github.ref_name }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-asan-ccache-${{ github.ref_name }}-
+
+    - name: Configure ccache
+      run: |
+        # RelWithDebInfo + ASAN objects are heavier than the Release jobs' (512M) and lighter than
+        # the Debug+coverage build (2G, measured 1.87 GB); one generation per open labelled PR.
+        ccache --set-config=max_size=1500M
+        ccache --set-config=compiler_check=content
+        ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
+        ccache --zero-stats
 
     - name: Configure CMake
       run: |
@@ -461,10 +494,56 @@ jobs:
           -DENABLE_TESTS=ON \
           -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
           -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
-          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
     - name: Build
       run: cmake --build build --target Tests
+
+    # CACHE_WARM_EXPECTED is false here by design: the first labelled run of a PR has nothing to
+    # restore (see the Restore ccache comment), so a miss is expected, not a failure. The launcher
+    # audit and hit-rate report still run.
+    - name: Check Cache Health
+      if: always()
+      env:
+        CACHE_MATCHED_KEY: ${{ steps.asan-ccache.outputs.cache-matched-key }}
+        DEPS_MATCHED_KEY: ${{ steps.deps-cache.outputs.cache-matched-key }}
+        CACHE_WARM_EXPECTED: "false"
+      run: bash scripts/ci-cache-check.sh
+
+    # Saved on every labelled run, PR-scoped (no refs/heads/main gate, unlike every other Save step
+    # in this file -- see the Restore ccache comment for why this job is the exception).
+    - name: Save ccache
+      id: asan-ccache-save
+      if: always()
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ steps.asan-ccache.outputs.cache-primary-key }}
+
+    # Keys are per-commit and entries immutable, so each push to a labelled PR mints a new
+    # generation; keep only the one just saved. Same guard shape as the main prune steps: runs only
+    # after a successful save, deletes only entries under THIS PR's ref, and only ones older than
+    # the key just saved. cache-cleanup.yml removes the last generation when the PR closes.
+    - name: Prune this PR's superseded ASAN cache generations
+      if: steps.asan-ccache-save.outcome == 'success'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        KEEP_KEY: ${{ steps.asan-ccache.outputs.cache-primary-key }}
+        PREFIX: ${{ runner.os }}-asan-ccache-${{ github.ref_name }}-
+      run: |
+        set -uo pipefail
+        if ! list="$(gh cache list --ref "$GITHUB_REF" --key "$PREFIX" --limit 100 --json id,key 2>&1)" \
+            || [ -z "$list" ] || [ "$list" = "[]" ]; then
+          echo "prune: nothing to list for $PREFIX (or listing failed), skipping: $list"
+          exit 0
+        fi
+        echo "$list" | jq -r --arg keep "$KEEP_KEY" '.[] | select(.key != $keep) | "\(.id) \(.key)"' |
+          while read -r id key; do
+            [ -n "$id" ] || continue
+            if gh cache delete "$id"; then echo "prune: deleted superseded $key"; else echo "prune: could not delete $key (id $id), continuing"; fi
+          done
 
     - name: Run Tests
       run: xvfb-run ./build/Tests/Tests
