@@ -303,8 +303,11 @@ jobs:
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
+    # -j4 on the 4 vCPU / 16 GB runner: at ninja's default -j6 a cold-cache Debug+coverage build ran
+    # out of memory near the end (Tests linking while the Tools harnesses compile) and the runner
+    # agent was killed ("runner has received a shutdown signal", exit 143) — 5 times in a row on one PR.
     - name: Build
-      run: cmake --build build
+      run: cmake --build build -j4
 
     - name: Check Cache Health
       if: always()
