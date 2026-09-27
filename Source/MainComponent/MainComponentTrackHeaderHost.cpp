@@ -70,7 +70,8 @@ void collectHostedPluginLaneOptions(juce::AudioProcessorGraph& graph, const synt
 // Inactive slots are never offered (docs/mixer/sends-and-buses.md#the-send-and-bus-ui). The label
 // mirrors the send knob's own FRO301 accessible title (synth::describeSendSlotLabel), so the picker
 // entry and the knob it automates always read the same "Send to <target>" / "Send N (no target)".
-void collectChannelStripSendLaneOptions(juce::AudioProcessorGraph& graph, const synth::TimelineDoc& timelineDoc,
+void collectChannelStripSendLaneOptions(juce::AudioProcessorGraph& graph, const synth::MacroSet& macros,
+                                        const synth::TimelineDoc& timelineDoc,
                                         std::vector<synth::ui::TrackHeaderHost::PluginLaneOption>& options) {
     for (auto* node : graph.getNodes()) {
         if (node == nullptr)
@@ -94,7 +95,7 @@ void collectChannelStripSendLaneOptions(juce::AudioProcessorGraph& graph, const 
             option.nodeUuid = uuid;
             option.paramId = paramId;
             option.paramIndex = -1; // unused for a plain RangedAudioParameter
-            option.label = synth::describeSendSlotLabel(graph, node->nodeID, slot);
+            option.label = synth::describeSendSlotLabel(graph, &macros, node->nodeID, slot);
             options.push_back(std::move(option));
         }
     }
@@ -212,7 +213,8 @@ void MainComponent::selectNodeInGraph(const juce::String& uuid) {
 std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> MainComponent::getAvailablePluginLaneOptions() const {
     std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> options;
     collectHostedPluginLaneOptions(audioEngine.getGraph(), timelineDoc, options);
-    collectChannelStripSendLaneOptions(audioEngine.getGraph(), timelineDoc, options);
+    collectChannelStripSendLaneOptions(audioEngine.getGraph(),
+                                       const_cast<MainComponent*>(this)->graphEditor.getMacros(), timelineDoc, options);
     return options;
 }
 

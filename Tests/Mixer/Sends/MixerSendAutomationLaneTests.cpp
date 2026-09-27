@@ -26,6 +26,7 @@
 #include "Modules/ChannelStripModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineReconciler.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <algorithm>
 #include <gtest/gtest.h>
@@ -200,4 +201,31 @@ TEST(MixerSendAutomationLaneTest, ChoosingTheEntryCreatesABoundLane) {
     const auto* laneAfterRemove = doc.getLaneForParam(uuid, "send1Level");
     ASSERT_NE(laneAfterRemove, nullptr) << "the lane is retained, never auto-deleted";
     EXPECT_FALSE(laneAfterRemove->orphaned);
+}
+
+TEST(MixerSendAutomationLaneTest, PickerNamesABoxedBusByItsMacroName) {
+    MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
+    auto& graph = mc.getAudioEngine().getGraph();
+
+    const juce::String sourceUuid = "c0900000-0000-0000-0000-00000000000a";
+    const juce::String busUuid = "c0900000-0000-0000-0000-00000000000b";
+    const auto source = addStripWithUuid(graph, sourceUuid);
+    const auto bus = addStripWithUuid(graph, busUuid);
+    ASSERT_NE(source, NodeID{});
+    ASSERT_NE(bus, NodeID{});
+    dynamic_cast<ChannelStripModule*>(graph.getNodeForId(bus)->getProcessor())->setIsBus(true);
+
+    // A renamed, boxed bus: the mixer row names it by its macro, so the lane picker must too.
+    synth::Macro macro;
+    macro.name = "Plate Verb";
+    macro.members = {busUuid};
+    mc.getGraphEditor().getMacros().add(macro);
+
+    ASSERT_EQ(synth::addSend(graph, source, bus), 0);
+    const auto options = collectAddLaneOptions(mc.getTimelinePanel());
+    const auto found = std::find_if(options.begin(), options.end(), [&](const auto& option) {
+        return option.nodeUuid == sourceUuid && option.paramId == "send1Level";
+    });
+    ASSERT_NE(found, options.end());
+    EXPECT_EQ(found->label, "Send to Plate Verb");
 }

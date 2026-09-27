@@ -3,6 +3,7 @@
 
 #include "MixerSends.h"
 
+#include "MacroSet.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"
@@ -188,12 +189,22 @@ NodeID findSendTarget(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int 
     return {};
 }
 
-juce::String describeSendSlotLabel(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot) {
+juce::String sendTargetName(juce::AudioProcessorGraph& graph, const MacroSet* macros, NodeID target) {
+    auto* node = target == NodeID{} ? nullptr : graph.getNodeForId(target);
+    if (node == nullptr)
+        return "No target";
+    if (macros != nullptr)
+        if (const auto* macro = macros->findByMember(node->properties["uuid"].toString()))
+            return macro->name;
+    return isBusStrip(graph, target) ? busFallbackName(graph, target) : juce::String("Channel");
+}
+
+juce::String describeSendSlotLabel(juce::AudioProcessorGraph& graph, const MacroSet* macros, NodeID sourceStrip,
+                                   int slot) {
     const auto target = findSendTarget(graph, sourceStrip, slot);
     if (target == NodeID{})
         return "Send " + juce::String(slot + 1) + " (no target)";
-    const juce::String name = isBusStrip(graph, target) ? busFallbackName(graph, target) : juce::String("Channel");
-    return "Send to " + name;
+    return "Send to " + sendTargetName(graph, macros, target);
 }
 
 std::vector<NodeID> enumerateSendTargets(juce::AudioProcessorGraph& graph, NodeID sourceStrip) {
