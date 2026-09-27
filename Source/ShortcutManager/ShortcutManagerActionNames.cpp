@@ -120,7 +120,7 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
     if (actionId == "toggleMixerPanel")
         return "Toggle Mixer Panel";
     if (actionId == "toggleMidiRemotePanel")
-        return "Toggle MIDI Remote Panel";
+        return "Toggle Controllers Panel";
     if (actionId == "zoomInHorizontal")
         return "Zoom In";
     if (actionId == "zoomOutHorizontal")

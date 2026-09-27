@@ -574,7 +574,7 @@ void MainComponent::applyToolbarIcons() {
     toggleTimelineButton.setButtonText(iconOnly ? "" : (isBottomDockVisible ? "Hide Timeline" : "Show Timeline"));
     toggleMidiRemoteButton.setButtonText(
         iconOnly ? ""
-                 : ((isBottomDockVisible && bottomDock.isMidiRemoteTabActive()) ? "Hide MIDI Remote" : "MIDI Remote"));
+                 : ((isBottomDockVisible && bottomDock.isMidiRemoteTabActive()) ? "Hide Controllers" : "Controllers"));
     toggleLibraryButton.setButtonText(iconOnly ? "" : (isLibraryVisible ? "Hide Library" : "Show Library"));
     themeToggleButton.setButtonText(
         iconOnly ? ""
@@ -613,7 +613,7 @@ void MainComponent::applyToolbarIcons() {
     toggleTimelineButton.setTooltip(hint(timelineBase, "toggleTimelinePanel"));
 
     const juce::String midiRemoteBase =
-        (isBottomDockVisible && bottomDock.isMidiRemoteTabActive()) ? "Hide MIDI Remote" : "Show MIDI Remote";
+        (isBottomDockVisible && bottomDock.isMidiRemoteTabActive()) ? "Hide Controllers" : "Show Controllers";
     toggleMidiRemoteButton.setTooltip(hint(midiRemoteBase, "toggleMidiRemotePanel"));
 
     const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";

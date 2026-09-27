@@ -20,7 +20,7 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     : timelinePanel_(timelinePanel)
     , timelineHost_(timelinePanel_, "Timeline", "timelineWindowBounds", &appProperties, lookAndFeel, shortcutManager)
     , mixerHost_(mixer_, "Mixer", "mixerWindowBounds", &appProperties, lookAndFeel, shortcutManager)
-    , midiRemoteHost_(midiRemotePanel_, "MIDI Remote", "midiRemoteWindowBounds", &appProperties, lookAndFeel,
+    , midiRemoteHost_(midiRemotePanel_, "Controllers", "midiRemoteWindowBounds", &appProperties, lookAndFeel,
                       shortcutManager) {
     addAndMakeVisible(timelineTabButton_);
     addAndMakeVisible(mixerTabButton_);

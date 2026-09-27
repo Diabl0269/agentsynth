@@ -666,8 +666,8 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
          }},
         // FRO131: same shape as toggleMixerPanel's own row above -- a third tab on the same dock.
         {AppCommands::toggleMidiRemotePanel,
-         "Toggle MIDI Remote Panel",
-         "Toggle the MIDI Remote tab in the bottom-docked panel",
+         "Toggle Controllers Panel",
+         "Toggle the Controllers tab in the bottom-docked panel",
          "View",
          "toggleMidiRemotePanel",
          {},
