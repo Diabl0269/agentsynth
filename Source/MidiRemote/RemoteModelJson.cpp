@@ -872,4 +872,32 @@ bool MidiRemoteProjectDoc::fromVar(const juce::var& state) {
     return true;
 }
 
+// FRO296: every assignment on (nodeUuid, paramA) flips to paramB and vice versa, so a mixer send-
+// slot swap (docs/mixer/sends-and-buses.md#reordering-sends) carries its MIDI Learn mapping along
+// with it, same rebind-in-place shape as TimelineDoc::swapLaneParams. Unlike that lane rebind,
+// there is no one-per-parameter invariant to protect here (nothing stops two controls mapping the
+// same target), so every matching assignment is swapped, not just the first. Each assignment's
+// decision is made from its OWN pre-loop paramId, so a forward pass is safe: flipping one
+// assignment from paramA to paramB can never make an assignment visited later mistake the result
+// for an original paramB.
+bool MidiRemoteProjectDoc::swapParameterAssignments(const juce::String& nodeUuid, const juce::String& paramA,
+                                                    const juce::String& paramB) {
+    if (nodeUuid.isEmpty() || paramA.isEmpty() || paramB.isEmpty() || paramA == paramB)
+        return false;
+
+    bool changedAny = false;
+    for (auto& assignment : assignments) {
+        if (!assignment.target.isParameter() || assignment.target.parameter.nodeUuid != nodeUuid)
+            continue;
+        if (assignment.target.parameter.paramId == paramA) {
+            assignment.target.parameter.paramId = paramB;
+            changedAny = true;
+        } else if (assignment.target.parameter.paramId == paramB) {
+            assignment.target.parameter.paramId = paramA;
+            changedAny = true;
+        }
+    }
+    return changedAny;
+}
+
 } // namespace synth

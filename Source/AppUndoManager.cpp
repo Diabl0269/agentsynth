@@ -853,8 +853,14 @@ bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph,
     return true;
 }
 
+// FRO296: the optional fourth (MidiRemoteProjectDoc) domain follows the exact same before/after/
+// push shape recordGraphAndMidiRemoteChange uses for its own MidiRemoteSnapshotAction -- captured
+// and diffed only when `midiRemoteDoc` is non-null, so every pre-FRO296 caller (which never passes
+// one) does exactly the same work as before.
 bool AppUndoManager::recordGraphTimelineAndMacroChange(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc,
-                                                       synth::MacroSet& macros, const std::function<void()>& mutation) {
+                                                       synth::MacroSet& macros, const std::function<void()>& mutation,
+                                                       synth::MidiRemoteProjectDoc* midiRemoteDoc,
+                                                       std::function<void()> midiRemotePostRestore) {
     if (!mutation)
         return false;
 
@@ -863,21 +869,25 @@ bool AppUndoManager::recordGraphTimelineAndMacroChange(juce::AudioProcessorGraph
     const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
     const juce::var timelineBefore = doc.toVar();
     const juce::var macrosBefore = macros.toVar();
+    const juce::var midiRemoteBefore = midiRemoteDoc != nullptr ? midiRemoteDoc->toVar() : juce::var();
 
     mutation();
 
     const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
     const juce::var timelineAfter = doc.toVar();
     const juce::var macrosAfter = macros.toVar();
+    const juce::var midiRemoteAfter = midiRemoteDoc != nullptr ? midiRemoteDoc->toVar() : juce::var();
 
     const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
     const bool timelineChanged = juce::JSON::toString(timelineBefore) != juce::JSON::toString(timelineAfter);
     const bool macrosChanged = juce::JSON::toString(macrosBefore) != juce::JSON::toString(macrosAfter);
+    const bool midiRemoteChanged =
+        midiRemoteDoc != nullptr && juce::JSON::toString(midiRemoteBefore) != juce::JSON::toString(midiRemoteAfter);
 
-    if (!graphChanged && !timelineChanged && !macrosChanged)
+    if (!graphChanged && !timelineChanged && !macrosChanged && !midiRemoteChanged)
         return false; // no domain changed: no transaction pushed
 
-    // Both halves land in the same transaction (no beginNewTransaction between them), so a single
+    // All halves land in the same transaction (no beginNewTransaction between them), so a single
     // undo()/redo() reverts or re-applies whichever domains actually changed, together.
     if (graphChanged || macrosChanged)
         pushGraphAndMacroActions(graph, macros, graphBefore, graphAfter, macrosBefore, macrosAfter, graphChanged,
@@ -885,6 +895,9 @@ bool AppUndoManager::recordGraphTimelineAndMacroChange(juce::AudioProcessorGraph
     if (timelineChanged)
         performAction(new TimelineSnapshotAction(
             doc, timelineBefore, timelineAfter, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+    if (midiRemoteChanged)
+        performAction(
+            new MidiRemoteSnapshotAction(*midiRemoteDoc, midiRemoteBefore, midiRemoteAfter, midiRemotePostRestore));
 
     return true;
 }

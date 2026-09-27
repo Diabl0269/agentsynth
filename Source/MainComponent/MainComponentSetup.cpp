@@ -558,6 +558,12 @@ void MainComponent::wireMidiRemoteEngine() {
     mixerPanel.onSoloMidiForgetRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {
         midiLearnController_.forgetNodeCommand(nodeId, synth::NodeCommandKind::toggleSolo);
     };
+    // FRO296 (docs/mixer/sends-and-buses.md#reordering-sends): a send drag-reorder swaps any MIDI
+    // Learn mapping on the moved slots too, in the SAME undo step -- moveSendRow needs the live doc
+    // to fold its own MidiRemoteSnapshotAction in, and the same republish every other doc_ mutator
+    // here calls after touching it.
+    mixerPanel.setMidiRemoteDoc(&midiRemoteDoc);
+    mixerPanel.onPublishMidiRemoteAssignments = [this] { midiLearnController_.publishAssignments(); };
     // FRO253: re-syncs the mixer column's M/S visuals after a hardware press flips solo outside
     // any column's own click -- see MixerColumnComponent::toggleSoloed's callers for why nothing
     // else does this (MixerColumnMidiLearn.cpp / RemoteActionInvokerImpl's own comment).

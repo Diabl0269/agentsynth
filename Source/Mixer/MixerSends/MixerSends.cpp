@@ -271,6 +271,162 @@ bool setSendMono(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot,
     return true;
 }
 
+namespace {
+
+/** Remaps `conn`'s SOURCE channel from `fromSlot`'s raw pair to `toSlot`'s -- the destination side
+ *  (whatever the send actually feeds) is untouched, which is what carries a module inserted on the
+ *  send path along with the swap for free. */
+Connection remapSlotSource(const Connection& conn, NodeID sourceStrip, int fromSlot, int toSlot) {
+    int channel = conn.source.channelIndex;
+    if (channel == ChannelStripModule::sendLeftChannel(fromSlot))
+        channel = ChannelStripModule::sendLeftChannel(toSlot);
+    else if (channel == ChannelStripModule::sendRightChannel(fromSlot))
+        channel = ChannelStripModule::sendRightChannel(toSlot);
+    return Connection{{sourceStrip, channel}, conn.destination};
+}
+
+} // namespace
+
+// FRO296 (docs/mixer/sends-and-buses.md#reordering-sends): the user wants "Send 1" to always be the
+// top row everywhere -- the knob's title, a lane's name, the target menu -- so reordering SWAPS THE
+// REAL SLOTS rather than reshuffling a display-only order on top of them. sendNLevel/sendNPan are
+// fixed per-slot identities ("send1Level" always names slot 0), so a swap moves what those two
+// parameter OBJECTS hold, never which object is which -- same reasoning as retargetSend never
+// re-creating a slot's parameters. Automation-lane rebinding is deliberately NOT here: a lane
+// belongs to a TimelineDoc, which this headless unit never sees (same boundary as retargetSend not
+// touching MIDI Learn) -- the caller that owns the doc (MixerPanelComponent) replays moveSendRow's
+// own swap sequence against it.
+bool swapSends(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slotA, int slotB) {
+    auto* strip = stripAt(graph, sourceStrip);
+    if (strip == nullptr || slotA < 0 || slotA >= ChannelStripModule::kMaxSends || slotB < 0 ||
+        slotB >= ChannelStripModule::kMaxSends)
+        return false;
+    if (slotA == slotB)
+        return true;
+
+    const auto cablesA = dropSlotCables(graph, sourceStrip, slotA);
+    const auto cablesB = dropSlotCables(graph, sourceStrip, slotB);
+
+    // Same "collect what was added, roll it all back on a partial refusal" shape as retargetSend's
+    // own rollback, just over two cable sets instead of one.
+    std::vector<Connection> added;
+    bool ok = true;
+    for (const auto& conn : cablesA) {
+        const auto remapped = remapSlotSource(conn, sourceStrip, slotA, slotB);
+        if (!graph.addConnection(remapped)) {
+            ok = false;
+            break;
+        }
+        added.push_back(remapped);
+    }
+    if (ok)
+        for (const auto& conn : cablesB) {
+            const auto remapped = remapSlotSource(conn, sourceStrip, slotB, slotA);
+            if (!graph.addConnection(remapped)) {
+                ok = false;
+                break;
+            }
+            added.push_back(remapped);
+        }
+
+    if (!ok) {
+        for (const auto& conn : added)
+            graph.removeConnection(conn);
+        for (const auto& conn : cablesA)
+            graph.addConnection(conn);
+        for (const auto& conn : cablesB)
+            graph.addConnection(conn);
+        return false;
+    }
+
+    // State bits: a plain field swap, both directions at once so neither read sees the other's
+    // already-written value.
+    const bool activeA = strip->isSendActive(slotA), activeB = strip->isSendActive(slotB);
+    const bool preA = strip->isSendPreFader(slotA), preB = strip->isSendPreFader(slotB);
+    const bool muteA = strip->isSendMuted(slotA), muteB = strip->isSendMuted(slotB);
+    const bool monoA = strip->isSendMono(slotA), monoB = strip->isSendMono(slotB);
+    strip->setSendActive(slotA, activeB);
+    strip->setSendActive(slotB, activeA);
+    strip->setSendPreFader(slotA, preB);
+    strip->setSendPreFader(slotB, preA);
+    strip->setSendMuted(slotA, muteB);
+    strip->setSendMuted(slotB, muteA);
+    strip->setSendMono(slotA, monoB);
+    strip->setSendMono(slotB, monoA);
+
+    // Parameter VALUES, not the parameter objects -- "send1Level" always names slot 0, so swapping
+    // slots means swapping what the two fixed-identity parameters hold. Both slots share the same
+    // range (ChannelStripModule's ctor gives every send the same NormalisableRange), so converting
+    // through slotA's own range for both writes is exact -- same shape as MixerSendList's own knob
+    // attachment writing through setValueNotifyingHost.
+    if (auto* levelA = strip->getSendLevelParameter(slotA))
+        if (auto* levelB = strip->getSendLevelParameter(slotB)) {
+            const auto& range = levelA->getNormalisableRange();
+            const float valueA = levelA->get(), valueB = levelB->get();
+            levelA->setValueNotifyingHost(range.convertTo0to1(valueB));
+            levelB->setValueNotifyingHost(range.convertTo0to1(valueA));
+        }
+    if (auto* panA = strip->getSendPanParameter(slotA))
+        if (auto* panB = strip->getSendPanParameter(slotB)) {
+            const auto& range = panA->getNormalisableRange();
+            const float valueA = panA->get(), valueB = panB->get();
+            panA->setValueNotifyingHost(range.convertTo0to1(valueB));
+            panB->setValueNotifyingHost(range.convertTo0to1(valueA));
+        }
+
+    return true;
+}
+
+// `fromRow`/`toRow` index the ACTIVE-slot-ordered visible list (MixerModelSends.cpp's
+// buildSendsForColumn), never a raw slot number. `appliedSwaps`, when non-null, is cleared and
+// filled with the exact (slotA, slotB) pairs applied, in order -- MixerPanelComponent replays the
+// same sequence against every automation lane bound to a moved slot's sendNLevel/sendNPan. False
+// (nothing changed, `appliedSwaps` left empty) for `fromRow == toRow`, an out-of-range row, or an
+// all-or-nothing refusal partway through the sequence (every completed swap is undone first).
+bool moveSendRow(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int fromRow, int toRow,
+                 std::vector<std::pair<int, int>>* appliedSwaps) {
+    if (appliedSwaps != nullptr)
+        appliedSwaps->clear();
+
+    auto* strip = stripAt(graph, sourceStrip);
+    if (strip == nullptr || fromRow == toRow)
+        return false;
+
+    std::vector<int> activeSlots;
+    for (int slot = 0; slot < ChannelStripModule::kMaxSends; ++slot)
+        if (strip->isSendActive(slot))
+            activeSlots.push_back(slot);
+    if (fromRow < 0 || fromRow >= (int)activeSlots.size() || toRow < 0 || toRow >= (int)activeSlots.size())
+        return false;
+
+    // A walk of adjacent swaps through the ACTIVE-slot list, from fromRow to toRow. `activeSlots`
+    // is the FIXED list of which physical slot sits at each visible position -- swapping two
+    // already-active slots' CONTENT never changes which slot numbers are active, so position i is
+    // slot activeSlots[i] for the whole walk (never re-derived or re-ordered mid-loop). Each step
+    // moves the row being dragged one position closer to toRow by exchanging its content with its
+    // neighbour's, so after the whole walk it has passed through every position in between and
+    // ended up at toRow -- while a sparse gap (an inactive slot between two active ones) is simply
+    // never one of the positions a step touches.
+    std::vector<std::pair<int, int>> applied;
+    const int step = toRow > fromRow ? 1 : -1;
+    for (int i = fromRow; i != toRow; i += step) {
+        const int a = activeSlots[(size_t)i];
+        const int b = activeSlots[(size_t)(i + step)];
+        if (!swapSends(graph, sourceStrip, a, b)) {
+            // All-or-nothing across the whole sequence: swapSends is its own inverse, so undoing
+            // every step already applied is just replaying them again, in reverse order.
+            for (auto it = applied.rbegin(); it != applied.rend(); ++it)
+                swapSends(graph, sourceStrip, it->first, it->second);
+            return false;
+        }
+        applied.emplace_back(a, b);
+    }
+
+    if (appliedSwaps != nullptr)
+        *appliedSwaps = std::move(applied);
+    return true;
+}
+
 bool retargetSend(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot, NodeID target) {
     auto* strip = stripAt(graph, sourceStrip);
     if (strip == nullptr || !strip->isSendActive(slot) || !targetIsLegal(graph, sourceStrip, target))

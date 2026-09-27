@@ -14,6 +14,10 @@ class GraphEditor;
 class AudioEngine;
 class ShortcutManager;
 
+namespace synth {
+class MidiRemoteProjectDoc; // Forward declaration (Source/MidiRemote/RemoteModel.h)
+}
+
 namespace synth::ui {
 class MixerColumnComponent;
 }
@@ -52,6 +56,15 @@ public:
      *  recordGraphAndMacroChange step, and returns its strip's node id (invalid on failure). Wired
      *  to the dock's "Add bus" button and to every send row's "New bus..." item. */
     juce::AudioProcessorGraph::NodeID createBus();
+
+    // FRO296 (docs/mixer/sends-and-buses.md#reordering-sends): drag-reorders a send row, one undo step.
+    bool moveSendRow(juce::AudioProcessorGraph::NodeID stripNodeId, int fromRow, int toRow);
+
+    // FRO296: nullable MidiRemoteProjectDoc moveSendRow swaps a moved send's mappings on; unset == does less.
+    void setMidiRemoteDoc(synth::MidiRemoteProjectDoc* doc) noexcept { midiRemoteDoc_ = doc; }
+
+    // FRO296: republishes MIDI Remote assignments; called after moveSendRow's edit and as its undo/redo postRestore.
+    std::function<void()> onPublishMidiRemoteAssignments;
 
     /** FRO18: fires when the Arm key (rebindable "timelineArmFocusedTrack") is pressed with a
      *  linked strip focused -- BottomDockComponent wires this to
@@ -230,6 +243,7 @@ private:
     synth::MacroSet* macros_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     GraphEditor* graphEditor_ = nullptr;
+    synth::MidiRemoteProjectDoc* midiRemoteDoc_ = nullptr; // FRO296, see setMidiRemoteDoc
     AudioEngine* audioEngine_ = nullptr;
     ShortcutManager* shortcuts_ = nullptr;
 

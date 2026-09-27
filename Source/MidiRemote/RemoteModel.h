@@ -309,6 +309,11 @@ public:
      *  malformed field, an unrecognised enum string, or a missing/wrong "version" (must equal
      *  exactly 1) rejects the WHOLE load and leaves `this` completely untouched. */
     bool fromVar(const juce::var& state);
+
+    // FRO296 (docs/mixer/sends-and-buses.md#reordering-sends): swaps the paramId of every
+    // parameter assignment on (nodeUuid, paramA)/(nodeUuid, paramB), in place. Mirrors
+    // TimelineDoc::swapLaneParams; returns whether anything changed.
+    bool swapParameterAssignments(const juce::String& nodeUuid, const juce::String& paramA, const juce::String& paramB);
 };
 
 } // namespace synth

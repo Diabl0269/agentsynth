@@ -844,6 +844,14 @@ project file versus a global profile shared by every project:
   auto-creates a profile or control, and an orphan's **Recreate**, likewise record the profile half
   on the controller history and the assignments on the project history. Restoring both halves
   takes one undo in the panel and one outside it.
+- FRO296: **reordering a send** (`MixerPanelComponent::moveSendRow`,
+  [`docs/mixer/sends-and-buses.md#reordering-sends`](../mixer/sends-and-buses.md#reordering-sends))
+  swaps any project assignment on the moved slot's `sendNLevel`/`sendNPan` alongside the graph and
+  the automation lane, all through the SAME `AppUndoManager::recordGraphTimelineAndMacroChange`
+  transaction — that method now takes an optional `MidiRemoteProjectDoc*` and captures/diffs it the
+  same way `recordGraphAndMidiRemoteChange` does, pushing a `MidiRemoteSnapshotAction` into the
+  transaction only when the doc actually changed. One Cmd+Z undoes the slot swap, the lane rebind
+  and the MIDI remap together.
 
 **Routing.** Cmd+Z / Cmd+Shift+Z and the Edit menu's Undo/Redo (the `AppCommands::undo` / `redo`
 command rows, `MainComponentCommandTable.cpp`) act on the controller history while keyboard focus
