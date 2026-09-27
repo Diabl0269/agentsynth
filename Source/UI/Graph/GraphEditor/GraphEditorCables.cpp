@@ -185,6 +185,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
 const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() {
     if (!cablesCacheValid) {
         cablesCache = rebuildVisibleCables();
+        macroCrossingAnim_.applyTo(cablesCache); // FRO41: cable-slide overlay, see MacroCrossingAnimator.h
         cablesCacheValid = true;
         ++cableRebuildCount;
     }
@@ -965,5 +966,22 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
             for (const auto& leg : s.mainPreviewLegs)
                 strokePreview(leg.p1, leg.p2, legColour(s.sourceCategory), s.signal);
         }
+    }
+
+    // ---- Macro-crossing module flash (FRO41) ----
+    // A fading ring over the module that just joined/left an expanded macro's hull, on top of its
+    // (buffered-to-image) card. editor.macroCrossingAnim_ is private state on GraphEditor —
+    // GraphContentComponent is a nested class, so this direct access is the same "one-line
+    // forwarder" relationship every other block above already has with `editor`.
+    if (auto flash = editor.macroCrossingAnim_.flashState()) {
+        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+        const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const auto [bounds, t] = *flash;
+        // Settles from a slightly oversized ring down onto the card, fading out as it lands —
+        // "flash-or-settle" per the ticket, not a static outline held for the tween's whole
+        // duration.
+        auto ring = bounds.toFloat().expanded(6.0f * (1.0f - t));
+        g.setColour(accentColour.withAlpha(0.55f * (1.0f - t)));
+        g.drawRoundedRectangle(ring, 10.0f, 2.0f);
     }
 }

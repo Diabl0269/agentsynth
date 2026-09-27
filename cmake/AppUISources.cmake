@@ -163,6 +163,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorMacroApi.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroCards.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
+    Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.h
+    Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupController.h
     Source/UI/Graph/MacroGroupController/MacroGroupControllerGeometry.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerGrouping.cpp

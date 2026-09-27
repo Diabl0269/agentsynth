@@ -41,6 +41,14 @@ A collapsed macro re-anchors the cables crossing its boundary in a post-process 
 That pass runs AFTER the knob-landing pass below, so a cable that is both knob-bound and crosses a
 collapsed macro's boundary ends up re-anchored to the macro card.
 
+`buildVisibleCables()` itself, one step further out than `rebuildVisibleCables()`'s own post-passes,
+overlays `MacroCrossingAnimator::applyTo()` on the freshly-rebuilt vector — the FRO41 cable-slide
+tween a Cmd-drag that crosses a macro's hull can arm on finalize (see
+[`docs/macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41`](../macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41)).
+It lives at the memo-wrapper level, not inside `rebuildVisibleCables()`, purely so the tween can
+overwrite a matched cable's endpoints without teaching that enumeration anything about macros; while
+no tween is live it is a no-op and the memo's own live-graph anchors show through unchanged.
+
 ## Knob landing
 
 FRO312: a `ModCV` jack with a bound, VISIBLE knob (`ModuleComponent::sliderIndexForModTarget` /

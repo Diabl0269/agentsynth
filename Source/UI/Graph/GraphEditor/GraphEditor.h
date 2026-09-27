@@ -9,6 +9,7 @@
 #include "UI/Graph/GraphCanvasHost.h"
 #include "UI/Graph/GraphDragDropController/GraphDragDropController.h"
 #include "UI/Graph/GraphEditor/GraphEditorTypes.h"
+#include "UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModuleClipboard.h"
 #include "UI/Graph/SelectionModel.h"
@@ -681,6 +682,21 @@ public:
     // Ends the zoom gesture now, as the settle timer would (the VBlank driver doesn't tick headless).
     void settleZoomNowForTest() { endZoomGesture(); }
 
+    // ---- Macro-crossing animation test seams (FRO41, MacroCrossingAnimator.h) ----
+    /** True while finalizeMacroMembershipDrag's cable-slide/module-flash tween is in flight. */
+    bool isMacroCrossingAnimLiveForTest() const noexcept { return macroCrossingAnim_.isLive(); }
+    /** Manually advances the tween to `t` (0..1) with no VBlank required — same call, including
+     *  the repaint that invalidates the cable memo, the real driver's onUpdate makes each frame. */
+    void advanceMacroCrossingAnimForTest(float t) {
+        macroCrossingAnim_.applyTweenAt(t);
+        repaintCanvas();
+    }
+    /** Lands the tween at its final state, same as the real driver's onComplete. */
+    void finishMacroCrossingAnimForTest() {
+        macroCrossingAnim_.finish();
+        repaintCanvas();
+    }
+
     void mouseMove(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
 
@@ -891,6 +907,13 @@ private:
     synth::ui::AnimationDriver modMatrixAnim;
     juce::Rectangle<int> modMatrixTargetBounds;
 
+    // Macro-crossing cable slide + module flash (FRO41): macroCrossingAnim_ is pure tween state
+    // (MacroCrossingAnimator.h, armed by finalizeMacroMembershipDrag), driven by this ordinary
+    // AnimationDriver exactly like the two above — see that header for why the state and the
+    // driver are deliberately two separate small members rather than one.
+    MacroCrossingAnimator macroCrossingAnim_;
+    synth::ui::AnimationDriver macroCrossingDriverAnim_;
+
     // ---- Alignment guides ---- During drag previews, store guide positions for visual feedback.
     struct AlignmentGuide {
         juce::Point<float> start; // line start point (canvas coords)
@@ -914,6 +937,13 @@ private:
     void applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor);
 
     void animateDropLanding(ModuleComponent* module, juce::Point<int> fromPos, juce::Point<int> toPos);
+
+    // FRO41: diffs `cablesBeforeSplice` against the current (post-splice) cable geometry, arms
+    // macroCrossingAnim_ if anything changed, and starts macroCrossingDriverAnim_ — see
+    // MacroCrossingAnimator.h and this method's definition (GraphEditorDragDrop.cpp) for why the
+    // snapshot itself is taken by the caller, before the mutation runs.
+    void armMacroCrossingAnimation(const std::vector<VisibleCable>& cablesBeforeSplice, uint32_t crossingNodeUid,
+                                   juce::Rectangle<int> flashBounds);
 
     // ---- Cable memo (perf) ----
     std::vector<VisibleCable> rebuildVisibleCables();

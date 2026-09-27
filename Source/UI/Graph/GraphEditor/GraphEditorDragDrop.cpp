@@ -668,6 +668,17 @@ void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juc
     auto& graph = audioEngine.getGraph();
     const juce::var graphBeforeOverride = undoManager ? undoManager->takeCapturedGraphBeforeState() : juce::var();
 
+    // FRO41: snapshot the pre-mutation cable geometry and the dragged module's own bounds now,
+    // while `module` is still known-good — doFinalize's macroController_ calls are free to add or
+    // remove macro-port components (see this method's own header comment above), so both are
+    // captured up front rather than read off `module` once the splice has already run. A plain
+    // drag (no leave/join candidate) skips the snapshot entirely — nothing to diff, nothing to
+    // animate, and MacroCrossingAnimator::arm() is never even called.
+    const bool crossedHull = leaveId.isNotEmpty() || joinId.isNotEmpty();
+    const auto crossingNodeUid = module->getNodeId().uid;
+    const auto crossingFlashBounds = crossedHull ? module->getBounds() : juce::Rectangle<int>();
+    const auto cablesBeforeSplice = crossedHull ? rebuildVisibleCables() : std::vector<VisibleCable>();
+
     auto doFinalize = [this, module, leaveId, joinId, uuid] {
         finalizeModuleDrag(module);
         if (leaveId.isNotEmpty())
@@ -680,6 +691,9 @@ void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juc
         undoManager->recordGraphAndMacroChange(graph, macros, doFinalize, graphBeforeOverride);
     else
         doFinalize();
+
+    if (crossedHull)
+        armMacroCrossingAnimation(cablesBeforeSplice, crossingNodeUid, crossingFlashBounds);
 
     clearMacroDragCandidate();
     // Torn down HERE, not by the mouseUp call site, because doFinalize (still running above) calls
@@ -723,6 +737,36 @@ void GraphEditor::animateDropLanding(ModuleComponent* module, juce::Point<int> f
                 return;
             safeModule->setTopLeftPosition(toPos);
             safeEditor->updateModulePosition(safeModule);
+            safeEditor->repaintCanvas();
+        });
+}
+
+// FRO41: the cable-slide + module-flash counterpart to animateDropLanding above, fired once per
+// finalizeMacroMembershipDrag call that actually crossed a hull. `cablesBeforeSplice` is the
+// caller's pre-mutation snapshot; the post-mutation geometry is read fresh here, after the splice
+// has already landed. MacroCrossingAnimator::arm() does the actual before/after diff (see its own
+// header for the matching rule) — this method only owns handing the result to
+// macroCrossingDriverAnim_, exactly like every other AnimationDriver use in this file.
+void GraphEditor::armMacroCrossingAnimation(const std::vector<VisibleCable>& cablesBeforeSplice,
+                                            uint32_t crossingNodeUid, juce::Rectangle<int> flashBounds) {
+    if (!macroCrossingAnim_.arm(cablesBeforeSplice, rebuildVisibleCables(), crossingNodeUid, flashBounds))
+        return;
+
+    juce::Component::SafePointer<GraphEditor> safeEditor(this);
+    macroCrossingDriverAnim_.start(
+        vblankUpdater,
+        220.0, // ms — short slide/flash, same order of magnitude as animateDropLanding's 180ms
+        synth::ui::easeOutCubic,
+        [safeEditor](float t) {
+            if (safeEditor == nullptr)
+                return;
+            safeEditor->macroCrossingAnim_.applyTweenAt(t);
+            safeEditor->repaintCanvas();
+        },
+        [safeEditor]() {
+            if (safeEditor == nullptr)
+                return;
+            safeEditor->macroCrossingAnim_.finish();
             safeEditor->repaintCanvas();
         });
 }
