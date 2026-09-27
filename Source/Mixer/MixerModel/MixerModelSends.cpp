@@ -44,6 +44,24 @@ void buildBusSourcesForColumn(juce::AudioProcessorGraph& graph, const TimelineDo
         column.busSources.push_back(stripColumnName(graph, doc, macros, sourceId));
 }
 
+namespace {
+
+/** A row's target text: the column name a strip target shows, or (FRO318) "Key: Compressor 1 on
+ *  <that column name>" for a Key target -- the column name, not sendTargetName's doc-less one, so
+ *  the row reads the same channel name its column header does. */
+juce::String sendEntryTargetName(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
+                                 const SendTarget& target) {
+    if (!target.isValid())
+        return "No target";
+    if (!target.key)
+        return stripColumnName(graph, doc, macros, target.node);
+    const auto channel = findKeyTargetChannel(graph, target.node);
+    return keySendTargetName(graph, target.node,
+                             channel != NodeID{} ? stripColumnName(graph, doc, macros, channel) : juce::String());
+}
+
+} // namespace
+
 void buildSendsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
                          MixerColumn& column) {
     auto* node = graph.getNodeForId(column.nodeId);
@@ -59,9 +77,10 @@ void buildSendsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& do
         entry.preFader = strip->isSendPreFader(slot);
         entry.muted = strip->isSendMuted(slot);
         entry.mono = strip->isSendMono(slot);
-        entry.targetNodeId = findSendTarget(graph, column.nodeId, slot);
-        entry.targetName = entry.targetNodeId == NodeID{} ? juce::String("No target")
-                                                          : stripColumnName(graph, doc, macros, entry.targetNodeId);
+        const auto target = resolveSendTarget(graph, column.nodeId, slot);
+        entry.targetNodeId = target.node;
+        entry.keyTarget = target.key;
+        entry.targetName = sendEntryTargetName(graph, doc, macros, target);
         column.sends.push_back(std::move(entry));
     }
 }

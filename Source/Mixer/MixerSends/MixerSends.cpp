@@ -26,6 +26,29 @@ ChannelStripModule* stripAt(juce::AudioProcessorGraph& graph, NodeID id) {
     return dynamic_cast<ChannelStripModule*>(processorAt(graph, id));
 }
 
+ModuleBase* moduleAt(juce::AudioProcessorGraph& graph, NodeID id) {
+    return dynamic_cast<ModuleBase*>(processorAt(graph, id));
+}
+
+/** `module`'s PortRole::Sidechain (Key) raw input channels, ascending -- queried off the module's own
+ *  input map rather than hard-coded, so any module that grows a Key pair is a Key target for free. */
+std::vector<int> keyInputChannels(juce::AudioProcessorGraph& graph, NodeID module) {
+    std::vector<int> channels;
+    if (auto* processor = moduleAt(graph, module))
+        for (int raw = 0; raw < processor->getTotalNumInputChannels(); ++raw)
+            if (processor->mapInputChannel(raw).role == PortRole::Sidechain)
+                channels.push_back(raw);
+    return channels;
+}
+
+/** True when `conn` is an audio edge landing on a module's Key input. */
+bool landsOnKey(juce::AudioProcessorGraph& graph, const Connection& conn) {
+    if (conn.destination.isMIDI())
+        return false;
+    auto* module = moduleAt(graph, conn.destination.nodeID);
+    return module != nullptr && module->mapInputChannel(conn.destination.channelIndex).role == PortRole::Sidechain;
+}
+
 bool isReachTerminal(const juce::AudioProcessor* processor) {
     if (processor == nullptr)
         return true;
@@ -36,7 +59,16 @@ bool isReachTerminal(const juce::AudioProcessor* processor) {
 }
 
 /** Forward from `start`, expanding THROUGH strips, to see whether `goal` is reachable -- the cycle
- *  guard behind enumerateSendTargets. Stops at the terminals; visited-set cycle guarded. */
+ *  guard behind enumerateSendTargets / enumerateKeySendTargets. Stops at the terminals; visited-set
+ *  cycle guarded.
+ *
+ *  FRO318: it follows EVERY connection, not just isSignalEdge's signal edges. The question here is
+ *  "would the new cable close a RENDER cycle?", and a render cycle does not care what an input is
+ *  for: a key edge (PortRole::Sidechain), a ModCV cable or a hidden attenuverter leg is exactly as
+ *  much a processing dependency as an audio input. isSignalEdge deliberately ignores those because
+ *  it answers a different question (what the mixer shows as a channel's signal path) -- so a strip
+ *  whose output keys a Compressor on the source's own chain used to be offered as a send target and
+ *  would have wired a cycle straight past the only defence there is (addConnection accepts one). */
 bool reaches(juce::AudioProcessorGraph& graph, const std::vector<Connection>& connections, NodeID start, NodeID goal) {
     std::vector<NodeID> queue{start};
     std::set<NodeID> visited{start};
@@ -46,7 +78,7 @@ bool reaches(juce::AudioProcessorGraph& graph, const std::vector<Connection>& co
         queue.pop_back();
 
         for (const auto& conn : connections) {
-            if (conn.source.nodeID != nodeId || !isSignalEdge(graph, connections, conn))
+            if (conn.source.nodeID != nodeId)
                 continue;
             const auto destId = conn.destination.nodeID;
             if (destId == goal)
@@ -78,12 +110,21 @@ std::vector<Connection> dropSlotCables(juce::AudioProcessorGraph& graph, NodeID 
     return doomed;
 }
 
-/** Wires `slot`'s stereo pair into `target`'s own ch0 / kRightBase. Rolls the left leg back if the
- *  right one is refused, so a half-wired send never exists. */
-bool wireSlot(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot, NodeID target) {
-    const Connection leftEdge{{sourceStrip, ChannelStripModule::sendLeftChannel(slot)}, {target, 0}};
-    const Connection rightEdge{{sourceStrip, ChannelStripModule::sendRightChannel(slot)},
-                               {target, ChannelStripModule::kRightBase}};
+/** Wires `slot`'s stereo pair into `target`: a strip's own ch0 / kRightBase, or (FRO318) a Key
+ *  target's first two PortRole::Sidechain channels (both legs onto the one Key channel if a module
+ *  ever declares a single one). Rolls the left leg back if the right one is refused, so a half-wired
+ *  send never exists. */
+bool wireSlot(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot, const SendTarget& target) {
+    int leftDest = 0, rightDest = ChannelStripModule::kRightBase;
+    if (target.key) {
+        const auto keys = keyInputChannels(graph, target.node);
+        if (keys.empty())
+            return false;
+        leftDest = keys[0];
+        rightDest = keys.size() > 1 ? keys[1] : keys[0];
+    }
+    const Connection leftEdge{{sourceStrip, ChannelStripModule::sendLeftChannel(slot)}, {target.node, leftDest}};
+    const Connection rightEdge{{sourceStrip, ChannelStripModule::sendRightChannel(slot)}, {target.node, rightDest}};
     if (!graph.addConnection(leftEdge))
         return false;
     if (!graph.addConnection(rightEdge)) {
@@ -93,11 +134,16 @@ bool wireSlot(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot, No
     return true;
 }
 
-bool targetIsLegal(juce::AudioProcessorGraph& graph, NodeID sourceStrip, NodeID target) {
-    if (target == sourceStrip || stripAt(graph, target) == nullptr || stripAt(graph, sourceStrip) == nullptr)
+/** The one legality rule behind every add/retarget and both menus: a strip target is another
+ *  strip, a Key target a module with a Key input; either way its own output must not reach back
+ *  to `sourceStrip` along ANY edge (reaches' own comment). */
+bool targetIsLegal(juce::AudioProcessorGraph& graph, NodeID sourceStrip, const SendTarget& target) {
+    if (target.node == sourceStrip || stripAt(graph, sourceStrip) == nullptr)
+        return false;
+    if (target.key ? keyInputChannels(graph, target.node).empty() : stripAt(graph, target.node) == nullptr)
         return false;
     const auto connections = graph.getConnections();
-    return !reaches(graph, connections, target, sourceStrip);
+    return !reaches(graph, connections, target.node, sourceStrip);
 }
 } // namespace
 
@@ -131,6 +177,9 @@ std::vector<NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph, Nod
     return sources;
 }
 
+// The trusted "isBus" flag is what a freshly added, still-unfed bus has to go on -- it has no
+// predecessors yet. A strip among its signal predecessors is the structural fallback, so a patch
+// built before the flag existed and a hand-wired group bus both still classify.
 bool isBusStrip(juce::AudioProcessorGraph& graph, NodeID stripId) {
     auto* strip = stripAt(graph, stripId);
     if (strip == nullptr)
@@ -138,6 +187,8 @@ bool isBusStrip(juce::AudioProcessorGraph& graph, NodeID stripId) {
     return strip->isBus() || !findStripsFeedingStrip(graph, stripId).empty();
 }
 
+// The name a bus column and a bus's stem file fall back to, a bus having no feeding track to take a
+// name from.
 juce::String busFallbackName(juce::AudioProcessorGraph& graph, NodeID stripId) {
     std::vector<NodeID> buses;
     for (auto* node : graph.getNodes())
@@ -150,45 +201,87 @@ juce::String busFallbackName(juce::AudioProcessorGraph& graph, NodeID stripId) {
     return "Bus " + juce::String(ordinal);
 }
 
-NodeID findSendTarget(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot) {
+// FRO318: one breadth-first walk answers both target kinds. A Key edge must be tested BEFORE the
+// isSignalEdge filter, since that filter exists precisely to drop key edges (a bass keyed from a
+// kick is not a bus) -- which is why a Key send used to resolve to "no target" at all. Hits are
+// queued rather than returned on sight so the NEAREST target wins whichever kind it is, and a Key
+// hit is terminal: whatever the keyed module feeds is its channel's business, not this send's.
+SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot) {
     auto* strip = stripAt(graph, sourceStrip);
     if (strip == nullptr || !strip->isSendActive(slot))
         return {};
 
     const auto connections = graph.getConnections();
-    const int leg = ChannelStripModule::sendLeftChannel(slot);
-
-    std::vector<NodeID> queue;
+    std::vector<SendTarget> queue; // key == true entries are Key hits, never expanded
     std::set<NodeID> visited{sourceStrip};
-    for (const auto& conn : connections) {
-        if (conn.source.nodeID != sourceStrip || conn.source.channelIndex != leg)
-            continue;
+    std::set<NodeID> keyHits;
+    const auto follow = [&](const Connection& conn) {
+        if (landsOnKey(graph, conn)) {
+            if (keyHits.insert(conn.destination.nodeID).second)
+                queue.push_back({conn.destination.nodeID, true});
+            return;
+        }
         if (!isSignalEdge(graph, connections, conn))
-            continue;
+            return;
         if (visited.insert(conn.destination.nodeID).second)
-            queue.push_back(conn.destination.nodeID);
-    }
+            queue.push_back({conn.destination.nodeID, false});
+    };
 
-    while (!queue.empty()) {
-        const auto nodeId = queue.front();
-        queue.erase(queue.begin());
+    const int leg = ChannelStripModule::sendLeftChannel(slot);
+    for (const auto& conn : connections)
+        if (conn.source.nodeID == sourceStrip && conn.source.channelIndex == leg)
+            follow(conn);
 
-        auto* processor = processorAt(graph, nodeId);
+    for (size_t head = 0; head < queue.size(); ++head) {
+        const auto entry = queue[head];
+        if (entry.key)
+            return entry; // the send lands on this module's Key input
+        auto* processor = processorAt(graph, entry.node);
         if (dynamic_cast<ChannelStripModule*>(processor) != nullptr)
-            return nodeId; // the first strip the send reaches IS the bus it feeds
+            return entry; // the first strip the send reaches IS the bus it feeds
         if (isReachTerminal(processor))
             continue; // the send left the patch without ever reaching a bus
 
-        for (const auto& conn : connections) {
-            if (conn.source.nodeID != nodeId || !isSignalEdge(graph, connections, conn))
-                continue;
-            if (visited.insert(conn.destination.nodeID).second)
-                queue.push_back(conn.destination.nodeID);
-        }
+        for (const auto& conn : connections)
+            if (conn.source.nodeID == entry.node)
+                follow(conn);
     }
     return {};
 }
 
+// The strip-only view of resolveSendTarget: a forward walk from the slot's raw LEFT output to the
+// FIRST ChannelStripModule it reaches (the same "stop at the first strip" rule
+// findStripFedByTrackSource uses), so a module the user inserted on the send path still resolves to
+// the bus behind it. Invalid when the slot is inactive, unconnected, its cable leaves the patch
+// without passing a strip, or (FRO318) it feeds a Key input -- every bus/solo/stem caller keeps
+// meaning "the STRIP this send feeds".
+NodeID findSendTarget(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot) {
+    const auto target = resolveSendTarget(graph, sourceStrip, slot);
+    return target.key ? NodeID{} : target.node;
+}
+
+// Deliberately the same forward walk the track/channel link uses (findStripFedByTrackSource works
+// from any node): the channel a keyed module "sits on" is the channel its own audio reaches.
+NodeID findKeyTargetChannel(juce::AudioProcessorGraph& graph, NodeID module) {
+    return findStripFedByTrackSource(graph, module);
+}
+
+// The module half is the card title the canvas paints (a custom "displayName" first, then the
+// processor's auto-numbered "Compressor 2" -- GraphEditor::getModuleTitle's own rule, restated
+// here because Core cannot reach a GraphEditor).
+juce::String keySendTargetName(juce::AudioProcessorGraph& graph, NodeID module, const juce::String& channelName) {
+    auto* node = graph.getNodeForId(module);
+    if (node == nullptr)
+        return "No target";
+    auto title = node->properties["displayName"].toString();
+    if (title.isEmpty() && node->getProcessor() != nullptr)
+        title = node->getProcessor()->getName();
+    return "Key: " + title + (channelName.isNotEmpty() ? " on " + channelName : juce::String());
+}
+
+// Its grouping macro's name when `macros` has one, else the bus fallback name ("Bus N") or plain
+// "Channel" for an ordinary strip. Shared by MixerSendList's menus and the automation lane picker
+// (FRO292), so both always name the same bus the same way.
 juce::String sendTargetName(juce::AudioProcessorGraph& graph, const MacroSet* macros, NodeID target) {
     auto* node = target == NodeID{} ? nullptr : graph.getNodeForId(target);
     if (node == nullptr)
@@ -199,14 +292,27 @@ juce::String sendTargetName(juce::AudioProcessorGraph& graph, const MacroSet* ma
     return isBusStrip(graph, target) ? busFallbackName(graph, target) : juce::String("Channel");
 }
 
+juce::String sendTargetName(juce::AudioProcessorGraph& graph, const MacroSet* macros, const SendTarget& target) {
+    if (!target.key)
+        return sendTargetName(graph, macros, target.node);
+    const auto channel = findKeyTargetChannel(graph, target.node);
+    return keySendTargetName(graph, target.node,
+                             channel != NodeID{} ? sendTargetName(graph, macros, channel) : juce::String());
+}
+
 juce::String describeSendSlotLabel(juce::AudioProcessorGraph& graph, const MacroSet* macros, NodeID sourceStrip,
                                    int slot) {
-    const auto target = findSendTarget(graph, sourceStrip, slot);
-    if (target == NodeID{})
+    const auto target = resolveSendTarget(graph, sourceStrip, slot);
+    if (!target.isValid())
         return "Send " + juce::String(slot + 1) + " (no target)";
     return "Send to " + sendTargetName(graph, macros, target);
 }
 
+// Every OTHER ChannelStripModule minus any whose own output already reaches `sourceStrip` -- those
+// would close a feedback loop. This walk is the ONLY cycle defence, not merely the menu's half of
+// one: juce::AudioProcessorGraph does not refuse a cycle (canConnect checks node existence, channel
+// bounds and "not already connected", nothing more), so addSend applies the same check rather than
+// leaning on a backstop that isn't there.
 std::vector<NodeID> enumerateSendTargets(juce::AudioProcessorGraph& graph, NodeID sourceStrip) {
     std::vector<NodeID> targets;
     if (stripAt(graph, sourceStrip) == nullptr)
@@ -226,7 +332,28 @@ std::vector<NodeID> enumerateSendTargets(juce::AudioProcessorGraph& graph, NodeI
     return targets;
 }
 
+std::vector<NodeID> enumerateKeySendTargets(juce::AudioProcessorGraph& graph, NodeID sourceStrip) {
+    std::vector<NodeID> targets;
+    if (stripAt(graph, sourceStrip) == nullptr)
+        return targets;
+
+    for (auto* node : graph.getNodes())
+        if (node != nullptr && targetIsLegal(graph, sourceStrip, {node->nodeID, true}))
+            targets.push_back(node->nodeID);
+    std::sort(targets.begin(), targets.end(), [](NodeID a, NodeID b) { return a.uid < b.uid; });
+    return targets;
+}
+
 int addSend(juce::AudioProcessorGraph& graph, NodeID sourceStrip, NodeID target) {
+    return addSend(graph, sourceStrip, SendTarget{target, false});
+}
+
+// Activates `sourceStrip`'s lowest free slot (post-fader, unity -- see ChannelStripModule::addSend)
+// and wires its stereo pair into the target (wireSlot). -1 when either node is the wrong kind, all
+// kMaxSends slots are in use, the target would close a cycle, or the graph refuses the connection
+// -- in every failing case NOTHING is changed, so the caller can abandon its undo transaction
+// rather than record a no-op step.
+int addSend(juce::AudioProcessorGraph& graph, NodeID sourceStrip, const SendTarget& target) {
     if (!targetIsLegal(graph, sourceStrip, target))
         return -1;
 
@@ -428,10 +555,16 @@ bool moveSendRow(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int fromR
 }
 
 bool retargetSend(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot, NodeID target) {
+    return retargetSend(graph, sourceStrip, slot, SendTarget{target, false});
+}
+
+bool retargetSend(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot, const SendTarget& target) {
     auto* strip = stripAt(graph, sourceStrip);
     if (strip == nullptr || !strip->isSendActive(slot) || !targetIsLegal(graph, sourceStrip, target))
         return false;
-    if (findSendTarget(graph, sourceStrip, slot) == target)
+    // The whole SendTarget, not just the node: a Key send on a module and a strip send landing on
+    // that same node would otherwise read as "already there" (FRO318).
+    if (resolveSendTarget(graph, sourceStrip, slot) == target)
         return true; // already there
 
     // Put the old cables back if the new pair is refused, or a failed retarget would leave the slot

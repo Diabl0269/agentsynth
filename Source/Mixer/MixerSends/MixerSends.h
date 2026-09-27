@@ -31,33 +31,43 @@ class MacroSet;
 std::vector<juce::AudioProcessorGraph::NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph,
                                                                       juce::AudioProcessorGraph::NodeID stripId);
 
-/** True when `stripId` is a group/send bus: it carries the trusted "isBus" flag (which is what a
- *  freshly added, still-unfed bus has to go on -- it has no predecessors yet), OR at least one of
- *  its signal predecessors is another strip (the structural fallback, so a patch built before the
- *  flag existed and a hand-wired group bus both still classify). */
+/** True when `stripId` is a group/send bus (its "isBus" flag, or a strip among its signal predecessors). */
 bool isBusStrip(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID stripId);
 
-/** "Bus N", N being the 1-based position of `stripId` among the graph's bus strips in ascending
- *  NodeID -- the name a bus column and a bus's stem file fall back to, a bus having no feeding track
- *  to take a name from. */
+/** "Bus N", N = `stripId`'s 1-based position among the graph's bus strips in ascending NodeID. */
 juce::String busFallbackName(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID stripId);
 
 // ---- Sends ---------------------------------------------------------------------------------------
 
-/** The strip a send slot currently feeds: a forward walk from the slot's raw LEFT output channel to
- *  the FIRST ChannelStripModule it reaches (the same "stop at the first strip" rule
- *  findStripFedByTrackSource uses), so a module the user inserted on the send path on the canvas
- *  still resolves to the bus behind it. Invalid NodeID when the slot is inactive, unconnected, or
- *  its cable leaves the patch without passing a strip. Pure query. */
+/** What a send slot feeds (FRO318): a strip's main input, or (`key`) a module's Key input. */
+struct SendTarget {
+    juce::AudioProcessorGraph::NodeID node;
+    bool key = false;
+    bool isValid() const noexcept { return node != juce::AudioProcessorGraph::NodeID{}; }
+    bool operator==(const SendTarget& other) const noexcept { return node == other.node && key == other.key; }
+    bool operator!=(const SendTarget& other) const noexcept { return !(*this == other); }
+};
+
+/** The strip a send slot currently feeds; invalid when inactive, unwired, or a Key send. Pure query. */
 juce::AudioProcessorGraph::NodeID findSendTarget(juce::AudioProcessorGraph& graph,
                                                  juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
 
-/** The display name of a send target: its grouping macro's name when `macros` has one, else the
- *  bus fallback name ("Bus N") or plain "Channel" for an ordinary strip; "No target" for an invalid
- *  id. Shared by MixerSendList's rows and menus and the automation lane picker (FRO292), so both
- *  always name the same bus the same way. `macros` may be null. */
+/** Strip or Key target of slot `slot` (findSendTarget is its strip-only view). Invalid when unwired. */
+SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
+
+/** The first strip `module`'s own output reaches -- the channel a Key target sits on. Invalid if none. */
+juce::AudioProcessorGraph::NodeID findKeyTargetChannel(juce::AudioProcessorGraph& graph,
+                                                       juce::AudioProcessorGraph::NodeID module);
+
+/** "Key: <module title> on <channelName>", or "Key: <module title>" when `channelName` is empty. */
+juce::String keySendTargetName(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID module,
+                               const juce::String& channelName);
+
+/** Display name of a strip send target ("No target" when invalid). `macros` may be null. */
 juce::String sendTargetName(juce::AudioProcessorGraph& graph, const MacroSet* macros,
                             juce::AudioProcessorGraph::NodeID target);
+/** sendTargetName for either kind: a Key target reads "Key: Compressor 1 on <sendTargetName>". */
+juce::String sendTargetName(juce::AudioProcessorGraph& graph, const MacroSet* macros, const SendTarget& target);
 
 /** "Send to <target>" / "Send N (no target)" -- the FRO301 accessible-title format MixerSendList's
  *  knob uses, shared so a lane created for the same slot (FRO292) always agrees with the knob that
@@ -65,22 +75,19 @@ juce::String sendTargetName(juce::AudioProcessorGraph& graph, const MacroSet* ma
 juce::String describeSendSlotLabel(juce::AudioProcessorGraph& graph, const MacroSet* macros,
                                    juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
 
-/** Every strip a new (or retargeted) send from `sourceStrip` may legally feed: every OTHER
- *  ChannelStripModule in the graph, in ascending NodeID, minus any whose own signal already reaches
- *  `sourceStrip` -- those would close a feedback loop. This walk is the ONLY cycle defence, not
- *  merely the menu's half of one: juce::AudioProcessorGraph does not refuse a cycle (canConnect
- *  checks node existence, channel bounds and "not already connected", nothing more), so addSend
- *  applies the same check rather than leaning on a backstop that isn't there. Pure query. */
+/** Every OTHER strip `sourceStrip` may legally send to (no cycle), ascending NodeID. Pure query. */
 std::vector<juce::AudioProcessorGraph::NodeID> enumerateSendTargets(juce::AudioProcessorGraph& graph,
                                                                     juce::AudioProcessorGraph::NodeID sourceStrip);
 
-/** Activates `sourceStrip`'s lowest free slot (post-fader, unity -- see ChannelStripModule::addSend)
- *  and wires its stereo pair into `target`'s ch0/kRightBase. Returns the slot index, or -1 when
- *  either node is not a strip, all kMaxSends slots are in use, `target` would close a cycle, or the
- *  graph refuses the connection -- in every failing case NOTHING is changed, so the caller can
- *  abandon its undo transaction rather than record a no-op step. */
+/** Every module with a Key (PortRole::Sidechain) input `sourceStrip` may legally key, ascending NodeID. */
+std::vector<juce::AudioProcessorGraph::NodeID> enumerateKeySendTargets(juce::AudioProcessorGraph& graph,
+                                                                       juce::AudioProcessorGraph::NodeID sourceStrip);
+
+/** Activates the lowest free slot and wires it into strip `target`. Slot index, or -1 with NOTHING changed. */
 int addSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip,
             juce::AudioProcessorGraph::NodeID target);
+/** addSend for either kind: a Key target is wired onto the module's Key L/R inputs. Same refusals. */
+int addSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, const SendTarget& target);
 
 /** Clears slot `slot`'s cables and its active bit (and its mute/mono bits). Higher slots keep
  *  their own raw channels, so nothing else is re-wired (only the VISIBLE jack indices renumber).
@@ -95,12 +102,12 @@ bool setSendMuted(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::N
 /** Sums/unsums an active slot's L/R to mono. False when `sourceStrip`/`slot` don't resolve. */
 bool setSendMono(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot, bool mono);
 
-/** Repoints an active slot at a different target: drops its current cables and wires the new pair.
- *  False (and nothing changed) on the same refusals as addSend — including one the GRAPH refuses
- *  after the legality check passed, in which case the slot's previous cables are put back rather
- *  than left cut. */
+/** Repoints an active slot at strip `target`. False, with nothing changed, on addSend's refusals. */
 bool retargetSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot,
                   juce::AudioProcessorGraph::NodeID target);
+/** retargetSend for either kind -- strip to Key, Key to strip, or Key to another Key. */
+bool retargetSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot,
+                  const SendTarget& target);
 
 bool swapSends(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slotA,
                int slotB); // FRO296 reorder: swaps cables, active/pre/mute/mono bits, level/pan values

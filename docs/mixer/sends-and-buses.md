@@ -69,7 +69,8 @@ zippers, and a centred, still-stereo send renders bit-identical to before FRO294
 **The target is never stored.** Node ids are reassigned on every rebuild-from-JSON, so a stored id
 goes stale on undo. "Which bus does slot *k* feed?" is answered by walking forward from slot *k*'s own
 output channel to the first strip (`synth::findSendTarget`), which therefore also resolves through a
-module the user inserted on the send path, and returns nothing for a cut cable.
+module the user inserted on the send path, and returns nothing for a cut cable. A send can also feed
+a Compressor/Gate Key input instead of a strip; see [Sending to a Key input](#sending-to-a-key-input).
 
 Which slots exist, each slot's pre or post setting, (FRO295) each slot's **mute**, and (FRO294) each
 slot's **mono** are **trusted extra state**, `"sends": [{"slot", "pre", "mute", "mono"}]`, the same
@@ -171,8 +172,6 @@ lockstep with the level smoother in every branch `writeSendLegs`/`skipSendSmooth
 drag never zippers. Mono is a plain per-sample sum with no smoothing of its own — flipping it can pop
 exactly the way flipping the strip's own Mono/Stereo shape can, which is an accepted, existing class
 of transition in this codebase.
-
-**Under bypass the strip's own gain and pan are off, so pre and post coincide.**
 
 **Every branch writes every send channel** — the reserved `5..7` and all of `8..15` are cleared
 unconditionally up front — or a stale block from the previous callback leaks into a bus.
@@ -290,6 +289,10 @@ now-inert extra state — no orphan logic runs, since the parameter itself never
 
 **The forward cycle walk is the ONLY cycle defence.** Cyclic targets are excluded from the menu by a
 forward walk from the candidate back to this strip, and `synth::addSend` applies the same check.
+**FRO318: that walk follows EVERY connection, not just `isSignalEdge`'s signal edges** — a Key edge, a
+ModCV cable or a hidden attenuverter leg is as much a render dependency as an audio input, so a bus
+whose output keys a Compressor on the source's own chain is no longer offered as the source's send
+target (see [Sending to a Key input](#sending-to-a-key-input)).
 `juce::AudioProcessorGraph::addConnection` is **not** a backstop here, as measured: it checks node
 existence, channel bounds and "not already connected", and **accepts a cycle without complaint**.
 `FeedbackGuardTests`' render-time guard is what catches an audible runaway if one is ever wired by
@@ -299,6 +302,59 @@ same holds for every other refusal (a non-strip target, self, out of slots).
 **"Add bus"** — `+ Bus` on the dock's tab strip, and "New bus..." in every send menu — builds a
 bypassed Gate, bypassed EQ, bypassed Compressor, Stereo Strip, Master(Mix) chain via the shared chain
 builder, boxed in a macro named "Bus N". A boxed bus takes its macro's name.
+
+## Sending to a Key input
+
+**FRO318: a send can also feed a Compressor's or Gate's Key input** — the detector key
+([`fx-modules.md`](../modules/fx-modules.md#key-inputs-sidechain)) — so a kick track can duck a bass
+track straight from the mixer. It is still just a send: the same slot, the same cables, the same
+level, pan, mono, mute and pre/post, all applied to the slot's output leg exactly as for a bus.
+
+**Two target kinds, one value type.** `synth::SendTarget { node, key }`
+(`Source/Mixer/MixerSends/MixerSends.h`): a strip (`key == false`, wired into the strip's
+`ch0`/`kRightBase` as before) or a module's Key input (`key == true`, wired into the module's first
+two `PortRole::Sidechain` inputs, found by querying its own input map — nothing is hard-coded to
+Compressor or Gate, so any module that grows a Key pair becomes a target for free). `addSend` and
+`retargetSend` take either kind with the same all-or-nothing rollback; the old strip-only overloads
+forward to them. Reordering needs nothing new: `swapSends`/`moveSendRow` remap cables by source
+channel, so a Key send moves like any other.
+
+**The target is still never stored.** `synth::resolveSendTarget` walks forward from the slot's raw
+left output: an edge landing on a Sidechain input makes that module a Key target (checked *before*
+the `isSignalEdge` filter, which drops key edges by design); otherwise the first strip reached, as
+`findSendTarget` always did. The nearest hit wins. `findSendTarget` stays the strip-only view and
+reports a Key send as no strip at all, so every bus/solo/stem caller keeps its meaning.
+
+**Keying follows the cable.** Adding or removing a Key send is an ordinary topology change, so
+`synth::publishSidechainConnections` — run on every graph change — switches the module's detector
+to the key and back. Muting the send silences the key; it does not unplug it, so the detector stays
+on the (now silent) key and the ducking simply stops. **A bypassed Compressor/Gate ignores its key**
+— the ones Make Channel builds start bypassed, so switch it on to hear the send.
+
+**Labels.** In the send menu, after the bus/strip targets, a separator and one
+"Key: \<module\> on \<channel\>" entry per legal Key target; `<module>` is the card title (its
+custom name, else the auto-numbered "Compressor 2"), `<channel>` is `sendTargetName` of the first
+strip the module's own output reaches (`synth::findKeyTargetChannel`), and a module that reaches no
+strip reads plain "Key: \<module\>". The row itself names the channel the way its column header
+does (`stripColumnName`, so the track's name), which can read richer than the menu's doc-less
+`sendTargetName` — the same asymmetry strip targets already have. The knob's FRO301 title and the
+lane picker's `describeSendSlotLabel` read "Send to Key: Compressor 2 on Bass".
+
+**Cycles.** A Key target is illegal when the module's own output reaches the source strip, along
+ANY edge — including another Key edge: a cycle through a key is still a real render cycle. So the
+Compressor on the source's own channel is never offered. See the cycle-walk paragraph above.
+
+**Solo.** A Key send's leg stays **open while the channel it keys is audible** (soloed, downstream of
+a solo, or contributing): soloing the bass keeps it ducking. Only the send bit opens — the kick's
+main leg is still decided by its own walk, so the kick itself stays silent. A Key edge never makes
+the keyed channel "downstream" of a soloed kick either (`collectDownstreamStrips` keeps ignoring key
+edges). The open Key leg does make the kick a contributing strip in the fixed point, which keeps
+whatever feeds the kick feeding its key.
+
+**Stems.** A Key send contributes to no stem: `collectStemStrips` lists strips only, the stem tap
+copies a strip's main legs only (never a send leg), and a Key edge never makes the keyed channel a
+bus, so its stem keeps its own name. The keyed channel's stem does carry the ducked audio, because
+that is what its strip outputs.
 
 ## Stems
 
