@@ -358,6 +358,10 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
         modMatrix.clearRows();
         // T154: capture BEFORE removal
         const auto portNeighbors = macroController_.macroPortDeletionNeighbors({nodeId});
+        // FRO23: capture BEFORE removal too -- a healable splice needs the deleted node's own
+        // connections still in the graph to classify. See GraphEditor::deleteSelection's matching
+        // comment.
+        const auto healSplices = captureHealSplices({nodeId});
         // graph.removeNode() frees this node's processor -- and its AudioProcessorParameters --
         // synchronously, and a module card's own Delete is just as able to remove a
         // ChannelStripModule/MasterModule as a canvas "Delete" is. Nothing on this path rebuilds
@@ -368,6 +372,9 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
         if (onBeforeDetachAllModuleComponents)
             onBeforeDetachAllModuleComponents();
         graph.removeNode(nodeId);
+        // FRO23: heal BEFORE the FRO22/T154 sweeps below, so a macro port a heal just gave a
+        // fresh cable to is no longer orphaned by the time they run.
+        healDeletedChain(healSplices);
         // FRO22: see GraphEditor::deleteSelection's matching comment.
         for (auto n : portNeighbors)
             macroController_.autoDeleteOrphanedAttenuverter(n);

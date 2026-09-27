@@ -500,6 +500,14 @@ public:
         return spliceCableOnMacroPortDeleteEnabled;
     }
 
+    // FRO23 (docs/layout/module-card.md#deleting-a-module-reconnect-the-chain-fro23): "reconnect the chain" — when a
+    // deleted module (or a run of them, all in the same delete) has exactly one incoming and one outgoing audio cable,
+    // splice its surviving neighbours together instead of leaving a gap. On by default;
+    // Preferences ("reconnectChainOnDelete") can turn it off. Logic lives in
+    // GraphEditorDeleteHeal.cpp — GraphEditor.h keeps only this switch.
+    void setReconnectChainOnDeleteEnabled(bool enabled) { reconnectChainOnDeleteEnabled = enabled; }
+    bool getReconnectChainOnDeleteEnabled() const noexcept { return reconnectChainOnDeleteEnabled; }
+
     // Default jack layout for newly created modules that expose the Dual I/O parameter.
     // false (default): one collapsed "Audio" jack. true: split Left/Right by default.
     void setDefaultDualIOForNewModules(bool enabled) { defaultDualIOForNewModules = enabled; }
@@ -939,6 +947,7 @@ private:
     bool macroDragWithoutCmdEnabled = true;
     std::optional<bool> macroJoinCommandOverride_;
     bool autoCreateChannelOnConnectEnabled = true;
+    bool reconnectChainOnDeleteEnabled = true; // FRO23 — see the getter/setter's doc comment
     bool defaultDualIOForNewModules = false;
     std::map<juce::String, bool> dualIOPerModuleOverrides;
 
@@ -983,6 +992,24 @@ private:
     void beginOrRefreshZoomGesture();
     void endZoomGesture();
     void setModuleRasterFrozen(bool frozen);
+
+    // ---- FRO23 delete heal (GraphEditorDeleteHeal.cpp) ----
+    // One healable audio splice, captured BEFORE `deletedIds` is removed from the graph:
+    // `upstreamId`/`downstreamId` are both SURVIVORS (never a member of `deletedIds`), found by
+    // walking off each end of a deleted run of exactly-one-audio-in/-out nodes. Applying it later
+    // wires upstreamId's `upstreamJack` to downstreamId's `downstreamJack` the same way a user-drawn
+    // cable would (resolvePolyLink's L->L/R->R mapping), only after re-validating with
+    // graph.isAnInputTo()/canConnect() once the deletion has actually happened.
+    struct HealSplice {
+        juce::AudioProcessorGraph::NodeID upstreamId, downstreamId;
+        int upstreamJack = 0, downstreamJack = 0;
+        bool operator==(const HealSplice& o) const noexcept {
+            return upstreamId == o.upstreamId && downstreamId == o.downstreamId && upstreamJack == o.upstreamJack &&
+                   downstreamJack == o.downstreamJack;
+        }
+    };
+    std::vector<HealSplice> captureHealSplices(const std::vector<juce::AudioProcessorGraph::NodeID>& deletedIds) const;
+    void healDeletedChain(const std::vector<HealSplice>& splices);
 
 public:
     const std::vector<ModulationDisplayInfo>& getCachedModDisplayInfo() const { return cachedModDisplayInfo; }

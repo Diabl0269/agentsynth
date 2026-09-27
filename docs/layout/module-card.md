@@ -123,6 +123,55 @@ The header area holds `DrawableButton` instances, not `TextButton`s, positioned 
 `requestDeleteModule(NodeID)` is the canonical delete entry point; `deleteButton.onClick` delegates
 to it.
 
+### Deleting a module: reconnect the chain (FRO23)
+
+Every user-facing delete path funnels through `GraphEditor::deleteSelection()` or
+`::requestDeleteModule()`/`::deleteModule()` — the Delete key, this header's own `deleteButton`,
+and the canvas/card context menus' "Delete"/"Delete Module"/"Delete N Selected Modules" items all
+end up here. When the "Reconnect the chain when deleting a module" preference is on (the default —
+Settings → Preferences, `reconnectChainOnDelete`, `PreferencesSettingsTab::isReconnectChainOnDeleteEnabled`)
+and a deleted module has EXACTLY one incoming and one outgoing audio cable — counted at the visible
+logical-cable level, so a stereo pair sharing both jacks is one leg, not two — the module's surviving
+upstream and downstream neighbours are wired directly to each other, with the same L->L/R->R mapping
+a user-drawn cable gets (`GraphEditor::resolvePolyLink`). A module with more audio legs on either
+side (a mixer, a splitter, two audio inputs) deletes exactly as before, with no reconnection —
+including a split-block module (Oscillator, Filter, VCA, Wavetable) with Dual I/O switched ON:
+Left and Right are then two SEPARATE visible jacks, so a module fed on both counts as two incoming
+legs, not one, the same as any other multi-leg case. Collapsed (Dual I/O off), a split-block
+module's one "Audio" jack is genuinely mono — its Right leg lives on a separate far block, not raw
+ch1 — unlike an auto-derived FX shape's collapsed jack (Chorus, Reverb, Delay, Distortion...),
+which owns both raw legs of a real stereo pair under that one jack; either way it is still exactly
+one audio leg, so the module remains heal-eligible. A bare graph I/O node (Audio Input/Output) has
+no jack-collapsing of its own — each of its raw channels is its own visible jack — so a stereo
+cable landing on it is two separate legs on ITS side; a module wired straight into Audio Output (or
+out of Audio Input) with more than one of its channels engaged is therefore never heal-eligible on
+that side. Modulation/CV cables on the deleted module are simply dropped either way — they are
+never candidates for the heal.
+
+Deleting several modules in one selection heals across the whole deleted RUN, from the nearest
+surviving upstream node to the nearest surviving downstream one, as long as every module along that
+run is itself exactly one audio leg in / one out; a run that includes a branching module (more than
+one leg on a side) is left unhealed past that point, same as a single ineligible deletion. The
+healed connection is re-validated after the deletion actually happens with
+`AudioProcessorGraph::isAnInputTo` (rejects a cycle — `canConnect` alone does not check for one)
+and `::canConnect` (per-leg legality: valid channel, not already connected) — the same checks a
+manual cable drag relies on; an invalid result skips the heal rather than forcing a bad edge. The
+heal runs BEFORE the macro-port/attenuverter auto-delete sweeps
+([`../macros/auto-ports.md`](../macros/auto-ports.md)), so a macro port that a heal just gave a
+fresh cable to is no longer orphaned by the time those run, and it composes with a macro port or
+hidden Attenuverter sitting on either end of the deleted run — the heal just wires the two
+surviving endpoints, whatever kind of node they are. It never runs for a deleted macro port node
+itself, and a port anywhere in the middle of a deleted run leaves the run unhealed past it — deleting
+a port is a separate feature with its own preference (`spliceCableOnMacroPortDelete`, default OFF:
+the cable is dropped), and this generic, default-ON heal must not silently override that dedicated
+default (see [`../macros/auto-ports.md`](../macros/auto-ports.md) for the full ordering story). The
+whole delete (plus any heal it triggers)
+is one undo step: Cmd+Z restores the deleted module(s) and their original cables and removes the
+healed cable in the same stroke; redo re-applies both together. Audio Output is never removed by
+any of this — deleting it is unaffected, and it is never eligible to be healed away.
+Implementation lives in its own unit, `Source/UI/Graph/GraphEditor/GraphEditorDeleteHeal.cpp`
+(`GraphEditor::captureHealSplices`/`::healDeletedChain`), called from both delete entry points.
+
 `applyHeaderButtonIcons()` retints the header buttons from the active `AppLookAndFeel`. It is
 null-guarded: when the look-and-feel cast fails (headless tests) the function returns early and the
 buttons stay imageless but functional. `lookAndFeelChanged()` calls it, so icons update on a theme

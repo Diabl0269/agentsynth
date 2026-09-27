@@ -365,6 +365,26 @@ leg into the surviving macro member would otherwise pass). Gated on the same
 `autoDeleteMacroPortsOnLastCableEnabled` preference. No general multi-hop walk — this reaches
 exactly one hop past the attenuverter and stops.
 
+**Ordering with FRO23's "reconnect the chain" heal.** `deleteSelection`/`requestDeleteModule` run a
+second, independent capture-before/act-after pass alongside `macroPortDeletionNeighbors` —
+`GraphEditor::captureHealSplices` (before `removeNode`) and `::healDeletedChain` (after) — that
+splices a deleted module's surviving upstream/downstream neighbours together when it had exactly
+one incoming and one outgoing audio cable (see
+[`../layout/module-card.md#deleting-a-module-reconnect-the-chain-fro23`](../layout/module-card.md#deleting-a-module-reconnect-the-chain-fro23)).
+`healDeletedChain` always runs BEFORE `autoDeleteOrphanedAttenuverter`/`autoDeleteOrphanedMacroPort`
+above, so a macro port that the heal just gave a fresh cable to is no longer a zero-connection
+candidate by the time those sweeps look at it — reversing the order would auto-delete a port the
+heal was about to save. The two features are otherwise independent: the heal never touches a macro
+port or attenuverter node itself (only the two surviving endpoints, whatever kind they are), and it
+is gated by its own preference (`reconnectChainOnDelete`), never `autoDeleteMacroPortsOnLastCableEnabled`.
+It also never runs *for* a deleted macro port node itself, nor across one sitting in the middle of a
+deleted run (`MacroGroupController::nodeIsMacroPort`, checked at the seed and at every hop) —
+deleting a port is its own separate feature with its own preference
+(`spliceCableOnMacroPortDelete`, default OFF: the cable is dropped, not spliced), and letting this
+generic, default-ON heal splice through it would silently flip that dedicated default for every port
+deletion. A surviving macro port neighbour is still healed to exactly as before; only the port node's
+OWN deletion is excluded.
+
 `modMatrix.clearRows()` needs no special interaction handling: it is `rows.clear(); repaint();`, a
 blunt UI-state clear with no node scoping of its own, so it stays where it already runs (once, at the
 top of each function's undo-transaction lambda) and tolerates being called ahead of an auto-delete
