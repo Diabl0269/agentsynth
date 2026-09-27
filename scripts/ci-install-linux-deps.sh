@@ -48,7 +48,7 @@ PACKAGES=(
     cmake ninja-build libasound2-dev libx11-dev libxinerama-dev libxext-dev libxcomposite-dev
     libxcursor-dev libxrandr-dev libxrender-dev libfontconfig1-dev libfreetype6-dev
     libglu1-mesa-dev libcurl4-openssl-dev libgtk-3-dev libjack-jackd2-dev freeglut3-dev
-    pkg-config llvm clang ccache xvfb
+    pkg-config llvm clang lld ccache xvfb
 )
 
 # 15 s per attempt with 2 retries, instead of apt's 120 s default: enough for a slow-but-alive

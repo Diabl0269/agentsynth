@@ -301,7 +301,21 @@ jobs:
           -DENABLE_TESTS=ON \
           -DENABLE_AI_HARNESS=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld \
+          -DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=lld
+
+    # The runner kills that -j4 alone did not stop landed in the final links (Tests and the Tools
+    # harnesses linking at once, Debug + coverage + -g): lld above links in a fraction of GNU ld's
+    # memory, and this swap turns any remaining spike into a slow link instead of a dead runner
+    # (FRO327). The image ships a 4 GB swap file; this adds 8 GB more.
+    - name: Add swap
+      run: |
+        sudo fallocate -l 8G /mnt/ci-extra.swap
+        sudo chmod 600 /mnt/ci-extra.swap
+        sudo mkswap /mnt/ci-extra.swap
+        sudo swapon /mnt/ci-extra.swap
+        free -h
 
     # -j4 on the 4 vCPU / 16 GB runner: at ninja's default -j6 a cold-cache Debug+coverage build ran
     # out of memory near the end (Tests linking while the Tools harnesses compile) and the runner
