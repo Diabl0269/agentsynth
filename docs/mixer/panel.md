@@ -466,9 +466,11 @@ formatting immediately after constructing `panAttachment_`, the identical fix `M
 already applies for the fader's own "-3.0 dB" text (see that class's `applyDbAccessibilityText`).
 
 **Insert rows, "+ Send" and "Make channel" are real, named, reachable AX children, not just painted
-text.** `MixerInsertList`/`MixerSendList` draw every row themselves in `paint()` rather than as child
-components, so before FRO228 a screen reader had nothing to land on for a row at all (an unnamed
-`AXGroup`, or nothing). Each now gets a small transparent proxy `Component`
+text.** `MixerInsertList`/`MixerSendList` draw most of a row themselves in `paint()` rather than as
+child components (the level knob and, FRO295, the M mute button are the exceptions — real
+`juce::Slider`/`juce::TextButton` children with their own `AccessibilityHandler`), so before FRO228
+a screen reader had nothing to land on for the rest of a row at all (an unnamed `AXGroup`, or
+nothing). Each now gets a small transparent proxy `Component`
 (`MixerInsertList::RowAccessibilityProxy`, `MixerSendList::AddSendAccessibilityProxy`) sized over its
 row in `resized()`, `setInterceptsMouseClicks(false, false)` so the existing `mouseDown()`/hit-testing
 stays the only path for a real click, titled `"<insert name>, bypassed"`/`"<insert name>"` or `"Add

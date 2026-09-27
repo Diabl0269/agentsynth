@@ -64,9 +64,11 @@ goes stale on undo. "Which bus does slot *k* feed?" is answered by walking forwa
 output channel to the first strip (`synth::findSendTarget`), which therefore also resolves through a
 module the user inserted on the send path, and returns nothing for a cut cable.
 
-Which slots exist, and each slot's pre or post setting, are **trusted extra state**,
-`"sends": [{"slot", "pre"}]`, the same path as `"shape"` and `"solo"`. A track preset scrubs
-`"sends"` from every captured strip
+Which slots exist, each slot's pre or post setting, and (FRO295) each slot's **mute** are **trusted
+extra state**, `"sends": [{"slot", "pre", "mute"}]`, the same path as `"shape"` and `"solo"` — never
+an `AudioParameter`. `"mute"` is written unconditionally, same as `"pre"`; an entry with no `"mute"`
+key at all (every project saved before FRO295) reads as unmuted, so an old project loads unchanged.
+A track preset scrubs `"sends"` from every captured strip
 ([`docs/mixer/track-presets.md`](track-presets.md#scrubbed-keys)).
 
 ## Slots are sparse
@@ -85,6 +87,21 @@ after them**, which is exactly what the strip hands Master, and before the solo 
 `CLAUDE.md` two-branch contract; keeping a pre-fader cue alive under mute would mean making that
 branch selective, which is the erosion the invariant exists to prevent. This is a deliberate departure
 from DAWs that do keep pre-fader cue sends alive under mute.
+
+**Under bypass the strip's own gain and pan are off, so pre and post coincide.**
+
+**FRO295: a single send can also be muted on its own**, independent of the strip's own mute above and
+of every other slot. Per-send mute is non-parameter trusted state (`isSendMuted`/`setSendMuted`),
+exactly like the pre/post bit next to it — never an `AudioParameter`, so the send's own
+`sendNLevel` is never touched: unmuting always restores the exact level the knob was left at. In
+`processBlock`, a muted slot's L/R legs are silenced the same way a solo-gated-shut leg is —
+`writeSendLegs` skips writing over the silence the unconditional hygiene pass already wrote, one
+relaxed atomic read alongside `preMask_`'s own. Removing a send (`synth::removeSend`) clears the
+mute bit along with the active/pre-fader bits, so a slot a later "+ Send" reuses always starts
+unmuted. **Mute does not remove the send as a structural path** — `findSendTarget` and
+`computeSoloAudibleLegs` (below) don't look at it at all, so a muted send still keeps its source
+classified as feeding whatever bus it targets; it simply carries silence instead of signal while
+muted.
 
 **Under bypass the strip's own gain and pan are off, so pre and post coincide.**
 
@@ -145,15 +162,25 @@ track. **Buses sit after the track-driven strips and before Direct**, which is e
 existing orphan-strip append puts them.
 
 On a source column a compact `MixerSendList` sits under the insert list: one row per active slot — a
-target-bus button, a rotary level knob attached straight onto `sendNLevel`, a `PRE`/`POST` toggle and
-an `x` — plus a `+ Send` row while a slot is free. **FRO301: a screen reader names each level knob by
-its target** — "Send to Bus 1", or "Send 2 (no target)" once its cable is cut — and speaks its value
-the same "-6.0 dB" format as the fader and pan knob
+target-bus button, a rotary level knob attached straight onto `sendNLevel`, an **"M" mute toggle**
+(FRO295), a `PRE`/`POST` toggle and an `x` — plus a `+ Send` row while a slot is free. **FRO301: a
+screen reader names each level knob by its target** — "Send to Bus 1", or "Send 2 (no target)" once
+its cable is cut — and speaks its value the same "-6.0 dB" format as the fader and pan knob
 ([`docs/mixer/panel.md`](panel.md#keyboard-navigation-and-accessibility)). **Each
 mutation is ONE
 `recordGraphAndMacroChange`** around `Source/Mixer/MixerSends`' Core flows, and **the rows unbind
 before a graph-replacing undo frees their parameters**
 ([`docs/mixer/panel.md`](panel.md#unbinding-before-a-graph-change)).
+
+**FRO295: the M button is a real `juce::TextButton`, not painted text like PRE/POST** — it reuses the
+exact button type/convention `MixerColumnComponent`'s own strip-level mute button uses
+(`setClickingTogglesState(false)` plus a manual `setToggleState` kept in step by `rebuildKnobs()`),
+so its on/off colouring comes from `AppLookAndFeel`'s `TextButton::buttonOnColourId` (the theme's
+accent) with no bespoke paint, and it gets a real hit area and a real `AccessibilityHandler` (a
+`juce::Button`'s own, unlike the proxy components the paint-only rows need). Its accessible title is
+"Mute send to \<target\>" / "Mute send N (no target)", the same naming the level knob's own title
+uses. Clicking it calls `synth::setSendMuted` inside the same one-`recordGraphAndMacroChange` shape
+every other row mutation uses.
 
 **FRO292: an active send's level can carry its own automation lane.** Right-click the send knob
 → **Automate 'Send N Level'** creates the lane and opens the automation strip on it (the same

@@ -250,6 +250,15 @@ bool removeSend(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot) 
     dropSlotCables(graph, sourceStrip, slot);
     strip->setSendActive(slot, false);
     strip->setSendPreFader(slot, false);
+    strip->setSendMuted(slot, false); // FRO295: a reused slot always starts unmuted
+    return true;
+}
+
+bool setSendMuted(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot, bool muted) {
+    auto* strip = stripAt(graph, sourceStrip);
+    if (strip == nullptr || !strip->isSendActive(slot))
+        return false;
+    strip->setSendMuted(slot, muted);
     return true;
 }
 

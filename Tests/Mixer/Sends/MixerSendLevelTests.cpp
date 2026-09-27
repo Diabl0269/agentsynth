@@ -150,6 +150,62 @@ TEST(MixerSendLevelTest, MuteSilencesPreAndPostSends) {
     expectChannel(buffer, 0, 0.0f, "and the main leg");
 }
 
+TEST(MixerSendLevelTest, MuteSilencesOnlyItsOwnSlotAndUnmuteRestoresTheSameLevel) {
+    // FRO295: per-send mute is a silence gate ON TOP of the level parameter, not a level of zero --
+    // an unmuted sibling slot must keep passing signal, and unmuting must not have moved the level.
+    ChannelStripModule strip;
+    ASSERT_EQ(strip.addSend(), 0);
+    strip.setSendPreFader(0, true);
+    setParam(strip, "send1Level", -6.0f);
+    ASSERT_EQ(strip.addSend(), 1); // sibling slot, never muted
+    strip.setSendPreFader(1, true);
+    strip.setSendMuted(0, true);
+    strip.prepareToPlay(kSampleRate, kBlockSize);
+
+    auto buffer = stripInput(1.0f, 1.0f);
+    settleAndProcess(strip, buffer);
+
+    expectChannel(buffer, sendL(0), 0.0f, "a muted send is silent");
+    expectChannel(buffer, sendR(0), 0.0f, "a muted send is silent");
+    const float expectedSibling = juce::Decibels::decibelsToGain(0.0f, ChannelStripModule::kMinGainDb);
+    expectChannel(buffer, sendL(1), expectedSibling, "the unmuted sibling slot still passes signal");
+    expectChannel(buffer, sendR(1), expectedSibling, "the unmuted sibling slot still passes signal");
+
+    strip.setSendMuted(0, false);
+    auto restored = stripInput(1.0f, 1.0f);
+    settleAndProcess(strip, restored);
+    const float expectedLevel = juce::Decibels::decibelsToGain(-6.0f, ChannelStripModule::kMinGainDb);
+    expectChannel(restored, sendL(0), expectedLevel, "unmute restores the level the parameter always held");
+    expectChannel(restored, sendR(0), expectedLevel, "unmute restores the level the parameter always held");
+}
+
+TEST(MixerSendLevelTest, MuteStateRoundTripsThroughExtraStateAndAnOldEntryLoadsUnmuted) {
+    ChannelStripModule source;
+    ASSERT_EQ(source.addSend(), 0);
+    ASSERT_EQ(source.addSend(), 1);
+    source.setSendMuted(0, true);
+
+    ChannelStripModule restored;
+    restored.setExtraState(source.getExtraState());
+    EXPECT_TRUE(restored.isSendMuted(0));
+    EXPECT_FALSE(restored.isSendMuted(1)) << "only the muted slot carries the bit";
+
+    // An entry saved before FRO295 has no "mute" key at all -- must load unmuted, not default to
+    // whatever bit happened to be set before setExtraState() ran (readSendsState clears first).
+    ChannelStripModule legacy;
+    auto* obj = new juce::DynamicObject();
+    obj->setProperty("shape", "stereo");
+    juce::Array<juce::var> sends;
+    auto* entry = new juce::DynamicObject();
+    entry->setProperty("slot", 0);
+    entry->setProperty("pre", false);
+    sends.add(juce::var(entry));
+    obj->setProperty("sends", sends);
+    legacy.setExtraState(juce::var(obj));
+    EXPECT_TRUE(legacy.isSendActive(0));
+    EXPECT_FALSE(legacy.isSendMuted(0)) << "no \"mute\" key means unmuted, same as \"pre\"'s own default";
+}
+
 TEST(MixerSendLevelTest, BypassMakesPreAndPostSendsIdentical) {
     // Bypass disables the strip's own gain and pan, so the two taps see the same signal.
     ChannelStripModule strip;

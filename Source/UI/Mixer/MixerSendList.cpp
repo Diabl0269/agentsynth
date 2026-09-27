@@ -59,8 +59,29 @@ void MixerSendList::rebuildKnobs() {
     if (strip == nullptr)
         return;
 
-    for (const auto& entry : entries_) {
+    for (int i = 0; i < (int)entries_.size(); ++i) {
+        const auto& entry = entries_[(size_t)i];
         Row row;
+
+        // FRO295: the M mute toggle. Same button convention as MixerColumnComponent's own strip
+        // mute button (MixerColumnComponent.cpp) -- setClickingTogglesState(false) plus a manual
+        // setToggleState kept in step by rebuildKnobs() re-running after every mutation, so its
+        // paint (and AX toggle role) come from AppLookAndFeel's buttonOnColourId, not a bespoke
+        // colour here.
+        row.muteButton = std::make_unique<juce::TextButton>("M");
+        row.muteButton->setClickingTogglesState(false);
+        // JUCE's default text indent is ~5 px a side on an unconnected button, which leaves no room
+        // for the "M" at this width (it rendered as a squashed "_"); connected edges halve it.
+        row.muteButton->setConnectedEdges(juce::Button::ConnectedOnLeft | juce::Button::ConnectedOnRight |
+                                          juce::Button::ConnectedOnTop | juce::Button::ConnectedOnBottom);
+        row.muteButton->setToggleState(entry.muted, juce::dontSendNotification);
+        row.muteButton->setTitle(entry.targetNodeId != juce::AudioProcessorGraph::NodeID{}
+                                     ? "Mute send to " + entry.targetName
+                                     : "Mute send " + juce::String(entry.slot + 1) + " (no target)");
+        const int rowIndex = i;
+        row.muteButton->onClick = [this, rowIndex] { toggleMuteForRow(rowIndex); };
+        addAndMakeVisible(*row.muteButton);
+
         row.knob = std::make_unique<juce::Slider>();
         row.knob->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         row.knob->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
@@ -115,6 +136,10 @@ juce::Slider* MixerSendList::getKnobForTest(int rowIndex) const {
     return rowIndex >= 0 && rowIndex < (int)rows_.size() ? rows_[(size_t)rowIndex].knob.get() : nullptr;
 }
 
+juce::Button* MixerSendList::getMuteButtonForTest(int rowIndex) const {
+    return rowIndex >= 0 && rowIndex < (int)rows_.size() ? rows_[(size_t)rowIndex].muteButton.get() : nullptr;
+}
+
 int MixerSendList::getPreferredHeight() const noexcept {
     return ((int)entries_.size() + (canAddSend() ? 1 : 0)) * kRowHeight;
 }
@@ -156,6 +181,7 @@ void MixerSendList::paint(juce::Graphics& g) {
         g.setColour(entry.preFader ? accent : muted);
         g.drawText(entry.preFader ? "PRE" : "POST", toggle, juce::Justification::centred, false);
 
+        row.removeFromRight(kMuteWidth); // the M button is a real child component -- see resized()
         row.removeFromRight(kKnobWidth); // the knob is a real child component -- see resized()
 
         g.setColour(entry.targetNodeId == juce::AudioProcessorGraph::NodeID{} ? muted : text);
@@ -171,11 +197,13 @@ void MixerSendList::paint(juce::Graphics& g) {
 
 void MixerSendList::resized() {
     for (int i = 0; i < (int)rows_.size(); ++i) {
-        if (rows_[(size_t)i].knob == nullptr)
-            continue;
-        auto row = getLocalBounds().withY(i * kRowHeight).withHeight(kRowHeight);
-        row.removeFromRight(kRemoveWidth + kToggleWidth);
-        rows_[(size_t)i].knob->setBounds(row.removeFromRight(kKnobWidth).reduced(1));
+        auto& row = rows_[(size_t)i];
+        auto bounds = getLocalBounds().withY(i * kRowHeight).withHeight(kRowHeight);
+        bounds.removeFromRight(kRemoveWidth + kToggleWidth);
+        if (row.muteButton != nullptr)
+            row.muteButton->setBounds(bounds.removeFromRight(kMuteWidth).reduced(1));
+        if (row.knob != nullptr)
+            row.knob->setBounds(bounds.removeFromRight(kKnobWidth).reduced(1));
     }
 
     // FRO228: same anchor paint()'s own addRow uses.
@@ -198,7 +226,10 @@ void MixerSendList::mouseDown(const juce::MouseEvent& event) {
         removeRow(row);
     else if (fromRight <= kRemoveWidth + kToggleWidth)
         togglePreFaderForRow(row);
-    else if (fromRight > kRemoveWidth + kToggleWidth + kKnobWidth)
+    // The M button (kMuteWidth) and the knob (kKnobWidth) are real child components between the
+    // PRE/POST toggle and the target-name area, so this handler never sees a click landing on
+    // either -- only the shape of the "everything past them is the target name" test below moves.
+    else if (fromRight > kRemoveWidth + kToggleWidth + kMuteWidth + kKnobWidth)
         showTargetMenu(row); // the knob's own bounds are its child component's business
 }
 
@@ -285,6 +316,15 @@ void MixerSendList::togglePreFaderForRow(int rowIndex) {
         strip->setSendPreFader(slot, !strip->isSendPreFader(slot));
         return true;
     });
+}
+
+void MixerSendList::toggleMuteForRow(int rowIndex) {
+    if (rowIndex < 0 || rowIndex >= (int)entries_.size())
+        return;
+    const auto& entry = entries_[(size_t)rowIndex];
+    const int slot = entry.slot;
+    const bool newMuted = !entry.muted;
+    mutateAndNotify([&] { return graph_ != nullptr && synth::setSendMuted(*graph_, stripNodeId_, slot, newMuted); });
 }
 
 } // namespace synth::ui

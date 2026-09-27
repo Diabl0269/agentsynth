@@ -57,6 +57,22 @@ ChannelStripModule* stripAt(juce::AudioProcessorGraph& graph, NodeID id) {
     return node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
 }
 
+// FRO295: fires a real mouseDown+mouseUp on `component`'s own centre -- the "test the real mouse
+// path" convention MixerColumnComponentTests.cpp's synthesizeMouseUp and
+// MixerColumnMidiLearnTests.cpp's realChildMouseEvent both use, rather than calling the row's
+// headless toggle seam directly. Takes juce::Component&, not juce::Button&, so this also works on
+// the M button below: juce::Button overrides mouseDown/mouseUp as PROTECTED, but access control is
+// resolved against the expression's static type, and juce::Component declares both public.
+void clickComponent(juce::Component& component) {
+    const auto pos = component.getLocalBounds().getCentre().toFloat();
+    const juce::ModifierKeys mods(juce::ModifierKeys::leftButtonModifier);
+    const auto now = juce::Time::getCurrentTime();
+    component.mouseDown(juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, mods, 0.0f, 0.0f, 0.0f,
+                                         0.0f, 0.0f, &component, &component, now, pos, now, 1, false));
+    component.mouseUp(juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, mods, 0.0f, 0.0f, 0.0f,
+                                       0.0f, 0.0f, &component, &component, now, pos, now, 1, false));
+}
+
 /** One audio track (its own channel strip) plus one empty bus, both already showing as columns. */
 struct SendRig {
     std::unique_ptr<MainComponent> mc;
@@ -158,6 +174,40 @@ TEST(MixerSendListTests, PreFaderToggleIsOneUndoStepAndUndoRestoresIt) {
     ASSERT_NE(afterUndo, nullptr);
     EXPECT_FALSE(stripAt(rig.graph(), afterUndo->getNodeId())->isSendPreFader(0))
         << "the PRE/POST flip is one undo step, carried in the strip's trusted extra state";
+    EXPECT_TRUE(stripAt(rig.graph(), afterUndo->getNodeId())->isSendActive(0)) << "and the send itself survives";
+}
+
+TEST(MixerSendListTests, MuteButtonClickIsOneUndoStepAndUndoRestoresIt) {
+    SendRig rig;
+    auto* column = rig.sourceColumn();
+    ASSERT_NE(column, nullptr);
+    column->getSendListForTest().addSendTo(rig.bus);
+    rig.panel().rebuild();
+    // FRO295: same "size the panel for a real click" step MixerPanelComponentTests.cpp's own
+    // ClickingAColumnSelectsItsOwningMacroOnTheCanvas test uses -- rebuild() alone does not lay the
+    // column's children out at a real pixel size.
+    rig.panel().setSize(1400, 300);
+    rig.panel().resized();
+
+    auto* muteButton = rig.sourceColumn()->getSendListForTest().getMuteButtonForTest(0);
+    ASSERT_NE(muteButton, nullptr);
+    ASSERT_GT(muteButton->getWidth(), 0) << "the row must be really laid out for a real click to land";
+    EXPECT_FALSE(muteButton->getToggleState());
+
+    const auto sourceId = rig.sourceColumn()->getNodeId();
+    ASSERT_FALSE(stripAt(rig.graph(), sourceId)->isSendMuted(0));
+
+    clickComponent(*muteButton);
+    rig.panel().rebuild();
+    EXPECT_TRUE(stripAt(rig.graph(), rig.sourceColumn()->getNodeId())->isSendMuted(0))
+        << "a real click on the M button toggles mute through synth::setSendMuted";
+
+    ASSERT_TRUE(rig.mc->getUndoManager().undo());
+    rig.panel().rebuild();
+    auto* afterUndo = rig.sourceColumn();
+    ASSERT_NE(afterUndo, nullptr);
+    EXPECT_FALSE(stripAt(rig.graph(), afterUndo->getNodeId())->isSendMuted(0))
+        << "the mute click is one undo step, carried in the strip's trusted extra state";
     EXPECT_TRUE(stripAt(rig.graph(), afterUndo->getNodeId())->isSendActive(0)) << "and the send itself survives";
 }
 

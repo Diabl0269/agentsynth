@@ -14,10 +14,10 @@ class GraphEditor;
 // MixerInsertList and laid out directly under it.
 //
 // One row per ACTIVE slot, in slot order: the target bus's name (click to retarget), a small rotary
-// level knob, a PRE/POST toggle and an `x` remove; then a "+ Send" row while the strip has a free
-// slot. Each mutation is ONE AppUndoManager::recordGraphAndMacroChange around synth::MixerSends'
-// Core flows (which have no undo of their own), exactly as MixerInsertList wraps the insert
-// splices.
+// level knob, an "M" mute toggle (FRO295), a PRE/POST toggle and an `x` remove; then a "+ Send" row
+// while the strip has a free slot. Each mutation is ONE AppUndoManager::recordGraphAndMacroChange
+// around synth::MixerSends' Core flows (which have no undo of their own), exactly as MixerInsertList
+// wraps the insert splices.
 //
 // The level knob attaches straight onto the strip's own `sendNLevel` AudioParameterFloat, so send
 // level is host-visible and automatable with no lane plumbing of its own. That attachment is a live
@@ -72,11 +72,16 @@ public:
     void addSendTo(juce::AudioProcessorGraph::NodeID target);
     void removeRow(int rowIndex);
     void togglePreFaderForRow(int rowIndex);
+    /** FRO295: flips row `rowIndex`'s mute bit via synth::setSendMuted, one recordGraphAndMacroChange. */
+    void toggleMuteForRow(int rowIndex);
     void retargetRow(int rowIndex, juce::AudioProcessorGraph::NodeID target);
     std::vector<juce::AudioProcessorGraph::NodeID> availableTargets() const;
     bool canAddSend() const;
     bool isAttachedForTest(int rowIndex) const;
     juce::Slider* getKnobForTest(int rowIndex) const;
+    /** The row's real "M" button -- a juce::Button child, same type/LookAndFeel as the column's own
+     *  channel mute button, so a test can click it through the real mouse path. */
+    juce::Button* getMuteButtonForTest(int rowIndex) const;
     int getRowCountForTest() const noexcept { return (int)entries_.size(); }
     /** FRO228: the transparent, name-only "Add send" proxy -- see AddSendAccessibilityProxy's own
      *  comment. Always exists; only actually reachable (setVisible(true)) while canAddSend(). */
@@ -90,11 +95,17 @@ private:
     static constexpr int kRowHeight = 20;
     static constexpr int kKnobWidth = 20;
     static constexpr int kToggleWidth = 30;
+    static constexpr int kMuteWidth = 18;
     static constexpr int kRemoveWidth = 14;
 
     struct Row {
         std::unique_ptr<juce::Slider> knob;
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
+        // FRO295: a real juce::TextButton, not painted text like PRE/POST -- reuses
+        // MixerColumnComponent's own "M" button type/LookAndFeel (setClickingTogglesState(false),
+        // manual setToggleState mirroring the strip's own mute button convention) so mute gets the
+        // same real hit area, accessibility role and on/off colouring with no new ad-hoc paint.
+        std::unique_ptr<juce::TextButton> muteButton;
     };
 
     // FRO228: paint() above draws the "+ Send" row itself (plain text, no component), so VoiceOver/

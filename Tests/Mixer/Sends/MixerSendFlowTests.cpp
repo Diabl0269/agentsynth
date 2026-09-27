@@ -95,6 +95,31 @@ TEST(MixerSendFlowTest, RemoveSendClearsTheCablesAndTheSlotOnly) {
     EXPECT_FALSE(synth::removeSend(rig.graph, rig.master, 0));
 }
 
+TEST(MixerSendFlowTest, SetSendMutedTogglesTheBitAndRefusesANonStripOrInactiveSlot) {
+    Rig rig;
+    ASSERT_EQ(synth::addSend(rig.graph, rig.sourceA, rig.bus), 0);
+
+    EXPECT_TRUE(synth::setSendMuted(rig.graph, rig.sourceA, 0, true));
+    EXPECT_TRUE(stripAt(rig.graph, rig.sourceA)->isSendMuted(0));
+    EXPECT_TRUE(synth::setSendMuted(rig.graph, rig.sourceA, 0, false));
+    EXPECT_FALSE(stripAt(rig.graph, rig.sourceA)->isSendMuted(0));
+
+    EXPECT_FALSE(synth::setSendMuted(rig.graph, rig.sourceA, 1, true)) << "slot 1 is not active";
+    EXPECT_FALSE(synth::setSendMuted(rig.graph, rig.master, 0, true)) << "Master is not a strip";
+}
+
+TEST(MixerSendFlowTest, RemoveSendThenAddSendInTheSameSlotStartsUnmuted) {
+    Rig rig;
+    ASSERT_EQ(synth::addSend(rig.graph, rig.sourceA, rig.bus), 0);
+    ASSERT_TRUE(synth::setSendMuted(rig.graph, rig.sourceA, 0, true));
+
+    ASSERT_TRUE(synth::removeSend(rig.graph, rig.sourceA, 0));
+    EXPECT_FALSE(stripAt(rig.graph, rig.sourceA)->isSendMuted(0)) << "a freed slot forgets its mute too";
+
+    ASSERT_EQ(synth::addSend(rig.graph, rig.sourceA, rig.sourceB), 0) << "the freed slot is reused";
+    EXPECT_FALSE(stripAt(rig.graph, rig.sourceA)->isSendMuted(0)) << "a fresh send in a reused slot starts unmuted";
+}
+
 TEST(MixerSendFlowTest, RetargetSendMovesTheCablesAndKeepsTheSlot) {
     Rig rig;
     ASSERT_EQ(synth::addSend(rig.graph, rig.sourceA, rig.bus), 0);

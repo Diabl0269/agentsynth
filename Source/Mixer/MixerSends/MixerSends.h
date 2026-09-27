@@ -81,10 +81,15 @@ std::vector<juce::AudioProcessorGraph::NodeID> enumerateSendTargets(juce::AudioP
 int addSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip,
             juce::AudioProcessorGraph::NodeID target);
 
-/** Clears slot `slot`'s cables and its active bit. Higher slots keep their own raw channels, so
- *  nothing else is re-wired (only the VISIBLE jack indices renumber). False when `sourceStrip` is
- *  not a strip or the slot was not active. */
+/** Clears slot `slot`'s cables and its active bit (and, FRO295, its mute bit). Higher slots keep
+ *  their own raw channels, so nothing else is re-wired (only the VISIBLE jack indices renumber).
+ *  False when `sourceStrip` is not a strip or the slot was not active. */
 bool removeSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
+
+/** FRO295: mutes/unmutes an active slot, never its level parameter. False (no change) when
+ *  `sourceStrip` is not a strip or `slot` is not active. */
+bool setSendMuted(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot,
+                  bool muted);
 
 /** Repoints an active slot at a different target: drops its current cables and wires the new pair.
  *  False (and nothing changed) on the same refusals as addSend — including one the GRAPH refuses
