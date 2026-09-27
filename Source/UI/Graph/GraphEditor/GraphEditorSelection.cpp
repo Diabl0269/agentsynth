@@ -6,6 +6,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
+#include "GraphEditorInternal.h" // GraphEditor::HealSplice's full definition (captureHealSplices)
 
 #include "CanvasAccessibilityClip.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"

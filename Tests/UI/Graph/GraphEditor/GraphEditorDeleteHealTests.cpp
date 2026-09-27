@@ -17,6 +17,8 @@
 #include "Modules/FilterModule.h"
 #include "Modules/MacroPortShape.h"
 #include "Modules/OscillatorModule.h"
+#include "Modules/VCAModule.h"
+#include "PresetManager.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 
 using NodeID = juce::AudioProcessorGraph::NodeID;
@@ -566,4 +568,140 @@ TEST_F(GraphEditorTest, DualIOSplitInputLegsCountAsTwoAndNeverHeals) {
     EXPECT_EQ(graph.getNodeForId(filter), nullptr);
     EXPECT_EQ(graph.getNumNodes(), nodesBefore - 1);
     EXPECT_EQ(monoConnectionCount(engine, leftSrc, rightSrc), 0) << "two incoming legs -- never heals";
+}
+
+// ============================================================================
+// The orchestrator's follow-up: the DEFAULT PATCH's own shape, reproduced by loading it for real
+// (synth::PresetManager::loadDefaultPreset) rather than approximating it -- Oscillator -> Filter ->
+// VCA, all three shipping Dual I/O ON (their constructor default for a Declared stereo shape, never
+// collapsed by anything a bare preset load runs), so Filter has TWO incoming legs (Osc L->Filter L,
+// Osc R->Filter R) and TWO outgoing legs (Filter L->VCA L, Filter R->VCA R) rather than one of each.
+// mergeDualIoStereoPairLegs (GraphEditorDeleteHeal.cpp) is what turns each matching L/R pair back
+// into one logical leg so the 1-in/1-out rule still applies and the chain heals: Osc L->VCA L,
+// Osc R->VCA R, healed as two explicit jack pairs since resolvePolyLink has no single-jack notion
+// of "two separate jacks" the way a collapsed stereo jack's own multi-voice fan does.
+// ============================================================================
+
+namespace {
+struct DefaultPatchOscFilterVca {
+    NodeID osc, filter, vca;
+};
+
+// Bundled presets carry only an "id" in their JSON, never a "uuid" -- AIStateMapper's
+// adoptUuidIfTrusted only adopts one when the node object actually has one, so a preset-loaded
+// node's "uuid" property stays empty and this file's own uuidOf/nodeIdForUuid helpers (built for
+// addHealNode's synthetic nodes, which DO set one) cannot track identity across this fixture's
+// undo/redo. Re-scanning by module type after the fact works just as well here: Osc/Filter/VCA are
+// each singletons in the default patch, and a plain requestDeleteModule/deleteSelection (no
+// undo/redo involved yet) never reassigns a SURVIVING node's own NodeID anyway.
+DefaultPatchOscFilterVca findOscFilterVca(juce::AudioProcessorGraph& graph) {
+    DefaultPatchOscFilterVca f;
+    for (auto* node : graph.getNodes()) {
+        if (dynamic_cast<OscillatorModule*>(node->getProcessor()) != nullptr)
+            f.osc = node->nodeID;
+        else if (dynamic_cast<FilterModule*>(node->getProcessor()) != nullptr)
+            f.filter = node->nodeID;
+        else if (dynamic_cast<VCAModule*>(node->getProcessor()) != nullptr)
+            f.vca = node->nodeID;
+    }
+    return f;
+}
+
+DefaultPatchOscFilterVca loadDefaultPatchOscFilterVca(GraphEditor& editor, AudioEngine& engine) {
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    synth::PresetManager::loadDefaultPreset(graph);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    return findOscFilterVca(graph);
+}
+
+// Asserts the default patch really does ship the shape this whole test class relies on: Osc and
+// VCA both genuinely Dual I/O split, and Filter wired to both with a full L/R pair on each side --
+// the premise "Filter has 2 incoming audio legs... and 2 outgoing" the fix is built to still heal.
+void assertDefaultPatchIsFullyDualIOWired(AudioEngine& engine, const DefaultPatchOscFilterVca& f) {
+    auto& graph = engine.getGraph();
+    ASSERT_TRUE(f.osc.uid != 0 && f.filter.uid != 0 && f.vca.uid != 0) << "default patch missing an expected module";
+    auto* oscMb = dynamic_cast<ModuleBase*>(graph.getNodeForId(f.osc)->getProcessor());
+    auto* filterMb = dynamic_cast<ModuleBase*>(graph.getNodeForId(f.filter)->getProcessor());
+    auto* vcaMb = dynamic_cast<ModuleBase*>(graph.getNodeForId(f.vca)->getProcessor());
+    ASSERT_TRUE(oscMb->isDualIO() && filterMb->isDualIO() && vcaMb->isDualIO())
+        << "sanity: the default patch ships every stereo module Dual I/O ON";
+    ASSERT_TRUE(graph.isConnected({{f.osc, 0}, {f.filter, 0}})) << "Osc L -> Filter L";
+    ASSERT_TRUE(
+        graph.isConnected({{f.osc, oscMb->rightAudioLegChannel()}, {f.filter, filterMb->rightAudioLegChannel()}}))
+        << "Osc R -> Filter R";
+    ASSERT_TRUE(graph.isConnected({{f.filter, 0}, {f.vca, 0}})) << "Filter L -> VCA L";
+    ASSERT_TRUE(
+        graph.isConnected({{f.filter, filterMb->rightAudioLegChannel()}, {f.vca, vcaMb->rightAudioLegChannel()}}))
+        << "Filter R -> VCA R";
+}
+} // namespace
+
+TEST_F(GraphEditorTest, DeletingFilterInTheDefaultPatchHealsOscDirectlyIntoVcaViaRequestDeleteModule) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 900);
+
+    const auto f = loadDefaultPatchOscFilterVca(editor, engine);
+    assertDefaultPatchIsFullyDualIOWired(engine, f);
+    auto* oscMb = dynamic_cast<ModuleBase*>(engine.getGraph().getNodeForId(f.osc)->getProcessor());
+    auto* vcaMb = dynamic_cast<ModuleBase*>(engine.getGraph().getNodeForId(f.vca)->getProcessor());
+    const int nodesBefore = engine.getGraph().getNumNodes();
+
+    editor.requestDeleteModule(f.filter);
+
+    EXPECT_EQ(engine.getGraph().getNodeForId(f.filter), nullptr);
+    EXPECT_EQ(engine.getGraph().getNumNodes(), nodesBefore - 1);
+    // f.osc/f.vca are still the right NodeIDs: deleting one node via requestDeleteModule is a
+    // surgical graph.removeNode(), not a full snapshot restore, so a surviving node's own NodeID
+    // never changes underneath it.
+    EXPECT_TRUE(engine.getGraph().isConnected({{f.osc, 0}, {f.vca, 0}})) << "Osc L healed straight into VCA L";
+    EXPECT_TRUE(
+        engine.getGraph().isConnected({{f.osc, oscMb->rightAudioLegChannel()}, {f.vca, vcaMb->rightAudioLegChannel()}}))
+        << "Osc R healed straight into VCA R";
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    // Undo restores through a full graph-snapshot apply, which CAN hand every node a fresh
+    // NodeID -- re-find Osc/VCA by type rather than trusting f.osc/f.vca still resolve.
+    EXPECT_EQ(engine.getGraph().getNumNodes(), nodesBefore) << "one undo restores Filter";
+    const auto restored = findOscFilterVca(engine.getGraph());
+    EXPECT_FALSE(engine.getGraph().isConnected({{restored.osc, 0}, {restored.vca, 0}})) << "the heal edge is gone";
+}
+
+TEST_F(GraphEditorTest, DeletingFilterInTheDefaultPatchHealsOscDirectlyIntoVcaViaDeleteSelection) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 900);
+
+    const auto f = loadDefaultPatchOscFilterVca(editor, engine);
+    assertDefaultPatchIsFullyDualIOWired(engine, f);
+    auto* oscMb = dynamic_cast<ModuleBase*>(engine.getGraph().getNodeForId(f.osc)->getProcessor());
+    auto* vcaMb = dynamic_cast<ModuleBase*>(engine.getGraph().getNodeForId(f.vca)->getProcessor());
+    const int nodesBefore = engine.getGraph().getNumNodes();
+
+    editor.setSelectedNodes({f.filter});
+    editor.deleteSelection();
+
+    EXPECT_EQ(engine.getGraph().getNodeForId(f.filter), nullptr);
+    EXPECT_EQ(engine.getGraph().getNumNodes(), nodesBefore - 1);
+    // f.osc/f.vca are still the right NodeIDs -- see the sibling requestDeleteModule test's own
+    // comment for why a single-node delete never touches a survivor's NodeID.
+    EXPECT_TRUE(engine.getGraph().isConnected({{f.osc, 0}, {f.vca, 0}})) << "Osc L healed straight into VCA L";
+    EXPECT_TRUE(
+        engine.getGraph().isConnected({{f.osc, oscMb->rightAudioLegChannel()}, {f.vca, vcaMb->rightAudioLegChannel()}}))
+        << "Osc R healed straight into VCA R";
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    EXPECT_EQ(engine.getGraph().getNumNodes(), nodesBefore) << "one undo restores Filter";
+    const auto restored = findOscFilterVca(engine.getGraph());
+    EXPECT_FALSE(engine.getGraph().isConnected({{restored.osc, 0}, {restored.vca, 0}})) << "the heal edge is gone";
 }

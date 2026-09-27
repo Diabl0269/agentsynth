@@ -17,6 +17,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
+#include "GraphEditorInternal.h" // GraphEditor::HealSplice's full definition
 #include "Modules/ModuleBase.h"
 
 #include <algorithm>
@@ -32,6 +33,11 @@ struct AudioLeg {
     juce::AudioProcessorGraph::NodeID peerId;
     int peerJack = 0;
     int thisJack = 0;
+    // Set by mergeDualIoStereoPairLegs: true means peerJack/thisJack are each the LEFT half of a
+    // genuine Dual-I/O L/R pair on BOTH ends, and healing this leg must wire jack+1 on both sides
+    // too (Right), not just fan jack alone the way a collapsed stereo jack's single visible index
+    // would (resolvePolyLink has no notion of "two separate jacks" for one PolyLink).
+    bool dualPair = false;
     bool operator==(const AudioLeg& o) const noexcept {
         return peerId == o.peerId && peerJack == o.peerJack && thisJack == o.thisJack;
     }
@@ -105,6 +111,44 @@ void mergeBareIoChannelPairs(std::vector<AudioLeg>& legs, juce::AudioProcessorGr
     }
 }
 
+// A Dual-I/O module presents its Left and Right as two SEPARATE visible jacks (jack0/jack1), each
+// genuinely mono (ModuleBase::mapStereoPairInput/Output's and every split-block module's own
+// mapAudioLeg -- both give each split leg polyVoiceSpan 1). So when BOTH `nodeId` and its peer are
+// wired Left-to-Left (jack0/jack0) AND Right-to-Right (jack1/jack1), that is one logical stereo
+// cable -- the default patch's Oscillator -> Filter -> VCA chain, all Dual I/O on, is exactly this
+// shape -- not two independent mono legs the 1-in/1-out rule should reject. Requires isDualIO() on
+// BOTH ends (not just "jack index 0 and 1 exist"): a genuine two-independent-input module (a
+// mixer/splitter with no Dual I/O toggle at all) must still count as two real legs, matching
+// TwoAudioInputsNeverHeals -- `peerJack`/`thisJack` alone can't tell a real L/R pair apart from two
+// coincidentally-adjacent unrelated jacks. Mixed cases (this node split but the peer collapsed or
+// two different peers) are deliberately left unmerged: the peer's OWN raw legs then land on a
+// single collapsed jack index on ITS side, so `thisJack` differs between the two connections and
+// the "same thisJack" test below already excludes them -- "follow the existing rules" (no heal for
+// that side) rather than trying to broadcast/guess a width mismatch.
+void mergeDualIoStereoPairLegs(std::vector<AudioLeg>& legs, juce::AudioProcessorGraph& graph, bool thisIsDualIO) {
+    if (!thisIsDualIO)
+        return;
+    for (size_t i = 0; i < legs.size(); ++i) {
+        if (legs[i].peerJack != 0 || legs[i].thisJack != 0)
+            continue;
+        auto* peerNode = graph.getNodeForId(legs[i].peerId);
+        auto* peerMb = peerNode != nullptr ? dynamic_cast<ModuleBase*>(peerNode->getProcessor()) : nullptr;
+        if (peerMb == nullptr || !peerMb->isDualIO())
+            continue;
+        for (size_t j = 0; j < legs.size(); ++j) {
+            if (j == i)
+                continue;
+            if (legs[j].peerId == legs[i].peerId && legs[j].peerJack == 1 && legs[j].thisJack == 1) {
+                legs[i].dualPair = true;
+                legs.erase(legs.begin() + static_cast<long>(j));
+                if (j < i)
+                    --i;
+                break;
+            }
+        }
+    }
+}
+
 // Every distinct audio leg touching `nodeId`, read straight from the raw graph connections -- the
 // same source of truth macroPortDeletionNeighbors()/autoDeleteOrphanedAttenuverter()
 // (MacroGroupControllerPorts.cpp) read, not buildVisibleCables() (paint-oriented, keyed off live
@@ -136,6 +180,12 @@ AudioLegs classifyAudioLegs(juce::AudioProcessorGraph& graph, juce::AudioProcess
     }
     mergeBareIoChannelPairs(legs.incoming, graph);
     mergeBareIoChannelPairs(legs.outgoing, graph);
+
+    auto* thisNode = graph.getNodeForId(nodeId);
+    auto* thisMb = thisNode != nullptr ? dynamic_cast<ModuleBase*>(thisNode->getProcessor()) : nullptr;
+    const bool thisIsDualIO = thisMb != nullptr && thisMb->isDualIO();
+    mergeDualIoStereoPairLegs(legs.incoming, graph, thisIsDualIO);
+    mergeDualIoStereoPairLegs(legs.outgoing, graph, thisIsDualIO);
     return legs;
 }
 
@@ -168,6 +218,26 @@ std::optional<AudioLeg> walkToSurvivor(juce::AudioProcessorGraph& graph, AudioLe
         leg = viaIncoming ? hopLegs.incoming.front() : hopLegs.outgoing.front();
     }
     return leg;
+}
+
+// Validates one visible-jack pair's healed connection exactly like a user-drawn cable would be --
+// isAnInputTo for a cycle (canConnect alone doesn't check one), then canConnect per leg (valid
+// channel, not already connected) -- without touching the graph. Kept separate from the actual
+// connect so a Dual-I/O pair's Left and Right jacks can both be validated before either is wired:
+// "All-or-nothing... never Left-only" (FRO23), now applying across the two SEPARATE jacks a
+// Dual-I/O pair needs, not just across one jack's own multi-voice fan.
+bool validateHealJackPair(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID upId, ModuleBase* upMb,
+                          int upJack, juce::AudioProcessorGraph::NodeID downId, ModuleBase* downMb, int downJack) {
+    const auto link = GraphEditor::resolvePolyLink(upMb, upJack, downMb, downJack);
+    if (link.voiceCount <= 0 || graph.isAnInputTo(downId, upId))
+        return false;
+    for (int v = 0; v < link.voiceCount; ++v) {
+        const juce::AudioProcessorGraph::Connection candidate{{upId, link.sourceRawChannel + v * link.sourceStride},
+                                                              {downId, link.destRawChannel + v}};
+        if (!graph.canConnect(candidate))
+            return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -203,7 +273,7 @@ GraphEditor::captureHealSplices(const std::vector<juce::AudioProcessorGraph::Nod
         if (!up || !down || isDeleted(up->peerId) || isDeleted(down->peerId))
             continue;
 
-        const HealSplice splice{up->peerId, down->peerId, up->peerJack, down->peerJack};
+        const HealSplice splice{up->peerId, down->peerId, up->peerJack, down->peerJack, up->dualPair, down->dualPair};
         // Every heal-eligible node in the same deleted run resolves to the identical splice
         // (walking off either end lands on the same two survivors) -- dedupe rather than
         // special-case "am I the run's first node".
@@ -223,27 +293,23 @@ void GraphEditor::healDeletedChain(const std::vector<HealSplice>& splices) {
 
         auto* upMb = dynamic_cast<ModuleBase*>(upNode->getProcessor());
         auto* downMb = dynamic_cast<ModuleBase*>(downNode->getProcessor());
-        const auto link = resolvePolyLink(upMb, splice.upstreamJack, downMb, splice.downstreamJack);
 
-        // Same validation a user-drawn cable is subject to -- "if invalid, don't heal" (FRO23).
-        // AudioProcessorGraph::canConnect only checks per-leg legality (valid channel, not
-        // already connected, MIDI-ness matches); it does NOT reject a cycle -- that is
-        // isAnInputTo's job, which a manual cable drag relies on the same way (JUCE's own
-        // addConnection tolerates the resulting cycle at the storage level, but the graph can no
-        // longer be topologically sorted for rendering). A cycle only depends on the two NODES,
-        // not the leg, so it is checked once per splice, before the per-leg legality loop.
-        // All-or-nothing: a stereo pair heals as a whole cable or not at all, never Left-only.
-        bool everyLegValid = link.voiceCount > 0 && !graph.isAnInputTo(splice.downstreamId, splice.upstreamId);
-        for (int v = 0; v < link.voiceCount && everyLegValid; ++v) {
-            const juce::AudioProcessorGraph::Connection candidate{
-                {splice.upstreamId, link.sourceRawChannel + v * link.sourceStride},
-                {splice.downstreamId, link.destRawChannel + v}};
-            everyLegValid = graph.canConnect(candidate);
-        }
-        if (!everyLegValid)
+        // A genuine Dual-I/O L/R pair on BOTH ends (captureHealSplices' mergeDualIoStereoPairLegs)
+        // heals as two SEPARATE jack pairs, Left (jack) then Right (jack+1) -- resolvePolyLink has
+        // no notion of "two distinct jacks" within one PolyLink, unlike a single collapsed stereo
+        // jack's own multi-voice fan. Both are validated before either is wired.
+        if (!validateHealJackPair(graph, splice.upstreamId, upMb, splice.upstreamJack, splice.downstreamId, downMb,
+                                  splice.downstreamJack))
+            continue;
+        const bool healBothLegs = splice.upstreamDualPair && splice.downstreamDualPair;
+        if (healBothLegs && !validateHealJackPair(graph, splice.upstreamId, upMb, splice.upstreamJack + 1,
+                                                  splice.downstreamId, downMb, splice.downstreamJack + 1))
             continue;
 
         connectPorts(splice.upstreamId, splice.upstreamJack, splice.downstreamId, splice.downstreamJack,
                      /*isMidi=*/false, /*recordUndo=*/false);
+        if (healBothLegs)
+            connectPorts(splice.upstreamId, splice.upstreamJack + 1, splice.downstreamId, splice.downstreamJack + 1,
+                         /*isMidi=*/false, /*recordUndo=*/false);
     }
 }

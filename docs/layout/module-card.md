@@ -134,10 +134,25 @@ and a deleted module has EXACTLY one incoming and one outgoing audio cable — c
 logical-cable level, so a stereo pair sharing both jacks is one leg, not two — the module's surviving
 upstream and downstream neighbours are wired directly to each other, with the same L->L/R->R mapping
 a user-drawn cable gets (`GraphEditor::resolvePolyLink`). A module with more audio legs on either
-side (a mixer, a splitter, two audio inputs) deletes exactly as before, with no reconnection —
-including a split-block module (Oscillator, Filter, VCA, Wavetable) with Dual I/O switched ON:
-Left and Right are then two SEPARATE visible jacks, so a module fed on both counts as two incoming
-legs, not one, the same as any other multi-leg case. Collapsed (Dual I/O off), a split-block
+side (a mixer, a splitter, two audio inputs) deletes exactly as before, with no reconnection.
+
+A split-block module (Oscillator, Filter, VCA, Wavetable) with Dual I/O switched ON presents Left
+and Right as two SEPARATE visible jacks — the default patch's own shape, Oscillator -> Filter ->
+VCA, all three shipping Dual I/O ON by construction. That looks like two incoming and two outgoing
+legs, which the 1-in/1-out rule would otherwise reject outright — the most common single "delete an
+effect" case there is, so `mergeDualIoStereoPairLegs` (`GraphEditorDeleteHeal.cpp`) treats a
+matching Left/Right pair as ONE logical leg when BOTH the deleted module AND its peer are genuinely
+Dual I/O split (`ModuleBase::isDualIO()`, checked on both ends — not just "jack index 0 and 1 exist"
+coincidentally, which would wrongly fold a real two-input mixer's independent jacks into a fake
+stereo pair). Healing then wires Left->Left and Right->Right as two EXPLICIT jack pairs, one
+`connectPorts` call each, validated together as all-or-nothing before either is wired —
+`resolvePolyLink` has no notion of "two separate jacks" within a single `PolyLink`, unlike a
+collapsed stereo jack's own multi-voice fan, which is why this needs its own two-call path rather
+than reusing the fan. A "mixed" shape — the module split but its peer collapsed, or its two raw legs
+landing on two different peer nodes — is deliberately left unmerged and follows the ordinary rules
+(no heal on that side): the peer's own two raw legs then land on a single jack index of its own, so
+the "same peer AND same deleted-module jack" pairing test never matches, rather than the heal trying
+to guess a width mismatch. Collapsed (Dual I/O off), a split-block
 module's one "Audio" jack is genuinely mono — its Right leg lives on a separate far block, not raw
 ch1 — unlike an auto-derived FX shape's collapsed jack (Chorus, Reverb, Delay, Distortion...),
 which owns both raw legs of a real stereo pair under that one jack; either way it is still exactly
