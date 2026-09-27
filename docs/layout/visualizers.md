@@ -216,7 +216,7 @@ It is wired into the ADSR envelope card (`ModuleComponentEnvelopeCard.cpp` — s
 using `CurveMode::Fixed`, the fixed origin / attack-peak / hold-end / sustain / release-end topology
 this component was built for. `CurveMode::Free` (add, remove and reorder points) is the second
 supported topology, and now has a real caller: the LFO card's Custom-waveform section
-(`ModuleComponentLfoCard.cpp` — see [modules.md](../modules/modules.md#lfo-module)'s "Card UI"
+(`ModuleComponentLfoCard.cpp` — see [lfo.md](../modules/lfo.md)'s "Card UI"
 entry, FRO114).
 
 **Bend is `EnvelopeGenerator::shape`.** A segment's value at `progress` is

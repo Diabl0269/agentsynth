@@ -624,7 +624,7 @@ origin/attack-peak/hold-end/sustain/release-end topology the envelope card uses:
   does; `addPointAt`/`removeNode`/`resetBend` fire their change callback before `onGestureEnd`.
 
 `Tests/Modules/Lfo/` and `Tests/UI/Graph/ModuleComponent/ModuleComponentLfoCardTests.cpp` (FRO114,
-LFO's Custom waveform — see [`../modules/modules.md`](../modules/modules.md#lfo-module)):
+LFO's Custom waveform — see [`../modules/modules.md`](../modules/lfo.md)):
 
 - **LfoCustomWaveTest** (`Modules/Lfo/LfoCustomWaveTests.cpp`) — `synth::LfoCustomWave`, headless:
   the Triangle default and its JSON round-trip; `toVar`'s shape; `sanitise`'s clamp/sort/pin/
