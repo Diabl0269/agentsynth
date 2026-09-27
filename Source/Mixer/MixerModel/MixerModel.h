@@ -35,6 +35,8 @@ struct MixerSendEntry {
     /** The bus this slot feeds. Invalid when the slot's cable has been cut on the canvas, in which
      *  case `targetName` is the "no target" placeholder. */
     juce::AudioProcessorGraph::NodeID targetNodeId;
+    /** FRO318: `targetNodeId` is a module whose Key input this send feeds, not a strip. */
+    bool keyTarget = false;
     juce::String targetName;
 };
 

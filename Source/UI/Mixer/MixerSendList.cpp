@@ -192,6 +192,10 @@ juce::String MixerSendList::targetNameFor(NodeID target) const {
     return graph_ != nullptr ? synth::sendTargetName(*graph_, macros_, target) : juce::String("No target");
 }
 
+juce::String MixerSendList::targetNameFor(const synth::SendTarget& target) const {
+    return graph_ != nullptr ? synth::sendTargetName(*graph_, macros_, target) : juce::String("No target");
+}
+
 void MixerSendList::paint(juce::Graphics& g) {
     const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const auto text = laf != nullptr ? laf->getTheme().colors.textPrimary : juce::Colour(0xffEAEEF3);
@@ -343,6 +347,29 @@ std::vector<NodeID> MixerSendList::availableTargets() const {
     return synth::enumerateSendTargets(*graph_, stripNodeId_);
 }
 
+std::vector<NodeID> MixerSendList::availableKeyTargets() const {
+    if (graph_ == nullptr)
+        return {};
+    return synth::enumerateKeySendTargets(*graph_, stripNodeId_);
+}
+
+// FRO318 (docs/mixer/sends-and-buses.md#sending-to-a-key-input): Key targets go AFTER the bus/strip
+// targets behind their own separator, so the everyday "send to a bus" list reads exactly as before
+// and a Key entry is never mistaken for a channel. Cyclic modules (e.g. the Compressor on this
+// strip's own chain) never appear -- enumerateKeySendTargets applies the same legality rule addSend
+// does.
+void MixerSendList::appendKeyTargetItems(juce::PopupMenu& menu,
+                                         const std::function<void(synth::SendTarget)>& choose) const {
+    const auto keyTargets = availableKeyTargets();
+    if (keyTargets.empty())
+        return;
+    menu.addSeparator();
+    for (const auto module : keyTargets) {
+        const synth::SendTarget target{module, true};
+        menu.addItem(targetNameFor(target), true, false, [choose, target] { choose(target); });
+    }
+}
+
 void MixerSendList::showTargetMenu(int rowIndex) {
     if (rowIndex < 0 || rowIndex >= (int)entries_.size())
         return;
@@ -361,6 +388,7 @@ void MixerSendList::showTargetMenu(int rowIndex) {
     menu.addSeparator();
     for (const auto target : targets)
         menu.addItem(targetNameFor(target), true, false, [this, rowIndex, target] { retargetRow(rowIndex, target); });
+    appendKeyTargetItems(menu, [this, rowIndex](synth::SendTarget target) { retargetRow(rowIndex, target); });
 
     // FRO296: a per-item action, not an id+results-callback dispatch, so this is the SAME hookable
     // shape MixerColumnComponent's own MIDI-learn menus use (setShowContextMenuHookForTest) -- a
@@ -380,6 +408,7 @@ void MixerSendList::showAddMenu() {
     menu.addSeparator();
     for (const auto target : targets)
         menu.addItem(targetNameFor(target), true, false, [this, target] { addSendTo(target); });
+    appendKeyTargetItems(menu, [this](synth::SendTarget target) { addSendTo(target); });
 
     showMenuHook_(menu);
 }
@@ -396,7 +425,9 @@ void MixerSendList::mutateAndNotify(const std::function<bool()>& mutation) {
         onMutated();
 }
 
-void MixerSendList::addSendTo(NodeID target) {
+void MixerSendList::addSendTo(NodeID target) { addSendTo(synth::SendTarget{target, false}); }
+
+void MixerSendList::addSendTo(const synth::SendTarget& target) {
     mutateAndNotify([&] { return graph_ != nullptr && synth::addSend(*graph_, stripNodeId_, target) >= 0; });
 }
 
@@ -408,6 +439,10 @@ void MixerSendList::removeRow(int rowIndex) {
 }
 
 void MixerSendList::retargetRow(int rowIndex, NodeID target) {
+    retargetRow(rowIndex, synth::SendTarget{target, false});
+}
+
+void MixerSendList::retargetRow(int rowIndex, const synth::SendTarget& target) {
     if (rowIndex < 0 || rowIndex >= (int)entries_.size())
         return;
     const int slot = entries_[(size_t)rowIndex].slot;

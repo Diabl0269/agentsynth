@@ -419,6 +419,10 @@ Compressor and Gate share one mechanism (FRO317):
   loads it once per block and also requires the buffer to carry ch7/ch8. `AudioEngine` runs it on
   every graph change broadcast (a plain cable drag never reaches `publishTimeline`), from
   `publishTimeline` beside the solo recount, and from the plugin's `setStateInformation`.
+- **A mixer send can feed it (FRO318).** A strip's send menu lists every legal Key as
+  "Key: Compressor 2 on Bass"; picking one wires the send's L/R onto this module's Key L/R, so the
+  send's level, pan, mute and pre/post shape the key — see
+  [`docs/mixer/sends-and-buses.md`](../mixer/sends-and-buses.md#sending-to-a-key-input).
 
 ## Bitcrusher Module
 - **Implementation**: Downsampling and bit-depth quantization effect with dither.

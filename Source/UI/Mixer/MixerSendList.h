@@ -2,6 +2,7 @@
 
 #include "MacroSet.h"
 #include "Mixer/MixerModel/MixerModel.h"
+#include "Mixer/MixerSends/MixerSends.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -82,6 +83,8 @@ public:
     // docs/development/test-patterns.md), so the menu callbacks below call these same real methods.
     // Row indices address the VISIBLE rows, i.e. positions in `entries_`, not slot numbers.
     void addSendTo(juce::AudioProcessorGraph::NodeID target);
+    /** FRO318: either target kind -- the "Key: ..." menu items call this with `key` set. */
+    void addSendTo(const synth::SendTarget& target);
     void removeRow(int rowIndex);
     void togglePreFaderForRow(int rowIndex);
     /** FRO295: flips row `rowIndex`'s mute bit via synth::setSendMuted, one recordGraphAndMacroChange. */
@@ -90,12 +93,15 @@ public:
      *  -- the target menu's "Mono" item and this class's own headless test seam both call this. */
     void toggleMonoForRow(int rowIndex);
     void retargetRow(int rowIndex, juce::AudioProcessorGraph::NodeID target);
+    void retargetRow(int rowIndex, const synth::SendTarget& target);
     /** FRO296: the real mutation behind a completed drag -- calls the moveSendRow callback and, on
      *  success, onMutated(), same shape as every other row mutation's mutateAndNotify. A synthesized
      *  test drag (mouseDown/mouseDrag past the threshold/mouseUp on the name area) reaches this
      *  through the real mouse path; a test that wants to skip the gesture can call it directly. */
     void moveRow(int fromRow, int toRow);
     std::vector<juce::AudioProcessorGraph::NodeID> availableTargets() const;
+    /** FRO318: modules whose Key input this strip may feed (synth::enumerateKeySendTargets). */
+    std::vector<juce::AudioProcessorGraph::NodeID> availableKeyTargets() const;
     bool canAddSend() const;
     bool isAttachedForTest(int rowIndex) const;
     juce::Slider* getKnobForTest(int rowIndex) const;
@@ -177,6 +183,9 @@ private:
     void showAddMenu();
     void mutateAndNotify(const std::function<bool()>& mutation);
     juce::String targetNameFor(juce::AudioProcessorGraph::NodeID target) const;
+    juce::String targetNameFor(const synth::SendTarget& target) const;
+    /** FRO318: the separator + one "Key: ..." item per legal Key target, calling `choose` on pick. */
+    void appendKeyTargetItems(juce::PopupMenu& menu, const std::function<void(synth::SendTarget)>& choose) const;
 
     juce::AudioProcessorGraph* graph_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;

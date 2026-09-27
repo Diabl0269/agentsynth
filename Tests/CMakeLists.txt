@@ -130,6 +130,8 @@ add_executable(Tests
     Mixer/Sends/MixerSendReorderTests.cpp
     Mixer/Sends/MixerSendReorderLaneTests.cpp
     Mixer/Sends/MixerSendReorderMidiLearnTests.cpp
+    Mixer/Sends/MixerKeySendTests.cpp
+    Mixer/Sends/MixerKeySendDuckingTests.cpp
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp
@@ -456,6 +458,7 @@ add_executable(Tests
     UI/Mixer/MixerFaderDragTests.cpp
     UI/Mixer/MixerSendListTests.cpp
     UI/Mixer/MixerSendListDragTests.cpp
+    UI/Mixer/MixerSendListKeyTargetTests.cpp
     UI/Layout/BottomDockComponentTests.cpp
     UI/Layout/BottomDockResizeTests.cpp
     UI/Mixer/MixerOwnPanelResizeTests.cpp
