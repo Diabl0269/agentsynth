@@ -10,6 +10,7 @@
 
 #include <algorithm>
 
+using midiremote_surface_test::DragDriver;
 using midiremote_surface_test::surfaceMouseEvent;
 using midiremote_surface_test::twoAdjacentPlusBystanderModel;
 using synth::ui::ControllerSurfaceCell;
@@ -102,6 +103,35 @@ TEST(ControllerSurfaceGroupDragTest, GroupDragIsClampedAsABlockAtTheGridsTopLeft
     EXPECT_EQ(findMove(moves, "a")->row, 0);
     EXPECT_EQ(findMove(moves, "b")->col, 1);
     EXPECT_EQ(findMove(moves, "b")->row, 0);
+}
+
+// FRO331: same coordinate hazard as the single-cell case (ControllerSurfaceTests.cpp's
+// MultiStepDragLandsExactlyOnOriginPlusDelta), but for a group -- the delta a multi-step drag on
+// the origin cell reports is what every group member's move is computed from, so a group drag is
+// exactly as exposed to it as a lone one.
+TEST(ControllerSurfaceGroupDragTest, MultiStepGroupDragLandsExactlyOnOriginPlusDeltaForEveryMember) {
+    ControllerSurfaceComponent surface;
+    surface.setSize(600, 600);
+    surface.setControls("profileA", twoAdjacentPlusBystanderModel());
+
+    click(*findCell(surface, "a"));
+    click(*findCell(surface, "b"), juce::ModifierKeys(juce::ModifierKeys::shiftModifier));
+
+    std::vector<ControllerSurfaceComponent::MovedCell> moves;
+    surface.onControlsMoved = [&](const std::vector<ControllerSurfaceComponent::MovedCell>& m) { moves = m; };
+
+    auto* a = findCell(surface, "a"); // (0,0); "b" is (1,0)
+    DragDriver drag(*a);
+    drag.stepToOffset(0, 1);
+    drag.stepToOffset(0, 2);
+    drag.stepToOffset(1, 2);
+    drag.end();
+
+    ASSERT_EQ(moves.size(), 2u);
+    EXPECT_EQ(findMove(moves, "a")->col, 1);
+    EXPECT_EQ(findMove(moves, "a")->row, 2);
+    EXPECT_EQ(findMove(moves, "b")->col, 2); // relative offset from "a" preserved
+    EXPECT_EQ(findMove(moves, "b")->row, 2);
 }
 
 TEST(ControllerSurfaceGroupDragTest, GroupDragOntoAnUnselectedControlIsRefused) {

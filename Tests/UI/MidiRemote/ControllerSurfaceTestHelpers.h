@@ -78,4 +78,42 @@ inline juce::MouseEvent surfaceMouseEvent(juce::Component& comp, juce::Point<flo
                             wasDragged);
 }
 
+// FRO331: drives a REAL multi-step drag on `cell` -- mouseDown, then one mouseDrag per entry of
+// `parentOffsetsInCells` (each a (dCols, dRows) offset from the drag's start, in whole cells, not
+// cumulative-since-last-step) -- computing each step's LOCAL mouse position the same way a real
+// juce::MouseInputSource would: from a position that is fixed in the PARENT's coordinate space
+// (real screen coordinates don't move just because the dragged component's bounds do) converted
+// into the cell's CURRENT bounds, which the owner may have just changed in response to the
+// previous step. A single-shot drag (one mouseDrag straight from start to end) can't exercise the
+// mid-drag-reposition hazard this ticket is about; only reading the cell's position fresh before
+// each step can. Leaves the cell mid-drag (call cell.mouseUp(...) with the LAST event this
+// function fires, e.g. via lastStepEvent()) -- see FRO331's test suites for the pattern.
+class DragDriver {
+public:
+    explicit DragDriver(juce::Component& cell)
+        : cell_(cell) {
+        downLocal_ = cell_.getLocalBounds().getCentre().toFloat();
+        downParent_ = cell_.getPosition().toFloat() + downLocal_;
+        cell_.mouseDown(surfaceMouseEvent(cell_, downLocal_, downLocal_, false));
+    }
+
+    // Fires one mouseDrag for a cumulative offset of `dCols`/`dRows` WHOLE CELLS from the drag's
+    // start (not from the previous step) -- mirrors what a real mouse position `parentOffsetInCells`
+    // cells away from the mouseDown point produces, however many steps it takes to get there.
+    void stepToOffset(int dCols, int dRows) {
+        const auto cellSize = (float)synth::ui::ControllerSurfaceCell::kCellSize;
+        const auto targetParent = downParent_ + juce::Point<float>((float)dCols * cellSize, (float)dRows * cellSize);
+        lastLocal_ = targetParent - cell_.getPosition().toFloat(); // cell's CURRENT (possibly moved) bounds
+        cell_.mouseDrag(surfaceMouseEvent(cell_, lastLocal_, downLocal_, true));
+    }
+
+    void end() { cell_.mouseUp(surfaceMouseEvent(cell_, lastLocal_, downLocal_, true)); }
+
+private:
+    juce::Component& cell_;
+    juce::Point<float> downLocal_;
+    juce::Point<float> downParent_;
+    juce::Point<float> lastLocal_;
+};
+
 } // namespace midiremote_surface_test

@@ -96,6 +96,10 @@ private:
     std::unique_ptr<juce::Slider> slider_;     // knob/encoder/fader/wheel, style set per kind
     std::unique_ptr<juce::TextButton> button_; // pad/button
 
+    // FRO331: in the PARENT's coordinate space, not this cell's own local space -- the owner
+    // repositions this cell mid-drag (moveCellToLayout()) each time a boundary is crossed, which
+    // would otherwise shift the meaning of a cell-local anchor out from under a drag already in
+    // progress. See mouseDown()/mouseDrag()'s own comment for the failure this caused.
     juce::Point<int> dragStartMouse_;
     bool isDragging_ = false;
 

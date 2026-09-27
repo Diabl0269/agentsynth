@@ -243,8 +243,13 @@ const juce::Identifier kLastFiredDeltaColProperty("lastFiredDeltaCol");
 const juce::Identifier kLastFiredDeltaRowProperty("lastFiredDeltaRow");
 } // namespace
 
+// FRO331: the drag anchor lives in the PARENT's coordinate space, not this cell's. The owner
+// (ControllerSurfaceComponent::moveCellToLayout) moves this cell each time the drag crosses a cell
+// boundary, which moves a cell-local origin mid-gesture: offsets then measured from the cell's new
+// bounds instead of the drag's start, so the reported delta (which the owner adds to the control's
+// unmoved layout) was wrong after the first crossing. The parent does not move during a drag.
 void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
-    dragStartMouse_ = event.getPosition();
+    dragStartMouse_ = event.getEventRelativeTo(getParentComponent()).getPosition();
     isDragging_ = false;
     getProperties().set(kLastFiredDeltaColProperty, 0);
     getProperties().set(kLastFiredDeltaRowProperty, 0);
@@ -262,7 +267,7 @@ void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
 // per pixel. The owner (ControllerSurfaceComponent) accumulates the delta onto the drag-start grid
 // position and clamps once, per its own header's contract.
 void ControllerSurfaceCell::mouseDrag(const juce::MouseEvent& event) {
-    const auto offset = event.getPosition() - dragStartMouse_;
+    const auto offset = event.getEventRelativeTo(getParentComponent()).getPosition() - dragStartMouse_;
     const int dCols = (int)std::floor((float)offset.x / (float)kCellSize + 0.5f);
     const int dRows = (int)std::floor((float)offset.y / (float)kCellSize + 0.5f);
 
