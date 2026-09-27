@@ -451,9 +451,23 @@ Loads an audio file from disk and plays it back one of two ways.
     (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`, sharing LFO's rateSync division list) and the
     tempo-following DSP behind them; both `tempoSync` and the four division params are excluded
     from the generic per-param UI (`shouldSkipGenericBoolToggle`/`shouldSkipGenericChoiceCombo` in
-    `ModuleComponent.cpp`) so they don't leak extra rows onto the card, but the four division
-    params have no user-facing control of their own yet — tracked separately (FRO118) as a real
-    BPM-mode UI design (e.g. swapping each knob for a division picker), not a quick follow-up.
+    `ModuleComponent.cpp`).
+  - **BPM-mode pickers (FRO118)**: in BPM mode, each of the ATK/HOLD/DEC/REL knobs is replaced —
+    in its own grid cell, short caption label kept — by a `juce::ComboBox` bound to its matching
+    `*Div` param via a plain `juce::ComboBoxParameterAttachment` (the same binding/undo idiom the
+    generic per-param combos use — a combo pick is one `beginChangeGesture`/`setValueNotifyingHost`/
+    `endChangeGesture`, so `ModuleComponent`'s existing `parameterGestureChanged` capture gives it
+    one undo step for free, no bespoke onChange needed). SUS stays a knob in both modes. The four
+    combos are created lazily, the first time a card enters BPM mode (`ensureEnvelopeDivCombosCreated`)
+    — never for a card that stays in MS — so a fresh MS-default card has no extra `ComboBox`
+    children. `buildEnvelopeCurveModel` sources each stage's duration from
+    `envelopeNoteDivisionSeconds(index, bpm)` in BPM mode (`ADSRModule::getLastSeenBpm()`, an
+    atomic refreshed every block from the module's playhead, default 120 before the first
+    `processBlock`) instead of the ms param; dragging a node's x snaps `writeEnvelopeParamsFromCurve`'s
+    write to the nearest division by comparing durations in log-time, and writes the `*Div` param
+    instead of the ms one. The time-axis labels switch to a beat count at that bpm (`envelopeBeatLabel`,
+    via `CurveEditorComponent::setTimeLabelFormatter`) — whole beats read "N beat(s)", anything else
+    a plain "x.xx beats"; MS mode keeps the default "0"/"250ms"/"1s" labels.
 - **Default instrument-track chain (P9-3i, FRO43)**: "+ Track -> Instrument -> {Oscillator/Wavetable}" auto-wires one ADSR (MIDI-gated, forced non-poly, `sustain` overridden to 0.7) driving a VCA ahead of the rest of the chain — see [`docs/mixer/mixer.md#envelope-and-vca-for-a-raw-instrument`](../mixer/mixer.md#envelope-and-vca-for-a-raw-instrument) for the full wiring and why it's forced non-poly. When the instrument is poly (P9-3j, FRO46), the ADSR is genuinely poly instead — gated by a Poly MIDI node's per-voice Gate CV rather than raw MIDI — see [`docs/mixer/mixer.md#a-poly-instrument-gets-a-per-voice-envelope`](../mixer/mixer.md#a-poly-instrument-gets-a-per-voice-envelope).
 
 ## Envelope Follower Module

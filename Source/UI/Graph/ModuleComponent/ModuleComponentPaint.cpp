@@ -246,7 +246,10 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
             if (t.channelIndex != modDropTargetChannel)
                 continue;
             const int si = sliderIndexForModTarget(t);
-            if (si < 0)
+            // FRO118: si now resolves even when the knob is hidden behind a swapped-in BPM *Div
+            // combo (so a jack still lands there) -- but there is no ring to draw on a combo, so
+            // skip painting one rather than drawing a circle over it.
+            if (si < 0 || !sliders[si]->isVisible())
                 break;
             const auto b = sliders[si]->getBounds().toFloat();
             const float radius = std::min(b.getWidth(), b.getHeight()) / 2.0f - 6.0f;
@@ -281,7 +284,9 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
             continue;
 
         const int si = sliderIndexForModTarget(*target);
-        if (si < 0)
+        // FRO118: same reasoning as the drop-target ring above -- a swapped-in BPM combo still
+        // resolves an si (real jack anchor), but has no ring to paint over it.
+        if (si < 0 || !sliders[si]->isVisible())
             continue;
 
         auto sliderBounds = sliders[si]->getBounds().toFloat();
@@ -576,8 +581,11 @@ int ModuleComponent::getModRingSliderIndex(const juce::String& paramName) const 
         if (sliders[si]->getSliderStyle() != juce::Slider::RotaryHorizontalVerticalDrag)
             continue;
         // A knob on an inactive tab page keeps the bounds it had when its page was last laid
-        // out, so drawing from them paints a ring over empty card (issue #180 tab strip).
-        if (!sliders[si]->isVisible())
+        // out, so drawing from them paints a ring over empty card (issue #180 tab strip) --
+        // UNLESS it's hidden only because its own *Div combo has swapped in over it (FRO118 BPM
+        // mode), which keeps the SAME cell a jack still legitimately lands on; see
+        // isEnvelopeDivSwappedForSlider's own comment (ModuleComponentEnvelopeCard.cpp).
+        if (!sliders[si]->isVisible() && !isEnvelopeDivSwappedForSlider(si))
             return -1;
         return si;
     }

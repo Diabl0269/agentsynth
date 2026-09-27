@@ -156,10 +156,12 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
     } else if (getType(module) == ModuleType::ADSR &&
                (param->paramID == "attack" || param->paramID == "hold" || param->paramID == "decay" ||
                 param->paramID == "sustain" || param->paramID == "release" || param->paramID == "attackCurve" ||
-                param->paramID == "decayCurve" || param->paramID == "releaseCurve")) {
-        // FRO112: keep the envelope graph in sync with knob drags, automation, undo/redo and
-        // preset loads. syncEnvelopeCurveFromParams itself no-ops while envelopeCurveGestureActive
-        // (a live graph drag is already the source of truth for that span).
+                param->paramID == "decayCurve" || param->paramID == "releaseCurve" || param->paramID == "attackDiv" ||
+                param->paramID == "holdDiv" || param->paramID == "decayDiv" || param->paramID == "releaseDiv")) {
+        // FRO112 (ms params)/FRO118 (*Div, BPM mode): keep the envelope graph in sync with knob
+        // drags, combo picks, automation, undo/redo and preset loads. syncEnvelopeCurveFromParams
+        // itself no-ops while envelopeCurveGestureActive (a live graph drag is already the source
+        // of truth for that span); a combo pick never sets that flag, so it always rebuilds here.
         if (juce::MessageManager::existsAndIsCurrentThread()) {
             syncEnvelopeCurveFromParams();
         } else {
