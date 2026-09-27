@@ -32,7 +32,7 @@ CurveEditorComponent* findLfoCurveEditor(ModuleComponent& comp) {
 juce::ComboBox* findLfoGridCombo(ModuleComponent& comp) {
     for (auto* child : comp.getChildren())
         if (auto* combo = dynamic_cast<juce::ComboBox*>(child))
-            if (combo->getNumItems() == 5 && combo->getItemText(0) == "Off")
+            if (combo->getNumItems() == 5 && combo->getItemText(0) == "Grid Off")
                 return combo;
     return nullptr;
 }
