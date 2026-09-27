@@ -70,6 +70,10 @@ void MixerSendList::rebuildKnobs() {
         // colour here.
         row.muteButton = std::make_unique<juce::TextButton>("M");
         row.muteButton->setClickingTogglesState(false);
+        // JUCE's default text indent is ~5 px a side on an unconnected button, which leaves no room
+        // for the "M" at this width (it rendered as a squashed "_"); connected edges halve it.
+        row.muteButton->setConnectedEdges(juce::Button::ConnectedOnLeft | juce::Button::ConnectedOnRight |
+                                          juce::Button::ConnectedOnTop | juce::Button::ConnectedOnBottom);
         row.muteButton->setToggleState(entry.muted, juce::dontSendNotification);
         row.muteButton->setTitle(entry.targetNodeId != juce::AudioProcessorGraph::NodeID{}
                                      ? "Mute send to " + entry.targetName

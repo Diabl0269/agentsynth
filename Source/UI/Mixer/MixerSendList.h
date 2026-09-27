@@ -95,7 +95,7 @@ private:
     static constexpr int kRowHeight = 20;
     static constexpr int kKnobWidth = 20;
     static constexpr int kToggleWidth = 30;
-    static constexpr int kMuteWidth = 16;
+    static constexpr int kMuteWidth = 18;
     static constexpr int kRemoveWidth = 14;
 
     struct Row {
