@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <iostream>
 
+using midiremote_surface_test::DragDriver;
 using midiremote_surface_test::fourControlModel;
 using midiremote_surface_test::makeCellModel;
 using midiremote_surface_test::surfaceMouseEvent;
@@ -139,6 +140,59 @@ TEST(ControllerSurfaceComponentTest, RealDragPastAFullCellFiresOnControlsMovedWi
 
     ASSERT_EQ(moves.size(), 1u);
     EXPECT_EQ(moves[0].controlId, "knob1");
+    EXPECT_EQ(moves[0].col, 2);
+    EXPECT_EQ(moves[0].row, 0);
+}
+
+// FRO331: the ticket's own repro -- 3 cols right, 1 row down, delivered over SEVERAL mouseDrag
+// events (as a real drag does), not one mouseDrag straight from start to end. knob1 starts at
+// (0,0); (3,1) is empty in fourControlModel()'s 2x2 layout.
+TEST(ControllerSurfaceComponentTest, MultiStepDragLandsExactlyOnOriginPlusDelta) {
+    ControllerSurfaceComponent surface;
+    surface.setSize(600, 600);
+    surface.setControls("profileA", fourControlModel());
+
+    std::vector<ControllerSurfaceComponent::MovedCell> moves;
+    surface.onControlsMoved = [&](const std::vector<ControllerSurfaceComponent::MovedCell>& m) { moves = m; };
+
+    auto* knob = findCell(surface, "knob1");
+    ASSERT_NE(knob, nullptr);
+
+    DragDriver drag(*knob);
+    // One step per cell crossed on each axis, exactly as a slow real drag delivers them.
+    drag.stepToOffset(1, 0);
+    drag.stepToOffset(2, 0);
+    drag.stepToOffset(3, 0);
+    drag.stepToOffset(3, 1);
+    drag.end();
+
+    ASSERT_EQ(moves.size(), 1u);
+    EXPECT_EQ(moves[0].controlId, "knob1");
+    EXPECT_EQ(moves[0].col, 3);
+    EXPECT_EQ(moves[0].row, 1);
+}
+
+// FRO331: a drag that overshoots the final target and comes back must still land exactly where the
+// mouse ends up, not somewhere reflecting the overshoot.
+TEST(ControllerSurfaceComponentTest, MultiStepDragPastTargetAndBackLandsOnFinalCell) {
+    ControllerSurfaceComponent surface;
+    surface.setSize(600, 600);
+    surface.setControls("profileA", fourControlModel());
+
+    std::vector<ControllerSurfaceComponent::MovedCell> moves;
+    surface.onControlsMoved = [&](const std::vector<ControllerSurfaceComponent::MovedCell>& m) { moves = m; };
+
+    auto* knob = findCell(surface, "knob1"); // starts at (0,0)
+    ASSERT_NE(knob, nullptr);
+
+    DragDriver drag(*knob);
+    drag.stepToOffset(1, 0);
+    drag.stepToOffset(2, 0);
+    drag.stepToOffset(3, 0); // overshoot the eventual target
+    drag.stepToOffset(2, 0); // ...and come back
+    drag.end();
+
+    ASSERT_EQ(moves.size(), 1u);
     EXPECT_EQ(moves[0].col, 2);
     EXPECT_EQ(moves[0].row, 0);
 }

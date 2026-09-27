@@ -243,8 +243,20 @@ const juce::Identifier kLastFiredDeltaColProperty("lastFiredDeltaCol");
 const juce::Identifier kLastFiredDeltaRowProperty("lastFiredDeltaRow");
 } // namespace
 
+// FRO331: the anchor is captured in the PARENT's coordinate space
+// (event.getEventRelativeTo(getParentComponent())), not this cell's own local space
+// (event.getPosition()) --
+// the owner (ControllerSurfaceComponent::moveCellToLayout) repositions THIS cell every time a
+// drag crosses a cell boundary, which moves the local origin mid-gesture. A local-space anchor
+// stayed valid only until the first such reposition: every offset computed after that measured
+// movement relative to the cell's NEW bounds, not the drag's true start, so mouseDrag() below
+// was effectively reporting the delta since the last boundary crossing rather than since
+// mouseDown -- and the owner (which adds that delta onto the position it already moved to)
+// compounded it further, so the control could land anywhere but where the mouse actually was.
+// The parent never moves mid-drag, so anchoring there keeps every step measuring true total
+// mouse movement since mouseDown, however many boundaries the cell has crossed since.
 void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
-    dragStartMouse_ = event.getPosition();
+    dragStartMouse_ = event.getEventRelativeTo(getParentComponent()).getPosition();
     isDragging_ = false;
     getProperties().set(kLastFiredDeltaColProperty, 0);
     getProperties().set(kLastFiredDeltaRowProperty, 0);
@@ -262,7 +274,7 @@ void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
 // per pixel. The owner (ControllerSurfaceComponent) accumulates the delta onto the drag-start grid
 // position and clamps once, per its own header's contract.
 void ControllerSurfaceCell::mouseDrag(const juce::MouseEvent& event) {
-    const auto offset = event.getPosition() - dragStartMouse_;
+    const auto offset = event.getEventRelativeTo(getParentComponent()).getPosition() - dragStartMouse_;
     const int dCols = (int)std::floor((float)offset.x / (float)kCellSize + 0.5f);
     const int dRows = (int)std::floor((float)offset.y / (float)kCellSize + 0.5f);
 
