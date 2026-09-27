@@ -738,6 +738,14 @@ empty selection on either falls through. `AIChatComponent::keyPressed()`'s Escap
 request is in flight; otherwise it is passed through so it keeps whatever meaning the enclosing
 window gives it.
 
+A **hosted plugin editor window** (a separate top-level window, not a panel inside the main one)
+has its own fixed convention, same "never in the `ShortcutManager` table" shape as the table above:
+Esc closes it only if the plugin's own editor didn't handle it first — a native NSView editor gets
+first crack at it too, via the AppKit responder chain, and only an unhandled Esc reaches
+`HostedPluginEditorWindow::keyPressed()` from there (verified against Apple's own AUDelay) — while
+Cmd+W always closes it, via a mac-only `NSEvent` monitor scoped to the key window. See
+[`architecture/plugin-layer.md#editor-windows`](../architecture/plugin-layer.md#editor-windows) (FRO337) for the full split.
+
 Arrow keys and the tool digits are split across two components with opposite rules:
 `PianoRollComponent::keyPressed()` consumes an arrow **only when something is selected** (an
 empty-selection arrow falls through, so it keeps whatever meaning it has elsewhere) and

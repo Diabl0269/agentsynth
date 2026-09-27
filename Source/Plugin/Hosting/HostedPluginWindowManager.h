@@ -84,8 +84,14 @@ public:
         // alone never creates one (see setCreatesNativeWindows()'s doc comment above). window's
         // bounds are already the just-centred ones, and TopLevelWindow::addToDesktop() reads the
         // component's CURRENT bounds to size/position the native peer, so they survive unchanged.
-        if (createsNativeWindows_ && hasPrimaryDisplayForNativeWindow())
+        if (createsNativeWindows_ && hasPrimaryDisplayForNativeWindow()) {
             addWindowToDesktop(*window);
+#if JUCE_MAC
+            // FRO337: only once a real native peer exists — see HostedPluginEditorWindow's own
+            // installMacKeyMonitor() comment for why.
+            window->installMacKeyMonitor();
+#endif
+        }
         window->setVisible(true);
         window->toFront(true);
         windows_.emplace(nodeId, std::move(window));
