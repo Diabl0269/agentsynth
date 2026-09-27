@@ -129,6 +129,7 @@ add_executable(Tests
     Mixer/Sends/MixerSendAutomationPlaybackTests.cpp
     Mixer/Sends/MixerSendReorderTests.cpp
     Mixer/Sends/MixerSendReorderLaneTests.cpp
+    Mixer/Sends/MixerSendReorderMidiLearnTests.cpp
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp

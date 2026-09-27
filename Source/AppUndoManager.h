@@ -218,10 +218,14 @@ public:
      * @param doc Reference to the timeline document. Same lifetime contract as recordTimelineChange.
      * @param macros Reference to the macro set.
      * @param mutation Lambda that performs the combined mutation.
+     * @param midiRemoteDoc FRO296: optional fourth domain; null (default) skips it -- see the .cpp.
+     * @param midiRemotePostRestore Passed through when midiRemoteDoc is set.
      * @return true if any domain changed and a transaction was pushed, false if none did.
      */
     bool recordGraphTimelineAndMacroChange(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc,
-                                           synth::MacroSet& macros, const std::function<void()>& mutation);
+                                           synth::MacroSet& macros, const std::function<void()>& mutation,
+                                           synth::MidiRemoteProjectDoc* midiRemoteDoc = nullptr,
+                                           std::function<void()> midiRemotePostRestore = {});
 
     /**
      * @brief Hooks fired around EVERY restore this manager performs on undo/redo — the graph's

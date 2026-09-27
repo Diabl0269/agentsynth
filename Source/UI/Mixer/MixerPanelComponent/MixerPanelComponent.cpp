@@ -4,6 +4,7 @@
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "MidiRemote/RemoteModel.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerSends/MixerSends.h"
@@ -267,28 +268,44 @@ bool MixerPanelComponent::moveSendRow(juce::AudioProcessorGraph::NodeID stripNod
         return false;
 
     bool changed = false;
-    undoManager_->recordGraphTimelineAndMacroChange(*graph_, *doc_, *macros_, [&] {
+    auto mutation = [&] {
         std::vector<std::pair<int, int>> swaps;
         if (!synth::moveSendRow(*graph_, stripNodeId, fromRow, toRow, &swaps))
             return;
         changed = true;
 
-        // FRO296: replay the exact same slot-swap sequence against every automation lane bound to
-        // either swapped slot's sendNLevel/sendNPan, inside the SAME transaction -- a send's lane
-        // always follows it, same as its cables and parameter values
-        // (docs/mixer/sends-and-buses.md#reordering-sends).
+        // FRO296: replay the exact same slot-swap sequence against every automation lane AND every
+        // MIDI Learn assignment bound to either swapped slot's sendNLevel/sendNPan, inside the SAME
+        // transaction -- a send's lane and its hardware mapping both follow it, same as its cables
+        // and parameter values (docs/mixer/sends-and-buses.md#reordering-sends).
         if (auto* node = graph_->getNodeForId(stripNodeId)) {
             const juce::String uuid = node->properties["uuid"].toString();
             if (uuid.isNotEmpty())
                 for (const auto& swap : swaps) {
-                    doc_->swapLaneParams(uuid, ChannelStripModule::getSendLevelParameterId(swap.first),
-                                         ChannelStripModule::getSendLevelParameterId(swap.second));
-                    doc_->swapLaneParams(uuid, ChannelStripModule::getSendPanParameterId(swap.first),
-                                         ChannelStripModule::getSendPanParameterId(swap.second));
+                    const auto levelA = ChannelStripModule::getSendLevelParameterId(swap.first);
+                    const auto levelB = ChannelStripModule::getSendLevelParameterId(swap.second);
+                    const auto panA = ChannelStripModule::getSendPanParameterId(swap.first);
+                    const auto panB = ChannelStripModule::getSendPanParameterId(swap.second);
+                    doc_->swapLaneParams(uuid, levelA, levelB);
+                    doc_->swapLaneParams(uuid, panA, panB);
+                    if (midiRemoteDoc_ != nullptr) {
+                        midiRemoteDoc_->swapParameterAssignments(uuid, levelA, levelB);
+                        midiRemoteDoc_->swapParameterAssignments(uuid, panA, panB);
+                    }
                 }
         }
         graphEditor_->updateComponents();
+    };
+
+    undoManager_->recordGraphTimelineAndMacroChange(*graph_, *doc_, *macros_, mutation, midiRemoteDoc_, [this] {
+        if (onPublishMidiRemoteAssignments)
+            onPublishMidiRemoteAssignments();
     });
+
+    // Republish right away too, not just on a later undo/redo restore -- recordGraphTimelineAndMacroChange's
+    // postRestore only fires from perform()/undo() on the UNDO STACK, never for the initial edit itself.
+    if (changed && midiRemoteDoc_ != nullptr && onPublishMidiRemoteAssignments)
+        onPublishMidiRemoteAssignments();
     return changed;
 }
 

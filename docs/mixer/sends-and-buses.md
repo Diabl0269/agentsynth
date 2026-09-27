@@ -111,7 +111,12 @@ call:
   delete+recreate, so points and record mode survive) retargets a lane from `sendALevel`/`sendAPan` to
   `sendBLevel`/`sendBPan` and back, replayed by the caller (`MixerPanelComponent::moveSendRow`, which
   owns the `TimelineDoc`) against the SAME sequence of slot swaps the Core flow applied — see
-  [`docs/timeline/automation.md`](../timeline/automation.md#a-lane-follows-its-send-through-a-reorder-fro296).
+  [`docs/timeline/automation.md`](../timeline/automation.md#a-lane-follows-its-send-through-a-reorder-fro296);
+- its **MIDI Learn mapping**, if it has one — keyed the same way a lane is, `(nodeUuid, paramId)`
+  (`Source/MidiRemote/RemoteModel.h`'s `Target::Parameter`), so `moveSendRow` replays the identical
+  slot-swap sequence a third time against `MidiRemoteProjectDoc::swapParameterAssignments`, right
+  beside the `TimelineDoc::swapLaneParams` calls — see
+  [`docs/control/midi-remote.md#undo`](../control/midi-remote.md#undo).
 
 **A visible row's POSITION is `moveSendRow`'s `fromRow`/`toRow`, into the active-slot-ordered list
 (`MixerModelSends.cpp`'s `buildSendsForColumn`), not a raw slot number** — dragging row *i* to
@@ -120,18 +125,14 @@ step, each exchanging the two slots CURRENTLY sitting at two neighbouring visibl
 gap (an inactive slot between two active ones) is never one of the positions a step touches: slots 0
 and 2 active, moving row 1 above row 0, is exactly one `swapSends(0, 2)` — slot 1 stays untouched.
 `moveSendRow` reports the exact sequence of `(slotA, slotB)` pairs it applied, which is what lets the
-caller replay the identical sequence against a lane. The whole gesture — the slot swap(s) and any lane
-rebind — lands in ONE `AppUndoManager::recordGraphTimelineAndMacroChange` transaction, so a single
-Cmd+Z reverts cables, values, bits and lane binding together.
-
-**MIDI Learn mappings are NOT swapped.** A MIDI Remote assignment to a send parameter is keyed the
-same way a lane is — `(nodeUuid, paramId)` (`Source/MidiRemote/RemoteModel.h`'s `Target::Parameter`)
-— but it lives in a separate `MidiRemoteProjectDoc`, and there is today no
-`AppUndoManager::recordGraphTimelineMacroAndMidiRemoteChange` that could join a remap to the SAME
-undo transaction as the slot swap. Per this feature's own rule ("never swap silently without an
-undoable API that joins the same step"), a send reorder leaves any MIDI Learn mapping on
-`sendNLevel`/`sendNPan` exactly where it was — mapped to the SLOT NUMBER, not the send that moved. A
-user who reorders a MIDI-mapped send needs to re-map it by hand; this is a known, accepted gap.
+caller replay the identical sequence against a lane and a MIDI mapping. The whole gesture — the slot
+swap(s), any lane rebind, and any MIDI Learn remap — lands in ONE
+`AppUndoManager::recordGraphTimelineAndMacroChange` transaction (extended to optionally also carry a
+`MidiRemoteProjectDoc` domain), so a single Cmd+Z reverts cables, values, bits, lane binding AND the
+MIDI mapping together. `MixerPanelComponent::moveSendRow` also republishes the live MIDI Remote
+assignment cache (`MidiLearnController::publishAssignments()`) right after its own edit and again as
+the undo/redo postRestore, so a hardware control already resolves against the send's new slot with no
+separate reconcile step.
 
 ## Pre and post, mute and bypass
 
