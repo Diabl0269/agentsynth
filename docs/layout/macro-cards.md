@@ -170,6 +170,66 @@ newline-separated, capped list of member names, which `MainComponent`'s already-
 `juce::TooltipWindow` shows on hover — so a collapsed macro's contents are discoverable without
 expanding it.
 
+## Direct port add/remove from the collapsed card
+
+**FRO24 (founder decision, 2026-09-27): the two most common Configure I/O operations —
+add a port, delete a port — are reachable straight from the collapsed card, without opening the
+modal.** `MacroPortConfigDialog` (see [`docs/macros/configure-io.md`](../macros/configure-io.md)) stays
+for everything a single click can't express: rename, reorder, shape and colour. The founder's
+open-ended "make them even slicker" look-and-feel exploration for these jacks is a separate,
+still-unscoped ticket — this covers only the concrete '+'/'x' pair.
+
+**The '+' affordance.** One small '+' per side, drawn at the TOP of the same jack band
+`GraphEditor::macroCardPortLayout` lays ports out in (`MacroCardComponent::getAddPortButtonBounds`)
+— ahead of where a freshly-added port lands, since `nextMacroPortOrder` always appends a new port
+as the bottom-most on its side. Clicking it (`MacroCardComponent::buildAddPortMenu`) opens a
+`juce::PopupMenu` offering the exact same four choices `MacroPortConfigDialog`'s own "Add a port"
+panel does — Audio/CV Mono, Audio/CV Stereo, Audio/CV Poly-N, or MIDI
+([`docs/macros/configure-io.md#adding-a-port`](../macros/configure-io.md#adding-a-port)) — never a
+second list. Picking one calls the SAME `MacroGroupController::addMacroPort()` Configure I/O's Add
+button calls, with an empty name (falling back to `defaultMacroPortName()`, exactly like an empty
+name field in the dialog) and, for Poly-N, the dialog's own default voice count (4). The direction
+is already fixed by which side's '+' was clicked, so unlike the dialog this menu has no direction
+combo and no name field — the quick affordance's whole point is the two most common single-port
+operations reachable at a glance, not a second place to type one. `addMacroPort()`'s own
+`recordGraphAndMacroChange` transaction makes this one undo step, same as from the dialog.
+
+**Hidden gracefully when a side has no room, never overlapping a jack.**
+`macroCardPortLayout()` even-spaces a side's jacks across the fixed jack band
+(`kMacroCardJackBandTop`/`Bottom`), so the more ports a side already has, the closer its topmost
+jack sits to `kMacroCardJackBandTop` — exactly where the '+' paints.
+`MacroCardComponent::hasRoomForAddPortButton()` hides the '+' once that gap drops below a real
+jack's own footprint, rather than touching the shared jack-spacing algorithm every other surface
+(`paint()`, the drop hit-test, `buildVisibleCables()`'s boundary-cable anchoring) reads unmodified.
+
+**The 'x' affordance.** Hovering a configured jack reveals a small 'x' overlaid on that ONE jack's
+dot (`MacroCardComponent::mouseMove`/`mouseExit` track `hoveredPortUuid_` via the SAME
+`macroCardPortForPoint()` hit-test the drop-target path and the hover overlay both read, so
+hovering, drawing and deleting can never disagree about which jack the mouse is on). Clicking it
+calls `MacroGroupController::deleteMacroPortManually()` — the FRO235 entry point that drops the
+cable by default and splices it back only when the "splice the cable back" preference is on, the
+same as Configure I/O's own Delete Port and the port's right-click Delete Port
+([`docs/macros/configure-io.md#deleting-a-port-from-the-dialog`](../macros/configure-io.md#deleting-a-port-from-the-dialog)).
+No confirm dialog — undo covers it, same as every other macro mutation.
+
+**Neither affordance steals a card body-drag or a real cable drag.** Both hit-tests are checked in
+`mouseDown()` at the SAME precedence `getExpandButtonBounds()` already has — before the shift/cmd
+multi-select branch and the drag-arm fallback — so a click that misses both falls straight through
+to the card's ordinary selection/drag handling, unchanged. The 'x' re-runs
+`macroCardPortForPoint()` against the click position rather than trusting the cached
+`hoveredPortUuid_` alone, so a `mouseDown` with no preceding `mouseMove` (a real click landing where
+the mouse already rested, or a test driving `mouseDown` directly) falls through to the ordinary
+click handling instead of deleting a jack it was never shown hovering — which is also why a plain
+click on an un-hovered jack still behaves exactly as it did before this change. Dragging a cable
+FROM a collapsed card's own jack is not a thing this card supports (jacks here are drop targets
+only, via `endConnectionDrag`'s own hit-test, independent of this component's `mouseDown`), so
+there is nothing for either affordance to steal there either.
+
+**No macro type is excluded.** Configure I/O's own "Configure I/O..." menu item carries no
+guard — it is offered unconditionally for every resolved macro, channel macros included — so the
+'+'/'x' pair follows the same "always available" rule rather than inventing a restriction Configure
+I/O itself doesn't have.
+
 ## Cables re-anchor around a collapsed macro
 
 A collapsed macro hides its members but not their graph edges, so `rebuildVisibleCables()` (see

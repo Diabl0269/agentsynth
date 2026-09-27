@@ -2,6 +2,7 @@
 
 #include "AppUndoManager.h"
 #include "MacroSet.h"
+#include "Modules/MacroPortShape.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -45,6 +46,8 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override; // FRO24: arms hoveredPortUuid_ (see below)
+    void mouseExit(const juce::MouseEvent& e) override; // FRO24: clears hoveredPortUuid_
 
     /** Newline-separated member module names, capped so a huge macro doesn't produce an
      *  unreadable tooltip. */
@@ -89,6 +92,15 @@ public:
     juce::Colour resolvePortJackColour(const juce::String& nodeUuid, const std::optional<juce::Colour>& stored,
                                        juce::Colour kindTint) const; // preview -> stored -> kindTint
 
+    // FRO24: the '+' button's kind/shape choice menu, RETURNED rather than shown — see the .cpp
+    // definition for the choice list and why it doesn't show the popup itself.
+    juce::PopupMenu buildAddPortMenu(bool isInput);
+
+    // Test accessors for the '+'/'x' hit-testing below — same *ForTest pattern as above.
+    juce::Rectangle<float> getAddPortButtonBoundsForTest(bool isInput) const { return getAddPortButtonBounds(isInput); }
+    bool hasRoomForAddPortButtonForTest(bool isInput) const { return hasRoomForAddPortButton(isInput); }
+    juce::String getHoveredPortUuidForTest() const { return hoveredPortUuid_.value_or(juce::String()); }
+
 private:
     /** `priorSelection` (T138): whatever was selected right before mouseDown's own reselect —
      *  see GraphEditor::buildMacroMenu's addCandidateSelection comment for why this must be
@@ -122,6 +134,18 @@ private:
      *  drift from what is drawn. paint() and mouseDoubleClick() both call this rather than
      *  computing the rect separately. */
     juce::Rectangle<int> getTitleRowBounds() const;
+
+    // FRO24: the '+' button's bounds for the given side — see the .cpp definition for the
+    // geometry rationale. paint()/mouseDown() both read this rather than duplicating it.
+    juce::Rectangle<float> getAddPortButtonBounds(bool isInput) const;
+
+    // FRO24: false once this side's '+' would overlap its topmost jack — see the .cpp definition.
+    bool hasRoomForAddPortButton(bool isInput) const;
+
+    // FRO24: the configured port (by nodeUuid) the mouse currently rests over, kept fresh by
+    // mouseMove()/mouseExit() — see those definitions for why mouseDown() re-checks rather than
+    // trusting this cache alone.
+    std::optional<juce::String> hoveredPortUuid_;
 
     GraphEditor& owner;
     juce::String macroId;
