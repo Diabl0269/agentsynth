@@ -6,6 +6,7 @@
 #include "GraphEditorTestHelpers.h"
 
 #include "Modules/ADSRModule.h"
+#include "Modules/FX/CompressorModule.h"
 #include "Modules/FX/DelayModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
@@ -90,6 +91,26 @@ TEST_F(GraphEditorTest, ResolvePolyLinkBroadcastsMonoIntoCollapsedStereoPair) {
     EXPECT_EQ(link.destRawChannel, 0);
     EXPECT_EQ(link.voiceCount, 2);
     EXPECT_EQ(link.sourceStride, 0);
+}
+
+TEST_F(GraphEditorTest, ResolvePolyLinkTreatsACollapsedKeyJackAsAStereoPair) {
+    // FRO317: the collapsed "Key" jack (PortRole::Sidechain, span 2 on raw 7/8) takes the same
+    // cables the collapsed Audio jack does — a mono kick keys both legs, a stereo source pairs L/R.
+    OscillatorModule osc;
+    DelayModule delay; // collapsed: one Audio output jack spanning raw 0/1
+    CompressorModule comp;
+    const int keyJack = 6;
+
+    auto mono = GraphEditor::resolvePolyLink(&osc, 0, &comp, keyJack);
+    EXPECT_EQ(mono.destRawChannel, CompressorModule::kKeyBase);
+    EXPECT_EQ(mono.voiceCount, 2);
+    EXPECT_EQ(mono.sourceStride, 0);
+
+    auto stereo = GraphEditor::resolvePolyLink(&delay, 0, &comp, keyJack);
+    EXPECT_EQ(stereo.sourceRawChannel, 0);
+    EXPECT_EQ(stereo.destRawChannel, CompressorModule::kKeyBase);
+    EXPECT_EQ(stereo.voiceCount, 2);
+    EXPECT_EQ(stereo.sourceStride, 1);
 }
 
 TEST_F(GraphEditorTest, TogglingDualIOKeepsBothStereoLegs) {

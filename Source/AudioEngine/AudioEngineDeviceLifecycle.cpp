@@ -27,9 +27,15 @@ AudioEngine::AudioEngine(HostMode mode)
     // — sees it through the standard getPlayHead() API. No per-node injection, and nothing to
     // re-wire when the graph's node set changes.
     mainProcessorGraph.setPlayHead(&transport);
+    // Every node/connection change broadcasts (asynchronously, coalesced); the key-input
+    // publication hangs off it so it holds in the app AND the plugin (changeListenerCallback).
+    mainProcessorGraph.addChangeListener(this);
 }
 
-AudioEngine::~AudioEngine() { shutdown(); }
+AudioEngine::~AudioEngine() {
+    mainProcessorGraph.removeChangeListener(this);
+    shutdown();
+}
 
 void AudioEngine::initialise() {
     // Hosted mode: the plugin wrapper owns the audio clock and forwards the host's MIDI, so we
@@ -153,6 +159,13 @@ void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
 }
 
 void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
+    // The graph's own topology broadcast, in BOTH host modes: republish which Compressor/Gate key
+    // inputs have a cable, so plugging or unplugging a key switches the detector (FRO317).
+    if (source == &mainProcessorGraph) {
+        refreshSidechainKeys();
+        return;
+    }
+
     // Only ever subscribed to our own device manager, and only in Standalone mode; both checks are
     // here so a future subscription can't silently start persisting something else's state. The
     // same guard is what makes reconcileMidiInputs() below structurally unreachable in Hosted mode

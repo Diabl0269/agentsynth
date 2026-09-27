@@ -199,7 +199,9 @@ inline std::vector<int> collectSmartAudioLegs(juce::AudioProcessor* proc, bool i
         if (isInput && audioJackIsModCvDest(mb, j))
             continue;
         const PortRole role = primaryRoleForJack(mb, j, isInput);
-        if (role == PortRole::Pitch || role == PortRole::Gate || role == PortRole::Midi || role == PortRole::ModCV)
+        // A Sidechain (Key) jack is never a smart-connect audio leg: keying is always a deliberate cable.
+        if (role == PortRole::Pitch || role == PortRole::Gate || role == PortRole::Midi || role == PortRole::ModCV ||
+            role == PortRole::Sidechain)
             continue;
 
         const juce::String label = isInput ? mb->getInputPortLabel(j) : mb->getOutputPortLabel(j);

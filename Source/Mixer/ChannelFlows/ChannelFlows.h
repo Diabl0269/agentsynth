@@ -277,8 +277,8 @@ juce::AudioProcessorGraph::NodeID resolveChannelSource(juce::AudioProcessorGraph
 
 /** True when `c` is a signal edge by the rule above: every MIDI edge; every audio edge that
  *  neither touches an AttenuverterModule nor lands (after following any macro ports) on a
- *  PortRole::ModCV input. `connections` is the full connection list the caller already has (this
- *  never re-fetches it), since callers walking a whole chain call this once per candidate edge. */
+ *  ModCV input or Sidechain key (isSignalPathInputRole). `connections` is the full connection list
+ *  the caller already has (never re-fetched): callers walking a chain call this once per edge. */
 bool isSignalEdge(juce::AudioProcessorGraph& graph,
                   const std::vector<juce::AudioProcessorGraph::Connection>& connections,
                   const juce::AudioProcessorGraph::Connection& c);

@@ -148,14 +148,14 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().
         return {synth::LayoutUtil::kDoubleWidth, 592};
     if (typeName == "Compressor")
-        return {280, 237}; // +100: a CV jack per parameter (Audio + 5 CV = 6 port rows) sets it
+        return {280, 257}; // Audio + 5 CV + Key = 7 port rows set it (+20 for the FRO317 Key jack)
     if (typeName == "Limiter")
         return {280, 161}; // +60: a CV jack per parameter (Audio + 3 CV = 4 port rows) sets it
     if (typeName == "Gate")
         // 6 float sliders (Threshold/Attack/Hold/Release/Range/Level): same row count as
         // Compressor's 5 (3+3 wraps to the same number of rows as 6 in a 3-per-row grid).
-        // +100: a CV jack per parameter (Audio + 5 CV = 6 port rows) sets it, as for Compressor.
-        return {280, 237};
+        // Audio + 5 CV + Key = 7 port rows set it, as for Compressor (+20 for the FRO317 Key jack).
+        return {280, 257};
     if (typeName == "Voice Mixer")
         return {280, 301}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "External MIDI")

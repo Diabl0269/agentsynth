@@ -5,9 +5,9 @@
 #include <cmath>
 #include <juce_dsp/juce_dsp.h>
 
-// Standard noise gate — Threshold/Attack/Hold/Release/Range, stereo-linked. See
-// docs/modules/fx-modules.md#gate-module for the full spec (hysteresis rationale, why the detector is
-// linked, v1 scope). No sidechain input in v1 (see docs/modules/fx-modules.md#gate-module).
+// Standard noise gate — Threshold/Attack/Hold/Release/Range, stereo-linked, with a Key (sidechain)
+// input the detector listens to while a cable reaches it. See docs/modules/fx-modules.md#gate-module
+// for the full spec (hysteresis rationale, why the detector is linked, the key input).
 class GateModule : public ModuleBase {
 public:
     // The gate opens once the linked envelope reaches Threshold and closes only once it falls
@@ -16,9 +16,11 @@ public:
     // hardware/software noise gates; kept as a named constant rather than a user parameter (v1
     // scope, documented in docs/modules/fx-modules.md#gate-module).
     static constexpr float kGateHysteresisDb = 3.0f;
+    static constexpr int kNumCvInputs = 5;
+    static constexpr int kKeyBase = sidechainKeyBase(kNumCvInputs); // Key L = 7, Key R = 8
 
     GateModule()
-        : ModuleBase("Gate", 7, 2) { // 2 audio + 5 CV (Threshold, Attack, Hold, Release, Range)
+        : ModuleBase("Gate", 9, 2) { // 2 audio + 5 CV (Threshold, Attack, Hold, Release, Range) + Key L/R
         addParameter(thresholdParam =
                          new juce::AudioParameterFloat("threshold", "Threshold (dB)", -80.0f, 0.0f, -40.0f));
         addParameter(attackParam = new juce::AudioParameterFloat("attack", "Attack (ms)", 0.1f, 200.0f, 2.0f));
@@ -109,10 +111,16 @@ public:
         float* left = buffer.getWritePointer(0);
         float* right = buffer.getWritePointer(1);
 
+        // Keyed only while a cable reaches a Key jack (published from the message thread, never
+        // inferred from level) and the buffer carries the key channels; else it hears its own audio.
+        const bool keyed = isSidechainConnected() && buffer.getNumChannels() >= kKeyBase + 2;
+        const float* detectL = keyed ? buffer.getReadPointer(kKeyBase) : left;
+        const float* detectR = keyed ? buffer.getReadPointer(kKeyBase + 1) : right;
+
         for (int i = 0; i < numSamples; ++i) {
-            // Stereo-linked detector: ONE gain computer driven by max(|L|,|R|), so the stereo
-            // image never shifts (docs/modules/fx-modules.md#gate-module).
-            const float envelope = std::max(std::abs(left[i]), std::abs(right[i]));
+            // Stereo-linked detector: ONE gain computer driven by max(|L|,|R|) of the audio or the
+            // key, so the stereo image never shifts (docs/modules/fx-modules.md#gate-module).
+            const float envelope = std::max(std::abs(detectL[i]), std::abs(detectR[i]));
 
             if (!detectorOpen) {
                 if (envelope >= openThreshLin) {
@@ -147,24 +155,23 @@ public:
 
         applyOutputLevel(buffer, 2);
 
-        // Clear CV channels to prevent leaking to downstream modules
+        // Clear CV and key channels (read above) to prevent leaking to downstream modules
         for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
             buffer.clear(ch, 0, numSamples);
     }
 
     juce::String getInputPortLabel(int i) const override {
         const juce::String cv[] = {"Threshold", "Attack", "Hold", "Release", "Range"};
-        return stereoInputLabel(i, 5, cv);
+        return stereoKeyInputLabel(i, kNumCvInputs, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(5); }
+    int getVisibleInputPortCount() const override { return stereoKeyVisibleInputCount(kNumCvInputs); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 5); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoKeyInput(raw, kNumCvInputs); }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     // Every continuous parameter has a CV jack (paramId binds "Threshold" to the "Threshold (dB)"
-    // knob, and so on). These are parameter CVs, not a sidechain: the detector still listens to
-    // the audio pair only — no sidechain input in v1, see docs/modules/fx-modules.md#gate-module.
+    // knob, and so on). These are parameter CVs; the Key pair is not a modulation target.
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Threshold", 2, "threshold"},
                 {"Attack", 3, "attack"},
