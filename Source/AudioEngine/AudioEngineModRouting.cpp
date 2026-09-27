@@ -354,6 +354,15 @@ bool AudioEngine::isModBypassed(juce::AudioProcessorGraph::NodeID attenuverterNo
 }
 
 void AudioEngine::updateModuleNames() {
+    // Two passes: the total per base type has to be known BEFORE any name is assigned, so a lone
+    // instance can be told apart from one that genuinely needs disambiguating (FRO181). Assigning
+    // "<Type> 1" to a module that is the only one of its kind is a spurious rename with no
+    // disambiguating purpose — worse, this pass runs incidentally (ModMatrixComponent's node-count
+    // watchdog, replaceModule's "Refresh UI" step) on graph changes that never added or removed a
+    // module the user thinks of as such (a macro's own inlet/outlet port splice on group/ungroup),
+    // so a bare "Oscillator" would otherwise pick up a needless "1" the first time any of that
+    // incidentally fires, then keep it forever after (recomputed the same way every time).
+    std::vector<std::pair<ModuleBase*, juce::String>> nameable;
     std::map<juce::String, int> typeCounts;
     for (auto* node : mainProcessorGraph.getNodes()) {
         if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor())) {
@@ -366,8 +375,16 @@ void AudioEngine::updateModuleNames() {
                 baseName = baseName.substring(0, lastSpace);
             if (baseName.startsWith("Attenuverter"))
                 baseName = "Mod Slot";
-            int index = ++typeCounts[baseName];
-            module->setModuleName(baseName + " " + juce::String(index));
+            ++typeCounts[baseName];
+            nameable.emplace_back(module, baseName);
         }
+    }
+
+    std::map<juce::String, int> indices;
+    for (auto& [module, baseName] : nameable) {
+        if (typeCounts[baseName] <= 1)
+            module->setModuleName(baseName); // the only one of its kind — no number needed
+        else
+            module->setModuleName(baseName + " " + juce::String(++indices[baseName]));
     }
 }

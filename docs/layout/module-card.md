@@ -162,6 +162,20 @@ lives in the node property **`displayName`**, and the numbered processor name st
 `GraphEditor::getModuleTitle()` returns the custom one when set, else `processor->getName()`. Card
 paint goes through `ModuleComponent::cardTitle()` and never reads the processor name directly.
 
+**A lone module of a base type gets no number at all** (FRO181): `updateModuleNames()` counts every
+base type FIRST, then only appends `" <n>"` to a type that has 2+ live instances — the single
+`"Oscillator"` on a fresh patch stays bare, never `"Oscillator 1"`. This matters because the pass
+runs incidentally, not only when the user visibly adds/removes a module: `ModMatrixComponent`'s
+own node-count watchdog (and `GraphEditor::replaceModule`'s "Refresh UI" step) call it whenever the
+graph's total node count changes for ANY reason, including a macro's own inlet/outlet port
+splicing itself in and back out again on group/ungroup/undo/redo — none of which is a module the
+user thinks of as added or removed. Before the fix, that incidental call gave every bare,
+never-yet-numbered module a spurious `" 1"` the first time it ever ran, and it stuck from then on
+(the pass is otherwise idempotent, so nothing later reverted it). Pinned end-to-end by
+`Tests/Macros/MacroAutoPort/MacroAutoPortNameTests.cpp` (through the real
+`MacroGroupController::groupSelectionIntoMacro` entry point) and at the unit level by
+`ModMatrixTests.cpp`'s `UpdateModuleNames*` cases.
+
 Consequences worth knowing:
 
 - Renaming one instance does not disturb any other instance's number, and a later instance still
