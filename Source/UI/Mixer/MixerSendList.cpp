@@ -6,6 +6,7 @@
 #include "AppUndoManager.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "MixerDbAccessibilityText.h"
+#include "MixerPanAccessibilityText.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -16,7 +17,8 @@ namespace {
 using NodeID = juce::AudioProcessorGraph::NodeID;
 
 // Menu ids. Target ids start above the fixed items so one callback can tell them apart.
-constexpr int kNewBusItemId = 1;
+constexpr int kMonoItemId = 1; // FRO294
+constexpr int kNewBusItemId = 2;
 constexpr int kFirstTargetItemId = 100;
 
 ChannelStripModule* stripAt(juce::AudioProcessorGraph& graph, NodeID id) {
@@ -110,6 +112,29 @@ void MixerSendList::rebuildKnobs() {
             if (onSendKnobBuilt)
                 onSendKnobBuilt(*row.knob, param);
         }
+
+        // FRO294: the pan knob, same construction shape as the level knob above -- attached
+        // straight onto sendNPan, so it is host-visible/automatable with no lane plumbing, and
+        // registered in the SAME MIDI-learn registry via the SAME onSendKnobBuilt callback.
+        row.panKnob = std::make_unique<juce::Slider>();
+        row.panKnob->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        row.panKnob->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+        row.panKnob->setTitle(entry.targetNodeId != juce::AudioProcessorGraph::NodeID{}
+                                  ? "Send pan to " + entry.targetName
+                                  : "Send " + juce::String(entry.slot + 1) + " pan (no target)");
+        addAndMakeVisible(*row.panKnob);
+        if (auto* panParam = strip->getSendPanParameter(entry.slot)) {
+            const auto range = panParam->getNormalisableRange();
+            row.panKnob->setNormalisableRange(juce::NormalisableRange<double>((double)range.start, (double)range.end,
+                                                                              (double)range.interval,
+                                                                              (double)range.skew, range.symmetricSkew));
+            row.panAttachment = std::make_unique<juce::SliderParameterAttachment>(*panParam, *row.panKnob);
+            // Same reapply-after-construction fix as the level knob's applyDbAccessibilityText call
+            // above -- the attachment's own ctor overwrites textFromValueFunction unconditionally.
+            applyPanAccessibilityText(*row.panKnob);
+            if (onSendKnobBuilt)
+                onSendKnobBuilt(*row.panKnob, panParam);
+        }
         rows_.push_back(std::move(row));
     }
 }
@@ -117,11 +142,16 @@ void MixerSendList::rebuildKnobs() {
 int MixerSendList::liveUnbindCalls_ = 0;
 
 void MixerSendList::unbindFromGraph() {
-    for (auto& row : rows_)
+    for (auto& row : rows_) {
         if (row.attachment != nullptr) {
             row.attachment.reset();
             ++liveUnbindCalls_;
         }
+        if (row.panAttachment != nullptr) {
+            row.panAttachment.reset();
+            ++liveUnbindCalls_;
+        }
+    }
     graph_ = nullptr;
     undoManager_ = nullptr;
     macros_ = nullptr;
@@ -134,6 +164,10 @@ bool MixerSendList::isAttachedForTest(int rowIndex) const {
 
 juce::Slider* MixerSendList::getKnobForTest(int rowIndex) const {
     return rowIndex >= 0 && rowIndex < (int)rows_.size() ? rows_[(size_t)rowIndex].knob.get() : nullptr;
+}
+
+juce::Slider* MixerSendList::getPanKnobForTest(int rowIndex) const {
+    return rowIndex >= 0 && rowIndex < (int)rows_.size() ? rows_[(size_t)rowIndex].panKnob.get() : nullptr;
 }
 
 juce::Button* MixerSendList::getMuteButtonForTest(int rowIndex) const {
@@ -181,8 +215,18 @@ void MixerSendList::paint(juce::Graphics& g) {
         g.setColour(entry.preFader ? accent : muted);
         g.drawText(entry.preFader ? "PRE" : "POST", toggle, juce::Justification::centred, false);
 
-        row.removeFromRight(kMuteWidth); // the M button is a real child component -- see resized()
-        row.removeFromRight(kKnobWidth); // the knob is a real child component -- see resized()
+        row.removeFromRight(kMuteWidth);    // the M button is a real child component -- see resized()
+        row.removeFromRight(kKnobWidth);    // the level knob is a real child component -- see resized()
+        row.removeFromRight(kPanKnobWidth); // the pan knob is a real child component -- see resized()
+
+        // FRO294: a minimal "M" mono marker, painted the same way PRE/POST is above rather than a
+        // new row button (the row has no room for one) -- only takes name-area width on a row that
+        // actually is mono, so a stereo row's name keeps the full budget.
+        if (entry.mono) {
+            auto monoTag = row.removeFromLeft(kMonoMarkerWidth);
+            g.setColour(muted);
+            g.drawText("M", monoTag, juce::Justification::centred, false);
+        }
 
         g.setColour(entry.targetNodeId == juce::AudioProcessorGraph::NodeID{} ? muted : text);
         g.drawText(entry.targetName, row.reduced(2, 0), juce::Justification::centredLeft, true);
@@ -204,6 +248,8 @@ void MixerSendList::resized() {
             row.muteButton->setBounds(bounds.removeFromRight(kMuteWidth).reduced(1));
         if (row.knob != nullptr)
             row.knob->setBounds(bounds.removeFromRight(kKnobWidth).reduced(1));
+        if (row.panKnob != nullptr)
+            row.panKnob->setBounds(bounds.removeFromRight(kPanKnobWidth).reduced(1));
     }
 
     // FRO228: same anchor paint()'s own addRow uses.
@@ -226,11 +272,12 @@ void MixerSendList::mouseDown(const juce::MouseEvent& event) {
         removeRow(row);
     else if (fromRight <= kRemoveWidth + kToggleWidth)
         togglePreFaderForRow(row);
-    // The M button (kMuteWidth) and the knob (kKnobWidth) are real child components between the
-    // PRE/POST toggle and the target-name area, so this handler never sees a click landing on
-    // either -- only the shape of the "everything past them is the target name" test below moves.
-    else if (fromRight > kRemoveWidth + kToggleWidth + kMuteWidth + kKnobWidth)
-        showTargetMenu(row); // the knob's own bounds are its child component's business
+    // The M button (kMuteWidth), the level knob (kKnobWidth) and the pan knob (kPanKnobWidth) are
+    // real child components between the PRE/POST toggle and the target-name area, so this handler
+    // never sees a click landing on any of them -- only the shape of the "everything past them is
+    // the target name" test below moves.
+    else if (fromRight > kRemoveWidth + kToggleWidth + kMuteWidth + kKnobWidth + kPanKnobWidth)
+        showTargetMenu(row); // the knobs' own bounds are their child components' business
 }
 
 std::vector<NodeID> MixerSendList::availableTargets() const {
@@ -240,15 +287,24 @@ std::vector<NodeID> MixerSendList::availableTargets() const {
 }
 
 void MixerSendList::showTargetMenu(int rowIndex) {
+    if (rowIndex < 0 || rowIndex >= (int)entries_.size())
+        return;
+    const bool mono = entries_[(size_t)rowIndex].mono;
     const auto targets = availableTargets();
     juce::PopupMenu menu;
+    // FRO294: a ticked toggle, not a new row button -- the row has no width budget left for one
+    // (see this file's own header comment and MixerSendList.h's kMonoMarkerWidth).
+    menu.addItem(kMonoItemId, "Mono", true, mono);
+    menu.addSeparator();
     menu.addItem(kNewBusItemId, "New bus...", createBus != nullptr);
     menu.addSeparator();
     for (int i = 0; i < (int)targets.size(); ++i)
         menu.addItem(kFirstTargetItemId + i, targetNameFor(targets[(size_t)i]));
 
     menu.showMenuAsync(juce::PopupMenu::Options(), [this, rowIndex, targets](int result) {
-        if (result == kNewBusItemId && createBus != nullptr) {
+        if (result == kMonoItemId) {
+            toggleMonoForRow(rowIndex);
+        } else if (result == kNewBusItemId && createBus != nullptr) {
             if (const auto bus = createBus(); bus != NodeID{})
                 retargetRow(rowIndex, bus);
         } else if (result >= kFirstTargetItemId && result - kFirstTargetItemId < (int)targets.size()) {
@@ -325,6 +381,15 @@ void MixerSendList::toggleMuteForRow(int rowIndex) {
     const int slot = entry.slot;
     const bool newMuted = !entry.muted;
     mutateAndNotify([&] { return graph_ != nullptr && synth::setSendMuted(*graph_, stripNodeId_, slot, newMuted); });
+}
+
+void MixerSendList::toggleMonoForRow(int rowIndex) {
+    if (rowIndex < 0 || rowIndex >= (int)entries_.size())
+        return;
+    const auto& entry = entries_[(size_t)rowIndex];
+    const int slot = entry.slot;
+    const bool newMono = !entry.mono;
+    mutateAndNotify([&] { return graph_ != nullptr && synth::setSendMono(*graph_, stripNodeId_, slot, newMono); });
 }
 
 } // namespace synth::ui

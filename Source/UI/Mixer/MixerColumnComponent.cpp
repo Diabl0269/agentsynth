@@ -5,6 +5,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Mixer/PeakMeterLatch.h"
+#include "MixerPanAccessibilityText.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/ModuleBase.h"
@@ -23,20 +24,10 @@ namespace {
 constexpr int kMeterWidth = 32;
 constexpr int kMeterReadoutHeight = 12;
 
-// FRO228: what VoiceOver reads for the pan knob's current value -- "Center"/"50% left"/"50% right",
-// same text panSlider_'s NoTextBox would otherwise show nowhere else. Applied twice, same reason
-// MixerFader.cpp's applyDbAccessibilityText is: juce::SliderParameterAttachment's own constructor
-// unconditionally overwrites slider.textFromValueFunction with one built from the param's own
-// getText() (a raw "0.0000000" for pan, which has no unit label), so rebindControls() must
-// reapply this AFTER constructing panAttachment_ or the ctor's own copy gets silently undone.
-void applyPanAccessibilityText(juce::Slider& slider) {
-    slider.textFromValueFunction = [](double pan) {
-        if (std::abs(pan) < 0.005)
-            return juce::String("Center");
-        const int percent = (int)std::round(std::abs(pan) * 100.0);
-        return juce::String(percent) + (pan < 0.0 ? "% left" : "% right");
-    };
-}
+// FRO228/FRO294: applyPanAccessibilityText moved to MixerPanAccessibilityText.h so MixerSendList's
+// own per-send pan knobs can share the exact same "Center"/"50% left"/"50% right" phrasing instead
+// of a second copy -- see that header's own comment for why every caller must reapply it AFTER
+// constructing its SliderParameterAttachment.
 
 juce::AudioParameterFloat* findFloatParam(juce::AudioProcessor& processor, const juce::String& paramId) {
     for (auto* param : processor.getParameters())

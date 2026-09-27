@@ -13,16 +13,18 @@ class GraphEditor;
 // MixerSendList.h -- FRO15 (P9-9, docs/mixer/sends-and-buses.md): a column's send rows, sibling of
 // MixerInsertList and laid out directly under it.
 //
-// One row per ACTIVE slot, in slot order: the target bus's name (click to retarget), a small rotary
-// level knob, an "M" mute toggle (FRO295), a PRE/POST toggle and an `x` remove; then a "+ Send" row
+// One row per ACTIVE slot, in slot order: the target bus's name (click to retarget -- the same menu
+// now also carries a ticked "Mono" item, FRO294), a small rotary level knob, a small rotary pan knob
+// (FRO294), an "M" mute toggle (FRO295), a PRE/POST toggle and an `x` remove; then a "+ Send" row
 // while the strip has a free slot. Each mutation is ONE AppUndoManager::recordGraphAndMacroChange
 // around synth::MixerSends' Core flows (which have no undo of their own), exactly as MixerInsertList
 // wraps the insert splices.
 //
-// The level knob attaches straight onto the strip's own `sendNLevel` AudioParameterFloat, so send
-// level is host-visible and automatable with no lane plumbing of its own. That attachment is a live
-// pointer into a graph node's parameter, which makes unbindFromGraph() below load-bearing: without
-// it, an undo that REPLACES the graph frees the parameter this list is still attached to.
+// The level and pan knobs attach straight onto the strip's own `sendNLevel`/`sendNPan`
+// AudioParameterFloats, so both are host-visible and automatable with no lane plumbing of their
+// own. Those attachments are live pointers into a graph node's parameters, which makes
+// unbindFromGraph() below load-bearing: without it, an undo that REPLACES the graph frees the
+// parameters this list is still attached to.
 namespace synth::ui {
 
 class MixerSendList : public juce::Component {
@@ -74,11 +76,17 @@ public:
     void togglePreFaderForRow(int rowIndex);
     /** FRO295: flips row `rowIndex`'s mute bit via synth::setSendMuted, one recordGraphAndMacroChange. */
     void toggleMuteForRow(int rowIndex);
+    /** FRO294: flips row `rowIndex`'s mono bit via synth::setSendMono, one recordGraphAndMacroChange
+     *  -- the target menu's "Mono" item and this class's own headless test seam both call this. */
+    void toggleMonoForRow(int rowIndex);
     void retargetRow(int rowIndex, juce::AudioProcessorGraph::NodeID target);
     std::vector<juce::AudioProcessorGraph::NodeID> availableTargets() const;
     bool canAddSend() const;
     bool isAttachedForTest(int rowIndex) const;
     juce::Slider* getKnobForTest(int rowIndex) const;
+    /** FRO294: the row's pan knob, attached to sendNPan the same way getKnobForTest's level knob
+     *  attaches to sendNLevel. */
+    juce::Slider* getPanKnobForTest(int rowIndex) const;
     /** The row's real "M" button -- a juce::Button child, same type/LookAndFeel as the column's own
      *  channel mute button, so a test can click it through the real mouse path. */
     juce::Button* getMuteButtonForTest(int rowIndex) const;
@@ -94,13 +102,19 @@ public:
 private:
     static constexpr int kRowHeight = 20;
     static constexpr int kKnobWidth = 20;
+    static constexpr int kPanKnobWidth = 20; // FRO294
     static constexpr int kToggleWidth = 30;
     static constexpr int kMuteWidth = 18;
     static constexpr int kRemoveWidth = 14;
+    // FRO294: painted (not a real component) only when a row is mono -- see paint()'s own comment.
+    static constexpr int kMonoMarkerWidth = 10;
 
     struct Row {
         std::unique_ptr<juce::Slider> knob;
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
+        // FRO294: same shape as knob/attachment above, attached to the slot's sendNPan instead.
+        std::unique_ptr<juce::Slider> panKnob;
+        std::unique_ptr<juce::SliderParameterAttachment> panAttachment;
         // FRO295: a real juce::TextButton, not painted text like PRE/POST -- reuses
         // MixerColumnComponent's own "M" button type/LookAndFeel (setClickingTogglesState(false),
         // manual setToggleState mirroring the strip's own mute button convention) so mute gets the
