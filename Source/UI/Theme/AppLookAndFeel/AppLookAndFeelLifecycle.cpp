@@ -186,7 +186,7 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::TransportStop, c.textPrimary);
 
     // TransportPlay is scaffolding (no dedicated glyph yet — see IconLibrary.h) reused as the
-    // ToggleTimeline toolbar button's icon, so it follows the same muted-base convention as the
+    // ToggleBottomPanel toolbar button's icon, so it follows the same muted-base convention as the
     // rest of the toolbar set above.
     iconLibrary_.setTintColour(Icon::TransportPlay, c.textMuted);
 

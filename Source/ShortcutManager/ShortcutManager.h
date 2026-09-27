@@ -50,6 +50,7 @@ public:
                 bindings[actionId] = parseKeyPress(settings->getValue(key));
         }
         migrateSaveAsChordSwap(*settings);
+        migrateBottomPanelToggleKeys(*settings);
     }
 
     /** One-shot: Save Project As and Save Snippet swapped chords (Save As took the standard
@@ -70,6 +71,27 @@ public:
         if (bindings["saveSnippet"] == cmdShiftS && bindings["saveProjectAs"] == cmdOptS) {
             bindings["saveSnippet"] = cmdOptS;
             bindings["saveProjectAs"] = cmdShiftS;
+        }
+    }
+
+    /** FRO333: one-shot, same shape as migrateSaveAsChordSwap above. The bottom-dock toggle used to
+     *  be toggleTimelinePanel's own Cmd+T; a saved install still holds "shortcut_toggleTimelinePanel"
+     *  = Cmd+T (saveToProperties() persists every action, not only rebound ones), which would
+     *  otherwise collide with the new toggleBottomPanel action's own Cmd+T default -- both keyed to
+     *  the same chord, resolved arbitrarily by getActionsForKeyPress()'s "first in actionIds order"
+     *  rule. Move Cmd+T onto toggleBottomPanel and give toggleTimelinePanel its own new default
+     *  (Cmd+1) instead, but ONLY when toggleTimelinePanel still holds the OLD default -- a user who
+     *  rebound it keeps their choice, and toggleBottomPanel then just claims Cmd+T fresh (it is
+     *  absent from every saved file, so it already has its own default with no rebind needed). */
+    void migrateBottomPanelToggleKeys(juce::PropertiesFile& settings) {
+        constexpr auto flag = "shortcutMigration_bottomPanelCmdT";
+        if (settings.getBoolValue(flag, false))
+            return;
+        settings.setValue(flag, true);
+        const auto cmdT = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
+        if (bindings["toggleTimelinePanel"] == cmdT) {
+            bindings["toggleBottomPanel"] = cmdT;
+            bindings["toggleTimelinePanel"] = juce::KeyPress('1', juce::ModifierKeys::commandModifier, 0);
         }
     }
 
@@ -252,16 +274,16 @@ public:
 #endif
         bindings["toggleLibrary"] = juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0);
         // 't' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M /
-        // K / A / L / B, Shift+A, Shift+S, C / V / D) — safe to claim for the timeline panel
-        // toggle.
-        bindings["toggleTimelinePanel"] = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
-        // FRO11 (P9-5): Cmd+Alt+M, the Cmd+Alt+<letter> family collapseMacro already established
-        // below. Not bare Cmd+M (toggleModMatrix) nor Cmd+Shift+M (locateMaster, which spent the
-        // chord "focusTimeline"'s own comment had earmarked for this before the mixer panel
-        // existed — see locateMaster's comment) — neither is available, so this claims a fresh
-        // chord in the same modifier family instead of contesting either.
-        bindings["toggleMixerPanel"] =
-            juce::KeyPress('m', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
+        // K / A / L / B, Shift+A, Shift+S, C / V / D) — safe to claim for the ONE bottom-dock
+        // open/close toggle (FRO333; this used to be toggleTimelinePanel's own chord before the
+        // dock grew a single shared toggle — see migrateBottomPanelToggleKeys() below).
+        bindings["toggleBottomPanel"] = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
+        // FRO333: Cmd+1/2/3 -- "show this tab" (never closes the dock), in the dock's DEFAULT tab
+        // order (Timeline, Mixer, Controllers); a drag-reorder keeps Cmd+N pointed at whichever tab
+        // is now Nth (BottomDockComponent::permuteShortcutKeysForNewOrder). Free chords: no other
+        // binding in this table uses a bare Cmd+digit.
+        bindings["toggleTimelinePanel"] = juce::KeyPress('1', juce::ModifierKeys::commandModifier, 0);
+        bindings["toggleMixerPanel"] = juce::KeyPress('2', juce::ModifierKeys::commandModifier, 0);
         // The platform-standard Select All chord (Cubase, and every text field, read Cmd+A this
         // way); it routes per focused editor. The AI panel moved to Cmd+Shift+A to free it (above).
         bindings["selectAllModules"] = juce::KeyPress('a', juce::ModifierKeys::commandModifier, 0);
@@ -317,7 +339,7 @@ public:
         // (Graph, below) instead — FRO45's canvas-only stopgap for the same "find Master" need this
         // reservation was originally held for, ahead of the eventual mixer panel (P9-5). Free on both
         // counts against the rest of this table: no other binding uses 't' or 'l' with Cmd+Shift
-        // (toggleTimelinePanel is bare Cmd+T; autoArrange is bare Cmd+L, a different category
+        // (toggleBottomPanel is bare Cmd+T; autoArrange is bare Cmd+L, a different category
         // entirely), and no component keyPressed() override hardcodes either chord.
         bindings["focusTimeline"] =
             juce::KeyPress('t', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
@@ -358,10 +380,13 @@ public:
         bindings["selectNextTrack"] = juce::KeyPress();
         bindings["selectPreviousTrack"] = juce::KeyPress();
 
-        // FRO131: same "explicit invalid KeyPress, not an absent entry" reasoning as the transport
-        // family above -- shipped unbound (a toolbar button and MIDI Remote target already reach
-        // it), but still needs a `bindings` entry or saveToProperties()'s `.at()` throws.
-        bindings["toggleMidiRemotePanel"] = juce::KeyPress();
+        // FRO333: "show the Controllers tab" -- see toggleTimelinePanel/toggleMixerPanel's own
+        // comment above (the Cmd+1/2/3 family, permuted by a drag-reorder). Previously shipped
+        // unbound (FRO131); a returning user's saved unbound value carries forward unchanged, same
+        // as toggleMixerPanel's old Cmd+Alt+M -- only toggleTimelinePanel's Cmd+T is migrated (see
+        // migrateBottomPanelToggleKeys()), since only that one collides with the new
+        // toggleBottomPanel default.
+        bindings["toggleMidiRemotePanel"] = juce::KeyPress('3', juce::ModifierKeys::commandModifier, 0);
     }
 
     void addGraphDefaultBindings() {
@@ -691,12 +716,19 @@ private:
             {"toggleMinimap", ShortcutCategory::General},
             {"toggleAiPanel", ShortcutCategory::General},
             {"toggleLibrary", ShortcutCategory::General},
+            // FRO333: the ONE bottom-dock open/close toggle (docs/layout/chrome.md) -- opens or
+            // closes the whole dock, reopening on whichever tab was last active. The three rows
+            // below are no longer toggles themselves; each just SHOWS its tab (opening the dock if
+            // needed) -- see their own comments.
+            {"toggleBottomPanel", ShortcutCategory::General},
+            // FRO333: "show the Timeline/Mixer/Controllers tab" -- default Cmd+1/2/3, in the bottom
+            // dock's default tab order. A drag-reorder of the tab strip PERMUTES these three
+            // bindings so Cmd+N keeps naming the tab now in position N (BottomDockComponent::
+            // permuteShortcutKeysForNewOrder) -- never a user's own rebind away from the Cmd+digit
+            // convention, which the permute leaves alone (same guard shape as
+            // migrateSaveAsChordSwap below).
             {"toggleTimelinePanel", ShortcutCategory::General},
             {"toggleMixerPanel", ShortcutCategory::General},
-            // FRO131 (docs/control/midi-remote-ui.md#the-controllers-panel): default unbound --
-            // deliberately absent from resetToDefaults()'s bindings map below, not merely an empty
-            // KeyPress (the strict-resolution contract other surfaces rely on treats "no key in the
-            // map" as "no key at all", MainComponent::keyPressed's sole-dispatch-point comment).
             {"toggleMidiRemotePanel", ShortcutCategory::General},
             {"selectAllModules", ShortcutCategory::General},
             {"copySelection", ShortcutCategory::General},

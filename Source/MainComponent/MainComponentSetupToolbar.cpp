@@ -183,13 +183,16 @@ void MainComponent::addUndoButtons() {
 }
 
 void MainComponent::addToolbarToggleButtons() {
-    addAndMakeVisible(toggleTimelineButton);
-    toggleTimelineButton.setComponentID("toggleTimeline");
-    toggleTimelineButton.onClick = [this] {
+    addAndMakeVisible(toggleBottomPanelButton);
+    toggleBottomPanelButton.setComponentID("toggleBottomPanel");
+    toggleBottomPanelButton.onClick = [this] {
         isBottomDockVisible = !isBottomDockVisible;
         // Persist BEFORE the slide so a crash during layout doesn't lose the user's choice.
         appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, isBottomDockVisible ? "1" : "0");
         appProperties.getUserSettings()->saveIfNeeded();
+        // FRO333: a deliberate open/close always supersedes the auto-hide/auto-reopen bookkeeping
+        // the detach-state handler uses (see bottomDockAutoHiddenByEmptyTabs_'s own comment).
+        bottomDockAutoHiddenByEmptyTabs_ = false;
         applyToolbarIcons();
         beginPanelSlide();
     };
@@ -202,13 +205,6 @@ void MainComponent::addToolbarToggleButtons() {
         appProperties.getUserSettings()->saveIfNeeded();
         applyToolbarIcons();
     };
-
-    // FRO131 (docs/control/midi-remote-ui.md#the-controllers-panel): same shape as
-    // toggleTimelineButton above, through performToggleMidiRemotePanel() rather than a plain
-    // triggerClick() -- the dock is shared between three tabs now.
-    addAndMakeVisible(toggleMidiRemoteButton);
-    toggleMidiRemoteButton.setComponentID("toggleMidiRemote");
-    toggleMidiRemoteButton.onClick = [this] { performToggleMidiRemotePanel(); };
 
     addAndMakeVisible(toggleModMatrixButton);
     toggleModMatrixButton.setComponentID("toggleModMatrix");
@@ -271,7 +267,7 @@ void MainComponent::assembleToolbar() {
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
     toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &feedbackButton,
                         &undoButton, &redoButton, &autoArrangeButton, &toggleMinimapButton, &toggleModMatrixButton,
-                        &toggleAiPanelButton, &toggleTimelineButton, &toggleMidiRemoteButton, &themeToggleButton});
+                        &toggleAiPanelButton, &toggleBottomPanelButton, &themeToggleButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.

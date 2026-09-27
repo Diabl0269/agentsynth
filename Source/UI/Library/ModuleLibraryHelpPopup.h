@@ -203,7 +203,7 @@ public:
             {"pianoRollQuantise", juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0)},
             {"timelineJumpToLocator1", juce::KeyPress('1', juce::ModifierKeys::altModifier, 0)},
             {"timelineJumpToLocator2", juce::KeyPress('2', juce::ModifierKeys::altModifier, 0)},
-            {"toggleTimelinePanel", juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0)},
+            {"toggleBottomPanel", juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0)},
             {"toggleLibrary", juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0)},
 #if JUCE_MAC
             {"toggleAiPanel", juce::KeyPress('a', juce::ModifierKeys::ctrlModifier, 0)},

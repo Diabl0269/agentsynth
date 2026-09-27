@@ -73,7 +73,7 @@ TEST_F(FocusArbitrationTest, SelectNextAndPreviousTrackMoveTheFocusedTrackRow) {
     doc.addTrack(synth::TrackKind::Midi, "A");
     doc.addTrack(synth::TrackKind::Midi, "B");
     doc.addTrack(synth::TrackKind::Midi, "C");
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
     auto& panel = mc.getTimelinePanel();
     ASSERT_EQ(panel.getTrackHeaderCount(), 3);
@@ -93,7 +93,7 @@ TEST_F(FocusArbitrationTest, SelectNextAndPreviousTrackMoveTheFocusedTrackRow) {
 TEST_F(FocusArbitrationTest, SelectTrackCommandsReportFalseWithNoTracks) {
     MainComponent mc(std::make_unique<FocusMockProvider>());
     mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
     ASSERT_EQ(mc.getTimelinePanel().getTrackHeaderCount(), 0);
 

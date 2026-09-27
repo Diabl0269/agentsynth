@@ -115,12 +115,14 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Repeat Selection";
     if (actionId == "togglePlayback")
         return "Play / Stop";
+    if (actionId == "toggleBottomPanel")
+        return "Toggle Bottom Panel";
     if (actionId == "toggleTimelinePanel")
-        return "Toggle Timeline Panel";
+        return "Show Timeline Tab";
     if (actionId == "toggleMixerPanel")
-        return "Toggle Mixer Panel";
+        return "Show Mixer Tab";
     if (actionId == "toggleMidiRemotePanel")
-        return "Toggle Controllers Panel";
+        return "Show Controllers Tab";
     if (actionId == "zoomInHorizontal")
         return "Zoom In";
     if (actionId == "zoomOutHorizontal")

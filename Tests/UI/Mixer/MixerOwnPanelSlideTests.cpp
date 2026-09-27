@@ -12,7 +12,7 @@ TEST_F(MixerOwnPanelTest, HeadlessToggleLandsSynchronouslyBothWays) {
     auto& own = mc.getMixerPlacementControllerForTest();
     ASSERT_EQ(own.getSlideProgressForTest(), 1.0f);
 
-    mc.performToggleMixerPanel(); // close
+    mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer); // close
     EXPECT_EQ(own.getSlideProgressForTest(), 0.0f);
     EXPECT_FALSE(own.isVisible());
     EXPECT_FALSE(own.isOwnPanelShowing());
@@ -21,7 +21,7 @@ TEST_F(MixerOwnPanelTest, HeadlessToggleLandsSynchronouslyBothWays) {
     EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), mc.getStatusBar().getBounds().getY())
         << "a closed strip carves nothing off the canvas";
 
-    mc.performToggleMixerPanel(); // open
+    mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer); // open
     EXPECT_EQ(own.getSlideProgressForTest(), 1.0f);
     EXPECT_TRUE(own.isOwnPanelShowing());
     EXPECT_EQ(own.getCarveHeight(), 220);
@@ -52,11 +52,11 @@ TEST_F(MixerOwnPanelTest, OpeningIsVisibleBeforeTheFirstFrame) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     showOwnPanel(mc);
     auto& own = mc.getMixerPlacementControllerForTest();
-    mc.performToggleMixerPanel(); // close (synchronous)
+    mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer); // close (synchronous)
     ASSERT_FALSE(own.isVisible());
 
     own.forceSlideAnimationForTest(true);
-    mc.performToggleMixerPanel(); // open, as a real tween
+    mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer); // open, as a real tween
     EXPECT_TRUE(own.isSlideAnimatingForTest());
     EXPECT_TRUE(own.isVisible()) << "visible before the first frame, or the opening would be a pop";
     EXPECT_TRUE(own.isOwnPanelShowing());
@@ -81,7 +81,7 @@ TEST_F(MixerOwnPanelTest, ClosingStaysVisibleUntilTheSlideFinishes) {
     auto& own = mc.getMixerPlacementControllerForTest();
 
     own.forceSlideAnimationForTest(true);
-    mc.performToggleMixerPanel(); // close, as a real tween
+    mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer); // close, as a real tween
     EXPECT_TRUE(own.isSlideAnimatingForTest());
     EXPECT_TRUE(own.isVisible()) << "a closing strip animates down instead of vanishing";
     EXPECT_TRUE(own.isOwnPanelShowing()) << "meters and the focus region treat the whole slide as showing";
@@ -105,13 +105,13 @@ TEST_F(MixerOwnPanelTest, AMidFlightReversalStartsFromTheCurrentFraction) {
     auto& own = mc.getMixerPlacementControllerForTest();
 
     own.forceSlideAnimationForTest(true);
-    mc.performToggleMixerPanel(); // closing...
+    mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer); // closing...
     own.applySlideFrameForTest(0.4f);
     const float mid = own.getSlideProgressForTest();
     ASSERT_GT(mid, 0.0f);
     ASSERT_LT(mid, 1.0f);
 
-    mc.performToggleMixerPanel(); // ...reversed mid-flight
+    mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer); // ...reversed mid-flight
     EXPECT_FLOAT_EQ(own.getSlideTweenStartForTest(), mid) << "from where it is, never a jump to an extreme";
     EXPECT_FLOAT_EQ(own.getSlideProgressForTest(), mid);
     EXPECT_TRUE(own.isVisible());

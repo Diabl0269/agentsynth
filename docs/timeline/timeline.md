@@ -79,19 +79,35 @@ open. The height it removes is `timelineSlide_.sizeBetween(0, timelinePanelHeigh
 user's height scaled by the panel's open fraction, so the same carve serves both the docked panel
 and every frame of its slide.
 
-A toolbar toggle (`ToolbarComponent::Slot::ToggleTimeline`, right-hand group, immediately before
-`ToggleTheme`) and the **Cmd+T** shortcut (action id `toggleTimelinePanel`; see
-[`shortcuts.md`](../control/shortcuts.md)) both flip `MainComponent::isBottomDockVisible`. Visibility persists
-under the `bottomDockVisible` key in `juce::ApplicationProperties`, default `false`.
+FRO333: ONE toolbar toggle (`ToolbarComponent::Slot::ToggleBottomPanel`, right-hand group,
+immediately before `ToggleTheme`) and the **Cmd+T** shortcut (action id `toggleBottomPanel`; see
+[`shortcuts.md`](../control/shortcuts.md)) flip `MainComponent::isBottomDockVisible` — show/hide the
+whole dock, reopening on whichever tab was last active. It replaced the former separate
+Show-Timeline/Show-MIDI-Remote toolbar buttons, whose own close-on-second-press behaviour is gone:
+**Cmd+1/2/3** (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) now each only SHOW
+their own tab (`MainComponent::showBottomDockTab`), opening the dock if it was hidden but never
+closing it — see [`shortcuts.md`](../control/shortcuts.md) for the migration and the drag-reorder
+re-keying. Visibility persists under the `bottomDockVisible` key in `juce::ApplicationProperties`,
+default `false`.
 
 **The key and the flag gate the whole bottom dock, not just this panel.**
-`TimelinePanelComponent` is nested inside `BottomDockComponent` (the Timeline/Mixer tab strip; see
-[`docs/mixer/panel.md#what-the-mixer-shows`](../mixer/panel.md#what-the-mixer-shows)), and
+`TimelinePanelComponent` is nested inside `BottomDockComponent` (the Timeline/Mixer/Controllers tab
+strip; see [`docs/mixer/panel.md#what-the-mixer-shows`](../mixer/panel.md#what-the-mixer-shows)), and
 `bottomDock.setVisible(isBottomDockVisible)` is what the toggle, the shortcut and the persisted key
 actually drive. `isBottomDockVisible` / `bottomDockVisible` mean "the dock is open", regardless of
-which tab is active; which of the two panels is *showing* inside an open dock is the separate,
-independently persisted `bottomDockActiveTab` key (`BottomDockComponent::kActiveTabKey`, default
-`"timeline"` — see [`docs/mixer/panel.md#what-the-mixer-shows`](../mixer/panel.md#what-the-mixer-shows)).
+which tab is active; which tab is *showing* inside an open dock is the separate, independently
+persisted `bottomDockActiveTab` key (`BottomDockComponent::kActiveTabKey`, default `"timeline"`), and
+the strip's own user-reorderable left-to-right order is the also-independent `bottomDockTabOrder`
+key (comma-joined tab names, default `"timeline,mixer,midiRemote"`) — both keys are documented
+alongside the tab strip itself in
+[`docs/mixer/panel.md#what-the-mixer-shows`](../mixer/panel.md#what-the-mixer-shows).
+
+**Detaching the active tab never leaves the dock blank (FRO158/FRO333).** A tab detached to its own
+window (`Source/UI/Layout/DetachablePanelHost/`) leaves the strip entirely — its button and content
+disappear from here — and if it was the active tab, `BottomDockComponent` falls back to the next tab
+still offered; only once every tab has been detached (or Mixer disabled by its own placement
+preference too) does `MainComponent` hide the whole dock, reopening it automatically the moment a
+tab redocks. See [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows).
 
 **Why the names stayed.** They match settings files already on disk. The cost is that a
 component-local `TimelinePanelComponent::isVisible()` check does not tell you whether the dock is

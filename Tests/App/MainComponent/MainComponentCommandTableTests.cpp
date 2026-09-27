@@ -56,6 +56,9 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::zoomOutHorizontal,
     AppCommands::zoomInVertical,
     AppCommands::zoomOutVertical,
+    // FRO333: the ONE bottom-dock open/close toggle -- see MainComponentCommandTable.cpp's own
+    // comment. The three rows below now each just show their own tab.
+    AppCommands::toggleBottomPanel,
     AppCommands::toggleTimelinePanel,
     // FRO11 (P9-5): the new row sits right after toggleTimelinePanel in
     // MainComponentCommandTable.cpp -- see that file's own comment for why.

@@ -297,9 +297,8 @@ void MainComponent::wireGraphEditorCallbacks() {
         midiLearnController_.retargetNode(oldNodeUuid, newNodeId);
     };
     graphEditor.onMidiRemoteDocRestored = [this] { midiLearnController_.publishAssignments(); };
-    // FRO131 decision (2026-09-22): "Edit MIDI assignment..." -- open the dock (same sequence
-    // performToggleMidiRemotePanel()'s own "closed" branch runs, mirroring
-    // trackChannelLink_.setMixerRevealHook()'s own "open before reveal" shape above) before asking
+    // FRO131 decision (2026-09-22): "Edit MIDI assignment..." -- open the dock (ensureBottomDockOpen(),
+    // same "open before reveal" shape as trackChannelLink_.setMixerRevealHook() above) before asking
     // the panel to select the assignment; a closed dock has nothing on screen to select into yet.
     graphEditor.onEditMidiAssignmentRequested = [this](juce::AudioProcessorGraph::NodeID nodeId,
                                                        const juce::String& paramId) {
@@ -307,13 +306,7 @@ void MainComponent::wireGraphEditorCallbacks() {
         const juce::String nodeUuid = node != nullptr ? node->properties["uuid"].toString() : juce::String();
         if (nodeUuid.isEmpty())
             return;
-        if (!isBottomDockVisible) {
-            isBottomDockVisible = true;
-            appProperties.getUserSettings()->setValue("bottomDockVisible", "1");
-            appProperties.getUserSettings()->saveIfNeeded();
-            applyToolbarIcons();
-            beginPanelSlide();
-        }
+        ensureBottomDockOpen();
         bottomDock.selectMidiRemoteAssignment(nodeUuid, paramId);
     };
     graphEditor.snippetProvider = [this](const juce::String& name) -> juce::var {
@@ -801,8 +794,7 @@ void MainComponent::rebuildFocusRegions() {
                                  },
                                  [this] {
                                      bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
-                                     if (!isBottomDockVisible && toggleTimelineButton.onClick)
-                                         toggleTimelineButton.onClick();
+                                     ensureBottomDockOpen();
                                  }});
     // FRO18 plan (a)'s "FRO12 seam": the actual registration (open predicate + no `open` callback
     // -- see MixerFocusRegion.h's own comment) lives in the free `registerMixerFocusRegion` helper
@@ -839,8 +831,7 @@ void MainComponent::rebuildFocusRegions() {
                                  [this] { return isBottomDockVisible && bottomDock.isMidiRemoteTabActive(); },
                                  [this] {
                                      bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::MidiRemote);
-                                     if (!isBottomDockVisible && toggleMidiRemoteButton.onClick)
-                                         toggleMidiRemoteButton.onClick();
+                                     ensureBottomDockOpen();
                                  }});
     focusRegions_.addRegion({"aiPanel", &aiChatComponent, [this] { return isAiPanelVisible; },
                              [this] {

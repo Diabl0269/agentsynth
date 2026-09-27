@@ -52,7 +52,31 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     bottomDock.getMidiRemoteHost().setHostedPanelFocusRegion("midiRemote", bottomDock.getMidiRemotePanel());
     bottomDock.getTimelineHost().setHostedPanelFocusRegion("timeline", timelinePanel);
     bottomDock.getMixerHost().setHostedPanelFocusRegion("mixer", bottomDock.getMixerPanel());
-    bottomDock.onPanelDetachStateChanged = [this] { rebuildFocusRegions(); };
+    // FRO333: app-wide shortcuts (Cmd+T, Cmd+1..9) still fire while a detached tab's own window has
+    // focus -- see DetachedPanelWindow::onAppShortcut's own comment on why it can't just reach
+    // MainComponent::keyPressed directly.
+    auto appShortcutFallback = [this](const juce::KeyPress& key) { return keyPressed(key); };
+    bottomDock.getTimelineHost().onAppShortcutFallback = appShortcutFallback;
+    bottomDock.getMixerHost().onAppShortcutFallback = appShortcutFallback;
+    bottomDock.getMidiRemoteHost().onAppShortcutFallback = appShortcutFallback;
+    // FRO333: keeps isBottomDockVisible in sync with bottomDock.hasAnyVisibleTab() -- see
+    // bottomDockAutoHiddenByEmptyTabs_'s own comment (MainComponent.h) for why the reopen half is
+    // gated on that flag rather than firing on every "a tab came back" edge.
+    bottomDock.onPanelDetachStateChanged = [this] {
+        rebuildFocusRegions();
+        if (!bottomDock.hasAnyVisibleTab()) {
+            if (isBottomDockVisible) {
+                isBottomDockVisible = false;
+                bottomDockAutoHiddenByEmptyTabs_ = true;
+                appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, "0");
+                appProperties.getUserSettings()->saveIfNeeded();
+                applyToolbarIcons();
+                beginPanelSlide();
+            }
+        } else if (bottomDockAutoHiddenByEmptyTabs_) {
+            ensureBottomDockOpen(); // clears the flag itself once it actually reopens the dock
+        }
+    };
     // Placement preference (Tab/Own panel/Window, docs/mixer/panel.md) -- read once here (both
     // panels already exist by this point in initialiseCommon()'s ORDER) and again on every
     // settings-file write, see MainComponent::changeListenerCallback's settings branch.
@@ -74,17 +98,10 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
         bottomDock.getMixerPanel().unbindAllColumns();
     };
     // The channel chip's click (TrackChannelLinkSurface::revealChannelForTrack, "THE P9-5 HOOK"
-    // per its own comment): open the dock (same sequence performToggleMixerPanel's own "closed"
-    // branch runs) before revealColumnForStrip switches tabs and scrolls to the column -- a closed
-    // dock has nothing on screen to scroll to yet.
+    // per its own comment): open the dock (ensureBottomDockOpen()) before revealColumnForStrip
+    // switches tabs and scrolls to the column -- a closed dock has nothing on screen to scroll to yet.
     trackChannelLink_.setMixerRevealHook([this](juce::AudioProcessorGraph::NodeID stripId) {
-        if (!isBottomDockVisible) {
-            isBottomDockVisible = true;
-            appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, "1");
-            appProperties.getUserSettings()->saveIfNeeded();
-            applyToolbarIcons();
-            beginPanelSlide();
-        }
+        ensureBottomDockOpen();
         return bottomDock.revealColumnForStrip(stripId);
     });
 

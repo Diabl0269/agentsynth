@@ -81,9 +81,6 @@ const juce::StringArray& intentionallyUnboundActionIds() {
         "selectPreviousModule",
         "selectNextTrack",
         "selectPreviousTrack",
-        // FRO131: shipped unbound (docs/control/midi-remote-ui.md#the-controllers-panel) -- a
-        // toolbar button and MIDI Remote target already reach it; a user may still bind one.
-        "toggleMidiRemotePanel",
     };
     return ids;
 }

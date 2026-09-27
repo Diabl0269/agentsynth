@@ -371,7 +371,7 @@ TEST_F(TimelinePlayheadPollTest, TenHzPollOnlyReachesAVisiblePanel) {
     EXPECT_EQ(panel.getTransportUpdateCountForTest(), 0) << "a hidden timeline costs exactly what it did before";
     EXPECT_FALSE(panel.getPlayhead().isPlayheadTimerRunning());
 
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(timelinePanelIsOpen(mc));
 
     mc.timerCallback();
@@ -380,5 +380,5 @@ TEST_F(TimelinePlayheadPollTest, TenHzPollOnlyReachesAVisiblePanel) {
     // A stopped transport (nothing opens an audio device in a test) still starts no 30 Hz timer.
     EXPECT_FALSE(panel.getPlayhead().isPlayheadTimerRunning());
 
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
 }

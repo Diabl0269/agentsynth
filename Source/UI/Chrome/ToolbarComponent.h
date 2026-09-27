@@ -21,7 +21,7 @@ public:
     ToolbarComponent();
 
     // Logical slot order — matches the left group [Library..AutoArrange] + right group
-    // [ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleTimeline, ToggleTheme]. NumSlots is
+    // [ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleBottomPanel, ToggleTheme]. NumSlots is
     // the array size. Feedback sits immediately after Settings (same group — icon-only,
     // visually paired with the settings gear rather than a new standalone cluster).
     enum Slot {
@@ -35,14 +35,13 @@ public:
         Redo,
         AutoArrange,
         // ToggleMinimap sits before ToggleModMatrix so the right-hand group reads
-        // minimap -> mod matrix -> AI panel -> timeline -> theme (issue #159).
+        // minimap -> mod matrix -> AI panel -> bottom panel -> theme (issue #159).
         ToggleMinimap,
         ToggleModMatrix,
         ToggleAiPanel,
-        // Timeline panel toggle, right before the theme toggle.
-        ToggleTimeline,
-        // FRO131: the MIDI Remote panel's own toggle, right after Timeline's.
-        ToggleMidiRemote,
+        // FRO333: the ONE bottom-dock open/close toggle, right before the theme toggle -- replaces
+        // the former separate ToggleTimeline/ToggleMidiRemote slots.
+        ToggleBottomPanel,
         ToggleTheme,
         NumSlots
     };

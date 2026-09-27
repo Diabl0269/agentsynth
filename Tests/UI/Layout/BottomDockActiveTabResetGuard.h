@@ -64,6 +64,9 @@ struct BottomDockActiveTabResetGuardMDT {
             // FRO255: see the class comment -- both gaps confirmed by direct repro.
             s->removeValue("mixerPlacement");
             s->setValue("bottomDockVisible", "0");
+            // FRO333: a drag-reorder test's own tab order must not leak into a later test's
+            // "default order" assumption, same reasoning as bottomDockActiveTab above.
+            s->removeValue("bottomDockTabOrder");
             s->saveIfNeeded();
         }
     }

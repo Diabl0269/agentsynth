@@ -45,7 +45,7 @@ protected:
     // An open dock at the default height, on the tab under test.
     void openDockOnTab(MainComponent& mc) {
         mc.setSize(1600, 900);
-        mc.simulateToggleTimelineClick();
+        mc.simulateToggleBottomPanelClick();
         mc.getBottomDock().setActiveTab(GetParam());
         ASSERT_EQ(mc.getBottomDock().getActiveTab(), GetParam());
         ASSERT_EQ(mc.getBottomDock().getHeight(), 220);
@@ -211,7 +211,7 @@ TEST_P(BottomDockResizeOnEveryTabTest, AStrayClickOnTheHandleNeverPersists) {
 TEST_F(BottomDockResizeTest, AHeightDraggedOnOneTabHoldsWhenSwitchingTabs) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     auto& dock = mc.getBottomDock();
 
     dock.setActiveTab(Dock::Tab::Mixer);
@@ -233,7 +233,7 @@ TEST_F(BottomDockResizeTest, AHeightDraggedOnOneTabHoldsWhenSwitchingTabs) {
 TEST_F(BottomDockResizeTest, ADetachedTimelineStillLeavesTheDockResizable) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     auto& dock = mc.getBottomDock();
 
     dock.getTimelineHost().setDetached(true);
@@ -255,7 +255,7 @@ TEST_F(BottomDockResizeTest, ADetachedTimelineStillLeavesTheDockResizable) {
 TEST_F(BottomDockResizeTest, TheTimelinePanelHasNoHandleOfItsOwnAndItsTransportBarUsesTheFullStrip) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     auto& panel = mc.getTimelinePanel();
 
     EXPECT_EQ(panel.findChildWithID("timelineResizeHandle"), nullptr);
@@ -270,7 +270,7 @@ TEST_F(BottomDockResizeTest, TheTimelinePanelHasNoHandleOfItsOwnAndItsTransportB
 TEST_F(BottomDockResizeTest, AbsentSettingFallsBackToTheThemeMetric) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
 
     EXPECT_EQ(mc.getTimelinePanelHeight(), 220); // Metrics::timelinePanelHeight literal default
     EXPECT_EQ(mc.getBottomDock().getHeight(), 220);
@@ -284,7 +284,7 @@ TEST_F(BottomDockResizeTest, PersistedHeightIsHonouredAtStartup) {
 
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(timelinePanelIsOpen(mc));
 
     const auto& dock = mc.getBottomDock();
@@ -297,7 +297,7 @@ TEST_F(BottomDockResizeTest, PersistedHeightIsHonouredAtStartup) {
 TEST_F(BottomDockResizeTest, HeightIsClampedToTheMetricFloorAndThreeQuartersOfTheWindow) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
 
     auto& dock = mc.getBottomDock();
     ASSERT_TRUE(dock.onResizeHeight != nullptr);
@@ -322,7 +322,7 @@ TEST_F(BottomDockResizeTest, ASmallerWindowReclampsTheHeightSoTheCanvasSurvives)
 
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_EQ(mc.getTimelinePanelHeight(), 600); // within 75% of 900
 
     mc.setSize(1000, 400);
@@ -342,17 +342,17 @@ TEST_F(BottomDockResizeTest, HidingTheDockReturnsTheCanvasAndReshowingKeepsTheDr
     mc.setSize(1600, 900);
     const auto canvasWithNoPanel = mc.getGraphEditor().getBounds();
 
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     // The dock reports TOTAL height, so 420 here is exactly the dock's carve.
     mc.getBottomDock().onResizeHeight(420);
     ASSERT_EQ(mc.getBottomDock().getHeight(), 420);
 
-    mc.simulateToggleTimelineClick();      // hide
+    mc.simulateToggleBottomPanelClick();   // hide
     EXPECT_FALSE(timelinePanelIsOpen(mc)); // see HiddenByDefaultAndCarvesNothing's comment
     EXPECT_EQ(mc.getGraphEditor().getBounds(), canvasWithNoPanel) << "a hidden dock carves nothing, at any height";
     EXPECT_EQ(mc.getTimelinePanelHeight(), 420) << "the height outlives a hide";
 
-    mc.simulateToggleTimelineClick(); // show again
+    mc.simulateToggleBottomPanelClick(); // show again
     EXPECT_EQ(mc.getBottomDock().getHeight(), 420);
     EXPECT_EQ(mc.getBottomDock().getBottom(), mc.getStatusBar().getBounds().getY());
 }

@@ -59,7 +59,7 @@ TEST_F(FocusArbitrationTest, ShiftedSymbolKeyCodesFromTheRealKeyboardReachTheGri
     using Snap = synth::ui::TimelineViewState::Snap;
     MainComponent mc(std::make_unique<FocusMockProvider>());
     mc.setSize(1200, 800);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible()) << "precondition: the grid commands are panel-gated";
 
     auto& view = mc.getTimelinePanel().getViewState();
@@ -109,7 +109,7 @@ TEST_F(FocusArbitrationTest, LocatorJumpKeysWorkWithFocusOutsideTheTimelinePanel
     engine.prepareForHost(44100.0, 512, 0, 2);
     MainComponent mc(tm, lf, engine, std::make_unique<FocusMockProvider>());
     mc.setSize(1200, 800);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
 
     auto& transport = engine.getTransport();
@@ -157,7 +157,7 @@ TEST_F(FocusArbitrationTest, LocatorJumpKeysAlsoWorkFromInsideThePanelAndNoOpWit
     engine.prepareForHost(44100.0, 512, 0, 2);
     MainComponent mc(tm, lf, engine, std::make_unique<FocusMockProvider>());
     mc.setSize(1200, 800);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
 
     auto& panel = mc.getTimelinePanel();
@@ -191,7 +191,7 @@ TEST_F(FocusArbitrationTest, LocatorJumpKeysAlsoWorkFromInsideThePanelAndNoOpWit
 TEST_F(FocusArbitrationTest, ShiftedPunctuationReachesTheVerticalZoomCommands) {
     MainComponent mc(std::make_unique<FocusMockProvider>());
     mc.setSize(1200, 800);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
     mc.setEditSurfaceOverrideForTest(MainComponent::EditSurface::PianoRoll);
 

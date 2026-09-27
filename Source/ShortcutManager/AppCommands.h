@@ -67,6 +67,9 @@ enum CommandIDs {
     // transport to toggle) so ShortcutManager's tripwire tests (unique default, description,
     // command mapping) cover it unconditionally.
     togglePlayback,
+    // FRO333: the ONE bottom-dock open/close toggle -- see ShortcutManager.h's own comment on the
+    // action id. The three below now each just SHOW their tab (never close the dock).
+    toggleBottomPanel,
     toggleTimelinePanel,
     toggleMixerPanel,
     toggleMidiRemotePanel,
@@ -236,6 +239,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return repeatSelection;
     if (actionId == "togglePlayback")
         return togglePlayback;
+    if (actionId == "toggleBottomPanel")
+        return toggleBottomPanel;
     if (actionId == "toggleTimelinePanel")
         return toggleTimelinePanel;
     if (actionId == "toggleMixerPanel")

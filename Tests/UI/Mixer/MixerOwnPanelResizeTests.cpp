@@ -133,7 +133,7 @@ TEST_F(MixerOwnPanelTest, AnOpenDockReservesItsMinimumOutOfTheOwnPanelsBudget) {
     showOwnPanel(mc);
     auto& own = mc.getMixerPlacementControllerForTest();
 
-    mc.simulateToggleTimelineClick(); // open the dock (220 min)
+    mc.simulateToggleBottomPanelClick(); // open the dock (220 min)
     ASSERT_TRUE(mc.getBottomDock().isVisible());
 
     own.setOwnPanelHeight(5000, false);
@@ -142,7 +142,7 @@ TEST_F(MixerOwnPanelTest, AnOpenDockReservesItsMinimumOutOfTheOwnPanelsBudget) {
 
     // Closing the dock hands its reservation back: the stored wish (5000 -> clamped when stored)
     // does not silently shrink, but only what the window allows is laid out.
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     EXPECT_LE(own.getHeight(), 675);
     EXPECT_EQ(own.getHeight(), own.getOwnPanelHeight());
 }
@@ -190,7 +190,7 @@ TEST_F(MixerOwnPanelTest, DockAndOwnPanelTogetherNeverExceedThreeQuartersOfTheWi
     showOwnPanel(mc);
     auto& own = mc.getMixerPlacementControllerForTest();
     auto& dock = mc.getBottomDock();
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(dock.isVisible());
 
     for (const int windowHeight : {900, 700, 640}) {
@@ -215,7 +215,7 @@ TEST_F(MixerOwnPanelTest, TheOwnPanelSitsAtTheWindowsBottomEdgeUnderTheDock) {
     useOwnPanelPlacement();
     MainComponent mc(std::make_unique<MockProviderTL>());
     showOwnPanel(mc);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     auto& own = mc.getMixerPlacementControllerForTest();
     auto& dock = mc.getBottomDock();
 
@@ -229,10 +229,10 @@ TEST_F(MixerOwnPanelTest, TheDocksStoredHeightSurvivesGivingWayToTheOwnPanel) {
     writeSetting(MainComponent::kTimelinePanelHeightKey, 500);
     MainComponent mc(std::make_unique<MockProviderTL>());
     showOwnPanel(mc);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_EQ(mc.getBottomDock().getHeight(), 455) << "500 wished, 675 - the Own panel's 220";
 
     EXPECT_EQ(mc.getTimelinePanelHeight(), 500) << "the stored/persisted dock height is untouched";
-    mc.performToggleMixerPanel(); // close the Own panel (headless: lands at once)
+    mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer); // close the Own panel (headless: lands at once)
     EXPECT_EQ(mc.getBottomDock().getHeight(), 500) << "and comes back once the room does";
 }

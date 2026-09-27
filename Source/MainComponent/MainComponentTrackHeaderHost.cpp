@@ -269,8 +269,7 @@ synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeade
     if (!laneId.isValid())
         return {};
 
-    if (!isBottomDockVisible && toggleTimelineButton.onClick)
-        toggleTimelineButton.onClick();
+    ensureBottomDockOpen();
     timelinePanel.showAutomationLane(laneId);
     return laneId;
 }

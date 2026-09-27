@@ -315,6 +315,7 @@ add_executable(Tests
     UI/Settings/SettingsWindowTests.cpp
     App/ShortcutManager/ShortcutManagerActionRegressionTests.cpp
     App/ShortcutManager/ShortcutManagerApiTests.cpp
+    App/ShortcutManager/ShortcutManagerBottomPanelMigrationTests.cpp
     App/ShortcutManager/ShortcutManagerConflictTests.cpp
     App/ShortcutManager/ShortcutManagerDefaultsTests.cpp
     App/ShortcutManager/ShortcutManagerKeyMatchingTests.cpp
