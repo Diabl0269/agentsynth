@@ -354,7 +354,12 @@ the port — meant the port two hops away could never reach zero connections and
 `MacroGroupController::autoDeleteOrphanedAttenuverter`, called on the SAME
 `macroPortDeletionNeighbors` candidate list `autoDeleteOrphanedMacroPort` sweeps, no-ops unless the
 candidate is an attenuverter left with EXACTLY ONE remaining connection, to a macro port; when it
-matches, it removes the orphaned attenuverter and splices the port out directly (bypassing
+matches, it removes the orphaned attenuverter, then re-checks the port's OWN remaining connections
+before touching it further — an interior source can fan out through more than one attenuverter (an
+Envelope feeding both a Filter's cutoff and a VCA's gain, each through its own attenuverter), so
+deleting one destination must only remove that one attenuverter, leaving the port wired for the
+other fan-out leg. Only when every connection still on the port is interior (nothing exterior left
+— no other attenuverter, nothing else outside) does it splice the port out directly (bypassing
 `autoDeleteOrphanedMacroPort`'s own "zero cables total" test, which the port's still-live INTERIOR
 leg into the surviving macro member would otherwise pass). Gated on the same
 `autoDeleteMacroPortsOnLastCableEnabled` preference. No general multi-hop walk — this reaches

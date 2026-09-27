@@ -518,6 +518,94 @@ TEST(MacroAutoPortDelete, DeletingTheFarModuleThroughAHiddenAttenuverterSweepsTh
     EXPECT_TRUE(macro->hasMember(engine.getGraph().getNodeForId(env)->properties["uuid"].toString()));
 }
 
+// Same shape as above, but Env's mod-CV output fans out through TWO attenuverters -- one to
+// Filter's cutoff, one to a second module's (VCA's) gain -- both crossing the macro boundary
+// through the SAME port. Deleting Filter must only sweep the Filter-side attenuverter; the port
+// itself still has a live exterior connection (through the surviving attenuverter to VCA), so it
+// must NOT be spliced away.
+TEST(MacroAutoPortDelete, DeletingOneFanOutDestinationLeavesThePortWiredToTheOtherAttenuverter) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto env = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Env", 100, 100);
+    auto filter = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Filter", 900, 100);
+    auto vca = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "VCA", 900, 400);
+    auto spare = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Spare", 100, 400);
+    const auto attenToFilter = engine.addModRouting(env, 0, filter, 0);
+    const auto attenToVca = engine.addModRouting(env, 0, vca, 0);
+    ASSERT_TRUE(attenToFilter.uid != 0);
+    ASSERT_TRUE(attenToVca.uid != 0);
+
+    editor.setSelectedNodes({env, spare});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 1u) << "sanity: both fan-out legs share ONE crossing port";
+    const auto portUuid = macro->ports.front().nodeUuid;
+    const auto portId = nodeIdForUuid(engine, portUuid);
+    ASSERT_TRUE(portId.uid != 0);
+
+    editor.requestDeleteModule(filter);
+
+    EXPECT_EQ(engine.getGraph().getNodeForId(filter), nullptr);
+    EXPECT_EQ(engine.getGraph().getNodeForId(attenToFilter), nullptr)
+        << "the Filter-side attenuverter is now orphaned and must be swept";
+    EXPECT_NE(engine.getGraph().getNodeForId(attenToVca), nullptr) << "the VCA-side attenuverter is untouched";
+    macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 1u) << "the port survives -- it still feeds the VCA leg";
+    EXPECT_TRUE(macro->memberIsPort(portUuid));
+    EXPECT_NE(engine.getGraph().getNodeForId(portId), nullptr);
+    EXPECT_TRUE(hasConnection(engine, portId, 0, attenToVca, 0))
+        << "the surviving fan-out leg must still be wired through its own attenuverter";
+}
+
+TEST(MacroAutoPortDelete, DeletingOneFanOutDestinationIsOneUndoStep) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto env = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Env", 100, 100);
+    auto filter = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Filter", 900, 100);
+    auto vca = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "VCA", 900, 400);
+    auto spare = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Spare", 100, 400);
+    const auto attenToFilter = engine.addModRouting(env, 0, filter, 0);
+    const auto attenToVca = engine.addModRouting(env, 0, vca, 0);
+    ASSERT_TRUE(attenToFilter.uid != 0);
+    ASSERT_TRUE(attenToVca.uid != 0);
+
+    editor.setSelectedNodes({env, spare});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 1u);
+    const auto portUuid = macro->ports.front().nodeUuid;
+    const auto portId = nodeIdForUuid(engine, portUuid);
+    undo.clearUndoHistory();
+
+    editor.requestDeleteModule(filter);
+    ASSERT_EQ(engine.getGraph().getNodeForId(attenToFilter), nullptr);
+    ASSERT_NE(engine.getGraph().getNodeForId(portId), nullptr) << "sanity: the port survived the first delete";
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    EXPECT_NE(engine.getGraph().getNodeForId(filter), nullptr) << "one undo restores Filter";
+    EXPECT_NE(engine.getGraph().getNodeForId(attenToFilter), nullptr) << "...and its attenuverter";
+    macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 1u) << "the port never moved, so this is still just the one member";
+    EXPECT_EQ(macro->ports.front().nodeUuid, portUuid);
+    EXPECT_TRUE(hasConnection(engine, portId, 0, attenToFilter, 0));
+    EXPECT_TRUE(hasConnection(engine, attenToFilter, 0, filter, 0));
+    EXPECT_TRUE(hasConnection(engine, portId, 0, attenToVca, 0)) << "the VCA leg was never disturbed";
+}
+
 TEST(MacroAutoPortDelete, DeletingTheFarModuleThroughAnAttenuverterIsOneUndoStep) {
     AudioEngine engine;
     AppUndoManager undo;

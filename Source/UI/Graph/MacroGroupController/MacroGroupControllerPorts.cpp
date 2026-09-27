@@ -110,13 +110,44 @@ void MacroGroupController::autoDeleteOrphanedAttenuverter(juce::AudioProcessorGr
     host_.clearModMatrixRows();
     graph.removeNode(nodeId); // drops the attenuverter's own edge to the port too
 
-    // "Treat the port as orphaned": its EXTERIOR leg routed only through the just-removed
-    // attenuverter, so it is dead-ended even though its INTERIOR leg (into the surviving macro
-    // member on the near side) is still wired. Splice it out directly, sharing spliceOutMacroPort
-    // with every other auto-delete/ungroup path, rather than going through
-    // autoDeleteOrphanedMacroPort()'s own "zero cables total" test above — that test is right for
-    // the direct (non-attenuverter) case, but a lone interior leg would make it say this port
-    // "survives", which is exactly the T154 gap this founder decision closes.
+    // "Treat the port as orphaned" only if nothing exterior is left on it. A macro-interior
+    // source can fan out through more than one attenuverter (e.g. an Envelope feeding both a
+    // Filter's cutoff and a VCA's gain through two separate attenuverters on the same port) —
+    // deleting one destination must only remove ITS attenuverter, leaving the port wired for the
+    // other fan-out leg. So after the attenuverter is gone, re-scan the port's remaining
+    // connections: any edge whose other end is not an interior member of this macro (another
+    // attenuverter headed elsewhere, or anything else outside) means the port still has work to
+    // do, and only the attenuverter is removed. Only when every remaining edge is interior do we
+    // splice the port out directly, sharing spliceOutMacroPort with every other
+    // auto-delete/ungroup path rather than going through autoDeleteOrphanedMacroPort()'s own
+    // "zero cables total" test above — that test is right for the direct (non-attenuverter) case,
+    // but a lone interior leg would make it say this port "survives", which is exactly the T154
+    // gap this founder decision closes.
+    const auto portId = resolveMemberNodeId(portUuid);
+    bool hasExteriorConnection = false;
+    if (portId.uid != 0) {
+        for (const auto& c : graph.getConnections()) {
+            juce::AudioProcessorGraph::NodeID other;
+            if (c.source.nodeID == portId)
+                other = c.destination.nodeID;
+            else if (c.destination.nodeID == portId)
+                other = c.source.nodeID;
+            else
+                continue;
+            const juce::String otherUuid = nodeUuidFor(other);
+            const bool otherIsInteriorMember =
+                otherUuid.isNotEmpty() &&
+                std::find(m->members.begin(), m->members.end(), otherUuid) != m->members.end() &&
+                !m->memberIsPort(otherUuid);
+            if (!otherIsInteriorMember) {
+                hasExteriorConnection = true;
+                break;
+            }
+        }
+    }
+    if (hasExteriorConnection)
+        return; // still feeding another fan-out leg (e.g. a second attenuverter) — keep the port
+
     spliceOutMacroPort(*m, portUuid);
     if (m->members.empty())
         host_.getMacros().remove(m->id); // matches autoDeleteOrphanedMacroPort's own zero-members rule
