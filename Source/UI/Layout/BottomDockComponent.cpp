@@ -138,6 +138,17 @@ void BottomDockComponent::setMixerTabEnabled(bool enabled) {
         applyTabVisibility();
 }
 
+// Call after anything that might force a hidden host visible again as a side effect --
+// Component::addAndMakeVisible() calls setVisible(true) unconditionally, even when reparenting a
+// child that's already here, which is exactly what MixerPlacementController::applyPlacement()'s
+// "reclaims it (no-op if already there)" comment misses: without this, the mixer host was left
+// visible on top of the Timeline tab at startup, silently swallowing every click there until the
+// next real tab switch. allowMixerRebuild=false, same as the detach/redock callback above -- this
+// resyncs visibility for state that's already correct (or about to be corrected), not a real "tab
+// just became active" reveal, so it must not double the mixer/MIDI Remote rebuild a caller that
+// changed activeTab_/mixerTabEnabled_ itself already triggered.
+void BottomDockComponent::refreshTabVisibility() { applyTabVisibility(false); }
+
 DetachablePanelHost& BottomDockComponent::activeHost() noexcept {
     if (activeTab_ == Tab::Mixer && mixerTabEnabled_)
         return mixerHost_;

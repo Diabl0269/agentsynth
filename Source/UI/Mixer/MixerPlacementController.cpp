@@ -112,24 +112,39 @@ void MixerPlacementController::applyPlacement(Placement placement) {
     auto& host = bottomDock_.getMixerHost();
     switch (placement) {
     case Placement::Tab:
+        // addAndMakeVisible() force-shows `host` even when it's already parented here (JUCE calls
+        // setVisible(true) unconditionally) -- setMixerTabEnabled(true) is a no-op when the tab was
+        // already enabled (the common/first-launch case) and won't undo that, so refreshTabVisibility()
+        // below re-applies whichever tab is actually active.
         bottomDock_.addAndMakeVisible(host); // reclaims it (no-op if already there)
         host.setEmbeddedHeader(true);
         bottomDock_.setMixerTabEnabled(true);
         hideStripAtRest();
+        bottomDock_.refreshTabVisibility();
         break;
     case Placement::Window:
         // Stays parented inside bottomDock_ (harmless -- it renders nothing once detached; see
         // DetachablePanelHost::resized()), just hidden there via the disabled tab. Never
-        // eagerly detached here -- "opened on first reveal", see revealOrToggle().
+        // eagerly detached here -- "opened on first reveal", see revealOrToggle(). Same
+        // addAndMakeVisible()-force-shows hazard as the Tab case above, resynced the same way.
         bottomDock_.addAndMakeVisible(host);
         host.setEmbeddedHeader(true);
         bottomDock_.setMixerTabEnabled(false);
         hideStripAtRest();
+        bottomDock_.refreshTabVisibility();
         break;
     case Placement::OwnPanel:
+        // setMixerTabEnabled(false) runs BottomDockComponent::applyTabVisibility(), which sets
+        // mixer_.setVisible(false) -- correctly, since the dock's own Mixer tab isn't active -- but
+        // that leaves the panel itself hidden once it's reparented into THIS strip below:
+        // addAndMakeVisible(host) only force-shows the HOST (its own header strip), not its panel_
+        // child, whose visible flag nothing here would otherwise touch. Without the explicit show,
+        // Own-panel placement rendered a header with no content underneath.
         bottomDock_.setMixerTabEnabled(false);
         addAndMakeVisible(host); // reparents INTO this strip
         host.setEmbeddedHeader(false);
+        if (!host.isDetached())
+            bottomDock_.getMixerPanel().setVisible(true);
         // Shown at once with NO slide: a restore / preference change is not a toggle, and this
         // may run before the window exists.
         slideAnim_.stop(updater_);
