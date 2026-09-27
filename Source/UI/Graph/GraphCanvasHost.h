@@ -132,6 +132,13 @@ public:
      *  growing a differently-named wrapper — autoDeleteOrphanedMacroPort's very first check. */
     virtual bool getAutoDeleteMacroPortsOnLastCableEnabled() const noexcept = 0;
 
+    /** FRO235: the user preference gating whether a MANUAL macro-port delete (Configure I/O's
+     *  Delete Port, or the port's own right-click Delete Port) splices the cable back together
+     *  (true) or drops it (false, the default) — MacroGroupController::deleteMacroPortManually's
+     *  only branch. Unrelated to getAutoDeleteMacroPortsOnLastCableEnabled above, which gates a
+     *  different, automatic deletion. */
+    virtual bool getSpliceCableOnMacroPortDeleteEnabled() const noexcept = 0;
+
     // ---- FRO77 PR3: GraphDragDropController additions --------------------------------------
     //
     // Nine of these fourteen additions reuse an EXISTING GraphEditor method's name, the same

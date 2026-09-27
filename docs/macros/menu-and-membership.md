@@ -128,6 +128,21 @@ one shot. Three members, each scoped to exactly one direction of one operation, 
   edges whose external endpoint is actually one of `removedUuids` — otherwise a remaining member's
   pre-existing, already-ported connection would look like a brand-new crossing too, since its port is
   excluded from the "inside" set like any other port, and would get double-ported.
+- **`macroPortsThatBecomeObsoleteOnRemove(macroId, removedUuids)`** (FRO195, 2026-09-27 founder
+  decision) — the remove-side mirror of `macroPortsThatBecomeInteriorOnAdd` above. If a departing
+  member was the interior leg of one of the macro's EXISTING ports, that port is now bridging two
+  things that are BOTH external (the departing member, and whatever was already outside) — obsolete,
+  not a real crossing — and must be spliced back OUT the same way ungroup does, or the leave strands
+  a port on the hull still cabled to a now-outside module. Same "every remaining connection's other
+  side must be interior, or the port is never returned" safety `macroPortsThatBecomeInteriorOnAdd`
+  applies, computed against the REMAINING ordinary members (mirroring
+  `buildMacroPortCrossingPlanForRemovedMembers`'s own "inside" set).
+
+  This was a pre-existing gap on `main`, found by user testing of FRO40's Cmd-drag-out gesture:
+  `removeSelectionFromMacro` had always done only the "create a new crossing port" half of the
+  incremental logic above, never this "retire an existing one" half — `addSelectionToMacro` had
+  BOTH halves from the start. Audio still reached its destination either way (the stranded port
+  was a live pass-through), so this was graph clutter and a misleading picture, not broken sound.
 
 `buildMacroPortCrossingPlan`'s own `memberUids.size() < 2` early return was removed: the incremental
 callers legitimately need a crossing plan for a one-member "inside" set — removing one of a macro's
@@ -136,10 +151,13 @@ two ordinary members leaves exactly one remaining member whose newly external ca
 
 **Ordering matters in both directions.** `addSelectionToMacro` splices new ports in, THEN splices
 redundant ones out, both inside the same `recordGraphAndMacroChange` transaction as the membership
-change. `removeSelectionFromMacro` splices new ports in BEFORE the membership removal, because
-`spliceMacroPorts` needs `macros.find(macroId)` to still resolve and `removeMemberEverywhere` can
-dissolve the macro record outright if the removal drops its last member — doing the splice first
-means that dissolve, if it happens, always lands after the boundary is already correct.
+change. `removeSelectionFromMacro` splices new crossing ports in, then splices obsolete ones out,
+BOTH before the membership removal, because `spliceMacroPorts`/`spliceOutMacroPort` need
+`macros.find(macroId)` to still resolve and `removeMemberEverywhere` can dissolve the macro record
+outright if the removal drops its last member — doing both splices first means that dissolve, if it
+happens, always lands after the boundary is already correct. A member leaving with a cable to a
+staying member AND a cable through an existing port to an outside module hits both halves in the
+SAME call.
 
 Without this, removing a module from a macro left its cable correctly rendered as an un-ported
 boundary crossing but with no real port, unlike what a from-scratch grouping would have given it.

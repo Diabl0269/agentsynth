@@ -662,7 +662,11 @@ TEST(MacroPortContextMenu, LeftClickOnAPortBodyIsStillANoOp) {
     EXPECT_FALSE(editor.isNodeSelected(comp->getNodeId())) << "a left click on a port body must not select it";
 }
 
-TEST(MacroPortContextMenu, DeleteFromTheMenuSplicesTheCableBackAndRemovesTheNode) {
+// FRO235 (2026-09-27 founder decision): the right-click Delete Port menu item now drops the cable
+// by default -- see MacroPortFlow.RightClickDeletePortDropsByDefault/
+// RightClickDeletePortSplicesWhenThePreferenceIsOn in MacroPortFlowEditTests.cpp for the matched
+// pair of default/preference-on tests. This one stays as the real-menu-click regression guard.
+TEST(MacroPortContextMenu, DeleteFromTheMenuDropsTheCableByDefault) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -697,10 +701,11 @@ TEST(MacroPortContextMenu, DeleteFromTheMenuSplicesTheCableBackAndRemovesTheNode
     const auto* deleteItem = findMenuItemByText(capturedMenu, "Delete Port");
     ASSERT_NE(deleteItem, nullptr);
     ASSERT_TRUE((bool)deleteItem->action);
+    ASSERT_FALSE(editor.getSpliceCableOnMacroPortDeleteEnabled()) << "sanity: off by default";
     deleteItem->action();
 
     EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr) << "the port node itself is gone";
-    EXPECT_TRUE(hasConnection(engine, ext, 0, b, 0)) << "the cable is spliced back, not dropped";
+    EXPECT_FALSE(hasConnection(engine, ext, 0, b, 0)) << "default: the cable is DROPPED, not spliced";
     auto* macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr) << "two real modules keep the macro alive";
     EXPECT_TRUE(macro->ports.empty());

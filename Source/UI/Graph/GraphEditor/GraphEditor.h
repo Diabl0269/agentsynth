@@ -491,6 +491,15 @@ public:
         return autoDeleteMacroPortsOnLastCableEnabled;
     }
 
+    // FRO235 (docs/macros/auto-ports.md#a-port-node-is-directly-deletable): a MANUAL macro-port delete (Configure I/O's
+    // Delete Port, or the port's own right-click Delete Port) drops the cable by default;
+    // Preferences ("macroSpliceCableOnPortDelete") lets a user switch both to splicing it back
+    // together instead, the way ungroup always has.
+    void setSpliceCableOnMacroPortDeleteEnabled(bool enabled) { spliceCableOnMacroPortDeleteEnabled = enabled; }
+    bool getSpliceCableOnMacroPortDeleteEnabled() const noexcept override {
+        return spliceCableOnMacroPortDeleteEnabled;
+    }
+
     // Default jack layout for newly created modules that expose the Dual I/O parameter.
     // false (default): one collapsed "Audio" jack. true: split Left/Right by default.
     void setDefaultDualIOForNewModules(bool enabled) { defaultDualIOForNewModules = enabled; }
@@ -926,6 +935,7 @@ private:
     bool doubleClickPortDisconnectEnabled = true;
     bool autoCreateMacroPortsOnDragEnabled = true;
     bool autoDeleteMacroPortsOnLastCableEnabled = true;
+    bool spliceCableOnMacroPortDeleteEnabled = false; // FRO235: off by default — a manual delete drops the cable
     bool macroDragWithoutCmdEnabled = true;
     std::optional<bool> macroJoinCommandOverride_;
     bool autoCreateChannelOnConnectEnabled = true;

@@ -381,6 +381,7 @@ add_executable(Tests
     Macros/MacroPortFlow/MacroPortFlowShapeChangeTests.cpp
     Macros/MacroPortFlow/MacroPortFlowCableDropTests.cpp
     Macros/MacroPortFlow/MacroPortFlowAutoCreateOnDragTests.cpp
+    Macros/MacroPortFlow/MacroPortFlowShapeInferenceTests.cpp
     Macros/MacroPortRealMouseDragTests.cpp
     UI/Graph/DragStateResetTests.cpp
     UI/Graph/DragStateAsyncRebuildTests.cpp

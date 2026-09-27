@@ -522,7 +522,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
             auto* self = safeThis.getComponent();
             if (self == nullptr)
                 return;
-            self->getMacroController().removeMacroPort(macroId, nodeUuid);
+            self->getMacroController().deleteMacroPortManually(macroId, nodeUuid);
             if (auto* d = safeDialog.getComponent())
                 d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });

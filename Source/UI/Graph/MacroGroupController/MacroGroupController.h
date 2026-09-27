@@ -36,6 +36,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
+#include <utility>
 #include <vector>
 
 class ModuleBase;
@@ -217,6 +218,9 @@ public:
                               MacroPortShape shape, int voiceCount, const juce::String& portName);
     void removeMacroPort(const juce::String& macroId, const juce::String& nodeUuid);
     void deleteMacroPortNode(const juce::String& macroId, const juce::String& nodeUuid);
+    /** FRO235: the entry point both manual delete affordances call instead of removeMacroPort/
+     *  deleteMacroPortNode directly — see the .cpp for which one it picks and why. */
+    void deleteMacroPortManually(const juce::String& macroId, const juce::String& nodeUuid);
     void renameMacroPort(const juce::String& macroId, const juce::String& nodeUuid, const juce::String& newName);
     void moveMacroPortOrder(const juce::String& macroId, const juce::String& nodeUuid, bool moveUp);
     void reorderMacroPortToIndex(const juce::String& macroId, const juce::String& nodeUuid, int newIndexInGroup);
@@ -262,6 +266,10 @@ public:
     std::vector<MacroPortCrossingGroup>
     buildMacroPortCrossingPlanForRemovedMembers(const juce::String& macroId,
                                                 const std::vector<juce::String>& removedUuids) const;
+    /** FRO195: the remove-side mirror of macroPortsThatBecomeInteriorOnAdd above — which of
+     *  `macroId`'s EXISTING ports become obsolete once `removedUuids` leave. See the .cpp. */
+    std::vector<juce::String> macroPortsThatBecomeObsoleteOnRemove(const juce::String& macroId,
+                                                                   const std::vector<juce::String>& removedUuids) const;
     /** Splices ONE port node back out of its macro, reconnecting the cable it proxied. */
     void spliceOutMacroPort(synth::Macro& macro, const juce::String& portNodeUuid);
 
@@ -287,6 +295,11 @@ public:
      *  GraphEditorCommands.cpp/Selection.cpp call this directly. */
     std::vector<juce::AudioProcessorGraph::NodeID>
     macroPortDeletionNeighbors(const std::vector<juce::AudioProcessorGraph::NodeID>& deletedIds) const;
+
+    /** FRO22: call alongside autoDeleteOrphanedMacroPort() for every id macroPortDeletionNeighbors()
+     *  returned. No-op unless `nodeId` is an orphaned hidden Attenuverter; see the .cpp.
+     *  GraphEditorCommands.cpp/Selection.cpp call this directly. */
+    void autoDeleteOrphanedAttenuverter(juce::AudioProcessorGraph::NodeID nodeId);
 
     // ---- General-purpose node-uuid plumbing --------------------------------------------------
     //
@@ -326,4 +339,8 @@ private:
     juce::AudioProcessorGraph::NodeID mintMacroPortForAutoCreate(const juce::String& macroId, bool isInput, bool isMidi,
                                                                  juce::AudioProcessorGraph::NodeID internalNodeId,
                                                                  int internalVisibleJack);
+    /** FRO234: infers a macro port's shape (Mono/StereoCollapsed/Poly) from ONE dragged cable's
+     *  own jack fan, instead of always Mono. Returns {shape, voiceCount}. See the .cpp. */
+    static std::pair<MacroPortShape, int> inferPortShapeFromCableFan(ModuleBase* otherMb, int otherVisibleJack,
+                                                                     bool otherAsInput);
 };

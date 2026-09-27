@@ -183,14 +183,22 @@ void MacroGroupController::removeSelectionFromMacro(const juce::String& macroId,
     // T138: a cable from a departing member to one that's staying is about to become a real
     // boundary crossing — computed off the PRE-remove graph, before anything moves.
     const auto removePlan = buildMacroPortCrossingPlanForRemovedMembers(macroId, toRemove);
+    // FRO195: the mirror image of addSelectionToMacro's macroPortsThatBecomeInteriorOnAdd — an
+    // EXISTING port whose interior leg was exactly one of the departing members is now bridging
+    // two things that are both external, so splice it out the same way ungroup does, instead of
+    // leaving it stranded on the hull.
+    const auto obsoletePorts = macroPortsThatBecomeObsoleteOnRemove(macroId, toRemove);
 
     auto& graph = host_.graph();
-    auto doRemove = [this, macroId, toRemove, removePlan] {
-        // Splice BEFORE the membership removal below: spliceMacroPorts needs the macro to still
-        // resolve, and removeMemberEverywhere can dissolve the macro record outright if this
-        // drops its last member.
+    auto doRemove = [this, macroId, toRemove, removePlan, obsoletePorts] {
+        // Splice BEFORE the membership removal below: spliceMacroPorts/spliceOutMacroPort both
+        // need the macro to still resolve, and removeMemberEverywhere can dissolve the macro
+        // record outright if this drops its last member.
         if (!removePlan.empty())
             spliceMacroPorts(macroId, removePlan);
+        for (const auto& portUuid : obsoletePorts)
+            if (auto* liveMacro = host_.getMacros().find(macroId))
+                spliceOutMacroPort(*liveMacro, portUuid);
         for (const auto& uuid : toRemove)
             host_.getMacros().removeMemberEverywhere(uuid);
         host_.updateComponents();

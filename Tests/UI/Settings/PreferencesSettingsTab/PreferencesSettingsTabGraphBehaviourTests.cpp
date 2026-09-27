@@ -75,6 +75,29 @@ TEST_F(PreferencesSettingsTabTest, MacroAutoCreateAndAutoDeleteTogglesDefaultOnA
     }
 }
 
+// FRO235: OFF by default (unlike the two T148 toggles above), persisted under its own key, reading
+// the default must not write it, a fresh tab restores what was written.
+TEST_F(PreferencesSettingsTabTest, MacroSpliceCableOnPortDeleteTogglesDefaultOffAndRoundTrips) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.isMacroSpliceCableOnPortDeleteEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("macroSpliceCableOnPortDelete"));
+
+        tab.setMacroSpliceCableOnPortDeleteEnabled(true);
+        EXPECT_TRUE(tab.isMacroSpliceCableOnPortDeleteEnabled());
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("macroSpliceCableOnPortDelete"), "1");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isMacroSpliceCableOnPortDeleteEnabled());
+        tab.setMacroSpliceCableOnPortDeleteEnabled(false);
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.isMacroSpliceCableOnPortDeleteEnabled());
+    }
+}
+
 // FRO168: default ON, persisted under its own key, reading the default must not write it, a fresh
 // tab restores what was written -- mirrors MacroAutoCreateAndAutoDeleteTogglesDefaultOnAndRoundTrip.
 TEST_F(PreferencesSettingsTabTest, MacroDragWithoutCmdToggleDefaultsOnAndRoundTrips) {

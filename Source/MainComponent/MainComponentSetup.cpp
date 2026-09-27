@@ -70,6 +70,9 @@ void MainComponent::restorePanelPreferences() {
         appProperties.getUserSettings()->getBoolValue("macroAutoCreatePortsOnDrag", true));
     graphEditor.setAutoDeleteMacroPortsOnLastCableEnabled(
         appProperties.getUserSettings()->getBoolValue("macroAutoDeletePortsOnLastCable", true));
+    // FRO235: off by default — see PreferencesSettingsTab's own toggle comment.
+    graphEditor.setSpliceCableOnMacroPortDeleteEnabled(
+        appProperties.getUserSettings()->getBoolValue("macroSpliceCableOnPortDelete", false));
     // FRO168: default ON (Cmd-drag reparents either way) — see PreferencesSettingsTab's toggle comment.
     graphEditor.setMacroDragWithoutCmdEnabled(
         appProperties.getUserSettings()->getBoolValue("macroDragWithoutCmd", true));

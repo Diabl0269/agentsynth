@@ -468,3 +468,92 @@ TEST(MacroAutoPortDelete, DisabledPreferenceLeavesACablelessPortInPlaceAfterDele
     ASSERT_FALSE(editor.getMacros().empty());
     EXPECT_TRUE(editor.getMacros().find(macroId)->memberIsPort(portUuid));
 }
+
+// ============================================================================
+// FRO22 (founder decision, 2026-09-27, option (a)): a bounded one-extra-hop-through-an-attenuverter
+// special case. Almost every real macro-port-to-modulation-target crossing is spliced through a
+// hidden AttenuverterModule (AudioEngine::addModRouting), which can never itself be a macro member
+// -- so deleting the FAR side of that chain used to strand the port forever, two hops away from
+// the deleted node.
+// ============================================================================
+
+// The default-patch shape named in the ticket: Env -> Attenuverter -> Filter cutoff, grouped, then
+// the FAR module (Filter) deleted. The port fronting Env's mod-CV output routes through the
+// attenuverter to reach Filter; deleting Filter leaves the attenuverter with exactly one
+// connection left (back to the port), which must delete the attenuverter AND the port together.
+TEST(MacroAutoPortDelete, DeletingTheFarModuleThroughAHiddenAttenuverterSweepsTheAttenuverterAndThePort) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto env = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Env", 100, 100);
+    auto filter = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Filter", 900, 100);
+    auto spare = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Spare", 100, 400);
+    const auto attenId = engine.addModRouting(env, 0, filter, 0); // Env -> Attenuverter -> Filter cutoff
+    ASSERT_TRUE(attenId.uid != 0);
+
+    // Group Env with a second member (the min-2 rule) -- Env's own mod-routed crossing to the
+    // attenuverter gets a real port; Filter stays outside.
+    editor.setSelectedNodes({env, spare});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 1u) << "sanity: Env's mod-routed crossing got a real port";
+    const auto portUuid = macro->ports.front().nodeUuid;
+    const auto portId = nodeIdForUuid(engine, portUuid);
+    ASSERT_TRUE(portId.uid != 0);
+    ASSERT_NE(engine.getGraph().getNodeForId(attenId), nullptr) << "sanity: the attenuverter itself is untouched";
+
+    editor.requestDeleteModule(filter);
+
+    EXPECT_EQ(engine.getGraph().getNodeForId(filter), nullptr);
+    EXPECT_EQ(engine.getGraph().getNodeForId(attenId), nullptr)
+        << "the orphaned attenuverter (one remaining connection, to the port) must be swept too";
+    EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr)
+        << "the port -- dead-ended now that its only exterior route (through the attenuverter) is gone -- must go too";
+    macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr) << "Env and Spare are still members -- the macro survives";
+    EXPECT_FALSE(macro->memberIsPort(portUuid));
+    EXPECT_TRUE(macro->hasMember(engine.getGraph().getNodeForId(env)->properties["uuid"].toString()));
+}
+
+TEST(MacroAutoPortDelete, DeletingTheFarModuleThroughAnAttenuverterIsOneUndoStep) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto env = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Env", 100, 100);
+    auto filter = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Filter", 900, 100);
+    auto spare = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Spare", 100, 400);
+    const auto attenId = engine.addModRouting(env, 0, filter, 0);
+    ASSERT_TRUE(attenId.uid != 0);
+
+    editor.setSelectedNodes({env, spare});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 1u);
+    const auto portUuid = macro->ports.front().nodeUuid;
+    undo.clearUndoHistory();
+
+    editor.requestDeleteModule(filter);
+    ASSERT_EQ(nodeIdForUuid(engine, portUuid).uid, 0u) << "sanity: the port really was swept";
+    ASSERT_EQ(engine.getGraph().getNodeForId(attenId), nullptr);
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    EXPECT_NE(engine.getGraph().getNodeForId(filter), nullptr) << "one undo restores Filter";
+    EXPECT_NE(engine.getGraph().getNodeForId(attenId), nullptr) << "...and the attenuverter";
+    macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 1u) << "...and the macro port, together, in ONE undo step";
+    EXPECT_EQ(macro->ports.front().nodeUuid, portUuid);
+    const auto restoredPortId = nodeIdForUuid(engine, portUuid);
+    EXPECT_TRUE(hasConnection(engine, restoredPortId, 0, attenId, 0));
+    EXPECT_TRUE(hasConnection(engine, attenId, 0, filter, 0));
+}
