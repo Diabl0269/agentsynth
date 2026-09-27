@@ -98,7 +98,6 @@ public:
 
     // Test accessors for the '+'/'x' hit-testing below — same *ForTest pattern as above.
     juce::Rectangle<float> getAddPortButtonBoundsForTest(bool isInput) const { return getAddPortButtonBounds(isInput); }
-    bool hasRoomForAddPortButtonForTest(bool isInput) const { return hasRoomForAddPortButton(isInput); }
     juce::String getHoveredPortUuidForTest() const { return hoveredPortUuid_.value_or(juce::String()); }
 
 private:
@@ -135,17 +134,14 @@ private:
      *  computing the rect separately. */
     juce::Rectangle<int> getTitleRowBounds() const;
 
-    // FRO24: the '+' button's bounds for the given side — see the .cpp definition for the
-    // geometry rationale. paint()/mouseDown() both read this rather than duplicating it.
+    // FRO24: the '+' button's bounds for the given side (footer row) — see the .cpp definition.
     juce::Rectangle<float> getAddPortButtonBounds(bool isInput) const;
 
-    // FRO24: false once this side's '+' would overlap its topmost jack — see the .cpp definition.
-    bool hasRoomForAddPortButton(bool isInput) const;
-
-    // FRO24: the configured port (by nodeUuid) the mouse currently rests over, kept fresh by
-    // mouseMove()/mouseExit() — see those definitions for why mouseDown() re-checks rather than
-    // trusting this cache alone.
+    // FRO24: the port the mouse rests over, kept fresh by mouseMove()/mouseExit() — see those.
     std::optional<juce::String> hoveredPortUuid_;
+
+    // FRO24: click position an 'x' delete just suppressed hover at — see mouseMove()'s definition.
+    std::optional<juce::Point<int>> suppressHoverAtPosition_;
 
     GraphEditor& owner;
     juce::String macroId;

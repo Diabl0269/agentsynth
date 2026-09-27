@@ -179,12 +179,18 @@ for everything a single click can't express: rename, reorder, shape and colour. 
 open-ended "make them even slicker" look-and-feel exploration for these jacks is a separate,
 still-unscoped ticket — this covers only the concrete '+'/'x' pair.
 
-**The '+' affordance.** One small '+' per side, drawn at the TOP of the same jack band
-`GraphEditor::macroCardPortLayout` lays ports out in (`MacroCardComponent::getAddPortButtonBounds`)
-— ahead of where a freshly-added port lands, since `nextMacroPortOrder` always appends a new port
-as the bottom-most on its side. Clicking it (`MacroCardComponent::buildAddPortMenu`) opens a
-`juce::PopupMenu` offering the exact same four choices `MacroPortConfigDialog`'s own "Add a port"
-panel does — Audio/CV Mono, Audio/CV Stereo, Audio/CV Poly-N, or MIDI
+**The '+' affordance.** One small '+' per side, drawn in the card's FOOTER row beside the "N
+modules, M ports" text (`MacroCardComponent::getAddPortButtonBounds`), not the jack band
+`GraphEditor::macroCardPortLayout` lays ports out in. **This placement is a fix, not the original
+design** — the first cut sat at the top of the jack band, and because `macroCardPortLayout()`
+even-spaces a side's jacks across that same fixed band, the topmost jack marched up toward that
+spot as the port count grew, hiding the '+' as soon as a side had 2+ ports (founder in-app review,
+2026-09-27). The footer slot exists on every card regardless of port count — its top edge is
+pinned to `kMacroCardJackBandBottom` itself, structurally outside the band rather than merely
+placed to usually clear it — so the '+' is now always visible and can never overlap a jack.
+Clicking it (`MacroCardComponent::buildAddPortMenu`) opens a `juce::PopupMenu` offering the exact
+same four choices `MacroPortConfigDialog`'s own "Add a port" panel does — Audio/CV Mono, Audio/CV
+Stereo, Audio/CV Poly-N, or MIDI
 ([`docs/macros/configure-io.md#adding-a-port`](../macros/configure-io.md#adding-a-port)) — never a
 second list. Picking one calls the SAME `MacroGroupController::addMacroPort()` Configure I/O's Add
 button calls, with an empty name (falling back to `defaultMacroPortName()`, exactly like an empty
@@ -193,14 +199,6 @@ is already fixed by which side's '+' was clicked, so unlike the dialog this menu
 combo and no name field — the quick affordance's whole point is the two most common single-port
 operations reachable at a glance, not a second place to type one. `addMacroPort()`'s own
 `recordGraphAndMacroChange` transaction makes this one undo step, same as from the dialog.
-
-**Hidden gracefully when a side has no room, never overlapping a jack.**
-`macroCardPortLayout()` even-spaces a side's jacks across the fixed jack band
-(`kMacroCardJackBandTop`/`Bottom`), so the more ports a side already has, the closer its topmost
-jack sits to `kMacroCardJackBandTop` — exactly where the '+' paints.
-`MacroCardComponent::hasRoomForAddPortButton()` hides the '+' once that gap drops below a real
-jack's own footprint, rather than touching the shared jack-spacing algorithm every other surface
-(`paint()`, the drop hit-test, `buildVisibleCables()`'s boundary-cable anchoring) reads unmodified.
 
 **The 'x' affordance.** Hovering a configured jack reveals a small 'x' overlaid on that ONE jack's
 dot (`MacroCardComponent::mouseMove`/`mouseExit` track `hoveredPortUuid_` via the SAME
@@ -211,6 +209,18 @@ cable by default and splices it back only when the "splice the cable back" prefe
 same as Configure I/O's own Delete Port and the port's right-click Delete Port
 ([`docs/macros/configure-io.md#deleting-a-port-from-the-dialog`](../macros/configure-io.md#deleting-a-port-from-the-dialog)).
 No confirm dialog — undo covers it, same as every other macro mutation.
+
+**Deleting a port suppresses hover at that exact spot until the mouse really moves.** A delete
+reflows `macroCardPortLayout()` for the survivors, so the jack that used to be one slot away can
+slide underneath the still-resting cursor and land within `kMacroCardJackHitRadius` of the click —
+a quick double-click then deleted two ports, one per click (founder in-app review, 2026-09-27).
+`mouseDown()`'s delete branch clears `hoveredPortUuid_` AND records the click position in
+`suppressHoverAtPosition_`; `mouseMove()` refuses to re-arm hover while its reported position
+still equals that stored one — a plain clear alone is not enough, since a `mouseMove` JUCE
+dispatches at the same pixel as part of the click plumbing itself would otherwise re-arm hover on
+whatever jack the reflow just moved there. Any position that genuinely differs clears the
+suppression and resumes ordinary hover tracking, so this closes exactly the one stale re-arm, not
+hovering forever.
 
 **Neither affordance steals a card body-drag or a real cable drag.** Both hit-tests are checked in
 `mouseDown()` at the SAME precedence `getExpandButtonBounds()` already has — before the shift/cmd

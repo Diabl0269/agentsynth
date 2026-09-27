@@ -17,6 +17,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Macros/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <cmath>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <optional>
@@ -94,7 +95,7 @@ bool runMenuItem(juce::PopupMenu& menu, const juce::String& text) {
 // The '+' affordance: geometry, hiding gracefully when a side is crowded, and the add-port menu.
 // ============================================================================
 
-TEST(MacroCardPortButtons, AddButtonSitsAtTheJackInsetOnEachSide) {
+TEST(MacroCardPortButtons, AddButtonSitsInTheFooterBesideTheCountText) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -107,24 +108,19 @@ TEST(MacroCardPortButtons, AddButtonSitsAtTheJackInsetOnEachSide) {
     EXPECT_LT(inBounds.getCentreX(), outBounds.getCentreX()) << "input '+' on the left, output '+' on the right";
     EXPECT_TRUE(card->getLocalBounds().toFloat().contains(inBounds.getCentre()));
     EXPECT_TRUE(card->getLocalBounds().toFloat().contains(outBounds.getCentre()));
+    // FRO24 follow-up: pinned to the footer row, not the jack band this card's own jacks lay out
+    // in — its top edge must sit at or below the jack band's own bottom edge, structurally, not
+    // just "usually clear of it".
+    EXPECT_GE(inBounds.getY(), card->getHeight() - 16.0f) << "off the jack band (kMacroCardJackBandBottom)";
+    EXPECT_GE(outBounds.getY(), card->getHeight() - 16.0f);
 }
 
-TEST(MacroCardPortButtons, AddButtonHasRoomOnAFreshMacroWithNoPortsYet) {
-    AudioEngine engine;
-    GraphEditor editor(engine);
-    editor.setSize(1600, 1200);
-    auto macroId = makeTwoMemberMacro(editor, engine);
-    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
-    ASSERT_NE(card, nullptr);
-
-    EXPECT_TRUE(card->hasRoomForAddPortButtonForTest(true));
-    EXPECT_TRUE(card->hasRoomForAddPortButtonForTest(false));
-}
-
-// FRO24's own "hide '+' gracefully if there's no room rather than overlapping" requirement:
-// macroCardPortLayout() even-spaces a side's jacks across the fixed jack band, so enough ports on
-// one side push the topmost jack up close to the band's top edge — exactly where the '+' sits.
-TEST(MacroCardPortButtons, AddButtonHidesOnceASideIsCrowdedWithPorts) {
+// FRO24 follow-up (founder in-app review): the first cut hid the '+' as soon as a side had 2+
+// ports (it sat at the TOP of the jack band, which macroCardPortLayout()'s even-spacing pushes
+// the topmost jack toward as the count grows) — usable only on an almost-empty side. The footer
+// placement has no such failure mode: it must stay visible and off the jack band no matter how
+// many ports are on a side.
+TEST(MacroCardPortButtons, AddButtonStaysVisibleWithManyPortsAndNeverOverlapsAJack) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -135,9 +131,21 @@ TEST(MacroCardPortButtons, AddButtonHidesOnceASideIsCrowdedWithPorts) {
     for (int i = 0; i < 6; ++i)
         editor.getMacroController().addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
                                                  MacroPortShape::Mono, 1, "In " + juce::String(i));
+    editor.getMacroController().addMacroPort(macroId, /*isInput=*/false, synth::MacroPortKind::AudioCV,
+                                             MacroPortShape::Mono, 1, "Out");
 
-    EXPECT_FALSE(card->hasRoomForAddPortButtonForTest(true)) << "the crowded input side must hide its '+'";
-    EXPECT_TRUE(card->hasRoomForAddPortButtonForTest(false)) << "the untouched output side keeps its own '+'";
+    const auto inBounds = card->getAddPortButtonBoundsForTest(true);
+    const auto outBounds = card->getAddPortButtonBoundsForTest(false);
+    EXPECT_TRUE(card->getLocalBounds().toFloat().contains(inBounds.getCentre()))
+        << "the crowded input side's '+' must still be on-card";
+    EXPECT_TRUE(card->getLocalBounds().toFloat().contains(outBounds.getCentre()));
+
+    for (const auto& port : editor.getMacroController().macroCardPortLayout(macroId)) {
+        const auto dot =
+            juce::Rectangle<float>((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
+        EXPECT_FALSE(inBounds.intersects(dot)) << "the '+' must never overlap a jack: " << port.nodeUuid;
+        EXPECT_FALSE(outBounds.intersects(dot)) << "the '+' must never overlap a jack: " << port.nodeUuid;
+    }
 }
 
 TEST(MacroCardPortButtons, AddPortMenuOffersTheSameKindShapeChoicesConfigureIOsAddPanelDoes) {
@@ -299,6 +307,68 @@ TEST(MacroCardPortButtons, ClickingAHoveredJacksXDeletesItAndDropsTheCableByDefa
     undo.undo();
     ASSERT_FALSE(nodeIdForUuid(engine, portUuid).uid == 0) << "undo restores the deleted port node";
     EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
+}
+
+// FRO24 follow-up (founder in-app review): deleting a port via its 'x' reflows
+// macroCardPortLayout() for the survivors, so the NEXT jack can slide under the still-resting
+// cursor and land within its own hit radius — a quick double-click then deleted two ports, one
+// per click. A mouseMove reporting the SAME position as the delete click (JUCE can dispatch one
+// as part of the click plumbing itself even with no real cursor movement) must not re-arm hover
+// on whatever port the reflow just moved there; only a mouseMove at a genuinely different
+// position may.
+TEST(MacroCardPortButtons, DeletingAPortSuppressesHoverAtThatSpotSoADoubleClickCannotDeleteTheNextPortToo) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+
+    const auto uuidA = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "A");
+    const auto uuidB = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "B");
+    ASSERT_FALSE(uuidA.isEmpty());
+    ASSERT_FALSE(uuidB.isEmpty());
+
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    auto layoutBefore = editor.getMacroController().macroCardPortLayout(macroId);
+    ASSERT_EQ(layoutBefore.size(), 2u);
+    ASSERT_EQ(layoutBefore[0].nodeUuid, uuidA); // topmost, added first
+    const auto posA = layoutBefore[0].jackPos.toFloat();
+
+    // Delete A at posA, exactly as HoveringAJack.../ClickingAHoveredJacksX... does above.
+    hoverThenClick(*card, posA);
+    ASSERT_TRUE(nodeIdForUuid(engine, uuidA).uid == 0) << "A is gone";
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u) << "only B remains";
+
+    // B alone now reflows to a DIFFERENT y within kMacroCardJackHitRadius (10px) of posA's old
+    // spot — close enough that a hit-test at posA would still land on B, which is exactly what
+    // the bug exploited. Confirm the fixture actually reproduces that precondition rather than
+    // trivially passing because the reflowed jack moved out of reach.
+    const auto layoutAfter = editor.getMacroController().macroCardPortLayout(macroId);
+    ASSERT_EQ(layoutAfter.size(), 1u);
+    ASSERT_EQ(layoutAfter[0].nodeUuid, uuidB);
+    ASSERT_LT(std::abs(layoutAfter[0].jackPos.y - (int)posA.y), 10)
+        << "fixture precondition: B's reflowed jack must sit within the old click's hit radius";
+
+    // A mouseMove reporting the SAME position as the delete click — simulating the double-click's
+    // own plumbing landing on that exact pixel with no real movement — must not re-arm hover on B.
+    card->mouseMove(makeMouseEvent(*card, posA));
+    EXPECT_TRUE(card->getHoveredPortUuidForTest().isEmpty()) << "hover stays suppressed at the delete position";
+
+    // The second click of the double-click, still at posA: must NOT delete B.
+    card->mouseDown(makeMouseEvent(*card, posA));
+    EXPECT_FALSE(nodeIdForUuid(engine, uuidB).uid == 0) << "B must survive the second click of the double-click";
+    EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
+
+    // A mouseMove to a genuinely different position clears the suppression, and moving back onto
+    // B's real jack now arms hover normally — the fix suppresses ONE stale re-arm, not hovering
+    // forever.
+    card->mouseMove(makeMouseEvent(*card, juce::Point<float>(posA.x, posA.y + 30.0f)));
+    card->mouseMove(makeMouseEvent(*card, layoutAfter[0].jackPos.toFloat()));
+    EXPECT_EQ(card->getHoveredPortUuidForTest(), uuidB) << "hover resumes normally once the mouse really moves";
 }
 
 // A mouseDown with no preceding mouseMove — a test driving the handler directly, or (in principle)
