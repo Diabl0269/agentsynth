@@ -23,7 +23,10 @@ fallback for patches built before that flag existed, when one of its signal pred
 strip. **The flag is what a freshly added, still-unfed bus has to go on.** A track preset scrubs
 `"isBus"` from every captured strip
 ([`docs/mixer/track-presets.md`](track-presets.md#scrubbed-keys)), so inserting one never badges an
-ordinary track channel as BUS.
+ordinary track channel as BUS. **FRO297: a bus can itself be saved and re-added as a preset** (a
+third `TrackPresetKind`, alongside Audio and Instrument) — inserting one re-applies this same flag
+right after the scrub-respecting insert, the same mechanism "Add bus" uses, so the scrub's own
+hazard never reopens; see [`docs/mixer/track-presets.md#a-third-kind-bus`](track-presets.md#a-third-kind-bus).
 
 ## A send is an output leg
 

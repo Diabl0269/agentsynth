@@ -8,10 +8,10 @@
 namespace synth {
 
 /** Which `+ Track` submenu group (and which Preferences -> Mixer dropdown) a saved track preset
- *  belongs to. Written once at save time from the same track-kind resolution the track header
- *  already has (never inferred from node shape at load time — docs/mixer/track-presets.md). A MIDI track
- *  that alone drives an instrument counts as Instrument (docs/mixer/mixer.md#channels-follow-audio-not-tracks). */
-enum class TrackPresetKind { Audio, Instrument };
+ *  belongs to (docs/mixer/track-presets.md). A MIDI track that alone drives an instrument counts as
+ *  Instrument (docs/mixer/mixer.md#channels-follow-audio-not-tracks); `Bus` (FRO297) has no bound
+ *  timeline track -- see TrackPresetManager.cpp. */
+enum class TrackPresetKind { Audio, Instrument, Bus };
 
 /** One track preset as surfaced in a menu or a Preferences dropdown. */
 struct TrackPresetInfo {
@@ -37,8 +37,8 @@ struct TrackPresetInfo {
  * `connections`, `modulations`, optional `macros`), plus:
  *
  *   - `"schemaVersion"`: 1, same "absent means 1" rule as AIStateMapper::kSchemaVersion.
- *   - `"trackPresetKind"`: `"audio"` or `"instrument"` — which `+ Track` submenu/Preferences
- *     dropdown this belongs to.
+ *   - `"trackPresetKind"`: `"audio"`, `"instrument"` or `"bus"` (FRO297) — which `+ Track`
+ *     submenu/Preferences dropdown this belongs to.
  *   - `"channelMacroId"`: the snippet-local id (see "nodes") of this macro's own Channel Strip
  *     member, written defensively at extraction time so the file names which of its (usually one)
  *     captured macros is the channel; the load path does not need to consume it, since

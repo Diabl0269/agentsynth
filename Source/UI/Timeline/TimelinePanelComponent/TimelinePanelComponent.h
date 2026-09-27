@@ -363,6 +363,7 @@ public:
     static constexpr int kInsertTrackPresetFromFileMenuId = 11;
     static constexpr int kAddTrackPresetAudioMenuIdBase = 5000;
     static constexpr int kAddTrackPresetInstrumentMenuIdBase = 6000;
+    static constexpr int kAddTrackPresetBusMenuIdBase = 7000; // FRO297, same contract as the two above
 
     /** Adds a marker at the transport's current position, named "Marker N", coloured from the
      *  theme (see defaultMarkerColourArgb) — ONE recordTimelineChange when an undo manager is
@@ -454,6 +455,7 @@ private:
     // FRO13 (P9-7): same snapshot-not-re-collect contract, for the two grouped preset submenus.
     std::vector<synth::TrackPresetInfo> audioTrackPresetMenuSnapshot_;
     std::vector<synth::TrackPresetInfo> instrumentTrackPresetMenuSnapshot_;
+    std::vector<synth::TrackPresetInfo> busTrackPresetMenuSnapshot_; // FRO297, same contract
 
     // ---- T166: track-reorder drag (whole-row drag) ----
     // See syncTrackHeaders()'s definition in TimelinePanelTrackHeaders.cpp for the division of

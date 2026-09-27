@@ -116,6 +116,7 @@ add_executable(Tests
     Mixer/TrackPreset/TrackPresetCaptureTests.cpp
     Mixer/TrackPreset/TrackPresetDefaultsTests.cpp
     Mixer/TrackPreset/TrackPresetMenuTests.cpp
+    Mixer/TrackPreset/TrackPresetBusTests.cpp
     Mixer/MixerModel/MixerModelColumnTests.cpp
     Mixer/MixerModel/MixerModelInsertTests.cpp
     Mixer/MixerModel/MixerModelBusColumnTests.cpp

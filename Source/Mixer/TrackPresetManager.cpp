@@ -90,7 +90,9 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
         return {};
 
     root->setProperty("schemaVersion", 1);
-    root->setProperty("trackPresetKind", kind == TrackPresetKind::Instrument ? "instrument" : "audio");
+    root->setProperty("trackPresetKind", kind == TrackPresetKind::Instrument
+                                             ? "instrument"
+                                             : (kind == TrackPresetKind::Bus ? "bus" : "audio"));
 
     // channelMacroId: the snippet-local id of this macro's own Channel Strip member (see the
     // class comment on TrackPresetManager for why the load path doesn't need to consume this).
@@ -125,10 +127,20 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
     return preset;
 }
 
+// FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): TrackPresetKind::Bus is a channel macro
+// with no bound timeline track -- saved from a bus's own macro right-click menu (a bus has no
+// track header of its own to reach "Save Track as Preset..." from), and inserted with no timeline
+// track of its own, just the bus chain the mixer shows as a BUS column. It has no per-type
+// Preferences -> Mixer default (MainComponentTrackPresets.cpp never calls
+// setTrackPresetAsDefault-style bookkeeping for it).
 TrackPresetKind TrackPresetManager::getPresetKind(const juce::var& preset) {
-    if (auto* obj = preset.getDynamicObject())
-        if (obj->getProperty("trackPresetKind").toString() == "instrument")
+    if (auto* obj = preset.getDynamicObject()) {
+        const auto kind = obj->getProperty("trackPresetKind").toString();
+        if (kind == "instrument")
             return TrackPresetKind::Instrument;
+        if (kind == "bus")
+            return TrackPresetKind::Bus;
+    }
     return TrackPresetKind::Audio;
 }
 

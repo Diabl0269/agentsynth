@@ -9,6 +9,8 @@
 // needed -- none of these tests build a MainComponent).
 
 #include "../ChannelFlow/ChannelFlowTestRigs.h"
+#include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "Mixer/MixerSends/MixerSends.h"
 #include "Mixer/TrackPresetManager.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -44,6 +46,32 @@ inline SimpleTrackRigCFT buildSimpleTrackRigCFT(GraphEditor& editor, AudioEngine
 
     editor.makeChannelFromNode(result.trackIn->nodeID, "SimpleTrackRig");
     result.macro = editor.getMacros().findByMember(nodeUuid(result.trackIn));
+    return result;
+}
+
+// FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): a bus rig -- the bypassed Gate -> EQ ->
+// Compressor -> Channel Strip chain "Add bus" builds (synth::buildBusChannel), boxed into a macro
+// the same way MixerPanelComponent::createBus() does, with no headless MixerPanelComponent needed.
+// `name` empty means fall back to the numbered "Bus N" name, same as a freshly added bus.
+struct SimpleBusRigCFT {
+    juce::AudioProcessorGraph::Node* strip = nullptr;
+    synth::Macro* macro = nullptr;
+};
+
+inline SimpleBusRigCFT buildSimpleBusRigCFT(GraphEditor& editor, AudioEngine& engine, const juce::String& name = {}) {
+    auto& graph = engine.getGraph();
+    SimpleBusRigCFT result;
+    const synth::DefaultChannelLayout layout{{0, 0}, {200, 0}, {400, 0}, {600, 0}, {800, 0}};
+    const auto channel = synth::buildBusChannel(graph, layout);
+    if (channel.strip == nullptr)
+        return result;
+    result.strip = channel.strip;
+
+    synth::Macro macro;
+    macro.name = name.isNotEmpty() ? name : synth::busFallbackName(graph, channel.strip->nodeID);
+    macro.members = {channel.gateUuid, channel.eqUuid, channel.compressorUuid, channel.stripUuid};
+    editor.getMacros().add(macro);
+    result.macro = editor.getMacros().findByMember(channel.stripUuid);
     return result;
 }
 

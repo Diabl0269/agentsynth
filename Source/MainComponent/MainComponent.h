@@ -504,10 +504,11 @@ private:
     // Shared insert path; NO UNDO TRANSACTION OF ITS OWN — see MainComponentTrackPresets.cpp.
     juce::String insertTrackFromPresetVar(const juce::var& preset, synth::TrackPresetKind kind,
                                           const juce::String& trackNamePrefix);
-    // "Insert Track Preset from File..."'s shared body, factored out of addTrackFromPresetFile()'s
-    // FileChooser callback so a headless test can inject a file directly — see
-    // insertTrackPresetFromFileForTest() below and MainComponentTrackPresets.cpp's own comment.
+    // "Insert Track Preset from File..." + FRO297's bus-kind siblings below -- see MainComponentTrackPresets.cpp.
     juce::String insertTrackPresetFromFile(const juce::File& file);
+    juce::String insertBusFromPresetVar(const juce::var& preset);
+    void handleMacroTrackPresetAction(const juce::String& macroId, bool setAsDefault);
+    void saveBusAsPreset(const juce::String& macroId);
 
     // Hosted-plugin instrument loads in flight — see addInstrumentPluginTrack's own comment for
     // why this external owner holds the staged processor. A failed/refused load is dropped via
@@ -523,12 +524,10 @@ private:
 
     // ---- Audio recording ----
 
-    // Everything an armed-Audio-track take needs between the Record-on click and the commit. All
-    // message-thread state.
-    //
-    // Capture starts at the click, so a take is either rolling or not — no separate "armed,
-    // waiting for the punch" state. The punch is the earliest beat the COMMITTED CLIP may start
-    // at; pre-roll frames are recorded and then trimmed out of the clip window.
+    // Everything an armed-Audio-track take needs between the Record-on click and the commit -- all message-thread
+    // state. Capture starts at the click, so a take is either rolling or not — no separate "armed, waiting for the
+    // punch" state. The punch is the earliest beat the COMMITTED CLIP may start at; pre-roll frames are recorded and
+    // then trimmed out of the clip window.
     struct AudioTake {
         bool capturing = false;   // the tap is writing
         synth::TrackId track;     // the armed Audio track the clip lands on
@@ -582,6 +581,7 @@ private:
     void setTrackPresetAsDefault(synth::TrackId track) override;
     void addTrackFromPreset(const juce::String& presetName, synth::TrackPresetKind kind) override;
     void addTrackFromPresetFile() override;
+    void addBusFromPreset(const juce::String& presetName) override; // FRO297 (docs/mixer/track-presets.md)
     void makeChannelForNode(juce::AudioProcessorGraph::NodeID source);
     void duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId);
     std::vector<synth::PluginIdentity> getInstrumentPluginOptions() const override;

@@ -53,10 +53,18 @@ saved or deleted between the menu opening and the click landing.
 ## Track presets
 
 Below the Instrument submenu, `"+ Track"` lists every saved preset for each track kind — own
-**Audio** and **Instrument** submenus, one item per preset via
+**Audio**, **Instrument** and **Bus** submenus, one item per preset via
 `synth::TrackPresetManager::listTrackPresets`, ids `kAddTrackPresetAudioMenuIdBase` /
-`kAddTrackPresetInstrumentMenuIdBase` — then a final **"Insert Track Preset from File..."** entry
-that loads one saved anywhere on disk.
+`kAddTrackPresetInstrumentMenuIdBase` / `kAddTrackPresetBusMenuIdBase` — then a final **"Insert
+Track Preset from File..."** entry that loads one saved anywhere on disk.
+
+**FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): the Bus submenu is the odd one out.**
+Choosing one of its entries (`TrackHeaderHost::addBusFromPreset`) creates NO timeline track at
+all — a bus has none — just the bus chain, which the mixer shows as a BUS column exactly like a
+freshly built one. It follows the same build-time-snapshot rule as the other two
+(`busTrackPresetMenuSnapshot_`). **"Insert Track Preset from File..."** dispatches the same way: a
+file whose own `"trackPresetKind"` reads `"bus"` inserts through the no-timeline-track path instead
+of creating a track.
 
 This is a **separate** path from the plain MIDI/Audio/Instrument entries above: those consult only
 each type's *default* preset (Preferences → Mixer), while this submenu can insert ANY saved preset

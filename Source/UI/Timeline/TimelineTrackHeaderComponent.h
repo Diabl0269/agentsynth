@@ -254,6 +254,9 @@ struct TrackHeaderHost {
      *  default. */
     virtual void addTrackFromPresetFile() {}
 
+    /** FRO297: "+ Track" -> Bus submenu click. Non-pure no-op default. */
+    virtual void addBusFromPreset(const juce::String& presetName) { juce::ignoreUnused(presetName); }
+
     /** FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): everything the header needs about the
      * CHANNEL its track plays into -- the channel chip, and the linked-track name/colour/mute/solo fan-out. ONE
      *  accessor rather than a method per feature, so this interface (and MainComponent, which

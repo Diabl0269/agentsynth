@@ -407,13 +407,19 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
             if (safeThis->onTrackPresetMenuAction)
                 safeThis->onTrackPresetMenuAction(macroId, false);
         });
-        m.addItem("Set as Default Track Preset", [safeThis, macroId] {
-            if (safeThis == nullptr)
-                return;
-            safeThis->getMacroController().selectMacro(macroId, false);
-            if (safeThis->onTrackPresetMenuAction)
-                safeThis->onTrackPresetMenuAction(macroId, true);
-        });
+        // FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): a bus has no per-type Preferences
+        // -> Mixer default, so this item is omitted entirely for a bus macro (a track's own channel
+        // macro is the only one this can ever apply to) -- same "omit, don't disable" precedent
+        // "Mute Macro" sets above for a command that can only ever no-op.
+        if (!synth::isBusMacro(*macro, audioEngine.getGraph())) {
+            m.addItem("Set as Default Track Preset", [safeThis, macroId] {
+                if (safeThis == nullptr)
+                    return;
+                safeThis->getMacroController().selectMacro(macroId, false);
+                if (safeThis->onTrackPresetMenuAction)
+                    safeThis->onTrackPresetMenuAction(macroId, true);
+            });
+        }
     }
     m.addItem("Ungroup", [safeThis, macroId] {
         if (safeThis == nullptr)
