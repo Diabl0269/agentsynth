@@ -107,9 +107,18 @@ TEST(MixerSendAutomationLaneTest, PickerOffersOnlyActiveSends) {
     ASSERT_NE(found, options.end()) << "activating slot 0 must add exactly one entry for it";
     EXPECT_EQ(found->label, "Send to Bus 1") << "same FRO301 naming the send knob's accessible title uses";
 
-    // slot 1 (send2Level) is still inactive -- still not offered.
-    for (auto& option : options)
+    // FRO294: the same active slot also offers its pan.
+    const auto pan = std::find_if(options.begin(), options.end(), [&](const auto& option) {
+        return option.nodeUuid == sourceUuid && option.paramId == "send1Pan";
+    });
+    ASSERT_NE(pan, options.end());
+    EXPECT_EQ(pan->label, "Send to Bus 1 (pan)");
+
+    // slot 1 (send2Level / send2Pan) is still inactive -- still not offered.
+    for (auto& option : options) {
         EXPECT_NE(option.paramId, "send2Level");
+        EXPECT_NE(option.paramId, "send2Pan");
+    }
 }
 
 TEST(MixerSendAutomationLaneTest, PickerDropsOnlyTheRemovedSlot) {
