@@ -222,13 +222,19 @@ Every real control gets Tab, Return and Space for free from `juce::Button`, `juc
 
 ## Deleting a port from the dialog
 
-`GraphEditor::removeMacroPort()` reuses the ordinary multi-select delete path and **drops** the
-cable rather than splicing it back, pinned by
+`MacroGroupController::removeMacroPort()` reuses the ordinary multi-select delete path and
+**drops** the cable rather than splicing it back, pinned by
 `Tests/Macros/MacroPortFlow/MacroPortFlowEditTests.cpp`'s `RemoveDeletesTheNodeAndDropsThePort`.
-This differs on purpose from every other delete path, which splices
-([`docs/macros/auto-ports.md`](auto-ports.md#ungroup-and-direct-deletion-of-a-port)):
-`spliceOutMacroPort` is shared code, not shared semantics, and an explicit delete from a
-configuration dialog arguably should drop the cable rather than silently rewire the patch around it.
+
+**FRO235 (2026-09-27 founder decision): this dialog's own Delete Port button no longer calls
+`removeMacroPort()` directly.** It calls `MacroGroupController::deleteMacroPortManually()`
+instead — the SAME entry point the port's own right-click "Delete Port" menu item calls
+(`docs/macros/auto-ports.md#a-port-node-is-directly-deletable`). That method drops the cable by
+default (delegating to `removeMacroPort()` here, unchanged) and splices it back
+(`deleteMacroPortNode()`, `spliceOutMacroPort`) only when the "splice the cable back" Preference is
+on — so the two manual delete affordances always agree, and flipping the preference changes both
+at once. `removeMacroPort()`/`deleteMacroPortNode()` themselves are unchanged primitives;
+`deleteMacroPortManually()` is what decides which one runs.
 
 ## Related
 

@@ -177,6 +177,11 @@ void GraphEditor::deleteSelection() {
             onBeforeDetachAllModuleComponents();
         for (auto id : ids)
             graph.removeNode(id);
+        // FRO22: the bounded one-extra-hop-through-an-attenuverter case runs on the same
+        // pre-captured neighbour list, alongside (order doesn't matter — they touch disjoint node
+        // kinds) the plain direct-neighbour sweep below.
+        for (auto n : portNeighbors)
+            macroController_.autoDeleteOrphanedAttenuverter(n);
         for (auto n : portNeighbors)
             macroController_.autoDeleteOrphanedMacroPort(n);
         selection.clear();

@@ -182,6 +182,15 @@ void PreferencesSettingsTab::setMacroAutoDeletePortsOnLastCableEnabled(bool enab
     persistMacroAutoDeletePortsOnLastCable(enabled);
 }
 
+bool PreferencesSettingsTab::isMacroSpliceCableOnPortDeleteEnabled() const {
+    return macroSpliceCableOnPortDeleteToggle.getToggleState();
+}
+
+void PreferencesSettingsTab::setMacroSpliceCableOnPortDeleteEnabled(bool enabled) {
+    macroSpliceCableOnPortDeleteToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistMacroSpliceCableOnPortDelete(enabled);
+}
+
 bool PreferencesSettingsTab::isMacroDragWithoutCmdEnabled() const { return macroDragWithoutCmdToggle.getToggleState(); }
 
 void PreferencesSettingsTab::setMacroDragWithoutCmdEnabled(bool enabled) {
@@ -245,6 +254,13 @@ void PreferencesSettingsTab::persistMacroAutoDeletePortsOnLastCable(bool enabled
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
         graphEditor->setAutoDeleteMacroPortsOnLastCableEnabled(enabled);
+}
+
+void PreferencesSettingsTab::persistMacroSpliceCableOnPortDelete(bool enabled) {
+    appProperties.getUserSettings()->setValue("macroSpliceCableOnPortDelete", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->setSpliceCableOnMacroPortDeleteEnabled(enabled);
 }
 
 void PreferencesSettingsTab::persistMacroDragWithoutCmd(bool enabled) {
@@ -387,6 +403,23 @@ void PreferencesSettingsTab::initMacroToggles() {
         persistMacroAutoDeletePortsOnLastCable(macroAutoDeletePortsOnLastCableToggle.getToggleState());
     };
 
+    // FRO235 (docs/macros/auto-ports.md#a-port-node-is-directly-deletable): OFF by default — the two manual delete
+    // affordances (Configure I/O's Delete Port, the port's own right-click Delete Port) drop the
+    // cable unless this is on, in which case both splice it back together instead, the way
+    // ungroup always has.
+    contentHost.addAndMakeVisible(macroSpliceCableOnPortDeleteToggle);
+    macroSpliceCableOnPortDeleteToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("macroSpliceCableOnPortDelete", false),
+        juce::dontSendNotification);
+    macroSpliceCableOnPortDeleteToggle.setTooltip(
+        "When off (the default), deleting a macro port by hand -- from Configure I/O's Delete Port "
+        "button, or the port's own right-click Delete Port -- removes the port and its cable. When "
+        "on, the cable is spliced back together instead, wiring the two modules it used to bridge "
+        "directly. Ungrouping a macro always splices, regardless of this setting.");
+    macroSpliceCableOnPortDeleteToggle.onClick = [this] {
+        persistMacroSpliceCableOnPortDelete(macroSpliceCableOnPortDeleteToggle.getToggleState());
+    };
+
     // FRO168: plain on/off, ON by default (Cmd-drag reparents either way).
     contentHost.addAndMakeVisible(macroDragWithoutCmdToggle);
     macroDragWithoutCmdToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("macroDragWithoutCmd", true),
@@ -410,7 +443,8 @@ bool PreferencesSettingsTab::layoutMacroToggleGroup(
     const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible,
     const std::function<void(bool)>& beginGroup) {
     const std::initializer_list<juce::Component*> comps = {
-        &macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle, &macroDragWithoutCmdToggle};
+        &macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle, &macroSpliceCableOnPortDeleteToggle,
+        &macroDragWithoutCmdToggle};
     const bool visible = groupMatches(comps);
     setGroupVisible(comps, visible);
     beginGroup(visible);

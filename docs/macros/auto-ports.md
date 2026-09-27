@@ -6,9 +6,17 @@ ungrouping, deleting a port, and a port losing its last cable. The port model it
 [`docs/macros/ports.md`](ports.md); the manual dialog is
 [`docs/macros/configure-io.md`](configure-io.md).
 
-All of these are Mono only — no automatic path infers Stereo or Poly-N from a cable's own fan — with
-one exception: the grouping-time splice is the only source of `StereoCollapsed`, derived from the
-internal jack the crossing cable lands on rather than from any user choice.
+**FRO234 (2026-09-27 founder decision): the two cable-drag paths now infer shape too.** Both
+`GraphEditor::createMacroPortFromDroppedCable` (a cable dropped on a collapsed card) and
+`MacroGroupController::maybeAutoCreateMacroPortsForDrag` (a cable dragged across an expanded hull)
+read the dragged cable's own jack fan (`ModuleBase::getJackTargets`, the same read
+`resolvePolyLink` already does for an ordinary connection) via the shared
+`MacroGroupController::inferPortShapeFromCableFan` helper, instead of always minting a Mono port. A
+single dragged jack infers `StereoCollapsed` (one jack, two raw legs — span 2 + `Audio` role,
+matching the grouping-time merge pass's own rule below) or `Poly` (any other span > 1); anything
+else is `Mono`. The two-SEPARATE-jack `Stereo` shape is still unreachable from either path — it
+needs two independent legs no single dragged cable carries — and remains reachable only from the
+Configure I/O modal.
 
 ---
 
@@ -234,13 +242,24 @@ lightweight `AlertWindow` through `GraphEditor::promptRenameMacroPort`, the quic
 opening the whole dialog to retype one name) and "Configure I/O..." when the port still resolves to a
 live macro.
 
-Deleting a port this way while its macro stays alive shares `spliceOutMacroPort` with ungroup
-(`GraphEditor::deleteMacroPortNode`) — the cable is spliced back, never dropped — and **the macro
-dissolves outright if this was its last member**, mirroring `MacroSet::removeMemberEverywhere`'s own
-"zero members is not a meaningful state" rule.
+**FRO235 (2026-09-27 founder decision): both manual delete affordances now agree by default.**
+Right-click "Delete Port" and the Configure I/O dialog's own "Delete Port" button both call
+`MacroGroupController::deleteMacroPortManually`, which drops the cable by default — the same
+behaviour as any other node delete — rather than splicing it. A Preferences toggle, **"When
+deleting a macro port by hand, splice the cable back together instead of dropping it"**
+(`GraphEditor::setSpliceCableOnMacroPortDeleteEnabled`, persisted as
+`"macroSpliceCableOnPortDelete"`, OFF by default), switches BOTH paths to splicing
+(`spliceOutMacroPort`, the same helper ungroup and auto-delete-on-last-cable share) instead. The
+macro dissolves outright if the deleted port was its last member either way, mirroring
+`MacroSet::removeMemberEverywhere`'s own "zero members is not a meaningful state" rule.
 
-Deleting a port from the Configure I/O dialog is the one path that drops the cable instead; see
+Before this fix the two paths disagreed — Configure I/O's own "Delete Port" (`removeMacroPort`)
+reused the ordinary multi-select delete path and always dropped the cable, while the port's own
+right-click menu (`deleteMacroPortNode`) always spliced. See
 [`docs/macros/configure-io.md`](configure-io.md#deleting-a-port-from-the-dialog).
+
+Ungrouping (`ungroupSelection`) and auto-delete-on-last-cable (below) are unaffected by this
+preference — both always splice, unconditionally.
 
 ## Ports on a cable drag
 
@@ -323,9 +342,28 @@ transaction is chosen up front:**
   self-checking primitive the other call sites use: it no-ops for anything that is not a live macro
   port, or that still has a connection surviving elsewhere.
 
-**This is deliberately single-hop.** Splicing out a candidate can itself strand a second port that
-was wired only to the first — two ports can be directly wired port-to-port for a cross-macro-boundary
-crossing — and that second port is not chased. Nothing here cascades beyond one hop.
+**This is deliberately single-hop, with ONE bounded exception (FRO22, 2026-09-27 founder
+decision).** Splicing out a candidate can itself strand a second port that was wired only to the
+first — two ports can be directly wired port-to-port for a cross-macro-boundary crossing — and
+that second port is not chased. Nothing here cascades beyond one hop, **except** for a hidden
+`AttenuverterModule` sitting directly between the deleted node and a macro port: almost every real
+macro-port-to-modulation-target crossing is spliced through one (`AudioEngine::addModRouting`
+always wraps a CV routing as `source -> attenuverter(ch0) -> destination`), and an attenuverter can
+never itself be a macro member, so a deleted node's direct neighbour being the attenuverter — not
+the port — meant the port two hops away could never reach zero connections and auto-delete.
+`MacroGroupController::autoDeleteOrphanedAttenuverter`, called on the SAME
+`macroPortDeletionNeighbors` candidate list `autoDeleteOrphanedMacroPort` sweeps, no-ops unless the
+candidate is an attenuverter left with EXACTLY ONE remaining connection, to a macro port; when it
+matches, it removes the orphaned attenuverter, then re-checks the port's OWN remaining connections
+before touching it further — an interior source can fan out through more than one attenuverter (an
+Envelope feeding both a Filter's cutoff and a VCA's gain, each through its own attenuverter), so
+deleting one destination must only remove that one attenuverter, leaving the port wired for the
+other fan-out leg. Only when every connection still on the port is interior (nothing exterior left
+— no other attenuverter, nothing else outside) does it splice the port out directly (bypassing
+`autoDeleteOrphanedMacroPort`'s own "zero cables total" test, which the port's still-live INTERIOR
+leg into the surviving macro member would otherwise pass). Gated on the same
+`autoDeleteMacroPortsOnLastCableEnabled` preference. No general multi-hop walk — this reaches
+exactly one hop past the attenuverter and stops.
 
 `modMatrix.clearRows()` needs no special interaction handling: it is `rows.clear(); repaint();`, a
 blunt UI-state clear with no node scoping of its own, so it stays where it already runs (once, at the
@@ -342,6 +380,12 @@ and of the grouping-time tri-state above.
 A third macro toggle, **"Drag modules into and out of macros without Cmd"** (`"macroDragWithoutCmd"`),
 is unrelated to ports but lives in the same Preferences group and is likewise a plain on/off; unlike
 these two it defaults ON. See [`docs/macros/menu-and-membership.md`](menu-and-membership.md#dragging-without-cmd-the-preference).
+
+A fourth, **"When deleting a macro port by hand, splice the cable back together instead of
+dropping it"** (`"macroSpliceCableOnPortDelete"`, FRO235), governs the two MANUAL delete
+affordances above (Configure I/O's own Delete Port, and the port's own right-click Delete Port) —
+unlike the two T148 toggles, it defaults OFF: dropping the cable is the same behaviour any other
+node delete already has, so the new automation here is the OPT-IN splice, not the drop.
 
 **Why not a third tri-state.** These are brand-new automations shipped as the default behaviour, with
 a plain escape hatch for the user who wants the wire-straight-through or leave-a-cableless-port

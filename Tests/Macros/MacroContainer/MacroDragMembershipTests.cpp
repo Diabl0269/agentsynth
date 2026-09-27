@@ -295,6 +295,66 @@ TEST(MacroDragMembership, CmdDragJoinSplicesOutInteriorPortAndCreatesNewCrossing
     EXPECT_TRUE(foundDirectAtoF) << "splicing out the interior port must restore the direct A->F cable";
 }
 
+// FRO195: the LEAVE-direction mirror of CmdDragJoinSplicesOutInteriorPortAndCreatesNewCrossingPort
+// above -- a member dragged OUT of a macro can leave a DIFFERENT existing port obsolete (its
+// interior leg was exactly the departing member) while simultaneously creating a NEW port for a
+// cable that only just became a real crossing.
+TEST(MacroDragMembership, CmdDragLeaveSplicesOutObsoletePortAndCreatesNewCrossingPort) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 300);
+    auto outside = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
+
+    // outside->B crosses what's about to become the macro's boundary; A->B stays entirely
+    // interior for now (mirrors the join test's own A->F/F->G shape, for the leave direction).
+    editor.connectPorts(outside, 0, b, 0, /*isMidi=*/false);
+    editor.connectPorts(a, 0, b, 1, /*isMidi=*/false);
+
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(/*autoCreatePorts=*/true);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+
+    auto* macroBeforeDrag = editor.getMacros().find(macroId);
+    ASSERT_NE(macroBeforeDrag, nullptr);
+    ASSERT_EQ(macroBeforeDrag->ports.size(), 1u) << "sanity: grouping auto-created ONE port for outside->B";
+    const juce::String originalPortUuid = macroBeforeDrag->ports[0].nodeUuid;
+
+    const int nodesBeforeDrag = engine.getGraph().getNodes().size();
+
+    auto* compB = findComponent(editor, b);
+    ASSERT_NE(compB, nullptr);
+
+    // Same comfortably-outside-the-hull-excluding-self margin CmdDragMemberOutPastHullLeavesTheMacro uses.
+    dragBodyBy(*compB, {2400, 0}, kCmdClick, [&] {
+        EXPECT_TRUE(editor.hasMacroDragCandidate())
+            << "sanity: dragging B well outside the hull must arm the LEAVE candidate mid-drag";
+    });
+
+    EXPECT_EQ(editor.getMacroController().macroForNode(b), nullptr) << "B must have left the macro";
+
+    // Net node count is unchanged: the OLD port (outside->B) is now obsolete -- both its ends are
+    // external once B leaves -- and spliced out, while a NEW port (A->B, now the crossing cable)
+    // is created to replace it.
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBeforeDrag)
+        << "one port removed, one created -- the node count must net to zero";
+    EXPECT_EQ(nodeIdForUuid(engine, originalPortUuid).uid, 0u) << "the old outside->B port node must be gone";
+
+    auto* macroAfterDrag = editor.getMacros().find(macroId);
+    ASSERT_NE(macroAfterDrag, nullptr);
+    ASSERT_EQ(macroAfterDrag->ports.size(), 1u) << "exactly one NEW port, for the A->B crossing";
+    EXPECT_NE(macroAfterDrag->ports[0].nodeUuid, originalPortUuid);
+
+    bool foundDirectOutsideToB = false;
+    for (const auto& c : engine.getGraph().getConnections())
+        if (c.source.nodeID == outside && c.destination.nodeID == b)
+            foundDirectOutsideToB = true;
+    EXPECT_TRUE(foundDirectOutsideToB) << "splicing out the obsolete port must restore the direct outside->B cable";
+}
+
 // ---------------------------------------------------------------------------------------------
 // 4. ONE undo restores BOTH the position AND the membership.
 // ---------------------------------------------------------------------------------------------

@@ -327,10 +327,11 @@ juce::PopupMenu ModuleComponent::buildMacroPortContextMenu() {
         m.addItem("Rename Port...", [this, macroId, uuid] { owner.promptRenameMacroPort(macroId, uuid); });
         m.addItem("Configure I/O...", [this, macroId] { owner.promptConfigureMacroIO(macroId); });
         m.addSeparator();
-        // Splices the boundary cable back together rather than dropping it (founder-review fix
-        // G7) — GraphEditor::deleteMacroPortNode, sharing spliceOutMacroPort with ungroup.
+        // FRO235: drops the cable by default, splicing it back together only when the "splice the
+        // cable back" preference is on — MacroGroupController::deleteMacroPortManually, the SAME
+        // entry point Configure I/O's own Delete Port button uses, so the two never disagree.
         m.addItem("Delete Port",
-                  [this, macroId, uuid] { owner.getMacroController().deleteMacroPortNode(macroId, uuid); });
+                  [this, macroId, uuid] { owner.getMacroController().deleteMacroPortManually(macroId, uuid); });
     } else {
         // Defensive: macroPortOwnerFor's own header comment says this shouldn't happen (every
         // port node is constructed as a macro member with a matching MacroPort entry), but a port

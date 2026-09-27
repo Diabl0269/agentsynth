@@ -4,6 +4,117 @@
 // Topic: editing an existing port without changing its identity — remove, rename, reorder
 // (adjacent-swap and drag-to-index), and the T152 per-port colour.
 
+namespace {
+// Builds a two-member macro, an EXISTING port with a cable crossing through it (ext -> port -> a),
+// and returns {macroId, portUuid, extNodeId, aNodeId} — the fixture FRO235's manual-delete tests
+// share.
+struct ManualDeletePortFixture {
+    juce::String macroId;
+    juce::String portUuid;
+    NodeID ext;
+    NodeID a;
+};
+
+ManualDeletePortFixture makeManualDeletePortFixture(GraphEditor& editor, AudioEngine& engine) {
+    ManualDeletePortFixture fx;
+    fx.macroId = makeTwoMemberMacro(editor, engine);
+    auto* macro = editor.getMacros().find(fx.macroId);
+    fx.a = nodeIdForUuid(engine, macro->members[0]);
+
+    fx.portUuid = editor.getMacroController().addMacroPort(fx.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
+                                                           MacroPortShape::Mono, 1, "In");
+    const auto portId = nodeIdForUuid(engine, fx.portUuid);
+
+    fx.ext = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 50, 50);
+    engine.getGraph().addConnection({{fx.ext, 0}, {portId, 0}});
+    engine.getGraph().addConnection({{portId, 0}, {fx.a, 0}});
+    return fx;
+}
+} // namespace
+
+// ============================================================================
+// FRO235: the "splice the cable back" preference — Configure I/O's Delete Port (removeMacroPort)
+// and the port's own right-click Delete Port both go through deleteMacroPortManually, so a flip
+// of the preference always applies to both at once.
+// ============================================================================
+
+TEST(MacroPortFlow, ManualDeleteDropsTheCableByDefault) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto fx = makeManualDeletePortFixture(editor, engine);
+    ASSERT_FALSE(editor.getSpliceCableOnMacroPortDeleteEnabled()) << "off by default";
+
+    editor.getMacroController().deleteMacroPortManually(fx.macroId, fx.portUuid);
+
+    EXPECT_TRUE(nodeIdForUuid(engine, fx.portUuid).uid == 0) << "the port node is gone";
+    EXPECT_FALSE(hasConnection(engine, fx.ext, 0, fx.a, 0)) << "default: the cable is DROPPED, not spliced";
+}
+
+TEST(MacroPortFlow, ManualDeleteSplicesWhenThePreferenceIsOn) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto fx = makeManualDeletePortFixture(editor, engine);
+    editor.setSpliceCableOnMacroPortDeleteEnabled(true);
+
+    editor.getMacroController().deleteMacroPortManually(fx.macroId, fx.portUuid);
+
+    EXPECT_TRUE(nodeIdForUuid(engine, fx.portUuid).uid == 0) << "the port node is gone";
+    EXPECT_TRUE(hasConnection(engine, fx.ext, 0, fx.a, 0)) << "preference on: the cable is spliced back together";
+}
+
+// The right-click "Delete Port" menu item calls the exact same deleteMacroPortManually, so it must
+// agree with Configure I/O's own Delete Port on both settings of the preference.
+TEST(MacroPortFlow, RightClickDeletePortDropsByDefault) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto fx = makeManualDeletePortFixture(editor, engine);
+    editor.getMacroController().setMacroCollapsed(fx.macroId, false); // ports get a ModuleComponent only while expanded
+
+    const auto portId = nodeIdForUuid(engine, fx.portUuid);
+    auto* portComp = compFor(editor, portId);
+    ASSERT_NE(portComp, nullptr);
+
+    const auto menu = portComp->buildMacroPortContextMenu();
+    juce::PopupMenu::MenuItemIterator it(menu);
+    bool ran = false;
+    while (it.next()) {
+        if (it.getItem().text == "Delete Port") {
+            it.getItem().action();
+            ran = true;
+        }
+    }
+    ASSERT_TRUE(ran) << "the menu must actually offer Delete Port for an existing port";
+
+    EXPECT_TRUE(nodeIdForUuid(engine, fx.portUuid).uid == 0);
+    EXPECT_FALSE(hasConnection(engine, fx.ext, 0, fx.a, 0)) << "default: dropped, matching Configure I/O's own path";
+}
+
+TEST(MacroPortFlow, RightClickDeletePortSplicesWhenThePreferenceIsOn) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto fx = makeManualDeletePortFixture(editor, engine);
+    editor.getMacroController().setMacroCollapsed(fx.macroId, false);
+    editor.setSpliceCableOnMacroPortDeleteEnabled(true);
+
+    const auto portId = nodeIdForUuid(engine, fx.portUuid);
+    auto* portComp = compFor(editor, portId);
+    ASSERT_NE(portComp, nullptr);
+
+    const auto menu = portComp->buildMacroPortContextMenu();
+    juce::PopupMenu::MenuItemIterator it(menu);
+    while (it.next())
+        if (it.getItem().text == "Delete Port")
+            it.getItem().action();
+
+    EXPECT_TRUE(nodeIdForUuid(engine, fx.portUuid).uid == 0);
+    EXPECT_TRUE(hasConnection(engine, fx.ext, 0, fx.a, 0))
+        << "preference on: spliced, matching Configure I/O's own path";
+}
+
 TEST(MacroPortFlow, RemoveDeletesTheNodeAndDropsThePort) {
     AudioEngine engine;
     GraphEditor editor(engine);

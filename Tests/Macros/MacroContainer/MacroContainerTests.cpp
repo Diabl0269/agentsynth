@@ -741,3 +741,105 @@ TEST(MacroMembership, RemoveSelectionFromMacroWithASplicedPortIsOneUndoStep) {
     EXPECT_FALSE(macro->hasMember(uuidA));
     EXPECT_EQ(macro->ports.size(), 1u);
 }
+
+// ============================================================================
+// FRO195: removeSelectionFromMacro's remove-side mirror of
+// AddSelectionToMacroSplicesOutAnExistingPortTheJoiningMemberMakesInterior above — a member
+// leaving can leave an EXISTING port stranded, bridging two things now both external, exactly the
+// way a joining member can make one redundant. Test matrix: cable to a staying member (a new
+// crossing port is created — already covered by RemoveSelectionFromMacroWithASplicedPortIsOneUndoStep
+// above), cable to an outside module (the old port is obsolete and must be spliced out — new
+// below), and a member leaving with both at once.
+// ============================================================================
+
+TEST(MacroMembership, RemoveSelectionFromMacroSplicesOutAPortThatBecomesObsoleteWhenItsMemberLeaves) {
+    // b starts alone in the macro, wired to `outside` -- groupSelectionIntoMacro(true) gives that
+    // crossing a real port immediately, mirroring
+    // AddSelectionToMacroSplicesOutAnExistingPortTheJoiningMemberMakesInterior's own setup.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto outside = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    ASSERT_TRUE(engine.getGraph().addConnection({{outside, 0}, {b, 0}}));
+    auto uuidB = uuidOf(engine, b);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u) << "sanity: the outside<->b crossing got a real port";
+    const auto portUuidBefore = editor.getMacros().find(macroId)->ports.front().nodeUuid;
+
+    // b itself now leaves the macro: the port's interior leg WAS b, which is now external too, so
+    // the port bridges two things that are BOTH external -- obsolete, not a real crossing anymore.
+    editor.getMacroController().removeSelectionFromMacro(macroId, {uuidB});
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_FALSE(macro->hasMember(uuidB));
+    EXPECT_TRUE(macro->ports.empty()) << "the now-obsolete port must be spliced out, not left stranded on the hull "
+                                         "feeding a now-outside module";
+    EXPECT_EQ(nodeIdForUuid(engine, portUuidBefore).uid, 0u) << "the old port node itself must be gone";
+
+    bool sawDirect = false;
+    for (const auto& c : engine.getGraph().getConnections())
+        if (c.source.nodeID == outside && c.source.channelIndex == 0 && c.destination.nodeID == b &&
+            c.destination.channelIndex == 0)
+            sawDirect = true;
+    EXPECT_TRUE(sawDirect) << "outside and b (now both external) end up wired directly again";
+}
+
+TEST(MacroMembership, RemoveSelectionFromMacroHandlesBothANewCrossingAndAnObsoletePortAtOnce) {
+    // b is a member wired BOTH to `a` (a staying member -- becomes a new crossing) and to
+    // `outside` via an existing port (becomes obsolete) -- one removeSelectionFromMacro call must
+    // do both halves correctly.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto outside = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    ASSERT_TRUE(engine.getGraph().addConnection({{outside, 0}, {b, 0}}));
+    ASSERT_TRUE(engine.getGraph().addConnection({{a, 0}, {b, 1}}));
+    auto uuidB = uuidOf(engine, b);
+    auto uuidA = uuidOf(engine, a);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u)
+        << "sanity: only outside<->b crosses at group time -- a->b starts fully interior";
+    const auto portUuidBefore = editor.getMacros().find(macroId)->ports.front().nodeUuid;
+
+    editor.getMacroController().removeSelectionFromMacro(macroId, {uuidB});
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_FALSE(macro->hasMember(uuidB));
+    EXPECT_TRUE(macro->hasMember(uuidA)) << "a stays behind";
+    EXPECT_EQ(nodeIdForUuid(engine, portUuidBefore).uid, 0u) << "the old outside<->b port is obsolete and gone";
+    ASSERT_EQ(macro->ports.size(), 1u) << "exactly one NEW port for the a->b crossing that b's departure created";
+
+    bool sawOutsideDirect = false;
+    for (const auto& c : engine.getGraph().getConnections())
+        if (c.source.nodeID == outside && c.source.channelIndex == 0 && c.destination.nodeID == b &&
+            c.destination.channelIndex == 0)
+            sawOutsideDirect = true;
+    EXPECT_TRUE(sawOutsideDirect) << "outside<->b spliced back together directly";
+
+    const auto newPortId = nodeIdForUuid(engine, macro->ports.front().nodeUuid);
+    ASSERT_NE(newPortId.uid, 0u);
+    bool sawAToPort = false;
+    bool sawPortToB = false;
+    for (const auto& c : engine.getGraph().getConnections()) {
+        if (c.source.nodeID == a && c.source.channelIndex == 0 && c.destination.nodeID == newPortId)
+            sawAToPort = true;
+        if (c.source.nodeID == newPortId && c.destination.nodeID == b && c.destination.channelIndex == 1)
+            sawPortToB = true;
+    }
+    EXPECT_TRUE(sawAToPort) << "the newly-external a feeds the new crossing port";
+    EXPECT_TRUE(sawPortToB) << "the new port feeds the departed (now external) b, preserving the signal path";
+}

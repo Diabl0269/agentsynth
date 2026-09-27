@@ -84,6 +84,19 @@ it never means widening a live node. That is not a limitation worked around — 
 fixed-channel-count invariant applied honestly, because a port node is an ordinary module and that
 rule binds it like every other module.
 
+**FRO20 (P8-25, founder review round 3, item 3.6): the delete-and-re-add auto-wires the NEW raw
+channel a Mono -> Stereo/StereoCollapsed change adds.** `MacroGroupController::changeMacroPortShape`
+replays every surviving cable onto the new node's matching raw channel first (unchanged), then, for
+that specific transition, wires the raw channel the OLD Mono shape never had — reusing the SAME
+rule the Dual I/O toggle applies when an ordinary module grows a right leg
+(`GraphEditor::completeStereoPairConnections`), mirrored locally rather than called directly (this
+collaborator never includes `GraphEditor.h`; see `MacroGroupController.h`'s class comment). `Stereo`
+(two SEPARATE jacks) pairs the new right leg with the peer's own right leg when it has one the user
+can reach, or sums into the SAME mono jack the peer already exposes when it does not.
+`StereoCollapsed` (one jack, two raw legs) instead fans the identical cable onto the hidden follower
+raw channel, matching how a collapsed FX jack's own dual-raw-leg pair carries one cable. The whole
+thing — delete, create, replay, auto-wire — is still the ONE undo step the modal promises.
+
 There is deliberately **no shape inheritance**. Inheritance is the right rule for Dual I/O on a real
 DSP module (`ModuleBase::hasStereoOutputPairShape` derives it from channel counts, never from a
 per-module registration) and the wrong frame for a node constructed on demand: a port is created
@@ -94,13 +107,19 @@ Shape is therefore an **input to port creation**, supplied one of these ways:
 - **From the Configure I/O dialog** — Mono, Stereo or Poly-N, picked explicitly. This is the primary
   flow, and the only way to reach Stereo or Poly-N. `StereoCollapsed` is never one of the choices.
 - **From a cable dropped on a collapsed card's boundary** — creates a port matching the cable's
-  direction and kind, wired to the EXTERNAL end of the drag. **Mono only**; shape inference from the
-  cable's own poly or stereo fan is not implemented. This path never wires anything on the macro's
-  INTERIOR side: the macro is collapsed, so there is no visible member to pick a target from. Only
-  the dialog, or a manual cable drawn after expanding the macro, connects a port to a specific member.
-- **From a cable dragged across an expanded macro's hull** — also Mono only, and it wires both sides.
-  See [`docs/macros/auto-ports.md`](auto-ports.md#ports-on-a-cable-drag).
-- **From grouping a selection with a crossing cable** — the ONLY source of `StereoCollapsed`.
+  direction and kind, wired to the EXTERNAL end of the drag. **Mono, `StereoCollapsed` or `Poly`**,
+  inferred from the dragged cable's own jack fan (a 2-leg Audio or collapsed Key/sidechain jack gives
+  `StereoCollapsed`; FRO234, 2026-09-27 founder decision — see
+  [`docs/macros/auto-ports.md`](auto-ports.md#automatic-macro-ports) for the shared inference rule);
+  never the two-jack `Stereo` shape, which needs two independent legs no single cable carries. This
+  path never wires anything on the macro's INTERIOR side: the macro is collapsed, so there is no
+  visible member to pick a target from. Only the dialog, or a manual cable drawn after expanding the
+  macro, connects a port to a specific member.
+- **From a cable dragged across an expanded macro's hull** — same inference (Mono/`StereoCollapsed`/
+  `Poly`, never the two-jack `Stereo`), and it wires both sides. See
+  [`docs/macros/auto-ports.md`](auto-ports.md#ports-on-a-cable-drag).
+- **From grouping a selection with a crossing cable** — like the two cable paths above, can produce
+  `StereoCollapsed`.
   `GraphEditor::buildMacroPortCrossingPlan` derives the shape from the internal jack the crossing
   cable actually lands on, never from a user choice
   ([`docs/macros/auto-ports.md`](auto-ports.md#auto-creating-ports-when-grouping)).

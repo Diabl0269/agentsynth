@@ -447,6 +447,52 @@ MacroGroupController::buildMacroPortCrossingPlanForRemovedMembers(const juce::St
     return plan;
 }
 
+std::vector<juce::String>
+MacroGroupController::macroPortsThatBecomeObsoleteOnRemove(const juce::String& macroId,
+                                                           const std::vector<juce::String>& removedUuids) const {
+    const auto* macro = host_.getMacros().find(macroId);
+    if (macro == nullptr || removedUuids.empty())
+        return {};
+
+    // The mirror image of macroPortsThatBecomeInteriorOnAdd's `interiorAfterAdd`: the ordinary
+    // members that are STILL inside once removedUuids leave. A port whose every remaining edge's
+    // other end is NOT one of these is now bridging two things that are both external — its
+    // interior leg was exactly a departing member — so it is obsolete, not a real crossing.
+    std::set<juce::String> interiorAfterRemove;
+    std::set<juce::String> removedSet(removedUuids.begin(), removedUuids.end());
+    for (const auto& uuid : macro->members)
+        if (!macro->memberIsPort(uuid) && removedSet.count(uuid) == 0)
+            interiorAfterRemove.insert(uuid);
+
+    auto& graph = host_.graph();
+    std::vector<juce::String> result;
+    for (const auto& port : macro->ports) {
+        const auto portId = resolveMemberNodeId(port.nodeUuid);
+        if (portId.uid == 0)
+            continue;
+        bool anyEdge = false;
+        bool anyInterior = false;
+        for (const auto& c : graph.getConnections()) {
+            juce::AudioProcessorGraph::NodeID other;
+            if (c.source.nodeID == portId)
+                other = c.destination.nodeID;
+            else if (c.destination.nodeID == portId)
+                other = c.source.nodeID;
+            else
+                continue;
+            anyEdge = true;
+            const juce::String otherUuid = nodeUuidFor(other);
+            if (otherUuid.isNotEmpty() && interiorAfterRemove.count(otherUuid) != 0) {
+                anyInterior = true;
+                break;
+            }
+        }
+        if (anyEdge && !anyInterior)
+            result.push_back(port.nodeUuid);
+    }
+    return result;
+}
+
 void MacroGroupController::spliceOutMacroPort(synth::Macro& macro, const juce::String& portNodeUuid) {
     const auto nodeId = resolveMemberNodeId(portNodeUuid);
     if (nodeId.uid != 0) {
@@ -526,18 +572,24 @@ MacroGroupController::mintMacroPortForAutoCreate(const juce::String& macroId, bo
     auto newProcessor = synth::AIStateMapper::createModule(typeName);
     if (!newProcessor)
         return {};
-    if (!isMidi) {
-        // Always Mono — the same scope cut createMacroPortFromDroppedCable already applies
-        // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed).
-        if (auto* inlet = dynamic_cast<MacroInletModule*>(newProcessor.get()))
-            inlet->setPortShape(MacroPortShape::Mono, 1);
-        else if (auto* outlet = dynamic_cast<MacroOutletModule*>(newProcessor.get()))
-            outlet->setPortShape(MacroPortShape::Mono, 1);
-    }
 
     auto& graph = host_.graph();
     auto* internalNode = graph.getNodeForId(internalNodeId);
     auto* internalMb = internalNode != nullptr ? dynamic_cast<ModuleBase*>(internalNode->getProcessor()) : nullptr;
+
+    if (!isMidi) {
+        // FRO234: infer the shape from the dragged cable's own fan on the INTERNAL member's jack
+        // (mirrored onto the boundary) instead of always Mono — same rule
+        // createMacroPortFromDroppedCable applies for the collapsed-card-drop case. The internal
+        // jack's own direction matches the new port's `isInput` (a signal entering the port also
+        // enters this member).
+        const auto [inferredShape, inferredVoices] =
+            inferPortShapeFromCableFan(internalMb, internalVisibleJack, isInput);
+        if (auto* inlet = dynamic_cast<MacroInletModule*>(newProcessor.get()))
+            inlet->setPortShape(inferredShape, inferredVoices);
+        else if (auto* outlet = dynamic_cast<MacroOutletModule*>(newProcessor.get()))
+            outlet->setPortShape(inferredShape, inferredVoices);
+    }
 
     auto node = graph.addNode(std::move(newProcessor));
     if (!node)

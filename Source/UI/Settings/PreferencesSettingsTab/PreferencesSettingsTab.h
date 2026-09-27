@@ -40,6 +40,9 @@ public:
     void setMacroAutoCreatePortsOnDragEnabled(bool enabled);
     bool isMacroAutoDeletePortsOnLastCableEnabled() const;
     void setMacroAutoDeletePortsOnLastCableEnabled(bool enabled);
+    // FRO235: plain on/off, OFF by default — see the .cpp for what it gates.
+    bool isMacroSpliceCableOnPortDeleteEnabled() const;
+    void setMacroSpliceCableOnPortDeleteEnabled(bool enabled);
     // FRO168 (docs/macros/menu-and-membership.md): reparent a module by dragging it across a macro hull without
     // holding Cmd. Plain on/off, ON by default (Cmd works either way).
     bool isMacroDragWithoutCmdEnabled() const;
@@ -179,6 +182,7 @@ private:
     void persistDoubleClickPortDisconnect(bool enabled);
     void persistMacroAutoCreatePortsOnDrag(bool enabled);
     void persistMacroAutoDeletePortsOnLastCable(bool enabled);
+    void persistMacroSpliceCableOnPortDelete(bool enabled);
     void persistMacroDragWithoutCmd(bool enabled);
     void persistMixerAutoCreateChannelOnConnect(bool enabled);
     void persistAlignmentGuidesEnabled(bool enabled);
@@ -314,6 +318,9 @@ private:
                                                         "boundary"};
     juce::ToggleButton macroAutoDeletePortsOnLastCableToggle{"Auto-delete macro ports when their last cable is "
                                                              "removed"};
+    // FRO235: OFF by default, unlike the T148 pair above — see its getter/setter declarations for why.
+    juce::ToggleButton macroSpliceCableOnPortDeleteToggle{"When deleting a macro port by hand, splice the cable "
+                                                          "back together instead of dropping it"};
     juce::ToggleButton macroDragWithoutCmdToggle{"Drag modules into and out of macros without Cmd"};
     // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): plain on/off, ON by default —
     // see the getter/setter declarations above for why this is a different shape from a tri-state "ask".

@@ -368,6 +368,9 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
         if (onBeforeDetachAllModuleComponents)
             onBeforeDetachAllModuleComponents();
         graph.removeNode(nodeId);
+        // FRO22: see GraphEditor::deleteSelection's matching comment.
+        for (auto n : portNeighbors)
+            macroController_.autoDeleteOrphanedAttenuverter(n);
         for (auto n : portNeighbors)
             macroController_.autoDeleteOrphanedMacroPort(n);
         updateComponents();
