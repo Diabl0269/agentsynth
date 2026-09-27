@@ -188,6 +188,14 @@ NodeID findSendTarget(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int 
     return {};
 }
 
+juce::String describeSendSlotLabel(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot) {
+    const auto target = findSendTarget(graph, sourceStrip, slot);
+    if (target == NodeID{})
+        return "Send " + juce::String(slot + 1) + " (no target)";
+    const juce::String name = isBusStrip(graph, target) ? busFallbackName(graph, target) : juce::String("Channel");
+    return "Send to " + name;
+}
+
 std::vector<NodeID> enumerateSendTargets(juce::AudioProcessorGraph& graph, NodeID sourceStrip) {
     std::vector<NodeID> targets;
     if (stripAt(graph, sourceStrip) == nullptr)

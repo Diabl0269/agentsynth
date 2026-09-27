@@ -49,6 +49,14 @@ juce::String busFallbackName(juce::AudioProcessorGraph& graph, juce::AudioProces
 juce::AudioProcessorGraph::NodeID findSendTarget(juce::AudioProcessorGraph& graph,
                                                  juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
 
+/** "Send to <target>" / "Send N (no target)" -- the FRO301 accessible-title format MixerSendList's
+ *  knob uses, shared here so a lane created for the same slot (FRO292) always agrees with the knob
+ *  that drives it. Target naming mirrors targetNameFor's non-macro branch (bus name, or plain
+ *  "Channel" for an ordinary strip); a macro-grouped target's own name is a UI-only refinement this
+ *  helper does not reach for, since it has no MacroSet to query. `slot` is 0-based. */
+juce::String describeSendSlotLabel(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip,
+                                   int slot);
+
 /** Every strip a new (or retargeted) send from `sourceStrip` may legally feed: every OTHER
  *  ChannelStripModule in the graph, in ascending NodeID, minus any whose own signal already reaches
  *  `sourceStrip` -- those would close a feedback loop. This walk is the ONLY cycle defence, not

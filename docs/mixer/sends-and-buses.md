@@ -152,6 +152,17 @@ mutation is ONE
 before a graph-replacing undo frees their parameters**
 ([`docs/mixer/panel.md`](panel.md#unbinding-before-a-graph-change)).
 
+**FRO292: an active send's level can carry its own automation lane**, the same way a hosted
+plugin's own parameters can — the automation strip's lane picker offers an "Add lane…" entry per
+active, not-yet-automated slot, labelled by `synth::describeSendSlotLabel` with the SAME "Send to
+\<target\>" / "Send N (no target)" text the knob's own accessible title uses, so the picker entry and
+the knob it drives always read the same thing. A `sendNLevel` is an ordinary `RangedAudioParameter`
+(unlike a hosted plugin's), so the created lane's range comes from its real `NormalisableRange`
+(-60..+12 dB), not the hosted `{0, 1}` convention. Removing the slot leaves an existing lane bound to
+now-inert extra state — no orphan logic runs, since the parameter itself never goes away (see
+[`docs/timeline/automation.md`](../timeline/automation.md) and
+[`docs/modules/modulation.md`](../modules/modulation.md#hosted-plugin-parameters-as-automation-lanes)).
+
 **The forward cycle walk is the ONLY cycle defence.** Cyclic targets are excluded from the menu by a
 forward walk from the candidate back to this strip, and `synth::addSend` applies the same check.
 `juce::AudioProcessorGraph::addConnection` is **not** a backstop here, as measured: it checks node

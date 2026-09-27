@@ -101,6 +101,17 @@ the plugin has its own editor). Choosing one creates a lane with a `RangeSnapsho
 `{0, 1, default}` (a hosted parameter's native domain is always 0..1) and captures `paramIndexHint`
 from the parameter's current index.
 
+**FRO292: the same picker offers one "Add lane…" entry per ACTIVE, not-yet-automated send slot** on
+every `ChannelStripModule` in the graph — a send level has no `ModuleComponent` knob either (the
+strip is internal-only/hidden, [`modules.md`](modules.md#channel-strip-module-mixer-channel-hidden)),
+so this is its only lane-creation entry point too. An inactive slot is never offered. The entry's
+label — "Send to \<target\>" / "Send N (no target)" — is the same `synth::describeSendSlotLabel`
+string the send knob's own FRO301 accessible title uses
+([`mixer/sends-and-buses.md`](../mixer/sends-and-buses.md#the-send-and-bus-ui)), so the picker entry
+and the knob it drives always agree. Unlike a hosted parameter, `sendNLevel` is an ordinary
+`RangedAudioParameter`, so the created lane's range comes from its real `NormalisableRange`
+(-60..+12 dB) rather than the hosted `{0, 1}` convention.
+
 ## Routing kinds
 
 Every CV connection in the graph resolves to one of three routing kinds, defined in `AudioEngine.h`:
