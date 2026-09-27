@@ -100,6 +100,7 @@ add_executable(Tests
     Timeline/PeaksFileTests.cpp
     Timeline/RecordTapTests.cpp
     Mixer/ChannelStripTests.cpp
+    Mixer/MixerPanLawTests.cpp
     Mixer/PeakMeterLatchTests.cpp
     Mixer/MixerSoloTests.cpp
     Mixer/SidechainKeyGraphTests.cpp
@@ -491,6 +492,7 @@ add_executable(Tests
     UI/Mixer/MixerColumnComponentMeterTests.cpp
     UI/Mixer/MixerColumnMidiLearnTests.cpp
     UI/Mixer/MixerMasterColumnMidiLearnTests.cpp
+    UI/Mixer/MixerMasterColumnPanLawTests.cpp
     UI/Mixer/MixerMeterScaleTests.cpp
     UI/Mixer/MeterColourStopsTests.cpp
     UI/Mixer/MeterColourStopsPersistenceTests.cpp

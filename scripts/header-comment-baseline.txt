@@ -7,12 +7,12 @@
 # (+1 comment, +1 code) never moves excess, so it never trips this ratchet.
 44 Source/AI/AIIntegrationService/AIIntegrationService.h
 24 Source/AI/AIProvider.h
-110 Source/AI/AIStateMapper/AIStateMapper.h
+109 Source/AI/AIStateMapper/AIStateMapper.h
 2 Source/AI/AccountService.h
 30 Source/AI/PatchDiff.h
 25 Source/AI/RemoteProvider.h
-131 Source/AppUndoManager.h
-106 Source/AudioEngine/AudioEngine.h
+130 Source/AppUndoManager.h
+103 Source/AudioEngine/AudioEngine.h
 50 Source/MacroSet.h
 103 Source/Mixer/ChannelFlows/ChannelFlows.h
 26 Source/Mixer/MixerModel/MixerModel.h
@@ -36,7 +36,6 @@
 49 Source/Timeline/TimelineValidator.h
 36 Source/Transport/BounceExporter.h
 27 Source/Transport/OfflineTransportDriver.h
-1 Source/Transport/TransportService.h
 61 Source/UI/Assistant/AIChatComponent/AIChatComponent.h
 40 Source/UI/Chrome/StatusBarComponent.h
 13 Source/UI/Layout/BottomDockComponent.h

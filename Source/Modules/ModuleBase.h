@@ -4,6 +4,7 @@
 #include "VisualBuffer.h"
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstring>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -354,6 +355,21 @@ public:
         const float p = juce::jlimit(-1.0f, 1.0f, pan);
         gainL = juce::jlimit(0.0f, 1.0f, 1.0f - p);
         gainR = juce::jlimit(0.0f, 1.0f, 1.0f + p);
+    }
+
+    /** FRO325 (docs/mixer/mixer.md#pan-law): constant-power "-3 dB compensated" pan law -- centre is
+     *  unity on both legs same as panGains, but panning away from centre RAISES the far leg (up to
+     *  +3 dB at a hard pan) instead of only attenuating the near one, holding perceived loudness
+     *  constant (Logic/Ableton's default). Never a drop-in replacement for panGains: it is the
+     *  project-selectable law ChannelStripModule applies only to a MONO-shaped strip's own pan and
+     *  its sends' pan (see synth::MixerPanLaw) -- every other panGains caller is unaffected. The
+     *  jmax(0.0f, ...) guards a hard pan's near-zero leg from going slightly negative on a float
+     *  cosine/sine rounding error. */
+    static void panGainsCompensated(float pan, float& gainL, float& gainR) {
+        const float p = juce::jlimit(-1.0f, 1.0f, pan);
+        const float angle = (p + 1.0f) * juce::MathConstants<float>::halfPi * 0.5f;
+        gainL = juce::jmax(0.0f, std::sqrt(2.0f) * std::cos(angle));
+        gainR = juce::jmax(0.0f, std::sqrt(2.0f) * std::sin(angle));
     }
 
     /** Map raw ch0/ch1 (+ trailing CV) onto Dual or collapsed Audio jacks. */

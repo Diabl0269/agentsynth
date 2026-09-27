@@ -293,9 +293,9 @@ public:
      *  synth::AssetManager::cleanUnusedAssets. A no-op outside a saved bundle. */
     int cleanUnusedAssetsForTest() { return cleanUnusedAssets(); }
     GraphEditor& getGraphEditor() { return graphEditor; }
-    // Null in Hosted mode (the plugin path never constructs one — see ownedAudioEngine's gate in
-    // initialiseCommon()).
+    // Null in Hosted mode (see ownedAudioEngine's gate in initialiseCommon()).
     synth::ui::WelcomeScreenComponent* getWelcomeScreenForTest() const { return welcomeScreen_.get(); }
+    void loadPresetGuardedForTest(int index) { loadPresetGuarded(index); }
     ToolbarComponent& getToolbar() { return toolbar; }
     StatusBarComponent& getStatusBar() { return statusBar; }
     // The docked AI chat panel — plain accessor (the panel-slide tests read its bounds mid-slide).
@@ -631,7 +631,7 @@ private:
     void promptExportAudio();
     void promptExportStems();
     void loadFactoryPresetAtIndex(int index);
-    void loadPresetGuarded(int index);
+    void loadPresetGuarded(int index, bool isNewDocument = false);
     void openRecentProjectGuarded(const juce::File& file);
     void clearTimelineForNewPatch();
     void newPatch();

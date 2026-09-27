@@ -70,7 +70,7 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
             onMakeChannelForNode(source);
     };
     masterColumn_ = std::make_unique<MixerMasterColumn>();
-    masterColumn_->configure(graph, undoManager, macros, graphEditor);
+    masterColumn_->configure(graph, undoManager, macros, graphEditor, audioEngine);
     // FRO148: post-insert level for the Master meter once the chain has inserts (docs/mixer/meters.md).
     masterColumn_->outputPeakProvider = [this](int leg) -> float {
         return audioEngine_ != nullptr ? audioEngine_->takeOutputMeterPeak(synth::MeterReader::Mixer, leg) : 0.0f;

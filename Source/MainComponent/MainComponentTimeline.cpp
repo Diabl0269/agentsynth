@@ -396,6 +396,11 @@ void MainComponent::newPatch() {
     // than into a bundle this patch no longer belongs to.
     currentBundleDir_ = juce::File();
     refreshAssetRoots(); // No bundle any more, so no bundle-relative ref resolves
+    // FRO325: a brand-new project always starts Compensated (docs/mixer/mixer.md#pan-law) — this is
+    // a direct engine write, not an undo step, the same "not itself undoable, like BPM" posture the
+    // graph/timeline resets around it already have (this call runs after both, so nothing above it
+    // can leave the law stale on an undo back into THIS document).
+    audioEngine.setMixerPanLaw(synth::MixerPanLaw::Compensated);
     reconcileTimelineAfterGraphChange();
     markDocumentClean();
     setCurrentPatchName("Untitled");

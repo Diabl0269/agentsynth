@@ -62,9 +62,12 @@ four `juce::AudioParameterFloat`s, `send1Pan` to `send4Pan`, ranged -1 to +1 wit
 (centre)**, appended AFTER every other parameter (including `muted`) so nothing already registered
 renumbers. **All eight (four level, four pan) are added in the constructor unconditionally** —
 adding one later renumbers the host-visible layout and detaches saved host automation. A send's pan
-uses the exact same `ModuleBase::panGains` balance law the strip's own `pan` parameter does (unity on
-both legs at centre), smoothed over the same `kSmoothingSeconds` as level — so a send pan drag never
-zippers, and a centred, still-stereo send renders bit-identical to before FRO294.
+uses the exact same pan-law choice the strip's own `pan` parameter does
+([`docs/mixer/mixer.md#pan-law`](mixer.md#pan-law): FRO325's per-project Balance/Compensated on a
+Mono-shaped strip, always Balance on a Stereo one), smoothed over the same `kSmoothingSeconds` as
+level — so a send pan drag never zippers, and a centred, still-stereo send under the Balance law
+renders bit-identical to before FRO294 (the Compensated law gives centre a hair under unity, a float
+cosine/sine rounding, not a bug — see `ModuleBase::panGainsCompensated`).
 
 **The target is never stored.** Node ids are reassigned on every rebuild-from-JSON, so a stored id
 goes stale on undo. "Which bus does slot *k* feed?" is answered by walking forward from slot *k*'s own
@@ -163,10 +166,13 @@ muted.
 **FRO294: a send can be panned, and independently switched to mono.** In `writeSendLegs`, mono runs
 FIRST: the tapped L/R signal is summed to `(L+R)*0.5` on BOTH legs, replacing the stereo image with
 identical content on each leg. The result — mono or the original stereo pair — then goes through the
-send's own pan law (`ModuleBase::panGains`, the same balance law the strip's own `pan` uses): centre
-leaves both legs at unity, hard left/right zeroes the leg you pan away from. **A centred, still-
-stereo send is therefore bit-identical to pre-FRO294 output** — `panGains(0.0f)` returns exactly
-`1.0f` on both legs, no rounding, so nothing new is introduced when neither control is touched. Pan
+send's own pan law, exactly like the strip's own `pan` ([`docs/mixer/mixer.md#pan-law`](mixer.md#pan-law)):
+`ModuleBase::panGains` on a Stereo-shaped strip, or FRO325's per-project Balance/Compensated choice
+on a Mono one. Under the Balance law, centre leaves both legs at unity and hard left/right zeroes
+the leg you pan away from — **a centred, still-stereo send under Balance is bit-identical to
+pre-FRO294 output**, since `panGains(0.0f)` returns exactly `1.0f` on both legs with no rounding, so
+nothing new is introduced when neither control is touched (the Compensated law's centre is a hair
+under `1.0f`, a float rounding artefact of its cosine/sine formula, not a regression). Pan
 is smoothed the same way level is (its own `SmoothedValue`, `kSmoothingSeconds`, advanced/skipped in
 lockstep with the level smoother in every branch `writeSendLegs`/`skipSendSmoothers` touch) so a pan
 drag never zippers. Mono is a plain per-sample sum with no smoothing of its own — flipping it can pop

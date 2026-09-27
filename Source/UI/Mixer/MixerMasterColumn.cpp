@@ -5,6 +5,7 @@
 #include "MixerMasterColumn.h"
 
 #include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
@@ -57,6 +58,12 @@ MixerMasterColumn::MixerMasterColumn() {
     // FRO18: MixerPanelComponent is the single focusable leaf -- see
     // MixerColumnComponent.cpp's ctor comment for why every child control does this.
     muteButton_.setWantsKeyboardFocus(false);
+    // FRO325: the mixer has no other project-settings surface, so the project's pan law lives here
+    // -- see the class comment and docs/mixer/mixer.md#pan-law.
+    addAndMakeVisible(panLawButton_);
+    panLawButton_.setClickingTogglesState(false);
+    panLawButton_.setWantsKeyboardFocus(false);
+    panLawButton_.onClick = [this] { showPanLawMenu(); };
     // FRO133: added once here (the fader is a persistent member, never recreated) rather than per
     // setNodeId() -- mirrors MixerColumnComponent's own "register the listener once, rebuild the
     // param binding on every rebind" split.
@@ -64,11 +71,13 @@ MixerMasterColumn::MixerMasterColumn() {
 }
 
 void MixerMasterColumn::configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager,
-                                  synth::MacroSet& macros, GraphEditor& graphEditor) {
+                                  synth::MacroSet& macros, GraphEditor& graphEditor, AudioEngine& audioEngine) {
     graph_ = &graph;
     undoManager_ = &undoManager;
     graphEditor_ = &graphEditor;
+    audioEngine_ = &audioEngine;
     insertList_.configure(graph, undoManager, macros, graphEditor);
+    refreshPanLawButton();
 }
 
 void MixerMasterColumn::setColumn(const synth::MixerColumn& column) {
@@ -141,6 +150,60 @@ void MixerMasterColumn::toggleMuted() {
     undoManager_->pushSnapshotFromCapture(*graph_);
     refreshMuteAccessibility();
     repaint();
+}
+
+// FRO325 (docs/mixer/mixer.md#pan-law): labels the button by the engine's CURRENT law -- called
+// once from configure() and again after every menu pick, so an undo/redo of the setting (which
+// writes straight to the engine, not through this column) is picked up next time the button is
+// pressed. There is no live-value push from the engine, so a change made elsewhere (another
+// window, a future project-settings surface) is only reflected the next time this repaints via
+// that path -- acceptable since Master's own mute/fader controls have the identical "poll on
+// rebind, not pushed" contract.
+void MixerMasterColumn::refreshPanLawButton() {
+    if (audioEngine_ == nullptr)
+        return;
+    const bool compensated = audioEngine_->getMixerPanLaw() == synth::MixerPanLaw::Compensated;
+    panLawButton_.setButtonText(compensated ? "Pan: Comp." : "Pan: Bal.");
+    panLawButton_.setTitle(juce::String("Mixer pan law (this project): ") + (compensated ? "Compensated" : "Balance"));
+}
+
+void MixerMasterColumn::showPanLawMenu() {
+    if (audioEngine_ == nullptr || undoManager_ == nullptr)
+        return;
+    const auto current = audioEngine_->getMixerPanLaw();
+
+    juce::PopupMenu menu;
+    menu.addItem(-1, "Mixer pan law (this project)", false, false); // disabled title row
+    juce::Component::SafePointer<MixerMasterColumn> safeThis(this);
+    // Per-item callbacks, same idiom as appendMidiLearnMenuItems -- the menu drives the pick, not a
+    // showMenuAsync completion id, so the test seam below can drive an item's own callback directly
+    // with no real async popup loop.
+    menu.addItem("Balance (legacy)", true, current == synth::MixerPanLaw::Balance, [safeThis] {
+        if (safeThis != nullptr)
+            safeThis->setPanLaw(synth::MixerPanLaw::Balance);
+    });
+    menu.addItem("Compensated (constant-power, +3 dB at the extremes)", true,
+                 current == synth::MixerPanLaw::Compensated, [safeThis] {
+                     if (safeThis != nullptr)
+                         safeThis->setPanLaw(synth::MixerPanLaw::Compensated);
+                 });
+
+    showPanLawMenuHook_(menu);
+}
+
+void MixerMasterColumn::setPanLaw(synth::MixerPanLaw law) {
+    if (audioEngine_ == nullptr || undoManager_ == nullptr)
+        return;
+    const auto before = audioEngine_->getMixerPanLaw();
+    if (before == law)
+        return;
+    audioEngine_->setMixerPanLaw(law);
+    // recordMixerPanLawChange is what actually dirties the document (the edit serial is the
+    // project's one dirty-state funnel, docs/architecture/project-bundle.md#dirty-state-and-the-unsaved-changes-guard)
+    // and makes the change undoable, same as every other mixer control.
+    undoManager_->recordMixerPanLawChange([this](synth::MixerPanLaw l) { audioEngine_->setMixerPanLaw(l); }, before,
+                                          law);
+    refreshPanLawButton();
 }
 
 void MixerMasterColumn::setKeyboardFocused(bool focused) {
@@ -314,7 +377,10 @@ void MixerMasterColumn::resized() {
     header_.setBounds(bounds.removeFromTop(24));
     // FRO148: same sizing rule as a strip column's insert list (MixerColumnComponent::resized).
     insertList_.setBounds(bounds.removeFromTop(juce::jmin(bounds.getHeight() / 3, insertList_.getPreferredHeight())));
-    muteButton_.setBounds(bounds.removeFromBottom(20).reduced(2));
+    // FRO325: shares the mute row -- mute on the left, the pan-law control on the right.
+    auto bottomRow = bounds.removeFromBottom(20).reduced(2);
+    muteButton_.setBounds(bottomRow.removeFromLeft(bottomRow.getWidth() / 3));
+    panLawButton_.setBounds(bottomRow);
     meterReadout_.setBounds(bounds.removeFromTop(kMeterReadoutHeight));
     meter_.setBounds(bounds.removeFromRight(kMeterWidth));
     bounds.removeFromRight(2);

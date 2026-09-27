@@ -320,6 +320,11 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // Direct input read one answer for the whole pass. See refreshSoloGate().
     transport.setMixerSoloActiveForBlock(soloedStripCount_.load(std::memory_order_relaxed) > 0);
 
+    // FRO325: the project's pan law, same once-per-pass carrier rule -- every MONO ChannelStripModule
+    // reads one answer for the whole pass. See setMixerPanLaw().
+    transport.setMixerPanLawCompensatedForBlock(mixerPanLaw_.load(std::memory_order_relaxed) ==
+                                                synth::MixerPanLaw::Compensated);
+
     mainProcessorGraph.processBlock(buffer, midiMessages);
 
     // FRO148 (docs/mixer/meters.md): the output peak the Master column reads once Master has inserts. Latched HERE --

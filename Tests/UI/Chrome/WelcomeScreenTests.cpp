@@ -271,6 +271,82 @@ TEST_F(WelcomeScreenTest, OpenDefaultButton_LoadsFactoryPresetZeroAndHidesWelcom
     EXPECT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
 }
 
+// ---------------------------------------------------------------------------
+// FRO325 (docs/mixer/mixer.md#pan-law): every fresh, unsaved document the welcome screen can
+// start must land on Compensated, not just New Patch's own direct AppCommands::newPatch path.
+// ---------------------------------------------------------------------------
+
+// A bare, headless AudioEngine (the constructor's own resting state, e.g. every engine-only test
+// elsewhere in this suite) must stay Balance -- only MainComponent's own standalone-app startup
+// sequence (bringUpEngine, MainComponentSetup.cpp) opts a document into Compensated. Modelled on
+// NeverConstructsInHostedMode above: a Hosted-mode engine with no MainComponent around it at all.
+TEST_F(WelcomeScreenTest, HeadlessAudioEngineDefaultsToTheBalancePanLaw) {
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+    EXPECT_EQ(engine.getMixerPanLaw(), synth::MixerPanLaw::Balance);
+    engine.shutdown();
+}
+
+// The app-startup default document: there is no "restore last session" feature (see
+// docs/architecture/project-bundle.md), so every standalone launch that doesn't go on to load a
+// saved bundle/autosave starts from this document, and it counts as a new project.
+TEST_F(WelcomeScreenTest, StartupDefaultDocumentIsCompensated) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+
+    EXPECT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Compensated);
+}
+
+TEST_F(WelcomeScreenTest, NewProjectButton_SetsTheMixerPanLawToCompensated) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    // Start from Balance so the assertion below can't pass by accident.
+    mc.getAudioEngine().setMixerPanLaw(synth::MixerPanLaw::Balance);
+
+    mc.getWelcomeScreenForTest()->getNewProjectButtonForTest().triggerClick();
+    pumpMessageLoop();
+
+    EXPECT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Compensated);
+}
+
+TEST_F(WelcomeScreenTest, OpenDefaultButton_SetsTheMixerPanLawToCompensated) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.getAudioEngine().setMixerPanLaw(synth::MixerPanLaw::Balance);
+
+    mc.getWelcomeScreenForTest()->getOpenDefaultButtonForTest().triggerClick();
+    pumpMessageLoop();
+
+    EXPECT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Compensated);
+}
+
+// The Load menu's own factory-preset branch shares loadPresetGuarded() with the welcome screen's
+// button above, but must NOT reset the pan law: it swaps a preset into whatever project is
+// already open (see loadFactoryPresetAtIndex's own "not a new document" reasoning), so a user who
+// deliberately chose Balance for the open project must not have it silently flipped back just
+// because they loaded a factory preset from the Load menu.
+TEST_F(WelcomeScreenTest, LoadMenuFactoryPresetBranch_LeavesAnAlreadyOpenProjectsPanLawAlone) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.getWelcomeScreenForTest()->getNewProjectButtonForTest().triggerClick();
+    pumpMessageLoop();
+    ASSERT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Compensated);
+
+    // The user then deliberately switches this already-open project to Balance...
+    mc.getAudioEngine().setMixerPanLaw(synth::MixerPanLaw::Balance);
+
+    // ...and loads a factory preset the same way the Load menu's "result > 0" branch does
+    // (MainComponentSetupToolbar.cpp), i.e. isNewDocument left at its default false.
+    mc.loadPresetGuardedForTest(0);
+    pumpMessageLoop();
+
+    EXPECT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Balance);
+}
+
 // Never lets a real FileChooser open (see the file-header safety rule): with no answer supplied,
 // the guard's dialog stays "open" and launchOpenProjectChooser() is never reached.
 TEST_F(WelcomeScreenTest, OpenExistingButton_InvokesTheSameGuardedPathAsOpenProject) {

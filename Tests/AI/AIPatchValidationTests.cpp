@@ -221,6 +221,9 @@ std::vector<Case> makeCases() {
 
         {PatchValidationError::InternalModuleNotAllowed, "patch names an internal-only module type",
          [] { return juce::JSON::parse(R"({"nodes":[{"id":1,"type":"Attenuverter"}],"connections":[]})"); }},
+
+        {PatchValidationError::MixerPanLawNotAllowed, "patch carries a root 'mixerPanLaw' key",
+         [] { return juce::JSON::parse(R"({"nodes":[],"connections":[],"mixerPanLaw":"compensated"})"); }},
     };
 }
 

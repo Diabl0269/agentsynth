@@ -497,13 +497,22 @@ void MainComponent::loadFactoryPresetAtIndex(int index) {
 // LAST line inside the guard's `proceed` continuation — never before or after
 // guardUnsavedChanges() itself — so a Cancel answer leaves the welcome screen exactly as it was
 // (see DirtyDocumentIsGuardedBeforeWelcomeScreenReplacesIt in WelcomeScreenTests.cpp).
-void MainComponent::loadPresetGuarded(int index) {
+//
+// FRO325: `isNewDocument` is true ONLY for the welcome screen's call (a brand-new, unsaved
+// document, so the founder's "new projects use the new law" applies) and false for the Load
+// menu's (a factory preset swapped into whatever project is already open, which must leave that
+// project's own pan law alone — same reason the load below never clears the dirty flag). Set
+// inside `proceed`, not before the guard: a Cancel answer must leave the current project,
+// including its pan law, completely untouched.
+void MainComponent::loadPresetGuarded(int index, bool isNewDocument) {
     auto presets = synth::PresetManager::getPresetList();
     if (index < 0 || index >= presets.size())
         return;
-    guardUnsavedChanges("Loading a preset", [this, presets, index] {
+    guardUnsavedChanges("Loading a preset", [this, presets, index, isNewDocument] {
         statusBar.showMessage("Loading preset...");
         loadFactoryPresetAtIndex(index);
+        if (isNewDocument)
+            audioEngine.setMixerPanLaw(synth::MixerPanLaw::Compensated);
         setCurrentPatchName(presets[(size_t)index].name);
         statusBar.showMessage("Loaded: " + presets[(size_t)index].name);
         hideWelcomeScreen();

@@ -52,7 +52,7 @@ bool MainComponent::saveToFile(const juce::File& file) {
         // editor so the unknown-top-level-key stash a plain preset load filled is re-merged here too.
         const auto result =
             synth::ProjectBundle::save(file, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(),
-                                       graphEditor.getMacros(), midiRemoteDoc);
+                                       graphEditor.getMacros(), midiRemoteDoc, audioEngine.getMixerPanLaw());
         if (!result.ok) {
             statusBar.showMessage("Save failed: " + result.message);
             return false;
@@ -151,9 +151,10 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     currentBundleDir_ = bundleDir;
     refreshAssetRoots();
 
+    synth::MixerPanLaw loadedPanLaw = synth::MixerPanLaw::Balance;
     const auto result =
         synth::ProjectBundle::load(bundleDir, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(),
-                                   graphEditor.getMacros(), midiRemoteDoc);
+                                   graphEditor.getMacros(), midiRemoteDoc, &loadedPanLaw);
     // Reconcile the view whatever happened: on failure the load left the graph exactly as it
     // was, and the components still have to come back after the detach above.
     graphEditor.updateComponents();
@@ -166,6 +167,10 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
         statusBar.showMessage("Load failed: " + result.message);
         return false;
     }
+    // FRO325: the engine's own pan law follows the just-loaded bundle -- absent means Balance
+    // (an existing project's mix is never changed underfoot), never left at whatever the
+    // previously open document happened to have.
+    audioEngine.setMixerPanLaw(loadedPanLaw);
 
     // FRO142 (docs/control/midi-remote.md#pages): a freshly loaded project starts every profile on
     // page 1 -- this is a NEW project's assignments, not the ordinary edits publishAssignments()
@@ -203,9 +208,10 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     currentBundleDir_ = bundleDir;
     refreshAssetRoots();
 
-    const auto result =
-        synth::ProjectBundle::loadAutosave(bundleDir, audioEngine.getGraph(), timelineDoc,
-                                           graphEditor.getPatchDocument(), graphEditor.getMacros(), midiRemoteDoc);
+    synth::MixerPanLaw loadedPanLaw = synth::MixerPanLaw::Balance;
+    const auto result = synth::ProjectBundle::loadAutosave(bundleDir, audioEngine.getGraph(), timelineDoc,
+                                                           graphEditor.getPatchDocument(), graphEditor.getMacros(),
+                                                           midiRemoteDoc, &loadedPanLaw);
     graphEditor.updateComponents();
     if (!result.ok) {
         currentBundleDir_ = previousBundleDir;
@@ -213,6 +219,8 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
         statusBar.showMessage("Recovery failed: " + result.message);
         return false;
     }
+    // FRO325: same "follows the just-loaded state" rule as loadBundleFromFile.
+    audioEngine.setMixerPanLaw(loadedPanLaw);
 
     // FRO142: same "new project's assignments, reset to page 1" rule as loadBundleFromFile above.
     remoteEngine.resetActivePages();
@@ -418,7 +426,7 @@ void MainComponent::performAutosave() {
             : juce::jlimit(0, 50, settings->getIntValue(kAutosaveBackupCountKey, kDefaultAutosaveBackupCount));
     const auto result = synth::ProjectBundle::saveAutosave(currentBundleDir_, audioEngine.getGraph(), timelineDoc,
                                                            graphEditor.getPatchDocument(), graphEditor.getMacros(),
-                                                           backupCount, midiRemoteDoc);
+                                                           backupCount, midiRemoteDoc, audioEngine.getMixerPanLaw());
     if (result.ok)
         lastAutosavedEditSerial_ = undoManager.getEditSerial();
     else

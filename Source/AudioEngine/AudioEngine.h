@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AudioEngine/ModulationRoutingTypes.h"
+#include "Mixer/MixerPanLaw.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/AudioClipStreamer.h"
@@ -146,6 +147,10 @@ public:
 
     void setMasterMute(bool muted) noexcept;
     bool isMasterMuted() const noexcept;
+
+    // FRO325 (docs/mixer/mixer.md#pan-law): the project's mixer pan law; see the .cpp definition.
+    void setMixerPanLaw(synth::MixerPanLaw law) noexcept;
+    synth::MixerPanLaw getMixerPanLaw() const noexcept;
 
     // ---- Input monitoring gate + feedback guard ----
     // ANY THREAD (message-thread writes from MainComponent's poll; the audio thread also writes it,
@@ -507,6 +512,7 @@ private:
     bool deviceCallbackAttached_ = false;
 
     std::atomic<bool> masterMuted_{false};
+    std::atomic<synth::MixerPanLaw> mixerPanLaw_{synth::MixerPanLaw::Balance}; // FRO325; see setMixerPanLaw()
     std::atomic<bool> transportEnabled_{true};
     // Message-thread writes (MainComponent's poll) and audio-thread writes (the guard, on a
     // trip); read on the audio thread each render pass to publish to the transport carrier, and on

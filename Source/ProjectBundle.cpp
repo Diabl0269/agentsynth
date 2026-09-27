@@ -10,6 +10,7 @@ namespace {
 constexpr const char* kTimelineKey = "timeline";
 constexpr const char* kMacrosKey = "macros";
 constexpr const char* kMidiRemoteKey = "midiRemote";
+constexpr const char* kMixerPanLawKey = "mixerPanLaw"; // FRO325
 } // namespace
 
 bool ProjectBundle::isBundle(const juce::File& dir) {
@@ -22,7 +23,7 @@ bool ProjectBundle::isBundle(const juce::File& dir) {
 
 juce::var ProjectBundle::buildProjectJson(juce::AudioProcessorGraph& graph, const TimelineDoc& timeline,
                                           PatchDocument& patchDocument, const MacroSet& macros,
-                                          const MidiRemoteProjectDoc& midiRemote) {
+                                          const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw) {
     auto json = AIStateMapper::graphToJSON(graph);
     // Re-merge whatever unknown top-level keys were stashed on this bundle's last load — mirrors
     // GraphEditor::savePreset. A stale "timeline" among them (e.g. this document started life as a
@@ -34,10 +35,13 @@ juce::var ProjectBundle::buildProjectJson(juce::AudioProcessorGraph& graph, cons
     if (rootObj != nullptr) {
         // Set LAST so a fresh timeline/macros/midiRemote always wins over a stashed one.
         // "midiRemote" is set LAST OF ALL THREE (write-last is load-bearing — see the class
-        // comment's key-order proof).
+        // comment's key-order proof). FRO325's "mixerPanLaw" is a plain scalar with no doc of its
+        // own to go stale in the stash, but it goes last too, for the same "the live value always
+        // wins" reasoning.
         rootObj->setProperty(kTimelineKey, timeline.toVar());
         rootObj->setProperty(kMacrosKey, macros.toVar());
         rootObj->setProperty(kMidiRemoteKey, midiRemote.toVar());
+        rootObj->setProperty(kMixerPanLawKey, mixerPanLawToString(panLaw));
     }
 
     return json;
@@ -45,7 +49,7 @@ juce::var ProjectBundle::buildProjectJson(juce::AudioProcessorGraph& graph, cons
 
 ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                       const TimelineDoc& timeline, PatchDocument& patchDocument, const MacroSet& macros,
-                                      const MidiRemoteProjectDoc& midiRemote) {
+                                      const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw) {
     if (!bundleDir.exists() && !bundleDir.createDirectory())
         return {false, "io: could not create bundle directory \"" + bundleDir.getFullPathName() + "\"."};
 
@@ -57,7 +61,7 @@ ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioPr
     if (!peaksDir.exists() && !peaksDir.createDirectory())
         return {false, "io: could not create \"" + peaksDir.getFullPathName() + "\"."};
 
-    auto json = buildProjectJson(graph, timeline, patchDocument, macros, midiRemote);
+    auto json = buildProjectJson(graph, timeline, patchDocument, macros, midiRemote, panLaw);
     if (json.getDynamicObject() == nullptr)
         return {false, "io: graphToJSON did not produce a JSON object."};
 
@@ -97,7 +101,7 @@ void ProjectBundle::rotateAutosaveBackups(const juce::File& bundleDir, int maxBa
 ProjectLoadResult ProjectBundle::saveAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                               const TimelineDoc& timeline, PatchDocument& patchDocument,
                                               const MacroSet& macros, int maxBackups,
-                                              const MidiRemoteProjectDoc& midiRemote) {
+                                              const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw) {
     // No Audio/Peaks directory creation, and no touching project.json — an autosave is a sidecar
     // only. bundleDir itself must already exist (a project with no bundle yet has nowhere to put
     // the sidecar; MainComponent's autosave gate requires ProjectBundle::isBundle(currentBundleDir_)
@@ -105,7 +109,7 @@ ProjectLoadResult ProjectBundle::saveAutosave(const juce::File& bundleDir, juce:
     if (!bundleDir.isDirectory())
         return {false, "io: \"" + bundleDir.getFullPathName() + "\" is not a bundle directory."};
 
-    auto json = buildProjectJson(graph, timeline, patchDocument, macros, midiRemote);
+    auto json = buildProjectJson(graph, timeline, patchDocument, macros, midiRemote, panLaw);
     if (json.getDynamicObject() == nullptr)
         return {false, "io: graphToJSON did not produce a JSON object."};
 
@@ -125,8 +129,9 @@ bool ProjectBundle::hasAutosave(const juce::File& bundleDir) {
 
 ProjectLoadResult ProjectBundle::loadAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                               TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
-                                              MidiRemoteProjectDoc& midiRemote) {
-    return loadFromFile(bundleDir.getChildFile(kAutosaveFileName), graph, timeline, patchDocument, macros, midiRemote);
+                                              MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw) {
+    return loadFromFile(bundleDir.getChildFile(kAutosaveFileName), graph, timeline, patchDocument, macros, midiRemote,
+                        outPanLaw);
 }
 
 void ProjectBundle::discardAutosave(const juce::File& bundleDir) {
@@ -137,13 +142,14 @@ void ProjectBundle::discardAutosave(const juce::File& bundleDir) {
 
 ProjectLoadResult ProjectBundle::load(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                       TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
-                                      MidiRemoteProjectDoc& midiRemote) {
-    return loadFromFile(bundleDir.getChildFile(kProjectFileName), graph, timeline, patchDocument, macros, midiRemote);
+                                      MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw) {
+    return loadFromFile(bundleDir.getChildFile(kProjectFileName), graph, timeline, patchDocument, macros, midiRemote,
+                        outPanLaw);
 }
 
 ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juce::AudioProcessorGraph& graph,
                                               TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
-                                              MidiRemoteProjectDoc& midiRemote) {
+                                              MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw) {
     if (!projectFile.existsAsFile())
         return {false, "io: \"" + projectFile.getFullPathName() + "\" does not exist."};
 
@@ -184,7 +190,19 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         detachedMidiRemoteVar = rootObj->getProperty(kMidiRemoteKey);
         rootObj->removeProperty(kMidiRemoteKey);
     }
-    // From here on `json`/`rootObj` is "the patch" — timeline-, macros- and midiRemote-stripped.
+    // FRO325: "mixerPanLaw" is a plain scalar with no doc of its own, so it needs no local-var
+    // validation step like the three above — just detach it (same untrusted-gate reasoning) and
+    // read it straight into `outPanLaw` once the rest has all passed. An unrecognised string reads
+    // as Balance via mixerPanLawFromString rather than rejecting the whole file, deliberately more
+    // forgiving than the other three keys since a garbled scalar can never corrupt the graph.
+    const bool hasMixerPanLawKey = rootObj->hasProperty(kMixerPanLawKey);
+    juce::String mixerPanLawText;
+    if (hasMixerPanLawKey) {
+        mixerPanLawText = rootObj->getProperty(kMixerPanLawKey).toString();
+        rootObj->removeProperty(kMixerPanLawKey);
+    }
+    // From here on `json`/`rootObj` is "the patch" — timeline-, macros-, midiRemote- and
+    // mixerPanLaw-stripped.
 
     // Step 1: the untrusted gate. project.json is a file on disk, hand-editable exactly like a
     // preset or a snippet — a malformed patch is rejected whole, never partially applied.
@@ -255,6 +273,9 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         }
         macros.retainOnly(aliveUuids);
     }
+
+    if (outPanLaw != nullptr)
+        *outPanLaw = hasMixerPanLawKey ? mixerPanLawFromString(mixerPanLawText) : MixerPanLaw::Balance;
 
     return {true, {}};
 }
