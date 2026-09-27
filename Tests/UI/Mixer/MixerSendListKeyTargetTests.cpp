@@ -119,6 +119,7 @@ TEST(MixerSendListKeyTargetTests, TheSendMenuOffersTheOtherChannelsKeyAndChoosin
     const auto bassChannel = synth::sendTargetName(rig.graph(), &macros, bass);
     const auto bassKeyLabel = synth::sendTargetName(rig.graph(), &macros, synth::SendTarget{bassComp, true});
     const auto kickKeyLabel = synth::sendTargetName(rig.graph(), &macros, synth::SendTarget{kickComp, true});
+    EXPECT_EQ(bassChannel, "Audio 2") << "the key label names the track, not its inner channel macro";
     EXPECT_TRUE(bassKeyLabel.startsWith("Key: Compressor")) << bassKeyLabel;
     EXPECT_TRUE(bassKeyLabel.endsWith(" on " + bassChannel)) << bassKeyLabel;
 
