@@ -243,18 +243,11 @@ const juce::Identifier kLastFiredDeltaColProperty("lastFiredDeltaCol");
 const juce::Identifier kLastFiredDeltaRowProperty("lastFiredDeltaRow");
 } // namespace
 
-// FRO331: the anchor is captured in the PARENT's coordinate space
-// (event.getEventRelativeTo(getParentComponent())), not this cell's own local space
-// (event.getPosition()) --
-// the owner (ControllerSurfaceComponent::moveCellToLayout) repositions THIS cell every time a
-// drag crosses a cell boundary, which moves the local origin mid-gesture. A local-space anchor
-// stayed valid only until the first such reposition: every offset computed after that measured
-// movement relative to the cell's NEW bounds, not the drag's true start, so mouseDrag() below
-// was effectively reporting the delta since the last boundary crossing rather than since
-// mouseDown -- and the owner (which adds that delta onto the position it already moved to)
-// compounded it further, so the control could land anywhere but where the mouse actually was.
-// The parent never moves mid-drag, so anchoring there keeps every step measuring true total
-// mouse movement since mouseDown, however many boundaries the cell has crossed since.
+// FRO331: the drag anchor lives in the PARENT's coordinate space, not this cell's. The owner
+// (ControllerSurfaceComponent::moveCellToLayout) moves this cell each time the drag crosses a cell
+// boundary, which moves a cell-local origin mid-gesture: offsets then measured from the cell's new
+// bounds instead of the drag's start, so the reported delta (which the owner adds to the control's
+// unmoved layout) was wrong after the first crossing. The parent does not move during a drag.
 void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
     dragStartMouse_ = event.getEventRelativeTo(getParentComponent()).getPosition();
     isDragging_ = false;
