@@ -369,7 +369,7 @@ play, `0x06` = record strobe). Before FRO330 `classifyMessage` (`RemoteEngineInt
 every SysEx message as ineligible, so nothing — not Detect, not Learn, not a template — could ever
 bind one.
 
-**Decision:** a sixth `MessageType`, `mmc`, whose `MessageSpec::number` is the MMC **command
+**Decision:** a seventh `MessageType`, `mmc`, whose `MessageSpec::number` is the MMC **command
 byte** and whose `channel` is always `0` (MMC carries no MIDI channel — the "any channel"
 convention every other type already uses for `channel == 0` is repurposed as the only legal value,
 never a real one to send on). The device-id byte (`F0 7F <device-id> 06 ...`) is deliberately
