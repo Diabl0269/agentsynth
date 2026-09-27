@@ -1,7 +1,9 @@
 #include "MainComponent/MainComponent.h"
+#include "Plugin/Hosting/PluginScanService.h"
 #include "UserSettings.h"
 #include <cstdlib>
 #include <gtest/gtest.h>
+#include <iostream>
 #include <juce_events/juce_events.h>
 
 // Drain pending async messages after each test to prevent
@@ -14,6 +16,24 @@ class MessageQueueDrainer : public ::testing::EmptyTestEventListener {
 };
 
 int main(int argc, char** argv) {
+    // The real ChildLauncher re-executes THIS binary with `--scan-plugin <fmt> <file> <token>`
+    // (any test that lets a MainComponent's eager scan use the default launcher). Serve that as
+    // Main.cpp does and exit BEFORE gtest starts: otherwise the child re-runs the whole suite (and
+    // inherits AGENTSYNTH_SETTINGS_DIR / GTEST_SHARD_INDEX), racing its parent on the same
+    // settings file -- the FRO316 flakes.
+    {
+        juce::StringArray args;
+        for (int i = 0; i < argc; ++i)
+            args.add(juce::String::fromUTF8(argv[i]));
+        juce::String scanXml;
+        if (const auto exitCode = synth::runPluginScanChildMode(args, scanXml, /*suppressCrashDialog=*/true)) {
+            if (scanXml.isNotEmpty())
+                std::cout << scanXml << std::endl;
+            std::cout.flush();
+            return *exitCode;
+        }
+    }
+
     juce::ScopedJuceInitialiser_GUI juceInit;
     ::testing::InitGoogleTest(&argc, argv);
     ::testing::UnitTest::GetInstance()->listeners().Append(new MessageQueueDrainer());

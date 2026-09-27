@@ -198,6 +198,17 @@ var, so a shipped binary can never be redirected via it — the same "never wire
 `Branding.h::resolveApiBaseUrl()`'s `AGENTSYNTH_LOCAL_API_URL` gets by being compiled out of Release
 entirely, adapted here because Tests IS a Release build and needs the seam present.
 
+**`Tests` must serve `--scan-plugin` before gtest starts.** The default plugin-scan `ChildLauncher`
+re-executes the running binary with `--scan-plugin <format> <file> <token>` (any test whose
+MainComponent runs an eager scan without a fake launcher). `Tests/TestMain.cpp` therefore calls
+`synth::runPluginScanChildMode()` first and returns its exit code, exactly as `Source/Main.cpp` does.
+Without that, each such child re-ran the whole suite, inheriting `AGENTSYNTH_SETTINGS_DIR` and
+`GTEST_SHARD_INDEX`, and raced its parent on the same settings file (FRO316): a different
+settings-reading test failed in roughly half of shard-1 runs (`BottomDockComponentTests`,
+`PluginScanPersistenceTest`, `FocusRegionMainComponentTest`, `MixerOwnPanelTest`), and passed alone.
+A test that fails only inside a full run and passes filtered is worth a `ps` for stray `Tests`
+processes before blaming test order.
+
 **Why `userSettingsOptions()`'s override works by setting `folderName` to an absolute path.**
 `juce::File::getChildFile()` (`juce_File.cpp`) returns an absolute argument as-is, discarding
 whatever base it was called on: `if (isAbsolutePath(r)) return File(String(r));`.
