@@ -512,7 +512,7 @@ TEST(HostedPluginLaneTest, SerializationAdditive) {
 // 9. MIDI Learn / Automate share the lane picker's own resolver (FRO137)
 // ============================================================================
 
-// docs/control/plugin-card-layout.md#interaction-with-midi-remote-and-automation: "MIDI Learn ...
+// docs/control/plugin-card-layout.md#interaction-with-controllers-and-automation: "MIDI Learn ...
 // resolved by resolveLaneParameter's hosted rules" and "Automate ... calls the existing
 // onAutomateParameterRequested ... which the lane picker already supports". Both
 // MidiLearnController::arm()/assignControl() (Tests/MidiRemote/MidiLearnControllerHostedParameterTests.cpp)

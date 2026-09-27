@@ -1,4 +1,4 @@
-// MidiRemotePanelTests.cpp -- FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel): the
+// MidiRemotePanelTests.cpp -- FRO131 (docs/control/midi-remote-ui.md#the-controllers-panel): the
 // panel's own selection state and its null-safety before configure() runs. The three region
 // components (ControllersListComponent/ControllerSurfaceComponent/ControlInspectorComponent) have
 // their own test files; this one covers only what MidiRemotePanelComponent itself owns.

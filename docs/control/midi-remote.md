@@ -1,15 +1,15 @@
-# MIDI Remote — external controllers, surfaces and MIDI Learn
+# Controllers — external hardware surfaces and MIDI Learn
 
 This doc holds the **model and the decisions**: what exists, what the feature has to do, the
 questions that had more than one sensible answer, and the answer picked for each with its
-reason. The user-facing interaction (right-click MIDI Learn, the MIDI Remote panel, the
+reason. The user-facing interaction (right-click MIDI Learn, the Controllers panel, the
 controller surface, the settings) lives in [`midi-remote-ui.md`](midi-remote-ui.md). The sibling
 feature that lets a hosted plugin card show a chosen set of its parameters as knobs — the knobs
-MIDI Remote then maps like any other — is [`plugin-card-layout.md`](plugin-card-layout.md).
+Controllers then maps like any other — is [`plugin-card-layout.md`](plugin-card-layout.md).
 
 **Status:** the model, persistence and `RemoteEngine` are built and wired into `AudioEngine`.
 Right-click MIDI Learn is shipped and creates real assignments on every covered surface, including
-the mixer column's Solo (FRO253's `nodeCommand` target). The MIDI Remote panel (FRO131) is shipped
+the mixer column's Solo (FRO253's `nodeCommand` target). The Controllers panel (FRO131) is shipped
 — dock tab, Controllers list, Surface, Inspector, and "Edit MIDI assignment..." — as are Detect
 mode, Add controller, Templates, import/export and the encoder Auto-detect (FRO134); and the
 mapping assistant (FRO135) — the control-first "Assign from the panel" flow (pick-target overlay,
@@ -25,7 +25,7 @@ behaviour differs from the design, the surrounding text says so explicitly.
 
 ## The baseline this was built on
 
-The survey below is the state of the app **before** MIDI Remote — kept because the decisions that
+The survey below is the state of the app **before** Controllers — kept because the decisions that
 follow answer to it. Where a bullet has since changed, it says so. External MIDI at that point was
 a **note path only** ([`midi-input.md`](midi-input.md)):
 
@@ -86,7 +86,7 @@ a **note path only** ([`midi-input.md`](midi-input.md)):
 2. **Zero-setup path.** The first Learn on a controller the app has never seen creates that
    controller's profile and adds the touched control to its surface automatically. Configuring a
    controller up front is optional, never required.
-3. **One place to see and manage it all** — a MIDI Remote panel that shows each controller as a
+3. **One place to see and manage it all** — a Controllers panel that shows each controller as a
    drawn surface (its knobs/faders/buttons/pads in the app's own look, moving live as you touch
    the hardware), each control labelled with what it drives, with an inspector to change any
    assignment, and a mapping assistant to assign from the panel side.
@@ -229,7 +229,7 @@ onto a surface never changes what the patch hears until you assign it.
 
 *Second stated consequence, for the same reason:* an assignment whose **target no longer
 resolves** (its node was deleted, or its hosted plugin has no instance) is still consumed. The
-assignment exists, so the control still belongs to MIDI Remote and the message is swallowed
+assignment exists, so the control still belongs to Controllers and the message is swallowed
 rather than reaching the patch. The alternative — falling through to the graph once a target
 dies — is worse: deleting a node would silently turn a mapped knob into a CC source that starts
 landing in recording takes, i.e. a control's behaviour would flip based on whether some
@@ -805,7 +805,7 @@ Device opening: the standalone engine opens every input device that has a profil
 (`ensureMidiDeviceOpen`) at startup, in addition to the Audio tab's ticked devices — a profiled
 controller must never need a second checkbox to work. This profile priming is
 `MainComponent::openMidiRemoteDevices()` (FRO260), called once `AudioEngine::initialise()` has
-actually brought the engine up — MIDI Remote itself wires up earlier, in
+actually brought the engine up — Controllers itself wires up earlier, in
 `MainComponent::wireMidiRemoteEngine()` (before `initialiseAudioEngine()`, so it still runs for a
 Hosted plugin build too), but opening real devices and reading back what's open needs a live
 engine, so that half waits. Ticking a device in the Audio tab (or a controller reconnecting) after
@@ -828,7 +828,7 @@ FRO279 first hit this the other way around, when the profile priming ran before 
 `Tests/Engine/MidiInputDeliveryTests.cpp` drives a real virtual OS MIDI source through that launch
 order (it skips where the OS offers no virtual devices).
 
-Live activity for the panel ([`midi-remote-ui.md`](midi-remote-ui.md#the-midi-remote-panel)) rides the same FIFO: every event carries its
+Live activity for the panel ([`midi-remote-ui.md`](midi-remote-ui.md#the-controllers-panel)) rides the same FIFO: every event carries its
 decoded value; the panel drains a separate mirror ring at its own rate, and an unassigned control
 still produces an activity-only event so Detect mode and the surface's "it lit up" feedback work
 without an assignment.
@@ -904,7 +904,7 @@ project file versus a global profile shared by every project:
 
 **Routing.** Cmd+Z / Cmd+Shift+Z and the Edit menu's Undo/Redo (the `AppCommands::undo` / `redo`
 command rows, `MainComponentCommandTable.cpp`) act on the controller history while keyboard focus
-is inside the MIDI Remote panel — docked or detached — and on the project history otherwise. Any
+is inside the Controllers panel — docked or detached — and on the project history otherwise. Any
 press inside the panel (list, surface, cells, empty space) gives it focus; a press on the canvas
 takes focus back (`GraphEditor::mouseDown` grabs it). A focused panel with nothing left to undo
 does nothing rather than undoing a canvas edit the user is not looking at. The main toolbar's
@@ -931,7 +931,7 @@ happens inside the SAME undo transaction as the module replace —
 `AppUndoManager::recordGraphAndMidiRemoteChange`, the graph+MidiRemoteProjectDoc sibling of
 `recordCombinedChange` (graph+TimelineDoc) — so one Cmd+Z restores the old module AND its
 assignment's old target together, and one Cmd+Shift+Z re-applies both. `GraphEditor` stays free of
-any MIDI Remote type (thin-owner rule): the wiring is two small hooks
+any Controllers type (thin-owner rule): the wiring is two small hooks
 (`GraphEditor::onModuleReplaced`, `onMidiRemoteDocRestored`) MainComponent connects to
 `MidiLearnController`, not a new forwarder on `GraphEditor` itself. The engine is republished
 (`MidiLearnController::publishAssignments()`) right after a retarget, and again as the combined
@@ -950,5 +950,5 @@ once would be surprising, not useful — and this is unchanged by FRO240; pinned
 - [`plugin-card-layout.md`](plugin-card-layout.md) — which hosted-plugin parameters show as
   knobs (and the future "edit any module's layout").
 - [`midi-input.md`](midi-input.md) — the existing note path this feature sits in front of.
-- [`modules/modulation.md`](../modules/modulation.md) — sample-accurate control is CV, not MIDI Remote.
+- [`modules/modulation.md`](../modules/modulation.md) — sample-accurate control is CV, not Controllers.
 - [`shortcuts.md`](shortcuts.md) — the action registry action targets invoke.

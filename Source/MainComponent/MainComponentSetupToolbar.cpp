@@ -203,7 +203,7 @@ void MainComponent::addToolbarToggleButtons() {
         applyToolbarIcons();
     };
 
-    // FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel): same shape as
+    // FRO131 (docs/control/midi-remote-ui.md#the-controllers-panel): same shape as
     // toggleTimelineButton above, through performToggleMidiRemotePanel() rather than a plain
     // triggerClick() -- the dock is shared between three tabs now.
     addAndMakeVisible(toggleMidiRemoteButton);

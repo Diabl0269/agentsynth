@@ -63,7 +63,7 @@ void PreferencesSettingsTab::persistMidiRemoteShowBadges(bool enabled) {
 
 void PreferencesSettingsTab::setupMidiRemoteControls() {
     contentHost.addAndMakeVisible(midiRemoteTakeoverLabel);
-    midiRemoteTakeoverLabel.setText("MIDI Remote default takeover:", juce::dontSendNotification);
+    midiRemoteTakeoverLabel.setText("Controllers default takeover:", juce::dontSendNotification);
     midiRemoteTakeoverLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(midiRemoteTakeoverCombo);

@@ -38,7 +38,7 @@ namespace synth::ui {
 
 class BottomDockComponent : public juce::Component {
 public:
-    // FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel): MidiRemote is a third,
+    // FRO131 (docs/control/midi-remote-ui.md#the-controllers-panel): MidiRemote is a third,
     // always-offered tab -- unlike Mixer it has no OwnPanel/Window placement variant, so there is
     // no MidiRemote counterpart to mixerTabEnabled_.
     enum class Tab { Timeline, Mixer, MidiRemote };
@@ -227,7 +227,7 @@ private:
     synth::ui::DetachablePanelHost midiRemoteHost_;
     juce::TextButton timelineTabButton_{"Timeline"};
     juce::TextButton mixerTabButton_{"Mixer"};
-    juce::TextButton midiRemoteTabButton_{"MIDI Remote"};
+    juce::TextButton midiRemoteTabButton_{"Controllers"};
     // FRO12: icon-only, embedded in this tab strip (not either host's own header -- see
     // DetachablePanelHost's class comment on why this is a separate button instance rather than a
     // literal shared one across three different parents).

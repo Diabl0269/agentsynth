@@ -13,7 +13,7 @@ The card unit and `HostedParameterAttachment` (FRO128), described in
 [Choosing knobs as built](#choosing-knobs-as-built-fro132) -- touch-to-add now has both a gesture
 path and a burst-filtered value-change fallback (FRO241). MIDI Learn / Forget / Edit assignment and
 "Automate..." on a plugin-card knob (FRO137), described in
-[Interaction with MIDI Remote and automation](#interaction-with-midi-remote-and-automation).
+[Interaction with Controllers and automation](#interaction-with-controllers-and-automation).
 
 ---
 
@@ -185,7 +185,7 @@ with `label` or the parameter's name, and binds it with a **`HostedParameterAtta
   auto-UI control does, so right-click reaches `ModuleComponent::mouseDown` at all. A knob's
   right-click menu is "Automate '<Param>'" (mirroring a built-in knob's own menu) plus the shared
   MIDI Learn block; a toggle/choice control gets MIDI Learn only. See
-  [Interaction with MIDI Remote and automation](#interaction-with-midi-remote-and-automation).
+  [Interaction with Controllers and automation](#interaction-with-controllers-and-automation).
 
 ### Instance lifetime and unbinding
 
@@ -354,7 +354,7 @@ tick/untick, drag-reorder, label, the one `applyCurrentLayout()` write path) and
 
 ---
 
-## Interaction with MIDI Remote and automation
+## Interaction with Controllers and automation
 
 Nothing special — that is the point of binding real hosted parameters rather than proxies:
 
@@ -417,7 +417,7 @@ feature needs. What carries over when that epic starts:
 - **The same precedence** (instance override in node extra state → per-module-type user default
   under `<settings>/ModuleCardLayouts/<ModuleType>/` → the type's code-defined layout).
 - **The same picker** with "Apply to: this instance / all <Module> modules" and presets.
-- A future **focus bank** in MIDI Remote ([`midi-remote.md`](midi-remote.md)) follows a card's slot order.
+- A future **focus bank** in Controllers ([`midi-remote.md`](midi-remote.md)) follows a card's slot order.
 
 Bespoke cards (EQ, Envelope, Wavetable, Sampler) are the hard part: their bodies are not a knob
 grid, so "edit layout" there means at most hide/reorder of the knobs they *do* expose.

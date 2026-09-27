@@ -1,7 +1,7 @@
-# MIDI Remote — OSC as a second message source
+# Controllers — OSC as a second message source
 
 **Status: design only, nothing here is built.** Companion to [`midi-remote.md`](midi-remote.md)
-(the MIDI Remote model and decisions; read it first). There, OSC is a named non-goal of v1; this is
+(the Controllers model and decisions; read it first). There, OSC is a named non-goal of v1; this is
 the design it defers to.
 
 ## What you'd get
@@ -10,7 +10,7 @@ OSC (Open Sound Control) is how phone and tablet controller apps talk to music s
 Lemur, Open Stage Control and many others. It runs over the network instead of a MIDI cable, and
 messages carry names such as `/synth/filter/cutoff 0.42` instead of CC numbers. With this feature:
 
-- Turn on **OSC** in the MIDI Remote panel, point your tablet app at this computer and port, and your
+- Turn on **OSC** in the Controllers panel, point your tablet app at this computer and port, and your
   tablet appears as a controller in the Controllers list.
 - **Right-click any knob → MIDI Learn**, move a fader on the tablet, and it is bound. It is the same
   Learn, the same panel and the same Inspector as a hardware controller, just keyed by the OSC address
@@ -37,7 +37,7 @@ What does *not* carry over:
 - The thread. There is no `juce::MidiInput` driver thread. OSC arrives on a network thread that JUCE's
   `OSCReceiver` owns.
 - Consumption. OSC never reaches the graph, so "consumed vs passed through" does not apply: every OSC
-  message is MIDI Remote's.
+  message belongs to Controllers.
 
 ---
 

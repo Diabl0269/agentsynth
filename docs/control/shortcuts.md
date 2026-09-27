@@ -33,7 +33,7 @@ when reasoning about a key that "does nothing."
 | Cmd+O | Open Project - a `.agsproj` bundle (patch + timeline). This was split from the former combined "Load from file..." chooser; it took Cmd+O from the old combined open, which is now the menu-only "Open Patch" |
 | (menu only) | Open Patch - a plain `.json` preset (graph only). A menu-only `AppCommands::openPreset` (the Load icon's **Patches** submenu and the top-bar **File** menu), with no default shortcut, like `checkForUpdates` |
 | (menu only) | Contribute to Agent Synth... — **Help** menu (macOS and Windows; the app has no menu on the plugin path). `AppCommands::contribute` opens `branding::kContributeUrl` (agentsynth.app/contribute) in the default browser: no dialog, no startup prompt, no analytics event, no shortcut. Always enabled; a test replaces the browser launch via `MainComponent::setUrlOpenerForTest`. |
-| Cmd+Z | Undo — the project history, or the controller edit history while the MIDI Remote panel holds focus (see [`midi-remote.md`](midi-remote.md#undo)) |
+| Cmd+Z | Undo — the project history, or the controller edit history while the Controllers panel holds focus (see [`midi-remote.md`](midi-remote.md#undo)) |
 | Cmd+Shift+Z | Redo — routed the same way as Undo |
 | Cmd+M | Toggle Mod Matrix |
 | Cmd+K | Toggle Minimap |
@@ -100,10 +100,10 @@ mixer/timeline would need its own registry), populated with eight regions once e
 exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisible`), **Canvas**
 (always open — the `graphEditor`), **Timeline** (`isBottomDockVisible && !bottomDock.isMixerTabActive() && !bottomDock.isMidiRemoteTabActive()`),
 **Mixer** (`isBottomDockVisible && bottomDock.isMixerTabActive()`, no `open` callback — like Mod
-Matrix, no direct-focus shortcut targets it), **MIDI Remote** (`isBottomDockVisible &&
+Matrix, no direct-focus shortcut targets it), **Controllers** (`isBottomDockVisible &&
 bottomDock.isMidiRemoteTabActive()`, FRO131 — same dock-tab shape as Mixer, but does take a direct
 `open` callback), **AI Panel** (`isAiPanelVisible`) and **Mod Matrix**
-(`graphEditor.isModMatrixVisible()`). Timeline, Mixer and MIDI Remote share one dock
+(`graphEditor.isModMatrixVisible()`). Timeline, Mixer and Controllers share one dock
 (`BottomDockComponent`) with one tab visible at a time, so `isBottomDockVisible` alone (the dock's own
 open/closed state) stopped being enough to say the Timeline region is on screen the moment a second
 tab exists — each region's `isOpen` also checks which of the dock's tabs is active, and each
@@ -311,7 +311,7 @@ even with no mouse involved.
 ### Transport family
 
 Every transport verb is promoted to a command-dispatched `AppCommands` action — the
-[`midi-remote.md`](midi-remote.md#action-targets) prerequisite for a MIDI Remote hardware button to trigger
+[`midi-remote.md`](midi-remote.md#action-targets) prerequisite for a controller hardware button to trigger
 one via `ApplicationCommandManager::invokeDirectly`. All of them are **General**, and ship **unbound**
 by default (no default keypress) — they exist first as command/MIDI-Remote targets, and a user may
 still bind one from Settings like any other action:
@@ -331,7 +331,7 @@ still bind one from Settings like any other action:
 | `transportJumpToNextMarker` / `transportJumpToPreviousMarker` | Jump to Next Marker / Jump to Previous Marker | Relocates to the nearest `TimelineDoc` marker strictly ahead of / behind the current position. A no-op past the last marker (next) or before the first (previous) — it never wraps |
 
 The label "Play / Stop" is shared by `togglePlayback` and its alias so the toggle sits next to
-"Play" and "Stop" in the MIDI Remote action picker. Cursor moves posted faster than the audio thread
+"Play" and "Stop" in the Controllers action picker. Cursor moves posted faster than the audio thread
 applies them (a jog wheel, key repeat) accumulate — each builds on the previous request rather than
 on the once-per-block position snapshot, so no step is lost (`Source/Transport/TransportNudge.h`).
 The marker jumps share that same accumulate state (`Source/Transport/MarkerJump.h`), so pressing

@@ -751,7 +751,7 @@ TEST_F(MidiLearnControllerTest, UpdateAssignmentReturnsFalseForActionTargetAssig
 }
 
 // ============================================================================
-// FRO263 (docs/control/midi-remote-ui.md#the-midi-remote-panel): onChanged fires after every
+// FRO263 (docs/control/midi-remote-ui.md#the-controllers-panel): onChanged fires after every
 // mutation that changes what the panel shows, including as the undo/redo postRestore -- these
 // don't re-check every mutation MidiLearnControllerTests.cpp already covers above, just that the
 // hook reaches every DISTINCT code path that republishes profiles_/doc_.assignments (a project

@@ -777,7 +777,7 @@ private:
     juce::DrawableButton toggleLibraryButton{"toggleLibrary", juce::DrawableButton::ImageAboveTextLabel};
     // Timeline panel toggle — see ToolbarComponent::Slot::ToggleTimeline.
     juce::DrawableButton toggleTimelineButton{"toggleTimeline", juce::DrawableButton::ImageAboveTextLabel};
-    // FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel) — see
+    // FRO131 (docs/control/midi-remote-ui.md#the-controllers-panel) — see
     // ToolbarComponent::Slot::ToggleMidiRemote.
     juce::DrawableButton toggleMidiRemoteButton{"toggleMidiRemote", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton themeToggleButton{"toggleTheme", juce::DrawableButton::ImageAboveTextLabel};

@@ -169,7 +169,7 @@ reflects record-ON, not "a take is capturing".
 ## Transport actions
 
 Record has two entry points into the same gate. `AppCommands::transportRecord`
-(`MainComponentCommandTable.cpp`) is a command-dispatched action a MIDI Remote hardware button, or
+(`MainComponentCommandTable.cpp`) is a command-dispatched action a controller hardware button, or
 a Settings-rebound key, can invoke via `ApplicationCommandManager::invokeDirectly`. It reaches
 `handleRecordToggle` by calling `getRecordButton().triggerClick()` — the SAME button the mouse
 clicks, so both entry points hit the identical armed-track gate above; there is no second, looser

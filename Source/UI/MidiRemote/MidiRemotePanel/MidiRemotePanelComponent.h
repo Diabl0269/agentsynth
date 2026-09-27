@@ -28,7 +28,7 @@ class RemoteEngine;
 class MidiLearnController;
 } // namespace synth::midi
 
-// MidiRemotePanelComponent.h -- FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel): the
+// MidiRemotePanelComponent.h -- FRO131 (docs/control/midi-remote-ui.md#the-controllers-panel): the
 // third bottom-dock tab's content -- Controllers list (left) / Surface (centre) / Inspector
 // (right), plus the ONE `{selectedProfileId, selectedControlId}` selection state all three read
 // from and write into. Default-constructible with no live dependency (same shape as
@@ -61,7 +61,7 @@ public:
     /** FRO136: the Preferences default takeover, so the inspector's "Default" item can name it. */
     void setDefaultTakeover(synth::Takeover takeover) { inspector_.setDefaultTakeover(takeover); }
 
-    /** FRO263 (docs/control/midi-remote-ui.md#the-midi-remote-panel): MidiLearnController::onChanged's
+    /** FRO263 (docs/control/midi-remote-ui.md#the-controllers-panel): MidiLearnController::onChanged's
      *  target (wired once in MainComponent::wireMidiRemoteEngine()) -- keeps the panel live while
      *  it's open instead of only catching up on the next tab-switch-in. Defers the actual
      *  rebuildFromProfiles() via MessageManager::callAsync and coalesces repeat calls into one,

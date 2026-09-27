@@ -17,8 +17,8 @@ AudioSettingsTab::AudioSettingsTab(juce::AudioDeviceManager& deviceManager,
     addChildComponent(caption_);
     if (names.isEmpty())
         return;
-    caption_.setText("MIDI Remote controllers: " + names.joinIntoString(", ") +
-                         ". These are opened for MIDI Remote whether or not they are ticked above; "
+    caption_.setText("Controllers: " + names.joinIntoString(", ") +
+                         ". These are opened as controllers whether or not they are ticked above; "
                          "ticking one only decides whether it also plays the patch.",
                      juce::dontSendNotification);
     caption_.setFont(juce::Font(juce::FontOptions(11.5f)));

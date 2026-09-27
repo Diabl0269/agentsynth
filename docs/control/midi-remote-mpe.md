@@ -1,8 +1,8 @@
-# MIDI Remote — MPE (per-note expression) design
+# Controllers — MPE (per-note expression) design
 
 **Status: design only, nothing here is built.** Companion to [`midi-remote.md`](midi-remote.md)
-(the MIDI Remote model and decisions; read it first) and [`midi-input.md`](midi-input.md) (the note
-path MIDI Remote sits in front of).
+(the Controllers model and decisions; read it first) and [`midi-input.md`](midi-input.md) (the note
+path Controllers sits in front of).
 
 ## What you'd get
 
@@ -15,7 +15,7 @@ each finger on its own MIDI channel. That is how they carry **per-note** pitch g
 - The patch sees two new per-voice CV fans on Poly MIDI, **Pressure** and **Timbre**, which you
   cable wherever you like (VCA, filter cutoff, wavetable position). Per-note bend is folded into the
   existing Pitch output, so current patches glide with no rewiring.
-- MIDI Remote stops fighting MPE. Per-note messages are never mapped to knobs by accident and never
+- Controllers stops fighting MPE. Per-note messages are never mapped to knobs by accident and never
   swallowed by an "any channel" mapping. The controller's own global knobs and faders, sent on its
   manager channel, still map as usual.
 - In the plugin build it works on whatever MPE stream the host sends.
@@ -96,7 +96,7 @@ only, and never read by the drain.
   never MPE, even if an MCM arrives. `lower15` / `upper15` / `custom` force a layout. `auto` means
   detect.
 
-### 2. Coexistence rule: member channels are the synth's, not MIDI Remote's
+### 2. Coexistence rule: member channels are the synth's, not the Controllers layer's
 
 Once a source has an active zone (detected or forced):
 
@@ -114,13 +114,13 @@ Once a source has an active zone (detected or forced):
    collector and `ExternalMidiModule` exactly as today. `MidiRecorder` records it unchanged, because
    it taps the collector-merged buffer ([`midi-input.md`](midi-input.md#recording-the-recorder-taps-one-of-these-two-paths-only)).
 
-This is the only change MIDI Remote itself needs. Everything expressive happens downstream in the
+This is the only change Controllers itself needs. Everything expressive happens downstream in the
 graph, sample-accurately, which is where [`midi-remote.md`](midi-remote.md#how-does-a-hardware-value-reach-a-parameter)
 already says sample-accurate control belongs.
 
 ### 3. The voice path: `PolyMidiModule` becomes MPE-aware
 
-Per-note routing belongs in the graph, **not** in MIDI Remote's mapping path. MIDI Remote applies on
+Per-note routing belongs in the graph, **not** in the Controllers mapping path. Controllers applies on
 the message thread at 60 Hz with undo gestures. Per-note expression is audio-rate performance data
 that must not be recorded as undo steps. It is note data, like velocity.
 
@@ -163,7 +163,7 @@ that must not be recorded as undo steps. It is note data, like velocity.
   and trivially real-time safe. `MPEZoneLayout` (a value type with no lock) *is* reused for parsing
   RPN 6 / RPN 0 in both places.
 - **Zone awareness in the module.** The module parses MCM and RPN 0 from its own MIDI buffer, because
-  the RPNs pass through MIDI Remote untouched. It is therefore self-contained and works identically for
+  the RPNs pass through Controllers untouched. It is therefore self-contained and works identically for
   timeline-played MPE clips, the plugin build, and live input. In "MPE off" the module ignores channels
   as it does today (legacy behaviour, byte-identical).
 

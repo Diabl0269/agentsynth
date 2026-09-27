@@ -248,7 +248,7 @@ TEST_F(SettingsWindowTest, AudioTabCaptionListsTheControllersThatHaveAMidiRemote
     ASSERT_NE(audioTab, nullptr);
 
     const auto caption = audioTab->getCaptionTextForTest();
-    EXPECT_TRUE(caption.contains("MIDI Remote"));
+    EXPECT_TRUE(caption.contains("Controllers"));
     EXPECT_TRUE(caption.contains("Launchkey Mini MK3, nanoKONTROL2")) << "listed once each, in order";
     EXPECT_EQ(caption.indexOf("Launchkey"), caption.lastIndexOf("Launchkey")) << "duplicates dropped";
 }

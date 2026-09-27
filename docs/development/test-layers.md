@@ -202,7 +202,7 @@ rig's style):
 | File | Covers |
 |------|--------|
 | `BottomDockComponentTests.cpp` | tab strip switches without closing the dock; `toggleMixerPanel` (Cmd+Alt+M) opens on Mixer then closes on a second press; actionId round-trips to `AppCommands::toggleMixerPanel`; active tab persists across an `ApplicationProperties` reload |
-| `BottomDockResizeTests.cpp` | FRO231: the dock-wide resize handle on each of the Timeline / Mixer / MIDI Remote tabs (parameterized) — bounds and cursor, hit-test priority over the tab buttons, hover, total-height drag, live vs commit, stray click; plus `MainComponent`'s ownership of the height (default, persisted, clamp, smaller-window reclamp, hide/show, detached Timeline) |
+| `BottomDockResizeTests.cpp` | FRO231: the dock-wide resize handle on each of the Timeline / Mixer / Controllers tabs (parameterized) — bounds and cursor, hit-test priority over the tab buttons, hover, total-height drag, live vs commit, stray click; plus `MainComponent`'s ownership of the height (default, persisted, clamp, smaller-window reclamp, hide/show, detached Timeline) |
 | `MixerPanelComponentTests.cpp` | one column per strip plus Direct plus Master; themed PNG render smoke test (Obsidian plus Daylight, see the [`createComponentSnapshot` pattern](test-patterns.md#component-snapshot-smoke-tests)); clicking a column selects its owning macro (the clip-readout PNG inspection test is in [`../mixer/meters.md#test-coverage`](../mixer/meters.md#test-coverage)) |
 | `MixerFaderTests.cpp` | the fader's `SliderParameterAttachment` binding and dB readout, plus a regression test for a `MixerFader::parameterValueChanged` use-after-free (a `callAsync` lambda captured raw `this`; fixed with `SafePointer`) |
 
@@ -215,9 +215,9 @@ dock-relative) and `timelinePanelIsOpen(mc)` (`isVisible() && bottomDock.isVisib
 needs a real Desktop peer, unavailable headless), because `TimelinePanelComponent` nests inside
 `BottomDockComponent` rather than being `MainComponent`'s direct child.
 
-## MIDI Remote panel
+## Controllers panel
 
-`Tests/UI/MidiRemote/` (FRO131, [`../control/midi-remote-ui.md#the-midi-remote-panel`](../control/midi-remote-ui.md#the-midi-remote-panel))
+`Tests/UI/MidiRemote/` (FRO131, [`../control/midi-remote-ui.md#the-controllers-panel`](../control/midi-remote-ui.md#the-controllers-panel))
 — the dock's third tab, same real off-screen `MainComponent` style as the Mixer panel tests above.
 The engine/model/learn-controller test suite this panel sits on top of lives in `Tests/MidiRemote/`
 (FRO124/FRO130/FRO133/FRO253) and is not covered here.
