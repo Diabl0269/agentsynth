@@ -122,6 +122,9 @@ public:
     // Mixer. True (the default) is the existing Tab-placement behaviour, unchanged.
     void setMixerTabEnabled(bool enabled);
 
+    /** Re-applies visibility/z-order for the active tab, without a Mixer/MIDI Remote rebuild. */
+    void refreshTabVisibility();
+
     /** The Timeline's own detach-to-window host -- always owned and shown here, in every Mixer
      *  placement (docs/mixer/panel.md's placement table: "Bottom dock: unaffected"). */
     synth::ui::DetachablePanelHost& getTimelineHost() noexcept { return timelineHost_; }

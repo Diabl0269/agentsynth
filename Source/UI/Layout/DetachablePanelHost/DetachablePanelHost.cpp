@@ -13,6 +13,13 @@ DetachablePanelHost::DetachablePanelHost(juce::Component& panel, juce::String ti
     , appProperties_(appProperties)
     , lookAndFeel_(lookAndFeel)
     , shortcutManager_(shortcutManager) {
+    // paint() is intentionally blank -- this host is never itself a click target, only its header
+    // strip and panel_ children are. Belt-and-braces against a host left erroneously visible (e.g. a
+    // future MixerPlacementController-style bug that force-shows it via addAndMakeVisible() without
+    // re-running BottomDockComponent::applyTabVisibility()): clicks now fall through to whatever
+    // sibling sits behind it instead of being silently swallowed.
+    setInterceptsMouseClicks(false, true);
+
     titleLabel_.setText(title_, juce::dontSendNotification);
     titleLabel_.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(titleLabel_);

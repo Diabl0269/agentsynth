@@ -81,6 +81,23 @@ TEST(MixerPlacementControllerTests, TabPlacementIsTheDefaultAtLaunch) {
     EXPECT_FALSE(mc.getBottomDock().getMixerHost().isDetached());
 }
 
+TEST(MixerPlacementControllerTests, TabPlacementLeavesTheMixerHostHiddenAtLaunch) {
+    // Regression: applyPlacement(Tab) reclaims the mixer host with addAndMakeVisible(), which
+    // force-shows it (JUCE's Component::addAndMakeVisible calls setVisible(true) unconditionally,
+    // even when reparenting a child that's already there) -- and setMixerTabEnabled(true) is a
+    // no-op when the tab was already enabled (the default, first-launch case), so nothing re-hid
+    // it afterwards. The mixer host was left visible directly on top of the Timeline tab (same
+    // bounds, later z-order -- BottomDockComponent's ctor adds it after timelineHost_), silently
+    // swallowing every click there until the next real tab switch re-ran applyTabVisibility().
+    MixerPlacementResetGuard guard;
+    MainComponent mc(std::make_unique<MockProviderMPCXT>());
+    mc.setSize(1400, 900);
+
+    EXPECT_TRUE(mc.getBottomDock().getTimelineHost().isVisible()) << "Timeline tab is active by default";
+    EXPECT_FALSE(mc.getBottomDock().getMixerHost().isVisible())
+        << "the mixer host must not be left visible over the Timeline tab at launch";
+}
+
 TEST(MixerPlacementControllerTests, OwnPanelPlacementHonouredAtLaunch) {
     MixerPlacementResetGuard guard;
     writeMixerPlacement("ownPanel");
@@ -93,6 +110,12 @@ TEST(MixerPlacementControllerTests, OwnPanelPlacementHonouredAtLaunch) {
     EXPECT_EQ(mc.getBottomDock().getMixerHost().getParentComponent(), &mc.getMixerPlacementControllerForTest())
         << "reparented out of the dock, into the controller's own second strip";
     EXPECT_FALSE(mc.getBottomDock().getMixerHost().isDetached());
+    // Regression: BottomDockComponent::setMixerTabEnabled(false) (run just before the reparent
+    // above) sets mixer_.setVisible(false), since the dock's own Mixer tab isn't active -- and
+    // nothing re-showed the panel afterwards, so Own-panel placement rendered the host's header
+    // with no mixer content underneath it.
+    EXPECT_TRUE(mc.getBottomDock().getMixerPanel().isVisible())
+        << "the mixer content itself, not just its host/header, must show in the own-panel strip";
 }
 
 TEST(MixerPlacementControllerTests, WindowPlacementNeverEagerlyDetachesAtLaunch) {
