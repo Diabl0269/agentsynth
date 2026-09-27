@@ -251,6 +251,7 @@ bool removeSend(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot) 
     strip->setSendActive(slot, false);
     strip->setSendPreFader(slot, false);
     strip->setSendMuted(slot, false); // FRO295: a reused slot always starts unmuted
+    strip->setSendMono(slot, false);  // FRO294: and stereo
     return true;
 }
 
@@ -259,6 +260,14 @@ bool setSendMuted(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot
     if (strip == nullptr || !strip->isSendActive(slot))
         return false;
     strip->setSendMuted(slot, muted);
+    return true;
+}
+
+bool setSendMono(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot, bool mono) {
+    auto* strip = stripAt(graph, sourceStrip);
+    if (strip == nullptr || !strip->isSendActive(slot))
+        return false;
+    strip->setSendMono(slot, mono);
     return true;
 }
 

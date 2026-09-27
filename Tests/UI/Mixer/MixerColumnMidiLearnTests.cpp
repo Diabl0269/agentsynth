@@ -145,6 +145,23 @@ TEST(MixerColumnMidiLearnTests, RightClickSendKnobShowsMidiLearnForTheRightSendP
     EXPECT_EQ(fixture.column.findMidiLearnableParamForTest(knob), fixture.strip->getSendLevelParameter(0));
 }
 
+// FRO294: the pan knob registers in the SAME registry via the SAME onSendKnobBuilt callback as the
+// level knob above, so it gets the identical right-click coverage -- "MIDI Learn '<Param>'...", the
+// real menu text this surface builds (see showParamMidiLearnMenu()); this codebase has no
+// "Automate '<Param>'" entry on a mixer knob (that phrasing belongs to a hosted-plugin/module-card
+// knob's own right-click menu, ModuleComponentInteraction.cpp -- a different surface entirely).
+TEST(MixerColumnMidiLearnTests, RightClickPanKnobShowsMidiLearnForTheRightSendParam) {
+    ColumnFixture fixture(/*withSend=*/true);
+    fixture.editor.onMidiLearnRequested = [](juce::AudioProcessorGraph::NodeID, const juce::String&) {};
+
+    auto* panKnob = fixture.column.getSendListForTest().getPanKnobForTest(0);
+    ASSERT_NE(panKnob, nullptr);
+
+    const auto menu = rightClickChild(fixture.column, *panKnob);
+    EXPECT_TRUE(menuContains(menu, "MIDI Learn 'Send 1 Pan'..."));
+    EXPECT_EQ(fixture.column.findMidiLearnableParamForTest(panKnob), fixture.strip->getSendPanParameter(0));
+}
+
 TEST(MixerColumnMidiLearnTests, NoMidiLearnItemsWhenTheHostNeverWiredTheCallback) {
     ColumnFixture fixture; // editor.onMidiLearnRequested left unset
 

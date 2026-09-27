@@ -464,11 +464,16 @@ float.** `juce::SliderParameterAttachment`'s own constructor unconditionally ove
 label for pan, so a raw `"0.0000000"`) — `MixerColumnComponent::rebindControls()` reapplies the pan
 formatting immediately after constructing `panAttachment_`, the identical fix `MixerFader::bind()`
 already applies for the fader's own "-3.0 dB" text (see that class's `applyDbAccessibilityText`).
+`applyPanAccessibilityText` itself lives in the shared `Source/UI/Mixer/MixerPanAccessibilityText.h`
+(FRO294) so `MixerSendList`'s own per-send pan knobs reapply the identical text after their own
+`SliderParameterAttachment`, rather than a second copy of the formatting.
 
 **Insert rows, "+ Send" and "Make channel" are real, named, reachable AX children, not just painted
 text.** `MixerInsertList`/`MixerSendList` draw most of a row themselves in `paint()` rather than as
-child components (the level knob and, FRO295, the M mute button are the exceptions — real
-`juce::Slider`/`juce::TextButton` children with their own `AccessibilityHandler`), so before FRO228
+child components (the level knob, FRO294's pan knob, and, FRO295, the M mute button are the
+exceptions — real `juce::Slider`/`juce::TextButton` children with their own `AccessibilityHandler`;
+FRO294's own mono marker is the opposite case, a painted dot with no component (the pan knob's title says "(mono)"), since it is a
+read-only decoration on the target-name area, not something to click), so before FRO228
 a screen reader had nothing to land on for the rest of a row at all (an unnamed `AXGroup`, or
 nothing). Each now gets a small transparent proxy `Component`
 (`MixerInsertList::RowAccessibilityProxy`, `MixerSendList::AddSendAccessibilityProxy`) sized over its

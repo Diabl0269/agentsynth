@@ -58,6 +58,7 @@ void buildSendsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& do
         entry.slot = slot;
         entry.preFader = strip->isSendPreFader(slot);
         entry.muted = strip->isSendMuted(slot);
+        entry.mono = strip->isSendMono(slot);
         entry.targetNodeId = findSendTarget(graph, column.nodeId, slot);
         entry.targetName = entry.targetNodeId == NodeID{} ? juce::String("No target")
                                                           : stripColumnName(graph, doc, macros, entry.targetNodeId);

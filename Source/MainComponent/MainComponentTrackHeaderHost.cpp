@@ -87,16 +87,21 @@ void collectChannelStripSendLaneOptions(juce::AudioProcessorGraph& graph, const 
         for (int slot = 0; slot < ChannelStripModule::kMaxSends; ++slot) {
             if (!strip->isSendActive(slot))
                 continue;
-            const juce::String paramId = ChannelStripModule::getSendLevelParameterId(slot);
-            if (timelineDoc.getLaneForParam(uuid, paramId) != nullptr)
-                continue; // already automated
-
-            synth::ui::TrackHeaderHost::PluginLaneOption option;
-            option.nodeUuid = uuid;
-            option.paramId = paramId;
-            option.paramIndex = -1; // unused for a plain RangedAudioParameter
-            option.label = synth::describeSendSlotLabel(graph, &macros, node->nodeID, slot);
-            options.push_back(std::move(option));
+            // FRO294: a send's pan is automatable the same way its level is.
+            const juce::String slotLabel = synth::describeSendSlotLabel(graph, &macros, node->nodeID, slot);
+            const std::pair<juce::String, juce::String> params[] = {
+                {ChannelStripModule::getSendLevelParameterId(slot), slotLabel},
+                {ChannelStripModule::getSendPanParameterId(slot), slotLabel + " (pan)"}};
+            for (const auto& [paramId, label] : params) {
+                if (timelineDoc.getLaneForParam(uuid, paramId) != nullptr)
+                    continue; // already automated
+                synth::ui::TrackHeaderHost::PluginLaneOption option;
+                option.nodeUuid = uuid;
+                option.paramId = paramId;
+                option.paramIndex = -1; // unused for a plain RangedAudioParameter
+                option.label = label;
+                options.push_back(std::move(option));
+            }
         }
     }
 }

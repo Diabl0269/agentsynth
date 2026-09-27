@@ -5,12 +5,16 @@
 //   * level          -- a dB send level, applied to both legs of the pair
 //   * mute / bypass  -- mute silences every send (the deliberate departure from DAW cue sends);
 //                        bypass makes pre and post coincide
+//   * pan / mono     -- FRO294: a send's own pan law (hard left/right puts the return on only one
+//                        leg; centre + stereo is bit-identical to before FRO294) and its mono flag
+//                        (sums different L/R inputs to the same value on both legs)
 //   * hygiene        -- EVERY branch writes EVERY send channel, so a stale block can never leak
 //                        into a bus
 //   * sparse slots   -- removing a middle send leaves higher slots on their own raw channels and
 //                        only renumbers the VISIBLE jacks
-//   * state          -- the active slots and their pre/post round-trip through the trusted extra
-//                        state
+//   * state          -- the active slots, their pre/post/mute/mono, and every pan parameter's
+//                        identity/position round-trip through the trusted extra state / parameter
+//                        list
 //
 // The per-leg solo gate these legs also obey lives in MixerBusSoloTests.cpp.
 
@@ -224,6 +228,125 @@ TEST(MixerSendLevelTest, BypassMakesPreAndPostSendsIdentical) {
     expectChannelsEqual(buffer, sendR(0), sendR(1), "under bypass pre and post coincide");
     expectChannel(buffer, sendL(0), 0.5f, "and both carry the dry signal");
     expectChannel(buffer, sendR(0), 0.25f, "and both carry the dry signal");
+}
+
+// ============================================================================
+// Pan and mono (FRO294)
+// ============================================================================
+
+TEST(MixerSendLevelTest, SendPanHardLeftPutsTheReturnOnlyOnTheLeftLeg) {
+    ChannelStripModule strip;
+    ASSERT_EQ(strip.addSend(), 0);
+    strip.setSendPreFader(0, true);
+    setParam(strip, "send1Pan", -1.0f);
+    strip.prepareToPlay(kSampleRate, kBlockSize);
+
+    auto buffer = stripInput(0.5f, 0.5f);
+    settleAndProcess(strip, buffer);
+
+    expectChannel(buffer, sendL(0), 0.5f, "hard-left pan leaves the left leg at unity");
+    expectChannel(buffer, sendR(0), 0.0f, "hard-left pan silences the right leg entirely");
+}
+
+TEST(MixerSendLevelTest, SendPanHardRightPutsTheReturnOnlyOnTheRightLeg) {
+    ChannelStripModule strip;
+    ASSERT_EQ(strip.addSend(), 0);
+    strip.setSendPreFader(0, true);
+    setParam(strip, "send1Pan", 1.0f);
+    strip.prepareToPlay(kSampleRate, kBlockSize);
+
+    auto buffer = stripInput(0.5f, 0.5f);
+    settleAndProcess(strip, buffer);
+
+    expectChannel(buffer, sendL(0), 0.0f, "hard-right pan silences the left leg entirely");
+    expectChannel(buffer, sendR(0), 0.5f, "hard-right pan leaves the right leg at unity");
+}
+
+TEST(MixerSendLevelTest, SendPanCentreAndStereoIsBitIdenticalToBeforeFRO294) {
+    // send1Pan defaults to 0 (centre) and mono defaults to false -- reproduces
+    // SendLevelScalesTheLegInDecibels's own numbers exactly, proving FRO294 changed nothing at the
+    // default settings (ModuleBase::panGains(0.0f) returns exactly 1.0f on both legs, no rounding).
+    ChannelStripModule strip;
+    ASSERT_EQ(strip.addSend(), 0);
+    strip.setSendPreFader(0, true);
+    setParam(strip, "send1Level", -6.0f);
+    strip.prepareToPlay(kSampleRate, kBlockSize);
+
+    auto buffer = stripInput(1.0f, 1.0f);
+    settleAndProcess(strip, buffer);
+
+    const float expected = juce::Decibels::decibelsToGain(-6.0f, ChannelStripModule::kMinGainDb);
+    expectChannel(buffer, sendL(0), expected, "centre pan + stereo is unchanged by FRO294");
+    expectChannel(buffer, sendR(0), expected, "centre pan + stereo is unchanged by FRO294");
+}
+
+TEST(MixerSendLevelTest, SendMonoSumsDifferentLeftAndRightOntoBothLegsEqually) {
+    ChannelStripModule strip;
+    ASSERT_EQ(strip.addSend(), 0);
+    strip.setSendPreFader(0, true);
+    strip.setSendMono(0, true);
+    strip.prepareToPlay(kSampleRate, kBlockSize);
+
+    auto buffer = stripInput(0.8f, 0.2f);
+    settleAndProcess(strip, buffer);
+
+    const float expected = (0.8f + 0.2f) * 0.5f; // unity level, centre pan
+    expectChannel(buffer, sendL(0), expected, "mono sums differing L/R onto the left leg");
+    expectChannel(buffer, sendR(0), expected, "mono sums differing L/R onto the right leg");
+    expectChannelsEqual(buffer, sendL(0), sendR(0), "both legs carry the identical mono sum");
+}
+
+TEST(MixerSendLevelTest, MonoStateRoundTripsThroughExtraStateAndAnOldEntryLoadsStereo) {
+    ChannelStripModule source;
+    ASSERT_EQ(source.addSend(), 0);
+    ASSERT_EQ(source.addSend(), 1);
+    source.setSendMono(0, true);
+
+    ChannelStripModule restored;
+    restored.setExtraState(source.getExtraState());
+    EXPECT_TRUE(restored.isSendMono(0));
+    EXPECT_FALSE(restored.isSendMono(1)) << "only the mono slot carries the bit";
+
+    // An entry saved before FRO294 has no "mono" key at all -- must load stereo, not whatever bit
+    // happened to be set before setExtraState() ran (readSendsState clears first).
+    ChannelStripModule legacy;
+    auto* obj = new juce::DynamicObject();
+    obj->setProperty("shape", "stereo");
+    juce::Array<juce::var> sends;
+    auto* entry = new juce::DynamicObject();
+    entry->setProperty("slot", 0);
+    entry->setProperty("pre", false);
+    entry->setProperty("mute", false);
+    sends.add(juce::var(entry));
+    obj->setProperty("sends", sends);
+    legacy.setExtraState(juce::var(obj));
+    EXPECT_TRUE(legacy.isSendActive(0));
+    EXPECT_FALSE(legacy.isSendMono(0)) << "no \"mono\" key means stereo, same as \"mute\"'s own default";
+}
+
+TEST(MixerSendLevelTest, EverySendPanParameterExistsAppendedAfterEveryExistingParameter) {
+    // Adding a parameter anywhere else would renumber the host-visible layout and detach saved
+    // automation -- see the class comment.
+    ChannelStripModule strip;
+    for (int slot = 0; slot < ChannelStripModule::kMaxSends; ++slot)
+        EXPECT_NE(strip.getSendPanParameter(slot), nullptr)
+            << "send " << slot << " has its pan parameter from construction";
+    EXPECT_EQ(ChannelStripModule::getSendPanParameterId(2), "send3Pan");
+
+    const auto& params = strip.getParameters();
+    int muteIndex = -1, firstPanIndex = -1;
+    for (int i = 0; i < params.size(); ++i) {
+        auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(params[i]);
+        if (withId == nullptr)
+            continue;
+        if (withId->paramID == "muted")
+            muteIndex = i;
+        if (withId->paramID == "send1Pan" && firstPanIndex < 0)
+            firstPanIndex = i;
+    }
+    ASSERT_GE(muteIndex, 0);
+    ASSERT_GE(firstPanIndex, 0);
+    EXPECT_GT(firstPanIndex, muteIndex) << "pan parameters are appended after mute, never interleaved";
 }
 
 // ============================================================================

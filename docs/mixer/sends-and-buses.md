@@ -57,21 +57,31 @@ I/O toggle is inherited.
 ## What is a parameter and what is state
 
 Level is four `juce::AudioParameterFloat`s, `send1Level` to `send4Level`, ranged -60 to +12 dB with a
-default of **0 dB** so a new send is audible rather than looking broken. **All four are added in the
-constructor unconditionally** — adding one later renumbers the host-visible layout and detaches saved
-host automation.
+default of **0 dB** so a new send is audible rather than looking broken. **FRO294: pan is likewise
+four `juce::AudioParameterFloat`s, `send1Pan` to `send4Pan`, ranged -1 to +1 with a default of 0
+(centre)**, appended AFTER every other parameter (including `muted`) so nothing already registered
+renumbers. **All eight (four level, four pan) are added in the constructor unconditionally** —
+adding one later renumbers the host-visible layout and detaches saved host automation. A send's pan
+uses the exact same `ModuleBase::panGains` balance law the strip's own `pan` parameter does (unity on
+both legs at centre), smoothed over the same `kSmoothingSeconds` as level — so a send pan drag never
+zippers, and a centred, still-stereo send renders bit-identical to before FRO294.
 
 **The target is never stored.** Node ids are reassigned on every rebuild-from-JSON, so a stored id
 goes stale on undo. "Which bus does slot *k* feed?" is answered by walking forward from slot *k*'s own
 output channel to the first strip (`synth::findSendTarget`), which therefore also resolves through a
 module the user inserted on the send path, and returns nothing for a cut cable.
 
-Which slots exist, each slot's pre or post setting, and (FRO295) each slot's **mute** are **trusted
-extra state**, `"sends": [{"slot", "pre", "mute"}]`, the same path as `"shape"` and `"solo"` — never
-an `AudioParameter`. `"mute"` is written unconditionally, same as `"pre"`; an entry with no `"mute"`
-key at all (every project saved before FRO295) reads as unmuted, so an old project loads unchanged.
-A track preset scrubs `"sends"` from every captured strip
-([`docs/mixer/track-presets.md`](track-presets.md#scrubbed-keys)).
+Which slots exist, each slot's pre or post setting, (FRO295) each slot's **mute**, and (FRO294) each
+slot's **mono** are **trusted extra state**, `"sends": [{"slot", "pre", "mute", "mono"}]`, the same
+path as `"shape"` and `"solo"` — never an `AudioParameter`. `"mute"`/`"mono"` are each written
+unconditionally, same as `"pre"`; an entry with no `"mute"`/`"mono"` key at all (every project saved
+before FRO295/FRO294 respectively) reads as unmuted/stereo, so an old project loads unchanged.
+**Mono is state, not a parameter**, because it is a binary routing choice (sum L/R before the pan
+law) rather than a continuous value a fader or automation lane would drive — the identical "state,
+not parameter" call FRO295 already makes for mute. A track preset scrubs `"sends"` from every
+captured strip ([`docs/mixer/track-presets.md`](track-presets.md#scrubbed-keys)) — pan, being an
+ordinary parameter like level, needs no special case there: `extractTrackPreset` captures every
+parameter generically and pan rides along exactly as level already does.
 
 ## Slots are sparse
 
@@ -104,6 +114,19 @@ unmuted. **Mute does not remove the send as a structural path** — `findSendTar
 `computeSoloAudibleLegs` (below) don't look at it at all, so a muted send still keeps its source
 classified as feeding whatever bus it targets; it simply carries silence instead of signal while
 muted.
+
+**FRO294: a send can be panned, and independently switched to mono.** In `writeSendLegs`, mono runs
+FIRST: the tapped L/R signal is summed to `(L+R)*0.5` on BOTH legs, replacing the stereo image with
+identical content on each leg. The result — mono or the original stereo pair — then goes through the
+send's own pan law (`ModuleBase::panGains`, the same balance law the strip's own `pan` uses): centre
+leaves both legs at unity, hard left/right zeroes the leg you pan away from. **A centred, still-
+stereo send is therefore bit-identical to pre-FRO294 output** — `panGains(0.0f)` returns exactly
+`1.0f` on both legs, no rounding, so nothing new is introduced when neither control is touched. Pan
+is smoothed the same way level is (its own `SmoothedValue`, `kSmoothingSeconds`, advanced/skipped in
+lockstep with the level smoother in every branch `writeSendLegs`/`skipSendSmoothers` touch) so a pan
+drag never zippers. Mono is a plain per-sample sum with no smoothing of its own — flipping it can pop
+exactly the way flipping the strip's own Mono/Stereo shape can, which is an accepted, existing class
+of transition in this codebase.
 
 **Under bypass the strip's own gain and pan are off, so pre and post coincide.**
 
@@ -164,15 +187,27 @@ track. **Buses sit after the track-driven strips and before Direct**, which is e
 existing orphan-strip append puts them.
 
 On a source column a compact `MixerSendList` sits under the insert list: one row per active slot — a
-target-bus button, a rotary level knob attached straight onto `sendNLevel`, an **"M" mute toggle**
-(FRO295), a `PRE`/`POST` toggle and an `x` — plus a `+ Send` row while a slot is free. **FRO301: a
-screen reader names each level knob by its target** — "Send to Bus 1", or "Send 2 (no target)" once
-its cable is cut — and speaks its value the same "-6.0 dB" format as the fader and pan knob
-([`docs/mixer/panel.md`](panel.md#keyboard-navigation-and-accessibility)). **Each
-mutation is ONE
+target-bus button, a rotary level knob attached straight onto `sendNLevel`, a rotary **pan knob**
+(FRO294) attached straight onto `sendNPan`, an **"M" mute toggle** (FRO295), a `PRE`/`POST` toggle and
+an `x` — plus a `+ Send` row while a slot is free. **FRO301: a screen reader names each level knob by
+its target** — "Send to Bus 1", or "Send 2 (no target)" once its cable is cut — and speaks its value
+the same "-6.0 dB" format as the fader and pan knob
+([`docs/mixer/panel.md`](panel.md#keyboard-navigation-and-accessibility)); the pan knob follows the
+same naming convention ("Send pan to Bus 1" / "Send 2 pan (no target)") and speaks its value the same
+"Center"/"50% left"/"50% right" text the strip's own pan knob uses (shared via
+`Source/UI/Mixer/MixerPanAccessibilityText.h`). **Each mutation is ONE
 `recordGraphAndMacroChange`** around `Source/Mixer/MixerSends`' Core flows, and **the rows unbind
 before a graph-replacing undo frees their parameters**
 ([`docs/mixer/panel.md`](panel.md#unbinding-before-a-graph-change)).
+
+**FRO294: Mono has no row button of its own** — the row's width budget has no room left for one — so
+it is a ticked "Mono" item at the top of the row's existing target menu (`showTargetMenu`), toggled
+through `synth::setSendMono` inside the same one-`recordGraphAndMacroChange` shape every other row
+mutation uses. A mono row shows a small filled dot painted (not a component) at the left edge of
+the target-name area — a dot, not a letter, because an "M" there read as a second mute button — and
+its pan knob's accessible title gains "(mono)"; the same "painted, not a child" idiom `PRE`/`POST` already use, so the row's
+component budget stays exactly level knob + pan knob + M mute button + real-click PRE/POST/remove
+hit areas.
 
 **FRO295: the M button is a real `juce::TextButton`, not painted text like PRE/POST** — it reuses the
 exact button type/convention `MixerColumnComponent`'s own strip-level mute button uses

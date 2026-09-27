@@ -181,14 +181,15 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         return {280, 131};
     if (typeName == "Channel Strip")
         // gain + pan + the four send levels (FRO15: sendNLevel exists unconditionally, so the card
-        // always shows all four — +76 over the pre-send 181) below up to 2 input jacks a side
-        // (Stereo shape, what MainComponent::addAudioTrack always builds — width doesn't move with
-        // shape, only the Mono/Stereo jack-row count would, and this card's height already covers
-        // both). The send OUTPUT jacks appear only for active slots and sit in the right-hand
-        // gutter, which the control rows already outgrow. Internal-only like Track Audio/Rec Tap:
-        // library-less, no replace-menu entry. Measured against the real card by
-        // ChannelFlowTest.ChannelStripAndMasterHaveAPinnedSizeEstimate.
-        return {280, 257};
+        // always shows all four — +76 over the pre-send 181) + the four send pans (FRO294:
+        // sendNPan likewise exists unconditionally — +152 for four more generic-knob-grid rows)
+        // below up to 2 input jacks a side (Stereo shape, what MainComponent::addAudioTrack always
+        // builds — width doesn't move with shape, only the Mono/Stereo jack-row count would, and
+        // this card's height already covers both). The send OUTPUT jacks appear only for active
+        // slots and sit in the right-hand gutter, which the control rows already outgrow.
+        // Internal-only like Track Audio/Rec Tap: library-less, no replace-menu entry. Measured
+        // against the real card by ChannelFlowTest.ChannelStripAndMasterHaveAPinnedSizeEstimate.
+        return {280, 409};
     if (typeName == "Master")
         // gain slider only, 4 input jacks (Mix L/R, Direct L/R) a side setting the port gutter.
         // Internal-only, singleton, library-less. Measured against the real card by

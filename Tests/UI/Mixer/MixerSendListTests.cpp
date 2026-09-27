@@ -154,6 +154,70 @@ TEST(MixerSendListTests, TheLevelKnobDrivesTheStripsOwnSendLevelParameter) {
     EXPECT_NEAR(param->get(), -12.0f, 0.05f) << "the knob writes the host-visible parameter directly";
 }
 
+TEST(MixerSendListTests, ThePanKnobDrivesTheStripsOwnSendPanParameter) {
+    SendRig rig;
+    auto* column = rig.sourceColumn();
+    ASSERT_NE(column, nullptr);
+    const auto sourceId = column->getNodeId();
+    column->getSendListForTest().addSendTo(rig.bus);
+    rig.panel().rebuild();
+
+    auto& sendList = rig.sourceColumn()->getSendListForTest();
+    auto* panKnob = sendList.getPanKnobForTest(0);
+    ASSERT_NE(panKnob, nullptr);
+
+    auto* param = stripAt(rig.graph(), sourceId)->getSendPanParameter(0);
+    ASSERT_NE(param, nullptr);
+    EXPECT_NEAR(param->get(), 0.0f, 1.0e-4f) << "a new send is centred, not panned";
+
+    panKnob->setValue(-1.0, juce::sendNotificationSync);
+    EXPECT_NEAR(param->get(), -1.0f, 0.05f) << "the pan knob writes the host-visible parameter directly";
+}
+
+TEST(MixerSendListTests, MonoItemInTheTargetMenuIsOneUndoStepAndUndoRestoresIt) {
+    // showTargetMenu() itself never runs headless (juce::PopupMenu has no test seam) -- drive the
+    // same real method its "Mono" item's callback calls, same convention
+    // togglePreFaderForRow/toggleMuteForRow's own tests use above/below.
+    SendRig rig;
+    auto* column = rig.sourceColumn();
+    ASSERT_NE(column, nullptr);
+    column->getSendListForTest().addSendTo(rig.bus);
+    rig.panel().rebuild();
+
+    const auto sourceId = rig.sourceColumn()->getNodeId();
+    ASSERT_FALSE(stripAt(rig.graph(), sourceId)->isSendMono(0));
+
+    rig.sourceColumn()->getSendListForTest().toggleMonoForRow(0);
+    rig.panel().rebuild();
+    EXPECT_TRUE(stripAt(rig.graph(), rig.sourceColumn()->getNodeId())->isSendMono(0));
+
+    ASSERT_TRUE(rig.mc->getUndoManager().undo());
+    rig.panel().rebuild();
+    auto* afterUndo = rig.sourceColumn();
+    ASSERT_NE(afterUndo, nullptr);
+    EXPECT_FALSE(stripAt(rig.graph(), afterUndo->getNodeId())->isSendMono(0))
+        << "the Mono flip is one undo step, carried in the strip's trusted extra state";
+    EXPECT_TRUE(stripAt(rig.graph(), afterUndo->getNodeId())->isSendActive(0)) << "and the send itself survives";
+}
+
+// The mono marker is a painted dot, so a screen reader learns "mono" from the pan knob's title.
+TEST(MixerSendListTests, AMonoSendsPanKnobTitleSaysMono) {
+    SendRig rig;
+    auto* column = rig.sourceColumn();
+    ASSERT_NE(column, nullptr);
+    column->getSendListForTest().addSendTo(rig.bus);
+    rig.panel().rebuild();
+    auto* pan = rig.sourceColumn()->getSendListForTest().getPanKnobForTest(0);
+    ASSERT_NE(pan, nullptr);
+    EXPECT_FALSE(pan->getTitle().contains("(mono)"));
+
+    rig.sourceColumn()->getSendListForTest().toggleMonoForRow(0);
+    rig.panel().rebuild();
+    pan = rig.sourceColumn()->getSendListForTest().getPanKnobForTest(0);
+    ASSERT_NE(pan, nullptr);
+    EXPECT_TRUE(pan->getTitle().endsWith("(mono)")) << pan->getTitle();
+}
+
 TEST(MixerSendListTests, PreFaderToggleIsOneUndoStepAndUndoRestoresIt) {
     SendRig rig;
     auto* column = rig.sourceColumn();
