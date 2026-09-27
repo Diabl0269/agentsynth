@@ -106,6 +106,10 @@ Shape is therefore an **input to port creation**, supplied one of these ways:
 
 - **From the Configure I/O dialog** — Mono, Stereo or Poly-N, picked explicitly. This is the primary
   flow, and the only way to reach Stereo or Poly-N. `StereoCollapsed` is never one of the choices.
+  **The collapsed card's own '+' affordance (FRO24) reaches the same four choices** — Mono, Stereo,
+  Poly-N or MIDI — through a small `juce::PopupMenu` calling the identical `addMacroPort()` API, not
+  a second creation path; see
+  [`docs/layout/macro-cards.md#direct-port-addremove-from-the-collapsed-card`](../layout/macro-cards.md#direct-port-addremove-from-the-collapsed-card).
 - **From a cable dropped on a collapsed card's boundary** — creates a port matching the cable's
   direction and kind, wired to the EXTERNAL end of the drag. **Mono, `StereoCollapsed` or `Poly`**,
   inferred from the dragged cable's own jack fan (a 2-leg Audio or collapsed Key/sidechain jack gives

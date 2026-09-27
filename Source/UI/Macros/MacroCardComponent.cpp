@@ -1,6 +1,12 @@
 #include "MacroCardComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+
+// FRO24's '+'/'x' geometry shares the collapsed card's jack-band constants with
+// MacroGroupControllerGeometry.cpp (macroCardPortLayout) rather than re-deriving them — see
+// GraphEditorInternal.h's own comment for why they live there.
+using namespace detail;
 
 MacroCardComponent::MacroCardComponent(GraphEditor& owner, juce::String macroId)
     : owner(owner)
@@ -117,6 +123,41 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         }
     }
 
+    // ---- '+' add-port affordance (FRO24, docs/layout/macro-cards.md#direct-port-addremove-from-the-collapsed-card)
+    // ----
+    // One '+' per side, in the footer row beside the count text (getAddPortButtonBounds) — a
+    // fixed slot that exists regardless of port count, so it is always visible and never in the
+    // jack band macroCardPortLayout() lays ports out in. Drawn as lines, the same "no themed
+    // asset for one small affordance" idiom the expand chevron below already uses.
+    for (const bool isInput : {true, false}) {
+        const auto b = getAddPortButtonBounds(isInput);
+        g.setColour(themeColors.textMuted.withAlpha(0.75f));
+        g.drawEllipse(b, 1.2f);
+        const auto cross = b.reduced(b.getWidth() * 0.28f);
+        g.drawLine(cross.getCentreX(), cross.getY(), cross.getCentreX(), cross.getBottom(), 1.4f);
+        g.drawLine(cross.getX(), cross.getCentreY(), cross.getRight(), cross.getCentreY(), 1.4f);
+    }
+
+    // ---- Hovered port 'x' (FRO24) ----
+    // Overlays the jack dot just drawn above while the mouse rests on it (hoveredPortUuid_,
+    // kept fresh by mouseMove()/mouseExit() — this Component has no child Button of its own for a
+    // jack to hover). mouseDown() re-checks the same hit-test before deleting.
+    if (hoveredPortUuid_.has_value()) {
+        for (const auto& port : owner.getMacroController().macroCardPortLayout(macro->id)) {
+            if (port.nodeUuid != *hoveredPortUuid_)
+                continue;
+            const auto dot =
+                juce::Rectangle<float>((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
+            g.setColour(themeColors.surface.withAlpha(0.9f));
+            g.fillEllipse(dot);
+            g.setColour(themeColors.error);
+            const auto cross = dot.reduced(dot.getWidth() * 0.22f);
+            g.drawLine(cross.getX(), cross.getY(), cross.getRight(), cross.getBottom(), 1.6f);
+            g.drawLine(cross.getX(), cross.getBottom(), cross.getRight(), cross.getY(), 1.6f);
+            break;
+        }
+    }
+
     const auto chevronBounds = getExpandButtonBounds();
 
     // Bypass/mute indeterminate indicator (P8-15d, T142, docs/macros/ports.md#bypass-and-mute): "mixed-state
@@ -185,6 +226,60 @@ juce::Rectangle<float> MacroCardComponent::getToggleBadgeBounds(bool mute) const
     return juce::Rectangle<float>(x, y, kToggleBadgeSize, kToggleBadgeSize);
 }
 
+juce::Rectangle<float> MacroCardComponent::getAddPortButtonBounds(bool isInput) const {
+    // FRO24 follow-up (founder in-app review): the FIRST cut of this sat at the top of the jack
+    // band and hid itself once a side had 2+ ports (macroCardPortLayout() even-spaces a side's
+    // jacks across the whole band, so the topmost jack marches up toward that same spot as the
+    // count grows) — usable only on an almost-empty side. Moved to the FOOTER row instead, beside
+    // the "N modules, M ports" text paint() draws in the card's bottom 14px (textArea.removeFromBottom(14)
+    // there, and the SAME kMargin=10/kBottomMargin=6 outer inset getLocalBounds().reduced(10, 6)
+    // gives that row) — a fixed slot that exists on every card regardless of port count, so the
+    // '+' is never hidden and never sits in the jack band (kMacroCardJackBandTop/Bottom) at all,
+    // which is what makes overlapping a jack structurally impossible rather than merely unlikely.
+    // Input '+' sits just left of where the count text starts (x=10); output '+' just right of
+    // where it ends (x=width-10) — touching that margin, never crossing into the text's own span.
+    // Vertically, its TOP edge is pinned to kMacroCardJackBandBottom itself (never a value merely
+    // computed to fall outside the band): jack Y positions are a strict upper-bounded average
+    // over the band (macroCardPortLayout's placeSide, never reaching kMacroCardJackBandBottom for
+    // any finite port count), so anchoring the button's top there — rather than centring it in
+    // the footer row, which would let it creep a pixel or two into the band — makes "off the jack
+    // band" structural, not incidental.
+    constexpr float kSize = 8.0f;
+    constexpr float kTextMargin = 10.0f; // matches paint()'s reduced(10, 6) the count row also uses
+    const float y = (float)kMacroCardJackBandBottom;
+    const float x = isInput ? kTextMargin - kSize : (float)getWidth() - kTextMargin;
+    return juce::Rectangle<float>(x, y, kSize, kSize);
+}
+
+juce::PopupMenu MacroCardComponent::buildAddPortMenu(bool isInput) {
+    // The SAME kind/shape choice list synth::ui::MacroPortConfigDialog's own "Add a port" panel
+    // offers (newKindBox_/newShapeBox_, MacroPortConfigDialogLifecycle.cpp: Audio/CV picks
+    // Mono/Stereo/Poly-N, MIDI has no shape) — never a second list — and, on a choice, the SAME
+    // MacroGroupController::addMacroPort() Configure I/O's own Add button calls, so the created
+    // port and its one-undo-step transaction (recordGraphAndMacroChange, inside addMacroPort) are
+    // identical either way. `isInput` is already fixed by which side's '+' was clicked, so unlike
+    // the dialog this menu has no direction combo and no name field — an empty name (like an
+    // empty name field there) falls back to addMacroPort's own defaultMacroPortName(). The Poly-N
+    // voice count matches the dialog's own default ("4", newVoicesEditor_'s initial text); the
+    // quick affordance's whole point is the two most common single-port operations reachable at a
+    // glance, not a second place to type a voice count.
+    juce::PopupMenu menu;
+    juce::Component::SafePointer<MacroCardComponent> safeThis(this);
+    auto addItem = [&menu, safeThis, isInput](const juce::String& text, synth::MacroPortKind kind, MacroPortShape shape,
+                                              int voices) {
+        menu.addItem(text, [safeThis, isInput, kind, shape, voices] {
+            if (safeThis == nullptr)
+                return;
+            safeThis->owner.getMacroController().addMacroPort(safeThis->macroId, isInput, kind, shape, voices, {});
+        });
+    };
+    addItem("Audio/CV - Mono", synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1);
+    addItem("Audio/CV - Stereo", synth::MacroPortKind::AudioCV, MacroPortShape::Stereo, 1);
+    addItem("Audio/CV - Poly-N", synth::MacroPortKind::AudioCV, MacroPortShape::Poly, 4);
+    addItem("MIDI", synth::MacroPortKind::Midi, MacroPortShape::Mono, 1);
+    return menu;
+}
+
 juce::Rectangle<int> MacroCardComponent::getTitleRowBounds() const {
     auto textArea = getLocalBounds().reduced(10, 6);
     auto titleRow = textArea.removeFromTop(20);
@@ -216,6 +311,38 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
             owner.getMacroController().selectMacro(macroId, false);
         showContextMenu(priorSelection);
         return;
+    }
+
+    // FRO24 (docs/layout/macro-cards.md#direct-port-addremove-from-the-collapsed-card): a hovered
+    // port's 'x' deletes it and a side's '+' opens the add-port choice menu — both checked at the
+    // SAME precedence getExpandButtonBounds() already has below (before shift/cmd multi-select
+    // and the drag-arm fallback), so neither steals a card body drag or an expand click. The 'x'
+    // re-runs macroCardPortForPoint() rather than trusting hoveredPortUuid_ alone, since a
+    // mouseDown with no preceding mouseMove (a real click landing where the mouse already
+    // rested, or a test driving mouseDown directly with no mouseMove first) must never delete a
+    // jack it never actually hovered.
+    if (hoveredPortUuid_.has_value()) {
+        const auto hit = owner.getMacroController().macroCardPortForPoint(macroId, e.getPosition());
+        if (hit.has_value() && hit->nodeUuid == *hoveredPortUuid_) {
+            owner.getMacroController().deleteMacroPortManually(macroId, *hoveredPortUuid_);
+            // FRO24 follow-up (founder in-app review): a quick double-click used to delete TWO
+            // ports — the delete reflows macroCardPortLayout(), so the very next jack slides
+            // under the still-resting cursor and immediately shows ITS OWN 'x', which the second
+            // click of the double-click then hit. Clearing the hover here is not enough on its
+            // own (the next mouseMove would just re-arm it at the same pixel); suppressing hover
+            // at this exact click position until the mouse genuinely moves away from it is what
+            // actually closes the gap — see mouseMove()'s own comment.
+            hoveredPortUuid_.reset();
+            suppressHoverAtPosition_ = e.getPosition();
+            return;
+        }
+    }
+    for (const bool isInput : {true, false}) {
+        if (getAddPortButtonBounds(isInput).contains(e.position)) {
+            auto menu = buildAddPortMenu(isInput);
+            showContextMenuHook_(menu);
+            return;
+        }
     }
 
     if (getExpandButtonBounds().contains(e.position)) {
@@ -278,6 +405,39 @@ void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
     }
 
     owner.getMacroController().setMacroCollapsed(macroId, false);
+}
+
+void MacroCardComponent::mouseMove(const juce::MouseEvent& e) {
+    // FRO24 follow-up: a position suppressed by a just-completed 'x' delete (mouseDown's own
+    // comment on suppressHoverAtPosition_) stays suppressed until a mouseMove reports a
+    // DIFFERENT position — a mouseMove at the identical position (JUCE can dispatch one even with
+    // no real movement, e.g. as part of the click plumbing itself) must not re-arm hover on
+    // whatever port the reflow just slid underneath the resting cursor. Any position that
+    // genuinely differs means the mouse moved for real, so normal hover tracking resumes.
+    if (suppressHoverAtPosition_.has_value()) {
+        if (e.getPosition() == *suppressHoverAtPosition_)
+            return;
+        suppressHoverAtPosition_.reset();
+    }
+
+    // The ONE place hoveredPortUuid_ is armed — macroCardPortForPoint() is the SAME hit-test the
+    // drop-target path (GraphEditor::endConnectionDrag) and paint()'s hovered-'x' overlay both
+    // read, so hovering, drawing and deleting can never disagree about which jack the mouse is on.
+    const auto hit = owner.getMacroController().macroCardPortForPoint(macroId, e.getPosition());
+    const std::optional<juce::String> newHover =
+        hit.has_value() ? std::optional<juce::String>(hit->nodeUuid) : std::nullopt;
+    if (newHover != hoveredPortUuid_) {
+        hoveredPortUuid_ = newHover;
+        repaint();
+    }
+}
+
+void MacroCardComponent::mouseExit(const juce::MouseEvent&) {
+    suppressHoverAtPosition_.reset(); // leaving the card is itself real movement
+    if (hoveredPortUuid_.has_value()) {
+        hoveredPortUuid_.reset();
+        repaint();
+    }
 }
 
 void MacroCardComponent::beginRename() {
