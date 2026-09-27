@@ -314,6 +314,11 @@ protect, just read by the right-click menu and the mapped-badge paint instead of
 `SliderParameterAttachment`. Rebuilt by the next `rebindControls()`/`setNodeId()`, same lifecycle as
 everything else this section covers.
 
+**FRO292: the same right-click menu leads with "Automate '<Param>'"** on the fader, pan and send
+knobs (Mute and Solo are not automatable lanes). It fires `GraphEditor::onAutomateParameterRequested`
+— the route a canvas knob's own right-click uses — so `MainComponent::automateParameter` creates the
+lane and opens the automation strip on it. It is offered even when no MIDI Remote host is wired.
+
 **Why a pre-restore hook rather than relying on the rebuild.** A graph-structural undo or redo, New
 Patch, Open, or an AI patch apply freezes the affected `ChannelStripModule`/`MasterModule` nodes'
 parameters, and `MixerPanelComponent::rebuild()` is reached from the AFTER-restore hook

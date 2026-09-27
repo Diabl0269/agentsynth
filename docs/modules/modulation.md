@@ -104,7 +104,8 @@ from the parameter's current index.
 **FRO292: the same picker offers one "Add lane…" entry per ACTIVE, not-yet-automated send slot** on
 every `ChannelStripModule` in the graph — a send level has no `ModuleComponent` knob either (the
 strip is internal-only/hidden, [`modules.md`](modules.md#channel-strip-module-mixer-channel-hidden)),
-so this is its only lane-creation entry point too. An inactive slot is never offered. The entry's
+so its entry points are this picker and the mixer column's own right-click "Automate '<Param>'"
+([`mixer/panel.md`](../mixer/panel.md)). An inactive slot is never offered. The entry's
 label — "Send to \<target\>" / "Send N (no target)" — is the same `synth::describeSendSlotLabel`
 string the send knob's own FRO301 accessible title uses
 ([`mixer/sends-and-buses.md`](../mixer/sends-and-buses.md#the-send-and-bus-ui)), so the picker entry

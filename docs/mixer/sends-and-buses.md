@@ -152,8 +152,11 @@ mutation is ONE
 before a graph-replacing undo frees their parameters**
 ([`docs/mixer/panel.md`](panel.md#unbinding-before-a-graph-change)).
 
-**FRO292: an active send's level can carry its own automation lane**, the same way a hosted
-plugin's own parameters can — the automation strip's lane picker offers an "Add lane…" entry per
+**FRO292: an active send's level can carry its own automation lane.** Right-click the send knob
+→ **Automate 'Send N Level'** creates the lane and opens the automation strip on it (the same
+`onAutomateParameterRequested` route a canvas knob uses — the only way in from a track with no lanes
+yet, since the track header's `A` button only appears once one exists). Once the strip is open, its
+lane picker also offers an "Add lane…" entry per
 active, not-yet-automated slot, labelled by `synth::describeSendSlotLabel` with the SAME "Send to
 \<target\>" / "Send N (no target)" text the knob's own accessible title uses, so the picker entry and
 the knob it drives always read the same thing. A `sendNLevel` is an ordinary `RangedAudioParameter`
