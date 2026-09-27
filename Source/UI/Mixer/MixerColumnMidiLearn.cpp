@@ -124,8 +124,15 @@ void MixerColumnComponent::mouseDown(const juce::MouseEvent& e) {
 // Split out of mouseDown() above so each menu-building branch stays well under the function-size
 // cap -- see the two callers for when each one applies.
 void MixerColumnComponent::showParamMidiLearnMenu(juce::RangedAudioParameter& param) {
-    if (graphEditor_ == nullptr || !graphEditor_->onMidiLearnRequested)
+    if (graphEditor_ == nullptr)
+        return; // headless build: nothing is wired
+    juce::PopupMenu menu;
+    appendAutomateMenuItem(menu, param);
+    if (!graphEditor_->onMidiLearnRequested) {
+        if (menu.getNumItems() > 0)
+            showContextMenuHook_(menu);
         return; // the MIDI Remote host isn't wired (headless build)
+    }
 
     juce::String label;
     if (graphEditor_->onQueryMidiMappingsForNode) {
@@ -160,11 +167,28 @@ void MixerColumnComponent::showParamMidiLearnMenu(juce::RangedAudioParameter& pa
         };
     }
 
-    juce::PopupMenu menu;
     synth::ui::midilearn::appendMidiLearnMenuItems(menu, content);
     if (menu.getNumItems() == 0)
         return;
     showContextMenuHook_(menu);
+}
+
+// FRO292: "Automate '<Param>'" on the fader, pan and send-level knobs -- the same
+// GraphEditor::onAutomateParameterRequested route a canvas knob's right-click uses
+// (MainComponent::automateParameter: creates the lane if needed and opens the automation strip on
+// it). The Channel Strip has no canvas card, so this is the only way to START a lane on one of its
+// parameters from a track with no lanes yet (the track header's A button only shows once one exists).
+void MixerColumnComponent::appendAutomateMenuItem(juce::PopupMenu& menu, juce::RangedAudioParameter& param) {
+    if (!graphEditor_->onAutomateParameterRequested)
+        return;
+    juce::Component::SafePointer<MixerColumnComponent> safeThis(this);
+    GraphEditor* graphEditor = graphEditor_;
+    const juce::String paramId = param.paramID;
+    menu.addItem("Automate '" + param.getName(100) + "'", [safeThis, graphEditor, paramId] {
+        if (safeThis != nullptr && graphEditor->onAutomateParameterRequested)
+            graphEditor->onAutomateParameterRequested(safeThis->nodeId_, paramId);
+    });
+    menu.addSeparator();
 }
 
 // FRO253: Solo's own menu -- same shape as showParamMidiLearnMenu() above, but through

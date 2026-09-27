@@ -21,7 +21,12 @@ track-header column are untouched.
   characters when it does not resolve) and `TrackHeaderHost::getParameterDisplayName` (falling
   back to the raw `paramId`; a hosted plugin's paramIds are opaque, e.g. a VST3's are numbers).
   That is the SAME interface the track-header binding chip uses, so no second graph-aware seam
-  was added.
+  was added. After every existing lane, the combo lists "Add lane..." entries from
+  `TrackHeaderHost::getAvailablePluginLaneOptions()` — a hosted plugin's not-yet-automated instance
+  parameters, and (FRO292) every ACTIVE, not-yet-automated `ChannelStripModule` send slot, labelled
+  "Send to \<target\>" ([modulation.md](../modules/modulation.md#hosted-plugin-parameters-as-automation-lanes)) —
+  choosing one calls `addPluginAutomationLane` (find-or-create) and shows the result exactly like
+  picking an existing lane.
 - a record-mode `juce::ComboBox` (Off/Read/Touch/Latch/Write, 1-based combo id = `LaneRecordMode` +
   1) bound to `TimelineDoc::setLaneRecordMode` through `AppUndoManager::recordTimelineChange` — a
   manual selector change IS a user gesture, unlike `AutomationRecorder`'s own programmatic

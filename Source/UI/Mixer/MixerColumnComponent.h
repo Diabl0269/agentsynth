@@ -231,6 +231,7 @@ private:
     void registerSoloMidiLearnable();
     /** Split out of mouseDown() (MixerColumnMidiLearn.cpp) -- one branch per registry entry kind. */
     void showParamMidiLearnMenu(juce::RangedAudioParameter& param);
+    void appendAutomateMenuItem(juce::PopupMenu& menu, juce::RangedAudioParameter& param);
     void showSoloMidiLearnMenu();
     void refreshMidiLearnBadges();
     void repaintArmedMidiLearnOutline(); // FRO256: keeps the armed breathing outline animating; see .cpp

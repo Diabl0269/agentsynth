@@ -17,6 +17,8 @@
 
 namespace synth {
 
+class MacroSet;
+
 // ---- Buses -------------------------------------------------------------------------------------
 //
 // A bus is an ordinary ChannelStripModule whose inputs are other strips' outputs
@@ -48,6 +50,19 @@ juce::String busFallbackName(juce::AudioProcessorGraph& graph, juce::AudioProces
  *  its cable leaves the patch without passing a strip. Pure query. */
 juce::AudioProcessorGraph::NodeID findSendTarget(juce::AudioProcessorGraph& graph,
                                                  juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
+
+/** The display name of a send target: its grouping macro's name when `macros` has one, else the
+ *  bus fallback name ("Bus N") or plain "Channel" for an ordinary strip; "No target" for an invalid
+ *  id. Shared by MixerSendList's rows and menus and the automation lane picker (FRO292), so both
+ *  always name the same bus the same way. `macros` may be null. */
+juce::String sendTargetName(juce::AudioProcessorGraph& graph, const MacroSet* macros,
+                            juce::AudioProcessorGraph::NodeID target);
+
+/** "Send to <target>" / "Send N (no target)" -- the FRO301 accessible-title format MixerSendList's
+ *  knob uses, shared so a lane created for the same slot (FRO292) always agrees with the knob that
+ *  drives it. `slot` is 0-based; `macros` may be null. */
+juce::String describeSendSlotLabel(juce::AudioProcessorGraph& graph, const MacroSet* macros,
+                                   juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
 
 /** Every strip a new (or retargeted) send from `sourceStrip` may legally feed: every OTHER
  *  ChannelStripModule in the graph, in ascending NodeID, minus any whose own signal already reaches

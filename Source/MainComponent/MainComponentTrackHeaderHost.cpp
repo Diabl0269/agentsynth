@@ -7,6 +7,8 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
+#include "Mixer/MixerSends/MixerSends.h" // synth::describeSendSlotLabel, ChannelStripModule send-slot lane options
+#include "Modules/ChannelStripModule.h"
 #include "Modules/TimelineMidiSourceModule.h" // auditionTrackNote pushes into the bound Track In node
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Timeline/AutomationBinding.h"
@@ -26,6 +28,77 @@ juce::String describeNodeForBinding(juce::AudioProcessorGraph::Node* node) {
     if (node == nullptr || node->getProcessor() == nullptr)
         return {};
     return node->getProcessor()->getName();
+}
+
+// The automation strip lane picker's "Add lane..." entries for a hosted plugin's own parameters,
+// which have no ModuleComponent knob to right-click (the plugin has its own editor; see
+// docs/modules/modulation.md#hosted-plugin-parameters-as-automation-lanes's Hosted Plugin table).
+// Every live HostedPluginModule with a published instance offers every parameter that doesn't
+// already have a lane; a bare or still-loading one offers nothing, same as it renders nothing
+// elsewhere in the UI.
+void collectHostedPluginLaneOptions(juce::AudioProcessorGraph& graph, const synth::TimelineDoc& timelineDoc,
+                                    std::vector<synth::ui::TrackHeaderHost::PluginLaneOption>& options) {
+    for (auto* node : graph.getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* hosted = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor());
+        if (hosted == nullptr || !hosted->hasInstance())
+            continue;
+
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isEmpty())
+            continue; // ensure-uuid runs at automate time, same as automateParameter() — nothing to offer yet
+
+        const juce::String moduleLabel = describeNodeForBinding(node);
+        for (const auto& param : hosted->getInstanceParameters()) {
+            if (timelineDoc.getLaneForParam(uuid, param.paramId) != nullptr)
+                continue; // already automated
+            synth::ui::TrackHeaderHost::PluginLaneOption option;
+            option.nodeUuid = uuid;
+            option.paramId = param.paramId;
+            option.paramIndex = param.index;
+            option.label = moduleLabel + juce::String::fromUTF8(" \xC2\xB7 ") + param.displayName;
+            options.push_back(std::move(option));
+        }
+    }
+}
+
+// FRO292: the same "Add lane..." surface, for every ACTIVE, not-yet-automated send slot on every
+// ChannelStripModule in the graph — a send level has no ModuleComponent knob either (Channel Strip
+// is internal-only/hidden, docs/modules/modules.md#channel-strip-module-mixer-channel-hidden), so
+// this is its only lane-creation entry point, same reasoning as the hosted-plugin case above.
+// Inactive slots are never offered (docs/mixer/sends-and-buses.md#the-send-and-bus-ui). The label
+// mirrors the send knob's own FRO301 accessible title (synth::describeSendSlotLabel), so the picker
+// entry and the knob it automates always read the same "Send to <target>" / "Send N (no target)".
+void collectChannelStripSendLaneOptions(juce::AudioProcessorGraph& graph, const synth::MacroSet& macros,
+                                        const synth::TimelineDoc& timelineDoc,
+                                        std::vector<synth::ui::TrackHeaderHost::PluginLaneOption>& options) {
+    for (auto* node : graph.getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* strip = dynamic_cast<ChannelStripModule*>(node->getProcessor());
+        if (strip == nullptr)
+            continue;
+
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isEmpty())
+            continue; // ensure-uuid runs at automate time — nothing to offer yet
+
+        for (int slot = 0; slot < ChannelStripModule::kMaxSends; ++slot) {
+            if (!strip->isSendActive(slot))
+                continue;
+            const juce::String paramId = ChannelStripModule::getSendLevelParameterId(slot);
+            if (timelineDoc.getLaneForParam(uuid, paramId) != nullptr)
+                continue; // already automated
+
+            synth::ui::TrackHeaderHost::PluginLaneOption option;
+            option.nodeUuid = uuid;
+            option.paramId = paramId;
+            option.paramIndex = -1; // unused for a plain RangedAudioParameter
+            option.label = synth::describeSendSlotLabel(graph, &macros, node->nodeID, slot);
+            options.push_back(std::move(option));
+        }
+    }
 }
 
 } // namespace
@@ -133,36 +206,15 @@ void MainComponent::selectNodeInGraph(const juce::String& uuid) {
         graphEditor.selectModule(node->nodeID, /*additive=*/false);
 }
 
-// The automation strip lane picker's "Add lane..." entries — the minimal creation surface
-// for a hosted plugin's own parameters, which have no ModuleComponent knob to right-click (the
-// plugin has its own editor; see docs/modules/modulation.md#hosted-plugin-parameters-as-automation-lanes's Hosted
-// Plugin table). Every live HostedPluginModule with a published instance offers every parameter that doesn't already
-// have a lane; a bare or still-loading one offers nothing, same as it renders nothing elsewhere in the UI.
+// FRO292: combines two sources, each split into its own free function above so neither grows past
+// a screen -- a hosted plugin's not-yet-automated instance parameters, and every ACTIVE,
+// not-yet-automated ChannelStripModule send slot (inactive slots are never offered, see
+// docs/mixer/sends-and-buses.md#the-send-and-bus-ui).
 std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> MainComponent::getAvailablePluginLaneOptions() const {
     std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> options;
-    for (auto* node : audioEngine.getGraph().getNodes()) {
-        if (node == nullptr)
-            continue;
-        auto* hosted = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor());
-        if (hosted == nullptr || !hosted->hasInstance())
-            continue;
-
-        const juce::String uuid = node->properties["uuid"].toString();
-        if (uuid.isEmpty())
-            continue; // ensure-uuid runs at automate time, same as automateParameter() — nothing to offer yet
-
-        const juce::String moduleLabel = describeNodeForBinding(node);
-        for (const auto& param : hosted->getInstanceParameters()) {
-            if (timelineDoc.getLaneForParam(uuid, param.paramId) != nullptr)
-                continue; // already automated
-            synth::ui::TrackHeaderHost::PluginLaneOption option;
-            option.nodeUuid = uuid;
-            option.paramId = param.paramId;
-            option.paramIndex = param.index;
-            option.label = moduleLabel + juce::String::fromUTF8(" \xC2\xB7 ") + param.displayName;
-            options.push_back(std::move(option));
-        }
-    }
+    collectHostedPluginLaneOptions(audioEngine.getGraph(), timelineDoc, options);
+    collectChannelStripSendLaneOptions(audioEngine.getGraph(),
+                                       const_cast<MainComponent*>(this)->graphEditor.getMacros(), timelineDoc, options);
     return options;
 }
 
@@ -171,14 +223,16 @@ synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeade
         return {};
 
     auto* node = findNodeByUuid(option.nodeUuid);
-    auto* hosted = node != nullptr ? dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()) : nullptr;
-    if (hosted == nullptr)
-        return {}; // the node disappeared (or stopped being a plugin) between offering and choosing
+    auto* processor = node != nullptr ? node->getProcessor() : nullptr;
+    if (processor == nullptr)
+        return {}; // the node disappeared between offering and choosing
 
-    // Hosted-plugin parameters are always normalised (a hosted AudioProcessorParameter has no
-    // NormalisableRange, and JUCE's own host contract is 0..1 regardless of format) — the lane's
-    // RangeSnapshot IS {0, 1, default}, never something read off a live NormalisableRange.
-    const auto resolved = synth::resolveLaneParameter(hosted, option.paramId, option.paramIndex);
+    // resolveLaneParameter branches internally on whether `processor` is a live HostedPluginModule
+    // instance (normalised 0..1, index-hint rescue) or one of our own modules (an exact paramID
+    // match against a real RangedAudioParameter, e.g. ChannelStripModule's sendNLevel, FRO292) — see
+    // AutomationBinding.h's class comment. laneValueBoundsFor/laneDefaultValueFor below read off
+    // whichever branch resolved, so this call needs no case split of its own.
+    const auto resolved = synth::resolveLaneParameter(processor, option.paramId, option.paramIndex);
     if (!resolved.resolved())
         return {}; // the parameter vanished between offering and choosing
 

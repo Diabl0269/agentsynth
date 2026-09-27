@@ -134,15 +134,7 @@ int MixerSendList::rowIndexAt(juce::Point<int> position) const {
 }
 
 juce::String MixerSendList::targetNameFor(NodeID target) const {
-    if (graph_ == nullptr || target == NodeID{})
-        return "No target";
-    auto* node = graph_->getNodeForId(target);
-    if (node == nullptr)
-        return "No target";
-    if (macros_ != nullptr)
-        if (const auto* macro = macros_->findByMember(node->properties["uuid"].toString()))
-            return macro->name;
-    return synth::isBusStrip(*graph_, target) ? synth::busFallbackName(*graph_, target) : juce::String("Channel");
+    return graph_ != nullptr ? synth::sendTargetName(*graph_, macros_, target) : juce::String("No target");
 }
 
 void MixerSendList::paint(juce::Graphics& g) {

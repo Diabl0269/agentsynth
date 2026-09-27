@@ -161,26 +161,26 @@ struct TrackHeaderHost {
      *  reasoning as the two methods above. */
     virtual void addInstrumentPluginTrack(const synth::PluginIdentity& identity) { juce::ignoreUnused(identity); }
 
-    /** One hosted-plugin instance parameter with no automation lane yet — the automation
-     *  strip's lane picker "Add lane..." entries. `paramId` is the value a created lane would carry
-     *  (a real stable id, or the synthetic "legacy:<index>" form — see
-     *  HostedPluginModule::InstanceParameterInfo); `paramIndex` is what becomes the lane's
-     *  paramIndexHint. */
+    /** One parameter with no automation lane yet — the automation strip's lane picker "Add lane..."
+     *  entries. Despite the name, also covers a ChannelStripModule send slot (FRO292); `paramId`/
+     *  `paramIndex` mean what HostedPluginModule::InstanceParameterInfo documents for a hosted
+     *  parameter, and `paramIndex` is unused (-1) for a send slot's plain RangedAudioParameter. */
     struct PluginLaneOption {
         juce::String nodeUuid;
         juce::String paramId;
         int paramIndex = -1;
-        juce::String label; // "Module name \xC2\xB7 parameter name"
+        juce::String label; // "Module name \xC2\xB7 parameter name", or "Send to <target>" for a send slot
     };
 
-    /** Every not-yet-automated hosted-plugin instance parameter across the live graph. Empty when
-     *  there is nothing to offer (no HostedPluginModule with a published instance, or every one of
-     *  its parameters is already automated). */
+    /** Every not-yet-automated hosted-plugin instance parameter across the live graph, plus every
+     *  ACTIVE, not-yet-automated ChannelStripModule send slot (FRO292). Empty when there is nothing
+     *  to offer. */
     virtual std::vector<PluginLaneOption> getAvailablePluginLaneOptions() const = 0;
 
     /** Creates (find-or-create — the doc-wide one-lane-per-parameter rule may mean it already
      *  exists) the automation lane for `option` and returns its id. An invalid id means it could not
-     *  be created (kMaxTracks/kMaxLanesPerTrack reached, or the option's node no longer resolves). */
+     *  be created (kMaxTracks/kMaxLanesPerTrack reached, or the option's node/parameter no longer
+     *  resolves). */
     virtual synth::LaneId addPluginAutomationLane(const PluginLaneOption& option) = 0;
 
     /** The properties file the colour picker's favourites shelf persists to, or nullptr for an

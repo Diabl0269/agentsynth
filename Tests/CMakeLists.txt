@@ -124,6 +124,8 @@ add_executable(Tests
     Mixer/Sends/MixerSendFlowTests.cpp
     Mixer/Sends/MixerBusSoloTests.cpp
     Mixer/Sends/MixerSendLatencyTests.cpp
+    Mixer/Sends/MixerSendAutomationLaneTests.cpp
+    Mixer/Sends/MixerSendAutomationPlaybackTests.cpp
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp

@@ -459,3 +459,48 @@ TEST(MixerColumnMidiLearnTests, RefreshMeterKeepsRepaintingTheArmedFaderOutlineW
     fixture.column.refreshMeter(0.1f);
     EXPECT_EQ(fixture.column.getMidiLearnArmedRepaintCountForTest(), 2);
 }
+
+// ============================================================================
+// FRO292: "Automate '<Param>'" on the fader/pan/send knobs, through GraphEditor's shared
+// onAutomateParameterRequested (the same route a canvas knob's right-click uses).
+// ============================================================================
+
+TEST(MixerColumnMidiLearnTests, RightClickSendKnobAutomateFiresWithTheStripAndSendParam) {
+    ColumnFixture fixture(/*withSend=*/true);
+    juce::AudioProcessorGraph::NodeID requestedNode;
+    juce::String requestedParamId;
+    int callCount = 0;
+    fixture.editor.onAutomateParameterRequested = [&](juce::AudioProcessorGraph::NodeID n, const juce::String& p) {
+        requestedNode = n;
+        requestedParamId = p;
+        ++callCount;
+    };
+
+    auto* knob = fixture.column.getSendListForTest().getKnobForTest(0);
+    ASSERT_NE(knob, nullptr);
+    auto menu = rightClickChild(fixture.column, *knob);
+    EXPECT_TRUE(menuContains(menu, "Automate 'Send 1 Level'"))
+        << "the item must be there even with no MIDI Remote host wired";
+
+    juce::PopupMenu::MenuItemIterator it(menu);
+    bool invoked = false;
+    while (it.next())
+        if (it.getItem().text == "Automate 'Send 1 Level'") {
+            it.getItem().action();
+            invoked = true;
+        }
+    ASSERT_TRUE(invoked);
+    EXPECT_EQ(callCount, 1);
+    EXPECT_EQ(requestedNode, fixture.column.getNodeId());
+    EXPECT_EQ(requestedParamId, "send1Level");
+}
+
+TEST(MixerColumnMidiLearnTests, RightClickFaderOffersAutomateAlongsideMidiLearn) {
+    ColumnFixture fixture;
+    fixture.editor.onMidiLearnRequested = [](juce::AudioProcessorGraph::NodeID, const juce::String&) {};
+    fixture.editor.onAutomateParameterRequested = [](juce::AudioProcessorGraph::NodeID, const juce::String&) {};
+
+    const auto menu = rightClickChild(fixture.column, fixture.column.getFaderForTest().getSlider());
+    EXPECT_TRUE(menuContains(menu, "Automate 'Gain'"));
+    EXPECT_TRUE(menuContains(menu, "MIDI Learn 'Gain'..."));
+}
