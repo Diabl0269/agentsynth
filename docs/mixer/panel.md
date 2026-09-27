@@ -169,9 +169,13 @@ either host's own button through three different parents.
 **The dock resizes from every tab** (FRO231). One `synth::ui::PanelResizeHandle` lives on the
 dock's own top edge — not inside the Timeline panel — so the Mixer and Controllers tabs resize the
 dock exactly like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays
-22 px; the tab, detach, `+ Bus` and Reset Meters buttons are laid out below it, so a grab never
-lands on a button) and reports the total dock height through `BottomDockComponent::onResizeHeight` /
-`onResizeHeightCommitted`. The rules (clamp, persistence, live relayout) are in
+22 px; the tab and detach buttons are laid out below it, so a grab never lands on a button) and
+reports the total dock height through `BottomDockComponent::onResizeHeight` /
+`onResizeHeightCommitted`. FRO338: `+ Bus`/Reset Meters no longer share the tab strip's carve at
+all (they used to be carved from its right edge, Mixer-tab-only, which meant the strip's own width
+split changed depending on which tab was active) — they now sit in their own slim toolbar row
+directly below the tab strip, inside the Mixer tab's content area, laid out only while Mixer is
+active; every other tab gets the full content height instead. The rules (clamp, persistence, live relayout) are in
 [`docs/timeline/timeline.md`](../timeline/timeline.md#panel-height); Own-panel placement is a
 separate strip with its own handle, below.
 

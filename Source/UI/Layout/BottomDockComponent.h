@@ -189,6 +189,10 @@ public:
 
     /** Total tab-strip height, including the top PanelResizeHandle::kHeight px the handle overlaps. */
     static constexpr int kTabStripHeight = 22;
+    /** FRO338: height of the Mixer-only toolbar row (Add bus/Reset Meters) carved from the TOP of
+     *  the Mixer tab's own content area, below the tab strip -- Timeline/Controllers never carve
+     *  it, so their content keeps the dock's full remaining height regardless of activeTab_. */
+    static constexpr int kMixerToolbarHeight = 24;
 
     // ---- Resizable height (top-edge grab strip, every tab) ----
     // Both callbacks carry the desired TOTAL dock height, UNCLAMPED; MainComponent clamps and persists.
@@ -201,10 +205,12 @@ public:
     juce::Component& getResizeHandle() noexcept { return resizeHandle_; }
     bool isResizeHandleHovered() const noexcept { return resizeHandle_.isHovered(); }
 
-    /** FRO15 test seam: the "Add bus" button the tab strip shows on the Mixer tab. */
+    /** FRO15 test seam: the "Add bus" button (FRO338: its own Mixer-only toolbar row above the
+     *  mixer content, not the tab strip -- see resized()'s own comment). */
     juce::TextButton& getAddBusButtonForTest() noexcept { return addBusButton_; }
-    /** FRO146 test seam: the "Reset Meters" button the tab strip shows on the Mixer tab -- resets
-     *  every column's (and Master's) clip readout, same as an Option/Alt-click on any one of them. */
+    /** FRO146 test seam: the "Reset Meters" button, same FRO338 toolbar row as "Add bus" above --
+     *  resets every column's (and Master's) clip readout, same as an Option/Alt-click on any one of
+     *  them. */
     juce::TextButton& getResetMetersButtonForTest() noexcept { return resetMetersButton_; }
     /** FRO228 test seam: this dock's own detach/redock button. */
     juce::DrawableButton& getDetachButtonForTest() noexcept { return detachButton_; }
@@ -233,9 +239,14 @@ private:
         }
         void mouseDrag(const juce::MouseEvent& e) override {
             owner_.dragTab(tab_, e);
+            // FRO338: only once the gesture is a real drag (JUCE's own move threshold, the same
+            // gate dragTab() itself uses) -- a stray click never shows the dragging-hand cursor.
+            if (e.mouseWasDraggedSinceMouseDown())
+                setMouseCursor(juce::MouseCursor::DraggingHandCursor);
             juce::TextButton::mouseDrag(e);
         }
         void mouseUp(const juce::MouseEvent& e) override {
+            setMouseCursor(juce::MouseCursor::NormalCursor);
             if (!owner_.endTabDrag())
                 juce::TextButton::mouseUp(e);
         }
@@ -299,8 +310,9 @@ private:
     // DetachablePanelHost's class comment on why this is a separate button instance rather than a
     // literal shared one across three different parents).
     juce::DrawableButton detachButton_{"detachActiveTab", juce::DrawableButton::ImageFitted};
-    // FRO15 (docs/mixer/sends-and-buses.md): "Add bus" sits on the tab strip and is visible only on the Mixer
-    // tab -- it has no meaning while the Timeline tab is showing.
+    // FRO15 (docs/mixer/sends-and-buses.md): "Add bus" is visible only on the Mixer tab -- it has no
+    // meaning while the Timeline tab is showing. FRO338: laid out in its own toolbar row above the
+    // mixer content, not carved from the tab strip (see resized()'s own comment).
     juce::TextButton addBusButton_{"+ Bus"};
     // FRO146: sits next to "+ Bus" (same Mixer-tab-only visibility) -- resets every column's clip
     // readout (docs/mixer/mixer.md meters section's "Meter Peak Level" reset action).

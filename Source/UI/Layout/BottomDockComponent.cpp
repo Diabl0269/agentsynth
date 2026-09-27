@@ -402,13 +402,13 @@ void BottomDockComponent::resized() {
 
     auto bounds = getLocalBounds();
     auto tabStrip = bounds.removeFromTop(kTabStripHeight).withTrimmedTop(PanelResizeHandle::kHeight);
-    // Rightmost: the FRO12 detach button (always present, acts on whichever tab is active), then
-    // the FRO15 "+ Bus" button (only visible -- and so only carved -- on the Mixer tab).
+    // Rightmost: the FRO12 detach button (always present, acts on whichever tab is active). The
+    // FRO15 "+ Bus"/FRO146 "Reset Meters" buttons used to be carved from here too, but only while
+    // Mixer was active -- that shrank the tabs' shared area on Mixer alone, so switching tabs
+    // visibly resized every tab button. FRO338 moves them into their own slim toolbar row instead,
+    // carved from the CONTENT area below (see the Mixer-only block right after), so the tab strip's
+    // width split is identical regardless of activeTab_.
     detachButton_.setBounds(tabStrip.removeFromRight(kTabStripHeight));
-    if (addBusButton_.isVisible())
-        addBusButton_.setBounds(tabStrip.removeFromRight(kAddBusButtonWidth));
-    if (resetMetersButton_.isVisible())
-        resetMetersButton_.setBounds(tabStrip.removeFromRight(kResetMetersButtonWidth));
 
     // FRO333: whatever's left splits between the tabs currently offered (isTabOfferedInStrip --
     // skips a Mixer disabled by placement AND any detached tab), in tabOrder_'s user-controlled
@@ -429,8 +429,21 @@ void BottomDockComponent::resized() {
         if (!isTabOfferedInStrip(t))
             buttonForTab(t).setVisible(false);
 
+    // FRO338: the Mixer-only toolbar (Add bus/Reset Meters) is carved from the MIXER HOST'S OWN
+    // content area only, below the tab strip -- Timeline and Controllers always get `bounds`
+    // unmodified, so switching to Mixer never shrinks anything but the Mixer tab's own content, and
+    // switching away never leaves a stale shrink behind (recomputed from `bounds` every resized()).
+    auto mixerBounds = bounds;
+    if (addBusButton_.isVisible() || resetMetersButton_.isVisible()) {
+        auto toolbar = mixerBounds.removeFromTop(kMixerToolbarHeight);
+        if (addBusButton_.isVisible())
+            addBusButton_.setBounds(toolbar.removeFromRight(kAddBusButtonWidth));
+        if (resetMetersButton_.isVisible())
+            resetMetersButton_.setBounds(toolbar.removeFromRight(kResetMetersButtonWidth));
+    }
+
     timelineHost_.setBounds(bounds);
-    mixerHost_.setBounds(bounds);
+    mixerHost_.setBounds(mixerBounds);
     midiRemoteHost_.setBounds(bounds);
 }
 

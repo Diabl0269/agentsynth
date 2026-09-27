@@ -86,9 +86,15 @@ TEST_P(BottomDockResizeOnEveryTabTest, HandleCoversTheDockTopEdgeAndKeepsTheTabB
     for (auto* button : {&dock.getAddBusButtonForTest(), &dock.getResetMetersButtonForTest()})
         if (button->isVisible())
             EXPECT_GE(button->getY(), Handle::kHeight) << button->getName();
+    // FRO338: Timeline/Controllers always get the dock's full content height -- only the Mixer
+    // host's own top edge moves down, and only while its toolbar row (Add bus/Reset Meters) is
+    // actually showing (i.e. the Mixer tab is active).
     EXPECT_EQ(dock.getTimelineHost().getY(), Dock::kTabStripHeight);
-    EXPECT_EQ(dock.getMixerHost().getY(), Dock::kTabStripHeight);
     EXPECT_EQ(dock.getMidiRemoteHost().getY(), Dock::kTabStripHeight);
+    const bool mixerToolbarShowing =
+        dock.getAddBusButtonForTest().isVisible() || dock.getResetMetersButtonForTest().isVisible();
+    EXPECT_EQ(dock.getMixerHost().getY(),
+              Dock::kTabStripHeight + (mixerToolbarShowing ? Dock::kMixerToolbarHeight : 0));
 }
 
 TEST_P(BottomDockResizeOnEveryTabTest, HandleWinsTheHitTestAtTheTopEdgeOverEveryTabButton) {
