@@ -690,7 +690,10 @@ MacroGroupController::inferPortShapeFromCableFan(ModuleBase* otherMb, int otherV
         }
     }
 
-    if (headSpan > 1 && headRole == PortRole::Audio)
+    // A collapsed Key jack (PortRole::Sidechain, span 2) is the same stereo pair shape — the rule
+    // buildMacroPortCrossingPlan applies at grouping time (MacroGroupControllerPortSplice.cpp).
+    const bool stereoPairRole = headRole == PortRole::Audio || headRole == PortRole::Sidechain;
+    if (headSpan > 1 && stereoPairRole)
         return {MacroPortShape::StereoCollapsed, 1}; // one jack, two raw legs — never the 2-jack Stereo shape
     if (headSpan > 1)
         return {MacroPortShape::Poly, headSpan};

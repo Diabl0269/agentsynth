@@ -108,7 +108,8 @@ Shape is therefore an **input to port creation**, supplied one of these ways:
   flow, and the only way to reach Stereo or Poly-N. `StereoCollapsed` is never one of the choices.
 - **From a cable dropped on a collapsed card's boundary** — creates a port matching the cable's
   direction and kind, wired to the EXTERNAL end of the drag. **Mono, `StereoCollapsed` or `Poly`**,
-  inferred from the dragged cable's own jack fan (FRO234, 2026-09-27 founder decision — see
+  inferred from the dragged cable's own jack fan (a 2-leg Audio or collapsed Key/sidechain jack gives
+  `StereoCollapsed`; FRO234, 2026-09-27 founder decision — see
   [`docs/macros/auto-ports.md`](auto-ports.md#automatic-macro-ports) for the shared inference rule);
   never the two-jack `Stereo` shape, which needs two independent legs no single cable carries. This
   path never wires anything on the macro's INTERIOR side: the macro is collapsed, so there is no
@@ -117,7 +118,8 @@ Shape is therefore an **input to port creation**, supplied one of these ways:
 - **From a cable dragged across an expanded macro's hull** — same inference (Mono/`StereoCollapsed`/
   `Poly`, never the two-jack `Stereo`), and it wires both sides. See
   [`docs/macros/auto-ports.md`](auto-ports.md#ports-on-a-cable-drag).
-- **From grouping a selection with a crossing cable** — the ONLY source of `StereoCollapsed`.
+- **From grouping a selection with a crossing cable** — like the two cable paths above, can produce
+  `StereoCollapsed`.
   `GraphEditor::buildMacroPortCrossingPlan` derives the shape from the internal jack the crossing
   cable actually lands on, never from a user choice
   ([`docs/macros/auto-ports.md`](auto-ports.md#auto-creating-ports-when-grouping)).

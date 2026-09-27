@@ -1,5 +1,6 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MacroPortFlowTestHelpers.h"
+#include "Modules/FX/CompressorModule.h"
 
 // Topic: FRO234 — createMacroPortFromDroppedCable (a cable dropped on a collapsed card) and
 // maybeAutoCreateMacroPortsForDrag (a cable dragged across an expanded hull) infer a new macro
@@ -224,4 +225,37 @@ TEST(MacroPortFlow, DragAcrossHullFromAPolyCvMemberCreatesAPolyPort) {
 
     for (int v = 0; v < 8; ++v)
         EXPECT_TRUE(hasConnection(engine, portId, v, extPoly, v)) << "voice " << v << " must be wired";
+}
+
+// FRO317 alignment: a cable dragged from a collapsed Compressor "Key" jack (PortRole::Sidechain,
+// span 2) and dropped on a collapsed card infers the same one-jack StereoCollapsed shape
+// buildMacroPortCrossingPlan gives a key crossing at grouping time, never Poly-2.
+TEST(MacroPortFlow, CableDropFromACollapsedKeyJackCreatesAStereoCollapsedPort) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+
+    auto comp = addModuleAt(editor, engine, std::make_unique<CompressorModule>(), 900, 900);
+    auto* compComp = compFor(editor, comp);
+    ASSERT_NE(compComp, nullptr);
+    auto* compModule = dynamic_cast<CompressorModule*>(engine.getGraph().getNodeForId(comp)->getProcessor());
+    int keyJack = -1;
+    for (int jack = 0; jack < compModule->getVisibleInputPortCount() && keyJack < 0; ++jack)
+        for (const auto& t : compModule->getJackTargets(jack, true))
+            if (t.role == PortRole::Sidechain && t.voiceSpan == 2)
+                keyJack = jack;
+    ASSERT_GE(keyJack, 0);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+
+    editor.beginConnectionDrag(compComp, keyJack, /*isInput=*/true, /*isMidi=*/false, {0, 0});
+    editor.endConnectionDrag(card->getBounds().getCentre());
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_EQ(macro->ports.size(), 1u);
+    const auto portId = nodeIdForUuid(engine, macro->ports[0].nodeUuid);
+    auto* outlet = dynamic_cast<MacroOutletModule*>(engine.getGraph().getNodeForId(portId)->getProcessor());
+    ASSERT_NE(outlet, nullptr);
+    EXPECT_EQ(outlet->getPortShape(), MacroPortShape::StereoCollapsed);
 }
