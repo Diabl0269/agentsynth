@@ -714,6 +714,13 @@ bool MainComponent::initialiseAudioEngine() {
     // a device it was never allowed to open.
     auto bringUpEngine = [this] {
         audioEngine.initialise();
+        // FRO325: this is the app-startup default document -- there is no "restore last session"
+        // feature (see docs/architecture/project-bundle.md), so every standalone launch that
+        // doesn't go on to load a saved bundle/autosave starts here. The founder's decision is
+        // "new projects use the new law", and an unopened startup document is a new project.
+        // openFromFile/loadBundleFromFile/loadAutosaveFromFile below all overwrite this with the
+        // file's own value (absent -> Balance) the moment the user opens something real.
+        audioEngine.setMixerPanLaw(synth::MixerPanLaw::Compensated);
         applyStoredDualIOPreferenceToPatch();
         graphEditor.updateComponents();
         graphEditor.refreshOutputDeviceInfo();

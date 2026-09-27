@@ -257,8 +257,18 @@ only ever changes a MONO `ChannelStripModule`'s own pan and its sends' pan.
 
 **Persistence and the engine-side switch.** The setting is a top-level `"mixerPanLaw"` string in the
 project file (`"balance"`/`"compensated"`, [`docs/architecture/project-bundle.md`](../architecture/project-bundle.md#projectbundle-agsproj)) —
-absent means Balance, so an existing project's mix is never changed underfoot; New Patch and a
-brand-new project both start Compensated. `AudioEngine` owns the live value
+absent means Balance, so an existing project's mix is never changed underfoot. The founder's
+decision is "new projects use the new law", so every path that starts a fresh, unsaved document
+sets Compensated: New Patch, the welcome screen's "New empty project" and "Open our default
+project" buttons, and the app-startup default document a standalone launch opens when there is no
+"restore last session" feature to fall back on (there isn't one — see
+[`docs/architecture/project-bundle.md`](../architecture/project-bundle.md#welcome-screen)). A bare,
+headless `AudioEngine` (no `MainComponent` around it, e.g. every engine-only test) keeps its own
+constructor default of Balance — only `MainComponent`'s standalone-app startup sequence opts a
+document into Compensated. Opening an existing `.agsproj` or autosave always keeps the file's own
+value; loading a factory preset (or a plain preset) into an already-open project never touches the
+project's law, the same reason that load never clears the dirty flag. `AudioEngine` owns the live
+value
 (`AudioEngine::setMixerPanLaw`/`getMixerPanLaw`) and republishes it once per render pass to
 `TransportService::setMixerPanLawCompensatedForBlock` — the same once-per-pass carrier idiom the mixer
 solo gate uses — which is what a `ChannelStripModule` actually reads off its playhead, render-safe (no

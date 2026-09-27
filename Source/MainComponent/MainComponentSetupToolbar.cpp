@@ -322,7 +322,12 @@ void MainComponent::createWelcomeScreen() {
             // hideWelcomeScreen() as the LAST step of its body, so a Cancel answer never touches it.
             commandManager.invokeDirectly(AppCommands::newPatch, true);
         };
-        welcomeScreen_->onOpenDefaultProject = [this] { loadPresetGuarded(0); };
+        // FRO325: the welcome screen only ever offers this button before any project is open, so
+        // it is always a fresh, unsaved document -- pass isNewDocument=true so it lands on
+        // Compensated. The Load menu's own equivalent call (loadPresetGuarded(result - 1) above)
+        // deliberately omits this: that one swaps a factory preset into a project that may already
+        // be open, and must leave its pan law alone.
+        welcomeScreen_->onOpenDefaultProject = [this] { loadPresetGuarded(0, /*isNewDocument=*/true); };
         // P8-31: the welcome screen's "Open an existing project…" button opens a whole .agsproj
         // project (patch + timeline), so it routes through the project half, not the patch half.
         welcomeScreen_->onOpenExistingProject = [this] { openProjectFromFile(); };
