@@ -45,8 +45,10 @@ mechanism `synth::buildBusChannel` uses for a strip built from scratch — so th
 only kind whose insert path ever calls `setIsBus(true)` at all.
 
 **Naming**: the inserted macro takes whatever name its own capture already carries (a user-renamed
-source bus keeps that name); only a captured macro that comes back nameless falls back to the
-numbered `synth::busFallbackName` default ("Bus N"), the same name "Add bus" would give a fresh one.
+source bus keeps that name). **A captured name that comes back empty, or that another macro in the
+project already carries, falls back to the numbered `synth::busFallbackName` default ("Bus N")**, the
+same name "Add bus" would give a fresh one, so inserting a preset saved from "Bus 1" next to "Bus 1"
+never shows two columns with the same name.
 
 `"+ Track"`'s own **Bus** submenu ([`docs/timeline/add-track.md`](../timeline/add-track.md#track-presets))
 lists every saved Bus preset the same way the Audio/Instrument ones are listed, and **"Insert Track

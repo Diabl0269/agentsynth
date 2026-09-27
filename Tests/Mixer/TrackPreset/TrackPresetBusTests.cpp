@@ -268,3 +268,44 @@ TEST_F(TrackPresetBusTest, ChoosingABusPresetEntryInsertsTheChainWithNoTimelineT
     ASSERT_NE(insertedStrip, nullptr) << "the inserted strip must be re-flagged as a bus, the same way Add bus does";
     EXPECT_TRUE(synth::isBusStrip(mc->getAudioEngine().getGraph(), insertedStrip->nodeID));
 }
+
+// A preset saved from "Bus 1" and inserted twice must not produce two columns with the same name:
+// a captured macro name another macro already carries falls back to the numbered "Bus N" default.
+TEST_F(TrackPresetBusTest, InsertingTheSamePresetTwiceGivesDistinctBusNames) {
+    HostedPatchCFT patch;
+    GraphEditor editor(patch.engine);
+    const auto rig = buildSimpleBusRigCFT(editor, patch.engine, "Bus 1");
+    ASSERT_NE(rig.macro, nullptr);
+    auto preset = synth::TrackPresetManager::extractTrackPreset(
+        patch.engine.getGraph(), editor.getMacros(), rig.macro->id, synth::TrackPresetKind::Bus, kBusPresetName);
+    ASSERT_TRUE(preset.isObject());
+    const auto dir = synth::TrackPresetManager::getDefaultTrackPresetsDirectory();
+    ASSERT_TRUE(synth::TrackPresetManager::saveTrackPreset(dir, kBusPresetName, preset));
+
+    auto mc = std::make_unique<MainComponent>(std::make_unique<MockProvider>());
+    mc->setSize(1600, 900);
+    mc->getAudioEngine().suspendDeviceCallback();
+
+    for (int i = 0; i < 2; ++i) {
+        const auto menu = mc->getTimelinePanel().buildAddTrackMenu();
+        const auto* busGroup = findMenuItemByTextCFT(menu, "Bus from Preset");
+        ASSERT_NE(busGroup, nullptr);
+        ASSERT_NE(busGroup->subMenu, nullptr);
+        const auto* item = findMenuItemByTextCFT(*busGroup->subMenu, kBusPresetName);
+        ASSERT_NE(item, nullptr);
+        mc->getTimelinePanel().applyAddTrackMenuChoice(item->itemID);
+    }
+
+    std::vector<juce::String> busNames;
+    auto& graph = mc->getAudioEngine().getGraph();
+    for (auto* node : graph.getNodes()) {
+        auto* module = dynamic_cast<ChannelStripModule*>(node->getProcessor());
+        if (module == nullptr || !module->isBus())
+            continue;
+        if (const auto* macro = mc->getGraphEditor().getMacros().findByMember(node->properties["uuid"].toString()))
+            busNames.push_back(macro->name);
+    }
+    ASSERT_EQ(busNames.size(), 2u);
+    EXPECT_EQ(busNames[0], "Bus 1") << "the first insert keeps the preset's own captured name";
+    EXPECT_NE(busNames[0], busNames[1]) << "the second insert must not reuse a name already in the project";
+}

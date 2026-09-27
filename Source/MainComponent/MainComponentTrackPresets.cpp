@@ -14,6 +14,7 @@
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"
 #include "UI/Timeline/TrackColour.h"
+#include <algorithm>
 
 namespace {
 
@@ -358,7 +359,13 @@ juce::String MainComponent::insertBusFromPresetVar(const juce::var& preset) {
     const juce::String stripUuid = stripNode->properties["uuid"].toString();
     auto* insertedMacro = graphEditor.getMacros().findByMember(stripUuid);
     juce::String busName = insertedMacro != nullptr ? insertedMacro->name : juce::String();
-    if (busName.isEmpty()) {
+    // A preset saved from "Bus 1" and inserted beside it would otherwise show two "Bus 1" columns:
+    // a captured name another macro already carries falls back to the numbered default too.
+    const auto& allMacros = graphEditor.getMacros().getAll();
+    const bool nameTaken = std::any_of(allMacros.begin(), allMacros.end(), [&](const synth::Macro& other) {
+        return insertedMacro != nullptr && other.id != insertedMacro->id && other.name == busName;
+    });
+    if (busName.isEmpty() || nameTaken) {
         busName = synth::busFallbackName(graph, stripNode->nodeID);
         if (insertedMacro != nullptr)
             insertedMacro->name = busName;
