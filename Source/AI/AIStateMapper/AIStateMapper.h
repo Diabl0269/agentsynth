@@ -53,6 +53,7 @@ enum class PatchValidationError {
     MacrosNotAllowed,
     MidiRemoteNotAllowed,
     InternalModuleNotAllowed,
+    MixerPanLawNotAllowed, // FRO325
 };
 
 /**

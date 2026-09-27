@@ -68,7 +68,7 @@ struct MasterColumnFixture {
         editor.setSize(900, 600);
 
         masterNode = graph.addNode(std::make_unique<MasterModule>());
-        column.configure(graph, undoManager, macros, editor);
+        column.configure(graph, undoManager, macros, editor, engine);
         column.setSize(140, 300);
         column.setNodeId(masterNode->nodeID);
     }

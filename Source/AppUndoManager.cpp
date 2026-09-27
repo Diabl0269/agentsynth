@@ -451,6 +451,47 @@ private:
 };
 
 /**
+ * @class MixerPanLawAction
+ * @brief FRO325: undoable action for the project's mixer-pan-law setting (docs/mixer/mixer.md#pan-law).
+ *
+ * Same firstPerform-skips-the-already-applied-edit shape as ParameterChangeAction, but the payload
+ * is a plain enum written through a caller-supplied setter rather than a graph parameter -- there is
+ * no node to look up, so perform()/undo() can never fail to find their target.
+ */
+class MixerPanLawAction : public juce::UndoableAction {
+public:
+    MixerPanLawAction(std::function<void(synth::MixerPanLaw)> apply, synth::MixerPanLaw before,
+                      synth::MixerPanLaw after)
+        : apply(std::move(apply))
+        , before(before)
+        , after(after) {}
+
+    bool perform() override {
+        if (firstPerform) {
+            firstPerform = false;
+            return true;
+        }
+        apply(after);
+        return true;
+    }
+
+    bool undo() override {
+        apply(before);
+        return true;
+    }
+
+    int getSizeInUnits() override { return 1; }
+
+private:
+    std::function<void(synth::MixerPanLaw)> apply;
+    synth::MixerPanLaw before;
+    synth::MixerPanLaw after;
+    bool firstPerform = true;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerPanLawAction)
+};
+
+/**
  * @class NodeExtraStateAction
  * @brief Undoable action that replays a module's extra state (ModuleBase::setExtraState) before/after.
  *
@@ -601,6 +642,15 @@ void AppUndoManager::recordParameterChange(juce::AudioProcessorGraph& graph, juc
     // The firstPerform flag will skip the first perform() since the parameter
     // was already changed by the user.
     performAction(new ParameterChangeAction(graph, nodeId, paramId, oldValue, newValue));
+}
+
+void AppUndoManager::recordMixerPanLawChange(std::function<void(synth::MixerPanLaw)> apply, synth::MixerPanLaw before,
+                                             synth::MixerPanLaw after) {
+    if (before == after)
+        return;
+    // Same firstPerform convention as recordParameterChange above -- the caller already applied
+    // `after` before calling this.
+    performAction(new MixerPanLawAction(std::move(apply), before, after));
 }
 
 void AppUndoManager::recordNodeExtraStateChange(juce::AudioProcessorGraph& graph,

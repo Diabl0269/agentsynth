@@ -2,6 +2,7 @@
 
 #include "MacroSet.h"
 #include "Mixer/MixerModel/MixerModel.h"
+#include "Mixer/MixerPanLaw.h"
 #include "MixerColumnHeader.h"
 #include "MixerFader.h"
 #include "MixerInsertList.h"
@@ -14,6 +15,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 class AppUndoManager;
+class AudioEngine;
 class GraphEditor;
 
 // MixerMasterColumn.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): Master's column -- fader/mute/
@@ -26,7 +28,7 @@ public:
     MixerMasterColumn();
 
     void configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, synth::MacroSet& macros,
-                   GraphEditor& graphEditor);
+                   GraphEditor& graphEditor, AudioEngine& audioEngine);
     void setNodeId(juce::AudioProcessorGraph::NodeID nodeId);
     /** FRO148: binds to `column` (Kind::Master) -- setNodeId(column.nodeId) plus the insert list's rows. Call after
      *  configure(); the column's chain fields come straight off MixerSnapshot. */
@@ -104,7 +106,21 @@ public:
             hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
     }
 
+    /** FRO325 (docs/mixer/mixer.md#pan-law): the project's pan-law control, next to the mute
+     *  button -- the mixer has no other project-settings surface (see the ticket's own note on
+     *  where this was added). */
+    juce::TextButton& getPanLawButtonForTest() noexcept { return panLawButton_; }
+    /** Same test-seam idiom as setShowContextMenuHookForTest, for the pan-law button's own menu. */
+    void setShowPanLawMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showPanLawMenuHook_ =
+            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+    }
+
 private:
+    void refreshPanLawButton();
+    void showPanLawMenu();
+    void setPanLaw(synth::MixerPanLaw law);
+
     void refreshMuteAccessibility();
     void refreshMidiLearnBadges();
     /** FRO256: mirrors MixerColumnComponent::repaintArmedMidiLearnOutline -- called from
@@ -115,6 +131,7 @@ private:
     juce::AudioProcessorGraph* graph_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     GraphEditor* graphEditor_ = nullptr;
+    AudioEngine* audioEngine_ = nullptr; // FRO325 -- see setPanLaw()
     juce::AudioProcessorGraph::NodeID nodeId_;
 
     // FRO133: the fader's bound param (paramID "gain") -- null when nothing is bound, same
@@ -140,6 +157,12 @@ private:
     MixerMeter meter_;
     MixerMeterReadout meterReadout_;
     juce::TextButton muteButton_{"M"};
+    // FRO325: labelled by refreshPanLawButton() ("Pan: Balance" / "Pan: Comp.") -- see the class
+    // comment on where this lives and why.
+    juce::TextButton panLawButton_;
+    std::function<void(juce::PopupMenu&)> showPanLawMenuHook_ = [](juce::PopupMenu& m) {
+        m.showMenuAsync(juce::PopupMenu::Options());
+    };
     bool keyboardFocused_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerMasterColumn)

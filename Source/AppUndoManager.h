@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Mixer/MixerPanLaw.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_data_structures/juce_data_structures.h>
@@ -148,6 +149,11 @@ public:
      */
     bool recordMidiRemoteChange(synth::MidiRemoteProjectDoc& doc, const juce::var& beforeJson,
                                 const juce::var& afterJson, std::function<void()> postRestore = {});
+
+    /** FRO325 (docs/mixer/mixer.md#pan-law): records a mixer-pan-law change as an undoable step,
+     *  same firstPerform convention as recordParameterChange -- see the .cpp definition. */
+    void recordMixerPanLawChange(std::function<void(synth::MixerPanLaw)> apply, synth::MixerPanLaw before,
+                                 synth::MixerPanLaw after);
 
     /**
      * @brief Records a mutation that may touch BOTH the graph and the timeline in a single gesture

@@ -787,3 +787,123 @@ TEST_F(ProjectBundleTest, DefaultProjectsDirectoryLivesUnderUserMusic) {
     EXPECT_TRUE(dir.getFileName().equalsIgnoreCase(synth::branding::kProjectsFolderName));
     EXPECT_TRUE(dir.isDirectory());
 }
+
+// ============================================================================
+// FRO325 (docs/mixer/mixer.md#pan-law): the "mixerPanLaw" field.
+// ============================================================================
+
+TEST_F(ProjectBundleTest, SaveWritesTheGivenPanLawAndItRoundTrips) {
+    juce::AudioProcessorGraph graph;
+    buildSampleGraph(graph);
+    TimelineDoc timeline;
+    PatchDocument patchDocument;
+    synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
+
+    auto dir = bundleDir("PanLawCompensated");
+    ASSERT_TRUE(
+        ProjectBundle::save(dir, graph, timeline, patchDocument, macros, midiRemote, synth::MixerPanLaw::Compensated)
+            .ok);
+
+    auto json = juce::JSON::parse(dir.getChildFile(ProjectBundle::kProjectFileName));
+    ASSERT_TRUE(json.isObject());
+    EXPECT_EQ(json.getProperty("mixerPanLaw", {}).toString(), "compensated");
+
+    juce::AudioProcessorGraph freshGraph;
+    TimelineDoc freshTimeline;
+    PatchDocument freshPatchDoc;
+    synth::MacroSet freshMacros;
+    synth::MidiRemoteProjectDoc freshMidiRemote;
+    synth::MixerPanLaw loadedLaw = synth::MixerPanLaw::Balance;
+    auto result =
+        ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDoc, freshMacros, freshMidiRemote, &loadedLaw);
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_EQ(loadedLaw, synth::MixerPanLaw::Compensated);
+}
+
+TEST_F(ProjectBundleTest, SaveWithBalanceRoundTrips) {
+    juce::AudioProcessorGraph graph;
+    buildSampleGraph(graph);
+    TimelineDoc timeline;
+    PatchDocument patchDocument;
+    synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
+
+    auto dir = bundleDir("PanLawBalance");
+    ASSERT_TRUE(
+        ProjectBundle::save(dir, graph, timeline, patchDocument, macros, midiRemote, synth::MixerPanLaw::Balance).ok);
+
+    juce::AudioProcessorGraph freshGraph;
+    TimelineDoc freshTimeline;
+    PatchDocument freshPatchDoc;
+    synth::MacroSet freshMacros;
+    synth::MidiRemoteProjectDoc freshMidiRemote;
+    synth::MixerPanLaw loadedLaw = synth::MixerPanLaw::Compensated;
+    auto result =
+        ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDoc, freshMacros, freshMidiRemote, &loadedLaw);
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_EQ(loadedLaw, synth::MixerPanLaw::Balance);
+}
+
+// A project saved before this ticket has no "mixerPanLaw" key at all -- absent must load as
+// Balance, so an existing project's mix is never changed underfoot.
+TEST_F(ProjectBundleTest, LegacyProjectWithNoPanLawKeyLoadsAsBalance) {
+    juce::AudioProcessorGraph graph;
+    buildSampleGraph(graph);
+    TimelineDoc timeline;
+    PatchDocument patchDocument;
+    synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
+
+    auto dir = bundleDir("PanLawLegacy");
+    ASSERT_TRUE(
+        ProjectBundle::save(dir, graph, timeline, patchDocument, macros, midiRemote, synth::MixerPanLaw::Compensated)
+            .ok);
+
+    // Simulate a project saved before FRO325 existed: strip the key a real old save would never
+    // have written in the first place.
+    auto projectFile = dir.getChildFile(ProjectBundle::kProjectFileName);
+    auto json = juce::JSON::parse(projectFile);
+    if (auto* obj = json.getDynamicObject())
+        obj->removeProperty("mixerPanLaw");
+    ASSERT_TRUE(projectFile.replaceWithText(juce::JSON::toString(json)));
+
+    juce::AudioProcessorGraph freshGraph;
+    TimelineDoc freshTimeline;
+    PatchDocument freshPatchDoc;
+    synth::MacroSet freshMacros;
+    synth::MidiRemoteProjectDoc freshMidiRemote;
+    synth::MixerPanLaw loadedLaw = synth::MixerPanLaw::Compensated;
+    auto result =
+        ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDoc, freshMacros, freshMidiRemote, &loadedLaw);
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_EQ(loadedLaw, synth::MixerPanLaw::Balance);
+}
+
+// A caller that doesn't ask for the law (outPanLaw == nullptr, the ~60 existing call sites) must
+// still have the key detached from the root -- or it would leak into the PatchDocument stash and
+// resurface in an "Export Patch Only" plain preset, breaking "never baked into a preset".
+TEST_F(ProjectBundleTest, LoadWithNoOutPanLawStillDetachesTheKeyFromTheStash) {
+    juce::AudioProcessorGraph graph;
+    buildSampleGraph(graph);
+    TimelineDoc timeline;
+    PatchDocument patchDocument;
+    synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
+
+    auto dir = bundleDir("PanLawNoOutParam");
+    ASSERT_TRUE(
+        ProjectBundle::save(dir, graph, timeline, patchDocument, macros, midiRemote, synth::MixerPanLaw::Compensated)
+            .ok);
+
+    juce::AudioProcessorGraph freshGraph;
+    TimelineDoc freshTimeline;
+    PatchDocument freshPatchDoc;
+    synth::MacroSet freshMacros;
+    synth::MidiRemoteProjectDoc freshMidiRemote;
+    auto result = ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDoc, freshMacros, freshMidiRemote);
+    ASSERT_TRUE(result.ok) << result.message;
+
+    EXPECT_FALSE(freshPatchDoc.toVar(synth::AIStateMapper::graphToJSON(freshGraph)).hasProperty("mixerPanLaw"))
+        << "the key must never survive into the unknown-top-level-key stash";
+}

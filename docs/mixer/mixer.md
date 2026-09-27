@@ -226,15 +226,49 @@ inferred later from what gets plugged into it. This is the same rule macro ports
 ([`docs/macros/ports.md`](../macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed)),
 applied to strips.
 
-Strip output is always stereo. Pan is a balance law with unity gain at centre; a mono strip feeds both
-output legs from a single input jack. The right leg follows the `kRightBase` convention
-(`Source/Modules/CLAUDE.md`) — **never ch1**, which stays reserved for CV on the split-block voice
-modules.
+Strip output is always stereo. A mono strip feeds both output legs from a single input jack, and its
+own pan is a real pan pot (see [Pan law](#pan-law) below); a stereo strip's "pan" stays a **balance**
+control (industry convention: pan pot on mono, balance on stereo). The right leg follows the
+`kRightBase` convention (`Source/Modules/CLAUDE.md`) — **never ch1**, which stays reserved for CV on
+the split-block voice modules.
 
 **Changing a strip's shape means replacing the strip**, one undo step, not widening a live node — the
 same invariant that governs every fixed-channel-count module in this codebase. When a flow wraps a
 chain that ends poly, it inserts a `VoiceMixerModule` ahead of the strip so the strip itself only ever
 receives a summed signal.
+
+## Pan law
+
+**FRO325: a Mono-shaped strip's own `pan` parameter, and every send's `sendNPan`
+([`docs/mixer/sends-and-buses.md`](sends-and-buses.md#what-is-a-parameter-and-what-is-state)), route
+through one of two pan laws — a per-PROJECT setting, not a per-strip one:**
+
+- **Balance** (`ModuleBase::panGains`) — centre leaves both legs at unity; panning only attenuates the
+  leg you move away from. What every project saved before this setting existed keeps, unchanged.
+- **Compensated** (`ModuleBase::panGainsCompensated`) — constant-power "-3 dB compensated": centre is
+  still unity on both legs, but panning away from centre RAISES the far leg (up to +3 dB at a hard
+  pan) instead of only attenuating the near one, holding perceived loudness roughly constant as a
+  mono source moves across the stereo field. This is Logic's and Ableton's default pan law.
+
+**A Stereo-shaped strip's `pan` is always the Balance law**, full stop — it is a balance control, not a
+pan pot, and the project setting never touches it. Every other `ModuleBase::panGains` caller (a
+module-card's own pan knob, e.g. Oscillator/Wavetable/Filter) is likewise unaffected; this ticket
+only ever changes a MONO `ChannelStripModule`'s own pan and its sends' pan.
+
+**Persistence and the engine-side switch.** The setting is a top-level `"mixerPanLaw"` string in the
+project file (`"balance"`/`"compensated"`, [`docs/architecture/project-bundle.md`](../architecture/project-bundle.md#projectbundle-agsproj)) —
+absent means Balance, so an existing project's mix is never changed underfoot; New Patch and a
+brand-new project both start Compensated. `AudioEngine` owns the live value
+(`AudioEngine::setMixerPanLaw`/`getMixerPanLaw`) and republishes it once per render pass to
+`TransportService::setMixerPanLawCompensatedForBlock` — the same once-per-pass carrier idiom the mixer
+solo gate uses — which is what a `ChannelStripModule` actually reads off its playhead, render-safe (no
+allocation, no lock).
+
+**The mixer's Master column carries the control** (there is no separate project-settings surface
+today): a small button next to Master's mute, labelled "Pan: Bal." / "Pan: Comp.", opens a two-item
+menu. Picking the other law is one undo step (`AppUndoManager::recordMixerPanLawChange`) — the
+project's one dirty-state funnel, so it marks the document dirty and is undoable like any other mixer
+edit.
 
 ## Bypass and mute
 

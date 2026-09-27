@@ -155,6 +155,10 @@ public:
     void setMixerSoloActiveForBlock(bool active) noexcept { mixerSoloActiveForBlock = active; }
     bool isMixerSoloActiveForBlock() const noexcept { return mixerSoloActiveForBlock; }
 
+    // FRO325 (docs/mixer/mixer.md#pan-law): same carrier idiom as the solo flag above.
+    void setMixerPanLawCompensatedForBlock(bool compensated) noexcept { mixerPanLawCompensatedForBlock = compensated; }
+    bool isMixerPanLawCompensatedForBlock() const noexcept { return mixerPanLawCompensatedForBlock; }
+
     // -- Any-thread reads ----------------------------------------------------
     struct PositionSnapshot {
         double ppq = 0.0;
@@ -230,6 +234,9 @@ private:
 
     // Audio thread only; see setMixerSoloActiveForBlock.
     bool mixerSoloActiveForBlock = false;
+
+    // Audio thread only; see setMixerPanLawCompensatedForBlock.
+    bool mixerPanLawCompensatedForBlock = false;
 
     // -- Command FIFO (message thread -> audio thread) ------------------------
     static constexpr int kFifoCapacity = 256;

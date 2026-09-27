@@ -52,9 +52,11 @@
  * All kMaxSends level AND (FRO294) PAN parameters are added in the constructor UNCONDITIONALLY,
  * active or not: adding a parameter later renumbers the host-visible layout and detaches saved
  * host automation. The pan parameters are appended AFTER every existing parameter (including
- * addMuteParameter()), so no existing parameter's index moves -- a send's pan rides the same
- * `ModuleBase::panGains` balance law the strip's own `pan` parameter uses (centre is unity on both
- * legs), smoothed over kSmoothingSeconds exactly like level. Which slots actually exist, each
+ * addMuteParameter()), so no existing parameter's index moves -- a send's pan rides the exact same
+ * pan-law choice (docs/mixer/mixer.md#pan-law) the strip's own `pan` parameter uses: `ModuleBase::panGains`
+ * balance law (centre is unity on both legs) on a Stereo strip, or FRO325's per-project
+ * `ModuleBase::panGainsCompensated` on a Mono one -- see applyPanLaw() -- smoothed over
+ * kSmoothingSeconds exactly like level. Which slots actually exist, each
  * slot's pre/post choice, (FRO295) each slot's MUTE, and (FRO294) each slot's MONO are
  * non-parameter trusted extra state ("sends"); the send's TARGET is never stored — it is the graph
  * edge itself, since node ids are reassigned on every rebuild-from-JSON and a stored id would go
@@ -581,9 +583,26 @@ private:
     void computeTargetGains(float& targetL, float& targetR) const {
         const float gain = juce::Decibels::decibelsToGain(gainParam_->get(), kMinGainDb);
         float panL = 1.0f, panR = 1.0f;
-        panGains(panParam_->get(), panL, panR);
+        applyPanLaw(panParam_->get(), panL, panR);
         targetL = gain * panL;
         targetR = gain * panR;
+    }
+
+    /** FRO325 (docs/mixer/mixer.md#pan-law): the strip's OWN pan and a send's pan both route through
+     *  this -- the project's pan law (read off the transport carrier a MONO strip's playhead already
+     *  has, same downcast as audibleLegsThisBlock()) applies ONLY while this strip is Mono-shaped; a
+     *  Stereo strip's "pan" stays the balance control it always was (docs/mixer/mixer.md#mono-and-stereo,
+     *  industry convention: pan pot on mono, balance on stereo). No transport, or Stereo, falls back
+     *  to panGains -- bit-identical to before this ticket for every existing project. */
+    void applyPanLaw(float pan, float& gainL, float& gainR) const {
+        if (getShape() == Shape::Mono) {
+            auto* transport = dynamic_cast<synth::TransportService*>(getPlayHead());
+            if (transport != nullptr && transport->isMixerPanLawCompensatedForBlock()) {
+                panGainsCompensated(pan, gainL, gainR);
+                return;
+            }
+        }
+        panGains(pan, gainL, gainR);
     }
 
     float sendTargetGain(int slot) const {
@@ -639,9 +658,11 @@ private:
             auto* destR = buffer.getWritePointer(sendRightChannel(slot));
             for (int i = 0; i < numSamples; ++i) {
                 // FRO294: mono first -- sum the TAPPED signal to (L+R)*0.5 on both legs, same
-                // content, before the pan law splits it back apart. At centre (panL=panR=1.0f
-                // exactly, since panGains(0.0f) clamps to unity on both legs with no rounding) a
-                // non-mono send reduces to the pre-FRO294 math bit-for-bit.
+                // content, before the pan law splits it back apart. At centre under the balance law
+                // (panL=panR=1.0f exactly, since panGains(0.0f) clamps to unity on both legs with no
+                // rounding) a non-mono send reduces to the pre-FRO294 math bit-for-bit; FRO325's
+                // compensated law (a Mono strip's project setting) gives centre gains a hair under
+                // 1.0f (a float cosine/sine rounding, not a bug) so that exactness no longer holds.
                 float sigL = sourceL[i];
                 float sigR = sourceR[i];
                 if (mono) {
@@ -650,7 +671,7 @@ private:
                     sigR = sum;
                 }
                 float panL = 1.0f, panR = 1.0f;
-                panGains(smoothedPan.getNextValue(), panL, panR);
+                applyPanLaw(smoothedPan.getNextValue(), panL, panR);
                 const float level = smoothed.getNextValue();
                 destL[i] = sigL * level * panL;
                 destR[i] = sigR * level * panR;

@@ -3,6 +3,7 @@
 // install mc.unsavedChangesPrompt before touching a dirty document.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
+#include "ProjectBundle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 // ---------------------------------------------------------------------------
@@ -433,6 +434,49 @@ TEST_F(MainComponentTest, OpeningALegacyPatchDropsTheBundleTarget) {
     ASSERT_TRUE(mc.openProjectForTest(legacy));
     EXPECT_TRUE(mc.wouldPromptOnSaveForTest()) << "a legacy patch has no bundle to resave to";
     EXPECT_FALSE(mc.isProjectDirty());
+}
+
+// ---------------------------------------------------------------------------
+// FRO325 (docs/mixer/mixer.md#pan-law): New Patch always resets the project to Compensated, and
+// the setting survives a save/load round trip.
+// ---------------------------------------------------------------------------
+
+TEST_F(MainComponentTest, NewPatchSetsTheMixerPanLawToCompensated) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    PromptRecorder prompt;
+    prompt.installOn(mc);
+
+    // Start from Balance (as if a legacy project had just been open) so the assertion below can't
+    // pass by accident because Compensated was already the engine's resting state.
+    mc.getAudioEngine().setMixerPanLaw(synth::MixerPanLaw::Balance);
+
+    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::newPatch, false));
+    EXPECT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Compensated);
+}
+
+TEST_F(MainComponentTest, SavingAndReloadingAProjectPreservesTheMixerPanLaw) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.getAudioEngine().setMixerPanLaw(synth::MixerPanLaw::Balance);
+
+    const auto bundleDir = tempRoot.getChildFile("PanLawRoundTrip.agsproj");
+    ASSERT_TRUE(mc.saveProjectForTest(bundleDir));
+
+    auto json = juce::JSON::parse(bundleDir.getChildFile(synth::ProjectBundle::kProjectFileName));
+    EXPECT_EQ(json.getProperty("mixerPanLaw", {}).toString(), "balance");
+
+    MainComponent reloaded(std::make_unique<MockProvider>());
+    reloaded.setSize(1600, 900);
+    reloaded.getAudioEngine().suspendDeviceCallback();
+    // Starts Compensated (a fresh engine's resting state) so the assertion below can't pass by
+    // accident either.
+    reloaded.getAudioEngine().setMixerPanLaw(synth::MixerPanLaw::Compensated);
+
+    ASSERT_TRUE(reloaded.openProjectForTest(bundleDir));
+    EXPECT_EQ(reloaded.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Balance);
 }
 
 // REGRESSION LOCK (f7cba4a): MainComponent must refresh models AFTER setProvider(). The

@@ -374,7 +374,7 @@ struct MasterMeterFixture {
         editor.setSize(900, 600);
         const auto rig = buildMasterRigMMT(graph, false);
         masterId = rig.master->nodeID;
-        column.configure(graph, undoManager, editor.getMacros(), editor);
+        column.configure(graph, undoManager, editor.getMacros(), editor, engine);
         column.onMutated = [this] { bind(); };
         column.setSize(140, 300);
         column.outputPeakProvider = [this](int) {

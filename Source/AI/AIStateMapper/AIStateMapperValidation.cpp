@@ -75,6 +75,12 @@ PatchValidationResult checkReservedKeysNotAllowed(const juce::DynamicObject* roo
                 "are app-authored project data, not accepted from a patch suggestion. Remove it and resend "
                 "only nodes, connections and modulations."};
 
+    if (rootObj->hasProperty("mixerPanLaw"))
+        return {false, PatchValidationError::MixerPanLawNotAllowed,
+                "Patch suggestions must not contain a \"mixerPanLaw\" property - the mixer's pan law is an "
+                "app-authored per-project setting, not accepted from a patch suggestion. Remove it and resend "
+                "only nodes, connections and modulations."};
+
     return {};
 }
 
@@ -154,6 +160,8 @@ juce::String patchValidationErrorName(PatchValidationError error) {
         return "MidiRemoteNotAllowed";
     case PatchValidationError::InternalModuleNotAllowed:
         return "InternalModuleNotAllowed";
+    case PatchValidationError::MixerPanLawNotAllowed:
+        return "MixerPanLawNotAllowed";
     }
     return "Unknown";
 }
