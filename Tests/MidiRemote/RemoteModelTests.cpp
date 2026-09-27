@@ -78,6 +78,18 @@ TEST(MidiRemoteModelTest, MessageSpecRoundTrips) {
     EXPECT_TRUE(parsed == spec);
 }
 
+// FRO330 (docs/control/midi-remote.md#mmc-messages): mmc round-trips like every other MessageType,
+// including its doc-exact camelCase JSON spelling ("mmc") and a command-byte `number` that isn't
+// one of the kMmc* constants -- an unrecognised command is still a legal spec, just one no shipped
+// template's controls will ever match.
+TEST(MidiRemoteModelTest, MessageSpecRoundTripsMmc) {
+    const auto spec = makeSpec(MessageType::mmc, 0, kMmcRecordStrobe);
+    MessageSpec parsed;
+    ASSERT_TRUE(MessageSpec::fromVar(spec.toVar(), parsed));
+    EXPECT_TRUE(parsed == spec);
+    EXPECT_EQ(spec.toVar().getDynamicObject()->getProperty("type").toString(), "mmc");
+}
+
 TEST(MidiRemoteModelTest, MessageSpecRejectsUnknownType) {
     juce::var v = juce::JSON::parse(R"({"type":"bogus","channel":1,"number":21})");
     MessageSpec parsed;

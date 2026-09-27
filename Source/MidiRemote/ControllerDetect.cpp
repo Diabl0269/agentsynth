@@ -114,6 +114,8 @@ juce::String detectedControlName(const MessageSpec& spec) {
         return "Program " + juce::String(spec.number);
     case MessageType::nrpn:
         return "NRPN " + juce::String(spec.number);
+    case MessageType::mmc:
+        return "MMC " + juce::String(spec.number);
     case MessageType::cc:
     default:
         return "CC " + juce::String(spec.number);
@@ -131,6 +133,10 @@ Control makeDetectedControl(const RemoteEvent& event, const std::vector<Control>
         break;
     case MessageType::pitchBend:
         control.kind = ControlKind::wheel;
+        break;
+    case MessageType::mmc:
+        // FRO330: a single discrete command, exactly like a program change -- always a button.
+        control.kind = ControlKind::button;
         break;
     case MessageType::nrpn:
         // Detect can only see an NRPN whose address CCs it recognised; its value is a CC 6 / CC 38

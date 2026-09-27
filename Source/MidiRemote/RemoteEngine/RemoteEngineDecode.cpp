@@ -68,6 +68,9 @@ void decodeButtonLike(RemoteEvent& event, const detail::ClassifiedMessage& class
         }
         break;
     case MessageType::programChange:
+    case MessageType::mmc:
+        // FRO330: one MMC command is one discrete press, exactly like a program change -- there is
+        // no MMC "release" to decode, so a button mapped to it can only ever fire on receipt.
         event.kind = RemoteEventKind::buttonPress;
         event.value = 1.0f;
         break;

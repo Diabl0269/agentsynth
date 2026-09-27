@@ -58,6 +58,8 @@ juce::String messageTypeDisplayName(synth::MessageType type) {
         return "Program Change";
     case synth::MessageType::nrpn:
         return "NRPN";
+    case synth::MessageType::mmc:
+        return "MMC";
     }
     return "Unknown";
 }
@@ -66,7 +68,8 @@ juce::String messageTypeDisplayName(synth::MessageType type) {
 juce::String formatMessageSpec(const synth::MessageSpec& spec) {
     juce::String text = messageTypeDisplayName(spec.type);
     const bool hasNumber = spec.type == synth::MessageType::cc || spec.type == synth::MessageType::note ||
-                           spec.type == synth::MessageType::programChange || spec.type == synth::MessageType::nrpn;
+                           spec.type == synth::MessageType::programChange || spec.type == synth::MessageType::nrpn ||
+                           spec.type == synth::MessageType::mmc;
     if (hasNumber)
         text << " " << spec.number;
     text << " ch " << (spec.channel == 0 ? juce::String("any") : juce::String(spec.channel));

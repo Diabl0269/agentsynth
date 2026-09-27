@@ -1,6 +1,7 @@
 #include "MidiRemote/ControllerTemplates.h"
 
 #include "BinaryData.h"
+#include "MidiRemote/MidiRemoteMapping.h"
 
 #include <algorithm>
 #include <iterator>
@@ -59,6 +60,19 @@ bool isTemplateResource(const char* resourceName) {
 
 bool hasSpec(const std::vector<Control>& controls, const MessageSpec& spec) {
     return std::any_of(controls.begin(), controls.end(), [&](const Control& c) { return c.message == spec; });
+}
+
+// FRO330: does any assignment in `actions` already claim `spec`? Same "existing wins" dedup rule
+// applyControllerTemplate already uses for controls (hasSpec above), applied to profile.actions so
+// re-applying a template (or applying two templates that both bind the same physical message)
+// never doubles up a transport binding.
+bool hasActionSpec(const std::vector<Assignment>& actions, const MessageSpec& spec) {
+    return std::any_of(actions.begin(), actions.end(), [&](const Assignment& a) { return a.spec == spec; });
+}
+
+const Control* findControlBySpec(const std::vector<Control>& controls, const MessageSpec& spec) {
+    const auto it = std::find_if(controls.begin(), controls.end(), [&](const Control& c) { return c.message == spec; });
+    return it == controls.end() ? nullptr : &*it;
 }
 
 } // namespace
@@ -148,6 +162,24 @@ TemplateApplyResult applyControllerTemplate(ControllerProfile& profile, const Co
         profile.controls.push_back(std::move(added));
         ++result.added;
     }
+
+    // FRO330: a template action's spec matches one of tmpl.controls (its author bound it there,
+    // e.g. BeatStep's "play" control) -- by now that control has landed on `profile.controls`
+    // above, either just-added or a pre-existing match, either way with a real profile-local id.
+    // makeAssignmentForControl re-derives the Assignment from THAT control rather than trusting the
+    // template's own placeholder control.profileId/controlId.
+    for (const auto& ta : tmpl.actions) {
+        if (hasActionSpec(profile.actions, ta.spec)) {
+            ++result.actionsSkippedDuplicates;
+            continue;
+        }
+        const Control* control = findControlBySpec(profile.controls, ta.spec);
+        if (control == nullptr)
+            continue; // malformed template: an action with no matching control -- nothing to bind
+        profile.actions.push_back(makeAssignmentForControl(profile, *control, ta.target));
+        ++result.actionsAdded;
+    }
+
     return result;
 }
 

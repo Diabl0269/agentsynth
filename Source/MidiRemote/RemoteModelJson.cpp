@@ -97,6 +97,8 @@ const char* toString(MessageType t) {
         return "programChange";
     case MessageType::nrpn:
         return "nrpn";
+    case MessageType::mmc:
+        return "mmc";
     }
     return "cc";
 }
@@ -124,6 +126,10 @@ bool messageTypeFromString(const juce::String& s, MessageType& out) {
     }
     if (s == "nrpn") {
         out = MessageType::nrpn;
+        return true;
+    }
+    if (s == "mmc") {
+        out = MessageType::mmc;
         return true;
     }
     return false;

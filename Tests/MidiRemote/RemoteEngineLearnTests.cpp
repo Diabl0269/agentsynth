@@ -8,6 +8,7 @@
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 
 #include <gtest/gtest.h>
+#include <iterator>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 using namespace synth;
@@ -101,6 +102,29 @@ TEST(MidiRemoteEngineLearnTest, ButtonLikePrefersNoteOverHigherCountSweep) {
     ASSERT_EQ(h.learnedCount, 1);
     EXPECT_EQ(h.lastResult.spec.type, MessageType::note) << "the button-like note must win despite fewer messages";
     EXPECT_EQ(h.lastResult.spec.number, 60);
+}
+
+// FRO330: an mmc command (the BeatStep's factory Play/Stop) is button-like exactly like a note,
+// so a learn armed buttonLike prefers it over a much higher-count CC sweep -- and the resolved
+// spec is the mmc command, driven through the real handleMessage dispatch with the real MMC byte
+// layout, not a hand-built MessageSpec.
+TEST(MidiRemoteEngineLearnTest, ButtonLikePrefersMmcOverHigherCountSweep) {
+    LearnHarness h;
+    h.arm(/*buttonLike=*/true);
+
+    for (int i = 0; i <= 10; ++i)
+        h.send(juce::MidiMessage::controllerEvent(1, 30, (i * 127) / 10));
+    const juce::uint8 playBody[] = {0x7f, 0x7f, 0x06, static_cast<juce::uint8>(kMmcPlay)};
+    h.send(juce::MidiMessage::createSysExMessage(playBody, (int)std::size(playBody)));
+    h.engine.drain();
+    h.advance(kLearnSettleMs + 1.0);
+    h.engine.drain();
+
+    ASSERT_EQ(h.learnedCount, 1);
+    EXPECT_EQ(h.lastResult.spec.type, MessageType::mmc)
+        << "the button-like mmc command must win despite fewer messages";
+    EXPECT_EQ(h.lastResult.spec.number, kMmcPlay);
+    EXPECT_EQ(h.lastResult.spec.channel, 0);
 }
 
 TEST(MidiRemoteEngineLearnTest, ButtonLikePrefersZeroOrOneTwentySevenCcOverSweep) {

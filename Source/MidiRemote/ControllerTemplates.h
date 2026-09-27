@@ -54,13 +54,27 @@ bool loadControllerTemplate(const juce::String& id, ControllerProfile& out);
 struct TemplateApplyResult {
     int added = 0;
     int skippedDuplicates = 0;
+    // FRO330 (docs/control/midi-remote-ui.md#templates-and-importexport): a template whose
+    // controls[] have factory transport (or other) actions already wired -- e.g. BeatStep's
+    // Play/Stop -- copies them into profile.actions too. 0 for every template that ships none
+    // (every generic template, and every vendor template pre-FRO330).
+    int actionsAdded = 0;
+    int actionsSkippedDuplicates = 0;
 };
 
 /** Merges `tmpl`'s controls into `profile`: a control whose MessageSpec already exists on the
  *  profile is skipped (the existing control wins); every added control gets a fresh id. An empty
  *  profile keeps the template's layout; otherwise added controls are shifted below the existing
  *  rows (max existing row + 1) so nothing overlaps. Never touches profile.id/name/input/output/
- *  actions/passMapped. */
+ *  passMapped.
+ *
+ *  FRO330: also copies `tmpl.actions` into `profile.actions` -- one new Assignment per template
+ *  action whose MessageSpec has no equivalent already on `profile.actions` (skipped as a
+ *  duplicate otherwise, same "existing wins" rule as controls), re-pointed at the merged-in
+ *  profile control with that same spec via makeAssignmentForControl (MidiRemoteMapping.h) so the
+ *  copy carries a real profile/control id rather than the template's own placeholder ones. A
+ *  template action whose spec matches no control in `tmpl.controls` is malformed and is skipped
+ *  (never asserted here -- ControllerTemplatesVendorTests.cpp guards template authoring). */
 TemplateApplyResult applyControllerTemplate(ControllerProfile& profile, const ControllerProfile& tmpl);
 
 } // namespace synth::midi
