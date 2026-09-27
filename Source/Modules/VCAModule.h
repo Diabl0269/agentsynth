@@ -50,6 +50,11 @@ public:
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+        // FRO324: borrow each voice's Left into its matching Right (kRightBase + voice), sample-
+        // exact, while Dual I/O is split and only Left is patched. Before the bypass/mute branches
+        // below so both see a filled Right leg exactly as if the user had cabled it.
+        applyLeftRightNormalling(buffer, polyParam->get() ? MAX_VOICES : 1);
+
         juce::ignoreUnused(midiMessages);
 
         int numSamples = buffer.getNumSamples();
@@ -176,6 +181,9 @@ public:
     int getVisibleInputPortCount() const override { return splitAudioJackCount() + 1; }
     int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
     int rightAudioLegChannel() const override { return kRightBase; }
+    // FRO324: Audio L/R are read in place at ch0(-7)/kRightBase(+) above -- a genuine stereo
+    // pair, eligible for render-time L->R normalling.
+    bool hasStereoAudioInputPair() const override { return true; }
 
     // Pure audio/CV processor — processBlock's midiMessages parameter is unused.
     bool acceptsMidi() const override { return false; }

@@ -40,6 +40,11 @@ public:
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+        // FRO324: borrow Left into Right's raw channel, sample-exact, while Dual I/O is
+        // split and only Left is patched. Must run before the bypass/mute branches below so
+        // both see a filled Right leg exactly as if the user had cabled it.
+        applyLeftRightNormalling(buffer);
+
         if (isBypassed()) {
             // Pass dry audio through; clear CV channels so mod signals don't leak downstream
             for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
@@ -98,6 +103,9 @@ public:
     int getVisibleInputPortCount() const override { return stereoVisibleInputCount(3); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
     LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 3); }
+    // FRO324: this module reads its audio input through mapStereoPairInput/mapStereoKeyInput
+    // above -- a genuine stereo pair, eligible for render-time L->R normalling.
+    bool hasStereoAudioInputPair() const override { return true; }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     // Every continuous parameter has a CV jack; paramId binds each jack to its knob ("Threshold"

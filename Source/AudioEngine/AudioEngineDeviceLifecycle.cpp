@@ -160,9 +160,15 @@ void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
 
 void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
     // The graph's own topology broadcast, in BOTH host modes: republish which Compressor/Gate key
-    // inputs have a cable, so plugging or unplugging a key switches the detector (FRO317).
+    // inputs have a cable, so plugging or unplugging a key switches the detector (FRO317). FRO324
+    // rides the same broadcast for the same reason: a plain canvas cable drag/unplug on Audio
+    // Output or a Dual I/O module's input never reaches publishTimeline() (MainComponent's own
+    // reconcileTimelineBindingsOnly() deliberately does not publish -- see
+    // MainComponentTimeline.cpp), so refreshNormalling() would otherwise see a stale flag and
+    // renderNextBlock would overwrite a freshly-patched Right with a copy of Left.
     if (source == &mainProcessorGraph) {
         refreshSidechainKeys();
+        refreshNormalling();
         return;
     }
 

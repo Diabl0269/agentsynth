@@ -255,6 +255,58 @@ public:
         or unwire a stereo pair must go through rightAudioLegChannel() rather than assuming ch1. */
     bool hasSplitBlockStereo() const { return rightAudioLegChannel() > 1; }
 
+    // -------------------------------------------------------------------------
+    // Right-borrows-Left normalling (FRO324, docs/modules/fx-modules.md#stereo-io-dual-io-toggle)
+    //
+    // A Dual I/O module's Right leg borrows Left, sample-exact, while Right is unpatched — the same
+    // policy Audio Output gets in AudioEngine::renderNextBlock. Render-time only: this never adds,
+    // removes or alters a graph edge, so a collapsed (non-Dual) jack is untouched (it already fans
+    // both raw legs from the one cable) and a Dual module with nothing declaring a real stereo
+    // AUDIO input pair never opts in. -- see hasStereoAudioInputPair() below.
+    // -------------------------------------------------------------------------
+
+    /** True for a module with a genuine stereo AUDIO input pair (Left on raw ch0, Right on
+        rightAudioLegChannel()) eligible for render-time normalling while Dual I/O is split and
+        only Left is patched. Defaults false: an input pair is always an EXPLICIT declaration
+        (mapStereoPairInput's own doc comment above), never inferred from channel shape -- Voice
+        Mixer's ch0-7 are eight independent voice inputs, not a stereo pair, even though it carries
+        the same dualIO toggle for its collapsing OUTPUT jack. Override to true only in a module
+        that actually reads its audio input through mapStereoPairInput/mapStereoKeyInput (the FX)
+        or an equivalent split-block in-place pair (Filter, VCA). */
+    virtual bool hasStereoAudioInputPair() const { return false; }
+
+    /** Copies raw ch0 onto rightAudioLegChannel() (and, for a poly module, each further voice's L
+        onto its matching R), sample-exact and in place -- a no-op unless AudioEngine::refreshNormalling
+        last found this module Dual I/O, with a genuine stereo input pair (hasStereoAudioInputPair()),
+        Left patched and Right not. Call at the very TOP of processBlock, before the bypass/mute
+        branches (Source/CLAUDE.md's bypass/mute contract), so both branches see a filled Right leg
+        exactly as if the user had cabled it: the bypass branch passes the borrowed signal through
+        dry, same as any other patched Right, and mute clears it like anything else. `voiceSpan`
+        defaults to 1 (every FX); a poly voice module (Filter, VCA) passes its own active voice
+        count so voice v's Right (rightAudioLegChannel() + v) borrows voice v's Left (raw v), not
+        only voice 0's. */
+    void applyLeftRightNormalling(juce::AudioBuffer<float>& buffer, int voiceSpan = 1) const noexcept {
+        if (!normalLeftToRight_.load(std::memory_order_relaxed))
+            return;
+        const int right = rightAudioLegChannel();
+        if (right <= 0)
+            return;
+        const int numSamples = buffer.getNumSamples();
+        const int numChannels = buffer.getNumChannels();
+        for (int v = 0; v < voiceSpan; ++v) {
+            const int src = v;
+            const int dst = right + v;
+            if (src >= numChannels || dst >= numChannels)
+                break;
+            buffer.copyFrom(dst, 0, buffer, src, 0, numSamples);
+        }
+    }
+
+    /** MESSAGE THREAD write (AudioEngine::refreshNormalling, the same scan that recounts the mixer
+        solo gate); audio-thread read once per block via applyLeftRightNormalling(). */
+    void setNormalLeftToRight(bool normal) noexcept { normalLeftToRight_.store(normal, std::memory_order_relaxed); }
+    bool isNormalLeftToRight() const noexcept { return normalLeftToRight_.load(std::memory_order_relaxed); }
+
     /** Visible audio jacks for a split-block module: 2 when dual, 1 when collapsed. */
     int splitAudioJackCount() const { return isDualIO() ? 2 : 1; }
 
@@ -798,6 +850,9 @@ private:
     char nodeUuid_[64] = {};
     std::atomic<bool> nodeUuidSet_{false};
     std::atomic<bool> sidechainConnected_{false};
+    // Right-borrows-Left normalling (FRO324). Message-thread write via setNormalLeftToRight;
+    // audio-thread read once per block via applyLeftRightNormalling().
+    std::atomic<bool> normalLeftToRight_{false};
     std::unique_ptr<VisualBuffer> visualBuffer;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedOutputLevel;
 

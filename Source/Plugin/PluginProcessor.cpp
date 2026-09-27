@@ -190,6 +190,7 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
     // state (docs/mixer/mixer.md#solo-is-a-render-time-gate), and a stale count would leave the mix stuck (un)gated.
     engine.refreshSoloGate();
     engine.refreshSidechainKeys();
+    engine.refreshNormalling();
 
     // Reconcile the view against whatever the graph now holds — including after a rejected
     // patch, where the graph is left untouched and the editor must rebuild what it just detached.
