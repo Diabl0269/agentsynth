@@ -6,6 +6,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
+#include "GraphEditorInternal.h" // GraphEditor::HealSplice's full definition (captureHealSplices)
 
 #include "CanvasAccessibilityClip.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -163,6 +164,10 @@ void GraphEditor::deleteSelection() {
     auto doDelete = [this, ids, &graph] {
         modMatrix.clearRows();
         const auto portNeighbors = macroController_.macroPortDeletionNeighbors(ids); // T154: capture BEFORE removal
+        // FRO23: capture BEFORE removal too -- walking off each deleted node's own connections to
+        // find its surviving neighbours (and healing a whole run of them in one pass) needs the
+        // graph as it stood before any of `ids` was removed.
+        const auto healSplices = captureHealSplices(ids);
         // FRO16 review follow-up: graph.removeNode() below frees each node's processor
         // synchronously, same as a full graph-replacing restore -- but nothing here reaches
         // MixerPanelComponent::rebuild() until the NEXT unrelated graph edit (this path's own
@@ -177,6 +182,9 @@ void GraphEditor::deleteSelection() {
             onBeforeDetachAllModuleComponents();
         for (auto id : ids)
             graph.removeNode(id);
+        // FRO23: heal BEFORE the FRO22/T154 sweeps below, so a macro port a heal just gave a fresh
+        // cable to is no longer orphaned by the time they run.
+        healDeletedChain(healSplices);
         // FRO22: the bounded one-extra-hop-through-an-attenuverter case runs on the same
         // pre-captured neighbour list, alongside (order doesn't matter — they touch disjoint node
         // kinds) the plain direct-neighbour sweep below.

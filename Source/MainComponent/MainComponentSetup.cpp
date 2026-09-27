@@ -64,6 +64,10 @@ void MainComponent::restorePanelPreferences() {
         appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired")));
     graphEditor.setDoubleClickPortDisconnectEnabled(
         appProperties.getUserSettings()->getBoolValue("doubleClickPortDisconnect", true));
+    // FRO23 (docs/layout/module-card.md#deleting-a-module-reconnect-the-chain-fro23): default ON -- see
+    // PreferencesSettingsTab's own toggle comment for why this is a plain on/off rather than a tri-state preference.
+    graphEditor.setReconnectChainOnDeleteEnabled(
+        appProperties.getUserSettings()->getBoolValue("reconnectChainOnDelete", true));
     // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): both default ON — see PreferencesSettingsTab's own toggle
     // comments for why these are plain on/off rather than the tri-state macroAutoPortPreference.
     graphEditor.setAutoCreateMacroPortsOnDragEnabled(

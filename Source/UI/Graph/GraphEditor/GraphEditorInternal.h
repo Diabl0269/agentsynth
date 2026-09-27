@@ -255,3 +255,24 @@ inline std::vector<std::pair<int, int>> expandAudioJackPairs(const std::vector<i
 }
 
 } // namespace detail
+
+// FRO23 delete heal (GraphEditorDeleteHeal.cpp): one healable audio splice, captured BEFORE
+// `deletedIds` is removed from the graph. `upstreamId`/`downstreamId` are both SURVIVORS (never a
+// member of `deletedIds`), found by walking off each end of a deleted run of exactly-one-audio-
+// in/-out nodes. Applying it wires upstreamId's `upstreamJack` to downstreamId's `downstreamJack`
+// the same way a user-drawn cable would (resolvePolyLink's L->L/R->R mapping), re-validated with
+// graph.isAnInputTo()/canConnect() once the deletion has actually happened.
+// `upstreamDualPair`/`downstreamDualPair`: true when that side is one half of a genuine Dual-I/O
+// L/R pair on BOTH the splice's own endpoint and its peer (mergeDualIoStereoPairLegs' own comment
+// in GraphEditorDeleteHeal.cpp) -- healDeletedChain then also heals jack+1 explicitly on that side,
+// since resolvePolyLink has no notion of "two separate jacks" within one PolyLink.
+struct GraphEditor::HealSplice {
+    juce::AudioProcessorGraph::NodeID upstreamId, downstreamId;
+    int upstreamJack = 0, downstreamJack = 0;
+    bool upstreamDualPair = false, downstreamDualPair = false;
+    bool operator==(const HealSplice& o) const noexcept {
+        return upstreamId == o.upstreamId && downstreamId == o.downstreamId && upstreamJack == o.upstreamJack &&
+               downstreamJack == o.downstreamJack && upstreamDualPair == o.upstreamDualPair &&
+               downstreamDualPair == o.downstreamDualPair;
+    }
+};

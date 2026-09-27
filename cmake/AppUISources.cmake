@@ -178,6 +178,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphDragDropController/GraphDragDropController.cpp
     Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp
     Source/UI/Graph/GraphEditor/GraphEditorPersistence.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorDeleteHeal.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponent.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponent.h
     Source/UI/Graph/ModuleComponent/ModuleComponentInternal.h

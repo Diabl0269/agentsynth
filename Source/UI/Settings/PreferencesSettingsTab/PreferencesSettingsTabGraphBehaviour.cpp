@@ -164,6 +164,15 @@ void PreferencesSettingsTab::setDoubleClickPortDisconnectEnabled(bool enabled) {
     persistDoubleClickPortDisconnect(enabled);
 }
 
+bool PreferencesSettingsTab::isReconnectChainOnDeleteEnabled() const {
+    return reconnectChainOnDeleteToggle.getToggleState();
+}
+
+void PreferencesSettingsTab::setReconnectChainOnDeleteEnabled(bool enabled) {
+    reconnectChainOnDeleteToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistReconnectChainOnDelete(enabled);
+}
+
 bool PreferencesSettingsTab::isMacroAutoCreatePortsOnDragEnabled() const {
     return macroAutoCreatePortsOnDragToggle.getToggleState();
 }
@@ -233,6 +242,13 @@ void PreferencesSettingsTab::persistDoubleClickPortDisconnect(bool enabled) {
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
         graphEditor->setDoubleClickPortDisconnectEnabled(enabled);
+}
+
+void PreferencesSettingsTab::persistReconnectChainOnDelete(bool enabled) {
+    appProperties.getUserSettings()->setValue("reconnectChainOnDelete", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->setReconnectChainOnDeleteEnabled(enabled);
 }
 
 void PreferencesSettingsTab::persistAlignmentGuidesEnabled(bool enabled) {
@@ -373,9 +389,25 @@ std::unique_ptr<juce::Component> PreferencesSettingsTab::createDualIOPerModuleDe
     return buildDualIOPerModuleDefaultsPopup();
 }
 
-// Builds the macro on/off toggles (T148 auto-create/auto-delete, FRO168 drag without Cmd). Pulled
-// out of the constructor, which is on the function-size ratchet, into its own named step.
+// Builds the macro on/off toggles (T148 auto-create/auto-delete, FRO168 drag without Cmd) plus
+// FRO23's "reconnect the chain on delete" (a general delete-behaviour toggle, not macro-specific,
+// folded into this same group/named-step so its construction never grows the ratcheted
+// constructor -- see the getter/setter's own doc comment on GraphEditor::setReconnectChainOnDeleteEnabled
+// for why this preference lives in the "same category" as the macro auto-port toggles below).
+// Pulled out of the constructor, which is on the function-size ratchet, into its own named step.
 void PreferencesSettingsTab::initMacroToggles() {
+    contentHost.addAndMakeVisible(reconnectChainOnDeleteToggle);
+    reconnectChainOnDeleteToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("reconnectChainOnDelete", true), juce::dontSendNotification);
+    reconnectChainOnDeleteToggle.setTooltip(
+        "When on (the default), deleting a module that has exactly one incoming and one outgoing "
+        "audio cable reconnects what fed it straight to what it fed, so the rest of the chain keeps "
+        "making sound. Modulation/CV cables on the deleted module are dropped either way. Off "
+        "leaves the chain broken, as before this preference existed.");
+    reconnectChainOnDeleteToggle.onClick = [this] {
+        persistReconnectChainOnDelete(reconnectChainOnDeleteToggle.getToggleState());
+    };
+
     // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): auto-create/auto-delete are plain on/off, unlike the
     // tri-state preference above — that one defaults to "ask" because it replaced pre-existing
     // silent behaviour; these two are brand-new automations the founder asked to ship ON by
@@ -443,8 +475,8 @@ bool PreferencesSettingsTab::layoutMacroToggleGroup(
     const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible,
     const std::function<void(bool)>& beginGroup) {
     const std::initializer_list<juce::Component*> comps = {
-        &macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle, &macroSpliceCableOnPortDeleteToggle,
-        &macroDragWithoutCmdToggle};
+        &reconnectChainOnDeleteToggle, &macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle,
+        &macroSpliceCableOnPortDeleteToggle, &macroDragWithoutCmdToggle};
     const bool visible = groupMatches(comps);
     setGroupVisible(comps, visible);
     beginGroup(visible);

@@ -499,6 +499,8 @@ public:
     bool getSpliceCableOnMacroPortDeleteEnabled() const noexcept override {
         return spliceCableOnMacroPortDeleteEnabled;
     }
+    void setReconnectChainOnDeleteEnabled(bool enabled) { reconnectChainOnDeleteEnabled = enabled; }
+    bool getReconnectChainOnDeleteEnabled() const noexcept { return reconnectChainOnDeleteEnabled; }
 
     // Default jack layout for newly created modules that expose the Dual I/O parameter.
     // false (default): one collapsed "Audio" jack. true: split Left/Right by default.
@@ -939,6 +941,7 @@ private:
     bool macroDragWithoutCmdEnabled = true;
     std::optional<bool> macroJoinCommandOverride_;
     bool autoCreateChannelOnConnectEnabled = true;
+    bool reconnectChainOnDeleteEnabled = true; // FRO23 — see the getter/setter's doc comment
     bool defaultDualIOForNewModules = false;
     std::map<juce::String, bool> dualIOPerModuleOverrides;
 
@@ -983,6 +986,9 @@ private:
     void beginOrRefreshZoomGesture();
     void endZoomGesture();
     void setModuleRasterFrozen(bool frozen);
+    struct HealSplice; // FRO23 delete heal; defined in GraphEditorInternal.h
+    std::vector<HealSplice> captureHealSplices(const std::vector<juce::AudioProcessorGraph::NodeID>& deletedIds) const;
+    void healDeletedChain(const std::vector<HealSplice>& splices);
 
 public:
     const std::vector<ModulationDisplayInfo>& getCachedModDisplayInfo() const { return cachedModDisplayInfo; }

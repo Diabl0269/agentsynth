@@ -33,6 +33,9 @@ public:
     void setSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     bool isDoubleClickPortDisconnectEnabled() const;
     void setDoubleClickPortDisconnectEnabled(bool enabled);
+    // FRO23 (docs/layout/module-card.md#deleting-a-module-reconnect-the-chain-fro23): plain on/off, ON by default.
+    bool isReconnectChainOnDeleteEnabled() const;
+    void setReconnectChainOnDeleteEnabled(bool enabled);
     // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): plain on/off, unlike getMacroAutoPortPreference() below —
     // these are brand-new automations shipped ON by default, with a plain escape hatch, not a
     // replacement for pre-existing silent behaviour (which is why that one is a tri-state "ask").
@@ -180,6 +183,7 @@ public:
 private:
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
+    void persistReconnectChainOnDelete(bool enabled);
     void persistMacroAutoCreatePortsOnDrag(bool enabled);
     void persistMacroAutoDeletePortsOnLastCable(bool enabled);
     void persistMacroSpliceCableOnPortDelete(bool enabled);
@@ -322,6 +326,8 @@ private:
     juce::ToggleButton macroSpliceCableOnPortDeleteToggle{"When deleting a macro port by hand, splice the cable "
                                                           "back together instead of dropping it"};
     juce::ToggleButton macroDragWithoutCmdToggle{"Drag modules into and out of macros without Cmd"};
+    // FRO23: not macro-specific -- see initMacroToggles()' own comment for why it lives here.
+    juce::ToggleButton reconnectChainOnDeleteToggle{"Reconnect the chain when deleting a module"};
     // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): plain on/off, ON by default —
     // see the getter/setter declarations above for why this is a different shape from a tri-state "ask".
     juce::ToggleButton mixerAutoCreateChannelOnConnectToggle{
