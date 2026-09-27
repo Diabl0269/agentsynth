@@ -107,7 +107,7 @@ private:
     static constexpr int kMuteWidth = 18;
     static constexpr int kRemoveWidth = 14;
     // FRO294: painted (not a real component) only when a row is mono -- see paint()'s own comment.
-    static constexpr int kMonoMarkerWidth = 10;
+    static constexpr int kMonoMarkerWidth = 6;
 
     struct Row {
         std::unique_ptr<juce::Slider> knob;

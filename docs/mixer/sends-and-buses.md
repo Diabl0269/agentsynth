@@ -203,8 +203,9 @@ before a graph-replacing undo frees their parameters**
 **FRO294: Mono has no row button of its own** — the row's width budget has no room left for one — so
 it is a ticked "Mono" item at the top of the row's existing target menu (`showTargetMenu`), toggled
 through `synth::setSendMono` inside the same one-`recordGraphAndMacroChange` shape every other row
-mutation uses. A mono row shows a small "M" marker painted (not a component) at the left edge of the
-target-name area, the same "painted, not a child" idiom `PRE`/`POST` already use, so the row's
+mutation uses. A mono row shows a small filled dot painted (not a component) at the left edge of
+the target-name area — a dot, not a letter, because an "M" there read as a second mute button — and
+its pan knob's accessible title gains "(mono)"; the same "painted, not a child" idiom `PRE`/`POST` already use, so the row's
 component budget stays exactly level knob + pan knob + M mute button + real-click PRE/POST/remove
 hit areas.
 

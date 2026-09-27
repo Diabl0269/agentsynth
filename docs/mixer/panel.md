@@ -472,7 +472,7 @@ already applies for the fader's own "-3.0 dB" text (see that class's `applyDbAcc
 text.** `MixerInsertList`/`MixerSendList` draw most of a row themselves in `paint()` rather than as
 child components (the level knob, FRO294's pan knob, and, FRO295, the M mute button are the
 exceptions — real `juce::Slider`/`juce::TextButton` children with their own `AccessibilityHandler`;
-FRO294's own mono marker is the opposite case, painted text with no component, since it is a
+FRO294's own mono marker is the opposite case, a painted dot with no component (the pan knob's title says "(mono)"), since it is a
 read-only decoration on the target-name area, not something to click), so before FRO228
 a screen reader had nothing to land on for the rest of a row at all (an unnamed `AXGroup`, or
 nothing). Each now gets a small transparent proxy `Component`

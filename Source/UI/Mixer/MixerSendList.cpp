@@ -119,9 +119,10 @@ void MixerSendList::rebuildKnobs() {
         row.panKnob = std::make_unique<juce::Slider>();
         row.panKnob->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         row.panKnob->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
-        row.panKnob->setTitle(entry.targetNodeId != juce::AudioProcessorGraph::NodeID{}
-                                  ? "Send pan to " + entry.targetName
-                                  : "Send " + juce::String(entry.slot + 1) + " pan (no target)");
+        row.panKnob->setTitle((entry.targetNodeId != juce::AudioProcessorGraph::NodeID{}
+                                   ? "Send pan to " + entry.targetName
+                                   : "Send " + juce::String(entry.slot + 1) + " pan (no target)") +
+                              (entry.mono ? " (mono)" : ""));
         addAndMakeVisible(*row.panKnob);
         if (auto* panParam = strip->getSendPanParameter(entry.slot)) {
             const auto range = panParam->getNormalisableRange();
@@ -219,13 +220,14 @@ void MixerSendList::paint(juce::Graphics& g) {
         row.removeFromRight(kKnobWidth);    // the level knob is a real child component -- see resized()
         row.removeFromRight(kPanKnobWidth); // the pan knob is a real child component -- see resized()
 
-        // FRO294: a minimal "M" mono marker, painted the same way PRE/POST is above rather than a
-        // new row button (the row has no room for one) -- only takes name-area width on a row that
-        // actually is mono, so a stereo row's name keeps the full budget.
+        // FRO294: a small filled dot marks a mono send, painted rather than a new row button (the
+        // row has no room for one). A dot, not a letter: an "M" here read as a second mute button
+        // beside the real one. Screen readers get "(mono)" on the pan knob's title instead. Only a
+        // mono row gives up name width, so a stereo row's name keeps the full budget.
         if (entry.mono) {
-            auto monoTag = row.removeFromLeft(kMonoMarkerWidth);
+            const auto monoTag = row.removeFromLeft(kMonoMarkerWidth).toFloat();
             g.setColour(muted);
-            g.drawText("M", monoTag, juce::Justification::centred, false);
+            g.fillEllipse(monoTag.withSizeKeepingCentre(4.0f, 4.0f));
         }
 
         g.setColour(entry.targetNodeId == juce::AudioProcessorGraph::NodeID{} ? muted : text);

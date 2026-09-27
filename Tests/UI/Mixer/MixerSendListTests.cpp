@@ -200,6 +200,24 @@ TEST(MixerSendListTests, MonoItemInTheTargetMenuIsOneUndoStepAndUndoRestoresIt) 
     EXPECT_TRUE(stripAt(rig.graph(), afterUndo->getNodeId())->isSendActive(0)) << "and the send itself survives";
 }
 
+// The mono marker is a painted dot, so a screen reader learns "mono" from the pan knob's title.
+TEST(MixerSendListTests, AMonoSendsPanKnobTitleSaysMono) {
+    SendRig rig;
+    auto* column = rig.sourceColumn();
+    ASSERT_NE(column, nullptr);
+    column->getSendListForTest().addSendTo(rig.bus);
+    rig.panel().rebuild();
+    auto* pan = rig.sourceColumn()->getSendListForTest().getPanKnobForTest(0);
+    ASSERT_NE(pan, nullptr);
+    EXPECT_FALSE(pan->getTitle().contains("(mono)"));
+
+    rig.sourceColumn()->getSendListForTest().toggleMonoForRow(0);
+    rig.panel().rebuild();
+    pan = rig.sourceColumn()->getSendListForTest().getPanKnobForTest(0);
+    ASSERT_NE(pan, nullptr);
+    EXPECT_TRUE(pan->getTitle().endsWith("(mono)")) << pan->getTitle();
+}
+
 TEST(MixerSendListTests, PreFaderToggleIsOneUndoStepAndUndoRestoresIt) {
     SendRig rig;
     auto* column = rig.sourceColumn();
