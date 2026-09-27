@@ -37,7 +37,7 @@ so each shard also gets its own `AGENTSYNTH_SETTINGS_DIR` — a Tests-only envir
 (`Source/UserSettings.h`), which redirects `synth::userSettingsOptions()` to store its settings
 file under that directory instead of the real per-user location for the rest of the process. Every
 sibling on-disk store this app owns (Themes, Snippets, AI local history, the device id, track
-presets, feedback logs, MIDI Remote controller profiles, unsaved-project recordings) is rooted
+presets, feedback logs, controller profiles, unsaved-project recordings) is rooted
 under `synth::userSettingsRootDirectory()`, the settings file's own parent directory, so the one
 override reaches all of them — nothing in the shipped app or plugin ever calls the setter or reads
 that env var, so a shipped binary can never be redirected this way. Overriding `$HOME` does not

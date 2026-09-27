@@ -133,7 +133,7 @@ caller replay the identical sequence against a lane and a MIDI mapping. The whol
 swap(s), any lane rebind, and any MIDI Learn remap — lands in ONE
 `AppUndoManager::recordGraphTimelineAndMacroChange` transaction (extended to optionally also carry a
 `MidiRemoteProjectDoc` domain), so a single Cmd+Z reverts cables, values, bits, lane binding AND the
-MIDI mapping together. `MixerPanelComponent::moveSendRow` also republishes the live MIDI Remote
+MIDI mapping together. `MixerPanelComponent::moveSendRow` also republishes the live Controllers
 assignment cache (`MidiLearnController::publishAssignments()`) right after its own edit and again as
 the undo/redo postRestore, so a hardware control already resolves against the send's new slot with no
 separate reconcile step.

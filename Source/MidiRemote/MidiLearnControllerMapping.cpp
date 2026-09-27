@@ -88,7 +88,7 @@ AssignStatus MidiLearnController::assignControl(const juce::String& profileId, c
 
             // FRO137: not one of this node's own RangedAudioParameters -- fall back to the same
             // hosted-plugin resolution an automation lane uses
-            // (docs/control/plugin-card-layout.md#interaction-with-midi-remote-and-automation), so
+            // (docs/control/plugin-card-layout.md#interaction-with-controllers-and-automation), so
             // the pick-target overlay/panel can also assign a plugin-card knob.
             juce::AudioProcessorParameter* hostedParam = nullptr;
             int paramIndexHint = -1;

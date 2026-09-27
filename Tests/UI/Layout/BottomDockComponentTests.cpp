@@ -4,6 +4,7 @@
 #include "BottomDockActiveTabResetGuard.h"
 #include "MainComponent/MainComponent.h"
 #include "ShortcutManager/AppCommands.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
 
@@ -181,4 +182,23 @@ TEST(BottomDockComponentTests, StartupPrefersTheNewBottomDockVisibleKeyWhenBothK
     mc.newPatchForTest();
 
     EXPECT_FALSE(mc.isBottomDockConfiguredVisible()) << "the new key wins over a stale old one";
+}
+
+// FRO329: the panel's user-facing name is "Controllers" on the dock tab, while the persisted
+// action id (ShortcutManager binds by id) keeps its original spelling.
+TEST(BottomDockComponentTests, ControllersTabUsesTheNewNameAndKeepsTheActionId) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
+    MainComponent mc(std::make_unique<MockProviderMDCT>());
+    mc.setSize(1400, 900);
+    auto& dock = mc.getBottomDock();
+
+    bool foundControllersTab = false;
+    for (auto* child : dock.getChildren()) {
+        if (auto* button = dynamic_cast<juce::TextButton*>(child)) {
+            EXPECT_FALSE(button->getButtonText().contains("MIDI Remote")) << button->getButtonText();
+            foundControllersTab = foundControllersTab || button->getButtonText() == "Controllers";
+        }
+    }
+    EXPECT_TRUE(foundControllersTab);
+    EXPECT_EQ(ShortcutManager::getActionDescription("toggleMidiRemotePanel"), "Toggle Controllers Panel");
 }

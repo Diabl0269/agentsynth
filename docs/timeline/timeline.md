@@ -126,7 +126,7 @@ minimum**:
 - **One grab strip for the whole dock, on every tab** (FRO231). `synth::ui::PanelResizeHandle`
   (`Source/UI/Layout/PanelResizeHandle.h`, `kHeight = 5`, `MouseCursor::UpDownResizeCursor`) is
   owned by `BottomDockComponent` and spans the dock's full width along ITS top edge, so the dock can
-  be resized from Timeline, Mixer and MIDI Remote alike (and while the Timeline is detached into
+  be resized from Timeline, Mixer and Controllers alike (and while the Timeline is detached into
   its own window). It *overlaps* the top 5 px of the 22 px tab strip: the strip keeps its full
   height so the content below never moves, but the tab/detach/`+ Bus`/Reset Meters buttons are laid
   out beneath it, so a resize grab never lands on a button. The Timeline panel itself has no handle

@@ -133,7 +133,7 @@ appears only on the DETACHED window itself. That is a deliberate simplification 
 either host's own button through three different parents.
 
 **The dock resizes from every tab** (FRO231). One `synth::ui::PanelResizeHandle` lives on the
-dock's own top edge — not inside the Timeline panel — so the Mixer and MIDI Remote tabs resize the
+dock's own top edge — not inside the Timeline panel — so the Mixer and Controllers tabs resize the
 dock exactly like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays
 22 px; the tab, detach, `+ Bus` and Reset Meters buttons are laid out below it, so a grab never
 lands on a button) and reports the total dock height through `BottomDockComponent::onResizeHeight` /
@@ -274,7 +274,7 @@ the grey has to come from somewhere the pointer it's handed is null or stale:
    `bottomDock`, so this specific gap was confined to the test/delegating path — but every headless
    test detaching a panel was exercising a permanently unthemed window until now.
 2. `MainComponent::changeListenerCallback`'s theme-switch re-skin pass only ever called
-   `getTopLevelComponent()->sendLookAndFeelChange()` — a detached Timeline/Mixer/MIDI Remote window
+   `getTopLevelComponent()->sendLookAndFeelChange()` — a detached Timeline/Mixer/Controllers window
    is its OWN separate top-level `Component`, so that broadcast never reached it. A theme switch made
    while a panel was detached left its background (and header icon) on whichever theme was active
    when the window was last (re)built — a second, independently reachable way to end up staring at
@@ -317,7 +317,7 @@ everything else this section covers.
 **FRO292: the same right-click menu leads with "Automate '<Param>'"** on the fader, pan and send
 knobs (Mute and Solo are not automatable lanes). It fires `GraphEditor::onAutomateParameterRequested`
 — the route a canvas knob's own right-click uses — so `MainComponent::automateParameter` creates the
-lane and opens the automation strip on it. It is offered even when no MIDI Remote host is wired.
+lane and opens the automation strip on it. It is offered even when no Controllers host is wired.
 
 **Why a pre-restore hook rather than relying on the rebuild.** A graph-structural undo or redo, New
 Patch, Open, or an AI patch apply freezes the affected `ChannelStripModule`/`MasterModule` nodes'
@@ -495,7 +495,7 @@ ticket, for the identical reason).
 - [`docs/mixer/sends-and-buses.md`](sends-and-buses.md) — the send list and bus columns.
 - [`docs/timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) — the
   bottom dock the Mixer tab shares.
-- [`docs/control/midi-remote-ui.md#the-midi-remote-panel`](../control/midi-remote-ui.md#the-midi-remote-panel)
+- [`docs/control/midi-remote-ui.md#the-controllers-panel`](../control/midi-remote-ui.md#the-controllers-panel)
   — the dock's third tab (FRO131), same Tab-only placement as Mixer's own Tab row above.
 - [`docs/layout/rendering.md`](../layout/rendering.md) — the no-unconditional-repaint rule.
 - [`docs/layout/theming.md`](../layout/theming.md) — the theme tokens a detached window reads.

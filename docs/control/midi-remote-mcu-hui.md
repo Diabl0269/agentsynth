@@ -1,7 +1,7 @@
-# MIDI Remote — Mackie Control (MCU) and HUI protocol surfaces
+# Controllers — Mackie Control (MCU) and HUI protocol surfaces
 
 **Status: design only, nothing here is built.** Companion to [`midi-remote.md`](midi-remote.md)
-(the MIDI Remote model and decisions; read it first). There, MCU/HUI is a named non-goal of the
+(the Controllers model and decisions; read it first). There, MCU/HUI is a named non-goal of the
 generic learnable design. This doc is the separate integration it defers to.
 
 ## What you'd get

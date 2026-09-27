@@ -1,12 +1,12 @@
-# MIDI Remote — interaction design, panel and coverage
+# Controllers — interaction design, panel and coverage
 
 Companion to [`midi-remote.md`](midi-remote.md) (the model and decisions; read it first). This
 doc is the **user-facing design**: what right-click MIDI Learn does on every surface, what the
-MIDI Remote panel looks like and how each flow in it works, the settings, the plugin-build
+Controllers panel looks like and how each flow in it works, the settings, the plugin-build
 behaviour and the tests. Module-card MIDI Learn (the "Generic module card"/"Bespoke cards"/"Header
 buttons" rows below) shipped in FRO130; the mixer column, Master's fader and the transport bar
 (FRO133) ship here too, and the mixer column's Solo (FRO253, a [node command target](midi-remote.md#node-command-targets)
-rather than a parameter) ships here as well. The MIDI Remote panel itself
+rather than a parameter) ships here as well. The Controllers panel itself
 (FRO131) shipped: the dock tab, Controllers list, Surface and Inspector (including Solo's own
 Surface cell / Inspector row, resolved by node command rather than parameter), and
 `GraphEditor::onEditMidiAssignmentRequested`. Detect mode, the "+ Add controller" popover,
@@ -16,7 +16,7 @@ the Inspector's editable name, kind and encoding. The mapping assistant (FRO135)
 the orphan-node display. The Preferences group, the Audio-tab caption and the plugin build's Host
 MIDI source (FRO136) round it out. Right-click Learn (and "Automate...") on a hosted plugin card's
 own chosen knobs (FRO137) shipped too — see the "Hosted plugin card" row below and
-[`plugin-card-layout.md`](plugin-card-layout.md#interaction-with-midi-remote-and-automation). Still
+[`plugin-card-layout.md`](plugin-card-layout.md#interaction-with-controllers-and-automation). Still
 design-only: the Inspector's **Relearn** button (rendered, disabled).
 
 ---
@@ -38,7 +38,7 @@ Learn from there binds the right parameter (or, for the mixer column's Solo, a [
 | Header buttons | Bypass, Mute, Dual I/O | same registry, via `RightClickSafeButton<juce::DrawableButton>` | **shipped**: right-click Bypass → Learn → pad toggles bypass |
 | Hosted plugin card | the chosen knobs, toggles and choice combos (`plugin-card-layout.md`) | `ModuleComponent::MidiLearnableRegistry::addHosted` registers each hosted control with the hosted parameter's `(uuid, paramId, indexHint)` triple; `MidiLearnController::arm`/`assignControl` resolve a non-`RangedAudioParameter` paramId through `resolveLaneParameter`'s hosted rules, capturing the same `paramIndexHint` an automation lane would | **shipped** (FRO137): right-click a plugin-card knob → "Automate..." (opens the lane picker on that hosted parameter) then MIDI Learn → CC binds `(uuid, paramId, indexHint)`; a toggle/choice control gets MIDI Learn only. Removing the knob from the card layout never forgets the mapping — see `plugin-card-layout.md`'s own note |
 | Mixer column | fader (`MixerFader`), pan, Mute, each send level (`MixerSendList`) | one `mouseDown` in `MixerColumnComponent` over its bound params (they are `ChannelStripModule` params, so ordinary parameter targets); `MixerSendList::onSendKnobBuilt` hands send-row knobs back for the SAME registry | **shipped**: right-click a fader → Learn → CC drives the strip's level |
-| Mixer column | Solo | `MixerColumnComponent`'s registry gets an `isSolo` entry (no parameter — `ChannelStripModule::soloed_` is engine state, [`Source/Modules/ChannelStripModule.h`](../../Source/Modules/ChannelStripModule.h)); its menu/badge/armed outline route through `MixerPanelComponent::onSoloMidiLearnRequested`/`onSoloMidiForgetRequested`/`onQuerySoloMidiMapping` to `MidiLearnController::armNodeCommand`/`forgetNodeCommand`/`queryNodeCommandMappings` rather than `GraphEditor`'s parameter-keyed callbacks | **shipped**: right-click S → MIDI Learn 'Solo'... → press a pad/button → it toggles solo (one undo step per press); Forget MIDI clears it. The MIDI Remote panel's Surface cell and Inspector row resolve it too (FRO131, "ModuleName · Solo") |
+| Mixer column | Solo | `MixerColumnComponent`'s registry gets an `isSolo` entry (no parameter — `ChannelStripModule::soloed_` is engine state, [`Source/Modules/ChannelStripModule.h`](../../Source/Modules/ChannelStripModule.h)); its menu/badge/armed outline route through `MixerPanelComponent::onSoloMidiLearnRequested`/`onSoloMidiForgetRequested`/`onQuerySoloMidiMapping` to `MidiLearnController::armNodeCommand`/`forgetNodeCommand`/`queryNodeCommandMappings` rather than `GraphEditor`'s parameter-keyed callbacks | **shipped**: right-click S → MIDI Learn 'Solo'... → press a pad/button → it toggles solo (one undo step per press); Forget MIDI clears it. The Controllers panel's Surface cell and Inspector row resolve it too (FRO131, "ModuleName · Solo") |
 | Master column | master level (fader only — Master has no pan, and its insert list has no learnable control; no Mute learn yet either, just the fader) | `MixerMasterColumn` registers its own fader the same way, via a `GraphEditor&` threaded through `configure()` | **shipped**: right-click Master's fader → Learn → CC drives Master's level |
 | Direct column | none | `MixerDirectColumn` has no fader/pan/M-S of its own (just "Make channel") — nothing to register | — not applicable, not a gap |
 | Transport bar | Play/Stop, Record, Loop, Metronome (`TimelineTransportBar::GlyphButton`) | right-click shows Learn with an **action** target ([`midi-remote.md`](midi-remote.md#action-targets)); `GlyphButton` is right-click-safe the same way Mute/Bypass are, and `MidiLearnController::armAction()`/`forgetAction()` write the assignment into the learned device's `ControllerProfile.actions` (global, not the project doc — [`midi-remote.md`](midi-remote.md#undo)) | **shipped**: right-click Play → Learn → pad toggles playback; badge shows on the button |
@@ -69,7 +69,7 @@ MIDI: Knob 1 on Launchkey Mini       ← mapped: disabled title row, tells you w
 ```
 
 "Edit MIDI assignment..." shipped in FRO131: `GraphEditor::onEditMidiAssignmentRequested` (and the
-mixer column/master/transport-bar equivalents) open the MIDI Remote panel's dock tab with the
+mixer column/master/transport-bar equivalents) open the Controllers panel's dock tab with the
 assignment's control already selected.
 
 **States while learning (target-first learn):**
@@ -106,7 +106,7 @@ audio, playback and every other click keep working; it is not a modal mode.
 
 ---
 
-## The MIDI Remote panel
+## The Controllers panel
 
 A third tab on the bottom dock, `BottomDockComponent::Tab::MidiRemote`, next to Timeline and
 Mixer (`Source/UI/Mixer/BottomDockComponent.h`) — it reuses the dock's slide, persistence
@@ -269,7 +269,7 @@ Select a control → **Assign…** (toolbar) or **Learn target** (inspector) →
   on every card, mixer column and the transport bar gets a subtle outline; the status bar says
   *"Click the knob, slider or button that Knob 1 should drive - Esc to cancel"*; the next left click
   on a learnable control makes the assignment and ends the overlay. Clicking anything else, a right
-  click, or Esc cancels. The dock's **Timeline / Mixer / MIDI Remote tab buttons are the exception**:
+  click, or Esc cancels. The dock's **Timeline / Mixer / Controllers tab buttons are the exception**:
   they receive the click (the overlay steps aside over them), so you can switch to the Mixer or Timeline
   to reach its controls mid-pick; the session stays open and re-collects its candidates for the newly
   showing surface. This is the only overlay-style mode in the feature, and it is entered from the panel,
@@ -435,7 +435,7 @@ Learn ([`midi-remote.md`](midi-remote.md#learn-what-does-the-first-message-mean)
 
 ## Settings
 
-Preferences tab (`PreferencesSettingsTab`), a "MIDI Remote" group (FRO136). Both are scalar keys in
+Preferences tab (`PreferencesSettingsTab`), a "Controllers" group (FRO136). Both are scalar keys in
 the shared settings file, documented in `Source/UserSettings.h`:
 
 - **Default takeover**: Jump / Pick-up / Scale (default Scale; key `midiRemoteDefaultTakeover`,
@@ -450,7 +450,7 @@ the shared settings file, documented in `Source/UserSettings.h`:
 The Audio tab's MIDI-input checklist keeps its meaning (which devices feed the *patch*); a
 device with a profile is opened by the remote engine regardless ([`midi-remote.md`](midi-remote.md#the-engine)).
 JUCE's stock device selector cannot decorate a single device row, so instead of a per-row
-"(MIDI Remote)" suffix the tab (`AudioSettingsTab`) carries a one-paragraph caption under the selector
+"(Controllers)" suffix the tab (`AudioSettingsTab`) carries a one-paragraph caption under the selector
 naming every profiled controller, which is what lets the two lists explain each other. No profiled
 controllers, no caption. The Audio tab's MIDI-output selector stays hidden and dead either way —
 controller feedback (FRO139) is picked per controller from the Controllers list's own right-click
@@ -467,7 +467,7 @@ one live controller is the pseudo-controller **Host MIDI**, fed from the MIDI bu
 - The controllers list always has a **Host MIDI** row, even before any profile exists; selecting it
   creates the (empty) Host MIDI profile, so Detect, templates and Learn all work on it.
 - Add controller, the device pickers and Detect-by-device are hidden (`ControllersListComponent::setHosted`);
-  the Audio tab, and with it its MIDI Remote caption, is not built at all in the plugin.
+  the Audio tab, and with it its Controllers caption, is not built at all in the plugin.
 - Profiles for real devices that exist on the machine are listed as *"standalone only"*, greyed and
   inert: they are viewable, and Detect is not offered on them.
 - Assignments made in the standalone app against a real controller do not fire inside a host

@@ -99,7 +99,7 @@ void MidiLearnController::arm(juce::AudioProcessorGraph::NodeID nodeId, const ju
             buttonLike = dynamic_cast<juce::AudioParameterBool*>(ranged) != nullptr;
         } else {
             // FRO137: paramId isn't one of this node's own RangedAudioParameters -- it may be a
-            // hosted plugin-card knob (docs/control/plugin-card-layout.md#interaction-with-midi-remote-and-automation).
+            // hosted plugin-card knob (docs/control/plugin-card-layout.md#interaction-with-controllers-and-automation).
             // Resolve it the same way an automation lane would, and capture the same
             // paramIndexHint an automation lane captures at creation -- ONLY for a hosted
             // parameter, so a built-in assignment's JSON never gains this field.

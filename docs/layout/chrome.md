@@ -226,7 +226,7 @@ and the Mixer's dock-vs-own-panel-vs-window placement is itself a Preferences se
 
 ### Bottom dock height
 
-The bottom dock (Timeline / Mixer / MIDI Remote tabs) is resizable from ONE top-edge grab strip,
+The bottom dock (Timeline / Mixer / Controllers tabs) is resizable from ONE top-edge grab strip,
 `synth::ui::PanelResizeHandle`, owned by `BottomDockComponent` and therefore live on every tab
 (FRO231). Dragging reports the desired total dock height through `BottomDockComponent::onResizeHeight`
 (live) and `onResizeHeightCommitted` (mouse-up, only after a real drag); `MainComponent` clamps it

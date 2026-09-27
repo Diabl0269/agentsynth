@@ -1,4 +1,4 @@
-// Concern: FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel) -- the panel's own
+// Concern: FRO131 (docs/control/midi-remote-ui.md#the-controllers-panel) -- the panel's own
 // selection state and the fan-out between its three regions and the live engine/store. The three
 // regions themselves (ControllersListComponent, ControllerSurfaceComponent, ControlInspectorComponent)
 // know nothing about RemoteEngine/MidiLearnController -- this is the one place that does.

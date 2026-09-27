@@ -38,7 +38,7 @@ namespace synth::ui {
 
 class BottomDockComponent : public juce::Component {
 public:
-    // FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel): MidiRemote is a third,
+    // FRO131 (docs/control/midi-remote-ui.md#the-controllers-panel): MidiRemote is a third,
     // always-offered tab -- unlike Mixer it has no OwnPanel/Window placement variant, so there is
     // no MidiRemote counterpart to mixerTabEnabled_.
     enum class Tab { Timeline, Mixer, MidiRemote };

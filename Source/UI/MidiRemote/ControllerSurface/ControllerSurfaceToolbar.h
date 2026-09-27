@@ -3,7 +3,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// ControllerSurfaceToolbar.h -- FRO134 (docs/control/midi-remote-ui.md#the-midi-remote-panel): the
+// ControllerSurfaceToolbar.h -- FRO134 (docs/control/midi-remote-ui.md#the-controllers-panel): the
 // row above the surface grid: [Detect] [Assign...] [Templates] [...], plus the Detect hint row while
 // Detect is on. Knows nothing about profiles -- MidiRemotePanelComponent supplies the menus' contents.
 // [Assign...] (FRO135) starts the panel-side assign flow for the selected control.
