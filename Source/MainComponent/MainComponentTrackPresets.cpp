@@ -22,6 +22,22 @@ namespace {
 // each unit that lays out cards, not a cross-file contract).
 constexpr int kTrackPresetCardGapX = 40;
 
+// Placement for an inserted preset (track or bus): to the right of the rightmost existing card, so
+// a preset never lands on top of an existing box — the same left-to-right arrangement
+// addAudioTrack's own chain uses.
+juce::Point<int> presetDropPosition(juce::AudioProcessorGraph& graph) {
+    int rightEdge = 0;
+    for (auto* node : graph.getNodes()) {
+        if (node == nullptr)
+            continue;
+        const int x = (int)node->properties.getWithDefault("x", 0);
+        const juce::String typeName =
+            node->getProcessor() != nullptr ? node->getProcessor()->getName() : juce::String();
+        rightEdge = juce::jmax(rightEdge, x + GraphEditor::estimateModuleSize(typeName).x);
+    }
+    return {rightEdge + kTrackPresetCardGapX, 0};
+}
+
 // FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): the per-type default track preset settings
 // keys — duplicated from PreferencesSettingsTabInternal.h's own copy for the same "one-line string not worth a header
 // dependency" reason every other cross-file settings key in this codebase is (see MainComponentFileIO.cpp's own
@@ -154,10 +170,11 @@ void MainComponent::handleMacroTrackPresetAction(const juce::String& macroId, bo
         }
     }
 
-    // No bound track claims this macro: a bus's own macro. `setAsDefault` never reaches here true --
-    // the macro's own menu omits "Set as Default Track Preset" for a bus (GraphEditorMacroPrompts.cpp,
-    // synth::isBusMacro) -- but guard it anyway rather than silently mis-saving on some future caller.
-    if (!setAsDefault)
+    // No bound track claims this macro: save it as a Bus only when it really is one (an unbound
+    // non-bus channel is a no-op, never mis-saved as a bus). `setAsDefault` never reaches here true
+    // for a bus -- the macro's own menu omits "Set as Default Track Preset" (GraphEditorMacroPrompts.cpp).
+    const auto* macro = graphEditor.getMacros().find(macroId);
+    if (!setAsDefault && macro != nullptr && synth::isBusMacro(*macro, audioEngine.getGraph()))
         saveBusAsPreset(macroId);
 }
 
@@ -212,18 +229,7 @@ juce::String MainComponent::insertTrackFromPresetVar(const juce::var& preset, sy
 
     auto& graph = audioEngine.getGraph();
 
-    // Placement: to the right of the rightmost existing card, so a preset never lands on top of an
-    // existing track's box — the same left-to-right arrangement addAudioTrack's own chain uses.
-    int rightEdge = 0;
-    for (auto* node : graph.getNodes()) {
-        if (node == nullptr)
-            continue;
-        const int x = (int)node->properties.getWithDefault("x", 0);
-        const juce::String typeName =
-            node->getProcessor() != nullptr ? node->getProcessor()->getName() : juce::String();
-        rightEdge = juce::jmax(rightEdge, x + GraphEditor::estimateModuleSize(typeName).x);
-    }
-    const juce::Point<int> dropPos{rightEdge + kTrackPresetCardGapX, 0};
+    const auto dropPos = presetDropPosition(graph);
 
     std::vector<synth::Macro> outMacros;
     const auto added = synth::TrackPresetManager::insertTrackPreset(preset, graph, dropPos, &outMacros);
@@ -313,17 +319,7 @@ juce::String MainComponent::insertBusFromPresetVar(const juce::var& preset) {
 
     auto& graph = audioEngine.getGraph();
 
-    // Same left-to-right placement idiom insertTrackFromPresetVar uses.
-    int rightEdge = 0;
-    for (auto* node : graph.getNodes()) {
-        if (node == nullptr)
-            continue;
-        const int x = (int)node->properties.getWithDefault("x", 0);
-        const juce::String typeName =
-            node->getProcessor() != nullptr ? node->getProcessor()->getName() : juce::String();
-        rightEdge = juce::jmax(rightEdge, x + GraphEditor::estimateModuleSize(typeName).x);
-    }
-    const juce::Point<int> dropPos{rightEdge + kTrackPresetCardGapX, 0};
+    const auto dropPos = presetDropPosition(graph);
 
     std::vector<synth::Macro> outMacros;
     const auto added = synth::TrackPresetManager::insertTrackPreset(preset, graph, dropPos, &outMacros);
