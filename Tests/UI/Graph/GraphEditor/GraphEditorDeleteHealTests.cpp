@@ -490,11 +490,13 @@ TEST_F(GraphEditorTest, DeletingFilterInARealOscFilterDistortionOutputChainHeals
 // connection.destination.channelIndex` -- but this heal's OWN eligibility count pairs raw 0/1 off
 // one source jack back into a single leg, mergeBareIoChannelPairs in GraphEditorDeleteHeal.cpp).
 // Deleting Distortion therefore DOES heal: Filter -> Audio Output directly. Filter's own collapsed
-// jack is genuinely mono (span 1, confirmed by osc->filter above), so the healed cable is a mono
-// source broadcast onto both of Output's raw legs -- resolvePolyLink's null-dest mono-broadcast
-// branch, "the way a manual cable into that jack would" (FRO23 follow-up) -- rather than silence in
-// one ear.
-TEST_F(GraphEditorTest, DeletingTheLastEffectBeforeAudioOutputHealsBothLegs) {
+// jack is genuinely mono (span 1, confirmed by osc->filter above), so the healed cable lands on
+// Output's Left alone -- one leg, exactly what a manual mono cable into that jack would draw.
+// FRO324 replaced resolvePolyLink's old null-dest mono-broadcast branch (added in #532 for FRO23)
+// with render-time L/Mono normalling: Right borrows Left for as long as Right stays unpatched, so
+// the heal is silent in neither ear without a second EDGE (see Tests/Engine/NormallingTests.cpp for
+// the audible proof through a real AudioEngine render).
+TEST_F(GraphEditorTest, DeletingTheLastEffectBeforeAudioOutputHealsToASingleLeftLeg) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 900);
@@ -506,8 +508,8 @@ TEST_F(GraphEditorTest, DeletingTheLastEffectBeforeAudioOutputHealsBothLegs) {
     editor.requestDeleteModule(f.distortion);
 
     EXPECT_EQ(engine.getGraph().getNodeForId(f.distortion), nullptr);
-    EXPECT_EQ(monoConnectionCount(engine, f.filter, f.out), 2)
-        << "Filter heals straight to Audio Output, mono broadcast onto both legs -- no silent ear";
+    EXPECT_EQ(monoConnectionCount(engine, f.filter, f.out), 1)
+        << "Filter heals straight to Audio Output on Left alone -- normalling, not a broadcast edge, fills Right";
 }
 
 // Two DIFFERENT destination nodes, even sitting on the same matching raw-channel numbers, are NOT

@@ -200,8 +200,14 @@ void ModuleComponent::paint(juce::Graphics& g) {
         juce::String label = "In " + juce::String(i);
         if (auto* mb = dynamic_cast<ModuleBase*>(module))
             label = mb->getInputPortLabel(i);
-        else if (dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(module))
-            label = (i == 0) ? "Left" : (i == 1) ? "Right" : "In " + juce::String(i);
+        else if (dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(module)) {
+            // FRO324: Audio Output's Left is labelled "L / Mono" -- it is the jack that normals,
+            // borrowing Left onto Right at render time for as long as Right stays unpatched (see
+            // ModuleComponent::getTooltip() for the jack-hover explanation). Audio Input has no
+            // normalling of its own, so its own Left/Right keep the plain labels.
+            const bool isNormallingLeft = i == 0 && isAudioOutputIONode(module);
+            label = isNormallingLeft ? "L / Mono" : (i == 0) ? "Left" : (i == 1) ? "Right" : "In " + juce::String(i);
+        }
 
         g.setColour(labelColour);
         g.drawText(label, p.x + 10, p.y - 10, 60, 20, juce::Justification::left, false);
@@ -737,6 +743,25 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
     }
 
     return std::nullopt;
+}
+
+// FRO324: Audio Output's "L / Mono" jack (and its Right sibling) are the only jacks with a
+// hover explanation today, so this stays a small special case against isAudioOutputIONode rather
+// than a general per-jack tooltip table -- getPortForPoint() already gives the exact same hit-test
+// paint()'s jack dots use, so the tooltip always agrees with what is drawn. Empty for every other
+// jack/module, so a control's own setTooltip() (juce::SettableTooltipClient) is unaffected;
+// juce::TooltipWindow only calls this while the mouse is actually over this component.
+juce::String ModuleComponent::getTooltip() {
+    if (module == nullptr || !isAudioOutputIONode(module))
+        return {};
+    const auto port = getPortForPoint(getMouseXYRelative());
+    if (!port.has_value() || !port->isInput || port->isMidi)
+        return {};
+    if (port->index == 0)
+        return "L / Mono - normals to Right while Right is unpatched";
+    if (port->index == 1)
+        return "Borrows Left while unpatched";
+    return {};
 }
 
 void ModuleComponent::resized() {

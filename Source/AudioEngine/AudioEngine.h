@@ -167,6 +167,13 @@ public:
     // MESSAGE THREAD. Re-publishes which modules have a cable on a Sidechain (Key) input.
     void refreshSidechainKeys();
 
+    // ---- Right-borrows-Left normalling (FRO324, docs/architecture/audio-engine.md#normalling-fro324) ----
+    // MESSAGE THREAD, called wherever refreshSoloGate() is -- see AudioEngineTimelinePublish.cpp.
+    void refreshNormalling();
+    bool isOutputRightNormalledFromLeft() const noexcept {
+        return outputRightNormalledFromLeft_.load(std::memory_order_relaxed);
+    }
+
     // FRO148 (docs/mixer/meters.md): the level leaving the WHOLE graph -- post-graph, pre-metronome -- for the Master
     // column once it has inserts (a post-fader limiter's ceiling shows here, not in MasterModule's own pre-insert
     // latch). Consume-on-read per MeterReader, like MasterModule::takeMeterPeak; leg 0 = Left, 1 = Right. Any thread.
@@ -509,6 +516,11 @@ private:
     // Soloed ChannelStrip count. Message-thread writes (refreshSoloGate / setChannelStripSoloed),
     // audio-thread reads (renderPass). See refreshSoloGate().
     std::atomic<int> soloedStripCount_{0};
+
+    // FRO324: whether Audio Output's Right currently borrows Left. Message-thread writes
+    // (refreshNormalling), audio-thread reads (renderNextBlock, right after the render pass). See
+    // refreshNormalling().
+    std::atomic<bool> outputRightNormalledFromLeft_{false};
     // Set true by the guard (audio thread) on a trip; consumed (and reset) by
     // consumeFeedbackGuardTripped() (message thread poll).
     std::atomic<bool> feedbackGuardTripped_{false};

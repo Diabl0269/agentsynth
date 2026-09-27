@@ -43,6 +43,7 @@ class ModuleComponent
     : public juce::Component
     , public juce::Timer
     , public juce::FileDragAndDropTarget
+    , public juce::TooltipClient
     , public juce::AudioProcessorParameter::Listener {
 public:
     ModuleComponent(juce::AudioProcessor* module, juce::AudioProcessorGraph::NodeID nodeId, GraphEditor& owner,
@@ -51,6 +52,12 @@ public:
     void parameterValueChanged(int parameterIndex, float newValue) override;
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
     ~ModuleComponent() override;
+
+    /** FRO324: the Audio Output "L / Mono" jack's hover explanation (and Right's "borrows Left"
+     *  reply), found via getPortForPoint() against the current mouse position -- the same jack
+     *  hit-test paint()/mouseDown() already share. Empty everywhere else, so juce::TooltipWindow
+     *  falls through to any per-control setTooltip() as before. See ModuleComponentPaint.cpp. */
+    juce::String getTooltip() override;
 
     void paint(juce::Graphics&) override;
     void paintOverChildren(juce::Graphics&) override; // hover chip, above the knob labels

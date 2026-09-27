@@ -17,6 +17,22 @@ or shrink the channel count — it only changes how many jacks you see:
 CV jacks (Drive, Rate, …) keep their **raw** channel indices so presets and the AI schema stay stable;
 in single-jack mode they simply shift one slot down in the visible column.
 
+### Right borrows Left while unpatched (FRO324)
+
+When Dual I/O is **On** and only Left is patched, Right borrows Left — render-time, sample-exact,
+and **never a graph edge**: `AudioEngine::refreshNormalling()` (message thread, alongside the mixer
+solo recount) sets a per-module atomic, and `ModuleBase::applyLeftRightNormalling()` copies raw ch0
+onto `rightAudioLegChannel()` at the very top of `processBlock`, before the bypass/mute branches.
+Patching Right stops the copy (Right then carries only its own source, never doubled); unpatching it
+restores the borrow. This only applies to a module with a genuine stereo AUDIO input pair —
+`ModuleBase::hasStereoAudioInputPair()`, true for the FX that read their input through
+`mapStereoPairInput`/`mapStereoKeyInput` and for the split-block `Filter`/`VCA` (in-place at
+ch0/`kRightBase`) — never for Voice Mixer's eight independent voice inputs, even though it carries
+the same `dualIO` toggle for its own collapsing OUTPUT jack. A **collapsed** (non-Dual) jack is
+untouched: it already fans one cable onto both raw legs, so there is nothing to borrow. See
+[`docs/architecture/audio-engine.md#normalling-fro324`](../architecture/audio-engine.md#normalling-fro324)
+for the Audio Output side of the same policy.
+
 ### The toggle is inherited, not registered
 
 **A module never opts in.** `ModuleBase`'s constructor adds the `dualIO` parameter itself when the

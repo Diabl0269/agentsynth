@@ -173,3 +173,33 @@ Solo on a `Channel Strip` is a **render-time gate, never a parameter write** ([`
 - **`AudioEngine::setChannelStripSoloed(nodeId, bool)`** is the one call a UI makes: it flips the strip's flag and recounts, ordered so no render pass ever sees the gate closed with nothing soloed (solo raises the flag first; un-solo drops the count first).
 - **Offline renders honour solo today.** A bounce drives the same `renderPass` (via `OfflineTransportDriver` -> `processHostBlock`), so a soloed strip silences the rest of an exported mix exactly as it does live. Stem export must decide whether a render forces the gate open, the way the metronome is forced off.
 - **Known quirks, inherent to extra-state persistence**: a solo toggle does not move the undo edit serial (no dirty flag, no autosave on its own), and because solo rides in the graph snapshot, undoing an unrelated earlier graph edit restores the solo state that snapshot held.
+
+### Normalling (FRO324)
+
+Right borrows Left while Right is unpatched — the "L / Mono" convention VCV Rack, Softube Modular,
+Cardinal and Eurorack all ship (see epic FRO323 for the survey). **Render-time only, never a graph
+edge**: `AudioEngine::refreshNormalling()` recomputes two atomics by scanning the graph, and
+`renderNextBlock`/each module's own `processBlock` reads them once per block.
+
+- **Audio Output.** `outputRightNormalledFromLeft_` is true iff the graph declares >= 2 output
+  channels and the bare `AudioGraphIOProcessor` sink has an incoming connection on raw ch0 and none
+  on raw ch1. `AudioEngine::renderNextBlock` copies ch0 onto ch1, sample-exact, right after the
+  render pass — **before** the master-mute clear (so muting still silences both legs) and the
+  FRO161 non-finite scrub (so a borrowed sample is scrubbed the same as a real one). A multichannel
+  output past the first pair never normals.
+- **Dual I/O modules.** Every `ModuleBase` with a genuine stereo AUDIO input pair
+  (`hasStereoAudioInputPair()` — the FX that read it through `mapStereoPairInput`/`mapStereoKeyInput`,
+  plus the split-block `Filter`/`VCA`) gets its own `normalLeftToRight_` atomic, true iff it is
+  currently split (`isDualIO()`), its raw ch0 is patched and its `rightAudioLegChannel()` is not. A
+  collapsed (non-Dual) jack is skipped outright — it already fans one cable onto both raw legs, so
+  there is nothing to borrow. Each such module's `ModuleBase::applyLeftRightNormalling()` runs at
+  the very top of its own `processBlock`, before the bypass/mute branches, so both branches see a
+  filled Right leg exactly as if the user had cabled it.
+- **Recomputed beside the solo gate.** `refreshNormalling()` runs inside `publishTimeline()` (right
+  after `refreshSoloGate()`) and from the plugin's `setStateInformation` path, so undo/redo, preset
+  load and every other graph-topology change picks it up for free — same reasoning as the solo
+  count above.
+- **`GraphEditor::resolvePolyLink`'s old null-dest mono-broadcast branch is gone** (it duplicated a
+  mono cable onto Output's raw ch0 AND ch1, added in #532 for FRO23's "reconnect the chain" heal).
+  A mono cable — hand-drawn or healed — now lands on Output's Left alone; normalling fills Right
+  for as long as it stays unpatched, which is audible rather than a second edge.

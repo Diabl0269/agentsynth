@@ -25,6 +25,7 @@ void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
     // strip must never leave the whole mix gated silent.
     refreshSoloGate();
     refreshSidechainKeys();
+    refreshNormalling();
 
     auto snapshot = synth::TimelineSnapshot::buildFrom(doc);
 
@@ -169,6 +170,68 @@ void AudioEngine::refreshSoloGate() {
 // replacements that reach publishTimeline, and from changeListenerCallback for every other topology
 // change (a plain cable drag or unplug never reaches publishTimeline).
 void AudioEngine::refreshSidechainKeys() { synth::publishSidechainConnections(mainProcessorGraph); }
+
+namespace {
+// True iff `nodeId`'s raw ch0 has an incoming connection and `rightChannel` does not. Shared by
+// the Audio Output check and the per-module Dual I/O check below -- same "Left patched, Right
+// not" test, just against a different node and a different right-channel index.
+bool leftPatchedRightNot(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId, int rightChannel) {
+    bool leftConnected = false;
+    bool rightConnected = false;
+    for (const auto& connection : graph.getConnections()) {
+        if (connection.destination.nodeID != nodeId)
+            continue;
+        if (connection.destination.channelIndex == 0)
+            leftConnected = true;
+        else if (connection.destination.channelIndex == rightChannel)
+            rightConnected = true;
+    }
+    return leftConnected && !rightConnected;
+}
+} // namespace
+
+// FRO324 (docs/architecture/audio-engine.md#normalling-fro324, docs/modules/fx-modules.md#stereo-io-dual-io-toggle):
+// render-time L->R normalling, recomputed here beside the solo/sidechain recounts so every
+// graph-topology change reaches it for free. Two independent scans, neither of which ever adds,
+// removes or alters a graph edge:
+//
+//   * Audio Output: normalled iff the graph declares >= 2 output channels (a multichannel output
+//     past the first pair never normals -- FRO323's policy) AND the bare AudioGraphIOProcessor
+//     sink has an incoming connection on raw ch0 and none on raw ch1.
+//   * Every ModuleBase with a genuine stereo AUDIO input pair (hasStereoAudioInputPair()) that is
+//     currently split (isDualIO()): normalled iff its own raw ch0 is patched and its
+//     rightAudioLegChannel() is not. A collapsed (non-Dual) jack is skipped outright -- it already
+//     fans one cable onto both raw legs, so there is nothing to borrow.
+void AudioEngine::refreshNormalling() {
+    using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
+
+    bool outputNormalled = false;
+    if (mainProcessorGraph.getTotalNumOutputChannels() >= 2) {
+        for (auto* node : mainProcessorGraph.getNodes()) {
+            if (node == nullptr)
+                continue;
+            auto* io = dynamic_cast<IOProcessor*>(node->getProcessor());
+            if (io == nullptr || io->getType() != IOProcessor::audioOutputNode)
+                continue;
+            outputNormalled = leftPatchedRightNot(mainProcessorGraph, node->nodeID, 1);
+            break; // Audio Output is a singleton -- see GraphEditorDragDrop.cpp's own note.
+        }
+    }
+    outputRightNormalledFromLeft_.store(outputNormalled, std::memory_order_relaxed);
+
+    for (auto* node : mainProcessorGraph.getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
+        if (mb == nullptr || !mb->hasStereoAudioInputPair() || !mb->isDualIO()) {
+            if (mb != nullptr)
+                mb->setNormalLeftToRight(false);
+            continue;
+        }
+        const int right = mb->rightAudioLegChannel();
+        mb->setNormalLeftToRight(right > 0 && leftPatchedRightNot(mainProcessorGraph, node->nodeID, right));
+    }
+}
 
 // The one call a UI should make: it flips the strip's own flag and recounts, ordered so no render
 // pass ever sees the gate closed with nothing soloed. Returns false when `node` is not a Channel

@@ -227,6 +227,16 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     else
         renderPass(buffer, midiMessages);
 
+    // FRO324: Audio Output's Right borrows Left, sample-exact, while Right is unpatched --
+    // render-time only, never a graph edge (see refreshNormalling()). Right after the render pass
+    // (so it sees exactly what the graph produced) and BEFORE the master-mute clear just below (so
+    // muting still silences both legs) and the FRO161 scrub further down (so a borrowed sample is
+    // scrubbed the same as a real one). Only when the graph declares a second output channel --
+    // a multichannel output past the first pair never normals.
+    if (mainProcessorGraph.getTotalNumOutputChannels() >= 2 && buffer.getNumChannels() >= 2 &&
+        outputRightNormalledFromLeft_.load(std::memory_order_relaxed))
+        buffer.copyFrom(1, 0, buffer, 0, 0, buffer.getNumSamples());
+
     // Zero-fill AFTER the graph has run (and after every slice, not per slice) so sequencers /
     // LFOs / envelopes keep advancing.
     if (masterMuted_.load(std::memory_order_relaxed))
