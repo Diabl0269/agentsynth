@@ -195,10 +195,16 @@ edge**: `AudioEngine::refreshNormalling()` recomputes two atomics by scanning th
   there is nothing to borrow. Each such module's `ModuleBase::applyLeftRightNormalling()` runs at
   the very top of its own `processBlock`, before the bypass/mute branches, so both branches see a
   filled Right leg exactly as if the user had cabled it.
-- **Recomputed beside the solo gate.** `refreshNormalling()` runs inside `publishTimeline()` (right
-  after `refreshSoloGate()`) and from the plugin's `setStateInformation` path, so undo/redo, preset
-  load and every other graph-topology change picks it up for free — same reasoning as the solo
-  count above.
+- **Recomputed beside the solo gate, AND on the graph's own change broadcast.** `refreshNormalling()`
+  runs inside `publishTimeline()` (right after `refreshSoloGate()`) and from the plugin's
+  `setStateInformation` path — same reasoning as the solo count, so undo/redo and preset load pick
+  it up for free. Those two are not enough on their own: a plain canvas cable drag/unplug goes
+  through `MainComponent::reconcileTimelineBindingsOnly()`, which deliberately never calls
+  `publishTimeline()`. `AudioEngine` also listens to `mainProcessorGraph` as a
+  `juce::ChangeBroadcaster` (already true for the sidechain-key recount, FRO317) and calls
+  `refreshNormalling()` from `changeListenerCallback` on every node/connection add or remove — the
+  same broadcast JUCE coalesces asynchronously on the message thread, so a normal cable edit is
+  covered without adding a second, synchronous call site in `GraphEditor`.
 - **`GraphEditor::resolvePolyLink`'s old null-dest mono-broadcast branch is gone** (it duplicated a
   mono cable onto Output's raw ch0 AND ch1, added in #532 for FRO23's "reconnect the chain" heal).
   A mono cable — hand-drawn or healed — now lands on Output's Left alone; normalling fills Right

@@ -168,7 +168,7 @@ public:
     void refreshSidechainKeys();
 
     // ---- Right-borrows-Left normalling (FRO324, docs/architecture/audio-engine.md#normalling-fro324) ----
-    // MESSAGE THREAD, called wherever refreshSoloGate() is -- see AudioEngineTimelinePublish.cpp.
+    // MESSAGE THREAD. See AudioEngineTimelinePublish.cpp for every call site.
     void refreshNormalling();
     bool isOutputRightNormalledFromLeft() const noexcept {
         return outputRightNormalledFromLeft_.load(std::memory_order_relaxed);

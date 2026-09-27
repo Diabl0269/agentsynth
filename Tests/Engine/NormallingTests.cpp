@@ -5,9 +5,16 @@
 // NonFiniteOutputGuardTests.cpp uses, so the assertions exercise the exact render path a user
 // would hear rather than the raw juce::AudioProcessorGraph some GraphEditor tests call directly.
 //
-// AudioEngine::refreshNormalling() is called by hand after each connection change here (the same
-// call `publishTimeline()`/the plugin's `setStateInformation` make on every real graph change --
-// undo/redo, preset load, a module delete -- per docs/architecture/audio-engine.md#normalling-fro324).
+// Most tests call AudioEngine::refreshNormalling() by hand after each connection change -- the
+// same call `publishTimeline()`/the plugin's `setStateInformation` make on every real graph change
+// (undo/redo, preset load, a module delete -- per docs/architecture/audio-engine.md#normalling-fro324).
+// The "CanvasStyle*" tests below deliberately do NOT: a plain canvas cable drag/unplug reaches
+// NEITHER of those two seams (MainComponent::reconcileTimelineBindingsOnly() never publishes), so
+// they drive the graph through the raw juce::AudioProcessorGraph API the way GraphEditor's
+// connectPorts()/disconnect do and pump the message loop for AudioEngine's OWN change-listener
+// seam (changeListenerCallback, AudioEngineDeviceLifecycle.cpp) to catch up -- exactly the pattern
+// Tests/Mixer/SidechainKeyGraphTests.cpp's TheEngineRepublishesOnEveryGraphChange already
+// established for the sidechain-key recount, which rides the same broadcast.
 //
 // Headless house rules as everywhere else: no real audio device, no sleeps.
 
@@ -54,6 +61,16 @@ std::vector<std::vector<float>> renderOneBlock(AudioEngine& engine, int numOutCh
     engine.audioDeviceIOCallbackWithContext(nullptr, 0, outPtrs.data(), numOutChannels, kBlockSize, {});
     engine.audioDeviceStopped();
     return out;
+}
+
+// Pumps the message loop until `flagReader()` matches `expected` or gives up -- the graph's own
+// juce::ChangeBroadcaster is async/coalesced, same bound and pattern as
+// SidechainKeyGraphTests.cpp's own pumpUntil.
+template <typename FlagReader>
+bool pumpUntil(FlagReader flagReader, bool expected) {
+    for (int i = 0; i < 100 && flagReader() != expected; ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    return flagReader() == expected;
 }
 
 } // namespace
@@ -155,6 +172,56 @@ TEST(NormallingTest, MultichannelOutputNeverNormalsPastTheFirstPair) {
     }
 }
 
+TEST(NormallingTest, CanvasStyleCableEditRecomputesOutputNormallingWithoutPublishTimeline) {
+    // The real bug this guards: a plain canvas cable edit never reaches publishTimeline() or
+    // setStateInformation, so if refreshNormalling() only rode those two seams, a freshly-patched
+    // Right would sit behind a stale "normalled" flag and renderNextBlock would overwrite it with a
+    // copy of Left. Drives the graph directly (as GraphEditor's connectPorts()/disconnect do) and
+    // never calls engine.refreshNormalling() or engine.publishTimeline() by hand.
+    AudioEngine engine(AudioEngine::HostMode::Standalone);
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, kSampleRate, kBlockSize);
+
+    auto oscLeft = graph.addNode(std::make_unique<OscillatorModule>());
+    auto oscRight = graph.addNode(std::make_unique<OscillatorModule>());
+    for (auto* p : oscRight->getProcessor()->getParameters())
+        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(p); withId && withId->paramID == "level")
+            withId->setValueNotifyingHost(0.2f);
+    auto out = graph.addNode(std::make_unique<IOProcessor>(IOProcessor::audioOutputNode));
+
+    const auto flag = [&] { return engine.isOutputRightNormalledFromLeft(); };
+
+    ASSERT_TRUE(graph.addConnection({{oscLeft->nodeID, 0}, {out->nodeID, 0}}));
+    ASSERT_TRUE(pumpUntil(flag, true)) << "Left patched, Right not -- must normal with no manual refresh call";
+    {
+        const auto rendered = renderOneBlock(engine, 2);
+        for (int i = 0; i < kBlockSize; ++i)
+            ASSERT_EQ(rendered[0][static_cast<std::size_t>(i)], rendered[1][static_cast<std::size_t>(i)]);
+    }
+
+    const juce::AudioProcessorGraph::Connection rightCable{{oscRight->nodeID, 0}, {out->nodeID, 1}};
+    ASSERT_TRUE(graph.addConnection(rightCable));
+    ASSERT_TRUE(pumpUntil(flag, false)) << "patching Right must stop normalling once the broadcast lands";
+    {
+        const auto rendered = renderOneBlock(engine, 2);
+        bool anyDiffers = false;
+        for (int i = 0; i < kBlockSize; ++i)
+            if (rendered[0][static_cast<std::size_t>(i)] != rendered[1][static_cast<std::size_t>(i)]) {
+                anyDiffers = true;
+                break;
+            }
+        EXPECT_TRUE(anyDiffers) << "Right must carry only its own source, never a copy of Left from a stale flag";
+    }
+
+    ASSERT_TRUE(graph.removeConnection(rightCable));
+    ASSERT_TRUE(pumpUntil(flag, true)) << "unplugging Right must restore normalling once the broadcast lands";
+    {
+        const auto rendered = renderOneBlock(engine, 2);
+        for (int i = 0; i < kBlockSize; ++i)
+            EXPECT_EQ(rendered[0][static_cast<std::size_t>(i)], rendered[1][static_cast<std::size_t>(i)]);
+    }
+}
+
 TEST(NormallingTest, FlagRecomputesOnEveryPublishTimelineCallLikeUndoRedoAndPresetLoad) {
     // publishTimeline() is the one seam every graph-replacing path (undo/redo restore, preset
     // load, a module delete) already has to reach -- Source/CLAUDE.md's own "every graph change
@@ -228,5 +295,59 @@ TEST(NormallingTest, DualIOEffectWithOnlyLeftPatchedProducesStereoIdenticalToThe
         EXPECT_FLOAT_EQ(reference[1][static_cast<std::size_t>(i)], split[1][static_cast<std::size_t>(i)])
             << "sample " << i << ": a split Dual I/O module with only Left patched must sound identical to the "
             << "collapsed-jack case";
+    }
+}
+
+TEST(NormallingTest, CanvasStyleCableEditRecomputesDualIOModuleNormallingWithoutPublishTimeline) {
+    // Same real bug, on a Dual I/O module's own input rather than Audio Output: a plain canvas
+    // cable edit onto Delay's Right jack must stop the borrow the moment the graph's change
+    // broadcast lands, with no publishTimeline()/refreshNormalling() call from this test.
+    AudioEngine engine(AudioEngine::HostMode::Standalone);
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, kSampleRate, kBlockSize);
+
+    auto oscLeft = graph.addNode(std::make_unique<OscillatorModule>());
+    auto oscRight = graph.addNode(std::make_unique<OscillatorModule>());
+    for (auto* p : oscRight->getProcessor()->getParameters())
+        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(p); withId && withId->paramID == "level")
+            withId->setValueNotifyingHost(0.2f);
+    auto delay = graph.addNode(std::make_unique<DelayModule>());
+    auto out = graph.addNode(std::make_unique<IOProcessor>(IOProcessor::audioOutputNode));
+    setDualIOParam(*delay->getProcessor(), true);
+    ASSERT_TRUE(graph.addConnection({{delay->nodeID, 0}, {out->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{delay->nodeID, 1}, {out->nodeID, 1}}));
+
+    auto* delayModule = dynamic_cast<ModuleBase*>(delay->getProcessor());
+    ASSERT_NE(delayModule, nullptr);
+    const auto flag = [&] { return delayModule->isNormalLeftToRight(); };
+
+    ASSERT_TRUE(graph.addConnection({{oscLeft->nodeID, 0}, {delay->nodeID, 0}})); // Left only
+    ASSERT_TRUE(pumpUntil(flag, true)) << "Delay's Left patched, Right not -- must normal with no manual refresh";
+    {
+        const auto rendered = renderOneBlock(engine, 2);
+        for (int i = 0; i < kBlockSize; ++i)
+            ASSERT_EQ(rendered[0][static_cast<std::size_t>(i)], rendered[1][static_cast<std::size_t>(i)]);
+    }
+
+    const juce::AudioProcessorGraph::Connection rightCable{{oscRight->nodeID, 0}, {delay->nodeID, 1}};
+    ASSERT_TRUE(graph.addConnection(rightCable));
+    ASSERT_TRUE(pumpUntil(flag, false)) << "patching Delay's Right must stop the borrow once the broadcast lands";
+    {
+        const auto rendered = renderOneBlock(engine, 2);
+        bool anyDiffers = false;
+        for (int i = 0; i < kBlockSize; ++i)
+            if (rendered[0][static_cast<std::size_t>(i)] != rendered[1][static_cast<std::size_t>(i)]) {
+                anyDiffers = true;
+                break;
+            }
+        EXPECT_TRUE(anyDiffers) << "Right must carry only its own source, never a copy of Left from a stale flag";
+    }
+
+    ASSERT_TRUE(graph.removeConnection(rightCable));
+    ASSERT_TRUE(pumpUntil(flag, true)) << "unplugging Delay's Right must restore the borrow once the broadcast lands";
+    {
+        const auto rendered = renderOneBlock(engine, 2);
+        for (int i = 0; i < kBlockSize; ++i)
+            EXPECT_EQ(rendered[0][static_cast<std::size_t>(i)], rendered[1][static_cast<std::size_t>(i)]);
     }
 }

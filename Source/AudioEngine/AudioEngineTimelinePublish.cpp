@@ -191,9 +191,14 @@ bool leftPatchedRightNot(juce::AudioProcessorGraph& graph, juce::AudioProcessorG
 } // namespace
 
 // FRO324 (docs/architecture/audio-engine.md#normalling-fro324, docs/modules/fx-modules.md#stereo-io-dual-io-toggle):
-// render-time L->R normalling, recomputed here beside the solo/sidechain recounts so every
-// graph-topology change reaches it for free. Two independent scans, neither of which ever adds,
-// removes or alters a graph edge:
+// render-time L->R normalling. Called from three places: here, beside the solo/sidechain recounts,
+// for every graph-replacing publish (undo/redo, preset load); from the plugin's setStateInformation
+// (same reasoning as refreshSoloGate() there); and from AudioEngine::changeListenerCallback on the
+// graph's own topology broadcast (AudioEngineDeviceLifecycle.cpp) -- a PLAIN canvas cable drag or
+// unplug reaches neither of the first two (MainComponent::reconcileTimelineBindingsOnly()
+// deliberately never publishes), so without that third call site a freshly-patched Right would sit
+// behind a stale "normalled" flag and renderNextBlock would overwrite it with a copy of Left. Two
+// independent scans, neither of which ever adds, removes or alters a graph edge:
 //
 //   * Audio Output: normalled iff the graph declares >= 2 output channels (a multichannel output
 //     past the first pair never normals -- FRO323's policy) AND the bare AudioGraphIOProcessor
