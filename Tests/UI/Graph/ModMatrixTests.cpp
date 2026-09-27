@@ -173,13 +173,37 @@ TEST_F(ModMatrixTest, UpdateModuleNamesStripsExistingNumbers) {
     // Manually set a name with a number
     osc->setModuleName("Oscillator 5");
 
-    // Call updateModuleNames (should renumber from 1)
+    // Call updateModuleNames: the stray digit is stripped, but with no sibling of the same base
+    // type left to disambiguate against, it is NOT replaced by a fresh "1" (FRO181) — a lone
+    // instance carries no number at all.
     engine.updateModuleNames();
 
     juce::String newName = osc->getName();
-    // Should be renumbered to "Oscillator 1" (since it's the only one)
-    EXPECT_TRUE(newName.contains("Oscillator"));
-    EXPECT_TRUE(newName.endsWith("1"));
+    EXPECT_EQ(newName, "Oscillator");
+}
+
+TEST_F(ModMatrixTest, UpdateModuleNamesOnlyNumbersWhenThereIsMoreThanOneOfAType) {
+    // FRO181: AudioEngine::updateModuleNames() runs incidentally on graph changes that never added
+    // or removed a module the user thinks of as such (e.g. a macro's own inlet/outlet port
+    // splice), so a lone module must never pick up a spurious "1" just because that pass happened
+    // to run. A second instance of the SAME base type still earns real disambiguating numbers.
+    auto& graph = engine.getGraph();
+    graph.clear();
+
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    ASSERT_NE(oscNode, nullptr);
+    engine.updateModuleNames();
+    EXPECT_EQ(oscNode->getProcessor()->getName(), "Oscillator") << "the only Oscillator needs no number";
+
+    auto secondOscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    ASSERT_NE(secondOscNode, nullptr);
+    engine.updateModuleNames();
+    EXPECT_EQ(oscNode->getProcessor()->getName(), "Oscillator 1") << "a sibling arrived — now both number";
+    EXPECT_EQ(secondOscNode->getProcessor()->getName(), "Oscillator 2");
+
+    graph.removeNode(secondOscNode->nodeID);
+    engine.updateModuleNames();
+    EXPECT_EQ(oscNode->getProcessor()->getName(), "Oscillator") << "back to being the only one — bare again";
 }
 
 TEST_F(ModMatrixTest, UpdateModuleNamesHandlesAttenuvertersAsModSlots) {

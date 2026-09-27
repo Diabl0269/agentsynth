@@ -32,7 +32,7 @@ TEST_F(GraphEditorTest, ModuleTitleRenameCommitsAndFallsBackToTheNumberedName) {
 
     auto& graph = engine.getGraph();
     auto node = graph.addNode(std::make_unique<ChorusModule>());
-    engine.updateModuleNames(); // assigns "Chorus 1"
+    engine.updateModuleNames(); // a lone Chorus needs no number (FRO181): stays bare "Chorus"
     editor.updateComponents();
     sizeModuleComponents(editor);
 
