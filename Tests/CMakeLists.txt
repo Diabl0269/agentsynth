@@ -55,6 +55,8 @@ add_executable(Tests
     Modules/MidiKeyboardModuleTests.cpp
     Modules/VCAModuleTests.cpp
     Modules/LFOModuleTests.cpp
+    Modules/Lfo/LfoCustomWaveTests.cpp
+    Modules/Lfo/LFOModuleCustomShapeTests.cpp
     Modules/SampleHoldModuleTests.cpp
     Modules/SchmittTriggerTests.cpp
     Modules/ComparatorModuleTests.cpp
@@ -201,6 +203,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentPaintTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentEnvelopeCardTests.cpp
     UI/Graph/ModuleComponent/EnvelopeCardTempoSyncTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentLfoCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModTargetTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentKnobCoverageTests.cpp
@@ -340,6 +343,7 @@ add_executable(Tests
     UI/ModuleViews/CurveEditor/CurveEditorGeometryTests.cpp
     UI/ModuleViews/CurveEditor/CurveEditorInteractionTests.cpp
     UI/ModuleViews/CurveEditor/CurveEditorPaintTests.cpp
+    UI/ModuleViews/CurveEditor/CurveEditorGridSnapTests.cpp
     UI/Layout/UIAnimationTests.cpp
     UI/Graph/GraphEditorOnboardingTests.cpp
     UI/Library/ModuleLibraryComponentTests.cpp

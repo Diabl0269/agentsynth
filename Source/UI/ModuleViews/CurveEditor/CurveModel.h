@@ -42,6 +42,17 @@ struct MoveResult {
     int newIndex = -1;
 };
 
+/** A point along the curve the transport is currently at: `segment` + a progress in [0, 1]
+ *  through it, the same shape `CurveModel::valueAt` takes. */
+struct CurvePlayhead {
+    int segment = 0;
+    float progress = 0.0f;
+};
+
+inline bool operator==(const CurvePlayhead& a, const CurvePlayhead& b) {
+    return a.segment == b.segment && a.progress == b.progress;
+}
+
 /** Pure data + edit model for a breakpoint curve: nodes connected by segments, each segment
  *  shaped by a bend amount in [-1, 1]. No `juce::Component` dependency, so it is constructible
  *  and unit-testable headless.
@@ -104,6 +115,13 @@ public:
 
     /** Free mode only: refuses a pinned node (`!xMovable`) or dropping below 2 nodes. */
     bool removePoint(int index);
+
+    /** The (segment, progress) pair whose x is `x` -- the first segment with `x <=` its END
+     *  node's x AND non-zero duration (so a zero-length step segment is never chosen; mirrors
+     *  `evaluate`'s own right-continuity rule elsewhere). `progress` is clamped to [0, 1]. An
+     *  empty model returns `{0, 0}`. Used by the LFO card to turn a raw phase into a
+     *  `CurvePlayhead` (`CurveEditorGeometry::playheadPosition` takes the same shape). */
+    CurvePlayhead playheadForX(double x) const;
 
     static ShapeFn defaultShape();
 

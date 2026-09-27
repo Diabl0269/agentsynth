@@ -564,19 +564,8 @@ Hand-played MIDI rarely repeats a pitch inside an envelope's attack; **machine-g
     - **MIDI Output**: Generates standard MIDI messages for driving oscillators or other MIDI-capable modules.
 
 ## LFO Module
-- **Source file**: `Source/Modules/LFOModule.h`
-- **Waveforms**: 5 shapes — Sine, Triangle, Sawtooth, Square, S&H (Sample-and-Hold).
-- **Rate modes**:
-    - **Hz mode**: Free-running, 0.01–20.0 Hz (default 1.0 Hz, skewed range). Rate CV (ch0) applies here.
-    - **Sync mode**: Tempo-locked to host BPM (falls back to 120 BPM if no PlayHead). Subdivisions: 1/1, 1/2, 1/4 (default), 1/8, 1/16, 1/32. The rate is the tempo division, not the `rateHz` knob, so Rate CV is deliberately ignored in this mode.
-- **Parameters**: Shape (choice), Sync (bool mode toggle), Rate Hz (float), Sync Rate (choice), Bipolar (bool, default true), Retrig (bool), Level (0.0–1.0, default 1.0), Glide (0.0–1.0, S&H only).
-- **Bipolar/Unipolar**: When `Bipolar` is true, output range is −1 to +1. When false (unipolar), mapped to 0 to +1.
-- **S&H Glide**: On each phase wrap a new random value is drawn; `Glide > 0` ramps to it over up to 0.5 s using `juce::LinearSmoothedValue`.
-- **Retrig**: A MIDI Note On resets the phase to 0.0 when `Retrig` is enabled — unaffected by the CV jacks below.
-- **CV inputs** (FRO284): Rate ch0, Level ch1, Glide ch2 — all `PortRole::ModCV`, mono. Each follows the normalised-CV convention (`ModuleBase::blockCV` + `modulateNormalised`, read once per block; see [`modulation.md`](modulation.md#cv-in-normalised-units)): Rate moves `rateHz` in its own skewed range (Hz mode only, see above); Level moves the `level` knob before the 10 ms smoother; Glide moves the `glide` knob at the same S&H step-edge read the knob itself uses. ch0 doubles as the CV output on the way out (read before overwrite, the same shared-channel convention as Oscillator/Wavetable ch0 and Sample & Hold ch0); ch1/ch2 are cleared each block so the raw CV doesn't leak downstream as output. `getModulationTargets()` sets `paramId` on all three (`rateHz`/`level`/`glide`).
-- **Output**: Single CV channel (ch0), the module's only visible output jack. Declares 3 raw output channels (docs/modules/poly-channel-layout.md — ch1/ch2 exist only to keep JUCE from aliasing them onto ch0's buffer) but ch1/ch2 carry no signal. Pushes to `VisualBuffer` for scope display.
-- **Smoothing**: Level is smoothed over 10 ms per sample — it scales the emitted CV, so a step there steps every destination downstream. Rate is a frequency (phase-continuous) and Glide is read only at an S&H step edge, so neither is smoothed.
-- **Width**: SINGLE (280 px). See [docs/layout/module-card.md](../layout/module-card.md#width-buckets).
+Low-frequency oscillator / CV source, including the user-drawn Custom waveform (FRO114). Full
+reference: [`lfo.md`](lfo.md).
 
 ## Sequencer Module
 - **Source file**: `Source/Modules/SequencerModule.h`

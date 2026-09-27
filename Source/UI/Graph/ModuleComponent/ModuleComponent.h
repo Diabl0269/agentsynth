@@ -495,6 +495,15 @@ private:
     // Destroyed before envelopeDivCombos_ (declared after, so members unwind in reverse).
     juce::OwnedArray<juce::ComboBoxParameterAttachment> envelopeDivAttachments_;
 
+    // --- LFO custom-waveform card (FRO114) -- see ModuleComponentLfoCard.cpp ---
+    std::unique_ptr<synth::ui::CurveEditorComponent> lfoCurveEditor; // shown only for shape == Custom
+    std::unique_ptr<juce::ComboBox> lfoGridCombo;
+    std::unique_ptr<juce::TextButton> lfoShapesButton;
+    std::unique_ptr<juce::TextButton> lfoToolsButton;
+    bool lfoCurveGestureActive = false; // mirrors envelopeCurveGestureActive, for the wave graph
+    juce::var lfoWaveBefore;            // getExtraState() at onGestureStart, for the undo bracket
+    int lfoLastSeenWaveGeneration = 0;  // last generation this card wrote or resynced from
+
     std::unique_ptr<WavetableDisplayComponent> wavetableDisplay;
     std::unique_ptr<juce::TextButton> loadWavetableButton;
     std::unique_ptr<juce::FileChooser> wavetableChooser;
@@ -661,6 +670,14 @@ private:
      *  repaints only if something changed. Called from the existing gated 15 Hz timerCallback. */
     void refreshMidiLearnBadges();
 
+public:
+    // ---- LFO custom-waveform card (FRO114, ModuleComponentLfoCard.cpp) ----
+    // Public so a menu item and a test call the same code as each other.
+    void applyLfoWavePreset(int presetIndex); // replaces the whole wave, one undo step
+    void applyLfoWaveTool(int toolIndex);     // 0-3: LfoCustomWave::Tool; 4: Reset to Default
+    void setLfoGridDivisions(int n);          // 0: grid Off (no snap); else {n, min(n, 8)}, snap on
+
+private:
     /** Paints the "mapped" badge on every registered control that has one, and the armed control's
      *  breathing outline. Called from paint() (ModuleComponentPaint.cpp). */
     void paintMidiLearnOverlays(juce::Graphics& g);
@@ -811,6 +828,16 @@ private:
     void applyEnvelopeDivComboBounds();
     // FRO118: true when the slider is hidden only because its *Div combo swapped in over it.
     bool isEnvelopeDivSwappedForSlider(int sliderIndex) const;
+
+    // --- LFO custom-waveform card (FRO114, ModuleComponentLfoCard.cpp) ---
+    void createLfoCardControls();          // toolbar + Free-mode curve editor; LFO only
+    void wireLfoGestureCallbacks();        // undo bracket, mirrors wireEnvelopeGestureCallbacks
+    void writeLfoWaveFromCurve();          // forward sync: graph -> module
+    void syncLfoCurveFromModule();         // reverse sync: module -> graph (no-op mid-gesture)
+    void syncLfoCustomSectionVisibility(); // show/hide + fill baseline + relayout; message thread only
+    void showLfoWaveContextMenu(const juce::MouseEvent& e, synth::ui::CurveHitResult hit);
+    void updateLfoWavePlayhead(); // gated 15 Hz poll of LFOModule's phase, visible-only
+    int layoutLfoCustomWaveSection(int y, int contentX, int contentW, bool apply); // no-op if hidden
 
     // Apply SVG icons to bypass/mute/delete DrawableButtons from the active LnF.
     // No-op when the themed LnF is not installed (headless tests).

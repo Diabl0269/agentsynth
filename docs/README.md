@@ -19,6 +19,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/modules/modulation.md`](modules/modulation.md) — routing model, logical-port API, poly-bus wires, attenuverters, visual signal flow
 - [`docs/modules/poly-channel-layout.md`](modules/poly-channel-layout.md) — the raw channel table for every poly-capable module
 - [`docs/modules/wavetable.md`](modules/wavetable.md) — the Wavetable oscillator: tables, warp, mip pyramid, interpolation, file import
+- [`docs/modules/lfo.md`](modules/lfo.md) — the LFO: built-in shapes, the user-drawn Custom waveform, tempo sync, CV inputs
 - [`docs/modules/development-guide.md`](modules/development-guide.md) — step-by-step guide to adding a module
 
 ## Layout, canvas & theming

@@ -1,6 +1,8 @@
 #pragma once
 
+#include "Lfo/LfoCustomWave.h"
 #include "ModuleBase.h"
+#include <atomic>
 #include <juce_core/juce_core.h>
 #include <random>
 
@@ -22,14 +24,24 @@ public:
     static constexpr int kNumInputs = 3;
     static constexpr int kNumOutputs = 3;
 
+    // FRO114: the Custom-waveform section only shows on the card while shape == this index.
+    static constexpr int kCustomShapeIndex = 5;
+
     LFOModule()
         : ModuleBase("LFO", kNumInputs, kNumOutputs) { // Rate/Level/Glide CV in, 1 Control Output
         // Enable visual buffer for scope display
         enableVisualBuffer(true);
 
         // Shape
-        juce::StringArray shapes({"Sine", "Triangle", "Sawtooth", "Square", "S&H"});
+        juce::StringArray shapes({"Sine", "Triangle", "Sawtooth", "Square", "S&H", "Custom"});
         addParameter(shapeParam = new juce::AudioParameterChoice("shape", "Shape", shapes, 0));
+
+        // FRO114: rendered once here so a fresh module (never touched by setCustomWave) already
+        // has a valid Triangle table on both sides of the publish/adopt seam -- see
+        // DefaultCustomWaveIsTriangleBeforeAnyPublish.
+        customWave_.renderTable(pendingCustomTable_);
+        customTablePending_ = false;
+        audioCustomTable_ = pendingCustomTable_;
 
         // Mode: Hz (false) / Sync (true)
         addParameter(modeParam = new juce::AudioParameterBool("mode", "Sync", true));
@@ -83,6 +95,11 @@ public:
 
         if (buffer.getNumSamples() == 0 || buffer.getNumChannels() == 0)
             return;
+
+        // FRO114: adopt whatever custom-wave table the message thread last published, once per
+        // block, before the sample loop reads audioCustomTable_ -- see adoptPendingCustomTable's
+        // own comment for why this is a try-lock, not a lock.
+        adoptPendingCustomTable();
 
         // Rate/Level/Glide CV, read once per block (docs/modules/modulation.md#cv-in-normalised-units).
         // ch0 must be read before the sample loop below overwrites it with the CV output.
@@ -189,6 +206,15 @@ public:
                 // The value is managed by shSmoother
                 currentSample = shSmoother.getNextValue();
                 break;
+            case 5: { // Custom (FRO114): linear interpolation over the published 1024-entry table.
+                const float pos = phase * (float)synth::LfoCustomWave::kTableSize;
+                const int i = juce::jlimit(0, synth::LfoCustomWave::kTableSize - 1, (int)pos);
+                const float f = pos - (float)i;
+                currentSample = audioCustomTable_[(size_t)i] +
+                                (audioCustomTable_[(size_t)i + 1] - audioCustomTable_[(size_t)i]) * f;
+                currentSample = currentSample * 2.0f - 1.0f; // table is 0..1 -> bipolar -1..1 like every other shape
+                break;
+            }
             }
 
             // Advance phase
@@ -236,6 +262,11 @@ public:
         // Hold's ch1-6 — clearing them stops the raw CV values leaking downstream as output.
         for (int ch = 1; ch < buffer.getNumChannels(); ++ch)
             buffer.clear(ch, 0, buffer.getNumSamples());
+
+        // FRO114: once per block, not per sample -- the same convention ADSRModule's own
+        // playheadProgress uses (ADSRModule.h) -- for ModuleComponent::updateLfoWavePlayhead to
+        // poll from its existing gated 15 Hz timer.
+        uiPhase_.store(phase, std::memory_order_relaxed);
     }
 
     bool acceptsMidi() const override { return true; }
@@ -288,7 +319,64 @@ public:
         return {{"Rate", 0, "rateHz"}, {"Level", 1, "level"}, {"Glide", 2, "glide"}};
     }
 
+    // ---- FRO114: Custom waveform (message thread only, except where noted) ----
+
+    /** Sanitises, stores, re-renders the audio-thread table and bumps the generation counter --
+     *  called by the card's forward-sync (ModuleComponentLfoCard.cpp) and by setExtraState. */
+    void setCustomWave(const synth::LfoCustomWave& wave) {
+        customWave_ = wave;
+        customWave_.sanitise();
+        synth::LfoCustomWave::Table table{};
+        customWave_.renderTable(table);
+        publishCustomTable(table);
+        customWaveGeneration_.fetch_add(1, std::memory_order_relaxed);
+    }
+    const synth::LfoCustomWave& getCustomWave() const noexcept { return customWave_; }
+    /** Bumped by every setCustomWave call -- the card polls this against its own last-seen value
+     *  to reverse-sync after an undo/redo or preset load it didn't itself just write. */
+    int getCustomWaveGeneration() const noexcept { return customWaveGeneration_.load(std::memory_order_relaxed); }
+    /** Written once per block by processBlock (audio thread); read by the card's gated 15 Hz
+     *  playhead poll. */
+    float getPhaseForUI() const noexcept { return uiPhase_.load(std::memory_order_relaxed); }
+
+    /** `{}` while the wave is still the Triangle default (regardless of the current shape index --
+     *  a Custom wave sculpted while on another shape must not be lost when the user switches back
+     *  and forth), else `customWave_.toVar()`. Applied on the TRUSTED path only, same as every
+     *  other module's extra state (docs/ai/patch-safety.md). */
+    juce::var getExtraState() const override { return customWave_.isDefault() ? juce::var() : customWave_.toVar(); }
+    /** A void/absent state (no extra-state key at all, or an explicit void var) resolves to the
+     *  default wave via setCustomWave(fromVar({})) -- fromVar's own rules give that outcome for
+     *  any non-object var, so this needs no special case. */
+    void setExtraState(const juce::var& state) override { setCustomWave(synth::LfoCustomWave::fromVar(state)); }
+
 private:
+    // FRO114: mirrors WavetableOscillatorModule's publishLoadedTable/adoptPendingTable
+    // (WavetableOscillatorModule.cpp), simplified to a fixed-size array (no allocation, ever,
+    // rather than a swapped shared_ptr) since a custom-wave table's size is compile-time fixed.
+    void publishCustomTable(const synth::LfoCustomWave::Table& t) {
+        const juce::SpinLock::ScopedLockType lock(customTableLock_);
+        pendingCustomTable_ = t;
+        customTablePending_ = true;
+    }
+    // Audio thread, once per block, before the sample loop. A try-lock: on contention this block
+    // simply keeps last block's table, which is at worst one block of staleness and never blocks
+    // or allocates -- the audio-thread invariant every SpinLock use in this codebase must keep.
+    void adoptPendingCustomTable() {
+        const juce::SpinLock::ScopedTryLockType lock(customTableLock_);
+        if (!lock.isLocked() || !customTablePending_)
+            return;
+        audioCustomTable_ = pendingCustomTable_;
+        customTablePending_ = false;
+    }
+
+    mutable juce::SpinLock customTableLock_; // guards pendingCustomTable_/customTablePending_ only
+    synth::LfoCustomWave::Table pendingCustomTable_{};
+    bool customTablePending_ = false;
+    synth::LfoCustomWave::Table audioCustomTable_{}; // audio-thread-private; never touched from the message thread
+    synth::LfoCustomWave customWave_ = synth::LfoCustomWave::defaultWave(); // message-thread-only
+    std::atomic<int> customWaveGeneration_{0};
+    std::atomic<float> uiPhase_{0.0f};
+
     juce::AudioParameterChoice* shapeParam;
     juce::AudioParameterBool* modeParam; // Sync (true)
     juce::AudioParameterFloat* rateHzParam;

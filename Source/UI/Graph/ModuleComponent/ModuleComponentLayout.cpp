@@ -285,6 +285,11 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
     // ModuleComponentEnvelopeCard.cpp. A no-op (returns `y` unchanged) for every other module.
     y = layoutEnvelopeGraphSection(y, contentX, contentW, apply);
 
+    // LFO custom-waveform section (FRO114): the Grid/Shapes/Tools toolbar, then the curve editor
+    // itself while shape == Custom -- see ModuleComponentLfoCard.cpp. A no-op for every other
+    // module (and for an LFO not currently on the Custom shape).
+    y = layoutLfoCustomWaveSection(y, contentX, contentW, apply);
+
     if (freqResponseToggle) {
         if (apply)
             freqResponseToggle->setBounds(contentX, y, contentW, kRowHeight);

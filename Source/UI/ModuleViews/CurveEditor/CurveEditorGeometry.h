@@ -15,16 +15,10 @@ struct CurveHitResult {
     int index = -1;
 };
 
-/** A point along the curve the transport is currently at: `segment` + a progress in [0, 1]
- *  through it, the same shape `CurveModel::valueAt` takes. */
-struct CurvePlayhead {
-    int segment = 0;
-    float progress = 0.0f;
-};
-
-inline bool operator==(const CurvePlayhead& a, const CurvePlayhead& b) {
-    return a.segment == b.segment && a.progress == b.progress;
-}
+/** Default zero-duration-segment pixel width -- mirrors `CurveEditorGeometry::kZeroSegmentPx`
+ *  (declared as a free constant so `CurveGeometryConfig`, below, can default against it without
+ *  forward-declaring the class it configures). */
+inline constexpr float kDefaultZeroSegmentPx = 12.0f;
 
 /** Tunables for `CurveEditorGeometry`'s x mapping. */
 struct CurveGeometryConfig {
@@ -33,6 +27,10 @@ struct CurveGeometryConfig {
     double minVisibleRange = 0.0;
     /** Overrides the computed visible range entirely when set. */
     std::optional<double> explicitVisibleRange;
+    /** Pixel width a zero-duration segment occupies on screen -- `kDefaultZeroSegmentPx` by
+     *  default (the envelope card's plateau convention). The LFO card sets this to 0 so a step in
+     *  a custom waveform draws as a true vertical line rather than a visible plateau. */
+    float zeroSegmentPx = kDefaultZeroSegmentPx;
 };
 
 /** Pure pixel mapping for a `CurveModel` over a pixel rectangle — testable without a
@@ -47,7 +45,7 @@ struct CurveGeometryConfig {
  */
 class CurveEditorGeometry {
 public:
-    static constexpr float kZeroSegmentPx = 12.0f;
+    static constexpr float kZeroSegmentPx = kDefaultZeroSegmentPx;
     static constexpr float kHitRadiusPx = 10.0f;
     /** Vertical inset so a node at level 0 or 1 isn't clipped against the component edge. */
     static constexpr float kLevelInsetPx = 10.0f;

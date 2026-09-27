@@ -20,6 +20,40 @@ CurveEditorComponent::ThemeColours CurveEditorComponent::resolveThemeColours() c
 void CurveEditorComponent::paintGrid(juce::Graphics& g, const CurveEditorGeometry& geometry,
                                      const ThemeColours& colours) const {
     const float h = (float)getHeight();
+
+    // grid_ set (the LFO card): a fixed xDivisions x yDivisions grid, in place of the nice-tick
+    // time grid every other caller (the envelope card) still gets below.
+    if (grid_.has_value()) {
+        const int xDiv = juce::jmax(1, grid_->xDivisions);
+        const int yDiv = juce::jmax(1, grid_->yDivisions);
+        const double minX = model_.getMinX();
+        const double maxX = model_.getMaxX();
+
+        g.setColour(colours.grid);
+        for (int i = 0; i <= xDiv; ++i) {
+            const double t = minX + (maxX - minX) * ((double)i / (double)xDiv);
+            g.drawVerticalLine((int)geometry.xForTime(t), 0.0f, h);
+        }
+        for (int i = 0; i <= yDiv; ++i) {
+            const float y = geometry.yForLevel((float)i / (float)yDiv);
+            // The middle line (yDiv even) is the zero/centre reference -- drawn brighter so it
+            // stays visible even with Grid set to Off's own faint reference grid.
+            const bool isMiddle = (yDiv % 2 == 0) && (i == yDiv / 2);
+            g.setColour(isMiddle ? colours.grid.withAlpha(0.7f) : colours.grid);
+            g.drawHorizontalLine((int)y, 0.0f, (float)getWidth());
+        }
+
+        g.setFont(juce::Font(9.0f));
+        g.setColour(colours.mutedText);
+        for (int i = 0; i <= xDiv; ++i) {
+            const double t = minX + (maxX - minX) * ((double)i / (double)xDiv);
+            const float x = geometry.xForTime(t);
+            const juce::String label = timeLabelFormatter_(t); // LFO's own formatter returns {}
+            g.drawText(label, (int)x + 2, (int)h - 12, 48, 11, juce::Justification::left, false);
+        }
+        return;
+    }
+
     const auto ticks = geometry.computeGridTicks();
 
     g.setColour(colours.grid);
@@ -41,7 +75,7 @@ void CurveEditorComponent::paintCurve(juce::Graphics& g, const CurveEditorGeomet
     if (numSegments <= 0)
         return;
 
-    const float baselineY = geometry.yForLevel(0.0f);
+    const float baselineY = geometry.yForLevel(fillBaselineLevel_);
     juce::Path curvePath;
     juce::Path fillPath;
     bool first = true;

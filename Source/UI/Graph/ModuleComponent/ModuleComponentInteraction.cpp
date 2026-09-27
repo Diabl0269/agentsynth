@@ -171,6 +171,19 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
                     safeThis->syncEnvelopeCurveFromParams();
             });
         }
+    } else if (getType(module) == ModuleType::LFO && (param->paramID == "shape" || param->paramID == "bipolar")) {
+        // FRO114: shape decides whether the Custom-wave section shows at all; bipolar decides its
+        // fill baseline. Both funnel into the same visibility+resize pass (combo click, preset
+        // load, undo, automation).
+        if (juce::MessageManager::existsAndIsCurrentThread()) {
+            syncLfoCustomSectionVisibility();
+        } else {
+            juce::Component::SafePointer<ModuleComponent> safeThis(this);
+            juce::MessageManager::callAsync([safeThis] {
+                if (safeThis != nullptr)
+                    safeThis->syncLfoCustomSectionVisibility();
+            });
+        }
     } else if (getType(module) == ModuleType::ADSR && param->paramID == "tempoSync") {
         // FRO117: keep the MS|BPM toggle pair in sync with automation/undo/preset loads, the
         // same reverse-sync shape as the envelope graph branch above.
