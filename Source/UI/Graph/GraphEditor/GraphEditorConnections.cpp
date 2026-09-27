@@ -28,7 +28,11 @@ using namespace detail;
 // that is broadcast to every voice (one LFO shakes all eight), which is what sourceStride == 0
 // means. Where a jack fronts more than one fan (Poly MIDI's "Poly Out" carries both Pitch and
 // Gate) the pairing whose roles agree wins. A null end (the graph's audio I/O nodes, which have no
-// logical ports) is treated as a plain mono jack whose index is its raw channel.
+// logical ports) is treated as a plain mono jack whose index is its raw channel — except dropping
+// onto its Left jack specifically (index 0), where both a stereo AND a mono audio source fan onto
+// raw 0 and 1 (the null-dest block at the end of this function), so neither leaves the Right leg
+// silent -- this is what FRO23's "reconnect the chain" heal relies on for a mono chain healed
+// straight into Audio Output.
 GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int sourceVisibleJack,
                                                    const ModuleBase* dest, int destVisibleJack) {
     PolyLink link{sourceVisibleJack, destVisibleJack, 1};
@@ -114,6 +118,17 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
         for (const auto& s : sourceTargets) {
             if (s.role == PortRole::Audio && s.voiceSpan == 2) {
                 return PolyLink{s.rawHeadChannel, 0, 2, 1};
+            }
+            // A genuinely MONO audio source dropped on Audio Output Left should still reach both
+            // speakers (FRO23's "reconnect the chain" heal relies on this: deleting the last effect
+            // before a mono-fed Output must not go silent in one ear) -- sourceStride 0 means the
+            // same one raw channel feeds both dest legs, the mod-CV-broadcast convention above.
+            // Deliberately excludes a source that is Dual I/O SPLIT: its "Left" jack is only mono
+            // because the Right jack is a separate, independently-wireable sibling (exactly the
+            // upstream in SmartConnectionCtrlInsertRemovesEveryDoomedLegOfADualIOUpstream) --
+            // broadcasting it here would double up once that Right jack gets its own cable.
+            if (s.role == PortRole::Audio && s.voiceSpan == 1 && (source == nullptr || !source->isDualIO())) {
+                return PolyLink{s.rawHeadChannel, 0, 2, 0};
             }
         }
     }

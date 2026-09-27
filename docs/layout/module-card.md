@@ -142,11 +142,25 @@ module's one "Audio" jack is genuinely mono — its Right leg lives on a separat
 ch1 — unlike an auto-derived FX shape's collapsed jack (Chorus, Reverb, Delay, Distortion...),
 which owns both raw legs of a real stereo pair under that one jack; either way it is still exactly
 one audio leg, so the module remains heal-eligible. A bare graph I/O node (Audio Input/Output) has
-no jack-collapsing of its own — each of its raw channels is its own visible jack — so a stereo
-cable landing on it is two separate legs on ITS side; a module wired straight into Audio Output (or
-out of Audio Input) with more than one of its channels engaged is therefore never heal-eligible on
-that side. Modulation/CV cables on the deleted module are simply dropped either way — they are
-never candidates for the heal.
+no jack-collapsing of its own for painting or hit-testing purposes — GraphEditorCables.cpp's
+`rebuildVisibleCables` still treats each of its raw channels as its own distinct visible cable — but
+this heal's OWN eligibility count is more specific: two legs landing on a bare I/O node's matching
+raw channel pair (0/1) off the SAME source jack of the deleted module are still one logical cable,
+not two (`mergeBareIoChannelPairs` in `GraphEditorDeleteHeal.cpp`). This is the ticket's own
+motivating case — deleting the last effect before Audio Output (Osc → Filter → Reverb → Audio
+Output, delete Reverb) — which now heals: the surviving Filter is wired directly into both of
+Output's legs. Two legs that land on the SAME raw pair but come off two DIFFERENT source jacks (a
+splitter feeding Left and Right separately) are not merged and remain two legs, unhealed, as do two
+legs that land on two DIFFERENT destination nodes even on matching channel numbers — the merge keys
+on the peer node's identity, not just the raw channel pair. When the surviving upstream module is
+itself mono (Filter's own collapsed jack, confirmed genuinely mono above) rather than a real stereo
+pair, the healed cable still reaches both of Audio Output's legs: `resolvePolyLink`'s null-destination
+branch broadcasts a mono Audio source onto both raw legs of Output's Left slot, the same as a
+manual mono cable dropped there would, "so a mono chain does not go silent in one ear" — unless the
+source module is itself Dual I/O SPLIT (a genuine, separately-wireable Right jack of its own), in
+which case that Right jack is left for its own cable rather than broadcast over. Modulation/CV
+cables on the deleted module are simply dropped either way — they are never candidates for the
+heal.
 
 Deleting several modules in one selection heals across the whole deleted RUN, from the nearest
 surviving upstream node to the nearest surviving downstream one, as long as every module along that

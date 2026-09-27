@@ -72,6 +72,39 @@ std::optional<int> audioVisibleJack(juce::AudioProcessorGraph::Node* node, int r
     return rawChannel < channels ? std::optional<int>(rawChannel) : std::nullopt;
 }
 
+// A bare graph I/O node (Audio Input/Output) has no logical ports of its own, so audioVisibleJack
+// gives each of its raw channels its OWN jack identity (matching resolvePolyLink's `identity`
+// fallback and GraphEditorCables.cpp's cable-painting/hit-testing, which also treats each raw
+// channel as its own distinct cable). That is the right notion for painting a cable, but wrong for
+// THIS heal's eligibility count: a genuine stereo pair -- the deleted node's own L/R landing on the
+// bare node's matching raw channels 0 and 1 -- is still one logical cable, same principle as any
+// other collapsed stereo jack ("count audio cables at the visible-jack level", FRO23). Two legs
+// merge only when they share BOTH the same peer node AND the same jack on THIS node's own side
+// (`thisJack`) -- i.e. they really did come off one jack of the deleted node -- so two independent
+// mono legs from a splitter/mixer that merely happen to land on raw 0 and 1 of the same bare I/O
+// node (different `thisJack`s) are correctly left as two separate, heal-ineligible legs.
+void mergeBareIoChannelPairs(std::vector<AudioLeg>& legs, juce::AudioProcessorGraph& graph) {
+    for (size_t i = 0; i < legs.size(); ++i) {
+        if (legs[i].peerJack != 0)
+            continue;
+        auto* peerNode = graph.getNodeForId(legs[i].peerId);
+        if (peerNode == nullptr || dynamic_cast<ModuleBase*>(peerNode->getProcessor()) != nullptr)
+            continue; // a ModuleBase peer's own mapInputChannel/mapOutputChannel already collapsed it
+        // The peerJack==1 partner can land anywhere in the vector, not only after `i` (connection
+        // order in the graph is not guaranteed) -- scan the whole vector, not just the tail.
+        for (size_t j = 0; j < legs.size(); ++j) {
+            if (j == i)
+                continue;
+            if (legs[j].peerId == legs[i].peerId && legs[j].thisJack == legs[i].thisJack && legs[j].peerJack == 1) {
+                legs.erase(legs.begin() + static_cast<long>(j));
+                if (j < i)
+                    --i; // erasing an earlier element shifts `i`'s own slot back by one
+                break;
+            }
+        }
+    }
+}
+
 // Every distinct audio leg touching `nodeId`, read straight from the raw graph connections -- the
 // same source of truth macroPortDeletionNeighbors()/autoDeleteOrphanedAttenuverter()
 // (MacroGroupControllerPorts.cpp) read, not buildVisibleCables() (paint-oriented, keyed off live
@@ -101,6 +134,8 @@ AudioLegs classifyAudioLegs(juce::AudioProcessorGraph& graph, juce::AudioProcess
                 legs.outgoing.push_back(leg);
         }
     }
+    mergeBareIoChannelPairs(legs.incoming, graph);
+    mergeBareIoChannelPairs(legs.outgoing, graph);
     return legs;
 }
 

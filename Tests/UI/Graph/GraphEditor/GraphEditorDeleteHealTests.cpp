@@ -478,26 +478,62 @@ TEST_F(GraphEditorTest, DeletingFilterInARealOscFilterDistortionOutputChainHeals
     EXPECT_EQ(monoConnectionCount(engine, f.osc, f.distortion), 2) << "Osc heals straight to Distortion";
 }
 
-// Distortion's own connection into the bare Audio Output node is NOT one audio leg but two: Audio
-// Output has no LogicalPort collapsing of its own (ModuleComponentLayout.cpp's getContentTopY
-// reads its RAW getTotalNumOutputChannels(), unlike a ModuleBase's collapsed jack), so its two raw
-// channels are two separate visible jacks and Distortion's stereo pair into it is two distinct
-// cables (GraphEditorCables.cpp's rebuildVisibleCables falls back to
-// `dstJack = connection.destination.channelIndex` for a non-ModuleBase destination). Distortion is
-// therefore never heal-eligible when wired straight into Audio Output -- confirms the classifier
-// does not false-positive a "both legs, one cable" heal across a bare multi-channel I/O node.
-TEST_F(GraphEditorTest, DeletingDistortionNeverHealsBecauseTheBareAudioOutputNodeIsTwoSeparateLegs) {
+// Distortion's own connection into the bare Audio Output node LOOKS like two raw legs, but they
+// land on Output's matching channel pair (raw 0 and 1) off the SAME source jack -- still one
+// logical cable, the ticket's own literal "delete the last effect before Audio Output" case and
+// the founder's example of losing sound (a bare I/O node has no LogicalPort collapsing of its own,
+// ModuleComponentLayout.cpp's getContentTopY reads its RAW getTotalNumOutputChannels(), so its
+// jack-painting/hit-testing genuinely treats each raw channel as its own visible cable --
+// GraphEditorCables.cpp's rebuildVisibleCables falls back to `dstJack =
+// connection.destination.channelIndex` -- but this heal's OWN eligibility count pairs raw 0/1 off
+// one source jack back into a single leg, mergeBareIoChannelPairs in GraphEditorDeleteHeal.cpp).
+// Deleting Distortion therefore DOES heal: Filter -> Audio Output directly. Filter's own collapsed
+// jack is genuinely mono (span 1, confirmed by osc->filter above), so the healed cable is a mono
+// source broadcast onto both of Output's raw legs -- resolvePolyLink's null-dest mono-broadcast
+// branch, "the way a manual cable into that jack would" (FRO23 follow-up) -- rather than silence in
+// one ear.
+TEST_F(GraphEditorTest, DeletingTheLastEffectBeforeAudioOutputHealsBothLegs) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 900);
 
     const auto f = makeOscFilterDistortionOutFixture(editor, engine);
-    ASSERT_EQ(monoConnectionCount(engine, f.distortion, f.out), 2);
+    ASSERT_EQ(monoConnectionCount(engine, f.distortion, f.out), 2)
+        << "two raw legs off Distortion's one collapsed output jack, into Output's matching pair";
 
     editor.requestDeleteModule(f.distortion);
 
     EXPECT_EQ(engine.getGraph().getNodeForId(f.distortion), nullptr);
-    EXPECT_EQ(monoConnectionCount(engine, f.filter, f.out), 0) << "two outgoing legs into Audio Output -- no heal";
+    EXPECT_EQ(monoConnectionCount(engine, f.filter, f.out), 2)
+        << "Filter heals straight to Audio Output, mono broadcast onto both legs -- no silent ear";
+}
+
+// Two DIFFERENT destination nodes, even sitting on the same matching raw-channel numbers, are NOT
+// one leg: the pairing above only merges legs that share the SAME peer node. A splitter/mixer-style
+// module (more than one distinct downstream) still deletes as today, unhealed -- "more audio legs
+// (mixer, splitters) deletes as today" (FRO23).
+TEST_F(GraphEditorTest, TwoDifferentDestinationNodesOnMatchingChannelsStillCountAsTwoLegs) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 900);
+
+    auto source = addHealNode(editor, engine, std::make_unique<HealTestMonoModule>("Source"), 0, 100);
+    auto middle = addHealNode(editor, engine, std::make_unique<HealTestMonoModule>("Middle"), 400, 100);
+    auto destA = addHealNode(editor, engine, std::make_unique<HealTestMonoModule>("DestA"), 800, 0);
+    auto destB = addHealNode(editor, engine, std::make_unique<HealTestMonoModule>("DestB"), 800, 300);
+    sizeModuleComponents(editor);
+
+    editor.connectPorts(source, 0, middle, 0, false, false);
+    editor.connectPorts(middle, 0, destA, 0, false, false);
+    editor.connectPorts(middle, 0, destB, 0, false, false);
+    ASSERT_EQ(monoConnectionCount(engine, middle, destA), 1);
+    ASSERT_EQ(monoConnectionCount(engine, middle, destB), 1);
+
+    editor.requestDeleteModule(middle);
+
+    EXPECT_EQ(engine.getGraph().getNodeForId(middle), nullptr) << "deletes as today -- just without a heal";
+    EXPECT_EQ(monoConnectionCount(engine, source, destA), 0) << "two distinct downstreams: not heal-eligible";
+    EXPECT_EQ(monoConnectionCount(engine, source, destB), 0);
 }
 
 // ============================================================================
