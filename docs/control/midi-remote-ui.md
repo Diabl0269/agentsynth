@@ -376,10 +376,10 @@ nanoKONTROL2 draws that device's knobs/sliders/buttons correctly without running
 FRO330: a template can also ship pre-wired **actions**, so applying it needs no MIDI Learn for
 those controls — see [Templates can ship actions too](midi-remote.md#templates-can-ship-actions-too).
 The BeatStep's template does this for its factory Play/Stop, which send [MMC](midi-remote.md#mmc-messages)
-rather than a CC or note. The Launch Control XL 3's fixed default Mode 16 has no documented
-transport-labelled buttons (only encoders, faders and 16 generic buttons — see this template's own
-`"source"` citation), so it ships no transport binding; it needs one only once a vendor chart names
-which buttons are transport and what they send.
+rather than a CC or note. The Launch Control XL 3 ships no transport binding: Novation's
+Programmer's Reference Guide says its Play and Record buttons send nothing in the fixed default
+Mode 16 and only send after a DAW-mode handshake, which the app doesn't perform (see this
+template's own `"source"` citation).
 
 **⋯** has *Import controller…* / *Export controller…* (JSON file,
 the profile document of [`midi-remote.md`](midi-remote.md#data-model)). Importing a document whose id is already set up on this

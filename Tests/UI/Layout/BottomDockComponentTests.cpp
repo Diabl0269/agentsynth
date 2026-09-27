@@ -1,5 +1,6 @@
 // BottomDockComponentTests.cpp -- FRO11 (P9-5): the dock's tab strip, the Toggle Mixer Panel
 // shortcut/command, and active-tab persistence via ApplicationProperties.
+#include "../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "AI/AIProvider.h"
 #include "BottomDockActiveTabResetGuard.h"
 #include "MainComponent/MainComponent.h"
@@ -7,6 +8,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
+#include <vector>
 
 namespace {
 
@@ -294,4 +296,82 @@ TEST(BottomDockComponentTests, DetachingTheActiveTabFallsBackToTheNextOneAndNeve
     dock.getMixerHost().setDetached(false);
     EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "a redock while auto-hidden reopens the panel";
     EXPECT_TRUE(dock.isMixerTabActive());
+}
+
+// FRO338: add-bus/reset-meters used to be carved from the tab strip's own right edge, Mixer-tab-
+// only -- switching to Mixer visibly shrank the tab strip's shared area, so every tab button's own
+// bounds changed depending on which tab was active. They now live in their own toolbar row above
+// the Mixer content instead, so the tab strip's width split must be identical on every tab.
+TEST(BottomDockComponentTests, TabButtonBoundsAreIdenticalWhetherTimelineOrMixerIsActive) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
+    MainComponent mc(std::make_unique<MockProviderMDCT>());
+    mc.setSize(1400, 900);
+    mc.newPatchForTest();
+    mc.simulateToggleBottomPanelClick();
+    auto& dock = mc.getBottomDock();
+
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
+    std::vector<juce::Rectangle<int>> timelineActiveBounds;
+    for (auto* button : dock.getTabButtons())
+        timelineActiveBounds.push_back(button->getBounds());
+
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
+    ASSERT_EQ(dock.getTabButtons().size(), timelineActiveBounds.size());
+    for (size_t i = 0; i < timelineActiveBounds.size(); ++i)
+        EXPECT_EQ(dock.getTabButtons()[i]->getBounds(), timelineActiveBounds[i])
+            << "tab button " << i << " moved when switching tabs";
+}
+
+// FRO338: the buttons are Mixer-only, and now that they've moved off the tab strip they must sit
+// entirely below it (never sharing a pixel with a tab button).
+TEST(BottomDockComponentTests, AddBusAndResetMetersAreMixerOnlyAndNeverOverlapTheTabStrip) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
+    MainComponent mc(std::make_unique<MockProviderMDCT>());
+    mc.setSize(1400, 900);
+    mc.newPatchForTest();
+    mc.simulateToggleBottomPanelClick();
+    auto& dock = mc.getBottomDock();
+
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
+    EXPECT_FALSE(dock.getAddBusButtonForTest().isVisible());
+    EXPECT_FALSE(dock.getResetMetersButtonForTest().isVisible());
+
+    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
+    EXPECT_TRUE(dock.getAddBusButtonForTest().isVisible());
+    EXPECT_TRUE(dock.getResetMetersButtonForTest().isVisible());
+
+    const juce::Rectangle<int> tabStripArea(0, 0, dock.getWidth(), synth::ui::BottomDockComponent::kTabStripHeight);
+    EXPECT_FALSE(tabStripArea.intersects(dock.getAddBusButtonForTest().getBounds()));
+    EXPECT_FALSE(tabStripArea.intersects(dock.getResetMetersButtonForTest().getBounds()));
+    for (auto* button : dock.getTabButtons()) {
+        EXPECT_FALSE(button->getBounds().intersects(dock.getAddBusButtonForTest().getBounds()));
+        EXPECT_FALSE(button->getBounds().intersects(dock.getResetMetersButtonForTest().getBounds()));
+    }
+}
+
+// FRO338: a real reorder drag shows the dragging-hand cursor once it clears JUCE's own drag
+// threshold, and mouseUp always restores it -- same reasoning as GraphEditor's macro-chip cursor
+// (GraphEditorCanvas.cpp's mouseMove).
+TEST(BottomDockComponentTests, DraggingATabShowsTheDraggingHandCursorAndMouseUpRestoresNormal) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
+    MainComponent mc(std::make_unique<MockProviderMDCT>());
+    mc.setSize(1400, 900);
+    mc.newPatchForTest();
+    mc.simulateToggleBottomPanelClick();
+    auto& dock = mc.getBottomDock();
+
+    auto buttons = dock.getTabButtons();
+    ASSERT_FALSE(buttons.empty());
+    auto* button = buttons.front();
+
+    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::NormalCursor);
+    button->mouseDown(makeClickEvent(*button, {5.0f, 5.0f}));
+    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::NormalCursor)
+        << "no cursor change from a mouseDown alone";
+
+    button->mouseDrag(makeDragEvent(*button, {60.0f, 5.0f}, {5.0f, 5.0f}));
+    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+
+    button->mouseUp(makeClickEvent(*button, {60.0f, 5.0f}));
+    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::NormalCursor);
 }

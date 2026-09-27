@@ -3,7 +3,7 @@
   "id": "template-novation-launch-control-xl-3",
   "name": "Launch Control XL 3",
   "vendor": "Novation",
-  "source": "Novation Launch Control XL 3 appendix, https://userguides.novationmusic.com/hc/en-gb/articles/26260540230162-Launch-Control-XL-3-appendix, section 'Default Mode (16) parameters' (Mode 16, the fixed default mode; all controls on MIDI channel 16: encoders CC13-36, faders CC5-12, button rows CC37-44 and CC45-52). The encoders' relative/absolute encoding is not stated there, so abs7 is used; use Auto-detect in the inspector if yours sends relative values.",
+  "source": "Novation Launch Control XL 3 appendix, https://userguides.novationmusic.com/hc/en-gb/articles/26260540230162-Launch-Control-XL-3-appendix, section 'Default Mode (16) parameters' (Mode 16, the fixed default mode; all controls on MIDI channel 16: encoders CC13-36, faders CC5-12, button rows CC37-44 and CC45-52). The encoders' relative/absolute encoding is not stated there, so abs7 is used; use Auto-detect in the inspector if yours sends relative values. No transport binding: the Launch Control XL 3 Programmer's Reference Guide, https://fael-downloads-prod.focusrite.com/customer/prod/downloads/launch_control_xl_3_programmer_s_reference_guide-pdf_en.pdf, p.7 'standalone (MIDI) mode', says the Page, Track, Record, Play, Solo/Arm and Mute/Select buttons are unused in this mode; they only send (Play CC116, Record CC118, channel 1, p.9) after a DAW-mode handshake (p.8), which the app does not send.",
   "input": {
     "identifier": "",
     "name": ""
