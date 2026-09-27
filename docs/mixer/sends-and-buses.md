@@ -69,7 +69,8 @@ zippers, and a centred, still-stereo send renders bit-identical to before FRO294
 **The target is never stored.** Node ids are reassigned on every rebuild-from-JSON, so a stored id
 goes stale on undo. "Which bus does slot *k* feed?" is answered by walking forward from slot *k*'s own
 output channel to the first strip (`synth::findSendTarget`), which therefore also resolves through a
-module the user inserted on the send path, and returns nothing for a cut cable.
+module the user inserted on the send path, and returns nothing for a cut cable. A send can also feed
+a Compressor/Gate Key input instead of a strip; see [Sending to a Key input](#sending-to-a-key-input).
 
 Which slots exist, each slot's pre or post setting, (FRO295) each slot's **mute**, and (FRO294) each
 slot's **mono** are **trusted extra state**, `"sends": [{"slot", "pre", "mute", "mono"}]`, the same
