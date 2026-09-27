@@ -92,7 +92,14 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
         trackHeaderHost_->createChannelsForExistingTracks();
     else if (menuId == kInsertTrackPresetFromFileMenuId)
         trackHeaderHost_->addTrackFromPresetFile();
-    else if (menuId >= kAddTrackPresetInstrumentMenuIdBase) {
+    else if (menuId >= kAddTrackPresetBusMenuIdBase) {
+        // FRO297: resolved against the snapshot buildAddTrackMenu() captured, same reason the
+        // Audio/Instrument submenus are — see busTrackPresetMenuSnapshot_'s own comment. Checked
+        // BEFORE kAddTrackPresetInstrumentMenuIdBase since its base (7000) sits above it (6000).
+        const int index = menuId - kAddTrackPresetBusMenuIdBase;
+        if (index >= 0 && index < (int)busTrackPresetMenuSnapshot_.size())
+            trackHeaderHost_->addBusFromPreset(busTrackPresetMenuSnapshot_[(size_t)index].name);
+    } else if (menuId >= kAddTrackPresetInstrumentMenuIdBase) {
         // FRO13: resolved against the snapshot buildAddTrackMenu() captured, same reason the
         // plugin list is (a preset can be saved/deleted between menu-open and click) — see
         // instrumentTrackPresetMenuSnapshot_'s own comment.
@@ -234,6 +241,17 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
             instrumentPresetMenu.addItem(kAddTrackPresetInstrumentMenuIdBase + i,
                                          instrumentTrackPresetMenuSnapshot_[(size_t)i].name);
         menu.addSubMenu("Instrument Track from Preset", instrumentPresetMenu);
+    }
+    // FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): a Bus preset creates no timeline track
+    // at all, just the bus chain — still listed here, grouped like the other two kinds, since
+    // "+ Track" is where every saved chain (track-bearing or not) is inserted from.
+    const auto busPresets = synth::TrackPresetManager::listTrackPresets(dir, synth::TrackPresetKind::Bus);
+    busTrackPresetMenuSnapshot_.assign(busPresets.begin(), busPresets.end());
+    if (!busTrackPresetMenuSnapshot_.empty()) {
+        juce::PopupMenu busPresetMenu;
+        for (int i = 0; i < (int)busTrackPresetMenuSnapshot_.size(); ++i)
+            busPresetMenu.addItem(kAddTrackPresetBusMenuIdBase + i, busTrackPresetMenuSnapshot_[(size_t)i].name);
+        menu.addSubMenu("Bus from Preset", busPresetMenu);
     }
     menu.addItem(kInsertTrackPresetFromFileMenuId, "Insert Track Preset from File...");
 

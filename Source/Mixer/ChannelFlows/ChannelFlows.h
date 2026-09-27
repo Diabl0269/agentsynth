@@ -303,6 +303,9 @@ collectOutsideModulatorsForTrackPreset(juce::AudioProcessorGraph& graph, const M
  *  "stop at another CHANNEL's strip, but not at a plain FX group" rule (ChannelFlowsTrackPreset.cpp). */
 bool isChannelMacro(const Macro& macro, juce::AudioProcessorGraph& graph);
 
+/** True when `macro`'s own Channel Strip member is a bus (FRO297, ChannelFlowsTrackPreset.cpp). */
+bool isBusMacro(const Macro& macro, juce::AudioProcessorGraph& graph);
+
 // ---- FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): track <-> channel ----------
 //
 // Both are pure signal-reach reads (no mutation, no undo, no TimelineDoc), defined in

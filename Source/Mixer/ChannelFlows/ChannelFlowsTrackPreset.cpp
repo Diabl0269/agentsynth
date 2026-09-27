@@ -7,6 +7,7 @@
 
 #include "ChannelFlowsInternal.h"
 #include "MacroSet.h"
+#include "Mixer/MixerSends/MixerSends.h"
 #include <algorithm>
 
 namespace synth {
@@ -42,6 +43,20 @@ bool isChannelMacro(const Macro& macro, juce::AudioProcessorGraph& graph) {
     for (auto* node : graph.getNodes()) {
         const juce::String uuid = node->properties["uuid"].toString();
         if (uuid.isNotEmpty() && macro.hasMember(uuid) && isStrip(node->getProcessor()))
+            return true;
+    }
+    return false;
+}
+
+// FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): true when one of `macro`'s members is a
+// bus strip (synth::isBusStrip, MixerSends.h) -- a macro with no bound timeline track. Gates the
+// macro's own "Set as Default Track Preset" item (GraphEditorMacroPrompts.cpp -- a bus has no
+// per-type default) and resolves a macro-context "Save Track as Preset..." action to
+// TrackPresetKind::Bus (MainComponentTrackPresets.cpp::handleMacroTrackPresetAction).
+bool isBusMacro(const Macro& macro, juce::AudioProcessorGraph& graph) {
+    for (auto* node : graph.getNodes()) {
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isNotEmpty() && macro.hasMember(uuid) && isBusStrip(graph, node->nodeID))
             return true;
     }
     return false;

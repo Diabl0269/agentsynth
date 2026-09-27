@@ -17,6 +17,42 @@ lives in [`docs/mixer/mixer.md`](mixer.md).
 `SnippetManager::extractSnippet`/`insertSnippet`, adding only what a track preset needs beyond a
 plain snippet: the outside-modulator walk below, and the key scrub below that.
 
+## A third kind: Bus
+
+**FRO297: a bus can be saved and re-added as a preset too**, alongside Audio and Instrument.
+`TrackPresetKind::Bus` is stored at the same `"trackPresetKind"` preset-level field the other two
+use ("bus" on disk) — there is no separate storage mechanism for it.
+
+A bus preset's own macro is its ENTIRE identity: unlike Audio/Instrument, a Bus preset creates **no
+timeline track at all** on insert — a bus has none — just the bus chain, which the mixer shows as a
+BUS column exactly like a freshly built one. Two consequences follow:
+
+- **Saving one has no track header to reach it from.** A bus's own channel macro right-click menu
+  ("Save Track as Preset...", gated on `synth::isChannelMacro` same as any channel) is the only save
+  path — there is no bus equivalent of the track header's own menu.
+- **A bus has no per-type Preferences -> Mixer default.** "Set as Default Track Preset" is omitted
+  entirely from a bus macro's own menu (`synth::isBusMacro`, same "omit, don't disable" precedent
+  the header's own gates use) — a bus preset can still be saved and inserted at any time, it just
+  never becomes what a plain "+ Bus" builds.
+
+**Inserting one re-flags `"isBus"` the same way "Add bus" does, AFTER the scrub-respecting insert
+runs.** The scrub itself is unchanged (see below): a Bus preset's saved JSON carries no `"isBus"` any
+more than an Audio or Instrument one does, so `TrackPresetManager::insertTrackPreset` alone never
+produces a bus-flagged strip. `MainComponent::insertBusFromPresetVar` calls
+`ChannelStripModule::setIsBus(true)` on the freshly inserted strip immediately afterward — the exact
+mechanism `synth::buildBusChannel` uses for a strip built from scratch — so the scrub's own hazard
+(an imported `isBus=true` badging an ordinary track channel) never reopens: a Bus-kind preset is the
+only kind whose insert path ever calls `setIsBus(true)` at all.
+
+**Naming**: the inserted macro takes whatever name its own capture already carries (a user-renamed
+source bus keeps that name); only a captured macro that comes back nameless falls back to the
+numbered `synth::busFallbackName` default ("Bus N"), the same name "Add bus" would give a fresh one.
+
+`"+ Track"`'s own **Bus** submenu ([`docs/timeline/add-track.md`](../timeline/add-track.md#track-presets))
+lists every saved Bus preset the same way the Audio/Instrument ones are listed, and **"Insert Track
+Preset from File..."** dispatches to the same no-timeline-track insert path when the file's own
+`"trackPresetKind"` reads `"bus"`.
+
 ## Why the product says track and not lane
 
 The product says **track** everywhere, in the UI and in these docs. "Lane" stays reserved for what it

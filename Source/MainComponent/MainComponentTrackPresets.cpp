@@ -10,6 +10,7 @@
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
+#include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"
 #include "UI/Timeline/TrackColour.h"
@@ -44,22 +45,28 @@ bool MainComponent::canSaveTrackPresetForTrack(synth::TrackId trackId) const {
     return graphEditor.isChannelMacroForTrack(track->bindingUuid);
 }
 
-// Shared by saveTrackAsPreset() and setTrackPresetAsDefault(): resolves `bindingUuid`'s channel
-// macro, extracts it (+ every outside module feeding it through a port) and writes it to disk
-// under `name`. False on any failure (no such macro, extraction/save failure) — nothing is left
-// half-written.
-static bool extractAndSaveTrackPreset(MainComponent& mc, const juce::String& bindingUuid, synth::TrackPresetKind kind,
-                                      const juce::String& name) {
-    auto& macros = mc.getGraphEditor().getMacros();
-    const auto* macro = macros.findByMember(bindingUuid);
-    if (macro == nullptr)
-        return false;
-    auto preset =
-        synth::TrackPresetManager::extractTrackPreset(mc.getAudioEngine().getGraph(), macros, macro->id, kind, name);
+// Shared by extractAndSaveTrackPreset() and saveBusAsPreset(): extracts `macroId` (+ every outside
+// module feeding it through a port) and writes it to disk under `name`. False on any failure (no
+// such macro, extraction/save failure) — nothing is left half-written.
+static bool extractAndSaveTrackPresetForMacro(MainComponent& mc, const juce::String& macroId,
+                                              synth::TrackPresetKind kind, const juce::String& name) {
+    auto preset = synth::TrackPresetManager::extractTrackPreset(mc.getAudioEngine().getGraph(),
+                                                                mc.getGraphEditor().getMacros(), macroId, kind, name);
     if (!preset.isObject())
         return false;
     return synth::TrackPresetManager::saveTrackPreset(synth::TrackPresetManager::getDefaultTrackPresetsDirectory(),
                                                       name, preset);
+}
+
+// Shared by saveTrackAsPreset() and setTrackPresetAsDefault(): resolves `bindingUuid`'s channel
+// macro, then delegates to extractAndSaveTrackPresetForMacro. False on any failure (no such macro,
+// extraction/save failure) — nothing is left half-written.
+static bool extractAndSaveTrackPreset(MainComponent& mc, const juce::String& bindingUuid, synth::TrackPresetKind kind,
+                                      const juce::String& name) {
+    const auto* macro = mc.getGraphEditor().getMacros().findByMember(bindingUuid);
+    if (macro == nullptr)
+        return false;
+    return extractAndSaveTrackPresetForMacro(mc, macro->id, kind, name);
 }
 
 void MainComponent::saveTrackAsPreset(synth::TrackId trackId) {
@@ -124,6 +131,73 @@ void MainComponent::setTrackPresetAsDefault(synth::TrackId trackId) {
         "Set \"" + name + "\" as the default " +
         (kind == synth::TrackPresetKind::Instrument ? juce::String("Instrument") : juce::String("Audio")) +
         " track preset");
+}
+
+// FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): GraphEditor::onTrackPresetMenuAction's
+// handler -- resolves `macroId` to the existing per-track path when it is a bound track's own
+// channel (Audio/Instrument, unchanged behaviour), or to the bus path when it is a bus's own macro
+// (no bound track, hence no track header to have reached this from). A malformed/vanished macroId
+// (not found, or a channel macro somehow bound to neither a track nor a bus) is a silent no-op --
+// the menu that produced this click is itself gated on synth::isChannelMacro, so this should never
+// see anything else in practice.
+void MainComponent::handleMacroTrackPresetAction(const juce::String& macroId, bool setAsDefault) {
+    for (const auto& track : timelineDoc.getTracks()) {
+        if (track.bindingUuid.isEmpty())
+            continue;
+        const auto* macro = graphEditor.getMacros().findByMember(track.bindingUuid);
+        if (macro != nullptr && macro->id == macroId) {
+            if (setAsDefault)
+                setTrackPresetAsDefault(track.id);
+            else
+                saveTrackAsPreset(track.id);
+            return;
+        }
+    }
+
+    // No bound track claims this macro: a bus's own macro. `setAsDefault` never reaches here true --
+    // the macro's own menu omits "Set as Default Track Preset" for a bus (GraphEditorMacroPrompts.cpp,
+    // synth::isBusMacro) -- but guard it anyway rather than silently mis-saving on some future caller.
+    if (!setAsDefault)
+        saveBusAsPreset(macroId);
+}
+
+// The bus sibling of saveTrackAsPreset() -- same async naming-prompt idiom, keyed on `macroId`
+// directly (a bus has no TrackId to resolve one from). Prefills the macro's own name (what a boxed
+// bus already shows, e.g. "Bus 1" or a user rename) rather than a track name.
+void MainComponent::saveBusAsPreset(const juce::String& macroId) {
+    const auto* macro = graphEditor.getMacros().find(macroId);
+    if (macro == nullptr) {
+        statusBar.showMessage("This bus is gone - nothing to save");
+        return;
+    }
+    const juce::String startingName = macro->name.isNotEmpty() ? macro->name : juce::String("Bus");
+
+    auto* window = new juce::AlertWindow("Save Bus Preset", "Name this bus preset:", juce::AlertWindow::NoIcon);
+    window->addTextEditor("name", startingName, "Preset name:");
+    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    juce::Component::SafePointer<MainComponent> safeThis(this);
+    window->enterModalState(
+        true, juce::ModalCallbackFunction::create([safeThis, window, macroId](int result) {
+            std::unique_ptr<juce::AlertWindow> owned(window);
+            if (result != 1)
+                return;
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return;
+
+            auto name = synth::TrackPresetManager::sanitiseName(owned->getTextEditorContents("name"));
+            if (name.isEmpty()) {
+                self->statusBar.showMessage("Bus preset not saved - the name was empty or reserved");
+                return;
+            }
+            if (extractAndSaveTrackPresetForMacro(*self, macroId, synth::TrackPresetKind::Bus, name))
+                self->statusBar.showMessage("Saved bus preset \"" + name + "\"");
+            else
+                self->statusBar.showMessage("Could not save bus preset \"" + name + "\"");
+        }),
+        false);
 }
 
 // The shared insert path (default-consulting branch, "+ Track" preset list, "Insert from File...").
@@ -225,6 +299,103 @@ void MainComponent::addTrackFromPreset(const juce::String& presetName, synth::Tr
                                                            : "Could not insert track preset \"" + presetName + "\"");
 }
 
+// FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): the Bus-kind sibling of
+// insertTrackFromPresetVar. A bus preset creates NO timeline track -- just the bus chain, which the
+// mixer shows as a BUS column -- so there is no track source node to find and no TimelineDoc::addTrack.
+// It still needs the same Strip->Master wiring (a preset never captures the shared Master singleton)
+// and the same "isBus" re-flag every other "Add bus" builder applies -- extractTrackPreset scrubs
+// "isBus" from the saved JSON (TrackPresetManager.cpp), so it must be set again here, the same
+// mechanism synth::buildBusChannel uses for a freshly built bus. NO UNDO TRANSACTION OF ITS OWN.
+// Returns the inserted bus's macro name, or empty on rejection/failure.
+juce::String MainComponent::insertBusFromPresetVar(const juce::var& preset) {
+    if (!preset.isObject())
+        return {};
+
+    auto& graph = audioEngine.getGraph();
+
+    // Same left-to-right placement idiom insertTrackFromPresetVar uses.
+    int rightEdge = 0;
+    for (auto* node : graph.getNodes()) {
+        if (node == nullptr)
+            continue;
+        const int x = (int)node->properties.getWithDefault("x", 0);
+        const juce::String typeName =
+            node->getProcessor() != nullptr ? node->getProcessor()->getName() : juce::String();
+        rightEdge = juce::jmax(rightEdge, x + GraphEditor::estimateModuleSize(typeName).x);
+    }
+    const juce::Point<int> dropPos{rightEdge + kTrackPresetCardGapX, 0};
+
+    std::vector<synth::Macro> outMacros;
+    const auto added = synth::TrackPresetManager::insertTrackPreset(preset, graph, dropPos, &outMacros);
+    if (added.empty())
+        return {}; // rejected by the untrusted gate, or nothing usable in the file
+
+    juce::AudioProcessorGraph::Node* stripNode = nullptr;
+    for (const auto id : added) {
+        auto* node = graph.getNodeForId(id);
+        if (node != nullptr && dynamic_cast<ChannelStripModule*>(node->getProcessor()) != nullptr)
+            stripNode = node;
+    }
+    if (stripNode == nullptr)
+        return {}; // malformed preset: no Channel Strip -- nothing here is a channel at all
+
+    // The scrubbed re-flag -- see this function's own comment above.
+    if (auto* strip = dynamic_cast<ChannelStripModule*>(stripNode->getProcessor()))
+        strip->setIsBus(true);
+
+    if (auto* master = synth::spliceMasterNode(graph, dropPos)) {
+        graph.addConnection({{stripNode->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}});
+        graph.addConnection(
+            {{stripNode->nodeID, ChannelStripModule::kRightBase}, {master->nodeID, MasterModule::kMixRight}});
+    }
+
+    // outMacros straight onto the live MacroSet, same reason insertTrackFromPresetVar's own comment
+    // gives -- addMacroForMembers would re-derive membership/bounds from scratch and discard the
+    // preset's own captured ports/bounds.
+    for (auto& macro : outMacros)
+        graphEditor.getMacros().add(macro);
+
+    // Name/box it the way "Add bus" does ("Bus N") unless the preset's own captured macro already
+    // carries a name (docs/mixer/track-presets.md#a-third-kind-bus) -- a source bus that was
+    // user-renamed before saving arrives with that name already on its captured macro; only a
+    // preset whose macro came back nameless falls back to the numbered default.
+    const juce::String stripUuid = stripNode->properties["uuid"].toString();
+    auto* insertedMacro = graphEditor.getMacros().findByMember(stripUuid);
+    juce::String busName = insertedMacro != nullptr ? insertedMacro->name : juce::String();
+    if (busName.isEmpty()) {
+        busName = synth::busFallbackName(graph, stripNode->nodeID);
+        if (insertedMacro != nullptr)
+            insertedMacro->name = busName;
+    }
+
+    graphEditor.updateComponents();
+    return busName;
+}
+
+void MainComponent::addBusFromPreset(const juce::String& presetName) {
+    auto preset = synth::TrackPresetManager::loadTrackPreset(
+        synth::TrackPresetManager::getDefaultTrackPresetsDirectory(), presetName);
+    if (!preset.isObject()) {
+        statusBar.showMessage("Could not load bus preset \"" + presetName + "\"");
+        return;
+    }
+
+    // No timeline change at all -- a bus has no track -- so this is recordGraphAndMacroChange, the
+    // same two-domain transaction MixerPanelComponent::createBus() uses for a freshly built bus,
+    // not recordGraphTimelineAndMacroChange.
+    juce::String busName;
+    const bool pushed =
+        undoManager.recordGraphAndMacroChange(audioEngine.getGraph(), graphEditor.getMacros(),
+                                              [this, &preset, &busName] { busName = insertBusFromPresetVar(preset); });
+
+    // No track binding to reconcile, but the mixer's own column set (and, for a hosted build, the
+    // published render-thread snapshot) must still catch up to the graph change -- same reason
+    // addTrackFromPreset()/insertTrackPresetFromFile() call this after their own insert.
+    reconcileTimelineAfterGraphChange();
+    statusBar.showMessage(pushed && busName.isNotEmpty() ? "Added " + busName
+                                                         : "Could not insert bus preset \"" + presetName + "\"");
+}
+
 // Shared by addTrackFromPresetFile()'s FileChooser callback and the headless test seam
 // (insertTrackPresetFromFileForTest, MainComponent.h) -- there is no real display in a test
 // process for a juce::FileChooser to be positioned on (same reason openAddTrackMenu() below is a
@@ -239,6 +410,20 @@ juce::String MainComponent::insertTrackPresetFromFile(const juce::File& file) {
         return {};
     }
     const auto kind = synth::TrackPresetManager::getPresetKind(preset);
+
+    // FRO297: a Bus-kind file has no track to create -- same recordGraphAndMacroChange/
+    // insertBusFromPresetVar path addBusFromPreset() uses, not the track-creating transaction below.
+    if (kind == synth::TrackPresetKind::Bus) {
+        juce::String busName;
+        const bool pushed = undoManager.recordGraphAndMacroChange(
+            audioEngine.getGraph(), graphEditor.getMacros(),
+            [this, &preset, &busName] { busName = insertBusFromPresetVar(preset); });
+        reconcileTimelineAfterGraphChange();
+        statusBar.showMessage(pushed && busName.isNotEmpty() ? "Added " + busName
+                                                             : "Could not insert \"" + file.getFileName() + "\"");
+        return busName;
+    }
+
     const juce::String prefix =
         kind == synth::TrackPresetKind::Instrument ? juce::String("Instrument") : juce::String("Audio");
 

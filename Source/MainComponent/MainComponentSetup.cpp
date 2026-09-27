@@ -245,6 +245,13 @@ void MainComponent::wireGraphEditorCallbacks() {
                                                          const juce::String& macroId) {
         duplicateIntoChannel(nodeId, macroId);
     };
+    // FRO13/FRO297 (docs/mixer/track-presets.md): the channel macro's own right-click "Save Track as
+    // Preset.../Set as Default Track Preset" — see handleMacroTrackPresetAction's own comment for
+    // why this resolves to the track-header path for a track's channel and to the bus path
+    // (MainComponentTrackPresets.cpp) for a bus macro, which has no track header of its own.
+    graphEditor.onTrackPresetMenuAction = [this](const juce::String& macroId, bool setAsDefault) {
+        handleMacroTrackPresetAction(macroId, setAsDefault);
+    };
     // Right-click-any-knob -> the automation lane editor. Mirrors onSaveSnippetRequested's
     // shape exactly — GraphEditor owns no TimelineDoc, so it hands the (nodeId, paramId) pair back
     // to the one component that owns both the doc and the graph.
