@@ -172,8 +172,8 @@ public:
 
 private:
     // A rectify-and-smooth amplitude detector: a one-pole follower with separate rise and
-    // fall coefficients. Self-contained so it can be lifted into a shared header verbatim
-    // if the Compressor ever grows a sidechain input.
+    // fall coefficients. (The Compressor's Key input uses JUCE's BallisticsFilter instead, to
+    // match the ballistics of its own unkeyed detector.)
     struct Detector {
         float env = 0.0f;
 

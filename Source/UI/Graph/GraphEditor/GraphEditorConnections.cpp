@@ -63,7 +63,9 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
 
             // Mono audio into a collapsed stereo pair (voiceSpan == 2, PortRole::Audio) duplicates
             // onto L and R — the usual mono→FX insert. Distinct from poly-voice broadcast above.
-            if (s.voiceSpan == 1 && d.voiceSpan == 2 && d.role == PortRole::Audio) {
+            // A collapsed Key jack (PortRole::Sidechain) is the same stereo pair shape.
+            const bool destIsStereoPair = d.role == PortRole::Audio || d.role == PortRole::Sidechain;
+            if (s.voiceSpan == 1 && d.voiceSpan == 2 && destIsStereoPair) {
                 voiceCount = 2;
                 sourceStride = 0;
             }
@@ -81,7 +83,7 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
             // right leg gets picked up separately from the module's own Audio R block. Widening
             // this to non-adjacent legs is a deliberate behaviour change for manual cable drags
             // too, not something to slip in behind a smart-connect fix.
-            if (s.voiceSpan == 1 && d.voiceSpan == 2 && d.role == PortRole::Audio && s.role == PortRole::Audio &&
+            if (s.voiceSpan == 1 && d.voiceSpan == 2 && destIsStereoPair && s.role == PortRole::Audio &&
                 source != nullptr && source->isDualIO() && source->rightAudioLegChannel() == s.rawHeadChannel + 1) {
                 voiceCount = 2;
                 sourceStride = 1;

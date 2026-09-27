@@ -102,6 +102,7 @@ add_executable(Tests
     Mixer/ChannelStripTests.cpp
     Mixer/PeakMeterLatchTests.cpp
     Mixer/MixerSoloTests.cpp
+    Mixer/SidechainKeyGraphTests.cpp
     Mixer/ProjectLoadStripGainTests.cpp
     Mixer/ChannelFlow/ChannelFlowTests.cpp
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
@@ -237,6 +238,7 @@ add_executable(Tests
     FX/FXModule/FXModuleBitcrusherTests.cpp
     FX/FXModule/FXModuleChorusTests.cpp
     FX/FXModule/FXModuleCompressorTests.cpp
+    FX/FXModule/FXModuleSidechainKeyTests.cpp
     FX/FXModule/FXModuleDelayTests.cpp
     FX/FXModule/FXModuleDistortionTests.cpp
     FX/FXModule/FXModuleFlangerTests.cpp

@@ -28,7 +28,8 @@ namespace {
 // exposing it): never cross an AttenuverterModule on either end (AudioEngine::addModRouting always
 // wraps a hidden mod leg in one of these), and never treat an audio edge landing on a PortRole::
 // ModCV input as part of the signal path (a plain CV cable into some other track's cutoff must not
-// make that track "feed" this strip). Unlike ChannelFlows' full rule, this does not resolve through
+// make that track "feed" this strip) — nor on a PortRole::Sidechain key, by the same
+// isSignalPathInputRole rule. Unlike ChannelFlows' full rule, this does not resolve through
 // macro ports first (resolveThroughPorts) - a CV cable that enters a strip's macro through an
 // auto-ported Mono jack is a rare enough patch shape that treating it as signal here is an
 // acceptable simplification for a display/naming decision, not a routing one.
@@ -45,7 +46,7 @@ bool isLinkSignalEdge(juce::AudioProcessorGraph& graph, const juce::AudioProcess
     if (conn.source.isMIDI())
         return true;
     if (auto* module = dynamic_cast<ModuleBase*>(dstProcessor))
-        return module->mapInputChannel(conn.destination.channelIndex).role != PortRole::ModCV;
+        return isSignalPathInputRole(module->mapInputChannel(conn.destination.channelIndex).role);
     return true;
 }
 

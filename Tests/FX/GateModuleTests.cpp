@@ -78,14 +78,15 @@ TEST_F(GateModuleTest, ProcessBlockProducesOutputWhenAboveThreshold) {
 }
 
 TEST_F(GateModuleTest, PortLabelsAndCounts) {
-    // Audio pair first, then one parameter-CV jack per knob (these are NOT a sidechain — the
-    // detector still listens to the audio pair only).
+    // Audio pair first, then one parameter-CV jack per knob, then the Key (sidechain) pair appended
+    // last (FRO317) so saved patches keep ch0-6.
     const juce::String cv[] = {"Threshold", "Attack", "Hold", "Release", "Range"};
     EXPECT_EQ(module->getInputPortLabel(0), "Audio");
     for (int i = 0; i < 5; ++i)
         EXPECT_EQ(module->getInputPortLabel(1 + i), cv[i]);
     EXPECT_EQ(module->getOutputPortLabel(0), "Audio");
-    EXPECT_EQ(module->getVisibleInputPortCount(), 6);
+    EXPECT_EQ(module->getInputPortLabel(6), "Key");
+    EXPECT_EQ(module->getVisibleInputPortCount(), 7);
     EXPECT_EQ(module->getVisibleOutputPortCount(), 1);
 
     setDualIO(*module, true);
@@ -95,7 +96,9 @@ TEST_F(GateModuleTest, PortLabelsAndCounts) {
         EXPECT_EQ(module->getInputPortLabel(2 + i), cv[i]);
     EXPECT_EQ(module->getOutputPortLabel(0), "Left");
     EXPECT_EQ(module->getOutputPortLabel(1), "Right");
-    EXPECT_EQ(module->getVisibleInputPortCount(), 7);
+    EXPECT_EQ(module->getInputPortLabel(7), "Key L");
+    EXPECT_EQ(module->getInputPortLabel(8), "Key R");
+    EXPECT_EQ(module->getVisibleInputPortCount(), 9);
     EXPECT_EQ(module->getVisibleOutputPortCount(), 2);
 }
 

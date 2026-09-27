@@ -20,7 +20,9 @@ and `spliceMasterNode`'s `Strip -> Master(Mix)` classification all unchanged.
 `MixerColumn::Kind::Bus` is **display only**, set when the strip carries `"isBus": true` in its
 trusted extra state — written by "Add bus" and by the merge-point buses — **or**, as a structural
 fallback for patches built before that flag existed, when one of its signal predecessors is another
-strip. **The flag is what a freshly added, still-unfed bus has to go on.** A track preset scrubs
+strip. A cable into a Compressor or Gate **Key** input is not a signal predecessor
+(`PortRole::Sidechain`, [`fx-modules.md`](../modules/fx-modules.md#key-inputs-sidechain)), so a bass
+channel keyed from a kick channel stays a channel. **The flag is what a freshly added, still-unfed bus has to go on.** A track preset scrubs
 `"isBus"` from every captured strip
 ([`docs/mixer/track-presets.md`](track-presets.md#scrubbed-keys)), so inserting one never badges an
 ordinary track channel as BUS. **FRO297: a bus can itself be saved and re-added as a preset** (a

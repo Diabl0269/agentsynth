@@ -333,6 +333,7 @@ CV control of Level is deliberately **not** implemented — it would need a new 
 - **CV Modulation**: Threshold (ch2), Ratio (ch3), Attack (ch4), Release (ch5), Makeup (ch6), all under the [normalised convention](modulation.md#cv-in-normalised-units) and read once per block (every one lands in a `juce::dsp::Compressor` setter that is itself per block, or in the per-block makeup dB offset). Threshold/Ratio CV sits on top of the smoothed base, so a knob move still ramps while the CV steps. Only the audio pair goes through the compressor (`getSubsetChannelBlock(0, 2)`) — the CV block behind it is not audio, and the compressor was prepared for 2 channels; CV channels are cleared on the way out, on bypass too.
 - **Parameters**: Threshold (-60–0 dB), Ratio (1–20), Attack (0.1–200 ms), Release (10–1000 ms), Makeup Gain (-20–+40 dB).
 - **Smoothing**: Threshold and Ratio are both smoothed over 10 ms (a block at a time — `juce::dsp::Compressor` only takes them through setters); both set the gain computer, so stepping either steps the applied gain reduction. Attack and Release are detector time constants and are deliberately not smoothed.
+- **Key input (sidechain)**: a stereo Key pair appended after the CV block, on raw ch7/ch8 — one collapsing "Key" jack with Dual I/O off, "Key L"/"Key R" when split. Patch a kick into a bass Compressor's Key and the bass ducks on every hit. The detector **listens to the key only while a cable reaches a Key jack**; unplug it and the Compressor detects on its own audio again through the unchanged unkeyed DSP (a never-keyed Compressor's output is bit-identical to before the Key input existed; each detector restarts from rest when the key is plugged or unplugged). Keyed, the detector is ONE envelope driven by `max(|Key L|, |Key R|)` (the same peak ballistics and gain law as `juce::dsp::Compressor`) and its gain is applied to both legs of the module's own audio, so a mono key on Key L alone still ducks the whole image. Unkeyed it keeps `juce::dsp::Compressor`'s own per-leg detector. Connectivity is never inferred from level (a silent kick between hits is still plugged): the engine publishes it from the message thread — see [Key inputs](#key-inputs-sidechain) below. No latency is added; graph delay compensation aligns the key path.
 
 ## Flanger Module
 - **Implementation**: `juce::dsp::Chorus<float>` configured for flanger character by constraining the centre-delay range to 1–5 ms (versus Chorus's 1–30 ms). Default centre delay is 2 ms.
@@ -387,11 +388,37 @@ Threshold, with Attack/Hold/Release shaping how it opens and closes and Range se
 - **CV Modulation**: Threshold (ch2), Attack (ch3), Hold (ch4), Release (ch5), Range (ch6), all
   under the [normalised convention](modulation.md#cv-in-normalised-units) and read once per block
   (every value is already a per-block quantity: the smoothed levels advance a block at a time,
-  the time constants are sampled once per block). These are **parameter** CVs, not a sidechain —
-  the detector still listens to the audio pair only; a sidechain input is still out of v1 scope.
-  CV channels are cleared on the way out, on bypass too.
+  the time constants are sampled once per block). These are **parameter** CVs; the key below is
+  not a modulation target. CV and key channels are cleared on the way out, on bypass too.
+- **Key input (sidechain)**: a stereo Key pair on raw ch7/ch8, laid out exactly like the
+  Compressor's. While a cable reaches a Key jack the linked detector reads `max(|Key L|, |Key R|)`
+  instead of the audio pair, so the gate opens on the key; hysteresis, Hold and Range are
+  unchanged. Unplugged, it detects on its own audio again; unkeyed output is bit-identical to before the Key input existed.
 - **Dual I/O**: inherited `StereoAudio::Auto`, same as Compressor/Limiter — ch0/ch1 stereo pair,
-  then the CV block.
+  then the CV block, then the Key pair.
+
+### Key inputs (sidechain)
+
+Compressor and Gate share one mechanism (FRO317):
+
+- **Channels are appended, never renumbered.** Key L/R sit on `ModuleBase::sidechainKeyBase(5)` =
+  ch7/ch8, above every existing input, so a patch saved with 7-input modules loads with every
+  cable on its old channel. `ModuleBase::mapStereoKeyInput` / `stereoKeyInputLabel` /
+  `stereoKeyVisibleInputCount` give the grown jack count its own port map (no phantom poly heads,
+  no duplicated wires); the output shape stays 2, so Dual I/O is still inherited.
+- **`PortRole::Sidechain`.** A key carries audio but only steers a detector, so the mixer's graph
+  walks (`isSignalEdge`, the track-to-channel reach walk, bus classification, Make Channel) skip
+  it via `isSignalPathInputRole` — see
+  [`docs/mixer/sends-and-buses.md`](../mixer/sends-and-buses.md#a-bus-is-a-channel-strip).
+  Smart-connect never picks a Key jack; a manual cable onto the collapsed Key jack fans like the
+  collapsed Audio jack (mono duplicates onto both legs, a stereo source pairs L/R), and a key cable
+  crossing a macro boundary gets a collapsed stereo port.
+- **Connectivity is published, not guessed.** JUCE's graph does not tell a processor which inputs
+  are connected, so `synth::publishSidechainConnections` (message thread) scans the connection
+  list and sets each module's relaxed-atomic `ModuleBase::setSidechainConnected`; `processBlock`
+  loads it once per block and also requires the buffer to carry ch7/ch8. `AudioEngine` runs it on
+  every graph change broadcast (a plain cable drag never reaches `publishTimeline`), from
+  `publishTimeline` beside the solo recount, and from the plugin's `setStateInformation`.
 
 ## Bitcrusher Module
 - **Implementation**: Downsampling and bit-depth quantization effect with dither.

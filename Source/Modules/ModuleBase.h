@@ -389,6 +389,54 @@ public:
         return fallback;
     }
 
+    // -------------------------------------------------------------------------
+    // Sidechain key pair (Compressor, Gate)
+    //
+    // Layout: the ch0/ch1 audio pair, `numCvInputs` ModCV jacks, then a Key L / Key R pair APPENDED
+    // on raw 2 + numCvInputs and the channel after it, so saved patches keep every earlier channel.
+    // The key pair follows the Dual I/O toggle exactly like the audio pair: "Key L"/"Key R" when
+    // split, one collapsing "Key" jack (span 2) when not. Its role is PortRole::Sidechain, which the
+    // mixer's walks never treat as signal (isSignalPathInputRole).
+    // -------------------------------------------------------------------------
+
+    static constexpr int sidechainKeyBase(int numCvInputs) { return 2 + numCvInputs; }
+    int stereoKeyVisibleInputCount(int numCvInputs) const {
+        return stereoVisibleInputCount(numCvInputs) + (isDualIO() ? 2 : 1);
+    }
+
+    juce::String stereoKeyInputLabel(int visibleJack, int numCvInputs, const juce::String* cvLabels) const {
+        const int firstKeyJack = stereoVisibleInputCount(numCvInputs);
+        if (visibleJack == firstKeyJack)
+            return isDualIO() ? "Key L" : "Key";
+        if (visibleJack == firstKeyJack + 1 && isDualIO())
+            return "Key R";
+        return stereoInputLabel(visibleJack, numCvInputs, cvLabels);
+    }
+
+    LogicalPort mapStereoKeyInput(int raw, int numCvInputs) const {
+        const int keyBase = sidechainKeyBase(numCvInputs);
+        if (raw != keyBase && raw != keyBase + 1)
+            return mapStereoPairInput(raw, numCvInputs);
+        LogicalPort p;
+        p.role = PortRole::Sidechain;
+        const int firstKeyJack = stereoVisibleInputCount(numCvInputs);
+        if (isDualIO()) {
+            p.visibleJackIndex = firstKeyJack + (raw - keyBase);
+            p.isPolyGroupHead = true;
+            p.polyVoiceSpan = 1;
+        } else {
+            p.visibleJackIndex = firstKeyJack;
+            p.isPolyGroupHead = raw == keyBase;
+            p.polyVoiceSpan = raw == keyBase ? 2 : 1;
+        }
+        return p;
+    }
+
+    /** Whether a cable currently lands on any PortRole::Sidechain input. Written on the message
+        thread by synth::publishSidechainConnections, read once per block by the audio thread. */
+    void setSidechainConnected(bool connected) { sidechainConnected_.store(connected, std::memory_order_relaxed); }
+    bool isSidechainConnected() const { return sidechainConnected_.load(std::memory_order_relaxed); }
+
     // Opt-in output-level stage for modules whose output is audio.
     //
     // Deliberately NOT added in the ModuleBase ctor: parameter position is load-bearing
@@ -749,6 +797,7 @@ private:
     // against a snapshot's bindingUuid compares two identically-truncated copies. A uuid is 36.
     char nodeUuid_[64] = {};
     std::atomic<bool> nodeUuidSet_{false};
+    std::atomic<bool> sidechainConnected_{false};
     std::unique_ptr<VisualBuffer> visualBuffer;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedOutputLevel;
 

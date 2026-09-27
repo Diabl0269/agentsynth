@@ -38,7 +38,9 @@ bool isMacroPortNode(const juce::AudioProcessor* p) {
 }
 
 // planMakeChannel's signal-edge rule (ChannelFlows.h): every MIDI edge, and every audio edge that
-// neither touches a hidden modulation attenuverter nor lands on a PortRole::ModCV pin. The pin a
+// neither touches a hidden modulation attenuverter nor lands on a PortRole::ModCV pin or a
+// PortRole::Sidechain key (a bass Compressor keyed from a kick does not make the kick feed the
+// bass, so the bass strip never reads as a bus) — isSignalPathInputRole. The pin a
 // cable into `pin` ultimately lands on, looking through macro port nodes (each a pure per-channel
 // pass-through). An auto-created port reports a plain Audio role and no stereo side of its own, so
 // both the ModCV check below and crossingIsRight's L/R read must use the module behind it -- a
@@ -75,7 +77,7 @@ bool isSignalEdge(juce::AudioProcessorGraph& graph,
         return true;
     const auto pin = resolveThroughPorts(graph, connections, c.destination);
     if (auto* module = dynamic_cast<ModuleBase*>(processorFor(graph, pin.nodeID)))
-        return module->mapInputChannel(pin.channelIndex).role != PortRole::ModCV;
+        return isSignalPathInputRole(module->mapInputChannel(pin.channelIndex).role);
     return true;
 }
 

@@ -164,6 +164,9 @@ public:
     bool setChannelStripSoloed(juce::AudioProcessorGraph::NodeID node, bool soloed);
     int getSoloedStripCount() const noexcept { return soloedStripCount_.load(std::memory_order_relaxed); }
 
+    // MESSAGE THREAD. Re-publishes which modules have a cable on a Sidechain (Key) input.
+    void refreshSidechainKeys();
+
     // FRO148 (docs/mixer/meters.md): the level leaving the WHOLE graph -- post-graph, pre-metronome -- for the Master
     // column once it has inserts (a post-fader limiter's ceiling shows here, not in MasterModule's own pre-insert
     // latch). Consume-on-read per MeterReader, like MasterModule::takeMeterPeak; leg 0 = Left, 1 = Right. Any thread.

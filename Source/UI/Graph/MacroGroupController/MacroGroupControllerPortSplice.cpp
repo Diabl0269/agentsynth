@@ -136,9 +136,11 @@ std::vector<MacroGroupController::MacroPortCrossingGroup> MacroGroupController::
             // module's separately-jacked Left/Right pair never reaches this branch: each leg is
             // its own visible jack with headSpan == 1 here, so it starts life as two Mono groups
             // and only becomes Stereo in the merge pass below.
-            thisShape = (headSpan > 1 && headRole == PortRole::Audio) ? MacroPortShape::StereoCollapsed
-                        : (headSpan > 1)                              ? MacroPortShape::Poly
-                                                                      : MacroPortShape::Mono;
+            // A collapsed Key jack (PortRole::Sidechain, span 2) is the same stereo pair shape.
+            const bool stereoPairRole = headRole == PortRole::Audio || headRole == PortRole::Sidechain;
+            thisShape = (headSpan > 1 && stereoPairRole) ? MacroPortShape::StereoCollapsed
+                        : (headSpan > 1)                 ? MacroPortShape::Poly
+                                                         : MacroPortShape::Mono;
         }
 
         MacroPortCrossingGroup* group = nullptr;

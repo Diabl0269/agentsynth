@@ -90,8 +90,12 @@ static void setDualIO(juce::AudioProcessor& proc, bool dual) {
 // The FX modules whose every continuous parameter has a CV jack: the visible jacks are the
 // collapsed Audio (or Left/Right) pair followed by one jack per parameter, in parameter order,
 // and every jack is a modulation target on the matching raw channel (audio pair + jack index).
-static void expectStereoCvJacks(ModuleBase& module, const std::vector<juce::String>& cvLabels) {
-    ASSERT_EQ(module.getVisibleInputPortCount(), 1 + (int)cvLabels.size());
+// `hasKeyPair`: a Key (sidechain) pair is appended after the CV jacks (Compressor, FRO317) — one
+// collapsed "Key" jack, or Key L/R when split; its full map is pinned in FXModuleSidechainKeyTests.
+static void expectStereoCvJacks(ModuleBase& module, const std::vector<juce::String>& cvLabels,
+                                bool hasKeyPair = false) {
+    const int keyJacks = hasKeyPair ? 1 : 0;
+    ASSERT_EQ(module.getVisibleInputPortCount(), 1 + (int)cvLabels.size() + keyJacks);
     EXPECT_EQ(module.getInputPortLabel(0), "Audio");
     for (size_t i = 0; i < cvLabels.size(); ++i)
         EXPECT_EQ(module.getInputPortLabel(1 + (int)i), cvLabels[i]);
@@ -103,10 +107,12 @@ static void expectStereoCvJacks(ModuleBase& module, const std::vector<juce::Stri
         EXPECT_EQ(targets[i].channelIndex, 2 + (int)i);
         EXPECT_NE(module.parameterForModTarget(targets[i]), nullptr) << cvLabels[i] << " binds to no knob";
     }
-    EXPECT_EQ(module.getTotalNumInputChannels(), 2 + (int)cvLabels.size());
+    EXPECT_EQ(module.getTotalNumInputChannels(), 2 + (int)cvLabels.size() + 2 * keyJacks);
+    if (hasKeyPair)
+        EXPECT_EQ(module.getInputPortLabel(1 + (int)cvLabels.size()), "Key");
 
     setDualIO(module, true);
-    ASSERT_EQ(module.getVisibleInputPortCount(), 2 + (int)cvLabels.size());
+    ASSERT_EQ(module.getVisibleInputPortCount(), 2 + (int)cvLabels.size() + 2 * keyJacks);
     EXPECT_EQ(module.getInputPortLabel(0), "Left");
     EXPECT_EQ(module.getInputPortLabel(1), "Right");
     for (size_t i = 0; i < cvLabels.size(); ++i)
@@ -165,7 +171,7 @@ TEST(PortLabelTests, PhaserPortLabels) {
 
 TEST(PortLabelTests, CompressorPortLabels) {
     CompressorModule comp;
-    expectStereoCvJacks(comp, {"Threshold", "Ratio", "Attack", "Release", "Makeup"});
+    expectStereoCvJacks(comp, {"Threshold", "Ratio", "Attack", "Release", "Makeup"}, /*hasKeyPair=*/true);
 }
 
 TEST(PortLabelTests, FlangerPortLabels) {

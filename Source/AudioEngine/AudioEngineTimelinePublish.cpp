@@ -2,6 +2,7 @@
 // gate it keeps honest.
 
 #include "AudioEngine.h"
+#include "AudioEngine/SidechainConnections.h"
 #include "Mixer/SoloAudibleSet.h"
 #include "Modules/ChannelStripModule.h"
 #include "Timeline/AutomationBinding.h"
@@ -23,6 +24,7 @@ void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
     // makes it the one place the mixer's soloed-strip count can be kept honest: a deleted, replaced or undone soloed
     // strip must never leave the whole mix gated silent.
     refreshSoloGate();
+    refreshSidechainKeys();
 
     auto snapshot = synth::TimelineSnapshot::buildFrom(doc);
 
@@ -162,6 +164,11 @@ void AudioEngine::refreshSoloGate() {
     publishSoloAudibleMasks(mainProcessorGraph);
     soloedStripCount_.store(countSoloedStrips(mainProcessorGraph), std::memory_order_relaxed);
 }
+
+// Key-input connectivity (FRO317). Runs here, beside the solo recount, for the synchronous graph
+// replacements that reach publishTimeline, and from changeListenerCallback for every other topology
+// change (a plain cable drag or unplug never reaches publishTimeline).
+void AudioEngine::refreshSidechainKeys() { synth::publishSidechainConnections(mainProcessorGraph); }
 
 // The one call a UI should make: it flips the strip's own flag and recounts, ordered so no render
 // pass ever sees the gate closed with nothing soloed. Returns false when `node` is not a Channel

@@ -12,6 +12,7 @@
 
 #include "AppUndoManager.h"
 #include "Modules/AttenuverterModule.h"
+#include "Modules/FX/CompressorModule.h"
 #include "Modules/FX/DelayModule.h"
 #include "Modules/FX/ReverbModule.h"
 #include "Modules/FilterModule.h"
@@ -186,6 +187,37 @@ TEST(MacroAutoPort, CollapsedStereoOutputCrossingCreatesAOneJackStereoCollapsedO
     EXPECT_TRUE(hasConnection(engine, portNode, 1, extR, 0));
     EXPECT_FALSE(hasConnection(engine, reverb, 0, extL, 0));
     EXPECT_FALSE(hasConnection(engine, reverb, 1, extR, 0));
+}
+
+// FRO317: a collapsed Compressor "Key" jack (PortRole::Sidechain, span 2 on raw 7/8) is the same
+// stereo pair shape as a collapsed Audio jack, so a key cable crossing into a channel macro gets a
+// one-jack StereoCollapsed inlet carrying both key legs, not a Poly port.
+TEST(MacroAutoPort, CollapsedKeyInputCrossingCreatesAOneJackStereoCollapsedInlet) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto comp = addModuleAt(editor, engine, std::make_unique<CompressorModule>(), "Compressor", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    auto kick = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Kick", 100, 60);
+    const int keyL = CompressorModule::kKeyBase;
+    engine.getGraph().addConnection({{kick, 0}, {comp, keyL}});
+    engine.getGraph().addConnection({{kick, 0}, {comp, keyL + 1}});
+
+    const auto before = allNodeIds(engine);
+    editor.setSelectedNodes({comp, b});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_EQ(macro->ports.size(), 1u);
+    EXPECT_TRUE(macro->ports[0].isInput);
+
+    const auto portNode = theOneNewPortNode(engine, before);
+    auto* inlet = dynamic_cast<MacroInletModule*>(engine.getGraph().getNodeForId(portNode)->getProcessor());
+    ASSERT_NE(inlet, nullptr);
+    EXPECT_EQ(inlet->getPortShape(), MacroPortShape::StereoCollapsed);
+    EXPECT_TRUE(hasConnection(engine, portNode, 0, comp, keyL));
+    EXPECT_TRUE(hasConnection(engine, portNode, 1, comp, keyL + 1));
 }
 
 // Audio actually flows through the spliced port, both channels, so a channel-dropping "fix"

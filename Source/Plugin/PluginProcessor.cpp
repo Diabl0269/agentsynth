@@ -189,6 +189,7 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
     // mixer's soloed strips itself — a restored session's solo flags live in the strips' extra
     // state (docs/mixer/mixer.md#solo-is-a-render-time-gate), and a stale count would leave the mix stuck (un)gated.
     engine.refreshSoloGate();
+    engine.refreshSidechainKeys();
 
     // Reconcile the view against whatever the graph now holds — including after a rejected
     // patch, where the graph is left untouched and the editor must rebuild what it just detached.
