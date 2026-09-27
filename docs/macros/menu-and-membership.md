@@ -293,6 +293,50 @@ A crossing drag reuses the incremental membership path wholesale
 the same auto-port creation and splice-out-when-interior behaviour as the menu-driven add and remove,
 with no new port logic of its own.
 
+## Cable crawl and module flash (FRO41)
+
+**A drag that actually crosses a hull (a real join, leave, or transfer — never a plain move) also
+gets a short, time-bounded animation once `finalizeMacroMembershipDrag` lands**: the module itself
+gets a fading ring on top of its card (`GraphEditor::GraphContentComponent::paintOverChildren`), and
+any cable that just changed which node it lands on — because the port splicing above auto-created or
+removed a macro port for it — slides from its old anchor to its new one instead of jumping there.
+Both are driven by `MacroCrossingAnimator` (`Source/UI/Graph/MacroCrossingAnimator/`), a small
+collaborator matching the shape of `synth::ui::PanelSlide`: pure tween state, no `juce_animation`
+dependency of its own, driven by an ordinary `synth::ui::AnimationDriver` GraphEditor owns
+(`macroCrossingDriverAnim_`) exactly like `dropLandingAnim`/`modMatrixAnim`/`zoomSettleAnim` — see
+[`docs/layout/animation.md`](../layout/animation.md) for that shared rule.
+
+**The matching rule.** `armMacroCrossingAnimation` snapshots the visible-cable list immediately
+before the membership mutation and again immediately after, then `MacroCrossingAnimator::arm()`
+pairs a "vanished" cable from the first snapshot with an "appeared" cable from the second when they
+share exactly one endpoint (same node id, channel, and side) while the OTHER endpoint's identity
+changed. Both snapshots — and the matching itself — are restricted to cables touching the DRAGGED
+module's own node id, deliberately: a port removal can also collapse a wholly-interior two-segment
+path between two OTHER members (e.g. `A -> port -> F` becoming direct `A -> F` once `F` itself joins)
+into one straight cable that never had a single well-defined "old anchor" — both of ITS endpoints
+already sat where the new cable's endpoints are; only the bend at the port disappeared. Scoping to
+the dragged module's own cables sidesteps that case rather than mismatching it.
+
+**`GraphEditor::buildVisibleCables()` stays a pure memo of live graph/component state** — the tween
+never teaches it anything about macros. `MacroCrossingAnimator::applyTo()` runs as the very last step
+of `buildVisibleCables()` (after `rebuildVisibleCables()` itself returns), overwriting a matched
+cable's endpoints with the current lerp; once the tween finishes, `applyTo()` is a no-op and the
+memo's own freshly-computed anchor shows through unchanged, which is already the correct final
+position.
+
+**Test seams** (`GraphEditor::isMacroCrossingAnimLiveForTest`/`advanceMacroCrossingAnimForTest`/
+`finishMacroCrossingAnimForTest`) drive the tween with no `VBlank` and no `Component` peer required,
+the same way `settleZoomNowForTest()` stands in for `zoomSettleAnim`'s own driver —
+`Tests/Macros/MacroContainer/MacroCrossingAnimationTests.cpp` drives the real Cmd-drag gesture, then
+uses these to assert the animation armed on finalize, that a re-anchored cable's endpoint sits
+strictly between its old and new anchor mid-tween, and that finishing lands it exactly on the new one
+with the tween state cleared.
+
+There is no reduced-motion / "disable animations" setting anywhere in this codebase today, so this
+animation — like every other `AnimationDriver` use — is unconditional; a future reduced-motion
+preference would gate `armMacroCrossingAnimation`'s call into `macroCrossingDriverAnim_.start()`
+alongside every other animator, not add a special case here.
+
 ## Dragging without Cmd (the preference)
 
 Preferences > graph behaviour has **"Drag modules into and out of macros without Cmd"**
