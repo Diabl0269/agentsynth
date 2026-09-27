@@ -633,8 +633,10 @@ protected:
 
     void SetUp() override {
         resetKeys();
-        bundleDir =
-            juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_rectap_flow.agsproj");
+        // Unique per test: the three tests below share this fixture, and concurrent CI shards used to
+        // delete each other's bundle between save and load (FRO321).
+        bundleDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                        .getChildFile("agentsynth_rectap_flow_" + juce::Uuid().toString() + ".agsproj");
         bundleDir.deleteRecursively();
     }
     void TearDown() override {
