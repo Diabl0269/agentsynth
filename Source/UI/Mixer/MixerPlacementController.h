@@ -86,9 +86,9 @@ public:
     void applySlideFrameForTest(float t) { applySlideFrame(t); }
     void finishSlideForTest() { finishSlide(); }
 
-    /** "Reveal" the Mixer regardless of placement -- MainComponent::performToggleMixerPanel funnels
-     *  through here first. Tab placement: false, unhandled (the caller keeps its existing
-     *  open/close-the-dock behaviour). Own panel: slides this strip open/closed, true (handled
+    /** "Reveal" the Mixer regardless of placement -- MainComponent::showBottomDockTab funnels
+     *  through here first. Tab placement: false, unhandled (the caller keeps its existing "show
+     *  this tab in the dock" behaviour). Own panel: slides this strip open/closed, true (handled
      *  here). Window: opens (first reveal) / closes the DetachedPanelWindow, true (handled here). */
     bool revealOrToggle();
 

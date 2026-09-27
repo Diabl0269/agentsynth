@@ -50,9 +50,9 @@ asked for, same as before this guarantee existed.
 the strip's `gain` parameter via `juce::SliderParameterAttachment` and brackets the gesture through
 `parameterGestureChanged` to `AppUndoManager::captureBeforeState`/`pushSnapshotFromCapture`.
 
-`Cmd+Alt+M` (`toggleMixerPanel`) opens the bottom dock on the Mixer tab, or closes it on a second
-press when the dock is already open on Mixer — mirroring the Toggle Timeline button's own open and
-close symmetry.
+`Cmd+2` (`toggleMixerPanel`, FRO333) opens the bottom dock on the Mixer tab if it's hidden and
+switches to it; a second press is a no-op — see [**The tab strip**](#the-tab-strip) below for the
+dock-wide toggle/show split, the tab order and detach behaviour.
 
 ### Renaming a channel
 
@@ -82,6 +82,40 @@ boxed in a macro:
 
 The strip's own name is also what `docs/mixer/stem-export.md#stem-naming` prefers ahead of its
 track-walk rule, so renaming a channel here renames its stem file too.
+
+## The tab strip
+
+FRO333: `BottomDockComponent` offers its three tabs (Timeline, Mixer, Controllers) through one
+drag-reorderable strip, backed by a `std::vector<Tab> tabOrder_` — a permutation of all three,
+persisted as `bottomDockTabOrder` (comma-joined tab names, e.g. `"mixer,timeline,midiRemote"`;
+default `"timeline,mixer,midiRemote"`) alongside `bottomDockActiveTab`.
+
+- **One toggle, three shows.** `Cmd+T`/the toolbar button (`toggleBottomPanel`) is the only thing
+  that opens or closes the whole dock; it reopens on whichever tab (`bottomDockActiveTab`) was last
+  active. `Cmd+1`/`Cmd+2`/`Cmd+3` (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`,
+  `MainComponent::showBottomDockTab`) each only show their own tab — opening the dock first if it
+  was hidden, otherwise just switching — and never close it.
+- **Drag to reorder.** Dragging a tab button past another swaps their two slots in `tabOrder_` live
+  (`BottomDockComponent::dragTab`), and the swap is persisted, and the three tabs' own Cmd+digit key
+  bindings re-keyed to match (`permuteShortcutKeysForNewOrder`), only on mouse-up after a real drag —
+  a plain click still fires that tab's `onClick` as usual. The re-key only touches the three
+  bindings when they still form the `{Cmd+1, Cmd+2, Cmd+3}` set (see
+  [`docs/control/shortcuts.md`](../control/shortcuts.md)).
+- **A detached tab leaves the strip.** `BottomDockComponent::isTabOfferedInStrip` excludes a tab
+  that's detached to its own window (or, Mixer only, disabled by the Own-panel/Window placement
+  preference) from both the layout and the Cmd-digit count; `applyTabVisibility` picks a fallback —
+  the active tab if it's still offered, else the first offered tab in `tabOrder_` order — every time
+  visibility is recomputed, so a detach (or `setMixerTabEnabled(false)`) never leaves the dock
+  showing nothing (FRO158). `MainComponent` hides the whole dock only once
+  `BottomDockComponent::hasAnyVisibleTab()` goes false, and reopens it automatically the moment a
+  redock brings it back true — `bottomDockAutoHiddenByEmptyTabs_` tracks that this specific
+  auto-hide (never a deliberate Cmd+T close) is what a later redock should undo.
+- **App-wide shortcuts still reach a detached tab's own window.** `MainComponent::keyPressed` is
+  otherwise unreachable from a separate top-level `DetachedPanelWindow` (see
+  [**Per window keyboard focus**](#per-window-keyboard-focus) below); `DetachedPanelWindow::onAppShortcut`
+  is the one retry hook `MainComponent` wires (via `DetachablePanelHost::onAppShortcutFallback`) so
+  Cmd+T/Cmd+1..3 still work with a detached window focused, without a global key monitor that would
+  also steal keys a hosted plugin's own window should get first.
 
 ## Placement and detachable windows
 

@@ -27,7 +27,7 @@ using synth::test::PersistedKeysGuard;
 using synth::test::userSettingsTestOptions;
 
 // automateParameter()'s toggle path (and, in principle, any test that ever called
-// simulateToggleTimelineClick()) persists "bottomDockVisible" to the SAME on-disk properties
+// simulateToggleBottomPanelClick()) persists "bottomDockVisible" to the SAME on-disk properties
 // file every MainComponent instance reads at construction — reset it before AND after every test
 // in this file so SurfaceResolverRealFocus's "the panel starts hidden" precondition never depends
 // on what ran before it in the same process. Mirrors AutomationEditorTests.cpp's helper of the

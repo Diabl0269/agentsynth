@@ -39,6 +39,12 @@ public:
      *  DetachedPanelWindow. Idempotent -- calling with the current state is a no-op. */
     void setDetached(bool detached);
     bool isDetached() const noexcept { return window_ != nullptr; }
+    /** FRO333: brings an already-detached panel's window forward (Cmd+number/the tab strip's own
+     *  "show tab" action on a detached tab) instead of redocking it. No-op while docked. */
+    void bringDetachedWindowToFront() {
+        if (window_ != nullptr)
+            window_->toFront(true);
+    }
 
     juce::DrawableButton& getDetachButton() noexcept { return detachButton_; }
 
@@ -84,6 +90,9 @@ public:
      *  by the DETACHED window's own close button -- e.g. so BottomDockComponent can refresh its tab
      *  strip, or the owner can re-run registerFocusRegions(). */
     std::function<void()> onDetachedStateChanged;
+
+    /** FRO333: forwarded to every DetachedPanelWindow this host builds -- see its own onAppShortcut. */
+    std::function<bool(const juce::KeyPress&)> onAppShortcutFallback;
 
     void resized() override;
     void paint(juce::Graphics&) override;

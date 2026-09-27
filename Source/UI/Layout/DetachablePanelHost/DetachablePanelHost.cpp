@@ -69,6 +69,7 @@ void DetachablePanelHost::setDetached(bool detached) {
         window_ = std::make_unique<DetachedPanelWindow>(panel_, detachButton_, titleLabel_, boundsKey_, appProperties_,
                                                         lookAndFeel_, shortcutManager_);
         window_->onCloseRequested = [this] { setDetached(false); };
+        window_->onAppShortcut = onAppShortcutFallback;
         if (focusRegionRoot_ != nullptr)
             window_->registerHostedPanelFocusRegion(focusRegionId_, *focusRegionRoot_);
         // FRO12 follow-up: promote the window to a real native peer BEFORE setVisible(true) --

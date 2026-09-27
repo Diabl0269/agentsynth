@@ -1,8 +1,8 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **92 actions** across four categories —
-**General** (48, app-wide or routed per focused editor), **Graph** (6), **Timeline** (25) and
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **93 actions** across four categories —
+**General** (49, app-wide or routed per focused editor), **Graph** (6), **Timeline** (25) and
 **Piano Roll** (13) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the six tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
@@ -39,8 +39,8 @@ when reasoning about a key that "does nothing."
 | Cmd+K | Toggle Minimap |
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
-| Cmd+T | Toggle Timeline Panel (see [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock)) |
-| Cmd+Alt+M | Toggle Mixer Panel (`toggleMixerPanel`) — opens the bottom dock on the Mixer tab if closed, or on Timeline; closes it on a second press only when the dock is already open on Mixer, mirroring Cmd+T's own open/close symmetry. See [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows) |
+| Cmd+T | Toggle Bottom Panel (`toggleBottomPanel`) — the ONE show/hide toggle for the whole bottom-docked panel; reopens on whichever tab was last active. See [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) |
+| Cmd+1 / Cmd+2 / Cmd+3 | Show Timeline / Mixer / Controllers Tab (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) — opens the dock if it's hidden and switches to that tab; a second press is a no-op (only Cmd+T closes the dock). The three numbers follow the dock's own tab order, which the tab strip's drag-to-reorder changes — see [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Opt+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
@@ -60,7 +60,8 @@ when reasoning about a key that "does nothing."
 | Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it (lands on the sidebar container, not the search field — see Cmd+F below) |
 | Cmd+F | Focus Library Search — opens the Module Library first if it's closed, then focuses its search field specifically. See [**Library keyboard navigation**](#library-keyboard-navigation) below |
 
-Cmd+T and Space are always active (see [`timeline/timeline.md`](../timeline/timeline.md#always-compiled-never-gated)). The grid
+Cmd+T (now `toggleBottomPanel`) and Space are always active (see
+[`timeline/timeline.md`](../timeline/timeline.md#always-compiled-never-gated)). The grid
 and zoom commands below are inactive whenever the panel itself isn't open (`isBottomDockVisible`),
 the same as any other timeline-only command.
 
@@ -72,10 +73,14 @@ collide. Like every row above, all of these are rebindable in
 Settings — and note that a machine which already persisted the old bindings keeps them until
 "Reset to Defaults" (bindings are stored per actionId, defaults only fill the gaps).
 
-`Cmd+Alt+M` (Toggle Mixer Panel) is neither bare `Cmd+M` (already Toggle Mod Matrix) nor
-`Cmd+Shift+M` (already Locate Master, see [**Locate Master**](#locate-master)
-below) — Alt claims a fresh chord in the same `m` family without contesting either, the same move
-`Cmd+Alt+G` (Collapse/Expand Macro) makes next to Graph's own bare-letter bindings.
+FRO333: Cmd+1/2/3 replaced the Timeline tab's old bare `Cmd+T` and the Mixer tab's old
+`Cmd+Alt+M` (a saved install migrates the old Cmd+T binding onto the new toggleBottomPanel action,
+one-shot, the first time it loads its settings — `ShortcutManager::migrateBottomPanelToggleKeys`;
+an old `Cmd+Alt+M` for Mixer just carries forward unchanged, since it never collided with anything).
+Dragging a tab in the strip to reorder it re-keys Cmd+1/2/3 to match the new order
+(`BottomDockComponent::permuteShortcutKeysForNewOrder`) — but only while all three still hold a bare
+Cmd+digit as a set; rebinding one of the three away from that convention (in Settings) opts it out of
+future re-keying, same guard shape as the Save-As/Save-Snippet chord-swap migration below.
 
 `Cmd+C` / `Cmd+V` (and, by the same reasoning, Space) are safe to claim app-wide because JUCE's
 `TextEditor` consumes them itself while it has focus — Cmd+C/V by copying/pasting text, Space by

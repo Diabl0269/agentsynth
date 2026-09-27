@@ -157,9 +157,9 @@ public:
         if (toggleLibraryButton.onClick)
             toggleLibraryButton.onClick();
     }
-    void simulateToggleTimelineClick() {
-        if (toggleTimelineButton.onClick)
-            toggleTimelineButton.onClick();
+    void simulateToggleBottomPanelClick() {
+        if (toggleBottomPanelButton.onClick)
+            toggleBottomPanelButton.onClick();
     }
 
     /** The three sliding panels this component docks, for the slide test seams below. */
@@ -209,14 +209,11 @@ public:
     // Test-only: Own-panel placement reparents the Mixer host INTO this controller (it IS the
     // second strip), not to nullptr -- see MixerPlacementController.h's class comment.
     synth::ui::MixerPlacementController& getMixerPlacementControllerForTest() { return mixerPlacement_; }
-    /** Opens the dock on the Mixer tab (switching tabs, or opening the dock, as needed); closes it
-     *  when already open on the Mixer tab. Mirrors toggleTimelineButton's own open/close symmetry
-     *  -- see MainComponentPanels.cpp. */
-    void performToggleMixerPanel();
-
-    /** FRO131: same open/close symmetry as performToggleMixerPanel() above, for the MidiRemote
-     *  tab -- see MainComponentPanels.cpp. */
-    void performToggleMidiRemotePanel();
+    /** FRO333: opens the dock if hidden (never closes it) and switches to `tab`; a tab already
+     *  detached brings its window to the front instead. See MainComponentPanels.cpp. */
+    void showBottomDockTab(synth::ui::BottomDockComponent::Tab tab);
+    /** The open half of showBottomDockTab()'s sequence, for sites that open without switching tabs. */
+    void ensureBottomDockOpen();
 
     /** The settings key the user-dragged timeline height round-trips through; the theme metric is
      *  only the DEFAULT — see clampTimelinePanelHeight(). */
@@ -775,11 +772,9 @@ private:
     juce::DrawableButton toggleMinimapButton{"toggleMinimap", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton autoArrangeButton{"autoArrange", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton toggleLibraryButton{"toggleLibrary", juce::DrawableButton::ImageAboveTextLabel};
-    // Timeline panel toggle — see ToolbarComponent::Slot::ToggleTimeline.
-    juce::DrawableButton toggleTimelineButton{"toggleTimeline", juce::DrawableButton::ImageAboveTextLabel};
-    // FRO131 (docs/control/midi-remote-ui.md#the-controllers-panel) — see
-    // ToolbarComponent::Slot::ToggleMidiRemote.
-    juce::DrawableButton toggleMidiRemoteButton{"toggleMidiRemote", juce::DrawableButton::ImageAboveTextLabel};
+    // FRO333: the ONE bottom-dock open/close toggle (ToolbarComponent::Slot::ToggleBottomPanel).
+    // Timeline/Mixer/Controllers are "show tab" commands now (showBottomDockTab()), no toolbar button.
+    juce::DrawableButton toggleBottomPanelButton{"toggleBottomPanel", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton themeToggleButton{"toggleTheme", juce::DrawableButton::ImageAboveTextLabel};
 
     std::unique_ptr<juce::FileChooser> fileChooser;
@@ -822,6 +817,10 @@ private:
     // its Mixer-panel reference stays valid.
     synth::ui::MixerPlacementController mixerPlacement_{bottomDock, appProperties};
     bool isBottomDockVisible = false;
+    // FRO333: true only while the dock auto-hid because its last tab got detached (never for a
+    // deliberate Cmd+T/toolbar close) -- cleared by the matching auto-reopen and by every
+    // deliberate open/close, so a later redock never resurrects a panel the user hid on purpose.
+    bool bottomDockAutoHiddenByEmptyTabs_ = false;
     // The panel's docked height. Resolved in initialiseCommon() from kTimelinePanelHeightKey (theme
     // metric when absent) and moved by the panel's top-edge drag; 0 only before that.
     int timelinePanelHeight_ = 0;

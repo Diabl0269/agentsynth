@@ -640,39 +640,50 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
         {AppCommands::zoomOutVertical, nullptr, "Zoom the focused editor", "View", "zoomOutVertical",
          [](const MainComponent& m) { return m.isZoomCommandActive(AppCommands::zoomOutVertical); },
          [](MainComponent& m) { return m.applyZoomCommand(AppCommands::zoomOutVertical); }},
+        // FRO333: the ONE bottom-dock open/close toggle -- through the (renamed) toolbar button's
+        // triggerClick(), same "reuse the toggle path" idiom the three "show tab" rows below used
+        // to use individually.
+        {AppCommands::toggleBottomPanel,
+         "Toggle Bottom Panel",
+         "Show or hide the bottom-docked panel, reopening on its last active tab",
+         "View",
+         "toggleBottomPanel",
+         {},
+         [](MainComponent& m) {
+             m.toggleBottomPanelButton.triggerClick();
+             return true;
+         }},
+        // FRO333: no longer a toggle -- opens the dock if needed and switches to this tab; a second
+        // press while already showing is a no-op (never closes the dock -- that's toggleBottomPanel's
+        // job now). showBottomDockTab() also brings a DETACHED tab's own window to the front instead.
         {AppCommands::toggleTimelinePanel,
-         "Toggle Timeline Panel",
-         "Toggle the bottom-docked timeline panel",
+         "Show Timeline Tab",
+         "Show the Timeline tab in the bottom-docked panel",
          "View",
          "toggleTimelinePanel",
          {},
          [](MainComponent& m) {
-             m.toggleTimelineButton.triggerClick();
+             m.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Timeline);
              return true;
          }},
-        // FRO11 (P9-5): mirrors toggleTimelinePanel's own row exactly, but through
-        // performToggleMixerPanel() rather than the toggle button -- the dock is shared between two
-        // tabs now, so "toggle the mixer" also has to switch tabs, which a plain triggerClick() on
-        // the (still Timeline-only) dock-open button cannot express.
         {AppCommands::toggleMixerPanel,
-         "Toggle Mixer Panel",
-         "Toggle the mixer tab in the bottom-docked panel",
+         "Show Mixer Tab",
+         "Show the Mixer tab in the bottom-docked panel",
          "View",
          "toggleMixerPanel",
          {},
          [](MainComponent& m) {
-             m.performToggleMixerPanel();
+             m.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer);
              return true;
          }},
-        // FRO131: same shape as toggleMixerPanel's own row above -- a third tab on the same dock.
         {AppCommands::toggleMidiRemotePanel,
-         "Toggle Controllers Panel",
-         "Toggle the Controllers tab in the bottom-docked panel",
+         "Show Controllers Tab",
+         "Show the Controllers tab in the bottom-docked panel",
          "View",
          "toggleMidiRemotePanel",
          {},
          [](MainComponent& m) {
-             m.performToggleMidiRemotePanel();
+             m.showBottomDockTab(synth::ui::BottomDockComponent::Tab::MidiRemote);
              return true;
          }},
     };

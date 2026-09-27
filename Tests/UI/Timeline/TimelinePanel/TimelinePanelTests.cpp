@@ -93,7 +93,7 @@ TEST_F(TimelinePanelIntegrationTest, ToggleCarvesFullWidthAboveStatusBar) {
     const int libraryX = mc.getGraphEditor().getBounds().getX();
     const int graphRight = mc.getGraphEditor().getBounds().getRight();
 
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
     ASSERT_TRUE(timelinePanelIsOpen(mc));
 
@@ -124,10 +124,10 @@ TEST_F(TimelinePanelIntegrationTest, ToggleBackRestores) {
     mc.setSize(1600, 900);
     const auto initialBounds = mc.getGraphEditor().getBounds();
 
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
 
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     EXPECT_FALSE(mc.isBottomDockConfiguredVisible());
     EXPECT_FALSE(timelinePanelIsOpen(mc)); // see HiddenByDefaultAndCarvesNothing's comment
     EXPECT_EQ(mc.getGraphEditor().getBounds(), initialBounds);
@@ -137,7 +137,7 @@ TEST_F(TimelinePanelIntegrationTest, VisibilityPersists) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     ASSERT_FALSE(mc.isBottomDockConfiguredVisible());
 
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
     EXPECT_TRUE(mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("bottomDockVisible", false));
 
@@ -162,10 +162,9 @@ TEST_F(TimelinePanelIntegrationTest, ToggleTimelinePanelAndPlaybackCommandsAreAl
     mc.getCommandInfo(AppCommands::toggleTimelinePanel, info);
     EXPECT_EQ(info.flags & juce::ApplicationCommandInfo::isDisabled, 0) << "toggleTimelinePanel must always be active";
     // invokeDirectly() only proves perform() ran (returns true) — its actual effect is
-    // toggleTimelineButton.triggerClick(), which POSTS a message and never dispatches in a
-    // headless test (see PreferencesSettingsTabTests.cpp's ClickingTheToggleReachesTheEditorAnd
-    // NewModules comment), so it is not asserted here. simulateToggleTimelineClick() (used by the
-    // tests above) is the synchronous path for observing the panel's actual visibility.
+    // showBottomDockTab(Timeline), which is synchronous but still not asserted here (this test is
+    // only about the command's own enabled/disabled flag). simulateToggleBottomPanelClick() (used
+    // by the tests above) is what those tests use to observe the panel's actual visibility.
     EXPECT_TRUE(cm.invokeDirectly(AppCommands::toggleTimelinePanel, false));
 
     juce::ApplicationCommandInfo playbackInfo(AppCommands::togglePlayback);

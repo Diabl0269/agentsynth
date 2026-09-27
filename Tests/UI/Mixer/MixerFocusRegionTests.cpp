@@ -41,12 +41,12 @@ private:
 
 void ensureDockOpen(MainComponent& mc) {
     if (!mc.isBottomDockConfiguredVisible())
-        mc.simulateToggleTimelineClick();
+        mc.simulateToggleBottomPanelClick();
 }
 
 void ensureDockClosed(MainComponent& mc) {
     if (mc.isBottomDockConfiguredVisible())
-        mc.simulateToggleTimelineClick();
+        mc.simulateToggleBottomPanelClick();
 }
 
 } // namespace

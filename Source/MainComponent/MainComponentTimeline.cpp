@@ -774,9 +774,6 @@ void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, 
     if (!laneId.isValid())
         return;
 
-    // Reuse the toggle path exactly (same call simulateToggleTimelineClick() makes) rather than
-    // duplicating what it does to isBottomDockVisible/persistence/layout.
-    if (!isBottomDockVisible && toggleTimelineButton.onClick)
-        toggleTimelineButton.onClick();
+    ensureBottomDockOpen();
     timelinePanel.showAutomationLane(laneId);
 }

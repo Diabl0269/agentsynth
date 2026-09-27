@@ -161,6 +161,10 @@ bool DetachedPanelWindow::keyPressed(const juce::KeyPress& key) {
         if (const auto forward = synth::ui::resolveFocusCycleKeyPress(key, *shortcutManager_))
             return focusRegions_.cycleFocus(*forward);
     }
+    // FRO333: not a focus-cycle key -- give the app-wide shortcut dispatch a chance (Cmd+T, Cmd+1..9)
+    // before giving up; see onAppShortcut's own comment.
+    if (onAppShortcut)
+        return onAppShortcut(key);
     return false;
 }
 

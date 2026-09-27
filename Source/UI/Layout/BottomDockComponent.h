@@ -52,8 +52,9 @@ public:
                         juce::ApplicationProperties& appProperties, synth::theme::AppLookAndFeel* lookAndFeel,
                         ShortcutManager* shortcutManager);
 
-    /** Reads the persisted active tab once ("bottomDockActiveTab", default "timeline" --
-     *  docs/layout/chrome.md's "Panel collapse and persistence" table); writes it on every tab switch. */
+    /** Reads the persisted active tab and tab order once ("bottomDockActiveTab" /
+     *  "bottomDockTabOrder", docs/layout/chrome.md's "Panel collapse and persistence" table);
+     *  writes the former on every tab switch and the latter on every drag-reorder. */
     void setApplicationProperties(juce::ApplicationProperties* properties);
 
     /** MainComponent::reconcileTimelineAfterGraphChange -- fired after an insert-list mutation
@@ -74,6 +75,11 @@ public:
      *  open/close the dock itself -- that stays MainComponent's own isBottomDockVisible/
      *  beginPanelSlide() (see the class comment). */
     void setActiveTab(Tab tab);
+
+    /** FRO333: true while at least one tab is currently offered in the strip. MainComponent hides
+     *  the whole dock when this goes false and reopens it when it comes back true (see
+     *  bottomDockAutoHiddenByEmptyTabs_'s own comment). */
+    bool hasAnyVisibleTab() const noexcept;
 
     /** Re-runs the mixer panel's snapshot + column rebuild -- call after every graph/timeline/
      *  macro change (MainComponent's existing reconcile funnel is the natural place). */
@@ -118,8 +124,8 @@ public:
 
     // FRO12 (P9-6): whether the Mixer tab itself is offered at all -- false when the Mixer
     // placement preference is "Own panel" or "Window" (MixerPlacementController owns mixerHost_
-    // entirely in those modes; see that class). Forces the active tab back to Timeline if it was
-    // Mixer. True (the default) is the existing Tab-placement behaviour, unchanged.
+    // entirely in those modes; see that class). True (the default) is the existing Tab-placement
+    // behaviour, unchanged.
     void setMixerTabEnabled(bool enabled);
 
     /** Re-applies visibility/z-order for the active tab, without a Mixer/MIDI Remote rebuild. */
@@ -161,16 +167,21 @@ public:
 
     /** Fires whenever either host's detach state changes (docked<->detached, either direction --
      *  including a window's own close button). MainComponent hooks this to re-run its focus-region
-     *  registration pass (docs/control/shortcuts.md "Focus regions": a detached region must stop appearing
-     *  in the DOCKED window's Tab-cycle order). Separate from either DetachablePanelHost's own
-     *  onDetachedStateChanged, which this class's constructor already claims for
-     *  applyTabVisibility() -- both fire from the one place, in that order. */
+     *  registration pass (docs/control/shortcuts.md "Focus regions") AND (FRO333) to keep
+     *  isBottomDockVisible in sync with hasAnyVisibleTab(). Separate from either
+     *  DetachablePanelHost's own onDetachedStateChanged, which this class's constructor already
+     *  claims for applyTabVisibility() -- both fire from the one place, in that order. */
     std::function<void()> onPanelDetachStateChanged;
-    /** Fires after every real tab switch (the surfaces it revealed or rebuilt are already laid out). */
+    /** Fires after every real tab switch, including a fallback switch applyTabVisibility() picks
+     *  itself (a detach, a redock, or Mixer losing mixerTabEnabled_). */
     std::function<void()> onActiveTabChanged;
-    /** The three tab-strip buttons, in strip order: what the MIDI Remote pick overlay lets clicks through to. */
+    /** The tab-strip buttons, in the user's current (drag-reorderable) tab order: what the MIDI
+     *  Remote pick overlay lets clicks through to. */
     std::vector<juce::Component*> getTabButtons() {
-        return {&timelineTabButton_, &mixerTabButton_, &midiRemoteTabButton_};
+        std::vector<juce::Component*> buttons;
+        for (Tab t : tabOrder_)
+            buttons.push_back(&buttonForTab(t));
+        return buttons;
     }
 
     void resized() override;
@@ -197,8 +208,43 @@ public:
     juce::TextButton& getResetMetersButtonForTest() noexcept { return resetMetersButton_; }
     /** FRO228 test seam: this dock's own detach/redock button. */
     juce::DrawableButton& getDetachButtonForTest() noexcept { return detachButton_; }
+    /** FRO333 test seam: the tab strip's current drag-reorderable order. */
+    const std::vector<Tab>& getTabOrderForTest() const noexcept { return tabOrder_; }
+    /** FRO333 test seam: drives the same swap-under-cursor + persist + key-permute path a real
+     *  drag-and-release does, without synthesizing mouse events. */
+    void reorderTabsForTest(Tab dragged, Tab droppedOnto) {
+        swapTabOrder(dragged, droppedOnto);
+        persistTabOrder();
+        permuteShortcutKeysForNewOrder();
+        resized();
+    }
 
 private:
+    // FRO333: one tab-strip button; reports drags to its owner for reorder-by-swap (see .cpp).
+    class DockTabButton : public juce::TextButton {
+    public:
+        DockTabButton(BottomDockComponent& owner, Tab tab, const juce::String& text)
+            : juce::TextButton(text)
+            , owner_(owner)
+            , tab_(tab) {}
+        void mouseDown(const juce::MouseEvent& e) override {
+            owner_.beginTabDrag();
+            juce::TextButton::mouseDown(e);
+        }
+        void mouseDrag(const juce::MouseEvent& e) override {
+            owner_.dragTab(tab_, e);
+            juce::TextButton::mouseDrag(e);
+        }
+        void mouseUp(const juce::MouseEvent& e) override {
+            if (!owner_.endTabDrag())
+                juce::TextButton::mouseUp(e);
+        }
+
+    private:
+        BottomDockComponent& owner_;
+        Tab tab_;
+    };
+
     // FRO146 follow-up: `allowMixerRebuild` is false ONLY from the detach/redock callback
     // (onEitherHostDetachStateChanged) -- reparenting into/out of a DetachedPanelWindow doesn't
     // change which graph nodes the mixer shows, so a rebuild there was pure collateral damage: it
@@ -214,6 +260,27 @@ private:
     synth::ui::DetachablePanelHost& activeHost() noexcept;
     void refreshDetachButton();
 
+    // ---- FRO333: tab order, "which tabs are offered right now", and the fallback pick ----
+    synth::ui::DetachablePanelHost& hostForTab(Tab tab) noexcept;
+    const synth::ui::DetachablePanelHost& hostForTab(Tab tab) const noexcept;
+    juce::TextButton& buttonForTab(Tab tab) noexcept;
+    /** True when `tab` belongs in the strip right now: not detached, and (Mixer only) not disabled
+     *  by the placement preference. */
+    bool isTabOfferedInStrip(Tab tab) const noexcept;
+    /** `activeTab_` if it's still offered, else the first offered tab in tabOrder_, else
+     *  `activeTab_` unchanged (hasAnyVisibleTab() is false -- nothing to fall back to). */
+    Tab pickFallbackActiveTab() const noexcept;
+
+    // ---- FRO333: drag-to-reorder (DockTabButton's own mouse overrides call these; see .cpp) ----
+    void beginTabDrag() noexcept { tabDragReordered_ = false; }
+    void dragTab(Tab dragged, const juce::MouseEvent& e);
+    bool endTabDrag();
+    void swapTabOrder(Tab a, Tab b);
+    void persistTabOrder();
+    /** Permutes the three tabs' own Cmd+digit key bindings to match tabOrder_'s new order. */
+    void permuteShortcutKeysForNewOrder();
+    static const char* actionIdForTab(Tab tab) noexcept;
+
     TimelinePanelComponent& timelinePanel_;
     MixerPanelComponent mixer_;
     // FRO131: the panel and its host follow the same "declared before its host so the reference
@@ -225,9 +292,9 @@ private:
     synth::ui::DetachablePanelHost timelineHost_;
     synth::ui::DetachablePanelHost mixerHost_;
     synth::ui::DetachablePanelHost midiRemoteHost_;
-    juce::TextButton timelineTabButton_{"Timeline"};
-    juce::TextButton mixerTabButton_{"Mixer"};
-    juce::TextButton midiRemoteTabButton_{"Controllers"};
+    DockTabButton timelineTabButton_;
+    DockTabButton mixerTabButton_;
+    DockTabButton midiRemoteTabButton_;
     // FRO12: icon-only, embedded in this tab strip (not either host's own header -- see
     // DetachablePanelHost's class comment on why this is a separate button instance rather than a
     // literal shared one across three different parents).
@@ -243,7 +310,16 @@ private:
     Tab activeTab_ = Tab::Timeline;
     bool mixerTabEnabled_ = true;
     juce::ApplicationProperties* appProperties_ = nullptr;
+    ShortcutManager* shortcutManager_ = nullptr;
     static constexpr const char* kActiveTabKey = "bottomDockActiveTab";
+    // FRO333: user-controlled visual/Cmd+N order, a permutation of all three Tab values regardless
+    // of which are currently detached (a detached tab keeps its slot so redocking restores it there
+    // rather than always appending it at the end).
+    std::vector<Tab> tabOrder_{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
+    static constexpr const char* kTabOrderKey = "bottomDockTabOrder";
+    // True from a mouseDown that turns into a real reorder swap (see dragTab()); read once by
+    // endTabDrag() and reset there.
+    bool tabDragReordered_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BottomDockComponent)
 };

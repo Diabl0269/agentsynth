@@ -63,6 +63,13 @@ public:
      *  the graph canvas region MainComponent registers). */
     void registerHostedPanelFocusRegion(const juce::String& id, juce::Component& root);
 
+    /** FRO333: app-wide shortcuts (Cmd+T, Cmd+1..9) still have to fire while THIS window has focus
+     *  -- it's still an AgentSynth window ("the focused window wins" only hands the keys to a
+     *  HOSTED PLUGIN's own window). MainComponent::keyPressed is unreachable from here (see the
+     *  class comment above), so keyPressed() retries an unresolved key through this callback,
+     *  which DetachablePanelHost wires to the same dispatch MainComponent's own keyPressed uses. */
+    std::function<bool(const juce::KeyPress&)> onAppShortcut;
+
     static constexpr int kHeaderStripHeight = 22; // == DetachablePanelHost::kHeaderStripHeight
 
     // ---- Testing hooks (DetachedPanelWindowTests.cpp) ----

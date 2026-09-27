@@ -14,7 +14,7 @@ TEST_F(FocusArbitrationTest, SnapCommandsDriveThePanelsSharedGrid) {
     using Snap = synth::ui::TimelineViewState::Snap;
     MainComponent mc(std::make_unique<FocusMockProvider>());
     mc.setSize(1200, 800);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
 
     auto& cm = mc.getCommandManager();
@@ -71,7 +71,7 @@ TEST_F(FocusArbitrationTest, SnapCommandsDriveThePanelsSharedGrid) {
 TEST_F(FocusArbitrationTest, ZoomCommandsRoutePerFocusedSurface) {
     MainComponent mc(std::make_unique<FocusMockProvider>());
     mc.setSize(1200, 800);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
 
     auto& cm = mc.getCommandManager();

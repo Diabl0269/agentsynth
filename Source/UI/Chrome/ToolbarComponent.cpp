@@ -19,7 +19,7 @@ void ToolbarComponent::setButtons(std::array<juce::DrawableButton*, NumSlots> bt
 // find the group boundaries paint() draws separator hairlines at. Matches the Slot enum's
 // documented grouping (ToolbarComponent.h:21-22): left [Library]|[New,Save,Load]|
 // [Settings,Feedback]|[Undo,Redo]|[AutoArrange]; right
-// [ToggleMinimap,ToggleModMatrix,ToggleAiPanel,ToggleTimeline]|[ToggleTheme].
+// [ToggleMinimap,ToggleModMatrix,ToggleAiPanel,ToggleBottomPanel]|[ToggleTheme].
 namespace {
 int groupOf(int slot) {
     switch (slot) {
@@ -40,7 +40,7 @@ int groupOf(int slot) {
     case ToolbarComponent::ToggleMinimap:
     case ToolbarComponent::ToggleModMatrix:
     case ToolbarComponent::ToggleAiPanel:
-    case ToolbarComponent::ToggleTimeline:
+    case ToolbarComponent::ToggleBottomPanel:
         return 5;
     case ToolbarComponent::ToggleTheme:
         return 6;
@@ -71,7 +71,7 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
         108.0f, // ToggleMinimap ("Hide Minimap"/"Show Minimap")
         104.0f, // ToggleModMatrix
         92.0f,  // ToggleAiPanel
-        112.0f, // ToggleTimeline ("Hide Timeline"/"Show Timeline")
+        100.0f, // ToggleBottomPanel ("Hide Panel"/"Show Panel")
         110.0f  // ToggleTheme
     };
 
@@ -86,8 +86,7 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
     static constexpr float kGroupGap = 12.0f;
 
     // Left group: Library, Save, Load, Settings, Undo, Redo, AutoArrange.
-    // Invisible buttons (e.g. ToggleTimeline while the "Show timeline" preference is off) yield
-    // their slot entirely rather than leaving a reserved gap.
+    // Invisible buttons yield their slot entirely rather than leaving a reserved gap.
     int lastGroup = -1;
     for (int slot = Library; slot <= AutoArrange; ++slot)
         if (buttons_[(size_t)slot] != nullptr && buttons_[(size_t)slot]->isVisible()) {
@@ -104,7 +103,7 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
     // Flexible spacer pushes the right group to the far edge.
     fb.items.add(juce::FlexItem().withFlex(1.0f));
 
-    // Right group: ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleTimeline, ToggleTheme.
+    // Right group: ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleBottomPanel, ToggleTheme.
     lastGroup = -1;
     for (int slot = ToggleMinimap; slot <= ToggleTheme; ++slot)
         if (buttons_[(size_t)slot] != nullptr && buttons_[(size_t)slot]->isVisible()) {

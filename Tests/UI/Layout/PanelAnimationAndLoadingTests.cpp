@@ -245,7 +245,7 @@ TEST_F(PanelSlideLayoutTest, AMidSlideFractionScalesThePanelAndGivesTheRestToThe
 TEST_F(PanelSlideLayoutTest, TheTimelineSlidesAgainstAPinnedBottomEdge) {
     MainComponent mc(std::make_unique<MockProviderPAL>());
     mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     // FRO11 (P9-5): 220 total carve minus BottomDockComponent's 22px tab strip -- see
     // timelinePanelBoundsInMainComponent's own comment.
     ASSERT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 198);

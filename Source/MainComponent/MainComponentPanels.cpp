@@ -533,13 +533,9 @@ void MainComponent::applyToolbarIcons() {
     setIcon(toggleModMatrixButton, Icon::ToggleMatrix);
     setIcon(toggleMinimapButton, Icon::ToggleMinimap);
     setIcon(toggleAiPanelButton, Icon::ToggleAI);
-    // No dedicated timeline glyph exists yet — reuse TransportPlay, otherwise unused this
+    // No dedicated bottom-panel glyph exists yet — reuse TransportPlay, otherwise unused this
     // phase ("scaffolding only — no DrawableButton wired"; see IconLibrary.h).
-    setIcon(toggleTimelineButton, Icon::TransportPlay);
-    // FRO131: TrackMidi is a real MIDI glyph already in the library (used for track-header kind
-    // icons) -- no need for a dedicated new asset, same "reuse what exists" reasoning as
-    // toggleTimelineButton's own TransportPlay borrow above.
-    setIcon(toggleMidiRemoteButton, Icon::TrackMidi);
+    setIcon(toggleBottomPanelButton, Icon::TransportPlay);
     setIcon(themeToggleButton, Icon::ThemeToggle);
 
     // Master-mute uses the transport-stop glyph (no real play/stop transport this phase).
@@ -554,9 +550,7 @@ void MainComponent::applyToolbarIcons() {
     toggleMinimapButton.setToggleState(graphEditor.isMinimapVisible(), juce::dontSendNotification);
     toggleModMatrixButton.setToggleState(graphEditor.isModMatrixVisible(), juce::dontSendNotification);
     toggleAiPanelButton.setToggleState(isAiPanelVisible, juce::dontSendNotification);
-    toggleTimelineButton.setToggleState(isBottomDockVisible, juce::dontSendNotification);
-    toggleMidiRemoteButton.setToggleState(isBottomDockVisible && bottomDock.isMidiRemoteTabActive(),
-                                          juce::dontSendNotification);
+    toggleBottomPanelButton.setToggleState(isBottomDockVisible, juce::dontSendNotification);
 
     // Text: cleared in narrow mode; stateful for the toggles in wide mode.
     newButton.setButtonText(iconOnly ? "" : "New");
@@ -571,10 +565,7 @@ void MainComponent::applyToolbarIcons() {
     toggleMinimapButton.setButtonText(iconOnly ? ""
                                                : (graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"));
     toggleAiPanelButton.setButtonText(iconOnly ? "" : (isAiPanelVisible ? "Hide AI" : "Show AI"));
-    toggleTimelineButton.setButtonText(iconOnly ? "" : (isBottomDockVisible ? "Hide Timeline" : "Show Timeline"));
-    toggleMidiRemoteButton.setButtonText(
-        iconOnly ? ""
-                 : ((isBottomDockVisible && bottomDock.isMidiRemoteTabActive()) ? "Hide Controllers" : "Controllers"));
+    toggleBottomPanelButton.setButtonText(iconOnly ? "" : (isBottomDockVisible ? "Hide Panel" : "Show Panel"));
     toggleLibraryButton.setButtonText(iconOnly ? "" : (isLibraryVisible ? "Hide Library" : "Show Library"));
     themeToggleButton.setButtonText(
         iconOnly ? ""
@@ -609,12 +600,8 @@ void MainComponent::applyToolbarIcons() {
     const juce::String aiBase = isAiPanelVisible ? "Hide AI Panel" : "Show AI Panel";
     toggleAiPanelButton.setTooltip(hint(aiBase, "toggleAiPanel"));
 
-    const juce::String timelineBase = isBottomDockVisible ? "Hide Timeline" : "Show Timeline";
-    toggleTimelineButton.setTooltip(hint(timelineBase, "toggleTimelinePanel"));
-
-    const juce::String midiRemoteBase =
-        (isBottomDockVisible && bottomDock.isMidiRemoteTabActive()) ? "Hide Controllers" : "Show Controllers";
-    toggleMidiRemoteButton.setTooltip(hint(midiRemoteBase, "toggleMidiRemotePanel"));
+    const juce::String bottomPanelBase = isBottomDockVisible ? "Hide Panel" : "Show Panel";
+    toggleBottomPanelButton.setTooltip(hint(bottomPanelBase, "toggleBottomPanel"));
 
     const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";
     toggleLibraryButton.setTooltip(hint(libBase, "toggleLibrary"));
@@ -748,59 +735,36 @@ void MainComponent::finishPanelSlide() {
     resized();
 }
 
-// FRO11 (P9-5): mirrors toggleTimelineButton's own open/close symmetry (plan (f)) -- closed ->
-// open on the Mixer tab; open on Timeline -> switch to Mixer without closing; open on Mixer ->
-// close. The dock's own open/close state (isBottomDockVisible/timelineSlide_) stays keyed to "is
-// the DOCK open" regardless of which tab is active (see BottomDockComponent's own class comment).
-void MainComponent::performToggleMixerPanel() {
-    // FRO12 (P9-6): Own-panel/Window placements have nothing to do with the bottom dock's own
-    // open/close state below -- mixerPlacement_ handles the reveal itself and says so by
-    // returning true. Tab placement (the default) returns false and falls through to the
-    // unchanged FRO11 behaviour.
-    if (mixerPlacement_.revealOrToggle())
+// FRO333: no longer a toggle (that's toggleBottomPanelButton's job now, see its onClick) --
+// opens the dock if it's hidden and switches to `tab`; a no-op if that tab is already showing.
+// mixerPlacement_.revealOrToggle() is Mixer's OWN Own-panel/Window placement detour, unrelated to
+// the tab strip: it returns true and handles everything itself when Mixer isn't in Tab placement.
+void MainComponent::showBottomDockTab(synth::ui::BottomDockComponent::Tab tab) {
+    using Tab = synth::ui::BottomDockComponent::Tab;
+    if (tab == Tab::Mixer && mixerPlacement_.revealOrToggle())
         return;
-    if (!isBottomDockVisible) {
-        isBottomDockVisible = true;
-        appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, "1");
-        appProperties.getUserSettings()->saveIfNeeded();
-        bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
-        applyToolbarIcons();
-        beginPanelSlide();
+    auto& host = tab == Tab::Timeline ? bottomDock.getTimelineHost()
+                 : tab == Tab::Mixer  ? bottomDock.getMixerHost()
+                                      : bottomDock.getMidiRemoteHost();
+    if (host.isDetached()) {
+        host.bringDetachedWindowToFront();
         return;
     }
-    if (bottomDock.isMixerTabActive()) {
-        isBottomDockVisible = false;
-        appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, "0");
-        appProperties.getUserSettings()->saveIfNeeded();
-        applyToolbarIcons();
-        beginPanelSlide();
-        return;
-    }
-    bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
+    ensureBottomDockOpen();
+    bottomDock.setActiveTab(tab);
 }
 
-// FRO131: same open/close symmetry as performToggleMixerPanel() above -- MidiRemote has no
-// placement-controller detour (unlike Mixer's mixerPlacement_.revealOrToggle()), since it offers
-// no Own-panel/Window placement variant.
-void MainComponent::performToggleMidiRemotePanel() {
-    if (!isBottomDockVisible) {
-        isBottomDockVisible = true;
-        appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, "1");
-        appProperties.getUserSettings()->saveIfNeeded();
-        bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::MidiRemote);
-        applyToolbarIcons();
-        beginPanelSlide();
+// FRO333: the "open if closed" half other reveal sites (a channel-chip click, "Edit MIDI
+// assignment...", a focus-region open callback) also need, without switching tabs themselves.
+void MainComponent::ensureBottomDockOpen() {
+    if (isBottomDockVisible)
         return;
-    }
-    if (bottomDock.isMidiRemoteTabActive()) {
-        isBottomDockVisible = false;
-        appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, "0");
-        appProperties.getUserSettings()->saveIfNeeded();
-        applyToolbarIcons();
-        beginPanelSlide();
-        return;
-    }
-    bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::MidiRemote);
+    isBottomDockVisible = true;
+    bottomDockAutoHiddenByEmptyTabs_ = false;
+    appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, "1");
+    appProperties.getUserSettings()->saveIfNeeded();
+    applyToolbarIcons();
+    beginPanelSlide();
 }
 
 // ---- Collapsible library sidebar (slides, persisted) ----

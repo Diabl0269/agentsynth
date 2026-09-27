@@ -111,13 +111,17 @@ audio, playback and every other click keep working; it is not a modal mode.
 A third tab on the bottom dock, `BottomDockComponent::Tab::MidiRemote`, next to Timeline and
 Mixer (`Source/UI/Mixer/BottomDockComponent.h`) — it reuses the dock's slide, persistence
 (`"bottomDockActiveTab"`), detach-to-window (`DetachablePanelHost`) and focus-region machinery.
-Toolbar toggle + `ShortcutManager` action `toggleMidiRemotePanel` (category General, default
-unbound). Files: `Source/UI/MidiRemote/MidiRemotePanel/` (`MidiRemotePanelComponent` + one unit
-per region below), `Source/UI/MidiRemote/ControllerSurface/`, `Source/UI/MidiRemote/Inspector/`.
-The panel opens attached in the dock by default; detach-to-window is available but is not the
-default. FRO158 (still open, unrelated to this ticket) tracks a separate, unreproduced report that
-opening the Mixer tab can leave the dock blank; FRO131 does not depend on it and did not attempt
-to reproduce or fix it.
+Opened with `Cmd+3` / the Settings shortcut list's "Show Controllers Tab" (`ShortcutManager` action
+`toggleMidiRemotePanel`, category General; FRO333 gave the dock a single Cmd+T open/close toggle,
+so there is no per-tab toolbar button any more — see
+[`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip)). Files:
+`Source/UI/MidiRemote/MidiRemotePanel/` (`MidiRemotePanelComponent` + one unit per region below),
+`Source/UI/MidiRemote/ControllerSurface/`, `Source/UI/MidiRemote/Inspector/`. The panel opens
+attached in the dock by default; detach-to-window is available but is not the default, and FRO333
+made a detach leave the tab strip entirely — closed and fixed: FRO158's "opening the Mixer tab can
+leave the dock blank" report was this exact case (the previously-active tab's host and the
+newly-detached one were both hidden at once), reproduced against a detach rather than the founder's
+literal "opening" wording and fixed by the same fallback-tab logic.
 
 The panel stays live while it's open (FRO263) — it re-pulls the profile/assignment set on every
 mutation that changes it, wherever it happens: a canvas Learn/Forget, a module deleted from the canvas (its assignments turn to "(missing module)"), Undo/Redo, an action Learn on

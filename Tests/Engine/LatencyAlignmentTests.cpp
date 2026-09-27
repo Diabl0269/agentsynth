@@ -585,7 +585,7 @@ TEST_F(LatencyFlowTest, PlayheadUsesOutputLatencyOnlyNotTheRecordingSum) {
     ASSERT_EQ(engine.getGraphLatencySamples(), 0);
     ASSERT_EQ(engine.getRecordingLatencySamples(), 36000);
 
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     auto& panel = mc.getTimelinePanel();
     ASSERT_TRUE(panel.isVisible());
 
@@ -614,7 +614,7 @@ TEST_F(LatencyFlowTest, PlayheadUsesOutputLatencyOnlyNotTheRecordingSum) {
     EXPECT_NE(panel.getPlayhead().getLineX(), recordingSumX)
         << "the recording sum belongs to take placement, not to the drawn line";
 
-    mc.simulateToggleTimelineClick();
+    mc.simulateToggleBottomPanelClick();
     engine.audioDeviceStopped();
 }
 

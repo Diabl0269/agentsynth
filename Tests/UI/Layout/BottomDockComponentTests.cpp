@@ -60,7 +60,7 @@ TEST(BottomDockComponentTests, TabStripSwitchesBetweenTimelineAndMixerWithoutClo
     EXPECT_TRUE(mc.getTimelinePanel().isVisible());
 }
 
-TEST(BottomDockComponentTests, ToggleMixerCommandOpensDockOnMixerTabThenClosesOnSecondPress) {
+TEST(BottomDockComponentTests, ShowMixerTabOpensTheDockAndStaysOpenOnASecondPress) {
     // Isolates "bottomDockActiveTab" (see the guard's own comment) -- this test switches to the
     // Mixer tab itself and must not leak that into a later test's "Timeline" default assumption.
     BottomDockActiveTabResetGuardMDT resetGuard;
@@ -70,12 +70,31 @@ TEST(BottomDockComponentTests, ToggleMixerCommandOpensDockOnMixerTabThenClosesOn
 
     ASSERT_FALSE(mc.isBottomDockConfiguredVisible()) << "the dock starts closed";
 
-    mc.performToggleMixerPanel();
+    mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer);
     EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "closed -> open on the Mixer tab";
     EXPECT_TRUE(mc.getBottomDock().isMixerTabActive());
 
-    mc.performToggleMixerPanel();
-    EXPECT_FALSE(mc.isBottomDockConfiguredVisible()) << "open on Mixer -> close (mirrors toggleTimelineButton)";
+    // FRO333: "show tab" never closes the dock any more -- only toggleBottomPanel does.
+    mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer);
+    EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "a second press is a no-op, not a close";
+    EXPECT_TRUE(mc.getBottomDock().isMixerTabActive());
+}
+
+TEST(BottomDockComponentTests, ToggleBottomPanelOpensOnTheLastActiveTabThenClosesOnSecondPress) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
+    MainComponent mc(std::make_unique<MockProviderMDCT>());
+    mc.setSize(1400, 900);
+    mc.newPatchForTest();
+    mc.getBottomDock().setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
+
+    ASSERT_FALSE(mc.isBottomDockConfiguredVisible()) << "the dock starts closed";
+
+    mc.simulateToggleBottomPanelClick();
+    EXPECT_TRUE(mc.isBottomDockConfiguredVisible());
+    EXPECT_TRUE(mc.getBottomDock().isMixerTabActive()) << "reopens on the last tab used, not always Timeline";
+
+    mc.simulateToggleBottomPanelClick();
+    EXPECT_FALSE(mc.isBottomDockConfiguredVisible()) << "the ONE toggle still closes the whole panel";
 }
 
 TEST(BottomDockComponentTests, ToggleMixerPanelActionIdRoundTripsToItsCommand) {
@@ -200,5 +219,79 @@ TEST(BottomDockComponentTests, ControllersTabUsesTheNewNameAndKeepsTheActionId) 
         }
     }
     EXPECT_TRUE(foundControllersTab);
-    EXPECT_EQ(ShortcutManager::getActionDescription("toggleMidiRemotePanel"), "Toggle Controllers Panel");
+    EXPECT_EQ(ShortcutManager::getActionDescription("toggleMidiRemotePanel"), "Show Controllers Tab");
+}
+
+// FRO333: Timeline/Mixer/Controllers no longer each toggle the whole dock closed -- they only ever
+// show their own tab (opening the dock if it was hidden).
+TEST(BottomDockComponentTests, ShowTabActionsNeverCloseTheDock) {
+    EXPECT_EQ(AppCommands::getCommandForAction("toggleTimelinePanel"), AppCommands::toggleTimelinePanel);
+    EXPECT_EQ(AppCommands::getCommandForAction("toggleMixerPanel"), AppCommands::toggleMixerPanel);
+    EXPECT_EQ(AppCommands::getCommandForAction("toggleMidiRemotePanel"), AppCommands::toggleMidiRemotePanel);
+    EXPECT_EQ(AppCommands::getCommandForAction("toggleBottomPanel"), AppCommands::toggleBottomPanel);
+    EXPECT_EQ(ShortcutManager::getActionDescription("toggleTimelinePanel"), "Show Timeline Tab");
+    EXPECT_EQ(ShortcutManager::getActionDescription("toggleMixerPanel"), "Show Mixer Tab");
+    EXPECT_EQ(ShortcutManager::getActionDescription("toggleBottomPanel"), "Toggle Bottom Panel");
+}
+
+// FRO333: the dock's own tab order (Timeline, Mixer, Controllers by default) is what Cmd+1..3 and
+// the strip's own left-to-right layout follow; getTabButtons() reports it in that same order.
+TEST(BottomDockComponentTests, DefaultTabOrderIsTimelineMixerControllers) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
+    MainComponent mc(std::make_unique<MockProviderMDCT>());
+    mc.setSize(1400, 900);
+    auto& dock = mc.getBottomDock();
+    using Tab = synth::ui::BottomDockComponent::Tab;
+    const std::vector<Tab> expected{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
+    EXPECT_EQ(dock.getTabOrderForTest(), expected);
+}
+
+// FRO333: dragging a tab past another swaps their order, persists it, and re-keys Cmd+1/2/3 so
+// Cmd+1 keeps opening whichever tab now sits first.
+TEST(BottomDockComponentTests, DragReorderSwapsTabOrderAndPermutesTheCmdDigitBindings) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
+    MainComponent mc(std::make_unique<MockProviderMDCT>());
+    mc.setSize(1400, 900);
+    auto& dock = mc.getBottomDock();
+    using Tab = synth::ui::BottomDockComponent::Tab;
+
+    dock.reorderTabsForTest(Tab::Timeline, Tab::Mixer);
+
+    const std::vector<Tab> expected{Tab::Mixer, Tab::Timeline, Tab::MidiRemote};
+    EXPECT_EQ(dock.getTabOrderForTest(), expected);
+    EXPECT_EQ(mc.getShortcutManager().getBinding("toggleMixerPanel"),
+              juce::KeyPress('1', juce::ModifierKeys::commandModifier, 0));
+    EXPECT_EQ(mc.getShortcutManager().getBinding("toggleTimelinePanel"),
+              juce::KeyPress('2', juce::ModifierKeys::commandModifier, 0));
+    EXPECT_EQ(mc.getShortcutManager().getBinding("toggleMidiRemotePanel"),
+              juce::KeyPress('3', juce::ModifierKeys::commandModifier, 0));
+}
+
+// FRO158/FRO333: detaching the ACTIVE tab must never leave the dock showing nothing -- it falls
+// back to the next tab still offered, and hides the whole dock only once none are left.
+TEST(BottomDockComponentTests, DetachingTheActiveTabFallsBackToTheNextOneAndNeverGoesBlank) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
+    MainComponent mc(std::make_unique<MockProviderMDCT>());
+    mc.setSize(1400, 900);
+    mc.newPatchForTest();
+    auto& dock = mc.getBottomDock();
+    using Tab = synth::ui::BottomDockComponent::Tab;
+
+    mc.showBottomDockTab(Tab::Mixer);
+    ASSERT_TRUE(dock.isMixerTabActive());
+
+    dock.getMixerHost().setDetached(true);
+    EXPECT_FALSE(dock.isMixerTabActive()) << "the detached tab must not stay 'active' with nothing shown for it";
+    EXPECT_TRUE(dock.getActiveTab() == Tab::Timeline || dock.getActiveTab() == Tab::MidiRemote)
+        << "falls back to a tab that's still offered";
+    EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "two tabs remain -- the dock itself must stay open";
+
+    dock.getTimelineHost().setDetached(true);
+    dock.getMidiRemoteHost().setDetached(true);
+    EXPECT_FALSE(dock.hasAnyVisibleTab());
+    EXPECT_FALSE(mc.isBottomDockConfiguredVisible()) << "no tabs left -- the whole panel hides";
+
+    dock.getMixerHost().setDetached(false);
+    EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "a redock while auto-hidden reopens the panel";
+    EXPECT_TRUE(dock.isMixerTabActive());
 }

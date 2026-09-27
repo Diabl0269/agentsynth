@@ -1,10 +1,13 @@
 // Concern: FRO11 (P9-5) -- BottomDockComponent's tab strip, persistence and layout. FRO12 (P9-6,
 // docs/mixer/panel.md) extends this with both panels' detach-to-window hosts and the tab strip's
-// own icon-only detach button.
+// own icon-only detach button. FRO333 extends it again with a user-reorderable tab order and
+// "a detached tab leaves the strip, the active tab falls back to the next one" behaviour.
 #include "BottomDockComponent.h"
 
 #include "AudioEngine/AudioEngine.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include <algorithm>
+#include <utility>
 
 namespace synth::ui {
 
@@ -21,7 +24,11 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     , timelineHost_(timelinePanel_, "Timeline", "timelineWindowBounds", &appProperties, lookAndFeel, shortcutManager)
     , mixerHost_(mixer_, "Mixer", "mixerWindowBounds", &appProperties, lookAndFeel, shortcutManager)
     , midiRemoteHost_(midiRemotePanel_, "Controllers", "midiRemoteWindowBounds", &appProperties, lookAndFeel,
-                      shortcutManager) {
+                      shortcutManager)
+    , timelineTabButton_(*this, Tab::Timeline, "Timeline")
+    , mixerTabButton_(*this, Tab::Mixer, "Mixer")
+    , midiRemoteTabButton_(*this, Tab::MidiRemote, "Controllers")
+    , shortcutManager_(shortcutManager) {
     addAndMakeVisible(timelineTabButton_);
     addAndMakeVisible(mixerTabButton_);
     addAndMakeVisible(midiRemoteTabButton_);
@@ -46,6 +53,9 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     timelineHost_.setEmbeddedHeader(true);
     mixerHost_.setEmbeddedHeader(true);
     midiRemoteHost_.setEmbeddedHeader(true);
+    // FRO333: applyTabVisibility() itself now resolves "which tab falls back into view" (a
+    // detach/redock on either host, in either direction), so the three hosts can share the one
+    // handler unchanged from before -- see applyTabVisibility()'s own comment.
     auto onEitherHostDetachStateChanged = [this] {
         // FRO146 follow-up: false -- see applyTabVisibility()'s own doc comment on why a pure
         // detach/redock must never rebuild the mixer's columns (it would silently wipe every
@@ -98,8 +108,23 @@ void BottomDockComponent::setApplicationProperties(juce::ApplicationProperties* 
     appProperties_ = properties;
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
-    const auto saved = appProperties_->getUserSettings()->getValue(kActiveTabKey, "timeline");
+    auto* settings = appProperties_->getUserSettings();
+    const auto saved = settings->getValue(kActiveTabKey, "timeline");
     activeTab_ = saved == "mixer" ? Tab::Mixer : (saved == "midiRemote" ? Tab::MidiRemote : Tab::Timeline);
+    // FRO333: "timeline,mixer,midiRemote" (comma-joined action-suffix names, reusing kActiveTabKey's
+    // own vocabulary) -- absent or malformed (wrong length, an unrecognised or repeated name) falls
+    // back to the default order rather than half-applying a corrupt permutation.
+    const auto savedOrder = juce::StringArray::fromTokens(settings->getValue(kTabOrderKey, ""), ",", "");
+    if (savedOrder.size() == 3) {
+        std::vector<Tab> parsed;
+        for (const auto& name : savedOrder)
+            parsed.push_back(name == "mixer" ? Tab::Mixer : (name == "midiRemote" ? Tab::MidiRemote : Tab::Timeline));
+        std::vector<Tab> sorted = parsed;
+        std::sort(sorted.begin(), sorted.end());
+        const std::vector<Tab> everyTab{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
+        if (sorted == everyTab)
+            tabOrder_ = parsed;
+    }
     applyTabVisibility();
 }
 
@@ -132,29 +157,64 @@ void BottomDockComponent::setMixerTabEnabled(bool enabled) {
     if (mixerTabEnabled_ == enabled)
         return;
     mixerTabEnabled_ = enabled;
-    if (!enabled && activeTab_ == Tab::Mixer)
-        setActiveTab(Tab::Timeline); // also runs applyTabVisibility()+persistActiveTab()
-    else
-        applyTabVisibility();
+    // FRO333: no separate "was Mixer active?" branch needed any more -- applyTabVisibility() picks
+    // a fallback active tab itself whenever the current one stops being offered, which disabling
+    // Mixer while it's active is just one more instance of (a detach is the other).
+    applyTabVisibility();
 }
 
-// Call after anything that might force a hidden host visible again as a side effect --
-// Component::addAndMakeVisible() calls setVisible(true) unconditionally, even when reparenting a
-// child that's already here, which is exactly what MixerPlacementController::applyPlacement()'s
-// "reclaims it (no-op if already there)" comment misses: without this, the mixer host was left
-// visible on top of the Timeline tab at startup, silently swallowing every click there until the
-// next real tab switch. allowMixerRebuild=false, same as the detach/redock callback above -- this
-// resyncs visibility for state that's already correct (or about to be corrected), not a real "tab
-// just became active" reveal, so it must not double the mixer/MIDI Remote rebuild a caller that
-// changed activeTab_/mixerTabEnabled_ itself already triggered.
 void BottomDockComponent::refreshTabVisibility() { applyTabVisibility(false); }
 
-DetachablePanelHost& BottomDockComponent::activeHost() noexcept {
-    if (activeTab_ == Tab::Mixer && mixerTabEnabled_)
+DetachablePanelHost& BottomDockComponent::activeHost() noexcept { return hostForTab(activeTab_); }
+
+DetachablePanelHost& BottomDockComponent::hostForTab(Tab tab) noexcept {
+    return const_cast<DetachablePanelHost&>(std::as_const(*this).hostForTab(tab));
+}
+
+const DetachablePanelHost& BottomDockComponent::hostForTab(Tab tab) const noexcept {
+    switch (tab) {
+    case Tab::Mixer:
         return mixerHost_;
-    if (activeTab_ == Tab::MidiRemote)
+    case Tab::MidiRemote:
         return midiRemoteHost_;
+    case Tab::Timeline:
+        break;
+    }
     return timelineHost_;
+}
+
+juce::TextButton& BottomDockComponent::buttonForTab(Tab tab) noexcept {
+    switch (tab) {
+    case Tab::Mixer:
+        return mixerTabButton_;
+    case Tab::MidiRemote:
+        return midiRemoteTabButton_;
+    case Tab::Timeline:
+        break;
+    }
+    return timelineTabButton_;
+}
+
+bool BottomDockComponent::isTabOfferedInStrip(Tab tab) const noexcept {
+    if (tab == Tab::Mixer && !mixerTabEnabled_)
+        return false;
+    return !hostForTab(tab).isDetached();
+}
+
+bool BottomDockComponent::hasAnyVisibleTab() const noexcept {
+    for (Tab t : tabOrder_)
+        if (isTabOfferedInStrip(t))
+            return true;
+    return false;
+}
+
+BottomDockComponent::Tab BottomDockComponent::pickFallbackActiveTab() const noexcept {
+    if (isTabOfferedInStrip(activeTab_))
+        return activeTab_;
+    for (Tab t : tabOrder_)
+        if (isTabOfferedInStrip(t))
+            return t;
+    return activeTab_; // hasAnyVisibleTab() is false -- nothing to fall back to.
 }
 
 void BottomDockComponent::refreshDetachButton() {
@@ -177,10 +237,23 @@ void BottomDockComponent::refreshDetachButton() {
     detachButton_.setImages(base.get(), hoverIcon.get(), hoverIcon.get());
 }
 
+// FRO333: the fallback pick is folded into every call (not just the detach-state callback) --
+// pickFallbackActiveTab() is a no-op read when activeTab_ is already offered, so this costs nothing
+// on the common "just an ordinary tab switch or a mixer rebuild" path, and it is what makes a
+// detach, a redock and setMixerTabEnabled(false) all resolve the same way without three separate
+// "which tab do I fall back to" implementations.
 void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
-    const bool mixerActive = activeTab_ == Tab::Mixer && mixerTabEnabled_;
+    const Tab resolved = pickFallbackActiveTab();
+    if (resolved != activeTab_) {
+        activeTab_ = resolved;
+        persistActiveTab();
+        if (onActiveTabChanged)
+            onActiveTabChanged();
+    }
+
+    const bool mixerActive = activeTab_ == Tab::Mixer;
     const bool midiRemoteActive = activeTab_ == Tab::MidiRemote;
-    const bool timelineActive = !mixerActive && !midiRemoteActive;
+    const bool timelineActive = activeTab_ == Tab::Timeline;
     timelineHost_.setVisible(timelineActive);
     mixerHost_.setVisible(mixerActive);
     midiRemoteHost_.setVisible(midiRemoteActive);
@@ -196,7 +269,6 @@ void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
         mixer_.setVisible(mixerActive);
     if (!midiRemoteHost_.isDetached())
         midiRemotePanel_.setVisible(midiRemoteActive);
-    mixerTabButton_.setVisible(mixerTabEnabled_);
     timelineTabButton_.setToggleState(timelineActive, juce::dontSendNotification);
     mixerTabButton_.setToggleState(mixerActive, juce::dontSendNotification);
     midiRemoteTabButton_.setToggleState(midiRemoteActive, juce::dontSendNotification);
@@ -230,6 +302,93 @@ void BottomDockComponent::persistActiveTab() {
     appProperties_->getUserSettings()->saveIfNeeded();
 }
 
+const char* BottomDockComponent::actionIdForTab(Tab tab) noexcept {
+    switch (tab) {
+    case Tab::Mixer:
+        return "toggleMixerPanel";
+    case Tab::MidiRemote:
+        return "toggleMidiRemotePanel";
+    case Tab::Timeline:
+        break;
+    }
+    return "toggleTimelinePanel";
+}
+
+void BottomDockComponent::swapTabOrder(Tab a, Tab b) {
+    auto ia = std::find(tabOrder_.begin(), tabOrder_.end(), a);
+    auto ib = std::find(tabOrder_.begin(), tabOrder_.end(), b);
+    if (ia != tabOrder_.end() && ib != tabOrder_.end())
+        std::iter_swap(ia, ib);
+}
+
+void BottomDockComponent::persistTabOrder() {
+    if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
+        return;
+    juce::StringArray names;
+    for (Tab t : tabOrder_)
+        names.add(t == Tab::Mixer ? "mixer" : (t == Tab::MidiRemote ? "midiRemote" : "timeline"));
+    appProperties_->getUserSettings()->setValue(kTabOrderKey, names.joinIntoString(","));
+    appProperties_->getUserSettings()->saveIfNeeded();
+}
+
+// FRO333: a drag-reorder keeps the "Cmd+N opens the Nth tab" convention true by permuting the three
+// actions' OWN key bindings to the new order -- but only when they still hold the {Cmd+1, Cmd+2,
+// Cmd+3} set as a whole (any assignment), the same "only touch what's still at its convention"
+// guard ShortcutManager::migrateSaveAsChordSwap uses. A binding a user rebound away from a bare
+// Cmd+digit takes at least one of the three out of that set, so the whole permute is skipped and
+// every one of the three keeps whatever the user last set it to.
+void BottomDockComponent::permuteShortcutKeysForNewOrder() {
+    if (shortcutManager_ == nullptr)
+        return;
+    std::vector<int> digits;
+    for (Tab t : tabOrder_) {
+        const auto key = shortcutManager_->getBinding(actionIdForTab(t));
+        bool matched = false;
+        for (int d = 1; d <= 3; ++d)
+            if (key == juce::KeyPress('0' + d, juce::ModifierKeys::commandModifier, 0)) {
+                digits.push_back(d);
+                matched = true;
+                break;
+            }
+        if (!matched)
+            return; // at least one of the three has been rebound away from the convention.
+    }
+    std::vector<int> sortedDigits = digits;
+    std::sort(sortedDigits.begin(), sortedDigits.end());
+    if (sortedDigits != std::vector<int>{1, 2, 3})
+        return; // not currently a {Cmd+1, Cmd+2, Cmd+3} set (shouldn't happen, belt-and-braces).
+    for (size_t i = 0; i < tabOrder_.size(); ++i)
+        shortcutManager_->setBinding(actionIdForTab(tabOrder_[i]),
+                                     juce::KeyPress('1' + (int)i, juce::ModifierKeys::commandModifier, 0));
+    shortcutManager_->saveToProperties();
+}
+
+void BottomDockComponent::dragTab(Tab dragged, const juce::MouseEvent& e) {
+    if (!e.mouseWasDraggedSinceMouseDown())
+        return;
+    const auto pos = e.getEventRelativeTo(this).getPosition();
+    for (Tab other : tabOrder_) {
+        if (other == dragged || !isTabOfferedInStrip(other))
+            continue;
+        if (buttonForTab(other).getBounds().contains(pos)) {
+            swapTabOrder(dragged, other);
+            tabDragReordered_ = true;
+            resized();
+            break;
+        }
+    }
+}
+
+bool BottomDockComponent::endTabDrag() {
+    const bool reordered = tabDragReordered_;
+    if (reordered) {
+        persistTabOrder();
+        permuteShortcutKeysForNewOrder();
+    }
+    tabDragReordered_ = false;
+    return reordered;
+}
+
 bool BottomDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID stripId) {
     setActiveTab(Tab::Mixer);
     return mixer_.revealColumn(stripId);
@@ -244,27 +403,31 @@ void BottomDockComponent::resized() {
     auto bounds = getLocalBounds();
     auto tabStrip = bounds.removeFromTop(kTabStripHeight).withTrimmedTop(PanelResizeHandle::kHeight);
     // Rightmost: the FRO12 detach button (always present, acts on whichever tab is active), then
-    // the FRO15 "+ Bus" button (only visible -- and so only carved -- on the Mixer tab), then
-    // whatever's left splits between the two tab buttons, unless FRO12's Own-panel/Window
-    // placement has disabled the Mixer tab entirely, in which case Timeline gets the full width.
+    // the FRO15 "+ Bus" button (only visible -- and so only carved -- on the Mixer tab).
     detachButton_.setBounds(tabStrip.removeFromRight(kTabStripHeight));
     if (addBusButton_.isVisible())
         addBusButton_.setBounds(tabStrip.removeFromRight(kAddBusButtonWidth));
     if (resetMetersButton_.isVisible())
         resetMetersButton_.setBounds(tabStrip.removeFromRight(kResetMetersButtonWidth));
-    // FRO131: MidiRemote has no placement variant (unlike Mixer's mixerTabEnabled_), so its button
-    // is always offered -- a three-way split when Mixer is also offered, two-way otherwise.
-    if (mixerTabEnabled_) {
-        const int third = tabStrip.getWidth() / 3;
-        timelineTabButton_.setBounds(tabStrip.removeFromLeft(third));
-        mixerTabButton_.setBounds(tabStrip.removeFromLeft(third));
-        midiRemoteTabButton_.setBounds(tabStrip);
-    } else {
-        const int half = tabStrip.getWidth() / 2;
-        timelineTabButton_.setBounds(tabStrip.removeFromLeft(half));
-        mixerTabButton_.setBounds({});
-        midiRemoteTabButton_.setBounds(tabStrip);
+
+    // FRO333: whatever's left splits between the tabs currently offered (isTabOfferedInStrip --
+    // skips a Mixer disabled by placement AND any detached tab), in tabOrder_'s user-controlled
+    // (drag-to-reorder) order; the last one absorbs the rounding remainder. A tab not offered is
+    // hidden outright -- it has left the strip.
+    std::vector<Tab> offered;
+    for (Tab t : tabOrder_)
+        if (isTabOfferedInStrip(t))
+            offered.push_back(t);
+    for (size_t i = 0; i < offered.size(); ++i) {
+        auto& button = buttonForTab(offered[i]);
+        button.setVisible(true);
+        button.setBounds(i + 1 == offered.size()
+                             ? tabStrip
+                             : tabStrip.removeFromLeft(tabStrip.getWidth() / (int)(offered.size() - i)));
     }
+    for (Tab t : tabOrder_)
+        if (!isTabOfferedInStrip(t))
+            buttonForTab(t).setVisible(false);
 
     timelineHost_.setBounds(bounds);
     mixerHost_.setBounds(bounds);

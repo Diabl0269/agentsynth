@@ -128,8 +128,9 @@ TEST(MixerPlacementControllerTests, WindowPlacementNeverEagerlyDetachesAtLaunch)
     // "opened on first reveal, not eagerly" -- the ticket's own scope statement.
     EXPECT_FALSE(mc.getBottomDock().getMixerHost().isDetached());
 
-    // performToggleMixerPanel() is the reveal path (toolbar / Cmd+M) -- the first call opens it.
-    mc.performToggleMixerPanel();
+    // showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer) is the reveal path (toolbar / Cmd+M) -- the first
+    // call opens it.
+    mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer);
     EXPECT_TRUE(mc.getBottomDock().getMixerHost().isDetached());
 }
 
@@ -218,7 +219,7 @@ TEST(MixerPlacementControllerTests, OwnPanelPlacementRegistersAnOpenMixerFocusRe
 
     // Hiding the strip (the toolbar/Cmd+M reveal path) must close the SAME region live -- isOpen is
     // a live callback, not a value baked in at registration time, so no rebuild is needed here.
-    mc.performToggleMixerPanel();
+    mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer);
     ASSERT_FALSE(mc.getMixerPlacementControllerForTest().isOwnPanelShowing());
     EXPECT_FALSE(region->isCurrentlyOpen()) << "closed once the own-panel strip is hidden";
 }
