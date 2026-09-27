@@ -13,12 +13,15 @@
 // "MidiRemote" per the ship-task --gtest_filter convention.
 
 #include "MidiRemote/ContinuousTarget.h"
+#include "MidiRemote/ControllerTemplates.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/ModuleBase.h"
+#include "ShortcutManager/AppCommands.h"
 
 #include <cmath>
 #include <gtest/gtest.h>
+#include <iterator>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <memory>
 #include <vector>
@@ -610,6 +613,47 @@ TEST(MidiRemoteEngineApplyTest, OrphanedNodeCommandInvokesNothing) {
     h.engine.drain();
 
     EXPECT_TRUE(invoker.invokedNodeCommands.empty()) << "an orphaned node command must invoke nothing";
+}
+
+// ============================================================================
+// FRO330 end-to-end: the shipped BeatStep template's Play/Stop -- loaded through the real template
+// loader, merged through the real applyControllerTemplate (which is what wires spec -> action, not
+// hand-built Assignments), and fired through the real MMC SysEx byte layout, exactly what a real
+// BeatStep sends and what docs/control/midi-remote-ui.md#templates-and-importexport promises:
+// "already assigned, no MIDI Learn needed".
+// ============================================================================
+
+TEST(MidiRemoteEngineApplyTest, BeatStepTemplatePlayAndStopFireTheRealTransportActionsOnLoad) {
+    ControllerProfile tmpl;
+    ASSERT_TRUE(loadControllerTemplate("template-arturia-beatstep", tmpl));
+
+    ControllerProfile profile;
+    profile.id = "profile";
+    profile.name = "profile";
+    profile.input.identifier = kSource;
+    profile.input.name = kSource;
+    const auto result = applyControllerTemplate(profile, tmpl);
+    ASSERT_EQ(result.actionsAdded, 2) << "BeatStep's Play and Stop controls must both wire an action";
+
+    ApplyHarness h;
+    CountingActionInvoker invoker;
+    h.engine.setActionInvoker(&invoker);
+    h.engine.setActionCommandLookup(&AppCommands::getCommandForAction);
+    h.publish({profile}, /*projectAssignments=*/{});
+
+    const juce::uint8 playBody[] = {0x7f, 0x7f, 0x06, static_cast<juce::uint8>(kMmcPlay)};
+    h.send(juce::MidiMessage::createSysExMessage(playBody, (int)std::size(playBody)));
+    h.engine.drain();
+    ASSERT_EQ(invoker.invoked.size(), 1u);
+    EXPECT_EQ(invoker.invoked.front(), AppCommands::getCommandForAction("transportPlay"));
+    EXPECT_NE(invoker.invoked.front(), AppCommands::kNoCommand);
+
+    const juce::uint8 stopBody[] = {0x7f, 0x7f, 0x06, static_cast<juce::uint8>(kMmcStop)};
+    h.send(juce::MidiMessage::createSysExMessage(stopBody, (int)std::size(stopBody)));
+    h.engine.drain();
+    ASSERT_EQ(invoker.invoked.size(), 2u);
+    EXPECT_EQ(invoker.invoked.back(), AppCommands::getCommandForAction("transportStop"));
+    EXPECT_NE(invoker.invoked.back(), AppCommands::kNoCommand);
 }
 
 // ============================================================================

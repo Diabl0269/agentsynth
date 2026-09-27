@@ -280,8 +280,9 @@ panel side, a **control** is armed and the target is picked next — [`midi-remo
 *Resolution rule:* the engine opens a **300 ms settle window** at the first eligible message and
 binds the **message key with the most messages** in that window (a knob sweep produces many
 CCs; a stray touch-strip blip produces one). Eligible: CC, note-on, pitch-bend, channel
-pressure, program change (a note-off only adds to its note-on's tally). **Ignored while
-learning:** per-note (poly) aftertouch, clock/active-sensing/sysex. MPE member channels are **not** filtered today, despite an earlier
+pressure, program change, MMC command ([above](#mmc-messages)) (a note-off only adds to its
+note-on's tally). **Ignored while learning:** per-note (poly) aftertouch, clock/active-sensing,
+System Realtime Start/Continue/Stop, and any sysex that isn't a 4-byte MMC command. MPE member channels are **not** filtered today, despite an earlier
 version of this doc saying so; [`midi-remote-mpe.md`](midi-remote-mpe.md) designs that rule. A learn
 on a *button-like* target (bool param, action) prefers note-on / CC 0-or-127 patterns and sets
 `buttonMode` from the observed behaviour (a CC that returns to 0 on release → momentary).
@@ -358,6 +359,54 @@ drive them with direction and takeover instead of firing on every press.
 Action targets are press-only, so a relative encoder assigned to an action fires it on every
 detent regardless of direction; direction-aware jogging is what a continuous playhead target
 (below) is for.
+
+### MMC messages
+
+*Problem (FRO330):* some hardware's factory transport buttons don't send a CC or note at all.
+The Arturia BeatStep's Play/Stop send **MIDI Machine Control** SysEx (`F0 7F <device-id> 06
+<command> F7` — MMA MIDI Machine Control Specification v1.0; command `0x01` = stop, `0x02` =
+play, `0x06` = record strobe). Before FRO330 `classifyMessage` (`RemoteEngineInternal.h`) dropped
+every SysEx message as ineligible, so nothing — not Detect, not Learn, not a template — could ever
+bind one.
+
+**Decision:** a sixth `MessageType`, `mmc`, whose `MessageSpec::number` is the MMC **command
+byte** and whose `channel` is always `0` (MMC carries no MIDI channel — the "any channel"
+convention every other type already uses for `channel == 0` is repurposed as the only legal value,
+never a real one to send on). The device-id byte (`F0 7F <device-id> 06 ...`) is deliberately
+ignored on the way in — a controller may broadcast on `0x7F` ("all call") or its own id, and
+either must match the same binding. `kMmcStop`/`kMmcPlay`/`kMmcRecordStrobe` (`RemoteModel.h`)
+name the command bytes a template can bind today; any other byte is still a legal `MessageSpec`
+(hand-authored JSON, or a future template), it just matches no message a real device sends.
+
+An `mmc` control decodes exactly like `programChange` — one command in, one `buttonPress` out at
+value 1.0 (there is no MMC "release" to speak of) — so it is always button-like for Learn and
+Detect too (`kindForSpec`/`looksButtonLike`), and never carries feedback (`RemoteEngineFeedback.cpp`
+only echoes `cc`/`note`/`pitchBend`, same as `nrpn`/`programChange` before it). System Realtime
+Start/Continue/Stop (`0xFA`/`0xFB`/`0xFC`) remain unsupported and ineligible — no shipped
+template's hardware needs them, and adding them is the same shape of change as this one should a
+future device require it.
+
+### Templates can ship actions too
+
+*Problem (FRO330):* a vendor template's `controls[]` can now include a hardware button whose
+factory behaviour has an obvious [action target](#action-targets) — an MMC Play/Stop, say — but
+`applyControllerTemplate` (`ControllerTemplates.h`) used to copy `controls[]` only, so a template
+could never deliver a working binding; every control still needed a manual Learn/assign
+afterwards.
+
+**Decision:** a template's `actions[]` (`Assignment` objects, same shape as
+[Data model](#data-model)'s) is now copied too, alongside `controls[]`, subject to the same
+"existing wins" dedup rule (an action whose `spec` already exists on the target profile's
+`actions[]` is skipped, not duplicated). Because the template's own `control.profileId`/
+`control.controlId` are just placeholders (the template itself is never a real profile a project
+can reference), `applyControllerTemplate` re-derives the copied `Assignment` from the **merged-in
+control with the same `spec`** via `makeAssignmentForControl` (`MidiRemoteMapping.h`) rather than
+trusting those fields — the copy that lands on the user's profile always points at a real control
+id. `TemplateApplyResult` grew `actionsAdded`/`actionsSkippedDuplicates` alongside
+`added`/`skippedDuplicates` so a caller can tell the two apart (the panel persists the profile
+when either count is nonzero, since re-applying a template after its controls already exist should
+still wire up an action it doesn't have yet). Every template shipped before FRO330 has an empty
+`actions[]`, so this is a pure addition — no existing template's behaviour changes.
 
 ### Node command targets
 
@@ -666,9 +715,9 @@ Control
   layout        : { col, row }             // grid cell on the drawn surface
 
 MessageSpec     // the KEY the engine matches on
-  type          : cc | note | pitchBend | channelPressure | programChange | nrpn
-  channel       : 1..16 | 0 (= any)
-  number        : 0..127 (cc/note), 0..16383 (nrpn)  // cc number / note number / nrpn address; ignored for pitchBend/channelPressure
+  type          : cc | note | pitchBend | channelPressure | programChange | nrpn | mmc
+  channel       : 1..16 | 0 (= any)                  // mmc: always 0 -- MMC has no MIDI channel
+  number        : 0..127 (cc/note/mmc), 0..16383 (nrpn)  // cc number / note number / nrpn address / MMC command byte; ignored for pitchBend/channelPressure
 
 Assignment
   id            : uuid string

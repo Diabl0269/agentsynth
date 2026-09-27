@@ -367,7 +367,17 @@ profile or **merges** it into a non-empty one
 (existing message keys win; the additions get fresh ids and are stacked below the existing rows).
 The menu groups templates by vendor (**Generic** first, then one section per manufacturer,
 alphabetically — `synth::midi::groupControllerTemplatesByVendor`), so picking e.g. Korg →
-nanoKONTROL2 draws that device's knobs/sliders/buttons correctly without running Detect. Hardware templates shipped: Arturia BeatStep and MiniLab 3, Korg nanoKONTROL2, Novation Launch Control XL 3 (its fixed default Mode 16). Devices whose vendor publishes no default CC/note chart (e.g. Novation Launchkey Mini MK3, Akai MPK Mini MK3) have no template; set them up with Detect. **⋯** has *Import controller…* / *Export controller…* (JSON file,
+nanoKONTROL2 draws that device's knobs/sliders/buttons correctly without running Detect. Hardware templates shipped: Arturia BeatStep and MiniLab 3, Korg nanoKONTROL2, Novation Launch Control XL 3 (its fixed default Mode 16). Devices whose vendor publishes no default CC/note chart (e.g. Novation Launchkey Mini MK3, Akai MPK Mini MK3) have no template; set them up with Detect.
+
+FRO330: a template can also ship pre-wired **actions**, so applying it needs no MIDI Learn for
+those controls — see [Templates can ship actions too](midi-remote.md#templates-can-ship-actions-too).
+The BeatStep's template does this for its factory Play/Stop, which send [MMC](midi-remote.md#mmc-messages)
+rather than a CC or note. The Launch Control XL 3's fixed default Mode 16 has no documented
+transport-labelled buttons (only encoders, faders and 16 generic buttons — see this template's own
+`"source"` citation), so it ships no transport binding; it needs one only once a vendor chart names
+which buttons are transport and what they send.
+
+**⋯** has *Import controller…* / *Export controller…* (JSON file,
 the profile document of [`midi-remote.md`](midi-remote.md#data-model)). Importing a document whose id is already set up on this
 machine prompts **Replace / Cancel** (a replace keeps the project's assignments linked, since they
 reference the profile by id). Shipped templates are JSON resources under
@@ -377,9 +387,13 @@ by `synth::midi::listControllerTemplates()` (`Source/MidiRemote/ControllerTempla
 #### Contribute a template
 
 A template file is an ordinary `ControllerProfile` document (`midi-remote.md#data-model`'s JSON
-shape — `version`, `id`, `name`, `input`, `controls[]`, `actions: []`), plus two keys the profile
+shape — `version`, `id`, `name`, `input`, `controls[]`, `actions[]`), plus two keys the profile
 schema itself doesn't know about (`ControllerProfile::fromVar` reads named keys only, so it
-tolerates and ignores them):
+tolerates and ignores them). `actions[]` is `[]` for almost every template (there is nothing to
+pre-wire) — it is non-empty only when a control's *factory* behaviour is an unambiguous action,
+like the BeatStep's Play/Stop ([Templates can ship actions too](midi-remote.md#templates-can-ship-actions-too)); its `control.profileId`/`control.controlId` are placeholders (this template's own id
+and a matching `controls[]` entry's id) that `applyControllerTemplate` re-derives against the real
+profile it merges into, never taken literally:
 
 - `"vendor"` — the manufacturer, e.g. `"Korg"`. Omit it (or leave it `""`) for a generic template;
   it groups under **Generic** in the Templates menu. Set it for a real device and it groups under

@@ -20,10 +20,12 @@ namespace synth::midi::detail {
 
 /** What handleMessage needs to know about a raw juce::MidiMessage before it can be looked up or
  *  decoded. `eligible` is false for anything that is not cc / noteOn / noteOff / pitchBend /
- *  channelPressure / programChange -- clock, active sensing, sysex and poly (per-note) aftertouch
+ *  channelPressure / programChange / a recognised MMC SysEx command (FRO330) -- clock, active
+ *  sensing, System Realtime Start/Stop/Continue, every other sysex, and poly (per-note) aftertouch
  *  are never eligible and must never reach findSlot or the learn tally
  * (docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph,
- *  docs/control/midi-remote.md#learn-what-does-the-first-message-mean). */
+ *  docs/control/midi-remote.md#learn-what-does-the-first-message-mean,
+ *  docs/control/midi-remote.md#mmc-messages). */
 struct ClassifiedMessage {
     /** Which half of a 14-bit value this message is (FRO140): the MSB / LSB of a paired CC, or CC 6 /
      *  CC 38 of an armed NRPN. `none` for every ordinary message. */
@@ -42,6 +44,20 @@ struct ClassifiedMessage {
     bool haveLsb = false;
     int value14 = 0; // paired / nrpn only: (msb << 7 | lsb) from the remembered halves
 };
+
+/** FRO330: the command byte of `message` if it is a MIDI Machine Control SysEx command (F0 7F
+ *  <device-id> 06 <command> F7 -- juce::MidiMessage::getSysExData() excludes the F0/F7 frame, so
+ *  the body is exactly 4 bytes: 0x7F, device-id, 0x06, command), else -1. Any device id is
+ *  accepted; the command byte itself is not validated against kMmc* here -- an unrecognised
+ *  command still classifies as an mmc MessageSpec, it just never matches a template's slot. */
+inline int mmcCommandByte(const juce::MidiMessage& message) noexcept {
+    if (!message.isSysEx() || message.getSysExDataSize() != 4)
+        return -1;
+    const auto* data = message.getSysExData();
+    if (data[0] != 0x7f || data[2] != 0x06)
+        return -1;
+    return data[3];
+}
 
 inline ClassifiedMessage classifyMessage(const juce::MidiMessage& message) noexcept {
     ClassifiedMessage result;
@@ -78,10 +94,21 @@ inline ClassifiedMessage classifyMessage(const juce::MidiMessage& message) noexc
         result.channel = message.getChannel();
         result.number = message.getProgramChangeNumber();
         result.rawValue = message.getProgramChangeNumber();
+    } else if (const int mmcCommand = mmcCommandByte(message); mmcCommand >= 0) {
+        // FRO330: F0 7F <device-id> 06 <command> F7 -- the device id is deliberately ignored (a
+        // controller may broadcast on 0x7F "all call" or its own id; docs/control/midi-remote.md
+        // #mmc-messages), so two controllers sending the same command on different device ids still
+        // collide on one MessageSpec, same as `channel = 0` already means "any" for every other type.
+        result.eligible = true;
+        result.type = synth::MessageType::mmc;
+        result.channel = 0;
+        result.number = mmcCommand;
+        result.rawValue = 127; // a single MMC command is one discrete "press", like programChange
     }
-    // Everything else -- poly (per-note) aftertouch, clock, active sensing, sysex, and the
-    // transport realtime bytes -- stays ineligible and is dropped by the caller before any ring
-    // write, per docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph's step 2.
+    // Everything else -- poly (per-note) aftertouch, clock, active sensing, System Realtime
+    // Start/Stop/Continue, and any sysex that isn't a 4-byte MMC command -- stays ineligible and is
+    // dropped by the caller before any ring write, per docs/control/midi-remote.md
+    // #are-mapped-messages-consumed-or-also-forwarded-to-the-graph's step 2.
 
     return result;
 }
@@ -179,6 +206,8 @@ inline float rawNormalisedValue(const ClassifiedMessage& msg) noexcept {
         return static_cast<float>(msg.pitchWheelValue) / 16383.0f;
     case synth::MessageType::nrpn:
         return static_cast<float>(msg.value14) / 16383.0f;
+    case synth::MessageType::mmc:
+        return 1.0f; // one discrete command == one full-value "press", like programChange
     case synth::MessageType::programChange:
     default:
         return 0.0f;

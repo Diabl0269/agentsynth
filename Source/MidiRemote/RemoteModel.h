@@ -20,7 +20,19 @@ enum class ControlKind { knob, fader, button, pad, encoder, wheel };
 
 // nrpn (FRO140): a 14-bit parameter address (CC 99/98) whose value arrives as data-entry CCs 6/38.
 // MessageSpec::number is the ADDRESS (0..16383), so an NRPN key can never collide with CC n.
-enum class MessageType { cc, note, pitchBend, channelPressure, programChange, nrpn };
+// mmc (FRO330, docs/control/midi-remote.md#mmc-messages): a MIDI Machine Control SysEx command
+// (F0 7F <device-id> 06 <command> F7) -- some hardware (e.g. the Arturia BeatStep) sends this for
+// its factory Play/Stop instead of a CC or note. MessageSpec::number is the COMMAND byte (1 stop,
+// 2 play, 6 record strobe -- MMA MMC spec); `channel` is always 0 (MMC has no MIDI channel).
+enum class MessageType { cc, note, pitchBend, channelPressure, programChange, nrpn, mmc };
+
+// MMC (FRO330) command bytes this app recognises, per the MMA MIDI Machine Control spec -- the
+// values MessageSpec::number takes when type == mmc. Only the transport verbs a template can bind
+// today; an unrecognised command byte is still a legal mmc MessageSpec (e.g. hand-authored JSON),
+// it just never matches a hardware message no BeatStep-like device sends.
+inline constexpr int kMmcStop = 0x01;
+inline constexpr int kMmcPlay = 0x02;
+inline constexpr int kMmcRecordStrobe = 0x06;
 
 // abs14 / abs14LsbFirst (FRO140) are 14-bit absolute values carried by TWO messages: CC n (MSB) with
 // CC n+32 (LSB) for a cc control (n 0..31), or data-entry CC 6 / CC 38 for an nrpn control. The

@@ -92,7 +92,10 @@ int MidiRemotePanelComponent::applyTemplateToSelectedProfile(const juce::String&
 
     auto updated = *profile;
     const auto result = synth::midi::applyControllerTemplate(updated, tmpl);
-    if (result.added > 0) {
+    // FRO330: a template can add actions (e.g. BeatStep's Play/Stop) without adding any new
+    // control -- re-applying the same template after its controls already exist should still wire
+    // up an action it did not have yet, so persist on either count.
+    if (result.added > 0 || result.actionsAdded > 0) {
         learnController_->updateProfile(updated, "Apply template");
         refreshSurfaceForSelectedProfile();
         controllerSurface_.setSelectedControlId(selectedControlId_);

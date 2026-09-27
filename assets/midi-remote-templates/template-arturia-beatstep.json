@@ -3,7 +3,7 @@
   "id": "template-arturia-beatstep",
   "name": "BeatStep",
   "vendor": "Arturia",
-  "source": "Arturia BeatStep User's Manual v1.0.1, https://downloads.arturia.com/products/beatstep/manual/BeatStep_Manual_1_0_1_EN.pdf, chapter 8 'Default Settings' (p.37): encoders CC7/74/71/76/77/93/73/75/114/18/19/16/17/91/79/72 (Absolute), pads notes 44-51 and 36-43, Global MIDI channel 1. STOP/PLAY send MMC and the large encoder has no tabulated default CC, so neither is included.",
+  "source": "Arturia BeatStep User's Manual v1.0.1, https://downloads.arturia.com/products/beatstep/manual/BeatStep_Manual_1_0_1_EN.pdf, chapter 8 'Default Settings' (p.37): encoders CC7/74/71/76/77/93/73/75/114/18/19/16/17/91/79/72 (Absolute), pads notes 44-51 and 36-43, Global MIDI channel 1. STOP/PLAY send MMC (F0 7F <device-id> 06 <command> F7, command 1 = stop / 2 = play -- MMA MIDI Machine Control Specification v1.0) and the large encoder has no tabulated default CC, so only the large encoder is left out. The BeatStep has no dedicated Record or Loop button, so this template binds Play/Stop only (FRO330).",
   "input": {
     "identifier": "",
     "name": ""
@@ -521,7 +521,92 @@
         "col": 7,
         "row": 3
       }
+    },
+    {
+      "id": "play",
+      "name": "Play",
+      "kind": "button",
+      "message": {
+        "type": "mmc",
+        "channel": 0,
+        "number": 2
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 4
+      }
+    },
+    {
+      "id": "stop",
+      "name": "Stop",
+      "kind": "button",
+      "message": {
+        "type": "mmc",
+        "channel": 0,
+        "number": 1
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 4
+      }
     }
   ],
-  "actions": []
+  "actions": [
+    {
+      "id": "action-play",
+      "control": {
+        "profileId": "template-arturia-beatstep",
+        "controlId": "play"
+      },
+      "spec": {
+        "type": "mmc",
+        "channel": 0,
+        "number": 2
+      },
+      "specEncoding": "abs7",
+      "specButtonMode": "momentary",
+      "specControlName": "Play",
+      "target": {
+        "action": {
+          "actionId": "transportPlay"
+        }
+      },
+      "takeover": "default",
+      "range": {
+        "min": 0.0,
+        "max": 1.0
+      },
+      "enabled": true
+    },
+    {
+      "id": "action-stop",
+      "control": {
+        "profileId": "template-arturia-beatstep",
+        "controlId": "stop"
+      },
+      "spec": {
+        "type": "mmc",
+        "channel": 0,
+        "number": 1
+      },
+      "specEncoding": "abs7",
+      "specButtonMode": "momentary",
+      "specControlName": "Stop",
+      "target": {
+        "action": {
+          "actionId": "transportStop"
+        }
+      },
+      "takeover": "default",
+      "range": {
+        "min": 0.0,
+        "max": 1.0
+      },
+      "enabled": true
+    }
+  ]
 }

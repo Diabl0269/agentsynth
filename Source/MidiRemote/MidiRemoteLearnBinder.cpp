@@ -24,17 +24,20 @@ juce::String nameForSpec(const MessageSpec& spec) {
         return "Program " + juce::String(spec.number);
     case MessageType::nrpn:
         return "NRPN " + juce::String(spec.number);
+    case MessageType::mmc:
+        return "MMC " + juce::String(spec.number);
     case MessageType::cc:
     default:
         return "CC " + juce::String(spec.number);
     }
 }
 
-// "kind guessed: CC -> knob, note -> button" (same doc section). Everything else defaults to
-// knob -- pitch bend/channel pressure/program change are continuous-ish oddities a learn rarely
-// lands on, and the panel lets the user retype it either way.
+// "kind guessed: CC -> knob, note -> button" (same doc section). mmc joins note (FRO330: a single
+// discrete command is always a button, never a knob). Everything else defaults to knob -- pitch
+// bend/channel pressure/program change are continuous-ish oddities a learn rarely lands on, and
+// the panel lets the user retype it either way.
 ControlKind kindForSpec(const MessageSpec& spec) {
-    return spec.type == MessageType::note ? ControlKind::button : ControlKind::knob;
+    return spec.type == MessageType::note || spec.type == MessageType::mmc ? ControlKind::button : ControlKind::knob;
 }
 
 } // namespace

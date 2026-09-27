@@ -70,7 +70,9 @@ void RemoteEngine::noteLearnCandidate(const juce::String& sourceKey, const Remot
 }
 
 bool RemoteEngine::looksButtonLike(const LearnTally& tally) noexcept {
-    if (tally.spec.type == MessageType::note)
+    // FRO330: an mmc tally is always button-like -- like note, it never carries an intermediate
+    // "sweep" value.
+    if (tally.spec.type == MessageType::note || tally.spec.type == MessageType::mmc)
         return true;
     return tally.spec.type == MessageType::cc && !tally.sawIntermediateValue;
 }

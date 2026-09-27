@@ -220,6 +220,30 @@ TEST(MidiRemoteEngineDecodeTest, ButtonLikeControlsDecodeNoteCcAndProgramChange)
     }
 }
 
+// FRO330: an mmc control (e.g. the BeatStep's Play/Stop) decodes exactly like a program change --
+// one SysEx command in, one press out, at value 1.0. Drives the real MMC byte layout (F0 7F
+// <device-id> 06 <command> F7) through the real dispatch entry point, RemoteEngine::handleMessage,
+// not classifyMessage/decodeButtonLike directly.
+TEST(MidiRemoteEngineDecodeTest, ButtonLikeControlsDecodeMmc) {
+    DecodeHarness h;
+    h.addControl("play-btn", MessageType::mmc, /*channel=*/0, kMmcPlay, Encoding::abs7, ControlKind::button);
+    h.addControl("stop-btn", MessageType::mmc, /*channel=*/0, kMmcStop, Encoding::abs7, ControlKind::button);
+    h.finalize();
+
+    const juce::uint8 playBody[] = {0x7f, 0x7f, 0x06, static_cast<juce::uint8>(kMmcPlay)};
+    const auto play = h.sendAndReadOne(juce::MidiMessage::createSysExMessage(playBody, (int)std::size(playBody)));
+    EXPECT_EQ(play.kind, RemoteEventKind::buttonPress);
+    EXPECT_NEAR(play.value, 1.0f, 1e-6f);
+    EXPECT_NE(play.slotIndex, -1);
+
+    const juce::uint8 stopBody[] = {0x7f, 0x00, 0x06, static_cast<juce::uint8>(kMmcStop)};
+    const auto stop = h.sendAndReadOne(juce::MidiMessage::createSysExMessage(stopBody, (int)std::size(stopBody)));
+    EXPECT_EQ(stop.kind, RemoteEventKind::buttonPress);
+    EXPECT_NEAR(stop.value, 1.0f, 1e-6f);
+    EXPECT_NE(stop.slotIndex, -1) << "the device id byte (0x7f above, 0x00 here) must not matter -- only "
+                                     "the command byte (bytes[3]) does";
+}
+
 // ============================================================================
 // Channel matching -- exact channel wins, channel 0 means "any"
 // ============================================================================
@@ -273,14 +297,23 @@ TEST(MidiRemoteEngineDecodeTest, IneligibleMessagesAreDroppedEntirely) {
     h.addControl("assigned", MessageType::cc, 1, 70, Encoding::abs7);
     h.finalize();
 
-    // MIDI clock, active sensing (raw 0xFE, no static factory exists), sysex, and poly (per-note)
-    // aftertouch -- distinct from channel pressure, which IS eligible -- must all be dropped before
-    // handleMessage ever looks at the source or the lookup table: no activity, no ring event.
+    // MIDI clock, active sensing (raw 0xFE, no static factory exists), an ordinary (non-MMC) sysex,
+    // System Realtime Start/Continue/Stop (FRO330 deliberately does NOT classify these -- only the
+    // MMC SysEx spelling of transport is supported, since that is what the BeatStep's factory
+    // Play/Stop actually sends), a 4-byte sysex that LOOKS like MMC but isn't (wrong 3rd byte), and
+    // poly (per-note) aftertouch -- distinct from channel pressure, which IS eligible -- must all be
+    // dropped before handleMessage ever looks at the source or the lookup table: no activity, no
+    // ring event.
     const juce::uint8 sysexPayload[] = {0x01, 0x02, 0x03};
+    const juce::uint8 notMmcPayload[] = {0x7f, 0x7f, 0x07, 0x02}; // 3rd byte isn't 0x06
     const std::vector<juce::MidiMessage> ineligible = {
         juce::MidiMessage::midiClock(),
         juce::MidiMessage(0xFE), // active sensing
         juce::MidiMessage::createSysExMessage(sysexPayload, (int)std::size(sysexPayload)),
+        juce::MidiMessage::createSysExMessage(notMmcPayload, (int)std::size(notMmcPayload)),
+        juce::MidiMessage::midiStart(),
+        juce::MidiMessage::midiContinue(),
+        juce::MidiMessage::midiStop(),
         juce::MidiMessage::aftertouchChange(1, 60, 100), // poly/per-note aftertouch
     };
 

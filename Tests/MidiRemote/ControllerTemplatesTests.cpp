@@ -22,7 +22,8 @@ const std::vector<std::pair<juce::String, size_t>> kExpected = {
     // Vendor templates (FRO143): not in ControllerTemplates.cpp's kOrder table, so they sort after
     // the generic ones, alphabetically by id -- see ControllerTemplatesVendorTests.cpp for their
     // vendor/source coverage.
-    {"template-arturia-beatstep", 32u},
+    // FRO330: +2 controls (Play/Stop, MMC) over the pre-FRO330 32.
+    {"template-arturia-beatstep", 34u},
     {"template-arturia-minilab-3", 20u},
     {"template-korg-nanokontrol2", 51u},
     {"template-novation-launch-control-xl-3", 48u},
@@ -82,7 +83,13 @@ TEST(ControllerTemplatesTest, EveryTemplateLoadsWithTheDocumentedControlCountAnd
         ASSERT_TRUE(loadControllerTemplate(id, p)) << id.toStdString();
         EXPECT_EQ(p.id, id);
         EXPECT_EQ(p.controls.size(), count) << id.toStdString();
-        EXPECT_TRUE(p.actions.empty());
+        // FRO330: template-arturia-beatstep is the one template that ships pre-wired actions
+        // (Play/Stop) -- see ControllerTemplatesVendorTests.cpp's ArturiaBeatStepHasTheDocumentedSurface
+        // for the transport-specific coverage. Every other template still ships none.
+        if (id == "template-arturia-beatstep")
+            EXPECT_EQ(p.actions.size(), 2u) << id.toStdString();
+        else
+            EXPECT_TRUE(p.actions.empty()) << id.toStdString();
 
         std::set<juce::String> ids;
         for (size_t i = 0; i < p.controls.size(); ++i) {
@@ -192,4 +199,56 @@ TEST(ControllerTemplatesTest, ApplyingTheSameTemplateTwiceAddsNothingTheSecondTi
     EXPECT_EQ(second.added, 0);
     EXPECT_EQ(second.skippedDuplicates, 4);
     EXPECT_EQ(profile.controls.size(), 4u);
+}
+
+// ============================================================================
+// FRO330: a template's actions[] (docs/control/midi-remote-ui.md#templates-and-importexport) --
+// applyControllerTemplate copies them onto profile.actions, re-pointed at the merged-in control.
+// ============================================================================
+
+TEST(ControllerTemplatesTest, ApplyToEmptyProfileAlsoCopiesTemplateActions) {
+    const auto tmpl = loadOrFail("template-arturia-beatstep");
+    ControllerProfile profile;
+    profile.id = "p1";
+
+    const auto result = applyControllerTemplate(profile, tmpl);
+
+    EXPECT_EQ(result.actionsAdded, 2);
+    EXPECT_EQ(result.actionsSkippedDuplicates, 0);
+    ASSERT_EQ(profile.actions.size(), 2u);
+    for (const auto& a : profile.actions) {
+        // Re-pointed at the profile this action was actually merged into -- never the template's
+        // own placeholder "template-arturia-beatstep"/"play"|"stop" ids.
+        EXPECT_EQ(a.control.profileId, "p1");
+        EXPECT_TRUE(a.target.isAction());
+        const auto boundControl = std::find_if(profile.controls.begin(), profile.controls.end(),
+                                               [&](const Control& c) { return c.id == a.control.controlId; });
+        ASSERT_NE(boundControl, profile.controls.end());
+        EXPECT_EQ(boundControl->message, a.spec);
+    }
+}
+
+TEST(ControllerTemplatesTest, ApplyingTheSameTemplateTwiceAddsNoActionsTheSecondTime) {
+    const auto tmpl = loadOrFail("template-arturia-beatstep");
+    ControllerProfile profile;
+
+    applyControllerTemplate(profile, tmpl);
+    const auto second = applyControllerTemplate(profile, tmpl);
+
+    EXPECT_EQ(second.added, 0);
+    EXPECT_EQ(second.actionsAdded, 0);
+    EXPECT_EQ(second.actionsSkippedDuplicates, 2);
+    EXPECT_EQ(profile.actions.size(), 2u);
+}
+
+TEST(ControllerTemplatesTest, TemplateWithNoActionsLeavesProfileActionsUntouched) {
+    const auto tmpl = loadOrFail("template-8-knobs");
+    ControllerProfile profile;
+    profile.id = "p1";
+
+    const auto result = applyControllerTemplate(profile, tmpl);
+
+    EXPECT_EQ(result.actionsAdded, 0);
+    EXPECT_EQ(result.actionsSkippedDuplicates, 0);
+    EXPECT_TRUE(profile.actions.empty());
 }

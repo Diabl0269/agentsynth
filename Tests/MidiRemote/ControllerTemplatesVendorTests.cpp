@@ -160,8 +160,8 @@ TEST(ControllerTemplatesVendorTest, NovationLaunchControlXL3HasTheDocumentedSurf
 TEST(ControllerTemplatesVendorTest, ArturiaBeatStepHasTheDocumentedSurface) {
     ControllerProfile p;
     ASSERT_TRUE(loadControllerTemplate("template-arturia-beatstep", p));
-    EXPECT_EQ(p.controls.size(), 32u);
-    int encoders = 0, pads = 0;
+    EXPECT_EQ(p.controls.size(), 34u); // FRO330: +2 (Play/Stop, MMC) over the pre-FRO330 32.
+    int encoders = 0, pads = 0, buttons = 0;
     for (const auto& c : p.controls) {
         switch (c.kind) {
         case ControlKind::encoder:
@@ -174,12 +174,19 @@ TEST(ControllerTemplatesVendorTest, ArturiaBeatStepHasTheDocumentedSurface) {
             EXPECT_EQ(c.message.type, MessageType::note);
             EXPECT_EQ(c.message.channel, 1);
             break;
+        case ControlKind::button:
+            // FRO330: Play/Stop -- MMC, no MIDI channel.
+            ++buttons;
+            EXPECT_EQ(c.message.type, MessageType::mmc);
+            EXPECT_EQ(c.message.channel, 0);
+            break;
         default:
             ADD_FAILURE() << "unexpected kind for " << c.id.toStdString();
         }
     }
     EXPECT_EQ(encoders, 16);
     EXPECT_EQ(pads, 16);
+    EXPECT_EQ(buttons, 2);
     // Verify specific CC/note numbers
     auto findControl = [&p](const juce::String& id) -> const Control* {
         for (const auto& c : p.controls)
@@ -196,6 +203,31 @@ TEST(ControllerTemplatesVendorTest, ArturiaBeatStepHasTheDocumentedSurface) {
     const auto* pad16 = findControl("pad16");
     ASSERT_NE(pad16, nullptr);
     EXPECT_EQ(pad16->message.number, 43);
+    const auto* play = findControl("play");
+    ASSERT_NE(play, nullptr);
+    EXPECT_EQ(play->message.number, kMmcPlay);
+    const auto* stop = findControl("stop");
+    ASSERT_NE(stop, nullptr);
+    EXPECT_EQ(stop->message.number, kMmcStop);
+
+    // FRO330: the template's actions[] bind Play/Stop to the real transport action ids -- this is
+    // what makes them work with no MIDI Learn (docs/control/midi-remote-ui.md
+    // #templates-and-importexport). loadControllerTemplate parses actions[] verbatim (control still
+    // points at the template's own placeholder ids); applyControllerTemplate is what re-points them
+    // at a real profile (see ControllerTemplatesTests.cpp).
+    ASSERT_EQ(p.actions.size(), 2u);
+    auto findAction = [&p](const juce::String& actionId) -> const Assignment* {
+        for (const auto& a : p.actions)
+            if (a.target.isAction() && a.target.action.actionId == actionId)
+                return &a;
+        return nullptr;
+    };
+    const auto* playAction = findAction("transportPlay");
+    ASSERT_NE(playAction, nullptr);
+    EXPECT_EQ(playAction->spec, play->message);
+    const auto* stopAction = findAction("transportStop");
+    ASSERT_NE(stopAction, nullptr);
+    EXPECT_EQ(stopAction->spec, stop->message);
 }
 
 TEST(ControllerTemplatesVendorTest, GroupingPutsGenericFirstThenVendorsAlphabeticallyPreservingOrder) {
