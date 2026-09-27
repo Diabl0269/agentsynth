@@ -122,6 +122,29 @@ click path `simulateToggleTimelineClick()` uses if it is hidden, and opens the s
 
 See [`modulation.md`](../modules/modulation.md) for the user-facing description of the right-click route.
 
+## A lane follows its send through a reorder (FRO296)
+
+`TimelineDoc::swapLaneParams(nodeUuid, paramA, paramB)` retargets whichever of the two `(nodeUuid,
+paramId)` lanes exists to the OTHER paramId, in place — a rebind, never a delete+recreate, so a
+lane's points and record mode survive untouched. It exists specifically for a mixer send-slot swap
+(`synth::swapSends`/`synth::moveSendRow`,
+[`docs/mixer/sends-and-buses.md#slots-are-sparse`](../mixer/sends-and-buses.md#slots-are-sparse)):
+`MixerPanelComponent::moveSendRow` — the one place that owns the graph, the `TimelineDoc` AND the
+macros together — replays the exact `(slotA, slotB)` sequence `synth::moveSendRow` applied to the
+graph, calling `swapLaneParams` once for `sendALevel`/`sendBLevel` and once for
+`sendAPan`/`sendBPan` per swap, all inside the SAME
+`AppUndoManager::recordGraphTimelineAndMacroChange` transaction as the slot swap itself. A lane on
+neither side of a given pair is left alone (no lane is created); a lane on exactly one side just
+gets the other's paramId, same as `rebindLane` (the nodeUuid half of this shape) leaving an unbound
+side untouched.
+
+This is a NEW, narrow case rather than a use of `rebindLane`: `rebindLane` only ever changes a
+lane's `nodeUuid`, and the doc-wide one-lane-per-parameter invariant it enforces (reject if some
+OTHER lane already owns the target identity) would make a true SWAP between two lanes on the SAME
+node impossible to express as two sequential `rebindLane` calls — the second call would always
+collide with the first's own new identity. `swapLaneParams` mutates both sides in one
+`applyMutation`, so the invariant never sees an intermediate, colliding state.
+
 ## Tests
 
 `Tests/UI/Timeline/AutomationEditorTests.cpp` — `AutomationLaneEditor` gesture and

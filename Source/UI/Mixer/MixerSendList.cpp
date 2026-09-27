@@ -16,11 +16,6 @@ namespace synth::ui {
 namespace {
 using NodeID = juce::AudioProcessorGraph::NodeID;
 
-// Menu ids. Target ids start above the fixed items so one callback can tell them apart.
-constexpr int kMonoItemId = 1; // FRO294
-constexpr int kNewBusItemId = 2;
-constexpr int kFirstTargetItemId = 100;
-
 ChannelStripModule* stripAt(juce::AudioProcessorGraph& graph, NodeID id) {
     auto* node = graph.getNodeForId(id);
     return node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
@@ -239,6 +234,15 @@ void MixerSendList::paint(juce::Graphics& g) {
         g.setColour(accent);
         g.drawText("+ Send", addRow.reduced(2, 0), juce::Justification::centredLeft, false);
     }
+
+    // FRO296: the drop indicator -- a plain line at the hovered insertion boundary, theme accent
+    // colour (no new colour, same as every other accent use in this file), drawn last so it always
+    // sits on top of the rows either side of it.
+    if (draggingRow_ && dragInsertionRow_ >= 0) {
+        const float lineY = (float)(dragInsertionRow_ * kRowHeight);
+        g.setColour(accent);
+        g.fillRect(juce::Rectangle<float>(0.0f, lineY - 1.0f, (float)getWidth(), 2.0f));
+    }
 }
 
 void MixerSendList::resized() {
@@ -262,6 +266,9 @@ void MixerSendList::resized() {
 }
 
 void MixerSendList::mouseDown(const juce::MouseEvent& event) {
+    dragFromRow_ = -1;
+    draggingRow_ = false;
+
     const int row = rowIndexAt(event.getPosition());
     if (row < 0) {
         if (canAddSend() && event.y >= (int)entries_.size() * kRowHeight)
@@ -279,7 +286,55 @@ void MixerSendList::mouseDown(const juce::MouseEvent& event) {
     // never sees a click landing on any of them -- only the shape of the "everything past them is
     // the target name" test below moves.
     else if (fromRight > kRemoveWidth + kToggleWidth + kMuteWidth + kKnobWidth + kPanKnobWidth)
-        showTargetMenu(row); // the knobs' own bounds are their child components' business
+        // FRO296: a press on the name area could be a plain click (open the target menu, as
+        // before) or the start of a reorder drag -- deferred to mouseDrag/mouseUp's threshold check
+        // rather than decided here, the same split TimelineTrackHeaderComponent's own row reorder
+        // uses (kRowDragThreshold there).
+        dragFromRow_ = row;
+}
+
+void MixerSendList::mouseDrag(const juce::MouseEvent& event) {
+    if (dragFromRow_ < 0)
+        return;
+    if (!draggingRow_) {
+        if (event.getDistanceFromDragStart() < kRowDragThreshold)
+            return;
+        draggingRow_ = true;
+    }
+    const int insertion = insertionRowAt(event.y);
+    if (insertion != dragInsertionRow_) {
+        dragInsertionRow_ = insertion;
+        repaint();
+    }
+}
+
+void MixerSendList::mouseUp(const juce::MouseEvent& event) {
+    if (dragFromRow_ < 0)
+        return;
+    const int fromRow = dragFromRow_;
+    const bool wasDragging = draggingRow_;
+    const int insertion = dragInsertionRow_;
+    dragFromRow_ = -1;
+    draggingRow_ = false;
+    dragInsertionRow_ = -1;
+    repaint();
+
+    if (!wasDragging) {
+        showTargetMenu(fromRow); // a click that never crossed the threshold -- today's behaviour
+        return;
+    }
+
+    // insertion is a BOUNDARY index (0..entries_.size()); dropping the row that used to be at
+    // fromRow so the boundary now sits right where the cursor is means: if the boundary is at or
+    // before fromRow, the row lands exactly there; if it's after, removing fromRow first shifts
+    // every later boundary down by one.
+    const int toRow = insertion <= fromRow ? insertion : insertion - 1;
+    if (toRow != fromRow)
+        moveRow(fromRow, juce::jlimit(0, (int)entries_.size() - 1, toRow));
+}
+
+int MixerSendList::insertionRowAt(int y) const {
+    return juce::jlimit(0, (int)entries_.size(), (y + kRowHeight / 2) / kRowHeight);
 }
 
 std::vector<NodeID> MixerSendList::availableTargets() const {
@@ -296,41 +351,37 @@ void MixerSendList::showTargetMenu(int rowIndex) {
     juce::PopupMenu menu;
     // FRO294: a ticked toggle, not a new row button -- the row has no width budget left for one
     // (see this file's own header comment and MixerSendList.h's kMonoMarkerWidth).
-    menu.addItem(kMonoItemId, "Mono", true, mono);
+    menu.addItem("Mono", true, mono, [this, rowIndex] { toggleMonoForRow(rowIndex); });
     menu.addSeparator();
-    menu.addItem(kNewBusItemId, "New bus...", createBus != nullptr);
-    menu.addSeparator();
-    for (int i = 0; i < (int)targets.size(); ++i)
-        menu.addItem(kFirstTargetItemId + i, targetNameFor(targets[(size_t)i]));
-
-    menu.showMenuAsync(juce::PopupMenu::Options(), [this, rowIndex, targets](int result) {
-        if (result == kMonoItemId) {
-            toggleMonoForRow(rowIndex);
-        } else if (result == kNewBusItemId && createBus != nullptr) {
+    menu.addItem("New bus...", createBus != nullptr, false, [this, rowIndex] {
+        if (createBus != nullptr)
             if (const auto bus = createBus(); bus != NodeID{})
                 retargetRow(rowIndex, bus);
-        } else if (result >= kFirstTargetItemId && result - kFirstTargetItemId < (int)targets.size()) {
-            retargetRow(rowIndex, targets[(size_t)(result - kFirstTargetItemId)]);
-        }
     });
+    menu.addSeparator();
+    for (const auto target : targets)
+        menu.addItem(targetNameFor(target), true, false, [this, rowIndex, target] { retargetRow(rowIndex, target); });
+
+    // FRO296: a per-item action, not an id+results-callback dispatch, so this is the SAME hookable
+    // shape MixerColumnComponent's own MIDI-learn menus use (setShowContextMenuHookForTest) -- a
+    // test overrides showMenuHook_ to inspect the built menu (or invoke an item's action directly)
+    // rather than the real, headless-incapable juce::PopupMenu::showMenuAsync.
+    showMenuHook_(menu);
 }
 
 void MixerSendList::showAddMenu() {
     const auto targets = availableTargets();
     juce::PopupMenu menu;
-    menu.addItem(kNewBusItemId, "New bus...", createBus != nullptr);
-    menu.addSeparator();
-    for (int i = 0; i < (int)targets.size(); ++i)
-        menu.addItem(kFirstTargetItemId + i, targetNameFor(targets[(size_t)i]));
-
-    menu.showMenuAsync(juce::PopupMenu::Options(), [this, targets](int result) {
-        if (result == kNewBusItemId && createBus != nullptr) {
+    menu.addItem("New bus...", createBus != nullptr, false, [this] {
+        if (createBus != nullptr)
             if (const auto bus = createBus(); bus != NodeID{})
                 addSendTo(bus);
-        } else if (result >= kFirstTargetItemId && result - kFirstTargetItemId < (int)targets.size()) {
-            addSendTo(targets[(size_t)(result - kFirstTargetItemId)]);
-        }
     });
+    menu.addSeparator();
+    for (const auto target : targets)
+        menu.addItem(targetNameFor(target), true, false, [this, target] { addSendTo(target); });
+
+    showMenuHook_(menu);
 }
 
 void MixerSendList::mutateAndNotify(const std::function<bool()>& mutation) {
@@ -383,6 +434,16 @@ void MixerSendList::toggleMuteForRow(int rowIndex) {
     const int slot = entry.slot;
     const bool newMuted = !entry.muted;
     mutateAndNotify([&] { return graph_ != nullptr && synth::setSendMuted(*graph_, stripNodeId_, slot, newMuted); });
+}
+
+void MixerSendList::moveRow(int fromRow, int toRow) {
+    if (moveSendRow == nullptr)
+        return;
+    // The whole drag is ONE undo step owned by MixerPanelComponent (graph + timeline + macro
+    // together) -- this list only reports whether it happened, same as every other row mutation's
+    // onMutated() call below.
+    if (moveSendRow(stripNodeId_, fromRow, toRow) && onMutated)
+        onMutated();
 }
 
 void MixerSendList::toggleMonoForRow(int rowIndex) {

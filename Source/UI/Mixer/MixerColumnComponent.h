@@ -131,6 +131,12 @@ public:
         sendList_.createBus = std::move(provider);
     }
 
+    /** FRO296: forwarded to the send list's drag-reorder -- see MixerSendList::moveSendRow. */
+    void
+    setMoveSendRowProvider(std::function<bool(juce::AudioProcessorGraph::NodeID, int fromRow, int toRow)> provider) {
+        sendList_.moveSendRow = std::move(provider);
+    }
+
     /** FRO15 test seam: the send rows this column is showing. */
     MixerSendList& getSendListForTest() noexcept { return sendList_; }
 

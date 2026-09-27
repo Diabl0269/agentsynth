@@ -227,4 +227,31 @@ bool TimelineDoc::rebindLane(LaneId id, const juce::String& newNodeUuid) {
     });
 }
 
+// FRO296: whichever side HAS a lane gets the OTHER paramId; a side with no lane stays that way (no
+// lane is created) -- so a mixer send-slot swap (docs/mixer/sends-and-buses.md#reordering-sends)
+// carries an automation lane along with it, without a delete+recreate that would lose its points or
+// record mode. ONE revision bump / one Listener::timelineChanged call for BOTH retargets together,
+// so a caller wrapping this in AppUndoManager::recordGraphTimelineAndMacroChange (the send-reorder
+// caller) sees it as part of the same combined edit, not a second one.
+bool TimelineDoc::swapLaneParams(const juce::String& nodeUuid, const juce::String& paramA, const juce::String& paramB) {
+    if (paramA.isEmpty() || paramB.isEmpty() || paramA == paramB)
+        return false;
+
+    // findLaneForParam is a plain lookup (no `id` to disambiguate a self-collision the way
+    // rebindLane's caller-supplied id does), which is fine here: paramA and paramB are guaranteed
+    // distinct above, so at most one lane can match each.
+    auto* laneA = findLaneForParam(nodeUuid, paramA);
+    auto* laneB = findLaneForParam(nodeUuid, paramB);
+    if (laneA == nullptr && laneB == nullptr)
+        return false; // neither side has a lane: nothing to swap
+
+    return applyMutation([&] {
+        if (laneA != nullptr)
+            laneA->paramId = paramB;
+        if (laneB != nullptr)
+            laneB->paramId = paramA;
+        return true;
+    });
+}
+
 } // namespace synth

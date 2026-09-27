@@ -589,6 +589,9 @@ public:
     // it in recordTimelineChange).
     bool rebindLane(LaneId id, const juce::String& newNodeUuid);
 
+    // FRO296: rebinds whichever of (nodeUuid, paramA)/(nodeUuid, paramB) has a lane to the other paramId, in place.
+    bool swapLaneParams(const juce::String& nodeUuid, const juce::String& paramA, const juce::String& paramB);
+
     // -- Markers ---------------------------------------------------------------
     // Adds a marker at `beat`. Inserted in sorted position; returns an invalid MarkerId on
     // rejection — a non-finite or negative `beat`, a `text` longer than kMaxMarkerTextLength, or a

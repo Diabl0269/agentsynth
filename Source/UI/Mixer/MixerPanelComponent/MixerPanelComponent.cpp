@@ -7,6 +7,7 @@
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerSends/MixerSends.h"
+#include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -144,6 +145,9 @@ void MixerPanelComponent::rebuild() {
         }
         widget->setColumn(column, sourceNames.joinIntoString(", "));
         widget->setCreateBusProvider([this] { return createBus(); });
+        widget->setMoveSendRowProvider([this](juce::AudioProcessorGraph::NodeID stripNodeId, int fromRow, int toRow) {
+            return moveSendRow(stripNodeId, fromRow, toRow);
+        });
 
         widget->onColumnClicked = [this, uuid = column.uuid] { selectOnCanvas(uuid); };
         widget->onEditOnCanvas = [this](const juce::String& target) { selectOnCanvas(target); };
@@ -251,6 +255,41 @@ juce::AudioProcessorGraph::NodeID MixerPanelComponent::createBus() {
     if (created != juce::AudioProcessorGraph::NodeID{} && onGraphMutated)
         onGraphMutated();
     return created;
+}
+
+// FRO296 (docs/mixer/sends-and-buses.md#reordering-sends): this is the one place graph, TimelineDoc
+// AND macros are all reachable at once, so the physical slot swap (synth::moveSendRow) and every
+// automation lane it carries along (TimelineDoc::swapLaneParams) land in a SINGLE
+// AppUndoManager::recordGraphTimelineAndMacroChange step.
+bool MixerPanelComponent::moveSendRow(juce::AudioProcessorGraph::NodeID stripNodeId, int fromRow, int toRow) {
+    if (graph_ == nullptr || doc_ == nullptr || macros_ == nullptr || undoManager_ == nullptr ||
+        graphEditor_ == nullptr || fromRow == toRow)
+        return false;
+
+    bool changed = false;
+    undoManager_->recordGraphTimelineAndMacroChange(*graph_, *doc_, *macros_, [&] {
+        std::vector<std::pair<int, int>> swaps;
+        if (!synth::moveSendRow(*graph_, stripNodeId, fromRow, toRow, &swaps))
+            return;
+        changed = true;
+
+        // FRO296: replay the exact same slot-swap sequence against every automation lane bound to
+        // either swapped slot's sendNLevel/sendNPan, inside the SAME transaction -- a send's lane
+        // always follows it, same as its cables and parameter values
+        // (docs/mixer/sends-and-buses.md#reordering-sends).
+        if (auto* node = graph_->getNodeForId(stripNodeId)) {
+            const juce::String uuid = node->properties["uuid"].toString();
+            if (uuid.isNotEmpty())
+                for (const auto& swap : swaps) {
+                    doc_->swapLaneParams(uuid, ChannelStripModule::getSendLevelParameterId(swap.first),
+                                         ChannelStripModule::getSendLevelParameterId(swap.second));
+                    doc_->swapLaneParams(uuid, ChannelStripModule::getSendPanParameterId(swap.first),
+                                         ChannelStripModule::getSendPanParameterId(swap.second));
+                }
+        }
+        graphEditor_->updateComponents();
+    });
+    return changed;
 }
 
 void MixerPanelComponent::unbindAllColumns() {

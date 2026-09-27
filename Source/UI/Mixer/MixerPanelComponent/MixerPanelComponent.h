@@ -53,6 +53,9 @@ public:
      *  to the dock's "Add bus" button and to every send row's "New bus..." item. */
     juce::AudioProcessorGraph::NodeID createBus();
 
+    // FRO296 (docs/mixer/sends-and-buses.md#reordering-sends): drag-reorders a send row, one undo step.
+    bool moveSendRow(juce::AudioProcessorGraph::NodeID stripNodeId, int fromRow, int toRow);
+
     /** FRO18: fires when the Arm key (rebindable "timelineArmFocusedTrack") is pressed with a
      *  linked strip focused -- BottomDockComponent wires this to
      *  MainComponent::performTrackEdit([&doc,id]{ doc.setTrackArmed(id, !doc.getTrack(id)->armed); }),

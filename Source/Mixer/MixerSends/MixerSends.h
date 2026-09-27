@@ -13,6 +13,7 @@
 // answered by walking the graph from slot k's own output channel (findSendTarget below).
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <utility>
 #include <vector>
 
 namespace synth {
@@ -100,5 +101,11 @@ bool setSendMono(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::No
  *  than left cut. */
 bool retargetSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot,
                   juce::AudioProcessorGraph::NodeID target);
+
+bool swapSends(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slotA,
+               int slotB); // FRO296 reorder: swaps cables, active/pre/mute/mono bits, level/pan values
+bool moveSendRow(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int fromRow,
+                 int toRow,
+                 std::vector<std::pair<int, int>>* appliedSwaps = nullptr); // moves visible row fromRow to toRow
 
 } // namespace synth

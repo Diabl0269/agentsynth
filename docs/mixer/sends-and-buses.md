@@ -90,6 +90,49 @@ channels** — no cable is re-wired and no parameter value is copied, so host au
 to the right send. Only the VISIBLE jack indices renumber; the jack LABEL keeps naming the slot, so a
 jack, its mixer row and its `sendNLevel` parameter always agree.
 
+## Reordering sends
+
+**FRO296: reordering swaps the REAL slots, not a display-only order on top of them** — the user wants
+"Send 1" to always be the TOP ROW everywhere (the knob's title, a lane's name, the target menu), so
+dragging a row to a new position is `synth::swapSends`/`synth::moveSendRow`
+(`Source/Mixer/MixerSends/MixerSends.h`) actually exchanging the CONTENT of two slot numbers, headless
+and with no undo of its own, exactly like `retargetSend`. Everything slot-keyed moves together, in one
+call:
+
+- its **cables** — exactly the connections leaving that slot's own raw L/R output channels, re-landed
+  on the other slot's raw channels; a module the user inserted on the send path (the same case
+  `findSendTarget`'s own walk handles) moves with it, since the cable is followed by channel index,
+  never by what it eventually reaches;
+- its **active/pre-fader/mute/mono bits** — a plain field swap;
+- its **level and pan parameter VALUES** — `sendNLevel`/`sendNPan` are fixed per-slot identities
+  (`"send1Level"` always names slot 0, so host automation on it always means "the top row's level"),
+  so swapping slots swaps what those two parameter OBJECTS hold, never the objects themselves;
+- its **automation lane**, if it has one — `TimelineDoc::swapLaneParams` (paramId-only rebind, no
+  delete+recreate, so points and record mode survive) retargets a lane from `sendALevel`/`sendAPan` to
+  `sendBLevel`/`sendBPan` and back, replayed by the caller (`MixerPanelComponent::moveSendRow`, which
+  owns the `TimelineDoc`) against the SAME sequence of slot swaps the Core flow applied — see
+  [`docs/timeline/automation.md`](../timeline/automation.md#a-lane-follows-its-send-through-a-reorder-fro296).
+
+**A visible row's POSITION is `moveSendRow`'s `fromRow`/`toRow`, into the active-slot-ordered list
+(`MixerModelSends.cpp`'s `buildSendsForColumn`), not a raw slot number** — dragging row *i* to
+position *j* becomes a walk of adjacent `swapSends` calls through that list from *i* to *j*, one per
+step, each exchanging the two slots CURRENTLY sitting at two neighbouring visible positions. A sparse
+gap (an inactive slot between two active ones) is never one of the positions a step touches: slots 0
+and 2 active, moving row 1 above row 0, is exactly one `swapSends(0, 2)` — slot 1 stays untouched.
+`moveSendRow` reports the exact sequence of `(slotA, slotB)` pairs it applied, which is what lets the
+caller replay the identical sequence against a lane. The whole gesture — the slot swap(s) and any lane
+rebind — lands in ONE `AppUndoManager::recordGraphTimelineAndMacroChange` transaction, so a single
+Cmd+Z reverts cables, values, bits and lane binding together.
+
+**MIDI Learn mappings are NOT swapped.** A MIDI Remote assignment to a send parameter is keyed the
+same way a lane is — `(nodeUuid, paramId)` (`Source/MidiRemote/RemoteModel.h`'s `Target::Parameter`)
+— but it lives in a separate `MidiRemoteProjectDoc`, and there is today no
+`AppUndoManager::recordGraphTimelineMacroAndMidiRemoteChange` that could join a remap to the SAME
+undo transaction as the slot swap. Per this feature's own rule ("never swap silently without an
+undoable API that joins the same step"), a send reorder leaves any MIDI Learn mapping on
+`sendNLevel`/`sendNPan` exactly where it was — mapped to the SLOT NUMBER, not the send that moved. A
+user who reorders a MIDI-mapped send needs to re-map it by hand; this is a known, accepted gap.
+
 ## Pre and post, mute and bypass
 
 **Pre-fader is tapped after the hygiene and mono duplication and before gain and pan; post-fader
@@ -218,6 +261,17 @@ accent) with no bespoke paint, and it gets a real hit area and a real `Accessibi
 "Mute send to \<target\>" / "Mute send N (no target)", the same naming the level knob's own title
 uses. Clicking it calls `synth::setSendMuted` inside the same one-`recordGraphAndMacroChange` shape
 every other row mutation uses.
+
+**FRO296: drag a row by its target-name area to reorder it.** The name area is the same region a
+plain click already used to open the target menu, so `MixerSendList` defers the click-vs-drag
+decision to a small pixel threshold (`kRowDragThreshold`, the same value/reasoning
+`TimelineTrackHeaderComponent`'s own row-reorder drag uses) — a press that never crosses it is a
+plain click and still opens the menu; one that does becomes a drag. While dragging, a thin insertion
+line (the theme's accent colour, no new colour) is painted at the hovered drop boundary. Releasing
+calls `MixerPanelComponent::moveSendRow` — the one place graph, `TimelineDoc` and macros are all
+reachable together — which does the real swap and lane rebind (see "Slots are sparse" above) as ONE
+undo step. The knobs, M button, PRE/POST and `x` all keep working exactly as before: only a press that
+lands on the name area itself, past the menu-vs-drag threshold, is claimed by the drag.
 
 **FRO292: an active send's level can carry its own automation lane.** Right-click the send knob
 → **Automate 'Send N Level'** creates the lane and opens the automation strip on it (the same

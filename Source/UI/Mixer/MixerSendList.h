@@ -55,6 +55,16 @@ public:
      *  can size canvas cards. */
     std::function<juce::AudioProcessorGraph::NodeID()> createBus;
 
+    /** FRO296: drag-reorder a row -- `fromRow`/`toRow` are VISIBLE row indices (positions in
+     *  `entries_`, same addressing as removeRow/retargetRow above). Supplied by MixerPanelComponent,
+     *  the one component that owns both the AppUndoManager (for ONE
+     *  recordGraphTimelineAndMacroChange step, docs/mixer/sends-and-buses.md#reordering-sends) and
+     *  the TimelineDoc (to replay the same slot-swap sequence against any automation lane on a moved
+     *  send) -- this list stays TimelineDoc-free, same pattern as createBus staying canvas-free.
+     *  Returns whether anything actually changed (false for `fromRow == toRow` or a refused swap),
+     *  which is what moveRow() below uses to decide whether to fire onMutated(). */
+    std::function<bool(juce::AudioProcessorGraph::NodeID, int fromRow, int toRow)> moveSendRow;
+
     int getPreferredHeight() const noexcept;
 
     /** FRO15: drops every SliderParameterAttachment and this list's own graph pointers -- called
@@ -80,6 +90,11 @@ public:
      *  -- the target menu's "Mono" item and this class's own headless test seam both call this. */
     void toggleMonoForRow(int rowIndex);
     void retargetRow(int rowIndex, juce::AudioProcessorGraph::NodeID target);
+    /** FRO296: the real mutation behind a completed drag -- calls the moveSendRow callback and, on
+     *  success, onMutated(), same shape as every other row mutation's mutateAndNotify. A synthesized
+     *  test drag (mouseDown/mouseDrag past the threshold/mouseUp on the name area) reaches this
+     *  through the real mouse path; a test that wants to skip the gesture can call it directly. */
+    void moveRow(int fromRow, int toRow);
     std::vector<juce::AudioProcessorGraph::NodeID> availableTargets() const;
     bool canAddSend() const;
     bool isAttachedForTest(int rowIndex) const;
@@ -95,9 +110,26 @@ public:
      *  comment. Always exists; only actually reachable (setVisible(true)) while canAddSend(). */
     juce::Component& getAddSendAccessibilityComponentForTest() noexcept { return addSendProxy_; }
 
+    /** FRO296: same seam as MixerColumnComponent::setShowContextMenuHookForTest -- juce::PopupMenu
+     *  never runs in a test process (docs/development/test-patterns.md), so a test overrides this to
+     *  inspect the built menu (item count, an item's text) or invoke an item's action directly,
+     *  instead of the real showMenuAsync(). A null hook restores the real behaviour. */
+    void setShowMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showMenuHook_ =
+            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+    }
+
     void paint(juce::Graphics& g) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent& event) override;
+    /** FRO296: the drag half of a name-area press -- see mouseDown's own comment on why the
+     *  click-vs-drag decision is deferred to here/mouseUp rather than taken in mouseDown. */
+    void mouseDrag(const juce::MouseEvent& event) override;
+    void mouseUp(const juce::MouseEvent& event) override;
+
+    /** FRO296 test seam: the insertion boundary a synthesized drag is currently hovering, or -1 when
+     *  no drag is live -- lets a test assert the insertion line without decoding paint() output. */
+    int getDragInsertionRowForTest() const noexcept { return draggingRow_ ? dragInsertionRow_ : -1; }
 
 private:
     static constexpr int kRowHeight = 20;
@@ -108,6 +140,10 @@ private:
     static constexpr int kRemoveWidth = 14;
     // FRO294: painted (not a real component) only when a row is mono -- see paint()'s own comment.
     static constexpr int kMonoMarkerWidth = 6;
+    // FRO296: pixel distance a name-area press must cross before it commits to a reorder drag rather
+    // than the click that opens the target menu -- same value/reasoning as
+    // TimelineTrackHeaderComponent's own kRowDragThreshold (T166).
+    static constexpr float kRowDragThreshold = 4.0f;
 
     struct Row {
         std::unique_ptr<juce::Slider> knob;
@@ -133,6 +169,9 @@ private:
     };
 
     int rowIndexAt(juce::Point<int> position) const;
+    /** FRO296: the insertion BOUNDARY (0..entries_.size()) nearest `y` -- boundary k sits between
+     *  visible rows k-1 and k, and dragging to it means "insert before row k". */
+    int insertionRowAt(int y) const;
     void rebuildKnobs();
     void showTargetMenu(int rowIndex);
     void showAddMenu();
@@ -148,6 +187,18 @@ private:
     std::vector<Row> rows_;
     juce::AudioProcessorGraph::NodeID stripNodeId_;
     AddSendAccessibilityProxy addSendProxy_;
+
+    // FRO296: drag-reorder gesture state. dragFromRow_ is armed on a name-area mouseDown and stays
+    // set for the whole press (drag or not); draggingRow_ flips true only once the threshold is
+    // crossed, exactly like TimelineTrackHeaderComponent's own draggingRow_.
+    int dragFromRow_ = -1;
+    bool draggingRow_ = false;
+    int dragInsertionRow_ = -1;
+
+    // See setShowMenuHookForTest's own comment.
+    std::function<void(juce::PopupMenu&)> showMenuHook_ = [](juce::PopupMenu& m) {
+        m.showMenuAsync(juce::PopupMenu::Options());
+    };
 
     static int liveUnbindCalls_;
 
