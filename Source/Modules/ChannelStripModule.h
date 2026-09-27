@@ -51,9 +51,11 @@
  *
  * All kMaxSends level parameters are added in the constructor UNCONDITIONALLY, active or not:
  * adding a parameter later renumbers the host-visible layout and detaches saved host automation.
- * Which slots actually exist, and each slot's pre/post choice, are non-parameter trusted extra
- * state ("sends"); the send's TARGET is never stored — it is the graph edge itself, since node ids
- * are reassigned on every rebuild-from-JSON and a stored id would go stale on undo.
+ * Which slots actually exist, each slot's pre/post choice, and (FRO295) each slot's MUTE are
+ * non-parameter trusted extra state ("sends"); the send's TARGET is never stored — it is the graph
+ * edge itself, since node ids are reassigned on every rebuild-from-JSON and a stored id would go
+ * stale on undo. A muted send never touches its own level parameter, so unmuting always restores
+ * the exact same level — mute is a separate silence gate on top, not a level of zero.
  *
  * Pre-fader is tapped after the hygiene/mono duplication and BEFORE gain and pan; post-fader after
  * them, i.e. exactly the signal the strip hands Master, and before the solo gate. Under bypass the
@@ -312,6 +314,11 @@ public:
     bool isSendPreFader(int slot) const noexcept {
         return slot >= 0 && slot < kMaxSends && (preMask_.load(std::memory_order_relaxed) & (1u << slot)) != 0;
     }
+    /** FRO295: per-send mute -- non-parameter trusted extra state, exactly like isSendPreFader above.
+     *  A muted slot's send level parameter is untouched, so unmuting restores the exact same level. */
+    bool isSendMuted(int slot) const noexcept {
+        return slot >= 0 && slot < kMaxSends && (muteMask_.load(std::memory_order_relaxed) & (1u << slot)) != 0;
+    }
     int getActiveSendCount() const noexcept {
         const auto mask = activeMask_.load(std::memory_order_relaxed);
         int count = 0;
@@ -355,6 +362,7 @@ public:
                 continue;
             setSendActive(slot, true);
             setSendPreFader(slot, false);
+            setSendMuted(slot, false);
             return slot;
         }
         return -1;
@@ -374,6 +382,15 @@ public:
         const juce::uint32 bit = 1u << slot;
         auto mask = preMask_.load(std::memory_order_relaxed);
         preMask_.store(pre ? (mask | bit) : (mask & ~bit), std::memory_order_relaxed);
+    }
+    /** FRO295: mutes/unmutes send `slot` without touching its level parameter -- unmuting always
+     *  restores the exact same level. No-op out of range. */
+    void setSendMuted(int slot, bool muted) {
+        if (slot < 0 || slot >= kMaxSends)
+            return;
+        const juce::uint32 bit = 1u << slot;
+        auto mask = muteMask_.load(std::memory_order_relaxed);
+        muteMask_.store(muted ? (mask | bit) : (mask & ~bit), std::memory_order_relaxed);
     }
 
     /** This slot's level parameter — the mixer row's knob attaches to it directly, so send level is
@@ -441,6 +458,7 @@ public:
             auto* entry = new juce::DynamicObject();
             entry->setProperty("slot", slot);
             entry->setProperty("pre", isSendPreFader(slot));
+            entry->setProperty("mute", isSendMuted(slot));
             sends.add(juce::var(entry));
         }
         obj->setProperty("sends", sends);
@@ -497,6 +515,7 @@ private:
     void readSendsState(const juce::var& sends) {
         activeMask_.store(0, std::memory_order_relaxed);
         preMask_.store(0, std::memory_order_relaxed);
+        muteMask_.store(0, std::memory_order_relaxed);
         if (const auto* array = sends.getArray()) {
             for (const auto& entry : *array) {
                 auto* obj = entry.getDynamicObject();
@@ -507,6 +526,9 @@ private:
                     continue;
                 setSendActive(slot, true);
                 setSendPreFader(slot, static_cast<bool>(obj->getProperty("pre")));
+                // FRO295: absent (an entry saved before mute existed) means unmuted, same "unset
+                // means off" rule "pre" already established -- an old project loads unchanged.
+                setSendMuted(slot, obj->hasProperty("mute") && static_cast<bool>(obj->getProperty("mute")));
             }
         }
     }
@@ -554,7 +576,10 @@ private:
             advanced |= bit;
             auto& smoothed = smoothedSend_[slot];
             smoothed.setTargetValue(sendTargetGain(slot));
-            if ((audible & sendLegBit(slot)) == 0) {
+            // FRO295: a muted slot is silenced the same way a solo-gated-shut leg is -- the hygiene
+            // pass already cleared it, so just don't write over that silence. The level parameter
+            // (and this smoother) keep tracking the target, so unmuting picks up at the same level.
+            if ((audible & sendLegBit(slot)) == 0 || isSendMuted(slot)) {
                 smoothed.skip(numSamples);
                 continue; // already silent from the hygiene pass
             }
@@ -626,6 +651,7 @@ private:
     // reads — one relaxed load each per block, so a strip's own slots are always self-consistent.
     std::atomic<juce::uint32> activeMask_{0};
     std::atomic<juce::uint32> preMask_{0};
+    std::atomic<juce::uint32> muteMask_{0}; // FRO295: per-send mute, same lifecycle as preMask_
     std::atomic<juce::uint32> soloAudibleMask_{0};
 
     static int legIndex(int leg) noexcept { return leg == 1 ? 1 : 0; }

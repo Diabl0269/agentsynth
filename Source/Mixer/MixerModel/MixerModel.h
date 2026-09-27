@@ -28,6 +28,8 @@ struct MixerInsertEntry {
 struct MixerSendEntry {
     int slot = 0;
     bool preFader = false;
+    /** FRO295: silenced independent of its level (ChannelStripModule::isSendMuted). */
+    bool muted = false;
     /** The bus this slot feeds. Invalid when the slot's cable has been cut on the canvas, in which
      *  case `targetName` is the "no target" placeholder. */
     juce::AudioProcessorGraph::NodeID targetNodeId;
