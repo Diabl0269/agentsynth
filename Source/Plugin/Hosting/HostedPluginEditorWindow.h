@@ -4,6 +4,11 @@
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
+
+#if JUCE_MAC
+#include "HostedPluginWindowMacKeyMonitor.h"
+#endif
 
 namespace synth {
 
@@ -40,6 +45,7 @@ public:
     ~HostedPluginEditorWindow() override;
 
     void closeButtonPressed() override;
+    bool keyPressed(const juce::KeyPress& key) override;
 
     juce::AudioProcessorGraph::NodeID getNodeId() const noexcept { return nodeId_; }
 
@@ -55,6 +61,16 @@ public:
     bool isShowingGenericEditorForTest() const;
     bool isShowingPlaceholderForTest() const;
 
+#if JUCE_MAC
+    // FRO337: installs the NSEvent monitor that lets Cmd+W close this window even when a hosted
+    // plugin's own native NSView — not a juce::Component — holds first responder. Esc is NOT part
+    // of this monitor: an Esc the plugin's own view doesn't consume travels up the AppKit responder
+    // chain to JUCE's peer view and reaches keyPressed() below on its own. Call ONLY after this
+    // window has a real native peer (HostedPluginWindowManager::addWindowToDesktop, right after
+    // addToDesktop()) — see HostedPluginWindowMacKeyMonitor.mm for why.
+    void installMacKeyMonitor();
+#endif
+
 private:
     // Rebuilds the content component from whatever the module currently reports (a fresh custom or
     // generic editor, or the "no instance" placeholder). Safe to call repeatedly, including with the
@@ -66,6 +82,13 @@ private:
 
     juce::WeakReference<HostedPluginModule> moduleRef_;
     juce::AudioProcessorGraph::NodeID nodeId_;
+
+#if JUCE_MAC
+    // Owns the NSEvent monitor installed by installMacKeyMonitor() above — a plain member, so
+    // ~HostedPluginEditorWindow's implicit member teardown removes the OS-level monitor before
+    // this window's own peer/base class ever does, with no extra code in the destructor.
+    std::unique_ptr<HostedPluginWindowMacKeyMonitor> macKeyMonitor_;
+#endif
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(HostedPluginEditorWindow)
 };

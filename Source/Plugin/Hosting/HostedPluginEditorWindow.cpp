@@ -46,6 +46,25 @@ void HostedPluginEditorWindow::closeButtonPressed() {
         onCloseRequested(nodeId_);
 }
 
+bool HostedPluginEditorWindow::keyPressed(const juce::KeyPress& key) {
+    // FRO337: only ever reached once the plugin itself didn't consume the key. For a plugin whose
+    // editor is a real juce::Component (including the GenericAudioProcessorEditor fallback), JUCE's
+    // own key dispatch walks from the focused component up to its parents and stops at the first
+    // keyPressed() that returns true, so this runs only once nothing further down did. A plugin
+    // that draws its own editor with a native NSView bypasses JUCE's dispatch entirely; there, this
+    // same keyPressed() is reached instead via the AppKit responder chain -- an unhandled Esc
+    // travels up from the plugin's own view to JUCE's peer view and lands here (verified in-app
+    // against Apple's own AUDelay). Cmd+W is handled here too for that path when it ever reaches
+    // this far, but in practice HostedPluginWindowMacKeyMonitor (mac only) intercepts Cmd+W earlier,
+    // ahead of the app's own menu key equivalents -- see HostedPluginWindowMacKeyMonitor.mm.
+    const bool isEscape = key == juce::KeyPress::escapeKey;
+    const bool isCommandW = key == juce::KeyPress('w', juce::ModifierKeys::commandModifier, 0);
+    if (!isEscape && !isCommandW)
+        return false;
+    closeButtonPressed(); // same close path as the titlebar's own close button
+    return true;
+}
+
 void HostedPluginEditorWindow::rebuildContent() {
     auto* module = moduleRef_.get();
     auto* instance = module != nullptr ? module->getActiveInstanceForEditor() : nullptr;
@@ -107,5 +126,13 @@ bool HostedPluginEditorWindow::isShowingPlaceholderForTest() const {
     auto* content = getContentComponent();
     return content != nullptr && content->getComponentID() == kPlaceholderComponentId;
 }
+
+#if JUCE_MAC
+void HostedPluginEditorWindow::installMacKeyMonitor() {
+    // Constructing HostedPluginWindowMacKeyMonitor reads getPeer() — see its own ctor/.mm comment
+    // for why this must only run after addToDesktop() has given this window a real native peer.
+    macKeyMonitor_ = std::make_unique<HostedPluginWindowMacKeyMonitor>(*this);
+}
+#endif
 
 } // namespace synth

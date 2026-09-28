@@ -608,6 +608,19 @@ target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 include(cmake/AppUISources.cmake)
 add_library(AppUI STATIC ${APPUI_SOURCES})
 
+# FRO337: the mac-only NSEvent monitor half of "Esc/Cmd+W closes a focused hosted-plugin window"
+# (Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.{h,mm}) — Objective-C++, so it can't sit
+# in APPUI_SOURCES' plain file(GLOB)-free list like every other AppUI source; registered directly
+# on the target instead, same shape as Source/Update/SparkleUpdateManager.mm below. AppUI (not a
+# specific app/plugin target) because every consumer needs it: the app, both plugin formats, and
+# Tests all link AppUI and share the one HostedPluginEditorWindow it patches.
+if(APPLE)
+    target_sources(AppUI PRIVATE Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.mm)
+    # ARC explicitly, matching SparkleUpdateManager.mm below — this file's NSEvent monitor block
+    # and NSWindow/NSText lookups are all Cocoa objects it never wants to retain/release by hand.
+    set_source_files_properties(Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+endif()
+
 # PUBLIC so consumers (the app and the plugin) inherit Core's JUCE modules, include dirs,
 # the Assets binary-data lib and HAS_FONT_ASSETS.
 target_link_libraries(AppUI PUBLIC Core)

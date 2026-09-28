@@ -22,6 +22,10 @@
 //   4. Resize — the editor drives the window's size.
 //   5. ModuleComponent — the card's "Open Editor" button.
 //   6. Native-window promotion (FRO100) — setCreatesNativeWindows() gates the real peer.
+//   7. Esc/Cmd+W closes the window (FRO337) via HostedPluginEditorWindow::keyPressed — the
+//      cross-platform juce::KeyPress path. The mac-only NSEvent monitor
+//      (HostedPluginWindowMacKeyMonitor.mm) is a separate, Cmd+W-only seam that can't run
+//      headlessly; it is exercised in-app instead (see docs/architecture/plugin-layer.md).
 
 #include "../StubPluginInstance.h"
 #include "AudioEngine/AudioEngine.h"
@@ -416,4 +420,56 @@ TEST(HostedPluginWindowManagerNativeWindowTest, FlagTrueWithAPrimaryDisplayReach
     auto* window = manager.getWindowForTest(juce::AudioProcessorGraph::NodeID(1));
     ASSERT_NE(window, nullptr);
     EXPECT_EQ(window->getPeer(), nullptr);
+}
+
+// ============================================================================
+// 7. Esc/Cmd+W closes the window (FRO337)
+// ============================================================================
+
+TEST(HostedPluginEditorWindowTest, EscapeRequestsCloseForTheRightNode) {
+    StubBackend backend;
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    loadAndWait(module, backend);
+
+    HostedPluginEditorWindow window(module, juce::AudioProcessorGraph::NodeID(3));
+    bool closeRequested = false;
+    juce::AudioProcessorGraph::NodeID requestedId;
+    window.onCloseRequested = [&](juce::AudioProcessorGraph::NodeID id) {
+        closeRequested = true;
+        requestedId = id;
+    };
+
+    EXPECT_TRUE(window.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_TRUE(closeRequested);
+    EXPECT_EQ(requestedId, juce::AudioProcessorGraph::NodeID(3));
+}
+
+TEST(HostedPluginEditorWindowTest, CommandWRequestsClose) {
+    StubBackend backend;
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    loadAndWait(module, backend);
+
+    HostedPluginEditorWindow window(module, juce::AudioProcessorGraph::NodeID(1));
+    bool closeRequested = false;
+    window.onCloseRequested = [&](juce::AudioProcessorGraph::NodeID) { closeRequested = true; };
+
+    EXPECT_TRUE(window.keyPressed(juce::KeyPress('w', juce::ModifierKeys::commandModifier, 0)));
+    EXPECT_TRUE(closeRequested);
+}
+
+TEST(HostedPluginEditorWindowTest, UnrelatedKeyDoesNotClose) {
+    StubBackend backend;
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    loadAndWait(module, backend);
+
+    HostedPluginEditorWindow window(module, juce::AudioProcessorGraph::NodeID(1));
+    bool closeRequested = false;
+    window.onCloseRequested = [&](juce::AudioProcessorGraph::NodeID) { closeRequested = true; };
+
+    EXPECT_FALSE(window.keyPressed(juce::KeyPress('a')));
+    EXPECT_FALSE(window.keyPressed(juce::KeyPress('w'))); // 'w' with no Cmd modifier must not close
+    EXPECT_FALSE(closeRequested);
 }
