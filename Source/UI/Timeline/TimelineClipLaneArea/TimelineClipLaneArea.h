@@ -182,8 +182,8 @@ public:
 
     // Whether a Move/Resize(-Left/-Right) drag is currently in flight — the panel's follow-playhead
     // guard reads this so a drag in progress and an auto-scroll page-flip never fight over
-    // firstVisibleBeat in the same 100ms. Marquee/Draw are deliberately excluded: neither one drags
-    // an EXISTING clip's position, so neither is what follow-playhead needs to stay clear of.
+    // firstVisibleBeat in the same 100ms. Marquee/Draw/Range are deliberately excluded: none drags
+    // an EXISTING clip's position, so none is what follow-playhead needs to stay clear of.
     bool isDragInProgress() const noexcept {
         return dragMode_ == DragMode::Move || dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight;
     }
