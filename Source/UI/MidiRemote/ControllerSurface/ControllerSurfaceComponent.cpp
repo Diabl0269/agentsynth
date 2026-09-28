@@ -26,10 +26,19 @@
 
 namespace synth::ui {
 
-ControllerSurfaceComponent::ControllerSurfaceComponent() {
+ControllerSurfaceComponent::ControllerSurfaceComponent()
+    : content_(*this) {
     // Delete/Backspace/Esc must reach THIS component's keyPressed(), not go looking for a focused
     // cell -- cells are mouse-inert display widgets and never take focus themselves.
     setWantsKeyboardFocus(true);
+
+    // FRO331: content_ never handles a click itself -- an empty-space press must reach THIS
+    // component's mouseDown (pan/marquee/deselect), exactly the "fallback clicks to parent" wiring
+    // GraphEditor uses for its own content child. A cell (added to content_ below) still gets its
+    // own press first, since a child's own interception is unaffected by its parent's.
+    addAndMakeVisible(content_);
+    content_.setInterceptsMouseClicks(false, true);
+    updateTransform();
 }
 
 ControllerSurfaceComponent::~ControllerSurfaceComponent() = default;
@@ -39,8 +48,10 @@ ControllerSurfaceComponent::~ControllerSurfaceComponent() = default;
 // refresh -- Detect, a move, a delete, an undo/redo) instead prunes the existing selection down to
 // whatever ids still exist, so the caller doesn't have to re-apply it after every mutation.
 void ControllerSurfaceComponent::setControls(const juce::String& profileId, const std::vector<CellModel>& cells) {
-    if (profileId != profileId_)
+    if (profileId != profileId_) {
         selectedIds_.clear();
+        restoreOrResetView(profileId);
+    }
     profileId_ = profileId;
     cells_.clear();
 
@@ -52,7 +63,7 @@ void ControllerSurfaceComponent::setControls(const juce::String& profileId, cons
         const int x = kCellMargin + cellModel.control.layout.col * (kCellSize + kCellMargin);
         const int y = kCellMargin + cellModel.control.layout.row * (kCellSize + kCellMargin);
         cell->setBounds(x, y, kCellSize, kCellSize);
-        addAndMakeVisible(cell);
+        content_.addAndMakeVisible(cell);
 
         const juce::String controlId = cellModel.control.id;
         cell->onSelected = [this, controlId](const juce::ModifierKeys& mods) { handleCellSelected(controlId, mods); };
@@ -130,32 +141,32 @@ const ControllerSurfaceCell* ControllerSurfaceComponent::findCellForTest(const j
     return nullptr;
 }
 
+ControllerSurfaceCell* ControllerSurfaceComponent::findCellForTest(const juce::String& controlId) {
+    return const_cast<ControllerSurfaceCell*>(
+        const_cast<const ControllerSurfaceComponent*>(this)->findCellForTest(controlId));
+}
+
 void ControllerSurfaceComponent::resized() {
-    // Cells are positioned by grid col/row in setControls(), not by this component's own size --
-    // nothing to lay out here.
+    // Cells are positioned by grid col/row in setControls(), and content_'s own bounds are the
+    // fixed pannable extent set in updateTransform() -- neither depends on this component's own
+    // size, so there is nothing to lay out here.
 }
 
 void ControllerSurfaceComponent::paint(juce::Graphics& g) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const juce::Colour background = lf != nullptr ? lf->getTheme().colors.bg1 : juce::Colours::black;
-    const juce::Colour gridLine = lf != nullptr ? lf->getTheme().colors.border : juce::Colours::darkgrey;
     const juce::Colour textColour = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
 
+    // Fills behind content_'s own transformed bounds too -- content_ paints its dotted grid only
+    // where cells actually exist (Content::paint()), so an empty/zoomed-out margin still needs a
+    // background from somewhere.
     g.fillAll(background);
 
     if (cells_.isEmpty()) {
         g.setColour(textColour.withAlpha(0.5f));
         g.setFont(juce::Font(juce::FontOptions(13.0f)));
         g.drawFittedText("No controller selected", getLocalBounds(), juce::Justification::centred, 2);
-        return;
     }
-
-    // A simple dotted grid so an empty vs. populated surface reads differently in a screenshot,
-    // per this file's brief -- nothing fancier is required.
-    g.setColour(gridLine.withAlpha(0.3f));
-    for (int x = kCellMargin; x < getWidth(); x += (kCellSize + kCellMargin))
-        for (int y = kCellMargin; y < getHeight(); y += (kCellSize + kCellMargin))
-            g.fillRect(x, y, 1, 1);
 }
 
 bool ControllerSurfaceComponent::keyPressed(const juce::KeyPress& key) {

@@ -127,11 +127,11 @@ TEST(ControllerSurfaceComponentTest, RealDragPastAFullCellFiresOnControlsMovedWi
     ASSERT_NE(knob, nullptr);
 
     const juce::Point<float> downPos = knob->getLocalBounds().getCentre().toFloat();
-    const int cellSize = ControllerSurfaceCell::kCellSize;
+    const int cellPitch = ControllerSurfaceCell::kCellPitch; // on-screen distance between cells
     // Two full cell widths right, no vertical movement -- (2,0) is empty in fourControlModel()'s
     // 2x2 layout (unlike (1,0), which fader1 occupies -- a drag landing on another control is
     // refused, see ControllerSurfaceGroupDragTests.cpp), so expect newCol == 2, newRow == 0.
-    const juce::Point<float> dragPos = downPos + juce::Point<float>((float)cellSize * 2.0f, 0.0f);
+    const juce::Point<float> dragPos = downPos + juce::Point<float>((float)cellPitch * 2.0f, 0.0f);
 
     knob->mouseDown(surfaceMouseEvent(*knob, downPos, downPos, false));
     EXPECT_EQ(selected, std::vector<juce::String>{"knob1"}) << "mouseDown must still select even though a drag follows";

@@ -78,6 +78,9 @@ TEST(ControllerSurfaceSelectionTest, PlainClickOnAMultiSelectedCellDoesNotCollap
     EXPECT_EQ(surface.getSelectedControlIds(), std::vector<juce::String>{"pad1"});
 }
 
+// FRO331: a marquee now requires Shift (a plain drag on empty space pans instead -- see
+// ControllerSurfaceViewTests.cpp) -- matching the module canvas's own Shift-starts-marquee
+// convention (GraphEditorCanvas.cpp).
 TEST(ControllerSurfaceSelectionTest, MarqueeOverEmptySpaceSelectsIntersectingCells) {
     ControllerSurfaceComponent surface;
     surface.setSize(400, 400);
@@ -89,12 +92,13 @@ TEST(ControllerSurfaceSelectionTest, MarqueeOverEmptySpaceSelectsIntersectingCel
     const int size = ControllerSurfaceComponent::kCellSize;
     const juce::Point<float> anchor(0.0f, 0.0f);
     const juce::Point<float> corner((float)(margin * 3 + size * 2), (float)(margin * 3 + size * 2));
+    const juce::ModifierKeys shift(juce::ModifierKeys::shiftModifier);
 
-    surface.mouseDown(surfaceMouseEvent(surface, anchor, anchor, false));
+    surface.mouseDown(surfaceMouseEvent(surface, anchor, anchor, false, shift));
     EXPECT_FALSE(surface.isMarqueeActiveForTest()) << "a press alone is not yet a marquee";
-    surface.mouseDrag(surfaceMouseEvent(surface, corner, anchor, true));
+    surface.mouseDrag(surfaceMouseEvent(surface, corner, anchor, true, shift));
     EXPECT_TRUE(surface.isMarqueeActiveForTest());
-    surface.mouseUp(surfaceMouseEvent(surface, corner, anchor, true));
+    surface.mouseUp(surfaceMouseEvent(surface, corner, anchor, true, shift));
 
     EXPECT_FALSE(surface.isMarqueeActiveForTest()) << "the marquee itself clears once the drag ends";
     auto selected = surface.getSelectedControlIds();
@@ -102,7 +106,9 @@ TEST(ControllerSurfaceSelectionTest, MarqueeOverEmptySpaceSelectsIntersectingCel
     EXPECT_EQ(selected, (std::vector<juce::String>{"button1", "fader1", "knob1", "pad1"}));
 }
 
-TEST(ControllerSurfaceSelectionTest, MarqueeWithShiftAddsToTheExistingSelection) {
+// FRO331: plain Shift+drag REPLACES the selection -- only Cmd+Shift+drag adds to it (below). A
+// pre-existing selection outside the marquee's rectangle is dropped, same as a plain click would.
+TEST(ControllerSurfaceSelectionTest, MarqueeWithPlainShiftReplacesTheSelection) {
     ControllerSurfaceComponent surface;
     surface.setSize(400, 400);
     surface.setControls("profileA", fourControlModel());
@@ -113,13 +119,31 @@ TEST(ControllerSurfaceSelectionTest, MarqueeWithShiftAddsToTheExistingSelection)
     const int margin = ControllerSurfaceComponent::kCellMargin;
     const int size = ControllerSurfaceComponent::kCellSize;
     const juce::Point<float> corner((float)(margin + size), (float)(margin + size)); // covers only knob1
+    const juce::ModifierKeys shift(juce::ModifierKeys::shiftModifier);
 
-    surface.mouseDown(
-        surfaceMouseEvent(surface, anchor, anchor, false, juce::ModifierKeys(juce::ModifierKeys::shiftModifier)));
-    surface.mouseDrag(
-        surfaceMouseEvent(surface, corner, anchor, true, juce::ModifierKeys(juce::ModifierKeys::shiftModifier)));
-    surface.mouseUp(
-        surfaceMouseEvent(surface, corner, anchor, true, juce::ModifierKeys(juce::ModifierKeys::shiftModifier)));
+    surface.mouseDown(surfaceMouseEvent(surface, anchor, anchor, false, shift));
+    surface.mouseDrag(surfaceMouseEvent(surface, corner, anchor, true, shift));
+    surface.mouseUp(surfaceMouseEvent(surface, corner, anchor, true, shift));
+
+    EXPECT_EQ(surface.getSelectedControlIds(), std::vector<juce::String>{"knob1"});
+}
+
+TEST(ControllerSurfaceSelectionTest, MarqueeWithCmdShiftAddsToTheExistingSelection) {
+    ControllerSurfaceComponent surface;
+    surface.setSize(400, 400);
+    surface.setControls("profileA", fourControlModel());
+
+    surface.setSelectedControlId("button1"); // far corner, outside the marquee below
+
+    const juce::Point<float> anchor(0.0f, 0.0f);
+    const int margin = ControllerSurfaceComponent::kCellMargin;
+    const int size = ControllerSurfaceComponent::kCellSize;
+    const juce::Point<float> corner((float)(margin + size), (float)(margin + size)); // covers only knob1
+    const juce::ModifierKeys cmdShift((int)(juce::ModifierKeys::shiftModifier | juce::ModifierKeys::commandModifier));
+
+    surface.mouseDown(surfaceMouseEvent(surface, anchor, anchor, false, cmdShift));
+    surface.mouseDrag(surfaceMouseEvent(surface, corner, anchor, true, cmdShift));
+    surface.mouseUp(surfaceMouseEvent(surface, corner, anchor, true, cmdShift));
 
     auto selected = surface.getSelectedControlIds();
     std::sort(selected.begin(), selected.end());

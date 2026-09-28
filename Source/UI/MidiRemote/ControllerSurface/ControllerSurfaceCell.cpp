@@ -261,15 +261,23 @@ void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
         onSelected(event.mods);
 }
 
-// Reports a DELTA (in whole kCellSize units from the drag's start), not a running total, and only
-// when that integer delta actually changes -- a plain click with no movement must never fire a
-// spurious onDraggedByCells(0,0), and a slow drag across many pixels must not spam the owner once
-// per pixel. The owner (ControllerSurfaceComponent) accumulates the delta onto the drag-start grid
-// position and clamps once, per its own header's contract.
+// Reports a DELTA (in whole GRID CELLS from the drag's start), not a running total, and only when
+// that integer delta actually changes -- a plain click with no movement must never fire a spurious
+// onDraggedByCells(0,0), and a slow drag across many pixels must not spam the owner once per pixel.
+// The owner (ControllerSurfaceComponent) accumulates the delta onto the drag-start grid position
+// and clamps once, per its own header's contract.
+//
+// Bugfix (found while testing FRO331's pan/zoom): divides by kCellPitch (kCellSize + the owner's
+// inter-cell margin), NOT kCellSize alone -- see kCellPitch's own doc comment on the header. Dividing
+// by kCellSize alone under-counts the real on-screen pitch between cells, so a drag of N whole
+// cells (N * kCellPitch px) reported round(N * kCellPitch / kCellSize) cells instead of N -- e.g. 8
+// cells (8 * 62 px) reported as 9, 10 cells (10 * 62 px) reported as 11. Short drags (<= ~4 cells)
+// stayed under the rounding threshold and looked fine, which is why this went unnoticed until a
+// group drag crossing several other controls' cells made an 8+ cell drag common enough to hit it.
 void ControllerSurfaceCell::mouseDrag(const juce::MouseEvent& event) {
     const auto offset = event.getEventRelativeTo(getParentComponent()).getPosition() - dragStartMouse_;
-    const int dCols = (int)std::floor((float)offset.x / (float)kCellSize + 0.5f);
-    const int dRows = (int)std::floor((float)offset.y / (float)kCellSize + 0.5f);
+    const int dCols = (int)std::floor((float)offset.x / (float)kCellPitch + 0.5f);
+    const int dRows = (int)std::floor((float)offset.y / (float)kCellPitch + 0.5f);
 
     const int lastCol = (int)getProperties().getWithDefault(kLastFiredDeltaColProperty, 0);
     const int lastRow = (int)getProperties().getWithDefault(kLastFiredDeltaRowProperty, 0);
