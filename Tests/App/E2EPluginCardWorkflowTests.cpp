@@ -343,33 +343,56 @@ TEST_F(E2EPluginCardWorkflowTest, MidiLearnOnAHostedKnobThenAFakeCcDrivesThePara
 
     // Real wall-clock settle (RemoteEngine::kLearnSettleMs, 300ms) -- mainComp_'s RemoteEngine uses
     // the real clock, unlike MidiLearnControllerTests.cpp's own fixture, which injects a fake one.
-    const auto settleDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (controller.isArmed() && std::chrono::steady_clock::now() < settleDeadline) {
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    // pumpUntil, not a fixed sleep: waits on the actual signal (the learn token clearing), bounded
+    // generously above the 300ms settle window rather than timed to it.
+    ASSERT_TRUE(pumpUntil([&] {
         remote.drain();
-    }
-    ASSERT_FALSE(controller.isArmed()) << "the learn settled and bound";
+        return !controller.isArmed();
+    })) << "the learn settled and bound";
 
     auto* cutoff = hosted->findInstanceParameter("cutoff");
     ASSERT_NE(cutoff, nullptr);
     const float before = cutoff->getValue();
 
+    // FRO340: re-assert both overrides right before driving the parameter, rather than trusting
+    // them to have survived the settle wait above unmolested. That wait pumps the real message
+    // loop for up to ~300ms, which is long enough for an unrelated, already-queued
+    // juce::ChangeBroadcaster::sendChangeMessage() from this machine's OWN Application Support
+    // settings file (any earlier settings write, anywhere in the app, coalesces into one async
+    // callback) to land mid-loop. MainComponent::changeListenerCallback -> applyMidiRemotePreferences()
+    // re-reads the MIDI Remote defaults on every such callback (by design -- a live Preferences
+    // change is meant to apply immediately, see MainComponentPanels.cpp) and silently overwrites
+    // this test's Takeover::jump with whatever this developer's real on-disk preference is. When
+    // that preference is Takeover::pickup (or scale), the very next hardware event is a brand-new
+    // gesture, which pickup/scale both deliberately swallow (RemoteEngineApply.cpp) -- so the
+    // parameter never moves and this test flakes on a machine with a non-default saved preference,
+    // 20%+ of runs when reproduced locally. refreshSources() (arm()'s own call) can equally be
+    // raced by the same mechanism, so both go back here, immediately before the event that depends
+    // on them, instead of trusting them from before the wait.
+    remote.setSources({juce::String(kFakeDevice)});
+    remote.setDefaultTakeover(synth::Takeover::jump);
+
     mainComp_->getAudioEngine().handleIncomingMidiMessageFromSource(kFakeDevice,
                                                                     juce::MidiMessage::controllerEvent(1, kCc, 0));
     remote.drain();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(
-        50); // the drain's apply is a real gesture on the message thread
 
-    EXPECT_NE(cutoff->getValue(), before) << "the fake CC actually moved the hosted parameter";
+    // pumpUntil again: setValueNotifyingHost() (RemoteEngineApply.cpp) is synchronous, so the very
+    // first drain() above should already have moved it, but wait on the value itself (generous
+    // upper bound) rather than assume -- and rather than a fixed extra sleep -- so a slower machine
+    // still gets a real answer instead of a false negative.
+    EXPECT_TRUE(pumpUntil([&] {
+        remote.drain();
+        return cutoff->getValue() != before;
+    })) << "the fake CC actually moved the hosted parameter";
 
     // Close the still-open change gesture (RemoteEngine::kGestureIdleMs, 250ms) before mainComp_
     // (and the graph/instance under it) is torn down in TearDown() -- same reasoning as
     // MidiLearnControllerTests.cpp's own LearnThenImmediateCcDrivesTheParameterWithoutAnExplicitReconcile:
     // ~RemoteEngine's endAllGestures() would otherwise dereference a parameter the graph teardown
-    // already freed.
-    const auto idleDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
-    while (std::chrono::steady_clock::now() < idleDeadline) {
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    // already freed. activeGestureCount() is the actual signal (RemoteEngine.h's own test
+    // diagnostic) rather than a fixed 500ms wait timed to kGestureIdleMs.
+    ASSERT_TRUE(pumpUntil([&] {
         remote.drain();
-    }
+        return remote.activeGestureCount() == 0;
+    })) << "the change gesture closed before teardown";
 }

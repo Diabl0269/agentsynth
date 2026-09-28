@@ -113,6 +113,22 @@ edit — both fail the build until the module is accounted for.
   `MidiRemotePanelTestFixture.h` do), or declare the `RemoteEngine` after the engine. The same bug
   existed in `~MainComponent()` itself; see
   [`midi-remote.md`](../control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter).
+- **A test against a real `mainComp_` that overrides `RemoteEngine::setDefaultTakeover`/`setSources`
+  and then pumps the message loop for a real wall-clock wait (e.g. `RemoteEngine::kLearnSettleMs`)
+  can have that override silently reverted mid-wait.** `MainComponent::changeListenerCallback` calls
+  `applyMidiRemotePreferences()` on every `appProperties.getUserSettings()` change broadcast, by
+  design (a live Preferences edit is meant to apply immediately) — and `juce::ChangeBroadcaster`
+  delivers that broadcast asynchronously, so an unrelated settings write from anywhere earlier in
+  the run can land during the pump. `applyMidiRemotePreferences()` then re-reads the MIDI Remote
+  defaults straight off this machine's real, on-disk settings file, silently replacing a test's
+  `Takeover::jump` with whatever that developer happened to have saved (`pickup`/`scale`) — and
+  `pickup`/`scale` both deliberately swallow the very first hardware event on a brand-new gesture
+  (`RemoteEngineApply.cpp`), so the parameter the test expects to move doesn't. FRO340
+  (`E2EPluginCardWorkflowTests.cpp`'s `MidiLearnOnAHostedKnobThenAFakeCcDrivesTheParameter`) hit
+  this at roughly a 1-in-5 rate depending on the machine's saved preference. Not a product bug —
+  the live-reload is intentional — so the fix is in the test: re-assert `setSources`/
+  `setDefaultTakeover` immediately before the event that depends on them, rather than trusting an
+  override made before a real-time wait to survive it.
 - **A local macOS ASan build won't catch a use-after-free inside JUCE.** JUCE's modules compile as
   Objective-C++ (`.mm`) on macOS, and those take `CMAKE_OBJCXX_FLAGS`, not the
   `-DCMAKE_CXX_FLAGS=-fsanitize=address` the ASan recipe passes. The bad read above happened inside
