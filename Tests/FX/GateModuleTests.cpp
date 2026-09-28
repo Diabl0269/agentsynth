@@ -1,4 +1,4 @@
-// GateModuleTests.cpp — P9-11 (FRO17).
+// GateModuleTests.cpp
 //
 // Covers what is specific to GateModule beyond the generic factory/serialization/automation
 // sweeps (AIStateMapperTests, ModuleAdoptionTests, AutomationZipperTests, StereoVoiceModuleTests
@@ -79,7 +79,7 @@ TEST_F(GateModuleTest, ProcessBlockProducesOutputWhenAboveThreshold) {
 
 TEST_F(GateModuleTest, PortLabelsAndCounts) {
     // Audio pair first, then one parameter-CV jack per knob, then the Key (sidechain) pair appended
-    // last (FRO317) so saved patches keep ch0-6.
+    // last so saved patches keep ch0-6.
     const juce::String cv[] = {"Threshold", "Attack", "Hold", "Release", "Range"};
     EXPECT_EQ(module->getInputPortLabel(0), "Audio");
     for (int i = 0; i < 5; ++i)

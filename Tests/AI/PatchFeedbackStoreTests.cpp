@@ -104,7 +104,7 @@ TEST_F(PatchFeedbackStoreTest, IncludesTimestamp) {
     EXPECT_TRUE(entry->getProperty("timestamp").toString().isNotEmpty());
 }
 
-// P6-9: conversationId/messageId are the server-side ids a rating corresponds to, when known.
+// conversationId/messageId are the server-side ids a rating corresponds to, when known.
 TEST_F(PatchFeedbackStoreTest, IncludesConversationAndMessageIdWhenProvided) {
     PatchFeedbackStore store(tempFile);
     store.record(R"({"nodes":[]})", PatchFeedbackStore::Rating::Up, "great patch", "conv-123", "msg-456");
@@ -117,7 +117,7 @@ TEST_F(PatchFeedbackStoreTest, IncludesConversationAndMessageIdWhenProvided) {
 }
 
 // Old call sites (no conversationId/messageId args) and offline/free-tier entries must keep the
-// exact pre-P6-9 shape — no empty-string "conversationId"/"messageId" fields ever appear.
+// exact legacy shape — no empty-string "conversationId"/"messageId" fields ever appear.
 TEST_F(PatchFeedbackStoreTest, OmitsConversationAndMessageIdWhenNotProvided) {
     PatchFeedbackStore store(tempFile);
     store.record(R"({"nodes":[]})", PatchFeedbackStore::Rating::Down);

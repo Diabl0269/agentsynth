@@ -1,9 +1,9 @@
 // TimelineTrackHeaderContextMenuTests.cpp
 //
-// FRO60: the header context menu (Delete Track, Make Channel) has to be reachable from a REAL
+// The header context menu (Delete Track, Make Channel) has to be reachable from a REAL
 // right-click anywhere on the row, not just on its own background pixels. TimelineTrackHeaderTests.cpp
 // already covers buildContextMenu()/applyContextMenuChoice() and even a real right-click via
-// header.mouseDown(...) directly — but that is EXACTLY the blind spot FRO25's live check found:
+// header.mouseDown(...) directly — but that is EXACTLY the blind spot the live check found:
 // calling header.mouseDown(...) proves nothing about whether a right-click that actually lands on a
 // CHILD component (the name label, the M/S/R/A toggles) ever reaches mouseDown() at all, since JUCE
 // hands a click to whichever component is directly under the cursor and never bubbles it to an
@@ -56,7 +56,7 @@ public:
     bool canMakeChannelForTrack(TrackId) const override { return canMakeChannel; }
     void makeChannelForTrack(TrackId) override { ++makeChannelCalls; }
 
-    // FRO13 (P9-7): the "Save Track as Preset.../Set as Default Track Preset" pair, same
+    // The "Save Track as Preset.../Set as Default Track Preset" pair, same
     // disabled-not-hidden gate (canSaveTrackPresetForTrack) as canMakeChannelForTrack above.
     bool canSaveTrackPresetForTrack(TrackId) const override { return canSaveTrackPreset; }
     void saveTrackAsPreset(TrackId) override { ++saveTrackPresetCalls; }
@@ -225,8 +225,8 @@ TEST(TimelineTrackHeaderContextMenuTest, ColourSwatchRightClickNeverReachesTheHe
 }
 
 // =============================================================================
-// FRO13 (P9-7, docs/mixer/track-presets.md): "Save Track as Preset.../Set as Default Track Preset" reached
-// through the SAME real-child-click path as Make Channel/Delete Track above.
+// "Save Track as Preset.../Set as Default Track Preset" reached through the SAME real-child-click
+// path as Make Channel/Delete Track above (see docs/mixer/track-presets.md).
 // =============================================================================
 
 TEST(TimelineTrackHeaderContextMenuTest, RightClickOnNameLabelShowsTrackPresetItems) {

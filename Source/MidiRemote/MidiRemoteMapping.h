@@ -13,7 +13,7 @@ namespace synth::midi {
 
 /** The assignment `control` (on `profile`) gets when the user maps it to `target`: a fresh id, the
  *  control's message/encoding/button-mode/name denormalised onto it, takeover "default", full
- *  range. `page` (FRO142, docs/control/midi-remote.md#pages) is the profile's active page at
+ *  range. `page` (docs/control/midi-remote.md#pages) is the profile's active page at
  *  assignment time -- meaningless (left at its default, 1) for a GLOBAL target (action/continuous),
  *  which ignores Assignment::page entirely. */
 Assignment makeAssignmentForControl(const ControllerProfile& profile, const Control& control, const Target& target,

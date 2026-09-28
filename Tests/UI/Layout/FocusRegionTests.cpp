@@ -1,7 +1,7 @@
-// T159: the app-wide keyboard focus-region framework (Source/UI/Layout/FocusRegion.h) — Tab/Shift+Tab
+// The app-wide keyboard focus-region framework (Source/UI/Layout/FocusRegion.h) — Tab/Shift+Tab
 // cycling between whichever regions are currently open, plus two direct-focus shortcuts
-// (Cmd+Shift+T/L) that open a closed target first. First of a 3-part epic; T160/T161 (module-library
-// and timeline-track-header navigation WITHIN a region) are NOT covered here.
+// (Cmd+Shift+T/L) that open a closed target first. Module-library
+// and timeline-track-header navigation WITHIN a region are NOT covered here.
 //
 // Two layers of test, matching the split FocusRegion.h's own header comment calls out:
 //
@@ -68,12 +68,12 @@ TEST(FocusRegionRegistryTest, RegionContainingPrefersTheMostSpecificNestedRegion
         << "focus on the outer root itself (not inside the nested region) still resolves to the outer one";
 }
 
-// FRO12 (P9-6, docs/mixer/panel.md): a DetachedPanelWindow owns its OWN FocusRegionRegistry,
-// separate from MainComponent's -- Tab inside it must cycle only its own region(s). Modeled here
-// as two plain registries (no need for a real DetachedPanelWindow to prove the pure logic never
-// crosses); DetachedPanelWindowTests.cpp's TabCyclesOnlyItsOwnOneRegionRegistry is the real-class
-// version, and FocusRegionMainComponentTest below proves the DOCKED side's registry drops the
-// region while detached.
+// A DetachedPanelWindow owns its OWN FocusRegionRegistry, separate from MainComponent's -- Tab
+// inside it must cycle only its own region(s). Modeled here as two plain registries (no need for a
+// real DetachedPanelWindow to prove the pure logic never crosses); DetachedPanelWindowTests.cpp's
+// TabCyclesOnlyItsOwnOneRegionRegistry is the real-class version, and FocusRegionMainComponentTest
+// below proves the DOCKED side's registry drops the region while detached
+// (see docs/mixer/panel.md).
 TEST(FocusRegionRegistryTest, TwoIndependentRegistriesNeverCrossResolve) {
     juce::Component dockedRoot, detachedRoot;
     synth::ui::FocusRegionRegistry dockRegistry;
@@ -227,7 +227,7 @@ private:
 };
 
 // The real on-disk settings file and the save/restore guard around it live in
-// Tests/TestSettingsHelpers.h (FRO58) -- one copy for every test that opens it.
+// Tests/TestSettingsHelpers.h -- one copy for every test that opens it.
 using synth::test::PersistedKeysGuard;
 using synth::test::userSettingsTestOptions;
 
@@ -253,7 +253,7 @@ bool commandIsActive(MainComponent& mc, juce::CommandID cmdId) {
 class FocusRegionMainComponentTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // FRO101: DetachingAPanelDropsItFromMainComponentsRegistryUntilRedocked (below) detaches
+        // DetachingAPanelDropsItFromMainComponentsRegistryUntilRedocked (below) detaches
         // the real timeline host against a real MainComponent, which persists "timelineWindowBounds"
         // into the same real on-disk settings file every other key here already guards.
         guard_.emplace(juce::StringArray{"showWelcomeScreenAtLaunch", "librarySidebarVisible", "bottomDockVisible",
@@ -273,13 +273,13 @@ private:
     std::optional<PersistedKeysGuard> guard_;
 };
 
-// The registry MainComponent builds must be exactly the six T159 phase-1 regions, in the
+// The registry MainComponent builds must be exactly the six regions, in the
 // documented Tab-cycle order (Toolbar, Library, Canvas, Timeline, AI Panel, Mod Matrix).
 TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheEightDocumentedRegionsInOrder) {
-    // FRO18: the mixer panel joined as a 7th region, registered right after "timeline" -- the two
+    // The mixer panel joined as a 7th region, registered right after "timeline" -- the two
     // share one dock (one tab visible at a time), so it belongs next to the region it splits from,
     // not appended at the end (see MixerFocusRegionTests.cpp for the two regions' open predicates).
-    // FRO131: "midiRemote" joined as an 8th region the same way, right after "mixer" -- all three
+    // "midiRemote" joined as an 8th region the same way, right after "mixer" -- all three
     // share the one dock now.
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
     juce::StringArray ids;
@@ -317,7 +317,7 @@ TEST_F(FocusRegionMainComponentTest, RegionContainingResolvesTheNestedModMatrixN
 // grabKeyboardFocus() on a region root only lands ON that root deterministically if the root itself
 // has opted into keyboard focus; otherwise juce::Component descends into children by Y/X POSITION
 // (not by which child wants focus), which is fragile to depend on for a container whose layout can
-// change. Every T159 region root must opt in explicitly -- this is a real regression guard for a bug
+// change. Every region root must opt in explicitly -- this is a real regression guard for a bug
 // class that would otherwise pass every other test in this file (none of them create a native peer,
 // so a real grabKeyboardFocus() call is never exercised end-to-end here).
 TEST_F(FocusRegionMainComponentTest, EveryRegionRootWantsKeyboardFocusItself) {
@@ -365,7 +365,7 @@ TEST_F(FocusRegionMainComponentTest, KeyPressedTabDispatchesSuccessfullyWhenNotS
     EXPECT_TRUE(mc.keyPressed(shiftTab));
 }
 
-// The locked T159 decision: Tab-cycling is suppressed entirely while the launch overlay is up front.
+// Tab-cycling is suppressed entirely while the launch overlay is up front.
 TEST_F(FocusRegionMainComponentTest, TabCyclingSuppressedWhileWelcomeScreenIsVisible) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
     ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
@@ -443,7 +443,7 @@ TEST_F(FocusRegionMainComponentTest, CmdShiftLOnAnAlreadyOpenLibraryLeavesItOpen
     EXPECT_TRUE(mc.isLibraryConfiguredVisible()) << "a Focus Library on an already-open sidebar must not close it";
 }
 
-// T160: Cmd+F opens the Library first if it is closed, exactly like Cmd+Shift+L above -- but it
+// Cmd+F opens the Library first if it is closed, exactly like Cmd+Shift+L above -- but it
 // lands on the search field specifically (ModuleLibraryComponent::focusSearchField), not the
 // region root, which is not observable headlessly (no native peer to grab real focus against; see
 // FocusRegion.h's own comment on that constraint). "Opens if closed" is the one effect this test
@@ -483,7 +483,7 @@ TEST_F(FocusRegionMainComponentTest, DirectFocusShortcutsAreNotSuppressedByTheWe
 }
 
 // ============================================================================
-// 3. FRO12 (P9-6) -- detach/redock re-runs MainComponent's own registration pass.
+// 3. Detach/redock re-runs MainComponent's own registration pass.
 // ============================================================================
 
 TEST_F(FocusRegionMainComponentTest, DetachingAPanelDropsItFromMainComponentsRegistryUntilRedocked) {

@@ -1,8 +1,8 @@
-// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): ControllerProfile::Handshake round-trip/
-// rejection coverage -- mirrors RemoteModelFocusBankTests.cpp's style. The headline guarantee:
-// every pre-FRO339 document (no "handshake" property at all) loads with an empty Handshake and
-// re-serialises byte-identical to what it started as. Suite name contains "MidiRemote" per the
-// ship-task --gtest_filter convention.
+// ControllerProfile::Handshake round-trip/ rejection coverage -- mirrors
+// RemoteModelFocusBankTests.cpp's style. The headline guarantee: every document (no "handshake"
+// property at all) loads with an empty Handshake and re-serialises byte-identical to what it
+// started as. Suite name contains "MidiRemote" per the ship-task --gtest_filter convention (see
+// docs/control/midi-remote-device-handshake.md#device-handshake).
 
 #include "MidiRemote/RemoteModel.h"
 #include <gtest/gtest.h>
@@ -96,9 +96,10 @@ TEST(MidiRemoteModelHandshakeTest, RejectsNonArrayOpen) {
     EXPECT_FALSE(parsed.fromVar(v));
 }
 
-// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): the port hint round-trips like every
-// other optional field here -- absent by default, present only when non-empty, and a present but
-// non-string value is a hard rejection, same all-or-nothing convention as the rest of this file.
+// The port hint round-trips like every other optional field here -- absent by default, present only
+// when non-empty, and a present but non-string value is a hard rejection, same all-or-nothing
+// convention as the rest of this file (see
+// docs/control/midi-remote-device-handshake.md#device-handshake).
 TEST(MidiRemoteModelHandshakeTest, PortHintDefaultsToEmptyAndIsOmittedFromJson) {
     auto p = makeV1Profile();
     p.handshake.openMessage = {0x01};

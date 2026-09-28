@@ -1,4 +1,4 @@
-// MixerDockMeterGatingTests.cpp -- FRO146 follow-up: a detached mixer window's meters never
+// MixerDockMeterGatingTests.cpp -- a detached mixer window's meters never
 // ticked, because MainComponent::timerCallback()'s gate only ever looked at the DOCKED
 // BottomDockComponent's own tab/visibility state (`isMixerTabActive() && isVisible()`), which stays
 // false the instant the mixer is reparented into its own DetachedPanelWindow (Window placement's
@@ -50,7 +50,7 @@ private:
 };
 
 // The real on-disk settings file and the save/restore guard around it live in
-// Tests/TestSettingsHelpers.h (FRO58) -- one copy for every test that opens it.
+// Tests/TestSettingsHelpers.h -- one copy for every test that opens it.
 using synth::test::PersistedKeysGuard;
 using synth::test::userSettingsTestOptions;
 

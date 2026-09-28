@@ -33,7 +33,7 @@
  * private copy of an input channel when `inputChan < numOutputs`, so declaring fewer outputs than
  * the highest CV channel we read would let our post-cache clear scribble on a buffer another node
  * still needs (see OscillatorModule for the same constraint). Root Note CV (ch7) was APPENDED
- * after every other channel (FRO312) rather than inserted earlier, so no existing saved-patch
+ * after every other channel rather than inserted earlier, so no existing saved-patch
  * routing shifts.
  *
  * Thread safety: the sample is owned by a reference-counted SampleData. loadSampleFile() (message
@@ -51,7 +51,7 @@ public:
     static constexpr int kDensityCVCh = 4;
     static constexpr int kSprayCVCh = 5;
     static constexpr int kLevelCVCh = 6;
-    static constexpr int kRootNoteCVCh = 7; // FRO312: appended last, see the class comment above
+    static constexpr int kRootNoteCVCh = 7; // Appended last, see the class comment above
     static constexpr int kNumChannels = 8;
 
     // ---- Limits --------------------------------------------------------------
@@ -99,7 +99,7 @@ public:
         addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 0.8f));
         // Dual I/O comes from the ctor's StereoAudio::Declared above, defaulting to split — this
         // module has always emitted a real stereo pair. Collapsing uses the FX helpers rather than
-        // the split-block ones: one "Audio" jack that owns both raw legs (#219).
+        // the split-block ones: one "Audio" jack that owns both raw legs.
         addMuteParameter();
         enableVisualBuffer(true);
     }
@@ -317,8 +317,8 @@ public:
             const int idx = juce::jmin(i, ns - 1);
 
             // --- MIDI: consume any note-on/off landing on exactly this sample --------------
-            // Sample-accurate on purpose (mirrors ADSRModule's mono branch, FRO110) -- see
-            // applyHeldNoteMessage's doc comment for why a block-net gate drops notes (FRO246).
+            // Sample-accurate on purpose (mirrors ADSRModule's mono branch) -- see
+            // applyHeldNoteMessage's doc comment for why a block-net gate drops notes.
             bool midiNoteOnThisSample = false;
             for (const auto metadata : midiMessages) {
                 if (metadata.samplePosition != i)
@@ -546,7 +546,7 @@ private:
      *  with no Note-Off between them (legato) into "gate never fell", and a Note-Off immediately
      *  followed by a Note-On in the SAME block (a transport loop restart whose boundary lands inside
      *  this block, see TimelineMidiSourceModule::emitBlock) into "gate never rose" -- both silently
-     *  swallowed the new note (FRO246). Mirrors ADSRModule's mono branch (FRO110). */
+     *  swallowed the new note. Mirrors ADSRModule's mono branch. */
     bool applyHeldNoteMessage(const juce::MidiMessage& message) {
         if (message.isNoteOn()) {
             heldNotes.set(static_cast<size_t>(message.getNoteNumber()));

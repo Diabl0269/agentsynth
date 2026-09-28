@@ -16,7 +16,7 @@ class PluginKnobPickerRow;
 class PluginKnobPickerTouchCapture;
 
 /**
- * "Choose knobs..." popover (FRO132, docs/control/plugin-card-layout.md#choosing-knobs) -- search,
+ * "Choose knobs..." popover (docs/control/plugin-card-layout.md#choosing-knobs) -- search,
  * tick/untick, drag-reorder and per-slot label for a hosted plugin's parameters, an Apply-to scope
  * (this instance / every instance of the plugin), named presets, and touch-to-add. Opened as a
  * `juce::CallOutBox` anchored to the card (`ModuleComponent::showPluginKnobPicker`) or the card's
@@ -36,8 +36,8 @@ class PluginKnobPickerTouchCapture;
  * up) is not specially handled, the same known v1 limitation `PluginKnobPickerTouchCapture` already
  * documents for its own listener registration.
  *
- * "N parameters missing" (the founder decision
- * docs/control/plugin-card-layout.md#the-cardlayout-type-and-where-a-layout-comes-from names): a slot loaded from the
+ * "N parameters missing"
+ * (docs/control/plugin-card-layout.md#the-cardlayout-type-and-where-a-layout-comes-from): a slot loaded from the
  * resolved layout / a stored preset whose `paramId` is not among `allParams_` is split into `missingSlots_` rather than
  * shown as a row -- there is no checkbox for a parameter that doesn't exist. The very next apply (any tick, reorder,
  * label, scope switch, or preset load) writes `workingSlots_` only, so the missing ones are silently dropped from

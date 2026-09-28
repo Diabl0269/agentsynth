@@ -634,7 +634,7 @@ protected:
     void SetUp() override {
         resetKeys();
         // Unique per test: the three tests below share this fixture, and concurrent CI shards used to
-        // delete each other's bundle between save and load (FRO321).
+        // delete each other's bundle between save and load.
         bundleDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
                         .getChildFile("agentsynth_rectap_flow_" + juce::Uuid().toString() + ".agsproj");
         bundleDir.deleteRecursively();

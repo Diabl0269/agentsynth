@@ -3,13 +3,13 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// MixerColumnHeader.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): the colour swatch + name label +
+// MixerColumnHeader.h (docs/mixer/panel.md#what-the-mixer-shows): the colour swatch + name label +
 // click-to-select-macro row shared by MixerColumnComponent, MixerDirectColumn and
 // MixerMasterColumn, so the three column kinds don't triplicate the same paint code (root
 // CLAUDE.md's "extract a real collaborator class" preference over copy-pasted paint()). Small
 // enough to stay header-only, same as the plan's own budget for this file.
 //
-// FRO225: the name is also double-click-to-rename in place -- nameLabel_ reuses the exact
+// The name is also double-click-to-rename in place -- nameLabel_ reuses the exact
 // juce::Label(false, true, false) + onTextChange pattern TimelineTrackHeaderComponent::nameLabel_
 // already established (Source/UI/Timeline/TimelineTrackHeaderComponent.cpp), not a bespoke text
 // editor, so the two only "double-click a name to rename it" surfaces in the app behave alike. Same
@@ -29,7 +29,7 @@ public:
         nameLabel_.setComponentID("mixerColumnHeaderName");
         nameLabel_.setJustificationType(juce::Justification::centredLeft);
         nameLabel_.setMinimumHorizontalScale(1.0f);
-        // FRO228: setRenameEnabled(true) below is what actually arms editing AND the tooltip/AX
+        // setRenameEnabled(true) below is what actually arms editing AND the tooltip/AX
         // help text together -- see that method's own comment for why the two must never diverge.
         setRenameEnabled(true);
         nameLabel_.onTextChange = [this] {
@@ -48,7 +48,7 @@ public:
     void setColour(juce::Colour colour) {
         if (colour_ == colour)
             return;
-        // The swatch presence/absence shifts nameBounds() too (FRO225), so layout must redo, not
+        // The swatch presence/absence shifts nameBounds() too, so layout must redo, not
         // just repaint.
         colour_ = colour;
         resized();
@@ -94,8 +94,8 @@ public:
         repaint();
     }
 
-    /** FRO15 (docs/mixer/sends-and-buses.md): a "BUS" badge in place of the linked badge when this column is a
-     * group/send bus -- a bus has no track to link to, so the two are mutually exclusive by construction. */
+    /** A "BUS" badge in place of the linked badge when this column is a group/send bus -- a bus has no track
+     * to link to, so the two are mutually exclusive by construction (see docs/mixer/sends-and-buses.md). */
     void setBusBadgeVisible(bool visible) {
         if (busBadgeVisible_ == visible)
             return;
@@ -104,11 +104,11 @@ public:
         repaint();
     }
 
-    /** FRO225: whether double-click-to-rename is armed at all. Direct and Master have no
+    /** Whether double-click-to-rename is armed at all. Direct and Master have no
      *  ChannelStripModule name (Direct has no node; Master is a MasterModule) for a rename to write
      *  to, so MixerDirectColumn/MixerMasterColumn turn this off right after their fixed
      *  setDisplayName() call -- true (the default) is MixerColumnComponent's every Strip/Bus
-     *  column. FRO228: also gates the tooltip -- VoiceOver reads a juce::TooltipClient's tooltip as
+     *  column. Also gates the tooltip -- VoiceOver reads a juce::TooltipClient's tooltip as
      *  the label's accessible help text, so a disabled column must never still offer "Double-click
      *  to rename" (Direct/Master's AX help previously said so even though the label ignores the
      *  gesture). */
@@ -186,7 +186,7 @@ private:
 
     juce::Colour colour_; // alpha 0 by default -- see setColour()
     juce::String name_;
-    juce::Label nameLabel_; // FRO225: the name itself -- see the class comment's rename design
+    juce::Label nameLabel_; // The name itself -- see the class comment's rename design
     bool linkedBadgeVisible_ = false;
     bool busBadgeVisible_ = false;
 

@@ -1,4 +1,4 @@
-// MidiLearnControllerAssignTests.cpp -- FRO135
+// MidiLearnControllerAssignTests.cpp
 // (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn): MidiLearnController::assignControl /
 // forgetAssignment, the seam every panel-side assignment (the pick-target overlay's click, the action picker's choice)
 // ends in. Suite name contains "MidiRemote".
@@ -104,9 +104,8 @@ TEST_F(MidiRemoteAssignTest, NodeCommandTargetIsProjectScope) {
     EXPECT_TRUE(profile().actions.empty());
 }
 
-// FRO236 (docs/control/midi-remote.md#continuous-targets): mirrors
-// ActionTargetIsGlobalAndStoredOnTheProfileNotTheProject above -- a continuous target is GLOBAL,
-// exactly like an action.
+// Mirrors ActionTargetIsGlobalAndStoredOnTheProfileNotTheProject above -- a continuous target is
+// GLOBAL, exactly like an action (see docs/control/midi-remote.md#continuous-targets).
 TEST_F(MidiRemoteAssignTest, ContinuousTargetIsGlobalAndStoredOnTheProfileNotTheProject) {
     ASSERT_EQ(controller_->assignControl("p1", "pad", PickTarget::continuousTarget(synth::ContinuousTargetKind::bpm)),
               AssignStatus::assigned);
@@ -193,7 +192,7 @@ TEST_F(MidiRemoteAssignTest, ForgetByIdRemovesAGlobalActionAssignmentToo) {
     EXPECT_FALSE(controller_->forgetAssignment("no-such-id"));
 }
 
-// FRO236: mirrors ForgetByIdRemovesAGlobalActionAssignmentToo above -- forgetAssignment() searches
+// Mirrors ForgetByIdRemovesAGlobalActionAssignmentToo above -- forgetAssignment() searches
 // by id regardless of target kind, so a continuous target needs no special case.
 TEST_F(MidiRemoteAssignTest, ForgetByIdRemovesAGlobalContinuousAssignmentToo) {
     ASSERT_EQ(controller_->assignControl("p1", "pad", PickTarget::continuousTarget(synth::ContinuousTargetKind::bpm)),

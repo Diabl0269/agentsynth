@@ -112,11 +112,11 @@ int countSoloedStrips(juce::AudioProcessorGraph& graph, juce::AudioProcessorGrap
     return count;
 }
 
-// FRO15 (docs/mixer/sends-and-buses.md): hand each strip the per-leg mask synth::computeSoloAudibleLegs
-// worked out, OPEN BEFORE CLOSE. Pass 1 only ever ORs bits in, pass 2 assigns: a render pass
-// landing between the two sees a strip momentarily MORE audible, never one wrongly silent. (A
-// single pass would let strip A close its send leg a block before strip B's bus opens, which is
-// audible as a dropout on every solo click.)
+// Hand each strip the per-leg mask synth::computeSoloAudibleLegs worked out, OPEN BEFORE CLOSE.
+// Pass 1 only ever ORs bits in, pass 2 assigns: a render pass landing between the two sees a
+// strip momentarily MORE audible, never one wrongly silent. (A single pass would let strip A
+// close its send leg a block before strip B's bus opens, which is audible as a dropout on every
+// solo click.) See docs/mixer/sends-and-buses.md.
 void publishSoloAudibleMasks(juce::AudioProcessorGraph& graph) {
     const auto masks = synth::computeSoloAudibleLegs(graph);
     for (int pass = 0; pass < 2; ++pass) {
@@ -153,8 +153,8 @@ void openEverySoloAudibleMask(juce::AudioProcessorGraph& graph) {
 // refreshSoloGate() itself. The audio thread reads the count once per render pass and publishes "any
 // soloed?" to TransportService::setMixerSoloActiveForBlock.
 //
-// WHAT is silenced while the gate is closed is decided PER LEG, not per strip (FRO15,
-// docs/mixer/sends-and-buses.md): refreshSoloGate() also runs synth::computeSoloAudibleLegs() and
+// WHAT is silenced while the gate is closed is decided PER LEG, not per strip
+// (docs/mixer/sends-and-buses.md): refreshSoloGate() also runs synth::computeSoloAudibleLegs() and
 // hands each strip its own audible-leg mask, open-before-close, so soloing a send bus keeps its
 // sources' SEND legs open while their dry main legs close, and soloing a source keeps the buses it
 // feeds audible. The count itself stays a plain global "is anything soloed?" — that is still what
@@ -166,7 +166,7 @@ void AudioEngine::refreshSoloGate() {
     soloedStripCount_.store(countSoloedStrips(mainProcessorGraph), std::memory_order_relaxed);
 }
 
-// Key-input connectivity (FRO317). Runs here, beside the solo recount, for the synchronous graph
+// Key-input connectivity. Runs here, beside the solo recount, for the synchronous graph
 // replacements that reach publishTimeline, and from changeListenerCallback for every other topology
 // change (a plain cable drag or unplug never reaches publishTimeline).
 void AudioEngine::refreshSidechainKeys() { synth::publishSidechainConnections(mainProcessorGraph); }
@@ -190,18 +190,19 @@ bool leftPatchedRightNot(juce::AudioProcessorGraph& graph, juce::AudioProcessorG
 }
 } // namespace
 
-// FRO324 (docs/architecture/audio-engine.md#normalling-fro324, docs/modules/fx-modules.md#stereo-io-dual-io-toggle):
-// render-time L->R normalling. Called from three places: here, beside the solo/sidechain recounts,
-// for every graph-replacing publish (undo/redo, preset load); from the plugin's setStateInformation
-// (same reasoning as refreshSoloGate() there); and from AudioEngine::changeListenerCallback on the
-// graph's own topology broadcast (AudioEngineDeviceLifecycle.cpp) -- a PLAIN canvas cable drag or
-// unplug reaches neither of the first two (MainComponent::reconcileTimelineBindingsOnly()
-// deliberately never publishes), so without that third call site a freshly-patched Right would sit
-// behind a stale "normalled" flag and renderNextBlock would overwrite it with a copy of Left. Two
-// independent scans, neither of which ever adds, removes or alters a graph edge:
+// Render-time L->R normalling (see docs/architecture/audio-engine.md#normalling-fro324 and
+// docs/modules/fx-modules.md#stereo-io-dual-io-toggle). Called from three places: here, beside the
+// solo/sidechain recounts, for every graph-replacing publish (undo/redo, preset load); from the
+// plugin's setStateInformation (same reasoning as refreshSoloGate() there); and from
+// AudioEngine::changeListenerCallback on the graph's own topology broadcast
+// (AudioEngineDeviceLifecycle.cpp) -- a PLAIN canvas cable drag or unplug reaches neither of the
+// first two (MainComponent::reconcileTimelineBindingsOnly() deliberately never publishes), so
+// without that third call site a freshly-patched Right would sit behind a stale "normalled" flag
+// and renderNextBlock would overwrite it with a copy of Left. Two independent scans, neither of
+// which ever adds, removes or alters a graph edge:
 //
 //   * Audio Output: normalled iff the graph declares >= 2 output channels (a multichannel output
-//     past the first pair never normals -- FRO323's policy) AND the bare AudioGraphIOProcessor
+//     past the first pair never normals) AND the bare AudioGraphIOProcessor
 //     sink has an incoming connection on raw ch0 and none on raw ch1.
 //   * Every ModuleBase with a genuine stereo AUDIO input pair (hasStereoAudioInputPair()) that is
 //     currently split (isDualIO()): normalled iff its own raw ch0 is patched and its

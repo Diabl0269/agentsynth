@@ -32,9 +32,9 @@ MidiLearnController::MidiLearnController(AudioEngine& engine, GraphEditor& graph
     profiles_ = profileStore_.loadAll().profiles;
     remoteEngine_.onLearned = [this](const LearnResult& result) { handleLearned(result); };
 
-    // FRO141 (docs/control/midi-remote.md#focus-bank): starts immediately and runs for this
-    // object's whole life -- see focusBankWatcher_'s own comment on why it is a separate instance
-    // from watcher_.
+    // Starts immediately and runs for this object's whole life -- see focusBankWatcher_'s own
+    // comment on why it is a separate instance from watcher_ (see
+    // docs/control/midi-remote.md#focus-bank).
     focusBankWatcher_.onTick = [this] { pollFocusBankSelection(); };
     focusBankWatcher_.start();
 }
@@ -45,19 +45,19 @@ bool MidiLearnController::isArmed() const noexcept { return remoteEngine_.isLear
 
 // A device opened after startup (or a hosted build's host-MIDI source) must be visible to the
 // engine before a learn can hear it -- wireMidiRemoteEngine() primes Hosted's fixed hostSourceKey()
-// source once, at launch (FRO260: Standalone's real devices aren't open yet at that point, so
+// source once, at launch (Standalone's real devices aren't open yet at that point, so
 // openMidiRemoteDevices() -- called once the engine is up -- primes Standalone's instead, calling
-// this same function). Every arm() below still calls this defensively before a fresh learn; FRO262
-// gave it a second, now-primary caller -- AudioEngine::onMidiDevicesChanged, wired in
-// wireMidiRemoteEngine() -- so a device opened via a live Settings tick reaches
-// RemoteEngine::setSources() immediately, not just the next time the user arms a Learn.
+// this same function). Every arm() below still calls this defensively before a fresh learn; the
+// primary caller is AudioEngine::onMidiDevicesChanged, wired in wireMidiRemoteEngine() -- so a
+// device opened via a live Settings tick reaches RemoteEngine::setSources() immediately, not just
+// the next time the user arms a Learn.
 void MidiLearnController::refreshSources() {
     auto sources = engine_.getOpenMidiInputIdentifiers();
     if (engine_.isHosted())
         sources.push_back(hostSourceKey());
     remoteEngine_.setSources(sources);
-    // FRO339: a device opening/closing is exactly when a profile's declared handshake needs
-    // (re)sending or retracting too -- see MidiLearnControllerHandshake.cpp.
+    // A device opening/closing is exactly when a profile's declared handshake needs (re)sending or
+    // retracting too -- see MidiLearnControllerHandshake.cpp.
     reconcileHandshakes();
 }
 
@@ -101,11 +101,12 @@ void MidiLearnController::arm(juce::AudioProcessorGraph::NodeID nodeId, const ju
         if (ranged != nullptr) {
             buttonLike = dynamic_cast<juce::AudioParameterBool*>(ranged) != nullptr;
         } else {
-            // FRO137: paramId isn't one of this node's own RangedAudioParameters -- it may be a
-            // hosted plugin-card knob (docs/control/plugin-card-layout.md#interaction-with-controllers-and-automation).
-            // Resolve it the same way an automation lane would, and capture the same
-            // paramIndexHint an automation lane captures at creation -- ONLY for a hosted
-            // parameter, so a built-in assignment's JSON never gains this field.
+            // ParamId isn't one of this node's own RangedAudioParameters -- it may be a hosted
+            // plugin-card knob
+            // (docs/control/plugin-card-layout.md#interaction-with-controllers-and-automation).
+            // Resolve it the same way an automation lane would, and capture the same paramIndexHint
+            // an automation lane captures at creation -- ONLY for a hosted parameter, so a built-in
+            // assignment's JSON never gains this field.
             const auto resolution = synth::resolveLaneParameter(node->getProcessor(), paramId, -1);
             if (auto* live = resolution.liveParameter()) {
                 buttonLike = live->isBoolean() || live->getNumSteps() == 2;
@@ -141,10 +142,11 @@ void MidiLearnController::arm(juce::AudioProcessorGraph::NodeID nodeId, const ju
     watcher_.start();
 }
 
-// FRO133 (docs/control/midi-remote.md#action-targets): the same arm/watch/cancel machinery as
-// arm() above, minus the node/uuid resolution -- an action target has no graph node. Only one
-// learn is ever armed at a time regardless of kind (docs/control/midi-remote-ui.md#the-learn-interaction),
-// so this replaces any pending parameter learn exactly as arm() replaces a pending action learn.
+// The same arm/watch/cancel machinery as arm() above, minus the node/uuid resolution -- an action
+// target has no graph node. Only one learn is ever armed at a time regardless of kind
+// (docs/control/midi-remote-ui.md#the-learn-interaction), so this replaces any pending parameter
+// learn exactly as arm() replaces a pending action learn (see
+// docs/control/midi-remote.md#action-targets).
 void MidiLearnController::armAction(const juce::String& actionId) {
     endArmedUi();
 
@@ -170,10 +172,10 @@ void MidiLearnController::armAction(const juce::String& actionId) {
     watcher_.start();
 }
 
-// FRO253: mirrors arm() above -- endArmedUi() first (armLearn() would replace any pending learn
-// regardless, but its UI must follow), then arm the engine and the mixer column's own breathing
-// outline. Unlike armAction(), a node command has no ShortcutManager id and no transport-bar
-// outline to arm -- it always shows on the mixer column via MixerPanelComponent::setMidiLearnArmedSolo.
+// Mirrors arm() above -- endArmedUi() first (armLearn() would replace any pending learn regardless,
+// but its UI must follow), then arm the engine and the mixer column's own breathing outline. Unlike
+// armAction(), a node command has no ShortcutManager id and no transport-bar outline to arm -- it
+// always shows on the mixer column via MixerPanelComponent::setMidiLearnArmedSolo.
 void MidiLearnController::armNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) {
     const juce::String uuid = ensureNodeUuid(nodeId);
     if (uuid.isEmpty())
@@ -217,7 +219,7 @@ void MidiLearnController::endArmedUi() {
     graphEditor_.clearMidiLearnArmed();
     if (mixerPanel_ != nullptr) {
         mixerPanel_->clearMidiLearnArmed();
-        mixerPanel_->clearMidiLearnArmedSolo(); // FRO253; idempotent when nothing is armed there
+        mixerPanel_->clearMidiLearnArmedSolo(); // Idempotent when nothing is armed there
     }
     if (transportBar_ != nullptr)
         transportBar_->clearMidiLearnArmedAction();
@@ -270,7 +272,7 @@ void MidiLearnController::handleLearned(const LearnResult& result) {
 
     // "MIDI Learn again..." on an already-mapped target replaces its assignment, never duplicates
     // it -- for a parameter target (nodeUuid+paramId) OR a node command target (nodeUuid+command),
-    // the only two kinds MidiRemoteProjectDoc::assignments ever holds (FRO253: it is never action).
+    // the only two kinds MidiRemoteProjectDoc::assignments ever holds (it is never action).
     auto& assignments = doc_.assignments;
     const auto& newTarget = outcome.assignment.target;
     assignments.erase(std::remove_if(assignments.begin(), assignments.end(),
@@ -299,13 +301,13 @@ void MidiLearnController::handleLearned(const LearnResult& result) {
     statusBar_.showMessage("Mapped to " + outcome.assignment.specControlName + " on " + deviceName);
 }
 
-// FRO133: an action assignment is a GLOBAL setting stored on the profile itself
-// (ControllerProfile::actions, docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project),
-// never the project doc, so -- like every other profile edit -- it is a controller-history step,
-// not an AppUndoManager one (docs/control/midi-remote.md#undo). Unlike
-// the parameter path above, the profile is saved UNCONDITIONALLY here: even an existing
-// control's re-learn changes the profile (a new/replaced action assignment in its `actions`
-// list), not just a brand-new profile/control.
+// An action assignment is a GLOBAL setting stored on the profile itself
+// (ControllerProfile::actions,
+// docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project), never the
+// project doc, so -- like every other profile edit -- it is a controller-history step, not an
+// AppUndoManager one (docs/control/midi-remote.md#undo). Unlike the parameter path above, the
+// profile is saved UNCONDITIONALLY here: even an existing control's re-learn changes the profile (a
+// new/replaced action assignment in its `actions` list), not just a brand-new profile/control.
 void MidiLearnController::handleLearnedAction(const LearnResult& result, LearnBindOutcome& outcome) {
     auto& actions = outcome.profile.actions;
     actions.erase(std::remove_if(actions.begin(), actions.end(),
@@ -375,10 +377,9 @@ MidiLearnController::queryMappings(juce::AudioProcessorGraph::NodeID nodeId) con
     return result;
 }
 
-// FRO133: mirrors forget() above but mutates a profile's `actions` list rather than doc_ -- an
-// action assignment is global, so this searches every profile (in practice at most one carries
-// any given actionId, since armAction() replaces rather than duplicates) rather than resolving a
-// single node.
+// Mirrors forget() above but mutates a profile's `actions` list rather than doc_ -- an action
+// assignment is global, so this searches every profile (in practice at most one carries any given
+// actionId, since armAction() replaces rather than duplicates) rather than resolving a single node.
 void MidiLearnController::forgetAction(const juce::String& actionId) {
     bool removedAny = false;
     for (auto& profile : profiles_) {
@@ -419,8 +420,8 @@ std::map<juce::String, juce::String> MidiLearnController::queryActionMappings() 
     return result;
 }
 
-// FRO253: mirrors forget() above but matches on (nodeUuid, command) rather than (nodeUuid,
-// paramId) -- a node command target has no paramId.
+// Mirrors forget() above but matches on (nodeUuid, command) rather than (nodeUuid, paramId) -- a
+// node command target has no paramId.
 void MidiLearnController::forgetNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) {
     const juce::String uuid = resolveNodeUuid(nodeId);
     if (uuid.isEmpty())
@@ -444,7 +445,7 @@ void MidiLearnController::forgetNodeCommand(juce::AudioProcessorGraph::NodeID no
     statusBar_.showMessage("MIDI mapping removed");
 }
 
-// FRO253: mirrors queryMappings() above, keyed by NodeCommandKind rather than a paramId string.
+// Mirrors queryMappings() above, keyed by NodeCommandKind rather than a paramId string.
 std::map<NodeCommandKind, juce::String>
 MidiLearnController::queryNodeCommandMappings(juce::AudioProcessorGraph::NodeID nodeId) const {
     std::map<NodeCommandKind, juce::String> result;
@@ -544,7 +545,7 @@ bool MidiLearnController::updateControl(const juce::String& profileId, const Con
     controlIt->kind = edited.kind;
     controlIt->encoding = edited.encoding;
     controlIt->buttonMode = edited.buttonMode;
-    controlIt->focusBank = edited.focusBank; // FRO141: the Inspector's "Follow selection" toggle
+    controlIt->focusBank = edited.focusBank; // The Inspector's "Follow selection" toggle
 
     const auto syncAssignment = [&](Assignment& a) {
         a.specControlName = controlIt->name;
@@ -601,15 +602,15 @@ bool MidiLearnController::deleteProfile(const juce::String& profileId) {
 // two histories (docs/control/midi-remote.md#undo): the profile half is one controller-history
 // step, the project half one AppUndoManager step (mirroring forget()'s before/after-JSON snapshot),
 // so restoring both needs an undo in the panel AND one on the canvas. A single-control delete is
-// just deleteControlsWithLabel() for one id -- FRO270's group delete (deleteControls() below) is
-// the same body for many, so there is exactly one place this two-history split is implemented.
+// just deleteControlsWithLabel() for one id -- the group delete (deleteControls() below) is the
+// same body for many, so there is exactly one place this two-history split is implemented.
 bool MidiLearnController::deleteControl(const juce::String& profileId, const juce::String& controlId) {
     return deleteControlsWithLabel(profileId, {controlId}, "Delete control");
 }
 
-// FRO270: the surface's group delete. `controlIds` not found on the profile are silently ignored
-// (a selection that survived a live rebuild can still name a control removed meanwhile); returns
-// false only if NONE of them were found.
+// The surface's group delete. `controlIds` not found on the profile are silently ignored (a
+// selection that survived a live rebuild can still name a control removed meanwhile); returns false
+// only if NONE of them were found.
 bool MidiLearnController::deleteControls(const juce::String& profileId, const std::vector<juce::String>& controlIds) {
     return deleteControlsWithLabel(profileId, controlIds,
                                    controlIds.size() == 1u ? "Delete control" : "Delete controls");
@@ -674,9 +675,9 @@ bool MidiLearnController::deleteControlsWithLabel(const juce::String& profileId,
 // before/after-JSON shape as forget(). Rejects an action target (a profile edit, not this method's
 // job) and a nodeCommand target (routes through armNodeCommand/forgetNodeCommand instead).
 bool MidiLearnController::updateAssignment(const Assignment& updated) {
-    // FRO236 (docs/control/midi-remote.md#continuous-targets): a continuous target is GLOBAL, like
-    // an action, so its takeover/range edit is a profile edit -- a controller-history step,
-    // mirroring updateControl(), rather than this method's project-scope undo step.
+    // A continuous target is GLOBAL, like an action, so its takeover/range edit is a profile edit
+    // -- a controller-history step, mirroring updateControl(), rather than this method's
+    // project-scope undo step (see docs/control/midi-remote.md#continuous-targets).
     if (updated.target.isContinuous()) {
         for (auto& profile : profiles_) {
             auto it = std::find_if(profile.actions.begin(), profile.actions.end(),
@@ -711,8 +712,8 @@ bool MidiLearnController::updateAssignment(const Assignment& updated) {
     return true;
 }
 
-// FRO263: onChanged fires here, and at the end of every profile-only mutation (updateProfile,
-// deleteProfile, deleteControl, forgetAction, handleLearnedAction, and FRO273's undo/redo) that calls
+// OnChanged fires here, and at the end of every profile-only mutation (updateProfile,
+// deleteProfile, deleteControl, forgetAction, handleLearnedAction, and undo/redo) that calls
 // remoteEngine_.setProfiles() WITHOUT going through this function -- those never touch
 // doc_.assignments, so they'd otherwise leave the panel stale for a rename/retype/delete/action-
 // Learn/Forget the same way a project assignment change would. Wired once, in
@@ -722,13 +723,13 @@ bool MidiLearnController::updateAssignment(const Assignment& updated) {
 // rebuild would free the very ControllerSurfaceCell whose mouseUp is still executing.
 void MidiLearnController::publishAssignments() {
     remoteEngine_.setAssignments(doc_.assignments);
-    // FRO253: setAssignments() rebuilds the snapshot with graph == nullptr by design, so it can
-    // only carry forward each assignment id's PREVIOUS resolution -- a brand-new assignment (a
-    // just-completed learn, or its undo/redo) has none, so its slot stays unresolved until some
-    // unrelated graph change happens to reach MainComponent's reconcile funnel. Reconcile against
-    // the live graph right here so a fresh learn's target works immediately. MainComponent's own
-    // callers (project load / autosave restore) already reconcile again right after this call --
-    // that second pass is a cheap no-op re-resolve against the same graph, not a correctness fix.
+    // SetAssignments() rebuilds the snapshot with graph == nullptr by design, so it can only carry
+    // forward each assignment id's PREVIOUS resolution -- a brand-new assignment (a just-completed
+    // learn, or its undo/redo) has none, so its slot stays unresolved until some unrelated graph
+    // change happens to reach MainComponent's reconcile funnel. Reconcile against the live graph
+    // right here so a fresh learn's target works immediately. MainComponent's own callers (project
+    // load / autosave restore) already reconcile again right after this call -- that second pass is
+    // a cheap no-op re-resolve against the same graph, not a correctness fix.
     remoteEngine_.reconcile(engine_.getGraph());
     if (onChanged)
         onChanged();

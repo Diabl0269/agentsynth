@@ -43,7 +43,7 @@ void AudioEngine::initialise() {
     // supplies the real sample rate/channel count later, since there is no device to ask.
     if (!isHosted()) {
         if (audioDeviceDisabled_) {
-            // FRO29 automation launch: skip initialiseDevices() entirely, so no audio device,
+            // Automation launch: skip initialiseDevices() entirely, so no audio device,
             // no MIDI input, and no mic-permission prompt is ever touched. Take the exact same
             // no-device placeholder the "no usable audio device" branch below falls back to, and
             // reset the MIDI collector the same way initialiseDevices() would for a device-less
@@ -89,7 +89,7 @@ void AudioEngine::initialise() {
 // initialise() call sites (the runtime-permission callback and the direct one) would otherwise have
 // to carry the argument, and because the engine keeps the state for any later re-initialise.
 //
-// FRO27: repaired with synth::stripUnusedInputDevice() before it is stored, not just on the way
+// Repaired with synth::stripUnusedInputDevice() before it is stored, not just on the way
 // out (changeListenerCallback below) -- a state saved by an older build of this app, before this
 // fix existed, can still be sitting in the user's settings file naming an input device it never
 // actually enabled. Repairing it here means the very next launch that loads it is already safe,
@@ -100,7 +100,7 @@ void AudioEngine::setSavedDeviceState(std::unique_ptr<juce::XmlElement> state) {
     savedDeviceState_ = std::move(state);
 }
 
-// FRO27: false with no saved state at all -- there is nothing to open input on. See
+// False with no saved state at all -- there is nothing to open input on. See
 // synth::deviceStateEnablesInput(); this is the accessor MainComponent::initialiseAudioEngine
 // gates the mic-permission request on, so a launch that only ever restores an output device never
 // asks for microphone access.
@@ -108,7 +108,7 @@ bool AudioEngine::savedDeviceStateEnablesInput() const {
     return savedDeviceState_ != nullptr && synth::deviceStateEnablesInput(*savedDeviceState_);
 }
 
-// FRO29: an automation launch (--no-audio-device / AGENTSYNTH_NO_AUDIO_DEVICE) must never trigger
+// An automation launch (--no-audio-device / AGENTSYNTH_NO_AUDIO_DEVICE) must never trigger
 // the macOS mic-permission TCC prompt or fight an agent for the audio hardware, so this has to stop
 // initialise() from calling initialiseDevices() at all -- opening a device and then immediately
 // closing it would still have shown the prompt. Message-thread only, and must be called before
@@ -160,8 +160,8 @@ void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
 
 void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
     // The graph's own topology broadcast, in BOTH host modes: republish which Compressor/Gate key
-    // inputs have a cable, so plugging or unplugging a key switches the detector (FRO317). FRO324
-    // rides the same broadcast for the same reason: a plain canvas cable drag/unplug on Audio
+    // inputs have a cable, so plugging or unplugging a key switches the detector. Right-borrows-Left
+    // normalling rides the same broadcast for the same reason: a plain canvas cable drag/unplug on Audio
     // Output or a Dual I/O module's input never reaches publishTimeline() (MainComponent's own
     // reconcileTimelineBindingsOnly() deliberately does not publish -- see
     // MainComponentTimeline.cpp), so refreshNormalling() would otherwise see a stale flag and
@@ -180,7 +180,7 @@ void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
         return;
 
     if (onDeviceStateChanged) {
-        // FRO27: createStateXml() itself can come back naming an input device the user never
+        // createStateXml() itself can come back naming an input device the user never
         // actually enabled (JUCE's updateXml() always writes audioInputDeviceName, and its own
         // default-device fill-in can put a real mic there even for an output-only change) -- strip
         // it here, at the source, so nothing downstream (the persisted settings key, a future
@@ -191,7 +191,7 @@ void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
         onDeviceStateChanged(std::move(state));
     }
 
-    // FRO262: this broadcast is also JUCE's only signal that the Audio tab's MIDI Input list
+    // This broadcast is also JUCE's only signal that the Audio tab's MIDI Input list
     // changed -- a device ticked (or one that reappears after a reconnect) after
     // initialiseDevices()'s one-shot launch loop ran must still reach MIDI Learn/MIDI Remote and
     // general MIDI input. See reconcileMidiInputs() (AudioEngineMidi.cpp) for what "reconcile"
@@ -201,7 +201,7 @@ void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
 }
 
 void AudioEngine::shutdown() {
-    // FRO87: fire first, before anything below is touched -- this is what makes shutdown() safe
+    // Fire first, before anything below is touched -- this is what makes shutdown() safe
     // to call directly from ANY caller (a test, a future/hosted code path) without the caller
     // having to separately remember to detach UI-owned parameter attachments first. See the
     // member's own doc comment in AudioEngine.h.

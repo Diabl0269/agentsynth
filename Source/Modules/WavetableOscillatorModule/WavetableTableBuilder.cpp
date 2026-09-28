@@ -1,4 +1,4 @@
-// Out-of-line bodies for wavetable::TableBuilder (FRO73). Split out of
+// Out-of-line bodies for wavetable::TableBuilder. Split out of
 // WavetableOscillatorModule.h, where these ran inline as a nested class; moved here verbatim
 // (only the class qualifier was added and `inline` dropped) as part of getting that header
 // under the file-size cap. No behavior change.

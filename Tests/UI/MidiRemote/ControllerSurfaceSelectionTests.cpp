@@ -1,4 +1,4 @@
-// ControllerSurfaceSelectionTests.cpp -- FRO270 (docs/control/midi-remote-ui.md#surface-centre):
+// ControllerSurfaceSelectionTests.cpp (docs/control/midi-remote-ui.md#surface-centre):
 // multi-select on the MIDI Remote surface -- plain/shift/cmd click, a marquee drag over empty grid
 // space, Esc/empty-click-to-clear, and selection surviving a live rebuild -- driven through the
 // real mouseDown/mouseDrag/mouseUp path (Source/UI/CLAUDE.md's "test the real mouse path"
@@ -73,12 +73,12 @@ TEST(ControllerSurfaceSelectionTest, PlainClickOnAMultiSelectedCellDoesNotCollap
     click(*findCell(surface, "knob1"));
     EXPECT_EQ(surface.getSelectedControlIds().size(), 2u);
 
-    // A plain click on an UNselected cell still replaces the selection as before FRO270.
+    // A plain click on an UNselected cell still replaces the selection.
     click(*findCell(surface, "pad1"));
     EXPECT_EQ(surface.getSelectedControlIds(), std::vector<juce::String>{"pad1"});
 }
 
-// FRO331: a marquee now requires Shift (a plain drag on empty space pans instead -- see
+// A marquee now requires Shift (a plain drag on empty space pans instead -- see
 // ControllerSurfaceViewTests.cpp) -- matching the module canvas's own Shift-starts-marquee
 // convention (GraphEditorCanvas.cpp).
 TEST(ControllerSurfaceSelectionTest, MarqueeOverEmptySpaceSelectsIntersectingCells) {
@@ -106,7 +106,7 @@ TEST(ControllerSurfaceSelectionTest, MarqueeOverEmptySpaceSelectsIntersectingCel
     EXPECT_EQ(selected, (std::vector<juce::String>{"button1", "fader1", "knob1", "pad1"}));
 }
 
-// FRO331: plain Shift+drag REPLACES the selection -- only Cmd+Shift+drag adds to it (below). A
+// Plain Shift+drag REPLACES the selection -- only Cmd+Shift+drag adds to it (below). A
 // pre-existing selection outside the marquee's rectangle is dropped, same as a plain click would.
 TEST(ControllerSurfaceSelectionTest, MarqueeWithPlainShiftReplacesTheSelection) {
     ControllerSurfaceComponent surface;
@@ -184,7 +184,7 @@ TEST(ControllerSurfaceSelectionTest, SelectionSurvivesALiveRefreshRebuildDroppin
     std::sort(selected.begin(), selected.end());
     EXPECT_EQ(selected, (std::vector<juce::String>{"fader1", "knob1"}));
 
-    // A DIFFERENT profile clears the selection entirely, matching the pre-FRO270 behaviour.
+    // A DIFFERENT profile clears the selection entirely, matching the legacy behaviour.
     surface.setControls("profileB", fourControlModel());
     EXPECT_TRUE(surface.getSelectedControlIds().empty());
 }

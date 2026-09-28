@@ -2,7 +2,7 @@
 // (updateLayout), the macro-port docked widget's size, the content-top-Y/input-column helpers,
 // and the default body-content layout shared by most module cards. ModuleComponent is declared
 // in ModuleComponent.h; the rest of its implementation lives in the sibling ModuleComponent*.cpp
-// units next to this one (FRO65 split of the former single ModuleComponent.cpp).
+// units next to this one.
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
@@ -44,12 +44,12 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
-    // FRO112: ADSR no longer measures itself — its five remaining knobs (attack/hold/decay/
-    // sustain/release; the three curve params moved onto the envelope graph's bend handles) flow
-    // through the generic 3-per-row knob grid below exactly like every other module's, wrapping
-    // into two rows (3+2) at the shared 280px width. The envelope graph section and its BPM|MS
-    // row are generic-layout blocks too (see layoutDefaultContent, mirroring the scope/frequency-
-    // response toggle+component pattern) rather than a bespoke branch here.
+    // ADSR does not measure itself — its five knobs (attack/hold/decay/sustain/release; the three
+    // curve params live on the envelope graph's bend handles) flow through the generic 3-per-row
+    // knob grid below exactly like every other module's, wrapping into two rows (3+2) at the shared
+    // 280px width. The envelope graph section and its BPM|MS row are generic-layout blocks too (see
+    // layoutDefaultContent, mirroring the scope/frequency-response toggle+component pattern) rather
+    // than a bespoke branch here.
 
     // Parametric EQ is double-width with a bespoke band grid, so it measures itself.
     if (getType(module) == ModuleType::ParametricEQ) {
@@ -58,7 +58,7 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
-    // The Wavetable card carries 15 knobs, 7 combos and 16 input jacks after issue #180, so it
+    // The Wavetable card carries 15 knobs, 7 combos and 16 input jacks, so it
     // goes double-width and uses the default body layout's wide-card branches (6 knob columns,
     // paired combos). At single width the same content would run past 1150px tall.
     const int cardWidth =
@@ -73,11 +73,10 @@ void ModuleComponent::updateLayout() {
     resized();
 }
 
-// Compact docked widget for the four macro-port types (P8-15 founder-review fix F2,
-// docs/macros/ports.md#how-a-port-is-drawn): a small, fixed-shape row — no header chrome, no body, no 100px
-// floor a real module card carries. Sized purely from the module's own visible jack count, which
-// for a Mono/Poly-N port (or a MIDI port, no shape at all) is one row on each side (getVisible*
-// PortCount()==1) and for Stereo is two (==2) — MacroInletModule/MacroOutletModule's
+// Compact docked widget for the four macro-port types (docs/macros/ports.md#how-a-port-is-drawn): a small, fixed-shape
+// row — no header chrome, no body, no 100px floor a real module card carries. Sized purely from the module's own
+// visible jack count, which for a Mono/Poly-N port (or a MIDI port, no shape at all) is one row on each side
+// (getVisible* PortCount()==1) and for Stereo is two (==2) — MacroInletModule/MacroOutletModule's
 // declare-max/vary-visible mechanism (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's
 // implementation note) already keeps that in sync with the port's shape, so this needs no shape-aware branching of its
 // own.
@@ -105,7 +104,7 @@ int ModuleComponent::getContentTopY() {
         numOuts = mb->getVisibleOutputPortCount();
     }
 
-    // FRO312: clears the last DRAWN input jack, not the last VISIBLE one -- a knob-bound jack (see
+    // Clears the last DRAWN input jack, not the last VISIBLE one -- a knob-bound jack (see
     // isInputJackKnobBound) draws no gutter row at all, so a card whose only inputs are knob-bound
     // reserves no dead space here for them. Ask for the real jack positions instead of
     // recomputing them: a port label box spans centre ± 10, so clear the lowest jack by a little
@@ -123,7 +122,7 @@ int ModuleComponent::getContentTopY() {
 int ModuleComponent::getInputPortColumns() const {
     // Only the Wavetable card needs this today: 16 CV jacks in one column would set a ~390px
     // floor on the card height before any control is placed. Keyed off the DRAWN jack count
-    // (FRO312: a knob-bound jack draws no gutter row, so it must not count towards this threshold)
+    // (a knob-bound jack draws no gutter row, so it must not count towards this threshold)
     // rather than the type so a future high-jack module gets the same treatment for free.
     if (getWidth() >= synth::LayoutUtil::kDoubleWidth)
         if ((int)drawnInputJackIndices().size() > 10)
@@ -285,7 +284,7 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
     // ModuleComponentEnvelopeCard.cpp. A no-op (returns `y` unchanged) for every other module.
     y = layoutEnvelopeGraphSection(y, contentX, contentW, apply);
 
-    // LFO custom-waveform section (FRO114): the Grid/Shapes/Tools toolbar, then the curve editor
+    // LFO custom-waveform section: the Grid/Shapes/Tools toolbar, then the curve editor
     // itself while shape == Custom -- see ModuleComponentLfoCard.cpp. A no-op for every other
     // module (and for an LFO not currently on the Custom shape).
     y = layoutLfoCustomWaveSection(y, contentX, contentW, apply);

@@ -2,9 +2,9 @@
 //
 // Estimated module footprint (estimateModuleSize, used before a component exists), placement
 // resolution (resolvePlacement and friends), hosted-plugin/module drop creation, and drop-landing
-// animation — the drag-and-drop helpers that stay on GraphEditor (FRO77 PR3 design: not
+// animation — the drag-and-drop helpers that stay on GraphEditor (not
 // drag-exclusive, or SafePointer<GraphEditor>-based and therefore tied to this Component's own
-// identity). FRO254: the drag-preview API's plain one-line forwarders onto
+// identity). The drag-preview API's plain one-line forwarders onto
 // GraphDragDropController (beginDragPreview/updateDragPreview/endDragPreview/
 // isDragPreviewActive/getDragPreviewGhost/getAlignmentGuides/getDragPreviewSelfId/
 // buildDragPreviewState) are gone — every call site now reaches it directly, either through
@@ -37,41 +37,41 @@
 // Estimated (w, h) footprint for a module type name, used for the library drag ghost before a
 // real component exists. Public so a test can hold it to the real component sizes — see
 // ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents.
-// Split out of GraphEditor::estimateModuleSize (FRO312, see its own comment below for why) purely
-// so that method can carry the FRO312 explanation beside its one-line body instead of above this
+// Split out of GraphEditor::estimateModuleSize (see its own comment below for why) purely
+// so that method can carry the explanation beside its one-line body instead of above this
 // ~30-branch table.
 static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName) {
     if (typeName == "Oscillator")
-        return {280, 433}; // +96 in #219: an Audio R output jack row and the Pan knob row
+        return {280, 433}; // +96: an Audio R output jack row and the Pan knob row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Filter")
-        // +1 knob row: the Level knob took it from 3 sliders to 4 (issue #122).
-        // +20 in #219: the Audio L/R input pair adds a jack row to the port gutter.
+        // +1 knob row: the Level knob took it from 3 sliders to 4.
+        // +20: the Audio L/R input pair adds a jack row to the port gutter.
         // −128: frequency-response chart is opt-in via "Show Response" (was always reserved).
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
         return {280, 383};
     if (typeName == "LFO")
-        // FRO281: +40 for the Rate/Level/Glide CV jacks (3 input jacks, one row shared per pair
+        // +40 for the Rate/Level/Glide CV jacks (3 input jacks, one row shared per pair
         // with the mono CV output already there — see ModuleComponentTest.
         // EstimatedModuleSizesMatchTheRealComponents, which pins this to the real component).
         return {280, 361}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "VCA")
-        return {280, 233}; // +20 in #219: the Audio L/R input pair adds a jack row
+        return {280, 233}; // +20: the Audio L/R input pair adds a jack row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
-        // FRO112: five rotary knobs (attack/hold/decay/sustain/release) now flow through the
+        // Five rotary knobs (attack/hold/decay/sustain/release) now flow through the
         // generic 3-per-row knob grid (3+2, same shape as every other module), the three curve
         // params moved onto the collapsed-by-default envelope graph's bend handles, and a
         // collapsed graph adds one row (its disclosure toggle + BPM|MS). Below 2 jacks + Poly
         // toggle + threshold control + knob grid (2 rows) + disclosure row, collapsed.
-        // FRO281: +100 for the five Attack/Hold/Decay/Sustain/Release CV jacks appended after
+        // +100 for the five Attack/Hold/Decay/Sustain/Release CV jacks appended after
         // Threshold (see ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents).
-        // FRO312: -100 -- those five jacks all resolve to a bound generic rotary knob now, so
+        // -100 -- those five jacks all resolve to a bound generic rotary knob now, so
         // each draws no gutter row at all (isInputJackKnobBound). Threshold keeps its jack (it has
         // no generic slider, see the comment on estimateModuleSize below), so it's still 1 row.
         // (No Attack/Decay/Release Curve CV jacks here -- those three curve amounts have no knob
         // to land on, so adding a jack for them would just be a knob-less gutter jack, the exact
-        // shape FRO312 exists to remove; see docs/modules/modulation.md.)
+        // shape knob-bound jacks exist to remove; see docs/modules/modulation.md.)
         return {280, 389};
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
         // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
@@ -83,7 +83,7 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         typeName.containsIgnoreCase("MIDI Keyboard"))
         return {synth::LayoutUtil::kDoubleWidth, 150};
     if (typeName == "Poly MIDI" || typeName == "PolyMidi")
-        // +48 (one combo row) from the issue #198 Voice Steal selector, then +26 (one toggle row)
+        // +48 (one combo row) for the Voice Steal selector, then +26 (one toggle row)
         // for the Vel → Gate switch. +8: header-to-first-port gap grew 1px -> 9px (base 30->38).
         return {280, 185};
     if (typeName == "Distortion")
@@ -129,7 +129,7 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
     if (typeName == "Sampler")
         return {280, 545}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Wavetable")
-        // Double-width since issue #180. The 16 CV jacks run in two left-hand columns and the 23
+        // Double-width. The 16 CV jacks run in two left-hand columns and the 23
         // controls are paged behind a tab strip (only Position and Warp stay pinned), so neither
         // the gutter nor the control count sets the height on its own.
         return {synth::LayoutUtil::kDoubleWidth, 565};
@@ -148,13 +148,13 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().
         return {synth::LayoutUtil::kDoubleWidth, 592};
     if (typeName == "Compressor")
-        return {280, 257}; // Audio + 5 CV + Key = 7 port rows set it (+20 for the FRO317 Key jack)
+        return {280, 257}; // Audio + 5 CV + Key = 7 port rows set it (+20 for the Key jack)
     if (typeName == "Limiter")
         return {280, 161}; // +60: a CV jack per parameter (Audio + 3 CV = 4 port rows) sets it
     if (typeName == "Gate")
         // 6 float sliders (Threshold/Attack/Hold/Release/Range/Level): same row count as
         // Compressor's 5 (3+3 wraps to the same number of rows as 6 in a 3-per-row grid).
-        // Audio + 5 CV + Key = 7 port rows set it, as for Compressor (+20 for the FRO317 Key jack).
+        // Audio + 5 CV + Key = 7 port rows set it, as for Compressor (+20 for the Key jack).
         return {280, 257};
     if (typeName == "Voice Mixer")
         return {280, 301}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
@@ -180,13 +180,13 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
         return {280, 131};
     if (typeName == "Channel Strip")
-        // gain + pan + the four send levels (FRO15: sendNLevel exists unconditionally, so the card
-        // always shows all four — +76 over the pre-send 181) + the four send pans (FRO294:
-        // sendNPan likewise exists unconditionally — +152 for four more generic-knob-grid rows)
-        // below up to 2 input jacks a side (Stereo shape, what MainComponent::addAudioTrack always
-        // builds — width doesn't move with shape, only the Mono/Stereo jack-row count would, and
-        // this card's height already covers both). The send OUTPUT jacks appear only for active
-        // slots and sit in the right-hand gutter, which the control rows already outgrow.
+        // gain + pan + the four send levels + the four send pans, below up to 2 input jacks a side
+        // (Stereo shape, what MainComponent::addAudioTrack always builds — width doesn't move with
+        // shape, only the Mono/Stereo jack-row count would, and this card's height already covers
+        // both). Height: 181 for gain + pan alone, +76 for the send levels (sendNLevel exists
+        // unconditionally, so the card always shows all four), +152 for the send pans (sendNPan
+        // likewise — four more generic-knob-grid rows) = 409. The send OUTPUT jacks appear only for
+        // active slots and sit in the right-hand gutter, which the control rows already outgrow.
         // Internal-only like Track Audio/Rec Tap: library-less, no replace-menu entry. Measured
         // against the real card by ChannelFlowTest.ChannelStripAndMasterHaveAPinnedSizeEstimate.
         return {280, 409};
@@ -203,15 +203,16 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         // scan list and load UX ship. Measured against the real card by
         // HostedPluginTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        // +4: FRO128 gave the button row a 6px gap below it (was 2).
+        // +4: the button row has a 6px gap below it.
         return {280, 135};
     if (typeName == "Macro In" || typeName == "Macro Out")
-        // Founder-review fix F2 (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed /
-        // docs/macros/configure-io.md#adding-a-port): no longer a full module card — a small docked widget
-        // (ModuleComponent::layoutMacroPortWidget), constructed Mono by default (one jack row) — the port-creation flow
-        // grows it to two rows for Stereo via the ordinary component re-layout, same as any other jack-count change.
-        // Library-less (the "Configure I/O" modal places it). Measured against the real card by
-        // MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate.
+        // Not a full module card — a small docked widget (ModuleComponent::layoutMacroPortWidget), constructed Mono
+        // by default (one jack row) — the port-creation flow grows it to two rows for Stereo via the ordinary
+        // component re-layout, same as any other jack-count change. Library-less (the "Configure I/O" modal places
+        // it). Measured against the real card by
+        // MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate (see
+        // docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed and
+        // docs/macros/configure-io.md#adding-a-port).
         return {ModuleComponent::kMacroPortWidgetWidth,
                 ModuleComponent::kMacroPortWidgetHeaderY + ModuleComponent::kMacroPortWidgetBottomPad};
     if (typeName == "Macro MIDI In" || typeName == "Macro MIDI Out")
@@ -224,23 +225,24 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
 }
 
 juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
-    // FRO312: every continuous parameter with a CV jack used to cost the jack column one full
-    // row; a jack whose target resolves to a bound, GENERIC ROTARY knob (ModuleComponent::
-    // isInputJackKnobBound's live rule) now draws no gutter row at all, so several of the literals
-    // in estimateModuleSizeBaseTable() shrank. Replicating that rule exactly here (without a live
-    // ModuleComponent to ask) turned out to need the SAME slider-style/exclusion knowledge only
-    // createControls() has (a choice/bool-bound target like Oscillator's "Waveform" gets a combo,
-    // never a rotary; ADSR's Threshold/curve targets have bound float parameters but no generic
-    // slider at all, see ModuleComponent.cpp's shouldSkipGenericFloatSlider) -- an approximation
-    // here would only trade one hand-kept table (this one) for a second, subtly different one.
+    // A jack whose target resolves to a bound, GENERIC ROTARY knob
+    // (ModuleComponent::isInputJackKnobBound's live rule) draws no gutter row at all, so a
+    // continuous parameter with a CV jack does not always cost the jack column a row. Replicating
+    // that rule exactly here (without a live ModuleComponent to ask) would need the SAME
+    // slider-style/exclusion knowledge only createControls() has (a choice/bool-bound target like
+    // Oscillator's "Waveform" gets a combo, never a rotary; ADSR's Threshold/curve targets have
+    // bound float parameters but no generic slider at all, see ModuleComponent.cpp's
+    // shouldSkipGenericFloatSlider) -- an approximation here would only trade one hand-kept table
+    // (this one) for a second, subtly different one.
     // ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents (which builds a REAL
     // ModuleComponent per library type and measures it) is what actually keeps this table honest;
-    // it caught every FRO312 height change below when the table was updated by hand against it.
+    // it catches any height change below when the table is updated by hand.
+    // it catches any height change below when the table is updated by hand.
     return estimateModuleSizeBaseTable(typeName);
 }
 
 // ---- DragAndDropTarget / FileDragAndDropTarget overrides ----------------------------------
-// Bodies live on GraphDragDropController (FRO77 PR3): JUCE resolves a drop target by Component
+// Bodies live on GraphDragDropController: JUCE resolves a drop target by Component
 // identity, so the actual override must stay a GraphEditor member, but everything it does is one
 // call into the controller.
 bool GraphEditor::isInterestedInDragSource(const SourceDetails& dragSourceDetails) {
@@ -325,7 +327,7 @@ juce::Point<int> GraphEditor::getViewportCentreInCanvasSpace() const {
 // `configure` runs on the processor BEFORE it joins the graph, so any non-parameter state it
 // sets is captured by the undo snapshot.
 //
-// A non-empty `joinMacroId` (a library drop with Cmd held over an expanded hull, FRO168) also makes
+// A non-empty `joinMacroId` (a library drop with Cmd held over an expanded hull) also makes
 // the new node a member of that macro. Node creation and membership must be ONE undo step, and a
 // graph-only recordStructuralChange snapshot cannot carry a membership change, so that case is
 // recorded through recordGraphAndMacroChange instead (same mutation lambda). The node gets its uuid
@@ -519,26 +521,26 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     // stays consistent via a uniform selection-drag delta, see dockMacroPortWidgets' own comment)
     // can move the hull this module contributes to without going through updateComponents(), so
     // its macro's port widgets would otherwise lag one drag behind. Re-derive now, the same as
-    // every other layout pass (P8-15 fix F2).
+    // every other layout pass.
     macroController_.dockMacroPortWidgets();
 
     // Apply proximity suggestions before the drag-preview teardown clears them. Group drags never
     // reach here with multi-select (finalizeSelectionDrag handles those). Connections join the
     // surrounding module-drag undo snapshot (captureBeforeState / pushSnapshotFromCapture).
-    // FRO77 PR1: shouldOfferSmartConnections/smartSuggestions moved onto SmartConnectionEngine —
+    // shouldOfferSmartConnections/smartSuggestions moved onto SmartConnectionEngine —
     // same two conditions, read through the engine instead of GraphEditor's own former fields.
     if (smartConnections_.shouldOfferSmartConnections(dragDropController_.buildDragPreviewState()) &&
         smartConnections_.getSmartSuggestionCount() > 0)
         smartConnections_.applySmartSuggestions(module->getNodeId(), /*recordUndo=*/false);
 
-    // FRO300: a single-module drag can land the module fully outside the visible rect (drag it
+    // A single-module drag can land the module fully outside the visible rect (drag it
     // under the bottom dock, or past the edge while zoomed in) without any pan/zoom of its own.
     detail::applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
 
     repaintCanvas();
 }
 
-// ---- Cmd-drag macro reparent (FRO40, FRO168, docs/macros/menu-and-membership.md) --------------
+// ---- Cmd-drag macro reparent (docs/macros/menu-and-membership.md) -----------------------------
 //
 // A Cmd-armed drag (or a plain single-module drag with the drag-without-Cmd preference) joins,
 // leaves or transfers between expanded macros by crossing their hull borders.
@@ -651,7 +653,7 @@ void GraphEditor::setMacroDropCandidate(const juce::String& macroId) {
 // a future macroController_ change does end up tearing down the dragged component, even though
 // today's addSelectionToMacro/removeSelectionFromMacro never do.
 //
-// TRANSFER ORDERING (FRO168): the leave runs first, then the join, and neither precomputes a
+// TRANSFER ORDERING: the leave runs first, then the join, and neither precomputes a
 // port-crossing plan up front. Each call builds its own plan at call time from the graph as it is
 // THEN: macro A's plan is computed off the pre-remove graph (cables from the node to A's members
 // become A's boundary ports), and macro B's plan off the post-remove graph, in which the splice A's
@@ -669,7 +671,7 @@ void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juc
     auto& graph = audioEngine.getGraph();
     const juce::var graphBeforeOverride = undoManager ? undoManager->takeCapturedGraphBeforeState() : juce::var();
 
-    // FRO41: snapshot the pre-mutation cable geometry and the dragged module's own bounds now,
+    // Snapshot the pre-mutation cable geometry and the dragged module's own bounds now,
     // while `module` is still known-good — doFinalize's macroController_ calls are free to add or
     // remove macro-port components (see this method's own header comment above), so both are
     // captured up front rather than read off `module` once the splice has already run. A plain
@@ -742,7 +744,7 @@ void GraphEditor::animateDropLanding(ModuleComponent* module, juce::Point<int> f
         });
 }
 
-// FRO41: the cable-slide + module-flash counterpart to animateDropLanding above, fired once per
+// The cable-slide + module-flash counterpart to animateDropLanding above, fired once per
 // finalizeMacroMembershipDrag call that actually crossed a hull. `cablesBeforeSplice` is the
 // caller's pre-mutation snapshot; the post-mutation geometry is read fresh here, after the splice
 // has already landed. MacroCrossingAnimator::arm() does the actual before/after diff (see its own

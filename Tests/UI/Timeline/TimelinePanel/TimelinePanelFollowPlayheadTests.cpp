@@ -233,8 +233,8 @@ TEST(TimelineFollowPlayheadTest, FKeyTogglesFollowThroughTheShortcutManager) {
     // Detach before `shortcuts` (declared after `panel`, so destroyed first) goes out of scope —
     // an ASAN run caught the heap-use-after-free this leaves otherwise: TimelinePanelComponent::
     // ~TimelinePanelComponent() removes itself as a change listener from whatever ShortcutManager
-    // is still installed, which is a dangling pointer once `shortcuts` is gone. See PR #381's fix
-    // for TimelinePanelToolStripTests.cpp, which established this idiom.
+    // is still installed, which is a dangling pointer once `shortcuts` is gone. Same idiom as
+    // TimelinePanelToolStripTests.cpp.
     panel.setShortcutManager(nullptr);
 }
 
@@ -311,7 +311,7 @@ TEST(TimelineFollowPlayheadTest, NoScrollWhenFollowIsOff) {
 }
 
 TEST(TimelineFollowPlayheadTest, NoScrollWhileThePianoRollIsOpen) {
-    // `doc` declared BEFORE `f` (see the FRO97 comment on FKeyTogglesFollowThroughTheShortcutManager
+    // `doc` declared BEFORE `f` (see the comment on FKeyTogglesFollowThroughTheShortcutManager
     // above): TimelinePanelComponent::~TimelinePanelComponent() unconditionally dereferences `doc_`
     // (doc_->removeListener(this)), so if `doc` destructed first — the shape every other affected
     // test in this file had — that call would be a use-after-free/stack-use-after-scope on `doc`.

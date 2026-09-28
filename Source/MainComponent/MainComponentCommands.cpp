@@ -1,6 +1,6 @@
 // MainComponentCommands.cpp — MainComponent's juce::ApplicationCommandTarget implementation:
 // paint() plus the getAllCommands/getCommandInfo/perform trio (kept together — see the class's
-// own comment on why they must not be split). FRO76: all three are now table lookups over
+// own comment on why they must not be split). All three are table lookups over
 // commandTable() (MainComponentCommandTable.cpp) rather than a per-command switch — see that
 // file for the table itself, the named perform() bodies, and the isActive predicates.
 // MainComponent is declared in MainComponent.h; the rest of its implementation lives in the

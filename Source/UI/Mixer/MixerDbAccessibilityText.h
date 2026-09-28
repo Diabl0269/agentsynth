@@ -2,7 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// MixerDbAccessibilityText.h -- FRO301: what VoiceOver reads for a dB-scale slider's current
+// MixerDbAccessibilityText.h: what VoiceOver reads for a dB-scale slider's current
 // value, e.g. "-3.0 dB" (spoken "minus 3 dB"). Shared by MixerFader (its own readout_ label uses
 // the same formatting) and MixerSendList's send-level knobs, both of which must reapply this
 // AFTER constructing their juce::SliderParameterAttachment -- its constructor unconditionally

@@ -62,11 +62,11 @@ juce::String applyHandshakePortHint(const juce::String& deviceName, const juce::
     return tokens.joinIntoString(" ");
 }
 
-// Resolves the MIDI OUTPUT a profile's handshake should be sent to, given `input` (the profile's own
-// `input` device), an optional `portHint` (ControllerProfile::Handshake::port), and every output the
-// app can currently see. 2026-09-28 hardware finding (docs/control/midi-remote-device-handshake.md
-// #device-handshake): CoreMIDI gives an input/output pair for the SAME physical port asymmetric
-// names, so matching on the input's own identifier/name only worked by accident. Order below.
+// Resolves the MIDI OUTPUT a profile's handshake should be sent to, given `input` (the profile's
+// own `input` device), an optional `portHint` (ControllerProfile::Handshake::port), and every
+// output the app can currently see. CoreMIDI gives an input/output pair for the SAME physical port
+// asymmetric names, so matching on the input's own identifier/name only works by accident (see
+// docs/control/midi-remote-device-handshake.md#device-handshake). Order below.
 std::optional<ControllerProfile::Input>
 resolveHandshakeOutput(const ControllerProfile::Input& input, const juce::String& portHint,
                        const std::vector<ControllerProfile::Input>& availableOutputs) {
@@ -90,8 +90,7 @@ resolveHandshakeOutput(const ControllerProfile::Input& input, const juce::String
                                      [&](const ControllerProfile::Input& o) { return o.name == candidateName; }))
         return found;
 
-    // 3. The candidate name's trailing "Out" swapped to "In" (the asymmetric-port case FRO339
-    // shipped for).
+    // 3. The candidate name's trailing "Out" swapped to "In" (the asymmetric-port case).
     const juce::String swapped = swapTrailingWord(candidateName, "Out", "In");
     if (swapped != candidateName) {
         if (auto found =
@@ -125,7 +124,7 @@ juce::String describeHandshakeIssue(const ControllerProfile::Input& input, const
 // Sends `handshake.openMessage` for every profile with a non-empty handshake whose input device is
 // in `openSourceKeys` (AudioEngine::getOpenMidiInputIdentifiers()) and isn't already tracked as open
 // -- to resolveHandshakeOutput(profile.input, profile.handshake.port, availableOutputs)'s result, NOT
-// to profile.input itself (see RemoteModel.h's own Handshake comment on why that used to be wrong).
+// to profile.input itself (see RemoteModel.h's own Handshake comment on why).
 // A profile whose output can't be resolved is skipped, not asserted -- see getHandshakeIssue().
 // Sends `handshake.closeMessage` for every previously-open profile that no longer qualifies --
 // removed, handshake cleared, or device no longer open -- to the SAME output it opened on (never

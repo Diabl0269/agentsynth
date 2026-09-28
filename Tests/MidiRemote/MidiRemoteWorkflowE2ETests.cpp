@@ -1,6 +1,6 @@
-// FRO138 (docs/control/midi-remote-ui.md#tests, the E2E bullet): one whole MIDI Remote workflow, headless, driven
-// through the seams a user's hands and a controller's wire actually use -- never
-// RemoteEngine::handleMessage()/applyEvent() directly:
+// One whole MIDI Remote workflow, headless, driven through the seams a user's hands and a
+// controller's wire actually use -- never RemoteEngine::handleMessage()/applyEvent() directly
+// (see docs/control/midi-remote-ui.md#tests):
 //
 //   * the right-click "MIDI Learn 'Cutoff'..." item on a REAL ModuleComponent slider (a real right-click through the
 //     control's own mouseDown()/mouseUp() and the card's MouseListener half, same idiom as
@@ -67,7 +67,7 @@ class CountingInvoker : public RemoteActionInvoker {
 public:
     void invokeRemoteCommand(juce::CommandID commandId) override { invoked.push_back(commandId); }
     void invokeNodeCommand(juce::AudioProcessorGraph::NodeID, NodeCommandKind) override {}
-    // FRO236: this suite doesn't exercise continuous targets -- stub, never called.
+    // This suite doesn't exercise continuous targets -- stub, never called.
     double getContinuousValue(ContinuousTargetKind) override { return 0.0; }
     void setContinuousValue(ContinuousTargetKind, double) override {}
     bool getContinuousWindow(ContinuousTargetKind, double&, double&) override { return false; }
@@ -581,7 +581,7 @@ TEST_F(MidiRemoteWorkflowE2ETest, HostedModeLearnsAndDrivesTheCutoffFromTheHosts
 }
 
 // ============================================================================
-// 9. FRO140: a 14-bit knob -- Detect adds ONE control, assigning it drives the parameter at full resolution
+// 9. A 14-bit knob -- Detect adds ONE control, assigning it drives the parameter at full resolution
 // ============================================================================
 
 TEST_F(MidiRemoteWorkflowE2ETest, FourteenBitKnobIsDetectedAsOneControlAndSweepsTheCutoffWithoutStairSteps) {

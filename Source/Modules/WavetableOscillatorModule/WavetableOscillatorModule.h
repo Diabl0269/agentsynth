@@ -37,8 +37,8 @@ public:
     // channels 0-7 are the per-voice pitch fan and the shared mod-CV block starts at
     // kPolyModCVBase, so jack j (j >= 1) lands on kPolyModCVBase + j - 1.
     //
-    // New jacks are only ever APPENDED — Position..Level keep the channel numbers they had
-    // in #172 so patches saved before this change still route to the same targets.
+    // New jacks are only ever APPENDED — Position..Level keep their original channel numbers
+    // so previously saved patches still route to the same targets.
     // -------------------------------------------------------------------------
     enum Jack {
         kJackPitch = 0, // mono: shares ch0 with Audio L, so mono pitch comes from MIDI
@@ -119,7 +119,7 @@ public:
     // Table geometry
     // -------------------------------------------------------------------------
     // Table geometry, the Wavetable storage type and TableBuilder live in
-    // WavetableTableBuilder.h/.cpp (FRO73 split, to get this header under the file-size cap).
+    // WavetableTableBuilder.h/.cpp (split, to get this header under the file-size cap).
     // These aliases/forwards keep every existing WavetableOscillatorModule::X call site (this
     // class's own methods, tests, static_asserts below) compiling unchanged.
     static constexpr int kFrameSize = wavetable::kFrameSize;
@@ -362,7 +362,7 @@ private:
     //
     // TableBuilder (an alias for wavetable::TableBuilder above) does the actual FFT work; the
     // functions below use it to synthesise the built-in tables and to import an audio file.
-    // Bodies are in WavetableOscillatorModule.cpp (FRO73, to keep this header under the
+    // Bodies are in WavetableOscillatorModule.cpp (to keep this header under the
     // file-size cap).
     // -------------------------------------------------------------------------
     static float classicShapeHarmonic(int shape, int h);
@@ -714,8 +714,8 @@ private:
     /** Equal-power stereo placement for unison voice `u`. width 0 collapses to centre. */
     static void unisonPanGains(int u, int unisonCount, float width, float& gainL, float& gainR);
 
-    // The balance pan law itself lives on ModuleBase::panGains — Oscillator and Filter grew
-    // Audio L/R blocks of their own in #219 and all three modules must place a signal identically.
+    // The balance pan law itself lives on ModuleBase::panGains — Oscillator and Filter have
+    // Audio L/R blocks of their own too, and all three modules must place a signal identically.
 
     static bool isChannelActive(const juce::AudioBuffer<float>& buffer, int ch, int numSamples);
 

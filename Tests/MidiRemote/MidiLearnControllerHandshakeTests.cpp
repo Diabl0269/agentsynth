@@ -1,9 +1,10 @@
-// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): MidiLearnController's thin wiring around
-// ControllerHandshakeCoordinator -- setHandshakeFeedbackSink()/shutdownHandshakes(), and that every
-// profiles_-mutating call (addProfile here) reconciles it via setProfilesAndReconcileHandshakes().
-// Same HostMode::Hosted + hostSourceKey() fixture shape as MidiLearnControllerTests.cpp, so a
-// profile's device can be "open" with no real audio device or MIDI hardware. Suite name contains
-// "MidiRemote" per the ship-task --gtest_filter convention.
+// MidiLearnController's thin wiring around ControllerHandshakeCoordinator --
+// setHandshakeFeedbackSink()/shutdownHandshakes(), and that every profiles_-mutating call
+// (addProfile here) reconciles it via setProfilesAndReconcileHandshakes(). Same HostMode::Hosted +
+// hostSourceKey() fixture shape as MidiLearnControllerTests.cpp, so a profile's device can be
+// "open" with no real audio device or MIDI hardware. Suite name contains "MidiRemote" per the
+// ship-task --gtest_filter convention (see
+// docs/control/midi-remote-device-handshake.md#device-handshake).
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -49,7 +50,7 @@ protected:
         graphEditor_ = std::make_unique<GraphEditor>(*engine_);
         controller_ = std::make_unique<MidiLearnController>(*engine_, *graphEditor_, remoteEngine_, doc_, undo_,
                                                             statusBar_, synth::ControllerProfileStore(root_));
-        // FRO339: a headless test process has no CoreMIDI entitlement/bundle -- see
+        // A headless test process has no CoreMIDI entitlement/bundle -- see
         // setAvailableOutputsQueryForTest()'s own doc comment. Hosted mode's own hostSourceKey()
         // "output" is appended by reconcileHandshakes() itself regardless of what this returns, so
         // an empty list here is enough for every test in this fixture.
@@ -114,11 +115,11 @@ TEST_F(MidiLearnControllerHandshakeTest, GetHandshakeIssueForProfileIsEmptyBefor
     EXPECT_TRUE(controller_->getHandshakeIssueForProfile("p1").isEmpty());
 }
 
-// FRO339: reconcileHandshakes() unconditionally adds a {hostSourceKey(), hostSourceKey()} output for
-// Hosted mode (see its own comment), so a Hosted-mode profile's handshake always resolves by
-// identity regardless of `input.name` -- but describeHandshakeIssue()'s port-hint check is
-// independent of that, and still fires whenever the declared hint isn't in the input's own name.
-// This proves that path reaches all the way through MidiLearnController's wiring, not just
+// ReconcileHandshakes() unconditionally adds a {hostSourceKey(), hostSourceKey()} output for Hosted
+// mode (see its own comment), so a Hosted-mode profile's handshake always resolves by identity
+// regardless of `input.name` -- but describeHandshakeIssue()'s port-hint check is independent of
+// that, and still fires whenever the declared hint isn't in the input's own name. This proves that
+// path reaches all the way through MidiLearnController's wiring, not just
 // ControllerHandshakeCoordinator directly (already covered by ControllerHandshakeTests.cpp).
 TEST_F(MidiLearnControllerHandshakeTest, GetHandshakeIssueForProfileReportsAPortHintMismatch) {
     FakeFeedbackSink sink;

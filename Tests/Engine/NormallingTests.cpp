@@ -1,4 +1,4 @@
-// FRO324: render-time L/Mono normalling -- Right borrows Left while Right is unpatched, for both
+// Render-time L/Mono normalling -- Right borrows Left while Right is unpatched, for both
 // Audio Output and any Dual I/O module with a genuine stereo AUDIO input pair. Never a graph edge:
 // every test here drives a real AudioEngine graph through the actual Standalone device callback
 // (audioDeviceIOCallbackWithContext -> renderNextBlock), the same pattern

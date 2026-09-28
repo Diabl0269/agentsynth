@@ -9,7 +9,7 @@ namespace synth {
 
 /** Which `+ Track` submenu group (and which Preferences -> Mixer dropdown) a saved track preset
  *  belongs to (docs/mixer/track-presets.md). A MIDI track that alone drives an instrument counts as
- *  Instrument (docs/mixer/mixer.md#channels-follow-audio-not-tracks); `Bus` (FRO297) has no bound
+ *  Instrument (docs/mixer/mixer.md#channels-follow-audio-not-tracks); `Bus` has no bound
  *  timeline track -- see TrackPresetManager.cpp. */
 enum class TrackPresetKind { Audio, Instrument, Bus };
 
@@ -37,7 +37,7 @@ struct TrackPresetInfo {
  * `connections`, `modulations`, optional `macros`), plus:
  *
  *   - `"schemaVersion"`: 1, same "absent means 1" rule as AIStateMapper::kSchemaVersion.
- *   - `"trackPresetKind"`: `"audio"`, `"instrument"` or `"bus"` (FRO297) — which `+ Track`
+ *   - `"trackPresetKind"`: `"audio"`, `"instrument"` or `"bus"` — which `+ Track`
  *     submenu/Preferences dropdown this belongs to.
  *   - `"channelMacroId"`: the snippet-local id (see "nodes") of this macro's own Channel Strip
  *     member, written defensively at extraction time so the file names which of its (usually one)
@@ -70,8 +70,8 @@ public:
 
     /**
      * Captures `channelMacroId`'s own members (the "own box") PLUS every outside module that
-     * feeds it through a port (docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box's founder
-     * requirement, collectOutsideModulatorsForTrackPreset), as one preset var.
+     * feeds it through a port (docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box,
+     * collectOutsideModulatorsForTrackPreset), as one preset var.
      *
      * `includeExtraState` is always forced on internally — a track preset must always carry
      * strip shape/gain/pan (ChannelStripModule's extra state) or a Mono strip would silently

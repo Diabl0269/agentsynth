@@ -111,9 +111,9 @@ TEST_F(ModuleComponentTest, VoiceMixerLastInputJackOverflowsBounds) {
 // while getPortCenter() puts the first jack at y=70, so a 7-input module drew its body straight over
 // the last jack.
 //
-// FRO312: "the lowest input jack" means the lowest DRAWN one -- the Sampler's CV jacks are
+// "the lowest input jack" means the lowest DRAWN one -- the Sampler's CV jacks are
 // knob-bound (their gutter dots are hidden; see SamplerHasLoadButtonWaveformAndKnownHeight's own
-// FRO312 note), so getPortCenter() for the raw last VISIBLE index now returns a knob's landing
+// note), so getPortCenter() for the raw last VISIBLE index now returns a knob's landing
 // anchor deep in the body itself, not a gutter position — using it here would demand body content
 // start below content that has not been laid out yet.
 TEST_F(ModuleComponentTest, BodyContentClearsEveryPortLabel) {
@@ -177,7 +177,7 @@ TEST_F(ModuleComponentTest, MidiInDotClearsHeaderHairlineWithBreathingRoom) {
 TEST_F(ModuleComponentTest, GetPortCenter_ClampsOutOfRangeToLastVisibleJack) {
     AudioEngine engine;
     GraphEditor editor(engine);
-    VCAModule processor; // VCA: getVisibleInputPortCount() == 3, getVisibleOutputPortCount() == 2 (#219)
+    VCAModule processor; // VCA: getVisibleInputPortCount() == 3, getVisibleOutputPortCount() == 2
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(2), editor);
     moduleComponent.setSize(280, 200);
 
@@ -210,7 +210,7 @@ TEST_F(ModuleComponentTest, GetPortCenter_ClampsOutOfRangeToLastVisibleJack) {
         << "getPortCenter(5,false).y should clamp to getPortCenter(1,false).y (last visible output jack)";
 }
 
-// FRO312: VCA's CV jack drives Gain (see ModuleComponentModTargetTests.cpp's
+// VCA's CV jack drives Gain (see ModuleComponentModTargetTests.cpp's
 // VCAGainKnobIsTheCVJacksTarget), so it is knob-bound and must be excluded from the drawn/hit-test
 // list; the remaining jacks (Audio L/R) must still be there, packed with no gap.
 TEST_F(ModuleComponentTest, KnobBoundInputJackIsExcludedFromTheDrawnAndHitTestedList) {
@@ -237,7 +237,7 @@ TEST_F(ModuleComponentTest, KnobBoundInputJackIsExcludedFromTheDrawnAndHitTested
         << "a knob-bound jack must never be hit-tested as a gutter port";
 }
 
-// FRO312: the remaining (drawn) input jacks pack with no gap where the hidden knob-bound jack used
+// The remaining (drawn) input jacks pack with no gap where the hidden knob-bound jack used
 // to sit -- consecutive DRAWN rows are exactly one yStep (20px) apart, not spaced as if the hidden
 // jack still occupied a row.
 TEST_F(ModuleComponentTest, DrawnInputJacksPackWithNoGapAroundAHiddenKnobBoundJack) {
@@ -257,10 +257,10 @@ TEST_F(ModuleComponentTest, DrawnInputJacksPackWithNoGapAroundAHiddenKnobBoundJa
     }
 }
 
-// FRO312: a card whose only inputs are knob-bound reserves no dead gutter space for them -- the
+// A card whose only inputs are knob-bound reserves no dead gutter space for them -- the
 // body content starts right after the last DRAWN jack, not the last visible one (getContentTopY,
 // private, is exercised indirectly here through where the first body child actually lands, exactly
-// like BodyContentClearsEveryPortLabel above does for the pre-FRO312 case).
+// like BodyContentClearsEveryPortLabel above does for the legacy case).
 TEST_F(ModuleComponentTest, ContentTopClearsOnlyTheLastDrawnJackNotEveryVisibleOne) {
     AudioEngine engine;
     GraphEditor editor(engine);

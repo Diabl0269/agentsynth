@@ -1,4 +1,4 @@
-// MidiRemotePanelAssignTests.cpp -- FRO135 (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn):
+// MidiRemotePanelAssignTests.cpp (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn):
 // the panel side of "Assign...": the toolbar and inspector entry points, the pick-target hand-off and the
 // action choice reaching the surface and the inspector. The pick-target overlay itself is
 // PickTargetOverlayTests.cpp; the action list is ActionPickerTests.cpp. Suite names contain "MidiRemote".
@@ -105,8 +105,8 @@ TEST_F(MidiRemotePanelAssignTest, ChoosingAnActionAssignsGloballyAndShowsOnTheSu
     EXPECT_EQ(drives->getText(), ShortcutManager::getActionDescription("transportTogglePlayStop"));
 }
 
-// FRO236 (docs/control/midi-remote.md#continuous-targets): mirrors
-// ChoosingAnActionAssignsGloballyAndShowsOnTheSurfaceAndInTheInspector above.
+// Mirrors ChoosingAnActionAssignsGloballyAndShowsOnTheSurfaceAndInTheInspector above
+// (see docs/control/midi-remote.md#continuous-targets).
 TEST_F(MidiRemotePanelAssignTest, ChoosingAContinuousTargetAssignsGloballyAndShowsOnTheSurfaceAndInTheInspector) {
     panel_.selectForTest("p1", "pad");
     ASSERT_TRUE(panel_.assignSelectedControlToContinuous(synth::ContinuousTargetKind::masterVolume));

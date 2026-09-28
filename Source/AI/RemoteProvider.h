@@ -27,7 +27,7 @@ namespace synth {
  * Non-streaming: onDelta is accepted for interface compatibility but never invoked, because the
  * service's patch.generate endpoint is not streaming-capable (a single `c.json({data})`).
  *
- * Registered in AIProviderRegistry as "remote" and, as of P4-6, the default provider — see
+ * Registered in AIProviderRegistry as "remote" and the default provider — see
  * ProviderDescriptor::hidden and AIProviderRegistry::createDefault().
  */
 class RemoteProvider

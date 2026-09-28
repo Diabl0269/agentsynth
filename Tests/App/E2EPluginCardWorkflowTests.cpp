@@ -1,4 +1,4 @@
-// E2EPluginCardWorkflowTests.cpp -- FRO137 (docs/control/plugin-card-layout.md): the whole
+// E2EPluginCardWorkflowTests.cpp (docs/control/plugin-card-layout.md): the whole
 // plugin-card-knob story end to end, against the fake hosted instance (Tests/StubPluginInstance.h)
 // since no real plugin binary can live in this repo. Sibling of Tests/App/E2EWorkflowTests.cpp,
 // reusing its MainComponent-based setup for every test here, including the MIDI Learn one. The
@@ -354,7 +354,7 @@ TEST_F(E2EPluginCardWorkflowTest, MidiLearnOnAHostedKnobThenAFakeCcDrivesThePara
     ASSERT_NE(cutoff, nullptr);
     const float before = cutoff->getValue();
 
-    // FRO340: re-assert both overrides right before driving the parameter, rather than trusting
+    // Re-assert both overrides right before driving the parameter, rather than trusting
     // them to have survived the settle wait above unmolested. That wait pumps the real message
     // loop for up to ~300ms, which is long enough for an unrelated, already-queued
     // juce::ChangeBroadcaster::sendChangeMessage() from this machine's OWN Application Support

@@ -1,4 +1,4 @@
-// submitMessageFeedback (P6-9), submitGeneralFeedback (P6-16), and the fire-and-forget
+// submitMessageFeedback, submitGeneralFeedback, and the fire-and-forget
 // revoke/logout pair.
 #include "AuthClientTestHelpers.h"
 
@@ -170,7 +170,7 @@ TEST(AuthClientTest, SubmitGeneralFeedbackWithEmptyAccessTokenSendsDeviceIdInste
         return makeStatus(200, "");
     };
 
-    // Non-empty device id, empty access token: an anonymous (signed-out) submission (P6-17).
+    // Non-empty device id, empty access token: an anonymous (signed-out) submission.
     synth::AuthClient client{kHost, kClientId, performer, "device-abc-123"};
     const auto result = client.submitGeneralFeedback("", "bug", "anonymous report", kNeverCancelled);
 

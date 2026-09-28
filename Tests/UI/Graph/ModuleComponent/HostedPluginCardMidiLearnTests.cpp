@@ -1,4 +1,4 @@
-// HostedPluginCardMidiLearnTests.cpp -- FRO137
+// HostedPluginCardMidiLearnTests.cpp
 // (docs/control/plugin-card-layout.md#interaction-with-controllers-and-automation): a plugin-card knob/toggle/choice
 // behaves like every other module-card control -- registered in ModuleComponent::MidiLearnableRegistry, surviving a
 // layout-triggered rebuild without leaving a stale entry, and right-clickable through the exact same real mouseDown()

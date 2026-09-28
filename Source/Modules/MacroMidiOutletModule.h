@@ -4,7 +4,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 /**
- * @brief "Macro MIDI Out" — a MIDI outlet jack on a Macro's boundary (P8-15 Macro I/O,
+ * @brief "Macro MIDI Out" — a MIDI outlet jack on a Macro's boundary (Macro I/O,
  * docs/macros/ports.md).
  *
  * The exact mirror of MacroMidiInletModule in the other direction — see that class's comment for

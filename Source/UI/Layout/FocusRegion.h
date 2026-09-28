@@ -7,9 +7,9 @@
 #include <optional>
 #include <vector>
 
-// T159: the app-wide keyboard focus-region framework — Tab/Shift+Tab cycling plus two direct-focus
-// shortcuts, phase 1 of a 3-part epic (T160 adds arrow-key navigation WITHIN the module library,
-// T161 within the timeline track headers; neither is built here). See docs/control/shortcuts.md and
+// The app-wide keyboard focus-region framework — Tab/Shift+Tab cycling plus two direct-focus
+// shortcuts, phase 1 (arrow-key navigation WITHIN the module library and the
+// timeline track headers is built separately, on top of this). See docs/control/shortcuts.md and
 // docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step for the
 // user-facing behaviour this implements.
 //
@@ -24,13 +24,13 @@ namespace synth::ui {
 // One region MainComponent's Tab-cycle and direct-focus shortcuts can land keyboard focus in.
 //
 //  - `id`   — a short stable string ("library", "canvas", "timeline", "aiPanel", "modMatrix" today).
-//             Never persisted, so it is free to add/rename as T160/T161 land.
+//             Never persisted, so it is free to add/rename.
 //  - `root` — the component `grabKeyboardFocus()` is called on. Never null once registered.
 //  - `isOpen` — null means "always open" (the graph canvas, which has no closed state); otherwise
 //             called on demand, never cached, so it always reflects live panel-visibility state.
 //  - `open` — how to open this region if `focusRegionById` is asked to focus it while closed. Null
 //             for a region with no closed state (`isOpen` also null) or one no direct-focus shortcut
-//             ever targets (Mod Matrix, per T159's scope — Tab-cycling never opens a closed region,
+//             ever targets (Mod Matrix, Tab-cycling never opens a closed region,
 //             see FocusRegionRegistry::cycleFocus, so leaving this null there is safe either way).
 struct FocusRegion {
     juce::String id;
@@ -90,7 +90,7 @@ public:
 
     // Pure decision: given the id currently holding focus (empty/unknown counts as "no current
     // region"), the id of the next OPEN region Tab-cycling should land in. Closed regions are
-    // skipped entirely — a LOCKED T159 decision, see docs/control/shortcuts.md — and the ends wrap. Every
+    // skipped entirely — see docs/control/shortcuts.md — and the ends wrap. Every
     // region closed (never happens today; Canvas has no closed state) answers an empty string.
     juce::String nextOpenRegionId(const juce::String& currentId, bool forward) const {
         const auto open = openRegions();
@@ -150,7 +150,7 @@ private:
 
 // The theme's one "selected/focused" token (docs/layout/theming.md's `accent`), painted as a translucent
 // outline (55% alpha, at the theme's normal border weight) around `comp`'s own bounds whenever it or
-// a descendant holds keyboard focus (`hasKeyboardFocus(true)`) — the visual half of T159, shared by
+// a descendant holds keyboard focus (`hasKeyboardFocus(true)`) — the visual half of it, shared by
 // every focus-region root's paint() rather than each one reinventing it. Softer than the "accent when
 // focused" treatment AppLookAndFeel already applies to ComboBox/TextEditor outlines (solid, full
 // alpha), deliberately: that reads fine around a small control but is too heavy around an entire
@@ -179,13 +179,13 @@ inline void paintFocusRegionOutline(juce::Component& comp, juce::Graphics& g) {
     g.drawRect(comp.getLocalBounds().toFloat().reduced(thickness * 0.5f), thickness);
 }
 
-// FRO12 (P9-6, docs/mixer/panel.md): resolves a keypress to a Tab-cycle direction the same way
-// MainComponent::keyPressed's command-table dispatch does (focusNextRegion/focusPrevRegion), but as
-// a free function so a top-level window with no ApplicationCommandTarget of its own -- a
-// DetachedPanelWindow -- can reach the same verdict without one. Returns true for forward
-// (Tab)/false for backward (Shift+Tab)/nullopt if `key` isn't bound to either action right now (a
-// user rebind is honoured automatically, same as the command table). Pure: never touches real
-// focus, so it's exactly as testable as FocusRegionRegistry's own pure helpers above.
+// Resolves a keypress to a Tab-cycle direction the same way MainComponent::keyPressed's
+// command-table dispatch does (focusNextRegion/focusPrevRegion), but as a free function so a
+// top-level window with no ApplicationCommandTarget of its own -- a DetachedPanelWindow -- can
+// reach the same verdict without one. Returns true for forward (Tab)/false for backward
+// (Shift+Tab)/nullopt if `key` isn't bound to either action right now (a user rebind is honoured
+// automatically, same as the command table). Pure: never touches real focus, so it's exactly as
+// testable as FocusRegionRegistry's own pure helpers above (see docs/mixer/panel.md).
 inline std::optional<bool> resolveFocusCycleKeyPress(const juce::KeyPress& key,
                                                      const ShortcutManager& shortcutManager) {
     for (const auto& action : shortcutManager.getActionsForKeyPress(key)) {

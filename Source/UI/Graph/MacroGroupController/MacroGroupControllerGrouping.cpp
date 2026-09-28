@@ -53,9 +53,9 @@ juce::String MacroGroupController::groupSelectionIntoMacro(bool autoCreatePorts)
         return {};
     }
 
-    // Founder-review fix F5 (docs/macros/auto-ports.md#the-auto-port-preference): the crossing plan is read off the
-    // LIVE graph now, before the macro exists — resolveMemberNodeId (which buildMacroPortCrossingPlan uses internally)
-    // only knows about macros already in the macro set, so this has to work off the uuid list directly.
+    // The crossing plan is read off the LIVE graph, before the macro exists — resolveMemberNodeId (which
+    // buildMacroPortCrossingPlan uses internally) only knows about macros already in the macro set, so this has to
+    // work off the uuid list directly (see docs/macros/auto-ports.md#the-auto-port-preference).
     std::vector<MacroPortCrossingGroup> portPlan;
     if (autoCreatePorts)
         portPlan = buildMacroPortCrossingPlan(memberUuids);
@@ -126,7 +126,7 @@ void MacroGroupController::addSelectionToMacro(const juce::String& macroId,
         }
     }
 
-    // T138: uuids genuinely new to THIS macro — the ones the port-crossing plan below cares about;
+    // uuids genuinely new to THIS macro — the ones the port-crossing plan below cares about;
     // a uuid already a member of macroId is silently skipped by addMember() below same as always.
     std::vector<juce::String> toAdd;
     for (const auto& uuid : memberUuids)
@@ -152,7 +152,7 @@ void MacroGroupController::addSelectionToMacro(const juce::String& macroId,
         host_.updateComponents();
     };
 
-    // FRO40: recordUndo=false runs doAdd() directly — an outer caller (GraphEditor's Cmd/Ctrl-drag
+    // recordUndo=false runs doAdd() directly — an outer caller (GraphEditor's Cmd/Ctrl-drag
     // reparent finalize) already opened its own recordGraphAndMacroChange around a bigger gesture
     // and needs this membership change inside THAT one undo step, not a second one of its own.
     if (!recordUndo)
@@ -180,10 +180,10 @@ void MacroGroupController::removeSelectionFromMacro(const juce::String& macroId,
     if (toRemove.empty())
         return;
 
-    // T138: a cable from a departing member to one that's staying is about to become a real
+    // A cable from a departing member to one that's staying is about to become a real
     // boundary crossing — computed off the PRE-remove graph, before anything moves.
     const auto removePlan = buildMacroPortCrossingPlanForRemovedMembers(macroId, toRemove);
-    // FRO195: the mirror image of addSelectionToMacro's macroPortsThatBecomeInteriorOnAdd — an
+    // The mirror image of addSelectionToMacro's macroPortsThatBecomeInteriorOnAdd — an
     // EXISTING port whose interior leg was exactly one of the departing members is now bridging
     // two things that are both external, so splice it out the same way ungroup does, instead of
     // leaving it stranded on the hull.
@@ -204,7 +204,7 @@ void MacroGroupController::removeSelectionFromMacro(const juce::String& macroId,
         host_.updateComponents();
     };
 
-    // FRO40: see addSelectionToMacro's matching comment above.
+    // See addSelectionToMacro's matching comment above.
     if (!recordUndo)
         doRemove();
     else if (host_.undo())
@@ -264,11 +264,10 @@ void MacroGroupController::ungroupSelection() {
             if (m == nullptr)
                 continue; // defensive: shouldn't happen mid-transaction
 
-            // Founder review, second pass: "ungroup leaves the macro input/output in place (They
-            // should be removed)". Splice every one of this macro's ports back out FIRST — auto-
-            // created and hand-added alike — restoring the external<->internal wiring each one
-            // proxied, before falling through to the plain-module behaviour below. Iterate a COPY:
-            // each call mutates m->ports/m->members as it goes.
+            // Ungroup removes the macro's input/output ports. Splice every one of this macro's ports back out FIRST —
+            // auto- created and hand-added alike — restoring the external<->internal wiring each one proxied, before
+            // falling through to the plain-module behaviour below. Iterate a COPY: each call mutates
+            // m->ports/m->members as it goes.
             const auto portsToSplice = m->ports;
             for (const auto& port : portsToSplice)
                 spliceOutMacroPort(*m, port.nodeUuid);
@@ -337,7 +336,7 @@ void MacroGroupController::toggleSelectionMacrosCollapsed() {
 }
 
 void MacroGroupController::groupOrToggleSelectionMacros() {
-    // Cmd+G's single entry point (P8-14). Mixed selection (some selected nodes already in a
+    // Cmd+G's single entry point. Mixed selection (some selected nodes already in a
     // macro, some loose): toggle wins outright — the touched macros are toggled and the loose
     // modules are silently left out of any grouping.
     auto ids = host_.getSelection().getSelected();
@@ -458,7 +457,7 @@ void MacroGroupController::renameMacro(const juce::String& macroId, const juce::
             m->name = newName;
     };
 
-    // FRO14: an installed hook owns the whole transaction (so a linked track's rename joins this
+    // An installed hook owns the whole transaction (so a linked track's rename joins this
     // one); anything else falls through to the plain graph+macro step this has always pushed.
     if (!(recordMacroRenameHook && recordMacroRenameHook(macroId, newName, doRename))) {
         if (host_.undo())
@@ -496,7 +495,7 @@ MacroGroupController::macroMemberPreviews(const juce::String& macroId) const {
 
     auto& graph = host_.graph();
     for (const auto& uuid : macro->members) {
-        // A port node is a boundary jack, not a module to preview (founder-review fix G6).
+        // A port node is a boundary jack, not a module to preview.
         if (macro->memberIsPort(uuid))
             continue;
 
@@ -530,7 +529,7 @@ juce::StringArray MacroGroupController::macroMemberNames(const juce::String& mac
 
     auto& graph = host_.graph();
     for (const auto& uuid : macro->members) {
-        // Same exclusion as macroMemberPreviews above (founder-review fix G6).
+        // Same exclusion as macroMemberPreviews above.
         if (macro->memberIsPort(uuid))
             continue;
 

@@ -1,4 +1,4 @@
-// Module-level tests for the mixer's Channel Strip and Master nodes (P9-2, docs/mixer/mixer.md#node-types).
+// Module-level tests for the mixer's Channel Strip and Master nodes (docs/mixer/mixer.md#node-types).
 //
 //   • pan law        -- balance law, unity at centre, for both Mono and Stereo strips
 //   • gain           -- dB fader, the -60 dB floor is silence
@@ -55,7 +55,7 @@ void settleAndProcess(juce::AudioProcessor& processor, juce::AudioBuffer<float>&
         auto scratch = buffer;
         processor.processBlock(scratch, midi);
     }
-    // FRO146: the meter latch keeps the MAX peak since a reader's last read, deliberately --
+    // The meter latch keeps the MAX peak since a reader's last read, deliberately --
     // that's the whole point (a real over during the ramp above must not be lost). Drain every
     // reader here so a caller's own takeMeterPeak() after this function sees only the ONE real
     // block below, not history from the warm-up ramp.
@@ -207,7 +207,7 @@ TEST(ChannelStripTest, MeterReportsTheLastBlocksPostFaderPeakPerReader) {
     settleAndProcess(strip, buffer);
     EXPECT_NEAR(strip.takeMeterPeak(synth::MeterReader::Mixer, 0), 0.0f, 1.0e-6f) << "hard right silences the left leg";
     EXPECT_NEAR(strip.takeMeterPeak(synth::MeterReader::Mixer, 1), 0.75f, 1.0e-6f);
-    // FRO146: consuming (read-and-reset) but ONLY of the reader's own slot -- the Mixer reader's
+    // Consuming (read-and-reset) but ONLY of the reader's own slot -- the Mixer reader's
     // second read (with no new block in between) sees 0, silence, exactly as a real per-block
     // store would once the peak is gone; the TrackHeader reader, which has never read yet, still
     // sees the full peak the Mixer reader already consumed.
@@ -218,7 +218,7 @@ TEST(ChannelStripTest, MeterReportsTheLastBlocksPostFaderPeakPerReader) {
 }
 
 TEST(ChannelStripTest, MeterMissedOversRegressionAHotBlockBetweenTwoQuietBlocksIsStillReported) {
-    // FRO146: the bug the latch replaces. The old scheme stored exactly one float per leg,
+    // The bug the latch replaces. The old scheme stored exactly one float per leg,
     // overwritten every block -- a hot block sandwiched between two quiet ones was silently gone
     // by the time a 10 Hz UI poll got around to reading it.
     ChannelStripModule strip;
@@ -278,9 +278,9 @@ TEST(ChannelStripTest, ExtraStateRoundTripsShapeAndSolo) {
     EXPECT_EQ(restored.getParameters().size(), original.getParameters().size()) << "solo must never become a parameter";
 }
 
-// FRO225 (docs/mixer/panel.md): the strip's own user-given name -- empty (unset) is the default, and
-// it round-trips through getExtraState()/setExtraState() exactly like shape/solo above, so it
-// survives save/load and presets.
+// The strip's own user-given name -- empty (unset) is the default, and it round-trips through
+// getExtraState()/setExtraState() exactly like shape/solo above, so it survives save/load and
+// presets (see docs/mixer/panel.md).
 TEST(ChannelStripTest, StripNameIsUnsetByDefault) {
     ChannelStripModule strip;
     EXPECT_TRUE(strip.getStripName().isEmpty());
@@ -296,7 +296,7 @@ TEST(ChannelStripTest, ExtraStateRoundTripsStripName) {
 }
 
 TEST(ChannelStripTest, ExtraStateWithNoNamePropertyLeavesTheNameUnset) {
-    // A patch saved before FRO225 (or any state object that never had a "name" key) must not throw
+    // A patch saved before strips had names (or any state object with no "name" key) must not throw
     // -- setExtraState only ever WRITES the field when the property is present (same
     // hasProperty()-gated pattern as every other extra-state key on this class).
     ChannelStripModule strip;

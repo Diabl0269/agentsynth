@@ -49,7 +49,7 @@ inline std::vector<synth::ui::ControllerSurfaceComponent::CellModel> fourControl
     };
 }
 
-// FRO270: a sparser layout for group-drag tests -- fourControlModel()'s dense 2x2 means nearly
+// A sparser layout for group-drag tests -- fourControlModel()'s dense 2x2 means nearly
 // every block move lands on another control, which is exactly what the overlap-refusal tests want,
 // but a clamp test needs an EMPTY destination to prove it's the clamp (not the refusal) doing the
 // work. Two adjacent controls at (0,0)/(1,0) plus a lone bystander far away at (5,5).
@@ -61,7 +61,7 @@ inline std::vector<synth::ui::ControllerSurfaceComponent::CellModel> twoAdjacent
     };
 }
 
-// FRO331 bugfix: 8 pads in a single row, cols 0-7 -- unlike twoAdjacentPlusBystanderModel()'s
+// 8 pads in a single row, cols 0-7 -- unlike twoAdjacentPlusBystanderModel()'s
 // bystander parked far away (col 5), a drag's intermediate whole-cell steps here cross cells
 // OCCUPIED by unselected pads (pad5..pad8), which is exactly the path twoAdjacentPlusBystanderModel()
 // can't exercise: a group drag whose live intermediate positions overlap other controls before
@@ -74,7 +74,7 @@ inline std::vector<synth::ui::ControllerSurfaceComponent::CellModel> eightPadsIn
     return cells;
 }
 
-// FRO331: cells are grandchildren of `surface` (they live on its private content_ child, which
+// Cells are grandchildren of `surface` (they live on its private content_ child, which
 // carries the pan/zoom transform -- ControllerSurfaceComponent.h), not direct children, so this
 // goes through the component's own test seam rather than surface.getChildren().
 inline synth::ui::ControllerSurfaceCell* findCell(synth::ui::ControllerSurfaceComponent& surface,
@@ -90,7 +90,7 @@ inline juce::MouseEvent surfaceMouseEvent(juce::Component& comp, juce::Point<flo
                             wasDragged);
 }
 
-// FRO331: drives a REAL multi-step drag on `cell` -- mouseDown, then one mouseDrag per entry of
+// Drives a REAL multi-step drag on `cell` -- mouseDown, then one mouseDrag per entry of
 // `parentOffsetsInCells` (each a (dCols, dRows) offset from the drag's start, in whole cells, not
 // cumulative-since-last-step) -- computing each step's LOCAL mouse position the same way a real
 // juce::MouseInputSource would: from a position that is fixed in the PARENT's coordinate space
@@ -99,7 +99,7 @@ inline juce::MouseEvent surfaceMouseEvent(juce::Component& comp, juce::Point<flo
 // previous step. A single-shot drag (one mouseDrag straight from start to end) can't exercise the
 // mid-drag-reposition hazard this ticket is about; only reading the cell's position fresh before
 // each step can. Leaves the cell mid-drag (call cell.mouseUp(...) with the LAST event this
-// function fires, e.g. via lastStepEvent()) -- see FRO331's test suites for the pattern.
+// function fires, e.g. via lastStepEvent()) -- see the test suites for the pattern.
 class DragDriver {
 public:
     explicit DragDriver(juce::Component& cell)
@@ -132,7 +132,7 @@ private:
     juce::Point<float> lastLocal_;
 };
 
-// FRO331: like DragDriver, but originates every step's mouse position in the SURFACE's own local
+// Like DragDriver, but originates every step's mouse position in the SURFACE's own local
 // space -- this suite's stand-in for real OS screen coordinates, since the surface is the root
 // component in every headless test here -- and converts it into the cell's local space via
 // juce::Component::getLocalPoint(), the exact conversion JUCE performs when it delivers a real

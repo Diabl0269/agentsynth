@@ -1,6 +1,6 @@
 // MainComponentSetupToolbar.cpp -- initialiseCommon()'s canvas/toolbar/status-bar chrome setup
 // steps (buttons, the load menu, toolbar assembly, status bar) and the app-only welcome-screen
-// setup. Split out of the former single MainComponent.cpp (FRO76) -- see
+// setup. Split out of MainComponent.cpp -- see
 // MainComponent::initialiseCommon in MainComponent.cpp for the ordered call sequence.
 #include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
@@ -41,16 +41,16 @@ void MainComponent::addCanvasAndPanels() {
         // exactly the cases that need it — a binding can only start or stop resolving when a node
         // appears or disappears, which is also the only way an orphan flag moves.
         reconcileTimelineBindingsOnly();
-        // FRO135: a canvas delete orphans MIDI Remote assignments; the open panel shows "(missing module)"
+        // A canvas delete orphans MIDI Remote assignments; the open panel shows "(missing module)"
         // only once it rebuilds. Deferred and coalesced, so a burst of structural changes is one rebuild.
         bottomDock.getMidiRemotePanel().scheduleLiveRefresh();
-        // FRO103: the other half of onBeforeDetachAllModuleComponents. A single-node removal
+        // The other half of onBeforeDetachAllModuleComponents. A single-node removal
         // (deleteSelection, requestDeleteModule, replaceModule) unbinds the WHOLE mixer before it
         // frees anything, and has no rebuild of its own -- reconcileTimelineBindingsOnly() above
         // deliberately never rebuilds the mixer. Left alone, every fader would sit on screen
         // attached to nothing until an unrelated later change rebuilt the panel. This re-binds
         // against the settled graph, and is a no-op unless the columns are actually detached, so
-        // it does NOT turn every structural change into a full mixer rebuild. FRO336: covers the
+        // it does NOT turn every structural change into a full mixer rebuild. Covers the
         // "both places" mirror view too, when one is open.
         bottomDock.rebuildIfUnboundMixerViews();
     };
@@ -60,17 +60,17 @@ void MainComponent::addCanvasAndPanels() {
     // Added unconditionally — isBottomDockVisible stays false forever in a flag-OFF build
     // (the only code that ever flips it, the toggle button's onClick, is gated below), so this is
     // an inert invisible child there, same as any other never-shown component.
-    // FRO11 (P9-5): bottomDock is timelinePanel's new direct parent -- it adds timelinePanel as
+    // bottomDock is timelinePanel's new direct parent -- it adds timelinePanel as
     // ITS OWN child in its constructor (docs/mixer/panel.md#what-the-mixer-shows), so MainComponent
     // parents bottomDock here instead of timelinePanel directly. Unchanged: which of the dock's two
     // tabs is visible stays keyed to isBottomDockVisible/timelineSlide_ regardless of active tab.
     addAndMakeVisible(bottomDock);
     bottomDock.setVisible(isBottomDockVisible);
-    // FRO12 (P9-6): the Mixer's "Own panel" placement is a second independent bottom strip --
+    // The Mixer's "Own panel" placement is a second independent bottom strip --
     // added here (Own-panel visibility is unrelated to isBottomDockVisible above) and given real
     // bounds only by resized(), gated on mixerPlacement_.isOwnPanelShowing().
     addAndMakeVisible(mixerPlacement_);
-    // FRO231: the Own panel's slide/height changes are laid out by THIS component's carve.
+    // The Own panel's slide/height changes are laid out by THIS component's carve.
     mixerPlacement_.onLayoutNeeded = [this] { resized(); };
     graphEditor.getModMatrix().setVisible(graphEditor.isModMatrixVisible());
 }
@@ -97,7 +97,7 @@ void MainComponent::addFileButtons() {
     loadButton.onClick = [this] { showLoadMenu(); };
 }
 
-// The Load button's popup menu body, extracted out of addFileButtons() (FRO76).
+// The Load button's popup menu body, extracted out of addFileButtons().
 void MainComponent::showLoadMenu() {
     juce::PopupMenu menu;
     auto presets = synth::PresetManager::getPresetList();
@@ -109,7 +109,7 @@ void MainComponent::showLoadMenu() {
         saveRecentProjects();
     auto recents = recentProjects.getEntries();
 
-    // P8-31: the flat "Open Project / Open Patch / Recent Projects" layout made a patch and a
+    // The flat "Open Project / Open Patch / Recent Projects" layout made a patch and a
     // whole project indistinguishable. Split the menu into two first-level entries: PATCHES holds
     // the default (factory) patches plus "Open a patch…"; PROJECTS holds the recent projects plus
     // "Open a project…". The leaf item ids (preset index, 1000/1001, 2000+) and the callback
@@ -150,11 +150,11 @@ void MainComponent::showLoadMenu() {
             if (index >= recents.size())
                 return;
             // Same guard as "Open Project...": the recent project itself is opened through
-            // openRecentProjectGuarded (shared with the welcome screen's recent-project rows,
-            // T114/P8-10), which re-adds it (moving it back to the front) on success.
+            // openRecentProjectGuarded (shared with the welcome screen's recent-project rows),
+            // which re-adds it (moving it back to the front) on success.
             openRecentProjectGuarded(recents[index]);
         } else if (result > 0) {
-            // Shared with the welcome screen's "Open our default project" button (T114/P8-10)
+            // Shared with the welcome screen's "Open our default project" button
             // — see loadPresetGuarded.
             loadPresetGuarded(result - 1);
         }
@@ -191,7 +191,7 @@ void MainComponent::addToolbarToggleButtons() {
         // Persist BEFORE the slide so a crash during layout doesn't lose the user's choice.
         appProperties.getUserSettings()->setValue(kBottomDockVisibleSettingKey, isBottomDockVisible ? "1" : "0");
         appProperties.getUserSettings()->saveIfNeeded();
-        // FRO333: a deliberate open/close always supersedes the auto-hide/auto-reopen bookkeeping
+        // A deliberate open/close always supersedes the auto-hide/auto-reopen bookkeeping
         // the detach-state handler uses (see bottomDockAutoHiddenByEmptyTabs_'s own comment).
         bottomDockAutoHiddenByEmptyTabs_ = false;
         applyToolbarIcons();
@@ -237,7 +237,7 @@ void MainComponent::addToolbarToggleButtons() {
 }
 
 // One place for both entry points (the gear and the feedback button), which differ only in the tab
-// they open on. The Audio tab's caption names the profiled MIDI controllers (FRO136); a Host MIDI
+// they open on. The Audio tab's caption names the profiled MIDI controllers; a Host MIDI
 // profile has no device of its own, so it is left out.
 void MainComponent::launchSettingsWindow(const juce::String& initialTabName) {
     std::vector<juce::String> profiledDevices;
@@ -278,7 +278,7 @@ void MainComponent::assembleToolbar() {
 void MainComponent::wireStatusBar() {
     // Master-mute: toggles AudioEngine's master mute (audio keeps running; output is zero-filled).
     statusBar.getMasterMuteButton().setComponentID("masterMute");
-    // FRO228: the ctor's "MasterMute" component name otherwise leaks as the AX title via
+    // The ctor's "MasterMute" component name otherwise leaks as the AX title via
     // ButtonAccessibilityHandler::getTitle()'s getButtonText() fallback.
     statusBar.getMasterMuteButton().setTitle("Mute master");
     statusBar.getMasterMuteButton().onClick = [this] {
@@ -305,7 +305,7 @@ void MainComponent::wireStatusBar() {
 }
 
 void MainComponent::createWelcomeScreen() {
-    // ---- Welcome screen (T114/P8-10) ---------------------------------------------------------
+    // ---- Welcome screen ----------------------------------------------------------------------
     // APP-ONLY: this whole block is unreachable on the plugin path anyway (it already returned at
     // the `ownedAudioEngine == nullptr` branch above), but the explicit guard is kept as the same
     // belt-and-suspenders idiom the rest of this function uses (see the audio-device-state block
@@ -319,13 +319,13 @@ void MainComponent::createWelcomeScreen() {
             // hideWelcomeScreen() as the LAST step of its body, so a Cancel answer never touches it.
             commandManager.invokeDirectly(AppCommands::newPatch, true);
         };
-        // FRO325: the welcome screen only ever offers this button before any project is open, so
+        // The welcome screen only ever offers this button before any project is open, so
         // it is always a fresh, unsaved document -- pass isNewDocument=true so it lands on
         // Compensated. The Load menu's own equivalent call (loadPresetGuarded(result - 1) above)
         // deliberately omits this: that one swaps a factory preset into a project that may already
         // be open, and must leave its pan law alone.
         welcomeScreen_->onOpenDefaultProject = [this] { loadPresetGuarded(0, /*isNewDocument=*/true); };
-        // P8-31: the welcome screen's "Open an existing project…" button opens a whole .agsproj
+        // The welcome screen's "Open an existing project…" button opens a whole .agsproj
         // project (patch + timeline), so it routes through the project half, not the patch half.
         welcomeScreen_->onOpenExistingProject = [this] { openProjectFromFile(); };
         welcomeScreen_->onOpenRecentProject = [this](const juce::File& file) { openRecentProjectGuarded(file); };

@@ -1,4 +1,4 @@
-// MixerSendReorderLaneTests.cpp -- FRO296 (docs/mixer/sends-and-buses.md#reordering-sends,
+// MixerSendReorderLaneTests.cpp (docs/mixer/sends-and-buses.md#reordering-sends,
 // docs/timeline/automation.md): the caller-level half of a send reorder -- MixerPanelComponent's
 // moveSendRow(), which is the ONE place graph, TimelineDoc and macros are all reachable together,
 // so the slot swap and its lane rebind land in a single AppUndoManager::recordGraphTimelineAndMacroChange

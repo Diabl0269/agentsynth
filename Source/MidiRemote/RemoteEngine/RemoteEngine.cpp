@@ -38,7 +38,7 @@ void RemoteEngine::setSources(const std::vector<juce::String>& sourceKeys) {
 
 void RemoteEngine::setProfiles(std::vector<ControllerProfile> profiles) {
     profiles_ = std::move(profiles);
-    // FRO139: a profile's output device may just have changed (or the profile may have gained/lost
+    // A profile's output device may just have changed (or the profile may have gained/lost
     // one) -- every "what did I last send" / cooldown fact feedback_ holds was computed against the
     // OLD output, so it's simplest and safest to forget all of it and let the next drain re-send
     // from scratch, rather than try to diff which assignments' profiles actually changed. Unlike
@@ -54,15 +54,15 @@ void RemoteEngine::setAssignments(std::vector<Assignment> assignments) {
     rebuildAndPublish(nullptr);
 }
 
-// FRO141 (docs/control/midi-remote.md#focus-bank): rebuilt from scratch by MidiLearnController
-// whenever the canvas selection changes -- never written to a project doc or a ControllerProfile.
-// An explicit project assignment on the same (profileId, controlId) on that profile's ACTIVE page,
-// or a GLOBAL profile action on that control, always wins over a transient one
-// (RemoteEngineReconcile.cpp's addSlot/transientBlockedByExplicit) -- a transient binding itself is
-// page-independent, unlike a project assignment. Republishes with graph == nullptr, same as every
-// other setter here; the caller (MidiLearnController::rebuildFocusBankAssignments) calls reconcile()
-// right afterwards to resolve a freshly bound assignment against the live graph immediately, rather
-// than waiting for an unrelated graph change to reach it.
+// Rebuilt from scratch by MidiLearnController whenever the canvas selection changes -- never written
+// to a project doc or a ControllerProfile. An explicit project assignment on the same (profileId,
+// controlId) on that profile's ACTIVE page, or a GLOBAL profile action on that control, always wins
+// over a transient one (RemoteEngineReconcile.cpp's addSlot/transientBlockedByExplicit) -- a
+// transient binding itself is page-independent, unlike a project assignment. Republishes with graph
+// == nullptr, same as every other setter here; the caller
+// (MidiLearnController::rebuildFocusBankAssignments) calls reconcile() right afterwards to resolve a
+// freshly bound assignment against the live graph immediately, rather than waiting for an unrelated
+// graph change to reach it (see docs/control/midi-remote.md#focus-bank).
 void RemoteEngine::setTransientAssignments(std::vector<Assignment> assignments) {
     transientAssignments_ = std::move(assignments);
     rebuildAndPublish(nullptr);
@@ -77,11 +77,11 @@ void RemoteEngine::setDefaultTakeover(Takeover takeover) {
     rebuildAndPublish(nullptr);
 }
 
-// FRO142 (docs/control/midi-remote.md#pages): getEffectivePageCount is a floor widened by whatever
-// the CURRENT project assignments actually reference, so deleting the assignments on a profile's
-// highest page (or loading a project that never used it) can shrink what this reports -- there is
-// no ratchet here, unlike ControllerProfile::pageCount itself, which only ever grows through the
-// UI's "+" button.
+// getEffectivePageCount is a floor widened by whatever the CURRENT project assignments actually
+// reference, so deleting the assignments on a profile's highest page (or loading a project that
+// never used it) can shrink what this reports -- there is no ratchet here, unlike
+// ControllerProfile::pageCount itself, which only ever grows through the UI's "+" button
+// (see docs/control/midi-remote.md#pages).
 int RemoteEngine::getEffectivePageCount(const juce::String& profileId) const {
     int count = 1;
     for (const auto& profile : profiles_)
@@ -93,10 +93,10 @@ int RemoteEngine::getEffectivePageCount(const juce::String& profileId) const {
     return count;
 }
 
-// FRO142 (docs/control/midi-remote.md#pages): a page applies to PROJECT assignments only -- a
-// GLOBAL profile action is active on every page (that is what keeps a page-switch button itself
-// reachable from every page). A missing map entry means page 1, which is also what a profile the
-// caller has never heard of gets -- there is no separate "unknown profile" answer to give.
+// A page applies to PROJECT assignments only -- a GLOBAL profile action is active on every page
+// (that is what keeps a page-switch button itself reachable from every page). A missing map
+// entry means page 1, which is also what a profile the caller has never heard of gets -- there
+// is no separate "unknown profile" answer to give (see docs/control/midi-remote.md#pages).
 int RemoteEngine::getActivePage(const juce::String& profileId) const {
     const auto found = activePages_.find(profileId);
     return found != activePages_.end() ? found->second : 1;
@@ -110,10 +110,10 @@ void RemoteEngine::setActivePage(const juce::String& profileId, int page) {
         return; // no-op: matches setDefaultTakeover's own "unchanged value never republishes" rule
     activePages_[profileId] = clamped;
     rebuildAndPublish(nullptr);
-    // FRO142 (docs/control/midi-remote.md#pages): re-send feedback for the newly active page's
-    // assignments -- resendFeedback() clears every cooldown/last-sent fact, so the very next drain
-    // re-sends every mapped parameter's CURRENT value even where it hasn't moved, exactly the
-    // "reopened device list" case this already existed for (FRO139).
+    // Re-send feedback for the newly active page's assignments -- resendFeedback() clears every
+    // cooldown/last-sent fact, so the very next drain re-sends every mapped parameter's CURRENT
+    // value even where it hasn't moved, exactly the "reopened device list" case this already
+    // existed for (see docs/control/midi-remote.md#pages).
     resendFeedback();
     if (onActivePageChanged)
         onActivePageChanged(profileId, clamped);

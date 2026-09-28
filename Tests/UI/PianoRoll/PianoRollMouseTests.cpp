@@ -414,7 +414,7 @@ TEST(PianoRollFollowPlayheadTest, NeverFlipsWhileADragIsInFlight) {
     f.roll.mouseUp(leftDrag(f.roll, dragged, anchor));
 }
 
-// FRO247: opening a clip must show ITS pattern, never jump toward wherever a follow flag left over
+// Opening a clip must show ITS pattern, never jump toward wherever a follow flag left over
 // from a PREVIOUS clip (or from before the clip was even opened) happens to think the playhead is.
 TEST(PianoRollFollowPlayheadTest, OpeningAClipSuppressesAStaleFollowPageUntilReArmed) {
     PianoRollFixture f;
@@ -443,7 +443,7 @@ TEST(PianoRollFollowPlayheadTest, OpeningAClipSuppressesAStaleFollowPageUntilReA
     EXPECT_NE(f.roll.getFirstVisibleBeat(), framedBeat) << "re-arming follow still works once the user asks again";
 }
 
-// FRO247: a manual scroll away from the playhead must stick -- not get undone by the very next
+// A manual scroll away from the playhead must stick -- not get undone by the very next
 // follow tick, which is what a mouse-wheel scroll (or a trackpad pan) previously read as.
 TEST(PianoRollFollowPlayheadTest, ManualScrollSuspendsFollowUntilReArmed) {
     PianoRollFixture f;

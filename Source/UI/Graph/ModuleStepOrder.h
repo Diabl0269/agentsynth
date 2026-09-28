@@ -1,4 +1,4 @@
-// Concern: FRO278's "select next/previous module" ordering -- which module a step lands on, kept
+// Concern: the "select next/previous module" ordering -- which module a step lands on, kept
 // free of GraphEditor so it is unit-testable against plain rectangles.
 #pragma once
 

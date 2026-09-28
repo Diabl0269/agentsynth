@@ -1,6 +1,6 @@
-// MixerMeterScaleTests.cpp -- FRO146: the meter's -60..+3 dBFS scale (Source/UI/Mixer/
+// MixerMeterScaleTests.cpp -- the meter's -60..+3 dBFS scale (Source/UI/Mixer/
 // MixerMeterScale.h), tested at its boundaries directly rather than reverse-engineered from
-// pixels. FRO146 follow-up: the dB<->position mapping is Cubase's own piecewise-linear taper, not
+// pixels. The dB<->position mapping is Cubase's own piecewise-linear taper, not
 // linear in dB -- exact breakpoints, monotonicity end to end, and the forward/inverse round-trip.
 #include "UI/Mixer/MixerMeterScale.h"
 #include <cmath>
@@ -40,7 +40,7 @@ TEST(MixerMeterScaleTest, TickTableIsOrderedLoudestFirstAndBracketsTheScale) {
 }
 
 // ============================================================================
-// FRO146 follow-up: the Cubase-style taper -- exact breakpoints, monotonicity, inverse round-trip.
+// The Cubase-style taper -- exact breakpoints, monotonicity, inverse round-trip.
 // ============================================================================
 
 TEST(MixerMeterScaleTest, DbToFractionHitsEveryBreakpointExactly) {

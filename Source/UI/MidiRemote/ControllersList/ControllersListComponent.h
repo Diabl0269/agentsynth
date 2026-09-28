@@ -4,13 +4,13 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
 
-// ControllersListComponent.h -- FRO131 (docs/control/midi-remote-ui.md#controllers-list-left): the
+// ControllersListComponent.h (docs/control/midi-remote-ui.md#controllers-list-left): the
 // MIDI Remote panel's left region, one row per controller profile. Deliberately decoupled from
 // synth::ControllerProfile/MidiLearnController -- it renders a plain view-model MidiRemotePanelComponent
 // builds each rebuild (mirroring MixerColumnComponent's own callback-driven-child shape), so this
 // component is headless-testable with no engine/store at all.
 //
-// "+ Add controller" (FRO134) is a footer button; the popover itself is AddControllerPopover,
+// "+ Add controller" is a footer button; the popover itself is AddControllerPopover,
 // owned by MidiRemotePanelComponent. Re-link/Recreate for an orphan row are task 8 -- an orphan row
 // renders (state glyph + "not on this machine" tooltip) but offers no action of its own yet.
 namespace synth::ui {
@@ -27,14 +27,15 @@ public:
         juce::String profileId;
         juce::String name;
         RowState state = RowState::present;
-        // FRO139 (docs/control/midi-remote.md#controller-feedback): the current "Send feedback to"
-        // choice, for the context menu's tick mark. feedbackOutputIdentifier is empty when
-        // hasFeedbackOutput is false (mirrors ControllerProfile::hasOutput/output).
+        // The current "Send feedback to" choice, for the context menu's tick mark.
+        // feedbackOutputIdentifier is empty when hasFeedbackOutput is false (mirrors
+        // ControllerProfile::hasOutput/output)
+        // (see docs/control/midi-remote.md#controller-feedback).
         bool hasFeedbackOutput = false;
         juce::String feedbackOutputIdentifier;
     };
 
-    /** FRO139: one "Send feedback to" submenu row. Deliberately not juce::MidiDeviceInfo (that
+    /** One "Send feedback to" submenu row. Deliberately not juce::MidiDeviceInfo (that
      *  would pull juce_audio_devices into this header) -- MidiRemotePanelComponent maps
      *  juce::MidiOutput::getAvailableDevices() into this on demand, via queryFeedbackOutputs below,
      *  so this component never calls a live device-enumeration API itself: doing so from inside a
@@ -62,13 +63,13 @@ public:
     void setSelectedProfileId(const juce::String& profileId);
     juce::String getSelectedProfileId() const noexcept { return selectedProfileId_; }
 
-    /** FRO263: proves the live-refresh pipeline actually reaches this component's rows, without a
+    /** Proves the live-refresh pipeline actually reaches this component's rows, without a
      *  getter into every row's own fields. */
     int getRowCountForTest() const noexcept { return static_cast<int>(rows_.size()); }
 
-    /** FRO134: hidden in the plugin build, where the list holds only Host MIDI. */
+    /** Hidden in the plugin build, where the list holds only Host MIDI. */
     void setAddControllerVisible(bool visible);
-    /** FRO136: the plugin build. Hides "+ Add controller" and words the standalone-only / orphan
+    /** The plugin build. Hides "+ Add controller" and words the standalone-only / orphan
      *  rows' tooltip for a host (a standalone assignment does not fire there). */
     void setHosted(bool hosted);
 
@@ -95,9 +96,9 @@ public:
      *  only invoking this callback if the user confirms. */
     std::function<int(const juce::String& profileId)> countProjectAssignments;
     std::function<void(const juce::String& profileId)> onDeleteConfirmed;
-    /** FRO139 (docs/control/midi-remote.md#controller-feedback): right-click "Send feedback to ->"
-     *  item chosen -- empty `identifier`/`name` means "None". Hidden in the plugin build, same as
-     *  "+ Add controller" and every other device-facing control (setHosted(true)). */
+    /** Right-click "Send feedback to ->" item chosen -- empty `identifier`/`name` means "None".
+     *  Hidden in the plugin build, same as "+ Add controller" and every other device-facing
+     *  control (setHosted(true)) (see docs/control/midi-remote.md#controller-feedback). */
     std::function<void(const juce::String& profileId, const juce::String& identifier, const juce::String& name)>
         onFeedbackOutputRequested;
     /** Supplies the submenu's device rows on demand (called once per right-click, never cached) --

@@ -1,4 +1,4 @@
-// MidiRemoteMappingTests.cpp -- FRO135 (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn,
+// MidiRemoteMappingTests.cpp (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn,
 // #controllers-list-left): the headless assignment builder and the two orphan-controller repairs.
 // Suite name contains "MidiRemote" per the ship-task --gtest_filter convention.
 

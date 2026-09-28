@@ -212,7 +212,7 @@ TEST_F(MainComponentTest, ToggleModMatrixButtonToggleStateFollowsVisibility) {
     EXPECT_EQ(toggleBtn->getToggleState(), before);
 }
 
-// simulateToggleMinimapClick() must flip the GraphEditor's minimap visibility (issue #159).
+// simulateToggleMinimapClick() must flip the GraphEditor's minimap visibility.
 TEST_F(MainComponentTest, SimulateToggleMinimapClickFlipsMinimapVisibility) {
     MainComponent mainComp(std::make_unique<MockProvider>());
 
@@ -282,22 +282,22 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
 #if JUCE_MAC || JUCE_WINDOWS
     expectedCommandCount += 1; // checkForUpdates
 #endif
-    // T114/P8-10: showWelcomeScreen and whatsNew are two more menu-only commands with no
+    // showWelcomeScreen and whatsNew are two more menu-only commands with no
     // shortcut-table entry (same "no chord" treatment as checkForUpdates above), but registered
     // UNCONDITIONALLY rather than mac-only — neither needs OS integration, only
     // ownedAudioEngine != nullptr, which is true for every MainComponent this test constructs.
     expectedCommandCount += 2;
-    // FRO94: contribute joins them as a third unconditional, chord-less Help command.
+    // Contribute joins them as a third unconditional, chord-less Help command.
     expectedCommandCount += 1;
-    // openPreset (P8-31) is a menu-only command: patch-load is reached via the Load menu/chooser, so
+    // openPreset is a menu-only command: patch-load is reached via the Load menu/chooser, so
     // only openProject took the rebindable Cmd+O binding. openPreset is still registered in
     // getAllCommands so the menu can invoke it but, like checkForUpdates, has no shortcut-table
     // entry, so the action-filtered count above omits it.
     expectedCommandCount += 1; // openPreset is menu-only (analogous to checkForUpdates)
-    // exportStems (P9-8) is a third menu-only command, same treatment as openPreset above: no
+    // exportStems is a third menu-only command, same treatment as openPreset above: no
     // ShortcutManager actionId/binding, registered here so the File menu can invoke it.
     expectedCommandCount += 1; // exportStems is menu-only (analogous to openPreset)
-    // exportPatchOnly (Cmd+Shift+P, P8-20) joined exportAudio (Cmd+Shift+E, P8-5) as a rebindable
+    // exportPatchOnly (Cmd+Shift+P) joined exportAudio (Cmd+Shift+E) as a rebindable
     // action with a default binding, so both are now counted through expectedActions above; the old
     // manual `+= 1` for exportPatchOnly no longer applies -- only checkForUpdates (mac), showWelcomeScreen/whatsNew,
     // openPreset and exportStems (above) are still menu-only commands with no shortcut-table entry.

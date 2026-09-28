@@ -5,7 +5,7 @@
 // Shared fixtures and helpers for the ChannelFlow test suite
 // (Tests/Mixer/ChannelFlow/ChannelFlow*Tests.cpp). Header-only; not compiled on its own and not
 // registered in Tests/CMakeLists.txt. Engine-level rig helpers that don't need a MainComponent
-// live in ChannelFlowTestRigs.h (FRO307) — included below.
+// live in ChannelFlowTestRigs.h — included below.
 
 #include "ChannelFlowTestRigs.h"
 #include "MainComponent/MainComponent.h"
@@ -30,11 +30,11 @@ protected:
             s->setValue("aiPanelVisible", "0");
             s->setValue("minimapVisible", "1");
             s->setValue("bottomDockVisible", "0");
-            // T184: pinned ON (the default) so an earlier PreferencesSettingsTabTests run that
+            // Pinned ON (the default) so an earlier PreferencesSettingsTabTests run that
             // persisted "0" to this same shared on-disk settings file can't silently flip these
             // tests' trigger condition off.
             s->setValue("mixerAutoCreateChannelOnConnect", "1");
-            // FRO42: the plugin-instrument tests below drive a REAL PluginScanService::ensureScanned()
+            // The plugin-instrument tests below drive a REAL PluginScanService::ensureScanned()
             // through MainComponent, and a completed scan's pluginScanCompleted() unconditionally
             // persists the scan list (MainComponent::savePluginScanList()) to this SAME shared
             // on-disk file — same convention as PluginScanTests.cpp's PluginScanPersistenceTest::
@@ -55,9 +55,9 @@ protected:
         mc.getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddAudioTrackMenuId);
     }
 
-    // T183: the Instrument submenu's headless seam, keyed by module type name rather than the raw
-    // menu id — matches how the picker itself is spelled everywhere else in this file. FRO48
-    // (P9-3k): `poly` picks the "(Poly)" menu entry instead, for Oscillator/Wavetable (Sampler has
+    // The Instrument submenu's headless seam, keyed by module type name rather than the raw
+    // menu id — matches how the picker itself is spelled everywhere else in this file.
+    // `poly` picks the "(Poly)" menu entry instead, for Oscillator/Wavetable (Sampler has
     // no poly parameter and no poly menu entry — see TimelinePanelComponent::openAddTrackMenu).
     static void addInstrumentTrack(MainComponent& mc, const juce::String& instrumentModuleType, bool poly = false) {
         int menuId = synth::ui::TimelinePanelComponent::kAddInstrumentSamplerMenuId;
@@ -72,7 +72,7 @@ protected:
 };
 
 // ============================================================================
-// Real-mouse-gesture helpers (T184/FRO25): a hand-built MouseEvent and the module-component
+// Real-mouse-gesture helpers: a hand-built MouseEvent and the module-component
 // lookup they're driven against. dragRealMidiCableBetweenCFT is local to
 // ChannelFlowAutoChannelTests.cpp (its only caller).
 // ============================================================================

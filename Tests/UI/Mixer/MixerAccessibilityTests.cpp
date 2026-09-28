@@ -1,4 +1,4 @@
-// MixerAccessibilityTests.cpp -- FRO18: JUCE AccessibilityHandler names/values on the mixer's
+// MixerAccessibilityTests.cpp -- JUCE AccessibilityHandler names/values on the mixer's
 // faders, pan knobs, meters and M/S buttons (plan (c)). Calls createAccessibilityHandler()
 // directly on the component under test rather than going through getAccessibilityHandler() --
 // the latter needs a native peer this suite never creates (the same headless-focus gap
@@ -26,7 +26,7 @@
 namespace {
 
 // The real on-disk settings file and the save/restore guard around it live in
-// Tests/TestSettingsHelpers.h (FRO58) -- one copy for every test that opens it.
+// Tests/TestSettingsHelpers.h -- one copy for every test that opens it.
 using synth::test::PersistedKeysGuard;
 using synth::test::userSettingsTestOptions;
 
@@ -132,12 +132,12 @@ TEST(MixerAccessibilityTest, MeterAccessibilityValueIsReadOnly) {
     auto* value = handler->getValueInterface();
     ASSERT_NE(value, nullptr);
     EXPECT_TRUE(value->isReadOnly());
-    // FRO146: dBFS text, not a percentage -- a linear 0.5 peak is ~-6.0 dBFS.
+    // dBFS text, not a percentage -- a linear 0.5 peak is ~-6.0 dBFS.
     EXPECT_EQ(value->getCurrentValueAsString(), "-6.0 dBFS");
 }
 
 // ============================================================================
-// FRO228: header rename tooltip/help gated on setRenameEnabled(); Master's own title; the pan
+// Header rename tooltip/help gated on setRenameEnabled(); Master's own title; the pan
 // knob's AX value surviving its param attachment; insert/send rows and "Make channel" becoming
 // real, named AX children; internal ids no longer leaking as button titles.
 // ============================================================================
@@ -223,7 +223,7 @@ TEST(MixerAccessibilityTest, SendListExposesAddSendAsAReachableNamedControl) {
            "what makes it reachable";
 }
 
-// FRO301: rebuildKnobs() gave every send-level knob no setTitle at all, and
+// rebuildKnobs() gave every send-level knob no setTitle at all, and
 // juce::SliderParameterAttachment's own constructor overwrites textFromValueFunction with the
 // param's raw getText() (see MixerSendList.cpp's own comment on the fix).
 TEST(MixerAccessibilityTest, SendKnobHasATitleNamingItsTargetAndReadsDbValues) {
@@ -241,7 +241,7 @@ TEST(MixerAccessibilityTest, SendKnobHasATitleNamingItsTargetAndReadsDbValues) {
     // bottomDock.rebuildMixer(), which destroys and recreates every column. A pointer taken before
     // the call is dangling by here -- addSendTo() on it read freed memory, which passed by luck on
     // macOS/Windows Release and segfaulted on roughly every other Linux Debug+coverage run
-    // (std::function::operator() on the freed MixerSendList's onMutated, agentsynth#498/#500).
+    // (std::function::operator() on the freed MixerSendList's onMutated).
     auto* column = mixerPanel.getStripColumnForTest(0);
     ASSERT_NE(column, nullptr);
     column->getSendListForTest().addSendTo(bus);
@@ -284,7 +284,7 @@ TEST(MixerAccessibilityTest, BottomDockDetachButtonHasAHumanTitleNotItsComponent
 }
 
 TEST(MixerAccessibilityTest, DetachedWindowRealWiringGetsAThemedLookAndFeel) {
-    // FRO228: DetachedPanelWindow itself was already covered (DetachedPanelWindowTests.cpp) for a
+    // DetachedPanelWindow itself was already covered (DetachedPanelWindowTests.cpp) for a
     // directly-supplied LookAndFeel -- this instead exercises the REAL wiring path a live detach
     // goes through (MainComponent -> BottomDockComponent -> DetachablePanelHost::setDetached()),
     // which is what actually regressed: MainComponent's delegating/test ctor used to assign
@@ -305,7 +305,7 @@ TEST(MixerAccessibilityTest, DetachedWindowRealWiringGetsAThemedLookAndFeel) {
     EXPECT_EQ(window->getBackgroundColour(), colors.bg0.withAlpha(1.0f).overlaidWith(colors.surface))
         << "the real setDetached(true) path must hand the window the app's OWN AppLookAndFeel, not "
            "a null one silently falling back to the stock ctor colour";
-    // FRO228: the redock button VoiceOver lands on inside the window is the SAME borrowed
+    // The redock button VoiceOver lands on inside the window is the SAME borrowed
     // DetachablePanelHost::detachButton_ -- it must not be unnamed just because it's icon-only.
     EXPECT_TRUE(mixerHost.getDetachButton().getTitle() == "Dock back")
         << "got: " << mixerHost.getDetachButton().getTitle();

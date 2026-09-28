@@ -1,5 +1,5 @@
-// Right-click MIDI Learn on the transport bar's four glyph buttons (FRO133,
-// docs/control/midi-remote-ui.md#right-click-midi-learn--coverage). Every target here is an
+// Right-click MIDI Learn on the transport bar's four glyph buttons
+// (docs/control/midi-remote-ui.md#right-click-midi-learn--coverage). Every target here is an
 // ACTION, not a graph parameter (docs/control/midi-remote.md#action-targets) -- the bar stays
 // graph-free, so these tests wire onMidiLearnRequested/onMidiForgetRequested/
 // onQueryMidiMappingsForActions directly as test doubles (mirroring
@@ -236,7 +236,7 @@ TEST(TransportBarMidiLearnTests, ArmingADifferentActionReplacesTheArmedOne) {
     SUCCEED();
 }
 
-// FRO256: updateFromTransport() must keep repainting the armed glyph's bounds on every poll while
+// updateFromTransport() must keep repainting the armed glyph's bounds on every poll while
 // armed, or the breathing outline (its alpha computed from wall time on every paint()) freezes at
 // whatever alpha its first paint happened to land on.
 TEST(TransportBarMidiLearnTests, UpdateFromTransportKeepsRepaintingTheArmedOutlineWhileArmed) {

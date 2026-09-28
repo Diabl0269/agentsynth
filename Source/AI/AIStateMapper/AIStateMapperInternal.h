@@ -124,7 +124,7 @@ inline const std::unordered_map<juce::String, ModuleFactoryFunc>& moduleFactory(
         // In the factory so our own saves round-trip a patch that has one; kNonAuthorableModuleTypes
         // below keeps it away from the model.
         {"Track Audio", []() { return std::make_unique<TimelineAudioSourceModule>(); }},
-        // A Macro's audio/CV inlet/outlet jacks (P8-15 Macro I/O). In the factory so our own saves
+        // A Macro's audio/CV inlet/outlet jacks (Macro I/O). In the factory so our own saves
         // round-trip a patch that has one; kNonAuthorableModuleTypes below keeps them away from the
         // model — see docs/macros/macros.md#ai-authorability.
         {"Macro In", []() { return std::make_unique<MacroInletModule>(); }},
@@ -133,7 +133,7 @@ inline const std::unordered_map<juce::String, ModuleFactoryFunc>& moduleFactory(
         // MacroMidiInletModule's class comment for why), same reason for being in the factory.
         {"Macro MIDI In", []() { return std::make_unique<MacroMidiInletModule>(); }},
         {"Macro MIDI Out", []() { return std::make_unique<MacroMidiOutletModule>(); }},
-        // The mixer's channel strip and mix bus (P9-2; docs/mixer/mixer.md#node-types). In the factory so our own
+        // The mixer's channel strip and mix bus (docs/mixer/mixer.md#node-types). In the factory so our own
         // saves round-trip a patch that has them; kNonAuthorableModuleTypes below keeps them away from
         // the model — see docs/mixer/mixer.md#ai-authorability.
         {"Channel Strip", []() { return std::make_unique<ChannelStripModule>(); }},
@@ -181,7 +181,7 @@ inline const std::set<juce::String> kNonAuthorableModuleTypes = {
     // (PatchValidationError::InternalModuleNotAllowed) rather than sanitised. Only the app's own
     // load UX may create one.
     "Hosted Plugin",
-    // A Macro's audio/CV inlet/outlet jack (P8-15 Macro I/O; docs/macros/macros.md#ai-authorability). Membership of
+    // A Macro's audio/CV inlet/outlet jack (Macro I/O; docs/macros/macros.md#ai-authorability). Membership of
     // the macro it belongs to is keyed by node uuid, and a provider-supplied uuid is ignored
     // (adoptUuidIfTrusted) — so a model-authored one could never resolve to a real macro's port
     // list even if it were let through. The macro's own port-creation flow is the only thing that

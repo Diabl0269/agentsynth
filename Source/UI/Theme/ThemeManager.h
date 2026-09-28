@@ -49,7 +49,7 @@ public:
     void addUserTheme(Theme theme);
 
     // Cross-platform: synth::userSettingsRootDirectory()/Themes (Source/UserSettings.h) --
-    // that root also honours the Tests-only settings-dir override (FRO305), so a test run never
+    // that root also honours the Tests-only settings-dir override, so a test run never
     // touches the developer's real Themes folder. Creates it if absent.
     static juce::File getUserThemesFolder();
 

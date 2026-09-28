@@ -20,7 +20,7 @@ void setTestEnv(const char* name, const char* value) { setenv(name, value, 1); }
 void clearTestEnv(const char* name) { unsetenv(name); }
 #endif
 
-// ---- P6-16: sync test doubles, local to this file (mirrors AIChatComponentTests.cpp's own
+// ---- sync test doubles, local to this file (mirrors AIChatComponentTests.cpp's own
 // copies -- those are not exported/shared) --------------------------------------------------
 
 template <typename Predicate>
@@ -230,7 +230,7 @@ TEST_F(FeedbackSettingsTabTest, ResizingDoesNotCrash) {
     EXPECT_NO_THROW(tab.resized());
 }
 
-// ---- P6-16: sync to the server ---------------------------------------------------------------
+// ---- Sync to the server ----------------------------------------------------------------------
 
 TEST_F(FeedbackSettingsTabTest, SignedInUserSyncsFeedbackToServer) {
     auto tokenStore = std::make_unique<synth::InMemoryTokenStore>();
@@ -268,7 +268,7 @@ TEST_F(FeedbackSettingsTabTest, SignedInUserSyncsFeedbackToServer) {
 }
 
 #ifndef NDEBUG
-// Pins the one deliberate difference from P6-9's submitMessageFeedback sync (which uses the
+// Pins the one deliberate difference from the submitMessageFeedback sync (which uses the
 // hardcoded synth::branding::kApiBaseUrl): this sync path must go through resolveApiBaseUrl(), so
 // AGENTSYNTH_LOCAL_API_URL redirects it exactly like every other cloud-gated feature (see
 // docs/development/local-cloud-dev.md). Only asserting url.endsWith("/v1/
@@ -299,9 +299,8 @@ TEST_F(FeedbackSettingsTabTest, SyncUsesLocalApiUrlOverrideWhenSet) {
 }
 #endif
 
-// P6-17: a signed-out user with an accountService attached still gets synced -- anonymously, via
-// this device's X-Device-Id -- rather than skipped as it was before P6-17 (superseding the old
-// "no sync while signed out" contract).
+// A signed-out user with an accountService attached still gets synced -- anonymously, via
+// this device's X-Device-Id -- rather than skipped.
 TEST_F(FeedbackSettingsTabTest, SignedOutStillSyncsFeedbackAnonymouslyViaDeviceId) {
     auto tokenStore = std::make_unique<synth::InMemoryTokenStore>();
     synth::AccountService accountService("http://mock-host:8787", makeSignInPerformer(), std::move(tokenStore));

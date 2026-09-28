@@ -1,4 +1,4 @@
-// Concern: FRO135 -- assigning the selected control from the panel side
+// Concern: assigning the selected control from the panel side
 // (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn): the Assign... /
 // Learn target menu, the pick-target overlay entry and the action picker.
 #include "MidiRemote/MidiLearnController.h"
@@ -35,9 +35,9 @@ void MidiRemotePanelComponent::showActionPicker(juce::Component& anchor) {
     if (selectedControlId_.isEmpty())
         return;
     auto picker = std::make_unique<ActionPickerComponent>();
-    // FRO142 (docs/control/midi-remote.md#pages): the "Page N" rows must match the selected
-    // control's OWN controller, set before the picker is shown -- ActionPickerComponent's own
-    // header comment on why this can't just default to 1.
+    // The "Page N" rows must match the selected control's OWN controller, set before the
+    // picker is shown -- ActionPickerComponent's own header comment on why this can't just
+    // default to 1 (see docs/control/midi-remote.md#pages).
     picker->setEffectivePageCount(remoteEngine_ != nullptr ? remoteEngine_->getEffectivePageCount(selectedProfileId_)
                                                            : 1);
     juce::Component::SafePointer<MidiRemotePanelComponent> safePanel(this);
@@ -50,14 +50,15 @@ void MidiRemotePanelComponent::showActionPicker(juce::Component& anchor) {
             if (safeBox != nullptr)
                 safeBox->dismiss();
         };
-        // FRO236 (docs/control/midi-remote.md#continuous-targets): the picker's "Continuous" group.
+        // The picker's "Continuous" group
+        // (see docs/control/midi-remote.md#continuous-targets).
         content->onContinuousChosen = [safePanel, safeBox](synth::ContinuousTargetKind kind) {
             if (safePanel != nullptr)
                 safePanel->assignSelectedControlToContinuous(kind);
             if (safeBox != nullptr)
                 safeBox->dismiss();
         };
-        // FRO142: the picker's "Pages" group.
+        // The picker's "Pages" group.
         content->onPageChosen = [safePanel, safeBox](synth::PageCommand command, int page) {
             if (safePanel != nullptr)
                 safePanel->assignSelectedControlToPage(command, page);
@@ -80,8 +81,8 @@ bool MidiRemotePanelComponent::assignSelectedControlToAction(const juce::String&
     return true;
 }
 
-// FRO236 (docs/control/midi-remote.md#continuous-targets): mirrors assignSelectedControlToAction
-// above.
+// Mirrors assignSelectedControlToAction above
+// (see docs/control/midi-remote.md#continuous-targets).
 bool MidiRemotePanelComponent::assignSelectedControlToContinuous(synth::ContinuousTargetKind kind) {
     if (learnController_ == nullptr || selectedProfileId_.isEmpty() || selectedControlId_.isEmpty())
         return false;
@@ -95,7 +96,8 @@ bool MidiRemotePanelComponent::assignSelectedControlToContinuous(synth::Continuo
     return true;
 }
 
-// FRO142 (docs/control/midi-remote.md#pages): mirrors assignSelectedControlToContinuous above.
+// Mirrors assignSelectedControlToContinuous above
+// (see docs/control/midi-remote.md#pages).
 bool MidiRemotePanelComponent::assignSelectedControlToPage(synth::PageCommand command, int page) {
     if (learnController_ == nullptr || selectedProfileId_.isEmpty() || selectedControlId_.isEmpty())
         return false;

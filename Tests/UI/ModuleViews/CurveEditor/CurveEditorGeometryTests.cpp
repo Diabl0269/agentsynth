@@ -1,6 +1,6 @@
 // CurveEditorGeometryTests.cpp
 // Tests for synth::ui::CurveEditorGeometry — the pure pixel mapping behind the reusable
-// breakpoint curve editor (FRO111): time/level <-> pixel round trips, the zero-duration-segment
+// breakpoint curve editor: time/level <-> pixel round trips, the zero-duration-segment
 // display plateau, hit-testing priority/tie rules, bend-handle tracking, and playhead mapping.
 
 #include "CurveEditorTestHelpers.h"

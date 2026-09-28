@@ -59,7 +59,7 @@ void RemoteEngine::noteLearnCandidate(const juce::String& sourceKey, const Remot
 
     // CC only: rawNormalisedValue() is rawValue/127.0f exactly, so a genuine 0 or 127 raw value
     // round-trips to exactly 0.0f/1.0f in IEEE-754 float division -- anything else is a real
-    // intermediate value, i.e. a sweep rather than a button tap (FRO130's buttonLike preference
+    // intermediate value, i.e. a sweep rather than a button tap (the buttonLike preference
     // below).
     if (spec.type == MessageType::cc && event.value != 0.0f && event.value != 1.0f)
         found->sawIntermediateValue = true;
@@ -70,7 +70,7 @@ void RemoteEngine::noteLearnCandidate(const juce::String& sourceKey, const Remot
 }
 
 bool RemoteEngine::looksButtonLike(const LearnTally& tally) noexcept {
-    // FRO330: an mmc tally is always button-like -- like note, it never carries an intermediate
+    // An mmc tally is always button-like -- like note, it never carries an intermediate
     // "sweep" value.
     if (tally.spec.type == MessageType::note || tally.spec.type == MessageType::mmc)
         return true;

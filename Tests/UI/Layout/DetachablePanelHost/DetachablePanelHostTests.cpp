@@ -1,7 +1,7 @@
 // DetachablePanelHostTests.cpp
 //
 // synth::ui::DetachablePanelHost -- the ONE mechanism that moves a panel between its dock slot and
-// its own top-level window (FRO12, P9-6, docs/mixer/panel.md). Every window this test creates is
+// its own top-level window (docs/mixer/panel.md). Every window this test creates is
 // addToDesktop=false (see DetachedPanelWindow's own header comment), so nothing here ever creates
 // a native peer -- see DetachedPanelWindowTests.cpp for that side of the mechanism.
 //
@@ -10,9 +10,9 @@
 //   2. Tooltip + button-text/idempotence of the detach control.
 //   3. Embedded-header suppression (Tab-placement chrome).
 //   4. onDetachedStateChanged fires for both directions, including a window-driven redock.
-//   5. Native-window promotion (FRO12 follow-up: setDetached(true) alone never created a peer) --
+//   5. Native-window promotion (setDetached(true) alone must create a peer) --
 //      see DetachablePanelHost.h's setCreatesNativeWindows() doc comment for the bug this guards.
-//   6. FRO228 -- refreshDetachedWindowTheme() re-skins an already-open detached window.
+//   6. RefreshDetachedWindowTheme() re-skins an already-open detached window.
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
@@ -102,7 +102,7 @@ TEST_F(DetachablePanelHostTest, SetDetachedIsIdempotent) {
 TEST_F(DetachablePanelHostTest, SetDetachedTogglesTooltip) {
     DetachablePanelHost host(panel, "Test Panel", "testPanelWindowBounds", &appProperties, nullptr, &shortcutManager);
     EXPECT_EQ(host.getButtonTooltipForTest(), "Open in window");
-    // FRO228: setButtonText({}) clears getButtonText() (ButtonAccessibilityHandler::getTitle()'s
+    // setButtonText({}) clears getButtonText() (ButtonAccessibilityHandler::getTitle()'s
     // own fallback), so without an explicit title this icon-only button was unnamed to a screen
     // reader -- same wording as the tooltip, same toggle.
     EXPECT_EQ(host.getDetachButton().getTitle(), "Open in window");
@@ -117,7 +117,7 @@ TEST_F(DetachablePanelHostTest, SetDetachedTogglesTooltip) {
 }
 
 TEST_F(DetachablePanelHostTest, ButtonTextAlwaysEmpty) {
-    // The detach control is ICON-ONLY (FRO12's own scope statement) -- no text label, docked or
+    // The detach control is ICON-ONLY (the scope statement) -- no text label, docked or
     // detached, so it can never fall back to rendering a text caption if the icon fails to load.
     DetachablePanelHost host(panel, "Test Panel", "testPanelWindowBounds", &appProperties, nullptr, &shortcutManager);
     EXPECT_TRUE(host.getButtonTextForTest().isEmpty());
@@ -173,7 +173,7 @@ TEST_F(DetachablePanelHostTest, WindowCloseButtonRedocksThroughTheSameCallback) 
 }
 
 // ============================================================================
-// 5. Native-window promotion (FRO12 follow-up)
+// 5. Native-window promotion
 // ============================================================================
 
 namespace {
@@ -237,7 +237,7 @@ TEST_F(DetachablePanelHostTest, FlagTrueWithAPrimaryDisplayReachesThePromotionCa
 }
 
 // ============================================================================
-// 6. FRO228 -- refreshDetachedWindowTheme() re-skins an already-open detached window
+// 6. RefreshDetachedWindowTheme() re-skins an already-open detached window
 // ============================================================================
 
 namespace {

@@ -8,7 +8,7 @@ namespace synth {
 
 namespace {
 
-// P6-8: date-only rendering ("18 Aug 2026") for the downgrade strip and history popup rows. Falls
+// Date-only rendering ("18 Aug 2026") for the downgrade strip and history popup rows. Falls
 // back to the raw ISO string on parse failure rather than showing nothing — an unreadable-but-
 // present date is more useful than a blank one.
 juce::String formatReadableDate(const juce::String& iso) {
@@ -23,7 +23,7 @@ juce::String formatReadableDate(const juce::String& iso) {
 } // namespace
 
 // ============================================================================
-// P6-8: local multi-conversation history + unified history UI + upsell/downgrade strips
+// Local multi-conversation history + unified history UI + upsell/downgrade strips
 // ============================================================================
 
 void AIChatComponent::updateUpsellStrip() {

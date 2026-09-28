@@ -9,8 +9,7 @@ namespace synth {
 /**
  * @class PlanBadge
  * @brief Slim usage indicator shown near the model picker: "Free · 240 / 1000 this month" or
- *        "Pro · 1,203 / 10,000 this month", sourced from AccountService's entitlement fields
- *        (P4-4).
+ *        "Pro · 1,203 / 10,000 this month", sourced from AccountService's entitlement fields.
  *
  * Driven entirely by setAccountService()/refresh() — same contract as AccountRow (see its class
  * comment): with no AccountService attached, or one attached but not yet SignedIn with a known

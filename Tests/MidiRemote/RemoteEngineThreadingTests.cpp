@@ -209,7 +209,7 @@ TEST(MidiRemoteEngineThreading, BurstWhileSwappingTheTable) {
         << "every snapshot retired during the burst should be reclaimable once the burst stops";
 }
 
-// FRO197: AudioEngine::setRemoteMessageSink(nullptr) must be safe to call concurrently with the
+// AudioEngine::setRemoteMessageSink(nullptr) must be safe to call concurrently with the
 // threads that read remoteMessageSink_ and call into it OUTSIDE any render pass --
 // AudioEngineMidi.cpp's handleIncomingMidiMessageFromSource (the standalone juce::MidiInput driver
 // thread's real entry point) is exactly that call site. Before ScopedRemoteSinkCall /
@@ -260,7 +260,7 @@ TEST(MidiRemoteEngineThreading, TeardownSurvivesConcurrentMidiThreadDelivery) {
         remote->setAssignments(makeAssignments(iteration));
         engine.setRemoteMessageSink(remote.get());
         engine.setRemoteMessageSink(nullptr);
-        remote.reset(); // the FRO197 use-after-free, if the handshake above were incomplete
+        remote.reset(); // a use-after-free, if the handshake above were incomplete
         ++iteration;
     }
 

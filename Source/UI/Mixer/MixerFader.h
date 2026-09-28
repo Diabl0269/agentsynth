@@ -6,22 +6,23 @@
 
 class AppUndoManager;
 
-// MixerFader.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): a dB-scale vertical fader bound to a
+// MixerFader.h (docs/mixer/panel.md#what-the-mixer-shows): a dB-scale vertical fader bound to a
 // ChannelStripModule/MasterModule's own `gain` AudioParameterFloat*, reused by both (their ranges
 // are identical -- ChannelStripModule::kMinGainDb/kMaxGainDb).
 //
-// FRO150 (docs/mixer/fader.md): the slider's on-screen THUMB POSITION follows Cubase's own
-// non-linear fader taper (MixerFaderTaper.h) while the bound PARAMETER stays exactly linear dB --
-// bind() installs a custom juce::NormalisableRange<double> whose convertTo0to1/convertFrom0to1
-// route through the taper. slider_ is a MixerFaderSlider (not a plain juce::Slider) for the
-// Shift-fine-drag/wheel and Cmd-click/double-click-reset conventions -- see its own header comment
-// for why those are reimplemented rather than layered on juce::Slider's own mouse handling.
+// The slider's on-screen THUMB POSITION follows Cubase's own non-linear fader taper
+// (MixerFaderTaper.h) while the bound PARAMETER stays exactly linear dB -- bind() installs a
+// custom juce::NormalisableRange<double> whose convertTo0to1/convertFrom0to1 route through the
+// taper. slider_ is a MixerFaderSlider (not a plain juce::Slider) for the Shift-fine-drag/wheel
+// and Cmd-click/double-click-reset conventions -- see its own header comment for why those are
+// reimplemented rather than layered on juce::Slider's own mouse handling
+// (see docs/mixer/fader.md).
 //
 // Undo: a juce::AudioProcessorParameter::Listener on the bound param brackets ONE
 // captureBeforeState()/pushSnapshotFromCapture() pair per drag gesture -- the exact mechanism
 // ModuleComponent::parameterGestureChanged already uses for every module's own knobs
 // (Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp), just triggered from the
-// mixer's own slider instead of a module card's. FRO150: MixerFaderSlider has no direct access to
+// mixer's own slider instead of a module card's. MixerFaderSlider has no direct access to
 // the bound AudioParameterFloat, so bind() wires its onDragStart/onDragEnd (juce::Slider's own
 // public std::function members) to param.beginChangeGesture()/endChangeGesture() directly, the
 // same pattern nudge() below already uses for the keyboard path -- one bracket mechanism, however
@@ -41,13 +42,13 @@ public:
      *  node can be destroyed. */
     void bind(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, juce::AudioParameterFloat& param);
     /** Idempotent and null-safe -- a call with nothing bound (param_ already null) is a no-op, so
-     *  destruction, a defensive rebind, and FRO11's pre-restore unbind hook can all call it freely
+     *  destruction, a defensive rebind, and the pre-restore unbind hook can all call it freely
      *  without checking bind state first. */
     void unbind();
 
     bool isBoundForTest() const noexcept { return param_ != nullptr; }
 
-    /** FRO18: nudges the bound param by `deltaDb` (clamped to the param's own range), as exactly
+    /** Nudges the bound param by `deltaDb` (clamped to the param's own range), as exactly
      *  ONE undo step -- begin/end the gesture around a single setValueNotifyingHost the same way a
      *  slider drag does, so parameterGestureChanged (already listening -- see the class comment)
      *  brackets it, not a second undo mechanism. A no-op (false) when nothing is bound, so the
@@ -57,7 +58,7 @@ public:
 
     /** Counts only unbind() calls that actually detached a live parameter (param_ was non-null at
      *  entry) -- a defensive no-op unbind() on an already-unbound fader never bumps this. Lets a
-     *  test prove the FRO11 pre-restore hook (MixerPanelComponent::unbindAllColumns(), reached via
+     *  test prove the pre-restore hook (MixerPanelComponent::unbindAllColumns(), reached via
      *  GraphEditor::onBeforeDetachAllModuleComponents) actually ran and did real work, not just
      *  that nothing crashed. */
     static int getLiveUnbindCallCountForTest() noexcept { return liveUnbindCallCountForTest_; }
@@ -65,17 +66,17 @@ public:
     juce::Slider& getSlider() noexcept { return slider_; }
     const juce::Slider& getSlider() const noexcept { return slider_; }
 
-    /** FRO18: "<channel name> fader" (e.g. "Lead 1 fader") -- the accessible name VoiceOver reads
+    /** "<channel name> fader" (e.g. "Lead 1 fader") -- the accessible name VoiceOver reads
      *  ahead of the slider's own value text below. */
     void setChannelName(const juce::String& name);
 
-    /** FRO18 review fix: moves REAL accessibility focus (not keyboard focus) to the fader slider's
+    /** Moves REAL accessibility focus (not keyboard focus) to the fader slider's
      *  handler when the column it belongs to becomes the panel's keyboard-walked focus. Safe to
      *  call unconditionally -- getAccessibilityHandler() returns null with no native peer yet
      *  (headless CI, or before the window is shown), the exact case slider_.getAccessibilityHandler()
      *  guards below. AccessibilityHandler::grabFocus() only calls Component::grabKeyboardFocus()
      *  when the component itself wants keyboard focus, which the slider deliberately doesn't
-     *  (setWantsKeyboardFocus(false) above, the T160 trap) -- so this moves VoiceOver's cursor
+     *  (setWantsKeyboardFocus(false) above, the keyboard-focus trap) -- so this moves VoiceOver's cursor
      *  without stealing the panel's own real OS keyboard focus (MixerPanelComponent is the single
      *  focusable leaf). */
     void grabAccessibilityFocus();

@@ -41,7 +41,7 @@ public:
 
     void resized() override;
     void paint(juce::Graphics& g) override;
-    // T159: focus-region outline (Source/UI/Layout/FocusRegion.h), drawn OVER children -- the message view
+    // Focus-region outline (Source/UI/Layout/FocusRegion.h), drawn OVER children -- the message view
     // and input field tile wall-to-wall against this panel's own edge, so an outline painted at the
     // end of paint() would sit UNDER them and never show.
     void paintOverChildren(juce::Graphics& g) override;
@@ -181,7 +181,7 @@ public:
     // setPatchFeedbackFileForTesting.
     void setLocalHistoryDirectoryForTesting(const juce::File& dir) { localHistoryDirOverride = dir; }
 
-    // Testing hook (P6-9): installs a fake AuthClient::HttpPerformer for the rating callback's
+    // Testing hook: installs a fake AuthClient::HttpPerformer for the rating callback's
     // feedback-sync POST, so a test can assert on the request the detached background thread sends
     // without ever opening a real socket. Mirrors setHistorySourcesForTesting's fake-transport
     // idiom, but at the HttpPerformer layer rather than ConversationHistorySource, since this call
@@ -346,7 +346,7 @@ private:
     juce::TextButton sendButton;
     juce::TextButton cancelButton; // Visible ONLY while waiting
     juce::TextButton newChatButton;
-    juce::TextButton historyButton; // P6-8: opens the history list/restore/clear popup
+    juce::TextButton historyButton; // opens the history list/restore/clear popup
     juce::ComboBox modelPicker;
 
     // Patch/Arrange request routing — see refreshModeControls() for the visibility gates and
@@ -363,12 +363,12 @@ private:
         return modeSelector.isVisible() && modeSelector.getSelectedId() == kModeSelectorArrangeId;
     }
 
-    // P4-6 privacy disclosure: visible only while the active provider is hosted (RemoteProvider).
+    // Privacy disclosure: visible only while the active provider is hosted (RemoteProvider).
     // Zero-height/invisible otherwise, same contract as accountRow/planBadge below it in the
     // bottom-chrome stack — see updateHostedModeNotice() and resized().
     juce::Label hostedModeNotice;
 
-    // P6-8 upsell strip: an "Upgrade to Pro" button, shown whenever !isProPlan(snapshot) —
+    // Upsell strip: an "Upgrade to Pro" button, shown whenever !isProPlan(snapshot) —
     // including with NO AccountService attached at all, which deliberately diverges from
     // accountRow/planBadge/hostedModeNotice's "invisible until a service says otherwise"
     // convention: those default to invisible because they have nothing true to say yet, but "not
@@ -379,7 +379,7 @@ private:
     // see updateUpsellStrip().
     juce::TextButton upsellButton;
 
-    // P6-8 downgrade notice: "Your subscription has lapsed — your saved history will be deleted on
+    // Downgrade notice: "Your subscription has lapsed — your saved history will be deleted on
     // {date}." Shown only once signed in, !isProPlan(snapshot), AND a grace-period deletion date is
     // known — which is learned ONLY from an explicit History-button click (listConversations()
     // writes on read, docs/ai/history.md#server-side-conversation-history — must not be polled). See
@@ -396,13 +396,13 @@ private:
     // setUrlOpenerForTesting() so no test ever launches a real browser.
     std::function<void(const juce::URL&)> urlOpener = [](const juce::URL& u) { u.launchInDefaultBrowser(); };
 
-    // P6-3: local, append-only feedback log. Always written unconditionally (offline, signed-out,
-    // and free-tier fallback); P6-9 additionally syncs to the server from the rating callback below
+    // Local, append-only feedback log. Always written unconditionally (offline, signed-out,
+    // and free-tier fallback); the rating callback below additionally syncs to the server
     // when a server message id is available and the account is signed-in Pro — see
     // PatchFeedbackStore::record()'s doc comment for the local log's own shape.
     PatchFeedbackStore patchFeedbackStore;
 
-    // P6-9: test injection for the feedback-sync POST the rating callback fires on a detached
+    // Test injection for the feedback-sync POST the rating callback fires on a detached
     // background thread (mirrors CloudHistorySource's HTTP-transport shape, but this call goes
     // straight through a locally-constructed AuthClient rather than a ConversationHistorySource,
     // since it isn't a history operation). Empty (falsy) in production, where a real AuthClient
@@ -418,7 +418,7 @@ private:
     // documented for model discovery (see CLAUDE.md "AI model discovery ordering").
     void updateHostedModeNotice();
 
-    // P6-3: thumbs up/down on a patch card. `None` is the UI's un-rated default and is never
+    // Thumbs up/down on a patch card. `None` is the UI's un-rated default and is never
     // itself written to PatchFeedbackStore — only Up/Down get persisted.
     enum class PatchRatingUiState { None, Up, Down };
 
@@ -427,7 +427,7 @@ private:
         juce::String text;
         juce::String jsonPatch;
         bool isExpanded = false;
-        // P4-4: true only for a live Quota-error response — renders an "Upgrade to Pro" button on
+        // True only for a live Quota-error response — renders an "Upgrade to Pro" button on
         // the bubble. Deliberately NOT reconstructed by the history-replay loop in the
         // constructor, so a New Chat or app restart drops it along with the rest of that turn's
         // transient UI state (mirrors how Cancel-button/spinner state is session-only).
@@ -442,17 +442,17 @@ private:
         juce::String timelineOpsJson;
         juce::String timelineOpsPreview;
 
-        // P6-3: session-scoped UI rating state, same "not reconstructed on replay" precedent as
+        // Session-scoped UI rating state, same "not reconstructed on replay" precedent as
         // showUpgradeAction just above — the durable record lives in patchFeedbackStore, not here.
         PatchRatingUiState ratingState = PatchRatingUiState::None;
         juce::String ratingComment;
 
-        // P6-9: server-assigned id for this assistant/patch message, from AIResponse::messageId
+        // Server-assigned id for this assistant/patch message, from AIResponse::messageId
         // (x-message-id header — Pro plan + persistence succeeded only). Only ever set for a live,
         // same-session assistant message just returned by sendMessage() — NOT reconstructed by the
         // history-replay loop, same "session-scoped" precedent as ratingState/showUpgradeAction
         // above. A rating on a restored conversation therefore stays local-only; this is a
-        // deliberate scope limit (P6-9 does not sync ratings on restored history), not a bug.
+        // deliberate scope limit (ratings on restored history are not synced), not a bug.
         juce::String serverMessageId;
 
         // Patch diff preview, computed ONCE (attachPatchPreview()) at the point this message is
@@ -489,7 +489,7 @@ private:
     // `aiService`, so it must be called after data is appended to `messages`.
     void attachPatchPreview(MessageData& data);
 
-    // P6-8: this session's local conversation identity — minted lazily on the first successful
+    // This session's local conversation identity — minted lazily on the first successful
     // exchange (saveCurrentConversationLocally()), not at construction, so a session that never
     // sends a message never creates an empty history file. Also adopted by restoreConversation()
     // so that restoring an earlier conversation makes subsequent local (and, for a Pro restore,
@@ -507,29 +507,29 @@ private:
     bool lastHistoryPopupWasCloud = false;
     std::vector<LocalConversationSummary> lastHistoryList;
 
-    // P6-8: syncs upsellButton's visibility, and historyButton's tooltip, to !isProPlan(snapshot)
+    // Syncs upsellButton's visibility, and historyButton's tooltip, to !isProPlan(snapshot)
     // (true whenever there is no AccountService at all — see upsellButton's member doc comment).
     // Called from setAccountService()'s onStateChanged handler and once at construction.
     void updateUpsellStrip();
 
-    // P6-8: syncs downgradeStripLabel visibility/text to (signed in && !isProPlan &&
+    // Syncs downgradeStripLabel visibility/text to (signed in && !isProPlan &&
     // lastDeletionScheduledAt.isNotEmpty()). Called from historyButtonClicked()'s cloud callback —
     // NOT from onStateChanged, since the date it renders is only ever learned from an explicit
     // History click (see lastDeletionScheduledAt's doc comment).
     void updateDowngradeStrip();
 
-    // P6-8: rebuilds `messages` from a flat (role, content) sequence — content still carries any
+    // Rebuilds `messages` from a flat (role, content) sequence — content still carries any
     // fenced ```json block unsplit, exactly like AIProvider::Message::content / a stored
     // LocalConversationMessage/AuthClient::ConversationMessage. Shared by the constructor's
     // aiService.getHistory() replay and restoreConversation()'s history-panel replay, so the two
     // can never drift.
     void replayMessagesFrom(const std::vector<std::pair<juce::String, juce::String>>& roleContentPairs);
 
-    // P6-8: reconstructs `content` for one MessageData the same way replayMessagesFrom() expects to
+    // Reconstructs `content` for one MessageData the same way replayMessagesFrom() expects to
     // consume it back (text, plus a re-fenced ```json block when jsonPatch is non-empty).
     static juce::String reconstructMessageContent(const MessageData& data);
 
-    // P6-8: builds this session's LocalConversation snapshot from `messages` and writes it via
+    // Builds this session's LocalConversation snapshot from `messages` and writes it via
     // LocalHistoryStore::save(), minting currentLocalConversationId/CreatedAt on first call. Called
     // once per successful exchange, right after the assistant turn is appended to `messages` (see
     // sendButtonClicked()) — deliberately NOT from AIIntegrationService::sendMessage()'s own
@@ -537,17 +537,17 @@ private:
     // own copy, split into text/jsonPatch) to hand.
     void saveCurrentConversationLocally();
 
-    // P6-8: first user message's text, trimmed/truncated — the title stored alongside a locally
+    // First user message's text, trimmed/truncated — the title stored alongside a locally
     // saved conversation. Empty `messages` (shouldn't happen when this is called, but defensively)
     // yields "New Conversation" rather than an empty title, which would render as a blank row in
     // the history popup.
     juce::String deriveConversationTitle() const;
 
-    // P6-8: the directory saveCurrentConversationLocally()/historyButtonClicked() read/write
+    // The directory saveCurrentConversationLocally()/historyButtonClicked() read/write
     // through — localHistoryDirOverride when set (tests), else the real per-user location.
     juce::File resolveLocalHistoryDirectory() const;
 
-    // P6-8: History button handler. Always sources the LOCAL list when !isProPlan(snapshot) or no
+    // History button handler. Always sources the LOCAL list when !isProPlan(snapshot) or no
     // AccountService/not signed in. When signed in, ALSO fires a cloud listConversations() call
     // regardless of plan — that call is the only source of a pending grace-period deletion date
     // (see lastDeletionScheduledAt), and when the plan IS Pro its result is the list itself. Never
@@ -555,12 +555,12 @@ private:
     // docs/ai/history.md#server-side-conversation-history.
     void historyButtonClicked();
 
-    // P6-8: builds a juce::PopupMenu from `list` (a "Clear my history" item plus one row per
+    // Builds a juce::PopupMenu from `list` (a "Clear my history" item plus one row per
     // conversation, titled with its readable updatedAt) and shows it. `isCloud` records which
     // backend to call get()/restore against when an item is picked.
     void showHistoryPopup(std::vector<LocalConversationSummary> list, bool isCloud);
 
-    // P6-8: fetches the full conversation (from whichever backend showHistoryPopup() was built
+    // Fetches the full conversation (from whichever backend showHistoryPopup() was built
     // against) and replays it into `messages` via replayMessagesFrom(). Also clears aiService's
     // own chatHistory (aiService.clearHistory()) and adopts `id` as currentLocalConversationId, so
     // subsequent exchanges in this session continue THIS conversation locally; for a cloud (Pro)
@@ -570,15 +570,15 @@ private:
     // model has no memory of the restored conversation until new turns accumulate.
     void restoreConversation(const juce::String& id, bool isCloud);
 
-    // P6-8: "Clear my history" — shows an AlertWindow confirmation (mirrors ShortcutsSettingsTab's
+    // "Clear my history" — shows an AlertWindow confirmation (mirrors ShortcutsSettingsTab's
     // "Reset to Defaults" pattern), then calls performClearHistory().
     void confirmAndClearHistory();
 
-    // P6-8: the actual delete, wired to the same backend historyButtonClicked() last populated the
+    // The actual delete, wired to the same backend historyButtonClicked() last populated the
     // popup from (local deleteAll() when !isProPlan, cloud deleteAllConversations() when Pro).
     void performClearHistory();
 
-    // P6-8: returns the backend to use for this call — the test double from
+    // Returns the backend to use for this call — the test double from
     // setHistorySourcesForTesting() when one was installed, otherwise a freshly constructed real
     // implementation OWNED BY `fallbackStorage` (a unique_ptr living in the CALLER's stack frame).
     // Every ConversationHistorySource implementation here only touches its own state during the

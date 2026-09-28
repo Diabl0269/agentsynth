@@ -1,4 +1,4 @@
-// MixerModelMasterInsertTests.cpp -- FRO148 (docs/mixer/mixer.md#master-inserts): Master's own insert list. Master's
+// MixerModelMasterInsertTests.cpp (docs/mixer/mixer.md#master-inserts): Master's own insert list. Master's
 // inserts sit AFTER its fader, so the chain is walked FORWARD from Master's output to the Rec Tap / Audio Output
 // terminator (`chainEndNodeId`). Headless: a bare AudioEngine/TimelineDoc/MacroSet, no MainComponent/GraphEditor.
 #include "Mixer/MixerModel/MixerModel.h"

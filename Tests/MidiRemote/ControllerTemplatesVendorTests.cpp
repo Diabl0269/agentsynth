@@ -1,8 +1,8 @@
-// synth::midi vendor controller templates (Source/MidiRemote/ControllerTemplates.cpp), FRO143: the
+// synth::midi vendor controller templates (Source/MidiRemote/ControllerTemplates.cpp): the
 // real-hardware templates (Korg nanoKONTROL2, Arturia MiniLab 3) shipped alongside the generic
 // ones, their vendor/source metadata, the Templates-menu vendor grouping, and layout-cell safety
-// (no two controls sharing a physical position). Headless -- no ControllerProfileStore, no file
-// I/O (templates come from BinaryData).
+// (no two controls sharing a physical position). Headless -- no ControllerProfileStore, no file I/O
+// (templates come from BinaryData).
 
 #include "MidiRemote/ControllerTemplates.h"
 
@@ -114,7 +114,7 @@ TEST(ControllerTemplatesVendorTest, ArturiaMiniLab3HasTheDocumentedSurface) {
 TEST(ControllerTemplatesVendorTest, NovationLaunchControlXL3HasTheDocumentedSurface) {
     ControllerProfile p;
     ASSERT_TRUE(loadControllerTemplate("template-novation-launch-control-xl-3", p));
-    // FRO339: +2 controls (Play/Record) over the pre-FRO339 48.
+    // +2 controls (Play/Record) over the previous 48.
     EXPECT_EQ(p.controls.size(), 50u);
     int encoders = 0, faders = 0, buttons = 0;
     for (const auto& c : p.controls) {
@@ -132,8 +132,8 @@ TEST(ControllerTemplatesVendorTest, NovationLaunchControlXL3HasTheDocumentedSurf
         case ControlKind::button:
             ++buttons;
             EXPECT_EQ(c.message.type, MessageType::cc);
-            // FRO339: the Mode-16 grid buttons stay on channel 16 (p.9's own table); Play/Record
-            // (DAW mode, only live once the handshake enables it) are channel 1.
+            // The Mode-16 grid buttons stay on channel 16 (p.9's own table); Play/Record (DAW mode,
+            // only live once the handshake enables it) are channel 1.
             EXPECT_TRUE(c.message.channel == 16 || c.message.channel == 1) << c.id.toStdString();
             break;
         default:
@@ -160,17 +160,18 @@ TEST(ControllerTemplatesVendorTest, NovationLaunchControlXL3HasTheDocumentedSurf
     ASSERT_NE(btnBottom8, nullptr);
     EXPECT_EQ(btnBottom8->message.number, 52);
 
-    // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): the DAW-mode enable/disable SysEx,
-    // and the two new transport controls with their actions[] bindings -- same "loads verbatim,
-    // applyControllerTemplate re-points the placeholder ids" shape as BeatStep's Play/Stop above.
+    // The DAW-mode enable/disable SysEx, and the two new transport controls with their actions[]
+    // bindings -- same "loads verbatim, applyControllerTemplate re-points the placeholder ids"
+    // shape as BeatStep's Play/Stop above (see
+    // docs/control/midi-remote-device-handshake.md#device-handshake).
     EXPECT_FALSE(p.handshake.isEmpty());
     const std::vector<std::uint8_t> expectedOpen = {0xF0, 0x00, 0x20, 0x29, 0x02, 0x15, 0x02, 0x7F, 0xF7};
     const std::vector<std::uint8_t> expectedClose = {0xF0, 0x00, 0x20, 0x29, 0x02, 0x15, 0x02, 0x00, 0xF7};
     EXPECT_EQ(p.handshake.openMessage, expectedOpen);
     EXPECT_EQ(p.handshake.closeMessage, expectedClose);
-    // FRO339: confirmed on hardware 2026-09-28 -- the device's ports are named asymmetrically, so
-    // this hint is what lets resolveHandshakeOutput() (and the Add-controller popover's preselect)
-    // find the "DAW" port even when a profile's `input` still names the wrong sibling one.
+    // The device's ports are named asymmetrically, so this hint is what lets
+    // resolveHandshakeOutput() (and the Add-controller popover's preselect) find the "DAW" port
+    // even when a profile's `input` still names the wrong sibling one.
     EXPECT_EQ(p.handshake.port, "DAW");
 
     const auto* play = findControl("play");
@@ -200,7 +201,7 @@ TEST(ControllerTemplatesVendorTest, NovationLaunchControlXL3HasTheDocumentedSurf
 TEST(ControllerTemplatesVendorTest, ArturiaBeatStepHasTheDocumentedSurface) {
     ControllerProfile p;
     ASSERT_TRUE(loadControllerTemplate("template-arturia-beatstep", p));
-    EXPECT_EQ(p.controls.size(), 34u); // FRO330: +2 (Play/Stop, MMC) over the pre-FRO330 32.
+    EXPECT_EQ(p.controls.size(), 34u); // +2 (Play/Stop, MMC) over the previous 32.
     int encoders = 0, pads = 0, buttons = 0;
     for (const auto& c : p.controls) {
         switch (c.kind) {
@@ -215,7 +216,7 @@ TEST(ControllerTemplatesVendorTest, ArturiaBeatStepHasTheDocumentedSurface) {
             EXPECT_EQ(c.message.channel, 1);
             break;
         case ControlKind::button:
-            // FRO330: Play/Stop -- MMC, no MIDI channel.
+            // Play/Stop -- MMC, no MIDI channel.
             ++buttons;
             EXPECT_EQ(c.message.type, MessageType::mmc);
             EXPECT_EQ(c.message.channel, 0);
@@ -250,8 +251,8 @@ TEST(ControllerTemplatesVendorTest, ArturiaBeatStepHasTheDocumentedSurface) {
     ASSERT_NE(stop, nullptr);
     EXPECT_EQ(stop->message.number, kMmcStop);
 
-    // FRO330: the template's actions[] bind Play/Stop to the real transport action ids -- this is
-    // what makes them work with no MIDI Learn (docs/control/midi-remote-ui.md
+    // The template's actions[] bind Play/Stop to the real transport action ids -- this is what
+    // makes them work with no MIDI Learn (docs/control/midi-remote-ui.md
     // #templates-and-importexport). loadControllerTemplate parses actions[] verbatim (control still
     // points at the template's own placeholder ids); applyControllerTemplate is what re-points them
     // at a real profile (see ControllerTemplatesTests.cpp).
@@ -306,9 +307,10 @@ TEST(ControllerTemplatesVendorTest, GroupingWithNoGenericTemplatesOmitsTheGeneri
     EXPECT_EQ(groups[0].vendor, "Zorp");
 }
 
-// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): listControllerTemplates()
-// mirrors a template's own handshake.port -- what AddControllerPopover reads to preselect a matching
-// input -- so it must never require loading the whole ControllerProfile just to find it.
+// ListControllerTemplates() mirrors a template's own handshake.port -- what AddControllerPopover
+// reads to preselect a matching input -- so it must never require loading the whole
+// ControllerProfile just to find it (see
+// docs/control/midi-remote-device-handshake.md#device-handshake).
 TEST(ControllerTemplatesVendorTest, ListingExposesTheLaunchControlXL3PortHintAndNothingElseHasOne) {
     for (const auto& info : listControllerTemplates()) {
         if (info.id == "template-novation-launch-control-xl-3")

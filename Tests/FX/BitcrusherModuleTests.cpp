@@ -168,7 +168,7 @@ TEST(BitcrusherModuleTest, DitherAddsNoise) {
     EXPECT_GT(rms, 0.0f);
 }
 
-// FRO314: Dither CV (ch5) must move the dither amount the same way the knob does -- proven by
+// Dither CV (ch5) must move the dither amount the same way the knob does -- proven by
 // driving it from 0 via CV alone (knob left at its 0.0 default) and confirming noise appears,
 // the same assertion DitherAddsNoise above makes via the parameter directly.
 TEST(BitcrusherModuleTest, DitherCVAddsNoiseWithTheKnobAtZero) {

@@ -1,6 +1,6 @@
-// Right-click MIDI Learn on the transport bar's four glyph buttons (FRO133,
+// Right-click MIDI Learn on the transport bar's four glyph buttons
 // docs/control/midi-remote-ui.md#right-click-midi-learn--coverage). Unlike the module card
-// (FRO130) and the mixer column (FRO133, MixerColumnMidiLearn.cpp), every target here is an
+// and the mixer column, every target here is an
 // ACTION target (docs/control/midi-remote.md#action-targets), not a graph parameter -- the bar
 // stays graph-free (Source/UI/CLAUDE.md's track-header precedent: "never sees the graph"), and it
 // knows only the four fixed ShortcutManager action ids its own glyphs invoke. That is also why
@@ -174,7 +174,7 @@ void TimelineTransportBar::refreshMidiLearnBadges() {
         repaint();
 }
 
-// FRO256: called from updateFromTransport()'s existing 10 Hz poll -- see
+// Called from updateFromTransport()'s existing 10 Hz poll -- see
 // MixerColumnComponent::repaintArmedMidiLearnOutline's own comment for why this needs to exist at
 // all (paintMidiLearnArmedOutline() recomputes alpha from wall time on every paint(), so nothing
 // visibly breathes unless something keeps asking for a repaint while armed).

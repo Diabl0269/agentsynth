@@ -1,4 +1,4 @@
-// MixerOwnPanelResizeTests.cpp -- FRO231: the Mixer's "Own panel" strip has a persisted user height
+// MixerOwnPanelResizeTests.cpp -- the Mixer's "Own panel" strip has a persisted user height
 // ("mixerOwnPanelHeight") and its own top-edge PanelResizeHandle, and shares the window's 3/4 budget
 // with the bottom dock. Real off-screen MainComponent, synthesized mouse events.
 

@@ -58,7 +58,7 @@ TEST(TimelinePanelTrackHeaderTest, HeadersFollowTheDocumentWithNoTimer) {
     EXPECT_EQ(panel.getTrackHeaderCount(), 0);
 }
 
-// T166: whole-row drag-to-reorder. No TrackHeaderHost is installed here (trackHeaderHost_ ==
+// Whole-row drag-to-reorder. No TrackHeaderHost is installed here (trackHeaderHost_ ==
 // nullptr) — deliberately, to exercise TimelinePanelComponent::endTrackDrag's own no-host
 // fallback (the same convention TimelineTrackHeaderComponent::performEdit already follows), which
 // also makes this the worst case for the ordering hazard below: with no host indirection, the
@@ -103,7 +103,7 @@ TEST(TimelinePanelTrackHeaderTest, WholeRowDragReordersTracksAndSurvivesTheHeade
     EXPECT_EQ(panel.getTrackHeaderAt(2)->getTrackId(), a);
 }
 
-// T166: pixel-level regression test for the drop indicator's paint ORDER. An earlier version drew
+// Pixel-level regression test for the drop indicator's paint ORDER. An earlier version drew
 // it in TrackHeaderList::paint() rather than paintOverChildren() — the header rows are children,
 // painted AFTER their parent, and each does an OPAQUE fill of its own bounds
 // (TimelineTrackHeaderComponent::paint()'s g.fillAll(colours.surface)), so the line was painted

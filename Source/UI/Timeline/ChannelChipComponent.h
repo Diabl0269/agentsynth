@@ -2,11 +2,11 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// ChannelChipComponent.h -- FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): the track header's
+// ChannelChipComponent.h (docs/mixer/mixer.md#channels-follow-audio-not-tracks): the track header's
 // CHANNEL chip.
 //
 // Shown on every track header whose notes/audio play into a channel, linked or not: the channel's
-// name plus a compact level meter. Clicking it reveals that channel (P9-5: its mixer column). It is
+// name plus a compact level meter. Clicking it reveals that channel (its mixer column). It is
 // a pointer, not a signal path -- this is how a MIDI track shows where its audio went, without
 // anyone creating an extra audio track for it.
 //
@@ -36,8 +36,8 @@ public:
     juce::String getChannelName() const { return channelName_; }
 
     /** Feeds one meter tick with a LINEAR amplitude peak (0..1-ish; a real over can exceed 1) --
-     *  converted internally to dBFS and a 0..1 fraction of the -60..+3 dB scale (FRO146,
-     *  MixerMeterScale.h), same scale and colour zones (MeterColourStops.h) as the mixer's own
+     *  converted internally to dBFS and a 0..1 fraction of the -60..+3 dB scale
+     *  (MixerMeterScale.h), same scale and colour zones (MeterColourStops.h) as the mixer's own
      *  MixerMeter, so the chip turns the clip colour on the same overs the mixer column shows red.
      *  Returns TRUE only when the displayed fraction moved far enough to be worth a repaint (and
      *  one was issued) -- the gate itself, exposed so a test can prove a below-threshold tick

@@ -98,13 +98,13 @@ void FeedbackSettingsTab::sendFeedback() {
     // Local log: unconditional, regardless of plan/sign-in/sync outcome.
     store.record(text, category);
 
-    // P6-16/P6-17: additionally sync to the server, fire-and-forget, whenever accountService is
+    // Additionally sync to the server, fire-and-forget, whenever accountService is
     // attached -- a null accountService means fully local-only (existing, deliberate contract
     // every bare `FeedbackSettingsTab tab;` test call site relies on). Unlike patch feedback
-    // (P6-9) this is NOT Pro-gated and, per P6-17, not even sign-in-gated: authenticated via the
+    // this is NOT Pro-gated and, not even sign-in-gated: authenticated via the
     // account's access token when signed in, anonymous via this device's stable id
     // (X-Device-Id, see AuthClient::submitGeneralFeedback) when signed out. Detached background
-    // thread, mirrors AIChatComponent's P6-9 sync block: captures COPIES only (a small, copyable,
+    // thread, mirrors AIChatComponent's sync block: captures COPIES only (a small, copyable,
     // stateless AuthClient plus plain strings), never `this` or any UI state, so the thread owns
     // everything it touches and safely outlives this callback.
     if (accountService != nullptr) {

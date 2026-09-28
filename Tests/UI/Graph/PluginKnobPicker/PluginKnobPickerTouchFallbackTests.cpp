@@ -1,4 +1,4 @@
-// PluginKnobPickerTouchFallbackTests.cpp -- FRO241 (docs/control/plugin-card-layout.md#choosing-knobs):
+// PluginKnobPickerTouchFallbackTests.cpp (docs/control/plugin-card-layout.md#choosing-knobs):
 // the value-change fallback for "Touch in the plugin editor to add", for a plugin that never emits a
 // gesture. Sibling to PluginKnobPickerTests.cpp (kept separate to stay under the file-size cap; that
 // file's own "4. Touch-to-add" group covers the gesture path and its off-thread hop, unchanged here).

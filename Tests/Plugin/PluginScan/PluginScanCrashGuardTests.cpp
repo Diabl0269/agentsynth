@@ -1,9 +1,9 @@
-// FRO59: the crash-guard building block that keeps a plugin-scan child's crash from popping macOS's
+// The crash-guard building block that keeps a plugin-scan child's crash from popping macOS's
 // own "quit unexpectedly" dialog. A `raise()`d signal is not a real hardware fault, and a synthetic
 // SIGTRAP is not the EXC_BREAKPOINT a real trapping plugin produces, so this proves the handler
 // itself installs and _exit()s promptly -- not that it wins the race against ReportCrash for every
 // real fault shape. That end-to-end claim can only be checked by watching for new
-// ~/Library/Logs/DiagnosticReports/Agent Synth-*.ips files across a real launch (see FRO59's PR).
+// ~/Library/Logs/DiagnosticReports/Agent Synth-*.ips files across a real launch (see the PR).
 
 #include "Plugin/Hosting/PluginScanCrashGuard.h"
 #include <gtest/gtest.h>

@@ -1,9 +1,7 @@
 // MainComponentCommandTable.cpp -- the CommandSpec table getAllCommands/getCommandInfo/perform
 // (MainComponentCommands.cpp) look up into, plus the named perform() bodies and isActive
-// predicates the table's rows call into. FRO76: replaces the three former switch statements with
-// one ordered table -- the row order below IS getAllCommands()'s order (menu order), and every
-// name/description/category/actionId/isActive/perform body is preserved from the pre-FRO76
-// switches (see git history for MainComponentCommands.cpp) except where explicitly noted.
+// predicates the table's rows call into. One ordered table replaces per-command switches -- the row
+// order below IS getAllCommands()'s order (menu order).
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "Transport/MarkerJump.h"
@@ -41,7 +39,7 @@ juce::String snapDivisionLabel(synth::ui::TimelineViewState::Snap snap) {
     return "Off";
 }
 
-// FRO277: the current marker beats, for jumpToAdjacentMarker (MarkerJump.h) -- getMarkers() is
+// The current marker beats, for jumpToAdjacentMarker (MarkerJump.h) -- getMarkers() is
 // already sorted by beat, but the search itself doesn't require that, so this stays a plain copy
 // rather than trusting the ordering invariant twice.
 std::vector<double> markerBeats(const synth::TimelineDoc& doc) {
@@ -317,11 +315,11 @@ bool MainComponent::applyZoomCommand(juce::CommandID commandID) {
 }
 
 // ---- Named isActive predicates shared by more than one row (touchesAnyMacro,
-// isEditSurfaceCommandActive, isZoomCommandActive) moved to MainComponentCommandPredicates.cpp,
-// FRO227 -- registering the Mixer edit surface pushed this file over the 1,000-line cap.
+// isEditSurfaceCommandActive, isZoomCommandActive) moved to MainComponentCommandPredicates.cpp
+// to keep this file under the 1,000-line cap.
 
 // ---- The table itself, split into category-grouped builder functions purely to keep
-// commandTable() itself under the function-size cap (FRO11) -- category boundaries are the
+// commandTable() itself under the function-size cap -- category boundaries are the
 // same ones the row comments below already used. Row order across the four still IS
 // getAllCommands()'s order (the menu order contract), built once and cached the same way a
 // static local in a member function normally is: the vector's contents don't depend on `this`,
@@ -389,7 +387,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildGeneralCommandRows()
              m.promptExportStems();
              return true;
          }},
-        // P8-31: the Patch open is menu-only, like checkForUpdates -- no rebindable action-id, so no
+        // The Patch open is menu-only, like checkForUpdates -- no rebindable action-id, so no
         // default keypress and no Settings row; it asks whether to replace or add onto the patch.
         {AppCommands::openPreset,
          "Open Patch",
@@ -401,7 +399,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildGeneralCommandRows()
              m.openPresetFromFile();
              return true;
          }},
-        // P8-31: the rebindable Cmd+O open is the WHOLE PROJECT (.agsproj bundle).
+        // The rebindable Cmd+O open is the WHOLE PROJECT (.agsproj bundle).
         {AppCommands::openProject,
          "Open Project",
          "Open a project (.agsproj bundle: patch + timeline)",
@@ -425,12 +423,13 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildGeneralCommandRows()
     };
 }
 
-// FRO273 (docs/control/midi-remote.md#undo): Undo/Redo (Cmd+Z / Cmd+Shift+Z and the Edit menu)
-// act on the controller edit history while keyboard focus is inside the MIDI Remote panel (docked
-// or detached -- the same panel object either way), and on the project's AppUndoManager everywhere
-// else. The toolbar's Undo/Redo buttons do not come through here and always mean the project. A
-// focused panel with nothing left to undo does nothing rather than falling through to the project:
-// the user is looking at the panel, and silently undoing a canvas edit instead would be a surprise.
+// Undo/Redo (Cmd+Z / Cmd+Shift+Z and the Edit menu) act on the controller edit history while
+// keyboard focus is inside the MIDI Remote panel (docked or detached -- the same panel object
+// either way), and on the project's AppUndoManager everywhere else. The toolbar's Undo/Redo buttons
+// do not come through here and always mean the project. A focused panel with nothing left to undo
+// does nothing rather than falling through to the project: the user is looking at the panel, and
+// silently undoing a canvas edit instead would be a surprise
+// (see docs/control/midi-remote.md#undo).
 std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandRows() {
     return {
         {AppCommands::undo,
@@ -499,8 +498,8 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
              m.graphEditor.autoArrange();
              return true;
          }},
-        // Static label -- Cmd+G now dispatches to whichever verb applies (P8-14,
-        // GraphEditor::groupOrToggleSelectionMacros), so the label can't claim to be only one of
+        // Static label -- Cmd+G now dispatches to whichever verb applies
+        // (GraphEditor::groupOrToggleSelectionMacros), so the label can't claim to be only one of
         // them. Mirrors collapseMacro's "static label covers both directions" reasoning below.
         // Active whenever EITHER branch of the dispatch could do something: enough modules to
         // group, or the selection touches at least one macro to toggle.
@@ -648,7 +647,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
         {AppCommands::zoomOutVertical, nullptr, "Zoom the focused editor", "View", "zoomOutVertical",
          [](const MainComponent& m) { return m.isZoomCommandActive(AppCommands::zoomOutVertical); },
          [](MainComponent& m) { return m.applyZoomCommand(AppCommands::zoomOutVertical); }},
-        // FRO333: the ONE bottom-dock open/close toggle -- through the (renamed) toolbar button's
+        // The ONE bottom-dock open/close toggle -- through the (renamed) toolbar button's
         // triggerClick(), same "reuse the toggle path" idiom the three "show tab" rows below used
         // to use individually.
         {AppCommands::toggleBottomPanel,
@@ -661,7 +660,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
              m.toggleBottomPanelButton.triggerClick();
              return true;
          }},
-        // FRO333: no longer a toggle -- opens the dock if needed and switches to this tab; a second
+        // No longer a toggle -- opens the dock if needed and switches to this tab; a second
         // press while already showing is a no-op (never closes the dock -- that's toggleBottomPanel's
         // job now). showBottomDockTab() also brings a DETACHED tab's own window to the front instead.
         {AppCommands::toggleTimelinePanel,
@@ -699,7 +698,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
 
 std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandRows() {
     return {
-        // T159: suppressed while the launch overlay is up front -- every region it would cycle to
+        // Suppressed while the launch overlay is up front -- every region it would cycle to
         // is sitting behind it, so there is nowhere useful for Tab to land.
         {AppCommands::focusNextRegion, "Focus Next Region",
          "Move keyboard focus to the next open panel (Library, Canvas, Timeline, AI Panel, Mod Matrix)", "General",
@@ -777,7 +776,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
              return true;
          }},
 #endif
-        // FRO94: menu-only, always active, no chord. Opens the contribute page in the browser.
+        // Menu-only, always active, no chord. Opens the contribute page in the browser.
         {AppCommands::contribute,
          "Contribute to Agent Synth...",
          "Opens agentsynth.app/contribute in your browser: ways to help build Agent Synth.",
@@ -791,7 +790,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
     };
 }
 
-// ---- Transport: promoted to command-dispatched actions (FRO125, docs/control/midi-remote.md#action-targets's
+// ---- Transport: promoted to command-dispatched actions (docs/control/midi-remote.md#action-targets's
 // prerequisite) so a MIDI Remote action target can invokeDirectly() them. Every row below reuses
 // the transport bar's OWN choke point -- triggerClick() on its buttons for play/stop TOGGLE, loop,
 // metronome and record, exactly the idiom togglePlayback already established above -- so a
@@ -867,7 +866,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          [](MainComponent& m) {
              return synth::locateTransportTracked(m.audioEngine.getTransport(), m.transportNudge_, 0.0);
          }},
-        // FRO271: cursor moves and loop-locator jumps. Nudges accumulate through transportNudge_ so
+        // Cursor moves and loop-locator jumps. Nudges accumulate through transportNudge_ so
         // several firing inside one audio block (a jog wheel) don't lose steps; see TransportNudge.h.
         {AppCommands::transportNudgeBackBeat,
          "Move Cursor Back (Beat)",
@@ -923,7 +922,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          [](MainComponent& m) {
              return synth::jumpToLoopLocator(m.audioEngine.getTransport(), m.transportNudge_, true);
          }},
-        // FRO277: jump to the next/previous timeline marker relative to the current position, using
+        // Jump to the next/previous timeline marker relative to the current position, using
         // the same transportNudge_ accumulate state as the cursor moves above (see MarkerJump.h) so
         // repeated presses step marker-by-marker even before the audio thread applies the first jump.
         {AppCommands::transportJumpToNextMarker,

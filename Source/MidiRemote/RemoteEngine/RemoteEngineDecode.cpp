@@ -69,7 +69,7 @@ void decodeButtonLike(RemoteEvent& event, const detail::ClassifiedMessage& class
         break;
     case MessageType::programChange:
     case MessageType::mmc:
-        // FRO330: one MMC command is one discrete press, exactly like a program change -- there is
+        // One MMC command is one discrete press, exactly like a program change -- there is
         // no MMC "release" to decode, so a button mapped to it can only ever fire on receipt.
         event.kind = RemoteEventKind::buttonPress;
         event.value = 1.0f;
@@ -86,7 +86,7 @@ void decodeButtonLike(RemoteEvent& event, const detail::ClassifiedMessage& class
     }
 }
 
-// Step 6a (FRO140): a paired-CC or nrpn message carries only one half of its value. The value is
+// Step 6a: a paired-CC or nrpn message carries only one half of its value. The value is
 // committed when the encoding's SECOND half arrives (abs14: the LSB, abs14LsbFirst: the MSB), using
 // the other half as last seen; the first half is remembered by the lane and produces no event, so
 // a controller that sends MSB-only never moves the parameter (docs/control/midi-remote.md
@@ -171,7 +171,7 @@ bool RemoteEngine::handleMessage(const juce::String& sourceKey, const juce::Midi
     SourceLane& lane =
         *lanes_[static_cast<std::size_t>(snap->sources[static_cast<std::size_t>(sourceIndex)].laneIndex)];
 
-    // Step 2b (FRO140): NRPN address CCs update the lane's state and pass through untouched; CC 6/38
+    // Step 2b: NRPN address CCs update the lane's state and pass through untouched; CC 6/38
     // under an armed address become one nrpn message that everything below treats like any other.
     if (detail::advanceNrpn(lane.state, *snap, sourceIndex, classified) == detail::NrpnStep::addressConsumed)
         return false;

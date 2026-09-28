@@ -1,14 +1,14 @@
 // GraphDragDropControllerTests.cpp
 //
-// Controller-level coverage for GraphDragDropController (FRO77 PR3): drives it directly against a
+// Controller-level coverage for GraphDragDropController drives it directly against a
 // real AudioEngine graph through GraphEditor::getCanvasHostForTest() (a minimal host — GraphEditor
 // supplies real ModuleComponents/graph/undo, but the test never goes through GraphEditor's own
 // itemDragEnter/itemDragMove/itemDragExit/itemDropped forwarders — it builds a SEPARATE
 // GraphDragDropController instance and drives DragAndDropTarget::SourceDetails through it
 // directly, proving the controller's own API works in isolation. The existing
 // GraphEditorSmartConnection*Tests.cpp / GraphEditorLayoutTests.cpp files cover the full gesture
-// chain through GraphEditor's forwarders and are unchanged by this PR — this file mirrors
-// SmartConnectionEngineTests.cpp's own isolation approach (FRO77 PR1).
+// chain through GraphEditor's forwarders and are covered there — this file mirrors
+// SmartConnectionEngineTests.cpp's own isolation approach.
 
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "AudioEngine/AudioEngine.h"

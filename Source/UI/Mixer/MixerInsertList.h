@@ -8,8 +8,8 @@
 class AppUndoManager;
 class GraphEditor;
 
-// MixerInsertList.h -- FRO11 (P9-5, docs/mixer/mixer.md#inserts-in-a-free-form-graph): a column's module list.
-// FRO148: the Master column owns one too -- there the "source" is Master's own node and the "strip" end is the
+// MixerInsertList.h (docs/mixer/mixer.md#inserts-in-a-free-form-graph): a column's module list.
+// The Master column owns one too -- there the "source" is Master's own node and the "strip" end is the
 // chain terminator (Rec Tap / Audio Output); nothing here is ChannelStrip-specific.
 //
 // Linear chain: a plain list, right-click for "Add...", "Move Up"/"Move Down"/"Remove" on one
@@ -31,7 +31,7 @@ public:
     void configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, synth::MacroSet& macros,
                    GraphEditor& graphEditor);
 
-    /** `stripNodeId` is the node the chain feeds: the strip itself, or (FRO148) Master's chain terminator. */
+    /** `stripNodeId` is the node the chain feeds: the strip itself, or Master's chain terminator. */
     void setEntries(const std::vector<synth::MixerInsertEntry>& entries, bool linear,
                     const juce::String& editOnCanvasTargetUuid, juce::AudioProcessorGraph::NodeID sourceNodeId,
                     juce::AudioProcessorGraph::NodeID stripNodeId);
@@ -41,7 +41,7 @@ public:
     /** Fires after a mutation changed the graph -- the caller runs its own post-topology-change
      *  reconcile (MainComponent::reconcileTimelineAfterGraphChange). */
     std::function<void()> onMutated;
-    /** FRO16 UAF fix: fires from removeRow(), with the node about to be removed, BEFORE
+    /** Fires from removeRow(), with the node about to be removed, BEFORE
      *  graph_->removeNode() frees its processor. graph.removeNode() destroys the Node (and any
      *  processor it owns) synchronously, but the caller's own reaction to onMutated -- bubbling up
      *  to MixerPanelComponent::rebuild(), which destroys the OLD MixerColumnComponent (and its
@@ -53,17 +53,17 @@ public:
 
     int getPreferredHeight() const noexcept;
 
-    /** The module type names the "Add..." menu offers (FRO148: includes Limiter and Gate) -- exposed so a test can
+    /** The module type names the "Add..." menu offers (includes Limiter and Gate) -- exposed so a test can
      *  check every one resolves through AIStateMapper::createModule without a popup menu. */
     static const juce::StringArray& getAddableModuleTypes() noexcept;
 
-    /** FRO15 test seams: what setEntries() last recorded, without a juce::Image round-trip --
+    /** Test seams: what setEntries() last recorded, without a juce::Image round-trip --
      *  Tests/UI/Mixer/MixerColumnComponentTests.cpp's bus-column layout cases and
      *  MixerInsertListTests.cpp's overlap regression use these directly. */
     int getEntryCountForTest() const noexcept { return (int)entries_.size(); }
     bool isLinearForTest() const noexcept { return linear_; }
 
-    /** FRO228: the transparent, name-only proxy component behind row `rowIndex` -- see
+    /** The transparent, name-only proxy component behind row `rowIndex` -- see
      *  RowAccessibilityProxy's own comment on why paint() above draws every row itself while
      *  accessibility still needs a real child Component per row. Null out of range. */
     juce::Component* getRowAccessibilityComponentForTest(int rowIndex) const noexcept {
@@ -85,7 +85,7 @@ public:
 private:
     static constexpr int kRowHeight = 18;
 
-    // FRO228: paint() above draws every row itself (a plain custom-painted list, not real per-row
+    // paint() above draws every row itself (a plain custom-painted list, not real per-row
     // components), so VoiceOver/NVDA had nothing to land on for a row at all -- one of these, sized
     // and positioned over its row in resized(), gives each row a real, named, clickable AX child
     // without touching the existing paint()/rowIndexAt() hit-testing (mouseDown() still owns real
@@ -113,7 +113,7 @@ private:
     juce::String editOnCanvasTargetUuid_;
     juce::AudioProcessorGraph::NodeID sourceNodeId_;
     juce::AudioProcessorGraph::NodeID stripNodeId_;
-    // FRO228: one per entries_ row, rebuilt (and re-titled "<name>, bypassed"/"<name>") every
+    // One per entries_ row, rebuilt (and re-titled "<name>, bypassed"/"<name>") every
     // setEntries() -- see RowAccessibilityProxy's own comment.
     std::vector<std::unique_ptr<RowAccessibilityProxy>> rowProxies_;
 

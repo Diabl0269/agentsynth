@@ -1,7 +1,7 @@
-// Right-click MIDI Learn on a mixer column's controls (FRO133,
+// Right-click MIDI Learn on a mixer column's controls
 // docs/control/midi-remote-ui.md#right-click-midi-learn--coverage): the fader, pan, Mute and every
 // send-row level knob are ordinary ChannelStripModule parameters, so this reuses the exact
-// registry/menu/badge/armed-outline shape FRO130 built for the module card
+// registry/menu/badge/armed-outline shape the module card uses
 // (Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp), via the surface-agnostic helpers
 // in Source/UI/MidiRemote/MidiLearnMenu.h -- MixerColumnComponent keeps its OWN small registry
 // (MidiLearnableEntry) rather than sharing ModuleComponent's, since the two components have no
@@ -16,7 +16,7 @@
 // targets, which have no node and need MidiLearnController::armAction() instead --
 // TimelineTransportBarMidiLearn.cpp).
 //
-// FRO253: Solo IS covered here too, but as a node command rather than a parameter --
+// Solo IS covered here too, but as a node command rather than a parameter --
 // ChannelStripModule::soloed_ is engine state (an std::atomic<bool>), not a
 // juce::RangedAudioParameter (Source/Modules/ChannelStripModule.h), so it has nothing for a
 // Target::Parameter to point at. Its registry entry (isSolo=true, param=null) routes through
@@ -54,7 +54,7 @@ void MixerColumnComponent::registerMidiLearnable(juce::Component& control, juce:
     midiLearnableEntries_.push_back(e);
 }
 
-// FRO253: mirrors registerMidiLearnable() above for the Solo node command entry -- param stays
+// Mirrors registerMidiLearnable() above for the Solo node command entry -- param stays
 // null (isSolo=true is what mouseDown()/refreshMidiLearnBadges() key on instead).
 void MixerColumnComponent::registerSoloMidiLearnable() {
     if (std::find(midiLearnListenerTargets_.begin(), midiLearnListenerTargets_.end(), &soloButton_) ==
@@ -173,7 +173,7 @@ void MixerColumnComponent::showParamMidiLearnMenu(juce::RangedAudioParameter& pa
     showContextMenuHook_(menu);
 }
 
-// FRO292: "Automate '<Param>'" on the fader, pan and send-level knobs -- the same
+// "Automate '<Param>'" on the fader, pan and send-level knobs -- the same
 // GraphEditor::onAutomateParameterRequested route a canvas knob's right-click uses
 // (MainComponent::automateParameter: creates the lane if needed and opens the automation strip on
 // it). The Channel Strip has no canvas card, so this is the only way to START a lane on one of its
@@ -191,7 +191,7 @@ void MixerColumnComponent::appendAutomateMenuItem(juce::PopupMenu& menu, juce::R
     menu.addSeparator();
 }
 
-// FRO253: Solo's own menu -- same shape as showParamMidiLearnMenu() above, but through
+// Solo's own menu -- same shape as showParamMidiLearnMenu() above, but through
 // MixerPanelComponent's onSoloMidiLearnRequested/onSoloMidiForgetRequested/onQuerySoloMidiMapping
 // (set by MixerPanelComponent::rebuild(), forwarding MainComponent's single wiring) rather than
 // GraphEditor's parameter-keyed callbacks -- Solo has no paramId for those to key on.
@@ -244,7 +244,7 @@ void MixerColumnComponent::setMidiLearnArmedParam(const juce::String& paramId) {
     repaintFor(midiLearnArmedParamId_);
 }
 
-// FRO253: mirrors setMidiLearnArmedParam() above for the Solo entry (isSolo, no paramId to key on).
+// Mirrors setMidiLearnArmedParam() above for the Solo entry (isSolo, no paramId to key on).
 void MixerColumnComponent::setMidiLearnArmedSolo(bool armed) {
     if (midiLearnArmedSolo_ == armed)
         return;
@@ -290,7 +290,7 @@ void MixerColumnComponent::refreshMidiLearnBadges() {
         repaint();
 }
 
-// FRO256: called from refreshMeter()'s existing 10 Hz tick -- paintMidiLearnArmedOutline() computes
+// Called from refreshMeter()'s existing 10 Hz tick -- paintMidiLearnArmedOutline() computes
 // its alpha from wall time on every paint(), so the outline only visibly "breathes" if something
 // keeps asking for a repaint while armed; nothing did before this (setMidiLearnArmedParam/
 // setMidiLearnArmedSolo above each repaint exactly once, on the arm/clear edge). Confined to the
@@ -321,7 +321,7 @@ void MixerColumnComponent::paintMidiLearnOverlays(juce::Graphics& g) {
     for (const auto& e : midiLearnableEntries_) {
         if (!e.mapped)
             continue;
-        // FRO256: `e.component` is a direct child for the fader/pan/mute/solo entries but TWO
+        // `e.component` is a direct child for the fader/pan/mute/solo entries but TWO
         // levels deep for a send-row knob (column -> sendList_ -> knob) -- getLocalArea(component,
         // component's own local bounds) walks the parent chain regardless of depth, unlike
         // component->getBounds() (one level: bounds in its IMMEDIATE parent's frame only). Passing

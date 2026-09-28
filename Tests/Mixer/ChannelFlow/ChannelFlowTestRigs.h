@@ -2,7 +2,7 @@
 
 // ChannelFlowTestRigs.h
 //
-// Engine-level rig helpers split out of ChannelFlowTestFixture.h (FRO307) so tests that never
+// Engine-level rig helpers split out of ChannelFlowTestFixture.h so tests that never
 // build a MainComponent need not include MainComponent.h. Header-only; not compiled on its own
 // and not registered in Tests/CMakeLists.txt.
 
@@ -101,7 +101,7 @@ inline juce::AudioProcessorGraph::Node* findMacroMemberOfTypeCFT(juce::AudioProc
     return nullptr;
 }
 
-// T183: flips a module's "poly" AudioParameterBool, when it has one. No-op (returns false) for
+// Flips a module's "poly" AudioParameterBool, when it has one. No-op (returns false) for
 // Sampler, which has no poly parameter at all.
 inline bool setPolyParamCFT(juce::AudioProcessor* processor, bool poly) {
     if (processor == nullptr)
@@ -116,7 +116,7 @@ inline bool setPolyParamCFT(juce::AudioProcessor* processor, bool poly) {
 }
 
 // ============================================================================
-// FRO42 (P9-3h): "+ Track -> Instrument -> Plugin" — the fake plugin-format seam, same shape
+// "+ Track -> Instrument -> Plugin" — the fake plugin-format seam, same shape
 // PluginScanTests.cpp's ScanningStubBackend/ScanListStubBackend use, extended with a name-keyed
 // factory table so a single backend can make one scanned identity succeed (an instrument) and
 // another fail (an effect never offered, or an instrument whose load is refused/broken) without
@@ -165,8 +165,8 @@ public:
 /** A minimal scanned-plugin description — `isInstrument` is the one field
  * PluginScanTests.cpp's own `descriptionXml()` helper never sets (it defaults false), and is
  * exactly what getInstrumentPluginOptions() filters on. `format`/`manufacturer` are deliberately
- * LAST and default to the common case (VST3, no manufacturer asserted on) — see FRO42 review
- * fixes: format disambiguation (PluginInstrumentMenuAppendsFormatLabel) and self-exclusion
+ * LAST and default to the common case (VST3, no manufacturer asserted on) — see the
+ * menu behaviours: format disambiguation (PluginInstrumentMenuAppendsFormatLabel) and self-exclusion
  * (PluginInstrumentMenuExcludesOwnBuild) both need to set one or both explicitly. */
 inline juce::PluginDescription pluginDescriptionCFT(const juce::String& name, int uid, bool isInstrument,
                                                     const juce::String& format = "VST3",
@@ -232,7 +232,7 @@ inline juce::AudioProcessorGraph::Node* addPlainNodeCFT(juce::AudioProcessorGrap
 }
 
 // ============================================================================
-// FRO25 "Make channel" rig helpers: the legacy (pre-P9-3) two-track patch, a Hosted render-identity
+// "Make channel" rig helpers: the legacy two-track patch, a Hosted render-identity
 // harness, and the snapshot/undo-step assertions shared by ChannelFlowMakeChannelCoreTests.cpp and
 // ChannelFlowMakeChannelAppTests.cpp.
 // ============================================================================
@@ -242,7 +242,7 @@ constexpr int kBlockSizeMCH = 256;
 
 enum class RigShapeCFT { SharedLfo, Merge };
 
-// A legacy (pre-P9-3) two-track patch, by hand, with no channel anywhere:
+// A legacy two-track patch, by hand, with no channel anywhere:
 //   SharedLfo: Track In A -> Osc A -> Filter A -> Audio Output, the same for B, ONE LFO modulating
 //              BOTH filters' cutoff (shared) and a second LFO modulating only Filter A (exclusive).
 //   Merge:     Track In A -> Osc A -> Filter A -> Filter M -> Audio Output, Track In B -> Osc B ->

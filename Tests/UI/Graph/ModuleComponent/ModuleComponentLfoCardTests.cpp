@@ -1,4 +1,4 @@
-// ModuleComponentLfoCard tests (FRO114): the Custom-waveform section's visibility (shape-gated),
+// ModuleComponentLfoCard tests: the Custom-waveform section's visibility (shape-gated),
 // the curve model built from LFOModule's custom wave, two-way sync driven through REAL
 // synthesized mouse events (not the model's primitives directly -- see CurveEditorComponent's
 // dragFrozenRange_ doc comment / CurveEditorTestHelpers.h), undo-gesture bracketing via

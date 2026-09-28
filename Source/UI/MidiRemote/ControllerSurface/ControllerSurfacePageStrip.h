@@ -3,7 +3,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// ControllerSurfacePageStrip.h -- FRO142 (docs/control/midi-remote.md#pages,
+// ControllerSurfacePageStrip.h (docs/control/midi-remote.md#pages,
 // docs/control/midi-remote-ui.md#pages): the row of page buttons ("1", "2", ...) above the surface
 // grid for the selected controller, plus a trailing "+" that adds a page. Shown even with a single
 // page (just "1" and "+") so the feature is discoverable. Knows nothing about RemoteEngine or

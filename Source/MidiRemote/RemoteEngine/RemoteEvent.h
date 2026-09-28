@@ -73,8 +73,8 @@ static_assert(sizeof(RemoteEvent) <= 24, "keep RemoteEvent small: it is memcpy'd
  *  WHY THIS IS HAND-ROLLED INSTEAD OF juce::AbstractFifo. AutomationUiFeed wraps
  *  juce::AbstractFifo, and that wrapping is NOT ThreadSanitizer-clean: a one-producer /
  *  one-consumer test over it reports a data race on the slot payload (see
- *  Tests/MidiRemote/RemoteEngineThreadingTests.cpp, and FRO187 for the AutomationUiFeed
- *  instance of the same finding). AbstractFifo publishes its indices through juce::Atomic,
+ *  Tests/MidiRemote/RemoteEngineThreadingTests.cpp, and likewise the AutomationUiFeed
+ *  instance). AbstractFifo publishes its indices through juce::Atomic,
  *  whose get()/set() are seq_cst, but it exposes no release/acquire pairing between the
  *  *payload* write and the index publication that a sanitizer can follow, so the payload
  *  handoff is not provably ordered. docs/control/midi-remote.md#threading-the-mapping-table-crosses-threads asks for a

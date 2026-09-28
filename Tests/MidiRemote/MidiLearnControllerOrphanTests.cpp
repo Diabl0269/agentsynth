@@ -1,4 +1,4 @@
-// MidiLearnControllerOrphanTests.cpp -- FRO135 (docs/control/midi-remote-ui.md#controllers-list-left): the
+// MidiLearnControllerOrphanTests.cpp (docs/control/midi-remote-ui.md#controllers-list-left): the
 // orphan-controller repairs Re-link and Recreate on MidiLearnController. A project that references a
 // controller this machine lacks is built the honest way: assign against a real profile, then delete the
 // profile -- the project's assignments and controller reference stay behind. Suite name contains "MidiRemote".

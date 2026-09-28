@@ -16,8 +16,8 @@ protected:
     juce::MidiBuffer midiMessages;
 };
 
-// FRO110 retired the PARAMETER's old minimum-time clamps (2ms attack / 5ms release): 0 ms is a
-// real, reachable, displayed value now, not silently raised. FRO116 found that honouring it
+// The PARAMETER has no minimum-time clamps (no 2ms attack / 5ms release floor): 0 ms is a
+// real, reachable, displayed value, not silently raised. Honouring it
 // *literally* -- a one-sample full-scale level step on note-off/note-on -- is an audible click
 // in its own right, so `EnvelopeGenerator` floors the stage's internal effective time to a
 // fixed, much smaller click-free minimum (0.1 ms attack, 1 ms decay/release). These two tests

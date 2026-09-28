@@ -10,7 +10,7 @@ namespace synth {
 
 /**
  * @class ConversationHistorySource
- * @brief Backend-agnostic interface behind AIChatComponent's history panel (P6-8).
+ * @brief Backend-agnostic interface behind AIChatComponent's history panel.
  *
  * One implementation (LocalHistorySource) wraps LocalHistoryStore; one (CloudHistorySource) wraps
  * AuthClient's cloud conversation endpoints. The panel UI (AIChatComponent) is written once

@@ -8,7 +8,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 /**
- * @brief "Master" — the mix bus every channel strip feeds (P9-2, docs/mixer/mixer.md#node-types).
+ * @brief "Master" — the mix bus every channel strip feeds (docs/mixer/mixer.md#node-types).
  *
  * Spliced in front of Rec Tap / Audio Output when the first channel is created
  * (synth::ensureMasterNode, Source/Mixer/MasterSplice.h), so the chain reads
@@ -125,7 +125,7 @@ public:
     LogicalPort mapInputChannel(int rawChannel) const override { return audioJack(rawChannel, kNumInputs); }
     LogicalPort mapOutputChannel(int rawChannel) const override { return audioJack(rawChannel, kNumOutputs); }
 
-    /** FRO146: the peak latched since `reader`'s own last call, for one leg (0 = Left, 1 = Right).
+    /** The peak latched since `reader`'s own last call, for one leg (0 = Left, 1 = Right).
      *  See ChannelStripModule::takeMeterPeak / Source/Mixer/PeakMeterLatch.h. */
     float takeMeterPeak(synth::MeterReader reader, int leg) noexcept {
         return meterLatches_[leg == 1 ? 1 : 0].takePeak(reader);

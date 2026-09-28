@@ -53,7 +53,7 @@ enum class PatchValidationError {
     MacrosNotAllowed,
     MidiRemoteNotAllowed,
     InternalModuleNotAllowed,
-    MixerPanLawNotAllowed, // FRO325
+    MixerPanLawNotAllowed,
 };
 
 /**
@@ -114,7 +114,7 @@ public:
      *  doesn't have one yet — the same lazy-generation graphToJSON above uses, exposed so a
      *  caller that just created a node (a merge-mode apply assigns none unless `trusted` and the
      *  source JSON carried one — see applyJSONToGraph) can get a real uuid to key on without
-     *  serialising the whole graph. SnippetManager::insertSnippet's P8-12 macro-membership
+     *  serialising the whole graph. SnippetManager::insertSnippet's macro-membership
      *  resolution is the reference caller: a freshly pasted node has no uuid until this runs. */
     static juce::String ensureNodeUuid(juce::AudioProcessorGraph::Node* node);
 
@@ -140,7 +140,7 @@ public:
      * @param outIdMap  Optional. When non-null, filled with the same json-id -> live NodeID map the
      *        function already builds internally to wire connections/modulations (a merge-mode
      *        apply does not honour the requested id — see SnippetManager::insertSnippet's own
-     *        comment). SnippetManager uses this to carry P8-12 macro membership (keyed by the
+     *        comment). SnippetManager uses this to carry macro membership (keyed by the
      *        snippet's own node ids) through to the freshly created nodes' real NodeIDs.
      *
      * @return true if the patch was applied successfully.

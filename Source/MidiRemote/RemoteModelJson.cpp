@@ -37,9 +37,9 @@ bool readInt(const juce::var& v, int& out) {
 
 bool readOptionalInt(const juce::var& v, int& out) { return v.isVoid() || readInt(v, out); }
 
-// FRO142: a missing "page"/"pageCount" property means the pre-FRO142 default (1); a PRESENT one
-// must be a well-formed int in [lo, hi] or the whole load fails, same all-or-nothing rule as every
-// other field in this file.
+// A missing "page"/"pageCount" property means the default (1); a PRESENT one must be a well-formed
+// int in [lo, hi] or the whole load fails, same all-or-nothing rule as every other field in this
+// file.
 bool readOptionalRangedInt(const juce::var& v, int& out, int lo, int hi) {
     if (v.isVoid()) {
         out = lo;
@@ -67,8 +67,8 @@ bool readBool(const juce::var& v, bool& out) {
     return true;
 }
 
-// FRO339: a Handshake message is a flat JSON array of 0..255 ints (readInt already rejects
-// anything wider); an empty array round-trips as an empty vector, same as an absent key.
+// A Handshake message is a flat JSON array of 0..255 ints (readInt already rejects anything wider);
+// an empty array round-trips as an empty vector, same as an absent key.
 bool readByteArray(const juce::var& v, std::vector<std::uint8_t>& out) {
     if (!v.isArray())
         return false;
@@ -90,9 +90,9 @@ juce::var byteArrayToVar(const std::vector<std::uint8_t>& bytes) {
     return arr;
 }
 
-// FRO141: a missing "focusBank" means the pre-FRO141 default (false); a PRESENT one must be a
-// strict bool (never a truthy int/string) or the whole load fails, same all-or-nothing rule as
-// every other field in this file.
+// A missing "focusBank" means the default (false); a PRESENT one must be a strict bool (never a
+// truthy int/string) or the whole load fails, same all-or-nothing rule as every other field in this
+// file.
 bool readOptionalBool(const juce::var& v, bool& out) {
     if (v.isVoid()) {
         out = false;
@@ -101,8 +101,8 @@ bool readOptionalBool(const juce::var& v, bool& out) {
     return readBool(v, out);
 }
 
-// FRO339 (handshake port hint): a missing "port" means the pre-hint default (""); a PRESENT one
-// must be a string (even "") or the whole load fails, same all-or-nothing rule as every other field.
+// A missing "port" means the default (""); a PRESENT one must be a string (even "") or the whole
+// load fails, same all-or-nothing rule as every other field.
 bool readOptionalString(const juce::var& v, juce::String& out) {
     if (v.isVoid()) {
         out = {};
@@ -312,8 +312,8 @@ bool nodeCommandKindFromString(const juce::String& s, NodeCommandKind& out) {
     return false;
 }
 
-// FRO236 (docs/control/midi-remote.md#continuous-targets): doc-exact camelCase, same hard-fail-on-
-// unknown-string rule as every other enum in this file.
+// Doc-exact camelCase, same hard-fail-on- unknown-string rule as every other enum in this file (see
+// docs/control/midi-remote.md#continuous-targets).
 const char* toString(ContinuousTargetKind k) {
     switch (k) {
     case ContinuousTargetKind::bpm:
@@ -342,8 +342,8 @@ bool continuousTargetKindFromString(const juce::String& s, ContinuousTargetKind&
     return false;
 }
 
-// FRO142 (docs/control/midi-remote.md#pages): doc-exact camelCase, same hard-fail-on-unknown-
-// string rule as every other enum in this file.
+// Doc-exact camelCase, same hard-fail-on-unknown- string rule as every other enum in this file (see
+// docs/control/midi-remote.md#pages).
 const char* toString(PageCommand c) {
     switch (c) {
     case PageCommand::next:
@@ -478,7 +478,7 @@ juce::var Control::toVar() const {
     layoutObj->setProperty("row", layout.row);
     obj->setProperty("layout", juce::var(layoutObj));
 
-    // FRO141: written only when true, so a pre-FRO141 control round-trips byte-identical.
+    // Written only when true, so an older control round-trips byte-identical.
     if (focusBank)
         obj->setProperty("focusBank", true);
 
@@ -521,7 +521,7 @@ bool Control::fromVar(const juce::var& v, Control& out) {
         !readInt(layoutObj->getProperty("row"), parsed.layout.row))
         return false;
 
-    // FRO141: missing == false (every pre-FRO141 control); present must be a strict bool.
+    // Missing == false (every older control); present must be a strict bool.
     if (!readOptionalBool(obj->getProperty("focusBank"), parsed.focusBank))
         return false;
 
@@ -676,7 +676,7 @@ juce::var Assignment::toVar() const {
 
     obj->setProperty("enabled", enabled);
 
-    // FRO142: written only when != 1, so a pre-FRO142 assignment round-trips byte-identical.
+    // Written only when != 1, so an older assignment round-trips byte-identical.
     if (page != 1)
         obj->setProperty("page", page);
 
@@ -737,7 +737,7 @@ bool Assignment::fromVar(const juce::var& v, Assignment& out) {
     if (!readBool(obj->getProperty("enabled"), parsed.enabled))
         return false;
 
-    // FRO142: missing == 1 (every pre-FRO142 assignment); present must be 1..16.
+    // Missing == 1 (every older assignment); present must be 1..16.
     if (!readOptionalRangedInt(obj->getProperty("page"), parsed.page, 1, 16))
         return false;
 
@@ -769,18 +769,18 @@ juce::var ControllerProfile::toVar() const {
 
     obj->setProperty("passMapped", passMapped);
 
-    // FRO339: written only when non-empty, so a pre-FRO339 profile round-trips byte-identical.
+    // Written only when non-empty, so an older profile round-trips byte-identical.
     if (!handshake.isEmpty()) {
         auto* handshakeObj = new juce::DynamicObject();
         handshakeObj->setProperty("open", byteArrayToVar(handshake.openMessage));
         handshakeObj->setProperty("close", byteArrayToVar(handshake.closeMessage));
-        // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): `port` is written only when
-        // non-empty, so a pre-port-hint document round-trips byte-identical. 2026-09-28 real-hardware
-        // finding: CoreMIDI can give an input/output pair for the SAME physical port asymmetric
-        // names (the Launch Control XL 3's "LCXL3 1 DAW Out" input pairs with a "LCXL3 1 DAW In"
-        // output, never a device sharing the input's own name) -- `port` names the word
+        // `port` is written only when non-empty, so a pre-port-hint document round-trips
+        // byte-identical. CoreMIDI can give an input/output pair for the SAME physical port
+        // asymmetric names (the Launch Control XL 3's "LCXL3 1 DAW Out" input pairs with a "LCXL3 1
+        // DAW In" output, never a device sharing the input's own name) -- `port` names the word
         // (resolveHandshakeOutput()'s `portHint`) that bridges the two, and is also what
-        // MidiRemotePanelComponent's status line checks the profile's `input` name against.
+        // MidiRemotePanelComponent's status line checks the profile's `input` name against (see
+        // docs/control/midi-remote-device-handshake.md#device-handshake).
         if (handshake.port.isNotEmpty())
             handshakeObj->setProperty("port", handshake.port);
         obj->setProperty("handshake", juce::var(handshakeObj));
@@ -796,7 +796,7 @@ juce::var ControllerProfile::toVar() const {
         actionArr.add(a.toVar());
     obj->setProperty("actions", actionArr);
 
-    // FRO142: written only when > 1, so a pre-FRO142 profile round-trips byte-identical.
+    // Written only when > 1, so an older profile round-trips byte-identical.
     if (pageCount > 1)
         obj->setProperty("pageCount", pageCount);
 
@@ -846,10 +846,9 @@ bool ControllerProfile::fromVar(const juce::var& state) {
     if (!readBool(obj->getProperty("passMapped"), parsed.passMapped))
         return false;
 
-    // FRO339: an absent "handshake" means the pre-FRO339 default (no handshake); a PRESENT one
-    // must carry both byte arrays (an empty array is fine -- "enable with nothing to send" is a
-    // legal, if useless, handshake) or the whole load fails, same all-or-nothing rule as everything
-    // else here.
+    // An absent "handshake" means the default (no handshake); a PRESENT one must carry both byte
+    // arrays (an empty array is fine -- "enable with nothing to send" is a legal, if useless,
+    // handshake) or the whole load fails, same all-or-nothing rule as everything else here.
     const juce::var handshakeVar = obj->getProperty("handshake");
     if (!handshakeVar.isVoid()) {
         auto* handshakeObj = handshakeVar.getDynamicObject();
@@ -864,8 +863,9 @@ bool ControllerProfile::fromVar(const juce::var& state) {
     if (!readControlList(obj->getProperty("controls"), parsed.controls))
         return false;
 
-    // "Reject a profile whose controls share a MessageSpec key" (docs/control/midi-remote.md#data-model's rule,
-    // ticket FRO124): an O(n^2) scan is fine at controller-surface scale (tens of controls).
+    // "Reject a profile whose controls share a MessageSpec key"
+    // (docs/control/midi-remote.md#data-model's rule): an O(n^2) scan is fine at controller-surface
+    // scale (tens of controls).
     for (size_t i = 0; i < parsed.controls.size(); ++i)
         for (size_t j = i + 1; j < parsed.controls.size(); ++j)
             if (parsed.controls[i].message == parsed.controls[j].message)
@@ -874,7 +874,7 @@ bool ControllerProfile::fromVar(const juce::var& state) {
     if (!readAssignmentList(obj->getProperty("actions"), parsed.actions))
         return false;
 
-    // FRO142: missing == 1 (every pre-FRO142 profile); present must be 1..16.
+    // Missing == 1 (every older profile); present must be 1..16.
     if (!readOptionalRangedInt(obj->getProperty("pageCount"), parsed.pageCount, 1, 16))
         return false;
 
@@ -943,14 +943,13 @@ bool MidiRemoteProjectDoc::fromVar(const juce::var& state) {
     return true;
 }
 
-// FRO296: every assignment on (nodeUuid, paramA) flips to paramB and vice versa, so a mixer send-
-// slot swap (docs/mixer/sends-and-buses.md#reordering-sends) carries its MIDI Learn mapping along
-// with it, same rebind-in-place shape as TimelineDoc::swapLaneParams. Unlike that lane rebind,
-// there is no one-per-parameter invariant to protect here (nothing stops two controls mapping the
-// same target), so every matching assignment is swapped, not just the first. Each assignment's
-// decision is made from its OWN pre-loop paramId, so a forward pass is safe: flipping one
-// assignment from paramA to paramB can never make an assignment visited later mistake the result
-// for an original paramB.
+// Every assignment on (nodeUuid, paramA) flips to paramB and vice versa, so a mixer send- slot swap
+// (docs/mixer/sends-and-buses.md#reordering-sends) carries its MIDI Learn mapping along with it,
+// same rebind-in-place shape as TimelineDoc::swapLaneParams. Unlike that lane rebind, there is no
+// one-per-parameter invariant to protect here (nothing stops two controls mapping the same target),
+// so every matching assignment is swapped, not just the first. Each assignment's decision is made
+// from its OWN pre-loop paramId, so a forward pass is safe: flipping one assignment from paramA to
+// paramB can never make an assignment visited later mistake the result for an original paramB.
 bool MidiRemoteProjectDoc::swapParameterAssignments(const juce::String& nodeUuid, const juce::String& paramA,
                                                     const juce::String& paramB) {
     if (nodeUuid.isEmpty() || paramA.isEmpty() || paramB.isEmpty() || paramA == paramB)

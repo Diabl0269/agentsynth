@@ -12,7 +12,7 @@ using VisibleCable = MacroCrossingAnimator::VisibleCable;
 // One endpoint's stable identity: which node/channel/side of a CableId, deliberately ignoring
 // attenUid (an attenuverter chain's own hidden node id, not one of the two REAL endpoints) — this
 // is what lets a match survive a mod-routed crossing the same as a plain one, and keeps this class
-// off MacroGroupController's own port-node bookkeeping entirely (FRO41's research note: match on
+// off MacroGroupController's own port-node bookkeeping entirely (match on
 // the real endpoints, never the port NodeID).
 struct EndpointKey {
     uint32_t uid = 0;

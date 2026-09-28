@@ -1,11 +1,11 @@
-// MeterColourStopsLiveApplyTests.cpp -- FRO147: proves the ONE shared cache
+// MeterColourStopsLiveApplyTests.cpp -- proves the ONE shared cache
 // (synth::theme::AppLookAndFeel::getMeterColourStops()) actually reaches both meter painters --
 // MixerMeter (mixer columns/Master/a detached window) and ChannelChipComponent (track header
 // chip) -- by pixel-sampling a real offscreen render before and after
 // AppLookAndFeel::setMeterColourStopsOverride(), the same "prove the painter itself, not just the
 // colour model" idiom MixerMeterPaintTests.cpp already uses. MainComponent's own re-read-on-
 // settings-notify push (MainComponentCallbacks.cpp) is exercised by driving AppLookAndFeel
-// directly here -- see that file's own FRO147 comment for why the tab has no more direct a route.
+// directly here -- see that file's own comment for why the tab has no more direct a route.
 
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Mixer/MixerMeter.h"
@@ -39,7 +39,7 @@ TEST(MeterColourStopsLiveApplyTest, MixerMeterPaintsTheOverrideStopsOnceOneIsSet
 
     // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
     // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
-    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    // Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
     juce::Image img(juce::Image::ARGB, kWidth, kHeight, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     meter.paint(g);

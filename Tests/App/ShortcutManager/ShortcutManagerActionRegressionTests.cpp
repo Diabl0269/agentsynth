@@ -4,7 +4,7 @@
 #include "ShortcutManagerTestFixture.h"
 
 // ---------------------------------------------------------------------------
-// Minimap toggle (issue #159)
+// Minimap toggle
 // ---------------------------------------------------------------------------
 
 // Default binding for the minimap toggle must be Cmd+K, with no extra modifiers.
@@ -34,7 +34,7 @@ TEST_F(ShortcutManagerTest, GetActionDescription_ToggleMinimapIsNonEmpty) {
 }
 
 // ---------------------------------------------------------------------------
-// Macro group/ungroup (P8-12)
+// Macro group/ungroup
 // ---------------------------------------------------------------------------
 
 // Default binding for grouping the selection into a macro must be Cmd+G, with no extra modifiers.
@@ -76,7 +76,7 @@ TEST_F(ShortcutManagerTest, ActionIds_ContainsUngroupSelection) {
 }
 
 // Both actions need a human-readable, non-empty description for the Settings UI.
-// P8-14: groupSelection (Cmd+G) dispatches to group-or-toggle, so its label is static and must
+// groupSelection (Cmd+G) dispatches to group-or-toggle, so its label is static and must
 // not claim to be only one of the two verbs it now covers.
 TEST_F(ShortcutManagerTest, GetActionDescription_GroupSelectionIsNonEmpty) {
     const auto description = ShortcutManager::getActionDescription("groupSelection");
@@ -91,7 +91,7 @@ TEST_F(ShortcutManagerTest, GetActionDescription_UngroupSelectionIsNonEmpty) {
 }
 
 // ---------------------------------------------------------------------------
-// Macro collapse/expand toggle (P8-12 follow-up — GraphEditor::toggleSelectionMacrosCollapsed)
+// Macro collapse/expand toggle (GraphEditor::toggleSelectionMacrosCollapsed)
 // ---------------------------------------------------------------------------
 
 // Default binding must stay Cmd+Alt+G — unchanged by the collapse-only -> toggle behaviour
@@ -189,10 +189,9 @@ TEST_F(ShortcutManagerTest, SnapIsJAndQuantiseIsQOnBothSurfacesWithoutColliding)
 }
 
 // ---------------------------------------------------------------------------
-// Export Patch Only (P8-20 / T133) -- the Cmd+Shift+P shortcut that saves just the patch as a
-// legacy .json via GraphEditor::savePreset. The AppCommands entry and its File-menu row shipped with
-// P8-5; this section pins the rebindable default binding P8-20 adds -- until then exportPatchOnly
-// followed the checkForUpdates "menu-only, no chord" treatment (no action id, no binding).
+// Export Patch Only -- the Cmd+Shift+P shortcut that saves just the patch as a
+// legacy .json via GraphEditor::savePreset. The AppCommands entry and its File-menu row exist; this section pins the
+// rebindable default binding (unlike checkForUpdates' "menu-only, no chord" treatment).
 // ---------------------------------------------------------------------------
 
 // 'p' is free under any modifier set: the bare 'p' is the timeline's loop-selection surface key,
@@ -210,7 +209,7 @@ TEST_F(ShortcutManagerTest, ExportPatchOnlyDefaultBindingIsCmdShiftP) {
 #endif
 }
 
-// T133's "resolves to the export action": the binding must answer its own command unambiguously.
+// the "resolves to the export action": the binding must answer its own command unambiguously.
 TEST_F(ShortcutManagerTest, GetActionForKeyPress_ResolvesCmdShiftPToExportPatchOnly) {
     auto kp = manager.getBinding("exportPatchOnly");
     ASSERT_TRUE(kp.isValid());
@@ -239,7 +238,7 @@ TEST_F(ShortcutManagerTest, GetActionDescription_ExportPatchOnlyIsNonEmpty) {
     EXPECT_EQ(description, "Export Patch Only");
 }
 
-// T133's "does not collide": within its (General) category nothing else owns Cmd+Shift+P, and the
+// the "does not collide": within its (General) category nothing else owns Cmd+Shift+P, and the
 // rhyming export/save chords stay distinct -- Export Audio shares the Cmd+Shift modifier set on a
 // different letter, Save Project As is Cmd+Shift+S, and Save Snippet (Cmd+Opt+S) is a Graph-category action so it
 // is out of scope for a General conflict probe.
@@ -262,7 +261,7 @@ TEST_F(ShortcutManagerTest, ExportPatchOnlyDoesNotCollideWithNeighbouringChords)
 }
 
 // ---------------------------------------------------------------------------
-// T159: the focus-region framework's four new General actions — Tab/Shift+Tab cycling plus the two
+// The focus-region framework's four new General actions — Tab/Shift+Tab cycling plus the two
 // direct-focus shortcuts. See Source/UI/Layout/FocusRegion.h for the registry these dispatch into and
 // Tests/UI/Layout/FocusRegionTests.cpp for the registry's own logic tests.
 // ---------------------------------------------------------------------------
@@ -329,7 +328,7 @@ TEST_F(ShortcutManagerTest, FocusRegionActionsAreGeneralCategory) {
 // The collision check the task's own acceptance criteria calls out explicitly: none of the four new
 // chords collide with anything already in the (General) table, including each other and the
 // deliberately-NOT-reused Cmd+M (toggleModMatrix). Cmd+Shift+M itself was reserved at the time for a
-// future Mixer-focus shortcut and is now FRO45's "Locate Master" (Graph category) — see that action's
+// future Mixer-focus shortcut and is now the "Locate Master" (Graph category) — see that action's
 // own comment in ShortcutManager::resetToDefaults for why it claims the chord that reservation held.
 TEST_F(ShortcutManagerTest, FocusRegionActionsDoNotCollideWithAnyExistingGeneralBinding) {
     for (const auto* actionId : {"focusNextRegion", "focusPrevRegion", "focusTimeline", "focusLibrary"}) {
@@ -339,7 +338,7 @@ TEST_F(ShortcutManagerTest, FocusRegionActionsDoNotCollideWithAnyExistingGeneral
             << actionId << " collides with " << manager.getConflictingAction(actionId, binding);
     }
 
-    // Cmd+Shift+M now belongs to locateMaster (FRO45) — Library/Timeline focus must not have
+    // Cmd+Shift+M now belongs to locateMaster — Library/Timeline focus must not have
     // wandered onto it, and nothing else may have claimed it either.
     const auto cmdShiftM =
         juce::KeyPress('m', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
@@ -353,7 +352,7 @@ TEST_F(ShortcutManagerTest, FocusRegionActionsDoNotCollideWithAnyExistingGeneral
 }
 
 // ---------------------------------------------------------------------------
-// T160: focusLibrarySearch — opens the Library search field specifically, distinct from
+// focusLibrarySearch — opens the Library search field specifically, distinct from
 // focusLibrary's region-root destination. See Tests/UI/Library/ModuleLibraryComponentTests.cpp for the
 // keyboard row-navigation this unlocks once focus lands in the field.
 // ---------------------------------------------------------------------------
@@ -390,7 +389,7 @@ TEST_F(ShortcutManagerTest, FocusLibrarySearchDoesNotCollideWithAnyExistingGener
 }
 
 // ---------------------------------------------------------------------------
-// T161: timelineMuteFocusedTrack / timelineSoloFocusedTrack / timelineArmFocusedTrack — bare m/s/r,
+// timelineMuteFocusedTrack / timelineSoloFocusedTrack / timelineArmFocusedTrack — bare m/s/r,
 // Timeline category, resolved by TimelineTrackHeaderComponent::keyPressed for whichever track header
 // row currently holds keyboard focus. See Tests/UI/Timeline/TimelineTrackFocusTests.cpp for the row/panel-level
 // behaviour these unlock. Deliberately not AppCommands/getCommandForAction entries — same pure
@@ -454,7 +453,7 @@ TEST_F(ShortcutManagerTest, GetCommandForAction_TimelineFocusedTrackActionsHaveN
 }
 
 // ---------------------------------------------------------------------------
-// FRO125: transportTogglePlayStop — the togglePlayback alias the MIDI Remote transport family
+// transportTogglePlayStop — the togglePlayback alias the MIDI Remote transport family
 // (docs/control/midi-remote.md#action-targets) uses for the play/stop toggle. See
 // Tests/App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp for the rest of the family
 // (transportPlay/Stop/ToggleLoop/Record/ToggleMetronome/ReturnToStart) and their invokeDirectly

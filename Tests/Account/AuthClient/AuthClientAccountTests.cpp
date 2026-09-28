@@ -1,5 +1,5 @@
 // Account/entitlement/preferences: fetchMe, fetchEntitlement, and the prompt-learning preference
-// get/set pair (P6-7).
+// get/set pair.
 #include "AuthClientTestHelpers.h"
 
 TEST(AuthClientTest, FetchMeSuccessParsesFieldsAndSendsBearerHeader) {
@@ -87,7 +87,7 @@ TEST(AuthClientTest, FetchEntitlementSuccessParsesFieldsIncludingUsage) {
     EXPECT_EQ(capturedHeaders.getValue("Authorization", ""), juce::String("Bearer access-token-123"));
 }
 
-// Older/pre-P4-4 server: no `usage` key at all. The fetch must still succeed — the client
+// Older/legacy server: no `usage` key at all. The fetch must still succeed — the client
 // degrades to showing 0 used rather than failing the whole entitlement fetch.
 TEST(AuthClientTest, FetchEntitlementMissingUsageDefaultsToZero) {
     auto performer = [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&,

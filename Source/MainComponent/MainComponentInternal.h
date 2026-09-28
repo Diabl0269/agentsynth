@@ -1,6 +1,6 @@
 #pragma once
 
-// Private to the MainComponent.cpp / MainComponent*.cpp translation units (FRO63 split of the
+// Private to the MainComponent.cpp / MainComponent*.cpp translation units (split of the
 // former single MainComponent.cpp). Holds the handful of file-local anonymous-namespace helpers
 // that are used by more than one of those units — everything used by only one unit stays in that
 // unit's own anonymous namespace instead. Not part of the public API: nothing outside the

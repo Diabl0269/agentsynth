@@ -1,4 +1,4 @@
-// BottomDockResizeTests.cpp -- FRO231: the bottom dock resizes from ONE top-edge handle on every
+// BottomDockResizeTests.cpp -- the bottom dock resizes from ONE top-edge handle on every
 // tab (Timeline, Mixer, MIDI Remote), and MainComponent owns the value the drag reports: default
 // from the theme metric, clamp, live relayout, persistence on drag end.
 
@@ -86,7 +86,7 @@ TEST_P(BottomDockResizeOnEveryTabTest, HandleCoversTheDockTopEdgeAndKeepsTheTabB
     for (auto* button : {&dock.getAddBusButtonForTest(), &dock.getResetMetersButtonForTest()})
         if (button->isVisible())
             EXPECT_GE(button->getY(), Handle::kHeight) << button->getName();
-    // FRO338: Timeline/Controllers always get the dock's full content height -- only the Mixer
+    // Timeline/Controllers always get the dock's full content height -- only the Mixer
     // host's own top edge moves down, and only while its toolbar row (Add bus/Reset Meters) is
     // actually showing (i.e. the Mixer tab is active).
     EXPECT_EQ(dock.getTimelineHost().getY(), Dock::kTabStripHeight);

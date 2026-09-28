@@ -1,4 +1,4 @@
-// MeterColourStopsPersistenceTests.cpp -- FRO147: the "meterColourStops" global override
+// MeterColourStopsPersistenceTests.cpp -- the "meterColourStops" global override
 // (Source/UI/Mixer/MeterColourStops.h's persistence section) and the AppLookAndFeel cache every
 // meter painter reads (Source/UI/Theme/AppLookAndFeel/AppLookAndFeel.h's meter-colour-stops
 // section). Modeled on NoteColourTests.cpp's persistence half: round-trip, absent-key and

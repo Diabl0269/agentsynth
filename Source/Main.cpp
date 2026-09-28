@@ -139,7 +139,7 @@ private:
                 // starts as "Default", matching the window's pre-existing untitled state.
                 mc->onDocumentTitleChanged(mc->getCurrentPatchName());
 
-                // FRO44: kick off the eager background scan here — the real app's ONE call site —
+                // Kick off the eager background scan here — the real app's ONE call site —
                 // rather than from MainComponent's own constructor, so every test and every plugin
                 // editor that builds a MainComponent stays exactly as scan-free as before. Posting
                 // the child processes happens on PluginScanService's own background thread; this
@@ -147,7 +147,7 @@ private:
                 // this window's construction critical path.
                 mc->maybeStartEagerPluginScan();
 
-                // FRO12 follow-up: this is the real app's ONE construction site for MainComponent
+                // This is the real app's ONE construction site for MainComponent
                 // (every test builds one directly and never reaches here) — opt both detach hosts
                 // into actually creating a native window on detach. See
                 // DetachablePanelHost::setCreatesNativeWindows()'s doc comment.
@@ -155,7 +155,7 @@ private:
                 mc->getBottomDock().getMixerHost().setCreatesNativeWindows(true);
                 mc->getBottomDock().getMidiRemoteHost().setCreatesNativeWindows(true);
 
-                // FRO100: same reasoning, for the hosted-plugin "Open Editor" window. See
+                // Same reasoning, for the hosted-plugin "Open Editor" window. See
                 // HostedPluginWindowManager::setCreatesNativeWindows()'s doc comment.
                 mc->getPluginWindowManager().setCreatesNativeWindows(true);
             }
@@ -202,7 +202,7 @@ private:
                     menu.addCommandItem(&cm, AppCommands::exportAudio);
                     menu.addCommandItem(&cm, AppCommands::exportStems);
                     menu.addSeparator();
-                    // P8-31: project and patch open as separate menu items - Open Project (.agsproj
+                    // Project and patch open as separate menu items - Open Project (.agsproj
                     // bundle, the rebindable Cmd+O) and Open Patch (.json preset, menu-only). addCommandItem
                     // pulls each label + keypress from getCommandInfo.
                     menu.addCommandItem(&cm, AppCommands::openProject);

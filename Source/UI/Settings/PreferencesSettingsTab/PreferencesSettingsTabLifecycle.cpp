@@ -13,10 +13,10 @@ namespace {
 // the Keyboard Shortcuts tab's section headers (see its kDividerAlpha — keep the two in step).
 constexpr float kDividerAlpha = 0.12f;
 
-// Height for a muted hint label under a preference row (round 5 fix): enough for TWO lines at the
-// hint's 11.5pt font, so text wider than the row wraps instead of being horizontally squeezed —
-// the 18px the two hints used before this only fit one line, and neither hint's text is short
-// enough to actually be one line at the tab's real width.
+// Height for a muted hint label under a preference row enough for TWO lines at the
+// hint's 11.5pt font, so text wider than the row wraps instead of being horizontally squeezed
+// (a one-line height would squeeze it, and neither hint's text is short enough to be one line at
+// the tab's real width).
 constexpr int kHintHeight = 32;
 } // namespace
 
@@ -81,7 +81,7 @@ GraphEditor::SmartConnectionMode modeFromComboId(int id) {
 
 PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& props)
     : appProperties(props) {
-    // Round 4 follow-up: without this, searchField below — a juce::TextEditor, and the first
+    // Without this, searchField below — a juce::TextEditor, and the first
     // focus-wanting descendant in this tab — auto-grabs keyboard focus the moment the Settings
     // DialogWindow's peer first gains OS focus. ComponentPeer::handleFocusGain() calls
     // grabKeyboardFocus() on the window's root component whenever a brand-new peer is shown with
@@ -101,7 +101,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     titleLabel.setText("Preferences", juce::dontSendNotification);
     titleLabel.setFont(juce::Font(juce::FontOptions(18.0f, juce::Font::bold)));
 
-    // Live filter (round 3 follow-up): styled like ModuleLibraryComponent's own search box, which
+    // Live filter: styled like ModuleLibraryComponent's own search box, which
     // is the closest precedent for a live text filter in this app.
     addAndMakeVisible(searchField);
     searchField.setMultiLine(false);
@@ -125,7 +125,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     };
     // The preference groups live inside a scroll view's content host, exactly as the Keyboard
     // Shortcuts tab keeps its rows: the title and the search field stay pinned above the scroll
-    // region, but the groups scroll when they outgrow the window instead of getting clipped (T157).
+    // region, but the groups scroll when they outgrow the window instead of getting clipped.
     // contentHost's own size is computed in layoutContent; the viewport gives it a vertical scrollbar.
     addAndMakeVisible(contentViewport);
     contentViewport.setViewedComponent(&contentHost, false);
@@ -212,9 +212,9 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
 
     initMacroToggles();
 
-    // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): auto-create a mixer channel
-    // when a MIDI cable from a Track In node connects to an instrument/macro whose audio reaches the output with no
-    // channel yet. Same "plain on/off, ON by default" shape as the two T148 toggles above.
+    // Auto-create a mixer channel when a MIDI cable from a Track In node connects to an instrument/macro whose
+    // audio reaches the output with no channel yet. Same "plain on/off, ON by default" shape as the two macro
+    // auto-port toggles above (see docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow").
     contentHost.addAndMakeVisible(mixerAutoCreateChannelOnConnectToggle);
     mixerAutoCreateChannelOnConnectToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("mixerAutoCreateChannelOnConnect", true),
@@ -268,13 +268,10 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     // DEFAULT TRUE, and deliberately the same idiom as the row above: "up zooms in" is what both
     // wheel-zoom surfaces already did, so nobody's gesture changes until they ask for it here.
     //
-    // Round 6: back to a checkbox after round 5's labelled dropdown ("Zoom direction:" + two
-    // options) drew a second round of pushback -- the user does not want two-value selects. The
-    // explanation that used to live in the toggle's own tooltip now lives in the always-visible
-    // hint below instead, one line, ASCII only. Persisted key and its boolean semantics are
-    // UNCHANGED across every round: see isZoomScrollUpZoomsInEnabled() /
-    // persistZoomScrollUpZoomsIn() below, still the only read/write sites, still under
-    // kZoomScrollUpZoomsInKey.
+    // A checkbox, not a two-value select. The explanation lives in the always-visible hint
+    // below, one line, ASCII only. The persisted key and its boolean semantics: see
+    // isZoomScrollUpZoomsInEnabled() / persistZoomScrollUpZoomsIn() below, the only read/write
+    // sites, under kZoomScrollUpZoomsInKey.
     zoomScrollUpZoomsInToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue(kZoomScrollUpZoomsInKey, true), juce::dontSendNotification);
     zoomScrollUpZoomsInToggle.setTooltip("When off, scrolling up zooms out. Applies to " + platformCommandKeyName() +
@@ -284,9 +281,9 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     };
 
     contentHost.addAndMakeVisible(zoomScrollUpZoomsInHint);
-    // One line (round 6): short enough that styleMutedHintLabel's two-line-tall box (kept from
-    // round 5's layout fix) never needs the second line, but the taller box is harmless and keeping
-    // it means this row and naturalScrollingHint above it stay pixel-identical in height.
+    // One line: short enough that styleMutedHintLabel's two-line-tall box never needs the
+    // second line, but keeping the taller box means this row and naturalScrollingHint above it
+    // stay pixel-identical in height.
     zoomScrollUpZoomsInHint.setText("When off, scrolling up zooms out. Applies to " + platformCommandKeyName() +
                                         " wheel zoom in the timeline and piano roll.",
                                     juce::dontSendNotification);
@@ -402,7 +399,7 @@ void PreferencesSettingsTab::resized() {
     bounds.removeFromTop(12);
 
     // Everything below is scrolled content: the viewport clips it and shows a vertical scrollbar
-    // when it overflows (T157). Rows are laid out to the viewport width minus its scrollbar
+    // when it overflows. Rows are laid out to the viewport width minus its scrollbar
     // gutter, so a control never runs under the thumb; reserving the gutter unconditionally
     // keeps the layout independent of whether the bar shows this very pass.
     contentViewport.setBounds(bounds);
@@ -412,7 +409,7 @@ void PreferencesSettingsTab::resized() {
 void PreferencesSettingsTab::layoutContent(int contentWidth) {
     dividerBounds.clear();
 
-    // ---- Live filter (round 3 follow-up item 2) --------------------------------------------
+    // ---- Live filter -----------------------------------------------------------------------
     //
     // Each of the groups below is a row for filtering purposes: a group matches when ANY of its
     // components button/label/tooltip text contains the query (case-insensitive); an empty query
@@ -427,10 +424,8 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
             s << b->getButtonText() << " ";
         if (auto* l = dynamic_cast<juce::Label*>(&c))
             s << l->getText() << " ";
-        // No juce::ComboBox branch: that was added in round 5 specifically so the zoom-direction
-        // dropdown's row was findable by "zoom" regardless of which option was selected. Round 6
-        // reverted that row to a checkbox — its button text ("Scroll up to zoom in") already
-        // contains "zoom" via the juce::Button branch above, so no combo special-case is needed.
+        // No juce::ComboBox branch: the zoom row is a checkbox whose button text ("Scroll up to
+        // zoom in") already contains "zoom" via the juce::Button branch above.
         if (auto* t = dynamic_cast<juce::SettableTooltipClient*>(&c))
             s << t->getTooltip() << " ";
         return s;
@@ -519,7 +514,7 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 4b: macro auto-port preference (founder-review fix F5).
+    // Group 4b: macro auto-port preference.
     {
         const bool visible = groupMatches({&macroAutoPortLabel_, &macroAutoPortCombo_});
         setGroupVisible({&macroAutoPortLabel_, &macroAutoPortCombo_}, visible);
@@ -533,11 +528,11 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 4c: macro toggles (T148 auto-create/auto-delete, FRO168 drag without Cmd).
+    // Group 4c: macro toggles (auto-create/auto-delete, drag without Cmd).
     pendingDivider =
         layoutMacroToggleGroup(y, contentWidth, groupMatches, setGroupVisible, beginGroup) || pendingDivider;
 
-    // Group 4d: T184 mixer auto-create-channel-on-connect toggle.
+    // Group 4d: mixer auto-create-channel-on-connect toggle.
     {
         const bool visible = groupMatches({&mixerAutoCreateChannelOnConnectToggle});
         setGroupVisible({&mixerAutoCreateChannelOnConnectToggle}, visible);
@@ -625,10 +620,10 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
         }
         pendingDivider = pendingDivider || visible;
     }
-    // Group 9 (FRO13, P9-7); chains Group 10 (FRO12, P9-6, last) itself -- see that function.
+    // Group 9; chains Group 10 itself -- see that function.
     layoutMixerDefaultTrackPresetGroup(y, contentWidth, groupMatches, setGroupVisible, beginGroup);
-    // Size the content host to whatever the visible groups consumed; the viewport scrolls it
-    // (T157). Width spans the full viewport so the dividers reach the edges; the scrollbar
+    // Size the content host to whatever the visible groups consumed; the viewport scrolls it.
+    // Width spans the full viewport so the dividers reach the edges; the scrollbar
     // gutter is already excluded from contentWidth.
     contentHost.setBounds(0, 0, juce::jmax(contentWidth, contentViewport.getWidth()), juce::jmax(y, 1));
     contentHost.repaint();

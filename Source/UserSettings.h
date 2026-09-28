@@ -7,7 +7,7 @@ namespace synth {
 
 namespace detail {
 
-// FRO305: Tests-only settings-dir override, rationale in test-patterns.md's "on-disk path"
+// Tests-only settings-dir override, rationale in test-patterns.md's "on-disk path"
 // section. Nothing but Tests/TestMain.cpp ever sets this.
 inline juce::String& settingsDirOverride() {
     static juce::String dir;
@@ -40,8 +40,8 @@ inline juce::PropertiesFile::Options userSettingsOptions() {
     options.filenameSuffix = "settings";
     options.osxLibrarySubFolder = "Application Support";
     options.storageFormat = juce::PropertiesFile::storeAsXML;
-    // Options::folderName accepts an absolute path (see test-patterns.md for why); FRO305's
-    // override rides on that.
+    // Options::folderName accepts an absolute path (see test-patterns.md for why); the
+    // tests-only override rides on that.
     const auto& overrideDir = detail::settingsDirOverride();
     options.folderName = overrideDir.isNotEmpty() ? overrideDir : juce::String(branding::kSettingsFolderName);
     return options;
@@ -79,7 +79,7 @@ inline constexpr const char* kMidiRemoteDefaultTakeoverSettingKey = "midiRemoteD
  *  PreferencesSettingsTab, read by MainComponent, which hands it to the badge painter. */
 inline constexpr const char* kMidiRemoteShowBadgesSettingKey = "midiRemoteShowBadges";
 
-/** One-time "Drop it on any knob to modulate that parameter" status-bar hint (FRO289): shown the
+/** One-time "Drop it on any knob to modulate that parameter" status-bar hint: shown the
  *  first time a cable drag starts from a modulation source's output, never again once set. Bool,
  *  default false (unshown). Read/written by GraphEditor::beginConnectionDrag through
  *  GraphEditor::propertiesFile_ -- the same juce::PropertiesFile the macro recolour favourites and

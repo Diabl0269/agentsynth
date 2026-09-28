@@ -1,5 +1,5 @@
 // AIChatComponentHistoryTests.cpp
-// P6-8/P6-9 local multi-conversation history: the unified history UI, upsell/downgrade strips,
+// Local multi-conversation history: the unified history UI, upsell/downgrade strips,
 // backend selection per plan (local vs. cloud), clear-history, restoring a saved conversation,
 // local save-on-every-exchange, rating sync to the server, and the wrapped-height UX-polish
 // regressions that reuse this section's FakeHistorySource/configureTestAppProperties helpers.
@@ -11,7 +11,7 @@
 #include "AIChatComponentTestFixture.h"
 
 // ============================================================================
-// P6-8: local multi-conversation history + unified history UI + upsell/downgrade strips
+// Local multi-conversation history + unified history UI + upsell/downgrade strips
 // ============================================================================
 
 namespace {
@@ -560,7 +560,7 @@ TEST_F(AIChatComponentTest, NewChatClearsCloudConversationIdToo) {
         << "New Chat must clear the cloud conversation id, not just the local one";
 }
 
-// ---- P6-9: rating sync to the server -------------------------------------------------------
+// ---- Rating sync to the server -------------------------------------------------------------
 
 namespace {
 

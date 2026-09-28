@@ -31,9 +31,9 @@ using namespace detail;
 // logical ports) is treated as a plain mono jack whose index is its raw channel — except dropping
 // a genuinely STEREO source onto its Left jack specifically (index 0), where it fans onto raw 0
 // AND 1 (the null-dest block at the end of this function), so neither leaves the Right leg silent.
-// A MONO source dropped there lands on Left alone (one leg, sourceStride 1) — FRO324's render-time
+// A MONO source dropped there lands on Left alone (one leg, sourceStride 1) — render-time
 // L/Mono normalling (AudioEngine::refreshNormalling) fills Right for as long as it stays unpatched,
-// which is also what FRO23's "reconnect the chain" heal now lands on for a mono chain healed
+// which is also what the "reconnect the chain" heal lands on for a mono chain healed
 // straight into Audio Output.
 GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int sourceVisibleJack,
                                                    const ModuleBase* dest, int destVisibleJack) {
@@ -117,12 +117,12 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
     // Graph I/O nodes are not ModuleBase: a collapsed stereo source dropped on Audio Output Left
     // should fan L→L and R→R rather than leave the right leg silent.
     //
-    // FRO324: a genuinely MONO source dropped on Audio Output Left used to broadcast onto both raw
-    // legs here (sourceStride 0, added in #532 for FRO23's "reconnect the chain" heal). Render-time
+    // A genuinely MONO source dropped on Audio Output Left would otherwise broadcast onto both raw
+    // legs here (sourceStride 0). Render-time
     // L/Mono normalling (AudioEngine::refreshNormalling) replaces that broadcast: a mono cable now
     // lands on Left alone, and Right borrows Left at render time for as long as Right stays
-    // unpatched -- audible normalling, never an edge. Removing the broadcast is what let FRO23's own
-    // heal land on the SAME single leg a manual mono cable would.
+    // unpatched -- audible normalling, never an edge. Not broadcasting is what lets the
+    // reconnect-the-chain heal land on the SAME single leg a manual mono cable would.
     if (dest == nullptr && destVisibleJack == 0) {
         for (const auto& s : sourceTargets) {
             if (s.role == PortRole::Audio && s.voiceSpan == 2) {
@@ -146,7 +146,7 @@ void GraphEditor::beginConnectionDrag(ModuleComponent* sourceModule, int channel
     repaintCanvas();
 }
 
-// FRO289: the first time a cable drag starts from a modulation source's OUTPUT, point out that it
+// The first time a cable drag starts from a modulation source's OUTPUT, point out that it
 // can be dropped straight on a knob -- never again once shown (persisted through propertiesFile_,
 // same as the macro recolour favourites shelf and the piano roll's scale assist). An audio/MIDI
 // output, or any INPUT drag (disconnect-and-redrag), never qualifies.
@@ -259,7 +259,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         // reasoning as collectModuleBoxes' marquee/group-drag exclusion) — it is kept alive only
         // so its position tracks the card, and its ORIGINAL bounds (group-bounds top-left, see
         // groupSelectionIntoMacro) sit directly underneath the card, including its own jacks at
-        // the same left/right inset a card jack now uses (T141). Without this guard a release on
+        // the same left/right inset a card jack now uses. Without this guard a release on
         // a card jack could hit-test straight through to the hidden member's real jack instead.
         if (comp == nullptr || !comp->isVisible())
             continue;
@@ -305,13 +305,13 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 const int srcJack = dragSourceIsInput ? port->index : dragSourceChannel;
                 const int dstJack = dragSourceIsInput ? dragSourceChannel : port->index;
 
-                // T184 (docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): a MIDI cable from a
-                // Track In node landing here may newly make some audio reach the output with no channel — build one, in
-                // the SAME undo step as the connection itself (and as any T148 macro port the connection below also
-                // mints, so a Track In dragged across a macro boundary straight onto an unchanneled instrument gets ALL
-                // of it undone by one Cmd+Z). Gated by autoCreateChannelOnConnectEnabled (Preferences); OFF (or not a
-                // MIDI drag from a Track In) falls straight through to the T148/plain-connect branch below, byte for
-                // byte as it was before T184.
+                // A MIDI cable from a Track In node landing here may newly make some audio reach the output with no
+                // channel — build one, in the SAME undo step as the connection itself (and as any auto-created macro
+                // port the connection below also mints, so a Track In dragged across a macro boundary straight onto an
+                // unchanneled instrument gets ALL of it undone by one Cmd+Z). Gated by
+                // autoCreateChannelOnConnectEnabled (Preferences); OFF (or not a MIDI drag from a Track In) falls
+                // straight through to the plain-connect branch below
+                // (see docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow").
                 if (autoCreateChannelOnConnectEnabled && dragSourceIsMidi &&
                     nodeIsTimelineMidiSource(realSrc->nodeID)) {
                     const auto realSrcId = realSrc->nodeID;
@@ -336,12 +336,13 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 } else if (!autoCreateMacroPortsOnDragEnabled ||
                            !macroController_.maybeAutoCreateMacroPortsForDrag(realSrc->nodeID, srcJack, realDst->nodeID,
                                                                               dstJack, dragSourceIsMidi)) {
-                    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): if this completed drag crosses a macro
-                    // boundary (an EXPANDED macro's member on one side, something outside that same
-                    // macro on the other — the collapsed-card drop above is a different code path),
-                    // mint and wire a matching port instead of the plain direct connection. Gated by
-                    // autoCreateMacroPortsOnDragEnabled (Preferences); when it handles the drag it
-                    // returns true and the plain connectPorts below is skipped entirely.
+                    // If this completed drag crosses a macro boundary (an EXPANDED macro's member on
+                    // one side, something outside that same macro on the other — the collapsed-card
+                    // drop above is a different code path), mint and wire a matching port instead of
+                    // the plain direct connection. Gated by autoCreateMacroPortsOnDragEnabled
+                    // (Preferences); when it handles the drag it returns true and the plain
+                    // connectPorts below is skipped entirely
+                    // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
                     connectPorts(realSrc->nodeID, srcJack, realDst->nodeID, dstJack, dragSourceIsMidi, true);
                 }
                 connectedToAModule = true;
@@ -375,7 +376,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             // macro offers an OUTPUT.
             const bool newPortIsInput = !dragSourceIsInput;
 
-            // T141: an existing port's jack under the cursor wires directly into that port's own
+            // An existing port's jack under the cursor wires directly into that port's own
             // node, rather than always minting a fresh one — "one jack per port" makes a jack a
             // real, precise drop target, not just the card as a whole. A jack whose direction or
             // kind doesn't match the drag is refused silently, the same way an ordinary mismatched
@@ -398,7 +399,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                         const int connSrcJack = newPortIsInput ? dragSourceChannel : 0;
                         const int connDstJack = newPortIsInput ? 0 : dragSourceChannel;
 
-                        // T184: the same auto-channel trigger as the direct-jack branch above,
+                        // The same auto-channel trigger as the direct-jack branch above,
                         // for a Track In dropped straight onto an EXISTING port jack on a
                         // collapsed macro's card. The port node (a MacroMidiInletModule) is a
                         // plain pass-through — findUnchanneledOutputFeeds (via
@@ -426,10 +427,10 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             }
 
             // No jack under the cursor: fall back to the "shape from a dropped cable" convenience
-            // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed, T140) — the whole card is still
-            // a valid drop target, and a fresh Mono port is created to receive the cable. T184 does NOT apply here:
-            // createMacroPortFromDroppedCable wires no interior leg (the freshly-minted port has nothing behind it
-            // yet), so there is nothing for findUnchanneledOutputFeeds to find.
+            // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed) — the whole card is still
+            // a valid drop target, and a fresh Mono port is created to receive the cable. The auto-channel path does
+            // NOT apply here: createMacroPortFromDroppedCable wires no interior leg (the freshly-minted port has
+            // nothing behind it yet), so there is nothing for findUnchanneledOutputFeeds to find.
             macroController_.createMacroPortFromDroppedCable(card->getMacroId(), newPortIsInput, dragSourceIsMidi,
                                                              srcNode->nodeID, dragSourceChannel);
             break;

@@ -1,4 +1,4 @@
-// ControllersListComponent.cpp -- FRO131 (docs/control/midi-remote-ui.md#controllers-list-left):
+// ControllersListComponent.cpp (docs/control/midi-remote-ui.md#controllers-list-left):
 // paint, hit-testing and the right-click Rename/Export/Delete flow. See the header for the
 // caller-facing contract.
 //
@@ -182,13 +182,13 @@ void beginRename(ControllersListComponent& self, const juce::String& profileId, 
                             false);
 }
 
-// FRO139 (docs/control/midi-remote.md#controller-feedback): right-click "Send feedback to ->" --
-// "None" plus one item per available output device, ticked against the row's own
-// hasFeedbackOutput/feedbackOutputIdentifier. The device rows come from
+// Right-click "Send feedback to ->" -- "None" plus one item per available output device, ticked
+// against the row's own hasFeedbackOutput/feedbackOutputIdentifier. The device rows come from
 // ControllersListComponent::queryFeedbackOutputs, called fresh on every right-click (the menu is
 // short-lived and rebuilt each time, unlike the plugin-picker snapshot rule in Source/UI/CLAUDE.md,
 // which exists for a list a background scan can mutate WHILE the menu is open) -- this component
-// never calls juce::MidiOutput::getAvailableDevices() itself, see the header's own comment on why.
+// never calls juce::MidiOutput::getAvailableDevices() itself, see the header's own comment on why
+// (see docs/control/midi-remote.md#controller-feedback).
 void appendFeedbackOutputSubmenu(ControllersListComponent& self, juce::PopupMenu& parent,
                                  const ControllersListComponent::RowModel& row) {
     juce::PopupMenu submenu;
@@ -288,7 +288,7 @@ void ControllersListComponent::paint(juce::Graphics& g) {
 }
 
 // Rows are painted directly from rows_ in paint() and boundsForRow()/rowIndexAt() derive their
-// geometry on demand, so the only child to lay out is the FRO134 "+ Add controller" footer.
+// geometry on demand, so the only child to lay out is the "+ Add controller" footer.
 void ControllersListComponent::resized() {
     addControllerButton_.setBounds(getLocalBounds().removeFromBottom(kFooterHeight).reduced(8, 4));
 }
@@ -352,8 +352,8 @@ void ControllersListComponent::showContextMenuForRow(int rowIndex) {
             beginDelete(*self, profileId, name);
     });
 
-    // FRO139 (docs/control/midi-remote.md#controller-feedback): hidden in the plugin build, same as
-    // "+ Add controller" -- a hosted plugin has no MIDI output of its own to pick.
+    // Hidden in the plugin build, same as "+ Add controller" -- a hosted plugin has no MIDI
+    // output of its own to pick (see docs/control/midi-remote.md#controller-feedback).
     if (!hosted_)
         appendFeedbackOutputSubmenu(*this, menu, rows_[static_cast<size_t>(rowIndex)]);
 

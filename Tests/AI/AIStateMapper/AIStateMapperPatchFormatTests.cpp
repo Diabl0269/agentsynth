@@ -17,7 +17,7 @@ namespace {
 //
 // Nothing else belongs here. A new entry means some module's saved type string does not name a
 // module the factory can rebuild, which is the class of bug that silently turned every saved Poly
-// Sequencer into a mono Sequencer (issue #196).
+// Sequencer into a mono Sequencer.
 const std::map<juce::String, juce::String> kFactoryTypeNameAliases = {{"Mod Slot", "Attenuverter"}};
 
 juce::String sortedParamIds(juce::AudioProcessor& processor) {
@@ -87,7 +87,7 @@ TEST(AIStateMapperTest, FactoryTypeNamesRoundTrip) {
 }
 
 // The regression that motivated the fix: a Poly Sequencer used to come back as a mono Sequencer
-// from every save/load and every undo (issue #196).
+// from every save/load and every undo.
 TEST(AIStateMapperTest, PolySequencerSurvivesRoundTrip) {
     juce::AudioProcessorGraph graph;
     ASSERT_NE(graph.addNode(synth::AIStateMapper::createModule("Poly Sequencer")), nullptr);
@@ -127,7 +127,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Audio Input", "bypassed"},
         {"Audio Output", ""},
         {"Bitcrusher", "bypassed, depth, dither, dualIO, mix, muted, outputLevel, rate"},
-        // The mixer's strip (P9-2). Solo is deliberately NOT here: it is a render-time gate kept
+        // The mixer's strip. Solo is deliberately NOT here: it is a render-time gate kept
         // in trusted extra state, never a parameter (docs/mixer/mixer.md#solo-is-a-render-time-gate).
         {"Channel Strip",
          "bypassed, gain, muted, pan, send1Level, send1Pan, send2Level, send2Pan, send3Level, send3Pan, send4Level, "
@@ -150,7 +150,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"LFO", "bipolar, bypassed, glide, level, mode, muted, rateHz, rateSync, retrig, shape"},
         {"Limiter", "bypassed, dualIO, inputGain, muted, release, threshold"},
         {"MIDI Keyboard", "bypassed, octave"},
-        // The four Macro I/O port node types (P8-15): pure pass-throughs, so the inherited
+        // The four Macro I/O port node types: pure pass-throughs, so the inherited
         // "bypassed" is the whole parameter set — same reasoning as Rec Tap/Track In/Track Audio,
         // the reference pattern these follow (no "muted": nothing here for it to silence beyond
         // what bypass already covers).
@@ -160,7 +160,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Macro Out", "bypassed"},
         {"Macros", "bypassed, macro1, macro10, macro11, macro12, macro13, macro14, macro15, macro16, macro2, macro3, "
                    "macro4, macro5, macro6, macro7, macro8, macro9, macroBipolar, macroCount, muted"},
-        // The mix bus (P9-2): a fader and a mute, no pan.
+        // The mix bus: a fader and a mute, no pan.
         {"Master", "bypassed, gain, muted"},
         {"Math", "bypassed, clip, muted"},
         {"Midi Input", ""},
@@ -293,7 +293,7 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
     // untrusted-unreachable mechanism cover hosting: the type is refused by validatePatch on the
     // untrusted path, not merely omitted from the schema.
     EXPECT_FALSE(actual.contains("Hosted Plugin"));
-    // A Macro's audio/CV inlet/outlet jack (P8-15 Macro I/O). Registered in the factory (our own
+    // A Macro's audio/CV inlet/outlet jack (Macro I/O). Registered in the factory (our own
     // saves round-trip one) but never offered to a model, and refused outright by validatePatch on
     // the untrusted path — its macro membership is keyed by node uuid, which is trusted-only, so a
     // model-authored one could never resolve to a real macro's port list.
@@ -303,7 +303,7 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
     // signal type.
     EXPECT_FALSE(actual.contains("Macro MIDI In"));
     EXPECT_FALSE(actual.contains("Macro MIDI Out"));
-    // The mixer's strip and bus (P9-2, docs/mixer/mixer.md#ai-authorability). "The AI can build a channel" is an
+    // The mixer's strip and bus (docs/mixer/mixer.md#ai-authorability). "The AI can build a channel" is an
     // app-side action the model invokes, never a node it writes.
     EXPECT_FALSE(actual.contains("Channel Strip"));
     EXPECT_FALSE(actual.contains("Master"));
@@ -509,7 +509,7 @@ TEST(AIStateMapperTest, TimelineIsRefusedFromUntrustedPatchesOnly) {
     EXPECT_EQ(graph.getNumNodes(), 1);
 }
 
-// "midiRemote" (FRO124) is refused the same way "timeline" is: it is app-authored MIDI controller
+// "midiRemote" is refused the same way "timeline" is: it is app-authored MIDI controller
 // assignment data, and a provider-authored mapping could never resolve to real hardware anyway.
 TEST(AIStateMapperTest, MidiRemoteKeyIsRefusedUntrusted) {
     juce::AudioProcessorGraph graph;
@@ -533,7 +533,7 @@ TEST(AIStateMapperTest, MidiRemoteKeyIsRefusedUntrusted) {
     EXPECT_EQ(graph.getNumNodes(), 1);
 }
 
-// FRO110 regression pin: the AI few-shot examples teach the model to emit ADSR times in real
+// Regression pin: the AI few-shot examples teach the model to emit ADSR times in real
 // seconds (attack ~0.01, decay ~0.15-0.3 -- AIIntegrationServiceSystemPrompt.cpp), and every one
 // of those lands inside [0,1]. applyParamsToProcessor's untrusted-apply heuristic therefore
 // treats them as normalized values the model "forgot" to denormalize and rescales via

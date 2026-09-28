@@ -2,7 +2,7 @@
 //
 // Every macro-related dialog/popup/menu builder that constructs a
 // juce::Component::SafePointer<GraphEditor> for an async callback — NOT moved into
-// MacroGroupController (FRO77 PR2) because a SafePointer needs a genuine GraphEditor&, not
+// MacroGroupController because a SafePointer needs a genuine GraphEditor&, not
 // obtainable through the narrow GraphCanvasHost seam. See MacroGroupController.h's class comment.
 // GraphEditor is declared in GraphEditor.h; sibling GraphEditor*.cpp files in this directory hold
 // the rest of the class.
@@ -26,10 +26,10 @@
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "UI/Macros/MacroCardComponent.h"
 
-// FRO13 (P9-7): true when memberUuid's macro is a mixer channel (synth::isChannelMacro) — a
+// True when memberUuid's macro is a mixer channel (synth::isChannelMacro) — a
 // const-callable query since getMacros() itself is non-const.
 //
-// FRO13 (P9-7): canSaveTrackPresetForTrack's const-callable query — getMacros() itself is
+// canSaveTrackPresetForTrack's const-callable query — getMacros() itself is
 // non-const, so MainComponent (a const TrackHeaderHost override) can't call findByMember() on it
 // directly.
 bool GraphEditor::isChannelMacroForTrack(const juce::String& memberUuid) const {
@@ -38,7 +38,7 @@ bool GraphEditor::isChannelMacroForTrack(const juce::String& memberUuid) const {
 }
 
 // Cmd+G / right-click "Create Macro" / drag-group-into-macro's real entry point. Stays on
-// GraphEditor (FRO77 PR2) — it shows a juce::Component::SafePointer<GraphEditor>-based async
+// GraphEditor — it shows a juce::Component::SafePointer<GraphEditor>-based async
 // modal, which needs a genuine GraphEditor&; see MacroGroupController.h's class comment. Also
 // GraphCanvasHost::requestGroupSelectionIntoMacro() — MacroGroupController::
 // groupOrToggleSelectionMacros() calls back into this through the host for a selection that
@@ -106,7 +106,7 @@ void GraphEditor::showMacroAutoPortModal(std::function<void(bool createPorts, bo
     options.componentToCentreAround = this;
     options.useNativeTitleBar = true;
     options.resizable = false;
-    // T153: the dialog's own keyPressed() override is the ONE Escape route (see its class comment
+    // The dialog's own keyPressed() override is the ONE Escape route (see its class comment
     // for the "Escape == Leave Cables As Is" decision) — juce::DialogWindow's own default Escape
     // handling (a Button shortcut dispatched on a DIFFERENT path than the keyPressed bubble our
     // override sits on) would otherwise race it and just hide the window with `onChoice` never
@@ -174,7 +174,7 @@ void GraphEditor::promptRenameMacro(const juce::String& macroId) {
 }
 
 // Shared by promptRecolourMacro and createMacroColourPickerForTest. Stays on GraphEditor
-// (FRO77 PR2) — see MacroGroupController.h's class comment (SafePointer<GraphEditor>).
+// — see MacroGroupController.h's class comment (SafePointer<GraphEditor>).
 //
 // The same picker the timeline ruler's marker menu and the track header swatch use
 // (TimelineRulerComponent::buildMarkerColourPicker is the exact pattern this mirrors). Live
@@ -242,7 +242,7 @@ void GraphEditor::promptRecolourMacro(const juce::String& macroId, juce::Rectang
 // uses, without launching a juce::CallOutBox — mirrors
 // TimelineRulerComponent::createMarkerColourPickerForTest(). Null when `macroId` doesn't
 // resolve. Test seam: a headless test drives the returned popup's preview/commit directly
-// rather than duplicating the recolour logic. Stays on GraphEditor (FRO77 PR2) — see
+// rather than duplicating the recolour logic. Stays on GraphEditor — see
 // MacroGroupController.h's class comment.
 std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::createMacroColourPickerForTest(const juce::String& macroId) {
     return buildMacroColourPicker(macroId);
@@ -253,7 +253,7 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::createMacroColourPick
 // caller (the hull menu) leaves it empty and gets promptRenameMacro's dialog, since there is no
 // card to host an inline editor there.
 //
-// `addCandidateSelection` (T138): both the collapsed card's own right-click
+// `addCandidateSelection`: both the collapsed card's own right-click
 // (MacroCardComponent::mouseDown) and the expanded hull's empty-space right-click
 // (GraphEditor::mouseDown's macroHullAt branch) call selectMacro(macroId, false) BEFORE this
 // method ever runs, so by the time it reads the CURRENT selection, any external batch the user
@@ -266,7 +266,7 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::createMacroColourPick
 // equals the macro's own members, which is exactly what removal should see.
 juce::PopupMenu
 // The shared macro actions menu — right-click a collapsed card or right-click inside an
-// expanded macro's hull both build this SAME menu (Fix 4/P8-12 follow-up), so the two paths
+// expanded macro's hull both build this SAME menu, so the two paths
 // cannot drift apart. Returns an empty menu if `macroId` doesn't resolve. See
 // GraphEditorMacroPrompts.cpp's definition for the `renameAction`/`addCandidateSelection`
 // parameter rationale.
@@ -279,7 +279,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
     const bool collapsed = macro->collapsed;
     juce::Component::SafePointer<GraphEditor> safeThis(this);
 
-    // T138: "Add Selection to Macro" is computed from `addCandidateSelection` when the caller
+    // "Add Selection to Macro" is computed from `addCandidateSelection` when the caller
     // supplied one — both the collapsed card's own right-click (MacroCardComponent::mouseDown) and
     // the expanded hull's empty-space right-click (GraphEditor::mouseDown's macroHullAt branch)
     // call selectMacro(macroId, false) BEFORE this method ever runs *only when the prior selection
@@ -356,15 +356,14 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
 
         self->promptRecolourMacro(macroId, anchor);
     });
-    // Unifies docs/macros/configure-io.md into ONE modal per an
-    // explicit founder request, rather than separate "Add Input"/"Add Output"/"Rename..."/
+    // Unifies docs/macros/configure-io.md into ONE modal, rather than separate "Add Input"/"Add Output"/"Rename..."/
     // "Reorder" menu items.
     m.addItem("Configure I/O...", [safeThis, macroId] {
         if (safeThis != nullptr)
             safeThis->promptConfigureMacroIO(macroId);
     });
     m.addSeparator();
-    // Bypass/mute fan-out (docs/macros/ports.md#bypass-and-mute, T142): each item names the action a click is about to
+    // Bypass/mute fan-out (docs/macros/ports.md#bypass-and-mute): each item names the action a click is about to
     // perform, so a Mixed or fully-off state reads as targeting ON ("Bypass"/"Mute") and a fully-on state reads as
     // targeting OFF ("Enable"/"Unmute") — the same convergence rule toggleMacroBypassed/ toggleMacroMuted apply. Mute
     // is omitted entirely when no member could possibly honour it (e.g. a macro made only of Macro In/Out ports),
@@ -386,7 +385,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
     // macroId directly, so each selects THIS macro immediately before acting — a caller no longer
     // has to pre-select it (the hull right-click site still does, redundantly but harmlessly, per
     // its own comment). This is what makes buildMacroMenu correct when grafted onto a member
-    // module's own right-click menu (founder-review item 4): that menu's whole point is to leave
+    // module's own right-click menu: that menu's whole point is to leave
     // the module selection alone for its OWN items, so without this, invoking either item here
     // would act on whatever was selected when the menu opened rather than on this macro.
     m.addItem("Save as Snippet...", [safeThis, macroId] {
@@ -396,9 +395,9 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
         if (safeThis->onSaveSnippetRequested)
             safeThis->onSaveSnippetRequested();
     });
-    // FRO13 (P9-7, docs/mixer/track-presets.md): only a mixer channel (a macro boxing a Channel Strip) can
-    // be saved as a track preset — omitted entirely on an ordinary group, same "Mute Macro"
-    // omit-when-meaningless precedent above.
+    // Only a mixer channel (a macro boxing a Channel Strip) can be saved as a track preset —
+    // omitted entirely on an ordinary group, same "Mute Macro" omit-when-meaningless precedent
+    // above (see docs/mixer/track-presets.md).
     if (synth::isChannelMacro(*macro, audioEngine.getGraph())) {
         m.addItem("Save Track as Preset...", [safeThis, macroId] {
             if (safeThis == nullptr)
@@ -407,10 +406,10 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
             if (safeThis->onTrackPresetMenuAction)
                 safeThis->onTrackPresetMenuAction(macroId, false);
         });
-        // FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): a bus has no per-type Preferences
-        // -> Mixer default, so this item is omitted entirely for a bus macro (a track's own channel
-        // macro is the only one this can ever apply to) -- same "omit, don't disable" precedent
-        // "Mute Macro" sets above for a command that can only ever no-op.
+        // A bus has no per-type Preferences -> Mixer default, so this item is omitted entirely for
+        // a bus macro (a track's own channel macro is the only one this can ever apply to) -- same
+        // "omit, don't disable" precedent "Mute Macro" sets above for a command that can only ever
+        // no-op (see docs/mixer/track-presets.md#a-third-kind-bus).
         if (!synth::isBusMacro(*macro, audioEngine.getGraph())) {
             m.addItem("Set as Default Track Preset", [safeThis, macroId] {
                 if (safeThis == nullptr)
@@ -427,7 +426,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
         safeThis->getMacroController().selectMacro(macroId, false);
         safeThis->getMacroController().ungroupSelection();
     });
-    // T138: unlike the two items above, these act on the captured selection (addableUuids/
+    // Unlike the two items above, these act on the captured selection (addableUuids/
     // removableUuids), not on whatever is selected at click time — see the capture comment above.
     // Omitted entirely (not shown disabled) when there is nothing they could do, matching "Mute
     // Macro"'s own precedent of omitting a command that can only ever no-op.
@@ -463,7 +462,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
         return;
 
     auto* dialog = new synth::ui::MacroPortConfigDialog(macro->name, macroController_.macroPortRowsForDialog(macroId));
-    dialog->setColourPickerPropertiesFile(propertiesFile_); // T152; nullptr is fine (in-memory favs)
+    dialog->setColourPickerPropertiesFile(propertiesFile_); // nullptr is fine (in-memory favs)
 
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(dialog);
@@ -471,7 +470,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
     options.componentToCentreAround = this;
     options.useNativeTitleBar = true;
     options.resizable = false;
-    // T153: same reasoning as showMacroAutoPortModal above — the dialog's own keyPressed()
+    // Same reasoning as showMacroAutoPortModal above — the dialog's own keyPressed()
     // override (Escape -> onRequestClose) is the ONE Escape route, not competing with
     // juce::DialogWindow's default (which would just hide the window on a different dispatch
     // path, bypassing onRequestClose and every commit-on-close side effect it triggers).
@@ -583,7 +582,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
 
 // Opens a small "Rename Port" AlertWindow for the single port fronted by `nodeUuid` — the
 // port node's own context menu's quicker alternative to opening the whole Configure I/O
-// modal just to retype one name (founder-review fix G7). Empty/whitespace-only input cancels
+// modal just to retype one name. Empty/whitespace-only input cancels
 // without renaming, same as promptRenameMacro's own convention; the actual mutation is
 // renameMacroPort() (already independently tested with no dialog involved). No-op if
 // `macroId` doesn't resolve.

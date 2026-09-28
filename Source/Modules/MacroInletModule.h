@@ -6,7 +6,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 /**
- * @brief "Macro In" — an audio/CV inlet jack on a Macro's boundary (P8-15 Macro I/O,
+ * @brief "Macro In" — an audio/CV inlet jack on a Macro's boundary (Macro I/O,
  * docs/macros/ports.md).
  *
  * A pure PASS-THROUGH: whatever lands on a visible input jack reaches the matching output jack
@@ -33,7 +33,7 @@
  * construction and before the node is wired into a live graph — never again
  * (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's immutability rule). This is what lets a
  * Stereo/Poly-N port exist with no new factory type and no migration for a Macro In already on disk: the bus was sized
- * for it from P8-15a onward.
+ * for it from the start.
  *
  * INTERNAL-ONLY, the same three exclusions as Track In / Rec Tap / Track Audio: not in the module
  * library, not offered by the replace menu, never authorable by a model
@@ -125,7 +125,7 @@ public:
         }
     }
 
-    // ---- Port-creation flow API (P8-15b, docs/macros/configure-io.md#adding-a-port). Called exactly ONCE, by
+    // ---- Port-creation flow API (docs/macros/configure-io.md#adding-a-port). Called exactly ONCE, by
     // GraphEditor::addMacroPort/changeMacroPortShape, right after construction and before the
     // node is added to a running graph — never again; see the class comment's immutability rule.
     // `voiceCount` is meaningless (and ignored) unless `shape` is Poly, where it is clamped to

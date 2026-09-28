@@ -1,4 +1,4 @@
-// Concern: FRO271's cursor-move and loop-jump transport actions (transportNudgeBackBeat/ForwardBeat/
+// Concern: the cursor-move and loop-jump transport actions (transportNudgeBackBeat/ForwardBeat/
 // BackBar/ForwardBar, transportJumpToLoopStart/End) and the "Play / Stop" label. Three layers: table
 // shape against a bare ShortcutManager (ids, labels, unbound, command mapping), the pure nudge
 // arithmetic in Transport/TransportNudge.h against a bare TransportService, and invokeDirectly

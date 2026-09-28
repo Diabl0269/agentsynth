@@ -1,6 +1,6 @@
 // ChannelFlowCreateChannelsTests.cpp
 //
-// "Create Channels" for existing projects (FRO26, P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project):
+// "Create Channels" for existing projects (docs/mixer/mixer.md#creating-channels-in-an-existing-project):
 // wraps every channel-less track's chain into a strip as one undo step, with no automatic migration on load. Uses the
 // ChannelFlowTest fixture from ChannelFlowTestFixture.h.
 
@@ -35,7 +35,7 @@
 #include <thread>
 
 // -------------------------------------------------------------------------------------------
-// "Create Channels" for existing projects (FRO26, P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project)
+// "Create Channels" for existing projects (docs/mixer/mixer.md#creating-channels-in-an-existing-project)
 //
 // docs/mixer/mixer.md#creating-channels-in-an-existing-project: an old project opens UNCHANGED -- no automatic
 // migration on load. The
@@ -43,10 +43,10 @@
 // here through the same applyAddTrackMenuChoice() headless seam addAudioTrack()/addInstrumentTrack()
 // use above) wraps every channel-less track's chain into a strip, as ONE undo step covering all of
 // them. These tests build the "old project" starting state directly -- a "Track Audio" or
-// "Track In" -> instrument chain wired straight to the output, exactly what addAudioTrack()
-// produced before T173a and what a real .agsproj predating this feature still loads as, since
+// "Track In" -> instrument chain wired straight to the output, exactly what an older
+// addAudioTrack() produced and what a real .agsproj predating auto-channels still loads as, since
 // nothing here ever migrates it automatically -- the same "build the pre-existing state directly"
-// pattern the AutoChannelOnConnect_* tests above use for T184's own "no channel yet" starting point.
+// pattern the AutoChannelOnConnect_* tests above use for the "no channel yet" starting point.
 // -------------------------------------------------------------------------------------------
 
 TEST_F(ChannelFlowTest, CreateChannelsWrapsEveryChannellessTrackAsOneUndoStep) {
@@ -70,7 +70,7 @@ TEST_F(ChannelFlowTest, CreateChannelsWrapsEveryChannellessTrackAsOneUndoStep) {
     ASSERT_TRUE(doc.setTrackBinding(audioTrackId, trackAudioUuid));
 
     // Legacy instrument track: Track In -> Oscillator wired straight to the output -- the same
-    // starting shape the AutoChannelOnConnect_* tests above build for T184's own case.
+    // starting shape the AutoChannelOnConnect_* tests above build for the case.
     mc.getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddMidiTrackMenuId);
     auto* trackInNode = findNodeOfTypeCFT(graph, ModuleType::TimelineMidiSource);
     ASSERT_NE(trackInNode, nullptr);
@@ -202,7 +202,7 @@ TEST_F(ChannelFlowTest, CreateChannelsIsANoOpWhenNothingNeedsAChannel) {
 
 // D1 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): "channels follow audio," not tracks, so two tracks that
 // share one unchanneled instrument must come out of the sweep with exactly ONE channel between them, not two. This
-// falls out for free from reusing T184's own per-node builder: the first track's call builds the channel and removes
+// falls out for free from reusing the per-node builder: the first track's call builds the channel and removes
 // the shared instrument's exit edges, so the second track's call sees findUnchanneledOutputFeeds already empty and does
 // nothing.
 TEST_F(ChannelFlowTest, CreateChannelsGivesTwoTracksSharingOneInstrumentJustOneChannel) {
@@ -273,7 +273,7 @@ TEST_F(ChannelFlowTest, HasTracksNeedingChannelsBacksTheMenusEnabledState) {
         << "the menu entry must stay disabled -- this track already has a channel";
 
     // A legacy audio track, wired straight to the output with no insert chain -- the same
-    // pre-P9-3 shape the tests above build.
+    // legacy shape the tests above build.
     auto* output = findNodeNamedCFT(graph, "Audio Output");
     ASSERT_NE(output, nullptr);
     juce::String legacyUuid;

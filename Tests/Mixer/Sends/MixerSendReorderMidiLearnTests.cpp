@@ -1,4 +1,4 @@
-// MixerSendReorderMidiLearnTests.cpp -- FRO296 (docs/mixer/sends-and-buses.md#reordering-sends,
+// MixerSendReorderMidiLearnTests.cpp (docs/mixer/sends-and-buses.md#reordering-sends,
 // docs/control/midi-remote.md): a MIDI Learn mapping on a send's level/pan follows the send
 // through a reorder, in the SAME undo step as the cables and the automation lane
 // (MixerSendReorderLaneTests.cpp covers the lane half). Same MainComponent-backed rig as that

@@ -104,7 +104,7 @@ void MacroPortConfigDialog::triggerCloseForTest() {
         closeButton_.onClick();
 }
 
-// ---- T152 test seams: drag-to-reorder + per-port colour -----------------------------------
+// ---- Test seams: drag-to-reorder + per-port colour ----------------------------------------
 
 void MacroPortConfigDialog::dragRowToIndexInGroupForTest(int row, int newIndexInGroup) {
     if (row >= 0 && row < (int)rowControls_.size())
@@ -136,7 +136,7 @@ std::unique_ptr<synth::ui::ColourPickerPopup> MacroPortConfigDialog::createRowCo
     return rowControls_[row]->buildColourPicker();
 }
 
-// ---- T153 test seams: keyboard accessibility -----------------------------------------------
+// ---- Test seams: keyboard accessibility ----------------------------------------------------
 
 void MacroPortConfigDialog::simulateRowNameEscapeForTest(int row) {
     if (row >= 0 && row < (int)rowControls_.size() && rowControls_[row]->nameEditor.onEscapeKey)
@@ -174,7 +174,7 @@ bool MacroPortConfigDialog::simulateRowControlArrowKeyForTest(int row, RowContro
     return false;
 }
 
-// ---- Founder review round 4 test seams: focus-visibility regression coverage ------------------
+// ---- Test seams: focus-visibility regression coverage -----------------------------------------
 
 void MacroPortConfigDialog::setRowFocusRingForcedForTest(int row, bool forced) {
     if (row < 0 || row >= (int)rowControls_.size())

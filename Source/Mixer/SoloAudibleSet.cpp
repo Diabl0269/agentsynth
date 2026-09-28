@@ -1,4 +1,4 @@
-// Concern: FRO15 (P9-9) -- computeSoloAudibleLegs, the per-leg mixer solo rule. See
+// Concern: computeSoloAudibleLegs, the per-leg mixer solo rule. See
 // SoloAudibleSet.h for the rule itself and why it is per leg rather than per strip.
 //
 // Every walk here goes through synth::isSignalEdge (ChannelFlows.h), the ONE shared signal-edge
@@ -123,15 +123,15 @@ bool legReachesAudibleStrip(juce::AudioProcessorGraph& graph, const std::vector<
     return false;
 }
 
-/** FRO318 (docs/mixer/sends-and-buses.md#sending-to-a-key-input): a send into a Compressor/Gate Key
- *  is never a signal path -- isSignalEdge drops key edges, so legReachesAudibleStrip alone would
- *  close it and soloing the bass would silently stop the kick ducking it. The Key leg is judged by
- *  the channel it KEYS instead: open iff the strip the keyed module's own audio reaches is in
- *  `audible`. Only the send bit opens -- the kick's main leg is still decided by its own walk, and
- *  collectDownstreamStrips keeps ignoring key edges, so the kick itself is never made audible just
- *  because it keys a soloed channel. It does take part in closeOverContributingStrips' fixed point
- *  (an open leg makes the kick "contributing"), which is right: whatever feeds the kick must keep
- *  feeding its Key send. */
+/** A send into a Compressor/Gate Key is never a signal path -- isSignalEdge drops key edges, so
+ *  legReachesAudibleStrip alone would close it and soloing the bass would silently stop the kick
+ *  ducking it. The Key leg is judged by the channel it KEYS instead: open iff the strip the keyed
+ *  module's own audio reaches is in `audible`. Only the send bit opens -- the kick's main leg is
+ *  still decided by its own walk, and collectDownstreamStrips keeps ignoring key edges, so the
+ *  kick itself is never made audible just because it keys a soloed channel. It does take part in
+ *  closeOverContributingStrips' fixed point (an open leg makes the kick "contributing"), which is
+ *  right: whatever feeds the kick must keep feeding its Key send
+ *  (see docs/mixer/sends-and-buses.md#sending-to-a-key-input). */
 bool keySendKeysAudibleChannel(juce::AudioProcessorGraph& graph, NodeID stripId, int slot,
                                const std::set<NodeID>& audible) {
     const auto target = resolveSendTarget(graph, stripId, slot);

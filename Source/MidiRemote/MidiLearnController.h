@@ -16,14 +16,13 @@
 #include <optional>
 #include <vector>
 
-// MidiLearnController.h -- FRO130 (docs/control/midi-remote-ui.md#the-learn-interaction): the
-// app-side half of a module-card right-click MIDI Learn. GraphEditor/ModuleComponent own the menu
+// MidiLearnController.h -- the app-side half of a module-card right-click MIDI Learn (see
+// docs/control/midi-remote-ui.md#the-learn-interaction). GraphEditor/ModuleComponent own the menu
 // and the badge/pulse painting but no RemoteEngine or MidiRemoteProjectDoc; this is what ACTS on a
 // learn request, mirroring the TrackChannelLinkController seam (a collaborator owned by
 // MainComponent rather than more methods on MainComponent itself).
 //
-// Owns the loaded controller-profile set (loaded once at construction, the same data
-// MainComponent::wireMidiRemoteEngine() used to keep as a local temp) and RemoteEngine::onLearned,
+// Owns the loaded controller-profile set (loaded once at construction) and RemoteEngine::onLearned,
 // so a learn's whole lifecycle -- arm, cancel (Esc / any click / 10s silent timeout), auto-profile
 // creation, undoable project-doc mutation -- lives in one place.
 
@@ -51,7 +50,7 @@ public:
     ~MidiLearnController();
 
     const std::vector<ControllerProfile>& getProfiles() const { return profiles_; }
-    /** Test/inspection (FRO193): proves which directory this instance's ControllerProfileStore
+    /** Test/inspection: proves which directory this instance's ControllerProfileStore
      *  actually resolved to, without exposing the store itself. */
     const juce::File& getControllersDirectoryForTest() const { return profileStore_.getControllersDirectory(); }
 
@@ -65,12 +64,11 @@ public:
     /** Wired to GraphEditor::onQueryMidiMappingsForNode. */
     std::map<juce::String, juce::String> queryMappings(juce::AudioProcessorGraph::NodeID nodeId) const;
 
-    /** FRO253 (docs/control/midi-remote.md#node-command-targets): arms a learn on a node command
-     *  (e.g. Solo, ChannelStripModule::soloed_) rather than a graph parameter -- modelled on arm()
-     *  above, not armAction(): a node command is PROJECT-scoped, same as a parameter (it lives on
-     *  MidiRemoteProjectDoc::assignments, not a ControllerProfile), because it names a graph node
-     *  that only makes sense within this project, unlike a fixed ShortcutManager action id.
-     *  Wired to MixerPanelComponent::onSoloMidiLearnRequested. */
+    /** Arms a learn on a node command (e.g. Solo, ChannelStripModule::soloed_) rather than a graph
+     *  parameter -- modelled on arm() above, not armAction(): a node command is PROJECT-scoped, same as a parameter (it
+     * lives on MidiRemoteProjectDoc::assignments, not a ControllerProfile), because it names a graph node that only
+     * makes sense within this project, unlike a fixed ShortcutManager action id. Wired to
+     * MixerPanelComponent::onSoloMidiLearnRequested (see docs/control/midi-remote.md#node-command-targets). */
     void armNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command);
 
     /** "Forget MIDI" for a node command target. A no-op if there is no assignment for it. Wired to
@@ -82,12 +80,12 @@ public:
      *  MixerPanelComponent::onQuerySoloMidiMapping. */
     std::map<NodeCommandKind, juce::String> queryNodeCommandMappings(juce::AudioProcessorGraph::NodeID nodeId) const;
 
-    /** FRO133 (docs/control/midi-remote.md#action-targets): arms a learn on a ShortcutManager
+    /** Arms a learn on a ShortcutManager
      *  action id (e.g. "transportTogglePlayStop") rather than a graph parameter -- always
      *  buttonLike. Unlike arm() above, an action assignment is GLOBAL: it is written into whatever
      *  ControllerProfile the learned device belongs to, not the project doc
      *  (docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project). Wired to
-     *  TimelineTransportBar::onMidiLearnRequested. */
+     *  TimelineTransportBar::onMidiLearnRequested (see docs/control/midi-remote.md#action-targets). */
     void armAction(const juce::String& actionId);
 
     /** "Forget MIDI" for an action target. Removes the assignment from every profile that carries
@@ -104,7 +102,7 @@ public:
      *  live graph. Called after every mutation here, as the undo/redo postRestore, and by
      *  MainComponent after a project load/autosave-restore replaces midiRemoteDoc wholesale.
      *
-     *  FRO253: RemoteEngine::setAssignments() rebuilds its snapshot with graph == nullptr by
+     *  RemoteEngine::setAssignments() rebuilds its snapshot with graph == nullptr by
      *  design (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step)
      *  -- it can only keep each assignment id's PREVIOUS resolution, so a brand-new id (a
      *  just-settled learn, or its undo/redo) has none and its slot stays unresolved until some
@@ -113,7 +111,7 @@ public:
      *  target works immediately, without changing RemoteEngine's setter semantics. */
     void publishAssignments();
 
-    // ---- FRO135: mapping assistant (MidiLearnControllerMapping.cpp, MidiLearnControllerPick.cpp) ----
+    // ---- Mapping assistant (MidiLearnControllerMapping.cpp, MidiLearnControllerPick.cpp) ----
 
     /** Project scope for a parameter/node command (undoable), global for an action. Nothing changes unless `assigned`.
      */
@@ -141,7 +139,7 @@ public:
     /** Esc key / clicking the canvas elsewhere while armed. A no-op if nothing is armed. */
     void cancelArmed();
 
-    // ---- FRO339: device handshake (MidiLearnControllerHandshake.cpp) --------------------------
+    // ---- Device handshake (MidiLearnControllerHandshake.cpp) --------------------------
 
     /** Message thread only. Wires the handshake coordinator to a real MIDI output sink -- a no-op
      *  before this runs. */
@@ -158,12 +156,12 @@ public:
     using AvailableOutputsQuery = std::function<std::vector<ControllerProfile::Input>()>;
     void setAvailableOutputsQueryForTest(AvailableOutputsQuery query) { availableOutputsQuery_ = std::move(query); }
 
-    /** FRO263: fires after every mutation that changes what the MIDI Remote panel shows. May be
+    /** Fires after every mutation that changes what the MIDI Remote panel shows. May be
      *  null (tests, or before MainComponent finishes wiring). See publishAssignments()'s .cpp
      *  comment for exactly which call sites fire it and why the panel-side handler must defer. */
     std::function<void()> onChanged;
 
-    /** FRO133: non-owning, may be null (tests, or before MainComponent finishes wiring -- same
+    /** Non-owning, may be null (tests, or before MainComponent finishes wiring -- same
      *  null contract as TimelineTransportBar::setTransport). Set once so a mixer-fader/pan/mute
      *  learn shows its OWN breathing outline on the mixer column, not only on the canvas card
      *  GraphEditor already reaches via setMidiLearnArmed()/clearMidiLearnArmed(). */
@@ -173,7 +171,7 @@ public:
      *  and badges. */
     void setTransportBar(synth::ui::TimelineTransportBar* bar) noexcept { transportBar_ = bar; }
 
-    // ---- FRO131: MIDI Remote panel profile mutations ----
+    // ---- MIDI Remote panel profile mutations ----
     // Every panel-side edit to a ControllerProfile routes through ONE of these rather than the
     // panel writing ControllerProfileStore directly, so the engine's published snapshot can never
     // go stale relative to what's on disk. Each records one step on the controller edit history
@@ -184,11 +182,11 @@ public:
      *  Returns false if `profile.id` doesn't match a known profile. */
     bool updateProfile(const ControllerProfile& profile, const juce::String& editLabel = "Edit controller");
 
-    /** FRO134: adds a brand-new profile (Add controller, Detect-from-scratch). Saved, published to
+    /** Adds a brand-new profile (Add controller, Detect-from-scratch). Saved, published to
      *  the engine and announced via onChanged. Returns false if `profile.id` is empty or already known. */
     bool addProfile(const ControllerProfile& profile, const juce::String& editLabel = "Add controller");
 
-    // ---- FRO142 (docs/control/midi-remote.md#pages): the page strip's "+" and "Delete page" ----
+    // ---- The page strip's "+" and "Delete page" (see docs/control/midi-remote.md#pages) ----
 
     /** "+": widens `profileId`'s effective page count by one (clamped at 16) through updateProfile()
      *  -- one controller-history step, undoable there -- then switches the engine's active page to
@@ -202,7 +200,7 @@ public:
      *  deleted one. False for page <= 1, page beyond the effective count, or an unknown profile. */
     bool deletePage(const juce::String& profileId, int page);
 
-    // ---- FRO273: controller edit history (MidiLearnControllerHistory.cpp). Message thread only. ----
+    // ---- Controller edit history (MidiLearnControllerHistory.cpp). Message thread only. ----
     bool canUndoProfileEdit() const noexcept { return profileHistory_.canUndo(); }
     bool canRedoProfileEdit() const noexcept { return profileHistory_.canRedo(); }
     /** Empty when there is nothing to undo / redo. */
@@ -218,12 +216,12 @@ public:
         ImportStatus status = ImportStatus::invalid;
         ControllerProfile profile; // set for imported / replaced / conflict (the file's profile)
     };
-    /** FRO134: "Import controller..." -- reads the profile document in `srcFile`. `invalid` if it
+    /** "Import controller..." -- reads the profile document in `srcFile`. `invalid` if it
      *  doesn't parse; `conflict` (nothing changed) if a profile with the same id is already known
      *  and `replaceExisting` is false, so the caller can prompt and call again with true. */
     ImportResult importProfile(const juce::File& srcFile, bool replaceExisting = false);
 
-    /** FRO134/FRO264: the Inspector's edit of an existing control's name, kind or encoding. Replaces
+    /** The Inspector's edit of an existing control's name, kind or encoding. Replaces
      *  the control (matched by id; its message key and layout are kept as they are on the stored
      *  one) and re-copies the denormalised name/encoding/button-mode onto every assignment that
      *  references it, since the engine reads those from the assignment. Returns false if the
@@ -242,7 +240,7 @@ public:
      *  Returns false if the control isn't found. See the .cpp for undo-scope details. */
     bool deleteControl(const juce::String& profileId, const juce::String& controlId);
 
-    /** FRO270: the MIDI Remote surface's group delete -- like deleteControl() but for several ids
+    /** The MIDI Remote surface's group delete -- like deleteControl() but for several ids
      *  at once, in ONE controller-history step and ONE project-history step (so a single undo on
      *  either restores the whole group). Ids not found on the profile are ignored; returns false
      *  if `profileId` is unknown or none of `controlIds` were found. */
@@ -259,21 +257,19 @@ public:
      *  -- see the .cpp for why action/nodeCommand targets are rejected here. */
     bool updateAssignment(const Assignment& updated);
 
-    // MESSAGE THREAD (FRO262). Republishes the engine's open MIDI inputs to RemoteEngine::setSources().
+    // MESSAGE THREAD. Republishes the engine's open MIDI inputs to RemoteEngine::setSources().
     void refreshSources();
 
-    /** FRO240 (docs/control/midi-remote.md#replace-and-duplicate, MidiLearnControllerRetarget.cpp):
-     *  wired to GraphEditor::onModuleReplaced -- re-targets every project assignment (parameter or
-     *  node command) whose target nodeUuid is `oldNodeUuid` onto `newNodeId`'s uuid (assigned
-     *  lazily if it has none yet), but ONLY where the new module still supports the target: a
-     *  parameter assignment only if `newNodeId`'s processor still resolves that paramId
-     *  (synth::resolveLaneParameter); a node command only if the new module supports that command
-     *  (toggleSolo: both nodes must be a ChannelStripModule). Anything that doesn't move is left
-     *  exactly where it was -- orphaned, same as today's plain delete/replace. Mutates `doc_`
-     *  in-place with NO undo recording of its own: the caller (GraphEditor::replaceModule, via
-     *  onModuleReplaced) must already be inside a single AppUndoManager::recordGraphAndMidiRemoteChange
-     *  transaction that brackets doc_'s own before/after JSON around this call, so the retarget
-     *  lands in the SAME undo step as the module replace. Returns true if anything moved. */
+    /** Wired to GraphEditor::onModuleReplaced (MidiLearnControllerRetarget.cpp) -- re-targets every project assignment
+     * (parameter or node command) whose target nodeUuid is `oldNodeUuid` onto `newNodeId`'s uuid (assigned lazily if it
+     * has none yet), but ONLY where the new module still supports the target: a parameter assignment only if
+     * `newNodeId`'s processor still resolves that paramId (synth::resolveLaneParameter); a node command only if the new
+     * module supports that command (toggleSolo: both nodes must be a ChannelStripModule). Anything that doesn't move is
+     * left exactly where it was -- orphaned, same as today's plain delete/replace. Mutates `doc_` in-place with NO undo
+     * recording of its own: the caller (GraphEditor::replaceModule, via onModuleReplaced) must already be inside a
+     * single AppUndoManager::recordGraphAndMidiRemoteChange transaction that brackets doc_'s own before/after JSON
+     * around this call, so the retarget lands in the SAME undo step as the module replace. Returns true if anything
+     * moved (see docs/control/midi-remote.md#replace-and-duplicate). */
     bool retargetNode(const juce::String& oldNodeUuid, juce::AudioProcessorGraph::NodeID newNodeId);
 
 private:
@@ -288,7 +284,7 @@ private:
         std::function<void()> onAnyClick;
         std::function<bool()> stillArmed;
         std::function<void()> onExternallyCancelled;
-        /** FRO141: fires on every tick regardless of `stillArmed`, for a watcher instance used to
+        /** Fires on every tick regardless of `stillArmed`, for a watcher instance used to
          *  poll something other than a learn's silent timeout (see focusBankWatcher_ below). Left
          *  null for the learn-armed watcher_ instance, which only ever wires the fields above. */
         std::function<void()> onTick;
@@ -308,7 +304,7 @@ private:
         }
     };
 
-    // ---- FRO141 (docs/control/midi-remote.md#focus-bank): MidiLearnControllerFocusBank.cpp ------
+    // ---- Focus bank: MidiLearnControllerFocusBank.cpp (see docs/control/midi-remote.md#focus-bank) ----
 
     /** focusBankWatcher_'s onTick: re-reads the canvas selection and, if it changed since the last
      *  poll, rebuilds the transient bindings. */
@@ -332,7 +328,7 @@ private:
     bool deleteControlsWithLabel(const juce::String& profileId, const std::vector<juce::String>& controlIds,
                                  const juce::String& editLabel);
 
-    // FRO339: see MidiLearnControllerHandshake.cpp for what each of these actually does.
+    // See MidiLearnControllerHandshake.cpp for what each of these actually does.
     void setProfilesAndReconcileHandshakes();
     void reconcileHandshakes();
 
@@ -346,9 +342,9 @@ private:
     ControllerProfileStore profileStore_;
     std::vector<ControllerProfile> profiles_;
     ProfileEditHistory profileHistory_;
-    // FRO339: unset until setHandshakeFeedbackSink() runs -- see MidiLearnControllerHandshake.cpp.
+    // Unset until setHandshakeFeedbackSink() runs -- see MidiLearnControllerHandshake.cpp.
     std::optional<ControllerHandshakeCoordinator> handshakeCoordinator_;
-    // FRO339: unset means reconcileHandshakes() uses the real juce::MidiOutput enumeration -- see
+    // Unset means reconcileHandshakes() uses the real juce::MidiOutput enumeration -- see
     // setAvailableOutputsQueryForTest()'s own doc comment above.
     AvailableOutputsQuery availableOutputsQuery_;
     bool applyingProfileHistory_ = false; // recording is suppressed while an undo/redo applies
@@ -358,10 +354,10 @@ private:
 
     UiWatcher watcher_;
 
-    // FRO141: a SEPARATE always-running UiWatcher instance -- watcher_ above only runs while a
-    // learn is armed (its start()/stop() are called from arm()/endArmedUi()), but the focus bank
-    // must keep tracking the canvas selection whether or not a learn is in progress. Never
-    // registered as a global mouse listener (it only needs the 200 ms tick), so it needs no
+    // A SEPARATE always-running UiWatcher instance -- watcher_ above only runs while a learn is
+    // armed (its start()/stop() are called from arm()/endArmedUi()), but the focus bank must keep
+    // tracking the canvas selection whether or not a learn is in progress. Never registered as a
+    // global mouse listener (it only needs the 200 ms tick), so it needs no
     // juce::Desktop::removeGlobalMouseListener() companion in ~MidiLearnController() the way
     // watcher_ does.
     UiWatcher focusBankWatcher_;

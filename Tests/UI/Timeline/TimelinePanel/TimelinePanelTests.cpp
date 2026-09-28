@@ -78,7 +78,7 @@ TEST_F(TimelinePanelIntegrationTest, HiddenByDefaultAndCarvesNothing) {
     mc.setSize(1600, 900);
 
     EXPECT_FALSE(mc.isBottomDockConfiguredVisible());
-    // FRO11 (P9-5): timelinePanelIsOpen(), not isVisible() -- the panel now lives inside
+    // timelinePanelIsOpen(), not isVisible() -- the panel now lives inside
     // BottomDockComponent (see its own comment), and its own visibility flag reflects only "the
     // Timeline tab is selected" (true by default), not "the dock is open".
     EXPECT_FALSE(timelinePanelIsOpen(mc));
@@ -97,7 +97,7 @@ TEST_F(TimelinePanelIntegrationTest, ToggleCarvesFullWidthAboveStatusBar) {
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
     ASSERT_TRUE(timelinePanelIsOpen(mc));
 
-    // FRO11 (P9-5): MainComponent-relative bounds -- see timelinePanelBoundsInMainComponent's own
+    // MainComponent-relative bounds -- see timelinePanelBoundsInMainComponent's own
     // comment for why a raw mc.getTimelinePanel().getBounds() can no longer be compared directly
     // against the status bar / graph editor (different coordinate origins now that the panel is
     // nested inside BottomDockComponent).

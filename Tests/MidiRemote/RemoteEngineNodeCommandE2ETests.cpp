@@ -1,6 +1,7 @@
-// FRO253 (docs/control/midi-remote.md#node-command-targets) end-to-end: a hardware press assigned
-// to a mixer column's Solo really flips ChannelStripModule::soloed_ and AudioEngine's soloed-strip
-// count, through the SAME real seam every parameter/action test in this directory drives --
+// End-to-end coverage of node-command targets
+// (docs/control/midi-remote.md#node-command-targets): a hardware press assigned to a mixer
+// column's Solo really flips ChannelStripModule::soloed_ and AudioEngine's soloed-strip count,
+// through the SAME real seam every parameter/action test in this directory drives --
 // AudioEngine::handleIncomingMidiMessageFromSource -> RemoteEngine::drain() -- rather than calling
 // RemoteEngine::handleMessage()/applyEvent() directly. The invoker is a small test double that
 // performs EXACTLY the calls MainComponent::RemoteActionInvokerImpl::invokeNodeCommand does
@@ -72,7 +73,7 @@ public:
 
     void invokeRemoteCommand(juce::CommandID) override {}
 
-    // FRO236: this suite doesn't exercise continuous targets -- stub, never called.
+    // This suite doesn't exercise continuous targets -- stub, never called.
     double getContinuousValue(ContinuousTargetKind) override { return 0.0; }
     void setContinuousValue(ContinuousTargetKind, double) override {}
     bool getContinuousWindow(ContinuousTargetKind, double&, double&) override { return false; }

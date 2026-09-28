@@ -1,4 +1,4 @@
-// PanelResizeHandleTests.cpp -- FRO231: synth::ui::PanelResizeHandle in isolation (a stand-in owner
+// PanelResizeHandleTests.cpp -- synth::ui::PanelResizeHandle in isolation (a stand-in owner
 // component, no MainComponent). The dock-level behaviour on every tab lives in
 // Tests/UI/Mixer/BottomDockResizeTests.cpp.
 

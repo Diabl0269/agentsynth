@@ -1,6 +1,6 @@
 // MacroGroupControllerTests.cpp
 //
-// Controller-level coverage for MacroGroupController (FRO77 PR2): drives it directly against a
+// Controller-level coverage for MacroGroupController: drives it directly against a
 // real AudioEngine graph through GraphEditor::getCanvasHostForTest() (mirrors
 // Tests/UI/Graph/SmartConnectionEngine/SmartConnectionEngineTests.cpp from PR1) — the test never
 // goes through GraphEditor's own forwarders, it builds a SEPARATE MacroGroupController instance

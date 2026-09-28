@@ -7,7 +7,7 @@
 
 namespace synth::ui {
 
-// T114/P8-10: the app-only startup overlay offering exactly four actions (New empty project, Open
+// The app-only startup overlay offering exactly four actions (New empty project, Open
 // the factory default project, Open an existing project, pick from Recent) instead of always
 // silently auto-loading the factory "Default" preset. NOT a separate window — MainComponent adds
 // this as a full-bounds child (see resized()) so it also occludes the toolbar while shown, since

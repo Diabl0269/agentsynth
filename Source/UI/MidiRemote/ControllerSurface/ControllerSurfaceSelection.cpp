@@ -1,4 +1,4 @@
-// Concern: FRO270 (docs/control/midi-remote-ui.md#surface-centre) -- the surface's own selection
+// Concern (docs/control/midi-remote-ui.md#surface-centre): the surface's own selection
 // set: plain/shift/cmd click on a cell, and the two public setters the panel uses to apply or
 // restore a selection from outside a click (a profile switch, Detect, Assign, an undo/redo).
 // Marquee selection lives in ControllerSurfaceMarquee.cpp -- it ends by calling

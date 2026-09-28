@@ -70,7 +70,7 @@ float sourceSample(juce::int64 frame, int channel) {
 
 struct ScopedTempDir {
     // Unique per instance: CI runs the suite as parallel shard processes, and a fixed name let two
-    // shards wipe each other's files mid-test (FRO322).
+    // shards wipe each other's files mid-test.
     explicit ScopedTempDir(const juce::String& name)
         : dir(juce::File::getSpecialLocation(juce::File::tempDirectory)
                   .getChildFile(name + "_" + juce::Uuid().toString())) {
@@ -882,8 +882,8 @@ TEST_F(AddAudioTrackFlowTest, AddAudioTrackFlow) {
     ASSERT_NE(created, nullptr);
     EXPECT_EQ(created->getProcessor()->getName(), "Track Audio");
 
-    // T173a: "+ Track -> Audio Track" now builds a whole default channel, so the Track Audio node
-    // feeds the chain's first insert, not the master bus directly. FRO226 made that the Gate — see
+    // "+ Track -> Audio Track" now builds a whole default channel, so the Track Audio node
+    // feeds the chain's first insert, not the master bus directly. that is the Gate — see
     // ChannelFlowTests.cpp for the rest of the chain (EQ, Compressor, Channel Strip, Master).
     auto* gate = findNodeNamedACP(graph, "Gate");
     ASSERT_NE(gate, nullptr);

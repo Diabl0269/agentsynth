@@ -1,4 +1,4 @@
-// Concern: FRO11 (P9-5) -- MixerDirectColumn's "Make channel" resolution and enablement.
+// Concern: MixerDirectColumn's "Make channel" resolution and enablement.
 #include "MixerDirectColumn.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
@@ -9,19 +9,19 @@
 namespace synth::ui {
 
 MixerDirectColumn::MixerDirectColumn() {
-    // FRO18 review fix: grabAccessibilityFocus() grabs focus on `this` (Direct has no fader to
+    // grabAccessibilityFocus() grabs focus on `this` (Direct has no fader to
     // target) -- without a title, its default unspecified-role AccessibilityHandler reads nothing.
     setTitle("Direct");
     addAndMakeVisible(header_);
     header_.setDisplayName("Direct");
-    header_.setRenameEnabled(false); // FRO225: Direct has no node, so no strip/macro name to write a rename to
+    header_.setRenameEnabled(false); // Direct has no node, so no strip/macro name to write a rename to
     addAndMakeVisible(makeChannelButton_);
-    // FRO228: explicit, rather than relying on Button::getButtonText()'s fallback (the ctor's
+    // Explicit, rather than relying on Button::getButtonText()'s fallback (the ctor's
     // "Make channel" argument already IS the button text, but a title makes the AX handler's
     // getTitle() resolve directly instead of falling through ButtonAccessibilityHandler's own
     // getButtonText() fallback).
     makeChannelButton_.setTitle("Make channel");
-    // FRO18: MixerPanelComponent is the single focusable leaf -- see
+    // MixerPanelComponent is the single focusable leaf -- see
     // MixerColumnComponent.cpp's ctor comment for why every child control does this.
     makeChannelButton_.setWantsKeyboardFocus(false);
     makeChannelButton_.onClick = [this] {

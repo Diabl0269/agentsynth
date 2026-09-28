@@ -32,7 +32,7 @@ juce::String nameForSpec(const MessageSpec& spec) {
     }
 }
 
-// "kind guessed: CC -> knob, note -> button" (same doc section). mmc joins note (FRO330: a single
+// "kind guessed: CC -> knob, note -> button" (same doc section). mmc joins note (a single
 // discrete command is always a button, never a knob). Everything else defaults to knob -- pitch
 // bend/channel pressure/program change are continuous-ish oddities a learn rarely lands on, and
 // the panel lets the user retype it either way.

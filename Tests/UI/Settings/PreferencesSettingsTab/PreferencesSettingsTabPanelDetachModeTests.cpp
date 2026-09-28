@@ -1,4 +1,4 @@
-// PreferencesSettingsTabPanelDetachModeTests.cpp -- FRO336 (docs/mixer/panel.md): "When a panel
+// PreferencesSettingsTabPanelDetachModeTests.cpp (docs/mixer/panel.md): "When a panel
 // opens in its own window" combo (Move it there / Show it in both places) -- default value,
 // getter/setter round trip, and persistence across a fresh PreferencesSettingsTab reading the same
 // ApplicationProperties file, same shape as PreferencesSettingsTabMixerPlacementTests.cpp (the

@@ -1,8 +1,8 @@
-// Concern: FRO11 (P9-5, docs/mixer/mixer.md#inserts-in-a-free-form-graph) -- a column's insert list: the chain between
+// Concern: (docs/mixer/mixer.md#inserts-in-a-free-form-graph) -- a column's insert list: the chain between
 // its feeding track's source and the strip, in signal order, plus linear-vs-branching classification, plus the three
-// insert-list mutation primitives (splice out / splice in / reorder). Also FRO15 (docs/mixer/sends-and-buses.md): a bus
+// insert-list mutation primitives (splice out / splice in / reorder). Also (docs/mixer/sends-and-buses.md): a bus
 // has no feeding track, so its own EQ/Compressor chain is discovered by walking BACKWARD from the strip instead
-// (buildBusInsertsForColumn). And FRO148 (docs/mixer/mixer.md#master-inserts): Master's own post-fader chain, walked
+// (buildBusInsertsForColumn). And (docs/mixer/mixer.md#master-inserts): Master's own post-fader chain, walked
 // FORWARD from Master's output to the Rec Tap / Audio Output terminator (buildMasterInsertsForColumn).
 #include "MixerModel.h"
 
@@ -88,12 +88,12 @@ void resolveEditOnCanvasTarget(juce::AudioProcessorGraph& graph, const MacroSet&
         column.editOnCanvasTargetUuid = module->getNodeUuid();
 }
 
-// FRO15 (docs/mixer/sends-and-buses.md): a bus has no feeding track (feedingTracks is empty by construction -- nothing
-// in the timeline plays into it), so there is no source node to walk FORWARD from. Its own
-// EQ/Compressor chain -- built by "Add bus"/buildBusChannel, or rearranged since -- instead sits
-// immediately upstream of the strip, so walk BACKWARD from the strip along signal predecessors.
+// A bus has no feeding track (feedingTracks is empty by construction -- nothing in the timeline plays into
+// it), so there is no source node to walk FORWARD from. Its own EQ/Compressor chain -- built by "Add
+// bus"/buildBusChannel, or rearranged since -- instead sits immediately upstream of the strip, so walk
+// BACKWARD from the strip along signal predecessors (see docs/mixer/sends-and-buses.md).
 //
-// A send into a bus (D2) lands on the SAME strip input channels (ch0/kRightBase) an insert's own
+// A send into a bus lands on the SAME strip input channels (ch0/kRightBase) an insert's own
 // output would, and IS a signal edge (isSignalEdge has no send-vs-insert concept) -- so a
 // ChannelStripModule predecessor is excluded here exactly like findStripsFeedingStrip excludes one
 // walking the other direction: "that strip IS a source, not something to expand through", never an
@@ -142,7 +142,7 @@ void buildBusInsertsForColumn(juce::AudioProcessorGraph& graph, const std::vecto
     resolveEditOnCanvasTarget(graph, macros, reverseChain, column);
 }
 
-// FRO148: the two nodes Master's chain can end at -- the master Rec Tap when one is spliced in (it sits in front of
+// The two nodes Master's chain can end at -- the master Rec Tap when one is spliced in (it sits in front of
 // Audio Output, see MasterSplice.h), else the graph's Audio Output. Neither is ever an insert.
 bool isMasterChainTerminator(juce::AudioProcessor* processor) {
     if (processor == nullptr)
@@ -153,9 +153,9 @@ bool isMasterChainTerminator(juce::AudioProcessor* processor) {
     return io != nullptr && io->getType() == juce::AudioProcessorGraph::AudioGraphIOProcessor::audioOutputNode;
 }
 
-// FRO148 (docs/mixer/mixer.md#master-inserts): Master's inserts sit AFTER its fader, so the chain is Master's own
-// output -> [inserts] -> terminator. Walked FORWARD from Master along signal edges (a strip's forward walk from its
-// track source, with Master standing in as the source and the Rec Tap/Audio Output as the sink instead of the strip).
+// Master's inserts sit AFTER its fader, so the chain is Master's own output -> [inserts] -> terminator. Walked
+// FORWARD from Master along signal edges (a strip's forward walk from its track source, with Master standing in as
+// the source and the Rec Tap/Audio Output as the sink instead of the strip) (see docs/mixer/mixer.md#master-inserts).
 //
 // Deliberately not "branching" when the TERMINATOR has other feeders: a hand-wired audio track can land on the Rec
 // Tap or Audio Output directly, and that shared sink is unaffected by splicing an insert in front of Master's own

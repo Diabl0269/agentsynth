@@ -1,4 +1,4 @@
-// Concern: FRO12 (P9-6) -- DetachedPanelWindow's content wrapper, bounds persistence, per-window
+// Concern: DetachedPanelWindow's content wrapper, bounds persistence, per-window
 // focus-region Tab cycling, and the plugin-mode LookAndFeel seam.
 #include "DetachedPanelWindow.h"
 
@@ -11,8 +11,8 @@ constexpr int kDefaultHeight = 420;
 // A persisted rect this small (or smaller) is never something a user actually resized to --
 // 128x128 is juce::ComponentBoundsConstrainer's OWN default minimum, i.e. the value a
 // ResizableWindow settles on when something drives it through setBounds() without ever going
-// through a real interactive resize (FRO101: a headless test detaching a panel against a real
-// MainComponent, before the settings-key leak those tests had was fixed). Anything under a
+// through a real interactive resize (e.g. a headless test detaching a panel against a real
+// MainComponent). Anything under a
 // plausible real window size is rejected the same way an absent/malformed persisted key already
 // is, below.
 constexpr int kMinPlausibleWidth = 320;
@@ -20,7 +20,7 @@ constexpr int kMinPlausibleHeight = 240;
 
 // True when `rect` is both a plausible SIZE for a real window and actually reachable on at least
 // one connected display -- a persisted rect from a display that's since been unplugged (or the
-// implausible near-origin rect FRO101 was filed against) is otherwise silently restored off-screen
+// implausible near-origin rect) is otherwise silently restored off-screen
 // or too small to use. Skips the display check entirely when there are no displays at all (a
 // genuinely headless CI runner) since there is nothing to validate placement against there --
 // restoreBoundsOrDefault()'s own centreWithSize()/setBounds() fallback already handles that case.
@@ -115,14 +115,14 @@ void DetachedPanelWindow::resized() {
 
 void DetachedPanelWindow::lookAndFeelChanged() {
     juce::DocumentWindow::lookAndFeelChanged();
-    // FRO102: the constructor's juce::Colours::darkgrey literal above is only ever the fallback for
+    // The constructor's juce::Colours::darkgrey literal above is only ever the fallback for
     // a null `lookAndFeel` (headless tests) -- once a real synth::theme::AppLookAndFeel is in play,
     // replace it with the theme's own surface token (same accessor DetachablePanelHost::applyIcon()
     // and the mixer columns already use: lf->getTheme().colors), so an empty/undersized hosted
     // panel shows the app's themed surface behind it, not a flat stock-JUCE grey. setLookAndFeel()
     // fires this synchronously (Component::sendLookAndFeelChange()), so it applies on construction,
     // on any later setLookAndFeel() swap, and once more (harmlessly) as the destructor clears it.
-    // FRO228: laid over the opaque page colour (bg0) -- a "glass" theme's surface is translucent
+    // Laid over the opaque page colour (bg0) -- a "glass" theme's surface is translucent
     // (docs/layout/theme-authoring.md), and a top-level window filled with it shows the OS window
     // backing through as flat light grey. An opaque surface overlays to itself, unchanged.
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
@@ -133,7 +133,7 @@ void DetachedPanelWindow::lookAndFeelChanged() {
 }
 
 void DetachedPanelWindow::applyHeaderButtonIcon(synth::theme::AppLookAndFeel& lf) {
-    // FRO228: the header button is BORROWED from DetachablePanelHost (this class's own header
+    // The header button is BORROWED from DetachablePanelHost (this class's own header
     // comment) -- DetachablePanelHost::applyIcon() only ever runs from ITS OWN lookAndFeelChanged(),
     // which stops reaching this button the moment setDetached(true) reparents it in here (an
     // icon-only ImageFitted DrawableButton with no Drawable ever assigned to it paints nothing at
@@ -161,7 +161,7 @@ bool DetachedPanelWindow::keyPressed(const juce::KeyPress& key) {
         if (const auto forward = synth::ui::resolveFocusCycleKeyPress(key, *shortcutManager_))
             return focusRegions_.cycleFocus(*forward);
     }
-    // FRO333: not a focus-cycle key -- give the app-wide shortcut dispatch a chance (Cmd+T, Cmd+1..9)
+    // Not a focus-cycle key -- give the app-wide shortcut dispatch a chance (Cmd+T, Cmd+1..9)
     // before giving up; see onAppShortcut's own comment.
     if (onAppShortcut)
         return onAppShortcut(key);

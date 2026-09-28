@@ -11,22 +11,22 @@
 #include "Branding.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
-#include "Modules/VCAModule.h" // VCAModule::kRightBase for the P9-3i envelope+VCA insertion below
+#include "Modules/VCAModule.h" // VCAModule::kRightBase for the envelope+VCA insertion below
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 
 namespace {
 
-// Horizontal gap (T173a) between each of the expanded channel's cards (Track Audio -> Gate -> EQ ->
+// Horizontal gap between each of the expanded channel's cards (Track Audio -> Gate -> EQ ->
 // Compressor -> Strip -> Master), on top of the real card widths (GraphEditor::estimateModuleSize)
 // — purely cosmetic. addAudioTrack lays every card out left-to-right along this stride so none
 // overlap regardless of how wide an individual card is (e.g. Parametric EQ's double-width card).
 constexpr int kChannelCardGapX = 40;
 
-// FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): the per-type default track preset settings
-// keys — duplicated from PreferencesSettingsTabInternal.h's own copy for the same "one-line string not worth a header
-// dependency" reason every other cross-file settings key in this codebase is.
+// The per-type default track preset settings keys — duplicated from PreferencesSettingsTabInternal.h's own copy for
+// the same "one-line string not worth a header dependency" reason every other cross-file settings key in this
+// codebase is (see docs/mixer/track-presets.md#saving-and-setting-a-default).
 constexpr const char* kMixerDefaultTrackPresetAudioKey = "mixerDefaultTrackPresetAudio";
 constexpr const char* kMixerDefaultTrackPresetInstrumentKey = "mixerDefaultTrackPresetInstrument";
 
@@ -88,7 +88,7 @@ void MainComponent::addAudioTrack() {
     const int index = (int)timelineDoc.getTracks().size();
     juce::String trackName; // set inside the mutation; read afterwards for the status message
 
-    // T173a (FRO226): "+ Track -> Audio Track" now creates a WHOLE mixer channel in ONE undo step —
+    // "+ Track -> Audio Track" creates a WHOLE mixer channel in ONE undo step —
     // Track Audio -> Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel
     // Strip (Stereo) -> Master (Mix), with {Track Audio, Gate, EQ, Compressor, Strip} boxed into one
     // collapsed macro named after the track, plus the track/binding/colour exactly like
@@ -102,10 +102,10 @@ void MainComponent::addAudioTrack() {
     // subtask depends on.
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, index, &trackName] {
-            // FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): consult the per-type default
-            // BEFORE any node is created. Defaults only steer this plain "+ Track -> Audio" gesture — a saved preset is
-            // always reachable regardless via the grouped list / file insert (TimelinePanelTrackHeaders.cpp),
-            // independent of what's set here.
+            // Consult the per-type default BEFORE any node is created. Defaults only steer this plain "+ Track ->
+            // Audio" gesture — a saved preset is always reachable regardless via the grouped list / file insert
+            // (TimelinePanelTrackHeaders.cpp), independent of what's set here
+            // (see docs/mixer/track-presets.md#saving-and-setting-a-default).
             const juce::String defaultPresetName =
                 appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetAudioKey, {});
             if (defaultPresetName.isNotEmpty()) {
@@ -128,7 +128,7 @@ void MainComponent::addAudioTrack() {
             if (!trackId.isValid())
                 return; // at kMaxTracks: nothing added, no node created, no macro
 
-            // Unwired (T173a): buildDefaultAudioChannel below wires it into the chain instead of
+            // Unwired: buildDefaultAudioChannel below wires it into the chain instead of
             // straight to the master bus.
             const juce::String trackAudioUuid = createTrackAudioNode(/*wireDirectlyToMasterBus=*/false);
             if (trackAudioUuid.isEmpty())
@@ -164,7 +164,7 @@ void MainComponent::addAudioTrack() {
                 /*master=*/{masterX, trackAudioPosition.y},
             };
 
-            // T187 layout follow-up: know BEFORE building the chain whether this call is the one
+            // Know BEFORE building the chain whether this call is the one
             // that splices Master for the first time — that's the only time a bare "Audio Output"
             // (the newPatch seed, or wherever the user first dropped one) is worth relocating below.
             const bool masterExistedBefore = synth::findMasterNode(audioEngine.getGraph()) != nullptr;
@@ -206,10 +206,10 @@ void MainComponent::addAudioTrack() {
 }
 
 void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) {
-    // T183 (P9-3b, FRO226): "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds Track In
+    // "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds Track In
     // -> instrument -> default chain (Gate bypassed -> Parametric EQ bypassed -> Compressor bypassed
     // -> Channel Strip Stereo -> Master Mix) in ONE undo step, the MIDI-track mirror of
-    // addAudioTrack()'s T173a step. {Track In, instrument, Gate, EQ, Compressor, Strip} are boxed
+    // addAudioTrack()'s step. {Track In, instrument, Gate, EQ, Compressor, Strip} are boxed
     // into one collapsed macro named after the track; Master stays outside it for the same
     // spliceMasterNode reason addAudioTrack's own
     // comment explains. A single Cmd+Z removes every bit of it. See buildInstrumentTrackAndChain's
@@ -217,13 +217,13 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType,
     //
     // This is a TrackKind::Midi track — a Track In feeding exactly one instrument is already what
     // addMidiTrack() produces once a cable is drawn by hand; this flow just draws that cable and
-    // builds the channel automatically. docs/mixer/mixer.md#channels-follow-audio-not-tracks once called this "(new
-    // track kind)" but T183's own scope never asked for a new TrackKind, and adding one is a format/serialization
-    // change nothing here requires — see that doc's update alongside this change.
+    // builds the channel automatically; no new TrackKind is needed
+    // (docs/mixer/mixer.md#channels-follow-audio-not-tracks), and adding one would be a format/serialization change
+    // nothing here requires.
     buildInstrumentTrackAndChain(synth::AIStateMapper::createModule(instrumentModuleType), instrumentModuleType, poly);
 }
 
-// T183/FRO42: the shared tail of addInstrumentTrack() and addInstrumentPluginTrack() — Track In
+// The shared tail of addInstrumentTrack() and addInstrumentPluginTrack() — Track In
 // -> `instrumentProcessor` -> [poly/envelope branches, gated exactly as addInstrumentTrack's own
 // comment describes] -> default chain -> Master, boxed into one collapsed macro, as ONE undo
 // step. `instrumentProcessor` must be non-null and NOT yet added to any graph (a factory
@@ -256,9 +256,9 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
         [this, index, &trackName, trackNamePrefix, poly, stagedInstrument] {
-            // FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): same default-consulting branch as
-            // addAudioTrack's own, before any node is created (including `stagedInstrument`,
-            // which is simply discarded unused when a default wins — never added to the graph).
+            // Same default-consulting branch as addAudioTrack's own, before any node is created
+            // (including `stagedInstrument`, which is simply discarded unused when a default wins — never
+            // added to the graph) (see docs/mixer/track-presets.md#saving-and-setting-a-default).
             const juce::String defaultPresetName =
                 appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetInstrumentKey, {});
             if (defaultPresetName.isNotEmpty()) {
@@ -384,7 +384,7 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
     const int instrumentX = static_cast<int>(build.instrumentNode->properties.getWithDefault("x", 0));
 
     if (isOscOrWavetable && instrumentIsPoly) {
-        // FRO46 (P9-3j): a poly Oscillator/Wavetable gets a TRUE per-voice envelope — Poly
+        // A poly Oscillator/Wavetable gets a TRUE per-voice envelope — Poly
         // MIDI + poly ADSR + poly VCA, replacing both the Voice Mixer stage below and
         // addEnvelopeAndVCAForRawInstrument's forced-mono ADSR/VCA (see
         // addPolyEnvelopeAndVCAForInstrument's own comment for why the non-poly path can't
@@ -430,7 +430,7 @@ void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
                              static_cast<int>(build.chainSource->properties.getWithDefault("y", 0)));
     }
 
-    // P9-3i (FRO43): Oscillator/Wavetable have no envelope of their own, so a held (or
+    // Oscillator/Wavetable have no envelope of their own, so a held (or
     // even released) note drones forever. Insert an ADSR (gated by the same Track In
     // MIDI as the instrument) driving a VCA, ahead of the rest of the chain — AFTER any
     // Voice Mixer stage above, never before it (see addEnvelopeAndVCAForRawInstrument's
@@ -502,11 +502,11 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
     return true;
 }
 
-// FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): every track whose bound node's chain
-// still reaches the output without passing through a ChannelStripModule — the same synth::findUnchanneledOutputFeeds
-// query T184's connect-triggered auto-channel already runs, just from each track's own binding
-// instead of a just-completed cable drag. An unbound or orphaned track (empty/unresolved
-// bindingUuid) contributes nothing — there is no chain to channel.
+// Every track whose bound node's chain still reaches the output without passing through a ChannelStripModule — the
+// same synth::findUnchanneledOutputFeeds query the connect-triggered auto-channel already runs, just from each
+// track's own binding instead of a just-completed cable drag. An unbound or orphaned track (empty/unresolved
+// bindingUuid) contributes nothing — there is no chain to channel
+// (see docs/mixer/mixer.md#creating-channels-in-an-existing-project).
 bool MainComponent::hasTracksNeedingChannels() const {
     auto& graph = audioEngine.getGraph();
     for (const auto& track : timelineDoc.getTracks()) {
@@ -521,15 +521,15 @@ bool MainComponent::hasTracksNeedingChannels() const {
     return false;
 }
 
-// FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): the "+ Track" menu's "Create Channels"
-// action for existing projects — docs/mixer/mixer.md#creating-channels-in-an-existing-project says the project itself
-// opens unchanged (no automatic migration on load; this method is never called from anywhere but the explicit menu
-// choice below). Gathers every track's own bound node first (outside the undo transaction — this is a pure read), then
-// wraps GraphEditor::createChannelsForUnchanneledTracks() in ONE
-// recordGraphTimelineAndMacroChange transaction, the same shape addAudioTrack/addInstrumentTrack
-// use, so N channel-less tracks becoming N new channels is a SINGLE Cmd+Z. A track already reaching
-// a ChannelStripModule is silently skipped inside that call (see its own comment) — nothing here
-// needs to pre-filter beyond "has a live binding at all".
+// The "+ Track" menu's "Create Channels" action for existing projects —
+// docs/mixer/mixer.md#creating-channels-in-an-existing-project says the project itself opens unchanged (no automatic
+// migration on load; this method is never called from anywhere but the explicit menu choice below). Gathers every
+// track's own bound node first (outside the undo transaction — this is a pure read), then wraps
+// GraphEditor::createChannelsForUnchanneledTracks() in ONE recordGraphTimelineAndMacroChange transaction, the same
+// shape addAudioTrack/addInstrumentTrack use, so N channel-less tracks becoming N new channels is a SINGLE Cmd+Z. A
+// track already reaching a ChannelStripModule is silently skipped inside that call (see its own comment) — nothing
+// here needs to pre-filter beyond "has a live binding at all"
+// (see docs/mixer/mixer.md#creating-channels-in-an-existing-project).
 void MainComponent::createChannelsForExistingTracks() {
     std::vector<juce::AudioProcessorGraph::NodeID> sourceNodeIds;
     for (const auto& track : timelineDoc.getTracks()) {
@@ -563,9 +563,9 @@ void MainComponent::createChannelsForExistingTracks() {
     statusBar.showMessage(pushed ? "Created channels" : "Could not create channels");
 }
 
-// FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make channel" on one track's bound node — the
-// header menu's enabled state is the same synth::planMakeChannel query the action itself runs. FRO25 (P9-3d): the
-// header menu's "Make Channel".
+// "Make channel" on one track's bound node — the header menu's enabled state is the same
+// synth::planMakeChannel query the action itself runs
+// (see docs/mixer/mixer.md#make-channel-and-shared-modules).
 bool MainComponent::canMakeChannelForTrack(synth::TrackId trackId) const {
     const auto* track = timelineDoc.getTrack(trackId);
     if (track == nullptr || track->bindingUuid.isEmpty())
@@ -588,7 +588,7 @@ void MainComponent::makeChannelForTrack(synth::TrackId trackId) {
 // the mutation (MacroSet::retainOnly must see every new node alive), then the reconcile pass. The
 // macro is named after the track the chain belongs to (the one bound to `source`), falling back to
 // the source module's own name for a trackless chain picked on the canvas.
-// FRO25 (P9-3d): the ONE undo transaction (graph + timeline + macros) + reconcile pass behind
+// The ONE undo transaction (graph + timeline + macros) + reconcile pass behind
 // every "Make channel" entry point (header menu, canvas/module menu via
 // GraphEditor::onMakeChannelRequested), and behind "Duplicate into Channel"
 // (GraphEditor::onDuplicateIntoChannelRequested).
@@ -627,7 +627,7 @@ void MainComponent::makeChannelForNode(juce::AudioProcessorGraph::NodeID source)
     statusBar.showMessage(built && pushed ? "Made channel: " + name : juce::String("Could not make a channel"));
 }
 
-// FRO25 (P9-3d): "Duplicate into Channel" — same one-transaction + reconcile shape as above.
+// "Duplicate into Channel" — same one-transaction + reconcile shape as above.
 void MainComponent::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId) {
     const auto targets = graphEditor.duplicateIntoChannelTargets(nodeId);
     if (std::find(targets.begin(), targets.end(), macroId) == targets.end())
@@ -644,18 +644,18 @@ void MainComponent::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeI
     statusBar.showMessage(built ? "Duplicated into the channel" : "Could not duplicate into the channel");
 }
 
-// FRO42 (P9-3h): instrument-capable hosted plugins for the "+ Track -> Instrument -> Plugin"
+// Instrument-capable hosted plugins for the "+ Track -> Instrument -> Plugin"
 // submenu — see TrackHeaderHost::getInstrumentPluginOptions's own comment. getKnownPlugins() (full
 // juce::PluginDescription, which carries isInstrument) is read here rather than
 // getKnownPluginIdentities() (PluginIdentity alone, no isInstrument) precisely because the filter
 // needs that field.
-// FRO42 (P9-3h): the Instrument submenu's "Plugin" entries.
+// The Instrument submenu's "Plugin" entries.
 std::vector<synth::PluginIdentity> MainComponent::getInstrumentPluginOptions() const {
     std::vector<synth::PluginIdentity> options;
     for (const auto& description : getPluginScanService().getKnownPlugins()) {
         if (!description.isInstrument)
             continue;
-        // FRO42 review fix: never offer to host this app's OWN VST3/AU build as an instrument —
+        // Never offer to host this app's OWN VST3/AU build as an instrument —
         // matched against synth::branding's product identity (the single source of truth CMake's
         // PRODUCT_NAME/COMPANY_NAME args are mirrored into for C++ code, see Branding.h) rather than
         // a literal re-typed here, and against BOTH name and manufacturer so a same-named third-
@@ -703,7 +703,7 @@ void MainComponent::addInstrumentPluginTrack(const synth::PluginIdentity& identi
     pendingInstrumentPluginLoads_.push_back(std::move(instrumentProcessor));
 
     const juce::String pluginName = description->name;
-    // FRO42 review fix: captured NOW, against the document this load was started for. New Patch/
+    // Captured NOW, against the document this load was started for. New Patch/
     // Open/Load preset (all via guardUnsavedChanges) bump documentGeneration_ before replacing the
     // document, so a completion that lands after that has a stale value here — see
     // documentGeneration_'s own comment.

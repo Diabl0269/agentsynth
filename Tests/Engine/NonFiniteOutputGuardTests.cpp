@@ -1,4 +1,4 @@
-// FRO161: AudioEngine::renderNextBlock's non-finite output guard (see AudioEngineRenderPass.cpp's
+// AudioEngine::renderNextBlock's non-finite output guard (see AudioEngineRenderPass.cpp's
 // scrubNonFiniteOutput). NaN/Inf reaching CoreAudio (or a plugin host) is undefined behaviour, and
 // nothing upstream of the device/host boundary checked for it before this -- a runaway feedback
 // patch or an upstream divide-by-zero could ride the buffer all the way out. This guard lives in

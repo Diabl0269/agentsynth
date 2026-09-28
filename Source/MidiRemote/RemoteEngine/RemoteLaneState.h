@@ -1,7 +1,7 @@
 #pragma once
 
 // The MIDI path's per-source memory for the two encodings whose value spans two messages
-// (FRO140, docs/control/midi-remote.md#14-bit-and-nrpn-encodings): the last MSB/LSB halves of a
+// (docs/control/midi-remote.md#14-bit-and-nrpn-encodings): the last MSB/LSB halves of a
 // CC n / CC n+32 pair, and each channel's armed NRPN address with its data-entry halves.
 //
 // THREAD CONTRACT. Every member is read and written ONLY by the lane's single producer (the one

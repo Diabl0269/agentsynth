@@ -1,5 +1,5 @@
-// Concern: FRO12 (P9-6) -- the Mixer placement preference (Tab/Own panel/Window) and moving
-// mixerHost_ between its three homes. FRO231 adds the Own panel's own slide, persisted height and
+// Concern: the Mixer placement preference (Tab/Own panel/Window) and moving
+// mixerHost_ between its three homes. The Own panel has its own slide, persisted height and
 // resize handle, kept entirely inside this class.
 #include "MixerPlacementController.h"
 

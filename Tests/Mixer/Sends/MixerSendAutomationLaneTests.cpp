@@ -1,4 +1,4 @@
-// MixerSendAutomationLaneTests.cpp -- FRO292 (docs/mixer/sends-and-buses.md#the-send-and-bus-ui,
+// MixerSendAutomationLaneTests.cpp (docs/mixer/sends-and-buses.md#the-send-and-bus-ui,
 // docs/timeline/automation.md): a send level gets its own automation lane through the SAME
 // "Add lane..." picker surface a hosted plugin's parameters already use
 // (MainComponent::getAvailablePluginLaneOptions / addPluginAutomationLane), never a new lane type
@@ -10,7 +10,7 @@
 //
 // Groups:
 //   1. PickerOffersOnlyActiveSends -- an inactive slot is never offered; activating one adds
-//      exactly one "Add lane..." entry, labelled like the send knob's own FRO301 accessible title.
+//      exactly one "Add lane..." entry, labelled like the send knob's own accessible title.
 //   2. PickerDropsOnlyTheRemovedSlot -- the sparse-slot rule (docs/mixer/sends-and-buses.md#slots-are-sparse)
 //      applied to the collector: removing slot 0 drops ONLY its entry, slot 1's stays.
 //   3. ChoosingTheEntryCreatesABoundLane -- selecting it creates a lane keyed on (strip uuid,
@@ -107,7 +107,7 @@ TEST(MixerSendAutomationLaneTest, PickerOffersOnlyActiveSends) {
     ASSERT_NE(found, options.end()) << "activating slot 0 must add exactly one entry for it";
     EXPECT_EQ(found->label, "Send to Bus 1") << "same FRO301 naming the send knob's accessible title uses";
 
-    // FRO294: the same active slot also offers its pan.
+    // The same active slot also offers its pan.
     const auto pan = std::find_if(options.begin(), options.end(), [&](const auto& option) {
         return option.nodeUuid == sourceUuid && option.paramId == "send1Pan";
     });

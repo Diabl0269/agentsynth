@@ -52,7 +52,7 @@ void setProcessorPoly(juce::AudioProcessor* processor, bool poly) {
         setBoolParam(*processor, "poly", poly);
 }
 
-// Builds the factory default mixer channel (docs/mixer/mixer.md#the-factory-default-chain, T173a, FRO226) that
+// Builds the factory default mixer channel (docs/mixer/mixer.md#the-factory-default-chain) that
 // "+ Track -> Audio Track" wires after a freshly-created Track Audio node's stereo output:
 //
 //     source 0/1 -> Gate 0/1 -> Parametric EQ 0/1 -> Compressor 0/1 -> Channel Strip (Stereo) -> Master (Mix)
@@ -97,7 +97,7 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
     return buildChannelChain(graph, {{source.nodeID, 0}}, {{source.nodeID, sourceRightChannel}}, layout);
 }
 
-// T183 (P9-3b): when `instrument` is currently in poly mode (it has a "poly" AudioParameterBool and
+// When `instrument` is currently in poly mode (it has a "poly" AudioParameterBool and
 // it's on), its L-octet (raw ch0-7) can carry up to 8 simultaneous voices, which
 // buildDefaultAudioChannel() cannot accept directly — it wants one stereo pair. Creates a Voice
 // Mixer (docs/mixer/mixer.md#an-instrument-track: any chain ending poly gets one ahead of the strip), wires
@@ -110,7 +110,7 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
 // before building the chain, or a future direct-poly picker), without the strip ever seeing more
 // than one stereo pair.
 //
-// FRO46 (P9-3j): for a poly Oscillator/Wavetable specifically, the caller no longer calls this —
+// For a poly Oscillator/Wavetable specifically, the caller does not call this —
 // addPolyEnvelopeAndVCAForInstrument() below replaces it entirely (its poly VCA does its own
 // 8-voice summing, so a separate Voice Mixer stage is redundant). This function is still the right
 // one for every other poly instrument (e.g. a poly Sampler, which has no auto-wired envelope).
@@ -133,7 +133,7 @@ juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProce
     return voiceMixer;
 }
 
-// P9-3i (FRO43): Oscillator/Wavetable have no envelope of their own — a held or even released note
+// Oscillator/Wavetable have no envelope of their own — a held or even released note
 // drones forever. Inserts an ADSR gated by the track's own MIDI (fanned alongside the existing
 // Track In -> instrument wire) driving a VCA's gain, ahead of the rest of the default chain:
 //
@@ -149,13 +149,13 @@ juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProce
 // before it, so a poly instrument's per-voice audio is summed to one stereo pair before the
 // (necessarily-mono) VCA gates it.
 //
-// ADSR's sustain (stock factory default 1.0 as of FRO110; this override predates that and is kept
+// ADSR's sustain (stock factory default 1.0; this override is kept
 // for clarity/explicitness) is set to 0.7 so a held note settles at a musical level instead of the
 // full peak; the release stage (stock default, unchanged) is what fixes the drone-after-note-off
 // bug. VCA's gain (stock factory default 0.5) is overridden to 1.0 so the envelope alone governs
 // perceived level, not an extra silent 50% attenuation stacked under it.
 //
-// FRO46 (P9-3j) superseded this as the poly instrument's ONLY option: when the instrument is poly,
+// The poly path supersedes this as the poly instrument's ONLY option: when the instrument is poly,
 // the caller now builds addPolyEnvelopeAndVCAForInstrument() below instead of this one (true
 // per-voice envelopes, no Voice Mixer). This function remains exactly as before for the non-poly
 // case — see addPolyEnvelopeAndVCAForInstrument's own comment below for why a poly ADSR fed only raw
@@ -176,7 +176,7 @@ EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& grap
     // fed only Track In's MIDI would never fire.
     setBoolParam(*adsr->getProcessor(), "poly", false);
     // Explicit sustain override so this auto-wired chain's level doesn't depend on ADSR's own
-    // stock default (1.0 as of FRO110) — see above.
+    // stock default (1.0) — see above.
     setFloatParam(*adsr->getProcessor(), "sustain", 0.7f);
 
     juce::String vcaUuid;
@@ -206,7 +206,7 @@ EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& grap
     return result;
 }
 
-// FRO46 (P9-3j): addEnvelopeAndVCAForRawInstrument's ADSR+VCA are forced non-poly because
+// addEnvelopeAndVCAForRawInstrument's ADSR+VCA are forced non-poly because
 // ADSRModule's poly branch is CV-gate-only — it never reads the MIDI note-on/off fallback that
 // drives its mono branch (ADSRModule.h's `heldNotes` bitset), so a poly ADSR fed only Track In's
 // raw MIDI would output a permanent zero envelope. This is the poly counterpart: instead of MIDI
@@ -296,12 +296,12 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
     return result;
 }
 
-// FRO15 (P9-9, docs/mixer/sends-and-buses.md): an EMPTY group/send bus — the same bypassed Gate -> bypassed
-// EQ -> bypassed Compressor -> Channel Strip (Stereo) -> Master (Mix) chain every other channel gets, with
-// nothing feeding the Gate yet, and the strip marked isBus() so the mixer gives its column the BUS badge. This
-// lives here rather than in MixerSends because it IS that shared chain builder with an empty feed
-// list — a bus is an ordinary channel whose inputs happen to be other strips' outputs (D1), so there
-// is deliberately no separate bus node type and no second chain builder.
+// An EMPTY group/send bus — the same bypassed Gate -> bypassed EQ -> bypassed Compressor -> Channel Strip
+// (Stereo) -> Master (Mix) chain every other channel gets, with nothing feeding the Gate yet, and the strip
+// marked isBus() so the mixer gives its column the BUS badge. This lives here rather than in MixerSends
+// because it IS that shared chain builder with an empty feed list — a bus is an ordinary channel whose inputs
+// happen to be other strips' outputs, so there is deliberately no separate bus node type and no second
+// chain builder (see docs/mixer/sends-and-buses.md).
 DefaultChannel buildBusChannel(juce::AudioProcessorGraph& graph, const DefaultChannelLayout& layout) {
     auto channel = buildChannelChain(graph, {}, {}, layout);
     if (channel.strip != nullptr)

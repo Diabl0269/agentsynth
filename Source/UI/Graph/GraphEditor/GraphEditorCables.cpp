@@ -17,7 +17,7 @@
 using namespace detail;
 
 // ============================================================================
-// Cables (issue #157)
+// Cables
 //
 // One enumeration feeds both painting and hit-testing. Keeping them separate was the obvious
 // shortcut and the wrong one: the drawn curve and the clickable curve would drift apart the
@@ -80,7 +80,7 @@ juce::Point<float> projectToRectEdge(juce::Rectangle<int> rect, juce::Point<floa
     return centre + juce::Point<float>(dx * t, dy * t);
 }
 
-// ---- Expanded-macro grouping hull (P8-12 follow-up) ----
+// ---- Expanded-macro grouping hull ----------------------
 // A collapsed macro reads as a card; an expanded one left no on-canvas trace that its members
 // were still grouped — Cmd+G on them again just refused with "already in a macro", with nothing
 // visible to explain why. Draws a light dashed outline + name chip around the live union of
@@ -107,7 +107,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         if (hull.isEmpty())
             continue;
 
-        // FRO40: a live reparent drag whose leave OR join candidate (GraphEditor::getMacroDragLeaveId
+        // A live reparent drag whose leave OR join candidate (GraphEditor::getMacroDragLeaveId
         // / getMacroDragJoinId) is THIS macro gets the SAME dashed hull, just emphasized — heavier,
         // fully opaque, and topped with a solid stroke — rather than a second visual language for
         // "about to change" (docs/macros/menu-and-membership.md). A transfer emphasises both.
@@ -153,7 +153,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         g.setColour(juce::Colours::white);
         g.drawText(label, chip.withLeft(chip.getX() + 12.0f), juce::Justification::centred, false);
 
-        // Collapse button (founder-review fix G5): the chip's own drag/rename affordance never
+        // Collapse button: the chip's own drag/rename affordance never
         // looked like "collapse me" — the only routes back to a collapsed card were the right-
         // click menu and an undocumented double-click. A small button at the OTHER end of the
         // same row, pointing the opposite way from MacroCardComponent's expand chevron, reads as
@@ -185,7 +185,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
 const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() {
     if (!cablesCacheValid) {
         cablesCache = rebuildVisibleCables();
-        macroCrossingAnim_.applyTo(cablesCache); // FRO41: cable-slide overlay, see MacroCrossingAnimator.h
+        macroCrossingAnim_.applyTo(cablesCache); // cable-slide overlay, see MacroCrossingAnimator.h
         cablesCacheValid = true;
         ++cableRebuildCount;
     }
@@ -360,7 +360,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                     connection.destination.channelIndex, 0};
         // MIDI ports are fixed anchors (top-right/top-left), not part of the audio jack stack —
         // portPos(..., 0, ...) would land on audio jack 0 instead, which paint() offsets downward
-        // to avoid colliding with the MIDI Out dot (T149).
+        // to avoid colliding with the MIDI Out dot.
         cable.p1 = srcIsMidi ? (srcComp->getBounds().getPosition() + srcComp->getMidiPortCenter(true)).toFloat()
                              : portPos(srcComp, srcJack, false);
         cable.p2 = dstIsMidi ? (dstComp->getBounds().getPosition() + dstComp->getMidiPortCenter(false)).toFloat()
@@ -409,7 +409,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
         cables.push_back(cable);
     }
 
-    // FRO288: re-anchor AttenuverterChain cables onto their bound, visible target knob's ring
+    // Re-anchor AttenuverterChain cables onto their bound, visible target knob's ring
     // start point (docs/layout/cables.md#knob-landing) BEFORE the collapsed-macro pass below, so
     // a macro-crossing cable still gets the macro's own boundary anchor on top.
     reanchorCablesToKnobTargets(cables);
@@ -418,13 +418,13 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
     return cables;
 }
 
-// Post-pass extracted from rebuildVisibleCables() (FRO288) purely to keep that function under
+// Post-pass extracted from rebuildVisibleCables() purely to keep that function under
 // its ratchet -- no behavior change. Runs AFTER reanchorCablesToKnobTargets so a cable that is
 // BOTH knob-bound and crosses a collapsed macro's boundary ends up re-anchored to the macro card
-// (this pass wins), matching the pre-FRO288 rule that a collapsed macro always owns its boundary
+// (this pass wins), matching the rule that a collapsed macro always owns its boundary
 // cables' endpoints.
 void GraphEditor::reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>& cables) {
-    // ---- Collapsed-macro cable treatment (P8-12, generalized for ports in P8-15c/T141) ----
+    // ---- Collapsed-macro cable treatment --------------------------------------------------
     //
     // A collapsed macro hides its member ModuleComponents (setVisible(false) in syncMacroCards),
     // but their graph edges — and the cables above computed from them — don't know that. A cable
@@ -436,7 +436,7 @@ void GraphEditor::reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>&
     //     (macroCardPortLayout), so the cable visibly enters/leaves through the port it actually
     //     passes through;
     //   - the hidden endpoint is an ordinary interior member wired to past the boundary (no port
-    //     involved) -> DIRECTIONAL edge anchor (founder-review fix F3): the card's RIGHT edge if
+    //     involved) -> DIRECTIONAL edge anchor: the card's RIGHT edge if
     //     the macro is the cable's SOURCE (signal leaving it), LEFT edge if it's the DESTINATION
     //     (signal entering it) -- never a facing-the-other-endpoint projection, which is what put
     //     both legs of a pass-through wire on the card's TOP edge when the other endpoint happened
@@ -472,7 +472,7 @@ void GraphEditor::reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>&
             }
         }
 
-        // Case (b)'s directional edge anchor (F3, see the comment above): the facing projection
+        // Case (b)'s directional edge anchor (see the comment above): the facing projection
         // still decides the Y (so several crossing cables keep distinct heights instead of
         // stacking), clamped into the same vertical jack band a real port jack lays out in;
         // X is forced to the card's actual left/right edge -- not the port jacks' inset -- so an
@@ -562,14 +562,14 @@ void GraphEditor::setCableColourOverrides(const synth::ui::CableColourOverrides&
 void GraphEditor::disconnectCable(const VisibleCable& cable) {
     auto& graph = audioEngine.getGraph();
 
-    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): both cable kinds populate id.srcUid/dstUid with the REAL
-    // logical endpoints — for an AttenuverterChain that's the true mod source/destination the
-    // chain proxies, never the hidden attenuverter itself (buildVisibleCables() constructs it
-    // that way, and G3's own splice logic already treats them as such). Decide BEFORE mutating
-    // whether removing this cable can leave a macro port with no connections left, so the right
-    // undo transaction is chosen up front. Gated on autoDeleteMacroPortsOnLastCableEnabled
-    // (Preferences) — off, this is always false and both branches below fall through to their
-    // original graph-only recordStructuralChange path, unchanged.
+    // Both cable kinds populate id.srcUid/dstUid with the REAL logical endpoints — for an
+    // AttenuverterChain that's the true mod source/destination the chain proxies, never the hidden
+    // attenuverter itself (buildVisibleCables() constructs it that way, and the attenuverter splice
+    // logic already treats them as such). Decide BEFORE mutating whether removing this cable can leave a
+    // macro port with no connections left, so the right undo transaction is chosen up front. Gated
+    // on autoDeleteMacroPortsOnLastCableEnabled (Preferences) — off, this is always false and both
+    // branches below fall through to the plain graph-only recordStructuralChange path
+    // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
     const juce::AudioProcessorGraph::NodeID srcId{cable.id.srcUid};
     const juce::AudioProcessorGraph::NodeID dstId{cable.id.dstUid};
     const bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled &&
@@ -777,7 +777,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     }
     // ---- End cables ----
 
-    // ---- Expanded-macro grouping hull (P8-12 follow-up; extracted, see paintExpandedMacroHulls
+    // ---- Expanded-macro grouping hull (see paintExpandedMacroHulls
     // above, for what it draws and why it's a free function rather than inlined here) ----
     paintExpandedMacroHulls(g, editor);
 
@@ -817,7 +817,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
 void GraphEditor::GraphContentComponent::resized() {}
 
 void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
-    // ---- Knob-landing dots (FRO288) ----
+    // ---- Knob-landing dots -------------
     // Cables are drawn in paint(), which runs BEFORE children -- an AttenuverterChain cable
     // re-anchored onto a knob (reanchorCablesToKnobTargets) therefore has its final stretch drawn
     // UNDER the opaque module card. Painting a small dot here, on top of every child, is what
@@ -826,7 +826,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         if (!cable.landsOnKnob)
             continue;
         g.setColour(editor.colourForCable(cable));
-        // FRO313: shared with ModuleComponent::getModTargetKnobAnchor's own push-out math, so the
+        // Shared with ModuleComponent::getModTargetKnobAnchor's own push-out math, so the
         // anchor point and the dot drawn on it can never disagree on the dot's own size.
         g.fillEllipse(cable.p2.x - ModuleComponent::kKnobLandingDotDiameter * 0.5f,
                       cable.p2.y - ModuleComponent::kKnobLandingDotDiameter * 0.5f,
@@ -876,7 +876,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         }
     }
 
-    // ---- Marquee selection band (issue #156) ----
+    // ---- Marquee selection band -----------------
     // Drawn here, in canvas space, so it stays locked to the modules it is selecting while the
     // view is zoomed. Paint-only — the selection itself is computed in updateMarquee().
     if (editor.marqueeActive && !editor.marqueeRect.isEmpty()) {
@@ -968,7 +968,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         }
     }
 
-    // ---- Macro-crossing module flash (FRO41) ----
+    // ---- Macro-crossing module flash ------------
     // A fading ring over the module that just joined/left an expanded macro's hull, on top of its
     // (buffered-to-image) card. editor.macroCrossingAnim_ is private state on GraphEditor —
     // GraphContentComponent is a nested class, so this direct access is the same "one-line

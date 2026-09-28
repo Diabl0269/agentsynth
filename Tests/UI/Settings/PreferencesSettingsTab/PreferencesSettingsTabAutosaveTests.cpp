@@ -1,9 +1,9 @@
 #include "PreferencesSettingsTabTestFixture.h"
 
-// Topic: autosave enabled/interval/backup-count preferences (P8-4).
+// Topic: autosave enabled/interval/backup-count preferences.
 
 // ---------------------------------------------------------------------------
-// P8-4: autosave enabled/interval preferences.
+// Autosave enabled/interval preferences.
 // ---------------------------------------------------------------------------
 
 TEST_F(PreferencesSettingsTabTest, AutosaveDefaultsToOnAtTwoMinutesWithFiveBackupsAndDoesNotWriteUntouched) {

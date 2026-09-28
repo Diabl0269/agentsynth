@@ -1,5 +1,5 @@
 // Persistence via the owner (MainComponent stores the list under "pluginScanList", a hosted build
-// resolves but never scans) and the eager startup scan (FRO44) that populates the sidebar unasked.
+// resolves but never scans) and the eager startup scan that populates the sidebar unasked.
 
 #include "AudioEngine/AudioEngine.h"
 #include "PluginScanTestHelpers.h"
@@ -154,11 +154,11 @@ TEST_F(PluginScanPersistenceTest, AHostedBuildResolvesButNeverScans) {
 }
 
 // ============================================================================
-// 9. Eager startup scan (FRO44)
+// 9. Eager startup scan
 // ============================================================================
 
 TEST_F(PluginScanPersistenceTest, HostedBuildNeverStartsTheEagerScanEither) {
-    // FRO44's own guard on the same door AHostedBuildResolvesButNeverScans (above) locks: the eager
+    // the guard on the same door AHostedBuildResolvesButNeverScans (above) locks: the eager
     // entry point must defer to the very same "never inside a host" rule as the manual button, not
     // reintroduce a bypass.
     AudioEngine hostedEngine(AudioEngine::HostMode::Hosted);
@@ -186,7 +186,7 @@ TEST_F(PluginScanPersistenceTest, HostedBuildNeverStartsTheEagerScanEither) {
 }
 
 TEST_F(PluginScanPersistenceTest, EagerScanPopulatesTheSidebarWithoutItEverBeingOpened) {
-    // The founder complaint this ticket fixes, end to end: nothing here calls
+    // End to end: nothing here calls
     // moduleLibrary.onScanPluginsRequested or opens the PLUGINS section — only the eager entry point
     // Main.cpp calls after building the real window.
     //
@@ -219,14 +219,14 @@ TEST_F(PluginScanPersistenceTest, EagerScanPopulatesTheSidebarWithoutItEverBeing
     // pluginScanCompleted() persists the list exactly like a manual scan's old inline completion did.
     EXPECT_TRUE(main.getAppPropertiesForTest().getUserSettings()->containsKey(MainComponent::kPluginScanListKey));
 
-    // A later call (e.g. FRO42's picker opening after startup already scanned) must not rescan.
+    // A later call (e.g. the picker opening after startup already scanned) must not rescan.
     main.maybeStartEagerPluginScan();
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     EXPECT_EQ(launcher.launchCountFor(kAlpha), 1);
 }
 
 TEST_F(PluginScanPersistenceTest, MaybeStartEagerPluginScanShowsAScanningBannerOnTheStatusBar) {
-    // FRO105: maybeStartEagerPluginScan() — the actual production entry point Main.cpp calls, not
+    // maybeStartEagerPluginScan() — the actual production entry point Main.cpp calls, not
     // ensureScanned() directly — used to start the scan with no progress callback at all, so nothing
     // told the user a scan was even running until the one "Found N plugins" completion message.
     FakeLauncher launcher;
@@ -258,7 +258,7 @@ TEST_F(PluginScanPersistenceTest, MaybeStartEagerPluginScanShowsAScanningBannerO
 }
 
 // ============================================================================
-// 10. Surviving a quit mid-scan (FRO105)
+// 10. Surviving a quit mid-scan
 // ============================================================================
 
 TEST_F(PluginScanPersistenceTest, DestroyingMainComponentMidScanPersistsWhatWasFoundSoFar) {

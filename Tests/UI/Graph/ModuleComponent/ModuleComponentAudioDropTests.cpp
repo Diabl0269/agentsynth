@@ -40,7 +40,7 @@ TEST_F(ModuleComponentTest, SamplerHasLoadButtonWaveformAndKnownHeight) {
     EXPECT_TRUE(foundNameLabel) << "an empty Sampler should say so rather than showing a blank label";
 
     EXPECT_EQ(moduleComponent.getWidth(), 280);
-    // FRO312: was 645 -- five of the Sampler's CV jacks are knob-bound and now draw no gutter row
+    // Was 645 -- five of the Sampler's CV jacks are knob-bound and now draw no gutter row
     // (100px, 5 rows * 20px), packing the input column. estimateModuleSize("Sampler") derives this
     // adjustment itself (GraphEditor::adjustEstimateForHiddenKnobJacks), so it stays in sync
     // automatically; ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents still pins it.
@@ -123,8 +123,8 @@ TEST_F(ModuleComponentTest, NonSamplerModuleRefusesFileDragSoItFallsThroughToThe
     EXPECT_FALSE(moduleComponent.isFileDragHighlighted());
 }
 
-// A Wavetable card claims audio-file drops itself. Before issue #180 it returned false and the
-// drop fell through to GraphEditor, which spawned an unrelated Sampler next to it.
+// A Wavetable card claims audio-file drops itself; otherwise the drop would fall through to
+// GraphEditor, which spawns an unrelated Sampler next to it.
 TEST_F(ModuleComponentTest, WavetableCardAcceptsAudioFileDrag) {
     AudioEngine engine;
     GraphEditor editor(engine);

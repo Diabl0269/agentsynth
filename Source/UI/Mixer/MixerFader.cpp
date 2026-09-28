@@ -1,4 +1,4 @@
-// Concern: FRO11 (P9-5) -- MixerFader's slider wiring, undo bracket and dB readout. FRO150 added
+// Concern: MixerFader's slider wiring, undo bracket and dB readout. The file holds
 // the taper-based NormalisableRange and the onDragStart/onDragEnd gesture wiring in bind() below.
 #include "MixerFader.h"
 
@@ -14,8 +14,8 @@ int MixerFader::liveUnbindCallCountForTest_ = 0;
 MixerFader::MixerFader() {
     slider_.setSliderStyle(juce::Slider::LinearVertical);
     slider_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
-    // FRO18: the panel is the single focusable leaf (MixerPanelComponent::keyPressed) -- a
-    // focused Slider would otherwise eat Up/Down before the panel ever saw them (the T160 trap
+    // The panel is the single focusable leaf (MixerPanelComponent::keyPressed) -- a
+    // focused Slider would otherwise eat Up/Down before the panel ever saw them (the keyboard-focus trap
     // docs/control/shortcuts.md documents).
     slider_.setWantsKeyboardFocus(false);
     applyDbAccessibilityText(slider_);
@@ -34,7 +34,7 @@ void MixerFader::bind(juce::AudioProcessorGraph& graph, AppUndoManager& undoMana
     undoManager_ = &undoManager;
     param_ = &param;
 
-    // FRO150: juce::SliderParameterAttachment's OWN constructor calls slider.setNormalisableRange()
+    // juce::SliderParameterAttachment's OWN constructor calls slider.setNormalisableRange()
     // (built from the param's own linear mapping) and overwrites slider.textFromValueFunction --
     // so attachment_ must be constructed FIRST, and our own taper range/accessibility text
     // installed AFTER, or the attachment silently undoes both. setNormalisableRange() only ever
@@ -67,7 +67,7 @@ void MixerFader::bind(juce::AudioProcessorGraph& graph, AppUndoManager& undoMana
         }));
     applyDbAccessibilityText(slider_);
 
-    // FRO150: every gesture MixerFaderSlider starts (drag, Cmd-click/double-click reset, a wheel
+    // Every gesture MixerFaderSlider starts (drag, Cmd-click/double-click reset, a wheel
     // step) calls these directly -- see MixerFaderSlider.h's class comment for why it can't rely on
     // juce::SliderParameterAttachment's own Slider::Listener gesture notifications the way a stock
     // Slider drag would.

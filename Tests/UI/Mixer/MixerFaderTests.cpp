@@ -1,4 +1,4 @@
-// MixerFaderTests.cpp -- FRO11 (P9-5): a fader gesture changes gain as exactly one undo step.
+// MixerFaderTests.cpp -- a fader gesture changes gain as exactly one undo step.
 //
 // Deviation from the plan's "drive it through real synthesised mouse events on the juce::Slider"
 // (docs/development/test-patterns.md, MacroPortRealMouseDragTests.cpp's template): a raw
@@ -70,7 +70,7 @@ TEST(MixerFaderTests, FaderGestureChangesGainAsOneUndoStep) {
     fader.unbind();
 }
 
-// FRO150: proves the bound slider's on-screen THUMB POSITION follows MixerFaderTaper.h while the
+// Proves the bound slider's on-screen THUMB POSITION follows MixerFaderTaper.h while the
 // bound parameter's own value stays exactly linear dB -- the two must never drift, since the
 // taper is UI-only (MixerFader.h's own class comment) and the parameter is what presets,
 // automation, AI patches and the plugin host all read.
@@ -114,7 +114,7 @@ TEST(MixerFaderTests, BoundSliderPositionMatchesTaperWhileParameterStaysLinearDb
     fader.unbind();
 }
 
-// FRO150 regression: juce::SliderParameterAttachment's own constructor overwrites
+// juce::SliderParameterAttachment's own constructor overwrites
 // textFromValueFunction with one built from the param's own getText() (no " dB" suffix --
 // ChannelStripModule's gain param has no unit label) -- caught while reordering bind() so the
 // taper range survives attachment_'s construction (MixerFader::bind()'s own comment). Proves the

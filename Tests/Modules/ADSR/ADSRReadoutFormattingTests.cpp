@@ -1,4 +1,4 @@
-// FRO112: readout formatting for ADSR's float params. juce::SliderParameterAttachment installs
+// Readout formatting for ADSR's float params. juce::SliderParameterAttachment installs
 // param.getText()/getValueForText() as the slider's textFromValueFunction/valueFromTextFunction,
 // so this is exactly what the envelope card's knobs (and any host's generic automation UI) show
 // and parse -- see the note on ADSRModule.h's adsrTimeAttributes()/adsrSustainAttributes().
@@ -62,7 +62,7 @@ TEST_F(ADSRTest, SustainDbTextRoundTripsThroughValueForText) {
     EXPECT_NEAR(readoutValue(sustain, "-6.0 dB"), 0.5012f, 5e-3f);
 }
 
-// The three bend params never appear as their own knob (FRO112 moved them onto the envelope
+// The three bend params never appear as their own knob (they live on the envelope
 // graph's bend handles), but a host's generic automation UI still reads their readout.
 TEST_F(ADSRTest, CurveParamsFormatAsPlainTwoDecimalValues) {
     for (const char* id : {"attackCurve", "decayCurve", "releaseCurve"}) {

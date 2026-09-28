@@ -1,7 +1,7 @@
-// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): wires ControllerHandshakeCoordinator to
-// the real MIDI output sink and reconciles it at every point profiles_/the open-device set can
-// change -- see MidiLearnController.h's own doc comments on each method below for why each call
-// site needs it.
+// Wires ControllerHandshakeCoordinator to the real MIDI output sink and reconciles it at every
+// point profiles_/the open-device set can change -- see MidiLearnController.h's own doc comments on
+// each method below for why each call site needs it (see
+// docs/control/midi-remote-device-handshake.md#device-handshake).
 
 #include "MidiRemote/MidiLearnController.h"
 
@@ -28,7 +28,7 @@ void MidiLearnController::shutdownHandshakes() {
         handshakeCoordinator_->shutdownAll();
 }
 
-// The shared "profiles_ changed" tail every FRO131 mutation (updateProfile, addProfile,
+// The shared "profiles_ changed" tail every profile mutation (updateProfile, addProfile,
 // deleteProfile, template application, undo/redo, ...) now calls instead of
 // remoteEngine_.setProfiles(profiles_) directly, so neither the engine publish nor the handshake
 // reconcile is ever forgotten at a new call site.
@@ -44,7 +44,7 @@ void MidiLearnController::reconcileHandshakes() {
         return;
     auto sources = engine_.getOpenMidiInputIdentifiers();
 
-    // FRO339: resolveHandshakeOutput() needs every OUTPUT the app can currently see -- real
+    // ResolveHandshakeOutput() needs every OUTPUT the app can currently see -- real
     // juce::MidiOutput enumeration in production, availableOutputsQuery_ in a test (see its own doc
     // comment on why: a headless test process has no CoreMIDI entitlement/bundle).
     std::vector<ControllerProfile::Input> availableOutputs;

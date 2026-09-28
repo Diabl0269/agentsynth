@@ -26,7 +26,7 @@ struct ProjectLoadResult {
  *
  * `project.json` = `AIStateMapper::graphToJSON` output + any stashed unknown top-level keys +
  * a `"timeline"` key holding `TimelineDoc::toVar()`, a `"macros"` key and a `"midiRemote"` key
- * holding `MidiRemoteProjectDoc::toVar()`, and (FRO325) a `"mixerPanLaw"` string
+ * holding `MidiRemoteProjectDoc::toVar()`, and a `"mixerPanLaw"` string
  * ("balance"/"compensated", docs/mixer/mixer.md#pan-law) -- absent means "balance". `Audio/`/`Peaks/`
  * hold recorded takes and their waveform-peak sidecars.
  *
@@ -40,7 +40,7 @@ struct ProjectLoadResult {
  * and rewrite refs. Nothing under `Audio/`/`Peaks/`/`Recordings/` is ever auto-deleted except via
  * `AssetManager::cleanUnusedAssets`, which never touches `Recordings/`.
  *
- * `"timeline"`, `"macros"` (P8-12) and `"midiRemote"` (FRO124) are all reserved top-level keys
+ * `"timeline"`, `"macros"` and `"midiRemote"` are all reserved top-level keys
  * everywhere else: a plain preset stashes them inertly, and `AIStateMapper::validatePatch`
  * refuses any of them from provider output. `ProjectBundle::load` is the one place they're
  * meaningful, in this all-or-nothing order:
@@ -59,7 +59,7 @@ struct ProjectLoadResult {
  *     uuids (an unresolved binding is flagged `orphaned`, NEVER deleted); `macros.retainOnly`
  *     drops any member uuid that doesn't resolve, dissolving a macro left with none. There is
  *     deliberately NO equivalent reconcile pass for `midiRemote` here — reconciling assignments
- *     against live graph nodes is `RemoteEngine`'s runtime job (a later ticket, FRO127), not this
+ *     against live graph nodes is `RemoteEngine`'s runtime job, not this
  *     load path's.
  * On any earlier failure, `graph`/`timeline`/`patchDocument`/`macros`/`midiRemote` are left
  * untouched.
@@ -105,7 +105,7 @@ public:
 
     /** Writes `<bundleDir>/project.json`, creating `bundleDir` and its `Audio/`/`Peaks/`
      *  subdirectories if they don't already exist. See the class comment for the exact JSON
-     *  shape and the "timeline set last" rationale — "macros" (P8-12) and "midiRemote" (FRO124)
+     *  shape and the "timeline set last" rationale — "macros" and "midiRemote"
      *  both follow the identical reserved-key treatment, "midiRemote" written last of the three. */
     static ProjectLoadResult save(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                   const TimelineDoc& timeline, PatchDocument& patchDocument, const MacroSet& macros,

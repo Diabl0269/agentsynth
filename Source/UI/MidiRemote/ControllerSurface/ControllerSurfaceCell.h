@@ -6,7 +6,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 
-// ControllerSurfaceCell.h -- FRO131 (docs/control/midi-remote-ui.md#surface-centre): one grid cell
+// ControllerSurfaceCell.h (docs/control/midi-remote-ui.md#surface-centre): one grid cell
 // -- a DISPLAY-ONLY widget (real juce::Slider/juce::Button, setInterceptsMouseClicks(false, false)
 // so the real widget's own AppLookAndFeel::drawRotarySlider/drawLinearSlider/drawButtonBackground
 // paint it exactly like a module card's own knob, per Source/UI/CLAUDE.md's mockup-fidelity
@@ -32,7 +32,7 @@ public:
     const juce::String& getControlId() const noexcept { return controlId_; }
     const synth::Control& getControl() const noexcept { return control_; }
 
-    /** FRO262 test seam: the widget's current displayed value (0..1) -- what configure()'s
+    /** Test seam: the widget's current displayed value (0..1) -- what configure()'s
      *  initialValue seeded and/or noteActivity() has since driven. */
     float getDisplayedValueForTest() const noexcept { return lastValue_; }
     const juce::String& getAssignmentLabelForTest() const noexcept { return assignmentLabel_; }
@@ -48,9 +48,10 @@ public:
      *  doesn't actually change the widget's current state. */
     void noteActivity(synth::midi::RemoteEventKind kind, float value);
 
-    /** FRO134 (docs/control/midi-remote-ui.md#detect-mode): a control Detect just added pulses (a
-     *  breathing accent outline, time-bounded to kDetectPulseMaxMs) until the next message arrives.
-     *  `sinceMs` is juce::Time::getMillisecondCounterHiRes() at the moment it started; 0 stops it. */
+    /** A control Detect just added pulses (a breathing accent outline, time-bounded to
+     *  kDetectPulseMaxMs) until the next message arrives. `sinceMs` is
+     *  juce::Time::getMillisecondCounterHiRes() at the moment it started; 0 stops it
+     *  (see docs/control/midi-remote-ui.md#detect-mode). */
     void setDetectPulse(double sinceMs);
     /** An existing control lit by Detect: a solid outline for kDetectFlashMs. */
     void flash();
@@ -59,7 +60,7 @@ public:
     void tickHighlight();
     bool hasLiveHighlightForTest() const noexcept { return pulseSinceMs_ != 0.0 || flashUntilMs_ != 0.0; }
 
-    /** FRO270: `mods` distinguishes a plain click (owner replaces the selection with just this
+    /** `mods` distinguishes a plain click (owner replaces the selection with just this
      *  cell) from shift (add) or cmd (toggle) -- see ControllerSurfaceSelection.cpp. */
     std::function<void(const juce::ModifierKeys& mods)> onSelected;
     /** Fired on drag once the pointer has crossed into a new cell -- (dCols, dRows) is the delta
@@ -76,7 +77,7 @@ public:
     void mouseUp(const juce::MouseEvent& event) override;
 
     static constexpr int kCellSize = 56;
-    // Bugfix (found while testing FRO331's pan/zoom): the grid's PITCH -- the pixel distance from
+    // The grid's PITCH -- the pixel distance from
     // one cell's origin to the next -- is kCellSize + the owner's inter-cell margin (6 px), not
     // kCellSize alone (setControls()/moveCellToLayout() on ControllerSurfaceComponent both lay
     // cells out on this pitch already). mouseDrag() divides the drag's pixel offset by this to get
@@ -106,7 +107,7 @@ private:
     std::unique_ptr<juce::Slider> slider_;     // knob/encoder/fader/wheel, style set per kind
     std::unique_ptr<juce::TextButton> button_; // pad/button
 
-    // FRO331: in the PARENT's coordinate space, not this cell's own local space -- the owner
+    // In the PARENT's coordinate space, not this cell's own local space -- the owner
     // repositions this cell mid-drag (moveCellToLayout()) each time a boundary is crossed, which
     // would otherwise shift the meaning of a cell-local anchor out from under a drag already in
     // progress. See mouseDown()/mouseDrag()'s own comment for the failure this caused.

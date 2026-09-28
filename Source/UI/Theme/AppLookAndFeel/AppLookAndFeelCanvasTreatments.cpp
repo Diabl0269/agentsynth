@@ -204,7 +204,7 @@ void AppLookAndFeel::drawModulationRing(juce::Graphics& g, juce::Point<float> ce
 
     const auto& m = theme.metrics;
     auto ringColour = positive ? theme.colors.modRingPositive : theme.colors.modRingNegative;
-    // FRO288: same brighter(0.3) treatment a hovered cable gets (docs/layout/cables.md#hover) --
+    // Same brighter(0.3) treatment a hovered cable gets (docs/layout/cables.md#hover) --
     // a wider stroke on top of the brighten so the highlight reads even at a glance.
     float width = m.knobRingWidth;
     if (hovered) {
@@ -223,7 +223,7 @@ void AppLookAndFeel::drawModulationRing(juce::Graphics& g, juce::Point<float> ce
     g.strokePath(ring, juce::PathStrokeType(width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
-// FRO287: the reachable-range band drawn UNDER the live ring above -- same arc geometry (shared
+// The reachable-range band drawn UNDER the live ring above -- same arc geometry (shared
 // via modRingAngleForNorm so the two can never drift apart), just wider alpha-blended stroke so it
 // reads as a track rather than a second live indicator. Visible even at rest (modSignalValue 0),
 // which is the whole point: it answers "how far COULD this knob move", not "where is it now".

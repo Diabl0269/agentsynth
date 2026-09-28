@@ -256,7 +256,7 @@ TEST(HostedPluginTest, UnresolvedIdentityStaysAPlaceholderThatRemembersItsPlugin
 }
 
 // ============================================================================
-// 3b. onLoadCompleted (FRO42) — the one signal that covers success, outright failure AND the
+// 3b. onLoadCompleted — the one signal that covers success, outright failure AND the
 //     over-max refusal, for a caller (MainComponent::addInstrumentPluginTrack) that must not touch
 //     the graph/undo stack until it KNOWS which of the three happened.
 // ============================================================================
@@ -319,7 +319,7 @@ TEST(HostedPluginTest, OnLoadCompletedFiresFalseOnTheOverMaxRefusal) {
 }
 
 // ============================================================================
-// 3c. rightAudioLegChannel (FRO42) — ch1 is a genuine audio channel here (this module has no CV
+// 3c. rightAudioLegChannel — ch1 is a genuine audio channel here (this module has no CV
 //     inputs, unlike the split-block voice modules), so it must NOT inherit ModuleBase's
 //     hasDualIOParameter()-gated default, which would read -1 forever (this module never registers
 //     a Dual I/O parameter).

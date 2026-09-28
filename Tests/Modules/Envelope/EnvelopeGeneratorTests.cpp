@@ -1,10 +1,10 @@
 // EnvelopeGeneratorTests.cpp
-// Unit tests for synth::EnvelopeGenerator (FRO110): the progress-based AHDSR engine that
+// Unit tests for synth::EnvelopeGenerator: the progress-based AHDSR engine that
 // replaces juce::ADSR inside ADSRModule. Exercises the zero-duration-stage cascade, exact
 // stage timing/curve endpoints, retrigger-from-current-level, mid-ramp parameter changes, and
 // the sustain-0/sustain-1 edge cases that motivated the rewrite.
 //
-// FRO116: Hold is the only stage still genuinely zero-cost at a 0 s parameter (it is pinned
+// Hold is the only stage still genuinely zero-cost at a 0 s parameter (it is pinned
 // flat, so there is no level to step across). Attack/Decay/Release floor their *effective* time
 // to a fixed click-free minimum instead of cascading for free -- see kMinAttackSeconds /
 // kMinRampSeconds in EnvelopeGenerator.h. Most of this file's zero-time tests use a 1 kHz test
@@ -34,7 +34,7 @@ EnvelopeGenerator makeGenerator() {
 
 // ---------------------------------------------------------------------------
 // Zero-duration stages: Hold cascades for free; Attack/Decay/Release floor to a short real
-// ramp instead (FRO116).
+// ramp instead.
 // ---------------------------------------------------------------------------
 
 TEST(EnvelopeGeneratorTest, ZeroAttackReachesFullLevelOnFirstSample) {
@@ -253,7 +253,7 @@ TEST_P(EnvelopeGeneratorStageDurationTest, ReleaseLastsItsConfiguredDuration) {
 
     env.noteOn();
     // Attack+Hold still cascade for free, but the floored Decay now takes a real sample or two
-    // of its own (FRO116) rather than landing on Sustain within the very first call.
+    // of its own rather than landing on Sustain within the very first call.
     int settleSamples = 0;
     while (env.getStage() != EnvelopeStage::Sustain && settleSamples < 1000) {
         env.getNextSample(p);

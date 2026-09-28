@@ -1,9 +1,9 @@
 // TimelineTrackFocusTests.cpp
 //
-// T161: keyboard focus + configurable M/S/R shortcuts for timeline track header rows.
+// Keyboard focus + configurable M/S/R shortcuts for timeline track header rows.
 //   - TimelineTrackHeaderComponent: setWantsKeyboardFocus(true), keyPressed() resolves bare m/s/r
 //     (rebindable via ShortcutManager) and Up/Down (reported via onFocusMoveRequested, never
-//     rebindable — matching ModuleLibraryComponent's T160 precedent for row navigation), mouseDown()
+//     rebindable — matching ModuleLibraryComponent's row navigation), mouseDown()
 //     reports a click-to-select via onSelectRequested.
 //   - TimelinePanelComponent: focusedTrackIndex_ (ephemeral UI state — never on TimelineDoc),
 //     moveFocusedTrack()'s clamp-at-the-ends rule, ensureTrackVisible()'s auto-scroll via the real
@@ -16,8 +16,7 @@
 // FocusRegionTests.cpp document. Two consequences:
 //   - grabKeyboardFocus()/hasKeyboardFocus() calls made by the code under test are harmless no-ops
 //     here — real focus movement (and therefore the per-row accent outline TimelineTrackHeaderComponent
-//     ::paintOverChildren paints) is not observable headlessly, same accepted gap as T159/T160's own
-//     outline paint.
+//     ::paintOverChildren paints) is not observable headlessly, same accepted gap as the focus-region outline paint.
 //   - TimelinePanelComponent::keyPressed's "bare Down on the panel root seeds row 0" branch is gated
 //     on juce::Component::getCurrentlyFocusedComponent() == this, which never becomes true without a
 //     real peer either, so that branch has no test here.
@@ -180,8 +179,8 @@ TEST(TimelineTrackFocusTest, MSRKeysAreRebindableThroughAnInstalledShortcutManag
     // Detach before `manager` (declared after `f`, so destroyed first) goes out of scope — an ASAN
     // run catches the heap-use-after-free this leaves otherwise: TimelinePanelComponent::
     // ~TimelinePanelComponent() removes itself as a change listener from whatever ShortcutManager
-    // is still installed, which is a dangling pointer once `manager` is gone. See PR #381's fix for
-    // TimelinePanelToolStripTests.cpp for the idiom this follows.
+    // is still installed, which is a dangling pointer once `manager` is gone. Same idiom as
+    // TimelinePanelToolStripTests.cpp.
     f.panel.setShortcutManager(nullptr);
 }
 

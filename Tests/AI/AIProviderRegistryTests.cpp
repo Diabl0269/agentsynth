@@ -99,7 +99,7 @@ TEST(AIProviderRegistryTest, PersistedIdIsIndependentOfDisplayName) {
     ASSERT_NE(provider, nullptr);
 }
 
-// P4-6: "remote" is no longer hidden — both providers are offered in AISettingsTab's combo.
+// "remote" is not hidden — both providers are offered in AISettingsTab's combo.
 TEST(AIProviderRegistryTest, CreateDefaultRegistersOllamaFirstAndRemoteVisible) {
     auto registry = synth::AIProviderRegistry::createDefault();
 
@@ -131,7 +131,7 @@ TEST(AIProviderRegistryTest, CreateDefaultUnknownIdFallsBackToOllamaNotRemote) {
 }
 
 // AIProviderRegistry.cpp's "remote" descriptor falls back to synth::branding::kApiBaseUrl when
-// ProviderConfig::host is empty — the pre-P4-6 code hardcoded http://localhost:8787 here, which
+// ProviderConfig::host is empty — the legacy code hardcoded http://localhost:8787 here, which
 // would have silently pointed hosted mode at nothing in production.
 TEST(AIProviderRegistryTest, RemoteDescriptorDefaultsToProductionApiBaseUrlWhenHostEmpty) {
     auto registry = synth::AIProviderRegistry::createDefault();

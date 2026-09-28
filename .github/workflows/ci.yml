@@ -217,6 +217,18 @@ jobs:
       # scripts/check-header-comments.sh's own doc comment and docs/development/header-comment-guard.md "Header comment
       # placement" for the full mechanism.
       run: bash scripts/check-header-comments.sh
+    - name: Test comment-provenance guard
+      # A hole in the scanner that decides what counts as comment text (a string literal counted,
+      # a block-comment line missed, an exemption leaking into Source/) or in the ratchet makes the
+      # provenance rule decorative. ~2s, no compiler, no network.
+      run: bash scripts/tests/check-comment-provenance.test.sh
+    - name: Check comment provenance
+      # Comments in Source/ and Tests/ state behaviour and reasons, never provenance (ticket ids,
+      # dates) -- that history lives in git. Per-file count of matching comment lines + strict
+      # ratchet baseline (scripts/comment-provenance-baseline.txt) for files not yet rewritten. See
+      # scripts/check-comment-provenance.sh's own doc comment and
+      # docs/development/comment-provenance-guard.md for the full mechanism.
+      run: bash scripts/check-comment-provenance.sh
     - name: Test docs checker
       # A hole in the docs-integrity scanner (a mis-scanned exclusion, a regex that matches the
       # wrong `]`, a ratchet that doesn't actually ratchet) makes the link/section/naming/map

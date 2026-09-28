@@ -3,7 +3,7 @@
 #include "PreferencesSettingsTabInternal.h"
 
 // Concern: the MIDI Remote group -- Default takeover and the mapped-control badge switch
-// (FRO136, docs/control/midi-remote-ui.md#settings). The keys live in UserSettings.h; MainComponent
+// (docs/control/midi-remote-ui.md#settings). The keys live in UserSettings.h; MainComponent
 // re-reads them on every settings-file change (applyMidiRemotePreferences), so nothing here pushes.
 
 namespace {

@@ -1,4 +1,4 @@
-// MixerKeySendDuckingTests.cpp -- FRO318 (docs/mixer/sends-and-buses.md#sending-to-a-key-input): the
+// MixerKeySendDuckingTests.cpp (docs/mixer/sends-and-buses.md#sending-to-a-key-input): the
 // end-to-end proof a Key send is heard. A real juce::AudioProcessorGraph renders
 //
 //   Audio In ch0 (kick pulses) ─► kick strip ── send 0 ──► Compressor Key L/R

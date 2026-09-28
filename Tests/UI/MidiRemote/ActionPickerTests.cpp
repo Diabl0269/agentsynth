@@ -1,4 +1,4 @@
-// ActionPickerTests.cpp -- FRO135 (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn):
+// ActionPickerTests.cpp (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn):
 // the "Choose an action" list -- command-dispatched actions only, grouped by ShortcutCategory in the
 // Shortcuts tab's order, named by ShortcutManager::getActionDescription, searchable. Suite name contains
 // "MidiRemote" per the ship-task --gtest_filter convention.
@@ -18,7 +18,7 @@ TEST(MidiRemoteActionPickerTest, ListsOnlyCommandDispatchedActions) {
     const auto rows = buildActionPickerRows({});
     int actions = 0;
     for (const auto& row : rows) {
-        // FRO236/FRO142: the Continuous and Pages groups have their own rows below, with no
+        // The Continuous and Pages groups have their own rows below, with no
         // actionId (a page/continuous target invokes through neither ShortcutManager nor a
         // juce::CommandID at all).
         if (row.isHeader || row.isContinuous || row.isPage)
@@ -47,7 +47,7 @@ TEST(MidiRemoteActionPickerTest, GroupsByCategoryInTheShortcutsTabOrderWithAHead
             headers.push_back(row.label);
             continue;
         }
-        if (row.isContinuous || row.isPage) // FRO236/FRO142: neither group is a ShortcutCategory
+        if (row.isContinuous || row.isPage) // neither group is a ShortcutCategory
             continue;
         current = ShortcutManager::getCategory(row.actionId);
         ASSERT_FALSE(headers.empty());
@@ -56,7 +56,7 @@ TEST(MidiRemoteActionPickerTest, GroupsByCategoryInTheShortcutsTabOrderWithAHead
     }
 
     // Headers appear in getCategoryOrder() order (skipping any category with nothing invokable),
-    // with "Continuous" (FRO236) then "Pages" (FRO142) appended last, in that order.
+    // with "Continuous" then "Pages" appended last, in that order.
     std::vector<juce::String> expectedOrder;
     for (const auto category : ShortcutManager::getCategoryOrder())
         if (std::find(headers.begin(), headers.end(), ShortcutManager::getCategoryName(category)) != headers.end())
@@ -86,7 +86,7 @@ TEST(MidiRemoteActionPickerTest, SearchFiltersByDescriptionCaseInsensitivelyAndD
     EXPECT_EQ(buildActionPickerRows("  ").size(), all.size()) << "a blank search shows everything";
 }
 
-// FRO271: the six cursor/loop actions reach the picker on their own (it walks the category table and
+// The six cursor/loop actions reach the picker on their own (it walks the category table and
 // requires a command mapping), and the play/stop toggle carries the "Play / Stop" label so a search for
 // "play" or "stop" finds it next to Play and Stop.
 TEST(MidiRemoteActionPickerTest, ListsTheCursorAndLoopActionsAndTheRenamedPlayStopToggle) {
@@ -103,11 +103,11 @@ TEST(MidiRemoteActionPickerTest, ListsTheCursorAndLoopActionsAndTheRenamedPlaySt
     EXPECT_EQ(labelOf("transportNudgeForwardBar"), "Move Cursor Forward (Bar)");
     EXPECT_EQ(labelOf("transportJumpToLoopStart"), "Jump to Loop Start");
     EXPECT_EQ(labelOf("transportJumpToLoopEnd"), "Jump to Loop End");
-    // FRO277: jump to the next/previous timeline marker.
+    // Jump to the next/previous timeline marker.
     EXPECT_EQ(labelOf("transportJumpToNextMarker"), "Jump to Next Marker");
     EXPECT_EQ(labelOf("transportJumpToPreviousMarker"), "Jump to Previous Marker");
     EXPECT_EQ(labelOf("togglePlayback"), "Play / Stop");
-    // FRO278: selection stepping.
+    // Selection stepping.
     EXPECT_EQ(labelOf("selectNextModule"), "Select Next Module");
     EXPECT_EQ(labelOf("selectPreviousModule"), "Select Previous Module");
     EXPECT_EQ(labelOf("selectNextTrack"), "Select Next Track");
@@ -126,7 +126,7 @@ TEST(MidiRemoteActionPickerTest, ListsTheCursorAndLoopActionsAndTheRenamedPlaySt
     }
 }
 
-// FRO236 (docs/control/midi-remote.md#continuous-targets).
+// See docs/control/midi-remote.md#continuous-targets.
 TEST(MidiRemoteActionPickerTest, ListsTheContinuousGroupWithExactlyThreeRows) {
     const auto rows = buildActionPickerRows({});
     std::vector<juce::String> continuousLabels;
@@ -182,7 +182,7 @@ TEST(MidiRemoteActionPickerTest, ChoosingAnActionRowFiresOnChosenAndAHeaderDoesN
     EXPECT_TRUE(chosen.isEmpty());
 }
 
-// -- FRO142 (docs/control/midi-remote.md#pages) -------------------------------------------------
+// -- Pages group (docs/control/midi-remote.md#pages) -------------------------------------
 
 TEST(MidiRemoteActionPickerTest, PagesGroupOffersNextPreviousAndOnePageRowPerExistingPage) {
     const auto rows = buildActionPickerRows({}, 3);

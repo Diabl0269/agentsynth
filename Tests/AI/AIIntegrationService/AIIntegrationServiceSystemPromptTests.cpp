@@ -1,9 +1,9 @@
-// P2-9: worked few-shot examples embedded in the system prompt.
+// Worked few-shot examples embedded in the system prompt.
 #include "AIIntegrationServiceTestFixture.h"
 
 namespace synth {
 
-// --- P2-9: worked few-shot examples in the system prompt ---
+// --- Worked few-shot examples in the system prompt ---------
 //
 // The JSON below must stay in sync with the examples embedded in
 // AIIntegrationService::initSystemPrompt() (Source/AI/AIIntegrationService/AIIntegrationService.cpp) — these tests
@@ -157,7 +157,7 @@ TEST_F(AIIntegrationServiceTest, WorkedExamplePatchesAreStructurallyValid) {
 }
 
 // Reusing an AIEvalHarness eval prompt as a few-shot example would be train/test contamination and
-// invalidate the P2-8 measurement — see the P2-9 task card. This is a manual copy of the 40 scenario
+// invalidate the eval measurement. This is a manual copy of the 40 scenario
 // prompts from Tools/AIEvalHarness/Main.cpp's scenarios(); if that list changes, re-sync it here.
 TEST_F(AIIntegrationServiceTest, WorkedExamplePromptsDoNotOverlapEvalScenarios) {
     static const std::vector<juce::String> kEvalScenarioPrompts = {

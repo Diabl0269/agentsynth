@@ -1,4 +1,4 @@
-// FRO41: the animation layered on top of FRO40's Cmd+drag hull-crossing gesture --
+// The animation layered on top of the Cmd+drag hull-crossing gesture --
 // GraphEditor::finalizeMacroMembershipDrag arms MacroCrossingAnimator whenever the drag actually
 // crossed a hull (docs/macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41), so the
 // module flashes and any cable re-routed through an auto-created/removed macro port slides to its

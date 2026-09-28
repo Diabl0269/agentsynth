@@ -1,5 +1,5 @@
 // ADSRCVTests.cpp
-// FRO285: the five stage-time/level CV jacks (Attack ch9, Hold ch10, Decay ch11, Sustain ch12,
+// The five stage-time/level CV jacks (Attack ch9, Hold ch10, Decay ch11, Sustain ch12,
 // Release ch13) appended after Threshold (ch8) -- port layout, the normalised-CV convention
 // (docs/modules/modulation.md#cv-in-normalised-units), the tempo-sync CV-ignore rule, and that
 // none of the five is ever mistaken for a poly gate head. Threshold's own CV coverage stays in

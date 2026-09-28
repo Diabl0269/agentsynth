@@ -1,4 +1,4 @@
-// T114/P8-10: the app-only welcome screen overlay (Feature 1) and the build-time "What's New"
+// The app-only welcome screen overlay (Feature 1) and the build-time "What's New"
 // dialog (Feature 2). See docs/architecture/project-bundle.md#welcome-screen and
 // docs/development/distribution.md's "What's New" section.
 //
@@ -111,7 +111,7 @@ protected:
         // (shown) before AND after each test so run order can't leak a false-hidden welcome screen
         // into an unrelated test.
         writeShowWelcomeAtLaunchPref("1");
-        // FRO305: this whole fixture (SetUp/TearDown, every TEST_F below) shares ONE fixed
+        // This whole fixture (SetUp/TearDown, every TEST_F below) shares ONE fixed
         // directory name -- fine for a single process, but GTest shard sharding can and does split
         // individual tests of the SAME suite across different shard processes, so 3 concurrent
         // shards deleteRecursively()-ing and recreating the identical real temp path would race
@@ -145,7 +145,7 @@ TEST_F(WelcomeScreenTest, NeverConstructsInHostedMode) {
 
     // `mc` must be gone before engine.shutdown() runs, not after: MainComponent::~MainComponent
     // detaches the UI's module components BEFORE the graph is torn down — see MainComponent.cpp's
-    // own ordering comment on the "FRO11 class of bug" — which matters because those components
+    // own ordering comment on the use-after-free class of bug — which matters because those components
     // hold processor-owned state (a MidiKeyboardComponent's MidiKeyboardState, a
     // SliderParameterAttachment's parameter) that AudioEngine::shutdown() is about to free when it
     // clears the graph. Calling shutdown() while `mc` (and the UI still pointing at that state) is
@@ -161,7 +161,7 @@ TEST_F(WelcomeScreenTest, NeverConstructsInHostedMode) {
     engine.shutdown();
 }
 
-// FRO87 regression: AudioEngine::shutdown() called directly (not through MainComponent's own
+// AudioEngine::shutdown() called directly (not through MainComponent's own
 // destructor) while a MainComponent built around the SAME Hosted-mode engine is still alive --
 // the same bad ordering as NeverConstructsInHostedMode above, but exercised against a patch that
 // actually has live UI-owned parameter attachments. Before the fix, shutdown() freed every node's
@@ -272,8 +272,8 @@ TEST_F(WelcomeScreenTest, OpenDefaultButton_LoadsFactoryPresetZeroAndHidesWelcom
 }
 
 // ---------------------------------------------------------------------------
-// FRO325 (docs/mixer/mixer.md#pan-law): every fresh, unsaved document the welcome screen can
-// start must land on Compensated, not just New Patch's own direct AppCommands::newPatch path.
+// Every fresh, unsaved document the welcome screen can start must land on Compensated, not just New
+// Patch's own direct AppCommands::newPatch path (see docs/mixer/mixer.md#pan-law).
 // ---------------------------------------------------------------------------
 
 // A bare, headless AudioEngine (the constructor's own resting state, e.g. every engine-only test

@@ -209,7 +209,7 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
             safeThis->selectAllModules();
     });
 
-    // FRO45: discoverable regardless of where auto-arrange or a drag left Master/Audio Output.
+    // Discoverable regardless of where auto-arrange or a drag left Master/Audio Output.
     // Disabled (mirroring the Paste item's setEnabled idiom above) rather than hidden, so the row
     // stays in a stable place whether or not the patch has a channel yet.
     juce::PopupMenu::Item locateMaster("Locate Master");
@@ -224,15 +224,15 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
     if (selectionCount > 1) {
         // Calls requestGroupSelectionIntoMacro() directly, not the Cmd+G dispatch — see the
         // matching comment in ModuleComponent.cpp's right-click menu for why. That entry point
-        // gates the auto-port-preference modal (founder-review fix F5,
-        // docs/macros/auto-ports.md#auto-creating-ports-when-grouping) the same way Cmd+G does.
+        // gates the auto-port-preference modal
+        // (docs/macros/auto-ports.md#auto-creating-ports-when-grouping) the same way Cmd+G does.
         m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules", [safeThis] {
             if (safeThis != nullptr)
                 safeThis->requestGroupSelectionIntoMacro();
         });
     }
 
-    // FRO25 (P9-3d): "Make Channel" for the selected chain (see addMakeChannelMenuItem).
+    // "Make Channel" for the selected chain (see addMakeChannelMenuItem).
     if (selectionCount > 0)
         addMakeChannelMenuItem(m);
 
@@ -296,7 +296,7 @@ void GraphEditor::mouseDoubleClick(const juce::MouseEvent& e) {
 }
 
 juce::AudioProcessorGraph::NodeID GraphEditor::getAttenuverterNodeAt(juce::Point<float> localPos) {
-    // Reuses buildVisibleCables()'s own AttenuverterChain geometry (T144) rather than re-deriving
+    // Reuses buildVisibleCables()'s own AttenuverterChain geometry rather than re-deriving
     // source/dest positions from raw graph connections: that duplicate computation used the raw
     // channel index (not mapOutputChannel/mapInputChannel's visible-jack mapping) and never ran the
     // collapsed-macro re-anchoring pass, so it silently drifted off the actually-painted knob the
@@ -351,14 +351,14 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
     // updateComponents() below prunes `macros` against whatever nodes survive, so a module that
     // was a macro member either shrinks or dissolves its macro as part of the SAME undo step —
     // recordGraphAndMacroChange captures both "before"/"after" snapshots, not just the graph's.
-    // T154: deleting this single node can also strand a DIFFERENT macro port wired only to it —
+    // Deleting this single node can also strand a DIFFERENT macro port wired only to it —
     // see macroPortDeletionNeighbors()'s comment. deleteModule(ModuleComponent*) resolves a NodeID
     // and delegates here, so it's covered too.
     auto doDelete = [this, nodeId, &graph] {
         modMatrix.clearRows();
-        // T154: capture BEFORE removal
+        // Capture BEFORE removal
         const auto portNeighbors = macroController_.macroPortDeletionNeighbors({nodeId});
-        // FRO23: capture BEFORE removal too -- a healable splice needs the deleted node's own
+        // Capture BEFORE removal too -- a healable splice needs the deleted node's own
         // connections still in the graph to classify. See GraphEditor::deleteSelection's matching
         // comment.
         const auto healSplices = captureHealSplices({nodeId});
@@ -372,10 +372,10 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
         if (onBeforeDetachAllModuleComponents)
             onBeforeDetachAllModuleComponents();
         graph.removeNode(nodeId);
-        // FRO23: heal BEFORE the FRO22/T154 sweeps below, so a macro port a heal just gave a
+        // Heal BEFORE the macro-port sweeps below, so a macro port a heal just gave a
         // fresh cable to is no longer orphaned by the time they run.
         healDeletedChain(healSplices);
-        // FRO22: see GraphEditor::deleteSelection's matching comment.
+        // See GraphEditor::deleteSelection's matching comment.
         for (auto n : portNeighbors)
             macroController_.autoDeleteOrphanedAttenuverter(n);
         for (auto n : portNeighbors)
@@ -420,7 +420,7 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
         // 2. Snapshot old module's properties
         int posX = oldNode->properties.getWithDefault("x", 0);
         int posY = oldNode->properties.getWithDefault("y", 0);
-        // FRO240: captured before removeNode() frees this node, so onModuleReplaced below can
+        // Captured before removeNode() frees this node, so onModuleReplaced below can
         // still tell MidiLearnController which uuid its assignments used to target. Empty is a
         // normal case (a node MIDI Remote never touched) -- retargetNode() below is a no-op then.
         const juce::String oldNodeUuid = oldNode->properties["uuid"].toString();
@@ -573,10 +573,10 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
         updateComponents();
         audioEngine.updateModuleNames();
 
-        // FRO240 (docs/control/midi-remote.md#replace-and-duplicate): re-target the old node's
-        // MIDI Remote assignments onto the new one, INSIDE this mutation -- so whichever undo
-        // recorder wraps doReplace (below) sees the doc's own before/after JSON bracket this call
-        // exactly like it brackets the graph edit above, and one Cmd+Z reverts both together.
+        // Re-target the old node's MIDI Remote assignments onto the new one, INSIDE this mutation
+        // -- so whichever undo recorder wraps doReplace (below) sees the doc's own before/after
+        // JSON bracket this call exactly like it brackets the graph edit above, and one Cmd+Z
+        // reverts both together (see docs/control/midi-remote.md#replace-and-duplicate).
         if (onModuleReplaced)
             onModuleReplaced(oldNodeUuid, newNodeId);
     };
@@ -588,7 +588,7 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
     repaint();
 }
 
-// FRO240: a plain recordStructuralChange here would leave onModuleReplaced's MIDI Remote doc edit
+// A plain recordStructuralChange here would leave onModuleReplaced's MIDI Remote doc edit
 // either unrecorded or, if MidiLearnController pushed its own undo action, a second undo step the
 // user would have to Cmd+Z separately -- so this folds the doc into the SAME transaction as the
 // graph replace whenever MainComponent has wired one up (setMidiRemoteProjectDocForUndo). Headless
@@ -627,11 +627,11 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
         targetChannels.push_back(portIndex);
     }
 
-    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): decide BEFORE mutating whether this disconnect can leave
-    // a macro port cableless — nodeId's own jack, or the far end of any plain (non-attenuverter) connection about to be
-    // removed. Only then does the transaction upgrade to recordGraphAndMacroChange; an ordinary disconnect keeps the
-    // existing graph-only recordStructuralChange path exactly as before. Gated on
-    // autoDeleteMacroPortsOnLastCableEnabled (Preferences) — off, this is always false.
+    // Decide BEFORE mutating whether this disconnect can leave a macro port cableless — nodeId's own jack, or the far
+    // end of any plain (non-attenuverter) connection about to be removed. Only then does the transaction upgrade to
+    // recordGraphAndMacroChange; an ordinary disconnect keeps the existing graph-only recordStructuralChange path.
+    // Gated on autoDeleteMacroPortsOnLastCableEnabled (Preferences) — off, this is always false
+    // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
     bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled && macroController_.nodeIsMacroPort(nodeId);
     if (autoDeleteMacroPortsOnLastCableEnabled && !touchesMacroPort) {
         auto isTargetChannelPrescan = [&targetChannels](int channel) {
@@ -935,7 +935,7 @@ void GraphEditor::timerCallback() {
     // refreshSmartSuggestions repaints only when the suggestion set really changed.
     smartConnections_.refreshSuggestionsIfInsertModifierChanged(dragDropController_.buildDragPreviewState());
 
-    // Minimap (issue #159): only build the model while visible, and only when it's needed —
+    // Minimap: only build the model while visible, and only when it's needed —
     // setModel() itself only repaints when the model actually changed (no repaint storm on a
     // static patch).
     if (minimap.isVisible())

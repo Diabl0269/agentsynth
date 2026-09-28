@@ -1,4 +1,4 @@
-// LfoCustomWaveTests.cpp (FRO114) -- synth::LfoCustomWave, the pure headless model behind
+// LfoCustomWaveTests.cpp -- synth::LfoCustomWave, the pure headless model behind
 // LFOModule's Custom waveform: the default/preset shapes, JSON round-trip and sanitise rules
 // (LFOModule::setCustomWave/setExtraState's only gate against untrusted-shaped input), the
 // right-continuous step evaluator, the render table's wrap guard, and the whole-wave tools.

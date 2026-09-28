@@ -1,4 +1,4 @@
-// MidiRemotePanelTests.cpp -- FRO131 (docs/control/midi-remote-ui.md#the-controllers-panel): the
+// MidiRemotePanelTests.cpp (docs/control/midi-remote-ui.md#the-controllers-panel): the
 // panel's own selection state and its null-safety before configure() runs. The three region
 // components (ControllersListComponent/ControllerSurfaceComponent/ControlInspectorComponent) have
 // their own test files; this one covers only what MidiRemotePanelComponent itself owns.
@@ -106,15 +106,15 @@ TEST(MidiRemotePanelComponentTests, SwitchingDockToMidiRemoteTabShowsThePanelAnd
     EXPECT_FALSE(mc.getTimelinePanel().isVisible());
 }
 
-// ---- FRO263: live-refresh pipeline (MidiLearnController::onChanged -> scheduleLiveRefresh() ->
+// ---- live-refresh pipeline (MidiLearnController::onChanged -> scheduleLiveRefresh() ->
 // deferred rebuildFromProfiles()) -- a lightweight fixture (AudioEngine/GraphEditor/MidiLearnController
 // wired directly, same ingredients as MidiLearnControllerTests.cpp) rather than a full MainComponent,
 // since only this one seam -- not the whole app -- is under test. The onChanged wiring itself is
 // reproduced here exactly as MainComponent::wireMidiRemoteEngine() does it.
 
 TEST_F(MidiRemotePanelLiveRefreshTest, LearnDoneWhileThePanelIsOpenAppearsWithoutATabSwitch) {
-    // The fixture is Hosted, so the list starts with the always-listed, not-yet-created Host MIDI row
-    // (FRO136); the learn's auto-created profile takes its place under its own id, which is what
+    // The fixture is Hosted, so the list starts with the always-listed, not-yet-created Host MIDI row;
+    // the learn's auto-created profile takes its place under its own id, which is what
     // shows a refresh happened.
     ASSERT_EQ(panel_.getControllersListForTest().getRowDisplayNameForTest("host-midi"), "Host MIDI");
 
@@ -131,7 +131,7 @@ TEST_F(MidiRemotePanelLiveRefreshTest, LearnDoneWhileThePanelIsOpenAppearsWithou
     EXPECT_EQ(panel_.getControllersListRowCountForTest(), 1);
 }
 
-// The ticket's own repro (FRO263): assign a knob, Forget, Cmd+Z -- the panel must not keep showing
+// The ticket's own repro: assign a knob, Forget, Cmd+Z -- the panel must not keep showing
 // it as gone.
 TEST_F(MidiRemotePanelLiveRefreshTest, ForgetThenUndoIsReflectedWithoutATabSwitch) {
     controller_->arm(node_->nodeID, "cutoff");
@@ -156,10 +156,10 @@ TEST_F(MidiRemotePanelLiveRefreshTest, ForgetThenUndoIsReflectedWithoutATabSwitc
            "before FRO263 this stayed stale until a tab switch";
 }
 
-// FRO262 (follow-up): a MIDI device that opens WHILE the panel is already showing must not stay
+// A MIDI device that opens WHILE the panel is already showing must not stay
 // greyed until a tab switch -- MainComponent::wireMidiRemoteEngine() now reaches
 // scheduleLiveRefresh() from AudioEngine::onMidiDevicesChanged too, not just from
-// MidiLearnController::onChanged (that path is FRO263's own, covered above). This test
+// MidiLearnController::onChanged (that path is the own, covered above). This test
 // deliberately leaves controller_->onChanged UNWIRED so a pass here proves the NEW
 // onMidiDevicesChanged -> scheduleLiveRefresh() seam alone is sufficient, not a side effect of the
 // onChanged wiring already covered by LearnDoneWhileThePanelIsOpenAppearsWithoutATabSwitch above.
@@ -167,7 +167,7 @@ TEST_F(MidiRemotePanelLiveRefreshTest, DeviceOpenedWhilePanelIsOpenAppearsWithou
     controller_->onChanged = nullptr; // isolate: only onMidiDevicesChanged wired below for this test
 
     // Create a profile/assignment the ordinary way (arm+learn), same as the sibling test, but
-    // since onChanged is unwired the panel must NOT have picked it up yet -- exactly the FRO262
+    // since onChanged is unwired the panel must NOT have picked it up yet -- exactly the
     // repro shape: a device/mapping becomes real while the panel tab is already active.
     controller_->arm(node_->nodeID, "cutoff");
     send(juce::MidiMessage::controllerEvent(1, 20, 64));
@@ -190,7 +190,7 @@ TEST_F(MidiRemotePanelLiveRefreshTest, DeviceOpenedWhilePanelIsOpenAppearsWithou
            "before this fix the panel stayed stale here until a tab switch";
 }
 
-// FRO262 (bug 3): the Surface's cell for an already-mapped, already-touched control must seed its
+// The Surface's cell for an already-mapped, already-touched control must seed its
 // widget from the target's REAL current value, not always show the minimum (0). Uses the same
 // arm/send/settle learn flow as the sibling tests above, but sets the FilterModule's "cutoff"
 // parameter to a known non-default value BEFORE resolving the surface, so a pass here can only mean

@@ -9,7 +9,7 @@
 
 namespace synth::ui {
 
-// DetachedPanelWindow.h -- FRO12 (P9-6, docs/mixer/panel.md): a native top-level window hosting one
+// DetachedPanelWindow.h (docs/mixer/panel.md): a native top-level window hosting one
 // panel a DetachablePanelHost has detached from its dock. Modeled on
 // Source/Plugin/Hosting/HostedPluginEditorWindow.{h,cpp}: constructed with addToDesktop=false, so
 // building this (and every test below) never creates a native peer -- only a later
@@ -23,7 +23,7 @@ namespace synth::ui {
 // processor's own instance on the plugin path, exactly the AgentSynthPluginEditor/HostedPluginEditorWindow pattern --
 // and clears it in its destructor. Never constructs its own ThemeManager/AppLookAndFeel.
 //
-// Keyboard focus is scoped to THIS window (T159/docs/control/shortcuts.md "Focus regions"): MainComponent's
+// Keyboard focus is scoped to THIS window (docs/control/shortcuts.md "Focus regions"): MainComponent's
 // keyPressed dispatch is not reachable from a separate top-level window (MainComponent installs no
 // KeyListener -- see MainComponentSetup.cpp's comment -- so Tab here would otherwise go nowhere),
 // so this window resolves Tab/Shift+Tab itself, against its OWN one-region FocusRegionRegistry
@@ -63,7 +63,7 @@ public:
      *  the graph canvas region MainComponent registers). */
     void registerHostedPanelFocusRegion(const juce::String& id, juce::Component& root);
 
-    /** FRO333: app-wide shortcuts (Cmd+T, Cmd+1..9) still have to fire while THIS window has focus
+    /** App-wide shortcuts (Cmd+T, Cmd+1..9) still have to fire while THIS window has focus
      *  -- it's still an AgentSynth window ("the focused window wins" only hands the keys to a
      *  HOSTED PLUGIN's own window). MainComponent::keyPressed is unreachable from here (see the
      *  class comment above), so keyPressed() retries an unresolved key through this callback,
@@ -81,7 +81,7 @@ private:
     void persistBounds();
     void restoreBoundsOrDefault();
     void globalFocusChanged(juce::Component* focusedComponent) override; // juce::FocusChangeListener
-    /** FRO228: re-applies the header button's themed icon -- see this method's own comment
+    /** Re-applies the header button's themed icon -- see this method's own comment
      *  (DetachedPanelWindow.cpp) for why DetachablePanelHost::applyIcon() alone isn't enough once
      *  the button is reparented in here. No-op before content_ exists. */
     void applyHeaderButtonIcon(synth::theme::AppLookAndFeel& lf);

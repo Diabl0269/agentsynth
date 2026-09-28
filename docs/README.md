@@ -119,6 +119,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/development/file-size-guard.md`](development/file-size-guard.md) — the 1000-line cap, its strict ratchet baseline, and how to split an over-cap file
 - [`docs/development/function-size-guard.md`](development/function-size-guard.md) — the 200-line-per-function cap, how a function's size is measured, and its ratchet baseline
 - [`docs/development/header-comment-guard.md`](development/header-comment-guard.md) — comment *placement* in headers: why it tracks excess (comments minus code) rather than a raw count, the exact threshold, and the ratchet baseline
+- [`docs/development/comment-provenance-guard.md`](development/comment-provenance-guard.md) — no ticket ids or dates in `Source/`/`Tests/` comments: the exact pattern, the rewrite rule, the `Regression test for <ID>:` exception, and the per-file ratchet baseline
 - [`docs/development/docs-guard.md`](development/docs-guard.md) — `scripts/check-docs.sh`'s seven checks (naming, links, `docs/...` mentions, `§`-section refs, README map completeness, bare `#anchor` mentions, bare basenames), the naming ratchet, and where it runs
 - [`docs/development/pr-title-convention.md`](development/pr-title-convention.md) — PR title format (`type(scope)!: subject`) and why it is checked on the title, not a commit message
 - [`docs/development/distribution.md`](development/distribution.md) — version identity, the build-time "What's New" data, and the signing state of a shipped build

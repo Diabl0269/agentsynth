@@ -29,7 +29,7 @@ TEST(MacroPortFlow, DroppingACableOnACollapsedCardCreatesAMonoInputAndWiresIt) {
     const auto dropPoint = card->getBounds().getCentre();
 
     // Drag from the external Oscillator's audio OUTPUT (jack 0) and release over the collapsed
-    // card — no jack under the cursor (T141 hasn't drawn any yet), so this exercises the
+    // card — no jack under the cursor (none drawn yet), so this exercises the
     // convenience path: an output source means the macro should gain an INPUT.
     editor.beginConnectionDrag(extComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
     editor.endConnectionDrag(dropPoint);

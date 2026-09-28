@@ -30,7 +30,7 @@ void GraphEditor::detachAllModuleComponents() {
     endZoomGesture();
     // Every ModuleComponent below is about to be destroyed — if one of them owned a live body drag
     // (dragPreviewActive/selectionDragActive armed by its own mouseDown), no mouseUp is ever coming
-    // to reset it (FRO19: an AI patch apply landing mid-gesture is the reproducing case). Cancel
+    // to reset it (e.g. an AI patch apply landing mid-gesture). Cancel
     // unconditionally: harmless when nothing was active, correct when something was.
     cancelLiveDragGestures();
     for (auto* comp : content.getModules())
@@ -65,7 +65,7 @@ void GraphEditor::updateComponents() {
         if (!stillExists) {
             // The node this component tracked just vanished (undo, a doc removal) — if it was the
             // one live-dragging (dragPreviewSelfId), no mouseUp is ever coming to reset the flags it
-            // armed (FRO19); cancel now, before the component itself is destroyed below. A
+            // armed; cancel now, before the component itself is destroyed below. A
             // non-initiating group member vanishing on its own is harmless: the initiator survives,
             // its real mouseUp is still coming, and finalizeSelectionDrag's lookup simply skips a
             // stale id it can't find (see cancelLiveDragGestures' own comment).
@@ -157,7 +157,7 @@ void GraphEditor::updateComponents() {
     if (zoomGestureActive)
         setModuleRasterFrozen(true);
 
-    // FRO300: cards can appear/disappear/reposition here (new node, deleted node, position synced
+    // Cards can appear/disappear/reposition here (new node, deleted node, position synced
     // from properties) without a pan/zoom in between, so updateTransform()'s own call wouldn't
     // see it until the next frame.
     applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
@@ -173,7 +173,7 @@ void GraphEditor::paint(juce::Graphics& g) {
 // Draws the empty-canvas onboarding hint centred in the visible, untransformed viewport,
 // after children paint -- so it draws over the canvas unaffected by the content transform.
 void GraphEditor::paintOverChildren(juce::Graphics& g) {
-    // T159: the canvas's focus-region outline, drawn OVER children (unlike the other four focus
+    // The canvas's focus-region outline, drawn OVER children (unlike the other four focus
     // regions' paint()) so a module's own image-cached body can never occlude it. Ahead of the
     // empty-canvas early return below, since the outline must show regardless of whether the canvas
     // has any modules in it.
@@ -236,7 +236,7 @@ void GraphEditor::resized() {
                                                 : juce::Rectangle<int>(getWidth(), 0, 600, getHeight());
     }
 
-    // ---- Minimap (issue #159) ----
+    // ---- Minimap -----------------
     // Bottom-LEFT with a 12px margin — the mod-matrix panel occupies a 600px panel on the right.
     // Auto-hide when the editor is too small to show it without swallowing the view, but never
     // clobber the user's preference: `minimapVisible` still reflects what they asked for, and
@@ -319,7 +319,7 @@ void GraphEditor::updateTransform() {
     if (minimap.isVisible())
         minimap.setViewport(getVisibleCanvasRect());
 
-    // FRO300: updateTransform() runs every wheel/pan/zoom frame, so a card that just left or
+    // updateTransform() runs every wheel/pan/zoom frame, so a card that just left or
     // re-entered the visible rect gets its accessibility flipped immediately -- the per-card guard
     // inside makes every other frame here a no-op.
     applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
@@ -462,12 +462,12 @@ synth::ui::MinimapModel GraphEditor::buildMinimapModel() {
     return model;
 }
 
-// P8-31: scroll + zoom the viewport so every module component is on-screen, clamped to the
+// Scroll + zoom the viewport so every module component is on-screen, clamped to the
 // same [0.1, 2.0] range as wheel zoom. Called after a patch is loaded so the just-loaded
 // modules are not left off-screen at their saved coordinates; a no-op when there are no
 // modules or the editor has no area yet.
 void GraphEditor::fitViewToModules() {
-    // P8-31: after loading a patch, bring every module on-screen. A loaded patch keeps its saved
+    // After loading a patch, bring every module on-screen. A loaded patch keeps its saved
     // coordinates, which often fall outside the current viewport; fitting the view shows the result
     // of the load instead of leaving the user staring at an empty region of the canvas.
     auto model = buildMinimapModel(); // one pass over modules + cables, already non-null-filtered
@@ -612,7 +612,7 @@ void GraphEditor::mouseMove(const juce::MouseEvent& e) {
     hoveredCableId = newId;
     setMouseCursor(newId.has_value() ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
 
-    // FRO288: a hovered cable that lands on a knob highlights that knob's ring too, via the same
+    // A hovered cable that lands on a knob highlights that knob's ring too, via the same
     // shared hover-correlation state a knob hover writes the other direction (setHoveredModTarget
     // repaints only the affected card). docs/modules/modulation.md#modulation-rings-on-knobs.
     if (newCable.has_value() && newCable->landsOnKnob)
@@ -666,19 +666,16 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         }
 
         // Right-click inside an expanded macro's hull: the same macro actions the collapsed
-        // card's own menu offers (Fix 4/P8-12 follow-up), reachable without collapsing first.
+        // card's own menu offers, reachable without collapsing first.
         //
-        // The explicit selectMacro() call used to be load-bearing, not cosmetic: buildMacroMenu's
-        // "Ungroup" and "Save as Snippet..." items act on the CURRENT SELECTION
+        // buildMacroMenu's "Ungroup" and "Save as Snippet..." items act on the CURRENT SELECTION
         // (ungroupSelection()/onSaveSnippetRequested()), and mouseUp deliberately preserves
-        // whatever was selected on a right-click (so the canvas menu's Paste keeps working) — so
-        // without selecting the macro here FIRST, those items would have silently acted on
-        // whatever was selected before this click instead of the macro the user just right-clicked.
-        // Now redundant — buildMacroMenu selects the macro itself before either item runs
-        // (founder-review item 4, docs/macros/menu-and-membership.md#the-macro-menus-entry-points, so the same fix also
-        // covers a macro member's own right-click menu) — left in place to keep this fix's diff scoped.
+        // whatever was selected on a right-click (so the canvas menu's Paste keeps working).
+        // buildMacroMenu selects the macro itself before either item runs
+        // (docs/macros/menu-and-membership.md#the-macro-menus-entry-points), so the selectMacro()
+        // below is a redundant safeguard, not what makes those items target this macro.
         if (const auto hullMacroId = macroController_.macroHullAt(canvasPos.roundToInt()); hullMacroId.isNotEmpty()) {
-            // T138: captured BEFORE the reselect above, which otherwise destroys any external
+            // Captured BEFORE the reselect above, which otherwise destroys any external
             // batch (or a partial subset of this macro's own members, picked for a targeted
             // "Remove Selection from Macro") the user chose before right-clicking this hull —
             // see buildMacroMenu's own comment on addCandidateSelection, and
@@ -704,7 +701,7 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
 
         auto localPos = content.getLocalPoint(this, e.getPosition());
 
-        // Collapse button (founder-review fix G5) - checked BEFORE the chip below, carving its
+        // Collapse button - checked BEFORE the chip below, carving its
         // hit zone out of that row explicitly, even though the two rectangles never actually
         // overlap (macroCollapseButtonBounds sits at the row's right end, macroChipBounds at its
         // left). A single click collapses through the SAME setMacroCollapsed the menu's
@@ -740,7 +737,7 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         auto attenId = getAttenuverterNodeAt(localPos.toFloat());
         if (attenId.uid != 0) {
             draggingAttenuverterNodeId = attenId;
-            beginModAmountGesture(); // FRO287: shared with the card-knob ring-drag gesture
+            beginModAmountGesture(); // shared with the card-knob ring-drag gesture
             return;
         }
 
@@ -779,7 +776,7 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
         pendingEmptyCanvasClick = false;
         if (draggingAttenuverterNodeId.uid != 0) {
             const float delta = (e.getPosition().y - lastMousePos.y) * -0.01f;
-            adjustModAmount(draggingAttenuverterNodeId, delta); // FRO287: shared gesture helper
+            adjustModAmount(draggingAttenuverterNodeId, delta); // shared gesture helper
             lastMousePos = e.getPosition();
             return;
         }
@@ -817,11 +814,11 @@ void GraphEditor::mouseUp(const juce::MouseEvent& e) {
     }
 
     if (draggingAttenuverterNodeId.uid != 0)
-        commitModAmountGesture(); // FRO287: shared gesture helper
+        commitModAmountGesture(); // shared gesture helper
     draggingAttenuverterNodeId = juce::AudioProcessorGraph::NodeID();
 
     // A press on empty canvas that never turned into a pan is a plain click: deselect — UNLESS it
-    // landed inside an expanded macro's hull (Fix 2/P8-12 follow-up), in which case it selects
+    // landed inside an expanded macro's hull, in which case it selects
     // that macro instead. Only reachable here at all because a click that landed ON a member
     // module is consumed by that ModuleComponent's own mouseDown and never reaches the canvas —
     // this is deliberately just the empty space inside the hull (between/around member cards),

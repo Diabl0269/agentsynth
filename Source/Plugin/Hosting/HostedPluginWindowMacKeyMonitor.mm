@@ -1,4 +1,4 @@
-// Concern: FRO337 -- the mac-only half of "Esc/Cmd+W closes a focused hosted-plugin window".
+// Concern: the mac-only half of "Esc/Cmd+W closes a focused hosted-plugin window".
 #include "HostedPluginWindowMacKeyMonitor.h"
 
 #if JUCE_MAC

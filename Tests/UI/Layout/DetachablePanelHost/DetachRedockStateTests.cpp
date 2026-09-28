@@ -1,4 +1,4 @@
-// DetachRedockStateTests.cpp -- FRO12 (P9-6, docs/mixer/panel.md): proves detach/redock preserves
+// DetachRedockStateTests.cpp (docs/mixer/panel.md): proves detach/redock preserves
 // REAL, production panel state end to end through BottomDockComponent/MainComponent, not just the
 // generic identity/mutation invariant DetachablePanelHostTests.cpp pins against a stub panel.
 // Drives a real, off-screen MainComponent (newPatchForTest() + simulateAddAudioTrackClick(), the
@@ -9,7 +9,7 @@
 // untouched -- unlike MixerPanelComponent::rebuild() (destroys and replaces every column), which
 // this test deliberately never calls after the state is set.
 //
-// FRO101: both tests below build a REAL MainComponent and detach a REAL panel, which means
+// Both tests below build a REAL MainComponent and detach a REAL panel, which means
 // DetachedPanelWindow::persistBounds() writes "timelineWindowBounds"/"mixerWindowBounds" into the
 // SAME on-disk "Agent Synth" settings file every shipped build reads -- exactly the leak that
 // produced the original bug report (a headless test run left a 128x128 rect there, and the
@@ -28,7 +28,7 @@
 namespace {
 
 // The real on-disk settings file and the save/restore guard around it live in
-// Tests/TestSettingsHelpers.h (FRO58) -- one copy for every test that opens it.
+// Tests/TestSettingsHelpers.h -- one copy for every test that opens it.
 using synth::test::PersistedKeysGuard;
 using synth::test::userSettingsTestOptions;
 
@@ -115,13 +115,12 @@ TEST(DetachRedockStateTests, MixerColumnSelectionSurvivesDetachAndRedock) {
     EXPECT_TRUE(column->isSelectedForTest()) << "and survive redocking back";
 }
 
-// FRO101 -- proves PersistedKeysGuard itself actually restores the two window-bounds keys, the
-// same way PR #328 ("Isolate MainComponent settings-restore tests from the real dev settings
-// file") proved its own guard: seed a known value, run production code that would otherwise
-// clobber it inside the guard's scope, then read the real file back OUTSIDE the guard and assert
-// it matches what was there before. Covers BOTH restorable states named in the guard's own
-// contract -- "had a value" and "did not exist at all" -- since a guard that writes back "" instead
-// of calling removeValue() would still pass a same-value-only check.
+// Proves PersistedKeysGuard itself actually restores the two window-bounds keys, the
+// same way the settings-restore tests prove their own guard: seed a known value, run production code that would
+// otherwise clobber it inside the guard's scope, then read the real file back OUTSIDE the guard and assert it matches
+// what was there before. Covers BOTH restorable states named in the guard's own contract -- "had a value" and "did not
+// exist at all" -- since a guard that writes back "" instead of calling removeValue() would still pass a
+// same-value-only check.
 namespace {
 void writeRealKey(const juce::String& key, const juce::String& value) {
     juce::ApplicationProperties props;
@@ -174,7 +173,7 @@ TEST(DetachRedockStateTests, MixerAndTimelineWindowBoundsKeysAreRestoredAfterAGu
         mc.setSize(1400, 900);
         mc.newPatchForTest();
 
-        // The exact production path that leaked these two keys before FRO101/this guard: detach
+        // The exact production path that would leak these two keys without this guard: detach
         // both real panels against a real MainComponent, which persistBounds()'s each into the
         // real settings file.
         auto& mixerHost = mc.getBottomDock().getMixerHost();

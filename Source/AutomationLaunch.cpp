@@ -1,4 +1,4 @@
-// Concern: FRO29 automation-launch detection -- a pure, headless-testable helper so
+// Concern: automation-launch detection -- a pure, headless-testable helper so
 // MainComponent's decision reduces to one function call instead of duplicating the
 // flag/env-var parsing at every call site.
 

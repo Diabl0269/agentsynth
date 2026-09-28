@@ -1,4 +1,4 @@
-// FRO27: synth::deviceStateEnablesInput / synth::stripUnusedInputDevice (the standalone-only fix
+// synth::deviceStateEnablesInput / synth::stripUnusedInputDevice (the standalone-only fix
 // for a saved device state naming an input device the user never actually enabled), plus
 // AudioEngine::setSavedDeviceState / savedDeviceStateEnablesInput applying it.
 //
@@ -139,7 +139,7 @@ TEST(DeviceStateInputsTest, NoSavedStateNeverEnablesInput) {
     engine.shutdown();
 }
 
-// NOTE (per FRO27 spec): a test asserting that changeListenerCallback's own
+// NOTE: a test asserting that changeListenerCallback's own
 // deviceManager.createStateXml() -> onDeviceStateChanged path strips an unused input name is not
 // reachable headlessly -- createStateXml() returns null until a real device has been opened
 // (Tests/Engine/AudioInputTests.cpp's DeviceStateChangeReachesTheOwnerCallback test only ever sees

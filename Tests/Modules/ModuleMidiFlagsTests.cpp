@@ -88,12 +88,12 @@ ExpectedMidiFlags expectedFlagsFor(ModuleType type) {
     case ModuleType::AudioInput:
     case ModuleType::RecordTap:
     case ModuleType::TimelineAudioSource:
-    // A Macro's audio/CV inlet/outlet jack (P8-15): 0 audio-only channels declared as its bus
+    // A Macro's audio/CV inlet/outlet jack: 0 audio-only channels declared as its bus
     // shape, and it never touches the MIDI buffer either — the whole reason it is a SEPARATE type
     // from MacroMidiInlet/MacroMidiOutlet rather than one type with a "kind" flag.
     case ModuleType::MacroInlet:
     case ModuleType::MacroOutlet:
-    // The mixer's strip and bus (P9-2): audio in, audio out, no MIDI either way.
+    // The mixer's strip and bus: audio in, audio out, no MIDI either way.
     case ModuleType::ChannelStrip:
     case ModuleType::Master:
         return {false, false};

@@ -1,4 +1,4 @@
-// OrphanControllerTests.cpp -- FRO135 (docs/control/midi-remote-ui.md#controllers-list-left,
+// OrphanControllerTests.cpp (docs/control/midi-remote-ui.md#controllers-list-left,
 // docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project): the panel side of an
 // orphan controller (Re-link / Recreate) and of an orphan node (an assignment whose target no longer
 // resolves: "(missing module)" in the warning colour, Forget the only action, never re-bound). The repairs'

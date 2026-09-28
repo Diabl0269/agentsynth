@@ -1,5 +1,5 @@
 // MultiSelectTests.cpp
-// GraphEditor-level tests for multi-select, group drag and snippet drop — issue #156.
+// GraphEditor-level tests for multi-select, group drag and snippet drop.
 //
 //   • selection API      — single/additive select, select-all, clear, prune after node removal
 //   • marquee            — replaces vs adds, canvas-coordinate hit testing, degenerate band
@@ -257,7 +257,7 @@ TEST(MultiSelectMarquee, UpdateWithoutBeginIsANoOp) {
 }
 
 // A collapsed macro's hidden members are not on the canvas as far as marquee hit-testing is
-// concerned — collectModuleBoxes() skips !isVisible() components (P8-12). Clicking the visible
+// concerned — collectModuleBoxes() skips !isVisible() components. Clicking the visible
 // card is the only way to select a collapsed macro; a marquee over the original footprint must
 // pick up nothing.
 TEST(MultiSelectMarquee, CollapsedMacroMembersAreNotMarqueeSelectable) {

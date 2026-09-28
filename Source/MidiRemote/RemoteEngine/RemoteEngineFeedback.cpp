@@ -1,5 +1,5 @@
-// Message thread. RemoteEngine::drain()'s feedback pass (FRO139,
-// docs/control/midi-remote.md#controller-feedback): for every parameter slot whose value has moved
+// Message thread. RemoteEngine::drain()'s feedback pass
+// (docs/control/midi-remote.md#controller-feedback): for every parameter slot whose value has moved
 // since the last drain, encode it back into the mapped control's own message shape and hand it to
 // the app-layer RemoteFeedbackSink.
 //
@@ -59,7 +59,7 @@ const ControllerProfile* findProfileWithOutput(const std::vector<ControllerProfi
     return nullptr;
 }
 
-// FRO140: a paired 14-bit CC is echoed as both halves (MSB on CC n, LSB on CC n+32).
+// A paired 14-bit CC is echoed as both halves (MSB on CC n, LSB on CC n+32).
 bool isPairedCcSlot(const RemoteMappingSnapshot::Slot& slot) {
     return slot.spec.type == MessageType::cc && isPairedEncoding(slot.encoding) && slot.spec.number >= 0 &&
            slot.spec.number + kPairedLsbOffset <= 63;
@@ -106,14 +106,14 @@ void RemoteEngine::sendFeedback(const RemoteMappingSnapshot& snapshot) {
     const double now = clock_();
 
     for (const auto& slot : snapshot.slots) {
-        // FRO236: a masterVolume continuous target resolves to a real juce::AudioProcessorParameter*
+        // A masterVolume continuous target resolves to a real juce::AudioProcessorParameter*
         // (RemoteEngineReconcile.cpp) and is echoed exactly like a parameter target; bpm/playhead
         // have no `param` and fall out of this same check via slot.param == nullptr below.
         const bool isParameterLike =
             slot.target.isParameter() ||
             (slot.target.isContinuous() && slot.continuous == ContinuousTargetKind::masterVolume);
         if (!isParameterLike || slot.orphaned || slot.param == nullptr || !slot.onActivePage)
-            continue; // FRO142: an inactive page never echoes (RemoteMappingSnapshot::Slot::onActivePage)
+            continue; // An inactive page never echoes (RemoteMappingSnapshot::Slot::onActivePage)
         // An nrpn slot is skipped like every other type without a feedback encoding: echoing an NRPN
         // means re-sending its address CCs first, which the controller may not accept.
         if (slot.spec.type != MessageType::cc && slot.spec.type != MessageType::note &&

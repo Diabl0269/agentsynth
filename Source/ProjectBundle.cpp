@@ -10,7 +10,7 @@ namespace {
 constexpr const char* kTimelineKey = "timeline";
 constexpr const char* kMacrosKey = "macros";
 constexpr const char* kMidiRemoteKey = "midiRemote";
-constexpr const char* kMixerPanLawKey = "mixerPanLaw"; // FRO325
+constexpr const char* kMixerPanLawKey = "mixerPanLaw";
 } // namespace
 
 bool ProjectBundle::isBundle(const juce::File& dir) {
@@ -35,7 +35,7 @@ juce::var ProjectBundle::buildProjectJson(juce::AudioProcessorGraph& graph, cons
     if (rootObj != nullptr) {
         // Set LAST so a fresh timeline/macros/midiRemote always wins over a stashed one.
         // "midiRemote" is set LAST OF ALL THREE (write-last is load-bearing — see the class
-        // comment's key-order proof). FRO325's "mixerPanLaw" is a plain scalar with no doc of its
+        // comment's key-order proof). "mixerPanLaw" is a plain scalar with no doc of its
         // own to go stale in the stash, but it goes last too, for the same "the live value always
         // wins" reasoning.
         rootObj->setProperty(kTimelineKey, timeline.toVar());
@@ -171,7 +171,7 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         rootObj->removeProperty(kTimelineKey);
     }
 
-    // "macros" (P8-12) gets the identical treatment, for the identical reason: validatePatch
+    // "macros" gets the identical treatment, for the identical reason: validatePatch
     // refuses any patch carrying it, and a .agsproj's "macros" is this format's own dialect, not
     // provider output.
     const bool hasMacrosKey = rootObj->hasProperty(kMacrosKey);
@@ -181,7 +181,7 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         rootObj->removeProperty(kMacrosKey);
     }
 
-    // "midiRemote" (FRO124) gets the identical treatment, for the identical reason: validatePatch
+    // "midiRemote" gets the identical treatment, for the identical reason: validatePatch
     // refuses any patch carrying it, and a .agsproj's "midiRemote" is this format's own dialect,
     // not provider output (docs/control/midi-remote.md#persistence-and-the-trust-boundary).
     const bool hasMidiRemoteKey = rootObj->hasProperty(kMidiRemoteKey);
@@ -190,7 +190,7 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         detachedMidiRemoteVar = rootObj->getProperty(kMidiRemoteKey);
         rootObj->removeProperty(kMidiRemoteKey);
     }
-    // FRO325: "mixerPanLaw" is a plain scalar with no doc of its own, so it needs no local-var
+    // "mixerPanLaw" is a plain scalar with no doc of its own, so it needs no local-var
     // validation step like the three above — just detach it (same untrusted-gate reasoning) and
     // read it straight into `outPanLaw` once the rest has all passed. An unrecognised string reads
     // as Balance via mixerPanLawFromString rather than rejecting the whole file, deliberately more

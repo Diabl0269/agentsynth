@@ -1,4 +1,4 @@
-// Concern: FRO15 (P9-9, docs/mixer/sends-and-buses.md) -- the bus/send half of buildMixerSnapshot: which
+// Concern: (docs/mixer/sends-and-buses.md) -- the bus/send half of buildMixerSnapshot: which
 // strips are buses, what a bus column calls itself and lists as its sources, and each column's
 // active send rows. Its own unit rather than more lines in MixerModelColumns.cpp (root CLAUDE.md's
 // one-concern-per-unit rule).
@@ -24,10 +24,10 @@ juce::String stripColumnName(juce::AudioProcessorGraph& graph, const TimelineDoc
     const juce::String uuid = node->properties["uuid"].toString();
     if (const auto* macro = macros.findByMember(uuid))
         return macro->name;
-    // FRO225 (docs/mixer/panel.md): a strip's own persisted name comes right after the macro (a
-    // boxed strip's name IS its macro's -- see the mixer header's inline-rename comment on why
-    // there are never two competing names for one column) and ahead of the bus/track-walk fallback
-    // below. Empty (unset) falls straight through, unchanged from before FRO225.
+    // A strip's own persisted name comes right after the macro (a boxed strip's name IS its
+    // macro's -- see the mixer header's inline-rename comment on why there are never two competing
+    // names for one column) and ahead of the bus/track-walk fallback below. Empty (unset) falls
+    // straight through (see docs/mixer/panel.md).
     if (auto* strip = dynamic_cast<ChannelStripModule*>(node->getProcessor());
         strip != nullptr && strip->getStripName().isNotEmpty())
         return strip->getStripName();
@@ -46,7 +46,7 @@ void buildBusSourcesForColumn(juce::AudioProcessorGraph& graph, const TimelineDo
 
 namespace {
 
-/** A row's target text: the column name a strip target shows, or (FRO318) "Key: Compressor 1 on
+/** A row's target text: the column name a strip target shows, or "Key: Compressor 1 on
  *  <that column name>" for a Key target -- the column name, not sendTargetName's doc-less one, so
  *  the row reads the same channel name its column header does. */
 juce::String sendEntryTargetName(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,

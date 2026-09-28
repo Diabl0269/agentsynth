@@ -186,7 +186,7 @@ float sourceSample(juce::int64 frame, int channel) {
 
 struct ScopedTempDir {
     // Unique per instance: CI runs the suite as parallel shard processes, and a fixed name let two
-    // shards wipe each other's files mid-test (FRO322).
+    // shards wipe each other's files mid-test.
     explicit ScopedTempDir(const juce::String& name)
         : dir(juce::File::getSpecialLocation(juce::File::tempDirectory)
                   .getChildFile(name + "_" + juce::Uuid().toString())) {

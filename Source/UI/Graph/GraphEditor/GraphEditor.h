@@ -27,7 +27,7 @@ class ModuleComponent;
 class MacroCardComponent;
 namespace synth {
 class PluginCardLayoutStore; // hosted-plugin card layouts, see setPluginCardLayoutStore
-class MidiRemoteProjectDoc;  // FRO240, see setMidiRemoteProjectDocForUndo
+class MidiRemoteProjectDoc;  // see setMidiRemoteProjectDocForUndo
 } // namespace synth
 namespace synth::ui {
 class ColourPickerPopup; // a unique_ptr return type only; 89 files include this header
@@ -94,7 +94,7 @@ public:
     void clearModDropTargets();
     void disconnectPort(ModuleComponent* module, int portIndex, bool isInput, bool isMidi);
 
-    // ---- Mod-amount drag gesture (FRO287) ----
+    // ---- Mod-amount drag gesture -------------
     // Shared by the cable midpoint knob (GraphEditorCanvas.cpp) and a card knob's ring-annulus/Alt
     // drag (ModuleComponent's CardKnobSlider) -- ONE path adjusts an attenuverter's "amount", so
     // the two gestures can never diverge. See GraphEditorModAmount.cpp for the implementation and
@@ -173,7 +173,7 @@ public:
     void setSelectedNodes(const std::vector<juce::AudioProcessorGraph::NodeID>& ids) override;
     void clearSelection();
     void selectAllModules();
-    /** FRO278: selects the module `direction` (+1 next, -1 previous) steps from the selection, left to
+    /** Selects the module `direction` (+1 next, -1 previous) steps from the selection, left to
      *  right across the canvas (ModuleStepOrder.h), and pans it into view if it is off-screen.
      *  @return false when the canvas has no module to select. */
     bool selectAdjacentModule(int direction);
@@ -262,7 +262,7 @@ public:
 
     /** The controller itself, for the app to install its hooks on. */
     MacroGroupController& getMacroController() noexcept { return macroController_; }
-    /** Const overload — FRO254: many migrated call sites reach the controller from a const
+    /** Const overload — for call sites that reach the controller from a const
      *  GraphEditor method (e.g. a read-only predicate), which the non-const overload can't serve. */
     const MacroGroupController& getMacroController() const noexcept { return macroController_; }
     /** The controller itself, for the app to install its hooks on. */
@@ -327,7 +327,7 @@ public:
     // recordGraphAndMacroChange transaction, so add/remove/rename/reorder and a shape change are
     // each exactly one undo step.
 
-    // FRO254 exception: NOT a pure forwarder (unlike the rest of this file's former macro API) —
+    // Exception: NOT a pure forwarder —
     // its body does real work beyond the pass-through call (repaintMacroPortColourTargets() +
     // clearMacroPortColourPreview() below), so it stays on GraphEditor rather than moving to
     // MacroGroupController::changeMacroPortColour, which callers must not call directly.
@@ -399,7 +399,7 @@ public:
     void setPluginCardLayoutStore(synth::PluginCardLayoutStore* store) noexcept { pluginCardLayoutStore_ = store; }
     synth::PluginCardLayoutStore* getPluginCardLayoutStore() const noexcept { return pluginCardLayoutStore_; }
 
-    // ---- FRO240: "Replace with..." keeps a module's MIDI Remote mappings ----
+    // ---- "Replace with..." keeps a module's MIDI Remote mappings ------------
     // GraphEditor stays free of MidiLearnController/RemoteEngine (thin-owner rule); these three
     // members are the hook MainComponent wires MidiLearnController through. See replaceModule()'s
     // own doc comment (GraphEditorCommands.cpp) for how they combine into one undo step.
@@ -491,10 +491,10 @@ public:
         return autoDeleteMacroPortsOnLastCableEnabled;
     }
 
-    // FRO235 (docs/macros/auto-ports.md#a-port-node-is-directly-deletable): a MANUAL macro-port delete (Configure I/O's
-    // Delete Port, or the port's own right-click Delete Port) drops the cable by default;
-    // Preferences ("macroSpliceCableOnPortDelete") lets a user switch both to splicing it back
-    // together instead, the way ungroup always has.
+    // A MANUAL macro-port delete (Configure I/O's Delete Port, or the port's own right-click Delete
+    // Port) drops the cable by default; Preferences ("macroSpliceCableOnPortDelete") lets a user
+    // switch both to splicing it back together instead, the way ungroup always has
+    // (see docs/macros/auto-ports.md#a-port-node-is-directly-deletable).
     void setSpliceCableOnMacroPortDeleteEnabled(bool enabled) { spliceCableOnMacroPortDeleteEnabled = enabled; }
     bool getSpliceCableOnMacroPortDeleteEnabled() const noexcept override {
         return spliceCableOnMacroPortDeleteEnabled;
@@ -657,13 +657,13 @@ public:
     juce::File getLastWavetableFolder() const noexcept { return lastWavetableFolder; }
     std::function<void(const juce::File&)> onWavetableFolderChanged;
 
-    /** FRO288: a card's own content changed in a way that can move where a cable lands (e.g. a
+    /** A card's own content changed in a way that can move where a cable lands (e.g. a
      *  Wavetable tab-page switch, which shows/hides knobs without moving or resizing the card
      *  itself, so nothing else invalidates the memo for it) -- repaintCanvas() is private
      *  (GraphCanvasHost), so this is ModuleComponent's public seam into it. */
     void notifyModuleContentChanged() { repaintCanvas(); }
 
-    // FRO288: the modulation target (destination node + RAW channel) currently correlated with a
+    // The modulation target (destination node + RAW channel) currently correlated with a
     // hover, in EITHER direction -- hovering a cable that lands on a knob (mouseMove below) or
     // hovering the knob/ring itself (ModuleComponent -> here). Cable paint treats it like
     // hoveredCableId; ModuleComponent's ring paint reads it back to highlight the ring. One shared
@@ -693,7 +693,7 @@ public:
     // Ends the zoom gesture now, as the settle timer would (the VBlank driver doesn't tick headless).
     void settleZoomNowForTest() { endZoomGesture(); }
 
-    // ---- Macro-crossing animation test seams (FRO41, MacroCrossingAnimator.h) ----
+    // ---- Macro-crossing animation test seams (MacroCrossingAnimator.h) -----------
     /** True while finalizeMacroMembershipDrag's cable-slide/module-flash tween is in flight. */
     bool isMacroCrossingAnimLiveForTest() const noexcept { return macroCrossingAnim_.isLive(); }
     /** Manually advances the tween to `t` (0..1) with no VBlank required — same call, including
@@ -865,14 +865,14 @@ private:
 
     void applySelectionChange(const std::vector<juce::AudioProcessorGraph::NodeID>& newSelection) override;
 
-    // FRO240: replaceModule()'s own named step -- picks the plain graph-only recordStructuralChange
+    // replaceModule()'s own named step -- picks the plain graph-only recordStructuralChange
     // or, when MainComponent has wired a doc up, the combined recordGraphAndMidiRemoteChange, so
     // replaceModule() itself doesn't have to inline both branches (see GraphEditorCommands.cpp).
     void recordReplaceModuleUndo(juce::AudioProcessorGraph& graph, const std::function<void()>& doReplace);
 
     AppUndoManager* undoManager = nullptr;
     synth::PluginCardLayoutStore* pluginCardLayoutStore_ = nullptr;
-    synth::MidiRemoteProjectDoc* midiRemoteDocForUndo_ = nullptr; // FRO240, see setMidiRemoteProjectDocForUndo
+    synth::MidiRemoteProjectDoc* midiRemoteDocForUndo_ = nullptr; // see setMidiRemoteProjectDocForUndo
 
     // Where the macro recolour picker's favourites shelf persists to — see setPropertiesFile.
     // Null (the default) keeps favourites in-memory only, which is what a headless test with no
@@ -918,7 +918,7 @@ private:
     synth::ui::AnimationDriver modMatrixAnim;
     juce::Rectangle<int> modMatrixTargetBounds;
 
-    // Macro-crossing cable slide + module flash (FRO41): macroCrossingAnim_ is pure tween state
+    // Macro-crossing cable slide + module flash: macroCrossingAnim_ is pure tween state
     // (MacroCrossingAnimator.h, armed by finalizeMacroMembershipDrag), driven by this ordinary
     // AnimationDriver exactly like the two above — see that header for why the state and the
     // driver are deliberately two separate small members rather than one.
@@ -937,11 +937,11 @@ private:
     bool doubleClickPortDisconnectEnabled = true;
     bool autoCreateMacroPortsOnDragEnabled = true;
     bool autoDeleteMacroPortsOnLastCableEnabled = true;
-    bool spliceCableOnMacroPortDeleteEnabled = false; // FRO235: off by default — a manual delete drops the cable
+    bool spliceCableOnMacroPortDeleteEnabled = false; // off by default — a manual delete drops the cable
     bool macroDragWithoutCmdEnabled = true;
     std::optional<bool> macroJoinCommandOverride_;
     bool autoCreateChannelOnConnectEnabled = true;
-    bool reconnectChainOnDeleteEnabled = true; // FRO23 — see the getter/setter's doc comment
+    bool reconnectChainOnDeleteEnabled = true; // see the getter/setter's doc comment
     bool defaultDualIOForNewModules = false;
     std::map<juce::String, bool> dualIOPerModuleOverrides;
 
@@ -951,7 +951,7 @@ private:
 
     void animateDropLanding(ModuleComponent* module, juce::Point<int> fromPos, juce::Point<int> toPos);
 
-    // FRO41: diffs `cablesBeforeSplice` against the current (post-splice) cable geometry, arms
+    // Diffs `cablesBeforeSplice` against the current (post-splice) cable geometry, arms
     // macroCrossingAnim_ if anything changed, and starts macroCrossingDriverAnim_ — see
     // MacroCrossingAnimator.h and this method's definition (GraphEditorDragDrop.cpp) for why the
     // snapshot itself is taken by the caller, before the mutation runs.
@@ -965,7 +965,7 @@ private:
     int cableRebuildCount = 0; // test seam, see docs/layout/animation.md#the-paint-count-pattern
     void repaintCanvas() override;
 
-    // ---- Knob-anchored cables + hover correlation (FRO288, GraphEditorModHover.cpp) ----
+    // ---- Knob-anchored cables + hover correlation (GraphEditorModHover.cpp) ------------
     // Post-passes at the end of rebuildVisibleCables(), in this order: the knob re-anchor runs
     // FIRST so the collapsed-macro pass (which re-anchors again for cables crossing a collapsed
     // macro's boundary) always wins on top of it for a cable that is both knob-bound AND crosses a
@@ -986,7 +986,7 @@ private:
     void beginOrRefreshZoomGesture();
     void endZoomGesture();
     void setModuleRasterFrozen(bool frozen);
-    struct HealSplice; // FRO23 delete heal; defined in GraphEditorInternal.h
+    struct HealSplice; // delete heal; defined in GraphEditorInternal.h
     std::vector<HealSplice> captureHealSplices(const std::vector<juce::AudioProcessorGraph::NodeID>& deletedIds) const;
     void healDeletedChain(const std::vector<HealSplice>& splices);
 

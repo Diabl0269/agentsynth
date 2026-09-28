@@ -1,4 +1,4 @@
-// MixerMeterReadoutTests.cpp -- FRO146: the per-column clip readout (Cubase's "Meter Peak Level"
+// MixerMeterReadoutTests.cpp -- the per-column clip readout (Cubase's "Meter Peak Level"
 // field, Source/UI/Mixer/MixerMeterReadout.h). Click-to-reset is driven through the REAL mouse
 // path (a synthesized juce::MouseEvent into mouseUp()), not by calling reset() directly, so the
 // modifier-key branch (plain click vs Option/Alt-click) is actually exercised.

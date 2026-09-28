@@ -23,7 +23,7 @@ void RemoteEngine::applyEvent(const RemoteMappingSnapshot& snapshot, const Remot
     else if (slot.target.isPage())
         applyToPage(slot, event);
     else if (slot.target.isContinuous() && slot.continuous != ContinuousTargetKind::masterVolume)
-        // FRO236: masterVolume falls through to applyToParameter below, exactly like a parameter
+        // masterVolume falls through to applyToParameter below, exactly like a parameter
         // target -- it resolves to the SAME juce::AudioProcessorParameter* the mixer's master fader
         // binds (RemoteEngineReconcile.cpp), so takeover/gesture/feedback all come for free.
         applyToContinuous(slot, event);
@@ -40,9 +40,9 @@ void RemoteEngine::applyToAction(const RemoteMappingSnapshot::Slot& slot, const 
     actionInvoker_->invokeRemoteCommand(slot.commandId);
 }
 
-// FRO253 (docs/control/midi-remote.md#node-command-targets): same "press only, momentary and
-// toggle alike" rule as applyToAction above -- a pad press toggles solo, like a mouse click;
-// hold-to-solo is not built.
+// Same "press only, momentary and toggle alike" rule as applyToAction above -- a pad press
+// toggles solo, like a mouse click; hold-to-solo is not built
+// (see docs/control/midi-remote.md#node-command-targets).
 void RemoteEngine::applyToNodeCommand(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event) {
     if (event.kind != RemoteEventKind::buttonPress)
         return;
@@ -51,9 +51,10 @@ void RemoteEngine::applyToNodeCommand(const RemoteMappingSnapshot::Slot& slot, c
     actionInvoker_->invokeNodeCommand(slot.nodeId, slot.target.nodeCommand.command);
 }
 
-// FRO142 (docs/control/midi-remote.md#pages): press only, momentary and toggle alike -- same rule
-// as applyToAction/applyToNodeCommand above. Acts on the profile that owns the control that fired
-// it (slot.profileId, resolved at snapshot-build time exactly like every other per-slot field).
+// Press only, momentary and toggle alike -- same rule as applyToAction/applyToNodeCommand above.
+// Acts on the profile that owns the control that fired it (slot.profileId, resolved at
+// snapshot-build time exactly like every other per-slot field)
+// (see docs/control/midi-remote.md#pages).
 void RemoteEngine::applyToPage(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event) {
     if (event.kind != RemoteEventKind::buttonPress)
         return;
@@ -79,9 +80,10 @@ void RemoteEngine::applyToParameter(const RemoteMappingSnapshot::Slot& slot, con
     if (slot.orphaned || slot.param == nullptr)
         return;
 
-    // FRO139 (docs/control/midi-remote.md#controller-feedback): every real hardware event on this
-    // control counts, even one a claim takeover below is about to reject -- a controller that just
-    // sent something is a controller the drain must not immediately echo a stale value back to.
+    // Every real hardware event on this control counts, even one a claim takeover below is about
+    // to reject -- a controller that just sent something is a controller the drain must not
+    // immediately echo a stale value back to
+    // (see docs/control/midi-remote.md#controller-feedback).
     {
         FeedbackState& fb = feedback_[slot.assignmentId];
         fb.hasHardware = true;
@@ -173,8 +175,9 @@ void RemoteEngine::applyToParameter(const RemoteMappingSnapshot::Slot& slot, con
     state.lastEventMs = clock_();
 }
 
-// FRO236 (docs/control/midi-remote.md#continuous-targets): bpm/playhead dispatch here; masterVolume
-// never reaches this function (RemoteEngine::applyEvent routes it to applyToParameter instead).
+// bpm/playhead dispatch here; masterVolume never reaches this function
+// (RemoteEngine::applyEvent routes it to applyToParameter instead)
+// (see docs/control/midi-remote.md#continuous-targets).
 void RemoteEngine::applyToContinuous(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event) {
     if (event.kind == RemoteEventKind::buttonPress || event.kind == RemoteEventKind::buttonRelease)
         return; // no defined behaviour -- docs/control/midi-remote.md#continuous-targets
@@ -265,7 +268,7 @@ void RemoteEngine::expireIdleGestures() {
             ++it;
         }
     }
-    // FRO236: a bpm absolute takeover's per-assignment state resets the same way a real gesture's
+    // A bpm absolute takeover's per-assignment state resets the same way a real gesture's
     // does -- the next turn after this idle window is a fresh "first event" for pickup/scale.
     for (auto it = continuousGestures_.begin(); it != continuousGestures_.end();) {
         if (now - it->second.lastEventMs >= kGestureIdleMs)

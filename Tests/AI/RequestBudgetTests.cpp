@@ -1,4 +1,4 @@
-// Unit coverage for synth::harness::RequestBudget (P1-11) — the hard ceiling AIPatchHarness's
+// Unit coverage for synth::harness::RequestBudget — the hard ceiling AIPatchHarness's
 // RecordingProvider enforces on outbound model requests so a nightly/scheduled run (potentially
 // against a paid vendor via --provider remote) cannot run away.
 

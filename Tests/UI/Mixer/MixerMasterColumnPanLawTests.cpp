@@ -1,6 +1,6 @@
-// FRO325 (docs/mixer/mixer.md#pan-law): the mixer's pan-law control, on Master's column next to
-// its mute button -- there is no other project-settings surface today, so this is where it lives.
-// Same fixture/click idiom as MixerMasterColumnMidiLearnTests.cpp's right-click menu.
+// The mixer's pan-law control, on Master's column next to its mute button -- there is no other
+// project-settings surface today, so this is where it lives. Same fixture/click idiom as
+// MixerMasterColumnMidiLearnTests.cpp's right-click menu (see docs/mixer/mixer.md#pan-law).
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"

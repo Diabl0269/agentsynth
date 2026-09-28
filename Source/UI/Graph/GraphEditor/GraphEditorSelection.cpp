@@ -14,7 +14,7 @@
 #include "UI/Macros/MacroCardComponent.h"
 
 // ---------------------------------------------------------------------------------------
-// Selection (issue #156)
+// Selection
 // ---------------------------------------------------------------------------------------
 //
 // Gesture contract, chosen so the existing drag-to-pan muscle memory is untouched:
@@ -145,7 +145,7 @@ void GraphEditor::pruneSelection() {
 
 // Removes every selected module as ONE undoable change, so Cmd+Z restores the whole group.
 // Also GraphCanvasHost::deleteSelection() — MacroGroupController's deleteMacroAndMembers/
-// removeMacroPort (FRO77 PR2) select the nodes to remove, then call this through the host.
+// removeMacroPort select the nodes to remove, then call this through the host.
 void GraphEditor::deleteSelection() {
     auto ids = selection.getSelected();
     if (ids.empty())
@@ -157,18 +157,18 @@ void GraphEditor::deleteSelection() {
     // them back one at a time. Deleting a collapsed macro card's members (see
     // deleteMacroAndMembers) flows through here too, so the macro half of the change has to be
     // captured in the SAME undo step as the graph half — recordGraphAndMacroChange, not
-    // recordStructuralChange. updateComponents() prunes `macros` against whatever survives. T154:
-    // this batch can also strand a DIFFERENT macro port that isn't itself being deleted (an
-    // ordinary member was that port's only remaining connection) — macroPortDeletionNeighbors()
-    // captures the candidates before removal, then autoDeleteOrphanedMacroPort sweeps them after.
+    // recordStructuralChange. updateComponents() prunes `macros` against whatever survives. This batch can also strand
+    // a DIFFERENT macro port that isn't itself being deleted (an ordinary member was that port's only remaining
+    // connection) — macroPortDeletionNeighbors() captures the candidates before removal, then
+    // autoDeleteOrphanedMacroPort sweeps them after.
     auto doDelete = [this, ids, &graph] {
         modMatrix.clearRows();
-        const auto portNeighbors = macroController_.macroPortDeletionNeighbors(ids); // T154: capture BEFORE removal
-        // FRO23: capture BEFORE removal too -- walking off each deleted node's own connections to
+        const auto portNeighbors = macroController_.macroPortDeletionNeighbors(ids); // Capture BEFORE removal
+        // Capture BEFORE removal too -- walking off each deleted node's own connections to
         // find its surviving neighbours (and healing a whole run of them in one pass) needs the
         // graph as it stood before any of `ids` was removed.
         const auto healSplices = captureHealSplices(ids);
-        // FRO16 review follow-up: graph.removeNode() below frees each node's processor
+        // graph.removeNode() below frees each node's processor
         // synchronously, same as a full graph-replacing restore -- but nothing here reaches
         // MixerPanelComponent::rebuild() until the NEXT unrelated graph edit (this path's own
         // reconcileTimelineBindingsOnly(), installed on onGraphStructureChanged, deliberately does
@@ -182,10 +182,10 @@ void GraphEditor::deleteSelection() {
             onBeforeDetachAllModuleComponents();
         for (auto id : ids)
             graph.removeNode(id);
-        // FRO23: heal BEFORE the FRO22/T154 sweeps below, so a macro port a heal just gave a fresh
+        // Heal BEFORE the macro-port sweeps below, so a macro port a heal just gave a fresh
         // cable to is no longer orphaned by the time they run.
         healDeletedChain(healSplices);
-        // FRO22: the bounded one-extra-hop-through-an-attenuverter case runs on the same
+        // The bounded one-extra-hop-through-an-attenuverter case runs on the same
         // pre-captured neighbour list, alongside (order doesn't matter — they touch disjoint node
         // kinds) the plain direct-neighbour sweep below.
         for (auto n : portNeighbors)
@@ -309,10 +309,10 @@ void GraphEditor::finalizeSelectionDrag() {
     // selection — a marquee that happens to catch one port widget plus an unrelated module, without the macro's other
     // members — has no such guarantee: the hull (built from non-port members, selected or not) may not have moved by
     // that same delta, desyncing the port from its dock. Re-deriving here (idempotent — a no-op for the whole-macro
-    // case, which already agrees) is the P8-15 fix F2 guard for that gap.
+    // case, which already agrees) is the guard for that gap.
     macroController_.dockMacroPortWidgets();
 
-    // FRO300: a group drag can carry the whole selection outside the visible rect in one gesture.
+    // A group drag can carry the whole selection outside the visible rect in one gesture.
     detail::applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
 
     selectionDragActive = false;
@@ -328,10 +328,10 @@ void GraphEditor::cancelSelectionDrag() {
     selectionDragStartPositions.clear();
 }
 
-// FRO19: cancels a live drag when the component that armed it (ModuleComponent or
+// Cancels a live drag when the component that armed it (ModuleComponent or
 // MacroCardComponent) is destroyed/detached mid-gesture (see docs/layout/selection.md).
 //
-// ---- Live-drag cancellation on component destruction/detach (FRO19) --------------------------
+// ---- Live-drag cancellation on component destruction/detach ----------------------------------
 //
 // ModuleComponent::mouseDown arms selectionDragActive/dragPreviewActive itself and clears them only
 // from its own mouseUp (ModuleComponentInteraction.cpp); MacroCardComponent::mouseDown arms
@@ -351,12 +351,12 @@ void GraphEditor::cancelLiveDragGestures() {
         cancelSelectionDrag();
     if (dragDropController_.isDragPreviewActive())
         dragDropController_.endDragPreview();
-    // FRO40: a component destroyed mid-Cmd/Ctrl-drag would otherwise leave the candidate hull
+    // A component destroyed mid-Cmd/Ctrl-drag would otherwise leave the candidate hull
     // highlighted forever — no-op when nothing was armed, same as the two clears above.
     clearMacroDragCandidate();
 }
 
-// ---- Macro card drag (MacroCardComponent's own ComponentDragger calls these; FRO77 PR2) --------
+// ---- Macro card drag (MacroCardComponent's own ComponentDragger calls these) -------------------
 //
 // Thin wrappers over the plain multi-select drag primitives above — kept on GraphEditor rather
 // than moved into MacroGroupController, since moving them would need four more GraphCanvasHost

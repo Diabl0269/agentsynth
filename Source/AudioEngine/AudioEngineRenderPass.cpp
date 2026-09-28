@@ -30,7 +30,7 @@ struct ScopedRenderPass {
     std::atomic<std::uint64_t>& finished_;
 };
 
-// FRO161: replaces a non-finite sample (NaN or +-Inf) with silence. A raw IEEE-754 bit test, not
+// Replaces a non-finite sample (NaN or +-Inf) with silence. A raw IEEE-754 bit test, not
 // std::isfinite -- an exponent field of all 1s (0x7f800000) means Inf (zero mantissa) or NaN (any
 // nonzero mantissa); every other bit pattern, including -0.0 and every denormal, is finite and
 // must come back untouched. This repo does not build with -ffast-math today (checked), but
@@ -227,10 +227,10 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     else
         renderPass(buffer, midiMessages);
 
-    // FRO324: Audio Output's Right borrows Left, sample-exact, while Right is unpatched --
+    // Audio Output's Right borrows Left, sample-exact, while Right is unpatched --
     // render-time only, never a graph edge (see refreshNormalling()). Right after the render pass
     // (so it sees exactly what the graph produced) and BEFORE the master-mute clear just below (so
-    // muting still silences both legs) and the FRO161 scrub further down (so a borrowed sample is
+    // muting still silences both legs) and the non-finite scrub further down (so a borrowed sample is
     // scrubbed the same as a real one). Only when the graph declares a second output channel --
     // a multichannel output past the first pair never normals.
     if (mainProcessorGraph.getTotalNumOutputChannels() >= 2 && buffer.getNumChannels() >= 2 &&
@@ -242,7 +242,7 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     if (masterMuted_.load(std::memory_order_relaxed))
         buffer.clear();
 
-    // FRO161: the LAST write to `buffer` before either caller hands it to hardware or the host --
+    // The LAST write to `buffer` before either caller hands it to hardware or the host --
     // audioDeviceIOCallbackWithContext's `buffer` aliases the device's own output pointers, and
     // processHostBlock's `buffer` IS the host's buffer, so nothing runs on this data after this
     // returns. Both host modes funnel through renderNextBlock (this function), so this is the one
@@ -320,17 +320,17 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // Direct input read one answer for the whole pass. See refreshSoloGate().
     transport.setMixerSoloActiveForBlock(soloedStripCount_.load(std::memory_order_relaxed) > 0);
 
-    // FRO325: the project's pan law, same once-per-pass carrier rule -- every MONO ChannelStripModule
+    // The project's pan law, same once-per-pass carrier rule -- every MONO ChannelStripModule
     // reads one answer for the whole pass. See setMixerPanLaw().
     transport.setMixerPanLawCompensatedForBlock(mixerPanLaw_.load(std::memory_order_relaxed) ==
                                                 synth::MixerPanLaw::Compensated);
 
     mainProcessorGraph.processBlock(buffer, midiMessages);
 
-    // FRO148 (docs/mixer/meters.md): the output peak the Master column reads once Master has inserts. Latched HERE --
-    // straight after the graph, before the metronome click -- so it is exactly what left the master chain and never
-    // includes the click. One store per pass (a sliced pass stores once per slice; the latch keeps the loudest), no
-    // allocation, no lock. Right falls back to left for a mono buffer.
+    // The output peak the Master column reads once Master has inserts. Latched HERE -- straight after the graph,
+    // before the metronome click -- so it is exactly what left the master chain and never includes the click. One
+    // store per pass (a sliced pass stores once per slice; the latch keeps the loudest), no allocation, no lock.
+    // Right falls back to left for a mono buffer (see docs/mixer/meters.md).
     if (const int numChannels = buffer.getNumChannels(); numChannels > 0 && buffer.getNumSamples() > 0) {
         const int numSamples = buffer.getNumSamples();
         const float left = buffer.getMagnitude(0, 0, numSamples);

@@ -2,7 +2,7 @@
 #include "MacroPortFlowTestHelpers.h"
 #include "Modules/FX/CompressorModule.h"
 
-// Topic: FRO234 — createMacroPortFromDroppedCable (a cable dropped on a collapsed card) and
+// Topic: createMacroPortFromDroppedCable (a cable dropped on a collapsed card) and
 // maybeAutoCreateMacroPortsForDrag (a cable dragged across an expanded hull) infer a new macro
 // port's shape from the dragged cable's OWN jack fan (mirroring resolvePolyLink/getJackTargets)
 // instead of always Mono. A single dragged jack can only ever produce Mono, StereoCollapsed (one
@@ -227,7 +227,7 @@ TEST(MacroPortFlow, DragAcrossHullFromAPolyCvMemberCreatesAPolyPort) {
         EXPECT_TRUE(hasConnection(engine, portId, v, extPoly, v)) << "voice " << v << " must be wired";
 }
 
-// FRO317 alignment: a cable dragged from a collapsed Compressor "Key" jack (PortRole::Sidechain,
+// Sidechain alignment: a cable dragged from a collapsed Compressor "Key" jack (PortRole::Sidechain,
 // span 2) and dropped on a collapsed card infers the same one-jack StereoCollapsed shape
 // buildMacroPortCrossingPlan gives a key crossing at grouping time, never Poly-2.
 TEST(MacroPortFlow, CableDropFromACollapsedKeyJackCreatesAStereoCollapsedPort) {

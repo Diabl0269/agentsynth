@@ -19,8 +19,8 @@ class AppUndoManager;
 class AudioEngine;
 class GraphEditor;
 
-// MixerMasterColumn.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): Master's column -- fader/mute/
-// meter/dB readout on MasterModule's own gain/mute params, no pan, no solo. FRO148: plus an insert list like a
+// MixerMasterColumn.h (docs/mixer/panel.md#what-the-mixer-shows): Master's column -- fader/mute/
+// meter/dB readout on MasterModule's own gain/mute params, no pan, no solo. Plus an insert list like a
 // strip's -- the post-fader chain between Master and the Rec Tap / Audio Output (docs/mixer/mixer.md#master-inserts).
 namespace synth::ui {
 
@@ -28,7 +28,7 @@ class MixerMasterColumn : public juce::Component {
 public:
     MixerMasterColumn();
 
-    /** FRO336: `meterReader` defaults to the pre-existing `MeterReader::Mixer` slot -- pass
+    /** `meterReader` defaults to the pre-existing `MeterReader::Mixer` slot -- pass
      *  `MeterReader::MixerMirror` when this column belongs to the Mixer's optional second live view
      *  (MixerMirrorController), so its own meter poll never races the docked view's for the same
      *  consume-on-read latch slot (Source/Mixer/PeakMeterLatch.h). */
@@ -36,28 +36,28 @@ public:
                    GraphEditor& graphEditor, AudioEngine& audioEngine,
                    synth::MeterReader meterReader = synth::MeterReader::Mixer);
     void setNodeId(juce::AudioProcessorGraph::NodeID nodeId);
-    /** FRO148: binds to `column` (Kind::Master) -- setNodeId(column.nodeId) plus the insert list's rows. Call after
+    /** Binds to `column` (Kind::Master) -- setNodeId(column.nodeId) plus the insert list's rows. Call after
      *  configure(); the column's chain fields come straight off MixerSnapshot. */
     void setColumn(const synth::MixerColumn& column);
-    /** FRO133: mirrors MixerColumnComponent::getNodeId() -- lets MixerPanelComponent::setMidiLearnArmed()
+    /** Mirrors MixerColumnComponent::getNodeId() -- lets MixerPanelComponent::setMidiLearnArmed()
      *  find Master by nodeId the same way it finds a strip column. */
     juce::AudioProcessorGraph::NodeID getNodeId() const noexcept { return nodeId_; }
 
-    /** FRO11: same contract as MixerColumnComponent::unbindFromGraph() -- unlike a strip column,
+    /** Same contract as MixerColumnComponent::unbindFromGraph() -- unlike a strip column,
      *  this component survives a MixerPanelComponent::rebuild() (it's a persistent member, not
      *  recreated), so without this its fader would otherwise stay bound to Master's OLD gain param
      *  across a graph-replacing restore until setNodeId() ran again, which is exactly the freed-
-     *  parameter window the FRO11 crash needs. */
+     *  parameter window the pre-restore crash needs. */
     void unbindFromGraph();
 
-    /** FRO148: the level LEAVING the master chain (AudioEngine::takeOutputMeterPeak(MeterReader::Mixer, leg)) --
+    /** The level LEAVING the master chain (AudioEngine::takeOutputMeterPeak(MeterReader::Mixer, leg)) --
      *  what the meter and clip/peak readout read once Master has >= 1 insert. Null falls back to Master's own
      *  pre-insert latch. Survives unbindFromGraph(): it points at the engine, not into the graph. */
     std::function<float(int leg)> outputPeakProvider;
     /** Forwarded from the insert list -- see MixerInsertList::onEditOnCanvas / onMutated. */
     std::function<void(const juce::String&)> onEditOnCanvas;
     std::function<void()> onMutated;
-    /** FRO336: fired at the end of toggleMuted()/setPanLaw() -- a real interactive change only,
+    /** Fired at the end of toggleMuted()/setPanLaw() -- a real interactive change only,
      *  same contract as MixerColumnComponent::onLiveStateChanged (see that member's comment). */
     std::function<void()> onLiveStateChanged;
 
@@ -70,22 +70,22 @@ public:
     MixerMeterReadout& getMeterReadoutForTest() noexcept { return meterReadout_; }
     void resetMeterReadout() { meterReadout_.reset(); }
 
-    /** FRO146: sibling of MixerColumnComponent::onResetAllMetersRequested -- fires on an
+    /** Sibling of MixerColumnComponent::onResetAllMetersRequested -- fires on an
      *  Option/Alt-click of Master's own readout. */
     std::function<void()> onResetAllMetersRequested;
 
-    /** FRO18: toggles Master's mute through the same undo bracket the M button's onClick already
+    /** Toggles Master's mute through the same undo bracket the M button's onClick already
      *  used -- MixerPanelComponent's keyPressed calls this directly, same seam as
      *  MixerColumnComponent::toggleMuted(). A no-op after unbindFromGraph(). */
     void toggleMuted();
 
-    /** FRO18: the fader nudged one undo step, or false when nothing is bound. */
+    /** The fader nudged one undo step, or false when nothing is bound. */
     bool nudgeFader(float deltaDb) { return fader_.nudge(deltaDb); }
 
     void setKeyboardFocused(bool focused);
     bool isKeyboardFocusedForTest() const noexcept { return keyboardFocused_; }
 
-    /** FRO18 review fix: same contract as MixerColumnComponent::grabAccessibilityFocus() -- moves
+    /** Same contract as MixerColumnComponent::grabAccessibilityFocus() -- moves
      *  VoiceOver's cursor to Master's own fader when Master becomes the keyboard-walked focus. */
     void grabAccessibilityFocus() { fader_.grabAccessibilityFocus(); }
     juce::Component& getAccessibilityFocusTargetForTest() noexcept { return fader_.getSlider(); }
@@ -95,14 +95,14 @@ public:
     void resized() override;
     void mouseDown(const juce::MouseEvent& event) override;
 
-    // ---- MIDI Learn (FRO133 -- Master has exactly one learnable control, its fader/"gain" param;
+    // ---- MIDI Learn (Master has exactly one learnable control, its fader/"gain" param;
     // see MixerColumnComponent's sibling pattern for the coverage-table entries with more than
     // one) ----
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const;
     bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const;
-    /** FRO135: the fader, for the pick-target overlay. */
+    /** The fader, for the pick-target overlay. */
     void collectPickCandidates(std::vector<PickCandidate>& out) const;
-    /** FRO256: mirrors MixerColumnComponent::getMidiLearnArmedRepaintCountForTest -- see that
+    /** Mirrors MixerColumnComponent::getMidiLearnArmedRepaintCountForTest -- see that
      *  method's own comment on why this exists. */
     int getMidiLearnArmedRepaintCountForTest() const noexcept { return midiLearnArmedRepaintCount_; }
     /** Arms/clears (empty id) the breathing outline. Message thread only -- called by
@@ -115,9 +115,8 @@ public:
             hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
     }
 
-    /** FRO325 (docs/mixer/mixer.md#pan-law): the project's pan-law control, next to the mute
-     *  button -- the mixer has no other project-settings surface (see the ticket's own note on
-     *  where this was added). */
+    /** The project's pan-law control, next to the mute button -- the mixer has no other
+     *  project-settings surface (see docs/mixer/mixer.md#pan-law). */
     juce::TextButton& getPanLawButtonForTest() noexcept { return panLawButton_; }
     /** Same test-seam idiom as setShowContextMenuHookForTest, for the pan-law button's own menu. */
     void setShowPanLawMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
@@ -125,7 +124,7 @@ public:
             hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
     }
 
-    /** FRO336: the cheap per-strip refresh for Master -- mute button + pan-law label, no rebuild.
+    /** The cheap per-strip refresh for Master -- mute button + pan-law label, no rebuild.
      *  Called on this instance directly by MixerPanelComponent::refreshLiveMixerVisuals(); see that
      *  method's comment for who calls it and why. */
     void refreshLiveVisuals();
@@ -137,7 +136,7 @@ private:
 
     void refreshMuteAccessibility();
     void refreshMidiLearnBadges();
-    /** FRO256: mirrors MixerColumnComponent::repaintArmedMidiLearnOutline -- called from
+    /** Mirrors MixerColumnComponent::repaintArmedMidiLearnOutline -- called from
      *  refreshMeter()'s existing 10 Hz tick so the breathing outline actually animates. */
     void repaintArmedMidiLearnOutline();
     void paintMidiLearnOverlays(juce::Graphics& g);
@@ -145,26 +144,26 @@ private:
     juce::AudioProcessorGraph* graph_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     GraphEditor* graphEditor_ = nullptr;
-    AudioEngine* audioEngine_ = nullptr; // FRO325 -- see setPanLaw()
+    AudioEngine* audioEngine_ = nullptr; // See setPanLaw()
     juce::AudioProcessorGraph::NodeID nodeId_;
 
-    // FRO133: the fader's bound param (paramID "gain") -- null when nothing is bound, same
+    // The fader's bound param (paramID "gain") -- null when nothing is bound, same
     // lifetime contract as fader_'s own internal param_ (MixerFader::isBoundForTest()). Cleared by
     // unbindFromGraph() before the graph-replacing mutation frees it.
     juce::RangedAudioParameter* midiLearnableFaderParam_ = nullptr;
     bool midiLearnBadgeMapped_ = false;
     juce::String midiLearnArmedParamId_;
     double midiLearnArmedSinceMs_ = 0.0;
-    // FRO256: backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
+    // Backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
     int midiLearnArmedRepaintCount_ = 0;
     std::function<void(juce::PopupMenu&)> showContextMenuHook_ = [](juce::PopupMenu& m) {
         m.showMenuAsync(juce::PopupMenu::Options());
     };
 
-    // FRO148: true once setColumn() saw >= 1 insert -- switches the meter to outputPeakProvider.
+    // True once setColumn() saw >= 1 insert -- switches the meter to outputPeakProvider.
     bool hasInserts_ = false;
     float takeMeterPeak(int leg);
-    // FRO336: which consume-on-read latch slot this instance polls -- see configure()'s own comment.
+    // Which consume-on-read latch slot this instance polls -- see configure()'s own comment.
     synth::MeterReader meterReader_ = synth::MeterReader::Mixer;
 
     MixerColumnHeader header_;
@@ -173,7 +172,7 @@ private:
     MixerMeter meter_;
     MixerMeterReadout meterReadout_;
     juce::TextButton muteButton_{"M"};
-    // FRO325: labelled by refreshPanLawButton() ("Pan: Balance" / "Pan: Comp.") -- see the class
+    // Labelled by refreshPanLawButton() ("Pan: Balance" / "Pan: Comp.") -- see the class
     // comment on where this lives and why.
     juce::TextButton panLawButton_;
     std::function<void(juce::PopupMenu&)> showPanLawMenuHook_ = [](juce::PopupMenu& m) {

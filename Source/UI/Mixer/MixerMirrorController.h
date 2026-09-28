@@ -10,7 +10,7 @@
 
 namespace synth::ui {
 
-// MixerMirrorController.h -- FRO336 (docs/mixer/panel.md#placement-and-detachable-windows): owns
+// MixerMirrorController.h (docs/mixer/panel.md#placement-and-detachable-windows): owns
 // the OPTIONAL second live Mixer view the "detachedPanelBothPlaces" preference adds. Unlike a
 // normal detach (DetachablePanelHost reparents the SAME panel instance between its dock slot and a
 // window -- a juce::Component has exactly one parent, so that mechanism can only ever show a panel
@@ -91,7 +91,7 @@ public:
         if (mirror_)
             mirror_->refreshMeters();
     }
-    /** FRO336: the cheap per-strip refresh (no rebuild) BottomDockComponent's own mixer_'s
+    /** The cheap per-strip refresh (no rebuild) BottomDockComponent's own mixer_'s
      *  onLiveMixerStateChanged drives this with -- see the class comment. */
     void refreshLiveVisualsIfOpen() {
         if (mirror_)

@@ -64,8 +64,8 @@ TEST_F(RemoteProviderTest, MapsTooManyRequestsToRateLimitAndReadsRetryAfter) {
     EXPECT_EQ(result.error.retryAfterSeconds, 45);
 }
 
-// P4-3's monthly quota (enforce-quota.ts) answers 429 QUOTA_EXCEEDED — this must map to Quota
-// (the P4-4 upgrade-bubble UI keys off this kind), not the generic RateLimit above.
+// the monthly quota (enforce-quota.ts) answers 429 QUOTA_EXCEEDED — this must map to Quota
+// (the upgrade-bubble UI keys off this kind), not the generic RateLimit above.
 TEST_F(RemoteProviderTest, MapsQuotaExceeded429ToQuotaError) {
     auto performer = [](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
@@ -138,7 +138,7 @@ TEST_F(RemoteProviderTest, ConversationIdHeaderCapturedFromResponseIntoAIRespons
     EXPECT_EQ(result.conversationId, juce::String("conv-server-issued"));
 }
 
-// P6-9's sibling to the test above: a response's x-message-id header is surfaced on
+// the sibling to the test above: a response's x-message-id header is surfaced on
 // AIResponse::messageId, present under the exact same server-side condition (Pro plan,
 // persistence succeeded) as x-conversation-id.
 TEST_F(RemoteProviderTest, MessageIdHeaderCapturedFromResponseIntoAIResponse) {
@@ -165,7 +165,7 @@ TEST_F(RemoteProviderTest, MessageIdHeaderCapturedFromResponseIntoAIResponse) {
     EXPECT_EQ(result.messageId, juce::String("msg-server-issued"));
 }
 
-// The free-plan case (P6-8): the server sends no header at all when it didn't persist. Must not
+// The free-plan case: the server sends no header at all when it didn't persist. Must not
 // be confused with an empty-but-present header — both collapse to an empty conversationId, which
 // is exactly the "nothing to resend" state AIIntegrationService's capture gate checks for.
 TEST_F(RemoteProviderTest, MissingConversationIdHeaderLeavesAIResponseFieldEmpty) {

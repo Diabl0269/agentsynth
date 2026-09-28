@@ -13,7 +13,7 @@ public:
     // Audio L: ch0 in mono, ch0-7 in poly — both as input and as output, unchanged since the
     // module was mono. Shared CV: ch1-3 (mono) / ch8-10 (poly), also unchanged.
     //
-    // Audio R (#219) is a dedicated block at kRightBase, again in AND out: this is a processor, so
+    // Audio R is a dedicated block at kRightBase, again in AND out: this is a processor, so
     // the right leg needs an input jack as well as an output. R deliberately does NOT live on ch1
     // the way an FX Dual I/O pair does — ch1 is the Cutoff CV input, and moving it would break
     // every saved patch that modulates cutoff.
@@ -49,7 +49,7 @@ public:
                          juce::StringArray{"LPF24", "LPF12", "HPF24", "HPF12", "BPF24", "BPF12", "Notch"}, 0));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         // Dual I/O comes from the ctor's StereoAudio::Declared above (defaults to split: this module
-        // filters in stereo). Collapsed, its jack layout is exactly what it was before #219 — Audio,
+        // filters in stereo). Collapsed, its jack layout is the plain mono one — Audio,
         // Cutoff, Resonance, Drive.
         addOutputLevelParameter();
         addMuteParameter();
@@ -83,7 +83,7 @@ public:
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& /*midiMessages*/) override {
-        // FRO324: borrow each voice's Left into its matching Right (kRightBase + voice), sample-
+        // Borrow each voice's Left into its matching Right (kRightBase + voice), sample-
         // exact, while Dual I/O is split and only Left is patched. Before the bypass/mute branches
         // below so both see a filled Right leg exactly as if the user had cabled it.
         applyLeftRightNormalling(buffer, polyParam->get() ? MAX_VOICES : 1);
@@ -155,7 +155,7 @@ public:
     int getVisibleInputPortCount() const override { return splitAudioJackCount() + kNumCVInputs; }
     int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
     int rightAudioLegChannel() const override { return kRightBase; }
-    // FRO324: Audio L/R are read in place at ch0(-7)/kRightBase(+) above -- a genuine stereo
+    // Audio L/R are read in place at ch0(-7)/kRightBase(+) above -- a genuine stereo
     // pair, eligible for render-time L->R normalling.
     bool hasStereoAudioInputPair() const override { return true; }
     // Pure audio/CV processor — processBlock's midiMessages parameter is unused.
@@ -325,7 +325,7 @@ private:
         }
 
         // Right leg: same coefficients, its own filter state. Skipped entirely when nothing is
-        // patched into Audio R, so a mono insert costs exactly what it did before #219.
+        // patched into Audio R, so a mono insert pays for one leg only.
         processRightLegMono(buffer, numSamples, numChannels);
     }
 

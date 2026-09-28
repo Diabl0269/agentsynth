@@ -1,15 +1,15 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MacroPortFlowTestHelpers.h"
 
-// Topic: T148 — auto-creating a macro port when a dragged cable crosses an EXPANDED macro's
+// Topic: auto-creating a macro port when a dragged cable crosses an EXPANDED macro's
 // boundary (jack-to-jack, both endpoints real ModuleComponents), including the mod-CV
 // attenuverter-wrapping case and the auto-create-on-drag preference toggle.
 
 // ============================================================================
-// T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): auto-create a macro port when a dragged cable crosses an
-// EXPANDED macro's boundary — the counterpart to the collapsed-card drop convenience above, which
-// only fires when there is no jack under the cursor. All jack-to-jack, so both endpoints are real,
-// visible ModuleComponents this time (no MacroCardComponent involved).
+// Auto-create a macro port when a dragged cable crosses an EXPANDED macro's boundary — the
+// counterpart to the collapsed-card drop convenience above, which only fires when there is no jack
+// under the cursor. All jack-to-jack, so both endpoints are real, visible ModuleComponents this
+// time (no MacroCardComponent involved) (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
 // ============================================================================
 
 TEST(MacroPortFlow, DraggingFromAnExpandedMacroMemberToAnExternalModuleAutoCreatesAnOutletAndWiresBothLegs) {
@@ -239,7 +239,7 @@ TEST(MacroPortFlow,
     editor.beginConnectionDrag(lfoComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
     editor.endConnectionDrag(knobPoint);
 
-    // T155: a mod-routed drag now mints a port too, exactly like a plain audio drag — TWO new
+    // A mod-routed drag now mints a port too, exactly like a plain audio drag — TWO new
     // nodes, not one: the auto-created MacroOutletModule AND the hidden AttenuverterModule that
     // connectPorts()'s own CV detection wraps the port->realDestination leg in.
     EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 2) << "one port node, one attenuverter node";

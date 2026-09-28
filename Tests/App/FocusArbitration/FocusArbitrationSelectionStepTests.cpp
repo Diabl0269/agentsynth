@@ -1,4 +1,4 @@
-// Concern: FRO278's select next/previous module and track commands, dispatched through the real
+// Concern: the select next/previous module and track commands, dispatched through the real
 // command manager. Deliberately NOT routed by resolveEditSurface(): each pair works the same
 // wherever focus is, which these tests pin by forcing the "wrong" surface first.
 #include "FocusArbitrationTestFixture.h"

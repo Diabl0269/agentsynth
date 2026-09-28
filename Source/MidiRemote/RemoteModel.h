@@ -19,27 +19,27 @@ namespace synth {
 
 enum class ControlKind { knob, fader, button, pad, encoder, wheel };
 
-// nrpn (FRO140): a 14-bit parameter address (CC 99/98) whose value arrives as data-entry CCs 6/38.
-// MessageSpec::number is the ADDRESS (0..16383), so an NRPN key can never collide with CC n.
-// mmc (FRO330, docs/control/midi-remote.md#mmc-messages): a MIDI Machine Control SysEx command
-// (F0 7F <device-id> 06 <command> F7) -- some hardware (e.g. the Arturia BeatStep) sends this for
-// its factory Play/Stop instead of a CC or note. MessageSpec::number is the COMMAND byte (1 stop,
-// 2 play, 6 record strobe -- MMA MMC spec); `channel` is always 0 (MMC has no MIDI channel).
+// nrpn: a 14-bit parameter address (CC 99/98) whose value arrives as data-entry CCs 6/38.
+// MessageSpec::number is the ADDRESS (0..16383), so an NRPN key can never collide with CC n. mmc: a
+// MIDI Machine Control SysEx command (F0 7F <device-id> 06 <command> F7) -- some hardware (e.g. the
+// Arturia BeatStep) sends this for its factory Play/Stop instead of a CC or note.
+// MessageSpec::number is the COMMAND byte (1 stop, 2 play, 6 record strobe -- MMA MMC spec);
+// `channel` is always 0 (MMC has no MIDI channel; see docs/control/midi-remote.md#mmc-messages).
 enum class MessageType { cc, note, pitchBend, channelPressure, programChange, nrpn, mmc };
 
-// MMC (FRO330) command bytes this app recognises, per the MMA MIDI Machine Control spec -- the
-// values MessageSpec::number takes when type == mmc. Only the transport verbs a template can bind
-// today; an unrecognised command byte is still a legal mmc MessageSpec (e.g. hand-authored JSON),
-// it just never matches a hardware message no BeatStep-like device sends.
+// MMC command bytes this app recognises, per the MMA MIDI Machine Control spec -- the values
+// MessageSpec::number takes when type == mmc. Only the transport verbs a template can bind today;
+// an unrecognised command byte is still a legal mmc MessageSpec (e.g. hand-authored JSON), it just
+// never matches a hardware message no BeatStep-like device sends.
 inline constexpr int kMmcStop = 0x01;
 inline constexpr int kMmcPlay = 0x02;
 inline constexpr int kMmcRecordStrobe = 0x06;
 
-// abs14 / abs14LsbFirst (FRO140) are 14-bit absolute values carried by TWO messages: CC n (MSB) with
-// CC n+32 (LSB) for a cc control (n 0..31), or data-entry CC 6 / CC 38 for an nrpn control. The
-// value is committed when the SECOND half arrives -- abs14 waits for the LSB, abs14LsbFirst for the
-// MSB -- and the other half is the last one seen. On an nrpn control abs7 means "CC 6 only".
-// Appended after the relative encodings: the inspector's combo ids are declaration order.
+// abs14 / abs14LsbFirst are 14-bit absolute values carried by TWO messages: CC n (MSB) with CC n+32
+// (LSB) for a cc control (n 0..31), or data-entry CC 6 / CC 38 for an nrpn control. The value is
+// committed when the SECOND half arrives -- abs14 waits for the LSB, abs14LsbFirst for the MSB --
+// and the other half is the last one seen. On an nrpn control abs7 means "CC 6 only". Appended
+// after the relative encodings: the inspector's combo ids are declaration order.
 enum class Encoding { abs7, relTwos, relBinOffset, relSignMag, abs14, abs14LsbFirst };
 
 /** MSB CC n pairs with LSB CC n + kPairedLsbOffset (MIDI 1.0 CC 0..31 / 32..63). */
@@ -61,27 +61,28 @@ enum class ButtonMode { momentary, toggle };
 // useDefault instead (docs/control/midi-remote.md#takeover / docs/control/midi-remote.md#data-model).
 enum class Takeover { jump, pickup, scale, useDefault };
 
-// FRO253 (docs/control/midi-remote.md#node-command-targets): what a Target::NodeCommand asks the
-// app-layer invoker to do to one graph node. toggleSolo is the only member today (the mixer
-// column's Solo button, which is engine state -- ChannelStripModule::soloed_ -- not a
-// juce::RangedAudioParameter, so it has no Target::Parameter to point at); a second node command
-// extends this enum rather than growing Target with a fourth kind.
+// What a Target::NodeCommand asks the app-layer invoker to do to one graph node. toggleSolo is the
+// only member today (the mixer column's Solo button, which is engine state --
+// ChannelStripModule::soloed_ -- not a juce::RangedAudioParameter, so it has no Target::Parameter
+// to point at); a second node command extends this enum rather than growing Target with a fourth
+// kind (see docs/control/midi-remote.md#node-command-targets).
 enum class NodeCommandKind { toggleSolo };
 
-// FRO236 (docs/control/midi-remote.md#continuous-targets): what a Target::Continuous drives. Unlike
-// a parameter/action/nodeCommand target these are never resolved against a graph node by uuid --
-// bpm and playhead reach the app layer's transport through RemoteActionInvoker's continuous
-// methods, and masterVolume resolves through a separate injected ContinuousParameterLookup (Core
-// must not include MasterModule.h) straight to the SAME juce::AudioProcessorParameter* the mixer's
-// own master fader binds, so it reuses applyToParameter/RemoteEngineFeedback.cpp verbatim.
+// What a Target::Continuous drives. Unlike a parameter/action/nodeCommand target these are never
+// resolved against a graph node by uuid -- bpm and playhead reach the app layer's transport through
+// RemoteActionInvoker's continuous methods, and masterVolume resolves through a separate injected
+// ContinuousParameterLookup (Core must not include MasterModule.h) straight to the SAME
+// juce::AudioProcessorParameter* the mixer's own master fader binds, so it reuses
+// applyToParameter/RemoteEngineFeedback.cpp verbatim (see
+// docs/control/midi-remote.md#continuous-targets).
 enum class ContinuousTargetKind { bpm, playhead, masterVolume };
 
-// FRO142 (docs/control/midi-remote.md#pages): what a Target::Page button asks the engine to do to
-// the ACTIVE PAGE of the profile that owns the control that fired it (never routed through
-// ShortcutManager / ActionCommandLookup -- this is engine-internal, unlike Kind::action). `go`
-// is the only command that reads Target::Page::page; next/previous wrap around the profile's
-// effective page count (ControllerProfile::pageCount, widened by the highest `page` any project
-// assignment on that profile uses).
+// What a Target::Page button asks the engine to do to the ACTIVE PAGE of the profile that owns the
+// control that fired it (never routed through ShortcutManager / ActionCommandLookup -- this is
+// engine-internal, unlike Kind::action). `go` is the only command that reads Target::Page::page;
+// next/previous wrap around the profile's effective page count (ControllerProfile::pageCount,
+// widened by the highest `page` any project assignment on that profile uses) (see
+// docs/control/midi-remote.md#pages).
 enum class PageCommand { next, previous, go };
 
 // -- MessageSpec ----------------------------------------------------------------------------------
@@ -132,12 +133,11 @@ struct Control {
         int row = 0;
     } layout;
 
-    // FRO141 (docs/control/midi-remote.md#focus-bank): membership in the controller setup's "focus
-    // bank" -- the set of controls that follow the canvas selection instead of holding a fixed
-    // mapping. This is the only thing about the focus bank that persists; the CURRENT binding
-    // (which control drives which parameter right now) never does -- see RemoteEngine::
-    // setTransientAssignments(). Written to JSON only when true, so a pre-FRO141 profile round-trips
-    // byte-identical.
+    // Membership in the controller setup's "focus bank" -- the set of controls that follow the
+    // canvas selection instead of holding a fixed mapping. This is the only thing about the focus
+    // bank that persists; the CURRENT binding (which control drives which parameter right now)
+    // never does -- see RemoteEngine:: setTransientAssignments(). Written to JSON only when true,
+    // so an older profile round-trips byte-identical (see docs/control/midi-remote.md#focus-bank).
     bool focusBank = false;
 
     juce::var toVar() const;
@@ -166,18 +166,18 @@ struct Target {
     struct Action {
         juce::String actionId; // ShortcutManager / juce::CommandID-backed action id
     };
-    // FRO253: a graph node this doesn't resolve to a parameter for -- see NodeCommandKind's own
-    // comment. Resolved by nodeUuid, exactly like Parameter::nodeUuid.
+    // A graph node this doesn't resolve to a parameter for -- see NodeCommandKind's own comment.
+    // Resolved by nodeUuid, exactly like Parameter::nodeUuid.
     struct NodeCommand {
         juce::String nodeUuid;
         NodeCommandKind command = NodeCommandKind::toggleSolo;
     };
-    // FRO236: no nodeUuid -- see ContinuousTargetKind's own comment on how each kind resolves.
+    // No nodeUuid -- see ContinuousTargetKind's own comment on how each kind resolves.
     struct Continuous {
         ContinuousTargetKind kind = ContinuousTargetKind::bpm;
     };
-    // FRO142 (docs/control/midi-remote.md#pages): a button-like, engine-internal target -- see
-    // PageCommand's own comment. `page` is 1-based and only meaningful for command == go.
+    // A button-like, engine-internal target -- see PageCommand's own comment. `page` is 1-based and
+    // only meaningful for command == go (see docs/control/midi-remote.md#pages).
     struct Page {
         PageCommand command = PageCommand::next;
         int page = 1;
@@ -234,10 +234,10 @@ struct Assignment {
 
     bool enabled = true;
 
-    // FRO142 (docs/control/midi-remote.md#pages): 1-based. Meaningful for a PROJECT assignment
-    // only (MidiRemoteProjectDoc::assignments) -- a GLOBAL profile action (ControllerProfile::actions)
-    // ignores it entirely, since an action is active on every page. Missing on load == 1, so every
-    // pre-FRO142 document round-trips unchanged.
+    // 1-based. Meaningful for a PROJECT assignment only (MidiRemoteProjectDoc::assignments) -- a
+    // GLOBAL profile action (ControllerProfile::actions) ignores it entirely, since an action is
+    // active on every page. Missing on load == 1, so every older document round-trips unchanged
+    // (see docs/control/midi-remote.md#pages).
     int page = 1;
 
     juce::var toVar() const;
@@ -260,10 +260,10 @@ struct ControllerProfile {
     };
     Input input;
 
-    // FRO139 (docs/control/midi-remote.md#controller-feedback): RemoteEngine's drain sends every
-    // mapped parameter's value back out to this device, picked per-controller from the panel's
-    // Controllers-list right-click rather than the dead Audio-tab MIDI-output selector. A nullable
-    // struct: hasOutput == false means "no output device set" and `output` itself is inert.
+    // RemoteEngine's drain sends every mapped parameter's value back out to this device, picked
+    // per-controller from the panel's Controllers-list right-click rather than the dead Audio-tab
+    // MIDI-output selector. A nullable struct: hasOutput == false means "no output device set" and
+    // `output` itself is inert (see docs/control/midi-remote.md#controller-feedback).
     bool hasOutput = false;
     Input output;
 
@@ -271,14 +271,15 @@ struct ControllerProfile {
     // "also pass mapped messages to the patch" toggle, default off
     bool passMapped = false;
 
-    // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): raw MIDI bytes to send once when the
-    // app opens this profile's device, and once when it lets go of it. Sent to whichever MIDI OUTPUT
-    // resolveHandshakeOutput() (ControllerHandshake.h) resolves for this profile's own `input` --
-    // never necessarily a device sharing `input`'s own identifier/name (see that function's doc
-    // comment and RemoteModelJson.cpp's own note on `port` for why). `port`: an optional hint (e.g.
-    // "DAW") naming the port word this handshake needs when a device's input/output ports are named
-    // asymmetrically -- empty for a device with no such ambiguity. Empty (both byte vectors and
-    // `port`) means "no handshake" -- a pre-FRO339 profile round-trips byte-identical.
+    // Raw MIDI bytes to send once when the app opens this profile's device, and once when it lets
+    // go of it. Sent to whichever MIDI OUTPUT resolveHandshakeOutput() (ControllerHandshake.h)
+    // resolves for this profile's own `input` -- never necessarily a device sharing `input`'s own
+    // identifier/name (see that function's doc comment and RemoteModelJson.cpp's own note on `port`
+    // for why). `port`: an optional hint (e.g. "DAW") naming the port word this handshake needs
+    // when a device's input/output ports are named asymmetrically -- empty for a device with no
+    // such ambiguity. Empty (both byte vectors and `port`) means "no handshake" -- an older profile
+    // round-trips byte-identical (see
+    // docs/control/midi-remote-device-handshake.md#device-handshake).
     struct Handshake {
         std::vector<std::uint8_t> openMessage;
         std::vector<std::uint8_t> closeMessage;
@@ -288,17 +289,17 @@ struct ControllerProfile {
     Handshake handshake;
 
     std::vector<Control> controls;
-    // GLOBAL assignments: target.kind == action, continuous, or page only (FRO236: a continuous
-    // target means the same thing in every project -- there is exactly one transport/master
-    // volume -- exactly like an action, so it lives here rather than in a project's
-    // MidiRemoteProjectDoc; FRO142: a page target is likewise engine-internal and active on every
-    // page, so it belongs beside the other GLOBAL action kinds).
+    // GLOBAL assignments: target.kind == action, continuous, or page only (a continuous target
+    // means the same thing in every project -- there is exactly one transport/master volume --
+    // exactly like an action, so it lives here rather than in a project's MidiRemoteProjectDoc; a
+    // page target is likewise engine-internal and active on every page, so it belongs beside the
+    // other GLOBAL action kinds).
     std::vector<Assignment> actions;
 
-    // FRO142 (docs/control/midi-remote.md#pages): how many mapping pages this controller has, 1..16.
-    // A project assignment's own `page` (Assignment::page) may exceed this -- see
-    // RemoteEngine::getEffectivePageCount -- so this is a floor, not a hard cap on what a project
-    // can reference.
+    // How many mapping pages this controller has, 1..16. A project assignment's own `page`
+    // (Assignment::page) may exceed this -- see RemoteEngine::getEffectivePageCount -- so this is a
+    // floor, not a hard cap on what a project can reference (see
+    // docs/control/midi-remote.md#pages).
     int pageCount = 1;
 
     int version = 1;
@@ -320,8 +321,8 @@ struct ControllerProfile {
 class MidiRemoteProjectDoc {
 public:
     int version = 1;
-    // FRO253/FRO236: a project assignment is never an action or a continuous target (both are
-    // GLOBAL, ControllerProfile::actions only) -- parameter and nodeCommand targets both live here.
+    // A project assignment is never an action or a continuous target (both are GLOBAL,
+    // ControllerProfile::actions only) -- parameter and nodeCommand targets both live here.
     std::vector<Assignment> assignments;
 
     struct ControllerRef {
@@ -339,9 +340,9 @@ public:
      *  exactly 1) rejects the WHOLE load and leaves `this` completely untouched. */
     bool fromVar(const juce::var& state);
 
-    // FRO296 (docs/mixer/sends-and-buses.md#reordering-sends): swaps the paramId of every
-    // parameter assignment on (nodeUuid, paramA)/(nodeUuid, paramB), in place. Mirrors
-    // TimelineDoc::swapLaneParams; returns whether anything changed.
+    // Swaps the paramId of every parameter assignment on (nodeUuid, paramA)/(nodeUuid, paramB), in
+    // place. Mirrors TimelineDoc::swapLaneParams; returns whether anything changed (see
+    // docs/mixer/sends-and-buses.md#reordering-sends).
     bool swapParameterAssignments(const juce::String& nodeUuid, const juce::String& paramA, const juce::String& paramB);
 };
 

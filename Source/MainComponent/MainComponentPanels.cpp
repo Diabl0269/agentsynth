@@ -54,7 +54,7 @@ void MainComponent::saveRecentProjects() {
     }
 }
 
-/** The status-bar message both scan triggers post per candidate — factored out (FRO105) so the
+/** The status-bar message both scan triggers post per candidate — factored out so the
  *  eager startup scan, which previously ran silently, reports progress exactly like the sidebar's
  *  manual row always has. */
 synth::PluginScanService::ProgressFn MainComponent::makePluginScanProgressReporter() {
@@ -94,7 +94,7 @@ void MainComponent::startPluginScan() {
     getPluginScanService().scanAsync(synth::hostedPluginFormatNames(), makePluginScanProgressReporter(), nullptr);
 }
 
-/** FRO44: the eager-population entry point, called ONCE by `Main.cpp` right after the real
+/** The eager-population entry point, called ONCE by `Main.cpp` right after the real
  *  standalone window is created — never by this class's own constructor, and never for the
  *  plugin-hosted path (see below). Delegates to `getPluginScanService().ensureScanned(...)`,
  *  which is itself a one-shot-per-service no-op past the first call: a second call (a test, or a
@@ -107,11 +107,9 @@ void MainComponent::startPluginScan() {
  *  the constructor already restored from settings — it just never scans one itself; see
  *  docs/architecture/plugin-layer.md#plugin-scanning--a-crash-must-kill-a-child-not-the-app.
  *
- *  FRO105: this used to call `ensureScanned()` with no progress callback at all, so the eager scan
- *  ran silently — the founder complaint this fixes was seeing only whatever the persisted list
- *  already had until the ONE completion message landed, with no sign a scan was even happening in
- *  between. `ensureScanned()`'s return says whether THIS call actually started the scan (false for
- *  a redundant later call), so the "Scanning for plugins..." banner only appears when it is true. */
+ *  Passes a progress callback to `ensureScanned()` so the eager scan is not silent between start
+ *  and the ONE completion message. `ensureScanned()`'s return says whether THIS call actually started the scan (false
+ * for a redundant later call), so the "Scanning for plugins..." banner only appears when it is true. */
 void MainComponent::maybeStartEagerPluginScan() {
     // See this method's header comment: hosted mode never scans, eagerly or otherwise.
     if (audioEngine.isHosted())
@@ -142,7 +140,7 @@ void MainComponent::pluginScanCompleted(const synth::PluginScanService::Result& 
     statusBar.showMessage(message);
 }
 
-// ---- Snippets (issue #156) ----
+// ---- Snippets -----------------
 
 /** Re-reads the snippets directory and pushes the list into the library sidebar. */
 void MainComponent::refreshSnippetLibrary() {
@@ -304,13 +302,13 @@ void MainComponent::promptRepeatSelection() {
 // PianoRollComponent/AutomationLaneEditor), so "last-clicked surface owns the verbs" falls out
 // of ordinary JUCE focus tracking with no extra bookkeeping in this class.
 //
-// FRO227: Mixer follows the same "check it's actually showing before trusting a stale focus
+// Mixer follows the same "check it's actually showing before trusting a stale focus
 // pointer" shape, but the mixer has THREE placements (MixerPlacementController::Placement) —
 // docked on the tab strip, an "Own panel" strip, or detached into its own window — so its
 // showing check is the same OR MainComponent::timerCallback already uses to gate meter ticks
 // (bottomDock.isMixerShowing() covers Tab-docked-and-active and Window; mixerPlacement_.
 // isOwnPanelShowing() covers Own panel), not the plain isBottomDockVisible gate the two timeline
-// surfaces use. MixerPanelComponent is the mixer's single focusable leaf (FRO18: every column's
+// surfaces use. MixerPanelComponent is the mixer's single focusable leaf (every column's
 // own controls are setWantsKeyboardFocus(false)), so isOrIsChildOf covers a column's controls
 // too, not just the panel root itself. Public: both perform()/getCommandInfo() and
 // FocusArbitrationTests.cpp call it directly.
@@ -338,7 +336,7 @@ MainComponent::EditSurface MainComponent::resolveEditSurface() const {
 }
 
 bool MainComponent::keyPressed(const juce::KeyPress& key) {
-    // FRO130: Esc cancels an armed MIDI Learn (docs/control/midi-remote-ui.md#the-learn-interaction),
+    // Esc cancels an armed MIDI Learn (docs/control/midi-remote-ui.md#the-learn-interaction),
     // ahead of everything below -- including GraphEditor's own canvas Escape (clears the selection),
     // which only reaches here at all when nothing is selected.
     if (key == juce::KeyPress::escapeKey && midiLearnController_.isPickingTarget()) {
@@ -439,8 +437,8 @@ void MainComponent::resized() {
     // rect at its docked edge rather than left showing the bounds it had when it was last open.
     // A panel that is both closed AND hidden is skipped entirely — its bounds are dead state, and
     // removeFrom*(0) would carve nothing from the canvas anyway.
-    // FRO12 (P9-6): the Mixer's "Own panel" placement -- a second, INDEPENDENT bottom strip BELOW
-    // the bottom dock carved next. FRO231: it slides and has a user height like the dock, but
+    // The Mixer's "Own panel" placement -- a second, INDEPENDENT bottom strip BELOW
+    // the bottom dock carved next. It slides and has a user height like the dock, but
     // through its OWN PanelSlide inside MixerPlacementController (which calls back into this pass
     // each frame), so its carve is asked for rather than derived from a member here. Same "|| showing"
     // frame-0 guard as every other panel above. Carved FIRST (before the bottom dock below)
@@ -473,7 +471,7 @@ void MainComponent::resized() {
 
     graphEditor.setBounds(bounds);
 
-    // T114/P8-10: full window bounds on EVERY layout pass, whether or not it's currently visible —
+    // Full window bounds on EVERY layout pass, whether or not it's currently visible —
     // it must always cover the toolbar/canvas the moment it's shown, and a stale rect from before
     // the last resize would leave gaps around the edges.
     if (welcomeScreen_)
@@ -735,7 +733,7 @@ void MainComponent::finishPanelSlide() {
     resized();
 }
 
-// FRO333: no longer a toggle (that's toggleBottomPanelButton's job now, see its onClick) --
+// No longer a toggle (that's toggleBottomPanelButton's job now, see its onClick) --
 // opens the dock if it's hidden and switches to `tab`; a no-op if that tab is already showing.
 // mixerPlacement_.revealOrToggle() is Mixer's OWN Own-panel/Window placement detour, unrelated to
 // the tab strip: it returns true and handles everything itself when Mixer isn't in Tab placement.
@@ -754,7 +752,7 @@ void MainComponent::showBottomDockTab(synth::ui::BottomDockComponent::Tab tab) {
     bottomDock.setActiveTab(tab);
 }
 
-// FRO333: the "open if closed" half other reveal sites (a channel-chip click, "Edit MIDI
+// The "open if closed" half other reveal sites (a channel-chip click, "Edit MIDI
 // assignment...", a focus-region open callback) also need, without switching tabs themselves.
 void MainComponent::ensureBottomDockOpen() {
     if (isBottomDockVisible)
@@ -784,7 +782,7 @@ void MainComponent::setLibraryVisible(bool v) {
     beginPanelSlide();
 }
 
-// ---- Welcome screen (T114/P8-10) ----
+// ---- Welcome screen -----------------
 
 // A no-op when welcomeScreen_ is null (Hosted mode) or already hidden — every guarded action's
 // `proceed` continuation calls this unconditionally as its LAST step, so it must tolerate both.
@@ -813,7 +811,7 @@ void MainComponent::showWelcomeScreen() {
     welcomeScreen_->setVisible(true);
 }
 
-// Feature 2 of T114/P8-10: a small, synchronous, no-network dialog listing recent commit subjects
+// A small, synchronous, no-network dialog listing recent commit subjects
 // captured at CMake CONFIGURE time (see the root CMakeLists.txt's "What's New" block and
 // WhatsNewData.h). Never invoked from a test — it would open a real modal juce::AlertWindow, same
 // caution as every other real-dialog entry point in this file.

@@ -1,4 +1,4 @@
-// BottomDockComponentTests.cpp -- FRO11 (P9-5): the dock's tab strip, the Toggle Mixer Panel
+// BottomDockComponentTests.cpp -- the dock's tab strip, the Toggle Mixer Panel
 // shortcut/command, and active-tab persistence via ApplicationProperties.
 #include "../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "AI/AIProvider.h"
@@ -76,7 +76,7 @@ TEST(BottomDockComponentTests, ShowMixerTabOpensTheDockAndStaysOpenOnASecondPres
     EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "closed -> open on the Mixer tab";
     EXPECT_TRUE(mc.getBottomDock().isMixerTabActive());
 
-    // FRO333: "show tab" never closes the dock any more -- only toggleBottomPanel does.
+    // "show tab" never closes the dock any more -- only toggleBottomPanel does.
     mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer);
     EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "a second press is a no-op, not a close";
     EXPECT_TRUE(mc.getBottomDock().isMixerTabActive());
@@ -205,7 +205,7 @@ TEST(BottomDockComponentTests, StartupPrefersTheNewBottomDockVisibleKeyWhenBothK
     EXPECT_FALSE(mc.isBottomDockConfiguredVisible()) << "the new key wins over a stale old one";
 }
 
-// FRO329: the panel's user-facing name is "Controllers" on the dock tab, while the persisted
+// The panel's user-facing name is "Controllers" on the dock tab, while the persisted
 // action id (ShortcutManager binds by id) keeps its original spelling.
 TEST(BottomDockComponentTests, ControllersTabUsesTheNewNameAndKeepsTheActionId) {
     BottomDockActiveTabResetGuardMDT resetGuard;
@@ -224,7 +224,7 @@ TEST(BottomDockComponentTests, ControllersTabUsesTheNewNameAndKeepsTheActionId) 
     EXPECT_EQ(ShortcutManager::getActionDescription("toggleMidiRemotePanel"), "Show Controllers Tab");
 }
 
-// FRO333: Timeline/Mixer/Controllers no longer each toggle the whole dock closed -- they only ever
+// Timeline/Mixer/Controllers no longer each toggle the whole dock closed -- they only ever
 // show their own tab (opening the dock if it was hidden).
 TEST(BottomDockComponentTests, ShowTabActionsNeverCloseTheDock) {
     EXPECT_EQ(AppCommands::getCommandForAction("toggleTimelinePanel"), AppCommands::toggleTimelinePanel);
@@ -236,7 +236,7 @@ TEST(BottomDockComponentTests, ShowTabActionsNeverCloseTheDock) {
     EXPECT_EQ(ShortcutManager::getActionDescription("toggleBottomPanel"), "Toggle Bottom Panel");
 }
 
-// FRO333: the dock's own tab order (Timeline, Mixer, Controllers by default) is what Cmd+1..3 and
+// The dock's own tab order (Timeline, Mixer, Controllers by default) is what Cmd+1..3 and
 // the strip's own left-to-right layout follow; getTabButtons() reports it in that same order.
 TEST(BottomDockComponentTests, DefaultTabOrderIsTimelineMixerControllers) {
     BottomDockActiveTabResetGuardMDT resetGuard;
@@ -248,7 +248,7 @@ TEST(BottomDockComponentTests, DefaultTabOrderIsTimelineMixerControllers) {
     EXPECT_EQ(dock.getTabOrderForTest(), expected);
 }
 
-// FRO333: dragging a tab past another swaps their order, persists it, and re-keys Cmd+1/2/3 so
+// Dragging a tab past another swaps their order, persists it, and re-keys Cmd+1/2/3 so
 // Cmd+1 keeps opening whichever tab now sits first.
 TEST(BottomDockComponentTests, DragReorderSwapsTabOrderAndPermutesTheCmdDigitBindings) {
     BottomDockActiveTabResetGuardMDT resetGuard;
@@ -269,7 +269,7 @@ TEST(BottomDockComponentTests, DragReorderSwapsTabOrderAndPermutesTheCmdDigitBin
               juce::KeyPress('3', juce::ModifierKeys::commandModifier, 0));
 }
 
-// FRO158/FRO333: detaching the ACTIVE tab must never leave the dock showing nothing -- it falls
+// Detaching the ACTIVE tab must never leave the dock showing nothing -- it falls
 // back to the next tab still offered, and hides the whole dock only once none are left.
 TEST(BottomDockComponentTests, DetachingTheActiveTabFallsBackToTheNextOneAndNeverGoesBlank) {
     BottomDockActiveTabResetGuardMDT resetGuard;
@@ -298,7 +298,7 @@ TEST(BottomDockComponentTests, DetachingTheActiveTabFallsBackToTheNextOneAndNeve
     EXPECT_TRUE(dock.isMixerTabActive());
 }
 
-// FRO338: add-bus/reset-meters used to be carved from the tab strip's own right edge, Mixer-tab-
+// Add-bus/reset-meters used to be carved from the tab strip's own right edge, Mixer-tab-
 // only -- switching to Mixer visibly shrank the tab strip's shared area, so every tab button's own
 // bounds changed depending on which tab was active. They now live in their own toolbar row above
 // the Mixer content instead, so the tab strip's width split must be identical on every tab.
@@ -322,7 +322,7 @@ TEST(BottomDockComponentTests, TabButtonBoundsAreIdenticalWhetherTimelineOrMixer
             << "tab button " << i << " moved when switching tabs";
 }
 
-// FRO338: the buttons are Mixer-only, and now that they've moved off the tab strip they must sit
+// The buttons are Mixer-only, and now that they've moved off the tab strip they must sit
 // entirely below it (never sharing a pixel with a tab button).
 TEST(BottomDockComponentTests, AddBusAndResetMetersAreMixerOnlyAndNeverOverlapTheTabStrip) {
     BottomDockActiveTabResetGuardMDT resetGuard;
@@ -349,7 +349,7 @@ TEST(BottomDockComponentTests, AddBusAndResetMetersAreMixerOnlyAndNeverOverlapTh
     }
 }
 
-// FRO338: a real reorder drag shows the dragging-hand cursor once it clears JUCE's own drag
+// A real reorder drag shows the dragging-hand cursor once it clears JUCE's own drag
 // threshold, and mouseUp always restores it -- same reasoning as GraphEditor's macro-chip cursor
 // (GraphEditorCanvas.cpp's mouseMove).
 TEST(BottomDockComponentTests, DraggingATabShowsTheDraggingHandCursorAndMouseUpRestoresNormal) {

@@ -1,6 +1,6 @@
 // CanvasAccessibilityClip.h
 //
-// FRO300: a canvas card panned or scrolled outside GraphEditor::getVisibleCanvasRect() (or
+// A canvas card panned or scrolled outside GraphEditor::getVisibleCanvasRect() (or
 // covered by the bottom dock shrinking that rect) is still a live JUCE child of
 // GraphEditor::GraphContentComponent -- nothing about being off-screen removes it from the
 // accessibility tree, so VoiceOver keeps announcing cards the user can't see or reach. JUCE's

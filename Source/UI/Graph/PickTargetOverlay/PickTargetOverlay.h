@@ -4,7 +4,7 @@
 #include <functional>
 #include <vector>
 
-// PickTargetOverlay.h -- FRO135 (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn):
+// PickTargetOverlay.h (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn):
 // the "Pick a module control" mode. A transparent layer over its parent (MainComponent, so it
 // covers the canvas, the bottom dock and the transport bar alike) that outlines every candidate a
 // surface reported, swallows the next click, and resolves it against the candidates itself -- no

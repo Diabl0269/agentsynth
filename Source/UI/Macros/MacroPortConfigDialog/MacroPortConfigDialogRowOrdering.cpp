@@ -5,7 +5,7 @@ namespace synth::ui {
 
 // Concern: drag-to-reorder (mouse) and keyboard row-focus navigation.
 
-// ---- T152 drag-to-reorder ----------------------------------------------------------------------
+// ---- Drag-to-reorder ---------------------------------------------------------------------------
 // beginRowDrag/updateRowDrag/endRowDrag implement the real mouse path (DragHandle wires straight
 // to these); the *ForTest seams below call PortRowComponent::commitDragTo directly instead of
 // synthesizing a mouseDown/mouseDrag/mouseUp sequence, the same "drive the real controls, skip the
@@ -84,7 +84,7 @@ void MacroPortConfigDialog::clearDragIndicators() {
         rc->setDropIndicator(-1);
 }
 
-// ---- T153 keyboard row navigation ---------------------------------------------------------------
+// ---- Keyboard row navigation --------------------------------------------------------------------
 
 int MacroPortConfigDialog::arrowNavigationTargetRow(int fromRow, bool moveDown) const {
     const int target = fromRow + (moveDown ? 1 : -1);

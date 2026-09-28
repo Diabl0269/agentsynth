@@ -14,7 +14,7 @@ ModuleLibraryComponent::ModuleLibraryComponent() {
     // collapse-all strip). Without this, clicking anywhere in the parent would cause the
     // searchEditor child to gain focus, clearing its placeholder text.
     setMouseClickGrabsKeyboardFocus(false);
-    // T159: makes grabKeyboardFocus() on THIS component (the "library" focus region's root)
+    // Makes grabKeyboardFocus() on THIS component (the "library" focus region's root)
     // succeed deterministically. juce::Component::grabKeyboardFocusInternal only takes the
     // focus itself when wantsKeyboardFocusFlag is set; otherwise it descends into children by
     // Y/X position (NOT by which child wants focus), which is a fragile thing to depend on for
@@ -45,7 +45,7 @@ ModuleLibraryComponent::ModuleLibraryComponent() {
     };
     addAndMakeVisible(searchEditor);
     applySearchEditorColours();
-    // T160: intercepts Up/Down/Return ahead of the editor's own keyPressed — see
+    // Intercepts Up/Down/Return ahead of the editor's own keyPressed — see
     // Source/UI/CLAUDE.md-adjacent notes below on why a KeyListener rather than an override is
     // required here (ComponentPeer::handleKeyPress runs a component's key LISTENERS before its
     // own keyPressed, and TextEditor::moveCaretUp/Down unconditionally return true for a

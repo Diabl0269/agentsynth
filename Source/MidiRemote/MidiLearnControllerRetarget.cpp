@@ -1,4 +1,4 @@
-// Concern: FRO240 (docs/control/midi-remote.md#replace-and-duplicate) -- retargeting a node's MIDI
+// Concern: (docs/control/midi-remote.md#replace-and-duplicate) -- retargeting a node's MIDI
 // Remote project assignments onto a replacement node's uuid when "Replace with..." swaps it in
 // (GraphEditor::replaceModule -> onModuleReplaced -> here). See MidiLearnController.h for the full
 // contract, including why this mutates doc_ with no undo recording of its own.
@@ -13,7 +13,7 @@ namespace synth::midi {
 
 namespace {
 
-// FRO253's own rule for which command a node supports: today only toggleSolo exists, and the only
+// The rule for which command a node supports: today only toggleSolo exists, and the only
 // module that answers to it is a ChannelStripModule (MainComponentRemoteActionInvoker::
 // invokeNodeCommand's own check) -- mirrored here rather than shared, since that invoker lives in
 // the app layer and this is Core-adjacent (MidiLearnController links AppUI, not the reverse).

@@ -1,4 +1,4 @@
-// MidiLearnControllerHostedParameterTests.cpp -- FRO137
+// MidiLearnControllerHostedParameterTests.cpp
 // (docs/control/plugin-card-layout.md#interaction-with-controllers-and-automation): a plugin-card
 // knob (a hosted plugin's own parameter, not one of the node's RangedAudioParameters) MIDI-Learns
 // exactly like a built-in knob. Covers the two seams that resolve a hosted target --

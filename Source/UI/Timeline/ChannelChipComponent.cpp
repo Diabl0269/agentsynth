@@ -21,7 +21,7 @@ struct ChipColours {
     juce::Colour surface{juce::Colour(0xff1B1F26)};
     juce::Colour border{juce::Colour(0xff2A2F38)};
     juce::Colour text{juce::Colour(0xffEAEEF3)};
-    // FRO146: the meter's colour now steps through MeterColourStops' four zones (same scale/zones
+    // The meter's colour now steps through MeterColourStops' four zones (same scale/zones
     // as MixerMeter) instead of a single fixed accent -- default-constructed from
     // synth::theme::Colors{}'s own field defaults, which already equal Obsidian's values.
     synth::ui::MeterColourStops meterStops = synth::ui::MeterColourStops::fromTheme(synth::theme::Colors{});
@@ -34,7 +34,7 @@ ChipColours coloursFor(const juce::Component& component) {
         result.surface = c.surface;
         result.border = c.border;
         result.text = c.textPrimary;
-        // FRO147: the SAME cached effective stops MixerMeter reads (the user's pinned override, or
+        // The SAME cached effective stops MixerMeter reads (the user's pinned override, or
         // the theme's own tokens) -- not a fresh fromTheme() rebuild, so this chip and the mixer's
         // own meters can never show two different colour sets for the same channel.
         result.meterStops = lf->getMeterColourStops();
@@ -61,7 +61,7 @@ void ChannelChipComponent::setChannelName(const juce::String& name) {
 }
 
 bool ChannelChipComponent::setMeterLevel(float peakLinear) {
-    // FRO146: linear amplitude -> dBFS -> a 0..1 fraction of the -60..+3 dB scale (same scale and
+    // Linear amplitude -> dBFS -> a 0..1 fraction of the -60..+3 dB scale (same scale and
     // colour zones as the mixer's own MixerMeter -- MixerMeterScale.h/MeterColourStops.h).
     const float db = synth::ui::meterLinearToDb(peakLinear);
     const float fraction = synth::ui::meterDbToFraction(db);

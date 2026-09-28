@@ -1,4 +1,4 @@
-// Concern: FRO146 -- MixerMeter's ballistics tick (refresh) and paint only.
+// Concern: MixerMeter's ballistics tick (refresh) and paint only.
 #include "MixerMeter.h"
 
 #include "MeterColourStops.h"
@@ -16,8 +16,8 @@ constexpr int kBarGap = 2;
 constexpr int kBarsAreaWidth = 16; // two ~7px bars + the gap between them
 constexpr int kLabelMinWidth = 14; // roughly enough for "-60" at the meter's tiny tick font
 
-// FRO146: a read-only value interface reporting the meter's louder bar as dBFS text, replacing
-// the pre-FRO146 percentage readout -- a percent of a linear 0..1 amplitude meant nothing once the
+// A read-only value interface reporting the meter's louder bar as dBFS text, replacing
+// a percentage readout, since a percent of a linear 0..1 amplitude meant nothing once the
 // scale became dB-linear.
 class MeterValueInterface : public juce::AccessibilityValueInterface {
 public:
@@ -70,7 +70,7 @@ void MixerMeter::paint(juce::Graphics& g) {
     const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const synth::theme::Colors fallback{};
     const auto& colors = laf != nullptr ? laf->getTheme().colors : fallback;
-    // FRO147: the cached EFFECTIVE stops (the user's pinned override, or the active theme's own
+    // The cached EFFECTIVE stops (the user's pinned override, or the active theme's own
     // four tokens when there is none) -- never rebuilt here, so a Settings > Appearance edit is a
     // single AppLookAndFeel write followed by a repaint, not per-tick work. No AppLookAndFeel
     // installed (a headless test) falls back to the theme literally, same as every other token

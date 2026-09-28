@@ -1,4 +1,4 @@
-// SidechainKeyGraphTests.cpp — FRO317: the graph side of the Compressor/Gate Key input.
+// SidechainKeyGraphTests.cpp — the graph side of the Compressor/Gate Key input.
 //
 //   • publication — synth::publishSidechainConnections (and the engine's graph-change listener)
 //                   sets a module's connectivity flag while a cable lands on a Key jack, clears it

@@ -20,14 +20,13 @@ const std::vector<std::pair<juce::String, size_t>> kExpected = {
     {"template-8-faders-8-buttons", 16u},
     {"template-transport-strip", 4u},
     {"template-keyboard-8-knobs", 11u},
-    // Vendor templates (FRO143): not in ControllerTemplates.cpp's kOrder table, so they sort after
-    // the generic ones, alphabetically by id -- see ControllerTemplatesVendorTests.cpp for their
-    // vendor/source coverage.
-    // FRO330: +2 controls (Play/Stop, MMC) over the pre-FRO330 32.
+    // Vendor templates: not in ControllerTemplates.cpp's kOrder table, so they sort after the
+    // generic ones, alphabetically by id -- see ControllerTemplatesVendorTests.cpp for their
+    // vendor/source coverage. +2 controls (Play/Stop, MMC) over the previous 32.
     {"template-arturia-beatstep", 34u},
     {"template-arturia-minilab-3", 20u},
     {"template-korg-nanokontrol2", 51u},
-    // FRO339: +2 controls (Play/Record, CC) over the pre-FRO339 48.
+    // +2 controls (Play/Record, CC) over the previous 48.
     {"template-novation-launch-control-xl-3", 50u},
 };
 
@@ -85,11 +84,11 @@ TEST(ControllerTemplatesTest, EveryTemplateLoadsWithTheDocumentedControlCountAnd
         ASSERT_TRUE(loadControllerTemplate(id, p)) << id.toStdString();
         EXPECT_EQ(p.id, id);
         EXPECT_EQ(p.controls.size(), count) << id.toStdString();
-        // FRO330/FRO339: template-arturia-beatstep (Play/Stop) and
-        // template-novation-launch-control-xl-3 (Play/Record) are the two templates that ship
-        // pre-wired actions -- see ControllerTemplatesVendorTests.cpp's
-        // ArturiaBeatStepHasTheDocumentedSurface / NovationLaunchControlXL3HasTheDocumentedSurface
-        // for the transport-specific coverage. Every other template still ships none.
+        // Template-arturia-beatstep (Play/Stop) and template-novation-launch-control-xl-3
+        // (Play/Record) are the two templates that ship pre-wired actions -- see
+        // ControllerTemplatesVendorTests.cpp's ArturiaBeatStepHasTheDocumentedSurface /
+        // NovationLaunchControlXL3HasTheDocumentedSurface for the transport-specific coverage.
+        // Every other template still ships none.
         if (id == "template-arturia-beatstep" || id == "template-novation-launch-control-xl-3")
             EXPECT_EQ(p.actions.size(), 2u) << id.toStdString();
         else
@@ -205,9 +204,9 @@ TEST(ControllerTemplatesTest, ApplyingTheSameTemplateTwiceAddsNothingTheSecondTi
     EXPECT_EQ(profile.controls.size(), 4u);
 }
 
-// ============================================================================
-// FRO330: a template's actions[] (docs/control/midi-remote-ui.md#templates-and-importexport) --
-// applyControllerTemplate copies them onto profile.actions, re-pointed at the merged-in control.
+// ============================================================================ A template's
+// actions[] (docs/control/midi-remote-ui.md#templates-and-importexport) -- applyControllerTemplate
+// copies them onto profile.actions, re-pointed at the merged-in control.
 // ============================================================================
 
 TEST(ControllerTemplatesTest, ApplyToEmptyProfileAlsoCopiesTemplateActions) {
@@ -257,10 +256,10 @@ TEST(ControllerTemplatesTest, TemplateWithNoActionsLeavesProfileActionsUntouched
     EXPECT_TRUE(profile.actions.empty());
 }
 
-// ============================================================================
-// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): a template's optional handshake --
-// applyControllerTemplate copies it only into a profile that doesn't already have one.
-// ============================================================================
+// ============================================================================ A template's
+// optional handshake -- applyControllerTemplate copies it only into a profile that doesn't already
+// have one. ============================================================================ (see
+// docs/control/midi-remote-device-handshake.md#device-handshake).
 
 TEST(ControllerTemplatesTest, ApplyToEmptyProfileAlsoCopiesTemplateHandshake) {
     const auto tmpl = loadOrFail("template-novation-launch-control-xl-3");
@@ -272,7 +271,7 @@ TEST(ControllerTemplatesTest, ApplyToEmptyProfileAlsoCopiesTemplateHandshake) {
 
     EXPECT_EQ(profile.handshake.openMessage, tmpl.handshake.openMessage);
     EXPECT_EQ(profile.handshake.closeMessage, tmpl.handshake.closeMessage);
-    EXPECT_EQ(profile.handshake.port, tmpl.handshake.port); // FRO339: the port hint copies too
+    EXPECT_EQ(profile.handshake.port, tmpl.handshake.port); // The port hint copies too
 }
 
 TEST(ControllerTemplatesTest, ApplyingATemplateNeverOverwritesAnExistingHandshake) {

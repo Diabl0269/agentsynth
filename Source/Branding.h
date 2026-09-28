@@ -45,7 +45,7 @@ constexpr const char* kLegacyFolderNames[] = {kSettingsFolderName, "Gravisynth"}
 // Product website, for the About box / support links. Not yet referenced anywhere.
 constexpr const char* kWebsiteUrl = "https://agentsynth.app";
 
-// Page behind the in-app Help-menu "contribute" item (AppCommands::contribute, FRO94). One canonical
+// Page behind the in-app Help-menu "contribute" item (AppCommands::contribute). One canonical
 // URL so the payment providers behind it can change without touching the binary.
 constexpr const char* kContributeUrl = "https://agentsynth.app/contribute";
 
@@ -53,17 +53,16 @@ constexpr const char* kContributeUrl = "https://agentsynth.app/contribute";
 constexpr const char* kSupportEmail = "support@agentsynth.app";
 
 // Static Polar checkout link (covers both the monthly and yearly Pro products) opened by the
-// "Upgrade to Pro" button on a Quota-kind AI error (P4-4, Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp).
+// "Upgrade to Pro" button on a Quota-kind AI error (Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp).
 // Deliberately static rather than a dynamically-created checkout session — see the backend repo's
-// billing doc, "what this deliberately does not do", for why P4-4 doesn't create checkout sessions.
+// billing doc, "what this deliberately does not do", for why the app doesn't create checkout sessions.
 constexpr const char* kUpgradeUrl = "https://buy.polar.sh/polar_cl_DkiJlmel2CXVtpl236TvS52omgYaZM26HGe1U0rbD75";
 
 // Production base URL for the synth-platform inference/auth/billing service (Cloud Run,
 // apps/infra/Pulumi.prod.yaml's authPublicBaseUrl in the synth-platform repo). Default host for
 // RemoteProvider, AuthClient and AccountService — see AIProviderRegistry.cpp and
-// MainComponent.h/.cpp. As of P4-6 the Cloud Run service still has no `allUsers` invoker binding
-// (tracked separately under P4-7), so requests here 403 at the IAM layer until that follow-up
-// infra step makes it public — expected, not a bug in this client.
+// MainComponent.h/.cpp. A 403 from the IAM layer here means the Cloud Run service has no `allUsers`
+// invoker binding (it isn't publicly invokable) — a deployment setting, not a bug in this client.
 constexpr const char* kApiBaseUrl = "https://synth-api-6eft3t2kxq-uc.a.run.app";
 
 // Debug-only override for kApiBaseUrl above — lets a locally-built app point its

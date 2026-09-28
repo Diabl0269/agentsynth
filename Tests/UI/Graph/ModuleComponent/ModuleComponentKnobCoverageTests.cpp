@@ -1,4 +1,4 @@
-// FRO314 registry-wide sweep: every rotary knob on every module card must accept a dropped
+// Registry-wide sweep: every rotary knob on every module card must accept a dropped
 // modulation cable. The bug this guards against: OscillatorModule's Level/Waveform/.../Pan
 // targets had no paramId (falling back to fragile jack-label/knob-name string matching) and its
 // Unison/Detune knobs had no CV jack -- and no test iterated the WHOLE module factory, so a new
@@ -65,8 +65,7 @@ const std::set<juce::String> kSkippedModuleTypes = {
     // Mixer-panel gain stages (Master/bus/channel gain, VoiceMixer per-voice level). Adding CV
     // jacks to these is out of scope for this sweep: ChannelStripModule's channel layout is
     // frozen-once-set with fixed send legs on raw ch8-15 (Source/Modules/CLAUDE.md), so a CV jack
-    // there needs its own careful channel-map change, not a drive-by fix here. Tracked as a
-    // follow-up rather than folded into FRO314 silently -- see the task's final report.
+    // there needs its own careful channel-map change, not a drive-by fix here.
     "Master",
     "Voice Mixer",
     "Channel Strip",
@@ -92,7 +91,7 @@ bool isSharedOutputLevelParam(const ModuleBase& mb, const juce::RangedAudioParam
 
 // Every visible rotary knob's componentID, when it is bound to a Float/Int parameter that ISN'T
 // the shared output Level stage. Choice/Bool knobs (waveform pickers, on/off toggles) are excluded
-// by TYPE, not by an allow-list guess. FRO312 closed the last known gap here (Sampler "rootNote"),
+// by TYPE, not by an allow-list guess. No module has a known gap (Sampler "rootNote" is covered),
 // so there is no per-module deferred-gap escape hatch left to check against.
 std::set<juce::String> continuousKnobParamNames(const ModuleBase& mb, ModuleComponent& card) {
     std::set<juce::String> names;
@@ -140,9 +139,9 @@ void setPolyIfPresent(ModuleBase& mb, bool poly) {
 //     the rest, because the value lives inside ThresholdControlComponent instead; that widget's
 //     own drop anchor is what getModTargetPortForPoint special-cases already.
 //
-// ADSR's three Curve amounts (FRO112, attackCurve/decayCurve/releaseCurve) need no entry here at
+// ADSR's three Curve amounts (attackCurve/decayCurve/releaseCurve) need no entry here at
 // all: they are edited only via the envelope graph's bend handles, have no CV jack (a jack with
-// no knob to land on is exactly the visible-truncated-gutter-jack shape FRO312 exists to remove --
+// no knob to land on is exactly the visible-truncated-gutter-jack shape knob-binding removes --
 // see docs/modules/modulation.md), and so are never declared as ModulationTargets in the first
 // place -- check (a) below never iterates them. Check (b) also can't false-positive on them:
 // shouldSkipGenericFloatSlider means they never get a rotary Slider component either, so
@@ -177,8 +176,8 @@ TEST_F(ModuleComponentTest, EveryModuleTypeKnobAcceptsADroppedModulationCable) {
         // One processor, reused across every voice mode this type has: safe now that
         // ModuleComponent::detachFromProcessor() correctly removes its own parameter listener
         // even for a card built directly on a processor that was never added to a graph, which is
-        // exactly this test's construction below (FRO312 fixed the dangling-listener
-        // use-after-free that used to make that unsafe -- see ModuleComponentLifecycleTests.cpp).
+        // exactly this test's construction below (the dangling-listener
+        // use-after-free is fixed -- see ModuleComponentLifecycleTests.cpp).
         auto processor = synth::AIStateMapper::createModule(typeName);
         auto* mb = dynamic_cast<ModuleBase*>(processor.get());
         if (mb == nullptr)

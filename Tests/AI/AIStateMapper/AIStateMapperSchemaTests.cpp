@@ -20,7 +20,7 @@ TEST(AIStateMapperTest, Modulation_SchemaIncludesModulationTargets) {
     ASSERT_TRUE(schema.contains("Modulation Sources"));
 }
 
-// P6-13: "track" in the timelineOps grammar used to be `{}` ("anything goes"), a confirmed Ollama
+// "track" in the timelineOps grammar used to be `{}` ("anything goes"), a confirmed Ollama
 // grammar-compiler bug (an empty-schema subschema gets mangled into a garbage wrapped object
 // instead of passing the value through). It must never regress back to that shape, and — per this
 // header's own note that llama.cpp's grammar compiler handles anyOf poorly — must not become a

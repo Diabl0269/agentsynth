@@ -20,9 +20,9 @@ struct PickTarget {
     juce::String actionId;                    // action
     NodeCommandKind command = NodeCommandKind::toggleSolo;
     ContinuousTargetKind continuous = ContinuousTargetKind::bpm; // continuous
-    // FRO142 (docs/control/midi-remote.md#pages): no node, like continuous above -- a page target
-    // acts on the profile that owns the control that fired it, resolved by MidiLearnController at
-    // assignment time, never a graph uuid.
+    // No node, like continuous above -- a page target acts on the profile that owns the control
+    // that fired it, resolved by MidiLearnController at assignment time, never a graph uuid
+    // (see docs/control/midi-remote.md#pages).
     PageCommand pageCommand = PageCommand::next;
     int pageNumber = 1; // valid iff pageCommand == go
 
@@ -46,15 +46,16 @@ struct PickTarget {
         t.command = kind;
         return t;
     }
-    // FRO236 (docs/control/midi-remote.md#continuous-targets): no node -- a continuous target never
-    // names a graph node (ContinuousTargetKind's own comment on how each kind resolves).
+    // No node -- a continuous target never names a graph node (ContinuousTargetKind's own
+    // comment on how each kind resolves)
+    // (see docs/control/midi-remote.md#continuous-targets).
     static PickTarget continuousTarget(ContinuousTargetKind kind) {
         PickTarget t;
         t.kind = Kind::continuous;
         t.continuous = kind;
         return t;
     }
-    // FRO142: `page` is only meaningful for command == go (mirrors Target::Page::page).
+    // `page` is only meaningful for command == go (mirrors Target::Page::page).
     static PickTarget pageTarget(PageCommand command, int page = 1) {
         PickTarget t;
         t.kind = Kind::page;

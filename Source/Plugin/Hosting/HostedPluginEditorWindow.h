@@ -62,7 +62,7 @@ public:
     bool isShowingPlaceholderForTest() const;
 
 #if JUCE_MAC
-    // FRO337: installs the NSEvent monitor that lets Cmd+W close this window even when a hosted
+    // Installs the NSEvent monitor that lets Cmd+W close this window even when a hosted
     // plugin's own native NSView — not a juce::Component — holds first responder. Esc is NOT part
     // of this monitor: an Esc the plugin's own view doesn't consume travels up the AppKit responder
     // chain to JUCE's peer view and reaches keyPressed() below on its own. Call ONLY after this

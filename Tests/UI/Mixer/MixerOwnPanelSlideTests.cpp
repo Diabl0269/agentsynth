@@ -1,4 +1,4 @@
-// MixerOwnPanelSlideTests.cpp -- FRO231: the Mixer's "Own panel" opens and closes through its own
+// MixerOwnPanelSlideTests.cpp -- the Mixer's "Own panel" opens and closes through its own
 // PanelSlide (inside MixerPlacementController, separate from MainComponent's three fractions).
 // Headless there is no VBlank, so the slide's frames are stood in for by the controller's test seams.
 

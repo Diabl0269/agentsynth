@@ -2,7 +2,7 @@
 
 #include <juce_core/juce_core.h>
 
-// MixerPanLaw.h -- FRO325 (docs/mixer/mixer.md#pan-law): the mixer's pan law, chosen PER PROJECT,
+// MixerPanLaw.h (docs/mixer/mixer.md#pan-law): the mixer's pan law, chosen PER PROJECT,
 // for a MONO-shaped ChannelStripModule's own "pan" parameter and its sends' "sendNPan" parameters
 // only -- never a Stereo-shaped strip's balance control, and never any other
 // ModuleBase::panGains caller (a module card's own pan knob). Balance is ModuleBase::panGains

@@ -1,5 +1,5 @@
-// GraphEditor/ModuleComponent-level tests for the compact docked port widget (P8-15
-// founder-review fix F2, docs/macros/ports.md#how-a-port-is-drawn): a macro port renders as a small named row
+// GraphEditor/ModuleComponent-level tests for the compact docked port widget
+// (docs/macros/ports.md#how-a-port-is-drawn): a macro port renders as a small named row
 // docked to its macro's hull edge instead of an ordinary 280x111 module card.
 //
 //   • hull    — macroHullBounds() excludes port members from the union it computes, so docking a
@@ -410,9 +410,8 @@ TEST(MacroPortWidget, MonoPortWidgetSizeMatchesEstimateModuleSize) {
 }
 
 // ============================================================================
-// Founder-review fix G4 ("make the routing more elegant and sleek, it's currently too large"):
-// the widget got smaller, but geometry self-consistency, hit-test generosity and name legibility
-// all have to survive the shrink.
+// The compact widget: geometry self-consistency, hit-test generosity and name legibility all
+// have to hold at its small size.
 // ============================================================================
 
 TEST(MacroPortWidgetG4, GeometryIsSelfConsistentForMonoStereoPolyAndMidi) {
@@ -516,11 +515,10 @@ TEST(MacroPortWidgetG4, HitTestStaysGenerousAroundTheShrunkJackDot) {
 TEST(MacroPortWidgetG4, RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize) {
     // A shrink that quietly forces every longer name into drawFittedText's compress-or-ellipsise
     // fallback would technically satisfy "never overflow the bounds" (drawFittedText guarantees
-    // that structurally) while still costing the founder the port-name legibility he asked for in
-    // the first review pass. This checks the STRONGER property: at the widget's tuned width, a
-    // realistic name like "Delay 1 Audio" measures narrower than the available text area at the
-    // widget's own (unscaled) 9.5f font, so paintMacroPortWidget draws it at full size, not
-    // shrunk.
+    // that structurally) while still costing port-name legibility. This checks the STRONGER
+    // property: at the widget's tuned width, a realistic name like "Delay 1 Audio" measures
+    // narrower than the available text area at the widget's own (unscaled) 9.5f font, so
+    // paintMacroPortWidget draws it at full size, not shrunk.
     const juce::String realisticName = "Delay 1 Audio";
     const juce::Font nameFont(juce::FontOptions(9.5f));
     const float textWidth = juce::GlyphArrangement::getStringWidth(nameFont, realisticName);
@@ -533,15 +531,15 @@ TEST(MacroPortWidgetG4, RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize) 
 }
 
 // ============================================================================
-// A port node's own right-click context menu (founder-review fix G7: "they cannot be removed" —
-// a port node had NO delete affordance at all once its macro was gone, and Configure I/O was
-// otherwise the ONE surface for it). Every test drives a REAL synthesised juce::MouseEvent into
-// the real ModuleComponent::mouseDown() (memory/test-the-real-mouse-path-for-ui-gestures) and
-// intercepts the menu via setShowContextMenuHookForTest() rather than letting a real
-// PopupMenu::showMenuAsync() open — that segfaults on a headless (no-display) Linux CI runner
-// (Tests/MacroContainerTests.cpp's MacroMemberContextMenu suite hit exactly this; G1 added the
-// hook for this reason). No test here ever lets a real AlertWindow/DialogWindow open either — the
-// Rename/Configure I/O items are asserted present by NAME, never invoked, since both open one.
+// A port node's own right-click context menu — without it a port node whose macro is gone has NO
+// delete affordance at all, since Configure I/O is otherwise the ONE surface for it. Every test
+// drives a REAL synthesised juce::MouseEvent into the real ModuleComponent::mouseDown()
+// (memory/test-the-real-mouse-path-for-ui-gestures) and intercepts the menu via
+// setShowContextMenuHookForTest() rather than letting a real PopupMenu::showMenuAsync() open —
+// that segfaults on a headless (no-display) Linux CI runner (Tests/MacroContainerTests.cpp's
+// MacroMemberContextMenu suite hit exactly this, which is why the hook exists). No test here ever
+// lets a real AlertWindow/DialogWindow open either — the Rename/Configure I/O items are asserted
+// present by NAME, never invoked, since both open one.
 // ============================================================================
 
 namespace {
@@ -605,12 +603,11 @@ TEST(MacroPortContextMenu, RightClickOffersRenameConfigureAndDeleteWhileTheMacro
 }
 
 TEST(MacroPortContextMenu, RightClickStillWorksAfterItsMacroIsGoneRegressionForTheBugItself) {
-    // The exact scenario the founder's second complaint names: a port that survives its macro
-    // (before this fix, ungroup left it in place) had no delete path at all — Configure I/O was
-    // the ONE surface, and promptConfigureMacroIO()'s very first line is `macros.find(macroId)`,
-    // which is nullptr the instant the macro is gone. After G7 no ORPHAN port should exist in
-    // practice (ungroup removes them), but the menu's own defensive fallback is still real
-    // behaviour worth pinning: a port node with no resolvable macro still offers Delete.
+    // A port that survives its macro would have no delete path through Configure I/O:
+    // promptConfigureMacroIO()'s very first line is `macros.find(macroId)`, which is nullptr the
+    // instant the macro is gone. Ungroup removes ports, so no ORPHAN port should exist in
+    // practice, but the menu's own defensive fallback is still real behaviour worth pinning: a
+    // port node with no resolvable macro still offers Delete.
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -662,7 +659,7 @@ TEST(MacroPortContextMenu, LeftClickOnAPortBodyIsStillANoOp) {
     EXPECT_FALSE(editor.isNodeSelected(comp->getNodeId())) << "a left click on a port body must not select it";
 }
 
-// FRO235 (2026-09-27 founder decision): the right-click Delete Port menu item now drops the cable
+// The right-click Delete Port menu item now drops the cable
 // by default -- see MacroPortFlow.RightClickDeletePortDropsByDefault/
 // RightClickDeletePortSplicesWhenThePreferenceIsOn in MacroPortFlowEditTests.cpp for the matched
 // pair of default/preference-on tests. This one stays as the real-menu-click regression guard.
@@ -751,10 +748,10 @@ TEST(MacroPortContextMenu, DeletingThePortNodeDirectlyIsOneUndoStep) {
 }
 
 // ============================================================================
-// Per-port colour reaches the docked widget's own jack (T162)
+// Per-port colour reaches the docked widget's own jack
 // ============================================================================
 // The macro's OWN colour tints the whole widget's card, but a single port's user colour (the
-// Configure I/O modal's swatch, T152) was reaching the collapsed card's jack (MacroCardComponent)
+// Configure I/O modal's swatch) was reaching the collapsed card's jack (MacroCardComponent)
 // and NOT the expanded docked widget (ModuleComponent::paintMacroPortWidget) — this pins that the
 // widget reads it too, off ModuleComponent::resolveMacroPortJackColour, which is the ONE place
 // paint and the test both go (so the test verifies what the paint reads, matching this file's own
@@ -809,7 +806,7 @@ TEST(MacroPortWidget, UserColouredPortOverrideTheTintOnTheDockedWidget) {
     EXPECT_EQ(*ownership.port->colour, userColour);
 
     // A set user colour wins over the kind tint, no matter which tint the paint passes (accent or
-    // audioWire) — that is the whole point of T162: the dot recolours to the user's choice.
+    // audioWire) — that is the whole point: the dot recolours to the user's choice.
     EXPECT_EQ(ModuleComponent::resolveMacroPortJackColour(ownership.port, juce::Colour(0xff00cc33)), userColour);
     EXPECT_EQ(ModuleComponent::resolveMacroPortJackColour(ownership.port, juce::Colour(0xff123456)), userColour);
 }

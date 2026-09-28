@@ -25,8 +25,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // ============================================================================
-// Collapse button (founder-review fix G5): "add a button to collapse it - currently there's only
-// a button to expand" — a visible affordance on the EXPANDED hull, mirroring
+// Collapse button: a visible affordance on the EXPANDED hull, mirroring
 // MacroCardComponent::getExpandButtonBounds on the collapsed card, at the opposite end of the same
 // top-of-hull row the name chip occupies.
 // ============================================================================
@@ -62,7 +61,7 @@ TEST(MacroCollapseButton, BoundsIsEmptyWhileCollapsedAndSitsInsideTheHullClearOf
 }
 
 TEST(MacroCollapseButton, DoesNotOverlapTheChipOrAMemberEvenForATwoModuleMacroPackedTight) {
-    // The degenerate case the founder-review checklist calls out: a small macro made of exactly
+    // The degenerate case: a small macro made of exactly
     // two adjacent modules, so the hull is as narrow as a real macro's ever gets. The chip and
     // button still must not overlap each other, and the button must not land on a member.
     AudioEngine engine;
@@ -205,7 +204,7 @@ TEST(MacroCollapseButton, CollapseViaTheButtonIsOneUndoStepAndUndoReExpands) {
 }
 
 // ============================================================================
-// Recolour (P8-14): "Change Colour..." opens the shared synth::ui::ColourPickerPopup, with a
+// Recolour: "Change Colour..." opens the shared synth::ui::ColourPickerPopup, with a
 // live preview (no undo) and exactly one undo step spanning original -> final colour on commit.
 // ============================================================================
 //
@@ -289,7 +288,7 @@ TEST(MacroRecolour, PreviewThenCommitBackToTheOriginalColourPushesNoUndoEntry) {
 }
 
 // ============================================================================
-// Collapsed-card double-click (P8-14): title row renames in place (like ModuleComponent's own
+// Collapsed-card double-click: title row renames in place (like ModuleComponent's own
 // title), anywhere else on the card still expands.
 // ============================================================================
 
@@ -393,7 +392,7 @@ TEST(MacroCardDoubleClick, TitleRowRenameCancelsAnyArmedCardDragSoMouseUpIsANoOp
 }
 
 // ============================================================================
-// Right-click on a macro MEMBER module also offers the macro (founder-review item 4)
+// Right-click on a macro MEMBER module also offers the macro
 // ============================================================================
 //
 // GraphEditor::mouseDown already offers the macro's own menu when a right-click lands on EMPTY
@@ -405,7 +404,7 @@ TEST(MacroCardDoubleClick, TitleRowRenameCancelsAnyArmedCardDragSoMouseUpIsANoOp
 // "Macro: <name>" submenu when -- and only when -- the clicked module resolves to a macro via
 // MacroSet::findByMember(). Because a member module's own right-click menu must NOT disturb the
 // module selection its OWN items (Copy/Duplicate/Delete Module...) act on, buildMacroMenu() itself
-// was changed to select its macro immediately before running "Ungroup"/"Save as Snippet...",
+// selects its macro immediately before running "Ungroup"/"Save as Snippet...",
 // rather than relying on a pre-select from the call site the way the hull path does.
 
 namespace {
@@ -598,7 +597,7 @@ TEST(MacroMemberContextMenu, RightClickFiresTheContextMenuHookExactlyOnce) {
 }
 
 TEST(MacroMemberContextMenu, TopLevelRemoveFromMacroItemActsOnThisModuleAloneRegardlessOfSelection) {
-    // T138 second live-testing round (2026-09-10): a user's first instinct was "right-click the
+    // A user's first instinct is "right-click the
     // module and remove it from the macro", not "open its macro's own nested submenu" -- this
     // pins the top-level escape hatch buildModuleContextMenu() now grafts on directly, one level up
     // from "Macro: <name>" -> "Remove from Macro".
@@ -642,7 +641,7 @@ TEST(MacroMemberContextMenu, TopLevelRemoveFromMacroItemActsOnThisModuleAloneReg
 }
 
 // ============================================================================
-// Membership menu gating (T138): buildMacroMenu() captures the selection at BUILD time (before
+// Membership menu gating: buildMacroMenu() captures the selection at BUILD time (before
 // any item's own handler can move it), then shows "Add Selection to Macro" only when that
 // captured selection has something addable, and "Remove from Macro" only when it has something
 // removable -- see the capture comment at the top of buildMacroMenu() itself.
@@ -736,7 +735,7 @@ juce::MouseEvent makeCardRightClick(MacroCardComponent& comp, juce::Point<int> p
 }
 } // namespace
 
-// Regression guard for a real bug found via live GUI testing (2026-09-10): MacroCardComponent's
+// Regression guard: MacroCardComponent's
 // own real right-click handler calls owner.getMacroController().selectMacro(macroId, false) BEFORE building the menu
 // (mouseDown's "if (!owner.getMacroController().isMacroSelected(macroId))" guard), which silently clobbers any OTHER
 // selection the user made before right-clicking. Calling GraphEditor::buildMacroMenu() directly
@@ -769,7 +768,7 @@ TEST(MacroMembershipMenu, AddItemAndSelectionBorderBothSurviveTheRealCardRightCl
 
     card->mouseDown(makeCardRightClick(*card, {10, 10}));
 
-    // T138 live-testing follow-up (2026-09-10): the reselect is now SKIPPED whenever there was ANY
+    // The reselect is SKIPPED whenever there was ANY
     // prior selection, specifically so the user still sees `loose`'s own selection border while the
     // menu is open -- forcing it here would silently swap the border onto the macro's own members
     // with no visual cue for what "Add Selection to Macro" is about to insert, which is the exact
@@ -826,7 +825,7 @@ TEST(MacroMembershipMenu, CardRightClickStillReselectsMacroWhenNothingWasSelecte
 }
 
 TEST(MacroMembershipMenu, RemoveSelectionFromMacroSurvivesTheRealCardRightClickWithAPartialSubset) {
-    // T138 second live-testing round (2026-09-10): reported live as "if I select one module and
+    // Reported live as "if I select one module and
     // then right-click, it just auto-selects all of the modules in the macro. So if I click remove
     // selected from macro, it just removes all of the modules". A partial subset of a macro's OWN
     // members is exactly as "non-empty" as an outside module -- the generalized fix (skip the

@@ -10,7 +10,7 @@
 // HostedPluginEditorWindow.h. Every HostedPluginEditorWindow constructed directly (not through
 // HostedPluginWindowManager::openEditorFor) stays headless for its whole life: the base
 // juce::DocumentWindow is built with addToDesktop=false, so no native peer is ever created unless
-// something explicitly promotes it. That promotion (FRO100) is openEditorFor()'s own
+// something explicitly promotes it. That promotion is openEditorFor()'s own
 // addToDesktop() call, gated on HostedPluginWindowManager::setCreatesNativeWindows(true) — false
 // by default, so every manager-level test below except group 6 stays exactly as headless as a
 // directly-constructed window.
@@ -21,8 +21,8 @@
 //   3. Instance-change reactions — swap rebuilds, unload closes.
 //   4. Resize — the editor drives the window's size.
 //   5. ModuleComponent — the card's "Open Editor" button.
-//   6. Native-window promotion (FRO100) — setCreatesNativeWindows() gates the real peer.
-//   7. Esc/Cmd+W closes the window (FRO337) via HostedPluginEditorWindow::keyPressed — the
+//   6. Native-window promotion — setCreatesNativeWindows() gates the real peer.
+//   7. Esc/Cmd+W closes the window via HostedPluginEditorWindow::keyPressed — the
 //      cross-platform juce::KeyPress path. The mac-only NSEvent monitor
 //      (HostedPluginWindowMacKeyMonitor.mm) is a separate, Cmd+W-only seam that can't run
 //      headlessly; it is exercised in-app instead (see docs/architecture/plugin-layer.md).
@@ -344,7 +344,7 @@ TEST(ModuleComponentHostedPluginTest, CardButtonWiring) {
 }
 
 // ============================================================================
-// 6. Native-window promotion (FRO100 — the FRO12 follow-up applied here)
+// 6. Native-window promotion
 // ============================================================================
 
 namespace {
@@ -423,7 +423,7 @@ TEST(HostedPluginWindowManagerNativeWindowTest, FlagTrueWithAPrimaryDisplayReach
 }
 
 // ============================================================================
-// 7. Esc/Cmd+W closes the window (FRO337)
+// 7. Esc/Cmd+W closes the window
 // ============================================================================
 
 TEST(HostedPluginEditorWindowTest, EscapeRequestsCloseForTheRightNode) {

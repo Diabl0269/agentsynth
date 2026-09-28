@@ -1,4 +1,4 @@
-// Concern: FRO13 (P9-7, docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box) -- what
+// Concern: (docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box) -- what
 // TrackPresetManager::extractTrackPreset captures beyond a channel macro's own members: an outside module modulating it
 // through a port (collectOutsideModulatorsForTrackPreset's forward-seeded, backward/upstream walk) travels with the
 // preset and is re-wired to the SAME modulation target on import; another channel's own strip (reached only by walking
@@ -132,7 +132,7 @@ TEST(TrackPresetCapture, SoloScrubbedFromCapturedChannelStrip) {
 }
 
 TEST(TrackPresetCapture, IsBusScrubbedFromCapturedChannelStrip) {
-    // FRO98 follow-up to the solo scrub above: a preset captured from a bus strip must not carry
+    // Like the solo scrub above: a preset captured from a bus strip must not carry
     // "isBus" into wherever it's inserted, or it badges an ordinary track channel as BUS
     // (docs/mixer/sends-and-buses.md).
     HostedPatchCFT patch;
@@ -172,7 +172,7 @@ TEST(TrackPresetCapture, IsBusScrubbedFromCapturedChannelStrip) {
 }
 
 TEST(TrackPresetCapture, NameScrubbedFromCapturedChannelStrip) {
-    // FRO225 follow-up to the solo/isBus scrubs above: a preset captured from a strip with its own
+    // Like the solo/isBus scrubs above: a preset captured from a strip with its own
     // persisted name must not carry "name" -- that's the SOURCE strip's own identity, and applying
     // the preset to a different channel must not rename it out from under the user.
     HostedPatchCFT patch;
@@ -212,7 +212,7 @@ TEST(TrackPresetCapture, NameScrubbedFromCapturedChannelStrip) {
 }
 
 TEST(TrackPresetCapture, SendsScrubbedFromCapturedChannelStrip) {
-    // FRO98 follow-up to the solo scrub above: a preset captured from a strip with configured
+    // Like the solo scrub above: a preset captured from a strip with configured
     // sends must not carry "sends" slot state -- a send's target is a graph edge that is never
     // stored (docs/mixer/sends-and-buses.md), so a captured slot would restore with no cable, showing a "No target"
     // row.

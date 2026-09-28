@@ -135,7 +135,7 @@ Control makeDetectedControl(const RemoteEvent& event, const std::vector<Control>
         control.kind = ControlKind::wheel;
         break;
     case MessageType::mmc:
-        // FRO330: a single discrete command, exactly like a program change -- always a button.
+        // A single discrete command, exactly like a program change -- always a button.
         control.kind = ControlKind::button;
         break;
     case MessageType::nrpn:

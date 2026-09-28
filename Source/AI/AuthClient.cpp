@@ -90,14 +90,14 @@ AuthClient::HttpResult performHttpWithCurl(const juce::String& method, const juc
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.toRawUTF8());
         curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.getNumBytesAsUTF8()));
     } else if (method == "PUT") {
-        // P6-7's PUT /v1/prompt-learning is the first body-bearing verb here curl has no
+        // PUT /v1/prompt-learning is the first body-bearing verb here curl has no
         // first-class CURLOPT for — CUSTOMREQUEST + POSTFIELDS is the standard libcurl idiom for
         // that (unlike DELETE just below, this one still needs a request body).
         curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.toRawUTF8());
         curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.getNumBytesAsUTF8()));
     } else if (method == "DELETE") {
-        // P6-8's conversation-deletion endpoints. No body on either DELETE route this client
+        // The conversation-deletion endpoints. No body on either DELETE route this client
         // calls, so nothing else to set beyond the verb override.
         curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
     } else {
@@ -344,7 +344,7 @@ AuthClient::EntitlementResult AuthClient::fetchEntitlement(const juce::String& a
     if (auto* limits = obj->getProperty("limits").getDynamicObject())
         result.monthlyRequestLimit = static_cast<int>(limits->getProperty("monthly_requests"));
 
-    // `usage` is a P4-4 addition to the response; absent against an older server is not a parse
+    // `usage` is an optional part of the response; absent against an older server is not a parse
     // failure — the client just shows 0 used rather than failing the whole entitlement fetch.
     if (auto* usage = obj->getProperty("usage").getDynamicObject()) {
         result.requestsUsed = static_cast<int>(usage->getProperty("requests_used"));
@@ -632,7 +632,7 @@ AuthClient::SubmitGeneralFeedbackResult AuthClient::submitGeneralFeedback(const 
 
     juce::StringPairArray headers;
     // Bearer auth only when signed in; otherwise this is an anonymous submission attributed via
-    // X-Device-Id below (P6-17).
+    // X-Device-Id below.
     if (accessToken.isNotEmpty())
         headers.set("Authorization", "Bearer " + accessToken);
     if (deviceId.isNotEmpty())

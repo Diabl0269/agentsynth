@@ -26,7 +26,7 @@ TEST_F(AIIntegrationServiceTest, GetPatchContext) {
     EXPECT_TRUE(context.contains("connections"));
 }
 
-// P3-3 (anonymous trial): a mocked 402 TRIAL_EXHAUSTED response from the provider must reach the
+// A mocked 402 TRIAL_EXHAUSTED response from the provider must reach the
 // caller as a distinct AIErrorKind::TrialExhausted with the server's message intact — not
 // collapsed into a generic failure. The actual HTTP-status-to-AIErrorKind mapping is RemoteProvider's
 // job (see Tests/AI/RemoteProviderTests.cpp's TrialExhaustedMapsToDistinctKindWithServerMessageIntact
@@ -98,9 +98,8 @@ TEST_F(AIIntegrationServiceTest, ReplaceModeNotReachingOutputIsRejectedStructura
 
     EXPECT_FALSE(success);
     // Prefix match, not the exact string: the tail enumerates every module type that counts
-    // as a signal source, so it changes whenever one is added. That already broke this
-    // assertion once (#165 added Noise, fixed in #164) and again when Wavetable was added.
-    // The prefix is the stable part and still pins the failure mode.
+    // as a signal source, so it changes whenever one is added. The prefix is the stable part and
+    // still pins the failure mode.
     EXPECT_TRUE(service->getLastPatchError().startsWith("Audio Output is not reachable from any"))
         << "actual: " << service->getLastPatchError().toStdString();
 }
@@ -156,9 +155,8 @@ TEST_F(AIIntegrationServiceTest, MergeRegressionGate_RejectsADeltaThatBreaksAWor
 
     EXPECT_FALSE(success);
     // Prefix match, not the exact string: the tail enumerates every module type that counts
-    // as a signal source, so it changes whenever one is added. That already broke this
-    // assertion once (#165 added Noise, fixed in #164) and again when Wavetable was added.
-    // The prefix is the stable part and still pins the failure mode.
+    // as a signal source, so it changes whenever one is added. The prefix is the stable part and
+    // still pins the failure mode.
     EXPECT_TRUE(service->getLastPatchError().startsWith("Audio Output is not reachable from any"))
         << "actual: " << service->getLastPatchError().toStdString();
     EXPECT_EQ(graph->getNumNodes(), 2) << "a structurally rejected merge must not touch the live graph";

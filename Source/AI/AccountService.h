@@ -19,7 +19,7 @@ struct AccountSnapshot {
     juce::String email;
     juce::String lastError;
 
-    // P4-4: entitlement, fetched alongside fetchMe() on sign-in (see completeSignIn()) and
+    // Entitlement, fetched alongside fetchMe() on sign-in (see completeSignIn()) and
     // refreshable on demand (see refreshEntitlement()). entitlementKnown is false until the first
     // successful fetch — a fetch failure is non-fatal (mirrors how a failed fetchMe() leaves
     // `email` empty rather than failing sign-in), so callers must check it before trusting
@@ -30,7 +30,7 @@ struct AccountSnapshot {
     int requestsUsed = 0;
     bool entitlementKnown = false;
 
-    // P6-7: opt-in flag for hosted-mode prompt collection used for product learning (human review,
+    // Opt-in flag for hosted-mode prompt collection used for product learning (human review,
     // never training/fine-tuning — see docs/ai/feedback.md#opt-in-prompt-collection). Off by default, matching
     // the server's default, so a default-constructed/not-yet-fetched snapshot is indistinguishable
     // from "known opted out" — same reasoning as `plan`'s empty-string default above, and safe
@@ -106,14 +106,14 @@ public:
         AIChatComponent calls this right after a Quota error). */
     void refreshEntitlement();
 
-    /** Re-fetches the prompt-learning opt-in preference (P6-7) only, leaving sign-in state and
+    /** Re-fetches the prompt-learning opt-in preference only, leaving sign-in state and
         entitlement untouched. No-op if signed out. Same fire-and-forget contract as
         refreshEntitlement(): publishes an updated snapshot on success, silent (logged, non-fatal)
         on failure. Intended for "the settings dialog just opened, or the user just signed in"
         moments — see AISettingsTab. */
     void refreshPromptLearningOptIn();
 
-    /** Sets the prompt-learning opt-in preference (P6-7) on the server and, on success, updates
+    /** Sets the prompt-learning opt-in preference on the server and, on success, updates
         the published snapshot to match. No-op if signed out — same gating as every other
         account-only action. Fire-and-forget: a transport failure leaves the snapshot (and
         therefore the settings checkbox) at whatever it was before the call, logged non-fatal. */

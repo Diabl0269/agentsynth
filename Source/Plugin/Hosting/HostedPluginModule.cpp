@@ -77,7 +77,7 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
                 module->publishInstance(std::move(instance));
             }
 
-            // FRO42: fires last, whatever branch above ran — see onLoadCompleted's own comment for
+            // Fires last, whatever branch above ran — see onLoadCompleted's own comment for
             // why hasInstance() (not `instance != nullptr`) is the right read here: publishInstance()
             // itself can silently refuse an over-max instance without ever publishing one.
             if (module->onLoadCompleted)

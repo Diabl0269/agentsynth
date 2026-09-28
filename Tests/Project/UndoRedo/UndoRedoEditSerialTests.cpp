@@ -1,10 +1,10 @@
-// Concern: P8-2 -- the edit serial behind MainComponent's dirty flag (advances exactly once
+// Concern: the edit serial behind MainComponent's dirty flag (advances exactly once
 // per real edit, synchronously, including through undo/redo, and never for a no-op push or a
 // refused undo).
 #include "UndoRedoTestFixture.h"
 
 // =============================================================================
-// P8-2: the edit serial behind MainComponent's dirty flag.
+// The edit serial behind MainComponent's dirty flag.
 //
 // The dirty flag cannot be driven by juce::UndoManager's change broadcast alone, because that
 // broadcast is ASYNC: a caller that edits the document and then declares it clean in the same call

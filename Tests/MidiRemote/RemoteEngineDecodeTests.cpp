@@ -220,7 +220,7 @@ TEST(MidiRemoteEngineDecodeTest, ButtonLikeControlsDecodeNoteCcAndProgramChange)
     }
 }
 
-// FRO330: an mmc control (e.g. the BeatStep's Play/Stop) decodes exactly like a program change --
+// An mmc control (e.g. the BeatStep's Play/Stop) decodes exactly like a program change --
 // one SysEx command in, one press out, at value 1.0. Drives the real MMC byte layout (F0 7F
 // <device-id> 06 <command> F7) through the real dispatch entry point, RemoteEngine::handleMessage,
 // not classifyMessage/decodeButtonLike directly.
@@ -298,7 +298,7 @@ TEST(MidiRemoteEngineDecodeTest, IneligibleMessagesAreDroppedEntirely) {
     h.finalize();
 
     // MIDI clock, active sensing (raw 0xFE, no static factory exists), an ordinary (non-MMC) sysex,
-    // System Realtime Start/Continue/Stop (FRO330 deliberately does NOT classify these -- only the
+    // System Realtime Start/Continue/Stop (these are deliberately NOT classified -- only the
     // MMC SysEx spelling of transport is supported, since that is what the BeatStep's factory
     // Play/Stop actually sends), a 4-byte sysex that LOOKS like MMC but isn't (wrong 3rd byte), and
     // poly (per-note) aftertouch -- distinct from channel pressure, which IS eligible -- must all be
@@ -324,7 +324,7 @@ TEST(MidiRemoteEngineDecodeTest, IneligibleMessagesAreDroppedEntirely) {
 }
 
 // ============================================================================
-// FRO134: Detect / encoder auto-detect feed off the activity ring
+// Detect / encoder auto-detect feed off the activity ring
 // ============================================================================
 
 // Detect's whole premise (docs/control/midi-remote-ui.md#detect-mode): a controller profile with NO

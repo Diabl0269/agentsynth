@@ -1,7 +1,7 @@
 #pragma once
 
 // TestSettingsHelpers.h -- the one place a test reaches the REAL on-disk "Agent Synth" settings
-// file (FRO58; header-only, not registered in Tests/CMakeLists.txt, included relatively like
+// file (header-only, not registered in Tests/CMakeLists.txt, included relatively like
 // TestAudioHelpers.h).
 //
 // A headless MainComponent has no per-test ApplicationProperties seam: it opens the same settings
@@ -9,7 +9,7 @@
 // synth::userSettingsOptions() and ChannelFlowTestFixture.h's "settings-file hygiene" comment).
 // Any test that persists something -- a snap division, a panel's visibility, a detached window's
 // bounds -- therefore leaks it into every later test and into the developer's own preferences.
-// Seven test files carried byte-identical private copies of the two helpers below (FRO56/FRO57);
+// Seven test files carried byte-identical private copies of the two helpers below;
 // this header replaces them so the Options can never drift from the production ones again: the
 // old copies re-hardcoded the application and folder name, which a product rename would have
 // silently split into a second settings file.

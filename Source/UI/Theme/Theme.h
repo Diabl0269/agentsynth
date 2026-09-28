@@ -50,9 +50,9 @@ struct Colors {
     juce::Colour knobBody{0xff13161B};     // knob body gradient inner stop (outer = surfaceHi)
     juce::Colour knobPointer{0xffEAEEF3};  // knob pointer line
     juce::Colour meterFill{0xff00D1FF};    // output meter LOW zone fill (below -18 dBFS)
-    // FRO146 (docs/mixer/mixer.md meters section): the meter's remaining three level zones, mid/high/clip
-    // ascending -- meterFill above stays the LOW zone for theme back-compat (it predates the
-    // zone model). See MeterColourStops.h for the exact band edges (-18/-6/0 dBFS).
+    // The meter's remaining three level zones, mid/high/clip ascending -- meterFill above stays
+    // the LOW zone for theme back-compat (it predates the zone model). See MeterColourStops.h
+    // for the exact band edges (-18/-6/0 dBFS) and docs/mixer/meters.md#colour-zones.
     juce::Colour meterMid{0xffFFD43B};        // -18..-6 dBFS
     juce::Colour meterHigh{0xffFF922B};       // -6..0 dBFS
     juce::Colour meterClip{0xffFF4D4F};       // above 0 dBFS
@@ -122,8 +122,8 @@ struct Metrics {
     float guideAlpha{0.7f};             // alignment guide opacity
     float guideLineWidth{1.5f};         // alignment guide stroke width
     float cornerRadiusSmall{4.0f};      // pill / small element radius
-    float modDepthBandAlpha{0.3f};      // reachable-range band under a modulation ring, FRO287; code-only
-    float modRingHoverWidthBoost{1.5f}; // FRO288: ring-width boost when hover-correlated with its cable; code-only
+    float modDepthBandAlpha{0.3f};      // reachable-range band under a modulation ring; code-only
+    float modRingHoverWidthBoost{1.5f}; // ring-width boost when hover-correlated with its cable; code-only
 
     // --- Chrome layout constants (code-only; not parsed from user JSON) ---
     // 44 (was 36): the old height only left room for a 9px icon-band trim and ~7px label text

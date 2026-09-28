@@ -1,9 +1,9 @@
-// FRO142 (docs/control/midi-remote.md#pages): page filtering in RemoteEngineReconcile.cpp, the page
-// Target in RemoteEngineApply.cpp, takeover across a switch, feedback resync, and
-// getEffectivePageCount/resetActivePages. Mirrors RemoteEngineApplyTests.cpp's ApplyHarness (one
-// real AudioProcessorGraph + FilterModule node, fake clock) so applying a real page-2 assignment
-// really moves a real juce::AudioProcessorParameter. Suite name contains "MidiRemote" per the
-// ship-task --gtest_filter convention.
+// Page filtering in RemoteEngineReconcile.cpp, the page Target in RemoteEngineApply.cpp, takeover
+// across a switch, feedback resync, and getEffectivePageCount/resetActivePages. Mirrors
+// RemoteEngineApplyTests.cpp's ApplyHarness (one real AudioProcessorGraph + FilterModule node, fake
+// clock) so applying a real page-2 assignment really moves a real juce::AudioProcessorParameter.
+// Suite name contains "MidiRemote" per the ship-task --gtest_filter convention
+// (see docs/control/midi-remote.md#pages).
 
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "Modules/FilterModule.h"

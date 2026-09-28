@@ -1,11 +1,11 @@
-// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): ControllerHandshakeCoordinator --
-// sends a profile's declared open bytes once its device is open, sends close once it stops
-// qualifying (removed, handshake cleared, or device closed), and shutdownAll() closes everything
-// still open. A FakeFeedbackSink stands in for the real juce::MidiOutput seam
-// (MidiRemoteFeedbackOutputs, already covered by its own MidiRemoteFeedbackOutputsTests.cpp for
-// "missing device" / "failed open" -- this coordinator only ever calls RemoteFeedbackSink, so it
-// inherits that no-crash contract rather than re-testing it here). Suite name contains
-// "MidiRemote" per the ship-task --gtest_filter convention.
+// ControllerHandshakeCoordinator -- sends a profile's declared open bytes once its device is open,
+// sends close once it stops qualifying (removed, handshake cleared, or device closed), and
+// shutdownAll() closes everything still open. A FakeFeedbackSink stands in for the real
+// juce::MidiOutput seam (MidiRemoteFeedbackOutputs, already covered by its own
+// MidiRemoteFeedbackOutputsTests.cpp for "missing device" / "failed open" -- this coordinator only
+// ever calls RemoteFeedbackSink, so it inherits that no-crash contract rather than re-testing it
+// here). Suite name contains "MidiRemote" per the ship-task --gtest_filter convention (see
+// docs/control/midi-remote-device-handshake.md#device-handshake).
 
 #include "MidiRemote/ControllerHandshake.h"
 
@@ -100,7 +100,7 @@ TEST(ControllerHandshakeTest, SendsNothingWhenNoOutputResolves) {
     const auto profile = makeProfile("p1", "dev1", {0xF0, 0x7F, 0xF7}, {0xF0, 0x00, 0xF7});
 
     // The device's INPUT is open, but no output anywhere matches it -- e.g. an output-less device,
-    // or (pre-FRO339's bug) an asymmetric in/out name pair with no port hint to bridge them.
+    // or an asymmetric in/out name pair with no port hint to bridge them.
     coordinator.reconcile({profile}, {"dev1"}, {});
     EXPECT_TRUE(sink.sent.empty());
 }
@@ -172,12 +172,12 @@ TEST(ControllerHandshakeTest, EmptyCloseBytesSendNothingOnClose) {
     EXPECT_EQ(sink.sent.size(), 1u); // nothing sent for the empty close message
 }
 
-// -- FRO339: the asymmetric-port real-hardware case (2026-09-28) ------------------------------
-// A connected Launch Control XL 3 showed CoreMIDI naming its four ports asymmetrically: the
-// SOURCES (this app's `input` choices) are "LCXL3 1 MIDI Out"/"LCXL3 1 DAW Out"; the DESTINATIONS
-// (what a handshake actually writes to) are "LCXL3 1 MIDI In"/"LCXL3 1 DAW In"/two "To DIN Out"
-// ports -- no destination shares either source's exact name, so the pre-FRO339 code (send to
-// whatever matches `input` literally) always failed silently for this device.
+// -- The asymmetric-port real-hardware case ------------------------------ A connected Launch
+// Control XL 3 showed CoreMIDI naming its four ports asymmetrically: the SOURCES (this app's
+// `input` choices) are "LCXL3 1 MIDI Out"/"LCXL3 1 DAW Out"; the DESTINATIONS (what a handshake
+// actually writes to) are "LCXL3 1 MIDI In"/"LCXL3 1 DAW In"/two "To DIN Out" ports -- no
+// destination shares either source's exact name, so sending to whatever matches `input` literally
+// always fails silently for this device.
 
 std::vector<ControllerProfile::Input> lcxl3Outputs() {
     return {{"out-midi-in", "LCXL3 1 MIDI In"},
@@ -248,7 +248,7 @@ TEST(DescribeHandshakeIssueTest, WarnsWhenNothingResolvedAndThereIsNoHint) {
     EXPECT_EQ(message, "This controller's handshake couldn't find a matching MIDI output for \"Some Device\".");
 }
 
-// -- FRO339: the coordinator end-to-end, through the real names above -------------------------
+// -- The coordinator end-to-end, through the real names above -------------------------
 
 TEST(ControllerHandshakeTest, SendsTheHandshakeToTheHintedDawInputEvenWhenTheWrongPortWasChosen) {
     FakeFeedbackSink sink;

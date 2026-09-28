@@ -1,4 +1,4 @@
-// ControllerSurfacePageStrip.cpp -- FRO142: see the header. Reuses juce::TextButton exactly like
+// ControllerSurfacePageStrip.cpp: see the header. Reuses juce::TextButton exactly like
 // every other row in this panel (ControllerSurfaceToolbar's own buttons); the only bespoke bit is
 // PageButton's right-click forward, since a plain juce::TextButton has no "distinguish a right-
 // click from onClick" hook of its own -- juce::Button::internalClickCallback fires onClick for

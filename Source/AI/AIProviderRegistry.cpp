@@ -39,7 +39,7 @@ AIProviderRegistry AIProviderRegistry::createDefault() {
     // deliberate even now that "remote" is the default (see MainComponent::resolveDefaultProviderId()):
     // an unrecognised/corrupt persisted id fails safe to the provider that sends no data anywhere,
     // never to the one that does.
-    // hidden=false as of P4-6: offered in AISettingsTab's provider combo alongside "ollama".
+    // hidden=false: offered in AISettingsTab's provider combo alongside "ollama".
     registry.registerProvider({"remote", "Remote (hosted)", true, true,
                                [](const ProviderConfig& config) -> std::unique_ptr<AIProvider> {
                                    auto provider = std::make_unique<RemoteProvider>(

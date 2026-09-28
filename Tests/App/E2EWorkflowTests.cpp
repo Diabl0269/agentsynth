@@ -66,7 +66,7 @@ class DummyDragSource : public juce::Component {};
 namespace {
 
 // The real on-disk settings file and the save/restore guard around it live in
-// Tests/TestSettingsHelpers.h (FRO58) -- one copy for every test that opens it.
+// Tests/TestSettingsHelpers.h -- one copy for every test that opens it.
 using synth::test::PersistedKeysGuard;
 using synth::test::userSettingsTestOptions;
 

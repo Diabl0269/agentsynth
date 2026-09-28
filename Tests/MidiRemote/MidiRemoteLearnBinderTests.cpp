@@ -128,7 +128,7 @@ TEST(MidiRemoteLearnBinderTest, AssignmentCarriesADenormalisedCopyOfTheControlSp
     EXPECT_TRUE(outcome.assignment.enabled);
 }
 
-// -- 14-bit pairs and NRPN (FRO140) ------------------------------------------------------------------
+// -- 14-bit pairs and NRPN ---------------------------------------------------------------------------
 
 TEST(MidiRemoteLearnBinderTest, LearningTheLsbHalfBindsTheExistingPairedControlNotANewOne) {
     ControllerProfile existing;

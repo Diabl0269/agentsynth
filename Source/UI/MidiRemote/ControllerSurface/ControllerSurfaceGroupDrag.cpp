@@ -1,18 +1,16 @@
-// Concern: FRO270 (docs/control/midi-remote-ui.md#surface-centre) -- turning a cell's own
-// cell-to-cell drag delta (ControllerSurfaceCell::onDraggedByCells/onDragEnded, unchanged since
-// FRO131) into a MOVE OF THE WHOLE SELECTION when the dragged cell is part of one, clamped as a
-// single block against the grid's top-left bound and refused outright if it would land any moved
-// control on a cell an unselected control already occupies. A lone selection (or a drag on a cell
-// that isn't part of the current selection) is just this same code with a group of one -- there is
-// exactly one drag-to-move implementation, not a single-cell path plus a separate group path.
+// Concern (docs/control/midi-remote-ui.md#surface-centre): turning a cell's own cell-to-cell drag
+// delta (ControllerSurfaceCell::onDraggedByCells/onDragEnded) into a MOVE OF THE WHOLE SELECTION
+// when the dragged cell is part of one, clamped as a single block against the grid's top-left
+// bound and refused outright if it would land any moved control on a cell an unselected control
+// already occupies. A lone selection (or a drag on a cell that isn't part of the current
+// selection) is just this same code with a group of one -- there is exactly one drag-to-move
+// implementation, not a single-cell path plus a separate group path.
 //
-// UNIFICATION NOTE (FRO270): before this ticket, a single-cell drag never checked for a target
-// already occupied by another control -- it could park two controls on the same cell. That was
-// never intentional (docs/control/midi-remote-ui.md never describes it, and no test asserted it);
-// it was simply never worth guarding for one control at a time. A GROUP move makes the same gap
-// much more visible and easy to trigger by accident, and there is no reasonable single shared rule
-// ("refuse the group but allow a single cell to land on another") that wouldn't be its own source
-// of confusion, so this refusal now applies uniformly to every drag, one and many alike.
+// UNIFICATION NOTE: every drag, one control or many, is refused if a moved control would land on a
+// cell another control already occupies. Parking two controls on the same cell was never
+// intentional (docs/control/midi-remote-ui.md never describes it), and there is no reasonable
+// single shared rule ("refuse the group but allow a single cell to land on another") that wouldn't
+// be its own source of confusion.
 
 #include "ControllerSurfaceComponent.h"
 

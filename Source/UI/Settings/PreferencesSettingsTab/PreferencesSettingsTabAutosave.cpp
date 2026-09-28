@@ -1,7 +1,7 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
 
-// Concern: autosave enabled/interval/backup-count preferences (P8-4).
+// Concern: autosave enabled/interval/backup-count preferences.
 
 bool PreferencesSettingsTab::isAutosaveEnabled() const { return autosaveEnabledToggle.getToggleState(); }
 

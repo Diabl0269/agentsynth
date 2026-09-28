@@ -1,4 +1,4 @@
-// Concern: FRO134 -- creating and importing controllers from the panel: "+ Add controller", the
+// Concern: creating and importing controllers from the panel: "+ Add controller", the
 // Templates menu, and Import/Export (docs/control/midi-remote-ui.md#add-controller,
 // #templates-and-importexport).
 #include "AudioEngine/AudioEngine.h"
@@ -92,7 +92,7 @@ int MidiRemotePanelComponent::applyTemplateToSelectedProfile(const juce::String&
 
     auto updated = *profile;
     const auto result = synth::midi::applyControllerTemplate(updated, tmpl);
-    // FRO330: a template can add actions (e.g. BeatStep's Play/Stop) without adding any new
+    // A template can add actions (e.g. BeatStep's Play/Stop) without adding any new
     // control -- re-applying the same template after its controls already exist should still wire
     // up an action it did not have yet, so persist on either count.
     if (result.added > 0 || result.actionsAdded > 0) {

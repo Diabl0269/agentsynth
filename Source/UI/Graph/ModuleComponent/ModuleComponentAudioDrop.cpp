@@ -1,8 +1,7 @@
 // ModuleComponentAudioDrop.cpp -- the Sampler's control creation (waveform view, load button,
 // file-name label) plus audio-file drag-and-drop for both the Sampler and the Wavetable
 // oscillator's file targets. ModuleComponent is declared in ModuleComponent.h; the rest of its
-// implementation lives in the sibling ModuleComponent*.cpp units next to this one (FRO65 split of
-// the former single ModuleComponent.cpp).
+// implementation lives in the sibling ModuleComponent*.cpp units next to this one.
 #include "ModuleComponent.h"
 #include "Modules/SamplerModule.h"
 

@@ -1,4 +1,4 @@
-// Tests/MidiRemote/MidiRemoteFeedbackOutputsTests.cpp -- FRO139
+// Tests/MidiRemote/MidiRemoteFeedbackOutputsTests.cpp
 // (docs/control/midi-remote.md#controller-feedback): the cache/failure-remembering shell around
 // MidiRemoteFeedbackOutputs::Opener, driven through the injected-opener test seam -- except the last
 // test, which is skipped unless a real output device is named (see its comment).

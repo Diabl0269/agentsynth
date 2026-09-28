@@ -1,4 +1,4 @@
-// ControllerSurfaceDetectTests.cpp -- FRO134 (docs/control/midi-remote-ui.md#detect-mode): Detect
+// ControllerSurfaceDetectTests.cpp (docs/control/midi-remote-ui.md#detect-mode): Detect
 // mode end to end through the real seams -- RemoteEngine::handleMessage -> the activity ring ->
 // MidiRemotePanelComponent::refreshActivity() (the ONE drain) -> the profile and the surface --
 // plus the toolbar's own contract and DetectModeController's decisions. Suite names contain
