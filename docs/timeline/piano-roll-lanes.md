@@ -75,7 +75,7 @@ dimmed and are still editable. Selected notes are drawn in the accent colour.
 | Drag a handle | Moves the point — beat snapped, value follows the pointer |
 | **Shift**+drag (line) | Replaces the span with its two snapped endpoints |
 | **Alt**+click/drag (erase) | Deletes every handle the pointer passes over |
-| Right-click | Delete point, point curve Hold / Linear (on a handle); Clear lane; Remove lane |
+| Right-click | Delete point, point curve Hold / Linear (on a handle); Clear lane; Remove lane. The target (clip, lane, point beat) is captured when the menu opens and re-verified when the async answer arrives; a stale one does nothing |
 
 Snap is the shared view-state snap (J toggles it), the same magnetism note edits use. New points on
 CC 64..69 (the pedals) default to **Hold**; everything else to **Linear**.
@@ -116,7 +116,10 @@ Hold (0) or Linear (1). The reserved Bezier curve is refused. Points stay sorted
 Mutators (`Source/Timeline/TimelineDoc/TimelineDocControllers.cpp`, one mutation each):
 `setNoteVelocities`, `addControllerLane`, `removeControllerLane`, `setControllerLanePoints`
 (replace-all, creates the lane when absent). Structural edits carry the lanes: **split** cuts each
-lane with a boundary point on both halves so both keep playing the same curve; **join** re-bases
+lane with a boundary point on both halves so both keep playing the same curve (a half that would
+pass the point cap drops its boundary point — that only happens when every point of a full lane is
+on that side, where the lane is flat across the cut, so nothing audible changes and the split is
+never refused); **join** re-bases
 b's points and merges by CC number; **duplicate** copies them.
 
 Serialised as an additive `"controllers"` array on each clip (written always, absent loads empty,
@@ -138,8 +141,11 @@ restored through `setControllerLanePoints`).
   equal tick.
 - **Import** turns each track's controller events into one **Hold** lane per CC number (channels
   merged), drops unchanged values, and skips 120..127 (channel-mode messages). A lane over the point
-  cap is thinned with `AutomationRecorder::thinPoints` at a growing tolerance. Tracks with no notes
-  are still skipped, CC data and all. `importIntoTrack` takes `withControllers` (default **false**:
+  cap is thinned with `AutomationRecorder::thinPoints` at a growing tolerance. A track holding only
+  CC data (a format-1 file's controller track) is kept. The same CC arriving from several tracks is
+  MERGED into one lane (sorted, unique beats, capped), never last-track-wins. `importIntoTrack`
+  makes one clip per note track, merges CC-only tracks into the first note clip, and turns a file
+  with CC but no notes into one CC clip. `importIntoTrack` takes `withControllers` (default **false**:
   the AI `placeMidiClip` path stays notes-only); `importIntoClip` merges a file into an existing
   clip, growing it to fit and replacing any lane the file also has.
 - **The "MIDI" chip** (eighth header chip) offers "Import MIDI file into this clip..." and "Export
@@ -173,6 +179,11 @@ included):
   starting mid-clip, locating and wrapping the loop all land the controller where the lane says.
 - **Pedals.** That same flush first sends 0 on CC 64 / 66 / 69 wherever this source last sent a
   value of 64 or more, so a stop or locate cannot leave a sustain held over the released notes.
+  During playback a held pedal is also released (0, at that beat) the moment no lane for that
+  controller and channel covers the playhead any more — its lane or clip ended, or the clip was
+  muted, deleted or edited out of the snapshot. An adjacent lane that continues the hold keeps it.
+- **Cost.** The per-track run carries a monotonic `runMaxEndBeat`, so each range binary-searches
+  its first live lane instead of scanning every lane behind the playhead.
 - All of it is allocation- and lock-free: a fixed 16 x 128 table of last-sent values.
 
 ## Tests

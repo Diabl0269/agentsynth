@@ -580,6 +580,8 @@ public:
     };
     // Moves/copies/removes the source track's OWN lanes' points in each span, all as ONE mutation.
     bool transferAutomationSpans(const std::vector<AutomationSpanEdit>& edits);
+    // Dry run of transferAutomationSpans: true when it would succeed (or do nothing). Never mutates.
+    bool canTransferAutomationSpans(const std::vector<AutomationSpanEdit>& edits) const;
 
     // Sets the lane's record mode. `mode` must be a LaneRecordMode value (0..4) — anything
     // else is rejected outright rather than clamped, so an out-of-range int can never reach the
@@ -718,6 +720,14 @@ private:
     }
 
     void finishMutation();
+
+    struct SpanTransferPlanEntry {
+        AutomationLane* lane = nullptr;
+        std::vector<AutomationLane::Breakpoint> points;
+    };
+    // -1 refused, 0 nothing to do, 1 `planOut` holds the new point lists. Never mutates.
+    int planAutomationSpanTransfer(const std::vector<AutomationSpanEdit>& edits,
+                                   std::vector<SpanTransferPlanEntry>& planOut);
 
     Track* findTrack(TrackId id);
     const Track* findTrack(TrackId id) const;

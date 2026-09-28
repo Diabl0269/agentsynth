@@ -266,6 +266,8 @@ public:
     // be unset, in which case the menu item is simply never offered (see showClipContextMenu). See
     // TimelineClipLaneEditTools.cpp for why this is a callback rather than a ClipContextChoice.
     std::function<void(synth::ClipId)> onRelinkAudioRequested;
+    // A one-line status for the user (a refused edit). May be unset; the panel reports through it too.
+    std::function<void(const juce::String&)> onStatusMessage;
 
     // Panel-scoped Delete/Escape/P. Grabs focus on mouseDown, so pressing Delete right after a
     // click lands here rather than on whichever panel had focus before. Returns false when there

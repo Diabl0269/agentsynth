@@ -128,13 +128,33 @@ juce::PopupMenu PianoRollControllerLanes::buildContextMenu(juce::Point<int> pos)
     return menu;
 }
 
-// Each action is one commit, hence one undo step, exactly like a gesture.
+PianoRollControllerLanes::ContextTarget PianoRollControllerLanes::contextTargetAt(juce::Point<int> pos) const {
+    ContextTarget target;
+    target.clip = roll_.getClipId();
+    target.lane = selectedLane_;
+    if (selectedLane_ != kVelocityLane)
+        if (const auto handle = handleAt(pos))
+            target.pointBeat = shownPoints()[*handle].beat;
+    return target;
+}
+
 void PianoRollControllerLanes::performContextAction(int action, juce::Point<int> pos) {
+    performContextAction(action, contextTargetAt(pos));
+}
+
+// Each action is one commit, hence one undo step, exactly like a gesture. The menu answers
+// asynchronously, and in between an undo, another view's edit or a clip / lane switch can change
+// what sits under the pointer — so the target captured at menu-open time is re-verified against
+// the doc NOW (same clip open, same lane shown, a point still at that exact beat) and a stale one
+// does nothing rather than editing whatever happens to be there instead.
+void PianoRollControllerLanes::performContextAction(int action, const ContextTarget& target) {
     const auto* clip = openClip();
-    if (clip == nullptr)
+    if (clip == nullptr || clip->id != target.clip || target.lane != selectedLane_)
         return;
     cancelGesture();
     if (action == ResetVelocities) {
+        if (selectedLane_ != kVelocityLane)
+            return;
         const auto restrict = selectedNoteIds();
         std::vector<std::pair<synth::NoteId, int>> velocities;
         for (const auto& note : clip->notes)
@@ -146,7 +166,11 @@ void PianoRollControllerLanes::performContextAction(int action, juce::Point<int>
     if (selectedLane_ == kVelocityLane)
         return;
     auto points = docPoints();
-    const auto handle = handleAt(pos);
+    std::optional<size_t> handle;
+    if (target.pointBeat)
+        for (size_t i = 0; i < points.size(); ++i)
+            if (points[i].beat == *target.pointBeat)
+                handle = i;
     switch (action) {
     case ClearLane:
         commitPoints({});
@@ -177,10 +201,11 @@ void PianoRollControllerLanes::showContextMenu(juce::Point<int> pos) {
     auto menu = buildContextMenu(pos);
     if (menu.getNumItems() == 0)
         return;
+    const auto target = contextTargetAt(pos); // captured NOW, verified when the answer arrives
     juce::Component::SafePointer<PianoRollControllerLanes> safe(this);
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this), [safe, pos](int result) {
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this), [safe, target](int result) {
         if (safe != nullptr && result != 0)
-            safe->performContextAction(result, pos);
+            safe->performContextAction(result, target);
     });
 }
 

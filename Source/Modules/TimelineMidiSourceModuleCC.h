@@ -32,7 +32,15 @@ namespace synth {
  * therefore RE-SENDS the current value at the new position: starting playback mid-clip, locating
  * or wrapping the loop always lands the controller where the lane says it is.
  *
- * Outside every clip's window nothing is sent: the controller keeps the last value it was given.
+ * Outside every clip's window nothing is sent: the controller keeps the last value it was given —
+ * EXCEPT a held switch pedal (CC 64 / 66 / 69 last sent at >= 64): the moment no lane for that
+ * controller on that channel covers the playhead any more (the lane or its clip ended, or the clip
+ * was muted, deleted or edited out of the snapshot), releaseUncoveredSwitches sends it an explicit 0
+ * at that beat, so a pedal never stays down after the data that pressed it is gone.
+ *
+ * Cost: the per-track run is sorted by startBeat and carries a monotonic runMaxEndBeat, so each
+ * range binary-searches its first live lane — independent of how many lanes the song has behind
+ * the playhead.
  */
 class TimelineControllerPlayer {
 public:
@@ -66,7 +74,7 @@ public:
         if (!(rangeEnd > rangeStart) || !(beatsPerSample > 0.0))
             return;
         int budget = kMaxEventsPerRange;
-        const int first = track.firstController;
+        const int first = firstLiveLane(snapshot, track, rangeStart);
         const int last = track.firstController + track.numControllers;
         for (int i = first; i < last && budget > 0; ++i) {
             const auto& lane = snapshot.controllers[(std::size_t)i];
@@ -91,10 +99,82 @@ public:
                 sendAt(points[p].beat);
             }
         }
+        releaseUncoveredSwitches(snapshot, track, midi, first, rangeStart, rangeEnd, baseOffset, beatsPerSample,
+                                 lastSample);
     }
 
 private:
     static std::size_t index(int channel, int cc) noexcept { return (std::size_t)((channel - 1) * 128 + cc); }
+
+    static constexpr int kSwitchCcs[3] = {64, 66, 69};
+
+    // First entry of the track's run whose runMaxEndBeat > rangeStart: every entry before it ended
+    // at or before the range, so none of them can overlap it (runMaxEndBeat is monotonic).
+    static int firstLiveLane(const TimelineSnapshot& snapshot, const TimelineSnapshot::TrackInfo& track,
+                             double rangeStart) noexcept {
+        int lo = track.firstController;
+        int hi = track.firstController + track.numControllers;
+        while (lo < hi) {
+            const int mid = lo + ((hi - lo) >> 1);
+            if (snapshot.controllers[(std::size_t)mid].runMaxEndBeat > rangeStart)
+                hi = mid;
+            else
+                lo = mid + 1;
+        }
+        return lo;
+    }
+
+    // The end beat of the lane for (cc, channel) covering `beat`, or -1 when none does. Only
+    // entries from `first` can cover a beat at or after the range start; scanning stops at the
+    // first entry starting after `beat` (sorted by start).
+    static double coveringLaneEnd(const TimelineSnapshot& snapshot, const TimelineSnapshot::TrackInfo& track, int first,
+                                  int cc, int channel, double beat) noexcept {
+        const int last = track.firstController + track.numControllers;
+        double end = -1.0;
+        for (int i = first; i < last; ++i) {
+            const auto& lane = snapshot.controllers[(std::size_t)i];
+            if (lane.startBeat > beat)
+                break;
+            if (lane.ccNumber == cc && lane.numPoints > 0 && (lane.channelMask & (1u << (channel - 1))) != 0 &&
+                lane.endBeat > beat)
+                end = juce::jmax(end, lane.endBeat);
+        }
+        return end;
+    }
+
+    // See the class comment. Runs AFTER the range's lanes emit (so a lane ending inside the range
+    // cannot re-press behind its own release): follows the chain of covering lanes from the range
+    // start (bounded) and releases at the first uncovered beat inside the range. If a lane further
+    // on re-pressed the pedal in this same range, the table now says 0 and the next range simply
+    // re-sends that lane's value — a duplicate, never a stuck pedal.
+    void releaseUncoveredSwitches(const TimelineSnapshot& snapshot, const TimelineSnapshot::TrackInfo& track,
+                                  juce::MidiBuffer& midi, int first, double rangeStart, double rangeEnd, int baseOffset,
+                                  double beatsPerSample, int lastSample) noexcept {
+        for (const int cc : kSwitchCcs) {
+            for (int channel = 1; channel <= 16; ++channel) {
+                auto& slot = lastSent_[index(channel, cc)];
+                if (slot < 64)
+                    continue;
+                double beat = rangeStart;
+                bool release = false;
+                for (int hop = 0; hop < 8; ++hop) {
+                    const double end = coveringLaneEnd(snapshot, track, first, cc, channel, beat);
+                    if (end < 0.0) {
+                        release = true;
+                        break;
+                    }
+                    if (end >= rangeEnd)
+                        break; // covered for the rest of this range
+                    beat = end;
+                }
+                if (!release)
+                    continue;
+                midi.addEvent(juce::MidiMessage::controllerEvent(channel, cc, 0),
+                              beatToOffset(beat, rangeStart, beatsPerSample, baseOffset, lastSample));
+                slot = 0;
+            }
+        }
+    }
 
     void send(juce::MidiBuffer& midi, const TimelineSnapshot::ControllerInfo& lane, int v7, int offset,
               int& budget) noexcept {

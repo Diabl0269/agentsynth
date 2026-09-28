@@ -82,3 +82,25 @@ TEST(TimelineClipClipboardControllerTest, DuplicateAndRepeatCarryCcLanes) {
     for (const auto* copy : copies)
         CcClipboardFixture::expectSameLanes(*copy, *f.doc.getClip(f.clip));
 }
+
+// ---- Review regression: automation that would not fit refuses the whole edit ---------------------
+
+TEST(TimelineClipClipboardControllerTest, DuplicateWhoseAutomationWouldNotFitIsRefusedWhole) {
+    CcClipboardFixture f;
+    const auto lane = f.doc.addLane(f.track, "node-uuid", "cutoff", {0.0f, 1.0f, 0.5f});
+    ASSERT_TRUE(lane.isValid());
+    std::vector<synth::AutomationLane::Breakpoint> points;
+    // The lane is full, with points under the clip [4, 8) and none where the copy lands [8, 12).
+    for (int i = 0; i < synth::TimelineDoc::kMaxBreakpointsPerLane; ++i)
+        points.push_back({4.0 + i * (3.9 / synth::TimelineDoc::kMaxBreakpointsPerLane), 0.5, 0.0f, 1});
+    ASSERT_TRUE(f.doc.editBreakpoints(lane, {}, points));
+    f.panel.getClipLaneArea().setAutomationFollowsClips(true);
+    juce::String status;
+    f.panel.getClipLaneArea().onStatusMessage = [&status](const juce::String& m) { status = m; };
+
+    const auto clipsBefore = f.doc.getTrack(f.track)->clips.size();
+    EXPECT_FALSE(f.panel.duplicateSelectedClips());
+    EXPECT_EQ(f.doc.getTrack(f.track)->clips.size(), clipsBefore) << "the clip must not move without its automation";
+    EXPECT_FALSE(f.undo.canUndo());
+    EXPECT_TRUE(status.isNotEmpty()) << "and the user is told why";
+}

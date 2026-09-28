@@ -368,6 +368,10 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
                             spanEdits.push_back(*spanEdit);
 
             std::vector<synth::ClipId> newIds;
+            // Refused whole when the automation half would not fit: the clip never moves without it.
+            const bool automationFits = automationSpanEditsFit(*doc_, spanEdits);
+            if (!automationFits && onStatusMessage)
+                onStatusMessage(kAutomationSpanRefusedMessage);
             auto mutate = [this, clips, destTracks, delta, copying, spanEdits, &newIds] {
                 for (std::size_t i = 0; i < clips.size(); ++i) {
                     const auto& origin = clips[i];
@@ -390,10 +394,13 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
                 }
                 applyAutomationSpanEdits(*doc_, spanEdits);
             };
-            if (undoManager_)
-                undoManager_->recordTimelineChange(*doc_, mutate);
-            else
-                mutate();
+            // Refused: nothing moves (the preview is dropped below like any finished drag).
+            if (automationFits) {
+                if (undoManager_)
+                    undoManager_->recordTimelineChange(*doc_, mutate);
+                else
+                    mutate();
+            }
 
             // A copy-drag ends with the COPIES selected — the user's attention is on what they
             // just made, and the next drag should move it rather than the original.

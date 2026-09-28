@@ -31,7 +31,7 @@
 34 Source/Timeline/MidiClipFile.h
 33 Source/Timeline/MidiRecorder.h
 33 Source/Timeline/PeaksFile.h
-114 Source/Timeline/TimelineDoc/TimelineDoc.h
+109 Source/Timeline/TimelineDoc/TimelineDoc.h
 40 Source/Timeline/TimelineOps.h
 48 Source/Timeline/TimelineValidator.h
 36 Source/Transport/BounceExporter.h

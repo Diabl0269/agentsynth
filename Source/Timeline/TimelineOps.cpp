@@ -489,9 +489,14 @@ TimelineOpsResult runPlaceMidiClip(const juce::String& where, juce::DynamicObjec
         return fail(where + "has a \"midBase64\" that is not valid base64.");
 
     juce::MemoryInputStream midiStream(decoded.getData(), decoded.getDataSize(), false);
-    const auto imported = MidiClipFile::importFromStream(midiStream);
+    auto imported = MidiClipFile::importFromStream(midiStream);
     if (!imported.ok)
         return fail(where + "carries a .mid blob that could not be imported: " + imported.message + ".");
+    // Notes only on this untrusted path: tracks carrying nothing but CC data are dropped here, so
+    // every count below is a count of clips importIntoTrack (withControllers = false) will create.
+    imported.tracks.erase(std::remove_if(imported.tracks.begin(), imported.tracks.end(),
+                                         [](const MidiClipFile::ImportedTrack& t) { return t.notes.empty(); }),
+                          imported.tracks.end());
     if (imported.tracks.empty())
         return fail(where + "carries a .mid blob with no notes in it - there is nothing to place.");
 

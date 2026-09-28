@@ -149,3 +149,91 @@ TEST(MidiClipFileControllerTest, ChannelModeMessagesAreNotImportedAsLanes) {
     ASSERT_TRUE(result.ok);
     EXPECT_FALSE(result.hasControllerData());
 }
+
+// ---- Review regressions -------------------------------------------------------------------------
+
+namespace {
+
+// A format-1 file: track 0 holds only CC, track 1 the notes, track 2 more CC for the same number.
+MidiClipFile::ImportResult controllerTrackFile() {
+    juce::MidiFile file;
+    file.setTicksPerQuarterNote(480);
+    juce::MidiMessageSequence ccTrack;
+    auto a = juce::MidiMessage::controllerEvent(1, 1, 20);
+    a.setTimeStamp(0);
+    ccTrack.addEvent(a);
+    auto b = juce::MidiMessage::controllerEvent(1, 1, 40);
+    b.setTimeStamp(960);
+    ccTrack.addEvent(b);
+    file.addTrack(ccTrack);
+    juce::MidiMessageSequence notes;
+    auto on = juce::MidiMessage::noteOn(1, 60, (juce::uint8)100);
+    on.setTimeStamp(0);
+    notes.addEvent(on);
+    auto off = juce::MidiMessage::noteOff(1, 60);
+    off.setTimeStamp(480);
+    notes.addEvent(off);
+    file.addTrack(notes);
+    juce::MidiMessageSequence more;
+    auto c = juce::MidiMessage::controllerEvent(1, 1, 80);
+    c.setTimeStamp(1920);
+    more.addEvent(c);
+    file.addTrack(more);
+    juce::MemoryOutputStream out;
+    file.writeTo(out, 1);
+    juce::MemoryInputStream in(out.getData(), out.getDataSize(), false);
+    return MidiClipFile::importFromStream(in);
+}
+
+} // namespace
+
+TEST(MidiClipFileControllerTest, ControllerOnlyTracksAreKeptAndMergedPerCc) {
+    const auto result = controllerTrackFile();
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(result.tracks.size(), 3u) << "CC-only tracks are no longer dropped";
+    EXPECT_TRUE(result.hasControllerData());
+
+    TimelineDoc doc;
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = doc.addClip(track, 0.0, 1.0, "c");
+    ASSERT_TRUE(MidiClipFile::importIntoClip(doc, clip, result, true));
+    const auto* lane = doc.getControllerLane(clip, 1);
+    ASSERT_NE(lane, nullptr);
+    ASSERT_EQ(lane->points.size(), 3u) << "both tracks' CC 1 streams merged, not last-track-wins";
+    EXPECT_DOUBLE_EQ(lane->points[0].value, 20.0);
+    EXPECT_DOUBLE_EQ(lane->points[1].value, 40.0);
+    EXPECT_DOUBLE_EQ(lane->points[2].value, 80.0);
+
+    TimelineDoc intoTrack;
+    const auto t2 = intoTrack.addTrack(TrackKind::Midi, "T");
+    ASSERT_TRUE(MidiClipFile::importIntoTrack(intoTrack, t2, 0.0, result, true));
+    ASSERT_EQ(intoTrack.getTrack(t2)->clips.size(), 1u) << "one note clip; CC-only tracks merge into it";
+    EXPECT_EQ(intoTrack.getTrack(t2)->clips[0].controllers.size(), 1u);
+    EXPECT_EQ(intoTrack.getTrack(t2)->clips[0].controllers[0].points.size(), 3u);
+}
+
+TEST(MidiClipFileControllerTest, AControllerOnlyFileImportsIntoAClipWhenAsked) {
+    juce::MidiFile file;
+    file.setTicksPerQuarterNote(480);
+    juce::MidiMessageSequence ccTrack;
+    auto a = juce::MidiMessage::controllerEvent(1, 11, 64);
+    a.setTimeStamp(480);
+    ccTrack.addEvent(a);
+    file.addTrack(ccTrack);
+    juce::MemoryOutputStream out;
+    file.writeTo(out, 1);
+    juce::MemoryInputStream in(out.getData(), out.getDataSize(), false);
+    const auto result = MidiClipFile::importFromStream(in);
+    ASSERT_TRUE(result.ok);
+    ASSERT_TRUE(result.hasControllerData());
+
+    TimelineDoc doc;
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "c");
+    EXPECT_FALSE(MidiClipFile::importIntoClip(doc, clip, result, false)) << "notes only: nothing to add";
+    ASSERT_TRUE(MidiClipFile::importIntoClip(doc, clip, result, true));
+    ASSERT_NE(doc.getControllerLane(clip, 11), nullptr);
+    ASSERT_TRUE(MidiClipFile::importIntoTrack(doc, track, 8.0, result, true));
+    EXPECT_EQ(doc.getTrack(track)->clips.size(), 2u) << "a CC-only file becomes one CC clip";
+    EXPECT_FALSE(MidiClipFile::importIntoTrack(doc, track, 16.0, result)) << "notes-only path: nothing";
+}

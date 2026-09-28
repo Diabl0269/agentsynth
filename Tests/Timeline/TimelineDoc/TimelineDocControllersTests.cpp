@@ -217,3 +217,24 @@ TEST(TimelineDocControllersTest, AbsentControllersLoadEmptyAndBadOnesAreRefused)
               }),
               999u);
 }
+
+TEST(TimelineDocControllersTest, SplittingAFullLaneKeepsBothHalvesWithinTheCapAndLoadable) {
+    // Review regression: the boundary point used to push a full lane's half to cap + 1, and the
+    // saved project then failed to load.
+    for (const bool allLeft : {true, false}) {
+        TimelineDoc doc;
+        const auto track = doc.addTrack(TrackKind::Midi, "T");
+        const auto clip = doc.addClip(track, 0.0, 64.0, "c");
+        std::vector<ControllerPoint> full;
+        const double base = allLeft ? 0.0 : 33.0;
+        for (int i = 0; i < TimelineDoc::kMaxControllerPointsPerLane; ++i)
+            full.push_back(cp(base + i * (30.0 / TimelineDoc::kMaxControllerPointsPerLane), (double)(i % 128)));
+        ASSERT_TRUE(doc.setControllerLanePoints(clip, 1, full));
+        const auto [left, right] = doc.splitClip(clip, 32.0);
+        ASSERT_TRUE(right.isValid());
+        EXPECT_LE((int)doc.getControllerLane(left, 1)->points.size(), TimelineDoc::kMaxControllerPointsPerLane);
+        EXPECT_LE((int)doc.getControllerLane(right, 1)->points.size(), TimelineDoc::kMaxControllerPointsPerLane);
+        TimelineDoc reloaded;
+        EXPECT_TRUE(reloaded.fromVar(doc.toVar())) << (allLeft ? "all points left of the cut" : "all right");
+    }
+}

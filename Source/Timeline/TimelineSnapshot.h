@@ -137,7 +137,8 @@ struct TimelineSnapshot {
         std::uint16_t channelMask = 1; // bit (channel - 1) set for every channel to emit on
         double startBeat = 0.0;        // the owning clip's window
         double endBeat = 0.0;
-        int firstPoint = 0; // range into points[]
+        double runMaxEndBeat = 0.0; // max endBeat over this track's run up to and including this entry
+        int firstPoint = 0;         // range into points[]
         int numPoints = 0;
     };
 

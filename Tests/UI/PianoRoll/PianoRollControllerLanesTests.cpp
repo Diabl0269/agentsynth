@@ -189,7 +189,7 @@ TEST(PianoRollControllerLanesTest, ResetVelocitiesActsOnTheSelection) {
     LaneFixture f;
     ASSERT_TRUE(f.doc.setNoteVelocities({{f.notes[0], 5}, {f.notes[1], 5}}));
     f.roll.getSelectionForTest().setSelection({f.notes[1]});
-    f.lanes().performContextAction(PianoRollControllerLanes::ResetVelocities, {});
+    f.lanes().performContextAction(PianoRollControllerLanes::ResetVelocities, juce::Point<int>{});
     EXPECT_EQ(f.velocity(0), 5);
     EXPECT_EQ(f.velocity(1), 100);
 }
@@ -347,4 +347,26 @@ TEST(PianoRollControllerLanesTest, HoverTracksBarsAndHandlesWithoutAGesture) {
     EXPECT_EQ(*l.getHoveredHandleForTest(), 0u);
     l.mouseMove(hover(l, f.at(5.0, 10.0)));
     EXPECT_FALSE(l.getHoveredHandleForTest().has_value());
+}
+
+TEST(PianoRollControllerLanesTest, AStaleContextTargetDoesNothing) {
+    // Review regression: the async menu answer used to re-hit-test the pointer, so after an undo it
+    // could act on a DIFFERENT point.
+    LaneFixture f;
+    f.lanes().selectLane(1);
+    ASSERT_TRUE(f.doc.setControllerLanePoints(f.clip, 1, {{2.0, 64.0, 1}}));
+    const auto target = f.lanes().contextTargetAt(f.at(2.0, 64.0).toInt());
+    ASSERT_TRUE(target.pointBeat.has_value());
+    // Before the answer arrives the point moves (another edit / an undo).
+    ASSERT_TRUE(f.doc.setControllerLanePoints(f.clip, 1, {{2.0 + 1.0e-3, 64.0, 1}}));
+    f.lanes().performContextAction(PianoRollControllerLanes::DeletePoint, target);
+    EXPECT_EQ(f.doc.getControllerLane(f.clip, 1)->points.size(), 1u) << "the captured point is gone: no-op";
+
+    const auto fresh = f.lanes().contextTargetAt(f.at(2.0, 64.0).toInt());
+    f.lanes().selectLane(11);
+    f.lanes().performContextAction(PianoRollControllerLanes::ClearLane, fresh);
+    EXPECT_EQ(f.doc.getControllerLane(f.clip, 1)->points.size(), 1u) << "a different lane is shown now: no-op";
+    f.lanes().selectLane(1);
+    f.lanes().performContextAction(PianoRollControllerLanes::DeletePoint, fresh);
+    EXPECT_TRUE(f.doc.getControllerLane(f.clip, 1)->points.empty()) << "a still-valid target acts";
 }

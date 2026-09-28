@@ -175,7 +175,9 @@ MidiClipFile::ImportResult MidiClipFile::importFromStream(juce::InputStream& str
                                " notes per clip; import rejected";
             return rejected;
         }
-        if (!imported->notes.empty())
+        // A track with only CC data is kept: a format-1 file often carries its controllers on a
+        // track of their own. Whether they are used is the importer's choice (withControllers).
+        if (!imported->notes.empty() || !imported->controllers.empty())
             result.tracks.push_back(std::move(*imported));
     }
 
@@ -201,15 +203,54 @@ bool MidiClipFile::ImportResult::hasControllerData() const noexcept {
 }
 
 namespace {
-// Writes one imported track's CC lanes into `clip` through the mutation API (its validation and
-// normalisation). A lane the clip already has for that CC is REPLACED: an import states what the
-// controller does, and interleaving two unrelated streams would describe neither.
-void applyImportedControllers(TimelineDoc& doc, ClipId clip, const MidiClipFile::ImportedTrack& imported) {
-    for (const auto& lane : imported.controllers)
+
+// Every CC lane of `tracks`, merged per controller number ACROSS tracks — the same CC on two tracks
+// becomes one lane holding both streams (sorted, unique beats with the later track winning a tie,
+// unchanged values dropped, then fitted to the cap exactly like one track's import), rather than
+// the last track silently replacing the first.
+std::vector<ClipControllerLane> mergedControllers(const std::vector<const MidiClipFile::ImportedTrack*>& tracks) {
+    std::map<int, std::vector<ControllerPoint>> byCc;
+    for (const auto* track : tracks)
+        for (const auto& lane : track->controllers)
+            byCc[lane.ccNumber].insert(byCc[lane.ccNumber].end(), lane.points.begin(), lane.points.end());
+    std::vector<ClipControllerLane> out;
+    for (auto& [cc, points] : byCc) {
+        std::stable_sort(points.begin(), points.end(),
+                         [](const ControllerPoint& a, const ControllerPoint& b) { return a.beat < b.beat; });
+        std::vector<ControllerPoint> unique;
+        for (const auto& point : points) {
+            if (!unique.empty() && unique.back().beat == point.beat)
+                unique.back() = point;
+            else if (unique.empty() || unique.back().value != point.value)
+                unique.push_back(point);
+        }
+        out.push_back({cc, CcCollector::fitToCap(std::move(unique))});
+    }
+    return out;
+}
+
+// Writes merged CC lanes into `clip` through the mutation API (its validation and normalisation).
+// A lane the clip already has for that CC is REPLACED: an import states what the controller does.
+void applyControllers(TimelineDoc& doc, ClipId clip, const std::vector<ClipControllerLane>& lanes) {
+    for (const auto& lane : lanes)
         doc.setControllerLanePoints(clip, lane.ccNumber, lane.points);
 }
+
+double lastControllerBeat(const std::vector<ClipControllerLane>& lanes) {
+    double last = 0.0;
+    for (const auto& lane : lanes)
+        if (!lane.points.empty())
+            last = std::max(last, lane.points.back().beat);
+    return last;
+}
+
 } // namespace
 
+// One clip per note-bearing imported track, all at `startBeat`. With `withControllers`:
+//   - each note track's own CC lanes go into its own clip;
+//   - CC from tracks WITHOUT notes (a format-1 file's controller track) is merged into the FIRST
+//     note clip, which is where a single-instrument file's controllers belong;
+//   - a file with CC but no notes at all becomes one clip holding just the CC lanes.
 bool MidiClipFile::importIntoTrack(TimelineDoc& doc, TrackId trackId, double startBeat, const ImportResult& result,
                                    bool withControllers) {
     if (!result.ok)
@@ -219,20 +260,36 @@ bool MidiClipFile::importIntoTrack(TimelineDoc& doc, TrackId trackId, double sta
     if (track == nullptr)
         return false;
 
-    std::vector<const ImportedTrack*> nonEmpty;
-    for (const auto& imported : result.tracks)
+    std::vector<const ImportedTrack*> noteTracks;
+    std::vector<const ImportedTrack*> ccOnlyTracks;
+    for (const auto& imported : result.tracks) {
         if (!imported.notes.empty())
-            nonEmpty.push_back(&imported);
-
-    if (nonEmpty.empty())
+            noteTracks.push_back(&imported);
+        else if (withControllers && !imported.controllers.empty())
+            ccOnlyTracks.push_back(&imported);
+    }
+    const auto ccOnly = mergedControllers(ccOnlyTracks);
+    const bool controllerClipOnly = noteTracks.empty() && !ccOnly.empty();
+    if (noteTracks.empty() && !controllerClipOnly)
         return false;
 
     // All-or-nothing against the doc's own cap: reject before mutating anything rather than
     // adding some clips and then discovering the track has no room for the rest.
-    if (track->clips.size() + nonEmpty.size() > (std::size_t)TimelineDoc::kMaxClipsPerTrack)
+    const std::size_t incomingClips = controllerClipOnly ? 1 : noteTracks.size();
+    if (track->clips.size() + incomingClips > (std::size_t)TimelineDoc::kMaxClipsPerTrack)
         return false;
 
-    for (const auto* imported : nonEmpty) {
+    if (controllerClipOnly) {
+        const ClipId clip =
+            doc.addClip(trackId, startBeat, std::max(std::ceil(lastControllerBeat(ccOnly)), 1.0), "Imported");
+        if (!clip.isValid())
+            return false;
+        applyControllers(doc, clip, ccOnly);
+        return true;
+    }
+
+    for (std::size_t i = 0; i < noteTracks.size(); ++i) {
+        const auto* imported = noteTracks[i];
         double lastEnd = 0.0;
         for (const auto& note : imported->notes)
             lastEnd = std::max(lastEnd, note.startBeat + note.lengthBeats);
@@ -245,8 +302,12 @@ bool MidiClipFile::importIntoTrack(TimelineDoc& doc, TrackId trackId, double sta
 
         for (const auto& note : imported->notes)
             doc.addNote(clip, note);
-        if (withControllers)
-            applyImportedControllers(doc, clip, *imported);
+        if (withControllers) {
+            std::vector<const ImportedTrack*> sources = {imported};
+            if (i == 0)
+                sources.insert(sources.end(), ccOnlyTracks.begin(), ccOnlyTracks.end());
+            applyControllers(doc, clip, mergedControllers(sources));
+        }
     }
 
     return true;
@@ -254,9 +315,9 @@ bool MidiClipFile::importIntoTrack(TimelineDoc& doc, TrackId trackId, double sta
 
 // "Import into THIS clip" (the piano roll's MIDI menu): every imported track's notes land in the
 // one clip at their file beats (the file's beat 0 is the clip's start), the clip grows to fit the
-// last note end — never shrinks — and, when asked, each CC lane is written through
-// setControllerLanePoints. Rejected with no mutation when the clip is gone, nothing would be added,
-// or the merged note count would pass kMaxNotesPerClip.
+// last note end — never shrinks — and, when asked, the CC lanes of every track (CC-only tracks
+// included), merged per controller number, are written through setControllerLanePoints. Rejected with no mutation when
+// the clip is gone, nothing would be added, or the merged note count would pass kMaxNotesPerClip.
 bool MidiClipFile::importIntoClip(TimelineDoc& doc, ClipId clipId, const ImportResult& result, bool withControllers) {
     const Clip* clip = doc.getClip(clipId);
     if (!result.ok || clip == nullptr)
@@ -275,12 +336,15 @@ bool MidiClipFile::importIntoClip(TimelineDoc& doc, ClipId clipId, const ImportR
 
     if (lastEnd > clip->lengthBeats)
         doc.resizeClip(clipId, std::ceil(lastEnd));
+    std::vector<const ImportedTrack*> all;
     for (const auto& imported : result.tracks) {
         for (const auto& note : imported.notes)
             doc.addNote(clipId, note);
-        if (withControllers)
-            applyImportedControllers(doc, clipId, imported);
+        all.push_back(&imported);
     }
+    // Merged per CC across every track, applied ONCE per lane (see mergedControllers).
+    if (withControllers)
+        applyControllers(doc, clipId, mergedControllers(all));
     return true;
 }
 

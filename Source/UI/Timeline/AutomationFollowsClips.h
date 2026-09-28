@@ -33,7 +33,18 @@ inline std::optional<AutomationSpanEdit> automationSpanEditForClip(const synth::
     return edit;
 }
 
-// Applies `edits` when there are any -- call from INSIDE the clip edit's mutation lambda.
+// Check BEFORE running the clip edit: false means the automation half would be refused (a lane
+// cap, an unresolved track), and the caller then refuses the WHOLE edit -- the clip must never move
+// while its automation silently stays behind -- and reports kAutomationSpanRefusedMessage.
+inline bool automationSpanEditsFit(const synth::TimelineDoc& doc, const std::vector<AutomationSpanEdit>& edits) {
+    return edits.empty() || doc.canTransferAutomationSpans(edits);
+}
+
+inline constexpr const char* kAutomationSpanRefusedMessage =
+    "Edit refused: the automation under the clip would not fit its lane (too many points)";
+
+// Applies `edits` when there are any -- call from INSIDE the clip edit's mutation lambda, after
+// automationSpanEditsFit said yes.
 inline void applyAutomationSpanEdits(synth::TimelineDoc& doc, const std::vector<AutomationSpanEdit>& edits) {
     if (!edits.empty())
         doc.transferAutomationSpans(edits);

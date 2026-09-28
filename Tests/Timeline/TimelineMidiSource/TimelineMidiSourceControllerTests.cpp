@@ -191,3 +191,70 @@ TEST(TimelineMidiSourceControllerTest, MutedClipAndOutsideTheClipWindowSendNothi
     ASSERT_TRUE(h2.transport.play());
     EXPECT_TRUE(renderCcs(h2, mutedSnapshot.get(), 8).empty());
 }
+
+// ---- Review regressions -------------------------------------------------------------------------
+
+TEST(TimelineMidiSourceControllerTest, HeldSustainIsReleasedWhenItsClipEnds) {
+    Doc doc("11111111-2222-3333-4444-555555555555", 2.0); // clip covers beats 0..2
+    ASSERT_TRUE(doc.doc.setControllerLanePoints(doc.clipId, 64, {cp(0.0, 127.0, 0)}));
+    auto snapshot = doc.snapshot();
+    Harness h;
+    ASSERT_TRUE(h.transport.play());
+    const auto ccs = renderCcs(h, snapshot.get(), blockOfBeat(3.0));
+    ASSERT_EQ(ccs.size(), 2u) << "pressed at the clip start, released where the clip ends";
+    EXPECT_EQ(ccs[0].value, 127);
+    EXPECT_EQ(ccs[1].value, 0);
+    EXPECT_EQ(ccs[1].block, blockOfBeat(2.0));
+    EXPECT_EQ(ccs[1].sample, offsetOfBeat(2.0));
+}
+
+TEST(TimelineMidiSourceControllerTest, HeldSustainIsReleasedWhenItsClipIsMutedMidPlay) {
+    Doc doc;
+    ASSERT_TRUE(doc.doc.setControllerLanePoints(doc.clipId, 64, {cp(0.0, 127.0, 0)}));
+    auto snapshot = doc.snapshot();
+    Harness h;
+    ASSERT_TRUE(h.transport.play());
+    ASSERT_EQ(renderCcs(h, snapshot.get(), 4).size(), 1u);
+    doc.doc.setClipMuted(doc.clipId, true);
+    auto muted = doc.snapshot();
+    const auto ccs = renderCcs(h, muted.get(), 2);
+    ASSERT_EQ(ccs.size(), 1u) << "the lane left the snapshot: the pedal must come up";
+    EXPECT_EQ(ccs[0].cc, 64);
+    EXPECT_EQ(ccs[0].value, 0);
+    EXPECT_EQ(ccs[0].sample, 0);
+}
+
+TEST(TimelineMidiSourceControllerTest, AdjacentSustainClipsKeepThePedalDown) {
+    Doc doc("11111111-2222-3333-4444-555555555555", 2.0);
+    const auto second = doc.doc.addClip(doc.trackId, 2.0, 2.0, "next");
+    ASSERT_TRUE(doc.doc.setControllerLanePoints(doc.clipId, 64, {cp(0.0, 127.0, 0)}));
+    ASSERT_TRUE(doc.doc.setControllerLanePoints(second, 64, {cp(0.0, 127.0, 0)}));
+    auto snapshot = doc.snapshot();
+    Harness h;
+    ASSERT_TRUE(h.transport.play());
+    const auto ccs = renderCcs(h, snapshot.get(), blockOfBeat(3.0));
+    ASSERT_EQ(ccs.size(), 1u) << "a covering lane continues the hold: no release between the clips";
+}
+
+TEST(TimelineMidiSourceControllerTest, ManyEarlierLanesDoNotHideALongOverlappingOne) {
+    // Sorted by start, ends are not: a long clip starting first must still play after many short
+    // clips that ended before the playhead (the binary search keys on the running max end).
+    Doc doc("11111111-2222-3333-4444-555555555555", 64.0);
+    ASSERT_TRUE(doc.doc.setControllerLanePoints(doc.clipId, 7, {cp(0.0, 10.0, 0), cp(40.0, 99.0, 0)}));
+    for (int i = 0; i < 30; ++i) {
+        const auto c = doc.doc.addClip(doc.trackId, 0.5 + i, 0.25, "short");
+        ASSERT_TRUE(doc.doc.setControllerLanePoints(c, 11, {cp(0.0, (double)(i + 1), 0)}));
+    }
+    auto snapshot = doc.snapshot();
+    const auto& lanes = snapshot->controllers;
+    for (size_t i = 1; i < lanes.size(); ++i)
+        EXPECT_GE(lanes[i].runMaxEndBeat, lanes[i - 1].runMaxEndBeat);
+    Harness h;
+    ASSERT_TRUE(h.transport.locateBeat(39.5));
+    ASSERT_TRUE(h.transport.play());
+    const auto ccs = renderCcs(h, snapshot.get(), blockOfBeat(1.0));
+    bool saw99 = false;
+    for (const auto& c : ccs)
+        saw99 = saw99 || (c.cc == 7 && c.value == 99);
+    EXPECT_TRUE(saw99);
+}

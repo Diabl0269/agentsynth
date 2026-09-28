@@ -164,6 +164,15 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
 
         info.numNotes = static_cast<int>(snapshot->notes.size()) - info.firstNote;
         info.numControllers = static_cast<int>(snapshot->controllers.size()) - info.firstController;
+        // Running max of endBeat along the run (sorted by start, ends are not): monotonic, so the
+        // player can binary-search the first entry that can still overlap a range instead of
+        // scanning every lane that ended long ago.
+        double runMax = 0.0;
+        for (int i = info.firstController; i < info.firstController + info.numControllers; ++i) {
+            auto& entry = snapshot->controllers[static_cast<std::size_t>(i)];
+            runMax = std::max(runMax, entry.endBeat);
+            entry.runMaxEndBeat = runMax;
+        }
 
         // -- audio clips -----------------------------------------------------------
         // Audio tracks only, and no merge step: the doc keeps a track's clips sorted by

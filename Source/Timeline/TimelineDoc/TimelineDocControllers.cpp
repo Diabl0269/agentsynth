@@ -28,6 +28,12 @@ namespace detail {
 // carrying the value (and the shaping curve) in force at the cut. Without them a Linear segment that
 // crosses the cut would lose an endpoint and flatten. Points after the cut are re-based onto the
 // right clip's own start. A lane with no points stays a lane (with no points) on both sides.
+//
+// Neither half may exceed kMaxControllerPointsPerLane (a saved project would otherwise refuse to
+// load). A half can only overflow when EVERY point of a full lane sits on its side of the cut — and
+// then the boundary point is redundant (the lane is flat across the cut: after its last point on
+// the left, before its first on the right), so it is simply left out. Lossless; the split is never
+// refused for this.
 void splitControllerLanes(const std::vector<ClipControllerLane>& lanes, double atBeat,
                           std::vector<ClipControllerLane>& leftOut, std::vector<ClipControllerLane>& rightOut) {
     leftOut.clear();
@@ -42,11 +48,14 @@ void splitControllerLanes(const std::vector<ClipControllerLane>& lanes, double a
             for (const auto& point : lane.points)
                 if (point.beat < atBeat)
                     left.points.push_back(point);
-            left.points.push_back({atBeat, value, curve});
+            if ((int)left.points.size() < TimelineDoc::kMaxControllerPointsPerLane)
+                left.points.push_back({atBeat, value, curve});
             right.points.push_back({0.0, value, curve});
             for (const auto& point : lane.points)
                 if (point.beat > atBeat)
                     right.points.push_back({point.beat - atBeat, point.value, point.curve});
+            if ((int)right.points.size() > TimelineDoc::kMaxControllerPointsPerLane)
+                right.points.erase(right.points.begin());
         }
         leftOut.push_back(std::move(left));
         rightOut.push_back(std::move(right));

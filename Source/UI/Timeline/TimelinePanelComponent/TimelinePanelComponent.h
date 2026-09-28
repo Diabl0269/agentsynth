@@ -537,6 +537,8 @@ private:
     // case — same formula (and same "4.0 with no transport" fallback) as every other timeline
     // sub-component's own currentBeatsPerBar()/beatsPerBarFrom() helper.
     double currentBeatsPerBarForPaste() const;
+    // Reports kAutomationSpanRefusedMessage through the lane area's onStatusMessage; returns false.
+    bool refuseForAutomation();
     // The first track of `kind` in doc order, or an invalid id. The paste fallback (see
     // pasteClipsAtPlayhead) and nothing else.
     synth::TrackId firstTrackOfKind(synth::TrackKind kind) const;

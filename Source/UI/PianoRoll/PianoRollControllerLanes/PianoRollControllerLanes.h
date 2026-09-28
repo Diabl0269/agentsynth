@@ -56,7 +56,16 @@ public:
     // ---- Right-click menu ----
     // `pos` is strip-local; point actions apply to the CC handle under it.
     juce::PopupMenu buildContextMenu(juce::Point<int> pos) const;
-    void performContextAction(int action, juce::Point<int> pos);
+    // What a right-click at `pos` targets, captured when the menu OPENS (the answer is async).
+    struct ContextTarget {
+        synth::ClipId clip;
+        int lane = kVelocityLane;
+        std::optional<double> pointBeat; // clip-relative beat of the CC point under the pointer
+    };
+    ContextTarget contextTargetAt(juce::Point<int> pos) const;
+    // Acts only if `target` still describes the open clip, the shown lane and an existing point.
+    void performContextAction(int action, const ContextTarget& target);
+    void performContextAction(int action, juce::Point<int> pos); // = contextTargetAt(pos) now
 
     // ---- Called by the roll ----
     // The velocity the live gesture previews for `id` (the roll colours the note by it), if any.

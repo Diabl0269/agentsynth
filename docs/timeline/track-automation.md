@@ -145,6 +145,16 @@ removals, destination clears, inserts), and the whole batch is ONE `applyMutatio
 drag whose spans overlap never reads a point the same batch already moved. The paste path writes
 through `editBreakpoints` per carried lane inside the paste's own `recordTimelineChange`.
 
+**A clip never moves without its automation.** When the automation half would be refused — a
+target lane would go past `kMaxBreakpointsPerLane`, or a track no longer resolves — the WHOLE edit
+is refused before anything changes: no clip moves or copies, no undo step is pushed, and the status
+bar says why (`kAutomationSpanRefusedMessage`, via `TimelineClipLaneArea::onStatusMessage`, which
+the panel's clipboard verbs report through too). The check is a dry run —
+`TimelineDoc::canTransferAutomationSpans` for drag / duplicate / repeat, a simulation of the
+`editBreakpoints` calls for paste — made against the doc as it is before the edit; clip edits never
+touch lanes, so the answer cannot change inside the edit. Delete and Cut only erase points and so
+are never refused. Pinned by `TimelinePanelClipClipboardControllerTests.cpp`.
+
 ## Tests
 
 - `Tests/UI/Timeline/TrackRowLayoutTests.cpp` — the layout in isolation.

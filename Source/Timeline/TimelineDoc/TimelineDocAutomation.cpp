@@ -178,7 +178,9 @@ bool isValidSpanEdit(const TimelineDoc::AutomationSpanEdit& edit) noexcept {
 // overlap never reads a point another edit in the same batch already moved. One applyMutation for
 // the whole batch; rejected outright (no mutation) on any malformed edit, an unresolved track, or a
 // lane that would exceed kMaxBreakpointsPerLane.
-bool TimelineDoc::transferAutomationSpans(const std::vector<AutomationSpanEdit>& edits) {
+int TimelineDoc::planAutomationSpanTransfer(const std::vector<AutomationSpanEdit>& edits,
+                                            std::vector<SpanTransferPlanEntry>& planOut) {
+    planOut.clear();
     struct Carry {
         AutomationLane* dest = nullptr;
         double destStart = 0.0;
@@ -207,13 +209,13 @@ bool TimelineDoc::transferAutomationSpans(const std::vector<AutomationSpanEdit>&
 
     for (const auto& edit : edits) {
         if (!isValidSpanEdit(edit))
-            return false;
+            return -1;
         auto* source = findTrack(edit.sourceTrack);
         if (source == nullptr)
-            return false;
+            return -1;
         Track* destTrack = nullptr;
         if (edit.kind != AutomationSpanEdit::Kind::Remove && (destTrack = findTrack(edit.destTrack)) == nullptr)
-            return false;
+            return -1;
 
         for (auto& lane : source->lanes) {
             std::vector<AutomationLane::Breakpoint> carried;
@@ -241,7 +243,7 @@ bool TimelineDoc::transferAutomationSpans(const std::vector<AutomationSpanEdit>&
     }
 
     if (removals.empty() && carries.empty())
-        return true; // nothing under any span: no-op, no revision bump
+        return 0; // nothing under any span: no-op, no revision bump
 
     std::map<AutomationLane*, std::vector<AutomationLane::Breakpoint>> simulated;
     auto planFor = [&simulated](AutomationLane* lane) -> std::vector<AutomationLane::Breakpoint>& {
@@ -255,15 +257,33 @@ bool TimelineDoc::transferAutomationSpans(const std::vector<AutomationSpanEdit>&
         for (const auto& p : carry.points)
             insertBreakpoint(planFor(carry.dest), p);
 
-    for (const auto& [lane, points] : simulated)
+    for (auto& [lane, points] : simulated) {
         if (static_cast<int>(points.size()) > kMaxBreakpointsPerLane)
-            return false;
+            return -1;
+        planOut.push_back({lane, std::move(points)});
+    }
+    return 1;
+}
 
+bool TimelineDoc::transferAutomationSpans(const std::vector<AutomationSpanEdit>& edits) {
+    std::vector<SpanTransferPlanEntry> plan;
+    const int outcome = planAutomationSpanTransfer(edits, plan);
+    if (outcome <= 0)
+        return outcome == 0;
     return applyMutation([&] {
-        for (auto& [lane, points] : simulated)
-            lane->points = std::move(points);
+        for (auto& entry : plan)
+            entry.lane->points = std::move(entry.points);
         return true;
     });
+}
+
+// The dry run callers use BEFORE a clip edit: the automation half of "automation follows events"
+// is only allowed to go ahead together with the clip edit, so a batch this would refuse (a cap, an
+// unresolved track) must be known before the clip moves. Clip edits never touch lanes, so the answer
+// cannot change between this check and the transfer inside the same mutation.
+bool TimelineDoc::canTransferAutomationSpans(const std::vector<AutomationSpanEdit>& edits) const {
+    std::vector<SpanTransferPlanEntry> plan;
+    return const_cast<TimelineDoc*>(this)->planAutomationSpanTransfer(edits, plan) >= 0;
 }
 
 bool TimelineDoc::setLaneRecordMode(LaneId id, int mode) {

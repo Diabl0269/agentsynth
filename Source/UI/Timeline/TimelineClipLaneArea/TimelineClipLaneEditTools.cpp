@@ -475,7 +475,10 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
             if (newId.isValid())
                 applyAutomationSpanEdits(*doc_, spanEdits);
         };
-        if (undoManager_)
+        if (!automationSpanEditsFit(*doc_, spanEdits)) {
+            if (onStatusMessage)
+                onStatusMessage(kAutomationSpanRefusedMessage);
+        } else if (undoManager_)
             undoManager_->recordTimelineChange(*doc_, mutate);
         else
             mutate();

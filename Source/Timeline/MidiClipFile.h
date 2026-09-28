@@ -63,7 +63,7 @@ public:
     struct ImportResult {
         bool ok = false;
         juce::String message;              // empty on success; a human-readable reason on failure
-        std::vector<ImportedTrack> tracks; // empty tracks are never included
+        std::vector<ImportedTrack> tracks; // tracks with neither notes nor CC are never included
         // True when any imported track carries CC lanes (the "import controller data?" question).
         bool hasControllerData() const noexcept;
     };
@@ -78,7 +78,7 @@ public:
     static ImportResult importFromStream(juce::InputStream& stream);
     static ImportResult importFromFile(const juce::File& file);
 
-    // Convenience: creates one clip per non-empty ImportedTrack on `trackId`, all starting at the
+    // Convenience: creates one clip per note-bearing ImportedTrack on `trackId` (CC-only tracks: see .cpp), at the
     // same `startBeat` (stacked, not sequenced — the caller decides layout). Each clip's length is
     // ceil(last note end) within that track, floored at 1 beat. All-or-nothing against the doc's
     // kMaxClipsPerTrack cap: if the track doesn't have room for every incoming clip, NOTHING is

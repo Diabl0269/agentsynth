@@ -8,6 +8,8 @@
 
 #include "AppUndoManager.h"
 #include "UI/Timeline/AutomationFollowsClips.h"
+#include <algorithm>
+#include <map>
 
 namespace synth::ui {
 
@@ -57,7 +59,52 @@ void pasteCapturedAutomation(
     }
 }
 
+using CapturedAutomation = std::vector<std::pair<synth::LaneId, std::vector<synth::AutomationLane::Breakpoint>>>;
+
+// The paste's automation half, simulated on copies of the target lanes in the SAME order the paste
+// writes them (erase the landing span, insert the carried points, last one wins per beat): false
+// when any lane would end up over kMaxBreakpointsPerLane, in which case the whole paste is refused —
+// a clip must never land without the automation it carries.
+bool pasteAutomationFits(const synth::TimelineDoc& doc, const std::vector<synth::TrackId>& targets,
+                         const std::vector<double>& startBeats, const std::vector<CapturedAutomation>& perEntry,
+                         const std::vector<double>& lengths) {
+    std::map<std::int64_t, std::vector<synth::AutomationLane::Breakpoint>> simulated;
+    for (std::size_t i = 0; i < targets.size(); ++i) {
+        if (!targets[i].isValid())
+            continue;
+        for (const auto& [sourceLane, points] : perEntry[i]) {
+            const auto* lane = pasteLaneFor(doc, sourceLane, targets[i]);
+            if (lane == nullptr || points.empty())
+                continue;
+            auto& plan = simulated.try_emplace(lane->id.value, lane->points).first->second;
+            const double from = startBeats[i];
+            const double to = startBeats[i] + lengths[i];
+            plan.erase(std::remove_if(plan.begin(), plan.end(),
+                                      [from, to](const auto& p) { return p.beat >= from && p.beat < to; }),
+                       plan.end());
+            for (auto p : points) {
+                p.beat += from;
+                const auto pos = std::lower_bound(plan.begin(), plan.end(), p.beat,
+                                                  [](const auto& a, double beat) { return a.beat < beat; });
+                if (pos != plan.end() && pos->beat == p.beat)
+                    *pos = p;
+                else
+                    plan.insert(pos, p);
+            }
+            if ((int)plan.size() > synth::TimelineDoc::kMaxBreakpointsPerLane)
+                return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
+
+bool TimelinePanelComponent::refuseForAutomation() {
+    if (clipLaneArea_.onStatusMessage)
+        clipLaneArea_.onStatusMessage(kAutomationSpanRefusedMessage);
+    return false;
+}
 
 //==============================================================================
 // ---- Clip clipboard ----
@@ -187,6 +234,18 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
                               : firstTrackOfKind(entry.requiredKind));
     }
 
+    {
+        std::vector<double> starts, lengths;
+        std::vector<CapturedAutomation> automation;
+        for (const auto& entry : clipClipboard_) {
+            starts.push_back(std::max(0.0, snappedPlayhead + entry.relativeStartBeat));
+            lengths.push_back(entry.lengthBeats);
+            automation.push_back(entry.automation);
+        }
+        if (!pasteAutomationFits(*doc_, targets, starts, automation, lengths))
+            return refuseForAutomation();
+    }
+
     std::vector<synth::ClipId> newIds;
     auto mutate = [this, snappedPlayhead, &targets, &newIds] {
         for (std::size_t i = 0; i < clipClipboard_.size(); ++i) {
@@ -257,6 +316,8 @@ bool TimelinePanelComponent::duplicateSelectedClips() {
         applyAutomationSpanEdits(*doc_, spanEdits);
     };
 
+    if (!automationSpanEditsFit(*doc_, spanEdits))
+        return refuseForAutomation();
     if (undoManager_)
         undoManager_->recordTimelineChange(*doc_, mutate);
     else
@@ -377,6 +438,8 @@ bool TimelinePanelComponent::repeatSelectedClips(int count) {
         applyAutomationSpanEdits(*doc_, spanEdits);
     };
 
+    if (!automationSpanEditsFit(*doc_, spanEdits))
+        return refuseForAutomation();
     if (undoManager_)
         undoManager_->recordTimelineChange(*doc_, mutate);
     else

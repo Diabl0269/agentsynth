@@ -192,6 +192,7 @@ void MainComponent::wireTimelineClipLaneCallbacks() {
     // "Relink audio…" bubbles up here rather than being handled inside the lane area itself
     // — it needs a host FileChooser and synth::AssetManager import, neither of which that class has.
     timelinePanel.getClipLaneArea().onRelinkAudioRequested = [this](synth::ClipId id) { promptRelinkClipAsset(id); };
+    timelinePanel.getClipLaneArea().onStatusMessage = [this](const juce::String& msg) { statusBar.showMessage(msg); };
     // Same division of labour for the authoring gestures: the lane area decides WHICH audio track
     // and WHICH beat (double-click on an empty audio row, or an OS file drop on one), and this owns
     // the import + clip creation, because only it knows the bundle root.
