@@ -66,7 +66,9 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneMouse.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneSelection.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneEditTools.cpp
+    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneRange.cpp
     Source/UI/Timeline/ClipSelectionModel.h
+    Source/UI/Timeline/RangeSelectionModel.h
     Source/UI/Mixer/MixerColumnHeader.h
     Source/UI/Mixer/MixerMeterScale.h
     Source/UI/Mixer/MixerMeterBallistics.h

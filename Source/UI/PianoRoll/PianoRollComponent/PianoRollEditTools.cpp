@@ -27,6 +27,8 @@ synth::theme::Icon iconForTool(EditTool tool) noexcept {
     switch (tool) {
     case EditTool::Select:
         return Icon::ToolSelect;
+    case EditTool::Range:
+        return Icon::ToolRange;
     case EditTool::Split:
         return Icon::ToolSplit;
     case EditTool::Glue:
@@ -203,7 +205,13 @@ void PianoRollComponent::endMarquee() {
 //==============================================================================
 // ---- Edit tools ----
 
+// EditTool::Range has no meaning inside one clip — a range is a beat span across TRACKS, and the
+// roll shows a single clip's notes — so the roll takes it as Select: the panel pushes every tool
+// into both editors, and opening a clip while Range is active must still leave its notes editable
+// rather than silently inert. getActiveTool() therefore reports Select while the panel says Range.
 void PianoRollComponent::setActiveTool(EditTool tool) {
+    if (tool == EditTool::Range)
+        tool = EditTool::Select;
     if (activeTool_ == tool)
         return;
     activeTool_ = tool;
@@ -272,7 +280,8 @@ void PianoRollComponent::handleToolMouseDown(juce::Point<int> pos) {
         return;
     }
     case EditTool::Select:
-        return; // never routed here — mouseDown keeps the whole Select gesture table inline
+    case EditTool::Range: // setActiveTool maps Range to Select, so this is never reached either
+        return;           // never routed here — mouseDown keeps the whole Select gesture table inline
     }
 }
 

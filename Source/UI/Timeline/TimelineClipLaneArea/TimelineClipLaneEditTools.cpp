@@ -28,6 +28,8 @@ synth::theme::Icon iconForTool(synth::ui::EditTool tool) noexcept {
     switch (tool) {
     case synth::ui::EditTool::Select:
         return Icon::ToolSelect;
+    case synth::ui::EditTool::Range:
+        return Icon::ToolRange;
     case synth::ui::EditTool::Split:
         return Icon::ToolSplit;
     case synth::ui::EditTool::Glue:
@@ -49,7 +51,8 @@ synth::theme::Icon iconForTool(synth::ui::EditTool tool) noexcept {
 
 // EditTool::Select is the tool this component grew up with and keeps ALL of its behaviour:
 // click/shift-click select, drag-move (cross-track and Alt-copy capable), edge trims with their
-// resize cursors, marquee, and both double-click authoring gestures. The other five are
+// resize cursors, marquee, and both double-click authoring gestures. Range drags a time span (see
+// TimelineClipLaneRange.cpp). The other five are
 // deliberately click-only — a drag with Split/Glue/Erase/Mute held would be a second,
 // undiscoverable gesture on a tool whose whole point is that one click does one thing — with Draw
 // the single exception (its drag IS the clip's length).
@@ -69,6 +72,10 @@ void TimelineClipLaneArea::setActiveTool(EditTool tool) {
     pendingEmptyClick_ = false;
     marqueeRect_ = {};
     clearToolPreviews();
+    // A range belongs to the Range tool (see TimelineClipLaneRange.cpp): leaving the tool drops it,
+    // so Copy/Cut/Delete under any other tool can only ever mean the clip selection.
+    if (tool != EditTool::Range)
+        clearRange();
     stopTimer(); // the auto-scroll timer's drag just got cancelled too
 
     applyToolCursor();
@@ -132,6 +139,7 @@ void TimelineClipLaneArea::handleToolMouseDown(const juce::MouseEvent& e) {
         applyClipContextChoice(hit->id, ClipContextChoice::ToggleMute, 0.0);
         break;
     case EditTool::Select:
+    case EditTool::Range: // mouseDown routes Range to beginRangeGesture before reaching here
     case EditTool::Draw:
         break; // handled above / never reached
     }

@@ -76,6 +76,9 @@ juce_add_binary_data(Assets SOURCES
     # FRO12 (P9-6, docs/mixer/panel.md): detach-to-window icon, shared by DetachablePanelHost for
     # both the Timeline and Mixer panels. BinaryData symbol: actiondetachwindow_svg.
     ${CMAKE_SOURCE_DIR}/assets/icons/action-detach-window.svg
+    # The Range edit tool (EditTool::Range), appended after the other tool glyphs. BinaryData
+    # symbol: toolrange_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/tool-range.svg
     # FRO134/FRO143 (docs/control/midi-remote-ui.md#templates-and-importexport): controller
     # templates (generic + vendor), enumerated via BinaryData::namedResourceList by id, not name.
     ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-8-knobs.json

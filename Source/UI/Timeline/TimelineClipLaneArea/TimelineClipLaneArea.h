@@ -5,6 +5,7 @@
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/EditTool.h"
+#include "UI/Timeline/RangeSelectionModel.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <array>
 #include <cmath>
@@ -181,8 +182,8 @@ public:
 
     // Whether a Move/Resize(-Left/-Right) drag is currently in flight — the panel's follow-playhead
     // guard reads this so a drag in progress and an auto-scroll page-flip never fight over
-    // firstVisibleBeat in the same 100ms. Marquee/Draw are deliberately excluded: neither one drags
-    // an EXISTING clip's position, so neither is what follow-playhead needs to stay clear of.
+    // firstVisibleBeat in the same 100ms. Marquee/Draw/Range are deliberately excluded: none drags
+    // an EXISTING clip's position, so none is what follow-playhead needs to stay clear of.
     bool isDragInProgress() const noexcept {
         return dragMode_ == DragMode::Move || dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight;
     }
@@ -212,6 +213,30 @@ public:
     // The live editor, or nullptr when no rename is in flight (test hook: a rename is otherwise
     // only observable as pixels).
     juce::TextEditor* getRenameEditorForTest() const noexcept { return renameEditor_.get(); }
+
+    // ---- Range tool (EditTool::Range; see TimelineClipLaneRange.cpp) ----
+    // The live time-range selection, owned here; the panel reads it for Copy/Cut.
+    const RangeSelectionModel& getRangeSelection() const noexcept { return range_; }
+    // A resolved range: covered tracks in row order plus its [startBeat, endBeat) span.
+    struct RangeSpan {
+        std::vector<synth::TrackId> tracks;
+        double startBeat = 0.0;
+        double endBeat = 0.0;
+    };
+    // The live range resolved against the doc, or nullopt (no doc, no width, or a corner's track gone).
+    std::optional<RangeSpan> getRangeSpan() const;
+    // Sets the range directly (absolute beats; the headless seam for the drag). Clears the clip selection.
+    void setRange(synth::TrackId anchorTrack, double anchorBeat, synth::TrackId extentTrack, double extentBeat);
+    void clearRange();
+    // Seconds per beat at the transport's tempo (120 bpm with no transport) — what range edits pass the doc.
+    double secondsPerBeat() const;
+    // The range verbs the context menu and Delete/Shift+Delete apply.
+    enum class RangeChoice { SplitAtEdges, Delete, DeleteCloseGap };
+    // Applies one verb as ONE recordTimelineChange. False when there is no range or nothing changed.
+    bool applyRangeChoice(RangeChoice choice);
+    // The union of the range's painted row rects, or an empty rect (test hook).
+    juce::Rectangle<int> getRangeRectForTest() const { return rangeRect(); }
+    bool isRangeDragActiveForTest() const noexcept { return dragMode_ == DragMode::Range; }
 
     // ---- Authoring: audio files (double-click an audio row, or drop files on one) ----
 
@@ -439,6 +464,8 @@ protected:
     // showMenuAsync. Protected virtual so a headless test can override it — see
     // TimelineClipLaneEditTools.cpp for why a real menu must never be reached from a test.
     virtual void showClipContextMenu(synth::ClipId id, juce::Point<int> localPos);
+    // The range's right-click menu; protected virtual for the same headless reason.
+    virtual void showRangeContextMenu(juce::Point<int> localPos);
 
     // ---- Edge auto-scroll (see EdgeAutoScroll.h) ----
     // A gated juce::Timer (kEdgeScrollHz), armed only while a Move/Resize drag's pointer sits
@@ -457,7 +484,7 @@ public:
     bool isAutoScrollTimerRunningForTest() const noexcept { return isTimerRunning(); }
 
 private:
-    enum class DragMode { None, Move, ResizeLeft, ResizeRight, Marquee, Draw };
+    enum class DragMode { None, Move, ResizeLeft, ResizeRight, Marquee, Draw, Range };
 
     struct ClipHit {
         synth::ClipId id;
@@ -546,6 +573,16 @@ private:
     // getDragGhostRectsForTest().
     juce::Rectangle<int> dragGhostRectFor(const DragOrigin& origin, int rowHeight) const;
     void paintDrawGhost(juce::Graphics& g);
+
+    // ---- Range tool gesture + painting ----
+    // Press: a fresh range at the pointer, or (Shift, range live) an extension of the current one.
+    void beginRangeGesture(const juce::MouseEvent& e);
+    void updateRangeGesture(juce::Point<int> pos);
+    void endRangeGesture();
+    // The (track, snapped beat) under `pos`, rows clamped into the doc's; nullopt with no doc/rows.
+    std::optional<std::pair<synth::TrackId, double>> rangePointAt(juce::Point<int> pos) const;
+    juce::Rectangle<int> rangeRect() const;
+    void paintRange(juce::Graphics& g);
 
     // ---- Tool cursors (built once per theme — never per mouse move) ----
     void rebuildToolCursors();
@@ -638,10 +675,13 @@ private:
 
     // ---- Edit tool ----
     EditTool activeTool_ = EditTool::Select;
-    // Six cached cursors, rebuilt only on a theme change (see rebuildToolCursors) — building one
+    // One cached cursor per tool, rebuilt only on a theme change (see rebuildToolCursors) — building one
     // renders an icon into an Image, which is far too much work for a mouse-move.
     std::array<juce::MouseCursor, kAllEditTools.size()> toolCursors_;
     bool toolCursorsBuilt_ = false;
+
+    // ---- Range tool (see TimelineClipLaneRange.cpp) ----
+    RangeSelectionModel range_;
 
     // ---- Split tool hover preview (the (clip, snapped beat) pair IS the repaint gate) ----
     synth::ClipId splitPreviewClip_;

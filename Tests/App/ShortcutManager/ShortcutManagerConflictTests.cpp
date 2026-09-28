@@ -43,6 +43,7 @@ TEST_F(ShortcutManagerTest, BareToolDigitsDoNotCollideWithTheGridOrLocatorComman
         int digit;
     };
     for (const auto& pair : std::vector<Pair>{{"timelineToolSelect", "snapSetWhole", '1'},
+                                              {"timelineToolRange", "snapSetHalf", '2'},
                                               {"timelineToolSplit", "snapSetQuarter", '3'},
                                               {"timelineToolGlue", "snapSetEighth", '4'},
                                               {"timelineToolErase", "snapSetSixteenth", '5'},
@@ -73,6 +74,14 @@ TEST_F(ShortcutManagerTest, BareToolDigitsDoNotCollideWithTheGridOrLocatorComman
     EXPECT_FALSE(grid1 == locator1);
     EXPECT_FALSE(tool1 == locator1);
     EXPECT_TRUE(manager.getConflictingAction("timelineJumpToLocator1", locator1).isEmpty());
+
+    // '2' carries the same three families now that the Range tool claims its bare digit.
+    const auto tool2 = manager.getBinding("timelineToolRange");
+    const auto locator2 = manager.getBinding("timelineJumpToLocator2");
+    EXPECT_EQ(tool2.getKeyCode(), '2');
+    EXPECT_EQ(locator2.getKeyCode(), '2');
+    EXPECT_FALSE(tool2 == locator2);
+    EXPECT_TRUE(manager.getConflictingAction("timelineToolRange", tool2).isEmpty());
 }
 
 // ---------------------------------------------------------------------------

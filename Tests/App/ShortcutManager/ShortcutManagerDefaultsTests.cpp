@@ -37,6 +37,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineLoopSelection",
         "timelineFollowPlayheadToggle",
         "timelineToolSelect",
+        "timelineToolRange",
         "timelineToolSplit",
         "timelineToolGlue",
         "timelineToolErase",
@@ -206,6 +207,7 @@ TEST_F(ShortcutManagerTest, CategoryAssignmentsAreWhatTheSectionsPromise) {
     EXPECT_EQ(ShortcutManager::getCategory("autoArrange"), ShortcutCategory::Graph);
     EXPECT_EQ(ShortcutManager::getCategory("saveSnippet"), ShortcutCategory::Graph);
     EXPECT_EQ(ShortcutManager::getCategory("timelineToolSplit"), ShortcutCategory::Timeline);
+    EXPECT_EQ(ShortcutManager::getCategory("timelineToolRange"), ShortcutCategory::Timeline);
     EXPECT_EQ(ShortcutManager::getCategory("snapSetEighth"), ShortcutCategory::Timeline);
     EXPECT_EQ(ShortcutManager::getCategory("pianoRollNudgeLeft"), ShortcutCategory::PianoRoll);
     // An id this build has never heard of falls back to General — the widest conflict scope, so an

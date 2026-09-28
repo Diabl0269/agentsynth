@@ -7,8 +7,8 @@ CoreText runtime font-family swap corruption described in
 
 ## The icon enum
 
-`synth::theme::Icon` in `Source/UI/Theme/IconLibrary.h` defines 43 icons, `TransportPlay = 0`
-through `ActionDetachWindow`, followed by `kCount`:
+`synth::theme::Icon` in `Source/UI/Theme/IconLibrary.h` defines 44 icons, `TransportPlay = 0`
+through `ToolRange`, followed by `kCount`:
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
@@ -22,13 +22,14 @@ WaveformTriangle ToggleMinimap    ModuleDualIO
 ToolSelect       ToolSplit        ToolGlue         ToolErase
 ToolMute         ToolDraw
 TrackMidi        TrackAudio       TrackAutomation  FollowPlayhead
-CatIO            ActionDetachWindow
+CatIO            ActionDetachWindow ToolRange
 ```
 
 **Ordinals are append-only.** New entries go immediately before `kCount`, never grouped in beside a
 related icon, so every existing enum ordinal — and the `IconLibraryTests.cpp` spot-checks against
 them — stays unchanged. `CatIO` (41) and `ActionDetachWindow` (42) were both appended for that
-reason rather than being grouped with the other `CatXxx` and `Action*` entries.
+reason rather than being grouped with the other `CatXxx` and `Action*` entries, and `ToolRange` (43)
+likewise sits after them rather than beside the other `Tool*` glyphs.
 
 Notes on individual entries:
 
@@ -47,7 +48,8 @@ Notes on individual entries:
   separate Left and Right jacks. There is no universal stereo-split glyph; this one is a Y-fork into
   two jacks. The button's tooltip carries the Dual I/O on/off copy. See
   [fx-modules.md](../modules/fx-modules.md#stereo-io-dual-io-toggle).
-- **`ToolSelect` through `ToolDraw`** (31-36) are the six glyphs for the timeline edit-tool strip
+- **`ToolSelect` through `ToolDraw`** (31-36) are six of the seven glyphs for the timeline
+  edit-tool strip (the seventh, `ToolRange`, is appended at 43 — see below)
   (`synth::ui::EditTool` — Select, Split, Glue, Erase, Mute, Draw): a pointer arrow, scissors, a
   glue bottle, an angled eraser block, a crossed-out speaker, and a pencil at about 45 degrees. The
   mute glyph is visually distinct from `ModuleMute`: that one is an outlined speaker with a small
@@ -74,6 +76,9 @@ Notes on individual entries:
   `CatUtility`, which gave the graph's actual source and sink no visual identity of their own.
 - **`ActionDetachWindow`** (42) is the icon-only open-in-window / dock-back control
   `DetachablePanelHost` uses for both the Timeline and Mixer panels.
+- **`ToolRange`** (43) is the Range edit tool's glyph (`EditTool::Range`, key 2): two vertical edge
+  bars with a double-headed arrow between them — a span of time, not an object. Strip button and
+  cursor use it exactly like the other `Tool*` glyphs above.
 
 ## Token to tint map
 
@@ -89,7 +94,7 @@ Notes on individual entries:
 | `TransportStop` | `textPrimary` |
 | Category icons (`CatSources` … `CatUtility`, `CatIO`) | `textMuted` |
 | `WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle` | `textPrimary` — the same as the combo text colour, so they stay legible across all themes |
-| `ToolSelect` … `ToolDraw` | `textPrimary` — which tool is ACTIVE is a per-button highlight painted with the `toolActive` token, not a different icon tint; the glyph itself never changes colour |
+| `ToolSelect` … `ToolDraw`, `ToolRange` | `textPrimary` — which tool is ACTIVE is a per-button highlight painted with the `toolActive` token, not a different icon tint; the glyph itself never changes colour |
 | `TrackMidi`, `TrackAudio`, `TrackAutomation` | `textMuted` — quiet identity chrome, the same convention as the category icons |
 | `FollowPlayhead` | `textPrimary` |
 | `ActionDetachWindow` | `textMuted` |

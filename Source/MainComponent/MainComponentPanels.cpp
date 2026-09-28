@@ -379,7 +379,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     // silently, because a surface action has no command to dispatch.
     //
     // Deliberately a WHITELIST of two ids rather than a blanket forward. Forwarding everything the
-    // panel resolves would make its bare letters and tool digits (J/L/P/F, 1/3/4/5/7/8) fire while
+    // panel resolves would make its bare letters and tool digits (J/L/P/F, 1/2/3/4/5/7/8) fire while
     // the graph canvas has focus, which is a different feature with its own design question. These
     // two act on the transport, are chorded, and mean nothing on any other surface.
     if (isBottomDockVisible) {

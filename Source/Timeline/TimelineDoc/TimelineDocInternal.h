@@ -7,7 +7,9 @@
 
 #include "TimelineDoc.h"
 
+#include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace synth {
 namespace detail {
@@ -34,6 +36,45 @@ inline bool noteLess(const MidiNote& a, const MidiNote& b) {
     if (a.pitch != b.pitch)
         return a.pitch < b.pitch;
     return a.id.value < b.id.value;
+}
+
+// -- note partitioning --------------------------------------------------------
+// THE rule for cutting a clip's notes at a clip-relative beat, shared by splitClip and every
+// range edit (trimClipStart/trimClipEnd/clipToRange) so a cut can never mean two different things.
+// Notes ending at or before `atBeat` go left untouched; notes starting at or after it go right,
+// re-based so `atBeat` becomes beat 0; a straddling note is cut in two — the left half keeps its
+// id and ends at the boundary, the right half takes `freshId(original)` and starts at 0 (a caller
+// that discards one side passes a lambda returning original.id, so the survivor keeps it). Both
+// outputs come back sorted by noteLess (a straddler's right half can tie a note at beat 0).
+template <typename FreshId>
+inline void partitionNotesAt(const std::vector<MidiNote>& notes, double atBeat, FreshId&& freshId,
+                             std::vector<MidiNote>& left, std::vector<MidiNote>& right) {
+    left.clear();
+    right.clear();
+    left.reserve(notes.size());
+    right.reserve(notes.size());
+    for (const auto& note : notes) {
+        const double noteEnd = note.startBeat + note.lengthBeats;
+        if (noteEnd <= atBeat) {
+            left.push_back(note);
+        } else if (note.startBeat >= atBeat) {
+            MidiNote moved = note;
+            moved.startBeat -= atBeat;
+            right.push_back(moved);
+        } else {
+            MidiNote leftHalf = note;
+            leftHalf.lengthBeats = atBeat - note.startBeat;
+            left.push_back(leftHalf);
+
+            MidiNote rightHalf = note;
+            rightHalf.id = freshId(note);
+            rightHalf.startBeat = 0.0;
+            rightHalf.lengthBeats = noteEnd - atBeat;
+            right.push_back(rightHalf);
+        }
+    }
+    std::stable_sort(left.begin(), left.end(), noteLess);
+    std::stable_sort(right.begin(), right.end(), noteLess);
 }
 
 // -- validation ---------------------------------------------------------------

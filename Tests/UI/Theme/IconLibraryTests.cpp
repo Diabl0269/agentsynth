@@ -303,7 +303,8 @@ TEST(IconLibraryTest, CatIOBinaryDataSymbol) {
 TEST(IconLibraryTest, ActionDetachWindowIconEnumCountAndOrdinal) {
     // Appended immediately before kCount, same append-only convention CatIO used -- kCount grows
     // from 42 to 43, and ActionDetachWindow lands at CatIO's old kCount slot (41), now 42.
-    EXPECT_EQ((int)Icon::kCount, 43);
+    // ToolRange was appended after it later, so kCount is 44 now (see ToolRangeIconEnumOrdinal).
+    EXPECT_EQ((int)Icon::kCount, 44);
     EXPECT_EQ((int)Icon::ActionDetachWindow, 42);
 
     IconLibrary lib;
@@ -323,5 +324,23 @@ TEST(IconLibraryTest, ActionDetachWindowBinaryDataSymbol) {
     EXPECT_GT(BinaryData::actiondetachwindow_svgSize, 0);
 #else
     GTEST_SKIP() << "BinaryData not linked in this build";
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// ToolRangeIconEnumOrdinal (the Range edit tool, EditTool::Range)
+// ---------------------------------------------------------------------------
+TEST(IconLibraryTest, ToolRangeIconEnumOrdinal) {
+    // Appended immediately before kCount, like CatIO and ActionDetachWindow, so no existing
+    // ordinal moved.
+    EXPECT_EQ((int)Icon::ToolRange, 43);
+    EXPECT_EQ((int)Icon::ToolDraw, 36);
+
+    IconLibrary lib;
+    auto d = lib.getDrawable(Icon::ToolRange);
+    if (kAssetsPresent)
+        EXPECT_NE(d, nullptr) << "ToolRange icon returned null with assets present";
+#ifdef HAS_FONT_ASSETS
+    EXPECT_GT(BinaryData::toolrange_svgSize, 0);
 #endif
 }

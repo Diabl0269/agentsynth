@@ -74,6 +74,8 @@ enum class Icon : int {
     // DetachablePanelHost uses for both the Timeline and Mixer panels. Appended immediately
     // before kCount, same append-only convention as CatIO above.
     ActionDetachWindow,
+    // EditTool::Range's glyph — appended, not grouped with the Tool* block (append-only, as CatIO).
+    ToolRange,
     kCount
 };
 
