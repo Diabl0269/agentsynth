@@ -160,6 +160,73 @@ Own-panel/Window placement variant like Mixer's own, so it has no third row in t
 | Own panel | `MixerPlacementController` itself, a second independent bottom strip below the bottom dock; slides, resizable | unaffected | its own header (embedded=false) |
 | Window | a `DetachedPanelWindow`, opened on first reveal, never eagerly at launch | unaffected | `mixerHost_` stays parented and hidden inside the dock until revealed |
 
+### Detach mode: move or both places
+
+FRO336 adds a second, orthogonal Preferences setting: **"When a panel opens in its own window:"
+Move it there** (default) or **Show it in both places** (`detachedPanelBothPlaces`, "move"/"both" —
+`BottomDockComponent::usesMixerMirrorForDetach`). It only changes what the Tab placement's own
+tab-strip detach button (above) does for the **Mixer** tab; Timeline/Controllers, and Mixer's own
+Own-panel/Window placements, always move (see `usesMixerMirrorForDetach`'s own guard).
+
+**Why "both" needs a second instance, not a second parent.** A `juce::Component` has exactly one
+parent, so the reparent-by-reference mechanism every other detach uses (above) can only ever show a
+panel in ONE place. "Both" is `synth::ui::MixerMirrorController` (`Source/UI/Mixer/`): a SECOND
+`MixerPanelComponent`, configured against the SAME `AudioProcessorGraph`/`TimelineDoc`/`MacroSet`/
+`AppUndoManager`/`GraphEditor`/`AudioEngine` the docked `mixer_` already uses, opened lazily in its
+own `DetachedPanelWindow` (built directly, not through a second `DetachablePanelHost` — there is
+nothing to dock the mirror INTO). `mixerHost_` itself never detaches while this is in play: the tab
+stays in the strip and active, exactly what makes this "both places" rather than "moved".
+
+**Fader and pan positions sync for free.** Both views' `MixerFader` / pan
+`juce::SliderParameterAttachment` bind to the SAME live `juce::AudioParameterFloat`, and JUCE
+notifies every registered listener on a parameter change regardless of which attachment wrote it. A
+drag gesture bracketed from EITHER view still produces exactly one undo step:
+`AppUndoManager::capturedBeforeState` is a single shared field guarded by `isVoid()`, so a second
+`captureBeforeState`/`pushSnapshotFromCapture` pair from the other view's own parameter listener is
+a harmless no-op (`BottomDockMixerMirrorTests.cpp` pins this with a real synthesized drag on one
+view and an edit-serial assertion). **Mute/Solo/pan-law also sync live**, through a separate,
+explicit path: `MixerColumnComponent`/`MixerMasterColumn::onLiveStateChanged` fires at the end of a
+real interactive toggle/pick (never a rebuild-driven state application), bubbles to
+`MixerPanelComponent::onLiveMixerStateChanged`, and `BottomDockComponent`/`MixerMirrorController`
+cross-wire each instance's signal to the OTHER instance's `refreshLiveMixerVisuals()` — the same
+cheap per-strip/Master refresh (no rebuild) FRO253 already used for a hardware MIDI Remote solo
+press, now reused and broadened rather than a bespoke mirror-to-dock ping
+(`BottomDockComponent::refreshLiveMixerVisualsEverywhere()`). `BottomDockMixerMirrorTests.cpp` pins a
+real click on one view's M button updating the other's, the pan-law label staying identical after a
+menu pick in either view, and an undo of a mute restoring both (the undo case needed no new
+mechanism — it is a graph-snapshot restore that already reaches both views through the unbind/rebuild
+hooks below). Inserts/sends/renames sync the same way they always did, through the pre-existing
+`onGraphMutated` -> `rebuild()` path, which `copyWiringFrom()` already carries across. Meters use
+their own `MeterReader::MixerMirror` latch slot (`Source/Mixer/PeakMeterLatch.h`) so the two views'
+polls never race each other's consume-on-read peaks.
+
+Pan-law's own **undo** restore is a separate, pre-existing, single-view limitation unrelated to this
+mechanism: `MixerPanLawAction` (`AppUndoManager.cpp`) has no restore-notification hook at all, so
+undoing/redoing a pan-law change only reaches a view's own label the next time something else
+rebuilds it (e.g. `MixerMasterColumn::setColumn()`, called on every mixer rebuild, now also re-reads
+the engine's current law for exactly this reason — a rebuild must never leave the label stale either).
+
+**Every mixer-view-wide seam reaches the mirror too, when one is open**:
+`BottomDockComponent::unbindAllMixerViews()`/`rebuildIfUnboundMixerViews()` (Source/UI/CLAUDE.md's
+mixer-unbind invariant — MainComponent wires these, not `getMixerPanel()` directly, to
+`GraphEditor::onBeforeDetachAllModuleComponents`/`onGraphStructureChanged`), `rebuildMixer()`,
+`refreshMeters()`, and the theme re-skin pass (`refreshMixerMirrorWindowTheme()`). A fresh mirror
+copies every callback/pointer MainComponent wires directly onto a panel instance — MIDI-learn
+requests, the MIDI Remote doc, the `ShortcutManager` — via `MixerPanelComponent::copyWiringFrom()`,
+so its own right-click menus resolve the same way the docked panel's already do (the MIDI-learn
+"armed" glow itself still only shows on whichever panel `MidiLearnController::setMixerPanel()` was
+pointed at — the docked one — a known, accepted visual-only gap).
+
+**Live preference changes.** `BottomDockComponent::applyDetachBothPlacesPreference()` re-reads the
+key on every settings-file write (`MainComponent::changeListenerCallback`, alongside
+`mixerPlacement_.applyPlacementPreference()`) and transitions whatever is currently open: switching
+TO "both" while the real host is detached redocks it, reactivates the Mixer tab, and opens a mirror
+in its place; switching back to "move" while a mirror is open closes it and detaches the real host
+instead — restoring the exact FRO333 "a detached tab leaves the strip" behaviour. Scoped to Tab
+placement (`mixerTabEnabled_`): a mirror is closed outright if the placement itself changes to
+Own panel/Window (`setMixerTabEnabled(false)`), since those placements have their own, unrelated
+detach state.
+
 **In Tab placement neither host draws its own header** (`setEmbeddedHeader(true)`): the dock's
 22 px tab strip (`BottomDockComponent::kTabStripHeight`) carries a single icon-only detach button that
 acts on whichever tab is active, and the header — with the real button, now reading "Dock back" —

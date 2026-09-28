@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MacroSet.h"
+#include "Mixer/PeakMeterLatch.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Mixer/MixerDirectColumn.h"
 #include "UI/Mixer/MixerMasterColumn.h"
@@ -39,8 +40,13 @@ public:
     MixerPanelComponent();
     ~MixerPanelComponent() override;
 
+    // FRO336: `meterReader` -- own consume-on-read latch slot per live view (see .cpp).
     void configure(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc, synth::MacroSet& macros,
-                   AppUndoManager& undoManager, GraphEditor& graphEditor, AudioEngine& audioEngine);
+                   AppUndoManager& undoManager, GraphEditor& graphEditor, AudioEngine& audioEngine,
+                   synth::MeterReader meterReader = synth::MeterReader::Mixer);
+
+    // FRO336: call once, right after configure() -- see .cpp for exactly what this copies.
+    void copyWiringFrom(const MixerPanelComponent& other);
 
     /** Forwarded from MixerDirectColumn -- BottomDockComponent wires this to
      *  MainComponent::makeChannelForNode, the same "Make channel" entry point every other trigger
@@ -50,6 +56,9 @@ public:
     /** Forwarded from every column's insert list after an add/reorder/remove mutation --
      *  BottomDockComponent wires this to MainComponent::reconcileTimelineAfterGraphChange. */
     std::function<void()> onGraphMutated;
+
+    /** FRO336: fired after a real interactive mute/solo/pan-law change -- see the .cpp wiring. */
+    std::function<void()> onLiveMixerStateChanged;
 
     /** FRO15 (docs/mixer/sends-and-buses.md): creates a group/send bus channel -- bypassed EQ -> bypassed
      *  Compressor -> Stereo Strip -> Master(Mix), boxed in a macro named "Bus N" -- as ONE
@@ -178,9 +187,8 @@ public:
     std::function<void(juce::AudioProcessorGraph::NodeID)> onSoloMidiForgetRequested;
     std::function<juce::String(juce::AudioProcessorGraph::NodeID)> onQuerySoloMidiMapping;
 
-    /** FRO253: re-syncs every column's M/S visuals after something other than a click changed
-     *  solo. See MixerPanelComponent.cpp's definition for why this exists. */
-    void refreshMuteSoloVisuals();
+    /** FRO253/FRO336: re-syncs every column's + Master's mute/solo/pan-law visuals -- see the .cpp definition. */
+    void refreshLiveMixerVisuals();
 
     bool keyPressed(const juce::KeyPress& key) override;
     void paintOverChildren(juce::Graphics& g) override;
@@ -246,6 +254,7 @@ private:
     synth::MidiRemoteProjectDoc* midiRemoteDoc_ = nullptr; // FRO296, see setMidiRemoteDoc
     AudioEngine* audioEngine_ = nullptr;
     ShortcutManager* shortcuts_ = nullptr;
+    synth::MeterReader meterReader_ = synth::MeterReader::Mixer; // FRO336, see configure()
 
     std::vector<std::unique_ptr<MixerColumnComponent>> stripColumns_;
     std::unique_ptr<MixerDirectColumn> directColumn_;
