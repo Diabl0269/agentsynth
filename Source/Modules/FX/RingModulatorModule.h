@@ -12,7 +12,7 @@
 // Drive sets how hard the diodes are pushed - it's a saturation/character control, not a level
 // control: `diodeRing` is linear above the diode breakpoint `vl`, so scaling both inputs by drive
 // and NOT normalising back out made drive an uncompensated gain of up to 8x (+18 dB) for any patch
-// where the carrier and modulator carry comparable energy (FRO120 - a hot filter output fanned into
+// where the carrier and modulator carry comparable energy (e.g. a hot filter output fanned into
 // both inputs drove the Master bus into hard clipping). The wet signal is divided back down by the
 // same drive used for that sample, so drive changes the diode nonlinearity's shape without changing
 // loudness; drive = 1 is bit-identical to the undivided form.

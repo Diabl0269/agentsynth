@@ -4,7 +4,7 @@
 //
 // Mouse-event helpers and ruler constants for the TimelinePanel tests, split out of
 // TimelinePanelTestFixture.h so tests that drive a bare TimelinePanelComponent need not pull in
-// MainComponent.h (FRO307). Header-only; not registered in Tests/CMakeLists.txt.
+// MainComponent.h. Header-only; not registered in Tests/CMakeLists.txt.
 
 #include <juce_gui_basics/juce_gui_basics.h>
 

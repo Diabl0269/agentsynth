@@ -1,4 +1,4 @@
-// FRO287: pure geometry for the modulation-ring depth band (modDepthBandRange /
+// Pure geometry for the modulation-ring depth band (modDepthBandRange /
 // modDepthBandUsesNegativeColour, ModuleComponentModBand.h) -- no ModuleComponent, no LookAndFeel,
 // no graph. See ModuleComponentModAmountGestureTests.cpp for the live-paint/gesture side.
 

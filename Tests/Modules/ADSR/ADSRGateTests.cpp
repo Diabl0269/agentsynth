@@ -1,6 +1,6 @@
 // ADSRGateTests.cpp
 // Mono gating: the Gate CV Schmitt trigger, MIDI note-on/off, their OR combination, and the
-// FRO110 repros for mono multi-note (re-articulation / held-note) behaviour.
+// Repros for mono multi-note (re-articulation / held-note) behaviour.
 
 #include "ADSRTestFixture.h"
 
@@ -72,7 +72,7 @@ TEST_F(ADSRTest, MidiOffDoesNotReleaseWhileGateCvIsHigh) {
 }
 
 // ---------------------------------------------------------------------------
-// FRO110 regression suite (formerly the Repro* diagnostics that motivated the rewrite): the
+// Regression suite: the
 // mono held-note bitset fix -- a MIDI note-on drives the retrigger directly instead of relying
 // on an edge in a held/not-held flag.
 // ---------------------------------------------------------------------------

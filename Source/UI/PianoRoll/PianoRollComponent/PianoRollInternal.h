@@ -4,9 +4,8 @@
 // PianoRollScaleAssist.cpp, PianoRollPainting.cpp, PianoRollEditTools.cpp, PianoRollAudition.cpp,
 // PianoRollClipboardAndKeys.cpp, PianoRollMouse.cpp, PianoRollZoom.cpp). Not a CMake source file —
 // each unit that needs one of these constants/helpers includes this header directly and brings the
-// names into scope with `using namespace synth::ui::detail;`, so every call site keeps its original,
-// unqualified spelling. Extracted verbatim from PianoRollComponent.cpp's old anonymous namespace
-// (FRO64); no behavior change.
+// names into scope with `using namespace synth::ui::detail;`, so every call site keeps its
+// unqualified spelling.
 
 #include <juce_gui_basics/juce_gui_basics.h>
 

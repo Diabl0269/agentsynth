@@ -1,9 +1,9 @@
-// ModuleComponentLfoCard.cpp (FRO114) -- the LFO card's Custom-waveform section: the Grid/
+// ModuleComponentLfoCard.cpp -- the LFO card's Custom-waveform section: the Grid/
 // Shapes/Tools toolbar + Free-mode curve editor, the two-way sync between it and LFOModule's
 // custom wave (getExtraState/setExtraState), undo-gesture wiring, the generation-poll reverse
 // sync, and the playhead poll. ModuleComponent is declared in ModuleComponent.h; the rest of its
-// implementation lives in the sibling ModuleComponent*.cpp units next to this one (FRO65 split of
-// the former single ModuleComponent.cpp). ModuleComponentEnvelopeCard.cpp is the pattern this
+// implementation lives in the sibling ModuleComponent*.cpp units next to this one.
+// ModuleComponentEnvelopeCard.cpp is the pattern this
 // mirrors throughout.
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"

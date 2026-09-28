@@ -1,10 +1,10 @@
 // MacroAutoPortUngroupTests.cpp
-// Ungrouping removes a macro's auto-created ports and splices cables back (founder-review fix G7,
-// docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port); the presentation-count/tooltip rules that exclude
+// Ungrouping removes a macro's auto-created ports and splices cables back
+// (docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port); the presentation-count/tooltip rules that exclude
 // auto-created ports; and the tri-state auto-create-ports preference's modal-firing conditions plus its
 // remember/skip-the-modal paths. Shared test modules/helpers live in MacroAutoPortTestHelpers.h.
 //
-// Creation tests live in MacroAutoPortCreationTests.cpp; the T148/T154 auto-delete suite lives in
+// Creation tests live in MacroAutoPortCreationTests.cpp; the auto-delete suite lives in
 // MacroAutoPortDeleteTests.cpp.
 
 #include "AudioEngine/AudioEngine.h"
@@ -23,10 +23,10 @@
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 // ============================================================================
-// Ungroup removes the macro's ports and splices the cable back (founder-review fix G7,
-// docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port): "ungroup leaves the macro input/output in place
-// (They should be removed)". Group then Ungroup must be a true round trip — every port node gone, every boundary cable
-// it proxied reconnected external<->internal directly, on the original raw channels.
+// Ungroup removes the macro's ports and splices the cable back
+// (docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port). Group then Ungroup must be a true round trip —
+// every port node gone, every boundary cable it proxied reconnected external<->internal directly, on the original raw
+// channels.
 // ============================================================================
 
 TEST(MacroUngroupPorts, RemovesTheAutoCreatedPortsAndSplicesTheCablesBack) {
@@ -248,17 +248,16 @@ TEST(MacroUngroupPorts, ReachesTheGraphStructureChangedNotificationHook) {
 }
 
 // ============================================================================
-// Presentation (founder-review fix G6, docs/macros/ports.md#member-counts-report-modules-not-ports): the module-count
+// Presentation (docs/macros/ports.md#member-counts-report-modules-not-ports): the module-count
 // indicator, the tooltip's member list and the content preview must count/list MODULES, never
 // the port nodes a crossing cable spliced in — members.size() itself stays untouched.
 // ============================================================================
 
 TEST(MacroAutoPort, PresentationCountExcludesAutoCreatedPortsFounderScenario) {
-    // The founder's exact reproduction: "the number of modules indicator seems to show more then
-    // there are - 4 when i grouped the delay and reverb in the default patch - should have shown
-    // 2." Delay -> Reverb, each with a crossing stereo connection on its outward-facing side (both
-    // default to Dual I/O OFF, so each crossing collapses into ONE port, same as the founder's
-    // screenshot) -> 2 real modules + 2 auto-created port nodes = 4 members, but 2 modules.
+    // Grouping Delay and Reverb in the default patch must report 2 modules, not 4. Delay ->
+    // Reverb, each with a crossing stereo connection on its outward-facing side (both default to
+    // Dual I/O OFF, so each crossing collapses into ONE port) -> 2 real modules + 2 auto-created
+    // port nodes = 4 members, but 2 modules.
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -327,7 +326,7 @@ TEST(MacroAutoPort, PresentationTooltipListsModulesNotPortNodes) {
 }
 
 TEST(MacroAutoPort, PresentationCountIsUnchangedForAPlainMacroWithNoPorts) {
-    // Regression guard: the plain P8-12 grouping case (no crossing cable, no ports at all) —
+    // Regression guard: the plain grouping case (no crossing cable, no ports at all) —
     // the most common case in the existing suite — must read exactly as it always did.
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -552,7 +551,7 @@ TEST(MacroAutoPort, ModalRememberPersistsThePreference) {
     EXPECT_TRUE(hasConnection(engine, ext, 0, a, 0));
 }
 
-// T147: the actual bug — the modal's "Remember my choice" wrote to the properties file but a fresh
+// The actual bug — the modal's "Remember my choice" wrote to the properties file but a fresh
 // launch never read it back, so the modal re-asked every session. This exercises the complete
 // round trip the way a relaunch does: the modal's write path persists the choice through the
 // editor's properties file, then a SECOND, freshly-constructed editor gets the restored preference

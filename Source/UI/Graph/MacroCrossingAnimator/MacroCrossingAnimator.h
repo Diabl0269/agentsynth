@@ -2,8 +2,8 @@
 
 // MacroCrossingAnimator.h
 //
-// FRO41: the interpolation state a Cmd+drag's mouseUp finalize (FRO40,
-// GraphEditor::finalizeMacroMembershipDrag) arms whenever crossing a macro's expanded hull border
+// The interpolation state a Cmd+drag's mouseUp finalize
+// (GraphEditor::finalizeMacroMembershipDrag) arms whenever crossing a macro's expanded hull border
 // auto-created or removed a macro port and re-routed one or more cables through it.
 // GraphEditor::buildVisibleCables() is memoized straight off live component/graph state with no
 // interpolation of its own (docs/layout/cables.md) — this is the small, self-contained bolt-on

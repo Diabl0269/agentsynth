@@ -555,7 +555,7 @@ void OllamaProvider::processRequest(const Request& req) {
     if (!req.responseSchema.isVoid())
         body->setProperty("format", req.responseSchema);
 
-    // Opt-in reproducibility/experiment knobs (P6-13) — omitted entirely when unset, which is
+    // Opt-in reproducibility/experiment knobs — omitted entirely when unset, which is
     // exactly today's request shape, so no production caller is affected.
     if (samplingOptions.think.has_value())
         body->setProperty("think", *samplingOptions.think);

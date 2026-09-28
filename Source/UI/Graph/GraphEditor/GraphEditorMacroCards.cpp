@@ -1,12 +1,12 @@
 // GraphEditorMacroCards.cpp
 //
 // The two macro-presentation pieces that need a genuine GraphEditor& / juce::Component identity
-// and so were NOT moved into MacroGroupController (FRO77 PR2) — see MacroGroupController.h's
+// and so were NOT moved into MacroGroupController — see MacroGroupController.h's
 // class comment: syncMacroCards() constructs `new MacroCardComponent(*this, ...)`, and
 // categoryPreviewColour() calls juce::Component::getLookAndFeel(). GraphEditor is declared in
 // GraphEditor.h; sibling GraphEditor*.cpp files in this directory hold the rest of the class.
 //
-// Plus the macro-port jack-colour recolour/preview block (T165) at the bottom: it lives here because
+// Plus the macro-port jack-colour recolour/preview block at the bottom: it lives here because
 // every surface it drives is a presentation component this file already owns -- the collapsed
 // MacroCardComponent and the port's docked ModuleComponent -- reached through GraphEditor's own
 // children. Its one production caller is GraphEditor::changeMacroPortColour in GraphEditorMacroApi.cpp.
@@ -19,7 +19,7 @@
 
 // Syncs macro card components with `macros` and the visibility of their (possibly hidden)
 // member ModuleComponents. Called at the end of updateComponents(), the same seam that
-// syncs ModuleComponents themselves. Stays on GraphEditor (FRO77 PR2) — it constructs
+// syncs ModuleComponents themselves. Stays on GraphEditor — it constructs
 // `new MacroCardComponent(*this, ...)`, which needs a genuine GraphEditor&; see
 // MacroGroupController.h's class comment. Also GraphCanvasHost::syncMacroCards() —
 // MacroGroupController::renameMacro()/setMacroColour() call it through the host afterward.
@@ -33,7 +33,7 @@ void GraphEditor::syncMacroCards() {
             // This card's own mouseDown may have armed a live body drag (beginMacroCardDrag ->
             // selectionDragActive) — its macro just vanished entirely (every member gone, so
             // MacroSet::retainOnly erased it), and no mouseUp is ever coming once the card is
-            // destroyed below (FRO19). Cancel now rather than leaving selectionDragActive stuck.
+            // destroyed below. Cancel now rather than leaving selectionDragActive stuck.
             if (card->isBodyDragActive())
                 cancelLiveDragGestures();
             content.removeChildComponent(card);

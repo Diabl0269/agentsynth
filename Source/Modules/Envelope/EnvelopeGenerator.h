@@ -67,7 +67,7 @@ public:
     }
 
     /** Enter Attack from the current level, over the full attack time. Safe to call from any
-     *  stage, including mid-decay or mid-release -- that is the whole point (FRO110).
+     *  stage, including mid-decay or mid-release -- that is the whole point.
      */
     void noteOn() noexcept {
         stageStart_ = currentLevel_;

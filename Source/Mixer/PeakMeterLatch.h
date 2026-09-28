@@ -3,7 +3,7 @@
 #include <array>
 #include <atomic>
 
-// PeakMeterLatch.h -- FRO146 (docs/mixer/mixer.md meters section): a lock-free "peak since I last
+// PeakMeterLatch.h (docs/mixer/mixer.md meters section): a lock-free "peak since I last
 // looked" latch, one per output leg of a metered module (ChannelStripModule/MasterModule).
 //
 // THE MISSED-OVERS BUG THIS REPLACES. The old scheme stored exactly one float per leg, overwritten
@@ -28,7 +28,7 @@ namespace synth {
 
 /** One enumerator per independent consumer of a metered module's peak. Add a new one for a new
  *  consumer -- never share an existing reader's slot across two logically different pollers.
- *  FRO336: `MixerMirror` is the Mixer's optional second live view (the "both places" detached-panel
+ *  `MixerMirror` is the Mixer's optional second live view (the "both places" detached-panel
  *  preference, Source/UI/Mixer/MixerMirrorController.h) -- it reads every strip/Master meter at its
  *  own cadence, same as the docked Mixer and a track header's channel chip already do independently
  *  of each other, so it gets its own slot rather than racing `Mixer` for the same one. */

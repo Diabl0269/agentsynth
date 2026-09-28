@@ -1,4 +1,4 @@
-// HostedPluginCardTests.cpp -- the Hosted Plugin card body (FRO128): the knobs / toggles / choice combos the
+// HostedPluginCardTests.cpp -- the Hosted Plugin card body: the knobs / toggles / choice combos the
 // resolved layout puts on the card, HostedParameterAttachment's two-way binding, the layout-change rebuilds,
 // gesture -> undo bracketing, and the unbind discipline when the instance goes away.
 //
@@ -829,7 +829,7 @@ TEST(HostedPluginCardTest, CardRendersToPngForVisualInspection) {
 
     // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
     // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
-    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    // Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
     juce::Image image(juce::Image::ARGB, card->getWidth(), card->getHeight(), true, juce::SoftwareImageType());
     juce::Graphics g(image);
     EXPECT_NO_THROW(card->paintEntireComponent(g, true));

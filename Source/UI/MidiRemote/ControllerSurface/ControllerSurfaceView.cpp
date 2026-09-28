@@ -1,4 +1,4 @@
-// Concern: FRO331 (docs/control/midi-remote-ui.md#surface-centre) -- the surface's pan/zoom view
+// Concern (docs/control/midi-remote-ui.md#surface-centre): the surface's pan/zoom view
 // transform. Mirrors GraphEditor's own canvas transform (Source/UI/Graph/GraphEditor/
 // GraphEditorCanvas.cpp's updateTransform()/applyZoomAt()) but is an independent, from-scratch
 // implementation: this directory never includes GraphEditor.h (Source/UI/CLAUDE.md's header-cost
@@ -37,7 +37,7 @@ constexpr float kWheelZoomSensitivity = 0.1f; // matches GraphEditor::applyZoomA
 ControllerSurfaceComponent::Content::Content(ControllerSurfaceComponent& owner)
     : owner_(owner) {}
 
-// The dotted background grid, moved here from ControllerSurfaceComponent::paint() (FRO331): drawn
+// The dotted background grid, moved here from ControllerSurfaceComponent::paint(): drawn
 // in CONTENT-local space so the dots stay attached to the grid under pan/zoom instead of to the
 // viewport, the same "drawn in canvas space" reasoning GraphEditorCables.cpp's marquee band
 // comment gives. Skipped entirely while no controller is selected -- the owner's paint() shows its
@@ -64,8 +64,8 @@ void ControllerSurfaceComponent::Content::paint(juce::Graphics& g) {
             g.fillRect(x, y, 1, 1);
 }
 
-// The marquee band (FRO270, moved here from ControllerSurfaceComponent::paintOverChildren() for
-// FRO331): marqueeRect_ is content-local, so painting it here -- rather than on the untransformed
+// The marquee band:
+// marqueeRect_ is content-local, so painting it here -- rather than on the untransformed
 // owner -- is what keeps the band locked to the cells it is selecting under pan/zoom, exactly the
 // reasoning GraphEditorCables.cpp's own marquee-paint comment gives for GraphContentComponent.
 void ControllerSurfaceComponent::Content::paintOverChildren(juce::Graphics& g) {
@@ -134,7 +134,7 @@ juce::Rectangle<float> ControllerSurfaceComponent::getVisibleContentRect() const
     return getLocalBounds().toFloat().transformedBy(t.inverted());
 }
 
-// FRO331: trivial, in-memory, session-only view-per-controller memory. Persisting it to disk
+// Trivial, in-memory, session-only view-per-controller memory. Persisting it to disk
 // (ControllerProfile/the project file) is deliberately out of scope for this ticket -- the surface
 // otherwise has no per-profile UI state at all today, so there is no existing read/write path to
 // extend, and adding one is a real schema/migration decision, not a "while we're here" addition.

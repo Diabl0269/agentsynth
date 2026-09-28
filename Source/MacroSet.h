@@ -16,7 +16,7 @@ namespace synth {
  *  and MIDI jacks apart. */
 enum class MacroPortKind { AudioCV, Midi };
 
-/** One inlet or outlet jack on a Macro's boundary (P8-15 Macro I/O; docs/macros/ports.md). The node
+/** One inlet or outlet jack on a Macro's boundary (Macro I/O; docs/macros/ports.md). The node
  *  named by `nodeUuid` (a MacroInlet/MacroOutlet or MacroMidiInlet/MacroMidiOutlet — always also
  *  a member of the same Macro, exactly like any other node) is the ground truth for what actually
  *  carries signal; this struct is the macro-level PRESENTATION layered over it — name and draw
@@ -28,8 +28,8 @@ struct MacroPort {
     int order = 0;         // draw order on the card, user-reorderable
     MacroPortKind kind = MacroPortKind::AudioCV;
 
-    // Per-port user colour (T152/founder review round 3, item 3.4), set from the Configure I/O
-    // modal's row swatch. nullopt (the default, and what every pre-T152 saved patch parses as) means
+    // Per-port user colour, set from the Configure I/O
+    // modal's row swatch. nullopt (the default, and what every older saved patch parses as) means
     // "unset" — every reader falls back to the existing kind tint (accent for AudioCV, audioWire for
     // Midi, the same colours PortRowComponent/MacroCardComponent already paint jacks with) rather
     // than a hard-coded colour, so an un-coloured port looks exactly as it always has.
@@ -42,14 +42,14 @@ struct MacroPort {
      *  caller parsing a whole macro's port list can reject it as one unit rather than accept a
      *  partially-parsed port. The optional "colour" key is the one exception to that strictness:
      *  it is decorative only (never load-bearing like nodeUuid/kind), so an absent key parses as
-     *  unset (back-compat with every pre-T152 save) and a present-but-malformed value is likewise
+     *  unset (back-compat with older saves) and a present-but-malformed value is likewise
      *  just ignored rather than rejecting the whole port over a cosmetic field. */
     static bool fromVar(const juce::var& v, MacroPort& out);
 };
 
 /** A named, coloured, collapsible grouping of graph nodes on the canvas — presentation over a
- *  flat graph (P8-12; docs/layout/macro-cards.md), now gaining optional named ports
- *  (P8-15 Macro I/O, docs/macros/ports.md). A Macro still adds no graph edges and no processing of
+ *  flat graph (docs/layout/macro-cards.md), now gaining optional named ports
+ *  (Macro I/O, docs/macros/ports.md). A Macro still adds no graph edges and no processing of
  *  its own: `ports` is a description of which of its OWN inlet/outlet member nodes are exposed as
  *  named jacks, not a mechanism the macro itself implements — the boundary stays a rendering
  *  concept (docs/macros/ports.md#cable-rendering-across-the-boundary).
@@ -60,7 +60,7 @@ struct MacroPort {
  *  uuid-mirroring invariant).
  *
  *  Flat model: a node already in a macro cannot be grouped into a second one. Nested macros are
- *  out of scope for P8-12 — see GraphEditor::groupSelectionIntoMacro, which refuses (with a
+ *  out of scope — see GraphEditor::groupSelectionIntoMacro, which refuses (with a
  *  status message, not a silent no-op) rather than doing something ad hoc. */
 struct Macro {
     juce::String id; // opaque, unique within a MacroSet — never mirrored into a processor
@@ -77,7 +77,7 @@ struct Macro {
 
     std::vector<juce::String> members; // node uuids
 
-    // Named jacks on this macro's boundary (P8-15). Every port's nodeUuid MUST also appear in
+    // Named jacks on this macro's boundary. Every port's nodeUuid MUST also appear in
     // `members` — an inlet/outlet is a member like any other node (docs/macros/ports.md#node-types) — and
     // MacroSet::fromVar rejects a saved macro where that does not hold. Order in this vector is
     // NOT the draw order; each port's own `order` decides (docs/macros/configure-io.md#renaming-and-reordering-ports).
@@ -91,13 +91,13 @@ struct Macro {
      *  variant node) rather than being an ordinary module the user grouped. Presentation-only —
      *  it answers "is this member a boundary jack", nothing more; `members` itself, and every
      *  consumer that reads it for bounds/group-drag/bypass-mute/undo/serialization, is completely
-     *  untouched by this (founder-review fix G6, docs/macros/ports.md#member-counts-report-modules-not-ports). */
+     *  untouched by this (docs/macros/ports.md#member-counts-report-modules-not-ports). */
     bool memberIsPort(const juce::String& memberUuid) const {
         return std::any_of(ports.begin(), ports.end(), [&](const MacroPort& p) { return p.nodeUuid == memberUuid; });
     }
 
     /** The user-facing MODULE count: `members.size()` minus the members that are actually port
-     *  nodes (founder-review fix G6). Grouping N modules with a crossing cable can splice in
+     *  nodes. Grouping N modules with a crossing cable can splice in
      *  inlet/outlet nodes that are genuine members (they must be, for bounds/drag/undo to work —
      *  see the class comment above and docs/macros/ports.md#node-types), but a port is a boundary jack the
      *  macro exposes, not a module the user put in the box — those are different quantities, and
@@ -136,7 +136,7 @@ public:
      *  return `Macro&`, and every real caller only ever wanted the id off it anyway
      *  (`macros.add(macro).id`) — but a `Macro&` held across a *second* `add()` dangles the
      *  moment that call reallocates `macros_`, which is exactly the ASAN heap-use-after-free
-     *  FRO95 caught (SnippetManagerMacroTests.cpp held a reference from the first of two `add()`
+     *  a test caught (SnippetManagerMacroTests.cpp held a reference from the first of two `add()`
      *  calls and read it after the second). Look the macro back up via `find(id)` any time after
      *  a further mutating call — never hold a `Macro&`/`Macro*` obtained from `add()` across
      *  another mutator. */
@@ -144,7 +144,7 @@ public:
 
     /** Removes the macro. Does NOT touch its former members' graph nodes itself — this call is
      *  purely a metadata change, same as every other MacroSet mutator. GraphEditor::
-     *  ungroupSelection() (founder-review fix G7, docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port) is
+     *  ungroupSelection() (docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port) is
      * the caller that gives "ungroup" its full user-facing meaning: it splices every one of the macro's PORT nodes back
      * out (GraphEditor::spliceOutMacroPort) — removing them and reconnecting the cable each proxied — before ever
      * calling this, so by the time `remove()` runs, only ordinary member nodes (untouched, exactly as this method's own
@@ -159,7 +159,7 @@ public:
     bool addMember(const juce::String& macroId, const juce::String& memberUuid);
 
     /** Removes `memberUuid` from whichever macro contains it (no-op if it is in none), also
-     *  dropping any port that fronted it (P8-15) — a port's nodeUuid is always a member, so this
+     *  dropping any port that fronted it — a port's nodeUuid is always a member, so this
      *  keeps that invariant true after a single-member removal too, not only after retainOnly().
      *  A macro left with zero members afterwards is dissolved outright — an empty macro is not a
      *  meaningful state to leave on screen.
@@ -167,7 +167,7 @@ public:
      *          string if `memberUuid` was in no macro. */
     juce::String removeMemberEverywhere(const juce::String& memberUuid);
 
-    /** Drops every member uuid that isn't in `aliveMemberUuids`, and with it any port (P8-15)
+    /** Drops every member uuid that isn't in `aliveMemberUuids`, and with it any port
      *  whose node died — a port whose node is gone is not a representable state, the same way a
      *  macro with zero members isn't. Dissolves any macro left with no members. Call after any
      *  graph mutation that can remove nodes — the MacroSet analogue of SelectionModel::retainOnly
@@ -181,7 +181,7 @@ public:
      *  macro with zero members, a duplicate id, a member uuid claimed by more than one macro, a
      *  malformed port, or a port whose nodeUuid is not one of the macro's own members) rejects
      *  the WHOLE load and leaves `this` completely untouched. An absent "ports" key on a macro
-     *  parses as no ports — every P8-12 project.json predates the key. Does not check members (or
+     *  parses as no ports — older project.json files predate the key. Does not check members (or
      *  ports) against a live graph — call retainOnly() with the graph's current node uuids
      *  afterwards, the same two-step TimelineReconciler::reconcile follows for TimelineDoc. */
     bool fromVar(const juce::var& state);

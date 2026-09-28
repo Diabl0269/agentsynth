@@ -2,11 +2,11 @@
 #include "MacroPortFlowTestHelpers.h"
 
 // Topic: editing an existing port without changing its identity — remove, rename, reorder
-// (adjacent-swap and drag-to-index), and the T152 per-port colour.
+// (adjacent-swap and drag-to-index), and the per-port colour.
 
 namespace {
 // Builds a two-member macro, an EXISTING port with a cable crossing through it (ext -> port -> a),
-// and returns {macroId, portUuid, extNodeId, aNodeId} — the fixture FRO235's manual-delete tests
+// and returns {macroId, portUuid, extNodeId, aNodeId} — the fixture the manual-delete tests
 // share.
 struct ManualDeletePortFixture {
     juce::String macroId;
@@ -33,7 +33,7 @@ ManualDeletePortFixture makeManualDeletePortFixture(GraphEditor& editor, AudioEn
 } // namespace
 
 // ============================================================================
-// FRO235: the "splice the cable back" preference — Configure I/O's Delete Port (removeMacroPort)
+// The "splice the cable back" preference — Configure I/O's Delete Port (removeMacroPort)
 // and the port's own right-click Delete Port both go through deleteMacroPortManually, so a flip
 // of the preference always applies to both at once.
 // ============================================================================
@@ -201,7 +201,7 @@ TEST(MacroPortFlow, ReorderIsScopedToOneDirectionAndNoOpsAtTheEdge) {
     EXPECT_EQ(orderOf(out1), out1OrderBefore);
 }
 
-// T152: drag-to-reorder's backing API. Unlike moveMacroPortOrder's adjacent swap, this can move a
+// drag-to-reorder's backing API. Unlike moveMacroPortOrder's adjacent swap, this can move a
 // port an arbitrary number of slots in one call and renumbers the whole group sequentially.
 TEST(MacroPortFlow, ReorderToIndexMovesAnArbitraryDistanceAndRenumbersTheWholeGroup) {
     AudioEngine engine;
@@ -283,7 +283,7 @@ TEST(MacroPortFlow, ReorderToIndexIsANoOpWhenAlreadyAtThatIndex) {
 }
 
 // ============================================================================
-// Per-port colour (T152)
+// Per-port colour
 // ============================================================================
 
 TEST(MacroPortFlow, ChangeColourSetsAndClearsThePortsColour) {

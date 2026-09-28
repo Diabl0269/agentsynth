@@ -2,8 +2,7 @@
 // state application, the module and macro-port right-click context menus, mouse handling (drag,
 // connection, selection, right-click-any-knob automate), and the inline title-rename editor.
 // ModuleComponent is declared in ModuleComponent.h; the rest of its implementation lives in the
-// sibling ModuleComponent*.cpp units next to this one (FRO65 split of the former single
-// ModuleComponent.cpp).
+// sibling ModuleComponent*.cpp units next to this one.
 #include "AI/AIStateMapper/AIStateMapper.h" // kMaxModuleDisplayNameChars — one cap for typed and loaded titles
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
@@ -25,7 +24,7 @@ void ModuleComponent::reflectParameterValue(const juce::AudioProcessorParameter*
     if (param == nullptr || module == nullptr)
         return; // nothing to reflect into, or this component is mid-teardown (detachFromProcessor)
 
-    // Hosted Plugin card (FRO128): its widgets have null entries in sliderParams/comboParams, so they are
+    // Hosted Plugin card: its widgets have null entries in sliderParams/comboParams, so they are
     // matched by the attachment that owns each one instead. Automation writes a hosted parameter with a plain setValue,
     // which its listeners never hear, so this feed is the only thing that moves the widget.
     for (auto* attachment : hostedAttachments_) {
@@ -58,8 +57,8 @@ void ModuleComponent::reflectParameterValue(const juce::AudioProcessorParameter*
     }
 }
 
-// Right-click-any-knob -> "Automate '<Param>'" plus the MIDI Learn block (FRO130,
-// appendMidiLearnMenuItems, ModuleComponentMidiLearn.cpp). `param` may be null (a control this
+// Right-click-any-knob -> "Automate '<Param>'" plus the MIDI Learn block
+// (appendMidiLearnMenuItems, ModuleComponentMidiLearn.cpp). `param` may be null (a control this
 // component built without a real RangedAudioParameter behind it, e.g. the ExternalMidiModule
 // device/channel combos — never true for anything reaching here through `sliders`, but checked
 // anyway since sliderParams can hold a null entry per its own header comment).
@@ -84,8 +83,7 @@ void ModuleComponent::showAutomateMenuForSlider(juce::RangedAudioParameter* para
     appendMidiLearnMenuItems(menu, param);
     // Routed through showContextMenuHook_ (rather than a direct showMenuAsync) so a test can
     // capture the built menu headlessly, the same seam buildModuleContextMenu()/
-    // buildMacroPortContextMenu() already use — this menu had never needed it before FRO130 added
-    // MIDI items worth asserting on.
+    // buildMacroPortContextMenu() already use.
     showContextMenuHook_(menu);
 }
 
@@ -158,7 +156,7 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
                 param->paramID == "sustain" || param->paramID == "release" || param->paramID == "attackCurve" ||
                 param->paramID == "decayCurve" || param->paramID == "releaseCurve" || param->paramID == "attackDiv" ||
                 param->paramID == "holdDiv" || param->paramID == "decayDiv" || param->paramID == "releaseDiv")) {
-        // FRO112 (ms params)/FRO118 (*Div, BPM mode): keep the envelope graph in sync with knob
+        // Ms params and *Div (BPM mode): keep the envelope graph in sync with knob
         // drags, combo picks, automation, undo/redo and preset loads. syncEnvelopeCurveFromParams
         // itself no-ops while envelopeCurveGestureActive (a live graph drag is already the source
         // of truth for that span); a combo pick never sets that flag, so it always rebuilds here.
@@ -172,7 +170,7 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
             });
         }
     } else if (getType(module) == ModuleType::LFO && (param->paramID == "shape" || param->paramID == "bipolar")) {
-        // FRO114: shape decides whether the Custom-wave section shows at all; bipolar decides its
+        // Shape decides whether the Custom-wave section shows at all; bipolar decides its
         // fill baseline. Both funnel into the same visibility+resize pass (combo click, preset
         // load, undo, automation).
         if (juce::MessageManager::existsAndIsCurrentThread()) {
@@ -185,7 +183,7 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
             });
         }
     } else if (getType(module) == ModuleType::ADSR && param->paramID == "tempoSync") {
-        // FRO117: keep the MS|BPM toggle pair in sync with automation/undo/preset loads, the
+        // Keep the MS|BPM toggle pair in sync with automation/undo/preset loads, the
         // same reverse-sync shape as the envelope graph branch above.
         if (juce::MessageManager::existsAndIsCurrentThread()) {
             syncEnvelopeSyncToggleFromParam();
@@ -327,7 +325,7 @@ juce::PopupMenu ModuleComponent::buildMacroPortContextMenu() {
         m.addItem("Rename Port...", [this, macroId, uuid] { owner.promptRenameMacroPort(macroId, uuid); });
         m.addItem("Configure I/O...", [this, macroId] { owner.promptConfigureMacroIO(macroId); });
         m.addSeparator();
-        // FRO235: drops the cable by default, splicing it back together only when the "splice the
+        // Drops the cable by default, splicing it back together only when the "splice the
         // cable back" preference is on — MacroGroupController::deleteMacroPortManually, the SAME
         // entry point Configure I/O's own Delete Port button uses, so the two never disagree.
         m.addItem("Delete Port",
@@ -348,7 +346,7 @@ juce::PopupMenu ModuleComponent::buildMacroPortContextMenu() {
 juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
     juce::PopupMenu m;
 
-    // Selection actions (issue #156). Offered whenever this module is selected — a
+    // Selection actions. Offered whenever this module is selected — a
     // single-module snippet is legal, it is just a group of one.
     const int selectionCount = owner.getSelectionCount();
     const juce::String groupSuffix =
@@ -374,16 +372,16 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         // (GraphEditor::groupOrToggleSelectionMacros) — a menu item names one verb
         // ("Create Macro") and must keep doing exactly what it says, even for a selection
         // that already touches a macro (where it still refuses, same as always).
-        // requestGroupSelectionIntoMacro() gates the auto-port-preference modal (founder-review
-        // fix F5, docs/macros/auto-ports.md#auto-creating-ports-when-grouping) the same way Cmd+G does.
+        // requestGroupSelectionIntoMacro() gates the auto-port-preference modal
+        // (docs/macros/auto-ports.md#auto-creating-ports-when-grouping) the same way Cmd+G does.
         m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules",
                   [this] { owner.requestGroupSelectionIntoMacro(); });
         m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules", [this] { owner.deleteSelection(); });
     }
 
-    // FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make Channel" for the chain this selection
-    // belongs to (shown only when one resolves, disabled once it already has a channel), and "Duplicate into Channel"
-    // when this module is shared into a channel macro from outside it.
+    // "Make Channel" for the chain this selection belongs to (shown only when one resolves, disabled once it already
+    // has a channel), and "Duplicate into Channel" when this module is shared into a channel macro from outside it
+    // (see docs/mixer/mixer.md#make-channel-and-shared-modules).
     owner.addMakeChannelMenuItem(m);
     owner.addDuplicateIntoChannelMenuItems(m, nodeId);
 
@@ -396,10 +394,9 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
     if (macro != nullptr)
         m.addItem(macro->collapsed ? "Expand Macro" : "Collapse Macro",
                   [this] { owner.getMacroController().toggleSelectionMacrosCollapsed(); });
-    // T138: a top-level escape hatch for the single most common macro-membership gesture — right-
+    // A top-level escape hatch for the single most common macro-membership gesture — right-
     // click a member module you want OUT, without hunting for the nested "Macro: <name>" submenu's
-    // own "Remove from Macro" item (found via live testing 2026-09-10: a user's first instinct was
-    // "right-click the module and remove it from the macro", not "open its macro's own submenu").
+    // own "Remove from Macro" item.
     // Acts on THIS module alone via removeNodeFromMacro(nodeId), never the live selection — so it
     // behaves the same whether or not this module happens to be selected, unlike the submenu's own
     // item (which reads live selection, correctly retargeted to just this module by mouseDown()
@@ -423,12 +420,12 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         m.addSeparator();
     }
 
-    // FRO132 (docs/control/plugin-card-layout.md#choosing-knobs): the card's own "Choose knobs..."
-    // button, offered here too for a Hosted Plugin node only -- both just call onChooseKnobsRequested,
-    // which showPluginKnobPicker() (ModuleComponentHostedPluginCard.cpp) wires up for exactly this
-    // module type. dynamic_cast rather than getType(module) == ModuleType::HostedPlugin to match the
-    // bypass-toggle check just above, which already establishes the "is this really a ModuleBase"
-    // pattern this menu builds against.
+    // The card's own "Choose knobs..." button, offered here too for a Hosted Plugin node only -- both
+    // just call onChooseKnobsRequested, which showPluginKnobPicker()
+    // (ModuleComponentHostedPluginCard.cpp) wires up for exactly this module type. dynamic_cast rather
+    // than getType(module) == ModuleType::HostedPlugin to match the bypass-toggle check just above,
+    // which already establishes the "is this really a ModuleBase" pattern this menu builds against
+    // (see docs/control/plugin-card-layout.md#choosing-knobs).
     if (dynamic_cast<synth::HostedPluginModule*>(module) != nullptr) {
         m.addItem("Choose knobs...", [this] {
             if (onChooseKnobsRequested)
@@ -508,14 +505,13 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
 
     m.addItem("Delete Module", [this] { owner.deleteModule(this); });
 
-    // Founder-review item 4 (docs/macros/menu-and-membership.md#the-macro-menus-entry-points): this module's own menu
-    // also offers the macro it belongs to, as an appended submenu — never folded into the items above, and never built
-    // when this module is in no macro (a module in no macro sees no change at all). buildMacroMenu
-    // itself now selects THIS macro before running its "Ungroup"/"Save as Snippet..." items (see
-    // its own comment), which is what makes it safe to graft on here without disturbing the module
-    // selection the rest of this menu (Copy/Duplicate/Delete Module, above) acts on: nothing in
-    // THIS method calls selectMacro, so the module retargeted at the top of mouseDown() stays
-    // selected right up until a macro submenu item actually fires.
+    // This module's own menu also offers the macro it belongs to, as an appended submenu — never folded into the items
+    // above, and never built when this module is in no macro (a module in no macro sees no change at all).
+    // buildMacroMenu itself selects THIS macro before running its "Ungroup"/"Save as Snippet..." items (see its
+    // own comment), which is what makes it safe to graft on here without disturbing the module selection the rest of
+    // this menu (Copy/Duplicate/Delete Module, above) acts on: nothing in THIS method calls selectMacro, so the module
+    // retargeted at the top of mouseDown() stays selected right up until a macro submenu item actually fires
+    // (see docs/macros/menu-and-membership.md#the-macro-menus-entry-points).
     if (macro != nullptr)
         m.addSubMenu("Macro: " + macro->name, owner.buildMacroMenu(macro->id));
 
@@ -543,7 +539,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                         showAutomateMenuForSlider(sliderParams[i]);
                     } else if (const auto* entry = midiLearnableRegistry_.find(e.eventComponent);
                                entry != nullptr && entry->hosted && entry->param != nullptr) {
-                        // FRO137: a hosted-plugin card knob -- sliderParams[i] is always null for
+                        // A hosted-plugin card knob -- sliderParams[i] is always null for
                         // these (a hosted parameter is not a RangedAudioParameter), so the registry
                         // is what supplies its identity for "Automate..." + MIDI Learn.
                         showHostedKnobMenu(entry->paramId, entry->param->getName(100));
@@ -552,7 +548,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                 return;
             }
         }
-        // FRO130/FRO137: every other learnable control (toggles, combos, header buttons, bespoke-
+        // Every other learnable control (toggles, combos, header buttons, bespoke-
         // card knobs already matched above via `sliders`, hosted toggles/choices) -- ONE registry
         // lookup rather than a new per-kind identity loop
         // (docs/control/midi-remote-ui.md#right-click-midi-learn--coverage, Source/UI/CLAUDE.md).
@@ -581,7 +577,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
 
             m.showMenuAsync(juce::PopupMenu::Options());
         } else if (e.getNumberOfClicks() >= 2 && owner.getDoubleClickPortDisconnectEnabled()) {
-            // Issue #216: intercept the second click so it does not start another cable drag.
+            // Intercept the second click so it does not start another cable drag.
             if (owner.isPortConnected(this, port->index, port->isInput, port->isMidi))
                 owner.disconnectPort(this, port->index, port->isInput, port->isMidi);
             return;
@@ -594,7 +590,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
         if (getType(module) == ModuleType::Attenuverter)
             return; // cannot drag
 
-        // Docked macro-port widget (P8-15 fix F2): not individually selectable or draggable via a
+        // Docked macro-port widget: not individually selectable or draggable via a
         // LEFT click — its position is fully derived by GraphEditor::dockMacroPortWidgets()
         // against its macro's hull (docs/macros/ports.md#how-a-port-is-drawn), and a body drag/select here would fight
         // that on every layout pass. A WHOLE-macro drag (via the collapsed card, or selecting the
@@ -602,8 +598,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
         // ports included — to the selection directly, never through this component's own
         // mouseDown, so it is unaffected by this early return.
         //
-        // RIGHT-click is the one deliberate exception (founder-review fix G7: "they cannot be
-        // removed") — falls through to the right-button branch below, which opens
+        // RIGHT-click is the one deliberate exception — falls through to the right-button branch below, which opens
         // buildMacroPortContextMenu() instead of the generic module menu, rather than leaving the
         // port with no delete affordance of its own once its macro is gone (ungroup) or Configure
         // I/O is otherwise inconvenient to reach.
@@ -651,7 +646,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             auto menu = buildModuleContextMenu();
             showContextMenuHook_(menu);
         } else {
-            // ---- Selection semantics (issue #156) + Ctrl insert-between ----
+            // ---- Selection semantics + Ctrl insert-between -----------------
             //
             // Ctrl+CLICK is an additive-select toggle and Ctrl+DRAG is an insert-between move, and
             // at mouse-down those are indistinguishable — so we arm BOTH and let mouse-up decide,
@@ -678,7 +673,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             // (ctrlTogglePending || cmdReparentPending), which is also true for a PLAIN macOS
             // Ctrl+drag (Ctrl and Cmd are genuinely distinct keys there). Gating on that instead
             // would silently compound the shipped insert-between gesture with a join/leave it was
-            // never designed to also do — exactly the FRO40 regression this member exists to
+            // never designed to also do — exactly what this member exists to
             // prevent. On Windows/Linux the two keys cannot be told apart at press time at all
             // (isCommandDown() is true whenever Ctrl is), so reparentArmed is true there and mouseUp
             // arbitrates by whether the drag actually crossed a hull (see mouseUp's own comment).
@@ -688,7 +683,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                 ctrlPressSelection = owner.getSelectedNodes();
                 owner.selectModule(nodeId, false);
             } else if (e.mods.isCommandDown()) {
-                // FRO40: Cmd+drag across an expanded macro's hull JOINS/LEAVES that macro; Cmd+CLICK
+                // Cmd+drag across an expanded macro's hull JOINS/LEAVES that macro; Cmd+CLICK
                 // (no movement) is still an additive-select toggle. Mirrors ctrlTogglePending exactly
                 // — arm BOTH the deferred toggle and the drag, collapse the selection onto this
                 // module, and fall through to the shared arming code below (never `return` here).
@@ -816,7 +811,7 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
         if (!owner.isSelectionDragActive())
             reparentArmed = computeReparentArmed(e.mods);
 
-        // FRO40: gated on reparentArmed, NOT on ctrlTogglePending || cmdReparentPending — the
+        // Gated on reparentArmed, NOT on ctrlTogglePending || cmdReparentPending — the
         // latter is also true for a plain macOS Ctrl+drag, which must never highlight or act on a
         // hull crossing (see reparentArmed's own comment on ModuleComponent.h). The CENTRE, not
         // the top-left, is what macroDragJoinOrLeaveTarget tests against (docs/macros/ports.md).
@@ -862,7 +857,7 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
         ctrlPressSelection.clear();
     }
     if (cmdReparentPending) {
-        // FRO40: Cmd+CLICK (no movement) mirrors Ctrl's deferred toggle exactly.
+        // Cmd+CLICK (no movement) mirrors Ctrl's deferred toggle exactly.
         if (!moved) {
             owner.setSelectedNodes(cmdPressSelection);
             owner.selectModule(nodeId, true);
@@ -879,7 +874,7 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
         return;
     }
 
-    // FRO40 + the Windows/Linux Ctrl-vs-Cmd arbitration (see mouseDown's/reparentArmed's own
+    // The Windows/Linux Ctrl-vs-Cmd arbitration (see mouseDown's/reparentArmed's own
     // comments): a reparent-armed drag that crossed a macro hull boundary reparents, landing
     // position + membership + port splicing in ONE undo step. The LIVE candidate every mouseDrag
     // tick computed above IS the answer — mouseUp never re-queries geometry of its own, so what

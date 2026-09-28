@@ -60,7 +60,7 @@ TEST(ExportAudioDialogTest, SelectionIgnoredWhenNoLoopRangeEvenIfToggled) {
     EXPECT_DOUBLE_EQ(options.endBeat, kArrangementEndBeat);
 }
 
-// P8-17: "Current loop range" is a range source decoupled from whether the loop is ARMED. The
+// "Current loop range" is a range source decoupled from whether the loop is ARMED. The
 // dialog never sees an arm flag - the caller (promptExportAudio) collapses "locators describe a
 // non-degenerate region" into hasLoopRange_, so a merely-disengaged loop is offered identically to
 // a live one. With an arrangement present, Whole Arrangement is the default, but selecting the loop
@@ -150,7 +150,7 @@ TEST(ExportAudioDialogTest, ProgressPageReflectsReportedFractionAndCompletion) {
     EXPECT_FALSE(closeRequested);
 }
 
-// ---- T153: keyboard accessibility sweep ----
+// ---- Keyboard accessibility sweep ----------
 
 TEST(ExportAudioDialogTest, EscapeOnTheOptionsPageFiresOnRequestClose) {
     auto dialog = makeDialog();
@@ -212,7 +212,7 @@ TEST(ExportAudioDialogTest, EscapeFromTheFileNameFieldAlsoFiresOnRequestClose) {
     EXPECT_TRUE(closed);
 }
 
-// ---- P8-5 follow-up: destination folder + file name field ----
+// ---- Destination folder + file name field --------------------
 
 TEST(ExportAudioDialogTest, DestinationDefaultsToTheGivenFolderAndFileNameBase) {
     const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory);
@@ -226,7 +226,7 @@ TEST(ExportAudioDialogTest, SwitchingFormatKeepsTheTypedFileName) {
     EXPECT_EQ(dialog.getDestinationForTest().getFileName(), "My Project.aiff");
 }
 
-// ---- P8-5 follow-up: tail Seconds/Bars ----
+// ---- Tail Seconds/Bars --------------------
 
 TEST(ExportAudioDialogTest, TailDefaultsToZeroSeconds) {
     auto dialog = makeDialog();
@@ -248,7 +248,7 @@ TEST(ExportAudioDialogTest, SwitchingBackToSecondsPreservesTheValue) {
     EXPECT_NEAR(dialog.getOptionsForTest().tailSeconds, 2.0, 1e-9);
 }
 
-// ---- P8-5 follow-up: destination-exists collision prompt ----
+// ---- Destination-exists collision prompt --------------------
 
 TEST(ExportAudioDialogTest, ExportProceedsDirectlyWhenDestinationDoesNotExist) {
     auto dialog = makeDialog();
@@ -302,7 +302,7 @@ TEST(ExportAudioDialogTest, SaveAsCopyChoiceUniquifiesTheFileName) {
     file.deleteFile();
 }
 
-// ---- P9-8: stems mode (docs/mixer/stem-export.md) ----
+// ---- Stems mode (docs/mixer/stem-export.md) ----------
 
 TEST(ExportAudioDialogTest, DefaultModeReportsExportAudioTitleAndIsNotStemsMode) {
     auto dialog = makeDialog();

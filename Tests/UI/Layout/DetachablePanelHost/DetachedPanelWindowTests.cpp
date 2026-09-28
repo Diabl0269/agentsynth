@@ -1,17 +1,17 @@
 // DetachedPanelWindowTests.cpp
 //
 // synth::ui::DetachedPanelWindow -- the top-level window a DetachablePanelHost detaches a panel
-// into (FRO12, P9-6, docs/mixer/panel.md). Mirrors Tests/Plugin/HostedPluginEditorWindowTests.cpp's
+// into (docs/mixer/panel.md). Mirrors Tests/Plugin/HostedPluginEditorWindowTests.cpp's
 // own structure: every window here is built with addToDesktop=false, so constructing one never
 // creates a native peer.
 //
 // Groups:
 //   1. Headless construction -- no native peer until setVisible(true).
-//   2. Bounds persistence round trip, including FRO101's implausible-bounds rejection.
+//   2. Bounds persistence round trip, including the implausible-bounds rejection.
 //   3. Close button -- fires onCloseRequested, never self-destroys.
 //   4. Plugin-mode LookAndFeel seam -- own scope, Desktop's default untouched.
-//   5. Per-window focus-region Tab cycling (T159/docs/control/shortcuts.md).
-//   6. FRO102 -- themed background (theme's surface token, re-applied on lookAndFeelChanged()).
+//   5. Per-window focus-region Tab cycling (docs/control/shortcuts.md).
+//   6. Themed background (theme's surface token, re-applied on lookAndFeelChanged()).
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
@@ -86,7 +86,7 @@ TEST_F(DetachedPanelWindowTest, NoPersistedKeyFallsBackToACentredDefault) {
     EXPECT_GT(window.getHeight(), 0);
 }
 
-// FRO101: a real bug report -- a headless test run polluted the REAL on-disk settings with
+// A real bug report -- a headless test run polluted the REAL on-disk settings with
 // "0 62 128 128" (128x128 being juce::ComponentBoundsConstrainer's own default minimum, never a
 // value a user actually dragged to), and the detached window restored it verbatim: 128x128 pinned
 // at the screen edge instead of the documented centred default. Asserting SIZE only (not
@@ -194,11 +194,11 @@ TEST_F(DetachedPanelWindowTest, UnboundKeyIsNotHandled) {
 }
 
 // ============================================================================
-// 6. FRO102 -- themed background
+// 6. Themed background
 // ============================================================================
 
 namespace {
-// A theme whose surface token is deliberately far from both the darkgrey literal FRO102 replaces
+// A theme whose surface token is deliberately far from both the darkgrey literal it replaces
 // AND from Theme.h's own default surface (0xff1B1F26, also the hardcoded fallback several
 // Source/UI/Mixer/*.cpp paint() overrides use) -- asserting against either of those would pass even
 // if DetachedPanelWindow never read the theme at all.

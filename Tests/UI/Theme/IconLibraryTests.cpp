@@ -256,9 +256,8 @@ TEST(IconLibraryTest, WaveformIconBinaryDataSymbols) {
 // 11. WaveformIconEnumCountCoversNewIcons
 // ---------------------------------------------------------------------------
 TEST(IconLibraryTest, WaveformIconEnumCountCoversNewIcons) {
-    // kCount's own value is asserted by ActionDetachWindowIconEnumCountAndOrdinal below (FRO12
-    // appended one more entry after this test was written -- 43, not 42). The static_assert in
-    // IconLibrary.cpp enforces kTable alignment at compile time regardless; this test only spot-
+    // kCount's own value is asserted by ActionDetachWindowIconEnumCountAndOrdinal below (the count is 43). The
+    // static_assert in IconLibrary.cpp enforces kTable alignment at compile time regardless; this test only spot-
     // checks that appending later entries never shifted the waveform ordinals below.
     // Spot-check ordinal positions of the new waveform icons (shifted +2 by ActionNew at index 6
     // and ThemeToggle at index 13, then +1 more by ActionFeedback at index 9; CatIO is appended
@@ -298,7 +297,7 @@ TEST(IconLibraryTest, CatIOBinaryDataSymbol) {
 }
 
 // ---------------------------------------------------------------------------
-// 14. ActionDetachWindowIconEnumCountAndOrdinal (FRO12, P9-6, docs/mixer/panel.md)
+// 14. ActionDetachWindowIconEnumCountAndOrdinal (docs/mixer/panel.md)
 // ---------------------------------------------------------------------------
 TEST(IconLibraryTest, ActionDetachWindowIconEnumCountAndOrdinal) {
     // Appended immediately before kCount, same append-only convention CatIO used -- kCount grows

@@ -1,0 +1,42 @@
+# Files with provenance (ticket ids / dates) in code comments. STRICT ratchet: an entry is
+# the exact current number of comment lines matching the pattern. A file may never exceed
+# its entry; when it shrinks, run `bash scripts/check-comment-provenance.sh --update` so
+# the entry tightens; once it reaches zero the entry must be removed (--update does that).
+# Never add a NEW file here -- rewrite its comments instead. Format: <count> <path>.
+1 Source/AI/AccountService.h
+4 Source/AI/AuthClient.h
+1 Source/AI/RemoteProvider.h
+10 Source/MainComponent/MainComponent.cpp
+18 Source/MainComponent/MainComponent.h
+58 Source/MainComponent/MainComponentSetup.cpp
+14 Source/MainComponent/MainComponentSetupTimeline.cpp
+9 Source/MainComponent/MainComponentTimeline.cpp
+5 Source/MainComponent/MainComponentTrackHeaderHost.cpp
+2 Source/MidiRemote/ControllerTemplates.cpp
+3 Source/MidiRemote/ControllerTemplates.h
+19 Source/MidiRemote/MidiLearnController.cpp
+20 Source/MidiRemote/MidiLearnController.h
+8 Source/MidiRemote/MidiLearnControllerMapping.cpp
+20 Source/MidiRemote/RemoteModel.h
+12 Source/MidiRemote/RemoteModelJson.cpp
+5 Source/Mixer/ChannelFlows/ChannelFlowsInternal.h
+5 Source/Mixer/ChannelFlows/ChannelFlowsMakeChannel.cpp
+2 Source/Mixer/ChannelFlows/ChannelFlowsTrackChannelLink.cpp
+1 Source/Timeline/TimelineDoc/TimelineDoc.h
+1 Source/Timeline/TimelineDoc/TimelineDocAutomation.cpp
+30 Source/UI/Graph/ModuleComponent/ModuleComponent.cpp
+36 Source/UI/Graph/ModuleComponent/ModuleComponent.h
+5 Source/UI/Graph/ModuleComponent/ModuleComponentInternal.h
+2 Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
+1 Source/UI/PianoRoll/PianoRollComponent/PianoRollMouse.cpp
+3 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
+20 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
+1 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
+18 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
+20 Source/UI/Timeline/TimelineTrackHeaderComponent.cpp
+32 Source/UI/Timeline/TimelineTrackHeaderComponent.h
+4 Tests/MidiRemote/ControllerTemplatesTests.cpp
+4 Tests/MidiRemote/ControllerTemplatesVendorTests.cpp
+6 Tests/MidiRemote/RemoteEngineApplyTests.cpp
+1 Tests/UI/Graph/ModuleComponent/ModuleComponentWavetableTests.cpp
+2 Tests/UI/Timeline/TimelineTrackHeaderTests.cpp

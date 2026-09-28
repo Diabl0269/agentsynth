@@ -1,4 +1,4 @@
-// SnippetManagerCardLayoutTests.cpp -- FRO137: a plugin-card layout override (HostedPluginModule's
+// SnippetManagerCardLayoutTests.cpp -- a plugin-card layout override (HostedPluginModule's
 // trusted-only "cardLayout" extra-state key) rides the SAME `includeExtraState`/`trustedPayload`
 // rules every other module's non-parameter `state` already follows (see
 // SnippetManagerExtractTests.cpp's own SnippetExtraState group) -- there is no cardLayout-specific

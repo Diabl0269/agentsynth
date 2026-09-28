@@ -1,4 +1,4 @@
-// FRO325 (docs/mixer/mixer.md#pan-law): the mixer's per-project pan law.
+// The mixer's per-project pan law (see docs/mixer/mixer.md#pan-law).
 //
 //   • ModuleBase::panGains / panGainsCompensated -- the two laws' raw gain values, in isolation
 //   • ChannelStripModule -- a MONO strip's own "pan" picks up the project law off its playhead;
@@ -6,7 +6,7 @@
 //   • Send pan on a MONO strip follows the same rule as the strip's own pan
 //
 // ChannelStripTests.cpp covers the balance law itself (default state, no playhead installed) and
-// every other Channel Strip behaviour; this file is deliberately narrow to FRO325's own law choice.
+// every other Channel Strip behaviour; this file is deliberately narrow to the law choice.
 
 #include "Modules/ChannelStripModule.h"
 #include "Modules/ModuleBase.h"
@@ -86,7 +86,7 @@ TEST(MixerPanLawTest, CompensatedLawGainsAtCentreHardLHardRAndMid) {
     float l = 0.0f, r = 0.0f;
     constexpr float kSqrt2 = 1.41421356f;
 
-    // Centre: unity on both legs (within float cosine/sine rounding -- FRO325's whole point is
+    // Centre: unity on both legs (within float cosine/sine rounding -- the whole point is
     // that this is NOT the near/far attenuation the balance law gives).
     ModuleBase::panGainsCompensated(0.0f, l, r);
     EXPECT_NEAR(l, 1.0f, kTolerance);
@@ -151,7 +151,7 @@ TEST(MixerPanLawTest, StereoStripStaysBalanceLawEvenWhenProjectIsCompensated) {
 
 TEST(MixerPanLawTest, NoTransportFallsBackToBalanceLawEvenOnAMonoStrip) {
     // A bare module with no playhead installed (a foreign host, or a headless unit test that
-    // never wires one) must render exactly as it did before FRO325.
+    // never wires one) must render with the plain balance law (panGains).
     ChannelStripModule strip;
     ASSERT_TRUE(strip.setShape(ChannelStripModule::Shape::Mono));
     strip.prepareToPlay(kSampleRate, kBlockSize);

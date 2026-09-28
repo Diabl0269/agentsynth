@@ -1,6 +1,6 @@
 #pragma once
 
-// BottomDockActiveTabResetGuard.h -- FRO11 (P9-5), extended FRO255. Shared by
+// BottomDockActiveTabResetGuard.h -- shared by
 // BottomDockComponentTests.cpp and MixerPanelComponentTests.cpp (header-only; not compiled on its
 // own and not registered in Tests/CMakeLists.txt).
 //
@@ -14,7 +14,7 @@
 // exactly the flake this guard exists to prevent. RAII, clearing the key on construction AND
 // destruction, matching ChannelFlowTest::resetKeys()'s before-AND-after shape.
 //
-// FRO255: "bottomDockActiveTab" alone was not enough -- two separate, confirmed-by-repro gaps:
+// "bottomDockActiveTab" alone was not enough -- two separate, confirmed-by-repro gaps:
 //
 // 1. ActiveTabPersistsAcrossApplicationPropertiesReload:103 (the ticket's own failure) -- its
 //    SECOND MainComponent reads BottomDockComponent::isMixerTabActive() right after construction.
@@ -61,10 +61,10 @@ struct BottomDockActiveTabResetGuardMDT {
         props.setStorageParameters(synth::test::userSettingsTestOptions());
         if (auto* s = props.getUserSettings()) {
             s->removeValue("bottomDockActiveTab");
-            // FRO255: see the class comment -- both gaps confirmed by direct repro.
+            // See the class comment -- both gaps confirmed by direct repro.
             s->removeValue("mixerPlacement");
             s->setValue("bottomDockVisible", "0");
-            // FRO333: a drag-reorder test's own tab order must not leak into a later test's
+            // A drag-reorder test's own tab order must not leak into a later test's
             // "default order" assumption, same reasoning as bottomDockActiveTab above.
             s->removeValue("bottomDockTabOrder");
             s->saveIfNeeded();

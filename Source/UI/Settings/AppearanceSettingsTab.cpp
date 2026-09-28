@@ -339,7 +339,7 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
         themeList.repaint();
     };
 
-    // ---- Cable colours (issue #157) ----
+    // ---- Cable colours -----------------
     cableColourMode = synth::ui::loadCableColourMode(*appProperties.getUserSettings());
     cableColourOverrides = synth::ui::loadCableColourOverrides(*appProperties.getUserSettings());
 
@@ -383,7 +383,7 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     contentHost.addAndMakeVisible(resetNoteColoursButton);
     resetNoteColoursButton.onClick = [this] { resetAllNoteColours(); };
 
-    // ---- Meter colours (FRO147) ----
+    // ---- Meter colours -------------
     meterColourStopsOverride = synth::ui::loadMeterColourStopsOverride(*appProperties.getUserSettings());
 
     contentHost.addAndMakeVisible(meterColoursTitleLabel);
@@ -618,7 +618,7 @@ void AppearanceSettingsTab::changeListenerCallback(juce::ChangeBroadcaster* sour
     if (noteSwatchRow)
         noteSwatchRow->repaint();
 
-    // FRO147: an un-pinned meter-colour editor follows the theme too. A repaint alone would not
+    // An un-pinned meter-colour editor follows the theme too. A repaint alone would not
     // be enough -- the editor owns its own working copy of a MeterColourStops (not a live theme
     // reference), so it has to be handed the new theme's own four stops explicitly.
     if (meterColourStopsEditor && !meterColourStopsOverride.has_value())
@@ -626,7 +626,7 @@ void AppearanceSettingsTab::changeListenerCallback(juce::ChangeBroadcaster* sour
 }
 
 //==============================================================================
-// Cable colours (issue #157)
+// Cable colours
 //==============================================================================
 
 void AppearanceSettingsTab::setGraphEditor(GraphEditor* ge) {
@@ -832,7 +832,7 @@ void AppearanceSettingsTab::openNoteColourPicker(int pitchClass, juce::Rectangle
 }
 
 //==============================================================================
-// Meter colours (FRO147)
+// Meter colours
 //==============================================================================
 
 void AppearanceSettingsTab::applyMeterColourStopsChange(const synth::ui::MeterColourStops& stops, bool committed) {

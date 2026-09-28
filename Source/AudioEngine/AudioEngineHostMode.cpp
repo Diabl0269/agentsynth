@@ -43,7 +43,7 @@ void AudioEngine::processHostBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     //
     // This whole block runs BEFORE renderNextBlock(), so it is outside ScopedRenderPass too —
     // ScopedRemoteSinkCall covers it exactly like the standalone MIDI-thread call site, entered once
-    // for the loop rather than per message since the sink is loaded once (FRO197).
+    // for the loop rather than per message since the sink is loaded once.
     {
         const ScopedRemoteSinkCall remoteSinkGuard(remoteSinkCallsInFlight_);
         if (auto* sink = remoteMessageSink_.load(std::memory_order_seq_cst); sink != nullptr) {

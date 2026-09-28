@@ -1,7 +1,7 @@
 // MacroGroupControllerBypassMute.cpp
 //
-// Deleting a macro and its members, and the macro bypass/mute fan-out (P8-15d, T142,
-// docs/macros/ports.md#bypass-and-mute). MacroGroupController is declared in MacroGroupController.h;
+// Deleting a macro and its members, and the macro bypass/mute fan-out
+// (docs/macros/ports.md#bypass-and-mute). MacroGroupController is declared in MacroGroupController.h;
 // sibling MacroGroupController*.cpp files in this directory hold the rest of the class.
 
 #include "MacroGroupController.h"

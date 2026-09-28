@@ -189,7 +189,7 @@ TEST(ThemeLoaderTest, JsonRoundTrip) {
     EXPECT_EQ(p.colors.knobBody.getARGB(), o.colors.knobBody.getARGB());
     EXPECT_EQ(p.colors.knobPointer.getARGB(), o.colors.knobPointer.getARGB());
     EXPECT_EQ(p.colors.meterFill.getARGB(), o.colors.meterFill.getARGB());
-    // FRO146: the meter's mid/high/clip zone tokens.
+    // The meter's mid/high/clip zone tokens.
     EXPECT_EQ(p.colors.meterMid.getARGB(), o.colors.meterMid.getARGB());
     EXPECT_EQ(p.colors.meterHigh.getARGB(), o.colors.meterHigh.getARGB());
     EXPECT_EQ(p.colors.meterClip.getARGB(), o.colors.meterClip.getARGB());
@@ -541,7 +541,7 @@ TEST(ThemeBuiltInsTest, ContrastAA_AllBuiltIns) {
 // ---------------------------------------------------------------------------
 // 20. Issue103MetricsDefaults
 // ---------------------------------------------------------------------------
-// Verify the new Metrics fields from Issue #103 (UI Phase 7 polish) have correct defaults.
+// Verify the code-only Metrics fields (grid, alignment guides, small corner radius) have correct defaults.
 TEST(ThemeMetricsTest, Issue103MetricsDefaults) {
     synth::theme::Theme theme;
     const auto& m = theme.metrics;
@@ -573,14 +573,14 @@ TEST(ThemeBuiltInsTest, Issue103MetricsInAllBuiltIns) {
 }
 
 // ---------------------------------------------------------------------------
-// 22. MetricsCodeOnlyFieldsNotInJSON (Issue #103 new fields)
+// 22. MetricsCodeOnlyFieldsNotInJSON
 // ---------------------------------------------------------------------------
 TEST(ThemeLoaderTest, Issue103MetricsNotInJSON) {
     auto theme = synth::theme::makeObsidian();
     auto json = synth::theme::ThemeLoader::themeToJson(theme);
     juce::String jsonStr = juce::JSON::toString(json, true);
 
-    // Verify that Issue #103 new code-only metrics fields are NOT present in the serialized JSON
+    // Verify that the code-only metrics fields are NOT present in the serialized JSON
     EXPECT_FALSE(jsonStr.contains("gridSize")) << "Issue 103 gridSize should not be user-configurable";
     EXPECT_FALSE(jsonStr.contains("guideAlpha")) << "Issue 103 guideAlpha should not be user-configurable";
     EXPECT_FALSE(jsonStr.contains("guideLineWidth")) << "Issue 103 guideLineWidth should not be user-configurable";
@@ -589,7 +589,7 @@ TEST(ThemeLoaderTest, Issue103MetricsNotInJSON) {
 }
 
 // ---------------------------------------------------------------------------
-// 23. GraphEditorUsesMetricsForRendering (Issue #103 Item 2 verification)
+// 23. GraphEditorUsesMetricsForRendering
 // ---------------------------------------------------------------------------
 // Verify that GraphEditor renders with correct metrics-derived values.
 TEST(GraphEditorRenderingTest, UsesMetricsCornerRadius) {
@@ -966,5 +966,5 @@ TEST(ThemeBuiltInsTest, AllFourBuiltInsPopulateNoteAndTrackButtonTokensDistinctl
     EXPECT_NE(neon.colors.noteFill.getHue(), neon.colors.midiWire.getHue());
 }
 
-// Meter colour-zone token loader coverage (FRO146) is in ThemeMeterZoneTests.cpp -- split out to
+// Meter colour-zone token loader coverage is in ThemeMeterZoneTests.cpp -- split out to
 // keep this file under the repo's 1,000-line cap (scripts/check-file-sizes.sh).

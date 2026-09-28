@@ -88,7 +88,7 @@ enum class ModuleType {
     // byte blob handed straight to third-party code, which is the last thing that should arrive
     // from a model.
     HostedPlugin,
-    // Internal-only: a Macro's audio/CV inlet jack (P8-15 Macro I/O; docs/macros/ports.md). Created
+    // Internal-only: a Macro's audio/CV inlet jack (Macro I/O; docs/macros/ports.md). Created
     // by the macro port-creation flow, never offered by the library or the replace menu, and
     // never authorable by a model (kNonAuthorableModuleTypes) — a Macro Inlet only means anything
     // relative to the macro that created it, which a model has no way to have done. A pure
@@ -257,7 +257,7 @@ public:
     bool hasSplitBlockStereo() const { return rightAudioLegChannel() > 1; }
 
     // -------------------------------------------------------------------------
-    // Right-borrows-Left normalling (FRO324, docs/modules/fx-modules.md#stereo-io-dual-io-toggle)
+    // Right-borrows-Left normalling (docs/modules/fx-modules.md#stereo-io-dual-io-toggle)
     //
     // A Dual I/O module's Right leg borrows Left, sample-exact, while Right is unpatched — the same
     // policy Audio Output gets in AudioEngine::renderNextBlock. Render-time only: this never adds,
@@ -357,14 +357,14 @@ public:
         gainR = juce::jlimit(0.0f, 1.0f, 1.0f + p);
     }
 
-    /** FRO325 (docs/mixer/mixer.md#pan-law): constant-power "-3 dB compensated" pan law -- centre is
-     *  unity on both legs same as panGains, but panning away from centre RAISES the far leg (up to
-     *  +3 dB at a hard pan) instead of only attenuating the near one, holding perceived loudness
-     *  constant (Logic/Ableton's default). Never a drop-in replacement for panGains: it is the
+    /** Constant-power "-3 dB compensated" pan law -- centre is unity on both legs same as
+     *  panGains, but panning away from centre RAISES the far leg (up to +3 dB at a hard pan)
+     *  instead of only attenuating the near one, holding perceived loudness constant
+     *  (Logic/Ableton's default). Never a drop-in replacement for panGains: it is the
      *  project-selectable law ChannelStripModule applies only to a MONO-shaped strip's own pan and
      *  its sends' pan (see synth::MixerPanLaw) -- every other panGains caller is unaffected. The
      *  jmax(0.0f, ...) guards a hard pan's near-zero leg from going slightly negative on a float
-     *  cosine/sine rounding error. */
+     *  cosine/sine rounding error (see docs/mixer/mixer.md#pan-law). */
     static void panGainsCompensated(float pan, float& gainL, float& gainR) {
         const float p = juce::jlimit(-1.0f, 1.0f, pan);
         const float angle = (p + 1.0f) * juce::MathConstants<float>::halfPi * 0.5f;
@@ -536,7 +536,7 @@ public:
     void setBypassed(bool b) { bypassedParam->setValueNotifyingHost(b ? 1.0f : 0.0f); }
 
     /** Whether this module opted into `addMuteParameter()`. A handful of internal-only node types
-     *  (Track In, Rec Tap, Track Audio; and, as of P8-15, Macro In/Out and their MIDI variants)
+     *  (Track In, Rec Tap, Track Audio; and Macro In/Out and their MIDI variants)
      *  do not — there is nothing for a mute to silence beyond what bypass already covers. Any
      *  caller fanning `setMuted` out over an arbitrary set of modules (docs/macros/ports.md#bypass-and-mute's
      *  macro-level mute) MUST check this first: `isMuted()`/`setMuted()` dereference `mutedParam`
@@ -605,7 +605,7 @@ public:
     //
     // Writers: the places AIStateMapper writes node->properties["uuid"] — adoptUuidIfTrusted
     // (trusted apply), applySnapshotPreservingNodes, and AIStateMapper::ensureNodeUuid's lazy
-    // generation (graphToJSON, and SnippetManager::insertSnippet's P8-12 macro-membership
+    // generation (graphToJSON, and SnippetManager::insertSnippet's macro-membership
     // resolution — a freshly pasted node has none until this runs). Each mirrors into the
     // processor immediately after setting the property, so the two never diverge.
     //
@@ -866,7 +866,7 @@ private:
     char nodeUuid_[64] = {};
     std::atomic<bool> nodeUuidSet_{false};
     std::atomic<bool> sidechainConnected_{false};
-    // Right-borrows-Left normalling (FRO324). Message-thread write via setNormalLeftToRight;
+    // Right-borrows-Left normalling. Message-thread write via setNormalLeftToRight;
     // audio-thread read once per block via applyLeftRightNormalling().
     std::atomic<bool> normalLeftToRight_{false};
     std::unique_ptr<VisualBuffer> visualBuffer;

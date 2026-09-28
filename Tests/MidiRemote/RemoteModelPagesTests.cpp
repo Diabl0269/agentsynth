@@ -1,8 +1,8 @@
-// FRO142 (docs/control/midi-remote.md#pages): Assignment::page, ControllerProfile::pageCount, and
-// Target::Kind::page round-trip/rejection coverage -- mirrors RemoteModelTests.cpp's style. The
-// headline guarantee: every pre-FRO142 document (no "page"/"pageCount" property anywhere) loads
-// with page 1 / pageCount 1 and re-serialises byte-identical to what it started as. Suite name
-// contains "MidiRemote" per the ship-task --gtest_filter convention.
+// Assignment::page, ControllerProfile::pageCount, and Target::Kind::page round-trip/rejection
+// coverage -- mirrors RemoteModelTests.cpp's style. The headline guarantee: every legacy document
+// (no "page"/"pageCount" property anywhere) loads with page 1 / pageCount 1 and re-serialises
+// byte-identical to what it started as. Suite name contains "MidiRemote" per the ship-task
+// --gtest_filter convention (see docs/control/midi-remote.md#pages).
 
 #include "MidiRemote/RemoteModel.h"
 #include <gtest/gtest.h>

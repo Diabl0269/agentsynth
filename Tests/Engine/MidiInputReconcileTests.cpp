@@ -1,6 +1,6 @@
 // MidiInputReconcileTests.cpp
 //
-// FRO262: a MIDI input device ticked in Settings > Audio's MIDI Input list AFTER app launch (a
+// A MIDI input device ticked in Settings > Audio's MIDI Input list AFTER app launch (a
 // controller plugged in later, or one the OS enumerates late) must become visible to MIDI
 // Learn/MIDI Remote and to general MIDI input, not just whatever was available when
 // AudioEngine::initialiseDevices()'s one-shot launch loop ran. AudioEngine::changeListenerCallback

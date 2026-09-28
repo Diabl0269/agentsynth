@@ -1,4 +1,4 @@
-// PeakMeterLatchTests.cpp -- FRO146: the lock-free "peak since I last looked" latch
+// PeakMeterLatchTests.cpp -- the lock-free "peak since I last looked" latch
 // (Source/Mixer/PeakMeterLatch.h) that replaced ChannelStripModule/MasterModule's old
 // plain-per-block-store meter, which silently dropped a hot block landing between two UI polls.
 #include "Mixer/PeakMeterLatch.h"

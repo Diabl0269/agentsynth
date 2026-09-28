@@ -1,8 +1,8 @@
-// P8-4: autosave. MainComponent-level gate + recovery-flow tests — the sidecar FILE FORMAT itself
+// Autosave: MainComponent-level gate + recovery-flow tests — the sidecar FILE FORMAT itself
 // (ProjectBundle::saveAutosave/loadAutosave/hasAutosave/discardAutosave) is covered directly in
 // ProjectBundleTests.cpp, which needs no MainComponent.
 //
-// SAFETY RULE, same as MainComponentTests.cpp's P8-2 section: never let a real dialog open — a
+// SAFETY RULE, same as MainComponentTests.cpp's unsaved-changes section: never let a real dialog open — a
 // headless run has no message loop to answer one with. Every test that reaches the autosave-
 // recovery prompt installs mc.autosaveRecoveryPrompt BEFORE opening a bundle with a pending sidecar.
 //
@@ -229,7 +229,7 @@ TEST_F(AutosaveTest, DoesNotFireDuringAnActiveMidiRecording) {
     EXPECT_FALSE(synth::ProjectBundle::hasAutosave(bundleDir)) << "must not fire mid-take";
 }
 
-// A failing bounce test here would mean a future change (e.g. a P8-5 progress dialog that pumps
+// A failing bounce test here would mean a future change (e.g. a bounce progress dialog that pumps
 // the message loop from inside BounceExporter::bounce()'s ProgressCallback) reopened the exact
 // re-entrancy window this file's header comment and docs/architecture/project-bundle.md#autosave-and-crash-recovery
 // warn about: bounce() today never pumps juce::MessageManager internally, so MainComponent's own real 10 Hz juce::Timer
@@ -351,7 +351,7 @@ TEST_F(AutosaveTest, AnExplicitSaveDiscardsAnyPendingAutosave) {
     EXPECT_FALSE(synth::ProjectBundle::hasAutosave(bundleDir));
 }
 
-// P8-4 follow-up: performAutosave() reads the configurable backup-count preference and passes it
+// performAutosave() reads the configurable backup-count preference and passes it
 // straight to ProjectBundle::saveAutosave - this is the integration point, the rotation mechanics
 // themselves are covered directly in ProjectBundleTests.cpp.
 TEST_F(AutosaveTest, PerformAutosaveHonoursTheConfiguredBackupCount) {

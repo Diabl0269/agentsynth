@@ -27,7 +27,7 @@ public:
         Header,    // category title — clicking it collapses/expands the section
         SubHeader, // non-interactive sub-label inside a section, e.g. a plugin format group ("VST3")
         Module,    // draggable module name
-        Snippet,   // draggable saved group (issue #156)
+        Snippet,   // draggable saved group
         Plugin,    // draggable scanned third-party plugin
         Action,    // clickable command row, e.g. "Scan for plugins…"
         EmptyHint  // non-interactive placeholder, e.g. "No snippets yet"
@@ -73,7 +73,7 @@ public:
     ~ModuleLibraryComponent() override;
 
     // -------------------------------------------------------------------------
-    // Snippets (issue #156)
+    // Snippets
     // -------------------------------------------------------------------------
 
     /** Replaces the Snippets section contents. Called by the owner after any snippet is saved or
@@ -103,7 +103,7 @@ public:
 
     bool isSearchActive() const { return normalisedSearchQuery(searchQuery).isNotEmpty(); }
 
-    /** T160: grabs keyboard focus on the search field specifically — the destination
+    /** Grabs keyboard focus on the search field specifically — the destination
      *  `AppCommands::focusLibrarySearch` (Cmd+F) needs, distinct from `FocusRegionRegistry`'s
      *  region-root focus (Cmd+Shift+L lands on `this`, not the search field; see FocusRegion.h /
      *  docs/control/shortcuts.md's Focus regions section). The caller (MainComponent) is responsible for
@@ -135,20 +135,20 @@ public:
      *  sensible canvas position. Dragging goes through the DragAndDrop payload instead. */
     std::function<void(const synth::PluginIdentity&)> onPluginActivated;
 
-    /** T160: fired by Enter-to-insert on a keyboard-focused Module row. Module rows had NO
+    /** Fired by Enter-to-insert on a keyboard-focused Module row. Module rows had NO
      *  click-to-add path before this — mouseDown() starts a drag immediately for them (see below),
      *  so mouseUp()/activateRow() was never reached for RowKind::Module until now. The owner adds
      *  the module at a sensible canvas position, mirroring onPluginActivated. Never fired for a
      *  disabled (already-in-patch singleton) row — see isEntryEnabled(). */
     std::function<void(const juce::String&)> onModuleActivated;
 
-    /** T160: fired by Enter-to-insert on a keyboard-focused Snippet row — same "no prior
+    /** Fired by Enter-to-insert on a keyboard-focused Snippet row — same "no prior
      *  click-to-add path" gap as onModuleActivated above. Snippet rows are never gated by
      *  isModuleAvailable, so unlike onModuleActivated this fires unconditionally. */
     std::function<void(const juce::String&)> onSnippetActivated;
 
     /** Performs the click action for the row at `index`: fires the scan request for the Action row,
-     *  onPluginActivated for a Plugin row, or (T160) onModuleActivated/onSnippetActivated for a
+     *  onPluginActivated for a Plugin row, or onModuleActivated/onSnippetActivated for a
      *  Module/Snippet row. No-op for anything else. Public so the behaviour is reachable without
      *  synthesising mouse events — this is also what keyPressed()'s Enter-to-insert calls. */
     void activateRow(int index);
@@ -318,7 +318,7 @@ public:
 
     void paint(juce::Graphics& g) override;
 
-    // T159: focus-region outline (Source/UI/Layout/FocusRegion.h), drawn OVER children like GraphEditor's
+    // Focus-region outline (Source/UI/Layout/FocusRegion.h), drawn OVER children like GraphEditor's
     // own outline -- paint() alone isn't enough here: the scrollable row content and the top strip
     // tile right up to the panel's own edge, so an outline drawn at the end of paint() would sit
     // UNDER whatever gets painted next and never actually show.
@@ -339,7 +339,7 @@ public:
     void mouseUp(const juce::MouseEvent& e) override;
 
     // -------------------------------------------------------------------------
-    // Keyboard navigation (T160)
+    // Keyboard navigation
     //
     // Two entry points feed the same three handlers below, because keyboard focus can genuinely be
     // in two different places: `this` itself (Cmd+Shift+L / Tab-cycle land here, per FocusRegion.h)
@@ -385,7 +385,7 @@ private:
 
     /** Left/Right on a focused section (Sub)Header folds/expands it via the SAME
      *  setSectionCollapsed() a mouse click on its chevron already calls — no parallel mechanism.
-     *  LOCKED decision (T160 scope): a no-op, not a bubble-worthy miss, when the focused row is
+     *  Deliberately a no-op, not a bubble-worthy miss, when the focused row is
      *  anything else ("a focused child row"), so Left/Right never surprises the user by doing
      *  nothing visible AND letting the key leak to some unrelated global binding. */
     bool handleFoldKey(bool collapse);
@@ -398,7 +398,7 @@ private:
 
     /** Scrolls just enough to bring the keyboard-focused row fully into the viewport below the
      *  pinned chrome — this sidebar is hand-scrolled (scrollOffset + a juce::ScrollBar), not a real
-     *  juce::Viewport, so unlike T161's track headers there is no free auto-scroll here; arrow
+     *  juce::Viewport, so unlike the timeline track headers there is no free auto-scroll here; arrow
      *  navigation has to drive it explicitly or it walks focus off screen with nothing visible
      *  moving. No-op if the row is already fully visible. */
     void scrollKeyboardFocusIntoView();
@@ -435,16 +435,16 @@ public:
     /** Returns the currently hovered entry index, or -1 when nothing is hovered. */
     int getHoveredIndex() const noexcept { return hoveredIndex; }
 
-    /** T160: the entry index Up/Down keyboard navigation has landed on, or -1. */
+    /** The entry index Up/Down keyboard navigation has landed on, or -1. */
     int getKeyboardFocusedIndex() const noexcept { return keyboardFocusedIndex; }
 
-    /** T160 test seam: drives the same state moveKeyboardFocus()/keyPressed() would, without a
+    /** Test seam: drives the same state moveKeyboardFocus()/keyPressed() would, without a
      *  real native peer — see FocusRegion.h's own comment on why this test suite can never create
      *  one for grabKeyboardFocus() to require. Clamped exactly like a real navigation move so a test
      *  can't put the component into a state real navigation never could. */
     void setKeyboardFocusedIndexForTest(int index);
 
-    /** T160 test seam: drives the private KeyListener::keyPressed(key, &searchEditor) overload a
+    /** Test seam: drives the private KeyListener::keyPressed(key, &searchEditor) overload a
      *  real native peer would invoke while the search field has focus — see the class comment on
      *  the keyboard-navigation section for why that path can't be reached by giving searchEditor
      *  real focus and calling its own keyPressed() headlessly (that call would exercise
@@ -487,7 +487,7 @@ public:
     bool isHelpButtonHoveredForTest() const noexcept { return helpButtonHovered; }
 
     // -------------------------------------------------------------------------
-    // Help popover pin/float test seams (round 2) — see the class comment on
+    // Help popover pin/float test seams — see the class comment on
     // synth::ui::ModuleLibraryHelpPopup for why the CallOutBox/floating split is implemented the
     // way it is. Every seam below is safe to call on a plain ModuleLibraryComponent EXCEPT where
     // noted: pinning never launches a real CallOutBox, only UN-pinning (or opening while unpinned)
@@ -632,7 +632,7 @@ private:
      *  painted for a row that is no longer on screen. */
     void clampHoverToVisibleRow();
 
-    /** T160 sibling of clampHoverToVisibleRow() above, for keyboardFocusedIndex — called from every
+    /** Sibling of clampHoverToVisibleRow() above, for keyboardFocusedIndex — called from every
      *  site that calls that one, so a snippet save, plugin scan, search-query change, or collapse
      *  animation finishing can never leave keyboard focus parked on a row that just left the visible
      *  set (Enter-to-insert on a hidden entry would otherwise silently activate the wrong module). */
@@ -672,7 +672,7 @@ private:
     std::vector<synth::PluginIdentity> plugins;
     std::set<juce::String> collapsedSections;
     int hoveredIndex = -1; // -1 = no hover; updated on mouseMove/mouseExit only
-    // T160: -1 = nothing keyboard-focused. Mirrors hoveredIndex's shape but is driven entirely by
+    // -1 = nothing keyboard-focused. Mirrors hoveredIndex's shape but is driven entirely by
     // keyPressed()/the searchEditor KeyListener, never by the mouse — the two are independent
     // visual states (see paint()'s separate outline for this one). Clamped at every site that
     // clamps hoveredIndex (clampHoverToVisibleRow's call sites) so a snippet save, plugin scan, or
@@ -699,7 +699,7 @@ private:
     std::optional<juce::VBlankAnimatorUpdater> vblankUpdater;
     synth::ui::AnimationDriver collapseAnim;
 
-    // Help popover (round 2: pin/float) — helpPopup_ is the ONE persistent content instance a pin
+    // Help popover (pin/float) — helpPopup_ is the ONE persistent content instance a pin
     // click re-hosts; helpCallOutBox_ exists only while it is shown unpinned. Declared in THIS
     // order (helpPopup_ first) so automatic member teardown destroys helpCallOutBox_ FIRST
     // (reverse declaration order) — it holds a non-owning `Component&` to *helpPopup_, so tearing

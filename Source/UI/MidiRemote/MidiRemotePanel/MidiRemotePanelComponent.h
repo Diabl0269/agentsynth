@@ -28,7 +28,7 @@ class RemoteEngine;
 class MidiLearnController;
 } // namespace synth::midi
 
-// MidiRemotePanelComponent.h -- FRO131 (docs/control/midi-remote-ui.md#the-controllers-panel): the
+// MidiRemotePanelComponent.h (docs/control/midi-remote-ui.md#the-controllers-panel): the
 // third bottom-dock tab's content -- Controllers list (left) / Surface (centre) / Inspector
 // (right), plus the ONE `{selectedProfileId, selectedControlId}` selection state all three read
 // from and write into. Default-constructible with no live dependency (same shape as
@@ -58,26 +58,26 @@ public:
      *  this directly; scheduleLiveRefresh() below is for a call site that might not be. */
     void rebuildFromProfiles();
 
-    /** FRO136: the Preferences default takeover, so the inspector's "Default" item can name it. */
+    /** The Preferences default takeover, so the inspector's "Default" item can name it. */
     void setDefaultTakeover(synth::Takeover takeover) { inspector_.setDefaultTakeover(takeover); }
 
-    /** FRO263 (docs/control/midi-remote-ui.md#the-controllers-panel): MidiLearnController::onChanged's
-     *  target (wired once in MainComponent::wireMidiRemoteEngine()) -- keeps the panel live while
-     *  it's open instead of only catching up on the next tab-switch-in. Defers the actual
-     *  rebuildFromProfiles() via MessageManager::callAsync and coalesces repeat calls into one,
-     *  because onChanged can fire from inside a cell's own mouseUp call stack (a drag-to-reposition
-     *  ending in MidiLearnController::updateProfile()) -- a synchronous rebuild there would free the
-     *  very ControllerSurfaceCell whose mouseUp is still executing (same hazard
-     *  ControllerSurfaceComponent.cpp's own mid-gesture-rebuild comment documents). A no-op before
-     *  configure() (rebuildFromProfiles() itself already guards on that). */
+    /** MidiLearnController::onChanged's target (wired once in MainComponent::wireMidiRemoteEngine())
+     *  -- keeps the panel live while it's open instead of only catching up on the next
+     *  tab-switch-in. Defers the actual rebuildFromProfiles() via MessageManager::callAsync and
+     *  coalesces repeat calls into one, because onChanged can fire from inside a cell's own mouseUp
+     *  call stack (a drag-to-reposition ending in MidiLearnController::updateProfile()) -- a
+     *  synchronous rebuild there would free the very ControllerSurfaceCell whose mouseUp is still
+     *  executing (same hazard ControllerSurfaceComponent.cpp's own mid-gesture-rebuild comment
+     *  documents). A no-op before configure() (rebuildFromProfiles() itself already guards on that)
+     *  (see docs/control/midi-remote-ui.md#the-controllers-panel). */
     void scheduleLiveRefresh();
 
-    /** FRO263 test seam: proves scheduleLiveRefresh()'s deferred rebuild actually reaches the
+    /** Test seam: proves scheduleLiveRefresh()'s deferred rebuild actually reaches the
      *  Controllers list, without exposing controllersList_ itself. */
     int getControllersListRowCountForTest() const { return controllersList_.getRowCountForTest(); }
     const ControllersListComponent& getControllersListForTest() const { return controllersList_; }
 
-    /** FRO262 test seam: a mapped control's widget value as last built by
+    /** Test seam: a mapped control's widget value as last built by
      *  refreshSurfaceForSelectedProfile(), without exposing controllerSurface_ itself. -1.0f if
      *  `controlId` isn't on the currently shown surface (see ControllerSurfaceComponent's own
      *  getCellValueForTest()). */
@@ -93,7 +93,7 @@ public:
      *  no free-running timer"). */
     void refreshActivity();
 
-    // ---- FRO134: Detect, Add controller, Templates, Import/Export, encoder auto-detect -------------
+    // ---- Detect, Add controller, Templates, Import/Export, encoder auto-detect ---------------------
     // (docs/control/midi-remote-ui.md#detect-mode, #add-controller). Units: MidiRemotePanelDetect.cpp
     // (Detect + auto-detect) and MidiRemotePanelControllers.cpp (Add / Templates / Import).
 
@@ -117,10 +117,10 @@ public:
     /** Import controller... with the file already chosen: prompts (async) if a controller with the
      *  same id exists. */
     void importControllerFile(const juce::File& file);
-    /** FRO139 (docs/control/midi-remote.md#controller-feedback): the Controllers-list right-click
-     *  "Send feedback to" choice -- `device` unset means "None". A public, directly-callable method
-     *  (rather than only reachable through the list's own callback) so it is unit-testable without
-     *  driving a real right-click menu. */
+    /** The Controllers-list right-click "Send feedback to" choice -- `device` unset means "None". A
+     *  public, directly-callable method (rather than only reachable through the list's own
+     *  callback) so it is unit-testable without driving a real right-click menu
+     *  (see docs/control/midi-remote.md#controller-feedback). */
     void setFeedbackOutput(const juce::String& profileId, const std::optional<synth::ControllerProfile::Input>& device);
     /** The prompt-free half: `replaceExisting` false reports `conflict` and changes nothing. A
      *  successful import selects the controller. */
@@ -142,7 +142,7 @@ public:
                                           std::function<void(bool ok)> done)>;
     void setPromptHookForTest(PromptHook hook) { promptHook_ = std::move(hook); }
 
-    // ---- FRO135: assign from the panel, orphan controllers ----
+    // ---- Assign from the panel, orphan controllers ------------
     // (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn, #controllers-list-left).
     // Units: MidiRemotePanelAssign.cpp and MidiRemotePanelOrphans.cpp.
 
@@ -155,11 +155,11 @@ public:
     /** The picker's choice: assigns the selected control to `actionId`. False if nothing is selected or the action is
      * not invokable. */
     bool assignSelectedControlToAction(const juce::String& actionId);
-    /** FRO236 (docs/control/midi-remote.md#continuous-targets): the picker's "Continuous" choice.
-     *  False if nothing is selected. */
+    /** The picker's "Continuous" choice. False if nothing is selected
+     *  (see docs/control/midi-remote.md#continuous-targets). */
     bool assignSelectedControlToContinuous(synth::ContinuousTargetKind kind);
-    /** FRO142 (docs/control/midi-remote.md#pages): the picker's "Pages" choice. False if nothing is
-     *  selected. */
+    /** The picker's "Pages" choice. False if nothing is selected
+     *  (see docs/control/midi-remote.md#pages). */
     bool assignSelectedControlToPage(synth::PageCommand command, int page);
 
     /** An orphan controller row (a project reference with no local profile) is selected. */
@@ -181,7 +181,7 @@ public:
         return controllerSurface_.findCellForTest(controlId);
     }
     ControllerSurfaceToolbar& getToolbarForTest() { return toolbar_; }
-    /** FRO142 test seam: drives the real page strip without exposing controllerSurface_'s own
+    /** Test seam: drives the real page strip without exposing controllerSurface_'s own
      *  internals -- ControllerSurfacePageStripTests.cpp's own suite covers the strip in isolation;
      *  this is for the panel-level "does switching pages change the surface" tests. */
     ControllerSurfacePageStrip& getPageStripForTest() { return pageStrip_; }
@@ -190,13 +190,13 @@ public:
         if (controlId.isNotEmpty())
             selectControl(controlId);
     }
-    /** FRO270 test seam: selects `controlIds` on the surface without driving real shift/cmd clicks
+    /** Test seam: selects `controlIds` on the surface without driving real shift/cmd clicks
      *  (those are ControllerSurfaceSelectionTests.cpp's job) -- the panel-level group move/delete
      *  tests only need a known multi-selection to already exist. */
     void selectControlsForTest(const std::vector<juce::String>& controlIds) {
         controllerSurface_.setSelectedControlIds(controlIds); // fans back into selectControls()
     }
-    /** FRO270 test seam: the surface's Delete key / group delete UI, without a real KeyPress. */
+    /** Test seam: the surface's Delete key / group delete UI, without a real KeyPress. */
     void requestDeleteControlsForTest(const std::vector<juce::String>& controlIds) {
         handleDeleteControlsRequested(controlIds);
     }
@@ -205,9 +205,8 @@ public:
     /** GraphEditor::onEditMidiAssignmentRequested's target, via BottomDockComponent -- resolves the
      *  project assignment for (nodeUuid, paramId), selects its controller/control and switches the
      *  surface/inspector to show it. Returns false (and leaves selection untouched) if no such
-     *  assignment exists yet -- the FRO130 decision doc note: "omitted until the panel exists"
-     *  no longer applies once this ships, but a control with no assignment has nothing to select
-     *  either. Does NOT open the dock or switch dock tabs -- same contract as
+     *  assignment exists yet (a control with no assignment has nothing to select). Does NOT open
+     *  the dock or switch dock tabs -- same contract as
      *  BottomDockComponent::revealColumnForStrip, the caller does that first. */
     bool selectAssignmentForParameter(const juce::String& nodeUuid, const juce::String& paramId);
 
@@ -216,13 +215,13 @@ public:
      *  selectNodeInGraph(nodeUuid) the same way TrackChannelLinkController's reveal hook does. */
     std::function<void(const juce::String& nodeUuid)> onLocateNode;
 
-    /** FRO142 (docs/control/midi-remote.md#pages): fired after a page switch actually changes what
-     *  the selected controller shows -- MainComponent wires this to the status bar, same as every
-     *  other MIDI Remote status line (StatusBarComponent::showMessage, plain text -- this panel has
-     *  no StatusBarComponent of its own, Core's RemoteEngine even less so). */
+    /** Fired after a page switch actually changes what the selected controller shows --
+     *  MainComponent wires this to the status bar, same as every other MIDI Remote status line
+     *  (StatusBarComponent::showMessage, plain text -- this panel has no StatusBarComponent of its
+     *  own, Core's RemoteEngine even less so) (see docs/control/midi-remote.md#pages). */
     std::function<void(const juce::String& message)> onStatusMessage;
 
-    // ---- FRO273: undo routing + cue (MidiRemotePanelUndo.cpp) ----
+    // ---- Undo routing + cue (MidiRemotePanelUndo.cpp) ------------
     /** True while keyboard focus is inside this panel (docked or detached): Cmd+Z then acts on the
      *  controller edit history instead of the project's. */
     bool holdsUndoFocus() const;
@@ -242,7 +241,7 @@ public:
 private:
     void selectProfile(const juce::String& profileId);
     void selectControl(const juce::String& controlId);
-    /** FRO270: the surface's onSelectionChanged -- mirrors the full id set into
+    /** The surface's onSelectionChanged -- mirrors the full id set into
      *  selectedControlIds_, and selectedControlId_ (the legacy single-control anchor every other
      *  member here still reads) tracks it only while exactly one is selected. */
     void selectControls(const std::vector<juce::String>& controlIds);
@@ -252,14 +251,13 @@ private:
     void handleExportRequested(const juce::String& profileId);
     void handleDeleteProfileRequested(const juce::String& profileId);
     void handleControlsMoved(const std::vector<synth::ui::ControllerSurfaceComponent::MovedCell>& moves);
-    /** FRO270: the surface's Delete/Backspace or the inspector's own group Delete -- confirms once
+    /** The surface's Delete/Backspace or the inspector's own group Delete -- confirms once
      *  (showPrompt/promptHook_, MidiRemotePanelDetect.cpp's mechanism) with the total assignment
      *  count across every id, then MidiLearnController::deleteControls() in one step. */
     void handleDeleteControlsRequested(const std::vector<juce::String>& controlIds);
     void handleForgetRequested(const juce::String& assignmentId);
     void handleControlEdited(const synth::Control& control);
 
-    // FRO134
     void showPrompt(const juce::String& title, const juce::String& message, bool cancellable,
                     std::function<void(bool ok)> done, const juce::String& confirmLabel = "Next");
     void showTemplatesMenu(juce::Component& anchor);
@@ -276,10 +274,10 @@ private:
     bool isOrphanId(const juce::String& profileId) const;
     bool isProfilePresent(const synth::ControllerProfile& profile) const;
 
-    // FRO136 (docs/control/midi-remote-ui.md#plugin-build): the plugin build's one live controller.
-    // Its row is always listed, under this id, even before a profile exists; selecting the row
-    // creates the profile under the same id (a Learn that got there first has a profile with the
-    // host source key under its own id, and then no extra row is added).
+    // The plugin build's one live controller. Its row is always listed, under this id, even
+    // before a profile exists; selecting the row creates the profile under the same id (a Learn
+    // that got there first has a profile with the host source key under its own id, and then no
+    // extra row is added) (see docs/control/midi-remote-ui.md#plugin-build).
     static constexpr const char* kHostMidiProfileId = "host-midi";
     bool hostMidiProfileExists() const;
     void createHostMidiProfile();
@@ -294,7 +292,7 @@ private:
 
     juce::String selectedProfileId_;
     juce::String selectedControlId_;
-    // FRO270: the surface's full selection, mirrored here so handleControlsMoved()/
+    // The surface's full selection, mirrored here so handleControlsMoved()/
     // handleDeleteControlsRequested() and the inspector's "N controls selected" state don't have to
     // read it back out of controllerSurface_. selectedControlId_ above is kept in step as this
     // set's only member whenever its size is exactly 1 (empty otherwise) -- every OTHER member
@@ -307,7 +305,7 @@ private:
     std::map<juce::String, juce::int64> profileLastActivityMs_;
     static constexpr int kActivityLitMs = 150;
 
-    // FRO263: scheduleLiveRefresh()'s coalescing latch -- true from the first call until the
+    // scheduleLiveRefresh()'s coalescing latch -- true from the first call until the
     // deferred rebuildFromProfiles() actually runs, so several onChanged notifications in a row
     // (e.g. a Learn's profile write followed by its project-assignment write) collapse into one
     // rebuild rather than one per notification.

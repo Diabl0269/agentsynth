@@ -1,4 +1,4 @@
-// ControllerSurfaceToolbar.cpp -- FRO134: see the header. The hint text is docs/control/
+// ControllerSurfaceToolbar.cpp: see the header. The hint text is docs/control/
 // midi-remote-ui.md#detect-mode's, word for word.
 
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceToolbar.h"

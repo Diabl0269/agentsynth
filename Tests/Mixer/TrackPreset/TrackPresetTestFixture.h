@@ -5,7 +5,7 @@
 // Shared fixtures/helpers for the TrackPreset test suite (Tests/Mixer/TrackPreset/TrackPreset*Tests.cpp).
 // Header-only; not compiled on its own and not registered in Tests/CMakeLists.txt. Reuses
 // ChannelFlowTestRigs.h's HostedPatchCFT/addPlainNodeCFT/modulatesCFT/isModuleOfTypeCFT rather
-// than duplicating them (FRO307: split out of ChannelFlowTestFixture.h, which this suite never
+// than duplicating them (split out of ChannelFlowTestFixture.h, which this suite never
 // needed -- none of these tests build a MainComponent).
 
 #include "../ChannelFlow/ChannelFlowTestRigs.h"
@@ -49,10 +49,10 @@ inline SimpleTrackRigCFT buildSimpleTrackRigCFT(GraphEditor& editor, AudioEngine
     return result;
 }
 
-// FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): a bus rig -- the bypassed Gate -> EQ ->
-// Compressor -> Channel Strip chain "Add bus" builds (synth::buildBusChannel), boxed into a macro
-// the same way MixerPanelComponent::createBus() does, with no headless MixerPanelComponent needed.
-// `name` empty means fall back to the numbered "Bus N" name, same as a freshly added bus.
+// A bus rig -- the bypassed Gate -> EQ -> Compressor -> Channel Strip chain "Add bus" builds
+// (synth::buildBusChannel), boxed into a macro the same way MixerPanelComponent::createBus() does,
+// with no headless MixerPanelComponent needed. `name` empty means fall back to the numbered "Bus N"
+// name, same as a freshly added bus (see docs/mixer/track-presets.md#a-third-kind-bus).
 struct SimpleBusRigCFT {
     juce::AudioProcessorGraph::Node* strip = nullptr;
     synth::Macro* macro = nullptr;

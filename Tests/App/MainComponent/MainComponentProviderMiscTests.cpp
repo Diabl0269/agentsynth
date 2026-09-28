@@ -1,6 +1,6 @@
 // Concern: AI provider/model selection on startup (registry-driven default, the
 // post-setProvider() refresh regression lock), toolbar button bounds after construction,
-// the Locate Master command reached through the real Cmd+Shift+M key path, and (FRO193) that a
+// the Locate Master command reached through the real Cmd+Shift+M key path, and that a
 // test-constructed MainComponent never touches the real MIDI Remote controller profiles folder.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
@@ -36,7 +36,7 @@ TEST_F(MainComponentTest, StartupUsesRegistryAndStillSelectsAModel) {
     EXPECT_EQ(mc.getAiServiceForTest().getCurrentModel(), "mock-model-a");
 }
 
-// P4-6: resolveDefaultProviderId() is the pure decision MainComponent::initialiseCommon() bases
+// resolveDefaultProviderId() is the pure decision MainComponent::initialiseCommon() bases
 // the migration on — a fresh install (no settings file at all) gets the new hosted-by-default,
 // an install that has already launched before keeps its working local Ollama default even though
 // it has never touched the "aiProvider" key specifically (see initialiseCommon()'s comment for
@@ -102,7 +102,7 @@ TEST_F(MainComponentTest, ToolbarButtonsHaveNonZeroBoundsAfterConstruction) {
     }
 }
 
-// FRO45: Cmd+Shift+M drives the same real key-handling path FocusRegionTests.cpp's Cmd+Shift+T/L
+// Cmd+Shift+M drives the same real key-handling path FocusRegionTests.cpp's Cmd+Shift+T/L
 // tests use (MainComponent::keyPressed -> ApplicationCommandManager::invokeDirectly, async), not a
 // direct call to GraphEditor::locateMasterOrOutput() — pinning that the shortcut is actually wired
 // through ShortcutManager/AppCommands, not just that the underlying action works.
@@ -129,7 +129,7 @@ TEST_F(MainComponentTest, LocateMasterCmdShiftMSelectsMasterThroughTheRealKeyPat
     EXPECT_EQ(selected[0], masterNode->nodeID);
 }
 
-// FRO193: MidiLearnController's own ControllerProfileStore ctor param used to default to the REAL,
+// MidiLearnController's own ControllerProfileStore ctor param used to default to the REAL,
 // resolved <settings folder>/MidiRemote/Controllers directory regardless of which MainComponent
 // ctor ran it -- so every one of the ~50 MainComponent*Tests.cpp files across this suite (this one
 // included, none of which know or care that MIDI Remote exists) silently read, and via a learn

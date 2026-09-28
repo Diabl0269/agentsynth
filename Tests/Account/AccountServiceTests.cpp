@@ -63,7 +63,7 @@ public:
     // don't care about entitlement get the same "fetchEntitlement failed, non-fatal" path
     // completeSignIn() already tolerates for fetchMe(), so they don't need to set this explicitly.
     AuthClient::HttpResult entitlementResponse = makeTransportFailure();
-    // P6-7: same "unset = transport failure" default as entitlementResponse above, and same
+    // Same "unset = transport failure" default as entitlementResponse above, and same
     // reasoning — a test that doesn't set this explicitly gets the non-fatal-failure path.
     // Separate responses for GET (refresh) and PUT (set) since real server semantics differ:
     // GET always reflects current state, PUT reflects the just-applied state.
@@ -511,7 +511,7 @@ TEST(AccountServiceTest, AttemptSilentSignInWithNoStoredTokenStaysSignedOutWitho
 }
 
 // ============================================================================
-// entitlement (P4-4)
+// entitlement
 // ============================================================================
 
 TEST(AccountServiceTest, CompleteSignInPopulatesEntitlementFromSuccessfulFetch) {
@@ -596,7 +596,7 @@ TEST(AccountServiceTest, RefreshEntitlementIsNoOpWhenSignedOut) {
 }
 
 // ============================================================================
-// prompt-learning opt-in (P6-7)
+// prompt-learning opt-in
 // ============================================================================
 
 TEST(AccountServiceTest, SetPromptLearningOptInTrueGoesThroughAuthenticatedPutAndUpdatesSnapshot) {

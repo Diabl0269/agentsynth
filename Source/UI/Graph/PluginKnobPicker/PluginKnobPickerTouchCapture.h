@@ -13,8 +13,8 @@ namespace synth::ui {
  * "Touch in the plugin editor to add" (docs/control/plugin-card-layout.md#choosing-knobs).
  *
  * Two signals feed the same owner-facing callback: a gesture START
- * (`parameterGestureChanged(index, true)`, the original FRO132 path -- most plugins) and, for a
- * plugin that never emits one, a VALUE CHANGE on a parameter not already in the layout (FRO241). The
+ * (`parameterGestureChanged(index, true)`, the standard path -- most plugins) and, for a
+ * plugin that never emits one, a VALUE CHANGE on a parameter not already in the layout. The
  * value-change path is burst-filtered so an automation sweep or a preset load -- which can touch many
  * parameters near-simultaneously -- does not add all of them: see `handleAsyncUpdate`'s doc comment.
  *

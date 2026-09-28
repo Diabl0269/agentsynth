@@ -4,7 +4,7 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include <memory>
 
-// TrackChannelLinkSurface.h -- FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): everything a track
+// TrackChannelLinkSurface.h (docs/mixer/mixer.md#channels-follow-audio-not-tracks): everything a track
 // header needs from the app about the CHANNEL its track plays into.
 //
 // A narrow seam, deliberately separate from TrackHeaderHost: that interface is about a track's own
@@ -78,7 +78,7 @@ struct TrackChannelLinkSurface {
 
     /** docs/mixer/mixer.md#channels-follow-audio-not-tracks's channel chip click: scrolls the channel into view and
      * selects it (the Locate Master contract), so a chip on a MIDI track is how the user finds where its audio went.
-     * THE P9-5 HOOK -- when the mixer panel exists this override opens/focuses that column instead, with no change to
+     * When the mixer panel exists this override opens/focuses that column instead, with no change to
      * the chip or the header. */
     virtual void revealChannelForTrack(synth::TrackId track) = 0;
 };

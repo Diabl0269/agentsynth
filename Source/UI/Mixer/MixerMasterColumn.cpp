@@ -1,4 +1,4 @@
-// Concern: FRO11 (P9-5) -- MixerMasterColumn's param binding and layout. FRO133's right-click MIDI
+// Concern: MixerMasterColumn's param binding and layout. The right-click MIDI
 // Learn on the fader lives here too (not a separate MixerMasterColumnMidiLearn.cpp unit): Master
 // has exactly one learnable control, so the whole feature is a handful of lines -- see
 // MixerColumnMidiLearn.cpp's own file comment for the design this mirrors.
@@ -27,14 +27,13 @@ juce::AudioParameterFloat* findFloatParam(juce::AudioProcessor& processor, const
 } // namespace
 
 MixerMasterColumn::MixerMasterColumn() {
-    // FRO228: without this, Master's own group AccessibilityHandler (the default, unspecified-role
+    // Without this, Master's own group AccessibilityHandler (the default, unspecified-role
     // one Component provides) reads an empty title -- MixerDirectColumn's ctor sets the same "own
     // component" title for the identical reason (that class's own comment on setTitle("Direct")).
     setTitle("Master");
     addAndMakeVisible(header_);
     header_.setDisplayName("Master");
-    header_.setRenameEnabled(
-        false); // FRO225: Master is a MasterModule, not a ChannelStripModule -- no strip name field
+    header_.setRenameEnabled(false); // Master is a MasterModule, not a ChannelStripModule -- no strip name field
     addAndMakeVisible(insertList_);
     insertList_.onEditOnCanvas = [this](const juce::String& uuid) {
         if (onEditOnCanvas)
@@ -55,16 +54,16 @@ MixerMasterColumn::MixerMasterColumn() {
     };
     addAndMakeVisible(muteButton_);
     muteButton_.setClickingTogglesState(false);
-    // FRO18: MixerPanelComponent is the single focusable leaf -- see
+    // MixerPanelComponent is the single focusable leaf -- see
     // MixerColumnComponent.cpp's ctor comment for why every child control does this.
     muteButton_.setWantsKeyboardFocus(false);
-    // FRO325: the mixer has no other project-settings surface, so the project's pan law lives here
+    // The mixer has no other project-settings surface, so the project's pan law lives here
     // -- see the class comment and docs/mixer/mixer.md#pan-law.
     addAndMakeVisible(panLawButton_);
     panLawButton_.setClickingTogglesState(false);
     panLawButton_.setWantsKeyboardFocus(false);
     panLawButton_.onClick = [this] { showPanLawMenu(); };
-    // FRO133: added once here (the fader is a persistent member, never recreated) rather than per
+    // Added once here (the fader is a persistent member, never recreated) rather than per
     // setNodeId() -- mirrors MixerColumnComponent's own "register the listener once, rebuild the
     // param binding on every rebind" split.
     fader_.getSlider().addMouseListener(this, false);
@@ -97,7 +96,7 @@ void MixerMasterColumn::setColumn(const synth::MixerColumn& column) {
         for (int leg = 0; leg < 2; ++leg)
             takeMeterPeak(leg);
     }
-    // FRO336: a rebuild is the ONE thing every path that changes the engine's pan law directly --
+    // A rebuild is the ONE thing every path that changes the engine's pan law directly --
     // New Patch's factory-default Compensated write (MainComponent::clearTimelineForNewPatch's
     // caller), Load, undo/redo -- reaches unconditionally, so re-reading it here is what keeps this
     // label from going stale indefinitely rather than only on the next menu pick. Found while
@@ -109,8 +108,8 @@ void MixerMasterColumn::setColumn(const synth::MixerColumn& column) {
 }
 
 float MixerMasterColumn::takeMeterPeak(int leg) {
-    // FRO148 (docs/mixer/meters.md): with inserts the meter shows what LEAVES the chain, like every DAW's master
-    // meter; with none it is the same pre-insert MasterModule latch as before.
+    // With inserts the meter shows what LEAVES the chain, like every DAW's master meter; with none it is
+    // MasterModule's own pre-insert latch (see docs/mixer/meters.md).
     if (hasInserts_ && outputPeakProvider)
         return outputPeakProvider(leg);
     if (graph_ == nullptr)
@@ -164,12 +163,12 @@ void MixerMasterColumn::toggleMuted() {
         onLiveStateChanged();
 }
 
-// FRO325 (docs/mixer/mixer.md#pan-law): labels the button by the engine's CURRENT law -- called
-// once from configure(), again after every menu pick (setPanLaw(), below), and (FRO336) from
-// refreshLiveVisuals() when a sibling live view (the mixer mirror, docs/mixer/panel.md) reports its
-// own pan-law change via onLiveStateChanged. An undo/redo of the setting still only reaches this
-// button the next time refreshMeter()'s tick or a rebuild calls it -- see MixerPanLawAction in
-// AppUndoManager.cpp, which has no restore-notification hook at all (pre-existing, unrelated gap).
+// Labels the button by the engine's CURRENT law -- called once from configure(), again after every
+// menu pick (setPanLaw(), below), and from refreshLiveVisuals() when a sibling live view (the mixer
+// mirror, docs/mixer/panel.md) reports its own pan-law change via onLiveStateChanged. An undo/redo
+// of the setting still only reaches this button the next time refreshMeter()'s tick or a rebuild
+// calls it -- see MixerPanLawAction in AppUndoManager.cpp, which has no restore-notification hook
+// at all (see docs/mixer/mixer.md#pan-law).
 void MixerMasterColumn::refreshPanLawButton() {
     if (audioEngine_ == nullptr)
         return;
@@ -219,7 +218,7 @@ void MixerMasterColumn::setPanLaw(synth::MixerPanLaw law) {
         onLiveStateChanged();
 }
 
-// FRO336: the cheap per-strip refresh a sibling live view's onLiveStateChanged drives this instance
+// The cheap per-strip refresh a sibling live view's onLiveStateChanged drives this instance
 // with -- mute + pan-law only, no rebuild; see MixerPanelComponent::refreshLiveMixerVisuals().
 void MixerMasterColumn::refreshLiveVisuals() {
     refreshMuteAccessibility();
@@ -235,7 +234,7 @@ void MixerMasterColumn::setKeyboardFocused(bool focused) {
 
 void MixerMasterColumn::unbindFromGraph() {
     fader_.unbind();
-    // FRO133: same use-after-free-on-undo hazard as fader_.unbind() above -- see MidiLearnMenu.h.
+    // Same use-after-free-on-undo hazard as fader_.unbind() above -- see MidiLearnMenu.h.
     midiLearnableFaderParam_ = nullptr;
     muteButton_.onClick = nullptr;
     meter_.peakProvider = nullptr;
@@ -246,13 +245,13 @@ void MixerMasterColumn::refreshMeter(float elapsedSeconds) {
     meter_.refresh(elapsedSeconds);
     meterReadout_.updatePeak(std::max(meter_.getDisplayedDbForTest(0), meter_.getDisplayedDbForTest(1)));
     refreshMidiLearnBadges();
-    // FRO256: same tick also keeps the armed breathing outline animating -- see
+    // Same tick also keeps the armed breathing outline animating -- see
     // repaintArmedMidiLearnOutline()'s own comment.
     repaintArmedMidiLearnOutline();
 }
 
 // ============================================================================
-// MIDI Learn (FRO133)
+// MIDI Learn
 // ============================================================================
 
 void MixerMasterColumn::mouseDown(const juce::MouseEvent& e) {
@@ -331,7 +330,7 @@ void MixerMasterColumn::refreshMidiLearnBadges() {
     repaint();
 }
 
-// FRO256: called from refreshMeter()'s existing 10 Hz tick -- see
+// Called from refreshMeter()'s existing 10 Hz tick -- see
 // MixerColumnComponent::repaintArmedMidiLearnOutline's own comment for why this needs to exist at
 // all (paintMidiLearnArmedOutline() recomputes alpha from wall time on every paint(), so nothing
 // visibly breathes unless something keeps asking for a repaint while armed).
@@ -345,7 +344,7 @@ void MixerMasterColumn::repaintArmedMidiLearnOutline() {
 
 void MixerMasterColumn::paintMidiLearnOverlays(juce::Graphics& g) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    // FRO256: the slider is nested inside fader_ (a MixerFader, itself a direct child of this
+    // The slider is nested inside fader_ (a MixerFader, itself a direct child of this
     // column), so its bounds must be walked up TWO levels into this column's own coordinate frame
     // -- getLocalArea(&slider, slider's own local bounds) does that regardless of depth; the
     // pre-fix code passed the slider's PARENT as the source but the slider's own local bounds
@@ -388,16 +387,16 @@ void MixerMasterColumn::paintOverChildren(juce::Graphics& g) {
 }
 
 void MixerMasterColumn::resized() {
-    // FRO146: same meter width/readout-row budget as MixerColumnComponent -- the Master column
+    // Same meter width/readout-row budget as MixerColumnComponent -- the Master column
     // stays visually consistent with every strip column's meter (docs/mixer/mixer.md meters section).
     constexpr int kMeterWidth = 32;
     constexpr int kMeterReadoutHeight = 12;
 
     auto bounds = getLocalBounds().reduced(2);
     header_.setBounds(bounds.removeFromTop(24));
-    // FRO148: same sizing rule as a strip column's insert list (MixerColumnComponent::resized).
+    // Same sizing rule as a strip column's insert list (MixerColumnComponent::resized).
     insertList_.setBounds(bounds.removeFromTop(juce::jmin(bounds.getHeight() / 3, insertList_.getPreferredHeight())));
-    // FRO325: shares the mute row -- mute on the left, the pan-law control on the right.
+    // Shares the mute row -- mute on the left, the pan-law control on the right.
     auto bottomRow = bounds.removeFromBottom(20).reduced(2);
     muteButton_.setBounds(bottomRow.removeFromLeft(bottomRow.getWidth() / 3));
     panLawButton_.setBounds(bottomRow);

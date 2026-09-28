@@ -1,4 +1,4 @@
-// MainComponentTrackPresets.cpp — FRO13 (P9-7, docs/mixer/track-presets.md): "Save track as preset.../Set
+// MainComponentTrackPresets.cpp (docs/mixer/track-presets.md): "Save track as preset.../Set
 // as default" (track header menu + channel macro menu), the "+ Track" grouped preset list, "Insert
 // Track Preset from File...", and the per-type default consulted by addAudioTrack/
 // buildInstrumentTrackAndChain (see MainComponentTrackCreation.cpp's own edits for that half).
@@ -39,10 +39,10 @@ juce::Point<int> presetDropPosition(juce::AudioProcessorGraph& graph) {
     return {rightEdge + kTrackPresetCardGapX, 0};
 }
 
-// FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): the per-type default track preset settings
-// keys — duplicated from PreferencesSettingsTabInternal.h's own copy for the same "one-line string not worth a header
-// dependency" reason every other cross-file settings key in this codebase is (see MainComponentFileIO.cpp's own
-// kAutosaveEnabledKey). The two writers/readers MUST agree on the string values.
+// The per-type default track preset settings keys — duplicated from PreferencesSettingsTabInternal.h's own copy for
+// the same "one-line string not worth a header dependency" reason every other cross-file settings key in this
+// codebase is (see MainComponentFileIO.cpp's own kAutosaveEnabledKey). The two writers/readers MUST agree on the
+// string values (see docs/mixer/track-presets.md#saving-and-setting-a-default).
 constexpr const char* kMixerDefaultTrackPresetAudioKey = "mixerDefaultTrackPresetAudio";
 constexpr const char* kMixerDefaultTrackPresetInstrumentKey = "mixerDefaultTrackPresetInstrument";
 
@@ -53,7 +53,7 @@ const char* mixerDefaultTrackPresetKey(synth::TrackPresetKind kind) {
 
 } // namespace
 
-// FRO13 (P9-7): true when `track`'s bound node has a channel of its own — gates the header menu's
+// True when `track`'s bound node has a channel of its own — gates the header menu's
 // and the channel macro menu's "Save track as preset.../Set as default" pair.
 bool MainComponent::canSaveTrackPresetForTrack(synth::TrackId trackId) const {
     const auto* track = timelineDoc.getTrack(trackId);
@@ -150,13 +150,13 @@ void MainComponent::setTrackPresetAsDefault(synth::TrackId trackId) {
         " track preset");
 }
 
-// FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): GraphEditor::onTrackPresetMenuAction's
-// handler -- resolves `macroId` to the existing per-track path when it is a bound track's own
-// channel (Audio/Instrument, unchanged behaviour), or to the bus path when it is a bus's own macro
-// (no bound track, hence no track header to have reached this from). A malformed/vanished macroId
-// (not found, or a channel macro somehow bound to neither a track nor a bus) is a silent no-op --
-// the menu that produced this click is itself gated on synth::isChannelMacro, so this should never
-// see anything else in practice.
+// GraphEditor::onTrackPresetMenuAction's handler -- resolves `macroId` to the existing per-track
+// path when it is a bound track's own channel (Audio/Instrument, unchanged behaviour), or to the
+// bus path when it is a bus's own macro (no bound track, hence no track header to have reached
+// this from). A malformed/vanished macroId (not found, or a channel macro somehow bound to neither
+// a track nor a bus) is a silent no-op -- the menu that produced this click is itself gated on
+// synth::isChannelMacro, so this should never see anything else in practice
+// (see docs/mixer/track-presets.md#a-third-kind-bus).
 void MainComponent::handleMacroTrackPresetAction(const juce::String& macroId, bool setAsDefault) {
     for (const auto& track : timelineDoc.getTracks()) {
         if (track.bindingUuid.isEmpty())
@@ -306,14 +306,14 @@ void MainComponent::addTrackFromPreset(const juce::String& presetName, synth::Tr
                                                            : "Could not insert track preset \"" + presetName + "\"");
 }
 
-// FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): the Bus-kind sibling of
-// insertTrackFromPresetVar. A bus preset creates NO timeline track -- just the bus chain, which the
-// mixer shows as a BUS column -- so there is no track source node to find and no TimelineDoc::addTrack.
-// It still needs the same Strip->Master wiring (a preset never captures the shared Master singleton)
-// and the same "isBus" re-flag every other "Add bus" builder applies -- extractTrackPreset scrubs
-// "isBus" from the saved JSON (TrackPresetManager.cpp), so it must be set again here, the same
-// mechanism synth::buildBusChannel uses for a freshly built bus. NO UNDO TRANSACTION OF ITS OWN.
-// Returns the inserted bus's macro name, or empty on rejection/failure.
+// The Bus-kind sibling of insertTrackFromPresetVar. A bus preset creates NO timeline track -- just the
+// bus chain, which the mixer shows as a BUS column -- so there is no track source node to find and no
+// TimelineDoc::addTrack. It still needs the same Strip->Master wiring (a preset never captures the
+// shared Master singleton) and the same "isBus" re-flag every other "Add bus" builder applies --
+// extractTrackPreset scrubs "isBus" from the saved JSON (TrackPresetManager.cpp), so it must be set
+// again here, the same mechanism synth::buildBusChannel uses for a freshly built bus. NO UNDO
+// TRANSACTION OF ITS OWN. Returns the inserted bus's macro name, or empty on rejection/failure
+// (see docs/mixer/track-presets.md#a-third-kind-bus).
 juce::String MainComponent::insertBusFromPresetVar(const juce::var& preset) {
     if (!preset.isObject())
         return {};
@@ -414,7 +414,7 @@ juce::String MainComponent::insertTrackPresetFromFile(const juce::File& file) {
     }
     const auto kind = synth::TrackPresetManager::getPresetKind(preset);
 
-    // FRO297: a Bus-kind file has no track to create -- same recordGraphAndMacroChange/
+    // A Bus-kind file has no track to create -- same recordGraphAndMacroChange/
     // insertBusFromPresetVar path addBusFromPreset() uses, not the track-creating transaction below.
     if (kind == synth::TrackPresetKind::Bus) {
         juce::String busName;

@@ -1,4 +1,4 @@
-// MidiLearnController's arm/cancel/bind lifecycle (FRO130, docs/control/midi-remote-ui.md#the-learn-interaction).
+// MidiLearnController's arm/cancel/bind lifecycle (docs/control/midi-remote-ui.md#the-learn-interaction).
 // Uses HostMode::Hosted so RemoteEngine::handleMessage has a source to test against without a real
 // audio device or MIDI hardware (docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host's
 // hostSourceKey()), and points ControllerProfileStore at a temp directory -- never the real
@@ -81,7 +81,7 @@ public:
 
     void invokeRemoteCommand(juce::CommandID) override {}
 
-    // FRO236: this suite doesn't exercise continuous targets -- stub, never called.
+    // This suite doesn't exercise continuous targets -- stub, never called.
     double getContinuousValue(ContinuousTargetKind) override { return 0.0; }
     void setContinuousValue(ContinuousTargetKind, double) override {}
     bool getContinuousWindow(ContinuousTargetKind, double&, double&) override { return false; }
@@ -211,7 +211,7 @@ TEST_F(MidiLearnControllerTest, ArmingAgainOnADifferentControlTearsDownThePrevio
 }
 
 // ============================================================================
-// FRO133: action targets (docs/control/midi-remote.md#action-targets) -- armAction()/
+// Action targets (docs/control/midi-remote.md#action-targets) -- armAction()/
 // forgetAction()/queryActionMappings() mirror arm()/forget()/queryMappings() above, but write the
 // assignment into the learned device's ControllerProfile.actions (GLOBAL) rather than doc_
 // (project), and are NOT undoable (docs/control/midi-remote.md#undo: "Profile edits ... not
@@ -297,7 +297,7 @@ TEST_F(MidiLearnControllerTest, QueryActionMappingsReturnsALabelForEachMappedAct
 }
 
 // ============================================================================
-// FRO253: node command targets (docs/control/midi-remote.md#node-command-targets) --
+// Node command targets (docs/control/midi-remote.md#node-command-targets) --
 // armNodeCommand()/forgetNodeCommand()/queryNodeCommandMappings() mirror arm()/forget()/
 // queryMappings() above (PROJECT-scoped, undoable, "learn again" replaces), unlike the action
 // overloads (GLOBAL, on the controller edit history instead).
@@ -414,7 +414,7 @@ TEST_F(MidiLearnControllerTest, ArmActionTearsDownAPreviouslyArmedParameterLearn
 }
 
 // ============================================================================
-// FRO253 regression: publishAssignments() must re-resolve against the live graph itself.
+// publishAssignments() must re-resolve against the live graph itself.
 // RemoteEngine::setAssignments() rebuilds its snapshot with graph == nullptr by design, which only
 // carries forward each assignment id's PREVIOUS resolution -- a brand-new id (a just-settled
 // learn, or its undo/redo) has none, so without publishAssignments() also reconciling, the target
@@ -485,8 +485,8 @@ TEST_F(MidiLearnControllerTest, LearnNodeCommandThenImmediatePressTogglesSoloWit
 }
 
 // ============================================================================
-// FRO131: MIDI Remote panel profile mutations (updateProfile, countProjectAssignmentsForProfile,
-// deleteProfile, deleteControl, updateAssignment) -- FRO130 arm/forget/learn paths handle
+// MIDI Remote panel profile mutations (updateProfile, countProjectAssignmentsForProfile,
+// deleteProfile, deleteControl, updateAssignment) -- the arm/forget/learn paths handle
 // the project doc half (project history) and auto-profiles (controller edit history);
 // these five panel-side methods route profile edits and project-doc removals through one
 // seam so the engine's published snapshot never goes stale.
@@ -751,12 +751,12 @@ TEST_F(MidiLearnControllerTest, UpdateAssignmentReturnsFalseForActionTargetAssig
 }
 
 // ============================================================================
-// FRO263 (docs/control/midi-remote-ui.md#the-controllers-panel): onChanged fires after every
-// mutation that changes what the panel shows, including as the undo/redo postRestore -- these
-// don't re-check every mutation MidiLearnControllerTests.cpp already covers above, just that the
-// hook reaches every DISTINCT code path that republishes profiles_/doc_.assignments (a project
-// mutation via publishAssignments(), and the five profile-only paths that call
-// remoteEngine_.setProfiles() without it).
+// onChanged fires after every mutation that changes what the panel shows, including as the
+// undo/redo postRestore -- these don't re-check every mutation MidiLearnControllerTests.cpp already
+// covers above, just that the hook reaches every DISTINCT code path that republishes
+// profiles_/doc_.assignments (a project mutation via publishAssignments(), and the five
+// profile-only paths that call remoteEngine_.setProfiles() without it)
+// (see docs/control/midi-remote-ui.md#the-controllers-panel).
 // ============================================================================
 
 TEST_F(MidiLearnControllerTest, OnChangedFiresOnLearn) {
@@ -835,7 +835,7 @@ TEST_F(MidiLearnControllerTest, OnChangedFiresOnEveryProfileOnlyMutation) {
 }
 
 // ============================================================================
-// FRO134: add / import / updateControl
+// Add / import / updateControl
 // ============================================================================
 
 TEST_F(MidiLearnControllerTest, AddProfileSavesPublishesAndRefusesDuplicatesAndEmptyIds) {

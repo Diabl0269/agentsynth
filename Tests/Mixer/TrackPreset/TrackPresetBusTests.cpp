@@ -1,4 +1,4 @@
-// Concern: FRO297 (docs/mixer/track-presets.md#a-third-kind-bus) -- the third TrackPresetKind, Bus:
+// Concern: (docs/mixer/track-presets.md#a-third-kind-bus) -- the third TrackPresetKind, Bus:
 // a bus's channel macro (no bound timeline track) saved and re-inserted with its effects/params
 // intact, still classifying as a bus (synth::isBusStrip) on the far side even though the scrubbed
 // saved JSON carries no "isBus"/"sends" (TrackPresetManager.cpp's own scrub, unchanged by this

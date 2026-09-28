@@ -1,6 +1,6 @@
 #pragma once
 
-// MixerOwnPanelTestFixture.h -- FRO231. Shared by MixerOwnPanelResizeTests.cpp and
+// MixerOwnPanelTestFixture.h -- shared by MixerOwnPanelResizeTests.cpp and
 // MixerOwnPanelSlideTests.cpp (header-only; not compiled on its own, not in Tests/CMakeLists.txt).
 // A real off-screen MainComponent in "Own panel" placement, with the on-disk settings keys the
 // placement, the dock and the Own panel's height persist under reset before AND after each test.

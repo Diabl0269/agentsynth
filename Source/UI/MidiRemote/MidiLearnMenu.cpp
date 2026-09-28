@@ -1,5 +1,5 @@
-// Extracted from ModuleComponent (FRO130, which built the module-card-only version of all three
-// functions below) so the mixer column and the transport bar (FRO133) call the SAME code instead
+// Extracted from ModuleComponent (which had the module-card-only version of all three
+// functions below) so the mixer column and the transport bar call the SAME code instead
 // of a second implementation. Deliberately holds only the pieces that need no registry of their
 // own -- each surface keeps its OWN MidiLearnableRegistry-shaped type
 // (ModuleComponent::MidiLearnableRegistry, MixerColumnComponent's, TimelineTransportBar's),

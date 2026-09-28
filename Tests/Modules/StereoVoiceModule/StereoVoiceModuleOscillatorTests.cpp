@@ -1,4 +1,4 @@
-// Oscillator channel-map and DSP tests for the L/R stereo split on voice modules (issue #219);
+// Oscillator channel-map and DSP tests for the L/R stereo split on voice modules;
 // see StereoVoiceModuleTestHelpers.h for the shared render/measurement helpers.
 
 #include "Modules/OscillatorModule.h"
@@ -16,7 +16,7 @@ TEST(OscillatorStereo, AudioRLivesAboveTheCVBlockNotOnChannelOne) {
     EXPECT_EQ(OscillatorModule::kNumOutputs, 22);
 
     OscillatorModule osc;
-    // FRO314: grew 14 -> 16 (Unison/Detune CV, appended). kRightBase/kNumOutputs above are
+    // Grew 14 -> 16 (Unison/Detune CV, appended). kRightBase/kNumOutputs above are
     // unaffected -- they are a LITERAL, not derived from the input count (see the class-level
     // channel-map comment on OscillatorModule::kRightBase) -- so existing routings into/out of
     // Audio R still key off the same raw channel.
@@ -43,9 +43,8 @@ TEST(OscillatorStereo, ChannelOneStaysWaveformCVAndNeverAdvertisesItselfAsAudioR
 TEST(OscillatorStereo, ExistingCVTargetChannelsAreUnchangedAndPanIsAppended) {
     OscillatorModule osc;
 
-    // Mono: every pre-#219 target keeps its raw channel; Pan takes ch6, which was already declared
-    // and unused.
-    // FRO314 appended Unison/Detune (ch14/15, same raw channel in both voice modes).
+    // Mono: every other target keeps its own raw channel; Pan takes ch6.
+    // Unison/Detune are ch14/15, same raw channel in both voice modes).
     const std::vector<std::pair<juce::String, int>> expectedMono = {{"Pitch", 0},  {"Waveform", 1}, {"Octave", 2},
                                                                     {"Coarse", 3}, {"Fine", 4},     {"Level", 5},
                                                                     {"Pan", 6},    {"Unison", 14},  {"Detune", 15}};

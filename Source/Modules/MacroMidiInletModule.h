@@ -4,7 +4,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 /**
- * @brief "Macro MIDI In" — a MIDI inlet jack on a Macro's boundary (P8-15 Macro I/O,
+ * @brief "Macro MIDI In" — a MIDI inlet jack on a Macro's boundary (Macro I/O,
  * docs/macros/ports.md, docs/macros/ports.md#node-types's MIDI-port decision).
  *
  * A SEPARATE type from MacroInlet rather than a "kind" flag on one type — the same shape of

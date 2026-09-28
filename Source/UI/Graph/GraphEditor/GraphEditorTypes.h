@@ -1,7 +1,7 @@
 // GraphEditorTypes.h
 //
-// Nested value types GraphEditor exposed as GraphEditor::X, moved out to their own header (FRO77
-// PR3 header-trim, rule 4) purely to shrink GraphEditor.h — no behavior change. GraphEditor.h
+// Nested value types GraphEditor exposed as GraphEditor::X, kept in their own header to keep
+// GraphEditor.h small. GraphEditor.h
 // pulls this in and re-exposes each type via a `using` alias, so every existing `GraphEditor::X`
 // spelling (callers, tests) keeps compiling unchanged.
 #pragma once
@@ -13,11 +13,11 @@
 
 namespace graph_editor_types {
 
-// ---- Locate Master (FRO45) -----------------------------------------------------------------
-// Founder feedback on T183's live check: once Master and Audio Output exist (T187 seeds an Audio
-// Output on New Patch), auto-arrange or a drag can leave them anywhere on the canvas. This is the
-// lightweight canvas-only stopgap — the durable answer is the future mixer panel (P9-5,
-// docs/mixer/mixer.md), not built here.
+// ---- Locate Master -------------------------------------------------------------------------
+// Once Master and Audio Output exist (New Patch seeds an Audio
+// Output), auto-arrange or a drag can leave them anywhere on the canvas. This is the
+// lightweight canvas-only stopgap — the durable answer is the mixer panel
+// (docs/mixer/mixer.md), not built here.
 enum class LocateMasterResult {
     NoTarget,   // neither node exists yet — graceful no-op
     Master,     // Master was selected and brought into view
@@ -36,7 +36,7 @@ struct PolyLink {
     int sourceStride = 1;
 };
 
-// ---- Cables (issue #157) --------------------------------------------------------------------
+// ---- Cables ---------------------------------------------------------------------------------
 // A "cable" is one wire as the USER sees it, which is not the same thing as a graph edge: an
 // attenuverter chain is two edges plus a hidden node, and a poly bus is N edges. Both render as a
 // single wire, so anything that identifies, hit-tests, or colours a cable has to key on this
@@ -79,7 +79,7 @@ struct VisibleCable {
     int voiceCount = 1;       // PolyBus bundle size (badge)
     float attenAmount = 0.0f; // AttenuverterChain knob value, -1..1
 
-    // FRO288: the logical destination, RAW channel (matches ModulationTarget::channelIndex /
+    // The logical destination, RAW channel (matches ModulationTarget::channelIndex /
     // ModulationRouting::destChannelIndex — NOT dstPort, a visible jack index) — set for every
     // cable kind, since it also doubles as the hover-correlation key. landsOnKnob is true only when
     // an AttenuverterChain cable's p2 was re-anchored onto its target knob's ring start point

@@ -261,7 +261,7 @@ TEST_F(AudioEngineModRoutingTests, DirectCVRoutingProducesDisplayInfo) {
         << "Expected at least one ModulationDisplayInfo for VCA destChannelIndex==8 (ADSR->VCA poly bus)";
 }
 
-// FRO287: ModulationDisplayInfo::amount/sourceBipolar, which the depth band is drawn from.
+// ModulationDisplayInfo::amount/sourceBipolar, which the depth band is drawn from.
 TEST_F(AudioEngineModRoutingTests, DisplayInfoAmountReadsTheAttenuverterAndSourceBipolarReadsTheLfo) {
     auto& graph = engine.getGraph();
     auto lfoNode = graph.addNode(std::make_unique<LFOModule>());

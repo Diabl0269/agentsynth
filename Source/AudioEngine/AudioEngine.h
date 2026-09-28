@@ -58,10 +58,10 @@ public:
     void setSavedDeviceState(std::unique_ptr<juce::XmlElement> state);
     bool hasSavedDeviceState() const noexcept { return savedDeviceState_ != nullptr; }
 
-    // FRO27: false when there is no saved state. See the .cpp definition.
+    // False when there is no saved state. See the .cpp definition.
     bool savedDeviceStateEnablesInput() const;
 
-    // Standalone only; call before initialise(). Skips opening any audio/MIDI device (automation launch, FRO29).
+    // Standalone only; call before initialise(). Skips opening any audio/MIDI device (automation launch).
     void setAudioDeviceDisabled(bool disabled) noexcept;
     bool isAudioDeviceDisabled() const noexcept;
 
@@ -76,7 +76,7 @@ public:
     // what keeps an untouched install on the legacy defaults path above. Owners must null-check.
     std::function<void(std::unique_ptr<juce::XmlElement>)> onDeviceStateChanged;
 
-    // MESSAGE THREAD. Fires when reconcileMidiInputs() (FRO262) changes what's open; never in Hosted mode.
+    // MESSAGE THREAD. Fires when reconcileMidiInputs() changes what's open; never in Hosted mode.
     std::function<void()> onMidiDevicesChanged;
 
     // MESSAGE THREAD, installed by the OWNER before initialise(). Fires as the very first thing
@@ -86,7 +86,7 @@ public:
     // SliderParameterAttachment holds a raw AudioProcessorParameter pointer) BEFORE those
     // parameters go away, so shutdown() is safe to call directly from any caller -- a test, or a
     // future/hosted code path -- without that caller having to separately remember to detach UI
-    // first (FRO87: a heap-use-after-free reached exactly this way, calling shutdown() on an
+    // first (a heap-use-after-free reached exactly this way, calling shutdown() on an
     // externally-owned Hosted-mode engine while a MainComponent built around it was still alive).
     // Parallel to GraphEditor::onBeforeDetachAllModuleComponents (Source/UI/Graph/GraphEditor/
     // GraphEditorCanvas.cpp), which plays the same role one layer up the call chain.
@@ -148,7 +148,7 @@ public:
     void setMasterMute(bool muted) noexcept;
     bool isMasterMuted() const noexcept;
 
-    // FRO325 (docs/mixer/mixer.md#pan-law): the project's mixer pan law; see the .cpp definition.
+    // The project's mixer pan law; see the .cpp definition and docs/mixer/mixer.md#pan-law.
     void setMixerPanLaw(synth::MixerPanLaw law) noexcept;
     synth::MixerPanLaw getMixerPanLaw() const noexcept;
 
@@ -172,16 +172,16 @@ public:
     // MESSAGE THREAD. Re-publishes which modules have a cable on a Sidechain (Key) input.
     void refreshSidechainKeys();
 
-    // ---- Right-borrows-Left normalling (FRO324, docs/architecture/audio-engine.md#normalling-fro324) ----
+    // ---- Right-borrows-Left normalling (docs/architecture/audio-engine.md#normalling-fro324) ------------
     // MESSAGE THREAD. See AudioEngineTimelinePublish.cpp for every call site.
     void refreshNormalling();
     bool isOutputRightNormalledFromLeft() const noexcept {
         return outputRightNormalledFromLeft_.load(std::memory_order_relaxed);
     }
 
-    // FRO148 (docs/mixer/meters.md): the level leaving the WHOLE graph -- post-graph, pre-metronome -- for the Master
-    // column once it has inserts (a post-fader limiter's ceiling shows here, not in MasterModule's own pre-insert
-    // latch). Consume-on-read per MeterReader, like MasterModule::takeMeterPeak; leg 0 = Left, 1 = Right. Any thread.
+    // The level leaving the WHOLE graph -- post-graph, pre-metronome -- for the Master column once it has inserts (a
+    // post-fader limiter's ceiling shows here, not in MasterModule's own pre-insert latch). Consume-on-read per
+    // MeterReader, like MasterModule::takeMeterPeak; leg 0 = Left, 1 = Right. Any thread (see docs/mixer/meters.md).
     float takeOutputMeterPeak(synth::MeterReader reader, int leg) noexcept {
         return outputMeterLatches_[leg == 1 ? 1 : 0].takePeak(reader);
     }
@@ -512,7 +512,7 @@ private:
     bool deviceCallbackAttached_ = false;
 
     std::atomic<bool> masterMuted_{false};
-    std::atomic<synth::MixerPanLaw> mixerPanLaw_{synth::MixerPanLaw::Balance}; // FRO325; see setMixerPanLaw()
+    std::atomic<synth::MixerPanLaw> mixerPanLaw_{synth::MixerPanLaw::Balance}; // See setMixerPanLaw()
     std::atomic<bool> transportEnabled_{true};
     // Message-thread writes (MainComponent's poll) and audio-thread writes (the guard, on a
     // trip); read on the audio thread each render pass to publish to the transport carrier, and on
@@ -523,7 +523,7 @@ private:
     // audio-thread reads (renderPass). See refreshSoloGate().
     std::atomic<int> soloedStripCount_{0};
 
-    // FRO324: whether Audio Output's Right currently borrows Left. Message-thread writes
+    // Whether Audio Output's Right currently borrows Left. Message-thread writes
     // (refreshNormalling), audio-thread reads (renderNextBlock, right after the render pass). See
     // refreshNormalling().
     std::atomic<bool> outputRightNormalledFromLeft_{false};
@@ -567,7 +567,7 @@ private:
     // Borrowed, never owned. Read on the MIDI driver thread or the audio thread; null = idle.
     std::atomic<synth::midi::RemoteMessageSink*> remoteMessageSink_{nullptr};
     // ScopedRemoteSinkCall's in-flight count; drainRemoteSinkCalls() waits for this to reach 0
-    // after setRemoteMessageSink() clears the pointer (FRO197).
+    // after setRemoteMessageSink() clears the pointer.
     std::atomic<int> remoteSinkCallsInFlight_{0};
     // Render passes entered / left, bumped on the way into and out of renderNextBlock so the gap
     // between them is exactly the window in which the two borrowed pointers above are read and
@@ -671,7 +671,7 @@ private:
     // AUDIO THREAD, once per render pass. Points the transport at this pass's slice of the capture.
     void publishDeviceInputForPass(int sampleOffset, int numSamples) noexcept;
 
-    // FRO148: audio thread stores once per graph pass (AudioEngineRenderPass.cpp); see takeOutputMeterPeak().
+    // Audio thread stores once per graph pass (AudioEngineRenderPass.cpp); see takeOutputMeterPeak().
     std::array<synth::PeakMeterLatch, 2> outputMeterLatches_;
 
     // The feedback guard itself. Called from renderPass, post-graph and pre-master-mute
@@ -691,7 +691,7 @@ private:
     juce::MidiMessageCollector midiMessageCollector;
     std::vector<std::unique_ptr<juce::MidiInput>> midiInputs;
 
-    // MESSAGE THREAD, Standalone only (FRO262). Returns whether the open set changed.
+    // MESSAGE THREAD, Standalone only. Returns whether the open set changed.
     bool reconcileMidiInputs();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioEngine)

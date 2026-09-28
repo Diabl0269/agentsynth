@@ -1,4 +1,4 @@
-// Concern: FRO11 (P9-5) -- MixerInsertList's paint, right-click menus and the three mutations
+// Concern: MixerInsertList's paint, right-click menus and the three mutations
 // (add/reorder/remove), each ONE recordGraphAndMacroChange around MixerModel's Core splice
 // primitives.
 #include "MixerInsertList.h"
@@ -14,7 +14,7 @@ namespace {
 
 // The insert-eligible effects the add menu offers -- a curated stereo-in/stereo-out set rather than the plan's "reuse
 // the module library's full category/search picker" (see the PR description's deviations): this ticket's own budget
-// did not fit a second copy of that picker's UI. FRO148: "Limiter" and "Gate" join the set (the Master column's
+// did not fit a second copy of that picker's UI. "Limiter" and "Gate" join the set (the Master column's
 // post-fader ceiling, and a strip's gate); the names are the factory's display names (AIStateMapper::createModule).
 const juce::StringArray kAddableModuleTypes{"Parametric EQ", "Compressor", "Limiter", "Gate",
                                             "Distortion",    "Chorus",     "Phaser",  "Flanger"};
@@ -54,7 +54,7 @@ void MixerInsertList::rebuildRowAccessibilityProxies() {
     rowProxies_.clear();
     for (const auto& entry : entries_) {
         auto proxy = std::make_unique<RowAccessibilityProxy>();
-        // FRO228: an overlay purely for accessibility -- mouseDown() above still owns every real
+        // An overlay purely for accessibility -- mouseDown() above still owns every real
         // click via rowIndexAt()/hit-testing on `this`, unchanged.
         proxy->setInterceptsMouseClicks(false, false);
         proxy->setTitle(entry.bypassed ? entry.name + ", bypassed" : entry.name);
@@ -82,7 +82,7 @@ void MixerInsertList::paint(juce::Graphics& g) {
     const auto disabled = laf != nullptr ? laf->getTheme().colors.textDisabled : juce::Colour(0xff5C6470);
     const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
 
-    // FRO15 fix: the empty-state placeholder always occupies row 0 (jmax(1, size) below matches
+    // The empty-state placeholder always occupies row 0 (jmax(1, size) below matches
     // getPreferredHeight()'s own row count), so anchor the "Edit on canvas" link AFTER it rather
     // than at entries_.size() * kRowHeight -- with zero entries that was also 0, drawing both texts
     // in the same row on top of each other (a bus with no inserts and a branching chain, before the
@@ -187,8 +187,8 @@ void MixerInsertList::moveRow(int rowIndex, int delta) {
     const auto predecessorId = insertAt == 0 ? sourceNodeId_ : without[(size_t)insertAt - 1].nodeId;
     const auto successorId = insertAt >= (int)without.size() ? stripNodeId_ : without[(size_t)insertAt].nodeId;
 
-    // FRO15: a bus's own chain has no external source (sourceNodeId_ stays invalid -- nothing feeds
-    // its EQ from outside, docs/mixer/sends-and-buses.md D6), so moving a row to the very front would ask
+    // A bus's own chain has no external source (sourceNodeId_ stays invalid -- nothing feeds
+    // its EQ from outside, docs/mixer/sends-and-buses.md), so moving a row to the very front would ask
     // spliceInInsert to splice against a predecessor that doesn't exist. reorderInsert's second step
     // (spliceInInsert) has no rollback of its own on failure, so refuse up front -- same "nothing
     // changed" guard addModule already applies for its own empty-chain edge case -- rather than leave
@@ -208,7 +208,7 @@ void MixerInsertList::removeRow(int rowIndex) {
     mutateAndNotify([&] {
         if (!synth::spliceOutInsert(*graph_, nodeId))
             return false;
-        // FRO16 UAF fix: unbind any UI object holding a raw pointer into `nodeId` (the column's
+        // Unbind any UI object holding a raw pointer into `nodeId` (the column's
         // own MixerEqThumbnail, if this is its bound EQ) BEFORE removeNode() frees the processor
         // it points at -- see onBeforeNodeRemoved's own comment.
         if (onBeforeNodeRemoved)
@@ -222,7 +222,7 @@ void MixerInsertList::removeRow(int rowIndex) {
 void MixerInsertList::addModule(const juce::String& moduleTypeName) {
     if (entries_.empty() && sourceNodeId_ == juce::AudioProcessorGraph::NodeID{})
         return;
-    // FRO148: nothing to splice in front of -- e.g. a Master column whose output never reaches a Rec Tap / Audio
+    // Nothing to splice in front of -- e.g. a Master column whose output never reaches a Rec Tap / Audio
     // Output.
     if (stripNodeId_ == juce::AudioProcessorGraph::NodeID{})
         return;

@@ -1,4 +1,4 @@
-// synth::StemSession stem-file naming (FRO55, docs/mixer/stem-export.md): each stem is named after the
+// synth::StemSession stem-file naming (docs/mixer/stem-export.md): each stem is named after the
 // ONE TimelineMidiSource/TimelineAudioSource ("Track In"/"Track Audio") track whose signal feeds
 // that strip, walked upstream through the graph transitively (through an EQ/Compressor, the way
 // buildDefaultAudioChannel's own chain does — Source/Mixer/ChannelFlows/ChannelFlows.cpp), not the strip's own
@@ -104,7 +104,7 @@ BounceOptions oneBeatOptions() {
 
 struct ScopedTempDir {
     // Unique per instance: CI runs the suite as parallel shard processes, and a fixed name let two
-    // shards wipe each other's files mid-test (FRO322).
+    // shards wipe each other's files mid-test.
     explicit ScopedTempDir(const juce::String& name)
         : dir(juce::File::getSpecialLocation(juce::File::tempDirectory)
                   .getChildFile(name + "_" + juce::Uuid().toString())) {
@@ -282,7 +282,7 @@ TEST(StemExportNamingTest, DuplicateTrackNamesStillProduceUniqueStemFiles) {
 }
 
 // ============================================================================
-// 5. FRO225 (docs/mixer/panel.md, docs/mixer/stem-export.md): a strip's own persisted name wins
+// 5. (docs/mixer/panel.md, docs/mixer/stem-export.md): a strip's own persisted name wins
 //    ahead of the track-walk rule above, and an empty (unset) one falls straight back to it.
 // ============================================================================
 

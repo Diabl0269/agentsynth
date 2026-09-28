@@ -1,4 +1,4 @@
-// Concern: FRO11 (P9-5) -- MixerPanelComponent's rebuild-from-snapshot and click-to-select-macro
+// Concern: MixerPanelComponent's rebuild-from-snapshot and click-to-select-macro
 // routing (shared by every column kind's onColumnClicked/onEditOnCanvas/onMakeChannelRequested).
 #include "MixerPanelComponent.h"
 
@@ -21,7 +21,7 @@ constexpr int kColumnGap = 4;
 // Horizontal step between the four cards a new bus channel places on the canvas.
 constexpr int kBusCardGap = 220;
 
-// FRO299: "+ Bus" only exists on BottomDockComponent's tab strip, shown only while the Mixer tab
+// "+ Bus" only exists on BottomDockComponent's tab strip, shown only while the Mixer tab
 // is the active, enabled tab there (BottomDockComponent::updateTabVisuals's own `mixerActive`) --
 // MixerPlacementController::applyPlacement disables that tab for both the Own-panel and detached
 // Window placements, so this panel (shared by all three placements) cannot name a location that is
@@ -33,7 +33,7 @@ const char* const kEmptyHintText =
 } // namespace
 
 MixerPanelComponent::MixerPanelComponent() {
-    // FRO18: the mixer's own keyboard-focus region ROOT (docs/control/shortcuts.md's "Mixer column
+    // The mixer's own keyboard-focus region ROOT (docs/control/shortcuts.md's "Mixer column
     // navigation") -- every child control gives up keyboard focus (see MixerColumnComponent's own
     // ctor comment), so this panel must claim it instead, or grabKeyboardFocus() has nothing to
     // land on.
@@ -42,7 +42,7 @@ MixerPanelComponent::MixerPanelComponent() {
     viewport_.setViewedComponent(&content_, false);
     viewport_.setScrollBarsShown(false, true);
 
-    // FRO299: a direct child of THIS panel, not content_/viewport_ (which scroll and would clip or
+    // A direct child of THIS panel, not content_/viewport_ (which scroll and would clip or
     // slide it). This panel is the single focusable leaf, so the hint is purely decorative: no
     // keyboard focus, no mouse hit-testing.
     addChildComponent(emptyHint_);
@@ -55,7 +55,7 @@ MixerPanelComponent::MixerPanelComponent() {
 
 MixerPanelComponent::~MixerPanelComponent() = default;
 
-// FRO336: `meterReader` defaults to the pre-existing `MeterReader::Mixer` slot -- the Mixer's
+// `meterReader` defaults to the pre-existing `MeterReader::Mixer` slot -- the Mixer's
 // optional second live view (MixerMirrorController) passes `MeterReader::MixerMirror` instead, so
 // its columns' meter polls never race the docked view's for the same consume-on-read latch slot
 // (Source/Mixer/PeakMeterLatch.h). Threaded straight through to every strip/Master column configure()
@@ -78,7 +78,7 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
     };
     masterColumn_ = std::make_unique<MixerMasterColumn>();
     masterColumn_->configure(graph, undoManager, macros, graphEditor, audioEngine, meterReader_);
-    // FRO148: post-insert level for the Master meter once the chain has inserts (docs/mixer/meters.md).
+    // Post-insert level for the Master meter once the chain has inserts (docs/mixer/meters.md).
     masterColumn_->outputPeakProvider = [this](int leg) -> float {
         return audioEngine_ != nullptr ? audioEngine_->takeOutputMeterPeak(meterReader_, leg) : 0.0f;
     };
@@ -87,7 +87,7 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
         if (onGraphMutated)
             onGraphMutated();
     };
-    // FRO336: onLiveMixerStateChanged is deliberately NOT in copyWiringFrom()'s blanket copy below --
+    // onLiveMixerStateChanged is deliberately NOT in copyWiringFrom()'s blanket copy below --
     // each instance's own copy must reach its SIBLING's refreshLiveMixerVisuals() (BottomDockComponent/
     // MixerMirrorController do that cross-wire), never its own, or an instance would refresh itself
     // instead of the other live view.
@@ -98,7 +98,7 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
     masterColumn_->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
 }
 
-// FRO336: everything MainComponent wires directly onto a panel instance (never touched by
+// Everything MainComponent wires directly onto a panel instance (never touched by
 // configure() above, which only wires the panel's OWN internal callbacks) -- the one-shot setup a
 // freshly created MixerMirrorController view needs so a right-click MIDI-learn menu, solo-learn
 // arming, MIDI Remote doc lookups and the M/S/R keyboard shortcuts all resolve the same way the
@@ -145,10 +145,10 @@ void MixerPanelComponent::rebuild() {
         return;
 
     // Every column below is built and bound fresh, so whatever unbindAllColumns() detached is
-    // live again once this returns (FRO103).
+    // live again once this returns.
     columnsUnbound_ = false;
 
-    // FRO18: capture the currently focused column's IDENTITY before the columns it points at are
+    // Capture the currently focused column's IDENTITY before the columns it points at are
     // destroyed below -- resolveFocusAfterRebuild() re-finds it afterwards by identity (uuid, or
     // kind alone for Direct), never by the raw index, which an unrelated strip insert/removal
     // elsewhere in the column order would otherwise silently reattach to the wrong column.
@@ -163,7 +163,7 @@ void MixerPanelComponent::rebuild() {
     stripColumns_.clear();
     for (const auto& column : snapshot.columns) {
         // Strips AND buses: a bus is an ordinary strip column with a BUS badge and a feeding-strips
-        // source line (docs/mixer/sends-and-buses.md D6), not a column kind of its own with its own widget.
+        // source line (docs/mixer/sends-and-buses.md), not a column kind of its own with its own widget.
         if (column.kind != synth::MixerColumn::Kind::Strip && column.kind != synth::MixerColumn::Kind::Bus)
             continue;
         auto widget = std::make_unique<MixerColumnComponent>();
@@ -195,7 +195,7 @@ void MixerPanelComponent::rebuild() {
                 onLiveMixerStateChanged();
         };
         widget->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
-        // FRO253: forwards this panel's single set of Solo-learn callbacks down to the column,
+        // Forwards this panel's single set of Solo-learn callbacks down to the column,
         // filling in the nodeId each column already knows about itself -- see this class's own
         // onSoloMidiLearnRequested/onSoloMidiForgetRequested/onQuerySoloMidiMapping doc comments.
         widget->onSoloMidiLearnRequested = [this, nodeId = column.nodeId] {
@@ -253,7 +253,7 @@ void MixerPanelComponent::rebuild() {
         }
     }
 
-    // FRO299: an empty graph (no strips, no Direct, no Master -- a brand-new project) otherwise
+    // An empty graph (no strips, no Direct, no Master -- a brand-new project) otherwise
     // rendered a blank panel with nothing telling the user how to get started.
     emptyHint_.setVisible(columnEntries_.empty());
 
@@ -296,10 +296,11 @@ juce::AudioProcessorGraph::NodeID MixerPanelComponent::createBus() {
     return created;
 }
 
-// FRO296 (docs/mixer/sends-and-buses.md#reordering-sends): this is the one place graph, TimelineDoc
-// AND macros are all reachable at once, so the physical slot swap (synth::moveSendRow) and every
-// automation lane it carries along (TimelineDoc::swapLaneParams) land in a SINGLE
-// AppUndoManager::recordGraphTimelineAndMacroChange step.
+// This is the one place graph, TimelineDoc AND macros are all reachable at once, so the physical
+// slot swap (synth::moveSendRow) and every automation lane it carries along
+// (TimelineDoc::swapLaneParams) land in a SINGLE
+// AppUndoManager::recordGraphTimelineAndMacroChange step
+// (see docs/mixer/sends-and-buses.md#reordering-sends).
 bool MixerPanelComponent::moveSendRow(juce::AudioProcessorGraph::NodeID stripNodeId, int fromRow, int toRow) {
     if (graph_ == nullptr || doc_ == nullptr || macros_ == nullptr || undoManager_ == nullptr ||
         graphEditor_ == nullptr || fromRow == toRow)
@@ -312,7 +313,7 @@ bool MixerPanelComponent::moveSendRow(juce::AudioProcessorGraph::NodeID stripNod
             return;
         changed = true;
 
-        // FRO296: replay the exact same slot-swap sequence against every automation lane AND every
+        // Replay the exact same slot-swap sequence against every automation lane AND every
         // MIDI Learn assignment bound to either swapped slot's sendNLevel/sendNPan, inside the SAME
         // transaction -- a send's lane and its hardware mapping both follow it, same as its cables
         // and parameter values (docs/mixer/sends-and-buses.md#reordering-sends).
@@ -396,7 +397,7 @@ void MixerPanelComponent::clearMidiLearnArmed() {
     midiLearnArmedNodeId_ = {};
 }
 
-// FRO253: mirrors setMidiLearnArmed()/clearMidiLearnArmed() above -- kept as a separate
+// Mirrors setMidiLearnArmed()/clearMidiLearnArmed() above -- kept as a separate
 // nodeId-keyed pair rather than overloading paramId with a sentinel, since Solo has no
 // juce::RangedAudioParameter identity to key on. Master has no Solo button (MixerMasterColumn.h),
 // so only strip columns are ever touched.
@@ -414,7 +415,7 @@ void MixerPanelComponent::clearMidiLearnArmedSolo() {
     midiLearnArmedSoloNodeId_ = {};
 }
 
-// FRO135: the pick-target overlay's view of the mixer -- every strip column, plus Master's fader.
+// The pick-target overlay's view of the mixer -- every strip column, plus Master's fader.
 // The Direct column has nothing learnable. Columns that are not showing are skipped by the overlay.
 void MixerPanelComponent::collectPickCandidates(std::vector<PickCandidate>& out) const {
     for (const auto& column : stripColumns_)
@@ -424,7 +425,7 @@ void MixerPanelComponent::collectPickCandidates(std::vector<PickCandidate>& out)
         masterColumn_->collectPickCandidates(out);
 }
 
-// FRO253/FRO336: called after something OTHER than a click on THIS instance changed mute/solo/
+// Called after something OTHER than a click on THIS instance changed mute/solo/
 // pan-law -- a hardware nodeCommand press (MainComponentRemoteActionInvoker::invokeNodeCommand,
 // via BottomDockComponent::refreshLiveMixerVisualsEverywhere()) or a sibling live view's own
 // interactive change (onLiveMixerStateChanged, cross-wired in BottomDockComponent/
@@ -472,7 +473,7 @@ void MixerPanelComponent::resetAllMeterReadouts() {
 void MixerPanelComponent::resized() {
     viewport_.setBounds(getLocalBounds());
 
-    // FRO299: same "muted" colour source as MixerInsertList::paint()'s empty-state text -- resolved
+    // Same "muted" colour source as MixerInsertList::paint()'s empty-state text -- resolved
     // here (rather than once in the ctor) so a theme switch's re-skin pass is picked up the next
     // time this panel lays out, the same staleness window MixerColumnHeader/sourceLineLabel_ accept
     // for their own theme-derived text colours.

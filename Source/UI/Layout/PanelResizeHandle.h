@@ -5,7 +5,7 @@
 
 namespace synth::ui {
 
-// PanelResizeHandle.h -- FRO231: a top-edge drag strip that resizes a bottom-anchored panel.
+// PanelResizeHandle.h: a top-edge drag strip that resizes a bottom-anchored panel.
 //
 // A standalone child the panel's owner places along the panel's TOP edge (setBounds(0, 0, width,
 // kHeight), added last so it wins the hit test over whatever chrome it overlaps). It never sizes

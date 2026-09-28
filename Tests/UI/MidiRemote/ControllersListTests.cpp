@@ -1,4 +1,4 @@
-// ControllersListTests.cpp -- FRO131 (docs/control/midi-remote-ui.md#controllers-list-left):
+// ControllersListTests.cpp (docs/control/midi-remote-ui.md#controllers-list-left):
 // headless tests for ControllersListComponent, driven through its REAL mouseDown() override with
 // synthesized juce::MouseEvents -- the "test the real mouse path" convention (Source/UI/CLAUDE.md,
 // Tests/UI/Mixer/MixerColumnComponentTests.cpp / Tests/UI/Graph/ModuleComponent/
@@ -356,7 +356,7 @@ TEST_F(ControllersListComponentTest, DeleteConfirmMessageSingularAndZeroPhrasing
 }
 
 // ============================================================================
-// FRO134: "+ Add controller"
+// "+ Add controller"
 // ============================================================================
 
 TEST_F(ControllersListComponentTest, AddControllerFooterFiresTheCallbackWithItsButtonAndCanBeHidden) {
@@ -383,7 +383,7 @@ TEST_F(ControllersListComponentTest, AddControllerFooterFiresTheCallbackWithItsB
 }
 
 // ============================================================================
-// FRO139 (docs/control/midi-remote.md#controller-feedback): "Send feedback to" submenu
+// "Send feedback to" submenu (see docs/control/midi-remote.md#controller-feedback)
 // ============================================================================
 
 // triggerMenuItem's plain (non-recursive) MenuItemIterator can't reach into a submenu -- this finds

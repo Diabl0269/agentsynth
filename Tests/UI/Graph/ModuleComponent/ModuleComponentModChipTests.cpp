@@ -1,4 +1,4 @@
-// FRO288: the hover chip's text formatting (formatModHoverChipText, ModuleComponentModChip.h) --
+// The hover chip's text formatting (formatModHoverChipText, ModuleComponentModChip.h) --
 // no ModuleComponent, no LookAndFeel, no graph. See ModuleComponentModBandTests.cpp for the sibling
 // depth-band geometry test and its own file-header note on the split.
 

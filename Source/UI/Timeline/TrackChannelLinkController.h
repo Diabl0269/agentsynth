@@ -7,7 +7,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <map>
 
-// TrackChannelLinkController.h -- FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): the app-side half
+// TrackChannelLinkController.h (docs/mixer/mixer.md#channels-follow-audio-not-tracks): the app-side half
 // of the track
 // <-> channel link. The rule itself is Core (Source/Mixer/TrackChannelLink.h, a pure query); this
 // class is what ACTS on it -- renaming both sides, fanning a live colour preview out over track and
@@ -71,7 +71,7 @@ public:
      *  note gating simply resumes for them. */
     void reconcileLinkedTracks();
 
-    /** FRO11 (P9-5): the mixer panel's own reveal, installed once the panel exists (wired in
+    /** The mixer panel's own reveal, installed once the panel exists (wired in
      *  MainComponent::wireTimelinePanelServicesAndShortcuts, the same late-setter pattern
      *  timelinePanel.setShortcutManager already uses). Takes the resolved strip's NodeID and opens/
      *  focuses its mixer column, returning true on success; revealChannelForTrack() falls back to

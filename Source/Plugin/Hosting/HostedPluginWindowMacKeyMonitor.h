@@ -10,7 +10,7 @@ namespace synth {
 
 class HostedPluginEditorWindow;
 
-// FRO337: RAII wrapper around a local NSEvent keyDown monitor scoped to one
+// RAII wrapper around a local NSEvent keyDown monitor scoped to one
 // HostedPluginEditorWindow's own NSWindow, handling Cmd+W only — see HostedPluginWindowMacKeyMonitor.mm
 // for the rationale (Cmd+W is a key equivalent the app's own menus would otherwise claim before
 // AppKit's normal responder-chain delivery ever reaches a plugin's own native NSView editor; Esc is

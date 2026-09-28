@@ -5,7 +5,7 @@
 #include <memory>
 #include <vector>
 
-// The Settings "Audio" tab: JUCE's stock device selector, plus (FRO136,
+// The Settings "Audio" tab: JUCE's stock device selector, plus (
 // docs/control/midi-remote-ui.md#settings) one caption under it naming the MIDI controllers that have
 // a MIDI Remote profile. The stock selector's MIDI-input checklist can't be decorated per device, and
 // its ticks mean "feeds the patch" -- a profiled controller is opened for MIDI Remote regardless -- so

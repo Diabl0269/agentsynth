@@ -1,9 +1,9 @@
-// FRO141 (docs/control/midi-remote.md#focus-bank): RemoteEngine::setTransientAssignments and the
-// explicit-wins/page-independence rules in RemoteEngineReconcile.cpp's addSlot/
-// transientBlockedByExplicit. Mirrors RemoteEnginePagesTests.cpp's harness (one real
-// AudioProcessorGraph + FilterModule node, fake clock) so a transient binding really moves a real
-// juce::AudioProcessorParameter through handleMessage()/drain(). Suite name contains "MidiRemote"
-// per the ship-task --gtest_filter convention.
+// RemoteEngine::setTransientAssignments and the explicit-wins/page-independence rules in
+// RemoteEngineReconcile.cpp's addSlot/transientBlockedByExplicit. Mirrors
+// RemoteEnginePagesTests.cpp's harness (one real AudioProcessorGraph + FilterModule node, fake
+// clock) so a transient binding really moves a real juce::AudioProcessorParameter through
+// handleMessage()/drain(). Suite name contains "MidiRemote" per the ship-task --gtest_filter
+// convention (see docs/control/midi-remote.md#focus-bank).
 
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "Modules/FilterModule.h"
@@ -45,7 +45,7 @@ Control makeBankControl(MessageType type, int channel, int number) {
     return c;
 }
 
-// FRO141: mirrors MidiLearnController::rebuildFocusBankAssignments' shape -- id
+// Mirrors MidiLearnController::rebuildFocusBankAssignments' shape -- id
 // "focus:<profileId>:<controlId>", spec/encoding from the control, target = parameter.
 Assignment makeTransient(const Control& control, const juce::String& paramId, int page = 1) {
     Assignment a;
@@ -61,7 +61,7 @@ Assignment makeTransient(const Control& control, const juce::String& paramId, in
     a.target.parameter.paramId = paramId;
     a.takeover = Takeover::useDefault;
     a.enabled = true;
-    a.page = page; // FRO141: irrelevant to the engine's transient handling -- see the doc's own note
+    a.page = page; // irrelevant to the engine's transient handling -- see the doc's own note
     return a;
 }
 

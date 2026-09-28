@@ -1,17 +1,16 @@
 // GraphEditorMacroApi.cpp
 //
-// FRO254: this file used to hold GraphEditor's one-line macro forwarders onto macroController_
-// (FRO77 PR2 / FRO91 lever E). Every call site now reaches MacroGroupController directly, either
-// through GraphEditor::getMacroController() (external callers) or the macroController_ member
-// itself (GraphEditor's own other .cpp files) — except changeMacroPortColour below, kept here as
-// the one deliberate exception: its body is not a pure pass-through (it also forces a repaint of
-// both port-colour paint surfaces and disarms any live preview), so callers must keep going
-// through GraphEditor rather than MacroGroupController::changeMacroPortColour directly. See
-// GraphEditor.h's doc comment on the declaration for the full rationale.
-
+// GraphEditor keeps no one-line macro forwarders onto macroController_: every call site reaches
+// MacroGroupController directly, either through GraphEditor::getMacroController() (external
+// callers) or the macroController_ member itself (GraphEditor's own other .cpp files) — except
+// changeMacroPortColour below, kept here as the one deliberate exception: its body is not a pure
+// pass-through (it also forces a repaint of both port-colour paint surfaces and disarms any live
+// preview), so callers must keep going through GraphEditor rather than
+// MacroGroupController::changeMacroPortColour directly. See GraphEditor.h's doc comment on the
+// declaration for the full rationale.
 #include "GraphEditor.h"
 
-// T152: sets (or, with nullopt, clears back to the kind-tint default) the user colour for the
+// Sets (or, with nullopt, clears back to the kind-tint default) the user colour for the
 // port fronted by `nodeUuid`.
 void GraphEditor::changeMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid,
                                         std::optional<juce::Colour> newColour) {

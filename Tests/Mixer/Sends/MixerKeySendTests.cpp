@@ -1,4 +1,4 @@
-// MixerKeySendTests.cpp -- FRO318 (docs/mixer/sends-and-buses.md#sending-to-a-key-input): a send whose
+// MixerKeySendTests.cpp (docs/mixer/sends-and-buses.md#sending-to-a-key-input): a send whose
 // target is a Compressor/Gate Key input rather than a strip. Headless: a bare graph (plus one
 // AudioEngine for the publication test), no rendering -- MixerKeySendDuckingTests.cpp hears it.
 //

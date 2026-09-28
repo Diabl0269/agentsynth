@@ -173,7 +173,7 @@ TEST(MacroCollapse, MacroForNodeFindsTheOwningMacroOnlyWhileGrouped) {
 }
 
 // ============================================================================
-// Group-or-toggle dispatch (P8-14 — Cmd+G, GraphEditor::groupOrToggleSelectionMacros)
+// Group-or-toggle dispatch (Cmd+G, GraphEditor::groupOrToggleSelectionMacros)
 // ============================================================================
 
 TEST(MacroGroupOrToggle, SelectionTouchingNoMacroGroups) {
@@ -337,7 +337,7 @@ TEST(MacroHull, HullAtHitsInsideAndMissesOutsideAndWhileCollapsed) {
 }
 
 // ============================================================================
-// Chip (P8-14 — the expanded hull's name-chip drag handle)
+// Chip (the expanded hull's name-chip drag handle)
 // ============================================================================
 
 TEST(MacroChip, ChipBoundsIsEmptyWhileCollapsedAndSitsOnTheHullsTopEdgeWhileExpanded) {
@@ -393,7 +393,7 @@ TEST(MacroChip, ChipAtHitsInsideAndMissesJustOutsideAndWhileCollapsed) {
 }
 
 // ============================================================================
-// Chip drag (P8-14 — dragging the chip moves the whole macro as a rigid body)
+// Chip drag (dragging the chip moves the whole macro as a rigid body)
 // ============================================================================
 
 TEST(MacroChipDrag, DraggingMovesEveryMemberByTheDragDeltaAsARigidBody) {
@@ -657,7 +657,7 @@ TEST(MacroCable, CollapsedMacroHidesInternalCablesAndReanchorsBoundaryCrossingOn
 }
 
 TEST(MacroCable, BoundaryCableTracksTheLiveCardBoundsBeforeFinalizeMacroCardDrag) {
-    // Fix 3 (P8-12 follow-up): rebuildVisibleCables() used to anchor on the PERSISTED
+    // Fix 3: rebuildVisibleCables() used to anchor on the PERSISTED
     // macro.bounds, which finalizeMacroCardDrag only writes on drop -- so a boundary cable stayed
     // pointed at the card's pre-drag position for the whole gesture. Moving the live
     // MacroCardComponent directly (never calling finalizeMacroCardDrag) reproduces "mid-drag"

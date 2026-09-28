@@ -4,7 +4,7 @@
 
 // ---------------------------------------------------------------------------
 ToolbarComponent::ToolbarComponent() {
-    // T159: makes grabKeyboardFocus() on THIS component (the "toolbar" focus region's root) succeed
+    // Makes grabKeyboardFocus() on THIS component (the "toolbar" focus region's root) succeed
     // deterministically rather than depending on JUCE's position-ordered descent into children --
     // see the identical comment in ModuleLibraryComponent's ctor. This component owns no children of
     // its own (the buttons are direct children of MainComponent), so there is nothing for descent to
@@ -169,7 +169,7 @@ void ToolbarComponent::paint(juce::Graphics& g) {
     }
 }
 
-// T159: focus-region outline (Source/UI/Layout/FocusRegion.h) -- see the paintOverChildren declaration's
+// Focus-region outline (Source/UI/Layout/FocusRegion.h) -- see the paintOverChildren declaration's
 // comment in the header for why this component uses the same convention as the other five region
 // roots despite owning no children of its own.
 void ToolbarComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }

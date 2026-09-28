@@ -1,4 +1,4 @@
-// MeterColourStopsTests.cpp -- FRO146: the meter's level-to-colour zone model
+// MeterColourStopsTests.cpp -- the meter's level-to-colour zone model
 // (Source/UI/Mixer/MeterColourStops.h), tested at its exact band edges, its POSITIONAL band
 // iteration (forEachBand -- Cubase/most DAWs' stacked-zone meter convention), and its
 // sorted/deduped/never-empty stop-set maintenance (setStops/the vector constructor).

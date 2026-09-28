@@ -1,4 +1,4 @@
-// FRO227: the Mixer edit surface -- MainComponent::resolveEditSurface() previously knew
+// The Mixer edit surface -- MainComponent::resolveEditSurface() previously knew
 // Graph/TimelineClips/PianoRoll only, so Cmd+C/V/D/X/R (and Select All/zoom, routed the same way)
 // with the mixer focused fell through to Graph and acted on the canvas selection instead. See
 // docs/control/shortcuts.md's "Surface routing" section and docs/timeline/focus.md for the

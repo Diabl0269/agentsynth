@@ -144,7 +144,7 @@ int PluginScanService::getScanTimeoutMs() const noexcept {
 }
 
 //==============================================================================
-// Listeners (FRO44)
+// Listeners
 //==============================================================================
 
 void PluginScanService::addListener(Listener* listener) {
@@ -294,7 +294,7 @@ void PluginScanService::runScan(juce::StringArray formatNames, ProgressFn progre
             }
         }
         if (alreadyKnown) {
-            // FRO44: the eager/ensureScanned path only — never launched again for a plugin the list
+            // The eager/ensureScanned path only — never launched again for a plugin the list
             // already has, so a warm launch costs a child process per NEWLY installed plugin, not
             // per plugin on the machine. A rescan the user explicitly asks for (scanAsync's default,
             // skipAlreadyKnown=false) still re-probes this, e.g. to notice an in-place update.
@@ -325,7 +325,7 @@ void PluginScanService::runScan(juce::StringArray formatNames, ProgressFn progre
 
     if (completion != nullptr)
         postToMessageThread([completion, result] { completion(result); });
-    // FRO44: every registered Listener hears about a real scan finishing, regardless of which
+    // Every registered Listener hears about a real scan finishing, regardless of which
     // caller's completion (if any) is also firing above — this is what lets a consumer that never
     // triggered the scan itself (a picker opened after the sidebar already asked) find out.
     notifyListeners(result);
@@ -501,7 +501,7 @@ std::optional<int> runPluginScanChildMode(const juce::StringArray& args, juce::S
     if (!PluginScanService::isValidScanToken(token))
         return 1; // no token, no way to stamp output the parent will accept
 
-    // FRO59: every early-return above has already happened, so this really is the isolated scan
+    // Every early-return above has already happened, so this really is the isolated scan
     // child — safe to go quiet on a crash from here on, if the caller asked us to.
     if (suppressCrashDialog)
         installQuietCrashHandlers();

@@ -17,7 +17,7 @@ class ADSRModule
 public:
     ADSRModule(const juce::String& name = "ADSR")
         : ModuleBase(name, 14, 14) // 8 gate CV per voice + shared Threshold/Attack/Hold/Decay/Sustain/Release
-                                   // CV (ch8-13, FRO285); 8 env + silent ch8-13. Outputs match inputs so the
+                                   // CV (ch8-13); 8 env + silent ch8-13. Outputs match inputs so the
                                    // highest CV channel read (13) never aliases a live graph buffer -- see
                                    // docs/modules/poly-channel-layout.md.
     {
@@ -35,7 +35,7 @@ public:
         // AIStateMapper's pre-existing untrusted in-[0,1] rescale misfire. See
         // docs/modules/modules.md#adsr-envelope-module for the full rationale and for why 5.0 stays the ceiling.
         //
-        // FRO112: every float param below also carries readout Attributes (ms/s for the four
+        // Every float param below also carries readout Attributes (ms/s for the four
         // stage times, dB for sustain, plain for the three curve amounts) so the envelope card's
         // knobs and any host's generic automation UI show clean text ("1.0 ms", "-6.0 dB")
         // instead of the raw linear value ("0.0010000000...") -- see adsrTimeAttributes() /
@@ -63,7 +63,7 @@ public:
         addParameter(releaseCurveParam = new juce::AudioParameterFloat("releaseCurve", "Release Curve",
                                                                        juce::NormalisableRange<float>(-1.0f, 1.0f),
                                                                        0.65f, adsrCurveAttributes()));
-        // Tempo sync (FRO113): BPM mode is REAL sync, not a display-only snap -- each timed stage
+        // Tempo sync: BPM mode is REAL sync, not a display-only snap -- each timed stage
         // gets its own note-division choice, sharing `envelopeNoteDivisions()` (the same six
         // entries/order as LFOModule's rateSync). `tempoSync` off (default) leaves the ms params
         // above in sole control, unchanged; the four *Div params still exist and round-trip in
@@ -140,7 +140,7 @@ public:
         // to hand a block larger than the `samplesPerBlock` given to `prepareToPlay`, and the
         // audio callback must never allocate (root CLAUDE.md), so there is deliberately no
         // scratch vector here to resize.
-        // Sustain CV (FRO285): a LEVEL, not a stage time, so tempo sync -- which only recomputes
+        // Sustain CV: a LEVEL, not a stage time, so tempo sync -- which only recomputes
         // the four *time* params below -- never gates it; it always applies. Read once per block
         // like every other parameter-CV jack added under the normalised-CV convention
         // (docs/modules/modulation.md#cv-in-normalised-units), then fed into the same per-sample
@@ -180,7 +180,7 @@ public:
                         // The note-on EVENT drives the retrigger, not an edge in a held/not-held
                         // flag -- a note-off + note-on landing on the same sample (a gapless
                         // mono legato transition) nets out to "still held" on the flag, but must
-                        // still re-articulate (FRO110).
+                        // still re-articulate.
                         envelopes[0].noteOn();
                         lastTriggeredVoice = 0;
                         ++firedThisBlock;
@@ -350,7 +350,7 @@ public:
             p.polyVoiceSpan = 1;
             return p;
         }
-        // Threshold + the five stage-time/level CV jacks (FRO285): shared across every voice,
+        // Threshold + the five stage-time/level CV jacks: shared across every voice,
         // exactly like Threshold -- each is its own mono jack, never a poly fan, so a signal on
         // ch9-13 alone is never mistaken for a poly gate head (mapInputChannel is what decides
         // that, not the raw channel range alone -- see docs/modules/poly-channel-layout.md).
@@ -404,14 +404,14 @@ public:
 
     static constexpr float getTriggerHysteresis() { return SchmittTrigger::kHysteresis; }
 
-    // Lock-free UI playhead accessors (FRO110): the stage/progress/level of the most recently
+    // Lock-free UI playhead accessors: the stage/progress/level of the most recently
     // (re)triggered voice, refreshed once per block. Not yet consumed by any UI.
     synth::EnvelopeStage getPlayheadStage() const noexcept { return playheadStage.load(std::memory_order_relaxed); }
     float getPlayheadProgress() const noexcept { return playheadProgress.load(std::memory_order_relaxed); }
     float getPlayheadLevel() const noexcept { return playheadLevel.load(std::memory_order_relaxed); }
 
     // The tempo (BPM) resolveStageTimes last read off the playhead, refreshed every block whether
-    // or not tempoSync is on; default 120 before the first processBlock. FRO118: the envelope
+    // or not tempoSync is on; default 120 before the first processBlock. The envelope
     // card's BPM-mode graph/pickers read this rather than touching getPlayHead() themselves.
     double getLastSeenBpm() const noexcept { return lastSeenBpm.load(std::memory_order_relaxed); }
 
@@ -422,7 +422,7 @@ private:
 
     // Per-block stage times: the ms knobs (plus their CV), or the tempo-synced divisions.
     StageTimes resolveStageTimes(const juce::AudioBuffer<float>& buffer) {
-        // Tempo sync (FRO113): recomputed once per block, same cadence LFOModule uses for its
+        // Tempo sync: recomputed once per block, same cadence LFOModule uses for its
         // own sync mode -- a live tempo change is picked up within one block, and because
         // EnvelopeGenerator turns a stage-time change mid-ramp into a slope change (never a
         // level jump), flipping tempoSync itself mid-note is exactly as click-free as automating
@@ -438,7 +438,7 @@ private:
                     bpm = *pos->getBpm();
             }
         }
-        // Published for the UI (FRO118's BPM-mode graph/pickers): read via getLastSeenBpm(), never
+        // Published for the UI (the BPM-mode graph/pickers): read via getLastSeenBpm(), never
         // getPlayHead() directly -- TransportService's block-only lifetime (Source/CLAUDE.md) makes
         // it unsafe to hold or call from the message thread.
         lastSeenBpm.store(bpm, std::memory_order_relaxed);
@@ -448,7 +448,7 @@ private:
             decay = synth::envelopeNoteDivisionSeconds(decayDivParam->getIndex(), bpm);
             release = synth::envelopeNoteDivisionSeconds(releaseDivParam->getIndex(), bpm);
         } else {
-            // Attack/Hold/Decay/Release CV (FRO285): IGNORED while tempo-synced. A synced stage's
+            // Attack/Hold/Decay/Release CV: IGNORED while tempo-synced. A synced stage's
             // effective time already comes from its *Div param and the live tempo above -- a CV
             // jack expressed in seconds has no meaning overlaid on a beat-locked division, so the
             // jack stays visibly patchable but is a no-op until the module goes back to MS mode.
@@ -462,7 +462,7 @@ private:
 
     static constexpr int MAX_VOICES = 8;
     static constexpr int kThresholdChannel = 8;
-    // Stage-time/level CV jacks (FRO285), appended after Threshold -- never inserted, so a saved
+    // Stage-time/level CV jacks, appended after Threshold -- never inserted, so a saved
     // patch that modulates Threshold on ch8 keeps doing so once these arrive on ch9-13. See
     // docs/modules/modulation.md#every-continuous-parameter-is-a-target.
     static constexpr int kAttackChannel = 9;
@@ -515,7 +515,7 @@ private:
             });
     }
 
-    // The three bend amounts (-1..1): not shown as their own knob (FRO112 moved them onto the
+    // The three bend amounts (-1..1): not shown as their own knob (moved them onto the
     // envelope graph's bend handles), but a host's generic automation UI still reads this.
     static juce::AudioParameterFloatAttributes adsrCurveAttributes() {
         return juce::AudioParameterFloatAttributes().withStringFromValueFunction(

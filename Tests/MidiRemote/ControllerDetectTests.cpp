@@ -1,4 +1,4 @@
-// ControllerDetectTests.cpp -- FRO134 (docs/control/midi-remote-ui.md#detect-mode): the headless
+// ControllerDetectTests.cpp (docs/control/midi-remote-ui.md#detect-mode): the headless
 // half of Detect -- which events may create a control, what it is called/typed, where it lands.
 #include "MidiRemote/ControllerDetect.h"
 
@@ -117,7 +117,7 @@ TEST(ControllerDetectTests, FindControlHonoursChannelZeroAsAny) {
     EXPECT_EQ(findControlForEvent(controls, event(MessageType::note, 2, 22)), nullptr);
 }
 
-// -- 14-bit pairs and NRPN (FRO140) ------------------------------------------------------------------
+// -- 14-bit pairs and NRPN ---------------------------------------------------------------------------
 
 TEST(ControllerDetectTests, NrpnBecomesA14BitKnobNamedByItsAddress) {
     const auto control = makeDetectedControl(event(MessageType::nrpn, 1, 300), {});

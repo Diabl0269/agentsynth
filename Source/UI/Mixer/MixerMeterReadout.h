@@ -4,7 +4,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <limits>
 
-// MixerMeterReadout.h -- FRO146 (Cubase's "Meter Peak Level" field): one column's numeric max-peak
+// MixerMeterReadout.h (Cubase's "Meter Peak Level" field): one column's numeric max-peak
 // readout, sitting near its meter/fader. Shows the highest peak (dBFS) seen since the last reset --
 // "-3.2", "+4.1", or "-inf" before anything has rendered -- and turns the clip colour once any
 // peak exceeds 0 dBFS, STAYING that colour across every later quiet tick until reset.

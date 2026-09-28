@@ -204,7 +204,7 @@ juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const
     }
     root->setProperty("modulations", modulations);
 
-    // Macros (P8-12): capture only a macro whose FULL membership is inside `keep` — the same
+    // Macros: capture only a macro whose FULL membership is inside `keep` — the same
     // self-contained rule connections/modulations already follow. Membership is emitted using
     // this snippet's own node ids (matching "nodes" above), not uuids: those ids get renumbered
     // on insert, uuids don't exist yet for a macro captured into a still-unsaved snippet var.
@@ -248,7 +248,7 @@ juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const
                 memberArr.add(id);
             m->setProperty("members", memberArr);
 
-            // Ports (P8-15 Macro I/O): keyed by this snippet's own node id, same as members above
+            // Ports (Macro I/O): keyed by this snippet's own node id, same as members above
             // — a port's nodeUuid is resolved through idForUuid, the same map membership just used,
             // so it can never name a node outside `keep` (Macro::ports' own invariant guarantees
             // every port's nodeUuid is already one of `macro.members`).
@@ -375,7 +375,7 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
     }
     root->setProperty("modulations", modulations);
 
-    // Macros (P8-12): remap membership through the same idMap node ids were just renumbered
+    // Macros: remap membership through the same idMap node ids were just renumbered
     // through. A member id this snippet doesn't carry (shouldn't happen — extractSnippet only
     // ever captures a fully-contained macro — but a hand-edited .agsnip could claim one) drops
     // that member; a macro left with fewer than two members this way is dropped outright, since
@@ -414,7 +414,7 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
             }
             m->setProperty("members", newMembers);
 
-            // Ports (P8-15): remap each port's "node" through the same idMap membership was just
+            // Ports: remap each port's "node" through the same idMap membership was just
             // renumbered through, and drop a port whose node this snippet doesn't carry — the same
             // "member id missing -> drop it" rule the members loop above already follows, since a
             // port whose node vanished is exactly as unrepresentable as a member that vanished.
@@ -577,7 +577,7 @@ std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::va
                     }
                 }
 
-                // Ports (P8-15): resolve each port's snippet node id through the map just built.
+                // Ports: resolve each port's snippet node id through the map just built.
                 // Built FROM the resolved member map, not independently — a port whose member
                 // failed to resolve (node vanished, uuid generation failed) must drop with it, or
                 // MacroSet::fromVar's "every port's nodeUuid must be one of this macro's own

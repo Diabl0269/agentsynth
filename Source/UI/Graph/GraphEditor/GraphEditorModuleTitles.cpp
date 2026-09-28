@@ -2,7 +2,7 @@
 //
 // Custom module titles (the "displayName" node property): get/set/resolve-for-display, and
 // committing any inline title editor left open when the user clicks elsewhere. Moved here
-// (FRO77 PR1) from GraphEditorSmartConnections.cpp, where they had been misplaced — titles are
+// from GraphEditorSmartConnections.cpp, where they had been misplaced — titles are
 // not a smart-connections concern. GraphEditor is declared in GraphEditor.h.
 
 #include "AudioEngine/AudioEngine.h"
@@ -61,8 +61,8 @@ void GraphEditor::setModuleDisplayName(juce::AudioProcessorGraph::NodeID nodeId,
 }
 
 // Title a card should paint: the custom one when set, else the auto-numbered module name.
-// Also GraphCanvasHost::getModuleTitle() — MacroGroupController::macroMemberNames() (FRO77
-// PR2) needs it and title resolution otherwise requires a live GraphEditor.
+// Also GraphCanvasHost::getModuleTitle() — MacroGroupController::macroMemberNames()
+// needs it and title resolution otherwise requires a live GraphEditor.
 juce::String GraphEditor::getModuleTitle(juce::AudioProcessorGraph::NodeID nodeId,
                                          juce::AudioProcessor* processor) const {
     const auto custom = getModuleDisplayName(nodeId);

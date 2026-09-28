@@ -10,7 +10,7 @@
 
 namespace synth::ui {
 
-// MixerPlacementController.h -- FRO12 (P9-6, docs/mixer/panel.md): owns the Mixer placement
+// MixerPlacementController.h (docs/mixer/panel.md): owns the Mixer placement
 // preference (Tab beside the Timeline / Own panel / Window) and moves BottomDockComponent's
 // mixerHost_ (the SAME MixerPanelComponent instance throughout -- DetachablePanelHost's own
 // "never copied" contract) between the three homes it can live in. The ONE collaborator
@@ -28,11 +28,11 @@ namespace synth::ui {
 // resized() renders nothing once detached anyway) -- only "Own panel" actually reparents it, into
 // THIS component (which IS the second strip; MainComponent adds and bounds it directly).
 //
-// "Own panel" (FRO231) slides open and closed like the bottom dock, has a persisted user height
+// "Own panel" slides open and closed like the bottom dock, has a persisted user height
 // ("mixerOwnPanelHeight") and its own top-edge PanelResizeHandle. The slide is this class's own
 // PanelSlide + AnimationDriver (MainComponent's three fractions are not touched); it calls
 // onLayoutNeeded each frame and MainComponent::resized() reads getCarveHeight(). The
-// BottomDockComponent/isBottomDockVisible rename mentioned in FRO11's own comments is done (FRO232)
+// BottomDockComponent/isBottomDockVisible rename is done
 // -- see docs/mixer/panel.md#the-three-placements.
 class MixerPlacementController : public juce::Component {
 public:

@@ -1,19 +1,19 @@
 // MacroSetTests.cpp
 // Pure struct-level unit tests for synth::MacroPort and its interaction with synth::MacroSet
-// (P8-15 Macro I/O, docs/macros/ports.md#port-set-and-ordering, docs/macros/ports.md#port-set-and-ordering) — no
+// (Macro I/O, docs/macros/ports.md#port-set-and-ordering) — no
 // GraphEditor, no AudioEngine. The GraphEditor-level Macro behaviour (wrap/unwrap, persistence, cables, ...) lives in
 // Tests/MacroContainerTests.cpp; this file covers only:
 //
 //   • MacroPort::toVar/fromVar   — round trip, both kinds, and rejection of malformed input
-//   • MacroSet::toVar/fromVar    — "ports" round trips, is optional (pre-P8-15 compatibility),
+//   • MacroSet::toVar/fromVar    — "ports" round trips, is optional (legacy compatibility),
 //                                  and rejects a port whose nodeUuid isn't one of its own members
 //   • MacroSet::retainOnly       — drops a port whose node died, dissolves the macro when its
 //                                  last member (a port node) dies, keeps a port whose node is
 //                                  still alive untouched
 //   • MacroSet::removeMemberEverywhere — drops a port when its fronting member is removed singly
 //   • Macro::memberIsPort/moduleMemberCount — the user-facing MODULE count excludes port nodes
-//                                  (founder-review fix G6) without touching members.size() itself
-//   • MacroSet::add               — returns the new macro's id BY VALUE (FRO95 regression): a
+//                                  without touching members.size() itself
+//   • MacroSet::add               — returns the new macro's id BY VALUE: a
 //                                  Macro&/Macro* must never be held across a further add() call,
 //                                  since push_back can reallocate macros_ out from under it
 
@@ -72,7 +72,7 @@ TEST(MacroPortSerialization, ToVarFromVarRoundTripsMidiPort) {
     EXPECT_EQ(parsed.kind, MacroPortKind::Midi);
 }
 
-// T152: MacroPort::colour is decorative, optional persistence — unset by default, round-trips
+// MacroPort::colour is decorative, optional persistence — unset by default, round-trips
 // when set, and (unlike kind/nodeUuid) never rejects the whole port when absent or malformed.
 
 TEST(MacroPortSerialization, ColourRoundTripsWhenSet) {
@@ -104,7 +104,7 @@ TEST(MacroPortSerialization, ColourDefaultsToUnsetAndOmitsTheKeyEntirely) {
     EXPECT_FALSE(parsed.colour.has_value());
 }
 
-// Back-compat: every port saved before T152 has no "colour" key at all — must still load fine,
+// Back-compat: a port saved before ports had a colour has no "colour" key at all — must still load fine,
 // with colour left unset (falls back to the kind tint everywhere it is displayed).
 TEST(MacroPortSerialization, PreT152SavedPortWithNoColourKeyLoadsFineAndColourStaysUnset) {
     auto* obj = new juce::DynamicObject();
@@ -114,7 +114,7 @@ TEST(MacroPortSerialization, PreT152SavedPortWithNoColourKeyLoadsFineAndColourSt
     obj->setProperty("order", 0);
     obj->setProperty("kind", "audioCV");
     // Deliberately no "colour" property at all — this is exactly what MacroPort::toVar() produced
-    // before T152 added the field.
+    // before the field existed.
 
     MacroPort parsed;
     ASSERT_TRUE(MacroPort::fromVar(juce::var(obj), parsed));
@@ -212,7 +212,7 @@ TEST(MacroSetPortPersistence, RoundTripsPortsThroughToVarFromVar) {
     EXPECT_EQ(r.ports[1].kind, MacroPortKind::Midi);
 }
 
-// Every macro saved by P8-12 (before this key existed) has no "ports" property at all — that
+// Every macro saved before this key existed has no "ports" property at all — that
 // must load as zero ports, not reject the whole macro.
 TEST(MacroSetPortPersistence, AbsentPortsKeyParsesAsEmptyPortList) {
     auto* macroObj = new juce::DynamicObject();
@@ -232,7 +232,7 @@ TEST(MacroSetPortPersistence, AbsentPortsKeyParsesAsEmptyPortList) {
     members.add("member-1");
     members.add("member-2");
     macroObj->setProperty("members", members);
-    // Deliberately no "ports" property — this is the exact shape a pre-P8-15 project.json has.
+    // Deliberately no "ports" property — this is the exact shape a legacy project.json has.
 
     juce::Array<juce::var> arr;
     arr.add(juce::var(macroObj));
@@ -372,15 +372,13 @@ TEST(MacroSetPortReconciliation, RemoveMemberEverywhereDropsThePortItFronted) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Macro::memberIsPort / Macro::moduleMemberCount (founder-review fix G6,
-// docs/macros/ports.md#member-counts-report-modules-not-ports): "the number of modules indicator seems
-// to show more than there are - 4 when i grouped the delay and reverb in the default patch - should have shown 2."
+// Macro::memberIsPort / Macro::moduleMemberCount (docs/macros/ports.md#member-counts-report-modules-not-ports):
 // members.size() counts port nodes as members (correctly - see the class comment on synth::Macro); the user-facing
 // MODULE count must not.
 // ---------------------------------------------------------------------------------------------
 
 TEST(MacroModuleCount, PlainGroupingWithNoPortsReportsMembersSizeUnchanged) {
-    // The regression risk called out explicitly: a macro with no ports (the plain P8-12
+    // The regression risk called out explicitly: a macro with no ports (the plain
     // grouping case, and the most common one in the existing test suite) must not have its count
     // disturbed by this fix at all.
     Macro m;
@@ -393,7 +391,7 @@ TEST(MacroModuleCount, PlainGroupingWithNoPortsReportsMembersSizeUnchanged) {
 }
 
 TEST(MacroModuleCount, FounderScenarioTwoModulesTwoAutoCreatedPortsCountsAsTwoModules) {
-    // The founder's exact reproduction: two real modules (Delay, Reverb) grouped with a crossing
+    // Two real modules (Delay, Reverb) grouped with a crossing
     // cable on each side auto-creates two port nodes. members.size() is honestly 4 (both ports
     // ARE members - that invariant is load-bearing, see the guard test below); the user-facing
     // module count must read 2.
@@ -441,10 +439,10 @@ TEST(MacroModuleCount, DeletingAPortUpdatesTheCount) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// MacroSet::add — id-by-value contract (FRO95)
+// MacroSet::add — id-by-value contract
 // ---------------------------------------------------------------------------------------------
 
-// Regression for the ASAN heap-use-after-free FRO95 fixed: add() used to return `Macro&` into
+// Regression test for FRO95: ASAN heap-use-after-free -- add() used to return `Macro&` into
 // macros_, so a caller that held the reference from an earlier add() and read it after a LATER
 // add() (which can reallocate the vector) had a dangling reference. add() now returns the id by
 // value instead, so there is nothing to dangle — this test drives several adds back-to-back and

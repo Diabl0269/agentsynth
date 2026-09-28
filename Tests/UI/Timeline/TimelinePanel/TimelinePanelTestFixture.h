@@ -43,7 +43,7 @@ private:
     int requestTimeoutMs = 240000;
 };
 
-// FRO11 (P9-5): mc.getTimelinePanel() is no longer a direct child of MainComponent -- it now
+// mc.getTimelinePanel() is not a direct child of MainComponent -- it
 // lives inside BottomDockComponent (the Timeline/Mixer tab strip), inset by the tab strip's own
 // height. getBounds() therefore returns coordinates relative to the DOCK, not MainComponent, so a
 // raw `mc.getTimelinePanel().getBounds()` can no longer be compared directly against another
@@ -56,7 +56,7 @@ inline juce::Rectangle<int> timelinePanelBoundsInMainComponent(MainComponent& mc
     return mc.getLocalArea(&panel, panel.getLocalBounds());
 }
 
-// FRO11 (P9-5): "is the timeline panel actually open and on screen" now takes both of
+// "is the timeline panel actually open and on screen" now takes both of
 // timelinePanel's own isVisible() (true only when the Timeline tab is selected) AND
 // bottomDock's isVisible() (true only when the dock itself is open) -- composing the two LOCAL
 // flags, not juce::Component::isShowing(), because isShowing() additionally requires the ROOT

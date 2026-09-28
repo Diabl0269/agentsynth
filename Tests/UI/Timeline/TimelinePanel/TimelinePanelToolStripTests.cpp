@@ -201,23 +201,23 @@ TEST(TimelineToolStripTest, FollowPlayheadTooltipTracksALiveRebindAndDropsTheOld
     EXPECT_FALSE(tooltip.contains("(f)")) << "and not the stale one";
 
     // Detach before `shortcuts` (declared after `f`, so destroyed first) goes out of scope — an
-    // ASAN run caught the heap-use-after-free this leaves otherwise (unrelated to FRO95, but hit
-    // while chasing it): TimelinePanelComponent::~TimelinePanelComponent() removes itself as a
+    // ASAN run caught the heap-use-after-free this leaves otherwise:
+    // TimelinePanelComponent::~TimelinePanelComponent() removes itself as a
     // change listener from whatever ShortcutManager is still installed, which is a dangling
     // pointer once `shortcuts` is gone. Every other test in this file that installs one already
     // does this (see ClearingTheSharedShortcutManagerRestoresTheHardcodedTooltipDefaults below).
     f.panel.setShortcutManager(nullptr);
 }
 
-// FRO97 regression: the product-side guard. `shortcuts` is declared AFTER `f` (same shape as the
+// The product-side guard. `shortcuts` is declared AFTER `f` (same shape as the
 // bug the ASAN job caught, and deliberately WITHOUT the explicit setShortcutManager(nullptr)
 // detach every other test in this file uses), so at scope exit `shortcuts` destructs FIRST and
 // `f.panel` (and its own ~TimelinePanelComponent) runs after with a manager that is already gone.
 // This must not crash: ~TimelinePanelComponent() now resolves through a juce::WeakReference
 // (shortcutsWeak_) rather than dereferencing `shortcuts_` directly, so it sees the manager is gone
 // and simply skips removeChangeListener instead of touching freed memory. A build without the
-// guard is exactly the heap-use-after-free ASAN reported at this file's history (see PR #381 and
-// FRO97).
+// guard is exactly the heap-use-after-free ASAN reported.
+// Regression test for FRO97: ~TimelinePanelComponent dereferenced a destroyed ShortcutManager.
 TEST(TimelineToolStripTest, DestructorSurvivesAManagerThatDestructsFirstWithNoExplicitDetach) {
     ToolPanelFixture f;
     ShortcutManager shortcuts;

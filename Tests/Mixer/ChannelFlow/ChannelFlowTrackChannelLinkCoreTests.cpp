@@ -1,8 +1,8 @@
 // =================================================================================================
-// FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks) — the LINK RULE itself, at the Core layer: the two
+// The LINK RULE itself (docs/mixer/mixer.md#channels-follow-audio-not-tracks), at the Core layer: the two
 // signal-reach queries (Source/Mixer/ChannelFlows/ChannelFlowsTrackChannelLink.cpp) and the combining query plus
-// channel naming (Source/Mixer/TrackChannelLink.cpp). No MainComponent, no GraphEditor, no undo —
-// bare graphs wired by hand, exactly like the Core half of the "Make channel" tests next door.
+// channel naming (Source/Mixer/TrackChannelLink.cpp). No MainComponent, no GraphEditor, no undo — bare graphs
+// wired by hand, exactly like the Core half of the "Make channel" tests next door.
 //
 // A track and a channel are LINKED when the track is that channel's ONLY source. The app-level
 // consequences of that (name/colour/mute/solo sync, the channel chip) are in
@@ -257,7 +257,7 @@ TEST(ChannelFlowTrackChannelLinkCore, ResolveTrackChannelLinkBreaksWhenASecondTr
 }
 
 // -------------------------------------------------------------------------------------------
-// channelDisplayName — shared with FRO55's stem file naming
+// channelDisplayName — shared with the stem file naming
 // -------------------------------------------------------------------------------------------
 
 TEST(ChannelFlowTrackChannelLinkCore, ChannelDisplayNameUsesTheOneFeedingTracksName) {

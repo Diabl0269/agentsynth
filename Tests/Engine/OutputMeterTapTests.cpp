@@ -1,4 +1,4 @@
-// OutputMeterTapTests.cpp -- FRO148 (docs/mixer/meters.md): AudioEngine::takeOutputMeterPeak, the post-graph peak
+// OutputMeterTapTests.cpp (docs/mixer/meters.md): AudioEngine::takeOutputMeterPeak, the post-graph peak
 // latch the Master column reads once Master has inserts. Latched straight after the graph, before the metronome click
 // and the master-mute zero-fill, one latch per leg with its own slot per MeterReader.
 #include "../FakeAudioIODevice.h"

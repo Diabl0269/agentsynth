@@ -20,7 +20,7 @@
 
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
-#include "TimelinePanel/TimelinePanelTestFixture.h" // timelinePanelIsOpen (FRO11)
+#include "TimelinePanel/TimelinePanelTestFixture.h" // timelinePanelIsOpen
 #include "Transport/TransportService.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
@@ -359,7 +359,7 @@ TEST_F(TimelinePlayheadPollTest, TenHzPollOnlyReachesAVisiblePanel) {
     mc.setSize(1600, 900);
 
     auto& panel = mc.getTimelinePanel();
-    // FRO11 (P9-5): timelinePanelIsOpen(), not panel.isVisible() -- the panel now lives inside
+    // timelinePanelIsOpen(), not panel.isVisible() -- the panel now lives inside
     // BottomDockComponent's tab strip, so its own visibility flag reflects only "the Timeline tab
     // is selected" (true by default), not "the dock is open". timelinePanelIsOpen's own comment
     // (TimelinePanelTestFixture.h) explains why this composes the two local isVisible() flags

@@ -1,4 +1,4 @@
-// Concern: FRO134 -- the panel's Detect mode and the Inspector's encoder auto-detect
+// Concern: the panel's Detect mode and the Inspector's encoder auto-detect
 // (docs/control/midi-remote-ui.md#detect-mode, #inspector-right). Both are fed from the ONE
 // activity drain in MidiRemotePanelComponent::refreshActivity(); this unit holds what happens
 // around it: the toggle, persisting what Detect found, the pulse, and the two-step prompt.

@@ -9,7 +9,7 @@ protected:
     void SetUp() override {
         parentDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
                         .getChildFile("SettingsMigrationTest")
-                        .getChildFile("run_" + juce::Uuid().toString()); // unique: parallel CI shards (FRO322)
+                        .getChildFile("run_" + juce::Uuid().toString()); // unique: parallel CI shards
         parentDir.createDirectory();
     }
 

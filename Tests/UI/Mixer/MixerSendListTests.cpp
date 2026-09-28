@@ -1,4 +1,4 @@
-// MixerSendListTests.cpp -- FRO15 (P9-9, docs/mixer/sends-and-buses.md): the mixer column's send rows,
+// MixerSendListTests.cpp (docs/mixer/sends-and-buses.md): the mixer column's send rows,
 // driven through a real off-screen MainComponent (newPatchForTest() + simulateAddAudioTrackClick(),
 // the same rig style as MixerPanelComponentTests.cpp) so the whole chain is exercised -- the Core
 // flow, the undo transaction around it, the snapshot rebuild, and the row's own parameter
@@ -57,7 +57,7 @@ ChannelStripModule* stripAt(juce::AudioProcessorGraph& graph, NodeID id) {
     return node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
 }
 
-// FRO295: fires a real mouseDown+mouseUp on `component`'s own centre -- the "test the real mouse
+// Fires a real mouseDown+mouseUp on `component`'s own centre -- the "test the real mouse
 // path" convention MixerColumnComponentTests.cpp's synthesizeMouseUp and
 // MixerColumnMidiLearnTests.cpp's realChildMouseEvent both use, rather than calling the row's
 // headless toggle seam directly. Takes juce::Component&, not juce::Button&, so this also works on
@@ -247,7 +247,7 @@ TEST(MixerSendListTests, MuteButtonClickIsOneUndoStepAndUndoRestoresIt) {
     ASSERT_NE(column, nullptr);
     column->getSendListForTest().addSendTo(rig.bus);
     rig.panel().rebuild();
-    // FRO295: same "size the panel for a real click" step MixerPanelComponentTests.cpp's own
+    // Same "size the panel for a real click" step MixerPanelComponentTests.cpp's own
     // ClickingAColumnSelectsItsOwningMacroOnTheCanvas test uses -- rebuild() alone does not lay the
     // column's children out at a real pixel size.
     rig.panel().setSize(1400, 300);

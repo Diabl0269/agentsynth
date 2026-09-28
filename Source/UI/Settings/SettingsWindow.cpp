@@ -25,7 +25,7 @@ public:
         providerLabel.setText("AI Provider:", juce::dontSendNotification);
 
         addAndMakeVisible(providerCombo);
-        // P4-6: hosted mode sends the prompt and current patch off this machine to Agent Synth's
+        // Hosted mode sends the prompt and current patch off this machine to Agent Synth's
         // servers; local (Ollama) mode never leaves it. See also the same disclosure next to the
         // model picker in AIChatComponent, which most users see far more often than this dialog.
         providerCombo.setTooltip(juce::String::fromUTF8("Local (Ollama) processing stays on this machine. Hosted mode "
@@ -75,7 +75,7 @@ public:
 
         updateHostFieldForSelectedProvider();
 
-        // P6-8: local chat-history retention. This is deliberately the only *local* retention
+        // Local chat-history retention. This is deliberately the only *local* retention
         // control — cloud retention stays the server's single global default
         // (see docs/ai/history.md#retention).
         // Added AFTER providerCombo/hostEditor above so existing tests that grab "the first
@@ -129,7 +129,7 @@ public:
             aiService.setRequestTimeoutMs(timeoutMs);
         };
 
-        // P6-7: opt-in prompt collection for product learning. Human review only — never used to
+        // Opt-in prompt collection for product learning. Human review only — never used to
         // train/fine-tune models (see docs/ai/feedback.md#opt-in-prompt-collection, and the
         // "we do not use your prompts to
         // train AI models" promise in the privacy policy this deliberately doesn't touch).
@@ -322,8 +322,8 @@ private:
         return nullptr;
     }
 
-    // Each provider persists its own host under its own settings key — sharing one key (the
-    // pre-P4-6 behaviour) meant switching providers silently pointed the new one at whatever host
+    // Each provider persists its own host under its own settings key — sharing one key
+    // would mean switching providers silently pointed the new one at whatever host
     // string the previous provider had left behind (e.g. RemoteProvider constructed against
     // Ollama's port). Mirrors MainComponent::initialiseCommon()'s equivalent lookup.
     static juce::String hostSettingsKeyFor(const synth::ProviderDescriptor* descriptor) {
@@ -404,7 +404,7 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     appearanceSettingsTab->setGraphEditor(graphEditor); // wire the tab to graph editor
     tabs.addTab("Appearance", juce::Colours::transparentBlack, appearanceSettingsTab, true);
 
-    // P6-10: general feedback entry point, not tied to any one AI-generated patch. Added last so
+    // General feedback entry point, not tied to any one AI-generated patch. Added last so
     // it doesn't shift the tab indices every other test in SettingsWindowTests.cpp hardcodes.
     auto* feedbackSettingsTab = new FeedbackSettingsTab(accountService);
     tabs.addTab("Feedback", juce::Colours::transparentBlack, feedbackSettingsTab, true);

@@ -46,7 +46,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineJumpToLocator1",
         "timelineJumpToLocator2",
         // TimelineClipLaneArea::keyPressed (its P shares timelineLoopSelection with the panel)
-        // TimelineTrackHeaderComponent::keyPressed (T161)
+        // TimelineTrackHeaderComponent::keyPressed
         "timelineMuteFocusedTrack",
         "timelineSoloFocusedTrack",
         "timelineArmFocusedTrack",
@@ -54,7 +54,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
     return ids;
 }
 
-// FRO125: the transport family is deliberately shipped with NO default keybinding (see
+// The transport family is deliberately shipped with NO default keybinding (see
 // ShortcutManager::addGeneralDefaultBindings' absence of an entry for these ids, and their own
 // comment in getActionTable()) -- they exist first as command/MIDI-Remote targets, and a user may
 // still bind one from Settings. Every OTHER action-table row is required to carry a real default
@@ -67,17 +67,17 @@ const juce::StringArray& intentionallyUnboundActionIds() {
         "transportRecord",
         "transportToggleMetronome",
         "transportReturnToStart",
-        // FRO271: cursor moves and loop-locator jumps.
+        // Cursor moves and loop-locator jumps.
         "transportNudgeBackBeat",
         "transportNudgeForwardBeat",
         "transportNudgeBackBar",
         "transportNudgeForwardBar",
         "transportJumpToLoopStart",
         "transportJumpToLoopEnd",
-        // FRO277: jump to the next/previous timeline marker.
+        // Jump to the next/previous timeline marker.
         "transportJumpToNextMarker",
         "transportJumpToPreviousMarker",
-        // FRO278: selection stepping.
+        // Selection stepping.
         "selectNextModule",
         "selectPreviousModule",
         "selectNextTrack",

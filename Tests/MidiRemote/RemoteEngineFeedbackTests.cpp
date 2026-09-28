@@ -285,7 +285,7 @@ TEST(MidiRemoteEngineFeedbackTest, SetProfilesAndResendFeedbackForceAResend) {
     h.engine.drain();
     ASSERT_EQ(h.sink.sent.size(), 1u);
 
-    h.engine.setProfiles(profiles); // FRO139: republishing clears feedback_ wholesale
+    h.engine.setProfiles(profiles); // republishing clears feedback_ wholesale
     h.engine.drain();
     EXPECT_EQ(h.sink.sent.size(), 2u);
 
@@ -304,7 +304,7 @@ TEST(MidiRemoteEngineFeedbackTest, NoSinkDoesNotCrash) {
     EXPECT_NO_FATAL_FAILURE(h.engine.drain());
 }
 
-// -- 14-bit pairs and NRPN (FRO140) ------------------------------------------------------------------
+// -- 14-bit pairs and NRPN ---------------------------------------------------------------------------
 
 TEST(MidiRemoteEngineFeedbackTest, PairedAbs14SlotEchoesMsbOnCcNThenLsbOnCcNPlus32) {
     FeedbackHarness h;
@@ -396,8 +396,8 @@ TEST(MidiRemoteEngineFeedbackTest, NrpnSlotSendsNothing) {
     EXPECT_TRUE(h.sink.sent.empty());
 }
 
-// FRO142 (docs/control/midi-remote.md#pages): two pages map the same knob to different parameters;
-// only the active page's value is echoed, and a page switch echoes the new page's value.
+// Two pages map the same knob to different parameters; only the active page's value is echoed, and
+// a page switch echoes the new page's value (see docs/control/midi-remote.md#pages).
 TEST(MidiRemoteEngineFeedbackTest, OnlyTheActivePageIsEchoedAndASwitchEchoesTheNewPage) {
     FeedbackHarness h;
     auto page1 = makeParamAssignment("a1", "knob", MessageType::cc, 1, 10, Encoding::abs7, "cutoff");

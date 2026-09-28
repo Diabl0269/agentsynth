@@ -1,4 +1,4 @@
-// Concern: FRO273 (docs/control/midi-remote.md#undo) -- which history Cmd+Z acts on. While keyboard
+// Concern (docs/control/midi-remote.md#undo): which history Cmd+Z acts on. While keyboard
 // focus is inside this panel, MainComponent's Undo/Redo commands act on the controller edit history
 // (MidiLearnController) rather than the project's AppUndoManager; this unit owns the focus side of
 // that: taking focus on any press inside the panel, answering "is focus here?", and the toolbar cue

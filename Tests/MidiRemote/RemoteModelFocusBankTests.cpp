@@ -1,8 +1,8 @@
-// FRO141 (docs/control/midi-remote.md#focus-bank): Control::focusBank round-trip/rejection
-// coverage -- mirrors RemoteModelPagesTests.cpp's style. The headline guarantee: every pre-FRO141
-// document (no "focusBank" property anywhere) loads with focusBank == false and re-serialises
-// byte-identical to what it started as. Suite name contains "MidiRemote" per the ship-task
-// --gtest_filter convention.
+// Control::focusBank round-trip/rejection coverage -- mirrors RemoteModelPagesTests.cpp's style.
+// The headline guarantee: every legacy document (no "focusBank" property anywhere) loads with
+// focusBank == false and re-serialises byte-identical to what it started as. Suite name contains
+// "MidiRemote" per the ship-task --gtest_filter convention
+// (see docs/control/midi-remote.md#focus-bank).
 
 #include "MidiRemote/RemoteModel.h"
 #include <gtest/gtest.h>
@@ -92,7 +92,7 @@ TEST(MidiRemoteModelFocusBankTest, ProfileWithFocusBankControlsRoundTripsAndOldP
     EXPECT_EQ(juce::JSON::toString(parsed.toVar()), juce::JSON::toString(beforeJson));
 
     // No control on the profile ever sets focusBank -- the whole document must be byte-identical
-    // to a pre-FRO141 profile that never mentions the key at all.
+    // to a legacy profile that never mentions the key at all.
     ControllerProfile oldProfile = profile;
     oldProfile.controls = {plain};
     const juce::var oldJson = oldProfile.toVar();

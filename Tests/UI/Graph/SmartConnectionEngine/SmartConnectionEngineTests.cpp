@@ -1,6 +1,6 @@
 // SmartConnectionEngineTests.cpp
 //
-// Engine-level coverage for SmartConnectionEngine (FRO77 PR1): drives it directly against a real
+// Engine-level coverage for SmartConnectionEngine: drives it directly against a real
 // AudioEngine graph through GraphEditor::getCanvasHostForTest() (a minimal host — GraphEditor
 // supplies real ModuleComponents/graph/undo, but the test never goes through GraphEditor's own
 // drag-preview gesture chain (beginDragPreview/updateDragPreview) or forwarders — it builds a

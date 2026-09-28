@@ -1,4 +1,4 @@
-// GraphEditorModAmount.cpp -- the shared mod-amount drag gesture (FRO287): adjusting an
+// GraphEditorModAmount.cpp -- the shared mod-amount drag gesture: adjusting an
 // attenuverter's "amount" param from a mouse drag, whether that drag started on the cable
 // midpoint knob (GraphEditorCanvas.cpp) or on a card knob's ring annulus / Alt-drag
 // (ModuleComponent's CardKnobSlider, see CardKnobSlider.h). GraphEditor is declared in

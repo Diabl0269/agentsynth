@@ -50,7 +50,7 @@ TEST(PortLabelTests, FilterPortLabels) {
 
 TEST(PortLabelTests, VCAPortLabels) {
     VCAModule vca;
-    // Audio L/R lead the visible jacks since #219; CV keeps its raw channel and only moves slot.
+    // Audio L/R lead the visible jacks; CV keeps its raw channel and only moves slot.
     EXPECT_EQ(vca.getInputPortLabel(0), "Audio L");
     EXPECT_EQ(vca.getInputPortLabel(1), "Audio R");
     EXPECT_EQ(vca.getInputPortLabel(2), "CV");
@@ -90,7 +90,7 @@ static void setDualIO(juce::AudioProcessor& proc, bool dual) {
 // The FX modules whose every continuous parameter has a CV jack: the visible jacks are the
 // collapsed Audio (or Left/Right) pair followed by one jack per parameter, in parameter order,
 // and every jack is a modulation target on the matching raw channel (audio pair + jack index).
-// `hasKeyPair`: a Key (sidechain) pair is appended after the CV jacks (Compressor, FRO317) — one
+// `hasKeyPair`: a Key (sidechain) pair is appended after the CV jacks (Compressor) — one
 // collapsed "Key" jack, or Key L/R when split; its full map is pinned in FXModuleSidechainKeyTests.
 static void expectStereoCvJacks(ModuleBase& module, const std::vector<juce::String>& cvLabels,
                                 bool hasKeyPair = false) {

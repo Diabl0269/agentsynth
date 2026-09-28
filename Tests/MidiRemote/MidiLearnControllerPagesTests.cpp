@@ -1,8 +1,8 @@
-// FRO142 (docs/control/midi-remote.md#pages): MidiLearnController::assignControl tags a new PROJECT
-// assignment with whatever page was active on its profile at assignment time, and only replaces
-// another assignment on the SAME control/target when that one is on the same page too. Reuses
-// MidiRemotePanelTestFixture.h (MidiLearnControllerAssignTests.cpp's own fixture). Suite name
-// contains "MidiRemote" per the ship-task --gtest_filter convention.
+// MidiLearnController::assignControl tags a new PROJECT assignment with whatever page was active on
+// its profile at assignment time, and only replaces another assignment on the SAME control/target
+// when that one is on the same page too. Reuses MidiRemotePanelTestFixture.h
+// (MidiLearnControllerAssignTests.cpp's own fixture). Suite name contains "MidiRemote" per the
+// ship-task --gtest_filter convention (see docs/control/midi-remote.md#pages).
 
 #include "../UI/MidiRemote/MidiRemotePanelTestFixture.h"
 
@@ -86,7 +86,7 @@ TEST_F(MidiRemoteAssignPagesTest, ActionTargetIgnoresTheActivePageAndStaysGlobal
     ASSERT_EQ(controller_->getProfiles().front().actions.size(), 1u);
 }
 
-// FRO142: a page target assigned from the panel/inspector's "Pages" group is GLOBAL too -- same
+// A page target assigned from the panel/inspector's "Pages" group is GLOBAL too -- same
 // branch as action/continuous -- and its own page number/command round-trip through the profile.
 TEST_F(MidiRemoteAssignPagesTest, PageTargetIsGlobalAndCarriesItsCommandAndPageNumber) {
     ASSERT_EQ(controller_->assignControl("p1", "knob", PickTarget::pageTarget(synth::PageCommand::go, 2)),

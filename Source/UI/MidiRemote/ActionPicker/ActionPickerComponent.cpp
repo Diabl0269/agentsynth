@@ -35,8 +35,8 @@ std::vector<ActionPickerRow> buildActionPickerRows(const juce::String& filter, i
         rows.insert(rows.end(), group.begin(), group.end());
     }
 
-    // FRO236 (docs/control/midi-remote.md#continuous-targets): one more group, appended last, same
-    // filter rule as every action category above.
+    // One more group, appended last, same filter rule as every action category above
+    // (see docs/control/midi-remote.md#continuous-targets).
     static constexpr std::array<synth::ContinuousTargetKind, 3> kContinuousKinds{
         synth::ContinuousTargetKind::bpm, synth::ContinuousTargetKind::playhead,
         synth::ContinuousTargetKind::masterVolume};
@@ -59,9 +59,9 @@ std::vector<ActionPickerRow> buildActionPickerRows(const juce::String& filter, i
         rows.insert(rows.end(), continuousGroup.begin(), continuousGroup.end());
     }
 
-    // FRO142 (docs/control/midi-remote.md#pages): Next page / Previous page always offered, then one
-    // "Page N" row per page the selected control's controller currently has -- filtered the same way
-    // as every other row above.
+    // Next page / Previous page always offered, then one "Page N" row per page the selected
+    // control's controller currently has -- filtered the same way as every other row above
+    // (see docs/control/midi-remote.md#pages).
     std::vector<ActionPickerRow> pageGroup;
     auto addPageRow = [&](const juce::String& label, synth::PageCommand command, int pageNumber) {
         if (needle.isNotEmpty() && !label.containsIgnoreCase(needle))

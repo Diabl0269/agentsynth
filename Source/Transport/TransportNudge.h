@@ -1,4 +1,4 @@
-// Concern: FRO271's cursor-move and loop-locator-jump transport actions (transportNudge*Beat/Bar,
+// Concern: the cursor-move and loop-locator-jump transport actions (transportNudge*Beat/Bar,
 // transportJumpToLoopStart/End) -- the target arithmetic and the message-thread accumulation state
 // they share, kept free of MainComponent so it is unit-testable against a bare TransportService.
 #pragma once

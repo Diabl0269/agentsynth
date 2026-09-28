@@ -1,4 +1,4 @@
-// ControllerSurfaceViewTests.cpp -- FRO331 (docs/control/midi-remote-ui.md#surface-centre): the
+// ControllerSurfaceViewTests.cpp (docs/control/midi-remote-ui.md#surface-centre): the
 // surface's own pan/zoom, driven through the real mouseDown/mouseDrag/mouseUp/mouseWheelMove/
 // mouseMagnify overrides with synthesized juce::MouseEvents (Source/UI/CLAUDE.md's "test the real
 // mouse path" convention), mirroring Tests/UI/Graph/GraphEditor/GraphEditorViewportTests.cpp's own
@@ -178,7 +178,7 @@ TEST(ControllerSurfaceViewTest, ViewIsRestoredPerControllerAcrossProfileSwitches
     EXPECT_EQ(surface.getPanOffsetForTest(), panA);
 }
 
-// ---- FRO331: drag-lands-where-dropped must still hold under pan/zoom ------------------------
+// ---- Drag-lands-where-dropped must still hold under pan/zoom --------------------------------
 
 // Companion to ControllerSurfaceTests.cpp's MultiStepDragLandsExactlyOnOriginPlusDelta, at a
 // non-1.0 zoom and non-zero pan (both reached through the surface's own real gestures) --
@@ -224,7 +224,7 @@ TEST(ControllerSurfaceViewTest, DragLandsWhereDroppedUnderNonTrivialZoomAndPan) 
     EXPECT_EQ(moves[0].row, 1);
 }
 
-// FRO331 bugfix regression: the coordinator's own in-app repro (a GROUP drag crossing several
+// The coordinator's own in-app repro (a GROUP drag crossing several
 // OCCUPIED cells) reproduced at zoom ~0.7 and ~1.25 in the app, not only at the default 1.0 this
 // file's other tests use -- ScreenSpaceDragDriver (which actually converts through content_'s
 // transform, unlike DragDriver) is the only test shape that can cover that combination.

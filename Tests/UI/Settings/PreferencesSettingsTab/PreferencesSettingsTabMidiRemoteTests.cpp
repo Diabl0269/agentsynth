@@ -1,4 +1,4 @@
-// PreferencesSettingsTabMidiRemoteTests.cpp -- FRO136 (docs/control/midi-remote-ui.md#settings): the
+// PreferencesSettingsTabMidiRemoteTests.cpp (docs/control/midi-remote-ui.md#settings): the
 // MIDI Remote group -- Default takeover (Jump / Pick-up / Scale, default Scale) and "Show MIDI badges
 // on mapped controls" (default on). What reaches RemoteEngine / the badge painter live is covered in
 // Tests/UI/MidiRemote/MidiRemotePreferencesTests.cpp; this file is the tab's own contract.

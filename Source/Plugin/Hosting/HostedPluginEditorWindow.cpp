@@ -19,7 +19,7 @@ HostedPluginEditorWindow::HostedPluginEditorWindow(HostedPluginModule& module, j
     // addToDesktop=false above: constructing this window (what every headless test below does)
     // never creates a native peer. Only HostedPluginWindowManager::openEditorFor's later
     // addToDesktop() call does that (gated on setCreatesNativeWindows(true), for real use — see
-    // HostedPluginWindowManager.h's FRO100 class comment).
+    // HostedPluginWindowManager.h's class comment).
     setUsingNativeTitleBar(true);
 
     // The seam this window reacts to for the rest of its life — see the class comment.
@@ -47,7 +47,7 @@ void HostedPluginEditorWindow::closeButtonPressed() {
 }
 
 bool HostedPluginEditorWindow::keyPressed(const juce::KeyPress& key) {
-    // FRO337: only ever reached once the plugin itself didn't consume the key. For a plugin whose
+    // Only ever reached once the plugin itself didn't consume the key. For a plugin whose
     // editor is a real juce::Component (including the GenericAudioProcessorEditor fallback), JUCE's
     // own key dispatch walks from the focused component up to its parents and stops at the first
     // keyPressed() that returns true, so this runs only once nothing further down did. A plugin

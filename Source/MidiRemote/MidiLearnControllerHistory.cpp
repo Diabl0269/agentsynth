@@ -1,4 +1,4 @@
-// Concern: FRO273 -- the controller edit history (docs/control/midi-remote.md#undo). Recording a
+// Concern: the controller edit history (docs/control/midi-remote.md#undo). Recording a
 // profile edit's before/after state from inside every profile mutation, and applying a recorded
 // state back through the SAME mutation path on undo/redo, so the engine snapshot is republished
 // and onChanged refreshes the panel exactly as for the original edit.

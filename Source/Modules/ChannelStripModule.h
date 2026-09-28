@@ -8,7 +8,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 /**
- * @brief "Channel Strip" — the end of one mixer channel (P9-2, docs/mixer/mixer.md#node-types).
+ * @brief "Channel Strip" — the end of one mixer channel (docs/mixer/mixer.md#node-types).
  *
  * The node the mixer enumerates: a channel's chain terminates here, and the strip's gain, pan,
  * mute and solo are what a mixer column drives. Output is always stereo (Left on ch0, Right on
@@ -31,7 +31,7 @@
  * once the node is live in a graph). A later write with a different shape is refused: changing a
  * strip's width means replacing the strip, one undo step, never widening a live node.
  *
- * SENDS (FRO15/P9-9, docs/mixer/sends-and-buses.md). A send is not a node: it is a strip-owned OUTPUT leg,
+ * SENDS (docs/mixer/sends-and-buses.md). A send is not a node: it is a strip-owned OUTPUT leg,
  * a real stereo pair of raw output channels an ordinary graph edge carries into a bus strip's
  * input. kMaxSends fixed slots are declared at construction (a variable-port module declares its
  * maximum and varies only the VISIBLE count — Source/Modules/CLAUDE.md), each with its own L and R
@@ -49,22 +49,22 @@
  * the one being mapped); the jack LABEL keeps naming the slot ("Send 3 L" stays Send 3), so a jack,
  * its mixer row and its `send3Level` parameter always agree.
  *
- * All kMaxSends level AND (FRO294) PAN parameters are added in the constructor UNCONDITIONALLY,
+ * All kMaxSends level AND PAN parameters are added in the constructor UNCONDITIONALLY,
  * active or not: adding a parameter later renumbers the host-visible layout and detaches saved
  * host automation. The pan parameters are appended AFTER every existing parameter (including
  * addMuteParameter()), so no existing parameter's index moves -- a send's pan rides the exact same
  * pan-law choice (docs/mixer/mixer.md#pan-law) the strip's own `pan` parameter uses: `ModuleBase::panGains`
- * balance law (centre is unity on both legs) on a Stereo strip, or FRO325's per-project
+ * balance law (centre is unity on both legs) on a Stereo strip, or the per-project
  * `ModuleBase::panGainsCompensated` on a Mono one -- see applyPanLaw() -- smoothed over
  * kSmoothingSeconds exactly like level. Which slots actually exist, each
- * slot's pre/post choice, (FRO295) each slot's MUTE, and (FRO294) each slot's MONO are
+ * slot's pre/post choice, each slot's MUTE, and each slot's MONO are
  * non-parameter trusted extra state ("sends"); the send's TARGET is never stored — it is the graph
  * edge itself, since node ids are reassigned on every rebuild-from-JSON and a stored id would go
  * stale on undo. A muted send never touches its own level parameter, so unmuting always restores
- * the exact same level — mute is a separate silence gate on top, not a level of zero. FRO294: MONO
+ * the exact same level — mute is a separate silence gate on top, not a level of zero. MONO
  * is state, not a parameter, because it is a binary routing choice (sum L/R before the pan law),
  * not a continuous value a fader or host automation lane would drive -- the same "state, not
- * parameter" reasoning FRO295 gives mute.
+ * parameter" reasoning that applies to mute.
  *
  * Pre-fader is tapped after the hygiene/mono duplication and BEFORE gain and pan; post-fader after
  * them, i.e. exactly the signal the strip hands Master, and before the solo gate. Under bypass the
@@ -101,7 +101,7 @@
  * a bypassed non-soloed strip leaking into a soloed mix would break docs/mixer/mixer.md#solo-is-a-render-time-gate's
  * "every non-soloed strip outputs silence".
  *
- * STEM TAP (P9-8, docs/mixer/stem-export.md). An opt-in, non-owning tap for offline stem export: a
+ * STEM TAP (docs/mixer/stem-export.md). An opt-in, non-owning tap for offline stem export: a
  * message-thread-armed pointer to a caller-owned stereo destination buffer, null during normal/live
  * playback. When non-null, the strip copies its FINAL stereo output — post gain, pan, mute AND solo
  * gate, i.e. exactly what it hands to Master — into the tap at the end of every processBlock exit
@@ -163,7 +163,7 @@ public:
                              juce::NormalisableRange<float>(kMinGainDb, kMaxGainDb, 0.1f), 0.0f));
         }
         addMuteParameter();
-        // FRO294: appended AFTER every parameter above (including mute), so nothing already
+        // Appended AFTER every parameter above (including mute), so nothing already
         // registered renumbers -- see the class comment.
         for (int slot = 0; slot < kMaxSends; ++slot) {
             const juce::String id = "send" + juce::String(slot + 1) + "Pan";
@@ -189,7 +189,7 @@ public:
         for (int slot = 0; slot < kMaxSends; ++slot) {
             smoothedSend_[slot].reset(sampleRate, kSmoothingSeconds);
             smoothedSend_[slot].setCurrentAndTargetValue(sendTargetGain(slot));
-            // FRO294: the pan VALUE is what's smoothed (not the two derived gains directly), same
+            // The pan VALUE is what's smoothed (not the two derived gains directly), same
             // shape as the strip's own gain/pan split -- writeSendLegs() re-derives gainL/gainR from
             // the smoothed value every sample via the shared ModuleBase::panGains law.
             smoothedSendPan_[slot].reset(sampleRate, kSmoothingSeconds);
@@ -336,12 +336,12 @@ public:
     bool isSendPreFader(int slot) const noexcept {
         return slot >= 0 && slot < kMaxSends && (preMask_.load(std::memory_order_relaxed) & (1u << slot)) != 0;
     }
-    /** FRO295: per-send mute -- non-parameter trusted extra state, exactly like isSendPreFader above.
+    /** Per-send mute -- non-parameter trusted extra state, exactly like isSendPreFader above.
      *  A muted slot's send level parameter is untouched, so unmuting restores the exact same level. */
     bool isSendMuted(int slot) const noexcept {
         return slot >= 0 && slot < kMaxSends && (muteMask_.load(std::memory_order_relaxed) & (1u << slot)) != 0;
     }
-    /** FRO294: per-send mono -- non-parameter trusted extra state, same lifecycle as isSendMuted
+    /** Per-send mono -- non-parameter trusted extra state, same lifecycle as isSendMuted
      *  above. When set, writeSendLegs sums the tapped L/R signal to (L+R)*0.5 on BOTH legs before
      *  applying the send's own pan law, rather than carrying the strip's stereo image unchanged. */
     bool isSendMono(int slot) const noexcept {
@@ -361,12 +361,12 @@ public:
      *  a track's channel, so the mixer gives its column the BUS badge and a feeding-strips source
      *  line instead of a track chip. Written by the "Add bus" flow and by buildMakeChannel's
      *  merge-point buses; persisted in the trusted extra state. Nothing about routing or audio
-     *  depends on it -- a bus IS an ordinary Channel Strip (that is the whole point of D1) -- so a
+     *  depends on it -- a bus IS an ordinary Channel Strip -- so a
      *  patch saved before the flag existed still classifies correctly from its topology. */
     void setIsBus(bool isBus) noexcept { isBus_.store(isBus, std::memory_order_relaxed); }
     bool isBus() const noexcept { return isBus_.load(std::memory_order_relaxed); }
 
-    // ---- User-given name (message thread only; FRO225, docs/mixer/panel.md#what-the-mixer-shows) ----
+    // ---- User-given name (message thread only; docs/mixer/panel.md#what-the-mixer-shows) ------------
     //
     // Named setStripName/getStripName, not setName/getName -- juce::AudioProcessor already declares
     // getName() (overridden above via ModuleBase::moduleName to return the module TYPE name, "Channel
@@ -412,7 +412,7 @@ public:
         auto mask = preMask_.load(std::memory_order_relaxed);
         preMask_.store(pre ? (mask | bit) : (mask & ~bit), std::memory_order_relaxed);
     }
-    /** FRO295: mutes/unmutes send `slot` without touching its level parameter -- unmuting always
+    /** Mutes/unmutes send `slot` without touching its level parameter -- unmuting always
      *  restores the exact same level. No-op out of range. */
     void setSendMuted(int slot, bool muted) {
         if (slot < 0 || slot >= kMaxSends)
@@ -421,7 +421,7 @@ public:
         auto mask = muteMask_.load(std::memory_order_relaxed);
         muteMask_.store(muted ? (mask | bit) : (mask & ~bit), std::memory_order_relaxed);
     }
-    /** FRO294: sums/unsums send `slot`'s tapped L/R to (L+R)*0.5 before its own pan law. No-op
+    /** Sums/unsums send `slot`'s tapped L/R to (L+R)*0.5 before its own pan law. No-op
      *  out of range. */
     void setSendMono(int slot, bool mono) {
         if (slot < 0 || slot >= kMaxSends)
@@ -437,7 +437,7 @@ public:
         return slot >= 0 && slot < kMaxSends ? sendLevelParams_[slot] : nullptr;
     }
     static juce::String getSendLevelParameterId(int slot) { return "send" + juce::String(slot + 1) + "Level"; }
-    /** FRO294: this slot's pan parameter -- same host-visible/automatable-for-free contract as the
+    /** This slot's pan parameter -- same host-visible/automatable-for-free contract as the
      *  level parameter above. Null only for an out-of-range slot. */
     juce::AudioParameterFloat* getSendPanParameter(int slot) const noexcept {
         return slot >= 0 && slot < kMaxSends ? sendPanParams_[slot] : nullptr;
@@ -464,7 +464,7 @@ public:
 
     // ---- Meter (audio thread writes, any thread reads) ----
 
-    /** FRO146: the peak latched since `reader`'s own last call, for one output leg (0 = Left,
+    /** The peak latched since `reader`'s own last call, for one output leg (0 = Left,
      *  1 = Right), post gain/pan/mute/solo. Consuming (read-and-reset) but only of `reader`'s own
      *  slot -- the mixer column and a track header's channel chip poll independently and must
      *  never steal each other's peaks. See Source/Mixer/PeakMeterLatch.h. */
@@ -572,7 +572,7 @@ private:
                     continue;
                 setSendActive(slot, true);
                 setSendPreFader(slot, static_cast<bool>(obj->getProperty("pre")));
-                // FRO295/FRO294: absent (an entry saved before mute/mono existed) means off, same
+                // Absent (an entry saved before mute/mono existed) means off, same
                 // "unset means off" rule "pre" already established -- an old project loads unchanged.
                 setSendMuted(slot, obj->hasProperty("mute") && static_cast<bool>(obj->getProperty("mute")));
                 setSendMono(slot, obj->hasProperty("mono") && static_cast<bool>(obj->getProperty("mono")));
@@ -588,12 +588,12 @@ private:
         targetR = gain * panR;
     }
 
-    /** FRO325 (docs/mixer/mixer.md#pan-law): the strip's OWN pan and a send's pan both route through
-     *  this -- the project's pan law (read off the transport carrier a MONO strip's playhead already
-     *  has, same downcast as audibleLegsThisBlock()) applies ONLY while this strip is Mono-shaped; a
-     *  Stereo strip's "pan" stays the balance control it always was (docs/mixer/mixer.md#mono-and-stereo,
-     *  industry convention: pan pot on mono, balance on stereo). No transport, or Stereo, falls back
-     *  to panGains -- bit-identical to before this ticket for every existing project. */
+    /** The strip's OWN pan and a send's pan both route through this -- the project's pan law (read off
+     *  the transport carrier a MONO strip's playhead already has, same downcast as
+     *  audibleLegsThisBlock()) applies ONLY while this strip is Mono-shaped; a Stereo strip's "pan" stays
+     *  the balance control it always was (docs/mixer/mixer.md#mono-and-stereo, industry convention: pan
+     *  pot on mono, balance on stereo). No transport, or Stereo, falls back to panGains unchanged
+     *  (see docs/mixer/mixer.md#pan-law). */
     void applyPanLaw(float pan, float& gainL, float& gainR) const {
         if (getShape() == Shape::Mono) {
             auto* transport = dynamic_cast<synth::TransportService*>(getPlayHead());
@@ -642,7 +642,7 @@ private:
             auto& smoothedPan = smoothedSendPan_[slot];
             smoothed.setTargetValue(sendTargetGain(slot));
             smoothedPan.setTargetValue(sendPanParams_[slot]->get());
-            // FRO295: a muted slot is silenced the same way a solo-gated-shut leg is -- the hygiene
+            // A muted slot is silenced the same way a solo-gated-shut leg is -- the hygiene
             // pass already cleared it, so just don't write over that silence. The level parameter
             // (and this smoother) keep tracking the target, so unmuting picks up at the same level.
             if ((audible & sendLegBit(slot)) == 0 || isSendMuted(slot)) {
@@ -657,10 +657,10 @@ private:
             auto* destL = buffer.getWritePointer(sendLeftChannel(slot));
             auto* destR = buffer.getWritePointer(sendRightChannel(slot));
             for (int i = 0; i < numSamples; ++i) {
-                // FRO294: mono first -- sum the TAPPED signal to (L+R)*0.5 on both legs, same
+                // Mono first -- sum the TAPPED signal to (L+R)*0.5 on both legs, same
                 // content, before the pan law splits it back apart. At centre under the balance law
                 // (panL=panR=1.0f exactly, since panGains(0.0f) clamps to unity on both legs with no
-                // rounding) a non-mono send reduces to the pre-FRO294 math bit-for-bit; FRO325's
+                // rounding) a non-mono send reduces to the plain math bit-for-bit; the
                 // compensated law (a Mono strip's project setting) gives centre gains a hair under
                 // 1.0f (a float cosine/sine rounding, not a bug) so that exactness no longer holds.
                 float sigL = sourceL[i];
@@ -718,12 +718,12 @@ private:
     juce::AudioParameterFloat* gainParam_ = nullptr;
     juce::AudioParameterFloat* panParam_ = nullptr;
     juce::AudioParameterFloat* sendLevelParams_[kMaxSends] = {};
-    juce::AudioParameterFloat* sendPanParams_[kMaxSends] = {}; // FRO294
+    juce::AudioParameterFloat* sendPanParams_[kMaxSends] = {};
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedGainL_{1.0f};
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedGainR_{1.0f};
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedSend_[kMaxSends];
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedSendPan_[kMaxSends]; // FRO294
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedSendPan_[kMaxSends];
 
     // Written on the message thread (setShape / setExtraState, before the node is live), read every
     // block on the audio thread. Relaxed: nothing orders against it.
@@ -738,8 +738,8 @@ private:
     // reads — one relaxed load each per block, so a strip's own slots are always self-consistent.
     std::atomic<juce::uint32> activeMask_{0};
     std::atomic<juce::uint32> preMask_{0};
-    std::atomic<juce::uint32> muteMask_{0}; // FRO295: per-send mute, same lifecycle as preMask_
-    std::atomic<juce::uint32> monoMask_{0}; // FRO294: per-send mono, same lifecycle as muteMask_
+    std::atomic<juce::uint32> muteMask_{0}; // per-send mute, same lifecycle as preMask_
+    std::atomic<juce::uint32> monoMask_{0}; // per-send mono, same lifecycle as muteMask_
     std::atomic<juce::uint32> soloAudibleMask_{0};
 
     static int legIndex(int leg) noexcept { return leg == 1 ? 1 : 0; }

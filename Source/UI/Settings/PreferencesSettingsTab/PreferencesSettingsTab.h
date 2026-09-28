@@ -9,7 +9,7 @@
 #include <optional>
 #include <vector>
 
-// The Settings "Preferences" tab (issues #216 / #217).
+// The Settings "Preferences" tab.
 //
 // Holds editor behaviour that is not appearance: smart-connection mode and double-click
 // port disconnect. Each control persists through juce::ApplicationProperties and, when a
@@ -33,36 +33,37 @@ public:
     void setSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     bool isDoubleClickPortDisconnectEnabled() const;
     void setDoubleClickPortDisconnectEnabled(bool enabled);
-    // FRO23 (docs/layout/module-card.md#deleting-a-module-reconnect-the-chain-fro23): plain on/off, ON by default.
+    // Plain on/off, ON by default
+    // (see docs/layout/module-card.md#deleting-a-module-reconnect-the-chain-fro23).
     bool isReconnectChainOnDeleteEnabled() const;
     void setReconnectChainOnDeleteEnabled(bool enabled);
-    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): plain on/off, unlike getMacroAutoPortPreference() below —
-    // these are brand-new automations shipped ON by default, with a plain escape hatch, not a
-    // replacement for pre-existing silent behaviour (which is why that one is a tri-state "ask").
+    // Plain on/off, unlike getMacroAutoPortPreference() below — these are automations that are ON by default with
+    // a plain escape hatch, not a replacement for pre-existing silent behaviour (which is why that one is a
+    // tri-state "ask") (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
     bool isMacroAutoCreatePortsOnDragEnabled() const;
     void setMacroAutoCreatePortsOnDragEnabled(bool enabled);
     bool isMacroAutoDeletePortsOnLastCableEnabled() const;
     void setMacroAutoDeletePortsOnLastCableEnabled(bool enabled);
-    // FRO235: plain on/off, OFF by default — see the .cpp for what it gates.
+    // Plain on/off, OFF by default — see the .cpp for what it gates.
     bool isMacroSpliceCableOnPortDeleteEnabled() const;
     void setMacroSpliceCableOnPortDeleteEnabled(bool enabled);
-    // FRO168 (docs/macros/menu-and-membership.md): reparent a module by dragging it across a macro hull without
-    // holding Cmd. Plain on/off, ON by default (Cmd works either way).
+    // Reparent a module by dragging it across a macro hull without holding Cmd. Plain on/off, ON by
+    // default (Cmd works either way) (see docs/macros/menu-and-membership.md).
     bool isMacroDragWithoutCmdEnabled() const;
     void setMacroDragWithoutCmdEnabled(bool enabled);
-    // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): plain on/off, ON by default —
-    // same shape as the two T148 toggles above (a brand-new automation, not a replacement for pre-existing silent
-    // behaviour).
+    // Plain on/off, ON by default — same shape as the two macro auto-port toggles above (a brand-new automation, not a
+    // replacement for pre-existing silent behaviour)
+    // (see docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow").
     bool isMixerAutoCreateChannelOnConnectEnabled() const;
     void setMixerAutoCreateChannelOnConnectEnabled(bool enabled);
     bool isAlignmentGuidesEnabled() const;
     void setAlignmentGuidesEnabled(bool enabled);
     bool getDefaultDualIOForNewModules() const;
     void setDefaultDualIOForNewModules(bool enabled);
-    // Founder-review fix F5 (docs/macros/auto-ports.md#auto-creating-ports-when-grouping): whether grouping a selection
-    // with a crossing cable into a macro auto-creates matching ports, leaves the cables as they are, or asks every time
-    // (the default). "Always ask" here is what lets a user who picked a side once reconsider — GraphEditor's own modal
-    // offers no such way back in, only "remember this choice".
+    // Whether grouping a selection with a crossing cable into a macro auto-creates matching ports, leaves the cables as
+    // they are, or asks every time (the default). "Always ask" here is what lets a user who picked a side once
+    // reconsider — GraphEditor's own modal offers no such way back in, only "remember this choice"
+    // (see docs/macros/auto-ports.md#auto-creating-ports-when-grouping).
     GraphEditor::MacroAutoPortPreference getMacroAutoPortPreference() const;
     void setMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref);
     bool isLoopSelectionArmsEnabled() const;
@@ -73,7 +74,7 @@ public:
     void setNaturalScrollingEnabled(bool enabled);
     bool isZoomScrollUpZoomsInEnabled() const;
     void setZoomScrollUpZoomsInEnabled(bool enabled);
-    // Autosave (P8-4): periodic sidecar save of the open bundle, gated on the edit serial having
+    // Autosave: periodic sidecar save of the open bundle, gated on the edit serial having
     // moved since the last one — see MainComponent::maybeAutosave. DEFAULT ON at 2 minutes.
     bool isAutosaveEnabled() const;
     void setAutosaveEnabled(bool enabled);
@@ -86,24 +87,25 @@ public:
     // autosave.json. Any exact integer 0-50; 0 disables the backup history entirely. DEFAULT 5.
     int getAutosaveBackupCount() const;
     void setAutosaveBackupCount(int count);
-    // FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): per-type default track preset. Empty
-    // string == "Factory Default" (the sentinel row, id kMixerDefaultPresetFactoryComboId) == the unchanged
-    // buildDefaultAudioChannel-based chain; a non-empty name that no longer resolves to a listed
-    // preset is silently ignored by the setter (the combo keeps its current selection).
+    // Per-type default track preset. Empty string == "Factory Default" (the sentinel row, id
+    // kMixerDefaultPresetFactoryComboId) == the unchanged buildDefaultAudioChannel-based chain; a non-empty
+    // name that no longer resolves to a listed preset is silently ignored by the setter (the combo keeps
+    // its current selection) (see docs/mixer/track-presets.md#saving-and-setting-a-default).
     juce::String getMixerDefaultTrackPresetAudio() const;
     void setMixerDefaultTrackPresetAudio(const juce::String& presetName);
     juce::String getMixerDefaultTrackPresetInstrument() const;
     void setMixerDefaultTrackPresetInstrument(const juce::String& presetName);
-    // FRO12 (P9-6, docs/mixer/panel.md): where the Mixer panel lives -- "tab"/"ownPanel"/"window",
-    // default "tab" (D4 = A, made configurable). Read once at launch by
-    // MainComponent/MixerPlacementController and re-applied immediately on every change (no
-    // restart) via the same settings-file ChangeListener every other live preference here uses.
+    // Where the Mixer panel lives -- "tab"/"ownPanel"/"window", default "tab".
+    // Read once at launch by MainComponent/MixerPlacementController and
+    // re-applied immediately on every change (no restart) via the same settings-file
+    // ChangeListener every other live preference here uses (see docs/mixer/panel.md).
     juce::String getMixerPlacement() const;
     void setMixerPlacement(const juce::String& placement);
-    // FRO336 (docs/mixer/panel.md#placement-and-detachable-windows): "When a panel opens in its own
-    // window" -- "move" (default) or "both". Read once at launch by BottomDockComponent and
-    // re-applied live the same way as getMixerPlacement() above. Only the Mixer honours "both"
-    // today (see BottomDockComponent::usesMixerMirrorForDetach).
+    // "When a panel opens in its own window" -- "move" (default) or "both". Read once at
+    // launch by BottomDockComponent and re-applied live the same way as getMixerPlacement()
+    // above. Only the Mixer honours "both" today (see
+    // BottomDockComponent::usesMixerMirrorForDetach and
+    // docs/mixer/panel.md#placement-and-detachable-windows).
     juce::String getPanelDetachMode() const;
     void setPanelDetachMode(const juce::String& mode);
     // MIDI Remote group (docs/control/midi-remote-ui.md#settings). Default takeover is never
@@ -166,12 +168,12 @@ public:
     // assert one falls where the Dual I/O row ends without reaching into paint() itself.
     const std::vector<juce::Rectangle<int>>& getDividerBoundsForTest() const { return dividerBounds; }
 
-    // Test-seam for T157: is the scrolled content taller than the visible viewport (i.e. is a
+    // Test seam: is the scrolled content taller than the visible viewport (i.e. is a
     // vertical scrollbar active)? Answers "does this tab clip its bottom groups" without reaching
     // into layoutContent. True when a window is too short to show every group, false when they fit.
     bool contentOverflowsViewportForTest() const { return contentHost.getHeight() > contentViewport.getHeight(); }
 
-    // Live filter across every preference row's label/tooltip text (round 3 follow-up item 2).
+    // Live filter across every preference row's label/tooltip text.
     // Setting the real searchField's text would also work, but that posts an async notification in
     // a real run — this drives the exact same code path (applySearchFilter) synchronously, the same
     // "set text without notification, then call the handler directly" idiom
@@ -214,17 +216,17 @@ private:
     void persistMidiRemoteDefaultTakeover(synth::Takeover takeover);
     void persistMidiRemoteShowBadges(bool enabled);
 
-    // FRO13 (P9-7): constructs/wires the two Mixer -> per-type default track preset combos.
+    // Constructs/wires the two Mixer -> per-type default track preset combos.
     // Pulled out of the constructor (which was tripping the function-size ratchet) into its own
     // named step, in PreferencesSettingsTabMixerDefaults.cpp alongside this group's other members.
     void setupMixerDefaultTrackPresetControls();
-    // FRO12 (P9-6): constructs/wires the Mixer placement combo, same "own named step" reason as
+    // Constructs/wires the Mixer placement combo, same "own named step" reason as
     // setupMixerDefaultTrackPresetControls() above.
     void setupMixerPlacementControls();
-    // FRO336: the panel-detach-mode combo, chained from the tail of setupMixerPlacementControls()
+    // The panel-detach-mode combo, chained from the tail of setupMixerPlacementControls()
     // for the same baselined-constructor reason.
     void setupPanelDetachModeControls();
-    // FRO136: the MIDI Remote group, chained from the tail of setupPanelDetachModeControls() for the
+    // The MIDI Remote group, chained from the tail of setupPanelDetachModeControls() for the
     // same baselined-constructor reason.
     void setupMidiRemoteControls();
 
@@ -232,12 +234,11 @@ private:
     // exercises the exact component a click would open, not a lookalike.
     std::unique_ptr<juce::Component> buildDualIOPerModuleDefaultsPopup();
 
-    // Shared muted-hint treatment for the small explanatory line under a preference row (round 5
-    // fix): naturalScrollingHint and zoomScrollUpZoomsInHint shared the exact same bug — a fixed
-    // 18px height gives room for barely one line, so a hint whose text is wider than the row
-    // squeezes horizontally (Label's default minimum-horizontal-scale) instead of wrapping.
-    // Callers still set their own text and bounds; this only fixes the font/colour/wrap behaviour,
-    // at one spot, for both. Kept through round 6's checkbox revert on this row.
+    // Shared muted-hint treatment for the small explanatory line under a preference row (naturalScrollingHint and
+    // zoomScrollUpZoomsInHint): a fixed 18px height gives room for barely one line, so a hint whose
+    // text is wider than the row would squeeze horizontally (Label's default
+    // minimum-horizontal-scale) instead of wrapping. Callers set their own text and bounds; this
+    // only sets the font/colour/wrap behaviour, at one spot, for both.
     void styleMutedHintLabel(juce::Label& hint);
 
     // Re-lays the tab for the current searchQuery: hides every row whose label/tooltip text does
@@ -252,11 +253,11 @@ private:
     // (applySearchFilter -> resized -> layoutContent) without re-laying the pinned chrome.
     void layoutContent(int contentWidth);
 
-    // FRO13 (P9-7): lays out the "Group 9" mixer-defaults row pair. Pulled out of layoutContent
+    // Lays out the "Group 9" mixer-defaults row pair. Pulled out of layoutContent
     // (which was tripping the function-size ratchet) into its own named step; `groupMatches`/
     // `setGroupVisible`/`beginGroup` are layoutContent's own search-filter helpers, forwarded
     // through rather than duplicated.
-    // The macro toggle group's rows (T148 + FRO168), and their construction; each a named step of
+    // The macro toggle group's rows (auto-port + drag without Cmd), and their construction; each a named step of
     // layoutContent / the constructor for the function-size ratchet.
     void initMacroToggles();
     bool
@@ -270,7 +271,7 @@ private:
         const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible,
         const std::function<void(bool)>& beginGroup);
 
-    // FRO12 (P9-6): lays out the Mixer placement combo row -- chained from the TAIL of
+    // Lays out the Mixer placement combo row -- chained from the TAIL of
     // layoutMixerDefaultTrackPresetGroup() (not called from layoutContent directly, and not
     // taking its `beginGroup` closure): layoutContent's own `pendingDivider` local (which
     // `beginGroup` updates) is a baselined function this ticket must not grow, so
@@ -281,14 +282,14 @@ private:
         const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
         const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
 
-    // FRO336: lays out the panel-detach-mode row, chained from layoutMixerPlacementGroup() the same
+    // Lays out the panel-detach-mode row, chained from layoutMixerPlacementGroup() the same
     // way that one is chained from layoutMixerDefaultTrackPresetGroup().
     void layoutPanelDetachModeGroup(
         int& y, int contentWidth, bool previousGroupWasVisible,
         const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
         const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
 
-    // FRO136: lays out the MIDI Remote group, chained from layoutPanelDetachModeGroup() the same way
+    // Lays out the MIDI Remote group, chained from layoutPanelDetachModeGroup() the same way
     // that one is chained from layoutMixerPlacementGroup().
     void
     layoutMidiRemoteGroup(int& y, int contentWidth, bool previousGroupWasVisible,
@@ -328,25 +329,26 @@ private:
     // module type that carries the Dual I/O parameter — see buildDualIOPerModuleDefaultsPopup() and
     // the "dualIOPerModuleDefaults" JSON key.
     juce::TextButton perModuleDefaultsButton{"Per-module I/O defaults..."};
-    // Founder-review fix F5 (docs/macros/auto-ports.md): "Always ask" / "Auto-create ports" /
-    // "Leave cables as is" — the tri-state GraphEditor::MacroAutoPortPreference the "Create Macro"
-    // gesture reads before deciding whether to show its own modal.
+    // "Always ask" / "Auto-create ports" / "Leave cables as is" — the tri-state
+    // GraphEditor::MacroAutoPortPreference the "Create Macro" gesture reads before deciding
+    // whether to show its own modal (see docs/macros/auto-ports.md).
     juce::Label macroAutoPortLabel_;
     juce::ComboBox macroAutoPortCombo_;
-    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): plain on/off toggles, ON by default — see their getter/
-    // setter declarations above for why these are a different shape from macroAutoPortCombo_.
+    // Plain on/off toggles, ON by default — see their getter/setter declarations above for why these are a
+    // different shape from macroAutoPortCombo_ (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
     juce::ToggleButton macroAutoCreatePortsOnDragToggle{"Auto-create macro ports when dragging a cable across a "
                                                         "boundary"};
     juce::ToggleButton macroAutoDeletePortsOnLastCableToggle{"Auto-delete macro ports when their last cable is "
                                                              "removed"};
-    // FRO235: OFF by default, unlike the T148 pair above — see its getter/setter declarations for why.
+    // OFF by default, unlike the macro auto-port pair above — see its getter/setter declarations for why.
     juce::ToggleButton macroSpliceCableOnPortDeleteToggle{"When deleting a macro port by hand, splice the cable "
                                                           "back together instead of dropping it"};
     juce::ToggleButton macroDragWithoutCmdToggle{"Drag modules into and out of macros without Cmd"};
-    // FRO23: not macro-specific -- see initMacroToggles()' own comment for why it lives here.
+    // Not macro-specific -- see initMacroToggles()' own comment for why it lives here.
     juce::ToggleButton reconnectChainOnDeleteToggle{"Reconnect the chain when deleting a module"};
-    // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): plain on/off, ON by default —
-    // see the getter/setter declarations above for why this is a different shape from a tri-state "ask".
+    // Plain on/off, ON by default — see the getter/setter declarations above for why this is a different
+    // shape from a tri-state "ask"
+    // (see docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow").
     juce::ToggleButton mixerAutoCreateChannelOnConnectToggle{
         "Auto-create a mixer channel when a MIDI track is connected"};
     juce::ToggleButton loopSelectionArmsToggle{"Timeline: P (loop selection) also switches looping on"};
@@ -363,20 +365,16 @@ private:
     // held, and users reach for both in the same visit. Independent of it, though: this one governs
     // the Cmd / Cmd+Shift wheel-ZOOM branches only, which is what its own caption spells out.
     //
-    // Round 5 replaced this checkbox with a labelled two-option dropdown ("Zoom direction:" +
-    // "Scroll up to zoom in" / "Scroll down to zoom in") to remove the boolean wording's
-    // ambiguity. Round 6 reverts that: the user does not want two-value selects, so this is back
-    // to a checkbox, now with a single-line hint carrying the explanation the round-3/5 tooltip
-    // used to. isZoomScrollUpZoomsInEnabled() / setZoomScrollUpZoomsInEnabled() were UNCHANGED
-    // across all three rounds — same persisted key, same boolean contract — so nothing outside
-    // this file (FocusArbitrationTests.cpp's ZoomScrollPreferenceReachesTheTimelineAndTheRoll,
-    // MainComponent) ever needed to change.
+    // A checkbox with a single-line hint carrying the explanation. The persisted key and boolean
+    // contract are isZoomScrollUpZoomsInEnabled() / setZoomScrollUpZoomsInEnabled(); readers
+    // outside this file (FocusArbitrationTests.cpp's
+    // ZoomScrollPreferenceReachesTheTimelineAndTheRoll, MainComponent) go through those.
     juce::ToggleButton zoomScrollUpZoomsInToggle{"Scroll up to zoom in"};
     juce::Label zoomScrollUpZoomsInHint;
     // On (the default) labels every row in the piano roll's keys column; off labels only the Cs —
     // PianoRollComponent::KeyLabelMode::AllNotes / OctavesOnly.
     juce::ToggleButton pianoRollKeyLabelsToggle{"Label every key"};
-    // Autosave (P8-4). One single line: the toggle, then "Every: [field] min", then
+    // Autosave. One single line: the toggle, then "Every: [field] min", then
     // "Keep: [field] backups" — three independent statements that read as one group, not stacked
     // rows. Both numeric fields are plain digits-only juce::TextEditors (exact-integer entry, no
     // +/- buttons and no fixed-choice list) - see the constructor for the commit-on-return/
@@ -388,21 +386,21 @@ private:
     juce::Label autosaveBackupCountLabel;
     juce::TextEditor autosaveBackupCountEditor;
     juce::Label autosaveBackupCountUnitLabel;
-    // FRO13 (P9-7): Mixer -> per-type default track preset, one combo each, "Factory Default" as
+    // Mixer -> per-type default track preset, one combo each, "Factory Default" as
     // the leading sentinel row (see PreferencesSettingsTabInternal.h's combo-id constants).
     juce::Label mixerDefaultTrackPresetAudioLabel;
     juce::ComboBox mixerDefaultTrackPresetAudioCombo;
     juce::Label mixerDefaultTrackPresetInstrumentLabel;
     juce::ComboBox mixerDefaultTrackPresetInstrumentCombo;
-    // FRO12 (P9-6, docs/mixer/panel.md): Mixer placement -- Tab beside the Timeline (default,
-    // combo id 1) / Own panel (2) / Window (3).
+    // Mixer placement -- Tab beside the Timeline (default, combo id 1) / Own
+    // panel (2) / Window (3) (see docs/mixer/panel.md).
     juce::Label mixerPlacementLabel;
     juce::ComboBox mixerPlacementCombo;
-    // FRO336 (docs/mixer/panel.md#placement-and-detachable-windows): "When a panel opens in its own
-    // window" -- Move it there (default, combo id 1) / Show it in both places (2).
+    // "When a panel opens in its own window" -- Move it there (default, combo id 1) / Show
+    // it in both places (2) (see docs/mixer/panel.md#placement-and-detachable-windows).
     juce::Label panelDetachModeLabel;
     juce::ComboBox panelDetachModeCombo;
-    // FRO136: Default takeover (Jump / Pick-up / Scale) and the badge switch.
+    // Default takeover (Jump / Pick-up / Scale) and the badge switch.
     juce::Label midiRemoteTakeoverLabel;
     juce::ComboBox midiRemoteTakeoverCombo;
     juce::ToggleButton midiRemoteShowBadgesToggle{"Show MIDI badges on mapped controls"};
@@ -418,7 +416,7 @@ private:
 
     // The scrolled content: every preference group below is a child of this bare host, held by
     // contentViewport, so a vertical scrollbar shows when the group stack outgrows the window
-    // instead of the lower groups getting clipped (T157). Its paint() delegates the hairline
+    // instead of the lower groups getting clipped. Its paint() delegates the hairline
     // dividers back to the owner (see paintContent) — the same structure ShortcutsSettingsTab's
     // RowsHost uses for its section chrome.
     struct ContentHost : juce::Component {

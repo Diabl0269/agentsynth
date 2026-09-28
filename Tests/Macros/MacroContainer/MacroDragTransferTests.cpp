@@ -1,4 +1,4 @@
-// FRO168: a member of macro A Cmd-dragged out of A and into expanded macro B's hull transfers in
+// A member of macro A Cmd-dragged out of A and into expanded macro B's hull transfers in
 // ONE gesture and ONE undo step (leave A, join B); the "drag modules into and out of macros without
 // Cmd" preference (default ON) lets a plain single-module drag do the same; and a library module
 // dropped over an expanded hull joins it, in the same undo step as its creation.

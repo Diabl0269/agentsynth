@@ -209,8 +209,8 @@ TEST_F(OllamaProviderTest, SendPromptIncludesSelectedModelInRequestBody) {
     EXPECT_EQ(parsedBody.getProperty("model", juce::var()).toString(), juce::String("mock-model:latest"));
 }
 
-// P6-13: unset SamplingOptions must leave the request body exactly as before this feature
-// existed — no production caller opts in, so this is the "no behavior change" half of the
+// Unset SamplingOptions must leave the request body without any sampling fields — no
+// production caller opts in, so this is the "no behavior change" half of the
 // contract. Mirrors SendPromptIncludesSelectedModelInRequestBody's capture pattern.
 TEST_F(OllamaProviderTest, SendPromptOmitsSamplingOptionsWhenUnset) {
     juce::String capturedPostData;
@@ -242,7 +242,7 @@ TEST_F(OllamaProviderTest, SendPromptOmitsSamplingOptionsWhenUnset) {
     EXPECT_FALSE(parsedBody.hasProperty("options"));
 }
 
-// P6-13: explicit values are opt-in wiring for Tools/AIEvalHarness's reproducibility knobs —
+// Explicit values are opt-in wiring for Tools/AIEvalHarness's reproducibility knobs —
 // think is top-level (Ollama's reasoning-model switch), temperature/seed nest under "options"
 // (Ollama's sampling parameters).
 TEST_F(OllamaProviderTest, SendPromptIncludesSamplingOptionsWhenSet) {

@@ -1,6 +1,6 @@
-// ControllerSurfaceComponent.cpp -- FRO131 (docs/control/midi-remote-ui.md#surface-centre): builds
+// ControllerSurfaceComponent.cpp (docs/control/midi-remote-ui.md#surface-centre): builds
 // and positions the grid of ControllerSurfaceCells, forwards activity, and owns the grid-level
-// paint/keyboard plumbing shared by every FRO270 concern. Selection (click/shift/cmd) lives in
+// paint/keyboard plumbing shared by every concern. Selection (click/shift/cmd) lives in
 // ControllerSurfaceSelection.cpp, the empty-space marquee in ControllerSurfaceMarquee.cpp, and
 // drag-to-move (single or group) in ControllerSurfaceGroupDrag.cpp -- this file only wires each
 // cell's callbacks to those units' handlers.
@@ -32,7 +32,7 @@ ControllerSurfaceComponent::ControllerSurfaceComponent()
     // cell -- cells are mouse-inert display widgets and never take focus themselves.
     setWantsKeyboardFocus(true);
 
-    // FRO331: content_ never handles a click itself -- an empty-space press must reach THIS
+    // content_ never handles a click itself -- an empty-space press must reach THIS
     // component's mouseDown (pan/marquee/deselect), exactly the "fallback clicks to parent" wiring
     // GraphEditor uses for its own content child. A cell (added to content_ below) still gets its
     // own press first, since a child's own interception is unaffected by its parent's.
@@ -43,7 +43,7 @@ ControllerSurfaceComponent::ControllerSurfaceComponent()
 
 ControllerSurfaceComponent::~ControllerSurfaceComponent() = default;
 
-// FRO270: switching to a different controller drops any control selection (matches the pre-FRO270
+// Switching to a different controller drops any control selection (matches the
 // behaviour of the panel's own selectedControlId_.clear()); rebuilding the SAME profile (a live
 // refresh -- Detect, a move, a delete, an undo/redo) instead prunes the existing selection down to
 // whatever ids still exist, so the caller doesn't have to re-apply it after every mutation.
@@ -170,7 +170,7 @@ void ControllerSurfaceComponent::paint(juce::Graphics& g) {
 }
 
 bool ControllerSurfaceComponent::keyPressed(const juce::KeyPress& key) {
-    // FRO270: Esc clears the selection regardless of how many are selected -- checked first since
+    // Esc clears the selection regardless of how many are selected -- checked first since
     // it is valid even with nothing selected (a no-op, reported as unhandled below).
     if (key == juce::KeyPress::escapeKey) {
         if (selectedIds_.empty())

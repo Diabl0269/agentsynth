@@ -1,4 +1,4 @@
-// ControllerSurfaceGroupDragTests.cpp -- FRO270 (docs/control/midi-remote-ui.md#surface-centre):
+// ControllerSurfaceGroupDragTests.cpp (docs/control/midi-remote-ui.md#surface-centre):
 // dragging any cell in a multi-selection moves the whole group together, keeping relative layout,
 // clamped as a block at the grid's top-left bound, and refused outright if it would land a moved
 // control on a cell an unselected control already occupies. Driven through the real
@@ -106,7 +106,7 @@ TEST(ControllerSurfaceGroupDragTest, GroupDragIsClampedAsABlockAtTheGridsTopLeft
     EXPECT_EQ(findMove(moves, "b")->row, 0);
 }
 
-// FRO331: same coordinate hazard as the single-cell case (ControllerSurfaceTests.cpp's
+// Same coordinate hazard as the single-cell case (ControllerSurfaceTests.cpp's
 // MultiStepDragLandsExactlyOnOriginPlusDelta), but for a group -- the delta a multi-step drag on
 // the origin cell reports is what every group member's move is computed from, so a group drag is
 // exactly as exposed to it as a lone one.
@@ -166,7 +166,7 @@ TEST(ControllerSurfaceGroupDragTest, GroupDragOntoAnUnselectedControlIsRefused) 
               juce::Rectangle<int>(margin + (cellSize + margin), margin, cellSize, cellSize));
 }
 
-// FRO331 bugfix (in-app repro): a group of pad1-4 (cols 0-3) shift-marqueed then dragged right by 8
+// Regression pin: a group of pad1-4 (cols 0-3) shift-marqueed then dragged right by 8
 // whole cells, ONE STEP PER CELL CROSSED (matching the ~20-mouseDrag-steps-for-8-cells shape a real
 // slow drag delivers) so the live path visually crosses pad5-8's OCCUPIED cells (cols 4-7) before
 // landing on the free cols 8-11 -- twoAdjacentPlusBystanderModel()'s bystander at col 5 is never on

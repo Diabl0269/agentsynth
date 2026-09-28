@@ -1,4 +1,4 @@
-// MainComponentMidiRemoteStartupTests.cpp -- FRO260: MainComponent::wireMidiRemoteEngine() splits
+// MainComponentMidiRemoteStartupTests.cpp -- MainComponent::wireMidiRemoteEngine() splits
 // into an early half (sink install + Hosted's fixed hostSourceKey() source, both safe before the
 // AudioEngine exists) and MainComponent::openMidiRemoteDevices() -- opening the saved controller
 // profiles' Standalone devices and republishing the engine's real open-input set -- which must not

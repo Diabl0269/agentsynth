@@ -1,4 +1,4 @@
-// MixerMeterBallisticsTests.cpp -- FRO146: instant attack, ~20 dB/s release, and a 1.5 s
+// MixerMeterBallisticsTests.cpp -- instant attack, ~20 dB/s release, and a 1.5 s
 // peak-hold that then falls at ~20 dB/s (Source/UI/Mixer/MixerMeterBallistics.h). Every case
 // drives advanceMeterBallistics() with an explicit elapsed time -- no wall clock, no juce::Timer.
 #include "UI/Mixer/MixerMeterBallistics.h"

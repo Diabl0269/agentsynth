@@ -1,4 +1,4 @@
-// AddControllerPopoverTests.cpp -- FRO134 (docs/control/midi-remote-ui.md#add-controller): the
+// AddControllerPopoverTests.cpp (docs/control/midi-remote-ui.md#add-controller): the
 // "+ Add controller" popover as a pure view over an injected device list -- deterministic, no
 // juce::MidiInput. Suite names contain "MidiRemote" per the ship-task --gtest_filter convention.
 #include "UI/MidiRemote/AddController/AddControllerPopover.h"

@@ -1,4 +1,4 @@
-// CurveEditorGridSnapTests.cpp (FRO114) -- the generic CurveEditorComponent/CurveEditorGeometry/
+// CurveEditorGridSnapTests.cpp -- the generic CurveEditorComponent/CurveEditorGeometry/
 // CurveModel additions the LFO custom-wave card needs: setGrid/setSnapToGrid (+ Shift bypass),
 // zeroSegmentPx, the right-click context-menu hook, and CurveModel::playheadForX. The envelope
 // card never touches any of these -- see CurveEditorInteractionTests.cpp for its own coverage,

@@ -1,4 +1,4 @@
-// FRO149 repro/regression: a real .agsproj project (two Oscillator macros, each ending in a
+// Repro/regression: a real .agsproj project (two Oscillator macros, each ending in a
 // Channel Strip) opened with both strips' faders pinned to +12 dB (the top of the range) and the
 // "12.0 dB" readout, regardless of what dB value was actually saved for that strip. This file
 // pins the load path (ProjectBundle::load -> AIStateMapper::applyJSONToGraph, trusted) and the
@@ -7,7 +7,7 @@
 // project's shape: two macros ("Oscillator 1" collapsed, "Oscillator 2" not), each an
 // Oscillator feeding a Channel Strip, both strips feeding Master.
 //
-// Investigation (FRO149): the load path (ProjectBundle::load -> AIStateMapper::applyJSONToGraph,
+// Investigation: the load path (ProjectBundle::load -> AIStateMapper::applyJSONToGraph,
 // trusted), the real app's open-project flow (MainComponent::openProjectForTest ->
 // GraphEditor::updateComponents -> reconcileTimelineAfterGraphChange), and the mixer UI path
 // (MixerPanelComponent::rebuild -> MixerColumnComponent::rebindControls -> MixerFader::bind) were
@@ -31,7 +31,7 @@
 
 namespace {
 
-// The strip's originally-saved gains (matches the FRO149 report): node "strip-a" was saved at
+// The strip's originally-saved gains (as reported): node "strip-a" was saved at
 // essentially 0 dB (the same near-zero float noise the app's own dB<->linear round trip always
 // produces for "unity"), node "strip-b" at -14.2 dB. Neither is anywhere near +12 dB.
 constexpr float kStripAGainDb = -1.430511474609375e-6f;

@@ -1,4 +1,4 @@
-// MeterColourStopsEditorTests.cpp -- FRO147: Source/UI/Settings/MeterColourStopsEditor.{h,cpp},
+// MeterColourStopsEditorTests.cpp -- Source/UI/Settings/MeterColourStopsEditor.{h,cpp},
 // the Settings > Appearance "Meter Colours" section's scale/handle editor. Headless, driven with
 // synthesized juce::MouseEvents for the drag gestures (docs/development/test-patterns.md's real
 // mouse path, same idiom as Tests/UI/Graph/DragStateResetTests.cpp's realMouseEvent()).
@@ -442,7 +442,7 @@ TEST_F(MeterColourStopsEditorTest, RendersToPngForVisualInspection) {
 
     // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
     // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
-    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    // Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
     juce::Image img(juce::Image::ARGB, editor.getWidth(), editor.getHeight(), true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(editor.paint(g));

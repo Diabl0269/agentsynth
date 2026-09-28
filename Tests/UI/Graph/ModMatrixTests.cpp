@@ -174,7 +174,7 @@ TEST_F(ModMatrixTest, UpdateModuleNamesStripsExistingNumbers) {
     osc->setModuleName("Oscillator 5");
 
     // Call updateModuleNames: the stray digit is stripped, but with no sibling of the same base
-    // type left to disambiguate against, it is NOT replaced by a fresh "1" (FRO181) — a lone
+    // type left to disambiguate against, it is NOT replaced by a fresh "1" — a lone
     // instance carries no number at all.
     engine.updateModuleNames();
 
@@ -183,7 +183,7 @@ TEST_F(ModMatrixTest, UpdateModuleNamesStripsExistingNumbers) {
 }
 
 TEST_F(ModMatrixTest, UpdateModuleNamesOnlyNumbersWhenThereIsMoreThanOneOfAType) {
-    // FRO181: AudioEngine::updateModuleNames() runs incidentally on graph changes that never added
+    // AudioEngine::updateModuleNames() runs incidentally on graph changes that never added
     // or removed a module the user thinks of as such (e.g. a macro's own inlet/outlet port
     // splice), so a lone module must never pick up a spurious "1" just because that pass happened
     // to run. A second instance of the SAME base type still earns real disambiguating numbers.
@@ -696,9 +696,9 @@ TEST_F(ModMatrixTest, GroupedDestinationLabelIncludesModuleName) {
     EXPECT_TRUE(label.contains("Cutoff")) << "label was: " << label;
 }
 
-// founder-review fix G3 (docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter): grouping a module that
-// is the destination of a mod routing now splices a MacroInletModule in as that routing's dest. MacroInletModule
-// declares no getModulationTargets() (a plain cable drop onto its jack must never auto-wrap into a new attenuverter --
+// Grouping a module that is the destination of a mod routing splices a MacroInletModule in as that routing's dest
+// (docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter). MacroInletModule declares no
+// getModulationTargets() (a plain cable drop onto its jack must never auto-wrap into a new attenuverter --
 // Tests/Macros/MacroPortFlowTests.cpp), so the destination combo needs a way to still resolve and show something for a
 // row landing there, instead of going blank/unselectable.
 TEST_F(ModMatrixTest, DestinationLabelStillResolvesAfterGroupingSplicesAMacroPort) {

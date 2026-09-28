@@ -605,7 +605,7 @@ void AIChatComponent::resized() {
             : 0;
     const int hostedNoticeGap = hostedNoticeHeight > 0 ? kChromeGap : 0;
 
-    // P6-8 downgrade notice: same zero-height-when-absent contract, reserved only once
+    // Downgrade notice: same zero-height-when-absent contract, reserved only once
     // updateDowngradeStrip() has something true to say (see its doc comment). Same measured-not-
     // guessed height as hostedModeNotice just above — this one's text also embeds a variable-
     // length date, so a fixed height clipped it whenever the rendered sentence wrapped.
@@ -615,7 +615,7 @@ void AIChatComponent::resized() {
             : 0;
     const int downgradeStripGap = downgradeStripHeight > 0 ? kChromeGap : 0;
 
-    // P6-8 upsell strip: just the "Upgrade to Pro" button now (its explanatory text moved to
+    // Upsell strip: just the "Upgrade to Pro" button now (its explanatory text moved to
     // historyButton's tooltip — see the member doc comment), so it only needs a single comfortable
     // click-target row, not the taller label+button row this used to be. Same zero-height-when-absent
     // contract, but starts VISIBLE by default (see the member doc comment) — most callers (including
@@ -811,7 +811,7 @@ void AIChatComponent::updateChatDisplay() {
                     patchFeedbackStore.record(msg.jsonPatch, storeRating, comment, serverConversationId,
                                               msg.serverMessageId);
 
-                    // P6-9: additionally sync to the server, fire-and-forget, ONLY when this
+                    // Additionally sync to the server, fire-and-forget, ONLY when this
                     // turn's assistant message has a server-assigned id (Pro + persistence
                     // succeeded when the message was created — see MessageData::serverMessageId)
                     // AND the account is still signed-in Pro right now AND a usable access token

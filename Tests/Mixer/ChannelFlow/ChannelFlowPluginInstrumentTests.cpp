@@ -1,8 +1,8 @@
 // ChannelFlowPluginInstrumentTests.cpp
 //
-// FRO42 (P9-3h): "+ Track -> Instrument -> Plugin -> <name>" — a hosted plugin as the
-// instrument, plus the FRO42 review-fix regressions (menu snapshot resolution, format-label
-// disambiguation, self-exclusion, poly Voice Mixer wiring). Uses InstrumentPluginStubBackendCFT
+// "+ Track -> Instrument -> Plugin -> <name>" — a hosted plugin as the
+// instrument, plus regressions for menu snapshot resolution, format-label
+// disambiguation, self-exclusion and poly Voice Mixer wiring. Uses InstrumentPluginStubBackendCFT
 // and friends from ChannelFlowTestFixture.h.
 
 #include "../../StubPluginInstance.h"
@@ -36,7 +36,7 @@
 #include <thread>
 
 // ============================================================================
-// FRO42 (P9-3h): "+ Track -> Instrument -> Plugin -> <name>" — a hosted plugin as the instrument.
+// "+ Track -> Instrument -> Plugin -> <name>" — a hosted plugin as the instrument.
 // Loading is asynchronous (StubBackend's own contract), so every test here pumps the message loop
 // after driving the SAME applyAddTrackMenuChoice/menu-id path the tests above use.
 // ============================================================================
@@ -56,7 +56,7 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackBuildsDefaultChannelWithNoAdsr) {
     mc.getPluginScanService().setCandidateSource([](const juce::String&) { return juce::StringArray(); });
     seedScanListCFT(mc.getPluginScanService(), {pluginDescriptionCFT("Stub Synth", 0xA1FA, /*isInstrument=*/true)});
 
-    // FRO42 fix: applyAddTrackMenuChoice now resolves against the snapshot buildAddTrackMenu()
+    // applyAddTrackMenuChoice now resolves against the snapshot buildAddTrackMenu()
     // captures, so a real menu open has to run first — the same flow a real click always goes
     // through (see TimelinePanelComponent.h's instrumentPluginMenuSnapshot_ comment).
     mc.getTimelinePanel().buildAddTrackMenu();
@@ -146,7 +146,7 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackOneUndoStepRevertsEverythingAndRedo
     const juce::String docBefore = juce::JSON::toString(doc.toVar());
     const juce::String macrosBefore = juce::JSON::toString(macros.toVar());
 
-    // FRO42 fix: resolve against the buildAddTrackMenu() snapshot, the real click flow.
+    // Resolve against the buildAddTrackMenu() snapshot, the real click flow.
     mc.getTimelinePanel().buildAddTrackMenu();
     mc.getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddInstrumentPluginMenuIdBase +
                                                   0);
@@ -219,7 +219,7 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackFailedLoadLeavesGraphAndUndoUntouch
     const int nodesBefore = graph.getNumNodes();
     const juce::String messageBefore = mc.getStatusBar().getTransientMessageForTest();
 
-    // FRO42 fix: resolve against the buildAddTrackMenu() snapshot, the real click flow.
+    // Resolve against the buildAddTrackMenu() snapshot, the real click flow.
     mc.getTimelinePanel().buildAddTrackMenu();
     mc.getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddInstrumentPluginMenuIdBase +
                                                   0);
@@ -277,7 +277,7 @@ TEST_F(ChannelFlowTest, PluginInstrumentMenuShowsScanningThenNoInstrumentPlugins
 }
 
 // ============================================================================
-// FRO42 review fixes (P9-3h follow-up). See TimelinePanelComponent.h's instrumentPluginMenuSnapshot_
+// Plugin-instrument menu behaviours. See TimelinePanelComponent.h's instrumentPluginMenuSnapshot_
 // and kAddInstrumentPluginNoneMenuId comments, and MainComponent::getInstrumentPluginOptions'/
 // addInstrumentPluginTrack's own comments, for the mechanism each of these proves.
 // ============================================================================
@@ -630,7 +630,7 @@ TEST_F(ChannelFlowTest, EnvelopeAndVCAComposeAfterVoiceMixerForPolyInstrument) {
     ASSERT_FALSE(channel.stripUuid.isEmpty()) << "the VCA's output must satisfy buildDefaultAudioChannel too";
 }
 
-// FRO46 (P9-3j): synth::addPolyEnvelopeAndVCAForInstrument, exercised directly at the ChannelFlows
+// synth::addPolyEnvelopeAndVCAForInstrument, exercised directly at the ChannelFlows
 // level (a factory-default Oscillator is poly OFF, so the golden "+ Track -> Instrument" path never
 // takes this branch today, same reasoning as the poly tests above) — proves a poly instrument gets
 // a TRUE per-voice envelope: Poly MIDI's Pitch/Gate fans feed the instrument and a poly ADSR
@@ -704,7 +704,7 @@ TEST_F(ChannelFlowTest, PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNoVo
         << "the VCA's summed ch0/ch1 output must satisfy buildDefaultAudioChannel";
 }
 
-// FRO48 (P9-3k): the "+ Track -> Instrument -> Oscillator (Poly)" menu entry is the first real UI
+// The "+ Track -> Instrument -> Oscillator (Poly)" menu entry is the first real UI
 // entry point for the poly-envelope auto-wire above — it must set the freshly created Oscillator's
 // "poly" parameter BEFORE MainComponent::addInstrumentTrack's own isProcessorPoly check runs, so
 // the golden "+ Track" path (never poly today — see InstrumentTrackOscillatorWiresSplitBlockRight-
@@ -754,7 +754,7 @@ TEST_F(ChannelFlowTest, AddInstrumentTrackMenuOscillatorPolyWiresPolyEnvelopeAnd
 }
 
 // Same as AddInstrumentTrackMenuOscillatorPolyWiresPolyEnvelopeAndVCA above, for the Wavetable
-// entry — Wavetable gets the same poly-envelope auto-wire as Oscillator (P9-3j).
+// entry — Wavetable gets the same poly-envelope auto-wire as Oscillator.
 TEST_F(ChannelFlowTest, AddInstrumentTrackMenuWavetablePolyWiresPolyEnvelopeAndVCA) {
     MainComponent mc(std::make_unique<MockProviderCFT>());
     mc.setSize(1600, 900);

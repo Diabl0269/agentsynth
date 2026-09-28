@@ -4,14 +4,14 @@
 #include <cstddef>
 #include <juce_audio_basics/juce_audio_basics.h>
 
-// MixerMeterScale.h -- FRO146 (docs/mixer/mixer.md meters section): the meter's dB scale, shared by the
+// MixerMeterScale.h (docs/mixer/mixer.md meters section): the meter's dB scale, shared by the
 // painter (MixerMeter), the clip readout (MixerMeterReadout) and the track header's channel chip
 // (ChannelChipComponent), and unit-tested directly so the boundary behaviour never has to be
 // reverse-engineered from pixels.
 //
 // -60..+3 dB (our own top; Cubase's own default channel-meter scale has no +3 mark, but we keep
 // ours as the pre-existing clip headroom cap). The dB<->position mapping is NOT linear in dB --
-// FRO146 follow-up: Cubase's real channel-meter taper gives 0 dB (and the +3 headroom above it)
+// Cubase's real channel-meter taper gives 0 dB (and the +3 headroom above it)
 // generous room and compresses the -30..-60 tail into a small strip at the bottom, so a meter reads
 // legibly at typical mixing levels without the quiet end turning into a single illegible pixel.
 // meterDbToFraction()/meterFractionToDb() are monotonic PIECEWISE-LINEAR interpolations through the

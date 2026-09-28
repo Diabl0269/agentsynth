@@ -85,7 +85,7 @@ public:
 
     /** The drag-preview state refreshSmartSuggestions needs, read from GraphEditor's own fields
      *  and handed in rather than reached for — GraphEditor keeps owning the actual drag-preview
-     *  members until FRO77 PR3 (GraphDragDropController). `probe` is BORROWED (the owning
+     *  members (see GraphDragDropController). `probe` is BORROWED (the owning
      *  unique_ptr stays on GraphEditor); `selectionDragBlocksSuggestions` is GraphEditor's own
      *  `selectionDragActive && selection.size() > 1` — selection itself is not on GraphCanvasHost
      *  in this PR, so the caller precomputes the one bit the engine needs from it. */
@@ -171,7 +171,7 @@ public:
 
     /** Whether a proximity suggestion should be offered at all for the CURRENT drag — mode, the
      *  multi-selection-drag guard, and the snippet guard. refreshSmartSuggestions is the main
-     *  caller; public because GraphEditor::finalizeModuleDrag (GraphEditorDragDrop.cpp, FRO77 PR3)
+     *  caller; public because GraphEditor::finalizeModuleDrag (GraphEditorDragDrop.cpp)
      *  also re-checks it before applying, exactly as it did when this lived on GraphEditor. */
     bool shouldOfferSmartConnections(const DragPreviewState& drag) const;
 

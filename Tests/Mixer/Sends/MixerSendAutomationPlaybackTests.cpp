@@ -1,4 +1,4 @@
-// MixerSendAutomationPlaybackTests.cpp -- FRO292 (docs/mixer/sends-and-buses.md#the-send-and-bus-ui):
+// MixerSendAutomationPlaybackTests.cpp (docs/mixer/sends-and-buses.md#the-send-and-bus-ui):
 // a lane bound to a ChannelStripModule's own sendNLevel is driven by the SAME
 // AutomationApplier/OfflineTransportDriver path AutomationApplierTests.cpp already pins for a
 // built-in module's parameter -- proof that a send level needed no new evaluator, only the new

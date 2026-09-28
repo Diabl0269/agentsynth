@@ -1,5 +1,4 @@
-// Right-click MIDI Learn on a module-card control (FRO130,
-// docs/control/midi-remote-ui.md#right-click-midi-learn--coverage /
+// Right-click MIDI Learn on a module-card control (docs/control/midi-remote-ui.md#right-click-midi-learn--coverage /
 // docs/control/midi-remote-ui.md#the-learn-interaction). Three concerns live here:
 //
 //   REGISTRY   ModuleComponent::MidiLearnableRegistry (declared in ModuleComponent.h, defined
@@ -9,8 +8,8 @@
 //              against `sliders` for the "Automate" item; see showAutomateMenuForSlider in
 //              ModuleComponentInteraction.cpp).
 //   MENU       appendMidiLearnMenuItems() builds the doc-exact block by calling the surface-
-//              agnostic synth::ui::midilearn::appendMidiLearnMenuItems() (FRO133,
-//              Source/UI/MidiRemote/MidiLearnMenu.h) with this card's own callbacks;
+//              agnostic synth::ui::midilearn::appendMidiLearnMenuItems()
+//              (Source/UI/MidiRemote/MidiLearnMenu.h) with this card's own callbacks;
 //              showAutomateMenuForSlider (sliders) and showMidiLearnOnlyMenu (everything else)
 //              both call it, then both route through showContextMenuHook_ so a test can capture
 //              the result headlessly.
@@ -51,7 +50,7 @@ void ModuleComponent::MidiLearnableRegistry::add(juce::Component& component, juc
     entries_.push_back(std::move(e));
 }
 
-// FRO137: a hosted-plugin card's knob/toggle/choice control. `param` is the live instance
+// A hosted-plugin card's knob/toggle/choice control. `param` is the live instance
 // parameter (a juce::HostedAudioProcessorParameter in practice, never a RangedAudioParameter with
 // a real paramID) and `paramId` is the slot's own stable id -- see CardLayout.h.
 void ModuleComponent::MidiLearnableRegistry::addHosted(juce::Component& component, juce::AudioProcessorParameter& param,
@@ -119,9 +118,9 @@ void ModuleComponent::registerHostedMidiLearnable(juce::Component& control, juce
 
 void ModuleComponent::clearHostedMidiLearnable() { midiLearnableRegistry_.clearHosted(); }
 
-// The pick-target overlay's view of this card (FRO135): every registered control with its parameter,
+// The pick-target overlay's view of this card: every registered control with its parameter,
 // so the overlay never needs to know what a card is. Hosted controls are included the same as
-// built-in ones (FRO137) -- e.paramId is the identity to key on either way.
+// built-in ones -- e.paramId is the identity to key on either way.
 void ModuleComponent::collectPickCandidates(std::vector<synth::ui::PickCandidate>& out) const {
     for (const auto& e : midiLearnableRegistry_.entries())
         if (e.param != nullptr)
@@ -138,7 +137,7 @@ void ModuleComponent::showMidiLearnOnlyMenu(juce::RangedAudioParameter* param) {
     showMidiLearnOnlyMenu(param->paramID, param->getName(100));
 }
 
-// FRO137: hosted-plugin toggle/choice controls -- same menu, keyed on a plain paramId + display
+// Hosted-plugin toggle/choice controls -- same menu, keyed on a plain paramId + display
 // name rather than a RangedAudioParameter (a hosted parameter isn't one).
 void ModuleComponent::showMidiLearnOnlyMenu(const juce::String& paramId, const juce::String& displayName) {
     juce::PopupMenu menu;
@@ -148,7 +147,7 @@ void ModuleComponent::showMidiLearnOnlyMenu(const juce::String& paramId, const j
     showContextMenuHook_(menu);
 }
 
-// FRO137: right-click on a hosted-plugin KNOB -- "Automate '<Param>'" (mirrors
+// Right-click on a hosted-plugin KNOB -- "Automate '<Param>'" (mirrors
 // showAutomateMenuForSlider's own item for a built-in knob) plus the shared MIDI Learn block.
 void ModuleComponent::showHostedKnobMenu(const juce::String& paramId, const juce::String& displayName) {
     if (module == nullptr)

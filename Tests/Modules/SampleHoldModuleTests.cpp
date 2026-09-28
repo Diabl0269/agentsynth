@@ -1,5 +1,5 @@
 // SampleHoldModuleTests.cpp
-// Unit tests for SampleHoldModule (Sample & Hold / Randomizer, issue #148).
+// Unit tests for SampleHoldModule (Sample & Hold / Randomizer).
 //   • Construction / port topology / modulation targets
 //   • Sample mode: latches the source on a rising edge and holds between edges
 //   • Track mode: follows the source while the gate is high, freezes when it falls
@@ -847,7 +847,7 @@ TEST(TriggerMeterTest, PaintDoesNotCrashAndDrawsSomething) {
 
     // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
     // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
-    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    // Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
     juce::Image img(juce::Image::ARGB, 260, 18, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(meter.paint(g));

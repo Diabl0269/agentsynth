@@ -28,7 +28,7 @@ public:
     void applyTheme(const Theme& theme);
     const Theme& getTheme() const noexcept { return theme; }
 
-    // ---------- meter colour stops (FRO147) ----------
+    // ---------- Meter colour stops -------------------
     // The ONE cache every meter painter (MixerMeter -- mixer columns, Master, a detached mixer
     // window, since they all resolve their LookAndFeel back to this same instance -- and
     // ChannelChipComponent) reads instead of rebuilding a MeterColourStops from scratch on every
@@ -121,14 +121,14 @@ public:
     // Draw the outer Serum-style modulation ring around a knob (replaces the inline logic in
     // ModuleComponent.cpp:551-564). centre/radius in the SAME coordinate space the caller paints
     // in. baseNorm/modNorm are 0..1 parameter positions; positive determines ring color.
-    // hovered (FRO288): the routing driving this ring is correlated with a hovered cable (or vice
+    // hovered: the routing driving this ring is correlated with a hovered cable (or vice
     // versa, docs/modules/modulation.md#modulation-rings-on-knobs) -- widens the stroke by
     // Theme::Metrics::modRingHoverWidthBoost and brightens the colour, the same brighter(0.3)
     // treatment a hovered cable already gets (docs/layout/cables.md#hover).
     void drawModulationRing(juce::Graphics&, juce::Point<float> centre, float radius, float baseNorm, float modNorm,
                             bool positive, bool hovered = false);
 
-    // Draw the reachable-range band under a modulation ring (FRO287): the arc between
+    // Draw the reachable-range band under a modulation ring: the arc between
     // [startNorm, endNorm] (already clamped to 0..1 by the caller -- see modDepthBandRange in
     // ModuleComponentModBand.h), same geometry as drawModulationRing, at theme.metrics
     // .modDepthBandAlpha. `colour` is the caller's already-resolved ring colour (modRingPositive
@@ -147,7 +147,7 @@ public:
 
     // Shared angle mapping for drawModulationRing/drawModulationDepthBand -- a 0..1 norm to a point
     // on the same 270 degree rotary sweep, clamped. Keeping this ONE place is what keeps the ring,
-    // the band it's drawn under, and (FRO288) a knob's mod-target ring-anchor point from ever
+    // the band it's drawn under, and a knob's mod-target ring-anchor point from ever
     // drifting apart geometrically. Public so ModuleComponent::getModTargetKnobAnchor can reuse it
     // (see UI/Graph/ModuleComponent/ModuleComponentInternal.h's modRingPointForNorm).
     static float modRingAngleForNorm(float norm) {
@@ -165,7 +165,7 @@ private:
 
     Theme theme{}; // active theme copy
 
-    // FRO147: the user's pinned stop set (nullopt = follow the theme) and the effective, cached
+    // The user's pinned stop set (nullopt = follow the theme) and the effective, cached
     // result recomputeMeterColourStops() derives from it -- see the public accessors above.
     std::optional<synth::ui::MeterColourStops> meterColourStopsOverride;
     synth::ui::MeterColourStops meterColourStops;

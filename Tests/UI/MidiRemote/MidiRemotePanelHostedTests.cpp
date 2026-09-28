@@ -1,4 +1,4 @@
-// MidiRemotePanelHostedTests.cpp -- FRO136 (docs/control/midi-remote-ui.md#plugin-build): the panel in
+// MidiRemotePanelHostedTests.cpp (docs/control/midi-remote-ui.md#plugin-build): the panel in
 // HostMode::Hosted (the plugin build). Host MIDI is the one live controller and is always listed; the
 // device UI is hidden; profiles for real devices are listed as "standalone only" and inert; Detect
 // works from the host's own MIDI buffer. The fixture's AudioEngine is Hosted. Suite names contain

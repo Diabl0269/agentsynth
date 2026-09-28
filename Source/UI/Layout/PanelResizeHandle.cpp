@@ -1,4 +1,4 @@
-// Concern: FRO231 -- PanelResizeHandle's paint, hover state and the screen-coordinate drag. Lifted
+// Concern: PanelResizeHandle's paint, hover state and the screen-coordinate drag. Lifted
 // out of TimelinePanelComponent (where it was a nested class) so the bottom dock can own ONE
 // handle regardless of which tab is showing.
 #include "PanelResizeHandle.h"

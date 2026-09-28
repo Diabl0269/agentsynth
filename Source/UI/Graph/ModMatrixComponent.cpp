@@ -11,7 +11,8 @@ namespace {
 // MacroInletModule deliberately declares NO getModulationTargets() — GraphEditor::connectPorts()
 // relies on that empty list to keep a plain cable drop onto a Macro In's jack a plain connection,
 // never auto-wrapped in a fresh attenuverter (Tests/Macros/MacroPortFlowTests.cpp's drop-a-cable tests
-// pin that). Founder-review fix G3 (docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter) can still
+// pin that). A modulation cable through an attenuverter
+// (docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter) can still
 // splice a MacroInletModule in as the DESTINATION of an EXISTING AttenuverterChain crossing a macro boundary, so this
 // row's destination combo needs something to show and match against — without changing what the module declares
 // globally (which would resurrect the auto-wrap problem for ordinary drops). Display-only: this never becomes a real
@@ -30,7 +31,7 @@ std::vector<ModulationTarget> destinationCandidatesForCombo(ModuleBase* module) 
 ModMatrixComponent::ModMatrixComponent(AudioEngine& engine, AppUndoManager* undoMgr)
     : audioEngine(engine)
     , undoManager(undoMgr) {
-    // T159: makes grabKeyboardFocus() on THIS component (the "modMatrix" focus region's root)
+    // Makes grabKeyboardFocus() on THIS component (the "modMatrix" focus region's root)
     // succeed deterministically rather than depending on JUCE's position-ordered descent into
     // children finding a focus-wanting one (see the identical comment in ModuleLibraryComponent's
     // ctor). Also matters here because this component nests INSIDE the "canvas" region (it is a
@@ -129,7 +130,7 @@ void ModMatrixComponent::paint(juce::Graphics& g) {
     }
 }
 
-// T159: focus-region outline (Source/UI/Layout/FocusRegion.h) -- see the paintOverChildren declaration's
+// Focus-region outline (Source/UI/Layout/FocusRegion.h) -- see the paintOverChildren declaration's
 // comment in the header for why this can't just be tacked onto the end of paint() above.
 void ModMatrixComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }
 

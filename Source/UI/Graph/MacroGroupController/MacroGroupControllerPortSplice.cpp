@@ -33,7 +33,7 @@ int MacroGroupController::nextMacroPortOrder(const synth::Macro& macro, bool isI
     return next;
 }
 
-// ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros/auto-ports.md#the-auto-port-preference)
+// ---- Auto-create-ports-on-group (docs/macros/auto-ports.md#the-auto-port-preference)
 // -------------
 
 std::vector<MacroGroupController::MacroPortCrossingGroup> MacroGroupController::buildMacroPortCrossingPlan(
@@ -46,7 +46,7 @@ std::vector<MacroGroupController::MacroPortCrossingGroup> MacroGroupController::
         if (id.uid != 0)
             memberUids.insert(id.uid);
     // No `size() < 2` floor: groupSelectionIntoMacro() already refuses a selection of fewer than
-    // two modules before it ever gets here, but the incremental add/remove callers (T138)
+    // two modules before it ever gets here, but the incremental add/remove callers
     // legitimately need a crossing plan for a one-member "inside" set. The loop below is correct
     // for any size, including 0 or 1.
     auto isMember = [&](juce::AudioProcessorGraph::NodeID id) { return memberUids.count(id.uid) != 0; };
@@ -67,8 +67,7 @@ std::vector<MacroGroupController::MacroPortCrossingGroup> MacroGroupController::
         const bool portIsInput = !srcInside;
 
         // A crossing connection whose EXTERNAL endpoint is an AttenuverterModule needs one more
-        // check before it can be treated like any other crossing (founder review: "mod
-        // connections don't get routed - they should"). AudioEngine::addModRouting always wraps a
+        // check before it can be treated like any other crossing. AudioEngine::addModRouting always wraps a
         // single-slot CV routing as source -> attenuverter(ch0) -> destination, and the
         // attenuverter itself can NEVER be a macro member — it never gets a ModuleComponent, so it
         // can never be part of a canvas selection. So when this crossing's external node is an
@@ -318,7 +317,7 @@ void MacroGroupController::spliceMacroPorts(const juce::String& macroId,
     }
 }
 
-// ---- Auto-create/delete ports on incremental Add/Remove Selection to/from Macro (T138) -----------
+// ---- Auto-create/delete ports on incremental Add/Remove Selection to/from Macro ------------------
 
 std::vector<MacroGroupController::MacroPortCrossingGroup>
 MacroGroupController::buildMacroPortCrossingPlanForNewMembers(const juce::String& macroId,
@@ -548,7 +547,7 @@ juce::String MacroGroupController::autoMacroPortName(ModuleBase* internalMb, boo
     return jackLabel.isNotEmpty() ? base + " " + jackLabel : base;
 }
 
-// ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros/auto-ports.md#ports-on-a-cable-drag)
+// ---- Auto-create-port-on-drag / auto-delete-on-last-cable (docs/macros/auto-ports.md#ports-on-a-cable-drag)
 // -----
 
 bool MacroGroupController::nodeIsMacroPort(juce::AudioProcessorGraph::NodeID nodeId) const {
@@ -578,7 +577,7 @@ MacroGroupController::mintMacroPortForAutoCreate(const juce::String& macroId, bo
     auto* internalMb = internalNode != nullptr ? dynamic_cast<ModuleBase*>(internalNode->getProcessor()) : nullptr;
 
     if (!isMidi) {
-        // FRO234: infer the shape from the dragged cable's own fan on the INTERNAL member's jack
+        // Infer the shape from the dragged cable's own fan on the INTERNAL member's jack
         // (mirrored onto the boundary) instead of always Mono — same rule
         // createMacroPortFromDroppedCable applies for the collapsed-card-drop case. The internal
         // jack's own direction matches the new port's `isInput` (a signal entering the port also
@@ -613,7 +612,7 @@ MacroGroupController::mintMacroPortForAutoCreate(const juce::String& macroId, bo
 bool MacroGroupController::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                                                             juce::AudioProcessorGraph::NodeID dstId, int dstJack,
                                                             bool isMidi, bool recordUndo) {
-    // T155: a mod/CV-routed drag goes through this SAME mint-and-wire path as a plain audio drag —
+    // A mod/CV-routed drag goes through this SAME mint-and-wire path as a plain audio drag —
     // no separate scope cut. host_.connectPorts() has its own CV detection and wraps that leg in a
     // hidden AttenuverterModule via addModRouting() exactly as it always has.
     const juce::String srcUuid = nodeUuidFor(srcId);
@@ -665,7 +664,7 @@ bool MacroGroupController::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessor
     };
 
     if (!recordUndo) {
-        // T184's auto-channel hook: the caller already owns an outer recordGraphAndMacroChange
+        // The auto-channel hook: the caller already owns an outer recordGraphAndMacroChange
         // transaction and will call updateComponents() itself once, after its own further
         // mutations.
         doMutation();

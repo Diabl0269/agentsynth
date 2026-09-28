@@ -1,4 +1,4 @@
-// MidiRemoteUndoRoutingTests.cpp -- FRO273 (docs/control/midi-remote.md#undo): the Edit menu's
+// MidiRemoteUndoRoutingTests.cpp (docs/control/midi-remote.md#undo): the Edit menu's
 // Undo/Redo command rows (AppCommands::undo / redo, what Cmd+Z / Cmd+Shift+Z and the menu both
 // invoke) act on the controller edit history while the MIDI Remote panel holds keyboard focus, and
 // on the project history otherwise. Driven through a real MainComponent's ApplicationCommandManager.

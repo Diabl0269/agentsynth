@@ -138,7 +138,7 @@ void ModuleComponent::HostedCardBinding::addKnob(const synth::ResolvedCardSlot& 
     slider->setComponentID("hostedKnob:" + resolved.slot.paramId);
     styleHostedKnob(*slider);
     card_.addAndMakeVisible(slider);
-    // FRO137: mirrors createControls()'s own addMouseListener(this) for a generic auto-UI slider --
+    // Mirrors createControls()'s own addMouseListener(this) for a generic auto-UI slider --
     // without it a right-click never reaches ModuleComponent::mouseDown at all, which is exactly
     // why a hosted knob was inert to right-click before this (docs/control/plugin-card-layout.md's
     // "Not yet wired" note).
@@ -158,7 +158,7 @@ void ModuleComponent::HostedCardBinding::addToggle(const synth::ResolvedCardSlot
     auto* toggle = card_.toggles.add(new detail::MidiLearnableToggleButton(text));
     toggle->setComponentID("hostedToggle:" + resolved.slot.paramId);
     card_.addAndMakeVisible(toggle);
-    toggle->addMouseListener(&card_, false); // FRO137: see addKnob()'s own comment
+    toggle->addMouseListener(&card_, false); // See addKnob()'s own comment
     card_.registerHostedMidiLearnable(*toggle, *resolved.param, resolved.slot.paramId);
 
     wireGestures(*card_.hostedAttachments_.add(new HostedParameterAttachment(*resolved.param, *toggle)),
@@ -169,7 +169,7 @@ void ModuleComponent::HostedCardBinding::addChoice(const synth::ResolvedCardSlot
     auto* combo = card_.comboBoxes.add(new juce::ComboBox());
     combo->setComponentID("hostedChoice:" + resolved.slot.paramId);
     card_.addAndMakeVisible(combo);
-    combo->addMouseListener(&card_, false); // FRO137: see addKnob()'s own comment
+    combo->addMouseListener(&card_, false); // See addKnob()'s own comment
     card_.comboParams.add(nullptr);         // a hosted parameter is not a RangedAudioParameter
     card_.registerHostedMidiLearnable(*combo, *resolved.param, resolved.slot.paramId);
 
@@ -222,11 +222,11 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
         rebuildHostedPluginCard();
 }
 
-// FRO132 (docs/control/plugin-card-layout.md#choosing-knobs): opens the picker as a juce::CallOutBox
-// anchored to this card. Reached from the "Choose knobs..." button (createHostedPluginControls()
-// above wires onChooseKnobsRequested to this very function) and from buildModuleContextMenu()'s own
-// "Choose knobs..." item (ModuleComponentInteraction.cpp), both of which just call
-// onChooseKnobsRequested() -- so this is the ONE place that actually builds the popover.
+// Opens the picker as a juce::CallOutBox anchored to this card. Reached from the "Choose knobs..."
+// button (createHostedPluginControls() above wires onChooseKnobsRequested to this very function)
+// and from buildModuleContextMenu()'s own "Choose knobs..." item (ModuleComponentInteraction.cpp),
+// both of which just call onChooseKnobsRequested() -- so this is the ONE place that actually builds
+// the popover (see docs/control/plugin-card-layout.md#choosing-knobs).
 void ModuleComponent::showPluginKnobPicker() {
     if (hostedCard_ == nullptr)
         return;
@@ -284,7 +284,7 @@ void ModuleComponent::unbindHostedPluginCard(bool paramsAlive) {
     }
     hostedAttachments_.clear();
 
-    // FRO137: drop every hosted registry entry BEFORE the widgets below are destroyed, or an entry
+    // Drop every hosted registry entry BEFORE the widgets below are destroyed, or an entry
     // is left pointing at a freed Component until the next rebuild's add() calls overwrite it (see
     // MidiLearnableRegistry::clearHosted()'s own comment).
     clearHostedMidiLearnable();

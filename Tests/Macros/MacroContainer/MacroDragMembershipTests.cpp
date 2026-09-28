@@ -1,11 +1,11 @@
-// FRO40: Cmd+drag (Ctrl+drag on Windows/Linux, where JUCE's commandModifier IS ctrlModifier) a
+// Cmd+drag (Ctrl+drag on Windows/Linux, where JUCE's commandModifier IS ctrlModifier) a
 // module across an EXPANDED macro's hull border to add it to / remove it from that macro, with a
 // live candidate-hull highlight, exactly ONE membership mutation at mouseUp, and the whole gesture
 // (position + membership + any macro-port splicing) landing in ONE undo step.
 //
 // Every test below drives the REAL ModuleComponent::mouseDown/mouseDrag/mouseUp callbacks, never a
 // direct addSelectionToMacro/removeSelectionFromMacro call —
-// docs/macros/menu-and-membership.md#adding-to-and-removing-from-a-macro's T138 note documents a real prior case of a
+// docs/macros/menu-and-membership.md#adding-to-and-removing-from-a-macro's note documents a real prior case of a
 // direct-call test hiding an unreachable feature, and this file's whole point is to prove the GESTURE (modifier
 // arbitration, deferred click-vs-drag classification, the live highlight, the single undo step) actually works end to
 // end.
@@ -295,7 +295,7 @@ TEST(MacroDragMembership, CmdDragJoinSplicesOutInteriorPortAndCreatesNewCrossing
     EXPECT_TRUE(foundDirectAtoF) << "splicing out the interior port must restore the direct A->F cable";
 }
 
-// FRO195: the LEAVE-direction mirror of CmdDragJoinSplicesOutInteriorPortAndCreatesNewCrossingPort
+// The LEAVE-direction mirror of CmdDragJoinSplicesOutInteriorPortAndCreatesNewCrossingPort
 // above -- a member dragged OUT of a macro can leave a DIFFERENT existing port obsolete (its
 // interior leg was exactly the departing member) while simultaneously creating a NEW port for a
 // cable that only just became a real crossing.
@@ -674,7 +674,7 @@ TEST(MacroDragMembership, WindowsLinuxCtrlDragNotCrossingAHullKeepsThePlainInser
 // module correctly reparents, and this test's "membership unchanged" assertion would fail — not
 // because the production code is wrong (WindowsLinuxCtrlDragCrossingHullReparents below covers
 // exactly that platform's real behaviour), but because the test's own premise doesn't exist there.
-// Confirmed on CI (PR #415, run 35293581829): both Ubuntu jobs ("Build, Test, and Coverage" and
+// Confirmed on CI: both Ubuntu jobs ("Build, Test, and Coverage" and
 // "Build and Test (ASAN)") failed on this one test, while macOS and Windows passed. Skips on the
 // modifier semantics themselves (checked as a compile-time constant), not on a platform macro, so
 // this stays correct if a platform ever changes which bits alias.

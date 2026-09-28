@@ -144,7 +144,7 @@ public:
      *  Owned by MainComponent, separately from onInstanceChanged. */
     std::function<void()> onInstancePublished;
 
-    /** FRO42: fired on the message thread at the end of EVERY loadPlugin() attempt — success,
+    /** Fired on the message thread at the end of EVERY loadPlugin() attempt — success,
      *  outright failure (the backend hands back no instance) OR the over-max refusal inside
      *  publishInstance() (which itself fires nothing else at all) — with `success` = hasInstance()
      *  read right after. This is the one signal that covers all three exits, which is exactly why a
@@ -248,7 +248,7 @@ public:
     LogicalPort mapInputChannel(int rawChannel) const override;
     LogicalPort mapOutputChannel(int rawChannel) const override;
 
-    /** FRO42: unlike the split-block voice modules, ch1 here is never a CV input — this module has
+    /** Unlike the split-block voice modules, ch1 here is never a CV input — this module has
      *  none, only the instance's own raw audio channels in a contiguous block (mapOutputChannel
      *  above) — so it does NOT use the ModuleBase default (`hasDualIOParameter() ? 1 : -1`), which
      *  would read -1 forever: this module never registers a Dual I/O parameter (its shape is fixed

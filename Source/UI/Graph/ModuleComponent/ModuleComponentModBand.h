@@ -1,6 +1,6 @@
 #pragma once
 
-// FRO287: pure geometry for the modulation-ring depth band -- the reachable range a knob's
+// Pure geometry for the modulation-ring depth band -- the reachable range a knob's
 // attached modulation could push it across, drawn as a band under the live ring
 // (docs/modules/modulation.md#modulation-rings-on-knobs). Split into a free function so the
 // start/end-norm math is unit-testable with no ModuleComponent/LookAndFeel involved

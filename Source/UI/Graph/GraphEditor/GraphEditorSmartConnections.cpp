@@ -1,8 +1,8 @@
 // GraphEditorSmartConnections.cpp
 //
-// GraphEditor's own smart-connection surface. FRO254: the plain one-line forwarders onto
+// GraphEditor's own smart-connection surface. Every call site reaches
 // SmartConnectionEngine (Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.{h,cpp})
-// are gone now that every call site reaches it directly, either through
+// directly, either through
 // GraphEditor::getSmartConnections() (external callers) or the smartConnections_ member itself
 // (GraphEditor's own other .cpp files). What's left: the three GraphCanvasHost pure-virtual
 // overrides below (refreshSmartSuggestions/clearSmartSuggestions/seedInsertModifierSample), which
@@ -33,7 +33,7 @@ juce::String GraphEditor::smartConnectionModeToString(SmartConnectionMode mode) 
 
 // GraphCanvasHost pure-virtual override — GraphDragDropController calls this polymorphically
 // through the host interface, so it can't move onto SmartConnectionEngine even though every
-// other forwarder in this file already has (FRO254).
+// other forwarder in this file already has.
 void GraphEditor::refreshSmartSuggestions() {
     smartConnections_.refreshSmartSuggestions(dragDropController_.buildDragPreviewState());
 }
@@ -57,7 +57,7 @@ bool GraphEditor::nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const 
 // GraphCanvasHost pure-virtual override — see refreshSmartSuggestions() above.
 void GraphEditor::seedInsertModifierSample() { smartConnections_.seedInsertModifierSample(); }
 
-// FRO312: the drop-in-a-live-component check ModuleComponent::isInputJackKnobBound makes (a
+// The drop-in-a-live-component check ModuleComponent::isInputJackKnobBound makes (a
 // ModulationTarget resolving to a VISIBLE slider) isn't available for a ghost preview, which has
 // no live component -- there is no tab-page/poly-visibility state to ask. "Has a bound parameter
 // at all" (parameterForModTarget != nullptr) is the same proxy GraphEditor::estimateModuleSize
@@ -74,7 +74,7 @@ static bool jackIsKnobBoundForEstimate(ModuleBase* mb, int visibleIndex) {
 
 // Port centre inside a bounds rect — must agree with ModuleComponent::getPortCenter (this ghost
 // preview ages the real thing before a component exists, so the two can never fully share code,
-// but every rule getPortCenter follows this mirrors, including FRO312's knob-jack packing).
+// but every rule getPortCenter follows this mirrors, including the knob-jack packing).
 juce::Point<int> GraphEditor::estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
                                                  bool isInput, bool isMidi) {
     if (proc == nullptr)
@@ -112,7 +112,7 @@ juce::Point<int> GraphEditor::estimatePortCenter(juce::AudioProcessor* proc, juc
     }
 
     if (isInput) {
-        // FRO312: a knob-bound jack draws no gutter dot -- its ghost preview cable lands on the
+        // A knob-bound jack draws no gutter dot -- its ghost preview cable lands on the
         // (not-yet-real) knob's own estimated position instead. Since there is no live slider to
         // ask, this falls back to the ring geometry directly: a default-radius rotary knob sits in
         // the standard 3-per-row body grid, which for a drag ghost is close enough (the exact spot

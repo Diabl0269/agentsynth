@@ -1,6 +1,5 @@
-// Out-of-line bodies for WavetableOscillatorModule (FRO73). These ran inline in the header;
-// moved here verbatim (only the class qualifier was added and `inline` dropped) as part of
-// getting WavetableOscillatorModule.h under the file-size cap. No behavior change.
+// Out-of-line bodies for WavetableOscillatorModule, kept here to hold
+// WavetableOscillatorModule.h under the file-size cap.
 
 #include "WavetableOscillatorModule.h"
 
@@ -291,8 +290,8 @@ WavetableOscillatorModule::WavetableOscillatorModule()
     addParameter(subShapeParam = new juce::AudioParameterChoice("subShape", "Sub Wave", {"Sine", "Square"}, 0));
     addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
     // Dual I/O comes from the ctor's StereoAudio::Declared above, defaulting to split — this
-    // module has been stereo since #180. Collapsed it shows a single "Audio" jack carrying the
-    // left leg, matching every other split-block module (#219).
+    // module is stereo. Collapsed it shows a single "Audio" jack carrying the
+    // left leg, matching every other split-block module.
     addParameter(syncModeParam =
                      new juce::AudioParameterChoice("syncMode", "Sync In", {"Off", "Hard Sync", "Ring Mod", "AM"}, 0));
 
@@ -767,7 +766,7 @@ WavetableOscillatorModule::BlockSettings WavetableOscillatorModule::gatherBlockS
     }
 
     // At width 0 / blend 1 every unison voice contributes unity to both legs, so this
-    // reduces to the 1/unisonCount average #172 used — Audio L keeps its old level.
+    // reduces to the plain 1/unisonCount average — Audio L keeps its mono level.
     bs.uniNormalise = (gainSum > 0.0f) ? (1.0f / gainSum) : 1.0f;
     return bs;
 }

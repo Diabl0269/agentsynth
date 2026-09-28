@@ -1,4 +1,4 @@
-// Concern: FRO278's selection-stepping command rows (select next/previous module on the graph canvas,
+// Concern: selection-stepping command rows (select next/previous module on the graph canvas,
 // next/previous track on the timeline). Split from MainComponentCommandTable.cpp to stay under the
 // file-size cap; assembled by commandTable() there. Two explicit pairs instead of one pair routed by
 // resolveEditSurface(): moving track focus itself changes what that reports, so a routed pair would

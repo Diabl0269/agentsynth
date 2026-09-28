@@ -24,7 +24,7 @@ public:
     static constexpr int kNumInputs = 3;
     static constexpr int kNumOutputs = 3;
 
-    // FRO114: the Custom-waveform section only shows on the card while shape == this index.
+    // The Custom-waveform section only shows on the card while shape == this index.
     static constexpr int kCustomShapeIndex = 5;
 
     LFOModule()
@@ -36,7 +36,7 @@ public:
         juce::StringArray shapes({"Sine", "Triangle", "Sawtooth", "Square", "S&H", "Custom"});
         addParameter(shapeParam = new juce::AudioParameterChoice("shape", "Shape", shapes, 0));
 
-        // FRO114: rendered once here so a fresh module (never touched by setCustomWave) already
+        // Rendered once here so a fresh module (never touched by setCustomWave) already
         // has a valid Triangle table on both sides of the publish/adopt seam -- see
         // DefaultCustomWaveIsTriangleBeforeAnyPublish.
         customWave_.renderTable(pendingCustomTable_);
@@ -96,7 +96,7 @@ public:
         if (buffer.getNumSamples() == 0 || buffer.getNumChannels() == 0)
             return;
 
-        // FRO114: adopt whatever custom-wave table the message thread last published, once per
+        // Adopt whatever custom-wave table the message thread last published, once per
         // block, before the sample loop reads audioCustomTable_ -- see adoptPendingCustomTable's
         // own comment for why this is a try-lock, not a lock.
         adoptPendingCustomTable();
@@ -206,7 +206,7 @@ public:
                 // The value is managed by shSmoother
                 currentSample = shSmoother.getNextValue();
                 break;
-            case 5: { // Custom (FRO114): linear interpolation over the published 1024-entry table.
+            case 5: { // Custom: linear interpolation over the published 1024-entry table.
                 const float pos = phase * (float)synth::LfoCustomWave::kTableSize;
                 const int i = juce::jlimit(0, synth::LfoCustomWave::kTableSize - 1, (int)pos);
                 const float f = pos - (float)i;
@@ -263,7 +263,7 @@ public:
         for (int ch = 1; ch < buffer.getNumChannels(); ++ch)
             buffer.clear(ch, 0, buffer.getNumSamples());
 
-        // FRO114: once per block, not per sample -- the same convention ADSRModule's own
+        // Once per block, not per sample -- the same convention ADSRModule's own
         // playheadProgress uses (ADSRModule.h) -- for ModuleComponent::updateLfoWavePlayhead to
         // poll from its existing gated 15 Hz timer.
         uiPhase_.store(phase, std::memory_order_relaxed);
@@ -319,7 +319,7 @@ public:
         return {{"Rate", 0, "rateHz"}, {"Level", 1, "level"}, {"Glide", 2, "glide"}};
     }
 
-    // ---- FRO114: Custom waveform (message thread only, except where noted) ----
+    // ---- Custom waveform (message thread only, except where noted) ------------
 
     /** Sanitises, stores, re-renders the audio-thread table and bumps the generation counter --
      *  called by the card's forward-sync (ModuleComponentLfoCard.cpp) and by setExtraState. */
@@ -350,7 +350,7 @@ public:
     void setExtraState(const juce::var& state) override { setCustomWave(synth::LfoCustomWave::fromVar(state)); }
 
 private:
-    // FRO114: mirrors WavetableOscillatorModule's publishLoadedTable/adoptPendingTable
+    // Mirrors WavetableOscillatorModule's publishLoadedTable/adoptPendingTable
     // (WavetableOscillatorModule.cpp), simplified to a fixed-size array (no allocation, ever,
     // rather than a swapped shared_ptr) since a custom-wave table's size is compile-time fixed.
     void publishCustomTable(const synth::LfoCustomWave::Table& t) {

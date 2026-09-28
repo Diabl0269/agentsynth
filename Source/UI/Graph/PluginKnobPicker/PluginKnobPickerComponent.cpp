@@ -40,7 +40,7 @@ PluginKnobPickerComponent::PluginKnobPickerComponent(HostedPluginModule& module,
         if (onOpenPluginEditorRequested)
             onOpenPluginEditorRequested();
     };
-    // FRO241: a value change on a parameter already checked is the picker's own tick (or the card's
+    // A value change on a parameter already checked is the picker's own tick (or the card's
     // own knob attachment moving it), never a new touch -- see the header's isParameterAlreadyInLayout
     // doc comment. Gestures need no such filter (a gesture start is a deliberate touch either way).
     touchCapture_->isParameterAlreadyInLayout = [this](int parameterIndex) {

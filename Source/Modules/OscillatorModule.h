@@ -10,11 +10,11 @@ public:
     //
     // Inputs (16): mono mode puts jack j on raw ch j for j 0-6 (Pitch, Waveform, Octave, Coarse,
     // Fine, Level, Pan); poly mode fans Pitch across ch0-7 and puts the shared mod-CV block at
-    // kPolyModCVBase, so jack j (1 <= j <= 6) lands on kPolyModCVBase + j - 1. Pan (#219) took the
+    // kPolyModCVBase, so jack j (1 <= j <= 6) lands on kPolyModCVBase + j - 1. Pan took the
     // channels that were already declared and unused — ch6 in mono, ch13 in poly — so every
-    // pre-#219 CV routing keeps its raw channel.
+    // older CV routing keeps its raw channel.
     //
-    // Unison and Detune (FRO314) are appended AFTER the poly shared-CV block, at the SAME raw
+    // Unison and Detune are appended AFTER the poly shared-CV block, at the SAME raw
     // channel in both voice modes (kUnisonCVChannel/kDetuneCVChannel, ch14/15) — they are global
     // params, not per-voice, so there is no separate poly variant to place. ch14/15 alias the
     // Audio R output block's first two channels (kRightBase/kRightBase+1): exactly the same
@@ -27,7 +27,7 @@ public:
     // and relabelling it would break both the CV routing and every saved patch using it.
     // -------------------------------------------------------------------------
     static constexpr int kNumVoices = 8;
-    static constexpr int kJackPan = 6; // last of the original (pre-FRO314) jacks
+    static constexpr int kJackPan = 6; // last of the original jacks
     static constexpr int kJackUnison = 7;
     static constexpr int kJackDetune = 8;
     static constexpr int kNumJacks = kJackDetune + 1; // Pitch..Detune
@@ -40,7 +40,7 @@ public:
     // kNumInputs must never move it — every patch already routed FROM Audio R depends on raw
     // output channel 14 staying 14.
     static constexpr int kRightBase = 14;
-    static constexpr int kNumOutputs = kRightBase + kNumVoices; // 22, unchanged by FRO314
+    static constexpr int kNumOutputs = kRightBase + kNumVoices; // 22
 
     /** Raw channel carrying jack `jack`'s CV, for the current voice mode. Only valid for the
         original Pitch..Pan jacks (1 <= jack <= kJackPan) — Unison/Detune use the fixed
@@ -463,7 +463,7 @@ private:
         auto* ch0 = buffer.getWritePointer(0);
 
         // modulateNormalised is a no-op when cv == 0.0f, so an unpatched jack reproduces the
-        // pre-FRO314 behaviour exactly.
+        // plain behaviour exactly.
         const int unisonCount = unisonDetune.unisonCount;
         const float detuneCents = unisonDetune.detuneCents;
 
@@ -552,7 +552,7 @@ private:
         }
 
         // Place the finished mono voice across Audio L / Audio R. Done as a post-pass rather than
-        // inside the render loop so the generator stays byte-identical to the pre-#219 mono path.
+        // inside the render loop so the generator stays byte-identical to the plain mono path.
         fillPanRamp(numSamples);
         placeVoiceInStereo(buffer, /*voiceIndex*/ 0, numSamples, cvPanSaved.get(), numSamples);
 

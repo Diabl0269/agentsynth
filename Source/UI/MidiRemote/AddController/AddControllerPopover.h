@@ -6,7 +6,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
 
-// AddControllerPopover.h -- FRO134 (docs/control/midi-remote-ui.md#add-controller): the "+ Add
+// AddControllerPopover.h (docs/control/midi-remote-ui.md#add-controller): the "+ Add
 // controller" popover -- MIDI input device, Name (prefilled from the device), Start with: Detect
 // controls now (default) / a template / Empty. Pure view: the device and template lists are handed
 // in (so it is deterministic in tests, no juce::MidiInput), and OK reports a Choice; creating the

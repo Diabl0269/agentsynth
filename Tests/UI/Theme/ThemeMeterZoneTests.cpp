@@ -1,4 +1,4 @@
-// ThemeMeterZoneTests.cpp -- FRO146: the meter's mid/high/clip colour-zone tokens
+// ThemeMeterZoneTests.cpp -- the meter's mid/high/clip colour-zone tokens
 // (meterMid/meterHigh/meterClip, docs/layout/theming.md's token table) -- loader plumbing only
 // (optional-with-default parsing + JSON round-trip + built-in distinctness). Boundary/zone-
 // selection behaviour itself lives in MeterColourStopsTests.cpp. Split out of ThemeTests.cpp
@@ -11,7 +11,7 @@
 #include <juce_core/juce_core.h>
 
 TEST(ThemeLoaderTest, MeterZoneTokensAbsentFallBackToObsidianDefaults) {
-    // A pre-FRO146 user theme has none of the new keys; it must still load, and every new token
+    // A legacy user theme has none of the new keys; it must still load, and every new token
     // must come back as the Obsidian default (Colors()' default-constructed value).
     const juce::String legacy = R"({
         "name": "Legacy",

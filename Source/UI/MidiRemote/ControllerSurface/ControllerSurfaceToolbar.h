@@ -3,10 +3,10 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// ControllerSurfaceToolbar.h -- FRO134 (docs/control/midi-remote-ui.md#the-controllers-panel): the
+// ControllerSurfaceToolbar.h (docs/control/midi-remote-ui.md#the-controllers-panel): the
 // row above the surface grid: [Detect] [Assign...] [Templates] [...], plus the Detect hint row while
 // Detect is on. Knows nothing about profiles -- MidiRemotePanelComponent supplies the menus' contents.
-// [Assign...] (FRO135) starts the panel-side assign flow for the selected control.
+// [Assign...] starts the panel-side assign flow for the selected control.
 namespace synth::ui {
 
 class ControllerSurfaceToolbar : public juce::Component {
@@ -22,7 +22,7 @@ public:
     void setDetectOn(bool on);
     bool isDetectOn() const noexcept { return detectOn_; }
 
-    /** FRO273: the right-aligned undo cue on the button row; empty hides it. */
+    /** The right-aligned undo cue on the button row; empty hides it. */
     void setUndoHint(const juce::String& text);
     juce::String getUndoHint() const { return undoHintLabel_.getText(); }
 

@@ -1,4 +1,4 @@
-// GraphEditor viewport tests: Minimap (issue #159) visibility/model and the zoom-perf cable
+// GraphEditor viewport tests: Minimap visibility/model and the zoom-perf cable
 // memoization + zoom-gesture raster freeze.
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
@@ -10,7 +10,7 @@
 #include "Modules/VCAModule.h"
 
 // ============================================================================
-// Minimap (issue #159)
+// Minimap
 // ============================================================================
 
 namespace {
@@ -399,7 +399,7 @@ TEST_F(GraphEditorTest, AClampedZoomTickDoesNotStartAGesture) {
 }
 
 // ============================================================================
-// FRO300: cards panned outside the visible canvas rect leave the accessibility tree
+// Cards panned outside the visible canvas rect leave the accessibility tree
 // ============================================================================
 
 namespace {

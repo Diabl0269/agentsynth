@@ -1,4 +1,4 @@
-// MixerInsertListTests.cpp -- FRO15 in-app finding: MixerInsertList's own paint()/mouseDown()
+// MixerInsertListTests.cpp -- MixerInsertList's own paint()/mouseDown()
 // overlap bug, and the moveRow regression the bus insert-discovery fix opened.
 //
 //   * overlap  -- when the list has zero entries AND is non-linear, the "(no inserts)" placeholder

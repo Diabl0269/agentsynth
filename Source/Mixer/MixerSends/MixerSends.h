@@ -1,6 +1,6 @@
 #pragma once
 
-// MixerSends.h -- FRO15 (P9-9, docs/mixer/sends-and-buses.md): the Core flows behind a strip's send slots.
+// MixerSends.h (docs/mixer/sends-and-buses.md): the Core flows behind a strip's send slots.
 //
 // Headless, no UI dependency (Source/Mixer/CLAUDE.md), and -- like ChannelFlows and MixerModel's
 // insert splices -- NO UNDO OF THEIR OWN: each is a plain graph mutation for a caller already
@@ -39,7 +39,7 @@ juce::String busFallbackName(juce::AudioProcessorGraph& graph, juce::AudioProces
 
 // ---- Sends ---------------------------------------------------------------------------------------
 
-/** What a send slot feeds (FRO318): a strip's main input, or (`key`) a module's Key input. */
+/** What a send slot feeds: a strip's main input, or (`key`) a module's Key input. */
 struct SendTarget {
     juce::AudioProcessorGraph::NodeID node;
     bool key = false;
@@ -69,8 +69,8 @@ juce::String sendTargetName(juce::AudioProcessorGraph& graph, const MacroSet* ma
 /** sendTargetName for either kind: a Key target reads "Key: Compressor 1 on <sendTargetName>". */
 juce::String sendTargetName(juce::AudioProcessorGraph& graph, const MacroSet* macros, const SendTarget& target);
 
-/** "Send to <target>" / "Send N (no target)" -- the FRO301 accessible-title format MixerSendList's
- *  knob uses, shared so a lane created for the same slot (FRO292) always agrees with the knob that
+/** "Send to <target>" / "Send N (no target)" -- the accessible-title format MixerSendList's
+ *  knob uses, shared so a lane created for the same slot always agrees with the knob that
  *  drives it. `slot` is 0-based; `macros` may be null. */
 juce::String describeSendSlotLabel(juce::AudioProcessorGraph& graph, const MacroSet* macros,
                                    juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
@@ -110,7 +110,7 @@ bool retargetSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::N
                   const SendTarget& target);
 
 bool swapSends(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slotA,
-               int slotB); // FRO296 reorder: swaps cables, active/pre/mute/mono bits, level/pan values
+               int slotB); // Reorder: swaps cables, active/pre/mute/mono bits, level/pan values
 bool moveSendRow(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int fromRow,
                  int toRow,
                  std::vector<std::pair<int, int>>* appliedSwaps = nullptr); // moves visible row fromRow to toRow

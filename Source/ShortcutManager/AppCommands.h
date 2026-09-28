@@ -11,18 +11,17 @@ enum CommandIDs {
     saveProjectAs,
     // Legacy patch-only export: writes a plain `.json` via GraphEditor::savePreset directly, never
     // touching currentBundleDir_ or the window title -- a SIDE export, not "the project got
-    // saved". Rebindable since P8-20 with a Cmd+Shift+P default (see resetToDefaults()); until
-    // then it kept the checkForUpdates treatment (a menu-only item with no chord and no row).
+    // saved". Rebindable, with a Cmd+Shift+P default (see resetToDefaults()).
     exportPatchOnly,
     // Offline audio bounce (BounceExporter/BounceRunner) - the whole arrangement or the current
     // loop range, rendered to WAV/AIFF. Rebindable (Cmd+Shift+E default) - see resetToDefaults().
     exportAudio,
-    // P9-8: offline stem export (StemExporter/StemRunner) - one file per mixer channel strip, same
+    // Offline stem export (StemExporter/StemRunner) - one file per mixer channel strip, same
     // range/format options as exportAudio. Menu-only, immediately after Export Audio in the File
     // menu - same "no chord, no Settings row" treatment as openPreset/checkForUpdates below (no
     // ShortcutManager actionId/binding).
     exportStems,
-    // P8-31 split the former single "Load from file..." browser into two menu entry points:
+    // Two menu entry points open a file:
     // a whole `.agsproj` project and a plain `.json` patch. openProject is the rebindable Cmd+O
     // open (a project); openPreset is a menu-only patch open. Loading a patch asks whether to
     // replace the current one or add the loaded one on top of it.
@@ -35,8 +34,8 @@ enum CommandIDs {
     toggleMinimap,
     toggleAiPanel,
     autoArrange,
-    // Wrap/unwrap the selection in a Macro container (P8-12). groupSelection (Cmd+G) is smart
-    // (P8-14, GraphEditor::groupOrToggleSelectionMacros): it groups the selection into a new
+    // Wrap/unwrap the selection in a Macro container. groupSelection (Cmd+G) is smart
+    // (GraphEditor::groupOrToggleSelectionMacros): it groups the selection into a new
     // macro when none of it is already grouped, and otherwise toggles the touched macro(s)
     // collapsed/expanded — the same verb as collapseMacro below, minus the explicit binding.
     // ungroupSelection stays its own command: dissolving a macro is never something grouping or
@@ -48,8 +47,7 @@ enum CommandIDs {
     // ("a menu row has no notion of a label that depends on what's selected right now") is
     // answered here by keeping a single static label ("Collapse / Expand Macro",
     // getActionDescription below): the label never has to guess which way the toggle is about to
-    // go, so one command covers both directions. Originally shipped collapse-only (P8-12
-    // follow-up: expanding left no way back short of Undo) before this toggle behaviour.
+    // go, so one command covers both directions.
     collapseMacro,
     toggleLibrary,
     selectAllModules,
@@ -67,7 +65,7 @@ enum CommandIDs {
     // transport to toggle) so ShortcutManager's tripwire tests (unique default, description,
     // command mapping) cover it unconditionally.
     togglePlayback,
-    // FRO333: the ONE bottom-dock open/close toggle -- see ShortcutManager.h's own comment on the
+    // The ONE bottom-dock open/close toggle -- see ShortcutManager.h's own comment on the
     // action id. The three below now each just SHOW their tab (never close the dock).
     toggleBottomPanel,
     toggleTimelinePanel,
@@ -101,17 +99,17 @@ enum CommandIDs {
     // plain "Check for Updates…" menu item with no keyboard shortcut. macOS only; see
     // Source/Update/UpdateManager.h.
     checkForUpdates,
-    // T114/P8-10: reopens the welcome screen overlay. Unlike checkForUpdates, registered
+    // Reopens the welcome screen overlay. Unlike checkForUpdates, registered
     // unconditionally in every build (see MainComponent::getAllCommands) — it needs no OS
     // integration, only ownedAudioEngine != nullptr (never registered at all on the plugin path).
     // Same "menu-only item with no chord" treatment as checkForUpdates: no ShortcutManager
     // actionId/binding.
     showWelcomeScreen,
-    // Build-time, no-network "What's New" dialog (Feature 2 of T114/P8-10) — see the root
+    // Build-time, no-network "What's New" dialog — see the root
     // CMakeLists.txt's WhatsNewData.h generation and MainComponent::showWhatsNewDialog. Same
     // unconditional-registration, no-chord treatment as showWelcomeScreen above.
     whatsNew,
-    // T159: the focus-region framework (see Source/UI/Layout/FocusRegion.h and docs/control/shortcuts.md). Tab and
+    // The focus-region framework (see Source/UI/Layout/FocusRegion.h and docs/control/shortcuts.md). Tab and
     // Shift+Tab cycle keyboard focus between whichever of the app's regions are currently OPEN
     // (Library/Canvas/Timeline/AI Panel/Mod Matrix); the two Focus* commands open their target
     // region first if it is closed, then focus it. All four are General, like every other
@@ -120,18 +118,18 @@ enum CommandIDs {
     focusPrevRegion,
     focusTimeline,
     focusLibrary,
-    // T160: opens the Library (if closed) and grabs focus on its search field specifically, rather
+    // Opens the Library (if closed) and grabs focus on its search field specifically, rather
     // than the region root focusLibrary lands on — see ModuleLibraryComponent::focusSearchField and
     // docs/control/shortcuts.md's Focus regions section for why those are two different destinations. Same
     // General/command-dispatched treatment as the other three Focus* actions above.
     focusLibrarySearch,
-    // FRO45: selects Master (falling back to Audio Output when there is no Master yet) and pans it
-    // into view — the canvas-only stopgap for founder feedback that auto-arrange or a drag can
-    // leave either node anywhere (GraphEditor::locateMasterOrOutput). Appended here per the
+    // Selects Master (falling back to Audio Output when there is no Master yet) and pans it
+    // into view — the canvas-only answer to auto-arrange or a drag leaving
+    // either node anywhere (GraphEditor::locateMasterOrOutput). Appended here per the
     // snapSet comment above ("nothing persists a raw juce::CommandID"); filed under Graph in the
     // action table below, alongside autoArrange, since it means nothing off the canvas.
     locateMaster,
-    // FRO125: transport verbs promoted to command-dispatched actions -- the prerequisite
+    // Transport verbs promoted to command-dispatched actions -- the prerequisite
     // docs/control/midi-remote.md#action-targets asks for, since a MIDI Remote action target invokes a
     // juce::CommandID. Filed under General (docs/control/shortcuts.md). Deliberately unbound by default
     // (see resetToDefaults()) -- these exist to be command/MIDI-Remote targets, not new default
@@ -152,7 +150,7 @@ enum CommandIDs {
     // "timelineMetronomeEnabled" state stays authoritative.
     transportToggleMetronome,
     transportReturnToStart,
-    // FRO271: cursor moves and loop-locator jumps, command-dispatched so a MIDI Remote action
+    // Cursor moves and loop-locator jumps, command-dispatched so a MIDI Remote action
     // target (or a keyboard shortcut) can fire them. Unbound by default like the family above.
     // Appended after transportReturnToStart -- never interleaved, so persisted ids stay stable.
     transportNudgeBackBeat,
@@ -161,17 +159,17 @@ enum CommandIDs {
     transportNudgeForwardBar,
     transportJumpToLoopStart,
     transportJumpToLoopEnd,
-    // FRO277: jump to the next/previous timeline marker relative to the current position. Same
-    // command-dispatched, unbound-by-default reasoning as the FRO271 family above -- appended
+    // Jump to the next/previous timeline marker relative to the current position. Same
+    // command-dispatched, unbound-by-default reasoning as the transport nudge family above -- appended
     // after transportJumpToLoopEnd, never interleaved.
     transportJumpToNextMarker,
     transportJumpToPreviousMarker,
-    // FRO94: opens the site's contribute page (branding::kContributeUrl) in the default browser --
+    // Opens the site's contribute page (branding::kContributeUrl) in the default browser --
     // no dialog, no prompt, no analytics event. Menu-only like showWelcomeScreen/whatsNew (no
     // ShortcutManager actionId/binding) and registered unconditionally. Appended last per the snapSet
     // comment above, so no existing enumerator's value moves.
     contribute,
-    // FRO278: step the selection to the next/previous module on the graph canvas or the next/previous
+    // Step the selection to the next/previous module on the graph canvas or the next/previous
     // track on the timeline. Two pairs rather than one focus-routed pair: a controller press must land
     // the same way wherever the last mouse click was, and moving track focus itself changes which
     // surface resolveEditSurface() reports. Appended last so no existing enumerator's value moves.

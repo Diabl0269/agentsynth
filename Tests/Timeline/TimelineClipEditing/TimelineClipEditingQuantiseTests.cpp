@@ -66,7 +66,7 @@ TEST_F(TimelineClipEditingTest, QuantiseRejectsInvalidGrid) {
 }
 
 // ------------------------------------------------------------- quantiseNoteLengths --
-// FRO107: the length twin of quantiseNotes above -- rounds lengthBeats to the nearest grid
+// The length twin of quantiseNotes above -- rounds lengthBeats to the nearest grid
 // multiple instead of startBeat, floored at one grid unit so a note can never zero out.
 
 TEST_F(TimelineClipEditingTest, QuantiseNoteLengthsRoundsToNearestGridMultiple) {

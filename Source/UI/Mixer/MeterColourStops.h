@@ -11,7 +11,7 @@ namespace synth::theme {
 struct Colors;
 }
 
-// MeterColourStops.h -- FRO146: the meter's level-to-colour zone model, isolated from every
+// MeterColourStops.h: the meter's level-to-colour zone model, isolated from every
 // painter that uses it (MixerMeter, ChannelChipComponent) so a follow-up ticket can make the
 // stops user-editable (Settings > Appearance -- add/drag/remove) by building a different
 // MeterColourStops -- no painter would need to change. Backed by a sorted, arbitrary-length
@@ -39,7 +39,7 @@ public:
     static constexpr float kHighFromDb = -6.0f;
     static constexpr float kClipFromDb = 0.0f;
 
-    /** FRO147: the Settings > Appearance editor's own ceiling on stop count -- a UI-level limit,
+    /** The Settings > Appearance editor's own ceiling on stop count -- a UI-level limit,
      *  not one setStops()/forEachBand() enforce themselves (they stay correct for any count, per
      *  the class comment above). Kept here so the editor and its persistence agree on one number. */
     static constexpr int kMaxStops = 8;
@@ -82,7 +82,7 @@ private:
 };
 
 //==============================================================================
-// Persistence -- FRO147: a GLOBAL user override, mirroring CableColour.h's / NoteColour.h's own
+// Persistence: a GLOBAL user override, mirroring CableColour.h's / NoteColour.h's own
 // "unset means follow the theme" idiom. Lives here (not in the settings tab) so the tab, the
 // AppLookAndFeel cache that painters read, and MainComponent's startup restore cannot disagree
 // about the storage format.

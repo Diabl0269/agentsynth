@@ -1,5 +1,5 @@
 // Scanning basics and the eager/ensure-scanned lifecycle: shared-service listener fan-out and the
-// warm-cache paths that keep a later ensureScanned() from relaunching what's already known (FRO44).
+// warm-cache paths that keep a later ensureScanned() from relaunching what's already known.
 
 #include "PluginScanTestHelpers.h"
 
@@ -68,7 +68,7 @@ TEST(PluginScanTest, RescanningAKnownPluginIsNotCountedAsNewAndDoesNotBlacklistI
 }
 
 // ============================================================================
-// 1b. Eager population / shared listeners (FRO44)
+// 1b. Eager population / shared listeners
 //
 // One PluginScanService is meant to be shared by several consumers (the sidebar today, a future
 // Instrument-track plugin picker) without each one owning — or re-triggering — its own scan.
@@ -154,7 +154,7 @@ TEST(PluginScanTest, EnsureScannedNeverRescansOnceItHasAlreadyCompleted) {
 }
 
 TEST(PluginScanTest, EnsureScannedReportsProgressAndWhetherItActuallyStartedAScan) {
-    // FRO105: ensureScanned() used to take no progress callback at all, so the eager startup scan
+    // ensureScanned() used to take no progress callback at all, so the eager startup scan
     // (its only production caller) ran silently with no way to tell the user a scan was in flight.
     FakeLauncher launcher;
     launcher.xmlByFile[kAlpha] = descriptionXml("Alpha", 0xA1FA, kAlpha);
@@ -236,7 +236,7 @@ TEST(PluginScanTest, RemovedListenerHearsNothingFurther) {
 }
 
 TEST(PluginScanTest, EnsureScannedNeverRelaunchesAnAlreadyKnownPluginOnAWarmCache) {
-    // "Persist/reuse the cached list so startup doesn't rescan everything every launch" (FRO44 spec)
+    // "Persist/reuse the cached list so startup doesn't rescan everything every launch"
     // — the persisted-list equivalent of EnsureScannedNeverRescansOnceItHasAlreadyCompleted above,
     // but for the case that actually happens on every real relaunch of the app: a FRESH
     // PluginScanService instance (ensureScanRequested_ latch reset) that loaded yesterday's saved

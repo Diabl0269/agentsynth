@@ -77,7 +77,7 @@ public:
         juce::String transportError;
     };
 
-    /** Result of GET /v1/entitlement (P4-2/P4-3/P4-4). `requestsUsed`/`usagePeriodStartIso` come
+    /** Result of GET /v1/entitlement. `requestsUsed`/`usagePeriodStartIso` come
         from the response's `usage` object; both stay at their defaults (0 / empty) against a
         server that doesn't send it yet — see the backend repo's billing doc for the full response
         shape. */
@@ -93,7 +93,7 @@ public:
         juce::String transportError;
     };
 
-    /** Result of GET/PUT /v1/prompt-learning (P6-7: opt-in prompt collection for product
+    /** Result of GET/PUT /v1/prompt-learning (opt-in prompt collection for product
         learning). `optedInAt` is the server's ISO-8601 `opted_in_at`, empty when it sent null
         (never opted in, or opted out again). */
     struct PromptLearningPreferenceResult {
@@ -112,7 +112,7 @@ public:
         juce::String updatedAt;
     };
 
-    /** Result of GET /v1/conversations (P6-8). Cloud-only — conversation persistence itself is
+    /** Result of GET /v1/conversations. Cloud-only — conversation persistence itself is
         Pro-gated server-side; this client has no plan awareness of its own, same as every other
         AuthClient method. */
     struct ListConversationsResult {
@@ -161,14 +161,14 @@ public:
         juce::String transportError;
     };
 
-    /** Result of POST /v1/conversations/:conversationId/messages/:messageId/feedback (P6-9). No
+    /** Result of POST /v1/conversations/:conversationId/messages/:messageId/feedback. No
         response body worth parsing on success — `ok` is the whole story. */
     struct SubmitMessageFeedbackResult {
         bool ok = false;
         juce::String transportError;
     };
 
-    /** Result of POST /v1/feedback (P6-16). No response body worth parsing on success -- `ok` is
+    /** Result of POST /v1/feedback. No response body worth parsing on success -- `ok` is
         the whole story, same shape as SubmitMessageFeedbackResult. */
     struct SubmitGeneralFeedbackResult {
         bool ok = false;
@@ -198,7 +198,7 @@ public:
     /** GET /v1/entitlement with `Authorization: Bearer <accessToken>`. */
     EntitlementResult fetchEntitlement(const juce::String& accessToken, const std::atomic<bool>& cancelled) const;
 
-    /** GET /v1/prompt-learning with `Authorization: Bearer <accessToken>` (P6-7). */
+    /** GET /v1/prompt-learning with `Authorization: Bearer <accessToken>`. */
     PromptLearningPreferenceResult fetchPromptLearningPreference(const juce::String& accessToken,
                                                                  const std::atomic<bool>& cancelled) const;
 
@@ -209,7 +209,7 @@ public:
     PromptLearningPreferenceResult setPromptLearningPreference(const juce::String& accessToken, bool optedIn,
                                                                const std::atomic<bool>& cancelled) const;
 
-    /** GET /v1/conversations with `Authorization: Bearer <accessToken>` (P6-8). See
+    /** GET /v1/conversations with `Authorization: Bearer <accessToken>`. See
         ListConversationsResult's doc comment for the read-writes-deletionScheduledAt caveat. */
     ListConversationsResult listConversations(const juce::String& accessToken,
                                               const std::atomic<bool>& cancelled) const;
@@ -239,7 +239,7 @@ public:
                                                       const juce::String& rating, const juce::String& comment,
                                                       const std::atomic<bool>& cancelled) const;
 
-    /** POST /v1/feedback with a JSON `{"category": category, "text": text}` body (P6-16).
+    /** POST /v1/feedback with a JSON `{"category": category, "text": text}` body.
         `category` is "bug", "feature", or "other". Unlike submitMessageFeedback (P6-9), the server
         does NOT plan-gate this -- any account, signed in or not, may submit general feedback.
         `Authorization: Bearer <accessToken>` is set only when `accessToken` is non-empty; the

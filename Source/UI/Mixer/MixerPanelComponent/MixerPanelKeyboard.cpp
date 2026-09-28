@@ -1,7 +1,7 @@
-// Concern: FRO18 -- MixerPanelComponent's keyboard dispatch (Left/Right column walk, Up/Down
+// Concern: MixerPanelComponent's keyboard dispatch (Left/Right column walk, Up/Down
 // fader nudge, Enter select-on-canvas, the rebindable M/S/R actions) and the focus-outline
 // painting/visual sync that goes with it. MixerPanelComponent.h's own class comment explains why
-// the panel, not a per-column leaf, is the single focusable region root (the T160 trap
+// the panel, not a per-column leaf, is the single focusable region root (the keyboard-focus trap
 // docs/control/shortcuts.md documents: a focused Slider/TextButton eats the very keys this file resolves).
 #include "MixerPanelComponent.h"
 
@@ -203,7 +203,7 @@ void MixerPanelComponent::revealFocusedColumn() {
 }
 
 void MixerPanelComponent::paintOverChildren(juce::Graphics& g) {
-    // The REGION root's own outline (real OS keyboard focus, T159's shared visual language) --
+    // The REGION root's own outline (real OS keyboard focus, the shared focus-outline language) --
     // distinct from each column's own keyboardFocused_ outline (syncFocusVisuals above), which
     // tracks focusedColumnIndex_ instead since real hasKeyboardFocus() is always false headless
     // with no native peer (same accepted gap TimelineTrackFocusTests documents). The two may

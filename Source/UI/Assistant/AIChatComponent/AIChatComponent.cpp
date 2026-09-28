@@ -12,7 +12,7 @@ namespace synth {
 AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::ApplicationProperties& props)
     : aiService(service)
     , appProperties(props) {
-    // T159: makes grabKeyboardFocus() on THIS component (the "aiPanel" focus region's root) succeed
+    // Makes grabKeyboardFocus() on THIS component (the "aiPanel" focus region's root) succeed
     // deterministically rather than depending on JUCE's position-ordered descent into children
     // finding a focus-wanting one (see the identical comment in ModuleLibraryComponent's ctor).
     setWantsKeyboardFocus(true);
@@ -108,7 +108,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
         updateChatDisplay();
     };
 
-    // P6-8: opens the history list/restore/clear popup — see historyButtonClicked(). Tooltip is
+    // Opens the history list/restore/clear popup — see historyButtonClicked(). Tooltip is
     // set by updateUpsellStrip() below (it varies by plan, so setting a static default here would
     // just be overwritten), not here.
     addAndMakeVisible(historyButton);
@@ -152,7 +152,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
         "Hosted mode sends your prompt and current patch to Agent Synth's servers for processing. See " +
         juce::String(synth::branding::kWebsiteUrl) + "/privacy for details.");
 
-    // P6-8 upsell strip. Starts visible (see the member doc comment for why this diverges from
+    // Upsell strip. Starts visible (see the member doc comment for why this diverges from
     // accountRow/planBadge/hostedModeNotice's invisible-until-known default) — updateUpsellStrip()
     // below sets its real state, and historyButton's tooltip, from whatever AccountSnapshot is
     // available at this point (none, at construction).
@@ -161,7 +161,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     upsellButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF6B4FBB));
     upsellButton.onClick = [this] { urlOpener(juce::URL(synth::branding::kUpgradeUrl)); };
 
-    // P6-8 downgrade notice — invisible until historyButtonClicked() learns a real grace-period
+    // Downgrade notice — invisible until historyButtonClicked() learns a real grace-period
     // deletion date (see lastDeletionScheduledAt's doc comment); never shown speculatively.
     addChildComponent(downgradeStripLabel);
     downgradeStripLabel.setJustificationType(juce::Justification::centredLeft);
@@ -345,7 +345,7 @@ void AIChatComponent::paint(juce::Graphics& g) {
     }
 }
 
-// T159: focus-region outline (Source/UI/Layout/FocusRegion.h) -- see the paintOverChildren declaration's
+// Focus-region outline (Source/UI/Layout/FocusRegion.h) -- see the paintOverChildren declaration's
 // comment in the header for why this can't just be tacked onto the end of paint() above.
 void AIChatComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }
 

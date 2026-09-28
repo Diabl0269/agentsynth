@@ -1,4 +1,4 @@
-// ControllerSurfaceTests.cpp -- FRO131 (docs/control/midi-remote-ui.md#surface-centre): headless
+// ControllerSurfaceTests.cpp (docs/control/midi-remote-ui.md#surface-centre): headless
 // tests for ControllerSurfaceComponent/ControllerSurfaceCell, driven through their REAL
 // mouseDown/mouseDrag/mouseUp overrides with synthesized juce::MouseEvents -- the "test the real
 // mouse path" convention (Source/UI/CLAUDE.md, Tests/UI/Mixer/MixerFaderDragTests.cpp's template)
@@ -144,7 +144,7 @@ TEST(ControllerSurfaceComponentTest, RealDragPastAFullCellFiresOnControlsMovedWi
     EXPECT_EQ(moves[0].row, 0);
 }
 
-// FRO331: the ticket's own repro -- 3 cols right, 1 row down, delivered over SEVERAL mouseDrag
+// The ticket's own repro -- 3 cols right, 1 row down, delivered over SEVERAL mouseDrag
 // events (as a real drag does), not one mouseDrag straight from start to end. knob1 starts at
 // (0,0); (3,1) is empty in fourControlModel()'s 2x2 layout.
 TEST(ControllerSurfaceComponentTest, MultiStepDragLandsExactlyOnOriginPlusDelta) {
@@ -172,7 +172,7 @@ TEST(ControllerSurfaceComponentTest, MultiStepDragLandsExactlyOnOriginPlusDelta)
     EXPECT_EQ(moves[0].row, 1);
 }
 
-// FRO331: a drag that overshoots the final target and comes back must still land exactly where the
+// A drag that overshoots the final target and comes back must still land exactly where the
 // mouse ends up, not somewhere reflecting the overshoot.
 TEST(ControllerSurfaceComponentTest, MultiStepDragPastTargetAndBackLandsOnFinalCell) {
     ControllerSurfaceComponent surface;
@@ -212,7 +212,7 @@ TEST(ControllerSurfaceComponentTest, NoteActivityAbsoluteSetsSliderValue) {
     EXPECT_NEAR(slider->getValue(), 0.75, 1.0e-6);
 }
 
-// FRO262: an already-mapped, already-touched control must show its real current value on build,
+// An already-mapped, already-touched control must show its real current value on build,
 // not always start at rest -- before this fix every cell configured at lastValue_ = 0.0f regardless
 // of CellModel::initialValue (which didn't exist).
 TEST(ControllerSurfaceComponentTest, SetControlsSeedsSliderFromCellModelInitialValue) {
@@ -376,7 +376,7 @@ TEST(ControllerSurfaceComponentTest, SurfaceRendersToPngForVisualInspection) {
 
     // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
     // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
-    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    // Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
     juce::Image img(juce::Image::ARGB, width, height, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(surface.paintEntireComponent(g, true));

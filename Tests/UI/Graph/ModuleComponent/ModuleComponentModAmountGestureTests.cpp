@@ -1,4 +1,4 @@
-// FRO287: the card-knob ring-drag gesture end to end -- a real LFO -> attenuverter -> VCA.gain
+// The card-knob ring-drag gesture end to end -- a real LFO -> attenuverter -> VCA.gain
 // routing, a real synthesized mouseDown/drag/up delivered to the knob's CardKnobSlider, asserting
 // the ATTENUVERTER's amount moved (never the knob's own gain param), and that undo restores it. A
 // plain drag in the knob's centre (no Alt, not on the ring) must still move the knob -- the
@@ -131,9 +131,9 @@ TEST_F(ModuleComponentTest, UndoRestoresTheAmountAfterAGesture) {
 }
 
 TEST_F(ModuleComponentTest, HiddenKnobDrawsNoRingAndNoBandAndDoesNotCrash) {
-    // FRO287: the depth band shares getModRingSliderIndex's hidden-page rule with the live ring --
+    // The depth band shares getModRingSliderIndex's hidden-page rule with the live ring --
     // a knob on an inactive tab page keeps its last bounds, so painting from them would land a
-    // band on empty card (issue #180). paintModulationRings' `if (si < 0) continue;` skips both.
+    // band on empty card. paintModulationRings' `if (si < 0) continue;` skips both.
     Fixture f;
     ASSERT_NE(f.gainKnob, nullptr);
     ASSERT_NE(f.vcaCard, nullptr);
@@ -164,7 +164,7 @@ TEST_F(ModuleComponentTest, PlainDragInTheKnobCentreStillMovesTheKnob) {
     EXPECT_NE(f.gainKnob->getValue(), gainBefore) << "an ordinary centre drag must not be stolen by the gesture";
 }
 
-// FRO312: the VCA's CV jack (drives Gain) is knob-bound and therefore hidden -- the ONLY way left
+// The VCA's CV jack (drives Gain) is knob-bound and therefore hidden -- the ONLY way left
 // to pick up its landed cable and redirect it is a click on the landing dot, right on the knob
 // itself. A REAL synthesized mouseDown/drag/up delivered to the knob's CardKnobSlider, landing
 // on a second LFO's output jack, must wire that new source in exactly like a real (visible) input

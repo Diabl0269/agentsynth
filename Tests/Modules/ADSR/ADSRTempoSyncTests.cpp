@@ -1,5 +1,5 @@
 // ADSRTempoSyncTests.cpp
-// FRO113: the BPM | MS toggle's engine/parameter side. `tempoSync` off (default) leaves the
+// The BPM | MS toggle's engine/parameter side. `tempoSync` off (default) leaves the
 // existing ms params in sole control (covered by the rest of the ADSR test split); these tests
 // cover tempoSync ON -- the four *Div choice params, live tempo tracking, the click-safety of
 // flipping the toggle mid-note, offline-render reproducibility, and patch round-trip.

@@ -1,7 +1,7 @@
 #pragma once
 
-// The one seam AudioEngine's counterpart doesn't need, but the app layer does (FRO139,
-// docs/control/midi-remote.md#controller-feedback): where RemoteEngine::drain() sends a mapped
+// The one seam AudioEngine's counterpart doesn't need, but the app layer does
+// (docs/control/midi-remote.md#controller-feedback): where RemoteEngine::drain() sends a mapped
 // parameter's value back out to the controller that mapped it. A two-method interface in its own
 // header for the same reason RemoteMessageSink.h is one -- Core must never depend on
 // juce_audio_devices (juce::MidiOutput lives there), so the app layer implements this against a

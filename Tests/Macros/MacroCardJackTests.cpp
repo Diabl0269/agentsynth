@@ -1,5 +1,5 @@
-// GraphEditor-level tests for collapsed-card port jacks (P8-15c, T141,
-// docs/macros/ports.md#cable-rendering-across-the-boundary): one jack per configured MacroPort, and
+// GraphEditor-level tests for collapsed-card port jacks
+// (docs/macros/ports.md#cable-rendering-across-the-boundary): one jack per configured MacroPort, and
 // buildVisibleCables() anchoring a boundary cable to the specific jack it passes through rather than the card's generic
 // edge-projection.
 //
@@ -8,8 +8,8 @@
 // ModuleComponent::mouseDown/mouseUp, the same widget methods a real drag-and-drop gesture calls —
 // not by calling GraphEditor's internals directly. Per memory/test-the-real-mouse-path-for-ui-
 // gestures: testing the layer beneath mouseDown cannot catch a broken hit-test on the card jacks,
-// which is exactly the risk this file exists to cover (buildVisibleCables() is the function P8-12c
-// last reworked, and adversarial review caught 3 real integration bugs there).
+// which is exactly the risk this file exists to cover (buildVisibleCables() is the function most
+// exposed to integration bugs).
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
@@ -147,7 +147,7 @@ TEST(MacroCardJack, InputsLayOutDownTheLeftEdgeAndOutputsDownTheRightEdgeInOrder
         EXPECT_TRUE(card->getLocalBounds().contains(p.jackPos)) << p.nodeUuid;
 }
 
-// T152: a port's user colour (set from the Configure I/O modal's swatch) flows through to the
+// A port's user colour (set from the Configure I/O modal's swatch) flows through to the
 // card's own jack layout, which is what MacroCardComponent::paint reads to colour the drawn dot —
 // unset by default (falls back to the kind tint there, not this layout struct's concern).
 TEST(MacroCardJack, LayoutCarriesThePortsUserColourAndDefaultsToUnset) {
@@ -268,7 +268,7 @@ TEST(MacroCardJack, DroppingOnAJackWithTheWrongDirectionIsRefusedAndCreatesNoCon
 // ============================================================================
 // buildVisibleCables() anchoring (docs/macros/ports.md#cable-rendering-across-the-boundary): a cable through a PORT
 // anchors at that port's own jack; a cable straight to an ordinary interior member (no port involved) keeps the
-// pre-P8-15 projectToRectEdge treatment, unchanged.
+// legacy projectToRectEdge treatment, unchanged.
 // ============================================================================
 
 TEST(MacroCardJack, BoundaryCableThroughAPortAnchorsAtItsJackWhileAnInteriorMemberCableKeepsTheEdgeProjection) {
@@ -280,7 +280,7 @@ TEST(MacroCardJack, BoundaryCableThroughAPortAnchorsAtItsJackWhileAnInteriorMemb
 
     // Cable 1: wired straight to the interior Filter's audio input (member 'b'), bypassing any
     // port entirely - the case docs/macros/ports.md#cable-rendering-across-the-boundary says must keep working exactly
-    // as it did before P8-15.
+    // as it does without ports.
     auto extOscId = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 900);
     editor.connectPorts(extOscId, 0, m.b, 0, /*isMidi=*/false, /*recordUndo=*/false);
 
@@ -327,8 +327,8 @@ TEST(MacroCardJack, BoundaryCableThroughAPortAnchorsAtItsJackWhileAnInteriorMemb
 }
 
 // ============================================================================
-// Directional edge anchoring for a no-port-involved boundary cable (founder-review fix F3,
-// docs/macros/ports.md#cable-rendering-across-the-boundary): the card side is chosen by which end of the cable the
+// Directional edge anchoring for a no-port-involved boundary cable
+// (docs/macros/ports.md#cable-rendering-across-the-boundary): the card side is chosen by which end of the cable the
 // macro is, not by which edge happens to face the other endpoint. A cable ENTERING the macro (the macro is the cable's
 // destination) anchors on the LEFT edge; a cable LEAVING it (the macro is the source) anchors on the RIGHT edge -
 // regardless of where the external module actually sits.
@@ -341,8 +341,8 @@ TEST(MacroCardJack, InteriorMemberCableEnteringMacroAnchorsOnTheLeftEdge) {
     auto m = makeTwoMemberMacro(editor, engine); // a = Oscillator, b = Filter, both interior members
     ASSERT_TRUE(editor.getMacros().find(m.macroId)->collapsed);
 
-    // External module sits ABOVE the card - under the old facing-projection treatment this would
-    // land the anchor on the card's TOP edge (the exact founder-review complaint). It must not:
+    // External module sits ABOVE the card - a facing-edge projection would land the anchor on the
+    // card's TOP edge. It must not:
     // the macro is the cable's destination, so it belongs on the LEFT edge regardless.
     auto extOscId = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 10);
     editor.connectPorts(extOscId, 0, m.b, 0, /*isMidi=*/false, /*recordUndo=*/false);
@@ -483,14 +483,11 @@ TEST(MacroCardJack, EdgeAnchoredCableDoesNotLandOnAPortJackOnTheSameSide) {
 
 // ============================================================================
 // Ungrouping a macro whose port has cables landing on it (docs/macros/ports.md#cable-rendering-across-the-boundary,
-// docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port): the founder's second-pass review decided this
-// ("ungroup leaves the macro input/output in place (They should be removed)"). REWRITTEN from the OLD (now rejected)
-// behaviour this test used to pin — a port node surviving ungroup, with its cable untouched, on the theory that ungroup
-// is purely presentation-only. That is still true for a macro's REAL modules, but no longer for its ports: a port
-// exists only to proxy a boundary, and once the boundary (the macro) is gone, a port node is an orphan with no
-// meaningful state, not a module the user actually grouped. The decided rule (founder-review fix G7): ungroup removes
-// every one of the macro's port nodes and splices the cable each one proxied straight back together — external
-// reconnects directly to internal, exactly as it was before grouping — so Group then Ungroup is a true round trip.
+// docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port). Ungroup is presentation-only for a macro's REAL
+// modules, but not for its ports: a port exists only to proxy a boundary, and once the boundary (the macro) is gone, a
+// port node is an orphan with no meaningful state, not a module the user actually grouped. So ungroup removes every one
+// of the macro's port nodes and splices the cable each one proxied straight back together — external reconnects
+// directly to internal, exactly as it was before grouping — so Group then Ungroup is a true round trip.
 // ============================================================================
 
 TEST(MacroCardJack, UngroupingRemovesThePortAndSplicesTheExternalCableToTheInternalModule) {

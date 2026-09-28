@@ -1,4 +1,4 @@
-// Concern: the FRO27 fix -- stripping an input device name off a device-state XML that never
+// Concern: stripping an input device name off a device-state XML that never
 // actually enabled input channels.
 
 #include "DeviceStateInputs.h"

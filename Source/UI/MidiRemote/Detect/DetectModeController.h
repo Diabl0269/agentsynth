@@ -6,7 +6,7 @@
 
 #include <juce_core/juce_core.h>
 
-// DetectModeController.h -- FRO134 (docs/control/midi-remote-ui.md#detect-mode): the state and
+// DetectModeController.h (docs/control/midi-remote-ui.md#detect-mode): the state and
 // decision half of the panel's Detect toggle, kept apart from any component so it is headless-
 // testable. The panel feeds it every activity event of the SELECTED profile's device (from its
 // single RemoteEngine::drainActivity pass) and acts on what comes back; this class never touches

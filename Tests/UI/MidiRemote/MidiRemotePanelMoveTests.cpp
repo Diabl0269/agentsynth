@@ -1,4 +1,4 @@
-// MidiRemotePanelMoveTests.cpp -- FRO331 (docs/control/midi-remote-ui.md#surface-centre): a real
+// MidiRemotePanelMoveTests.cpp (docs/control/midi-remote-ui.md#surface-centre): a real
 // multi-step drag on the panel's own surface persists to the PROFILE's col/row (not just the
 // surface's in-memory bounds) once the gesture ends, and one undo on the controller history
 // restores the pre-drag position -- driven through the real cell mouseDown/mouseDrag/mouseUp path,

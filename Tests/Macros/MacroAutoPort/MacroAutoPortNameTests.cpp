@@ -1,5 +1,5 @@
 // MacroAutoPortNameTests.cpp
-// FRO181: undoing (or redoing, or ungrouping+undoing) a macro mutation must never rename a
+// Undoing (or redoing, or ungrouping+undoing) a macro mutation must never rename a
 // module. AudioEngine::updateModuleNames() (AudioEngineModRouting.cpp) auto-numbers modules
 // sharing a base type "wholesale on every graph change" (docs/layout/module-card.md), and it runs
 // incidentally whenever the mod matrix notices the graph's node count changed
@@ -27,13 +27,13 @@
 namespace {
 
 // Forces any pending juce::MessageManager::callAsync (GraphEditor::updateComponents()'s own
-// mod-matrix refresh, the actual carrier of the FRO181 rename) and the 10 Hz ModMatrixComponent
+// mod-matrix refresh, the actual carrier of the rename) and the 10 Hz ModMatrixComponent
 // timer to actually run — without this, the bug is invisible in a headless test that never pumps
 // the message loop (the async callback simply never fires).
 void pump() { juce::MessageManager::getInstance()->runDispatchLoopUntil(60); }
 
 // A small patch shaped like the ticket's repro: several modules that are each the only one of
-// their type (so each is a "lone singleton" FRO181 targets), one of them additionally carrying a
+// their type (so each is a "lone singleton" the auto-rename targets), one of them additionally carrying a
 // user-set custom card title ("displayName" — a totally different mechanism from the processor's
 // own auto-numbered name, see docs/layout/module-card.md, and must survive untouched too).
 struct NamedPatch {
@@ -72,8 +72,8 @@ struct NamedPatch {
         // TRUE starting names rather than whatever that first settle would already have turned them
         // into — a real running app pumps its event loop continuously, so this settle would already
         // have happened before the user could act, but that would make it impossible for a headless
-        // test to observe the FRO181 transition at all; not pumping here is what lets the group
-        // action below be the thing that finally triggers it, matching the ticket's own repro.
+        // test to observe the rename transition at all; not pumping here is what lets the group
+        // action below be the thing that finally triggers it.
     }
 
     std::map<juce::String, juce::String> snapshotNames() {

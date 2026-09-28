@@ -1,4 +1,4 @@
-// MidiRemotePanelLiveActivityTests.cpp -- FRO272: a hardware move reaches the panel's surface on the
+// MidiRemotePanelLiveActivityTests.cpp -- a hardware move reaches the panel's surface on the
 // next activity tick, without a dock tab switch. Drives the same path MainComponent::timerCallback
 // does: RemoteEngine::handleMessage (MIDI thread) -> drain (message-thread apply) ->
 // MidiRemotePanelComponent::refreshActivity -> ControllerSurfaceCell::noteActivity.

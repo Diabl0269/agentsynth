@@ -22,13 +22,13 @@ void AudioEngine::setMasterMute(bool muted) noexcept { masterMuted_.store(muted,
 
 bool AudioEngine::isMasterMuted() const noexcept { return masterMuted_.load(std::memory_order_relaxed); }
 
-// FRO325 (docs/mixer/mixer.md#pan-law): message-thread writes (a project load, the mixer's own
-// pan-law control) and reads; the audio thread never touches this atomic directly -- renderPass
-// republishes it once per pass into TransportService::setMixerPanLawCompensatedForBlock, which is
-// what a MONO ChannelStripModule actually reads off its playhead. Defaults to Balance, but a
-// project load always sets it explicitly either way (never a no-op), so the default only matters
-// before any project has ever loaded (a fresh AudioEngine in a test, or between construction and
-// initialise()'s default-patch load).
+// Message-thread writes (a project load, the mixer's own pan-law control) and reads; the audio
+// thread never touches this atomic directly -- renderPass republishes it once per pass into
+// TransportService::setMixerPanLawCompensatedForBlock, which is what a MONO ChannelStripModule
+// actually reads off its playhead. Defaults to Balance, but a project load always sets it
+// explicitly either way (never a no-op), so the default only matters before any project has ever
+// loaded (a fresh AudioEngine in a test, or between construction and initialise()'s default-patch
+// load) (see docs/mixer/mixer.md#pan-law).
 void AudioEngine::setMixerPanLaw(synth::MixerPanLaw law) noexcept {
     mixerPanLaw_.store(law, std::memory_order_relaxed);
 }

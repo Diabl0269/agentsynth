@@ -1,4 +1,4 @@
-// ProjectBundleCardLayoutTests.cpp -- FRO137: a plugin-card layout override survives a full
+// ProjectBundleCardLayoutTests.cpp -- a plugin-card layout override survives a full
 // project save/load, exactly like the rest of a HostedPluginModule's extra state (its plugin
 // identity + state blob). ProjectBundle::save/load always apply on the trusted path (it is the
 // user's own project file, not untrusted model output -- see the class's own doc comment), so

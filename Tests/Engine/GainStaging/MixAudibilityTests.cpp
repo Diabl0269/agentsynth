@@ -1,4 +1,4 @@
-// FRO120 gain-staging audit, part 2: two-source audibility.
+// Gain-staging audit, part 2: two-source audibility.
 //
 // The incident this guards against summed two oscillators past 0 dBFS at Master; the audio
 // device hard-clipped the block and one oscillator vanished. Part 1 (ModuleGainAuditTests.cpp)
@@ -255,7 +255,7 @@ double peakOf(const std::vector<float>& samples, int skip) {
     return peak;
 }
 
-// Simulates the audio device's hard clip at +-1.0 — the failure mode from the FRO120 incident
+// Simulates the audio device's hard clip at +-1.0 — the failure mode of an over-unity mix
 // (MasterModule itself never clips; the DEVICE did). Returns the clipped buffer.
 std::vector<float> hardClip(const std::vector<float>& samples) {
     std::vector<float> out(samples.size());

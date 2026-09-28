@@ -1,7 +1,7 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
 
-// Concern: FRO336 (docs/mixer/panel.md#placement-and-detachable-windows) -- "When a panel opens in
+// Concern: the detach-mode combo (docs/mixer/panel.md#placement-and-detachable-windows) -- "When a panel opens in
 // its own window: move it there (default) / show it in both places". Same "own named step, chained
 // from the tail of the previous group" pattern setupMixerPlacementControls()/
 // layoutMixerPlacementGroup() (PreferencesSettingsTabMixerDefaults.cpp) already establish; this
@@ -34,7 +34,7 @@ void PreferencesSettingsTab::setupPanelDetachModeControls() {
     // this to one code path -- same idiom setupMixerPlacementControls() uses.
     setPanelDetachMode(appProperties.getUserSettings()->getValue(kPanelDetachModeKey, "move"));
     panelDetachModeCombo.onChange = [this] { persistPanelDetachMode(getPanelDetachMode()); };
-    setupMidiRemoteControls(); // FRO136 -- chained here, the constructor is baselined
+    setupMidiRemoteControls(); // Chained here, the constructor is baselined
 }
 
 void PreferencesSettingsTab::layoutPanelDetachModeGroup(
@@ -44,7 +44,7 @@ void PreferencesSettingsTab::layoutPanelDetachModeGroup(
     const std::initializer_list<juce::Component*> panelDetachModeComps = {&panelDetachModeLabel, &panelDetachModeCombo};
     const bool visible = groupMatches(panelDetachModeComps);
     setGroupVisible(panelDetachModeComps, visible);
-    // FRO136: the MIDI Remote group follows; chained here for the same baselined-layoutContent reason.
+    // The MIDI Remote group follows; chained here for the same baselined-layoutContent reason.
     const auto chainNext = [&] {
         layoutMidiRemoteGroup(y, contentWidth, visible || previousGroupWasVisible, groupMatches, setGroupVisible);
     };

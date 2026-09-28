@@ -1,4 +1,4 @@
-// FRO288: the two-directional hover correlation between a knob-landing cable and the knob it lands
+// The two-directional hover correlation between a knob-landing cable and the knob it lands
 // on (GraphEditor::HoveredModTarget / setHoveredModTarget, GraphEditorModHover.cpp) --
 // docs/modules/modulation.md#modulation-rings-on-knobs.
 
@@ -161,7 +161,7 @@ TEST_F(GraphEditorTest, ModulatedKnobRendersToPngForVisualInspection) {
     juce::PNGImageFormat().writeImageToStream(img, stream);
 }
 
-// FRO312/FRO313 visual check: an Oscillator card with an LFO cable landing on its Level knob --
+// Visual check: an Oscillator card with an LFO cable landing on its Level knob --
 // the Level CV jack is knob-bound, so its gutter jack is hidden and the cable's own drop endpoint
 // is the pushed-out landing dot on the ring. Mirrors ModulatedKnobRendersToPngForVisualInspection's
 // own pattern (headless render, only written to disk when an env var names a path) but keyed off

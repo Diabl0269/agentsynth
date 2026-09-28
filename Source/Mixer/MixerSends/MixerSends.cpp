@@ -1,4 +1,4 @@
-// Concern: FRO15 (P9-9) -- the send slot flows (add / remove / retarget / resolve target / offer
+// Concern: the send slot flows (add / remove / retarget / resolve target / offer
 // legal targets). See MixerSends.h for the contract; docs/mixer/sends-and-buses.md for the design.
 
 #include "MixerSends.h"
@@ -62,7 +62,7 @@ bool isReachTerminal(const juce::AudioProcessor* processor) {
  *  guard behind enumerateSendTargets / enumerateKeySendTargets. Stops at the terminals; visited-set
  *  cycle guarded.
  *
- *  FRO318: it follows EVERY connection, not just isSignalEdge's signal edges. The question here is
+ *  It follows EVERY connection, not just isSignalEdge's signal edges. The question here is
  *  "would the new cable close a RENDER cycle?", and a render cycle does not care what an input is
  *  for: a key edge (PortRole::Sidechain), a ModCV cable or a hidden attenuverter leg is exactly as
  *  much a processing dependency as an audio input. isSignalEdge deliberately ignores those because
@@ -110,7 +110,7 @@ std::vector<Connection> dropSlotCables(juce::AudioProcessorGraph& graph, NodeID 
     return doomed;
 }
 
-/** Wires `slot`'s stereo pair into `target`: a strip's own ch0 / kRightBase, or (FRO318) a Key
+/** Wires `slot`'s stereo pair into `target`: a strip's own ch0 / kRightBase, or a Key
  *  target's first two PortRole::Sidechain channels (both legs onto the one Key channel if a module
  *  ever declares a single one). Rolls the left leg back if the right one is refused, so a half-wired
  *  send never exists. */
@@ -201,7 +201,7 @@ juce::String busFallbackName(juce::AudioProcessorGraph& graph, NodeID stripId) {
     return "Bus " + juce::String(ordinal);
 }
 
-// FRO318: one breadth-first walk answers both target kinds. A Key edge must be tested BEFORE the
+// One breadth-first walk answers both target kinds. A Key edge must be tested BEFORE the
 // isSignalEdge filter, since that filter exists precisely to drop key edges (a bass keyed from a
 // kick is not a bus) -- which is why a Key send used to resolve to "no target" at all. Hits are
 // queued rather than returned on sight so the NEAREST target wins whichever kind it is, and a Key
@@ -253,7 +253,7 @@ SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, NodeID sourceStri
 // FIRST ChannelStripModule it reaches (the same "stop at the first strip" rule
 // findStripFedByTrackSource uses), so a module the user inserted on the send path still resolves to
 // the bus behind it. Invalid when the slot is inactive, unconnected, its cable leaves the patch
-// without passing a strip, or (FRO318) it feeds a Key input -- every bus/solo/stem caller keeps
+// without passing a strip, or it feeds a Key input -- every bus/solo/stem caller keeps
 // meaning "the STRIP this send feeds".
 NodeID findSendTarget(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot) {
     const auto target = resolveSendTarget(graph, sourceStrip, slot);
@@ -280,8 +280,8 @@ juce::String keySendTargetName(juce::AudioProcessorGraph& graph, NodeID module, 
 }
 
 // Its grouping macro's name when `macros` has one, else the bus fallback name ("Bus N") or plain
-// "Channel" for an ordinary strip. Shared by MixerSendList's menus and the automation lane picker
-// (FRO292), so both always name the same bus the same way.
+// "Channel" for an ordinary strip. Shared by MixerSendList's menus and the automation lane picker,
+// so both always name the same bus the same way.
 juce::String sendTargetName(juce::AudioProcessorGraph& graph, const MacroSet* macros, NodeID target) {
     auto* node = target == NodeID{} ? nullptr : graph.getNodeForId(target);
     if (node == nullptr)
@@ -377,8 +377,8 @@ bool removeSend(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot) 
     dropSlotCables(graph, sourceStrip, slot);
     strip->setSendActive(slot, false);
     strip->setSendPreFader(slot, false);
-    strip->setSendMuted(slot, false); // FRO295: a reused slot always starts unmuted
-    strip->setSendMono(slot, false);  // FRO294: and stereo
+    strip->setSendMuted(slot, false); // A reused slot always starts unmuted
+    strip->setSendMono(slot, false);  // And stereo
     return true;
 }
 
@@ -414,15 +414,15 @@ Connection remapSlotSource(const Connection& conn, NodeID sourceStrip, int fromS
 
 } // namespace
 
-// FRO296 (docs/mixer/sends-and-buses.md#reordering-sends): the user wants "Send 1" to always be the
-// top row everywhere -- the knob's title, a lane's name, the target menu -- so reordering SWAPS THE
-// REAL SLOTS rather than reshuffling a display-only order on top of them. sendNLevel/sendNPan are
-// fixed per-slot identities ("send1Level" always names slot 0), so a swap moves what those two
-// parameter OBJECTS hold, never which object is which -- same reasoning as retargetSend never
-// re-creating a slot's parameters. Automation-lane rebinding is deliberately NOT here: a lane
-// belongs to a TimelineDoc, which this headless unit never sees (same boundary as retargetSend not
-// touching MIDI Learn) -- the caller that owns the doc (MixerPanelComponent) replays moveSendRow's
-// own swap sequence against it.
+// The user wants "Send 1" to always be the top row everywhere -- the knob's title, a lane's name,
+// the target menu -- so reordering SWAPS THE REAL SLOTS rather than reshuffling a display-only
+// order on top of them. sendNLevel/sendNPan are fixed per-slot identities ("send1Level" always
+// names slot 0), so a swap moves what those two parameter OBJECTS hold, never which object is which
+// -- same reasoning as retargetSend never re-creating a slot's parameters. Automation-lane
+// rebinding is deliberately NOT here: a lane belongs to a TimelineDoc, which this headless unit
+// never sees (same boundary as retargetSend not touching MIDI Learn) -- the caller that owns the
+// doc (MixerPanelComponent) replays moveSendRow's own swap sequence against it
+// (see docs/mixer/sends-and-buses.md#reordering-sends).
 bool swapSends(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slotA, int slotB) {
     auto* strip = stripAt(graph, sourceStrip);
     if (strip == nullptr || slotA < 0 || slotA >= ChannelStripModule::kMaxSends || slotB < 0 ||
@@ -563,7 +563,7 @@ bool retargetSend(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot
     if (strip == nullptr || !strip->isSendActive(slot) || !targetIsLegal(graph, sourceStrip, target))
         return false;
     // The whole SendTarget, not just the node: a Key send on a module and a strip send landing on
-    // that same node would otherwise read as "already there" (FRO318).
+    // that same node would otherwise read as "already there".
     if (resolveSendTarget(graph, sourceStrip, slot) == target)
         return true; // already there
 

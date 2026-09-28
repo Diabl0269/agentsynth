@@ -1,7 +1,7 @@
 #pragma once
 
 // App-layer, NOT Core: implements synth::midi::RemoteFeedbackSink over a real juce::MidiOutput
-// (FRO139, docs/control/midi-remote.md#controller-feedback) -- Core must never depend on
+// (docs/control/midi-remote.md#controller-feedback) -- Core must never depend on
 // juce_audio_devices (Source/CLAUDE.md's Core-layering rule; see RemoteFeedbackSink.h's own
 // comment), so this lives here exactly like ControllerProfileStore does for its own app-layer
 // concern. Owned by MainComponent, handed to RemoteEngine::setFeedbackSink() only in the standalone

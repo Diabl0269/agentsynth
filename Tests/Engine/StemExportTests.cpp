@@ -1,4 +1,4 @@
-// synth::StemExporter / synth::StemSession — offline stem export (P9-8, docs/mixer/stem-export.md): one
+// synth::StemExporter / synth::StemSession — offline stem export (docs/mixer/stem-export.md): one
 // render pass through the same offline path BounceExporter uses, writing one audio file per mixer
 // channel strip instead of one file for the whole mix.
 //
@@ -199,7 +199,7 @@ BounceOptions oneBeatOptionsWithTail(double tailSeconds) {
 
 struct ScopedTempDir {
     // Unique per instance: CI runs the suite as parallel shard processes, and a fixed name let two
-    // shards wipe each other's files mid-test (FRO322).
+    // shards wipe each other's files mid-test.
     explicit ScopedTempDir(const juce::String& name)
         : dir(juce::File::getSpecialLocation(juce::File::tempDirectory)
                   .getChildFile(name + "_" + juce::Uuid().toString())) {
@@ -263,7 +263,7 @@ TEST(StemExportTest, NStripsProduceNFilesWithExpectedNamesAndEqualLength) {
 
     ASSERT_EQ(result.stemFiles.size(), 2);
     // Neither strip is fed by a TimelineMidiSource/TimelineAudioSource (this rig's sources are a
-    // bare ConstantSource, and no TimelineDoc is passed at all) - the FRO55 fallback, "Channel N"
+    // bare ConstantSource, and no TimelineDoc is passed at all) - the fallback, "Channel N"
     // matching the strip's own NN position (docs/mixer/stem-export.md). See
     // Tests/Engine/StemExportNamingTests.cpp for the actual track-name resolution.
     EXPECT_EQ(result.stemFiles[0].getFileName(), "01 - Channel 1.wav");
@@ -679,7 +679,7 @@ TEST(StemExportTest, TapCapturesSilenceWhenMutedAndWhenSoloGated) {
 }
 
 // ============================================================================
-// 8. FRO15 (docs/mixer/sends-and-buses.md, docs/mixer/stem-export.md): a group/send bus is a ChannelStrip, so it gets
+// 8. (docs/mixer/sends-and-buses.md, docs/mixer/stem-export.md): a group/send bus is a ChannelStrip, so it gets
 // a stem for
 //    free -- and the stem-export identity has to survive the extra path. A source's stem stays PRE-send
 //    (the tap copies the main legs only), so nothing is double-counted for a post-fader send and

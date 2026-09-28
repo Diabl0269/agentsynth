@@ -9,17 +9,17 @@
 #include <utility>
 #include <vector>
 
-// ControllerSurfaceComponent.h -- FRO131 (docs/control/midi-remote-ui.md#surface-centre): the MIDI
-// Remote panel's centre region -- the selected controller's controls drawn on a 56 px grid
-// (Control::layout {col,row}, snapped). The toolbar row above it is ControllerSurfaceToolbar
-// (FRO134); this component owns only the grid itself. FRO270 adds multi-select (plain/shift/cmd
-// click, a marquee drag over empty grid space) and group move/delete -- selection, marquee and
-// group-drag are each their own concern unit (ControllerSurfaceSelection.cpp,
-// ControllerSurfaceMarquee.cpp, ControllerSurfaceGroupDrag.cpp); this header only declares them.
-// FRO331: pan/zoom (ControllerSurfaceView.cpp) makes an overflowing grid navigable, mirroring
-// GraphEditor's canvas -- the cells live on a `Content` child carrying the view's AffineTransform,
-// never on this component directly, so every position cell code already computes (grid math,
-// marquee hit-testing, drag deltas) stays in that untransformed content-local space for free.
+// ControllerSurfaceComponent.h (docs/control/midi-remote-ui.md#surface-centre): the MIDI Remote
+// panel's centre region -- the selected controller's controls drawn on a 56 px grid
+// (Control::layout {col,row}, snapped). The toolbar row above it is ControllerSurfaceToolbar; this
+// component owns only the grid itself. Multi-select (plain/shift/cmd click, a marquee drag over
+// empty grid space) and group move/delete -- selection, marquee and group-drag are each their own
+// concern unit (ControllerSurfaceSelection.cpp, ControllerSurfaceMarquee.cpp,
+// ControllerSurfaceGroupDrag.cpp); this header only declares them. Pan/zoom
+// (ControllerSurfaceView.cpp) makes an overflowing grid navigable, mirroring GraphEditor's canvas
+// -- the cells live on a `Content` child carrying the view's AffineTransform, never on this
+// component directly, so every position cell code already computes (grid math, marquee hit-testing,
+// drag deltas) stays in that untransformed content-local space for free.
 namespace synth::ui {
 
 class ControllerSurfaceComponent : public juce::Component {
@@ -45,7 +45,7 @@ public:
     /** Rebuilds the grid for a newly-selected profile (or clears it for an empty `profileId` --
      *  no controller selected). Structural only: call on profile switch, or when the shown
      *  profile's own control set/assignments change -- never on the activity tick. The current
-     *  selection survives the rebuild, minus any id no longer present (FRO270). */
+     *  selection survives the rebuild, minus any id no longer present. */
     void setControls(const juce::String& profileId, const std::vector<CellModel>& cells);
 
     const juce::String& getProfileId() const noexcept { return profileId_; }
@@ -54,7 +54,7 @@ public:
      *  isn't on the currently shown grid -- the caller doesn't filter first. */
     void noteActivity(const juce::String& controlId, synth::midi::RemoteEventKind kind, float value);
 
-    /** FRO134 (Detect): the control that should be pulsing (empty = none). Survives setControls():
+    /** (Detect) The control that should be pulsing (empty = none). Survives setControls():
      *  the pulse is re-applied to the rebuilt cell, since every detected control persists the
      *  profile and so rebuilds the grid. */
     void setDetectPulseControlId(const juce::String& controlId);
@@ -68,26 +68,26 @@ public:
      *  legacy single-select setter every non-multi-select caller (Detect, Assign, a profile
      *  switch) still uses. */
     void setSelectedControlId(const juce::String& controlId);
-    /** FRO270: replaces the whole selection with `ids` (silently dropping any id not currently on
+    /** Replaces the whole selection with `ids` (silently dropping any id not currently on
      *  the grid) -- the panel's own post-move/-delete restore call. */
     void setSelectedControlIds(const std::vector<juce::String>& ids);
     /** The single selected control, or empty if none or more than one is selected. */
     juce::String getSelectedControlId() const noexcept {
         return selectedIds_.size() == 1 ? selectedIds_.front() : juce::String();
     }
-    /** FRO270: every currently selected control id, in click/marquee order. */
+    /** Every currently selected control id, in click/marquee order. */
     const std::vector<juce::String>& getSelectedControlIds() const noexcept { return selectedIds_; }
 
-    /** FRO262 test seam: the widget's current displayed value (0..1) for `controlId`, or -1.0f if
+    /** Test seam: the widget's current displayed value (0..1) for `controlId`, or -1.0f if
      *  no cell with that id is currently shown. */
     float getCellValueForTest(const juce::String& controlId) const;
     const ControllerSurfaceCell* findCellForTest(const juce::String& controlId) const;
     /** Non-const overload for a test driving a real mouseDown/mouseDrag/mouseUp on the cell found. */
     ControllerSurfaceCell* findCellForTest(const juce::String& controlId);
-    /** FRO270 test seam: whether a marquee drag is currently being painted. */
+    /** Test seam: whether a marquee drag is currently being painted. */
     bool isMarqueeActiveForTest() const noexcept { return marqueeActive_; }
 
-    /** FRO270: fired on every selection change (click, shift/cmd-click, marquee, Esc, a click on
+    /** Fired on every selection change (click, shift/cmd-click, marquee, Esc, a click on
      *  empty grid space) with the new full id set -- the panel's one hook for keeping its own
      *  mirrored selection and the inspector in step. */
     std::function<void(const std::vector<juce::String>& ids)> onSelectionChanged;
@@ -109,13 +109,13 @@ public:
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
-    /** FRO331: plain wheel/trackpad-scroll pans (so an overflowing grid is navigable without a
+    /** Plain wheel/trackpad-scroll pans (so an overflowing grid is navigable without a
      *  drag); Cmd+wheel zooms, anchored at the cursor. */
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
-    /** FRO331: trackpad pinch zooms, anchored at the pinch point. */
+    /** Trackpad pinch zooms, anchored at the pinch point. */
     void mouseMagnify(const juce::MouseEvent& event, float scaleFactor) override;
 
-    /** FRO331: the content-space rectangle currently visible through this component's bounds, at
+    /** The content-space rectangle currently visible through this component's bounds, at
      *  the current pan/zoom -- the inverse of the view transform applied to getLocalBounds(). */
     juce::Rectangle<float> getVisibleContentRect() const noexcept;
     float getZoomLevelForTest() const noexcept { return zoomLevel_; }
@@ -123,28 +123,28 @@ public:
 
     static constexpr int kCellSize = ControllerSurfaceCell::kCellSize;
     static constexpr int kCellMargin = ControllerSurfaceCell::kCellMargin;
-    /** FRO331: zoom clamp, same shape as GraphEditor's own -- a control-surface grid never needs
+    /** Zoom clamp, same shape as GraphEditor's own -- a control-surface grid never needs
      *  GraphEditor's full [0.1, 2.0] range (a cell below ~0.4x is illegible; above 2x is rarely
      *  useful for a fixed 56 px grid). */
     static constexpr float kMinZoom = 0.4f;
     static constexpr float kMaxZoom = 2.0f;
 
 private:
-    // ---- FRO270 selection (ControllerSurfaceSelection.cpp) ----
+    // ---- Selection (ControllerSurfaceSelection.cpp) -----------
     void setSelectionInternal(std::vector<juce::String> ids, bool notify = true);
     void handleCellSelected(const juce::String& controlId, const juce::ModifierKeys& mods);
 
-    // ---- FRO270 marquee / FRO331 pan (ControllerSurfaceMarquee.cpp) ----
+    // ---- Marquee / pan (ControllerSurfaceMarquee.cpp) ----
     std::vector<juce::String> collectMarqueeHits() const;
 
-    // ---- FRO270 group drag (ControllerSurfaceGroupDrag.cpp) ----
+    // ---- Group drag (ControllerSurfaceGroupDrag.cpp) -----------
     void handleCellDragged(const juce::String& controlId, int deltaCol, int deltaRow);
     void handleCellDragEnded(const juce::String& controlId);
     ControllerSurfaceCell* findMutableCell(const juce::String& controlId);
     std::vector<juce::String> dragGroupFor(const juce::String& controlId) const;
     static void moveCellToLayout(ControllerSurfaceCell& cell, int col, int row);
 
-    // ---- FRO331 pan/zoom (ControllerSurfaceView.cpp) ----
+    // ---- Pan/zoom (ControllerSurfaceView.cpp) -----------
     // The cells' real parent: carries the view's AffineTransform (scale then translate) so every
     // child stays in one untransformed content-local coordinate space regardless of pan/zoom.
     class Content : public juce::Component {
@@ -187,7 +187,7 @@ private:
     // View transform (ControllerSurfaceView.cpp): screen = content * zoomLevel_ + panOffset_.
     juce::Point<float> panOffset_;
     float zoomLevel_ = 1.0f;
-    // FRO331: trivial in-memory (session-only, never written to disk) view-per-controller memory
+    // Trivial in-memory (session-only, never written to disk) view-per-controller memory
     // -- switching back to a profile already visited this session restores the pan/zoom it was
     // left at, keyed by profileId. Deliberately not part of ControllerProfile/persisted state: see
     // this member's use in restoreOrResetView()'s own comment.

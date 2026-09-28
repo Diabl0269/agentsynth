@@ -1,4 +1,4 @@
-// MixerColumnComponentTests.cpp -- FRO16 (P9-10): the column-level half of the EQ curve thumbnail
+// MixerColumnComponentTests.cpp -- the column-level half of the EQ curve thumbnail
 // -- finding "the" EQ among a column's inserts (first in signal order) and forwarding a click
 // through the column's existing onEditOnCanvas seam with the EQ's own uuid, never the strip's.
 //
@@ -48,7 +48,7 @@ void synthesizeMouseUp(juce::Component& component) {
                                        centre.toFloat(), juce::Time::getCurrentTime(), 1, false));
 }
 
-// FRO225: fires `component`'s REAL mouseDoubleClick() handler -- for an editable-on-double-click
+// Fires `component`'s REAL mouseDoubleClick() handler -- for an editable-on-double-click
 // juce::Label (setEditable(false, true, false), same as this file's synthesizeMouseUp() above does
 // for a plain click) that's Label::showEditor()'s own trigger, exactly what a live double-click
 // produces, not a shortcut that skips the gesture and calls showEditor() directly.
@@ -61,7 +61,7 @@ void synthesizeMouseDoubleClick(juce::Component& component) {
     component.mouseDoubleClick(event);
 }
 
-// FRO15 in-app finding: at the dock's real Mixer-tab column height (~181px) a freshly created
+// At the dock's real Mixer-tab column height (~181px) a freshly created
 // bus's insert list and EQ thumbnail must actually be visible -- not hidden behind the model bug
 // (buildInsertsForColumn never looking at a bus's own chain; MixerModelBusColumnTests.cpp covers
 // that half) or a resized() overlap. Checked at both the height the user actually saw (181) and a
@@ -129,11 +129,12 @@ synth::MixerColumn buildStarvedColumnModel(juce::AudioProcessorGraph& graph, syn
 
 } // namespace
 
-// FRO298 (docs/mixer/panel.md): at the bottom dock's OWN default column height (Theme's default
-// timelinePanelHeight minus the dock's own tab strip, BottomDockComponent::kTabStripHeight -- never
-// a magic 220), the insert list, send list, EQ thumbnail and pan knob used to reserve their own
-// space FIRST, leaving the fader ~0px. With 2+ inserts, a send and pan all competing for the same
-// short column, the fader must still keep at least kMinFaderHeight, with a real, draggable slider.
+// At the bottom dock's OWN default column height (Theme's default timelinePanelHeight minus the
+// dock's own tab strip, BottomDockComponent::kTabStripHeight -- never a magic 220), an insert list,
+// send list, EQ thumbnail and pan knob that each reserved their own space FIRST would leave the
+// fader ~0px. With 2+ inserts, a send and pan all competing for the same short column, the fader
+// must still keep at least kMinFaderHeight, with a real, draggable slider (see
+// docs/mixer/panel.md).
 TEST(MixerColumnComponentTests, FaderKeepsItsMinimumHeightAtTheDockDefaultColumnHeight) {
     AudioEngine engine;
     auto& graph = engine.getGraph();
@@ -165,7 +166,7 @@ TEST(MixerColumnComponentTests, FaderKeepsItsMinimumHeightAtTheDockDefaultColumn
         << "the fader's own slider (not just its dB readout) must stay usable, not squeezed to nothing";
 }
 
-// FRO298: the flip side of the guarantee above -- with plenty of room, every part still gets
+// The flip side of the guarantee above -- with plenty of room, every part still gets
 // exactly what it asked for, same as before this fix (only a too-short column ever trims anything).
 TEST(MixerColumnComponentTests, InsertAndSendListsKeepPreferredHeightWhenColumnIsTall) {
     AudioEngine engine;
@@ -290,7 +291,7 @@ TEST(MixerColumnComponentTests, NoEqInsertHidesTheThumbnail) {
     EXPECT_FALSE(column.getEqThumbnailForTest().isVisible());
 }
 
-// FRO16 review fix: removing the currently-thumbnailed EQ insert via the mixer's own row menu
+// Removing the currently-thumbnailed EQ insert via the mixer's own row menu
 // (MixerInsertList::removeRow) used to free the EQ's processor (graph.removeNode(), synchronous)
 // with nothing unbinding eqThumbnail_ first -- the eventual MixerPanelComponent::rebuild() this
 // mutation triggers (through onMutated) would then destroy this column, and ~MixerEqThumbnail's
@@ -338,9 +339,9 @@ TEST(MixerColumnComponentTests, RemovingTheBoundEqRowUnbindsTheThumbnailBeforeTh
 }
 
 // ============================================================================
-// FRO225 (docs/mixer/panel.md): the mixer header's inline rename. Named strips gets its own
-// persisted name; a strip boxed in a macro reuses the macro's rename instead (never two competing
-// names for one column) -- see MixerColumnComponent::commitHeaderRename's own comment.
+// The mixer header's inline rename. Named strips gets its own persisted name; a strip boxed in a
+// macro reuses the macro's rename instead (never two competing names for one column) -- see
+// MixerColumnComponent::commitHeaderRename's own comment (see docs/mixer/panel.md).
 // ============================================================================
 
 TEST(MixerColumnComponentTests, DoubleClickingTheHeaderNameRenamesAnUnboxedStrip) {

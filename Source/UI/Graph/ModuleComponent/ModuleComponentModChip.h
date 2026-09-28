@@ -1,6 +1,6 @@
 #pragma once
 
-// FRO288: the small "<source> · <+NN%>" chip drawn under a knob's value box while its routing is
+// The small "<source> · <+NN%>" chip drawn under a knob's value box while its routing is
 // hover-correlated (docs/modules/modulation.md#modulation-rings-on-knobs). Split into a free
 // function so the text formatting is unit-testable with no ModuleComponent/LookAndFeel involved
 // (Tests/UI/Graph/ModuleComponent/ModuleComponentModChipTests.cpp) -- same pattern as

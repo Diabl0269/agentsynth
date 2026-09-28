@@ -1,5 +1,5 @@
-// FRO24 (docs/layout/macro-cards.md#direct-port-addremove-from-the-collapsed-card): the collapsed
-// card's own '+' (add a port) and hover-'x' (delete a port) affordances.
+// The collapsed card's own '+' (add a port) and hover-'x' (delete a port) affordances
+// (docs/layout/macro-cards.md#direct-port-addremove-from-the-collapsed-card).
 //
 // Driven through the REAL mouse path — synthesised juce::MouseEvents into the actual
 // MacroCardComponent::mouseMove/mouseDown, the same methods a real hover-then-click gesture calls —
@@ -108,18 +108,17 @@ TEST(MacroCardPortButtons, AddButtonSitsInTheFooterBesideTheCountText) {
     EXPECT_LT(inBounds.getCentreX(), outBounds.getCentreX()) << "input '+' on the left, output '+' on the right";
     EXPECT_TRUE(card->getLocalBounds().toFloat().contains(inBounds.getCentre()));
     EXPECT_TRUE(card->getLocalBounds().toFloat().contains(outBounds.getCentre()));
-    // FRO24 follow-up: pinned to the footer row, not the jack band this card's own jacks lay out
-    // in — its top edge must sit at or below the jack band's own bottom edge, structurally, not
-    // just "usually clear of it".
+    // Pinned to the footer row, not the jack band this card's own jacks lay out in — its top edge
+    // must sit at or below the jack band's own bottom edge, structurally, not just "usually clear
+    // of it".
     EXPECT_GE(inBounds.getY(), card->getHeight() - 16.0f) << "off the jack band (kMacroCardJackBandBottom)";
     EXPECT_GE(outBounds.getY(), card->getHeight() - 16.0f);
 }
 
-// FRO24 follow-up (founder in-app review): the first cut hid the '+' as soon as a side had 2+
-// ports (it sat at the TOP of the jack band, which macroCardPortLayout()'s even-spacing pushes
-// the topmost jack toward as the count grows) — usable only on an almost-empty side. The footer
-// placement has no such failure mode: it must stay visible and off the jack band no matter how
-// many ports are on a side.
+// A '+' at the TOP of the jack band would be usable only on an almost-empty side, since
+// macroCardPortLayout()'s even-spacing pushes the topmost jack toward it as the count grows. The
+// footer placement has no such failure mode: it must stay visible and off the jack band no matter
+// how many ports are on a side.
 TEST(MacroCardPortButtons, AddButtonStaysVisibleWithManyPortsAndNeverOverlapsAJack) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -309,13 +308,12 @@ TEST(MacroCardPortButtons, ClickingAHoveredJacksXDeletesItAndDropsTheCableByDefa
     EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
 }
 
-// FRO24 follow-up (founder in-app review): deleting a port via its 'x' reflows
-// macroCardPortLayout() for the survivors, so the NEXT jack can slide under the still-resting
-// cursor and land within its own hit radius — a quick double-click then deleted two ports, one
-// per click. A mouseMove reporting the SAME position as the delete click (JUCE can dispatch one
-// as part of the click plumbing itself even with no real cursor movement) must not re-arm hover
-// on whatever port the reflow just moved there; only a mouseMove at a genuinely different
-// position may.
+// Deleting a port via its 'x' reflows macroCardPortLayout() for the survivors, so the NEXT jack can
+// slide under the still-resting cursor and land within its own hit radius — a quick double-click
+// would then delete two ports, one per click. A mouseMove reporting the SAME position as the delete
+// click (JUCE can dispatch one as part of the click plumbing itself even with no real cursor
+// movement) must not re-arm hover on whatever port the reflow just moved there; only a mouseMove at
+// a genuinely different position may.
 TEST(MacroCardPortButtons, DeletingAPortSuppressesHoverAtThatSpotSoADoubleClickCannotDeleteTheNextPortToo) {
     AudioEngine engine;
     AppUndoManager undo;
@@ -436,7 +434,7 @@ TEST(MacroCardPortButtons, HoveringDoesNotBreakARealCableDropOntoThePort) {
 // ============================================================================
 // PNG render smoke test (docs/development/testing.md's createComponentSnapshot pattern):
 // juce::SoftwareImageType() forces a software-backed bitmap so getPixelAt() reads what paint()
-// actually drew rather than an all-zero GPU-backed image on a headless CI runner (FRO242, the
+// actually drew rather than an all-zero GPU-backed image on a headless CI runner (the
 // same reasoning ModuleComponentPaintTests.cpp's WavetableCardPaintsAndTicksWithoutCrashing gives).
 // ============================================================================
 

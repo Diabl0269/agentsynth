@@ -1,5 +1,5 @@
 // MacroContainerTests.cpp
-// Lifecycle tests for Macros — P8-12's named, coloured, collapsible container that groups
+// Lifecycle tests for Macros — the named, coloured, collapsible container that groups
 // selected modules on the canvas as metadata layered over the existing multi-select system.
 // Shared helpers live in MacroContainerTestHelpers.h.
 //
@@ -235,7 +235,7 @@ TEST(MacroSnippet, ExtractAndInsertSucceedsAndCreatesANewMacroWithFreshUuids) {
 }
 
 TEST(MacroSnippet, ConfiguredPortSurvivesDuplicateAndSaveAsSnippet) {
-    // T117: a macro's configured I/O (P8-15) used to be dropped by SnippetManager::extractSnippet/
+    // A macro's configured I/O used to be dropped by SnippetManager::extractSnippet/
     // insertSnippet — the boundary jack's underlying MacroInlet node travelled through as an
     // ordinary member (nothing excludes it), but the MacroPort entry naming it as a jack did not,
     // so a duplicated or snippet-round-tripped macro silently lost its port and fell back to
@@ -385,7 +385,7 @@ TEST(MacroDelete, UngroupSelectionKeepsTheModulesInTheGraph) {
 }
 
 // ============================================================================
-// Membership (T138): Add Selection to Macro / Remove from Macro -- the incremental
+// Membership: Add Selection to Macro / Remove from Macro -- the incremental
 // counterparts to groupSelectionIntoMacro()/ungroupSelection() for an EXISTING macro.
 // ============================================================================
 
@@ -564,7 +564,7 @@ TEST(MacroMembership, RemoveSelectionFromMacroSkipsAPortUuidRatherThanDesyncingM
 }
 
 // ----------------------------------------------------------------------------
-// T138 second live-testing round (2026-09-10): auto-create/delete ports on Add/Remove Selection
+// Auto-create/delete ports on Add/Remove Selection
 // to/from Macro, matching what groupSelectionIntoMacro(true)/ungroupSelection() already do at
 // whole-macro creation/dissolution time. Reported live as "I remove a module from a macro, but its
 // connection still remains, and the output of that module still goes into the macro connection" --
@@ -743,7 +743,7 @@ TEST(MacroMembership, RemoveSelectionFromMacroWithASplicedPortIsOneUndoStep) {
 }
 
 // ============================================================================
-// FRO195: removeSelectionFromMacro's remove-side mirror of
+// removeSelectionFromMacro's remove-side mirror of
 // AddSelectionToMacroSplicesOutAnExistingPortTheJoiningMemberMakesInterior above — a member
 // leaving can leave an EXISTING port stranded, bridging two things now both external, exactly the
 // way a joining member can make one redundant. Test matrix: cable to a staying member (a new

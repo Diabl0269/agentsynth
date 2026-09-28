@@ -1,4 +1,4 @@
-// ProfileEditHistoryTests.cpp -- FRO273 (docs/control/midi-remote.md#undo): the controller edit
+// ProfileEditHistoryTests.cpp (docs/control/midi-remote.md#undo): the controller edit
 // history. Every profile mutation MidiLearnController makes records one before/after step, and
 // undo/redo applies them back through the same mutation path (saved to disk, republished). The
 // project half of a split edit (Delete control) stays on AppUndoManager. Suite name contains
@@ -119,7 +119,7 @@ TEST_F(MidiRemoteProfileHistoryTest, DeleteControlSplitsAcrossTheTwoHistories) {
     EXPECT_EQ(doc_.assignments[0].control.controlId, "k1");
 }
 
-// FRO270: the surface's group delete -- deleteControls() removes BOTH controls (and both project
+// The surface's group delete -- deleteControls() removes BOTH controls (and both project
 // assignments) in ONE step on each history, so a single undo on either restores the whole pair.
 TEST_F(MidiRemoteProfileHistoryTest, DeleteControlsRemovesAGroupInOneStepPerHistory) {
     auto withSecondControl = *find("p1");

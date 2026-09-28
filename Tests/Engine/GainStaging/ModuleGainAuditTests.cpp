@@ -1,4 +1,4 @@
-// FRO120 gain-staging audit, part 1: per-module hidden-amplifier sweep.
+// Gain-staging audit, part 1: per-module hidden-amplifier sweep.
 //
 // The incident this guards against: a Ring Modulator's Drive turned out to be an uncompensated
 // ~xdrive gain, so a two-oscillator patch summed past 0 dBFS at Master and the audio device
@@ -62,7 +62,7 @@ constexpr int kSkipSamples = 4096;   // settle past smoothing ramps / filter sta
 constexpr double kGainAlarmDb = 6.0;
 
 // ---------------------------------------------------------------------------------------------
-// Test signals — one column of the sweep matrix. Amplitudes per the FRO120 task brief: a modest
+// Test signals — one column of the sweep matrix. Amplitudes: a modest
 // sine, a full-scale square, and a "hot" square already past unity (simulating a user-authored
 // patch that over-drives an earlier stage before this module).
 // ---------------------------------------------------------------------------------------------

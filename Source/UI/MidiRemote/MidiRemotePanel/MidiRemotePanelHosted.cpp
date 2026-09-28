@@ -1,4 +1,4 @@
-// Concern: FRO136 -- the plugin build's (HostMode::Hosted) controller model in the panel: Host MIDI
+// Concern: the plugin build's (HostMode::Hosted) controller model in the panel: Host MIDI
 // is the one live controller, always listed; profiles for real devices are listed as standalone-only
 // and inert (docs/control/midi-remote-ui.md#plugin-build).
 #include "AudioEngine/AudioEngine.h"

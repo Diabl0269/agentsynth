@@ -37,7 +37,7 @@ struct LocalConversation {
 /**
  * @class LocalHistoryStore
  * @brief One JSON file per conversation under
- *        `<userAppData>/<kSettingsFolderName>/History/<id>.json` (P6-8) — the local half of the
+ *        `<userAppData>/<kSettingsFolderName>/History/<id>.json` — the local half of the
  *        local-first/cloud-as-sync history design. Every session writes here regardless of plan;
  *        Pro sessions additionally sync via the server's `x-conversation-id` mechanism
  *        (AIIntegrationService::setConversationId(), see docs/ai/history.md#local-history).

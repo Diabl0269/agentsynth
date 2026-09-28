@@ -1,4 +1,4 @@
-// ControllerSurfaceCell.cpp -- FRO131 (docs/control/midi-remote-ui.md#surface-centre): paint,
+// ControllerSurfaceCell.cpp (docs/control/midi-remote-ui.md#surface-centre): paint,
 // activity decode, and the cell's own mouse handling (select + drag-by-cells). See the header for
 // the caller-facing contract; the mid-gesture-rebuild hazard this cell must never trip is documented
 // on ControllerSurfaceComponent.cpp, which owns the rebuild.
@@ -171,7 +171,7 @@ void ControllerSurfaceCell::paint(juce::Graphics& g) {
         synth::ui::midilearn::paintMidiMappedDot(g, getLocalBounds(), badgeColour);
 }
 
-// FRO263: continuous feedback for the whole span a real cell-to-cell move is in progress -- a
+// Continuous feedback for the whole span a real cell-to-cell move is in progress -- a
 // dim overlay across the WHOLE cell (including the slider/button child, which paint() above never
 // reaches) so a slow drag has something visible happening between whole-cell snaps, instead of
 // nothing until the next boundary crossing. paintOverChildren() (not paint()) because the
@@ -197,7 +197,7 @@ void ControllerSurfaceCell::paintOverChildren(juce::Graphics& g) {
     }
 }
 
-// FRO134. The pulse's alpha is recomputed from wall time inside paintMidiLearnArmedOutline, but
+// The pulse's alpha is recomputed from wall time inside paintMidiLearnArmedOutline, but
 // nothing repaints on its own: the panel's gated activity tick calls tickHighlight(), which asks for
 // a repaint of THIS cell only while something is live (and once more when it ends, to erase it).
 void ControllerSurfaceCell::setDetectPulse(double sinceMs) {
@@ -243,7 +243,7 @@ const juce::Identifier kLastFiredDeltaColProperty("lastFiredDeltaCol");
 const juce::Identifier kLastFiredDeltaRowProperty("lastFiredDeltaRow");
 } // namespace
 
-// FRO331: the drag anchor lives in the PARENT's coordinate space, not this cell's. The owner
+// The drag anchor lives in the PARENT's coordinate space, not this cell's. The owner
 // (ControllerSurfaceComponent::moveCellToLayout) moves this cell each time the drag crosses a cell
 // boundary, which moves a cell-local origin mid-gesture: offsets then measured from the cell's new
 // bounds instead of the drag's start, so the reported delta (which the owner adds to the control's
@@ -253,7 +253,7 @@ void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
     isDragging_ = false;
     getProperties().set(kLastFiredDeltaColProperty, 0);
     getProperties().set(kLastFiredDeltaRowProperty, 0);
-    // FRO263: a hand cursor for the whole press-to-release span, not only once a whole-cell move is
+    // A hand cursor for the whole press-to-release span, not only once a whole-cell move is
     // detected below -- gives a press immediate "this can be dragged" feedback even if it turns out
     // to be a plain click, which reverts it in mouseUp() below just as promptly.
     setMouseCursor(juce::MouseCursor::DraggingHandCursor);
@@ -267,7 +267,7 @@ void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
 // The owner (ControllerSurfaceComponent) accumulates the delta onto the drag-start grid position
 // and clamps once, per its own header's contract.
 //
-// Bugfix (found while testing FRO331's pan/zoom): divides by kCellPitch (kCellSize + the owner's
+// Divides by kCellPitch (kCellSize + the owner's
 // inter-cell margin), NOT kCellSize alone -- see kCellPitch's own doc comment on the header. Dividing
 // by kCellSize alone under-counts the real on-screen pitch between cells, so a drag of N whole
 // cells (N * kCellPitch px) reported round(N * kCellPitch / kCellSize) cells instead of N -- e.g. 8
@@ -288,7 +288,7 @@ void ControllerSurfaceCell::mouseDrag(const juce::MouseEvent& event) {
     getProperties().set(kLastFiredDeltaRowProperty, dRows);
     // isDragging_ becomes true only once a real cell-crossing fires onDraggedByCells, not merely
     // because mouseDrag() was called -- so mouseUp below only fires onDragEnded for a drag that
-    // actually moved the cell, never for a plain click or a sub-cell jiggle. FRO263: paintOverChildren()
+    // actually moved the cell, never for a plain click or a sub-cell jiggle. PaintOverChildren()
     // reads this same flag for the dim-while-dragging overlay, so the first crossing also needs a
     // repaint to turn it on (every crossing after that already repaints via noteActivity()/the
     // owner's move, so this only matters once per drag).
@@ -305,7 +305,7 @@ void ControllerSurfaceCell::mouseUp(const juce::MouseEvent&) {
     isDragging_ = false;
     setMouseCursor(juce::MouseCursor::NormalCursor);
     if (didDrag) {
-        repaint(); // clears the FRO263 dim-while-dragging overlay
+        repaint(); // clears the dim-while-dragging overlay
         if (onDragEnded)
             onDragEnded();
     }

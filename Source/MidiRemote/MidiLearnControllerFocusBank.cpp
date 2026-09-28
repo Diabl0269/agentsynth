@@ -1,4 +1,4 @@
-// Concern: FRO141 (docs/control/midi-remote.md#focus-bank) -- transient bindings for the controls
+// Concern: (docs/control/midi-remote.md#focus-bank) -- transient bindings for the controls
 // marked "follow selection" (Control::focusBank), rebuilt whenever the canvas selection changes.
 // Polled from focusBankWatcher_'s 200 ms tick (MidiLearnController.h), a SEPARATE UiWatcher instance
 // from the one arm()/armAction()/armNodeCommand() use for a learn's silent timeout, so this keeps
@@ -39,7 +39,7 @@ std::vector<const Control*> MidiLearnController::collectFocusBankControls(const 
     return result;
 }
 
-// FRO141: exactly one selected module and no pick-target session binds the bank; anything else
+// Exactly one selected module and no pick-target session binds the bank; anything else
 // (none selected, several selected, or a pick in progress) leaves the CURRENT binding alone while
 // a pick is active -- see the .h's own comment on focusBankWatcher_ -- but clears it in every other
 // case. Only rebuilds when the selection or the set of bank controls actually changed since the last poll: republishing
@@ -114,7 +114,7 @@ void MidiLearnController::rebuildFocusBankAssignments() {
                         target.kind = synth::Target::Kind::parameter;
                         target.parameter.nodeUuid = uuid;
                         target.parameter.paramId = eligible[i].target.paramId;
-                        // FRO137: same hosted-plugin-card fallback arm() resolves -- harmless to
+                        // Same hosted-plugin-card fallback arm() resolves -- harmless to
                         // compute unconditionally, since a built-in AudioParameter's resolution
                         // never consults this hint.
                         target.parameter.paramIndexHint =
@@ -132,12 +132,12 @@ void MidiLearnController::rebuildFocusBankAssignments() {
     }
 
     remoteEngine_.setTransientAssignments(std::move(transient));
-    // FRO141: resolve against the live graph right away -- mirrors publishAssignments()'s own
+    // Resolve against the live graph right away -- mirrors publishAssignments()'s own
     // comment on why setAssignments()'s own graph==nullptr rebuild isn't enough for a brand-new
     // assignment id (a freshly selected module's parameters would otherwise stay unresolved until
     // some unrelated graph change happened to reach MainComponent's reconcile funnel).
     remoteEngine_.reconcile(engine_.getGraph());
-    // The MIDI Remote panel redraws on onChanged (FRO263): without it a bank cell kept showing
+    // The MIDI Remote panel redraws on onChanged: without it a bank cell kept showing
     // "Follows selection" after a rebind until something else refreshed the panel.
     if (onChanged)
         onChanged();

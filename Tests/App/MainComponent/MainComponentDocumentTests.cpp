@@ -8,7 +8,7 @@ TEST_F(MainComponentTest, PatchNameIsDefaultOnStartup) {
     EXPECT_EQ(mc.getCurrentPatchName(), "Default");
 }
 
-// P8-1's dirty-title wiring: startup itself must never leave the document marked dirty. Nothing in
+// the dirty-title wiring: startup itself must never leave the document marked dirty. Nothing in
 // construction (loading the default preset, applying the dual-IO preference, restoring
 // preferences) goes through AppUndoManager, so canUndo() — and therefore isDirty_ — must both be
 // false the instant construction finishes. A regression here would show up as a stray " *" in the
@@ -50,7 +50,7 @@ TEST_F(MainComponentTest, PatchNameUpdatesOnFactoryPresetLoad) {
 }
 
 // ---------------------------------------------------------------------------
-// P8-1: Cmd+S saves the whole project (bundle, not patch-only json) and remembers the file.
+// Cmd+S saves the whole project (bundle, not patch-only json) and remembers the file.
 // ---------------------------------------------------------------------------
 
 // A freshly constructed document has never been saved, so there is no bundle to resave to
@@ -125,7 +125,7 @@ TEST_F(MainComponentTest, ExportPatchOnlyWritesByteIdenticalLegacyJson) {
     EXPECT_EQ(exported.loadFileAsString(), legacy.loadFileAsString());
 }
 
-// A plain .json preset (the pre-P8-1 default, and still what Export Patch Only writes) must still
+// A plain .json preset (the legacy default, and still what Export Patch Only writes) must still
 // open correctly — openFromFile's non-bundle branch is untouched by this ticket, but the save-side
 // default changing is exactly the kind of change that could have silently broken it by omission.
 TEST_F(MainComponentTest, OpeningLegacyJsonPresetStillWorks) {

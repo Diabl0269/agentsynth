@@ -1,4 +1,4 @@
-// Concern: FRO12 (P9-6) -- DetachablePanelHost's dock/detach state machine, header layout, and
+// Concern: DetachablePanelHost's dock/detach state machine, header layout, and
 // themed icon application.
 #include "DetachablePanelHost.h"
 
@@ -72,7 +72,7 @@ void DetachablePanelHost::setDetached(bool detached) {
         window_->onAppShortcut = onAppShortcutFallback;
         if (focusRegionRoot_ != nullptr)
             window_->registerHostedPanelFocusRegion(focusRegionId_, *focusRegionRoot_);
-        // FRO12 follow-up: promote the window to a real native peer BEFORE setVisible(true) --
+        // Promote the window to a real native peer BEFORE setVisible(true) --
         // setVisible() alone never creates one (see setCreatesNativeWindows()'s doc comment on
         // DetachablePanelHost.h). window_'s bounds are already the restored/centred-default ones
         // from its own constructor's restoreBoundsOrDefault(); TopLevelWindow::addToDesktop() reads
@@ -139,7 +139,7 @@ void DetachablePanelHost::applyIcon() {
 }
 
 void DetachablePanelHost::applyTooltip() {
-    // FRO228: setButtonText({}) above clears getButtonText() (the ButtonAccessibilityHandler
+    // setButtonText({}) above clears getButtonText() (the ButtonAccessibilityHandler
     // fallback getTitle() otherwise uses), so without an explicit title this icon-only button was
     // unnamed to a screen reader both docked AND inside its own DetachedPanelWindow -- same fix as
     // BottomDockComponent::refreshDetachButton()'s own detach button.

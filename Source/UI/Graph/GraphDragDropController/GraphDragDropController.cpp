@@ -1,7 +1,7 @@
 // GraphDragDropController.cpp
 //
 // The drag-preview API (begin/update/endDragPreview) and the DragAndDropTarget/
-// FileDragAndDropTarget bodies GraphEditor forwards into it (FRO77 PR3). GraphDragDropController
+// FileDragAndDropTarget bodies GraphEditor forwards into it. GraphDragDropController
 // is declared in GraphDragDropController.h.
 
 #include "GraphDragDropController.h"

@@ -1,6 +1,6 @@
 // MidiInputDeliveryTests.cpp
 //
-// FRO279: a real message arriving from a real OS MIDI source must reach
+// A real message arriving from a real OS MIDI source must reach
 // AudioEngine::handleIncomingMidiMessageFromSource exactly ONCE. The headless MIDI Remote tests
 // call RemoteEngine::handleMessage directly, one call per message, so they cannot see a second
 // delivery that happens upstream of the engine (an input opened twice). This drives the real
@@ -85,12 +85,11 @@ TEST(MidiInputDeliveryTest, OneMessageFromAnOpenedSourceIsDeliveredOnce) {
     engine.drainRemoteSinkCalls();
 }
 
-// FRO279 originally hit this with MainComponent::wireMidiRemoteEngine opening a profile's
-// controller by name BEFORE initialiseAudioEngine() ran initialiseDevices()'s open-everything
-// loop, so a controller with a saved profile was reached by both. The identifier-keyed dedupe in
-// AudioEngine::openMidiInput must keep this a single open input regardless of which side runs
-// first (a relative encoder at double speed, a toggle that flips back, otherwise) -- this test
-// keeps that historical ordering covered.
+// MainComponent::wireMidiRemoteEngine can open a profile's controller by name BEFORE
+// initialiseAudioEngine() runs initialiseDevices()'s open-everything loop, so a controller with
+// a saved profile is reached by both. The identifier-keyed dedupe in AudioEngine::openMidiInput
+// must keep this a single open input regardless of which side runs first (a relative encoder at
+// double speed, a toggle that flips back, otherwise) -- this test covers that ordering.
 TEST(MidiInputDeliveryTest, ProfileOpenFollowedByLaunchLoopOpensTheSourceOnce) {
     const juce::String name = "FRO279 Launch Order Test Source";
     auto virtualSource = makeVirtualSource(name);
@@ -117,7 +116,7 @@ TEST(MidiInputDeliveryTest, ProfileOpenFollowedByLaunchLoopOpensTheSourceOnce) {
     engine.drainRemoteSinkCalls();
 }
 
-// FRO260: MainComponent::openMidiRemoteDevices() (the profile-open half split out of
+// MainComponent::openMidiRemoteDevices() (the profile-open half split out of
 // wireMidiRemoteEngine) now runs AFTER initialiseAudioEngine() has brought the engine up, so
 // initialiseDevices()'s open-everything loop is the one that runs FIRST in production -- the
 // mirror image of the historical ordering above. Same dedupe, same single-delivery guarantee,

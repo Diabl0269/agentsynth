@@ -1,5 +1,5 @@
 // Concern: ShortcutManager::getActionDescription's action-id -> display-name table. Split out of
-// ShortcutManager.h (FRO125) purely to keep that header under the 1,000-line cap
+// ShortcutManager.h purely to keep that header under the 1,000-line cap
 // (scripts/file-size-baseline.txt) as new actions are added -- see the header's own doc comment
 // on the declaration.
 #include "ShortcutManager.h"
@@ -9,10 +9,10 @@ namespace {
 // The transport family and the selection-stepping actions, split out of getActionDescription to keep
 // that function under the function-size cap. Empty when `actionId` is not one of them.
 juce::String transportAndSelectionActionName(const juce::String& actionId) {
-    // FRO125: the transport family (docs/control/midi-remote.md#action-targets). "Play"/"Stop" name the direction
+    // The transport family (docs/control/midi-remote.md#action-targets). "Play"/"Stop" name the direction
     // outright; the alias reuses togglePlayback's "Play / Stop" verbatim since it IS togglePlayback's
     // command (see AppCommands::getCommandForAction) and must read as the same action, not a rival
-    // one. The label sorts next to "Play" and "Stop" in the MIDI Remote action picker (FRO271).
+    // one. The label sorts next to "Play" and "Stop" in the MIDI Remote action picker.
     if (actionId == "transportPlay")
         return "Play";
     if (actionId == "transportStop")
@@ -27,7 +27,7 @@ juce::String transportAndSelectionActionName(const juce::String& actionId) {
         return "Toggle Metronome";
     if (actionId == "transportReturnToStart")
         return "Return to Start";
-    // FRO271: cursor moves and loop-locator jumps.
+    // Cursor moves and loop-locator jumps.
     if (actionId == "transportNudgeBackBeat")
         return "Move Cursor Back (Beat)";
     if (actionId == "transportNudgeForwardBeat")
@@ -40,12 +40,12 @@ juce::String transportAndSelectionActionName(const juce::String& actionId) {
         return "Jump to Loop Start";
     if (actionId == "transportJumpToLoopEnd")
         return "Jump to Loop End";
-    // FRO277: jump to the next/previous timeline marker relative to the current position.
+    // Jump to the next/previous timeline marker relative to the current position.
     if (actionId == "transportJumpToNextMarker")
         return "Jump to Next Marker";
     if (actionId == "transportJumpToPreviousMarker")
         return "Jump to Previous Marker";
-    // FRO278: selection stepping.
+    // Selection stepping.
     if (actionId == "selectNextModule")
         return "Select Next Module";
     if (actionId == "selectPreviousModule")
@@ -171,7 +171,7 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Jump to Locator 1";
     if (actionId == "timelineJumpToLocator2")
         return "Jump to Locator 2";
-    // T161: deliberately NOT "Mute"/"Solo"/"Arm" — the Settings tab's search matches this text,
+    // Deliberately NOT "Mute"/"Solo"/"Arm" — the Settings tab's search matches this text,
     // and "timelineToolMute" is already "Mute Tool" (a bare-7 edit-tool mode, unrelated). Spelling
     // out "Focused Track" keeps the two from reading as the same feature in a filtered list.
     if (actionId == "timelineMuteFocusedTrack")

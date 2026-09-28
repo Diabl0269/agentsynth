@@ -1,4 +1,4 @@
-// AddControllerPopover.cpp -- FRO134: see the header.
+// AddControllerPopover.cpp: see the header.
 //
 // Combo ids: devices are 1-based indices into devices_; the Start-with combo uses 1 = Detect,
 // 2 = Empty and 100 + n = templates_[n] (JUCE reserves id 0 for "nothing selected").

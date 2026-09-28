@@ -5,9 +5,9 @@
 namespace synth {
 
 /**
- * P6-3: local, append-only log of thumbs up/down feedback on AI-generated patches. This remains
+ * Local, append-only log of thumbs up/down feedback on AI-generated patches. This remains
  * the unconditional fallback log — every rating is recorded here regardless of plan or whether a
- * server sync succeeds. P6-9 (see AIChatComponent's rating callback) additionally syncs a rating
+ * server sync succeeds. AIChatComponent's rating callback additionally syncs a rating
  * to the server, keyed on the optional conversationId/messageId below, but ONLY when the account
  * is signed-in Pro and a server-assigned message id is available (live, same-session assistant
  * messages only — see AIChatComponent::MessageData::serverMessageId); ratings on restored
@@ -32,9 +32,9 @@ public:
     // patch's raw JSON text (the same string PatchCard renders); malformed JSON is stored verbatim
     // under "patchRaw" rather than dropped.
     //
-    // `conversationId`/`messageId` (P6-9) are the server-side ids this rating corresponds to, when
+    // `conversationId`/`messageId` are the server-side ids this rating corresponds to, when
     // known — included as "conversationId"/"messageId" fields in the JSON line ONLY when
-    // non-empty, so old log lines and offline/signed-out/free-tier entries keep their pre-P6-9
+    // non-empty, so old log lines and offline/signed-out/free-tier entries keep their original
     // shape exactly (no empty-string fields added).
     void record(const juce::String& patchJson, Rating rating, const juce::String& comment = {},
                 const juce::String& conversationId = {}, const juce::String& messageId = {});

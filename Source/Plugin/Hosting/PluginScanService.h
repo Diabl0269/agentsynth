@@ -31,7 +31,7 @@ namespace synth {
  *
  * A crash kills the child; a hang is killed by us on a timeout. Either way the parent records the
  * failure, blacklists the candidate so the next scan does not step on the same mine, and moves on to
- * the next one. FRO59: a crash also exits the child quietly, before macOS's own "quit unexpectedly"
+ * the next one. A crash also exits the child quietly, before macOS's own "quit unexpectedly"
  * crash reporter can pop a dialog in front of the user — see runPluginScanChildMode()'s
  * `suppressCrashDialog` and PluginScanCrashGuard.h.
  *
@@ -64,7 +64,7 @@ namespace synth {
  * posted callbacks carry a shared liveness flag, so a service destroyed with a scan in flight cannot
  * leave a callback pointing at freed memory.
  *
- * -- One shared owner, several consumers (FRO44) --------------------------------------------------
+ * -- One shared owner, several consumers ----------------------------------------------------------
  *
  * The library sidebar is no longer the only thing that wants this list — an Instrument-track "Plugin
  * picker" wants it too, before the user has ever opened the sidebar's PLUGINS section. Rather than
@@ -121,7 +121,7 @@ public:
     /** Message thread, exactly once per scanAsync() call — including a cancelled one. */
     using CompletionFn = std::function<void(const Result&)>;
 
-    /** FRO44: registered by every consumer of the ONE shared service (the library sidebar, a future
+    /** Registered by every consumer of the ONE shared service (the library sidebar, a future
      *  picker) so each finds out when a scan completes without having to be the one that triggered
      *  it — see the class comment's "One shared owner, several consumers" section. */
     class Listener {
@@ -221,7 +221,7 @@ public:
      *  (its completion callback still fires, with `cancelled` set, so a caller never hangs waiting
      *  for a callback that will not come).
      *
-     *  `skipAlreadyKnown` (default false, matching every pre-FRO44 caller): when true, a candidate
+     *  `skipAlreadyKnown` (default false, matching callers that never opt in): when true, a candidate
      *  already present in the list (same format + fileOrIdentifier) is counted in `Result::reused`
      *  and never handed to the launcher at all — this is what makes `ensureScanned()` below cheap on
      *  a warm cache instead of relaunching a child process per already-known plugin on every call.
@@ -231,7 +231,7 @@ public:
     void scanAsync(const juce::StringArray& formatNames, ProgressFn progress, CompletionFn completion,
                    bool skipAlreadyKnown = false);
 
-    /** FRO44: "make sure a scan has been requested at least once" — the eager-population entry
+    /** "make sure a scan has been requested at least once" — the eager-population entry
      *  point every consumer (app startup, the sidebar, a future picker) can call without worrying
      *  about who else already asked. The FIRST call this service instance ever sees starts
      *  `scanAsync(formatNames, progress, nullptr, skipAlreadyKnown: true)` and returns true — so a
@@ -242,7 +242,7 @@ public:
      *  `pluginScanCompleted` when the one real scan finishes, whether or not it was this call that
      *  started it. Message thread only, like `scanAsync()`.
      *
-     *  `progress` (optional; FRO105) lets the one caller that actually starts the scan show it is
+     *  `progress` (optional) lets the one caller that actually starts the scan show it is
      *  running — e.g. the eager startup scan posting to a status bar, exactly like the sidebar's
      *  manual "Scan for plugins..." row already does via `scanAsync()` directly. It is silently
      *  dropped on a no-op call (the return value says which happened), never invoked for a scan this
@@ -334,7 +334,7 @@ private:
     std::atomic<bool> scanning_{false};
     std::atomic<bool> cancelRequested_{false};
 
-    // FRO44's "exactly once" latch for ensureScanned(): true the instant the first call starts a
+    // The "exactly once" latch for ensureScanned(): true the instant the first call starts a
     // scan, so a second/third caller (whether concurrent with that scan or long after it finished)
     // never launches another one. Independent of `scanning_`, which only reflects "right now".
     std::atomic<bool> ensureScanRequested_{false};
@@ -370,7 +370,7 @@ private:
  * in process. Only the standalone app calls it: a VST3/AU build of ourselves never scans, so it has
  * no entry point to intercept.
  *
- * `suppressCrashDialog` (FRO59): when true, installs `installQuietCrashHandlers()`
+ * `suppressCrashDialog`: when true, installs `installQuietCrashHandlers()`
  * (PluginScanCrashGuard.h) before touching the candidate's binary, so a crash inside
  * `scanAndAddFile` exits this process quietly instead of popping macOS's own crash-reporter dialog.
  * Defaults to false ON PURPOSE — this function is also called IN-PROCESS by tests

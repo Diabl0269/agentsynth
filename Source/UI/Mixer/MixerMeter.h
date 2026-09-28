@@ -6,7 +6,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 
-// MixerMeter.h -- FRO146 (docs/mixer/mixer.md meters section): a column's stereo peak meter, Cubase-
+// MixerMeter.h (docs/mixer/mixer.md meters section): a column's stereo peak meter, Cubase-
 // MixConsole style -- two bars (L/R) on a -60..+3 dB scale (dB-linear position, see
 // MixerMeterScale.h), tick marks, a peak-hold line per bar, and a colour that steps through four
 // zones by level (MeterColourStops.h). Reads ChannelStripModule/MasterModule::takeMeterPeak via
@@ -44,7 +44,7 @@ public:
 
     void paint(juce::Graphics& g) override;
 
-    /** FRO146: a read-only staticText handler reporting the current displayed level in dB (the
+    /** A read-only staticText handler reporting the current displayed level in dB (the
      *  louder of the two bars), not a percentage -- percent meant nothing on a dB scale. */
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 

@@ -1,4 +1,4 @@
-// ModuleComponentEnvelopeCard tests (FRO112): readout formatting, the graph disclosure toggle,
+// ModuleComponentEnvelopeCard tests: readout formatting, the graph disclosure toggle,
 // the curve model built from ADSRModule's params, two-way sync between the graph and the
 // attack/hold/decay/sustain/release/*Curve parameters (driven through REAL synthesized mouse
 // events, not the model's primitives directly -- see CurveEditorComponent's dragFrozenRange_
@@ -140,8 +140,8 @@ TEST_F(ModuleComponentTest, AdsrEnvelopeCurveModelMatchesDefaultParams) {
     EXPECT_FALSE(model.isBendable(1)) << "the hold plateau (level 1 -> 1) has no curve param behind it";
 }
 
-// The three curve params are edited ONLY through the graph's bend handles -- FRO112 removed them
-// from the generic auto-slider UI entirely.
+// The three curve params are edited ONLY through the graph's bend handles -- they are not in
+// the generic auto-slider UI entirely.
 TEST_F(ModuleComponentTest, AdsrCurveParamsAreNotExposedAsSliders) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -283,9 +283,9 @@ TEST_F(ModuleComponentTest, EnvelopePlayheadMapsStageToSegmentOnlyWhenGraphIsOpe
     EXPECT_EQ(curve->getPlayhead()->segment, 0) << "a freshly triggered note is in the Attack stage (segment 0)";
 }
 
-// FRO113's tempoSync/attackDiv/holdDiv/decayDiv/releaseDiv (now real params on ADSRModule) must
+// the tempoSync/attackDiv/holdDiv/decayDiv/releaseDiv (now real params on ADSRModule) must
 // never leak into the generic per-param UI -- that's what blew up ModuleComponentTest.
-// EstimatedModuleSizesMatchTheRealComponents once FRO113 rebased onto FRO112's merge.
+// EstimatedModuleSizesMatchTheRealComponents.
 TEST_F(ModuleComponentTest, AdsrTempoSyncAndDivParamsAreExcludedFromTheGenericGrid) {
     AudioEngine engine;
     GraphEditor editor(engine);

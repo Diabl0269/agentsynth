@@ -1,4 +1,4 @@
-// Dual I/O jack-layout toggle tests for the split-block stereo voice modules (issue #219); see
+// Dual I/O jack-layout toggle tests for the split-block stereo voice modules; see
 // StereoVoiceModuleTestHelpers.h for the shared render/measurement helpers.
 
 #include "Modules/FilterModule.h"
@@ -29,7 +29,7 @@ TEST(SplitBlockDualIO, EveryStereoCapableModuleHasTheToggle) {
 }
 
 TEST(SplitBlockDualIO, CollapsingRestoresThePreStereoJackLayout) {
-    // Dual I/O off must look exactly like the module did before #219 — that is the whole point of
+    // Dual I/O off must look exactly like the plain mono module — that is the whole point of
     // calling it a jack-layout toggle rather than a mono/stereo switch.
     FilterModule filter;
     setBoolParam(filter, "dualIO", false);
@@ -95,7 +95,7 @@ TEST(SplitBlockDualIO, CollapsingDoesNotDisturbTheCVChannelMap) {
         OscillatorModule osc;
         setBoolParam(osc, "dualIO", dual);
         auto oscTargets = osc.getModulationTargets();
-        ASSERT_EQ(oscTargets.size(), 9u); // FRO314 appended Unison/Detune
+        ASSERT_EQ(oscTargets.size(), 9u); // includes Unison/Detune
         EXPECT_EQ(oscTargets[1].channelIndex, 1) << "Waveform CV, dual=" << dual;
         EXPECT_EQ(oscTargets[6].channelIndex, 6) << "Pan CV, dual=" << dual;
         EXPECT_EQ(oscTargets[7].channelIndex, 14) << "Unison CV, dual=" << dual;

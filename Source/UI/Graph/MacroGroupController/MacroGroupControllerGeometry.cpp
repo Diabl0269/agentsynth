@@ -63,16 +63,15 @@ juce::AudioProcessorGraph::NodeID resolveMemberNodeIdIn(GraphCanvasHost& host, c
     return {};
 }
 
-// Shared by macroHullBounds and macroHullBoundsExcluding (FRO40) — the latter is the former with
+// Shared by macroHullBounds and macroHullBoundsExcluding — the latter is the former with
 // one extra uuid left out of the union, needed because the plain hull is a LIVE union of member
 // bounds: the member being dragged OUT of it keeps inflating its own hull, so it could never test
 // as "outside" without excluding itself first (see macroDragJoinOrLeaveTarget's own comment).
 juce::Rectangle<int> computeMacroHullBounds(GraphCanvasHost& host, const synth::Macro& macro,
                                             const juce::String& extraExcludedUuid) {
     // Port members are EXCLUDED from the union: they dock to this hull's own edge
-    // (dockMacroPortWidgets, P8-15 fix F2), and if they also counted toward the bounds that
-    // DEFINE the hull, docking one would grow the hull, which would push it out again, forever —
-    // the exact feedback loop the fix's own review called out.
+    // (dockMacroPortWidgets), and if they also counted toward the bounds that
+    // DEFINE the hull, docking one would grow the hull, which would push it out again, forever.
     std::set<juce::String> excludedUuids;
     for (const auto& p : macro.ports)
         excludedUuids.insert(p.nodeUuid);
@@ -294,7 +293,7 @@ MacroGroupController::macroCardPortLayout(const juce::String& macroId) const {
             port.kind = side[i]->kind;
             port.name = side[i]->name;
             port.jackPos = {x, y};
-            port.colour = side[i]->colour; // T152; MacroCardComponent falls back to the kind tint
+            port.colour = side[i]->colour; // MacroCardComponent falls back to the kind tint
             result.push_back(port);
         }
     };
@@ -323,7 +322,7 @@ MacroCardComponent* MacroGroupController::getMacroCardForTest(const juce::String
 }
 
 namespace {
-// Docked macro-port widget layout (P8-15 founder-review fix F2, docs/macros/ports.md#how-a-port-is-drawn). Small
+// Docked macro-port widget layout (docs/macros/ports.md#how-a-port-is-drawn). Small
 // and fixed regardless of anything else on the canvas — the widget's own getWidth()/getHeight()
 // (set by ModuleComponent::layoutMacroPortWidget, called before this ever runs) decide how big;
 // this only decides WHERE.

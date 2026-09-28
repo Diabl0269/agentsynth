@@ -49,7 +49,7 @@ int MacroPortConfigDialog::comboIndexFromShape(MacroPortShape shape) {
 MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector<PortRow> ports)
     : macroName_(std::move(macroName))
     , rows_(std::move(ports)) {
-    // Founder review item 1: the window's own native title bar already reads "Configure I/O", so
+    // The window's own native title bar already reads "Configure I/O", so
     // the in-dialog title no longer repeats it — just the macro's name, which the chrome cannot
     // show.
     titleLabel_.setText(macroName_.isNotEmpty() ? macroName_ : "Macro", juce::dontSendNotification);
@@ -85,13 +85,13 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     newVoicesEditor_.setText("4", juce::dontSendNotification);
     newVoicesEditor_.setInputRestrictions(2, "0123456789");
     newVoicesEditor_.setJustification(juce::Justification::centred);
-    newVoicesEditor_.onReturnKey = [this] { triggerAddPortForTest(); }; // T153, same as newNameEditor_
+    newVoicesEditor_.onReturnKey = [this] { triggerAddPortForTest(); }; // same as newNameEditor_
     newVoicesEditor_.onEscapeKey = [this] { requestClose(); };
     addAndMakeVisible(newVoicesEditor_);
     updateNewPortVoicesVisibility(); // Mono is the default shape: starts hidden
 
     newNameEditor_.setTextToShowWhenEmpty("Port name", juce::Colours::grey);
-    // T153: Return commits the in-progress "Add a port" field the same way it already does for a
+    // Return commits the in-progress "Add a port" field the same way it already does for a
     // row's rename/voices fields — pressing Return here is the keyboard equivalent of clicking Add.
     newNameEditor_.onReturnKey = [this] { triggerAddPortForTest(); };
     newNameEditor_.onEscapeKey = [this] { // same "Escape closes the whole modal" decision as elsewhere
@@ -126,7 +126,7 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
 
 MacroPortConfigDialog::~MacroPortConfigDialog() = default;
 
-// T153: the bubble-up path — reached whenever the currently-focused control does not itself
+// The bubble-up path — reached whenever the currently-focused control does not itself
 // consume the key (a ComboBox or a GlyphButton/PortColourSwatch with no unhandled arrow, or
 // nothing focused at all). A juce::TextEditor consumes Escape/Return itself before either ever
 // gets here (TextEditor::keyPressed returns true for both), which is why every TextEditor above
@@ -139,13 +139,13 @@ bool MacroPortConfigDialog::keyPressed(const juce::KeyPress& key) {
     return false;
 }
 
-// T150: force any in-flight row-editor edit (rename, voice count) to commit before the dialog
+// Force any in-flight row-editor edit (rename, voice count) to commit before the dialog
 // closes. TextEditor::focusLost() posts an async command message rather than calling
 // onFocusLost synchronously (juce_TextEditor.cpp) — Close's own mouseDown already grabbed
 // keyboard focus away from whichever row editor had it (Component::internalMouseDown always
 // does this), so that editor's onFocusLost is already QUEUED but has not run yet by the time
 // onRequestClose would fire. Racing onRequestClose (which tears the dialog down) against that
-// queued async commit is exactly the founder-reported bug: the rename either never lands or
+// queued async commit is exactly the bug: the rename either never lands or
 // lands late, after the dialog already looks closed. Calling each row's own commit method
 // directly and synchronously here — the same idiom every *ForTest commit seam in this file
 // already uses — sidesteps the race entirely. maybeCommitName()/maybeCommitVoicesOnClose() are
@@ -183,7 +183,7 @@ void MacroPortConfigDialog::paint(juce::Graphics& g) {
     const auto& c = liveThemeColours(*this);
 
     // "Add a port" panel — a faintly bordered, rounded group so the row of controls above the Add
-    // button reads as one tied-together block (founder review item 1) rather than floating loose
+    // button reads as one tied-together block rather than floating loose
     // above an unrelated Add button.
     if (!addBlockBounds_.isEmpty()) {
         g.setColour(c.surface.withAlpha(0.5f));

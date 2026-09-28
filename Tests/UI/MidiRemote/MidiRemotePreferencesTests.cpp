@@ -1,4 +1,4 @@
-// MidiRemotePreferencesTests.cpp -- FRO136 (docs/control/midi-remote-ui.md#settings): the two
+// MidiRemotePreferencesTests.cpp (docs/control/midi-remote-ui.md#settings): the two
 // Preferences keys reach the things they govern live, through the settings-file broadcast
 // MainComponent already listens to -- Default takeover into RemoteEngine (Core never reads
 // settings), and the badge switch into the MIDI Learn badge painter every surface shares.
@@ -71,11 +71,11 @@ TEST(MidiRemotePreferencesTests, DefaultTakeoverReachesTheEngineLive) {
     EXPECT_EQ(mc.getRemoteEngineForTest().getDefaultTakeover(), synth::Takeover::pickup);
 }
 
-// FRO236 (docs/control/midi-remote.md#continuous-targets): drives the REAL
-// MainComponentRemoteActionInvoker wireMidiRemoteEngine() installs (rather than a test fake --
-// see MidiLearnControllerTests.cpp/RemoteEngineNodeCommandE2ETests.cpp's own ToggleSoloInvoker for
-// why those need one and this doesn't: there is no ChannelStripModule/undo bracket to fake here,
-// just the transport) -- a mapped knob's CC really moves AudioEngine's own TransportService.
+// Drives the REAL MainComponentRemoteActionInvoker wireMidiRemoteEngine() installs (rather than a
+// test fake -- see MidiLearnControllerTests.cpp/RemoteEngineNodeCommandE2ETests.cpp's own
+// ToggleSoloInvoker for why those need one and this doesn't: there is no ChannelStripModule/undo
+// bracket to fake here, just the transport) -- a mapped knob's CC really moves AudioEngine's own
+// TransportService (see docs/control/midi-remote.md#continuous-targets).
 TEST(MidiRemotePreferencesTests, BpmContinuousTargetReachesTheRealTransportThroughTheInvoker) {
     MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     mc.setSize(1200, 800);
@@ -195,7 +195,7 @@ namespace {
 float dotAlphaAfter(bool viaDot) {
     // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
     // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
-    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    // Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
     juce::Image image(juce::Image::ARGB, 20, 20, true, juce::SoftwareImageType());
     juce::Graphics g(image);
     if (viaDot)

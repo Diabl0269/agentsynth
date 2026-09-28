@@ -30,7 +30,7 @@ AgentSynthPluginEditor::AgentSynthPluginEditor(AgentSynthAudioProcessor& p)
     const auto saved = processor.getSavedEditorSize();
     setSize(juce::jlimit(kMinWidth, kMaxWidth, saved.x), juce::jlimit(kMinHeight, kMaxHeight, saved.y));
 
-    // FRO12 follow-up: this is the plugin's ONE construction site for MainComponent (no test
+    // This is the plugin's ONE construction site for MainComponent (no test
     // builds an AgentSynthPluginEditor directly) — opt both detach hosts into actually creating a
     // native window on detach, same as Main.cpp's MainWindow does for the standalone app. See
     // DetachablePanelHost::setCreatesNativeWindows()'s doc comment.
@@ -38,7 +38,7 @@ AgentSynthPluginEditor::AgentSynthPluginEditor(AgentSynthAudioProcessor& p)
     mainComponent.getBottomDock().getMixerHost().setCreatesNativeWindows(true);
     mainComponent.getBottomDock().getMidiRemoteHost().setCreatesNativeWindows(true);
 
-    // FRO100: same reasoning, for the hosted-plugin "Open Editor" window. See
+    // Same reasoning, for the hosted-plugin "Open Editor" window. See
     // HostedPluginWindowManager::setCreatesNativeWindows()'s doc comment.
     mainComponent.getPluginWindowManager().setCreatesNativeWindows(true);
 }

@@ -1,6 +1,6 @@
-// MeterColourStopsSettingsIntegrationTests.cpp -- FRO147: proves the actual live-apply wire, not
+// MeterColourStopsSettingsIntegrationTests.cpp -- proves the actual live-apply wire, not
 // just its two halves in isolation. AppearanceSettingsTab has no direct pointer to the live
-// meters (see its own FRO147 comment); instead MainComponent::changeListenerCallback's
+// meters (see its own comment); instead MainComponent::changeListenerCallback's
 // `source == appProperties.getUserSettings()` branch re-reads "meterColourStops" on EVERY settings
 // write and pushes it into the shared AppLookAndFeel (MainComponentCallbacks.cpp). This drives that
 // exact path end to end on a real MainComponent: write the key the same way

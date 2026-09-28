@@ -1,8 +1,8 @@
-// EnvelopeCardTempoSyncTests.cpp (FRO118): the BPM-mode note-division pickers on the ADSR
+// EnvelopeCardTempoSyncTests.cpp: the BPM-mode note-division pickers on the ADSR
 // envelope card -- attackDiv/holdDiv/decayDiv/releaseDiv swapping in over their matching knob's
 // own grid cell, the two-way param binding + undo bracketing that swap reuses from the generic
 // per-param combo idiom, the BPM-mode curve model's stage durations, and x-drag snapping. Sits
-// beside ModuleComponentEnvelopeCardTests.cpp (FRO112/FRO113/FRO117), which that file's own
+// beside ModuleComponentEnvelopeCardTests.cpp, which that file's own
 // AdsrTempoSyncAndDivParamsAreExcludedFromTheGenericGrid test pins to zero ComboBox children for
 // a fresh MS-default card -- these pickers are therefore built LAZILY (see
 // ensureEnvelopeDivCombosCreated in ModuleComponentEnvelopeCard.cpp), only once a card actually

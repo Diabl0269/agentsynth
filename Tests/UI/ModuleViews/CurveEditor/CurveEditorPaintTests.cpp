@@ -1,5 +1,5 @@
 // CurveEditorPaintTests.cpp
-// Paint smoke tests for synth::ui::CurveEditorComponent (FRO111): renders under the real app
+// Paint smoke tests for synth::ui::CurveEditorComponent: renders under the real app
 // LookAndFeel and asserts the curve actually shows up (accent-coloured pixels along the drawn
 // path, background elsewhere), plus an opt-in PNG dump of an envelope-shaped curve for visual
 // inspection (same pattern as ADSR_CARD_PNG in
@@ -48,7 +48,7 @@ TEST(CurveEditorPaintTest, PaintDrawsCurveInAccentColourOverBackgroundElsewhere)
 
     // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
     // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
-    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    // Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
     juce::Image img(juce::Image::ARGB, kWidth, kHeight, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(comp.paint(g));

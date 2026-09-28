@@ -84,7 +84,7 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::waveformsaw_svg, BinaryData::waveformsaw_svgSize},
         {BinaryData::waveformsquare_svg, BinaryData::waveformsquare_svgSize},
         {BinaryData::waveformtriangle_svg, BinaryData::waveformtriangle_svgSize},
-        // Minimap toggle (issue #159).
+        // Minimap toggle.
         {BinaryData::toggleminimap_svg, BinaryData::toggleminimap_svgSize},
         {BinaryData::moduledualio_svg, BinaryData::moduledualio_svgSize},
         // Timeline edit-tool strip (Cubase-style tools; see Source/UI/Timeline/EditTool.h).
@@ -101,7 +101,7 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::followplayhead_svg, BinaryData::followplayhead_svgSize},
         // I/O category icon (Audio Input/Output library rows + Audio Output card chrome).
         {BinaryData::catio_svg, BinaryData::catio_svgSize},
-        // FRO12 (P9-6): DetachablePanelHost's icon-only detach/dock-back control.
+        // DetachablePanelHost's icon-only detach/dock-back control.
         {BinaryData::actiondetachwindow_svg, BinaryData::actiondetachwindow_svgSize},
         // The Range edit tool (appended after the rest of the Tool* glyphs; see Icon::ToolRange).
         {BinaryData::toolrange_svg, BinaryData::toolrange_svgSize},

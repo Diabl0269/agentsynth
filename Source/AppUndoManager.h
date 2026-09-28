@@ -101,7 +101,7 @@ public:
     void pushSnapshotFromCapture(juce::AudioProcessorGraph& graph);
 
     /** @brief Consumes a captureBeforeState() capture for recordGraphAndMacroChange's
-     *  `graphBeforeOverride` instead of the plain snapshot path (FRO40) — see the .cpp definition
+     *  `graphBeforeOverride` instead of the plain snapshot path — see the .cpp definition
      *  for why. Clears the capture as a side effect; void if nothing was captured. */
     juce::var takeCapturedGraphBeforeState();
 
@@ -150,8 +150,8 @@ public:
     bool recordMidiRemoteChange(synth::MidiRemoteProjectDoc& doc, const juce::var& beforeJson,
                                 const juce::var& afterJson, std::function<void()> postRestore = {});
 
-    /** FRO325 (docs/mixer/mixer.md#pan-law): records a mixer-pan-law change as an undoable step,
-     *  same firstPerform convention as recordParameterChange -- see the .cpp definition. */
+    /** Records a mixer-pan-law change as an undoable step, same firstPerform convention as
+     *  recordParameterChange -- see the .cpp definition and docs/mixer/mixer.md#pan-law. */
     void recordMixerPanLawChange(std::function<void(synth::MixerPanLaw)> apply, synth::MixerPanLaw before,
                                  synth::MixerPanLaw after);
 
@@ -175,7 +175,7 @@ public:
     bool recordCombinedChange(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc,
                               const std::function<void()>& mutation);
 
-    /** FRO240: recordCombinedChange's shape for graph + MidiRemoteProjectDoc (see the .cpp).
+    /** recordCombinedChange's shape for graph + MidiRemoteProjectDoc (see the .cpp).
      *  `postRestore` mirrors recordMidiRemoteChange's own. */
     bool recordGraphAndMidiRemoteChange(juce::AudioProcessorGraph& graph, synth::MidiRemoteProjectDoc& doc,
                                         const std::function<void()>& mutation, std::function<void()> postRestore = {});
@@ -196,7 +196,7 @@ public:
      * @param graph Reference to the audio processor graph.
      * @param macros Reference to the macro set.
      * @param mutation Lambda that performs the combined mutation.
-     * @param graphBeforeOverride FRO40: optional graph "before" override for a caller whose live
+     * @param graphBeforeOverride Optional graph "before" override for a caller whose live
      *        gesture already wrote intermediate state into the graph — see the .cpp definition.
      * @return true if either domain changed and a transaction was pushed, false if neither did.
      */
@@ -205,7 +205,7 @@ public:
 
     /**
      * @brief Records a mutation that may touch the graph, the TimelineDoc, AND a synth::MacroSet all
-     *        in ONE undo step (the canonical case: T173a's "+ Track -> Audio Track", which creates a
+     *        in ONE undo step (the canonical case: "+ Track -> Audio Track", which creates a
      *        Track Audio node plus its default insert chain (graph), the new track (timeline), and
      *        the collapsed macro boxing the chain under the track's name (macros), all as a single
      *        gesture a single Cmd+Z has to remove entirely).
@@ -224,7 +224,7 @@ public:
      * @param doc Reference to the timeline document. Same lifetime contract as recordTimelineChange.
      * @param macros Reference to the macro set.
      * @param mutation Lambda that performs the combined mutation.
-     * @param midiRemoteDoc FRO296: optional fourth domain; null (default) skips it -- see the .cpp.
+     * @param midiRemoteDoc Optional fourth domain; null (default) skips it -- see the .cpp.
      * @param midiRemotePostRestore Passed through when midiRemoteDoc is set.
      * @return true if any domain changed and a transaction was pushed, false if none did.
      */

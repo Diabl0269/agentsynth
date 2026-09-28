@@ -155,7 +155,7 @@ public:
     void setMixerSoloActiveForBlock(bool active) noexcept { mixerSoloActiveForBlock = active; }
     bool isMixerSoloActiveForBlock() const noexcept { return mixerSoloActiveForBlock; }
 
-    // FRO325 (docs/mixer/mixer.md#pan-law): same carrier idiom as the solo flag above.
+    // Same carrier idiom as the solo flag above (see docs/mixer/mixer.md#pan-law).
     void setMixerPanLawCompensatedForBlock(bool compensated) noexcept { mixerPanLawCompensatedForBlock = compensated; }
     bool isMixerPanLawCompensatedForBlock() const noexcept { return mixerPanLawCompensatedForBlock; }
 

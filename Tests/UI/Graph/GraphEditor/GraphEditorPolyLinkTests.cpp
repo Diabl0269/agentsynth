@@ -15,7 +15,7 @@
 #include "Modules/VCAModule.h"
 
 // ============================================================================
-// Issue #163: poly connections auto-fan-out
+// Poly connections auto-fan-out
 // ============================================================================
 
 // ---- Pure resolvePolyLink tests (no graph needed) ----
@@ -26,7 +26,7 @@ TEST_F(GraphEditorTest, ResolvePolyLinkFansEnvelopeToPolyVCA) {
     setPolyParam(adsr, true);
     setPolyParam(vca, true);
 
-    auto link = GraphEditor::resolvePolyLink(&adsr, 0, &vca, 2); // VCA CV moved to jack 2 behind Audio L/R (#219)
+    auto link = GraphEditor::resolvePolyLink(&adsr, 0, &vca, 2); // VCA CV is jack 2, behind Audio L/R
     EXPECT_EQ(link.sourceRawChannel, 0);
     EXPECT_EQ(link.destRawChannel, 8);
     EXPECT_EQ(link.voiceCount, 8);
@@ -59,7 +59,7 @@ TEST_F(GraphEditorTest, ResolvePolyLinkStaysMonoWhenDestIsMono) {
     VCAModule monoVca; // poly defaults to false
 
     // A poly source into a mono jack must not sum eight envelopes onto one CV channel.
-    auto link = GraphEditor::resolvePolyLink(&polyAdsr, 0, &monoVca, 2); // CV jack (#219)
+    auto link = GraphEditor::resolvePolyLink(&polyAdsr, 0, &monoVca, 2); // CV jack
     EXPECT_EQ(link.sourceRawChannel, 0);
     EXPECT_EQ(link.destRawChannel, 1);
     EXPECT_EQ(link.voiceCount, 1);
@@ -73,7 +73,7 @@ TEST_F(GraphEditorTest, ResolvePolyLinkBroadcastsMonoSourceAcrossModCvFan) {
     VCAModule polyVca;
     setPolyParam(polyVca, true);
 
-    auto link = GraphEditor::resolvePolyLink(&lfo, 0, &polyVca, 2); // CV jack (#219)
+    auto link = GraphEditor::resolvePolyLink(&lfo, 0, &polyVca, 2); // CV jack
     EXPECT_EQ(link.sourceRawChannel, 0);
     EXPECT_EQ(link.destRawChannel, 8);
     EXPECT_EQ(link.voiceCount, 8);
@@ -94,7 +94,7 @@ TEST_F(GraphEditorTest, ResolvePolyLinkBroadcastsMonoIntoCollapsedStereoPair) {
 }
 
 TEST_F(GraphEditorTest, ResolvePolyLinkTreatsACollapsedKeyJackAsAStereoPair) {
-    // FRO317: the collapsed "Key" jack (PortRole::Sidechain, span 2 on raw 7/8) takes the same
+    // The collapsed "Key" jack (PortRole::Sidechain, span 2 on raw 7/8) takes the same
     // cables the collapsed Audio jack does — a mono kick keys both legs, a stereo source pairs L/R.
     OscillatorModule osc;
     DelayModule delay; // collapsed: one Audio output jack spanning raw 0/1

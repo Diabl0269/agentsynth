@@ -1,6 +1,6 @@
 #pragma once
 
-// Table-synthesis primitives for the Wavetable oscillator (FRO73): the mip-pyramid geometry,
+// Table-synthesis primitives for the Wavetable oscillator: the mip-pyramid geometry,
 // the `Wavetable` storage type, and `TableBuilder`, which turns a harmonic spectrum into a
 // band-limited mip pyramid via inverse FFT. Split out of WavetableOscillatorModule.h so that
 // header could get under the file-size cap; WavetableOscillatorModule aliases these names back
