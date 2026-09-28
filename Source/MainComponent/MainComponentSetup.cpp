@@ -1,8 +1,8 @@
 // MainComponentSetup.cpp -- initialiseCommon()'s general/app-lifecycle setup steps: panel and
 // graph-editor preference restore, AI provider/account wiring, plugin-scan + recent-projects
-// restore, command/shortcut registration, audio-engine bring-up and the focus-region registry.
-// Split out of the former single MainComponent.cpp (FRO76) -- see MainComponent::initialiseCommon
-// in MainComponent.cpp for the ordered call sequence these steps implement.
+// restore, command/shortcut registration, audio-engine bring-up and the focus-region registry. See
+// MainComponent::initialiseCommon in MainComponent.cpp for the ordered call sequence these steps
+// implement.
 #include "AI/AIProviderRegistry.h"
 #include "AudioEngine/AudioEngine.h"
 #include "AutomationLaunch.h"
@@ -14,8 +14,8 @@
 #include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
-// FRO232: the dock's persisted-visible flag used to be keyed "timelinePanelVisible" from back when
-// the dock only ever showed the Timeline. Runs once, before restorePanelPreferences() ever reads
+// The dock's persisted-visible flag used to be keyed "timelinePanelVisible" (the dock only ever
+// showed the Timeline). Runs once, before restorePanelPreferences() ever reads
 // kBottomDockVisibleSettingKey: if the new key is already there (a previously-migrated install, or
 // a fresh one) the old key -- if some leftover of it exists -- is left alone rather than
 // re-migrated; otherwise the old key's value (default false if neither key has ever been written)
@@ -64,24 +64,27 @@ void MainComponent::restorePanelPreferences() {
         appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired")));
     graphEditor.setDoubleClickPortDisconnectEnabled(
         appProperties.getUserSettings()->getBoolValue("doubleClickPortDisconnect", true));
-    // FRO23 (docs/layout/module-card.md#deleting-a-module-reconnect-the-chain-fro23): default ON -- see
-    // PreferencesSettingsTab's own toggle comment for why this is a plain on/off rather than a tri-state preference.
+    // Default ON -- see PreferencesSettingsTab's own toggle comment for why this is a plain on/off
+    // rather than a tri-state preference (see
+    // docs/layout/module-card.md#deleting-a-module-reconnect-the-chain-fro23).
     graphEditor.setReconnectChainOnDeleteEnabled(
         appProperties.getUserSettings()->getBoolValue("reconnectChainOnDelete", true));
-    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): both default ON — see PreferencesSettingsTab's own toggle
-    // comments for why these are plain on/off rather than the tri-state macroAutoPortPreference.
+    // Both default ON — see PreferencesSettingsTab's own toggle comments for why these are plain
+    // on/off rather than the tri-state macroAutoPortPreference (see
+    // docs/macros/auto-ports.md#ports-on-a-cable-drag).
     graphEditor.setAutoCreateMacroPortsOnDragEnabled(
         appProperties.getUserSettings()->getBoolValue("macroAutoCreatePortsOnDrag", true));
     graphEditor.setAutoDeleteMacroPortsOnLastCableEnabled(
         appProperties.getUserSettings()->getBoolValue("macroAutoDeletePortsOnLastCable", true));
-    // FRO235: off by default — see PreferencesSettingsTab's own toggle comment.
+    // Off by default — see PreferencesSettingsTab's own toggle comment.
     graphEditor.setSpliceCableOnMacroPortDeleteEnabled(
         appProperties.getUserSettings()->getBoolValue("macroSpliceCableOnPortDelete", false));
-    // FRO168: default ON (Cmd-drag reparents either way) — see PreferencesSettingsTab's toggle comment.
+    // Default ON (Cmd-drag reparents either way) — see PreferencesSettingsTab's toggle comment.
     graphEditor.setMacroDragWithoutCmdEnabled(
         appProperties.getUserSettings()->getBoolValue("macroDragWithoutCmd", true));
-    // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): default ON — see
-    // PreferencesSettingsTab's own toggle comment for why this is a plain on/off rather than a tri-state preference.
+    // Default ON — see PreferencesSettingsTab's own toggle comment for why this is a plain on/off
+    // rather than a tri-state preference (see docs/mixer/mixer.md#channels-follow-audio-not-tracks
+    // "main workflow").
     graphEditor.setAutoCreateChannelOnConnectEnabled(
         appProperties.getUserSettings()->getBoolValue("mixerAutoCreateChannelOnConnect", true));
     // Stored here, but APPLIED to the patch further down — the default preset does not exist yet.
@@ -92,16 +95,16 @@ void MainComponent::restorePanelPreferences() {
     // Per-module overrides of the default above (Preferences → "Per-module I/O defaults..."),
     // same new-modules-only scope as the toggle just above — no patch to retro-apply here either.
     graphEditor.setDualIOPerModuleOverrides(PreferencesSettingsTab::loadDualIOPerModuleOverrides(appProperties));
-    // Macro auto-port boundary tri-state (founder-review F5): restored the SAME way as the two
-    // on/off macro automations and the Dual I/O overrides above, so a "Remember my choice" from the
-    // auto-port modal the previous session survives a relaunch. Without this the editor's tri-state
-    // is only ever pushed when the Settings window opens (PreferencesSettingsTab::setGraphEditor),
-    // so a fresh launch left it Unset and the modal re-asked every session (T147).
+    // Macro auto-port boundary tri-state restored the SAME way as the two on/off macro automations
+    // and the Dual I/O overrides above, so a "Remember my choice" from the auto-port modal the
+    // previous session survives a relaunch. Without this the editor's tri-state is only ever pushed
+    // when the Settings window opens (PreferencesSettingsTab::setGraphEditor), so a fresh launch
+    // left it Unset and the modal re-asked every session.
     graphEditor.setMacroAutoPortPreference(PreferencesSettingsTab::loadMacroAutoPortPreference(appProperties));
 }
 
 void MainComponent::restoreGraphEditorPreferences() {
-    // Minimap overlay visibility (issue #159), defaults to visible.
+    // Minimap overlay visibility, defaults to visible.
     const bool minimapVisible = appProperties.getUserSettings()->getBoolValue("minimapVisible", true);
     graphEditor.setMinimapVisible(minimapVisible);
 
@@ -116,20 +119,20 @@ void MainComponent::restoreGraphEditorPreferences() {
     applyNaturalScrollingPreference();
     applyZoomScrollPreference();
 
-    // Cable colour config (issue #157). Restored HERE rather than only in AppearanceSettingsTab:
-    // that tab is built lazily when the Settings window opens, so leaving it to the tab would
-    // mean the canvas ignored the user's saved colours until they went looking for them.
+    // Cable colour config. Restored HERE rather than only in AppearanceSettingsTab: that tab is
+    // built lazily when the Settings window opens, so leaving it to the tab would mean the canvas
+    // ignored the user's saved colours until they went looking for them.
     graphEditor.setCableColourMode(synth::ui::loadCableColourMode(*appProperties.getUserSettings()));
     graphEditor.setCableColourOverrides(synth::ui::loadCableColourOverrides(*appProperties.getUserSettings()));
 
-    // Macro recolour picker's favourites shelf (P8-14): the same PropertiesFile the timeline
-    // ruler's marker colour picker persists to (TimelinePanelComponent::setApplicationProperties
-    // -> ruler_.setPropertiesFile), so a favourite saved from one is offered by the other.
+    // Macro recolour picker's favourites shelf: the same PropertiesFile the timeline ruler's marker
+    // colour picker persists to (TimelinePanelComponent::setApplicationProperties ->
+    // ruler_.setPropertiesFile), so a favourite saved from one is offered by the other.
     graphEditor.setPropertiesFile(appProperties.getUserSettings());
 
-    // Wavetable browser folder (issue #180): GraphEditor holds the value so every Wavetable
-    // card can seed its browser from it, MainComponent owns the ApplicationProperties round
-    // trip — the same split as the cable-colour config above.
+    // Wavetable browser folder: GraphEditor holds the value so every Wavetable card can seed its
+    // browser from it, MainComponent owns the ApplicationProperties round trip — the same split as
+    // the cable-colour config above.
     {
         const juce::String saved = appProperties.getUserSettings()->getValue("wavetableFolder", juce::String());
         if (saved.isNotEmpty())
@@ -150,13 +153,14 @@ void MainComponent::configureAiProvider(std::unique_ptr<synth::AIProvider> provi
         // display name — registry.create() falls back to the first registered provider ("ollama")
         // if the saved id is unknown (e.g. stale pre-registry value, or empty).
         //
-        // P4-6 migration: "aiProvider" is only ever WRITTEN by AISettingsTab::updateSettings(), so
-        // most existing installs have never persisted it, even after months of use — its absence
-        // alone can't distinguish "brand new install" from "existing user who never opened AI
-        // settings". existsAsFile() can: it reflects whether the settings file was already on disk
-        // before this launch touched anything (nothing above this point in initialiseCommon(), nor
-        // shortcutManager.loadFromProperties()/themeManager->initialise() in the constructor, writes
-        // to appProperties — all read-only). See resolveDefaultProviderId() for the pure decision.
+        // Migration: "aiProvider" is only ever WRITTEN by AISettingsTab::updateSettings(), so most
+        // existing installs have never persisted it, even after months of use — its absence alone
+        // can't distinguish "brand new install" from "existing user who never opened AI settings".
+        // existsAsFile() can: it reflects whether the settings file was already on disk before this
+        // launch touched anything (nothing above this point in initialiseCommon(), nor
+        // shortcutManager.loadFromProperties()/themeManager->initialise() in the constructor,
+        // writes to appProperties — all read-only). See resolveDefaultProviderId() for the pure
+        // decision.
         const bool hasExistingSettingsFile = appProperties.getUserSettings()->getFile().existsAsFile();
         const juce::String defaultProviderId = resolveDefaultProviderId(hasExistingSettingsFile);
         juce::String savedProviderId = appProperties.getUserSettings()->getValue("aiProvider", defaultProviderId);
@@ -191,7 +195,6 @@ void MainComponent::configureAiProvider(std::unique_ptr<synth::AIProvider> provi
     // provider, so discovery short-circuited and no model was ever selected. We must
     // refresh again HERE, after setProvider(), or currentModel stays empty and every
     // /api/chat request is rejected by Ollama with HTTP 400 "model is required".
-    // Regression: see #96 / f7cba4a.
     aiChatComponent.refreshModels();
 }
 
@@ -227,7 +230,7 @@ void MainComponent::wireAiChatAndAccount() {
     });
 
     // Wire the account row/dialog up BEFORE attemptSilentSignIn() so the wiring is live for any
-    // state changes that arrive from it (P3-2: sign-in surface for the AI panel).
+    // state changes that arrive from it (sign-in surface for the AI panel).
     aiChatComponent.setAccountService(&accountService);
     accountService.attemptSilentSignIn();
 
@@ -237,14 +240,14 @@ void MainComponent::wireAiChatAndAccount() {
 }
 
 void MainComponent::wireGraphEditorCallbacks() {
-    // ---- Snippets + library collapse state (issue #156) ----
+    // ---- Snippets + library collapse state ----
     // GraphEditor owns no file dialogs and the sidebar owns no filesystem access, so
     // MainComponent brokers between them.
     graphEditor.onSaveSnippetRequested = [this] { promptSaveSnippet(); };
-    // Macros (P8-12): GraphEditor owns no status bar — see onStatusMessage's own comment.
+    // Macros: GraphEditor owns no status bar — see onStatusMessage's own comment.
     graphEditor.onStatusMessage = [this](const juce::String& msg) { statusBar.showMessage(msg); };
-    // FRO25 (P9-3d): the canvas/module menus' "Make Channel" and "Duplicate into Channel" route
-    // here so their ONE undo step also covers the timeline and runs the reconcile pass.
+    // The canvas/module menus' "Make Channel" and "Duplicate into Channel" route here so their ONE
+    // undo step also covers the timeline and runs the reconcile pass.
     graphEditor.onMakeChannelRequested = [this](juce::AudioProcessorGraph::NodeID source) {
         makeChannelForNode(source);
     };
@@ -252,10 +255,10 @@ void MainComponent::wireGraphEditorCallbacks() {
                                                          const juce::String& macroId) {
         duplicateIntoChannel(nodeId, macroId);
     };
-    // FRO13/FRO297 (docs/mixer/track-presets.md): the channel macro's own right-click "Save Track as
-    // Preset.../Set as Default Track Preset" — see handleMacroTrackPresetAction's own comment for
-    // why this resolves to the track-header path for a track's channel and to the bus path
-    // (MainComponentTrackPresets.cpp) for a bus macro, which has no track header of its own.
+    // The channel macro's own right-click "Save Track as Preset.../Set as Default Track Preset" —
+    // see handleMacroTrackPresetAction's own comment for why this resolves to the track-header path
+    // for a track's channel and to the bus path (MainComponentTrackPresets.cpp) for a bus macro,
+    // which has no track header of its own (see docs/mixer/track-presets.md).
     graphEditor.onTrackPresetMenuAction = [this](const juce::String& macroId, bool setAsDefault) {
         handleMacroTrackPresetAction(macroId, setAsDefault);
     };
@@ -266,7 +269,7 @@ void MainComponent::wireGraphEditorCallbacks() {
                                                       const juce::String& paramId) {
         automateParameter(nodeId, paramId);
     };
-    // Hosted-plugin cards resolve their layout against this store (FRO128); the member outlives graphEditor.
+    // Hosted-plugin cards resolve their layout against this store; the member outlives graphEditor.
     graphEditor.setPluginCardLayoutStore(&pluginCardLayoutStore);
     // A hosted-plugin card's "Open Editor" button. Mirrors onAutomateParameterRequested's
     // shape — GraphEditor owns neither the module lookup nor the window manager.
@@ -275,8 +278,8 @@ void MainComponent::wireGraphEditorCallbacks() {
             if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()))
                 pluginWindowManager.openEditorFor(hostedPlugin, nodeId);
     };
-    // Module-card right-click MIDI Learn (FRO130) -- all three forward to the one collaborator
-    // that owns RemoteEngine/midiRemoteDoc access; see MidiLearnController.h.
+    // Module-card right-click MIDI Learn -- all three forward to the one collaborator that owns
+    // RemoteEngine/midiRemoteDoc access; see MidiLearnController.h.
     graphEditor.onQueryMidiMappingsForNode = [this](juce::AudioProcessorGraph::NodeID nodeId) {
         return midiLearnController_.queryMappings(nodeId);
     };
@@ -286,20 +289,21 @@ void MainComponent::wireGraphEditorCallbacks() {
     graphEditor.onMidiForgetRequested = [this](juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
         midiLearnController_.forget(nodeId, paramId);
     };
-    // FRO240 (docs/control/midi-remote.md#replace-and-duplicate): "Replace with..." keeps a
-    // module's MIDI Remote mappings -- setMidiRemoteProjectDocForUndo folds midiRemoteDoc's own
-    // before/after JSON into replaceModule()'s undo transaction, onModuleReplaced does the actual
-    // retarget (inside that same transaction), and onMidiRemoteDocRestored republishes to the
-    // engine after an undo/redo of it, exactly like every other MidiLearnController mutation.
+    // "Replace with..." keeps a module's MIDI Remote mappings -- setMidiRemoteProjectDocForUndo
+    // folds midiRemoteDoc's own before/after JSON into replaceModule()'s undo transaction,
+    // onModuleReplaced does the actual retarget (inside that same transaction), and
+    // onMidiRemoteDocRestored republishes to the engine after an undo/redo of it, exactly like
+    // every other MidiLearnController mutation (see
+    // docs/control/midi-remote.md#replace-and-duplicate).
     graphEditor.setMidiRemoteProjectDocForUndo(&midiRemoteDoc);
     graphEditor.onModuleReplaced = [this](const juce::String& oldNodeUuid,
                                           juce::AudioProcessorGraph::NodeID newNodeId) {
         midiLearnController_.retargetNode(oldNodeUuid, newNodeId);
     };
     graphEditor.onMidiRemoteDocRestored = [this] { midiLearnController_.publishAssignments(); };
-    // FRO131 decision (2026-09-22): "Edit MIDI assignment..." -- open the dock (ensureBottomDockOpen(),
-    // same "open before reveal" shape as trackChannelLink_.setMixerRevealHook() above) before asking
-    // the panel to select the assignment; a closed dock has nothing on screen to select into yet.
+    // "Edit MIDI assignment..." -- open the dock (ensureBottomDockOpen(), same "open before reveal"
+    // shape as trackChannelLink_.setMixerRevealHook() above) before asking the panel to select the
+    // assignment; a closed dock has nothing on screen to select into yet.
     graphEditor.onEditMidiAssignmentRequested = [this](juce::AudioProcessorGraph::NodeID nodeId,
                                                        const juce::String& paramId) {
         auto* node = audioEngine.getGraph().getNodeForId(nodeId);
@@ -352,7 +356,7 @@ void MainComponent::wirePluginScanAndRecents() {
     if (auto savedRecentProjects = juce::parseXML(appProperties.getUserSettings()->getValue(kRecentProjectsKey)))
         recentProjects.loadFromXml(*savedRecentProjects);
 
-    // FRO44: whichever scan service ended up active above (ours, or the plugin path's adopted one),
+    // Whichever scan service ended up active above (ours, or the plugin path's adopted one),
     // register on it so pluginScanCompleted() fires for every real scan — the manual "Scan for
     // plugins..." row below, and maybeStartEagerPluginScan() (called by Main.cpp, never from here).
     getPluginScanService().addListener(this);
@@ -361,8 +365,8 @@ void MainComponent::wirePluginScanAndRecents() {
     moduleLibrary.onPluginActivated = [this](const synth::PluginIdentity& identity) {
         graphEditor.addHostedPluginAtCanvasPosition(identity, graphEditor.getViewportCentreInCanvasSpace());
     };
-    // T160: Enter-to-insert on a keyboard-focused Module/Snippet row — the click-to-add path those
-    // two row kinds never had before (mouseDown starts a drag for them immediately; see
+    // Enter-to-insert on a keyboard-focused Module/Snippet row — the click-to-add path those two
+    // row kinds otherwise lack (mouseDown starts a drag for them immediately; see
     // ModuleLibraryComponent's own comment on onModuleActivated/onSnippetActivated). Both land at
     // the viewport centre, mirroring onPluginActivated above and the "drop with no cursor position"
     // fallback GraphEditor::itemDropped already uses.
@@ -391,15 +395,15 @@ void MainComponent::wireCommandsAndShortcuts() {
     startTimerHz(10);
 }
 
-// FRO127: wires synth::midi::RemoteEngine to the AudioEngine seam and primes it with whatever
-// controller profiles and project assignments already exist. Called right after
-// wireCommandsAndShortcuts() above (commandManager must exist — the action invoker dispatches
-// through it) and deliberately BEFORE initialiseAudioEngine() below: that function returns early
-// in Hosted mode (only the app-only welcome screen/focus regions depend on it), and MIDI Remote
-// must still wire up for a hosted plugin (docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host's
-// hostSourceKey exists exactly for that case).
+// Wires synth::midi::RemoteEngine to the AudioEngine seam and primes it with whatever controller
+// profiles and project assignments already exist. Called right after wireCommandsAndShortcuts()
+// above (commandManager must exist — the action invoker dispatches through it) and deliberately
+// BEFORE initialiseAudioEngine() below: that function returns early in Hosted mode (only the
+// app-only welcome screen/focus regions depend on it), and MIDI Remote must still wire up for a
+// hosted plugin (hostSourceKey exists exactly for that case; see
+// docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host's).
 //
-// FRO260: only the sink install and the Hosted source key (hostSourceKey(), via
+// Only the sink install and the Hosted source key (hostSourceKey(), via
 // midiLearnController_.refreshSources() below) belong here. Opening the saved profiles' standalone
 // devices depends on the real AudioEngine being up (its MIDI input list means nothing before
 // audioEngine.initialise() has run) — that half is openMidiRemoteDevices() below, called from
@@ -410,9 +414,9 @@ void MainComponent::wireMidiRemoteEngine() {
     remoteEngine.setActionInvoker(&remoteActionInvoker_);
     remoteEngine.setActionCommandLookup(
         [](const juce::String& actionId) { return AppCommands::getCommandForAction(actionId); });
-    // FRO236 (docs/control/midi-remote.md#continuous-targets): resolves masterVolume to the SAME
-    // juce::AudioParameterFloat* the mixer's own master fader binds (MixerMasterColumn::setNodeId) --
-    // Core must not include MasterModule.h, so this lookup lives here instead.
+    // Resolves masterVolume to the SAME juce::AudioParameterFloat* the mixer's own master fader
+    // binds (MixerMasterColumn::setNodeId) -- Core must not include MasterModule.h, so this lookup
+    // lives here instead (see docs/control/midi-remote.md#continuous-targets).
     remoteEngine.setContinuousParameterLookup(
         [](juce::AudioProcessorGraph& graph, synth::ContinuousTargetKind kind) -> juce::AudioProcessorParameter* {
             if (kind != synth::ContinuousTargetKind::masterVolume)
@@ -434,13 +438,13 @@ void MainComponent::wireMidiRemoteEngine() {
     remoteEngine.setParameterClaimedPredicate([this](const juce::AudioProcessorParameter* param) {
         return automationRecorder.getAudioState().claims.isClaimed(param);
     });
-    // FRO139 (docs/control/midi-remote.md#controller-feedback): a hosted plugin has no MIDI output
-    // of its own to send through, so feedback is a standalone-only feature -- remoteEngine's
-    // feedbackSink_ stays null there and drain()'s feedback pass is a no-op.
+    // A hosted plugin has no MIDI output of its own to send through, so feedback is a
+    // standalone-only feature -- remoteEngine's feedbackSink_ stays null there and drain()'s
+    // feedback pass is a no-op (see docs/control/midi-remote.md#controller-feedback).
     if (!audioEngine.isHosted())
         remoteEngine.setFeedbackSink(&remoteFeedbackOutputs_);
-    // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): same standalone-only reasoning --
-    // Hosted has no hardware MIDI output to send a handshake through either.
+    // Same standalone-only reasoning -- Hosted has no hardware MIDI output to send a handshake
+    // through either (see docs/control/midi-remote-device-handshake.md#device-handshake).
     if (!audioEngine.isHosted())
         midiLearnController_.setHandshakeFeedbackSink(remoteFeedbackOutputs_);
 
@@ -450,52 +454,51 @@ void MainComponent::wireMidiRemoteEngine() {
     remoteEngine.setProfiles(profiles);
     remoteEngine.setAssignments(midiRemoteDoc.assignments);
 
-    // FRO260: this used to also build deviceNames and call audioEngine.openMidiDevicesForRemote()
-    // + getOpenMidiInputIdentifiers() right here — both no-ops/empty in Hosted mode, but in
-    // Standalone mode the AudioEngine hasn't been initialise()'d yet at this point, so its MIDI
-    // input list is meaningless. That half now lives in openMidiRemoteDevices() (below), called
-    // once the engine is actually up. refreshSources() below does exactly what that early code
-    // did for Hosted mode (empty getOpenMidiInputIdentifiers() + hostSourceKey()), and is the same
-    // seam openMidiRemoteDevices() calls again once Standalone's real devices are open.
+    // Opening the standalone devices cannot happen here: the AudioEngine hasn't been initialise()'d
+    // yet at this point, so its MIDI input list is meaningless. That half lives in
+    // openMidiRemoteDevices() (below), called once the engine is actually up. refreshSources()
+    // below does exactly what that early code did for Hosted mode (empty
+    // getOpenMidiInputIdentifiers() + hostSourceKey()), and is the same seam
+    // openMidiRemoteDevices() calls again once Standalone's real devices are open.
     midiLearnController_.refreshSources();
 
-    // FRO262: the priming above only ever primes Hosted's fixed source (or, in Standalone,
-    // whatever openMidiRemoteDevices() has opened by the time it runs). A device ticked in the
-    // Audio tab (or one that reappears after a reconnect) afterwards needs the SAME
-    // re-registration -- AudioEngine::reconcileMidiInputs() (changeListenerCallback) decides WHICH
-    // devices end up open, and refreshSources() just republishes the resulting set through the
-    // identical getOpenMidiInputIdentifiers -> RemoteEngine::setSources() path used above. A no-op
-    // assignment in Hosted mode: the callback that would invoke it can structurally never fire
-    // there (changeListenerCallback's own isHosted() guard) -- cleared in MainComponent's
-    // destructor beside onDeviceStateChanged.
+    // The priming above only ever primes Hosted's fixed source (or, in Standalone, whatever
+    // openMidiRemoteDevices() has opened by the time it runs). A device ticked in the Audio tab (or
+    // one that reappears after a reconnect) afterwards needs the SAME re-registration --
+    // AudioEngine::reconcileMidiInputs() (changeListenerCallback) decides WHICH devices end up
+    // open, and refreshSources() just republishes the resulting set through the identical
+    // getOpenMidiInputIdentifiers -> RemoteEngine::setSources() path used above. A no-op assignment
+    // in Hosted mode: the callback that would invoke it can structurally never fire there
+    // (changeListenerCallback's own isHosted() guard) -- cleared in MainComponent's destructor
+    // beside onDeviceStateChanged.
     //
-    // FRO262 (follow-up): refreshSources() alone only fixes MIDI Learn actually hearing the device
-    // -- it never told the panel. MidiRemotePanelComponent::rebuildFromProfiles() computes each
-    // Controllers-list row's present/absent state from audioEngine.getOpenMidiInputIdentifiers() at
-    // rebuild time, so a device that newly opens while the panel tab is already showing stayed
-    // greyed until BottomDockComponent::applyTabVisibility()'s tab-switch-in catch-up ran it.
-    // scheduleLiveRefresh() (FRO263) is the same deferred/coalesced entry point
+    // refreshSources() alone only fixes MIDI Learn actually hearing the device -- it never tells
+    // the panel. MidiRemotePanelComponent::rebuildFromProfiles() computes each Controllers-list
+    // row's present/absent state from audioEngine.getOpenMidiInputIdentifiers() at rebuild time, so
+    // a device that newly opens while the panel tab is already showing would stay greyed until
+    // BottomDockComponent::applyTabVisibility()'s tab-switch-in catch-up ran it.
+    // scheduleLiveRefresh() is the same deferred/coalesced entry point
     // midiLearnController_.onChanged below uses, so this reuses that seam rather than adding a
     // second seam.
     audioEngine.onMidiDevicesChanged = [this] {
         midiLearnController_.refreshSources();
         bottomDock.getMidiRemotePanel().scheduleLiveRefresh();
-        // FRO139: the device set changed, so any cached juce::MidiOutput/remembered-failure is
-        // stale, and every mapped parameter needs to re-announce its value to whatever is open now.
+        // The device set changed, so any cached juce::MidiOutput/remembered-failure is stale, and
+        // every mapped parameter needs to re-announce its value to whatever is open now.
         remoteFeedbackOutputs_.closeAll();
         remoteEngine.resendFeedback();
     };
 
-    // FRO133: the mixer panel and transport bar are plain MainComponent members, already fully
-    // constructed by the time any constructor-body wiring function runs (member-init order, not
-    // this function's own call order) -- so it's safe to hand MidiLearnController their addresses
-    // here regardless of whether bottomDock/timelinePanel have run their own configure() yet. See
+    // The mixer panel and transport bar are plain MainComponent members, already fully constructed
+    // by the time any constructor-body wiring function runs (member-init order, not this function's
+    // own call order) -- so it's safe to hand MidiLearnController their addresses here regardless
+    // of whether bottomDock/timelinePanel have run their own configure() yet. See
     // MidiLearnController::setMixerPanel()/setTransportBar()'s own doc comment for why this exists:
     // GraphEditor::setMidiLearnArmed() only reaches the canvas card, not the mixer column or the
     // transport bar's own breathing outline for the SAME/an action target.
     midiLearnController_.setMixerPanel(&bottomDock.getMixerPanel());
     midiLearnController_.setTransportBar(&timelinePanel.getTransportBar());
-    midiLearnController_.setPickOverlayHost(this); // FRO135: the pick-target overlay covers canvas, dock and transport
+    midiLearnController_.setPickOverlayHost(this); // The pick-target overlay covers canvas, dock and transport
     midiLearnController_.setPickPassThrough(bottomDock.getTabButtons());
     bottomDock.onActiveTabChanged = [this] {
         midiLearnController_.refreshPickTarget();
@@ -506,28 +509,29 @@ void MainComponent::wireMidiRemoteEngine() {
         });
     };
 
-    // FRO131: same "wire it once everything it needs is alive" reasoning as the two calls above --
-    // the MIDI Remote panel needs remoteEngine/midiLearnController_/midiRemoteDoc, none of which
-    // exist yet at BottomDockComponent's own construction time (see BottomDockComponent::
+    // Same "wire it once everything it needs is alive" reasoning as the two calls above -- the MIDI
+    // Remote panel needs remoteEngine/midiLearnController_/midiRemoteDoc, none of which exist yet
+    // at BottomDockComponent's own construction time (see BottomDockComponent::
     // configureMidiRemote()'s doc comment).
     bottomDock.configureMidiRemote(audioEngine, remoteEngine, midiLearnController_, midiRemoteDoc, graphEditor);
     bottomDock.getMidiRemotePanel().onLocateNode = [this](const juce::String& nodeUuid) {
         selectNodeInGraph(nodeUuid);
     };
-    // FRO142 (docs/control/midi-remote.md#pages): plain text, same as every other MIDI Remote
-    // status line -- there is no "MIDI Remote:" prefix convention to match here.
+    // Plain text, same as every other MIDI Remote status line -- there is no "MIDI Remote:" prefix
+    // convention to match here (see docs/control/midi-remote.md#pages).
     bottomDock.getMidiRemotePanel().onStatusMessage = [this](const juce::String& message) {
         statusBar.showMessage(message);
     };
 
-    // FRO263: keep the panel live while it's open, not just on its own tab-switch-in --
+    // Keep the panel live while it's open, not just on its own tab-switch-in --
     // MidiLearnController::onChanged fires after every mutation that changes what the panel shows
-    // (see its own doc comment), so wiring it here covers Learn/Forget/Undo/Redo/a panel-side profile
-    // edit without a callback per mutation site. midiLearnController_ is declared after bottomDock in
-    // MainComponent.h, so it destructs first -- this lambda's `this` capture never outlives bottomDock.
+    // (see its own doc comment), so wiring it here covers Learn/Forget/Undo/Redo/a panel-side
+    // profile edit without a callback per mutation site. midiLearnController_ is declared after
+    // bottomDock in MainComponent.h, so it destructs first -- this lambda's `this` capture never
+    // outlives bottomDock.
     midiLearnController_.onChanged = [this] { bottomDock.getMidiRemotePanel().scheduleLiveRefresh(); };
 
-    // Transport-bar right-click MIDI Learn (FRO133) -- action targets, so these three forward to
+    // Transport-bar right-click MIDI Learn -- action targets, so these three forward to
     // MidiLearnController's action-keyed overloads rather than GraphEditor's node-keyed ones (see
     // this function's own graphEditor.onMidiLearnRequested sibling in wireGraphEditorCallbacks()).
     auto& transportBar = timelinePanel.getTransportBar();
@@ -539,10 +543,10 @@ void MainComponent::wireMidiRemoteEngine() {
         midiLearnController_.forgetAction(actionId);
     };
 
-    // FRO253: mixer column Solo right-click MIDI Learn -- a nodeCommand target, so these three
-    // forward to MidiLearnController's node-command-keyed overloads (mirrors the transport-bar
-    // action wiring immediately above; unlike a parameter target, Solo has no
-    // GraphEditor::onMidiLearnRequested sibling to reuse -- see MixerColumnMidiLearn.cpp).
+    // Mixer column Solo right-click MIDI Learn -- a nodeCommand target, so these three forward to
+    // MidiLearnController's node-command-keyed overloads (mirrors the transport-bar action wiring
+    // immediately above; unlike a parameter target, Solo has no GraphEditor::onMidiLearnRequested
+    // sibling to reuse -- see MixerColumnMidiLearn.cpp).
     auto& mixerPanel = bottomDock.getMixerPanel();
     mixerPanel.onQuerySoloMidiMapping = [this](juce::AudioProcessorGraph::NodeID nodeId) -> juce::String {
         const auto mappings = midiLearnController_.queryNodeCommandMappings(nodeId);
@@ -555,13 +559,13 @@ void MainComponent::wireMidiRemoteEngine() {
     mixerPanel.onSoloMidiForgetRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {
         midiLearnController_.forgetNodeCommand(nodeId, synth::NodeCommandKind::toggleSolo);
     };
-    // FRO296 (docs/mixer/sends-and-buses.md#reordering-sends): a send drag-reorder swaps any MIDI
-    // Learn mapping on the moved slots too, in the SAME undo step -- moveSendRow needs the live doc
-    // to fold its own MidiRemoteSnapshotAction in, and the same republish every other doc_ mutator
-    // here calls after touching it.
+    // A send drag-reorder swaps any MIDI Learn mapping on the moved slots too, in the SAME undo
+    // step -- moveSendRow needs the live doc to fold its own MidiRemoteSnapshotAction in, and the
+    // same republish every other doc_ mutator here calls after touching it (see
+    // docs/mixer/sends-and-buses.md#reordering-sends).
     mixerPanel.setMidiRemoteDoc(&midiRemoteDoc);
     mixerPanel.onPublishMidiRemoteAssignments = [this] { midiLearnController_.publishAssignments(); };
-    // FRO253/FRO336: re-syncs the mixer column's M/S visuals -- and, if the "both places" mirror
+    // Re-syncs the mixer column's M/S visuals -- and, if the "both places" mirror
     // (docs/mixer/panel.md) is open, its columns too -- after a hardware press flips solo outside
     // any column's own click. See MixerColumnComponent::toggleSoloed's callers for why nothing else
     // does this (MixerColumnMidiLearn.cpp / RemoteActionInvokerImpl's own comment).
@@ -576,14 +580,13 @@ void MainComponent::wireMidiRemoteEngine() {
     audioEngine.setRemoteMessageSink(&remoteEngine);
 }
 
-// FRO260: the standalone-only continuation of wireMidiRemoteEngine() above -- opening the saved
-// controller profiles' devices and re-publishing the engine's real open-input set to RemoteEngine
-// both need a live AudioEngine (its MIDI input list is meaningless before audioEngine.initialise()
-// has run), so this cannot run any earlier than initialiseAudioEngine() actually bringing the
-// engine up. Called from there (see that function's own comment on why), never from
-// initialiseCommon() directly -- Hosted mode never reaches this at all: initialiseAudioEngine()
-// returns before calling it, and openMidiDevicesForRemote/getOpenMidiInputIdentifiers are
-// no-ops/empty for Hosted regardless.
+// The standalone-only continuation of wireMidiRemoteEngine() above -- opening the saved controller
+// profiles' devices and re-publishing the engine's real open-input set to RemoteEngine both need a
+// live AudioEngine (its MIDI input list is meaningless before audioEngine.initialise() has run), so
+// this cannot run any earlier than initialiseAudioEngine() actually bringing the engine up. Called
+// from there (see that function's own comment on why), never from initialiseCommon() directly --
+// Hosted mode never reaches this at all: initialiseAudioEngine() returns before calling it, and
+// openMidiDevicesForRemote/getOpenMidiInputIdentifiers are no-ops/empty for Hosted regardless.
 void MainComponent::openMidiRemoteDevices() {
     // Test-only: proves this really ran with the engine already up (MainComponentMidiRemoteStartupTests.cpp)
     // without depending on real MIDI hardware -- isReceivingDeviceCallbacks() flips true inside
@@ -608,22 +611,22 @@ void MainComponent::openMidiRemoteDevices() {
 // Returns false exactly where initialiseCommon() used to `return;` early on the plugin path
 // (ownedAudioEngine == nullptr) — the caller mirrors that with `if (!initialiseAudioEngine())
 // return;`. True means the rest of initialiseCommon() (welcome screen, focus regions) still runs.
-// FRO260: also the one caller of openMidiRemoteDevices() -- called from INSIDE the engine-lifecycle
-// block below, right after audioEngine.initialise() itself, rather than from initialiseCommon()
-// after this function returns. The permission-request branch below defers audioEngine.initialise()
-// into an async callback (real on macOS, where mic access needs a runtime prompt even though MIDI
-// input doesn't touch it -- juce::RuntimePermissions::recordAudio still gates initialiseDevices()'s
-// whole device-open pass) — this function returns `true` immediately regardless of whether that
-// callback has fired yet, so a call site after `if (!initialiseAudioEngine()) return;` would still
-// run before the engine is up on that branch, reintroducing the exact bug this split fixes. Calling
-// it at the tail of BOTH branches below, right after audioEngine.initialise(), is what keeps
+// Also the one caller of openMidiRemoteDevices() -- called from INSIDE the engine-lifecycle block
+// below, right after audioEngine.initialise() itself, rather than from initialiseCommon() after
+// this function returns. The permission-request branch below defers audioEngine.initialise() into
+// an async callback (real on macOS, where mic access needs a runtime prompt even though MIDI input
+// doesn't touch it -- juce::RuntimePermissions::recordAudio still gates initialiseDevices()'s whole
+// device-open pass) — this function returns `true` immediately regardless of whether that callback
+// has fired yet, so a call site after `if (!initialiseAudioEngine()) return;` would still run
+// before the engine is up on that branch, reintroducing the exact bug this split fixes. Calling it
+// at the tail of BOTH branches below, right after audioEngine.initialise(), is what keeps
 // openMidiRemoteDevices()'s own "the engine is up by the time this runs" contract true regardless
 // of which branch (or how late the async one) actually runs it.
 bool MainComponent::initialiseAudioEngine() {
-    // FRO29: an automation launch must never open a device (or the saved one), so it also must
-    // never touch the "audioDeviceState" key below -- reading OR writing it. Computed once, up
-    // front, so both the saved-state block and the initialise()-branch choice further down share
-    // the same answer; harmless to compute on the Hosted (plugin) path too, where it is unused.
+    // An automation launch must never open a device (or the saved one), so it also must never touch
+    // the "audioDeviceState" key below -- reading OR writing it. Computed once, up front, so both
+    // the saved-state block and the initialise()-branch choice further down share the same answer;
+    // harmless to compute on the Hosted (plugin) path too, where it is unused.
     const bool noAudioDevice =
         synth::isNoAudioDeviceLaunch(juce::JUCEApplicationBase::getCommandLineParameterArray(),
                                      juce::SystemStats::getEnvironmentVariable(synth::kNoAudioDeviceEnvVar, {}));
@@ -683,12 +686,12 @@ bool MainComponent::initialiseAudioEngine() {
     graphEditor.setOutputDeviceInfoProvider([this] { return computeOutputDeviceInfoText(); });
 
     // Also installed unconditionally, same reasoning: on the Hosted path (ownedAudioEngine ==
-    // nullptr) the processor -- not this MainComponent -- calls audioEngine.shutdown(), and
-    // nothing enforces that it only does so after this MainComponent (and the parameter
-    // attachments its GraphEditor's ModuleComponents hold) has already been destroyed. Wiring the
-    // hook here, rather than only inside the `ownedAudioEngine != nullptr` block below, is what
-    // closes that gap (FRO87) -- detachAllModuleComponents() runs before shutdown() frees the
-    // graph's nodes/parameters no matter which path called shutdown().
+    // nullptr) the processor -- not this MainComponent -- calls audioEngine.shutdown(), and nothing
+    // enforces that it only does so after this MainComponent (and the parameter attachments its
+    // GraphEditor's ModuleComponents hold) has already been destroyed. Wiring the hook here, rather
+    // than only inside the `ownedAudioEngine != nullptr` block below, is what closes that gap --
+    // detachAllModuleComponents() runs before shutdown() frees the graph's nodes/parameters no
+    // matter which path called shutdown().
     audioEngine.onBeforeShutdown = [this] { graphEditor.detachAllModuleComponents(); };
 
     // Engine lifecycle is the owner's job. On the plugin path the processor already called
@@ -703,38 +706,36 @@ bool MainComponent::initialiseAudioEngine() {
         return false;
     }
 
-    // FRO27: one shared startup sequence for both branches below, as a local lambda rather than a
-    // new member or free helper -- MainComponent.h is already at its 1,000-line cap. The point of
-    // sharing it: the permission callback used to run this ONLY on a granted permission, so a
-    // denial left audioEngine.initialise() never called at all and the app had no audio output
-    // even though nothing about output ever needed the mic. A denial now reaches the exact same
-    // sequence as a grant -- the only difference is that AudioInputModule then renders silence for
-    // a device it was never allowed to open.
+    // One shared startup sequence for both branches below, as a local lambda rather than a new
+    // member or free helper -- MainComponent.h is already at its 1,000-line cap. The point of
+    // sharing it: a denied permission must still call audioEngine.initialise(), since output never
+    // needs the mic. A denial reaches the exact same sequence as a grant -- the only difference is
+    // that AudioInputModule then renders silence for a device it was never allowed to open.
     auto bringUpEngine = [this] {
         audioEngine.initialise();
-        // FRO325: this is the app-startup default document -- there is no "restore last session"
-        // feature (see docs/architecture/project-bundle.md), so every standalone launch that
-        // doesn't go on to load a saved bundle/autosave starts here. The founder's decision is
-        // "new projects use the new law", and an unopened startup document is a new project.
+        // This is the app-startup default document -- there is no "restore last session" feature
+        // (see docs/architecture/project-bundle.md), so every standalone launch that doesn't go on
+        // to load a saved bundle/autosave starts here. New projects use the new law, and an
+        // unopened startup document is a new project.
         // openFromFile/loadBundleFromFile/loadAutosaveFromFile below all overwrite this with the
         // file's own value (absent -> Balance) the moment the user opens something real.
         audioEngine.setMixerPanLaw(synth::MixerPanLaw::Compensated);
         applyStoredDualIOPreferenceToPatch();
         graphEditor.updateComponents();
         graphEditor.refreshOutputDeviceInfo();
-        openMidiRemoteDevices(); // FRO260: engine is up now -- see this function's own comment
+        openMidiRemoteDevices(); // Engine is up now -- see this function's own comment
     };
 
-    // FRO29: automation launch skips the mic-permission request entirely (that is the whole
-    // point -- requesting it is what triggers the TCC prompt an agent can't dismiss) and always
-    // takes the direct, synchronous branch below, exactly like a platform that never requires the
-    // permission in the first place.
+    // Automation launch skips the mic-permission request entirely (that is the whole point --
+    // requesting it is what triggers the TCC prompt an agent can't dismiss) and always takes the
+    // direct, synchronous branch below, exactly like a platform that never requires the permission
+    // in the first place.
     //
-    // FRO27: also skipped whenever the saved device state would not open an input device anyway --
-    // an output-only launch (no saved state at all, or one that only ever named an output device)
-    // needs no microphone access, and asking regardless is exactly the unwanted TCC prompt this
-    // ticket removes. If the user later ticks an input channel in the Audio tab, macOS prompts for
-    // it on its own the moment that input stream actually opens; this gate is only about launch.
+    // Also skipped whenever the saved device state would not open an input device anyway -- an
+    // output-only launch (no saved state at all, or one that only ever named an output device)
+    // needs no microphone access, and asking regardless is exactly the unwanted TCC prompt. If the
+    // user later ticks an input channel in the Audio tab, macOS prompts for it on its own the
+    // moment that input stream actually opens; this gate is only about launch.
     if (!noAudioDevice && juce::RuntimePermissions::isRequired(juce::RuntimePermissions::recordAudio) &&
         !juce::RuntimePermissions::isGranted(juce::RuntimePermissions::recordAudio) &&
         audioEngine.savedDeviceStateEnablesInput()) {
@@ -751,13 +752,13 @@ void MainComponent::registerFocusRegions() {
 
     // Repaint whichever region gains/loses focus — see FocusRegion.h's comment on
     // paintFocusRegionOutline for why nothing repaints on its own. Removed in the destructor.
-    // ONE-TIME registration: rebuildFocusRegions() re-runs on every detach/redock (FRO12), but
-    // this listener must not — see that method's own call site (bottomDock.onPanelDetachStateChanged).
+    // ONE-TIME registration: rebuildFocusRegions() re-runs on every detach/redock, but this
+    // listener must not — see that method's own call site (bottomDock.onPanelDetachStateChanged).
     juce::Desktop::getInstance().addFocusChangeListener(this);
 }
 
 void MainComponent::rebuildFocusRegions() {
-    // ---- T159: focus-region registry ---------------------------------------------------------
+    // ---- Focus-region registry ---------------------------------------------------------
     // Registered unconditionally (app AND plugin path — the plugin has every one of these panels
     // too, just no welcomeScreen_) after every region root above is fully constructed and wired.
     // Order matches the Tab-cycle order docs/control/shortcuts.md documents: Toolbar, Library, Canvas,
@@ -765,10 +766,11 @@ void MainComponent::rebuildFocusRegions() {
     // migrating them to a new unified visibility enum — see Source/UI/Layout/FocusRegion.h's own header
     // comment.
     //
-    // FRO12 (P9-6): cleared and rebuilt on every call so re-running it after a detach/redock never
-    // duplicates entries -- see the class-level call site in wireTimelinePanel()
+    // Cleared and rebuilt on every call so re-running it after a detach/redock never duplicates
+    // entries -- see the class-level call site in wireTimelinePanel()
     // (bottomDock.onPanelDetachStateChanged). Each hosted panel's ONE detached-window focus region
-    // is registered once on its host, not here -- see DetachablePanelHost::setHostedPanelFocusRegion.
+    // is registered once on its host, not here -- see
+    // DetachablePanelHost::setHostedPanelFocusRegion.
     focusRegions_.clear();
 
     // The toolbar is chrome, always visible in both the app and plugin editor -- no closed state,
@@ -778,19 +780,19 @@ void MainComponent::rebuildFocusRegions() {
         {"library", &moduleLibrary, [this] { return isLibraryVisible; }, [this] { setLibraryVisible(true); }});
     // The canvas has no closed state at all -- null isOpen/open, so it is always in the open list.
     focusRegions_.addRegion({"canvas", &graphEditor, nullptr, nullptr});
-    // FRO18 (plan (a)): "timeline" and "mixer" now share the SAME dock, one tab visible at a time
-    // -- isBottomDockVisible alone (the dock's own open/closed state) is no longer enough to say the
-    // Timeline region is open, since the dock can be open on the MIXER tab instead. Both regions'
-    // `open` re-select their own tab first (mirroring modMatrix's "no open state of its own to
-    // open" precedent for the case that's already showing) before falling through to the shared
-    // "open the dock if it's closed" step every panel toggle already does.
+    // "timeline" and "mixer" share the SAME dock, one tab visible at a time -- isBottomDockVisible
+    // alone (the dock's own open/closed state) is no longer enough to say the Timeline region is
+    // open, since the dock can be open on the MIXER tab instead. Both regions' `open` re-select
+    // their own tab first (mirroring modMatrix's "no open state of its own to open" precedent for
+    // the case that's already showing) before falling through to the shared "open the dock if it's
+    // closed" step every panel toggle already does.
     //
-    // FRO12: guarded -- a Timeline detached to its own window has nothing docked here to cycle
-    // to; Tab inside that window cycles its OWN one-region registry instead (see
+    // Guarded -- a Timeline detached to its own window has nothing docked here to cycle to; Tab
+    // inside that window cycles its OWN one-region registry instead (see
     // DetachedPanelWindow::keyPressed). Wrapping only -- never reorder/rename the regions below.
-    // FRO131: the dock grew a third tab (MidiRemote) -- excluding only Mixer here is no longer
-    // enough to say Timeline is the one actually showing, or this region reports open while the
-    // MidiRemote tab is the one on screen.
+    // The dock has a third tab (MidiRemote) -- excluding only Mixer here is not enough to say
+    // Timeline is the one actually showing, or this region reports open while the MidiRemote tab is
+    // the one on screen.
     if (!bottomDock.getTimelineHost().isDetached())
         focusRegions_.addRegion({"timeline", &timelinePanel,
                                  [this] {
@@ -801,12 +803,12 @@ void MainComponent::rebuildFocusRegions() {
                                      bottomDock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
                                      ensureBottomDockOpen();
                                  }});
-    // FRO18 plan (a)'s "FRO12 seam": the actual registration (open predicate + no `open` callback
-    // -- see MixerFocusRegion.h's own comment) lives in the free `registerMixerFocusRegion` helper
-    // so a future detached mixer window (FRO12) can register the same region against its own
-    // FocusRegionRegistry with a different `dockOpen` predicate instead of re-deriving this logic.
+    // The actual registration (open predicate + no `open` callback -- see MixerFocusRegion.h's own
+    // comment) lives in the free `registerMixerFocusRegion` helper so a future detached mixer
+    // window can register the same region against its own FocusRegionRegistry with a different
+    // `dockOpen` predicate instead of re-deriving this logic.
     //
-    // FRO12: three placements, three shapes -- never reorder/rename "mixer" once registered:
+    // Three placements, three shapes -- never reorder/rename "mixer" once registered:
     //  - Tab: same guard shape as "timeline" above; registerMixerFocusRegion's own dockOpen AND
     //    dock.isMixerTabActive() gate is exactly right here (the host is still docked, one tab
     //    visible at a time).
@@ -826,10 +828,10 @@ void MainComponent::rebuildFocusRegions() {
             focusRegions_.addRegion({"mixer", &bottomDock.getMixerPanel(),
                                      [this] { return mixerPlacement_.isOwnPanelShowing(); }, nullptr});
     }
-    // FRO131: same guard shape as "timeline" above -- MidiRemote has no placement variant (no
+    // Same guard shape as "timeline" above -- MidiRemote has no placement variant (no
     // Own-panel/Window controller like Mixer's mixerPlacement_), so it is always parented here
-    // unless detached to its own window, in which case that window's own one-region registry
-    // covers it (DetachablePanelHost::setHostedPanelFocusRegion, wired alongside the other two in
+    // unless detached to its own window, in which case that window's own one-region registry covers
+    // it (DetachablePanelHost::setHostedPanelFocusRegion, wired alongside the other two in
     // wireTimelinePanelServicesAndShortcuts() below).
     if (!bottomDock.getMidiRemoteHost().isDetached())
         focusRegions_.addRegion({"midiRemote", &bottomDock.getMidiRemotePanel(),
@@ -843,8 +845,8 @@ void MainComponent::rebuildFocusRegions() {
                                  if (!isAiPanelVisible && toggleAiPanelButton.onClick)
                                      toggleAiPanelButton.onClick();
                              }});
-    // No `open` callback: T159 wires no direct-focus shortcut to the Mod Matrix (out of scope per
-    // the task), and Tab-cycling never opens a closed region — see FocusRegionRegistry::cycleFocus.
+    // No `open` callback: no direct-focus shortcut is wired to the Mod Matrix, and Tab-cycling
+    // never opens a closed region — see FocusRegionRegistry::cycleFocus.
     focusRegions_.addRegion(
         {"modMatrix", &graphEditor.getModMatrix(), [this] { return graphEditor.isModMatrixVisible(); }, nullptr});
 }

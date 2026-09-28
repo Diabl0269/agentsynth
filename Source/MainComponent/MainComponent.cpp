@@ -66,7 +66,7 @@ MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLo
 // ---- Delegating constructor for tests / legacy call sites ----
 MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry,
                              synth::ControllerProfileStore profileStore)
-    // FRO228: ownedThemeManager/ownedLookAndFeel/themeManager/lookAndFeel must be set HERE, in the
+    // OwnedThemeManager/ownedLookAndFeel/themeManager/lookAndFeel must be set HERE, in the
     // member-initializer list, not assigned in the constructor body below -- bottomDock's own
     // in-class initializer (MainComponent.h) captures `lookAndFeel`'s CURRENT value while THIS list
     // is still being evaluated (declaration order puts these four members before bottomDock; the
@@ -84,10 +84,10 @@ MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth:
     , graphEditor(*graphEditorOwner_)
     , aiService(audioEngine.getGraph())
     , aiChatComponent(aiService, appProperties)
-    // FRO193: this is the ONLY ctor every MainComponent*Tests.cpp call site actually uses, so this
-    // is where controllerProfileStoreForCtor()'s test-directory override (Tests/TestMain.cpp)
-    // actually takes effect -- the primary/plugin ctors above keep the in-class default member
-    // initializer (a real ControllerProfileStore()) untouched, since nothing calls them from a test.
+    // This is the ONLY ctor every MainComponent*Tests.cpp call site actually uses, so this is where
+    // controllerProfileStoreForCtor()'s test-directory override (Tests/TestMain.cpp) actually takes
+    // effect -- the primary/plugin ctors above keep the in-class default member initializer (a real
+    // ControllerProfileStore()) untouched, since nothing calls them from a test.
     , midiLearnController_(audioEngine, graphEditor, remoteEngine, midiRemoteDoc, undoManager, statusBar,
                            std::move(profileStore)) {
     // Setup ApplicationProperties (same as primary ctor)
@@ -104,11 +104,11 @@ MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth:
 }
 
 namespace {
-// FRO193: empty (the default-constructed juce::File) means "no override" -- Tests/TestMain.cpp
-// sets this once, before any test constructs a MainComponent, so every one of the ~50
-// MainComponent*Tests.cpp call sites (none of which know or care about MIDI Remote) gets a
-// temp-dir ControllerProfileStore for free instead of silently reading/writing the developer's
-// real <settings>/MidiRemote/Controllers folder.
+// Empty (the default-constructed juce::File) means "no override" -- Tests/TestMain.cpp sets this
+// once, before any test constructs a MainComponent, so every one of the ~50 MainComponent*Tests.cpp
+// call sites (none of which know or care about MIDI Remote) gets a temp-dir ControllerProfileStore
+// for free instead of silently reading/writing the developer's real
+// <settings>/MidiRemote/Controllers folder.
 juce::File& controllerProfileTestDirectoryStorage() {
     static juce::File dir;
     return dir;
@@ -127,15 +127,15 @@ void MainComponent::setControllerProfileTestDirectory(const juce::File& dir) {
 // ---- Shared post-construction body ----
 // Shared initialisation body called from both constructors after appProperties is set up.
 void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry) {
-    // FRO147: overlay the meter-colours override (if any) onto the AppLookAndFeel's already-
-    // theme-derived cache — every ctor above already ran lookAndFeel->applyTheme() before calling
-    // this, so the theme-default stops are in place; this only pins a user override on top, before
-    // the first mixer column/channel chip ever paints.
+    // Overlay the meter-colours override (if any) onto the AppLookAndFeel's already- theme-derived
+    // cache — every ctor above already ran lookAndFeel->applyTheme() before calling this, so the
+    // theme-default stops are in place; this only pins a user override on top, before the first
+    // mixer column/channel chip ever paints.
     lookAndFeel->setMeterColourStopsOverride(synth::ui::loadMeterColourStopsOverride(*appProperties.getUserSettings()));
     restorePanelPreferences();       // ORDER: flags read before any addAndMakeVisible/setVisible
     restoreGraphEditorPreferences(); // ORDER: settings change listener registered here
     configureAiProvider(std::move(provider), std::move(registry)); // ORDER: nothing earlier may write appProperties
-    wireAiChatAndAccount(); // ORDER: after setProvider (#96); account before attemptSilentSignIn
+    wireAiChatAndAccount(); // ORDER: after setProvider; account before attemptSilentSignIn
     wireGraphEditorCallbacks();
     wirePluginScanAndRecents(); // ORDER: HostMode-dependent (ownedAudioEngine == nullptr)
     wireCommandsAndShortcuts(); // ORDER: keep the "no KeyListener" comment
@@ -152,8 +152,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     addToolbarToggleButtons();
     assembleToolbar(); // ORDER: setButtons() before setSize()
     wireStatusBar();
-    // FRO260: this is also where openMidiRemoteDevices() (MainComponentSetup.cpp) runs, from
-    // INSIDE initialiseAudioEngine() itself once the engine is actually up -- not listed as its own
+    // This is also where openMidiRemoteDevices() (MainComponentSetup.cpp) runs, from INSIDE
+    // initialiseAudioEngine() itself once the engine is actually up -- not listed as its own
     // ordered step here because it is standalone-only and never a top-level call site.
     if (!initialiseAudioEngine())
         return;
@@ -162,15 +162,16 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
 }
 
 MainComponent::~MainComponent() {
-    // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): send every open handshake's `close`
-    // bytes FIRST, while remoteFeedbackOutputs_ (the sink) and every MIDI output device are still
-    // fully alive -- "the app lets go of the controller" is the very first thing quitting means. A
-    // no-op in HostMode::Hosted and everywhere setHandshakeFeedbackSink() was never called.
+    // Send every open handshake's `close` bytes FIRST, while remoteFeedbackOutputs_ (the sink) and
+    // every MIDI output device are still fully alive -- "the app lets go of the controller" is the
+    // very first thing quitting means. A no-op in HostMode::Hosted and everywhere
+    // setHandshakeFeedbackSink() was never called (see
+    // docs/control/midi-remote-device-handshake.md#device-handshake).
     midiLearnController_.shutdownHandshakes();
 
-    // FRO44: unregister FIRST, before anything below (closing native plugin-editor windows
-    // included) has a chance to pump the message loop. A `pluginScanCompleted` queued by a scan on
-    // another thread would otherwise land mid-destruction and call `savePluginScanList()` /
+    // Unregister FIRST, before anything below (closing native plugin-editor windows included) has a
+    // chance to pump the message loop. A `pluginScanCompleted` queued by a scan on another thread
+    // would otherwise land mid-destruction and call `savePluginScanList()` /
     // `refreshPluginLibrary()` / `statusBar.showMessage()` on a half-torn-down component. On the
     // adopted-service path (plugin editors) the service is the PROCESSOR's and outlives this
     // destructor regardless, so leaving the listener registered would also call back into a dead
@@ -208,12 +209,12 @@ MainComponent::~MainComponent() {
     if (auto* backend = dynamic_cast<synth::DefaultHostedPluginBackend*>(&synth::HostedPluginBackend::getDefault()))
         if (backend->getScanService() == &pluginScanService)
             backend->setScanService(nullptr);
-    // FRO105: whatever the scan already found before this quit (or before a scan in flight was cut
-    // off by the cancelScan() below) is already sitting in pluginScanService's in-memory list
-    // regardless of whether it ever reached pluginScanCompleted() — which removeListener() above
-    // ensures it now never will. Without this, quitting during a long scan (a large or slow plugin
-    // folder) silently threw away every plugin found that session, so the NEXT launch re-probed them
-    // all over again; saving here makes an interrupted scan's progress durable, same as a completed
+    // Whatever the scan already found before this quit (or before a scan in flight was cut off by
+    // the cancelScan() below) is already sitting in pluginScanService's in-memory list regardless
+    // of whether it ever reached pluginScanCompleted() — which removeListener() above ensures it
+    // now never will. Without this, quitting during a long scan (a large or slow plugin folder)
+    // silently threw away every plugin found that session, so the NEXT launch re-probed them all
+    // over again; saving here makes an interrupted scan's progress durable, same as a completed
     // one's. Guarded on "still ours" (the same condition the backend unhook just above uses), NOT
     // isHosted(): on the adopted-service path activeScanService is the PROCESSOR's, which outlives
     // this editor and is never scanned from here anyway (see wirePluginScanAndRecents()), so saving
@@ -265,27 +266,27 @@ MainComponent::~MainComponent() {
     audioEngine.setMidiCaptureSink(nullptr);
     automationRecorder.detach();
     undoManager.setRestoreHooks({}, {});
-    // Also unbinds bottomDock's own fader/pan bindings via GraphEditor::onBeforeDetachAllModuleComponents
-    // (wired in wireTimelinePanelServicesAndShortcuts) -- bottomDock is declared AFTER graphEditor in
+    // Also unbinds bottomDock's own fader/pan bindings via
+    // GraphEditor::onBeforeDetachAllModuleComponents (wired in
+    // wireTimelinePanelServicesAndShortcuts) -- bottomDock is declared AFTER graphEditor in
     // MainComponent.h, so its own destructor runs BEFORE graphEditor's once this body returns;
     // without this call happening first, that destructor would unbind a fader still pointing at a
-    // param audioEngine.shutdown() below is about to free (the FRO11 class of bug, same root cause
-    // as the undo/redo crash this fixes).
+    // param audioEngine.shutdown() below is about to free (same root cause as an undo/redo crash).
     graphEditor.detachAllModuleComponents();
     // Unconditionally, both Standalone and Hosted: the hosted-mode engine outlives `this` (the
-    // processor owns it, not this MainComponent), so a dangling `this`-capturing lambda left
-    // wired here would fire out from under freed memory the next time something calls
-    // audioEngine.shutdown() (FRO87). Cleared BEFORE the guarded shutdown() call below so
-    // Standalone's own behaviour is unchanged: detachAllModuleComponents() has already run once
-    // (immediately above) by the time shutdown() could otherwise re-fire it via the hook.
+    // processor owns it, not this MainComponent), so a dangling `this`-capturing lambda left wired
+    // here would fire out from under freed memory the next time something calls
+    // audioEngine.shutdown(). Cleared BEFORE the guarded shutdown() call below so Standalone's own
+    // behaviour is unchanged: detachAllModuleComponents() has already run once (immediately above)
+    // by the time shutdown() could otherwise re-fire it via the hook.
     audioEngine.onBeforeShutdown = nullptr;
     // Only tear down an engine we own. On the plugin path the processor's engine must survive
     // the editor being closed and reopened.
     if (ownedAudioEngine != nullptr) {
-        // Drop the device-state callback first — it captures `this`, and shutdown() is the
-        // call that unsubscribes the engine from its device manager. onMidiDevicesChanged
-        // (FRO262) captures `this` the same way and is reachable from the same changeListenerCallback,
-        // so it gets the same treatment.
+        // Drop the device-state callback first — it captures `this`, and shutdown() is the call
+        // that unsubscribes the engine from its device manager. onMidiDevicesChanged captures
+        // `this` the same way and is reachable from the same changeListenerCallback, so it gets the
+        // same treatment.
         audioEngine.onDeviceStateChanged = nullptr;
         audioEngine.onMidiDevicesChanged = nullptr;
         audioEngine.shutdown();

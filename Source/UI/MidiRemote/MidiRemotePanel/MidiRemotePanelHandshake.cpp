@@ -1,6 +1,6 @@
-// Concern: FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake) -- the toolbar's
-// port-hint warning row for whichever controller is currently selected, mirroring
-// MidiRemotePanelUndo.cpp's own "re-derive a toolbar hint after every change" shape.
+// Concern: the toolbar's port-hint warning row for whichever controller is currently selected,
+// mirroring MidiRemotePanelUndo.cpp's own "re-derive a toolbar hint after every change" shape (see
+// docs/control/midi-remote-device-handshake.md#device-handshake).
 #include "MidiRemotePanelComponent.h"
 
 #include "MidiRemote/MidiLearnController.h"

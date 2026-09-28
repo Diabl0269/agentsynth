@@ -81,11 +81,11 @@ void AddControllerPopover::selectDevice(int comboId) {
     okButton_.setEnabled(canConfirm());
 }
 
-// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): choosing a template whose
-// handshake declares a port hint (TemplateInfo::handshakePort, e.g. the Launch Control XL 3's "DAW")
-// preselects the first free device row whose name already contains that word -- e.g. "LCXL3 1 DAW
-// Out" over "LCXL3 1 MIDI Out" -- through the SAME path a manual device pick uses (selectDevice()),
-// so the name field also re-prefills.
+// Choosing a template whose handshake declares a port hint (TemplateInfo::handshakePort, e.g. the
+// Launch Control XL 3's "DAW") preselects the first free device row whose name already contains
+// that word -- e.g. "LCXL3 1 DAW Out" over "LCXL3 1 MIDI Out" -- through the SAME path a manual
+// device pick uses (selectDevice()), so the name field also re-prefills (see
+// docs/control/midi-remote-device-handshake.md#device-handshake).
 void AddControllerPopover::handleStartChanged() {
     const int startId = startCombo_.getSelectedId();
     if (startId >= kStartTemplateBaseId) {

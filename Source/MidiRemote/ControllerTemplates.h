@@ -26,10 +26,10 @@ struct TemplateInfo {
     // document (with URL and section) its CC/note numbers were sourced from -- required by
     // docs/control/midi-remote-ui.md#contribute-a-template, never left to guesswork.
     juce::String source;
-    // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): mirrors this template's own
-    // ControllerProfile::Handshake::port (e.g. "DAW" for the Launch Control XL 3) -- empty for a
-    // template with no port ambiguity. AddControllerPopover reads this to preselect a matching input
-    // device when this template is chosen as "Start with".
+    // Mirrors this template's own ControllerProfile::Handshake::port (e.g. "DAW" for the Launch
+    // Control XL 3) -- empty for a template with no port ambiguity. AddControllerPopover reads this
+    // to preselect a matching input device when this template is chosen as "Start with" (see
+    // docs/control/midi-remote-device-handshake.md#device-handshake).
     juce::String handshakePort;
 };
 
@@ -59,10 +59,10 @@ bool loadControllerTemplate(const juce::String& id, ControllerProfile& out);
 struct TemplateApplyResult {
     int added = 0;
     int skippedDuplicates = 0;
-    // FRO330 (docs/control/midi-remote-ui.md#templates-and-importexport): a template whose
-    // controls[] have factory transport (or other) actions already wired -- e.g. BeatStep's
-    // Play/Stop -- copies them into profile.actions too. 0 for every template that ships none
-    // (every generic template, and every vendor template pre-FRO330).
+    // A template whose controls[] have factory transport (or other) actions already wired -- e.g.
+    // BeatStep's Play/Stop -- copies them into profile.actions too. 0 for every template that ships
+    // none (every generic template, and every vendor template before the MMC ones; see
+    // docs/control/midi-remote-ui.md#templates-and-importexport).
     int actionsAdded = 0;
     int actionsSkippedDuplicates = 0;
 };
@@ -73,7 +73,7 @@ struct TemplateApplyResult {
  *  rows (max existing row + 1) so nothing overlaps. Never touches profile.id/name/input/output/
  *  passMapped.
  *
- *  FRO330: also copies `tmpl.actions` into `profile.actions` -- one new Assignment per template
+ *  Also copies `tmpl.actions` into `profile.actions` -- one new Assignment per template
  *  action whose MessageSpec has no equivalent already on `profile.actions` (skipped as a
  *  duplicate otherwise, same "existing wins" rule as controls), re-pointed at the merged-in
  *  profile control with that same spec via makeAssignmentForControl (MidiRemoteMapping.h) so the
@@ -81,7 +81,7 @@ struct TemplateApplyResult {
  *  template action whose spec matches no control in `tmpl.controls` is malformed and is skipped
  *  (never asserted here -- ControllerTemplatesVendorTests.cpp guards template authoring).
  *
- *  FRO339: also copies `tmpl.handshake` into `profile.handshake`, but only when `profile` doesn't
+ *  Also copies `tmpl.handshake` into `profile.handshake`, but only when `profile` doesn't
  *  already have one -- unlike controls/actions this isn't keyed on a MessageSpec (there is only
  *  ever one handshake per profile), so "existing wins" here means "a profile that already
  *  declares a handshake keeps it" rather than a per-item dedup. */

@@ -62,10 +62,10 @@ bool hasSpec(const std::vector<Control>& controls, const MessageSpec& spec) {
     return std::any_of(controls.begin(), controls.end(), [&](const Control& c) { return c.message == spec; });
 }
 
-// FRO330: does any assignment in `actions` already claim `spec`? Same "existing wins" dedup rule
+// Does any assignment in `actions` already claim `spec`? Same "existing wins" dedup rule
 // applyControllerTemplate already uses for controls (hasSpec above), applied to profile.actions so
-// re-applying a template (or applying two templates that both bind the same physical message)
-// never doubles up a transport binding.
+// re-applying a template (or applying two templates that both bind the same physical message) never
+// doubles up a transport binding.
 bool hasActionSpec(const std::vector<Assignment>& actions, const MessageSpec& spec) {
     return std::any_of(actions.begin(), actions.end(), [&](const Assignment& a) { return a.spec == spec; });
 }
@@ -142,8 +142,8 @@ bool loadControllerTemplate(const juce::String& id, ControllerProfile& out) {
 TemplateApplyResult applyControllerTemplate(ControllerProfile& profile, const ControllerProfile& tmpl) {
     TemplateApplyResult result;
 
-    // FRO339: a profile that doesn't already declare a handshake picks up the template's --
-    // there is only one per profile, so this is "existing wins" without a per-item dedup.
+    // A profile that doesn't already declare a handshake picks up the template's -- there is only
+    // one per profile, so this is "existing wins" without a per-item dedup.
     if (profile.handshake.isEmpty())
         profile.handshake = tmpl.handshake;
 
@@ -168,9 +168,9 @@ TemplateApplyResult applyControllerTemplate(ControllerProfile& profile, const Co
         ++result.added;
     }
 
-    // FRO330: a template action's spec matches one of tmpl.controls (its author bound it there,
-    // e.g. BeatStep's "play" control) -- by now that control has landed on `profile.controls`
-    // above, either just-added or a pre-existing match, either way with a real profile-local id.
+    // A template action's spec matches one of tmpl.controls (its author bound it there, e.g.
+    // BeatStep's "play" control) -- by now that control has landed on `profile.controls` above,
+    // either just-added or a pre-existing match, either way with a real profile-local id.
     // makeAssignmentForControl re-derives the Assignment from THAT control rather than trusting the
     // template's own placeholder control.profileId/controlId.
     for (const auto& ta : tmpl.actions) {

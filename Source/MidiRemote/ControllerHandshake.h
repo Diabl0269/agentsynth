@@ -1,11 +1,12 @@
 #pragma once
 
-// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): sends a ControllerProfile's declared
-// open/close handshake bytes (RemoteModel.h's ControllerProfile::Handshake) to its own `input`
-// device's matching MIDI output -- e.g. Novation LCXL3's DAW-mode enable/disable SysEx, which the
-// device latches with no keep-alive (stays enabled until the close bytes arrive or it is
-// power-cycled). Core: only RemoteFeedbackSink (already the app layer's juce::MidiOutput seam for
-// controller feedback, FRO139) and RemoteModel.h -- no juce_audio_devices dependency of its own.
+// Sends a ControllerProfile's declared open/close handshake bytes (RemoteModel.h's
+// ControllerProfile::Handshake) to its own `input` device's matching MIDI output -- e.g. Novation
+// LCXL3's DAW-mode enable/disable SysEx, which the device latches with no keep-alive (stays enabled
+// until the close bytes arrive or it is power-cycled). Core: only RemoteFeedbackSink (already the
+// app layer's juce::MidiOutput seam for controller feedback) and RemoteModel.h -- no
+// juce_audio_devices dependency of its own (see
+// docs/control/midi-remote-device-handshake.md#device-handshake).
 
 #include "MidiRemote/RemoteEngine/RemoteFeedbackSink.h"
 #include "MidiRemote/RemoteModel.h"

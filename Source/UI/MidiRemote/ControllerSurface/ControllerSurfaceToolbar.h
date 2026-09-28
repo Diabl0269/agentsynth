@@ -26,11 +26,12 @@ public:
     void setUndoHint(const juce::String& text);
     juce::String getUndoHint() const { return undoHintLabel_.getText(); }
 
-    /** FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): the selected controller's
+    /** The selected controller's
      *  handshake port-mismatch warning (MidiLearnController::getHandshakeIssueForProfile), shown as
      *  its own full-width row below the button row; empty hides it. Same idempotent contract as
      *  setUndoHint, except (unlike the undo cue) this row changes getPreferredHeight() -- the caller
-     *  must re-layout afterwards, same as setDetectOn(). */
+     *  must re-layout afterwards, same as setDetectOn() (see
+     * docs/control/midi-remote-device-handshake.md#device-handshake). */
     void setPortHint(const juce::String& text);
     juce::String getPortHint() const { return portHintLabel_.getText(); }
 
