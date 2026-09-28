@@ -172,6 +172,12 @@ public:
     // recordTimelineChange for the whole repeat -- see its definition for the tiling rule. Returns
     // false when `count` is < 1, there's no doc/selection, or nothing could be created.
     bool repeatSelectedClips(int count);
+    // Whether the clip lanes hold a live Range-tool range — Copy/Cut then act on it, not the selection.
+    bool hasRangeSelection() const;
+    // Captures the range's contents, clipped to its edges, into the clip clipboard. False if nothing.
+    bool copyRange();
+    // copyRange() then deletes the range as ONE recordTimelineChange. False when the copy fails.
+    bool cutRange();
 
     // ---- Piano roll ----
     // Swaps the lanes region (gridLanesBounds_ — the same rect the clip-lane area occupies) to
@@ -295,7 +301,7 @@ public:
     void setZoomScrollInverted(bool inverted) noexcept;
     bool isZoomScrollInverted() const noexcept { return zoomScrollInverted_; }
 
-    /** The user's bindings for this panel's OWN keys: the six tool digits, the snap toggle, the loop
+    /** The user's bindings for this panel's OWN keys: the seven tool digits, the snap toggle, the loop
      *  toggle and loop-the-selection. Non-owning and may stay null -- with no manager installed
      *  keyPressed() falls back to the hardcoded Cubase defaults. Escape and anything the app
      *  dispatches as a command (Cmd+C/V/X/D, Space, the grid commands) are not resolved through
@@ -545,7 +551,7 @@ private:
 
     // ---- Edit-tool strip ----
     EditTool activeTool_ = EditTool::Select;
-    // Six radio-group icon buttons, indexed by EditTool. unique_ptrs because juce::DrawableButton
+    // Seven radio-group icon buttons, indexed by EditTool. unique_ptrs because juce::DrawableButton
     // has no default constructor (it needs a name and a style up front).
     std::array<std::unique_ptr<juce::DrawableButton>, kAllEditTools.size()> toolButtons_;
     // Re-applies the icons and the active-tool highlight colour from the current LookAndFeel.

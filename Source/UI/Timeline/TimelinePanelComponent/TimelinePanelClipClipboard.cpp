@@ -284,6 +284,9 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
     if (newIds.empty())
         return false;
 
+    // The pasted clips become the selection, and a selection never coexists with a range (see
+    // TimelineClipLaneRange.cpp) — so a paste made from the Range tool drops the range.
+    clipLaneArea_.clearRange();
     clipSelection_.setSelection(newIds);
     return true;
 }
@@ -372,6 +375,7 @@ bool TimelinePanelComponent::selectAllClips() {
     if (all.empty())
         return false;
 
+    clipLaneArea_.clearRange(); // a selection never coexists with a range
     clipSelection_.setSelection(all);
     clipLaneArea_.repaint();
     return true;
@@ -450,6 +454,69 @@ bool TimelinePanelComponent::repeatSelectedClips(int count) {
 
     clipSelection_.setSelection(newIds);
     clipLaneArea_.repaint();
+    return true;
+}
+
+//==============================================================================
+// ---- Range clipboard ----
+//
+// A range copy fills the SAME clipClipboard_ a clip copy does, so paste (kind-aware target rows,
+// snapping, the one undo step, the pasted clips ending up selected) is shared rather than written
+// twice. Each entry is the part of a clip inside the range (TimelineDoc::clipToRange — notes
+// clipped, an audio fragment's sourceStartSeconds advanced by what was cut off its left, a fade at
+// a cut edge zeroed), and its relative start is measured from the RANGE start rather than from the
+// earliest clip: leading empty space in the range is part of what was copied, so a paste lands
+// the content where it sat inside the range.
+
+bool TimelinePanelComponent::hasRangeSelection() const { return clipLaneArea_.getRangeSpan().has_value(); }
+
+bool TimelinePanelComponent::copyRange() {
+    if (doc_ == nullptr)
+        return false;
+    const auto span = clipLaneArea_.getRangeSpan();
+    if (!span)
+        return false;
+    const double spb = clipLaneArea_.secondsPerBeat();
+
+    std::vector<ClipboardClip> captured;
+    for (const auto trackId : span->tracks) {
+        const auto* track = doc_->getTrack(trackId);
+        if (track == nullptr)
+            continue;
+        for (const auto& clip : track->clips) {
+            const auto fragment = synth::TimelineDoc::clipToRange(clip, span->startBeat, span->endBeat, spb);
+            if (!fragment)
+                continue;
+            ClipboardClip entry;
+            entry.originalTrack = track->id;
+            entry.requiredKind = fragment->assetRef.isNotEmpty() ? synth::TrackKind::Audio : synth::TrackKind::Midi;
+            entry.relativeStartBeat = fragment->startBeat - span->startBeat;
+            entry.lengthBeats = fragment->lengthBeats;
+            entry.name = fragment->name;
+            entry.notes = fragment->notes;
+            entry.muted = fragment->muted;
+            entry.assetRef = fragment->assetRef;
+            entry.gainDb = fragment->gainDb;
+            entry.fadeInBeats = fragment->fadeInBeats;
+            entry.fadeOutBeats = fragment->fadeOutBeats;
+            entry.sourceStartSeconds = fragment->sourceStartSeconds;
+            captured.push_back(std::move(entry));
+        }
+    }
+    if (captured.empty())
+        return false; // a range over empty time copies nothing, and leaves the clipboard alone
+
+    clipClipboard_ = std::move(captured);
+    return true;
+}
+
+// The delete half is the lane area's own verb, so a cut and a Delete of the same range can never
+// remove different things. applyRangeChoice records exactly one undo step; the clipboard (filled
+// before it) survives an undo of the cut.
+bool TimelinePanelComponent::cutRange() {
+    if (!copyRange())
+        return false;
+    clipLaneArea_.applyRangeChoice(TimelineClipLaneArea::RangeChoice::Delete);
     return true;
 }
 

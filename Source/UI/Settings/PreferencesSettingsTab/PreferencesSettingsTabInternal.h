@@ -75,6 +75,17 @@ constexpr int kMixerPlacementTabComboId = 1;
 constexpr int kMixerPlacementOwnPanelComboId = 2;
 constexpr int kMixerPlacementWindowComboId = 3;
 
+// FRO336 (docs/mixer/panel.md#placement-and-detachable-windows): "When a panel opens in its own
+// window" -- move it there (the FRO333 default: the tab leaves the strip) or show it in both
+// places (a second live view opens in the window; the tab stays). Value is "move"/"both", default
+// "move" -- read at use time by BottomDockComponent, duplicated here for the same "one-line string
+// not worth a header dependency" reason as kMixerPlacementKey above. Only the Mixer honours this
+// today (see BottomDockComponent::usesMixerMirrorForDetach) -- Timeline/Controllers still always
+// move.
+constexpr const char* kPanelDetachModeKey = "detachedPanelBothPlaces";
+constexpr int kPanelDetachModeMoveComboId = 1;
+constexpr int kPanelDetachModeBothComboId = 2;
+
 } // namespace
 
 // Combo-id <-> enum helpers, defined in PreferencesSettingsTabLifecycle.cpp (where the constructor

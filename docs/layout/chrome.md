@@ -215,6 +215,8 @@ launches via `ApplicationProperties`:
 | `librarySidebarVisible` | `"1"` (true) | `moduleLibrary` left panel |
 | `aiPanelVisible` | `"0"` (false) | `aiChatComponent` right panel |
 | `mixerOwnPanelHeight` | absent (`220`, also the minimum) | the Mixer's "Own panel" strip — written once per resize drag, on mouse-up (FRO231) |
+| `detachedPanelBothPlaces` | `"move"` | FRO336: "move"/"both" — Tab placement's Mixer detach button either moves the panel into its window (default) or keeps it docked and opens a second live view too, see [`docs/mixer/panel.md`](../mixer/panel.md#detach-mode-move-or-both-places) |
+| `mixerMirrorWindowBounds` | absent (centred default) | the "both places" mirror window's own position/size — same `DetachedPanelWindow` bounds-persist mechanism as `mixerWindowBounds` |
 
 Both keys are read at the top of `initialiseCommon()`, before any `setVisible()` or
 `addAndMakeVisible()` call. Cmd+B toggles the library sidebar, wired through `ShortcutManager`.

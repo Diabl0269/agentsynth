@@ -72,6 +72,7 @@ add_executable(Tests
     Timeline/TimelineDoc/TimelineDocMarkersTests.cpp
     Timeline/TimelineDoc/TimelineDocControllersTests.cpp
     Timeline/TimelineControllerLaneTests.cpp
+    Timeline/TimelineDoc/TimelineDocRangesTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingNotesTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingQuantiseTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingSplitJoinTests.cpp
@@ -336,6 +337,7 @@ add_executable(Tests
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosaveTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycleTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerPlacementTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachModeTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemoteTests.cpp
     UI/Settings/FeedbackSettingsTabTests.cpp
     Engine/AudioRendering/AudioRenderingBasicTests.cpp
@@ -431,6 +433,7 @@ add_executable(Tests
     UI/Timeline/TimelineClipLane/TimelineClipLaneEditToolsTests.cpp
     UI/Timeline/TimelineClipLane/TimelineClipLaneMouseTests.cpp
     UI/Timeline/TimelineClipLane/TimelineClipLanePaintingTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLaneRangeTests.cpp
     UI/Timeline/TimelineClipLane/TimelineClipLaneSelectionTests.cpp
     UI/PianoRoll/NoteSelectionModelTests.cpp
     UI/PianoRoll/NoteHitTestMarqueeTests.cpp
@@ -474,6 +477,7 @@ add_executable(Tests
     UI/Mixer/MixerSendListDragTests.cpp
     UI/Mixer/MixerSendListKeyTargetTests.cpp
     UI/Layout/BottomDockComponentTests.cpp
+    UI/Layout/BottomDockMixerMirrorTests.cpp
     UI/Layout/BottomDockResizeTests.cpp
     UI/Mixer/MixerOwnPanelResizeTests.cpp
     UI/Mixer/MixerOwnPanelSlideTests.cpp

@@ -464,7 +464,9 @@ deleted while the alert was up — is a silent no-op, not a crash and not a resu
 
 ## Edit tools
 
-`handleToolMouseDown(pos)` routes every non-Select tool exactly the way
+The panel's **Range** tool has no meaning inside one clip, so `setActiveTool` takes it as Select
+(see [edit-tools](edit-tools.md#numbering)). `handleToolMouseDown(pos)` routes every other
+non-Select tool exactly the way
 `TimelineClipLaneArea::handleToolMouseDown` does for clips: Split, Glue, Erase and Mute act on a
 single click and hit-test a note first — a click on empty grid with one of these four held does
 nothing, no deselect, no marquee.

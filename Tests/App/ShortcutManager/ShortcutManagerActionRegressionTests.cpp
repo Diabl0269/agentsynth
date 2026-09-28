@@ -428,6 +428,7 @@ TEST_F(ShortcutManagerTest, TimelineFocusedTrackActionDescriptionsAreDistinctFro
     // The naming-collision risk these names exist to avoid — a Settings search for "mute" must not
     // read the tool-mode row and the track-toggle row as the same feature.
     EXPECT_EQ(ShortcutManager::getActionDescription("timelineToolMute"), "Mute Tool");
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineToolRange"), "Range Tool");
 }
 
 TEST_F(ShortcutManagerTest, TimelineFocusedTrackActionsAreTimelineCategory) {

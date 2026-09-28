@@ -4,6 +4,7 @@
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
 #include "UI/Layout/PanelResizeHandle.h"
 #include "UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h"
+#include "UI/Mixer/MixerMirrorController.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -82,11 +83,43 @@ public:
     bool hasAnyVisibleTab() const noexcept;
 
     /** Re-runs the mixer panel's snapshot + column rebuild -- call after every graph/timeline/
-     *  macro change (MainComponent's existing reconcile funnel is the natural place). */
-    void rebuildMixer() { mixer_.rebuild(); }
+     *  macro change (MainComponent's existing reconcile funnel is the natural place). FRO336: also
+     *  rebuilds the "both places" mirror view when one is open, so a mirror never shows a stale
+     *  column set. */
+    void rebuildMixer() {
+        mixer_.rebuild();
+        mixerMirror_.rebuildIfOpen();
+    }
     MixerPanelComponent& getMixerPanel() noexcept { return mixer_; }
     // FRO227: const overload for resolveEditSurface(), a const member function.
     const MixerPanelComponent& getMixerPanel() const noexcept { return mixer_; }
+
+    /** FRO336: re-syncs the docked mixer's + (if open) the "both places" mirror's mute/solo/pan-law
+     *  visuals from something that changed them OUTSIDE either view's own click -- today, a hardware
+     *  MIDI Remote solo press (MainComponent::wireMidiRemoteEngine's onNodeCommandApplied). The
+     *  live click-to-click case (one view's own button) is instead cross-wired directly through
+     *  mixer_.onLiveMixerStateChanged in the constructor below -- see MixerMirrorController.h's
+     *  class comment for the full mechanism. */
+    void refreshLiveMixerVisualsEverywhere() {
+        mixer_.refreshLiveMixerVisuals();
+        mixerMirror_.refreshLiveVisualsIfOpen();
+    }
+
+    /** FRO336: Source/UI/CLAUDE.md's mixer-unbind invariant applies to EVERY live MixerPanelComponent,
+     *  not only the docked one -- MainComponent wires this (not getMixerPanel().unbindAllColumns()
+     *  directly) to GraphEditor::onBeforeDetachAllModuleComponents, so a mirror view open when a
+     *  graph-replacing mutation (undo/redo restore, New Patch, Load, AI patch apply) runs is
+     *  unbound first too. */
+    void unbindAllMixerViews() {
+        mixer_.unbindAllColumns();
+        mixerMirror_.unbindIfOpen();
+    }
+    /** FRO336: sibling of unbindAllMixerViews() for MixerPanelComponent::rebuildIfUnbound()'s own
+     *  contract (MainComponent wires this to GraphEditor::onGraphStructureChanged). */
+    void rebuildIfUnboundMixerViews() {
+        mixer_.rebuildIfUnbound();
+        mixerMirror_.rebuildIfUnboundIfOpen();
+    }
 
     /** FRO263: mirrors rebuildMixer() above -- see its call site's own comment. */
     void rebuildMidiRemote() { midiRemotePanel_.rebuildFromProfiles(); }
@@ -102,7 +135,10 @@ public:
      *  DetachablePanelHost is detached -- its own window is a separate top-level Component, so
      *  THIS dock's isVisible() says nothing about whether that window is on screen), matching the
      *  Timeline panel's own precedent (docs/layout/rendering.md). */
-    void refreshMeters() { mixer_.refreshMeters(); }
+    void refreshMeters() {
+        mixer_.refreshMeters();
+        mixerMirror_.refreshMetersIfOpen(); // FRO336: independent meter cadence, own MeterReader slot
+    }
 
     /** FRO146 follow-up: "is the mixer panel showing anywhere a meter tick would be visible" --
      *  docked on the Mixer tab (`isMixerTabActive() && isVisible()`, the pre-existing check) OR
@@ -130,6 +166,25 @@ public:
 
     /** Re-applies visibility/z-order for the active tab, without a Mixer/MIDI Remote rebuild. */
     void refreshTabVisibility();
+
+    /** FRO336: "When a panel opens in its own window: move it there (default) / show it in both
+     *  places" -- re-reads "detachedPanelBothPlaces" and, if it changed, live-transitions whatever
+     *  is currently open (see the .cpp for the two transition directions). Scoped to the Mixer's Tab
+     *  placement only (see docs/mixer/panel.md) -- a no-op for Own-panel/Window placement and for
+     *  Timeline/Controllers, which have no mirror view. Call once at launch
+     *  (setApplicationProperties() below already does) and again on every settings-file write, the
+     *  same "MixerPlacementController::applyPlacementPreference() sibling" MainComponent's
+     *  ChangeListener already re-runs mixerPlacement_ through. */
+    void applyDetachBothPlacesPreference();
+
+    /** BottomDockComponent's own theme re-skin pass extension point -- MainComponent's
+     *  changeListenerCallback calls this alongside getMixerHost().refreshDetachedWindowTheme(). */
+    void refreshMixerMirrorWindowTheme() { mixerMirror_.refreshThemeIfOpen(); }
+
+    // ---- FRO336 test seams (BottomDockMixerMirrorTests.cpp) ----
+    bool isMixerMirrorOpenForTest() const noexcept { return mixerMirror_.isOpen(); }
+    MixerPanelComponent* getMixerMirrorPanelForTest() const noexcept { return mixerMirror_.getMirrorPanelForTest(); }
+    bool isDetachBothPlacesEnabledForTest() const noexcept { return detachBothPlacesEnabled_; }
 
     /** The Timeline's own detach-to-window host -- always owned and shown here, in every Mixer
      *  placement (docs/mixer/panel.md's placement table: "Bottom dock: unaffected"). */
@@ -271,6 +326,16 @@ private:
     synth::ui::DetachablePanelHost& activeHost() noexcept;
     void refreshDetachButton();
 
+    // ---- FRO336: "both places" -- the tab-strip detach button routes through the mirror instead
+    // of a real detach only for the Mixer tab, and only while the preference is on.
+    bool usesMixerMirrorForDetach() const noexcept { return activeTab_ == Tab::Mixer && detachBothPlacesEnabled_; }
+    /** The detach button's own onClick target -- replaces the plain
+     *  `activeHost().setDetached(!activeHost().isDetached())` toggle FRO333 shipped with. */
+    void toggleActiveHostDetach();
+    /** Resolves the live LookAndFeel/native-window flag the same way a real Mixer detach already
+     *  does, and opens the mirror against `mixer_`. */
+    void openMixerMirror();
+
     // ---- FRO333: tab order, "which tabs are offered right now", and the fallback pick ----
     synth::ui::DetachablePanelHost& hostForTab(Tab tab) noexcept;
     const synth::ui::DetachablePanelHost& hostForTab(Tab tab) const noexcept;
@@ -303,6 +368,11 @@ private:
     synth::ui::DetachablePanelHost timelineHost_;
     synth::ui::DetachablePanelHost mixerHost_;
     synth::ui::DetachablePanelHost midiRemoteHost_;
+    // FRO336: the Mixer's optional second live view -- see MixerMirrorController.h's own class
+    // comment. Constructed once (its ConfigureFn closure captures the same graph/doc/macros/
+    // undoManager/graphEditor/audioEngine references mixer_.configure() below already used), opened
+    // lazily on the first "both places" detach.
+    synth::ui::MixerMirrorController mixerMirror_;
     DockTabButton timelineTabButton_;
     DockTabButton mixerTabButton_;
     DockTabButton midiRemoteTabButton_;
@@ -332,6 +402,11 @@ private:
     // True from a mouseDown that turns into a real reorder swap (see dragTab()); read once by
     // endTabDrag() and reset there.
     bool tabDragReordered_ = false;
+    // FRO336: "detachedPanelBothPlaces" -- see applyDetachBothPlacesPreference()'s own comment.
+    // Read once in setApplicationProperties() (no live-transition side effects, nothing is open
+    // yet) and re-read live thereafter through that same method.
+    bool detachBothPlacesEnabled_ = false;
+    static constexpr const char* kDetachBothPlacesKey = "detachedPanelBothPlaces";
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BottomDockComponent)
 };

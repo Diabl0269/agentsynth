@@ -76,6 +76,13 @@ moving.**
   `isVisible()` says nothing about it;
 - `isOwnPanelShowing()` covers the "Own panel" placement.
 
+FRO336: `BottomDockComponent::refreshMeters()` additionally ticks the "both places" mirror view
+(`MixerMirrorController::refreshMetersIfOpen()`) whenever one is open — no separate gate needed,
+since the docked `mixer_` stays on the Mixer tab (and so `isMixerShowing()` stays true) for the whole
+time a mirror can exist. The mirror polls its own `MeterReader::MixerMirror` latch slot
+(`Source/Mixer/PeakMeterLatch.h`), never `MeterReader::Mixer`, so its cadence never steals the docked
+view's peaks or vice versa.
+
 **A detach or redock toggle reparents the SAME `MixerPanelComponent`, never rebuilds it, and
 deliberately skips `rebuild()`** (`BottomDockComponent::applyTabVisibility(false)` from that one
 caller). Unlike a real tab switch, nothing about which graph nodes the mixer shows has changed, and

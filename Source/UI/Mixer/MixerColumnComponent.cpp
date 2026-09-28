@@ -174,12 +174,14 @@ MixerColumnComponent::MixerColumnComponent() {
 }
 
 void MixerColumnComponent::configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager,
-                                     synth::MacroSet& macros, GraphEditor& graphEditor, AudioEngine& audioEngine) {
+                                     synth::MacroSet& macros, GraphEditor& graphEditor, AudioEngine& audioEngine,
+                                     synth::MeterReader meterReader) {
     graphEditor_ = &graphEditor;
     graph_ = &graph;
     undoManager_ = &undoManager;
     audioEngine_ = &audioEngine;
     macros_ = &macros;
+    meterReader_ = meterReader;
     insertList_.configure(graph, undoManager, macros, graphEditor);
     sendList_.configure(graph, undoManager, macros, graphEditor);
     // FRO133: fires once per send row rebuilt inside sendList_ (MixerSendList::rebuildKnobs(),
@@ -358,6 +360,8 @@ void MixerColumnComponent::toggleMuted() {
     undoManager_->pushSnapshotFromCapture(*graph_);
     refreshMuteSoloAccessibility(m, dynamic_cast<ChannelStripModule*>(n->getProcessor()));
     repaint();
+    if (onLiveStateChanged)
+        onLiveStateChanged();
 }
 
 void MixerColumnComponent::toggleSoloed() {
@@ -374,6 +378,8 @@ void MixerColumnComponent::toggleSoloed() {
     undoManager_->pushSnapshotFromCapture(*graph_);
     refreshMuteSoloAccessibility(dynamic_cast<ModuleBase*>(n->getProcessor()), strip);
     repaint();
+    if (onLiveStateChanged)
+        onLiveStateChanged();
 }
 
 // FRO253: see this method's own header comment -- re-syncs the M/S visuals after something other
@@ -418,7 +424,7 @@ void MixerColumnComponent::refreshMeter(float elapsedSeconds) {
         auto* node = graph_->getNodeForId(nodeId_);
         auto* processor = node != nullptr ? node->getProcessor() : nullptr;
         if (auto* strip = dynamic_cast<ChannelStripModule*>(processor))
-            return strip->takeMeterPeak(synth::MeterReader::Mixer, leg);
+            return strip->takeMeterPeak(meterReader_, leg);
         return 0.0f;
     };
     meter_.refresh(elapsedSeconds);

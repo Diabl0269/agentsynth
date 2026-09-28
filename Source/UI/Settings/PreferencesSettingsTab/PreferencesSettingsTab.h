@@ -100,6 +100,12 @@ public:
     // restart) via the same settings-file ChangeListener every other live preference here uses.
     juce::String getMixerPlacement() const;
     void setMixerPlacement(const juce::String& placement);
+    // FRO336 (docs/mixer/panel.md#placement-and-detachable-windows): "When a panel opens in its own
+    // window" -- "move" (default) or "both". Read once at launch by BottomDockComponent and
+    // re-applied live the same way as getMixerPlacement() above. Only the Mixer honours "both"
+    // today (see BottomDockComponent::usesMixerMirrorForDetach).
+    juce::String getPanelDetachMode() const;
+    void setPanelDetachMode(const juce::String& mode);
     // MIDI Remote group (docs/control/midi-remote-ui.md#settings). Default takeover is never
     // Takeover::useDefault; both are picked up live by MainComponent via the settings file.
     synth::Takeover getMidiRemoteDefaultTakeover() const;
@@ -202,6 +208,7 @@ private:
     void persistMixerDefaultTrackPresetAudio(const juce::String& presetName);
     void persistMixerDefaultTrackPresetInstrument(const juce::String& presetName);
     void persistMixerPlacement(const juce::String& placement);
+    void persistPanelDetachMode(const juce::String& mode);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
     void persistDualIOPerModuleOverrides();
     void persistMidiRemoteDefaultTakeover(synth::Takeover takeover);
@@ -214,7 +221,10 @@ private:
     // FRO12 (P9-6): constructs/wires the Mixer placement combo, same "own named step" reason as
     // setupMixerDefaultTrackPresetControls() above.
     void setupMixerPlacementControls();
-    // FRO136: the MIDI Remote group, chained from the tail of setupMixerPlacementControls() for the
+    // FRO336: the panel-detach-mode combo, chained from the tail of setupMixerPlacementControls()
+    // for the same baselined-constructor reason.
+    void setupPanelDetachModeControls();
+    // FRO136: the MIDI Remote group, chained from the tail of setupPanelDetachModeControls() for the
     // same baselined-constructor reason.
     void setupMidiRemoteControls();
 
@@ -271,8 +281,15 @@ private:
         const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
         const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
 
-    // FRO136: lays out the MIDI Remote group, chained from layoutMixerPlacementGroup() the same way
-    // that one is chained from layoutMixerDefaultTrackPresetGroup().
+    // FRO336: lays out the panel-detach-mode row, chained from layoutMixerPlacementGroup() the same
+    // way that one is chained from layoutMixerDefaultTrackPresetGroup().
+    void layoutPanelDetachModeGroup(
+        int& y, int contentWidth, bool previousGroupWasVisible,
+        const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+        const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
+
+    // FRO136: lays out the MIDI Remote group, chained from layoutPanelDetachModeGroup() the same way
+    // that one is chained from layoutMixerPlacementGroup().
     void
     layoutMidiRemoteGroup(int& y, int contentWidth, bool previousGroupWasVisible,
                           const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
@@ -381,6 +398,10 @@ private:
     // combo id 1) / Own panel (2) / Window (3).
     juce::Label mixerPlacementLabel;
     juce::ComboBox mixerPlacementCombo;
+    // FRO336 (docs/mixer/panel.md#placement-and-detachable-windows): "When a panel opens in its own
+    // window" -- Move it there (default, combo id 1) / Show it in both places (2).
+    juce::Label panelDetachModeLabel;
+    juce::ComboBox panelDetachModeCombo;
     // FRO136: Default takeover (Jump / Pick-up / Scale) and the badge switch.
     juce::Label midiRemoteTakeoverLabel;
     juce::ComboBox midiRemoteTakeoverCombo;

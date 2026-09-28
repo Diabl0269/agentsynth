@@ -82,6 +82,10 @@ void TimelineClipLaneArea::refreshFromDoc() {
                 alive.push_back(clip.id);
     }
     selection_.retainOnly(alive);
+    // A range whose corner track was removed has no rows left to cover — drop it rather than keep
+    // a selection nothing can paint or act on.
+    if (range_.isActive() && (doc_ == nullptr || !range_.coveredRows(*doc_)))
+        range_.clear();
     // A rename in flight over a clip this mutation removed has nothing left to commit to — drop
     // the editor rather than let a later Return call setClipName on a dead id.
     if (renameEditor_ != nullptr && (doc_ == nullptr || doc_->getClip(renamingClip_) == nullptr))
@@ -378,6 +382,7 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
     paintDragGhosts(g);
     paintDrawGhost(g);
     paintSplitPreview(g);
+    paintRange(g);
 
     if (dragMode_ == DragMode::Marquee)
         paintMarquee(g);

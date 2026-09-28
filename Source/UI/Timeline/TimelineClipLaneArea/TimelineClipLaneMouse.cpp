@@ -45,6 +45,12 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
     lastDragPointer_ = e.getPosition();
 
     if (e.mods.isPopupMenu()) {
+        // Inside a live range the range's own verbs win over the clip under the pointer — the
+        // range is what the user just made, and a clip menu would act on one clip of it.
+        if (activeTool_ == EditTool::Range && rangeRect().contains(e.getPosition())) {
+            showRangeContextMenu(e.getPosition());
+            return;
+        }
         auto hit = hitTestClip(e.getPosition());
         if (!hit)
             return; // empty-space right-click: no menu, selection untouched (GraphEditor's rule)
@@ -58,6 +64,12 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
 
     if (!e.mods.isLeftButtonDown())
         return;
+
+    // The Range tool drags a time span, not a clip — see TimelineClipLaneRange.cpp.
+    if (activeTool_ == EditTool::Range) {
+        beginRangeGesture(e);
+        return;
+    }
 
     // Every non-Select tool is a click action (Draw's drag included): none of them selects,
     // marquees or trims, so they never reach the pointer logic below.
@@ -139,6 +151,10 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
 }
 
 void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
+    if (dragMode_ == DragMode::Range) {
+        updateRangeGesture(e.getPosition());
+        return;
+    }
     if (dragMode_ == DragMode::Draw) {
         updateDrawGesture(e);
         return;
@@ -312,6 +328,10 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
     // marquee/pendingEmptyClick release reaches this point too and the timer must not care which.
     stopTimer();
 
+    if (dragMode_ == DragMode::Range) {
+        endRangeGesture();
+        return;
+    }
     if (dragMode_ == DragMode::Draw) {
         commitDrawGesture();
         return;

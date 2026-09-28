@@ -26,6 +26,8 @@ synth::theme::Icon iconForEditTool(synth::ui::EditTool tool) noexcept {
     switch (tool) {
     case synth::ui::EditTool::Select:
         return Icon::ToolSelect;
+    case synth::ui::EditTool::Range:
+        return Icon::ToolRange;
     case synth::ui::EditTool::Split:
         return Icon::ToolSplit;
     case synth::ui::EditTool::Glue:
@@ -44,7 +46,7 @@ synth::theme::Icon iconForEditTool(synth::ui::EditTool tool) noexcept {
 //==============================================================================
 // ---- Edit-tool strip ----
 
-// The six buttons are built in the constructor, unconditionally (a headless build simply has no
+// The seven buttons are built in the constructor, unconditionally (a headless build simply has no
 // icon to draw in them). Exposed so a test can click one rather than synthesise a key press.
 juce::DrawableButton* TimelinePanelComponent::getToolButton(EditTool tool) const noexcept {
     return toolButtons_[(std::size_t)tool].get();
@@ -53,7 +55,7 @@ juce::DrawableButton* TimelinePanelComponent::getToolButton(EditTool tool) const
 // Owned here (rather than by the clip-lane area or the roll individually) because the two share a
 // rect -- only one is ever visible -- and a tool row that changed meaning depending on which
 // editor happened to be showing would be a trap. Setting it pushes the tool into BOTH editors and
-// lights the matching strip button; the number keys (1/3/4/5/7/8) and the buttons are the two ways
+// lights the matching strip button; the number keys (1/2/3/4/5/7/8) and the buttons are the two ways
 // a user reaches it.
 void TimelinePanelComponent::setActiveTool(EditTool tool) {
     activeTool_ = tool;

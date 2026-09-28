@@ -73,7 +73,7 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     //
     // With NO manager (headless tests, embeddings with no settings store) the pre-shortcut behaviour
     // is kept verbatim: the digits come off editToolForKeyChar, command-modified digits are left
-    // alone (a host/app menu shortcut owns those), and the digits EditTool.h reserves — 2, 6 and 9 —
+    // alone (a host/app menu shortcut owns those), and the digits EditTool.h reserves — 6 and 9 —
     // return false and keep whatever meaning they have elsewhere. That fallback reads the TEXT
     // CHARACTER first, which is what a real keystroke carries on a layout where the digit needs a
     // modifier; the manager path cannot do that, since a modifier there is part of the binding.

@@ -58,10 +58,28 @@ bool TimelineClipLaneArea::keyPressed(const juce::KeyPress& key) {
     };
 
     if (matchesLoopSelection()) {
-        const auto span = getSelectedClipSpan();
+        // A live range loops exactly its own span; otherwise the selected clips' span.
+        auto span = getSelectedClipSpan();
+        if (const auto range = getRangeSpan())
+            span = std::make_pair(range->startBeat, range->endBeat);
         if (!span || !onLoopRangeRequested)
             return false;
         onLoopRangeRequested(span->first, span->second);
+        return true;
+    }
+
+    // Range verbs first: a live range means the Range tool is active and the clip selection is
+    // empty (see TimelineClipLaneRange.cpp). Shift+Delete also closes the gap.
+    const bool deleteKey = key.isKeyCode(juce::KeyPress::deleteKey) || key.isKeyCode(juce::KeyPress::backspaceKey);
+    if (deleteKey && getRangeSpan()) {
+        const auto mods = key.getModifiers();
+        if (mods.isCommandDown() || mods.isAltDown() || mods.isCtrlDown())
+            return false;
+        applyRangeChoice(mods.isShiftDown() ? RangeChoice::DeleteCloseGap : RangeChoice::Delete);
+        return true;
+    }
+    if (key == juce::KeyPress::escapeKey && range_.isActive()) {
+        clearRange();
         return true;
     }
 
