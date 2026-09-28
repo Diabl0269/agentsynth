@@ -27,7 +27,62 @@ std::vector<juce::TextButton*> findWavetableTabs(ModuleComponent& card) {
                         tabs.push_back(b);
     return tabs;
 }
+
+// A real left click (mouseDown + mouseUp) on `button`. Button re-declares mouseDown/mouseUp as
+// protected overrides of Component's public virtuals, so they are reached through a Component&
+// (docs/development/test-patterns.md, "test the real mouse path").
+void clickButton(juce::Button& button) {
+    auto& asComponent = static_cast<juce::Component&>(button);
+    const auto centre = button.getLocalBounds().getCentre().toFloat();
+    const auto event = [&] {
+        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), centre,
+                                juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f,
+                                0.0f, &asComponent, &asComponent, juce::Time::getCurrentTime(), centre,
+                                juce::Time::getCurrentTime(), 1, false);
+    };
+    asComponent.mouseDown(event());
+    asComponent.mouseUp(event());
+}
 } // namespace
+
+// The tab buttons sit inside the WavetableTabStrip child, one level below the card. A point on a
+// tab, hit-tested from the card, must land on that tab (the strip must not swallow it), and a real
+// click there must switch the page without resizing the card.
+TEST_F(ModuleComponentTest, WavetableTabRealClickThroughTheCardSwitchesThePage) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    WavetableOscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+    moduleComponent.setVisible(true);
+
+    const auto tabs = findWavetableTabs(moduleComponent);
+    ASSERT_EQ(tabs.size(), (size_t)WavetableTabStrip::kNumPages);
+    const int height = moduleComponent.getHeight();
+
+    const auto isVisibleSlider = [&](const juce::String& id) {
+        for (auto* child : moduleComponent.getChildren())
+            if (auto* s = dynamic_cast<juce::Slider*>(child))
+                if (s->getComponentID() == id)
+                    return s->isVisible();
+        return false;
+    };
+    ASSERT_TRUE(isVisibleSlider("Octave")) << "the Tune page should be showing first";
+
+    for (int page = WavetableTabStrip::kNumPages - 1; page >= 0; --page) {
+        auto* tab = tabs[(size_t)page];
+        const auto pointOnCard = moduleComponent.getLocalPoint(tab, tab->getLocalBounds().getCentre());
+        EXPECT_EQ(moduleComponent.getComponentAt(pointOnCard), tab)
+            << "a click on tab " << page << " does not reach its button";
+
+        clickButton(*tab);
+        EXPECT_TRUE(tab->getToggleState()) << "tab " << page << " is not selected after a real click";
+        EXPECT_EQ(moduleComponent.getHeight(), height) << "the card resized on tab " << page;
+    }
+
+    // Back on Tune (page 0) after the loop, and Unison-page knobs are hidden again.
+    EXPECT_TRUE(isVisibleSlider("Octave"));
+    EXPECT_FALSE(isVisibleSlider("Detune"));
+}
 
 TEST_F(ModuleComponentTest, WavetableCardBuildsDisplayAndLoadButton) {
     AudioEngine engine;
