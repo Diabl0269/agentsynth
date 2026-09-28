@@ -5,6 +5,8 @@
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
+#include <utility>
 #include <vector>
 
 // ControllerSurfaceComponent.h -- FRO131 (docs/control/midi-remote-ui.md#surface-centre): the MIDI
@@ -14,6 +16,10 @@
 // click, a marquee drag over empty grid space) and group move/delete -- selection, marquee and
 // group-drag are each their own concern unit (ControllerSurfaceSelection.cpp,
 // ControllerSurfaceMarquee.cpp, ControllerSurfaceGroupDrag.cpp); this header only declares them.
+// FRO331: pan/zoom (ControllerSurfaceView.cpp) makes an overflowing grid navigable, mirroring
+// GraphEditor's canvas -- the cells live on a `Content` child carrying the view's AffineTransform,
+// never on this component directly, so every position cell code already computes (grid math,
+// marquee hit-testing, drag deltas) stays in that untransformed content-local space for free.
 namespace synth::ui {
 
 class ControllerSurfaceComponent : public juce::Component {
@@ -76,6 +82,8 @@ public:
      *  no cell with that id is currently shown. */
     float getCellValueForTest(const juce::String& controlId) const;
     const ControllerSurfaceCell* findCellForTest(const juce::String& controlId) const;
+    /** Non-const overload for a test driving a real mouseDown/mouseDrag/mouseUp on the cell found. */
+    ControllerSurfaceCell* findCellForTest(const juce::String& controlId);
     /** FRO270 test seam: whether a marquee drag is currently being painted. */
     bool isMarqueeActiveForTest() const noexcept { return marqueeActive_; }
 
@@ -97,21 +105,36 @@ public:
 
     void resized() override;
     void paint(juce::Graphics& g) override;
-    void paintOverChildren(juce::Graphics& g) override;
     bool keyPressed(const juce::KeyPress& key) override;
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
+    /** FRO331: plain wheel/trackpad-scroll pans (so an overflowing grid is navigable without a
+     *  drag); Cmd+wheel zooms, anchored at the cursor. */
+    void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
+    /** FRO331: trackpad pinch zooms, anchored at the pinch point. */
+    void mouseMagnify(const juce::MouseEvent& event, float scaleFactor) override;
+
+    /** FRO331: the content-space rectangle currently visible through this component's bounds, at
+     *  the current pan/zoom -- the inverse of the view transform applied to getLocalBounds(). */
+    juce::Rectangle<float> getVisibleContentRect() const noexcept;
+    float getZoomLevelForTest() const noexcept { return zoomLevel_; }
+    juce::Point<float> getPanOffsetForTest() const noexcept { return panOffset_; }
 
     static constexpr int kCellSize = ControllerSurfaceCell::kCellSize;
-    static constexpr int kCellMargin = 6;
+    static constexpr int kCellMargin = ControllerSurfaceCell::kCellMargin;
+    /** FRO331: zoom clamp, same shape as GraphEditor's own -- a control-surface grid never needs
+     *  GraphEditor's full [0.1, 2.0] range (a cell below ~0.4x is illegible; above 2x is rarely
+     *  useful for a fixed 56 px grid). */
+    static constexpr float kMinZoom = 0.4f;
+    static constexpr float kMaxZoom = 2.0f;
 
 private:
     // ---- FRO270 selection (ControllerSurfaceSelection.cpp) ----
     void setSelectionInternal(std::vector<juce::String> ids, bool notify = true);
     void handleCellSelected(const juce::String& controlId, const juce::ModifierKeys& mods);
 
-    // ---- FRO270 marquee (ControllerSurfaceMarquee.cpp) ----
+    // ---- FRO270 marquee / FRO331 pan (ControllerSurfaceMarquee.cpp) ----
     std::vector<juce::String> collectMarqueeHits() const;
 
     // ---- FRO270 group drag (ControllerSurfaceGroupDrag.cpp) ----
@@ -121,19 +144,54 @@ private:
     std::vector<juce::String> dragGroupFor(const juce::String& controlId) const;
     static void moveCellToLayout(ControllerSurfaceCell& cell, int col, int row);
 
+    // ---- FRO331 pan/zoom (ControllerSurfaceView.cpp) ----
+    // The cells' real parent: carries the view's AffineTransform (scale then translate) so every
+    // child stays in one untransformed content-local coordinate space regardless of pan/zoom.
+    class Content : public juce::Component {
+    public:
+        explicit Content(ControllerSurfaceComponent& owner);
+        void paint(juce::Graphics& g) override;
+        void paintOverChildren(juce::Graphics& g) override;
+
+    private:
+        ControllerSurfaceComponent& owner_;
+    };
+
+    void updateTransform();
+    void applyZoom(float newZoomLevel, juce::Point<float> screenAnchor);
+    void restoreOrResetView(const juce::String& newProfileId);
+
+    Content content_;
     juce::String profileId_;
     std::vector<juce::String> selectedIds_;
     juce::String pulseControlId_;
     double pulseSinceMs_ = 0.0;
     juce::OwnedArray<ControllerSurfaceCell> cells_;
 
-    // Marquee drag state (ControllerSurfaceMarquee.cpp): a press on empty grid space that turns
-    // into a drag once the pointer actually moves, mirroring ControllerSurfaceCell's own
-    // click-vs-drag debounce.
+    // Marquee drag state (ControllerSurfaceMarquee.cpp), in content-local (canvas) coordinates so
+    // it survives pan/zoom: a Shift-press on empty grid space that turns into a drag once the
+    // pointer actually moves, mirroring ControllerSurfaceCell's own click-vs-drag debounce. A plain
+    // (non-Shift) press on empty space is pan or a deselect-click instead -- see pendingEmptyClick_.
     juce::Point<int> marqueeAnchor_;
     juce::Rectangle<int> marqueeRect_;
     bool marqueeActive_ = false;
+    bool marqueeArmed_ = false; // Shift was down at mouseDown -- this gesture can only ever be a marquee
     bool marqueeAdditive_ = false;
+
+    // Pan state (ControllerSurfaceMarquee.cpp): a plain press on empty space is pan-or-click,
+    // decided at mouseUp by whether any drag actually moved the view (pendingEmptyClick_ latches
+    // false on the first pan step) -- mirrors GraphEditor::pendingEmptyCanvasClick.
+    bool pendingEmptyClick_ = false;
+    juce::Point<float> lastPanMouse_;
+
+    // View transform (ControllerSurfaceView.cpp): screen = content * zoomLevel_ + panOffset_.
+    juce::Point<float> panOffset_;
+    float zoomLevel_ = 1.0f;
+    // FRO331: trivial in-memory (session-only, never written to disk) view-per-controller memory
+    // -- switching back to a profile already visited this session restores the pan/zoom it was
+    // left at, keyed by profileId. Deliberately not part of ControllerProfile/persisted state: see
+    // this member's use in restoreOrResetView()'s own comment.
+    std::map<juce::String, std::pair<juce::Point<float>, float>> savedViewByProfileId_;
 
     // Live group-drag state (ControllerSurfaceGroupDrag.cpp): the last delta reported by whichever
     // cell has mouse capture for the gesture, read back by handleCellDragEnded() (a cell's own

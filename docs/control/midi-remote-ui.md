@@ -184,11 +184,26 @@ showing, gated exactly like `BottomDockComponent::refreshMeters` — no free-run
 **Multi-select (FRO270).** Plain click replaces the selection with one control; shift-click adds a
 control to it (never removes one — there is no natural linear order on a 2D grid to "extend" a
 range along); cmd-click (`ModifierKeys::commandModifier`) toggles a control in/out. Pressing on
-EMPTY grid space and dragging draws a marquee rectangle — every control whose cell it intersects
-becomes the selection on release (shift held adds to whatever was already selected); a press with
-no drag on empty space, or Esc, clears it. The selection is owned by the surface itself and
-survives a live refresh rebuild (Detect, a move, an undo/redo) — any id no longer present is
-silently dropped, and switching to a different controller clears it, same as before FRO270.
+EMPTY grid space and Shift-dragging draws a marquee rectangle — every control whose cell it
+intersects becomes the selection on release (Cmd+Shift held adds to whatever was already selected,
+matching the module canvas's own additive-marquee modifier); a press with no drag on empty space,
+or Esc, clears it. The selection is owned by the surface itself and survives a live refresh
+rebuild (Detect, a move, an undo/redo) — any id no longer present is silently dropped, and
+switching to a different controller clears it, same as before FRO270.
+
+**Pan/zoom (FRO331).** A plain drag (no Shift) on EMPTY grid space pans the view instead of
+drawing a marquee — the Shift requirement above is what disambiguates the two gestures, mirroring
+`GraphEditor`'s own drag-to-pan/Shift-to-marquee split on the module canvas. Cmd+scroll (trackpad
+pinch too) zooms anchored at the cursor/pinch point — the point under it stays fixed — clamped to
+roughly [0.4x, 2x], a smaller range than the module canvas's own [0.1x, 2x] since a control-surface
+cell has no benefit from zooming out further than "the whole grid fits." A plain scroll (no Cmd)
+pans, the same as a drag, so a large controller stays reachable from a trackpad without a drag
+gesture at all. Pan/zoom is remembered per controller for the session (switching to a different
+controller and back restores the exact view it was left at) but is not written to disk — it resets
+to the default view (100%, centred at the origin) on the next launch. Implemented independently of
+`GraphEditor`'s own transform (`Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceView.cpp`)
+rather than shared with it, per this codebase's header-cost rule (`GraphEditor.h` is never included
+outside `Source/UI/Graph/`).
 
 **Group move.** Dragging any cell that is part of a multi-selection moves the whole selection
 together as one block, keeping every member's relative layout, snapped to cells the same way a

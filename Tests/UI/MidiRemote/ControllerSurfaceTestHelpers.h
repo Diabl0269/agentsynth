@@ -61,13 +61,25 @@ inline std::vector<synth::ui::ControllerSurfaceComponent::CellModel> twoAdjacent
     };
 }
 
+// FRO331 bugfix: 8 pads in a single row, cols 0-7 -- unlike twoAdjacentPlusBystanderModel()'s
+// bystander parked far away (col 5), a drag's intermediate whole-cell steps here cross cells
+// OCCUPIED by unselected pads (pad5..pad8), which is exactly the path twoAdjacentPlusBystanderModel()
+// can't exercise: a group drag whose live intermediate positions overlap other controls before
+// landing on a free destination.
+inline std::vector<synth::ui::ControllerSurfaceComponent::CellModel> eightPadsInARowModel() {
+    std::vector<synth::ui::ControllerSurfaceComponent::CellModel> cells;
+    for (int i = 0; i < 8; ++i)
+        cells.push_back(
+            makeCellModel("pad" + juce::String(i + 1), "Pad " + juce::String(i + 1), synth::ControlKind::pad, i, 0));
+    return cells;
+}
+
+// FRO331: cells are grandchildren of `surface` (they live on its private content_ child, which
+// carries the pan/zoom transform -- ControllerSurfaceComponent.h), not direct children, so this
+// goes through the component's own test seam rather than surface.getChildren().
 inline synth::ui::ControllerSurfaceCell* findCell(synth::ui::ControllerSurfaceComponent& surface,
                                                   const juce::String& controlId) {
-    for (auto* child : surface.getChildren())
-        if (auto* cell = dynamic_cast<synth::ui::ControllerSurfaceCell*>(child);
-            cell != nullptr && cell->getControlId() == controlId)
-            return cell;
-    return nullptr;
+    return surface.findCellForTest(controlId);
 }
 
 inline juce::MouseEvent surfaceMouseEvent(juce::Component& comp, juce::Point<float> pos,
@@ -100,9 +112,13 @@ public:
     // Fires one mouseDrag for a cumulative offset of `dCols`/`dRows` WHOLE CELLS from the drag's
     // start (not from the previous step) -- mirrors what a real mouse position `parentOffsetInCells`
     // cells away from the mouseDown point produces, however many steps it takes to get there.
+    // kCellPitch (kCellSize + the inter-cell margin), NOT kCellSize alone: the on-screen distance
+    // between adjacent cells is the pitch, matching what ControllerSurfaceCell::mouseDrag itself
+    // now divides by (see its own bugfix comment) -- stepping by kCellSize alone would feed the
+    // cell exactly what its old, buggy divisor expected and could never have caught that bug.
     void stepToOffset(int dCols, int dRows) {
-        const auto cellSize = (float)synth::ui::ControllerSurfaceCell::kCellSize;
-        const auto targetParent = downParent_ + juce::Point<float>((float)dCols * cellSize, (float)dRows * cellSize);
+        const auto cellPitch = (float)synth::ui::ControllerSurfaceCell::kCellPitch;
+        const auto targetParent = downParent_ + juce::Point<float>((float)dCols * cellPitch, (float)dRows * cellPitch);
         lastLocal_ = targetParent - cell_.getPosition().toFloat(); // cell's CURRENT (possibly moved) bounds
         cell_.mouseDrag(surfaceMouseEvent(cell_, lastLocal_, downLocal_, true));
     }
@@ -113,6 +129,47 @@ private:
     juce::Component& cell_;
     juce::Point<float> downLocal_;
     juce::Point<float> downParent_;
+    juce::Point<float> lastLocal_;
+};
+
+// FRO331: like DragDriver, but originates every step's mouse position in the SURFACE's own local
+// space -- this suite's stand-in for real OS screen coordinates, since the surface is the root
+// component in every headless test here -- and converts it into the cell's local space via
+// juce::Component::getLocalPoint(), the exact conversion JUCE performs when it delivers a real
+// event through an intervening transform. DragDriver deliberately never does this (it stays
+// entirely in parent-local units, by design -- see its own comment), so it cannot tell a correct
+// pan/zoom coordinate conversion from a broken one; this class is what a "drag lands where dropped
+// under zoom/pan" test actually needs. `dCols`/`dRows` are a CANVAS-space (content-local) offset in
+// whole cells from the drag's start, scaled by the surface's own current zoom to get the
+// equivalent on-screen distance -- exactly what a real mouse doing "N cells' worth of on-screen
+// travel at this zoom level" would produce.
+class ScreenSpaceDragDriver {
+public:
+    ScreenSpaceDragDriver(synth::ui::ControllerSurfaceComponent& surface, juce::Component& cell)
+        : surface_(surface)
+        , cell_(cell) {
+        downScreen_ = surface_.getLocalPoint(&cell_, cell_.getLocalBounds().getCentre().toFloat());
+        downLocal_ = cell_.getLocalPoint(&surface_, downScreen_);
+        lastLocal_ = downLocal_;
+        cell_.mouseDown(surfaceMouseEvent(cell_, downLocal_, downLocal_, false));
+    }
+
+    void stepToCanvasOffset(int dCols, int dRows) {
+        const float zoom = surface_.getZoomLevelForTest();
+        const auto cellPitch = (float)synth::ui::ControllerSurfaceCell::kCellPitch;
+        const auto targetScreen =
+            downScreen_ + juce::Point<float>((float)dCols * cellPitch, (float)dRows * cellPitch) * zoom;
+        lastLocal_ = cell_.getLocalPoint(&surface_, targetScreen);
+        cell_.mouseDrag(surfaceMouseEvent(cell_, lastLocal_, downLocal_, true));
+    }
+
+    void end() { cell_.mouseUp(surfaceMouseEvent(cell_, lastLocal_, downLocal_, true)); }
+
+private:
+    synth::ui::ControllerSurfaceComponent& surface_;
+    juce::Component& cell_;
+    juce::Point<float> downScreen_;
+    juce::Point<float> downLocal_;
     juce::Point<float> lastLocal_;
 };
 

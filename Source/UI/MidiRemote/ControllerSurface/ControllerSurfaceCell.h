@@ -76,6 +76,16 @@ public:
     void mouseUp(const juce::MouseEvent& event) override;
 
     static constexpr int kCellSize = 56;
+    // Bugfix (found while testing FRO331's pan/zoom): the grid's PITCH -- the pixel distance from
+    // one cell's origin to the next -- is kCellSize + the owner's inter-cell margin (6 px), not
+    // kCellSize alone (setControls()/moveCellToLayout() on ControllerSurfaceComponent both lay
+    // cells out on this pitch already). mouseDrag() divides the drag's pixel offset by this to get
+    // a whole-cell delta; dividing by kCellSize alone under-counts the pitch and over-reports the
+    // delta (e.g. a real 8-cell, 8*62 px drag was reported as round(8*62/56) = 9 cells). The margin
+    // is duplicated here (ControllerSurfaceComponent::kCellMargin is the same 6, forwarded from
+    // this constant) rather than the cell including ControllerSurfaceComponent.h for it.
+    static constexpr int kCellMargin = 6;
+    static constexpr int kCellPitch = kCellSize + kCellMargin;
     static constexpr double kDetectPulseMaxMs = 10000.0;
     static constexpr double kDetectFlashMs = 250.0;
 
