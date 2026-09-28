@@ -18,13 +18,6 @@
 
 namespace detail {
 
-// Sentinel wavetable tab-strip page ids for controls that live outside the strip (see
-// wavetablePageFor and the WavetablePage table in ModuleComponentWavetable.cpp). Shared with
-// layoutDefaultContent (ModuleComponentLayout.cpp), which tests kTabChrome to tell whether a
-// tabbed card has replaced the flat combo grid.
-inline constexpr int kTabPinned = -1; // always visible, above the strip
-inline constexpr int kTabChrome = -2; // laid out with the display band instead
-
 // ---- Modulation-ring geometry (FRO287) --------------------------------------------------------
 // The ONE place the ring/band centre and radius are computed from a knob's bounds -- shared by
 // paintModulationRings (ModuleComponentPaint.cpp) and CardKnobSlider's annulus hit-test

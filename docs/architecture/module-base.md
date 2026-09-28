@@ -131,7 +131,8 @@ constants/helpers shared by two or more of them. Source layout:
 - `ModuleComponent.cpp` — construction/teardown, header/theme helpers, the auto-UI control builder (`createControls`)
 - `ModuleComponentEQCard.cpp` — the Parametric EQ card's layout geometry, knob placement, pop-out window, undo-gesture wiring
 - `ModuleComponentAudioDrop.cpp` — Sampler control creation and audio-file drag-and-drop for the Sampler and Wavetable
-- `ModuleComponentWavetable.cpp` — the Wavetable oscillator's control creation and its tabbed page strip
+- `ModuleComponentWavetable.cpp` — the Wavetable oscillator's control creation, the hookup of its `WavetableTabStrip`, and the wavetable load/browse flow
+- `WavetableTabStrip.h/.cpp` — the Wavetable card's tabbed page strip as its own component (tab buttons, page table, page visibility and layout)
 - `ModuleComponentLayout.cpp` — the generic auto-layout pass (`updateLayout`, `layoutDefaultContent`, macro-port widget sizing)
 - `ModuleComponentPaint.cpp` — `paint()`, port geometry/hit-testing, `resized()`'s per-module-type dispatch
 - `ModuleComponentInteraction.cpp` — parameter callback reflection, macro/poly/dual-IO state, context menus, mouse handling, title rename

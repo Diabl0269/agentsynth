@@ -6,11 +6,28 @@
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ModuleComponent/WavetableTabStrip.h"
 #include "UI/Layout/LayoutUtil.h"
 #include <algorithm>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <set>
+#include <vector>
+
+namespace {
+// The tab buttons live inside the card's WavetableTabStrip child, not directly on the card.
+std::vector<juce::TextButton*> findWavetableTabs(ModuleComponent& card) {
+    std::vector<juce::TextButton*> tabs;
+    for (auto* child : card.getChildren())
+        if (auto* strip = dynamic_cast<WavetableTabStrip*>(child))
+            for (auto* grandchild : strip->getChildren())
+                if (auto* b = dynamic_cast<juce::TextButton*>(grandchild))
+                    if (b->getComponentID().startsWith("wtTab"))
+                        tabs.push_back(b);
+    return tabs;
+}
+} // namespace
 
 TEST_F(ModuleComponentTest, WavetableCardBuildsDisplayAndLoadButton) {
     AudioEngine engine;
@@ -201,10 +218,9 @@ TEST_F(ModuleComponentTest, KnobsResolveToTheirCVJackAsModulationDropTargets) {
     const auto octaveCentre = octave->getBounds().getCentre();
     ASSERT_TRUE(moduleComponent.getModTargetPortForPoint(octaveCentre).has_value());
 
-    for (auto* child : moduleComponent.getChildren())
-        if (auto* b = dynamic_cast<juce::TextButton*>(child))
-            if (b->getComponentID() == "wtTab1")
-                b->onClick(); // headless: triggerClick posts async, with no pump to deliver it
+    findWavetableTabs(moduleComponent)
+        .at(1)
+        ->onClick(); // headless: triggerClick posts async, with no pump to deliver it
 
     EXPECT_FALSE(moduleComponent.getModTargetPortForPoint(octaveCentre).has_value())
         << "a knob whose page is hidden must not accept a modulation drop";
@@ -243,11 +259,7 @@ TEST_F(ModuleComponentTest, WavetableTabsSwitchContentWithoutResizingTheCard) {
     WavetableOscillatorModule processor;
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
-    std::vector<juce::TextButton*> tabs;
-    for (auto* child : moduleComponent.getChildren())
-        if (auto* b = dynamic_cast<juce::TextButton*>(child))
-            if (b->getComponentID().startsWith("wtTab"))
-                tabs.push_back(b);
+    const auto tabs = findWavetableTabs(moduleComponent);
 
     ASSERT_GE(tabs.size(), 4u) << "expected a multi-page tab strip";
 
@@ -306,11 +318,7 @@ TEST_F(ModuleComponentTest, ModulationRingsSkipKnobsOnInactiveTabPages) {
     WavetableOscillatorModule processor;
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
-    std::vector<juce::TextButton*> tabs;
-    for (auto* child : moduleComponent.getChildren())
-        if (auto* b = dynamic_cast<juce::TextButton*>(child))
-            if (b->getComponentID().startsWith("wtTab"))
-                tabs.push_back(b);
+    const auto tabs = findWavetableTabs(moduleComponent);
     ASSERT_GE(tabs.size(), 2u);
 
     // Page 0 (Tune) owns Octave; Position is pinned above the strip.
