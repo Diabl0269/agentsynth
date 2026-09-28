@@ -78,6 +78,22 @@ one group without pushing the transport controls off their left-aligned home.
 [`layout/icons.md`](../layout/icons.md). Null-guarded on both a headless LnF and a headless icon
 library.
 
+## The curve selector
+
+A compact `LaneGlyphButton` (`Source/UI/Timeline/TrackAutomationLanes/`) immediately right of the
+Draw button, shown only while `EditTool::Draw` is active (its slot is reserved either way, so
+switching tools never shifts the buttons around it). It paints the current curve as a drawn
+`juce::Path` glyph; a click opens a popup of all eight — Freehand, Line, Sine, Triangle, Square, Saw
+Up, Saw Down, Random — each with its own glyph image and a tick on the current one
+(`TrackAutomationLanes::applyCurveMenuChoice(menuId)`, menu id = 1 + index, is the headless hook).
+
+It shapes what Draw does on **track automation lane rows** only
+([track-automation](track-automation.md#tools)): Freehand → the lane editor's Pencil, Line → Line,
+a waveform → Shape of that kind. Clips are unaffected, and the bottom automation strip keeps its own
+tool row. Beside it sit the toolbar's other two automation controls: the global-automation strip
+toggle (with a lane-count badge) and "automation follows clips"
+([track-automation](track-automation.md#automation-follows-events)).
+
 ## Tool cursors
 
 `Source/UI/Timeline/ToolCursors.h`'s `makeToolCursor(EditTool, const juce::Drawable*)` renders the

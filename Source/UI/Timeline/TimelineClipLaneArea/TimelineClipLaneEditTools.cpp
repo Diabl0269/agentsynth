@@ -9,6 +9,7 @@
 
 #include "AppUndoManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/AutomationFollowsClips.h"
 #include "UI/Timeline/ToolCursors.h"
 #include <algorithm>
 #include <cmath>
@@ -309,7 +310,7 @@ std::optional<TimelineClipLaneArea::SplitPreview> TimelineClipLaneArea::getSplit
 juce::Rectangle<int> TimelineClipLaneArea::getDrawGhostRectForTest() const {
     if (dragMode_ != DragMode::Draw || !drawDragged_ || drawRow_ < 0)
         return {};
-    return computeClipRect(viewState_, drawRow_, drawAnchorBeat_, drawEndBeat_ - drawAnchorBeat_, getRowHeight());
+    return clipRectFor(drawRow_, drawAnchorBeat_, drawEndBeat_ - drawAnchorBeat_);
 }
 
 //---- Inline rename ------------------------------------------------------------
@@ -463,7 +464,17 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
     }
     case ClipContextChoice::Duplicate: {
         synth::ClipId newId;
-        auto mutate = [this, id, &newId] { newId = doc_->duplicateClip(id); };
+        std::vector<AutomationSpanEdit> spanEdits; // "automation follows events": the copy lands right after
+        if (const auto* clip = doc_->getClip(id); clip != nullptr && automationFollowsClips_)
+            if (auto spanEdit =
+                    automationSpanEditForClip(*doc_, id, AutomationSpanEdit::Kind::Copy, doc_->getTrackForClip(id)->id,
+                                              clip->startBeat + clip->lengthBeats))
+                spanEdits.push_back(*spanEdit);
+        auto mutate = [this, id, spanEdits, &newId] {
+            newId = doc_->duplicateClip(id);
+            if (newId.isValid())
+                applyAutomationSpanEdits(*doc_, spanEdits);
+        };
         if (undoManager_)
             undoManager_->recordTimelineChange(*doc_, mutate);
         else
@@ -473,7 +484,14 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
         break;
     }
     case ClipContextChoice::Delete: {
-        auto mutate = [this, id] { doc_->removeClip(id); };
+        std::vector<AutomationSpanEdit> spanEdits;
+        if (automationFollowsClips_)
+            if (auto spanEdit = automationSpanEditForClip(*doc_, id, AutomationSpanEdit::Kind::Remove))
+                spanEdits.push_back(*spanEdit);
+        auto mutate = [this, id, spanEdits] {
+            applyAutomationSpanEdits(*doc_, spanEdits);
+            doc_->removeClip(id);
+        };
         if (undoManager_)
             undoManager_->recordTimelineChange(*doc_, mutate);
         else

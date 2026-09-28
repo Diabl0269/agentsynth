@@ -10,6 +10,7 @@
 
 #include "AppUndoManager.h"
 #include "Transport/TransportService.h"
+#include "UI/Timeline/AutomationFollowsClips.h"
 #include <algorithm>
 #include <cmath>
 
@@ -211,9 +212,20 @@ void TimelineClipLaneArea::updateDragPreviewFromLastPointer() {
         // it could cross tracks — rather than dropping the clips that would have fitted.
         // Clamping the whole group rather than dropping just the clips that would fit is
         // deliberate: a partial drop would silently tear a selection apart.
-        const int rowHeight = getRowHeight();
-        int rowDelta =
-            rowHeight > 0 ? (int)std::llround((double)(lastDragPointer_.y - mouseDownPos_.y) / (double)rowHeight) : 0;
+        // Through the shared row layout: the grabbed row's CENTRE moved by the pointer's y delta,
+        // resolved to a track (a lane row counts as its parent track, so an expanded track's lane
+        // rows are "over that track" and a clip can never land on a lane row). With no lane rows
+        // this is exactly the old round(dy / rowHeight).
+        int rowDelta = 0;
+        if (!dragClips_.empty()) {
+            int grabbedRow = dragClips_.front().trackIndex;
+            for (const auto& origin : dragClips_)
+                if (origin.id == activeClip_)
+                    grabbedRow = origin.trackIndex;
+            const auto& layout = getRowLayout();
+            const int grabbedCentre = layout.trackRowTop(grabbedRow) + layout.getTrackRowHeight() / 2;
+            rowDelta = layout.trackIndexForDrag(grabbedCentre + (lastDragPointer_.y - mouseDownPos_.y)) - grabbedRow;
+        }
         if (rowDelta != 0) {
             const auto& tracks = doc_->getTracks();
             for (const auto& origin : dragClips_) {
@@ -343,8 +355,20 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
                                          : synth::TrackId{});
             }
 
+            // "Automation follows events": built from the ORIGIN geometry before anything moves, and
+            // applied inside the same mutation, so the clip move and its automation are one undo step.
+            std::vector<AutomationSpanEdit> spanEdits;
+            if (automationFollowsClips_)
+                for (std::size_t i = 0; i < clips.size(); ++i)
+                    if (destTracks[i].isValid())
+                        if (auto spanEdit = automationSpanEditForClip(*doc_, clips[i].id,
+                                                                      copying ? AutomationSpanEdit::Kind::Copy
+                                                                              : AutomationSpanEdit::Kind::Move,
+                                                                      destTracks[i], clips[i].originalStart + delta))
+                            spanEdits.push_back(*spanEdit);
+
             std::vector<synth::ClipId> newIds;
-            auto mutate = [this, clips, destTracks, delta, copying, &newIds] {
+            auto mutate = [this, clips, destTracks, delta, copying, spanEdits, &newIds] {
                 for (std::size_t i = 0; i < clips.size(); ++i) {
                     const auto& origin = clips[i];
                     const double newStart = origin.originalStart + delta;
@@ -364,6 +388,7 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
                     doc_->moveClipToTrack(dup, destTracks[i], newStart);
                     newIds.push_back(dup);
                 }
+                applyAutomationSpanEdits(*doc_, spanEdits);
             };
             if (undoManager_)
                 undoManager_->recordTimelineChange(*doc_, mutate);
@@ -583,13 +608,12 @@ int TimelineClipLaneArea::dropRowFor(const juce::StringArray& files, int x, int 
 void TimelineClipLaneArea::setFileDropRow(int row) {
     if (row == fileDropRow_)
         return; // repaint ONLY on a row change — a drag reports every pixel of movement
-    const int rowHeight = getRowHeight();
     const int previous = fileDropRow_;
     fileDropRow_ = row;
     if (previous >= 0)
-        repaint(rowBounds(previous, rowHeight));
+        repaint(rowBounds(previous));
     if (fileDropRow_ >= 0)
-        repaint(rowBounds(fileDropRow_, rowHeight));
+        repaint(rowBounds(fileDropRow_));
 }
 
 bool TimelineClipLaneArea::isInterestedInFileDrag(const juce::StringArray& files) {

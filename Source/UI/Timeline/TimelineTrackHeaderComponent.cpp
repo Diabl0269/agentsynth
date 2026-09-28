@@ -173,7 +173,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     addAndMakeVisible(automationButton_);
     automationButton_.setComponentID("trackHeaderAutomationButton");
     automationButton_.setClickingTogglesState(false);
-    automationButton_.setTooltip("Show/hide this track's automation lane");
+    automationButton_.setTooltip("Show/hide this track's automation lanes");
     // T161: same focus opt-out as the M/S/R toggles above (see setUpToggle) — this button isn't
     // built through that lambda since it isn't a doc-state toggle.
     automationButton_.setWantsKeyboardFocus(false);
@@ -411,7 +411,21 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
                                           "' channel, shared with other tracks. Click to find it.");
     }
 
-    automationButton_.setVisible(!t->lanes.empty());
+    // A Midi/Audio track's A is always there (it expands/collapses the lane rows under the track,
+    // lit when there is automation to show); an Automation-kind track's A opens the global strip and
+    // only exists while it has a lane (docs/timeline/tracks.md#the-automation-button).
+    hasLanes_ = !t->lanes.empty();
+    const bool showAutomationButton = t->kind != synth::TrackKind::Automation || hasLanes_;
+    if (automationButton_.isVisible() != showAutomationButton) {
+        automationButton_.setVisible(showAutomationButton);
+        resized();
+    }
+    const int laneCount = (int)t->lanes.size();
+    const juce::String laneCountText = laneCount == 1 ? juce::String("1 lane") : juce::String(laneCount) + " lanes";
+    automationButton_.setTooltip(t->kind == synth::TrackKind::Automation
+                                     ? "Open this track's automation in the strip (" + laneCountText + ")"
+                                     : (lanesExpanded_ ? "Hide" : "Show") + juce::String(" this track's automation (") +
+                                           laneCountText + ")");
 
     // An Automation-kind track hosts lanes; a node binding is meaningless for it, so the chip is
     // hidden outright rather than shown pointing at nothing. Midi/Audio tracks are unaffected.
@@ -466,6 +480,19 @@ void TimelineTrackHeaderComponent::applyThemeDerivedColours() {
     soloButton_.setColour(juce::TextButton::textColourOnId, colours.bg0);
     armButton_.setColour(juce::TextButton::buttonOnColourId, colours.armOn);
     armButton_.setColour(juce::TextButton::textColourOnId, colours.bg0);
+    // A: an accent fill while its lanes are expanded, accent text while it has lanes to show (so
+    // existing automation is discoverable on a collapsed track), muted text when there are none.
+    automationButton_.setColour(juce::TextButton::buttonOnColourId, colours.accent);
+    automationButton_.setColour(juce::TextButton::textColourOnId, colours.bg0);
+    automationButton_.setColour(juce::TextButton::textColourOffId, hasLanes_ ? colours.accent : colours.textMuted);
+}
+
+void TimelineTrackHeaderComponent::setAutomationLanesExpanded(bool expanded) {
+    if (expanded == lanesExpanded_)
+        return;
+    lanesExpanded_ = expanded;
+    automationButton_.setToggleState(expanded, juce::dontSendNotification);
+    refreshFromDoc(); // re-words the A tooltip
 }
 
 void TimelineTrackHeaderComponent::lookAndFeelChanged() { applyThemeDerivedColours(); }
@@ -733,8 +760,21 @@ void TimelineTrackHeaderComponent::showBindingMenu() {
 }
 
 void TimelineTrackHeaderComponent::applyContextMenuChoice(int menuId) {
+    if (menuId == kToggleAutomationLanesMenuId) {
+        if (onAutomationToggleRequested)
+            onAutomationToggleRequested(trackId_);
+        return;
+    }
     if (host_ == nullptr)
         return;
+    if (menuId >= kAddAutomationLaneMenuIdBase) {
+        // Resolved against the snapshot buildContextMenu() took, the same click-resolution rule the
+        // "+ Track" menu's plugin list follows.
+        const auto index = (std::size_t)(menuId - kAddAutomationLaneMenuIdBase);
+        if (index < laneOptionsMenuSnapshot_.size())
+            host_->addPluginAutomationLane(laneOptionsMenuSnapshot_[index]);
+        return;
+    }
     if (menuId == kDeleteTrackMenuId)
         host_->deleteTrack(trackId_);
     else if (menuId == kMakeChannelMenuId && host_->canMakeChannelForTrack(trackId_))
@@ -755,6 +795,7 @@ juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
     const bool canSavePreset = host_ != nullptr && host_->canSaveTrackPresetForTrack(trackId_);
     menu.addItem(kSaveTrackPresetMenuId, "Save Track as Preset...", canSavePreset);
     menu.addItem(kSetTrackPresetDefaultMenuId, "Set as Default Track Preset", canSavePreset);
+    appendAutomationMenuItems(menu);
     menu.addSeparator();
     menu.addItem(kDeleteTrackMenuId, "Delete Track");
     return menu;
@@ -772,6 +813,43 @@ void TimelineTrackHeaderComponent::showContextMenu() {
         if (auto* self = safeThis.getComponent())
             self->applyContextMenuChoice(result);
     });
+}
+
+// The automation block of the row menu (docs/timeline/track-automation.md#expanding-a-track):
+// Show/Hide automation, and an "Add automation lane" submenu with one submenu per module this
+// track OWNS (TrackHeaderHost::getTrackAutomationParameterOptions), each listing its
+// not-yet-automated parameters. An Automation-kind track gets neither -- its lanes are global.
+void TimelineTrackHeaderComponent::appendAutomationMenuItems(juce::PopupMenu& menu) const {
+    laneOptionsMenuSnapshot_.clear();
+    const auto* t = track();
+    if (t == nullptr || t->kind == synth::TrackKind::Automation)
+        return;
+
+    menu.addSeparator();
+    menu.addItem(kToggleAutomationLanesMenuId, lanesExpanded_ ? "Hide automation" : "Show automation");
+    if (host_ != nullptr)
+        laneOptionsMenuSnapshot_ = host_->getTrackAutomationParameterOptions(trackId_);
+
+    juce::PopupMenu addMenu;
+    juce::String currentNode;
+    juce::PopupMenu moduleMenu;
+    auto flushModule = [&] {
+        if (currentNode.isEmpty())
+            return;
+        juce::String name = host_ != nullptr ? host_->getNodeDisplayName(currentNode) : juce::String();
+        addMenu.addSubMenu(name.isNotEmpty() ? name : currentNode.substring(0, 8), moduleMenu);
+        moduleMenu = juce::PopupMenu();
+    };
+    for (std::size_t i = 0; i < laneOptionsMenuSnapshot_.size(); ++i) {
+        const auto& option = laneOptionsMenuSnapshot_[i];
+        if (option.nodeUuid != currentNode) {
+            flushModule();
+            currentNode = option.nodeUuid;
+        }
+        moduleMenu.addItem(kAddAutomationLaneMenuIdBase + (int)i, option.label);
+    }
+    flushModule();
+    menu.addSubMenu("Add automation lane", addMenu, !laneOptionsMenuSnapshot_.empty());
 }
 
 } // namespace synth::ui

@@ -183,6 +183,9 @@ struct TrackHeaderHost {
      *  resolves). */
     virtual synth::LaneId addPluginAutomationLane(const PluginLaneOption& option) = 0;
 
+    /** Not-yet-automated parameters of the modules `track` owns; `label` is the parameter name only. */
+    virtual std::vector<PluginLaneOption> getTrackAutomationParameterOptions(synth::TrackId) const { return {}; }
+
     /** The properties file the colour picker's favourites shelf persists to, or nullptr for an
      *  in-memory-only picker (a header built for a test, or a host that hasn't wired one up yet).
      *  Non-pure so every existing TrackHeaderHost implementer keeps compiling unchanged. */
@@ -293,6 +296,9 @@ public:
     // FRO13 (P9-7): "Save track as preset.../Set as default", same id space.
     static constexpr int kSaveTrackPresetMenuId = 2002;
     static constexpr int kSetTrackPresetDefaultMenuId = 2003;
+    // Show/Hide automation, and "Add automation lane" entries (base + index into a build-time snapshot).
+    static constexpr int kToggleAutomationLanesMenuId = 2004;
+    static constexpr int kAddAutomationLaneMenuIdBase = 3000;
 
     TimelineTrackHeaderComponent(synth::TimelineDoc& doc, synth::TrackId trackId, TrackHeaderHost* host);
 
@@ -387,6 +393,9 @@ public:
     // single automation strip) works out whether that means "open this track's lane" or "close the
     // strip that's already showing it".
     std::function<void(synth::TrackId)> onAutomationToggleRequested;
+    // Mirrors the panel's expanded state onto the A button (lit) and the Show/Hide menu item.
+    void setAutomationLanesExpanded(bool expanded);
+    bool isAutomationLanesExpanded() const noexcept { return lanesExpanded_; }
 
     // ---- T166: whole-row drag-to-reorder -----------------------------------------
     //
@@ -561,6 +570,7 @@ private:
 
     void showBindingMenu();
     void showContextMenu();
+    void appendAutomationMenuItems(juce::PopupMenu& menu) const;
 
     // FRO14: the app's channel surface, or null (no host, or a host that wires none -- a test
     // stub). Every caller re-asks rather than caching: one cable drag can form or break the link.
@@ -629,6 +639,9 @@ private:
 
     juce::Colour resolvedColour_{juce::Colours::grey};
     bool chipWarning_ = false;
+    bool lanesExpanded_ = false;
+    bool hasLanes_ = false;
+    mutable std::vector<TrackHeaderHost::PluginLaneOption> laneOptionsMenuSnapshot_;
     // T166: true from the moment a background mouseDrag crosses the reorder threshold (see
     // onRowDragStarted) until the matching mouseUp. Reset to false BEFORE onRowDragEnded fires —
     // see that callback's own ordering-hazard comment.

@@ -19,7 +19,7 @@ namespace synth {
 // FRO13 (P9-7): lifted out of the anonymous namespace below (was: private to this file) so
 // ChannelFlowsTrackPreset.cpp's outside-modulator walk can reuse them too — see
 // ChannelFlowsInternal.h's extern declarations for why this is the one definition.
-juce::AudioProcessor* processorFor(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id) {
+juce::AudioProcessor* processorFor(const juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id) {
     auto* node = graph.getNodeForId(id);
     return node != nullptr ? node->getProcessor() : nullptr;
 }

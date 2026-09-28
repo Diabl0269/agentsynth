@@ -45,6 +45,9 @@ public:
     // tick. Same value and rationale as MidiRecorder::kMinNoteLengthBeats.
     static constexpr double kMinNoteLengthBeats = 1.0 / 32.0;
 
+    // Sample step (beats) at which EXPORT renders a Linear CC segment; see MidiClipFile.cpp.
+    static constexpr double kExportCcStepBeats = 1.0 / 32.0;
+
     // One track's worth of notes read from an SMF. Reuses TimelineDoc::MidiNote as-is — `id` is
     // left default (NoteId{}, the invalid sentinel) since these notes have not been assigned into
     // a doc yet; every other field is exactly what TimelineDoc::addNote expects. `startBeat` is
@@ -52,14 +55,17 @@ public:
     // clip-relative for a clip planted at that same beat zero — importIntoTrack relies on this to
     // place notes without re-basing them.
     struct ImportedTrack {
-        juce::String name;           // from a MetaEvent track-name event, if present; empty otherwise
-        std::vector<MidiNote> notes; // sorted by (startBeat, pitch), same invariant as Clip::notes
+        juce::String name;                           // from a MetaEvent track-name event, if present; empty otherwise
+        std::vector<MidiNote> notes;                 // sorted by (startBeat, pitch), same invariant as Clip::notes
+        std::vector<ClipControllerLane> controllers; // CC events as Hold lanes, sorted by ccNumber
     };
 
     struct ImportResult {
         bool ok = false;
         juce::String message;              // empty on success; a human-readable reason on failure
         std::vector<ImportedTrack> tracks; // empty tracks are never included
+        // True when any imported track carries CC lanes (the "import controller data?" question).
+        bool hasControllerData() const noexcept;
     };
 
     // Parses a Standard MIDI File (type 0 or 1) from a stream — NOT only from a File, so a future
@@ -83,14 +89,19 @@ public:
     // One doc mutation per clip (addClip) plus one per note (addNote) — this function performs no
     // batching of its own. The caller is responsible for wrapping the whole call in
     // AppUndoManager::recordTimelineChange for undo; this function never touches AppUndoManager.
-    static bool importIntoTrack(TimelineDoc& doc, TrackId trackId, double startBeat, const ImportResult& result);
+    // `withControllers` false (the default, and the untrusted AI path) imports notes only.
+    static bool importIntoTrack(TimelineDoc& doc, TrackId trackId, double startBeat, const ImportResult& result,
+                                bool withControllers = false);
+    // Merges every imported track into one EXISTING clip (clip-relative beats, clip grown to fit).
+    // Caller wraps it in recordTimelineChange; false with no mutation when there is nothing to add.
+    static bool importIntoClip(TimelineDoc& doc, ClipId clipId, const ImportResult& result, bool withControllers);
 
     // Exports one clip as an SMF type 1 file: a single tempo-less track holding every note in the
     // clip as a noteOn/noteOff pair at kExportPpq ticks-per-quarter-note (clip-relative beats,
     // exactly as stored — no truncation to the clip's own lengthBeats, matching the model's own
     // "notes may overhang a clip" policy), an explicit end-of-track event at max(the clip's own
-    // length, the last event), PPQ time format only. Returns false if `clipId` doesn't resolve to a
-    // clip in `doc`, or if the stream write fails.
+    // length, the last event), PPQ time format only, plus CC lanes as controller events (see .cpp).
+    // Returns false if `clipId` doesn't resolve to a clip in `doc`, or if the stream write fails.
     static bool exportClip(const TimelineDoc& doc, ClipId clipId, juce::OutputStream& stream);
     static bool exportClipToFile(const TimelineDoc& doc, ClipId clipId, const juce::File& file);
 

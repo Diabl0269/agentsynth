@@ -27,6 +27,8 @@ to absolute beats via `clip->startBeat` and back.
 | `PianoRollClipboardAndKeys.cpp` | The note clipboard and arrow-key editing (nudge/transpose/navigate) |
 | `PianoRollMouse.cpp` | Mouse handling and edge-auto-scroll |
 | `PianoRollZoom.cpp` | Anchored zoom and `keyPressed` dispatch |
+| `PianoRollMidiFile.cpp` | The "MIDI" chip: import a .mid into the open clip (asks about CC data), export the clip |
+| `PianoRollControllerLaneGlue.cpp` | The roll's side of the velocity / CC lane strip: its carve-up, the "Lanes" chip toggle, `canvasBottom()` |
 | `PianoRollInternal.h` | Private shared constants and helpers; not a CMake source file |
 | `PianoRollTypes.h` | `NoteHit`, `NoteOrigin`, `ClipboardNote`, `NoteGeometry`, `LineRange`, `ClipScaleMemory`; not a CMake source file |
 
@@ -76,7 +78,10 @@ and the same `viewState_.beatToX` mapping it always had.
 
 ## Vertical layout
 
-Toolbar row, then ruler, then note canvas.
+Toolbar row, then ruler, then note canvas — and, when the "Lanes" chip has opened it, the velocity
+/ CC lane strip docked under the canvas ([piano-roll-lanes](piano-roll-lanes.md)). The strip is
+carved from the bottom before the left gutter, so the canvas ends at `canvasBottom()`; collapsed
+(the default) nothing is carved and the geometry below is unchanged.
 
 While the roll is CLOSED nothing is unusual: the ruler is the top row of the lanes region and the
 roll occupies exactly `gridLanesBounds_`, the clip-lane rect. While it is **open**, the panel
@@ -304,9 +309,10 @@ the time the create or delete runs; the double-click is the last word either way
 
 ## Header chips
 
-**Six** drawn chips — not child `juce::Button`s; they are painted shapes hit-tested by position,
+**Eight** drawn chips — not child `juce::Button`s; they are painted shapes hit-tested by position,
 `HeaderButtonId` — left to right: **"Clips"** (back), **Quantise**, **Quantise Length**, **Quantise
-Pitches**, **"Scale"**, **Show Only Scale Notes**. The three quantise verbs (position, length,
+Pitches**, **"Scale"**, **Show Only Scale Notes**, **"Lanes"** (the velocity / CC strip toggle, lit
+while open) and **"MIDI"** (import / export a .mid file) — both in [piano-roll-lanes](piano-roll-lanes.md). The three quantise verbs (position, length,
 pitch) are grouped together in that order.
 
 Each is a `juce::Rectangle<int>` member carved in `resized()` and resolved through the single seam
@@ -317,8 +323,8 @@ Every chip does exactly ONE thing on a plain click; there are no modifier varian
 all. The GAPS carry meaning: 4 px between groups, 2 px within one, so "the three quantise verbs"
 reads as a cluster and "scale plus its row filter" as another.
 
-Only **Show Only Scale Notes** is a toggle, so it is the only one that ever paints lit; the rest
-are actions and merely dim when they would be a no-op. **Quantise** and **Quantise Length**
+Only **Show Only Scale Notes** and **"Lanes"** are toggles, so they are the only ones that ever
+paint lit; the rest are actions and merely dim when they would be a no-op. **Quantise** and **Quantise Length**
 additionally flash on every press, sharing the same `isQuantiseEnabled()` gate; **Quantise
 Pitches** does not, because it is silently a no-op with no scale chosen, matching its own dim.
 
@@ -665,8 +671,9 @@ toggle's both-ways round trip and its per-toggle undo step, the Draw tool's drag
 fallback, the note clipboard's
 cross-clip survival and its clip-window clamps on paste and repeat, and the arrow keys' shared-delta
 clamp with an empty selection falling through. Audition lives in `PianoRollAuditionTests.cpp`, the
-header chips in `PianoRollHeaderChipsTests.cpp`, and the key bindings in
-`PianoRollShortcutsTests.cpp`.
+header chips in `PianoRollHeaderChipsTests.cpp`, the key bindings in
+`PianoRollShortcutsTests.cpp`, and the velocity / CC lane strip in
+`PianoRollControllerLanesTests.cpp`.
 
 **Note for wheel tests:** `juce::MouseWheelDetails` has no default member initialisers, so they must
 construct it `{}`-initialised or a garbage `deltaX` decides the branch.

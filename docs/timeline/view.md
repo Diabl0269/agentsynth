@@ -108,8 +108,9 @@ The bindings follow Cubase:
 | Cmd+Shift+wheel | Zooms vertically, scaling `TimelineViewState::rowHeightScale` within `[0.5, 3.0]`, anchored so the row under the pointer stays put |
 | Trackpad pinch (`mouseMagnify()`) | Horizontal zoom; Shift+pinch is vertical. Deliberate enough a gesture to need no modifier, on the panel and inside the piano roll alike |
 
-`rowHeightScale` multiplies the themed row height in BOTH `TimelineClipLaneArea::getRowHeight()`
-and the panel's `layoutTrackHeaders()`. `trackScrollY` is shared with the header column: a
+`rowHeightScale` multiplies the themed row height in `TimelineClipLaneArea::getRowHeight()`, and
+every row position in both columns comes from the one `TrackRowLayout` built from it (expanded
+automation lane rows included, [track-automation](track-automation.md#row-geometry)). `trackScrollY` is shared with the header column: a
 scrollbar drag on the header viewport writes the same value back via `HeaderViewport::onScrolledY`,
 and `syncTrackScroll()` is the one re-sync point.
 

@@ -206,6 +206,11 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClip(ClipId id, double atBeat) {
         std::stable_sort(leftNotes.begin(), leftNotes.end(), noteLess);
         std::stable_sort(rightNotes.begin(), rightNotes.end(), noteLess);
 
+        std::vector<ClipControllerLane> leftLanes;
+        std::vector<ClipControllerLane> rightLanes;
+        splitControllerLanes(clip->controllers, atBeat, leftLanes, rightLanes);
+        clip->controllers = std::move(leftLanes);
+
         clip->notes = std::move(leftNotes);
         clip->lengthBeats = atBeat;
 
@@ -215,6 +220,7 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClip(ClipId id, double atBeat) {
         right.startBeat = rightStart;
         right.lengthBeats = rightLength;
         right.notes = std::move(rightNotes);
+        right.controllers = std::move(rightLanes);
         // The halves keep pointing at the same asset with the same gain, and
         // each keeps the fade at the edge it still owns (the left half's fade-out and the right
         // half's fade-in are at the cut, where there is nothing to fade). `sourceStartSeconds` is
@@ -258,6 +264,9 @@ bool TimelineDoc::joinClips(ClipId a, ClipId b) {
         return false;
     if (clipA->notes.size() + clipB->notes.size() > static_cast<size_t>(kMaxNotesPerClip))
         return false;
+    std::vector<ClipControllerLane> mergedLanes;
+    if (!mergeControllerLanes(clipA->controllers, clipB->controllers, clipB->startBeat - clipA->startBeat, mergedLanes))
+        return false;
 
     return applyMutation([&] {
         const double rebase = clipB->startBeat - clipA->startBeat;
@@ -276,6 +285,7 @@ bool TimelineDoc::joinClips(ClipId a, ClipId b) {
         std::merge(clipA->notes.begin(), clipA->notes.end(), rebasedB.begin(), rebasedB.end(),
                    std::back_inserter(merged), noteLess);
         clipA->notes = std::move(merged);
+        clipA->controllers = std::move(mergedLanes);
         clipA->lengthBeats = newEnd - clipA->startBeat;
         // `a` keeps its OWN asset, gain, source offset and fade-in; `b`'s are dropped along
         // with `b`. Two audio clips naming different assets cannot become one clip naming both, so
@@ -316,6 +326,7 @@ ClipId TimelineDoc::duplicateClip(ClipId id) {
         // Copied field by field rather than by struct assignment (the ids must not be), so `muted`
         // has to be listed here explicitly — a duplicate of a muted clip is muted.
         dup.muted = clip->muted;
+        dup.controllers = clip->controllers; // CC points are clip-relative, so they copy verbatim
         dup.notes.reserve(clip->notes.size());
         for (const auto& note : clip->notes) {
             MidiNote copy = note;

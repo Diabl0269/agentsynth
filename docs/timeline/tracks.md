@@ -352,13 +352,20 @@ undo or redo restore.
 
 ## The automation button
 
-The `A` button toggles this track's automation lane in the single, doc-wide automation strip
-([automation](automation.md)). The header only reports the click via
-`onAutomationToggleRequested` — it never tracks open/closed state itself, since it cannot see
-whether another track's lane is the one currently shown.
-`TimelinePanelComponent::toggleAutomationForTrack` decides: already open on one of this track's own
-lanes closes the strip; anything else — closed, or open on a different track — opens the track's
-first lane.
+On a **Midi or Audio track** the `A` button expands and collapses the track's automation lane rows
+under it ([track-automation](track-automation.md#expanding-a-track)). It is always shown, lit
+(accent fill) while expanded, and its text is accent-coloured whenever the track has lanes, so
+existing automation is discoverable on a collapsed track; the tooltip carries the lane count. The
+row menu's "Show automation" / "Hide automation" does the same, and "Add automation lane" lists the
+parameters of the modules this track owns.
+
+On an **Automation-kind track** (whose lanes are the global ones) `A` keeps its old job: it toggles
+the bottom automation strip ([automation](automation.md)) and is shown only while the track has a
+lane. `TimelinePanelComponent::toggleAutomationForTrack` decides: already open on one of this
+track's own lanes closes the strip; anything else opens the track's first lane.
+
+The header only reports the click via `onAutomationToggleRequested` and mirrors the expanded state
+the panel pushes back through `setAutomationLanesExpanded` — it never decides either itself.
 
 ## Row context menu
 

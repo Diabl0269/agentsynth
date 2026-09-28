@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 
 namespace synth {
 
@@ -133,6 +134,134 @@ bool TimelineDoc::editBreakpoints(LaneId laneId, const std::vector<double>& remo
 
     return applyMutation([&] {
         lane->points = std::move(simulated);
+        return true;
+    });
+}
+
+namespace {
+
+bool inSpan(double beat, double start, double end) noexcept { return beat >= start && beat < end; }
+
+void eraseSpan(std::vector<AutomationLane::Breakpoint>& points, double start, double end) {
+    points.erase(
+        std::remove_if(points.begin(), points.end(),
+                       [start, end](const AutomationLane::Breakpoint& p) { return inSpan(p.beat, start, end); }),
+        points.end());
+}
+
+bool isValidSpanEdit(const TimelineDoc::AutomationSpanEdit& edit) noexcept {
+    if (!std::isfinite(edit.startBeat) || !std::isfinite(edit.endBeat) || edit.startBeat < 0.0 ||
+        edit.endBeat <= edit.startBeat)
+        return false;
+    if (edit.kind == TimelineDoc::AutomationSpanEdit::Kind::Remove)
+        return true;
+    return isFiniteAtOrAfterZero(edit.destStartBeat);
+}
+
+} // namespace
+
+// "Automation follows events" (docs/timeline/track-automation.md#automation-follows-events): the
+// clip edit's span of automation on the SOURCE track's own lanes travels with it.
+//
+// Rules, per edit and per lane stored on `sourceTrack`:
+//   - Only points in the half-open span [startBeat, endBeat) are carried; a lane with none there
+//     is untouched (the destination span is NOT cleared for an empty carry, so moving a clip with
+//     no automation under it never wipes automation where it lands).
+//   - Move/Copy to the same track: the carried points replace whatever sits in the destination
+//     span on the same lane. To a DIFFERENT track the lane identity cannot be the same one (lanes
+//     are unique per (nodeUuid, paramId) doc-wide), so the target is the destination track's lane
+//     with the same paramId when there is exactly one such lane; otherwise a Move leaves the points
+//     where they are and a Copy writes nothing. Values are clamped into the target lane's range.
+//   - Remove drops the span's points.
+// Every read comes from the lanes' ORIGINAL points and the writes run in three passes (all source
+// removals, then all destination clears, then all inserts), so a multi-clip batch whose spans
+// overlap never reads a point another edit in the same batch already moved. One applyMutation for
+// the whole batch; rejected outright (no mutation) on any malformed edit, an unresolved track, or a
+// lane that would exceed kMaxBreakpointsPerLane.
+bool TimelineDoc::transferAutomationSpans(const std::vector<AutomationSpanEdit>& edits) {
+    struct Carry {
+        AutomationLane* dest = nullptr;
+        double destStart = 0.0;
+        double destEnd = 0.0;
+        std::vector<AutomationLane::Breakpoint> points;
+    };
+    struct Removal {
+        AutomationLane* lane = nullptr;
+        double start = 0.0;
+        double end = 0.0;
+    };
+    std::vector<Carry> carries;
+    std::vector<Removal> removals;
+
+    auto uniqueLaneWithParam = [](Track& track, const juce::String& paramId) -> AutomationLane* {
+        AutomationLane* found = nullptr;
+        for (auto& lane : track.lanes) {
+            if (lane.paramId != paramId)
+                continue;
+            if (found != nullptr)
+                return nullptr; // ambiguous: two candidates, pick neither
+            found = &lane;
+        }
+        return found;
+    };
+
+    for (const auto& edit : edits) {
+        if (!isValidSpanEdit(edit))
+            return false;
+        auto* source = findTrack(edit.sourceTrack);
+        if (source == nullptr)
+            return false;
+        Track* destTrack = nullptr;
+        if (edit.kind != AutomationSpanEdit::Kind::Remove && (destTrack = findTrack(edit.destTrack)) == nullptr)
+            return false;
+
+        for (auto& lane : source->lanes) {
+            std::vector<AutomationLane::Breakpoint> carried;
+            for (const auto& p : lane.points)
+                if (inSpan(p.beat, edit.startBeat, edit.endBeat))
+                    carried.push_back(p);
+            if (carried.empty())
+                continue;
+
+            if (edit.kind == AutomationSpanEdit::Kind::Remove) {
+                removals.push_back({&lane, edit.startBeat, edit.endBeat});
+                continue;
+            }
+            auto* dest = destTrack == source ? &lane : uniqueLaneWithParam(*destTrack, lane.paramId);
+            if (dest == nullptr)
+                continue; // no matching lane on the destination track: leave the points alone
+            if (edit.kind == AutomationSpanEdit::Kind::Move)
+                removals.push_back({&lane, edit.startBeat, edit.endBeat});
+            const double offset = edit.destStartBeat - edit.startBeat;
+            for (auto& p : carried)
+                p = makeBreakpoint(dest->range, p.beat + offset, p.value, p.tension, p.curve);
+            carries.push_back(
+                {dest, edit.destStartBeat, edit.destStartBeat + (edit.endBeat - edit.startBeat), std::move(carried)});
+        }
+    }
+
+    if (removals.empty() && carries.empty())
+        return true; // nothing under any span: no-op, no revision bump
+
+    std::map<AutomationLane*, std::vector<AutomationLane::Breakpoint>> simulated;
+    auto planFor = [&simulated](AutomationLane* lane) -> std::vector<AutomationLane::Breakpoint>& {
+        return simulated.try_emplace(lane, lane->points).first->second;
+    };
+    for (const auto& removal : removals)
+        eraseSpan(planFor(removal.lane), removal.start, removal.end);
+    for (const auto& carry : carries)
+        eraseSpan(planFor(carry.dest), carry.destStart, carry.destEnd);
+    for (const auto& carry : carries)
+        for (const auto& p : carry.points)
+            insertBreakpoint(planFor(carry.dest), p);
+
+    for (const auto& [lane, points] : simulated)
+        if (static_cast<int>(points.size()) > kMaxBreakpointsPerLane)
+            return false;
+
+    return applyMutation([&] {
+        for (auto& [lane, points] : simulated)
+            lane->points = std::move(points);
         return true;
     });
 }

@@ -67,8 +67,11 @@ add_executable(Tests
     Timeline/TimelineDoc/TimelineDocClipsTests.cpp
     Timeline/TimelineDoc/TimelineDocNotesTests.cpp
     Timeline/TimelineDoc/TimelineDocAutomationTests.cpp
+    Timeline/TimelineDoc/TimelineDocAutomationSpanTests.cpp
     Timeline/TimelineDoc/TimelineDocSerializationTests.cpp
     Timeline/TimelineDoc/TimelineDocMarkersTests.cpp
+    Timeline/TimelineDoc/TimelineDocControllersTests.cpp
+    Timeline/TimelineControllerLaneTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingNotesTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingQuantiseTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingSplitJoinTests.cpp
@@ -79,6 +82,8 @@ add_executable(Tests
     Timeline/TimelineClipEditing/TimelineClipEditingGridHierarchyTests.cpp
     Timeline/TimelineSnapshotTests.cpp
     Timeline/AutomationKernelTests.cpp
+    Timeline/AutomationShapesTests.cpp
+    Timeline/AutomationPlacementTests.cpp
     Timeline/AutomationApplierTests.cpp
     Timeline/AutomationRecordTests.cpp
     Timeline/AutomationSlicingTests.cpp
@@ -95,8 +100,10 @@ add_executable(Tests
     Timeline/TimelineMidiSource/TimelineMidiSourceLoopTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceEngineTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceAuditionTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceControllerTests.cpp
     Timeline/MidiRecorderTests.cpp
     Timeline/MidiClipFileTests.cpp
+    Timeline/MidiClipFileControllerTests.cpp
     Timeline/PeaksFileTests.cpp
     Timeline/RecordTapTests.cpp
     Mixer/ChannelStripTests.cpp
@@ -413,6 +420,7 @@ add_executable(Tests
     UI/Timeline/TimelinePanel/TimelinePanelResizeTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelAuthoringGestureTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelToolStripTests.cpp
+    UI/Timeline/TimelinePanel/TimelinePanelClipClipboardControllerTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelFollowPlayheadTests.cpp
     UI/Timeline/TimelinePlayheadTests.cpp
     UI/Timeline/TimelineTrackHeaderTests.cpp
@@ -437,6 +445,8 @@ add_executable(Tests
     UI/PianoRoll/PianoRollHeaderChipsTests.cpp
     UI/PianoRoll/PianoRollAuditionTests.cpp
     UI/PianoRoll/PianoRollMouseTests.cpp
+    UI/PianoRoll/PianoRollControllerLanesTests.cpp
+    UI/PianoRoll/PianoRollMidiFileTests.cpp
     Timeline/MusicalScaleTests.cpp
     UI/PianoRoll/NoteColourTests.cpp
     UI/Timeline/MidiDestinationPickerTests.cpp
@@ -453,6 +463,8 @@ add_executable(Tests
     UI/Timeline/TimelineTransportBarTests.cpp
     UI/Timeline/TransportBarMidiLearnTests.cpp
     UI/Timeline/TimelineViewStateTests.cpp
+    UI/Timeline/TrackRowLayoutTests.cpp
+    UI/Timeline/TrackAutomationLanesTests.cpp
     UI/Mixer/MixerPanelComponentTests.cpp
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
     UI/Mixer/MixerFaderTests.cpp

@@ -30,6 +30,7 @@ enum class TimelineValidationError {
     AssetNotAllowed,
     RecordModeNotAllowed,
     ReservedKindNotAllowed,
+    ControllerOutOfRange,
     InternalError,
 };
 
@@ -63,6 +64,9 @@ inline constexpr int kMaxTotalNotesUntrusted = 65536;
  *  120 BPM this is ~14 hours of music — far past anything a model should be authoring, and far
  *  short of where double-precision beat arithmetic starts losing musically relevant resolution. */
 inline constexpr double kMaxPpqUntrusted = 100000.0;
+
+/** CC lane points summed across every clip's "controllers" (the CC twin of kMaxTotalNotesUntrusted). */
+inline constexpr int kMaxTotalControllerPointsUntrusted = 65536;
 
 /**
  * @brief Untrusted gate for AI/tool-supplied timeline JSON (the TimelineDoc toVar dialect).

@@ -20,8 +20,6 @@
 
 namespace synth {
 
-namespace {
-
 // True when `conn` carries signal (audio or MIDI) rather than a hidden modulation leg -- the same
 // two exclusions ChannelFlows' own isSignalEdge rule uses (that function is private to the "Make
 // channel" implementation, so this mirrors just the parts a plain reach walk needs rather than
@@ -36,7 +34,7 @@ namespace {
 //
 // Moved here from StemSession.cpp's isStemNamingSignalEdge (FRO55) - see the file comment - and
 // expressed through ChannelFlowsInternal.h's shared node predicates rather than its own casts.
-bool isLinkSignalEdge(juce::AudioProcessorGraph& graph, const juce::AudioProcessorGraph::Connection& conn) {
+bool isLinkSignalEdge(const juce::AudioProcessorGraph& graph, const juce::AudioProcessorGraph::Connection& conn) {
     auto* srcProcessor = processorFor(graph, conn.source.nodeID);
     auto* dstProcessor = processorFor(graph, conn.destination.nodeID);
     if (srcProcessor == nullptr || dstProcessor == nullptr)
@@ -61,6 +59,8 @@ bool isReachTerminal(const juce::AudioProcessor* processor) {
         return true;
     return dynamic_cast<const juce::AudioProcessorGraph::AudioGraphIOProcessor*>(processor) != nullptr;
 }
+
+namespace {
 
 bool contains(const std::vector<juce::AudioProcessorGraph::NodeID>& ids, juce::AudioProcessorGraph::NodeID id) {
     return std::find(ids.begin(), ids.end(), id) != ids.end();

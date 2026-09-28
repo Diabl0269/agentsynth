@@ -48,7 +48,9 @@ than deleted, read by both components' `dynamic_cast<AppLookAndFeel*>`-with-fall
 `TimelineClipLaneArea::computeClipRect(viewState, trackIndex, startBeat, lengthBeats, rowHeight)`
 is a pure static function — no doc, no component — computing `[beatToX(start), beatToX(start +
 length)]` × `[row * rowHeight, rowHeight]`, so geometry is unit-testable with no component or
-LookAndFeel at all.
+LookAndFeel at all. It is the uniform-row case (no automation lane rows expanded) of
+`computeClipRectAtRowTop`; the component itself places every row through `getRowLayout()`
+([track-automation](track-automation.md#row-geometry)).
 
 ## Rendering
 
@@ -97,7 +99,9 @@ marquees or double-click-authors. Switching away from Select disables all of it;
 ## Cross-track drag
 
 A plain (non-copy) move drag previews **one shared track-row delta** for the WHOLE dragged set,
-derived from the vertical drag distance (`round(dy / rowHeight)`), legal only if **every** dragged
+derived from the vertical drag distance: the grabbed row's centre moved by `dy`, resolved through
+the row layout, where an expanded track's lane rows count as that track (with no lanes expanded this
+is exactly `round(dy / rowHeight)`), legal only if **every** dragged
 clip's destination row exists and accepts its payload. `TimelineDoc::moveClipToTrack`'s kind rule:
 an audio clip (non-empty `assetRef`) only onto a `TrackKind::Audio` row, a MIDI clip only onto
 `TrackKind::Midi`, neither onto `Automation`.

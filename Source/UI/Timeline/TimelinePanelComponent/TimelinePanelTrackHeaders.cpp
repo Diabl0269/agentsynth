@@ -31,6 +31,7 @@ juce::String shortPluginFormatLabel(const juce::String& format) {
 // whole conversation with the app goes through one seam.
 void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     trackHeaderHost_ = host;
+    trackLanes_.setTrackHeaderHost(host);
     // Headers are constructed with the host, so any that already exist have to be rebuilt against
     // the new one rather than refreshed.
     trackHeaderList_.headers.clear();
@@ -288,6 +289,11 @@ void TimelinePanelComponent::openAddTrackMenu() {
 void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     syncTrackHeaders();
     clipLaneArea_.refreshFromDoc();
+    // A lane added/removed on an unchanged track set still adds/removes a row, so the layout pass
+    // runs on every notification (syncTrackHeaders only re-lays out when the track set changed).
+    trackLanes_.refreshFromDoc();
+    layoutTrackHeaders();
+    refreshAutomationToolbar();
     // The ruler's marker flags come straight off the doc, so a mutation is the ONLY thing that can
     // move them — this is the repaint that replaces polling them (see TimelineRulerComponent). The
     // lanes rect goes with it, because this component paints each marker's stem down through the
@@ -307,7 +313,10 @@ void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     // its recordMode could have changed from under us — AutomationRecorder's own Write-drops-to-
     // Touch-on-stop).
     if (automationStripVisible_) {
-        if (doc_ == nullptr || doc_->getLane(selectedAutomationLane_) == nullptr) {
+        // An invalid selection is the strip opened EMPTY on its picker (toggleGlobalAutomationStrip
+        // with no global lanes yet) -- that stays open; a lane that was shown and is now gone closes it.
+        if (doc_ == nullptr ||
+            (selectedAutomationLane_.isValid() && doc_->getLane(selectedAutomationLane_) == nullptr)) {
             closeAutomationStrip();
         } else {
             syncAutomationLaneCombo();
@@ -392,11 +401,19 @@ void TimelinePanelComponent::syncTrackHeaders() {
     layoutTrackHeaders();
 }
 
+// A Midi/Audio track's `A` expands/collapses its own lane rows (docs/timeline/tracks.md#the-automation-button);
+// an Automation-kind track's lanes are the global ones, so its `A` keeps driving the bottom strip.
 void TimelinePanelComponent::toggleAutomationForTrack(synth::TrackId trackId) {
     if (doc_ == nullptr)
         return;
     const auto* t = doc_->getTrack(trackId);
-    if (t == nullptr || t->lanes.empty())
+    if (t == nullptr)
+        return;
+    if (t->kind != synth::TrackKind::Automation) {
+        trackLanes_.setExpanded(trackId, !trackLanes_.isExpanded(trackId));
+        return;
+    }
+    if (t->lanes.empty())
         return; // no-op: the button is hidden in this case anyway (see refreshFromDoc())
 
     // Already open on one of THIS track's lanes -> close. Anything else (closed, or open on a
@@ -408,18 +425,27 @@ void TimelinePanelComponent::toggleAutomationForTrack(synth::TrackId trackId) {
         showAutomationLane(t->lanes.front().id);
 }
 
+// Every y here comes from the clip-lane area's TrackRowLayout -- the SAME object its own rows,
+// hit tests and drag maths read -- so a header row, its expanded lane rows and the clip row beside
+// them can never drift apart (docs/timeline/track-automation.md#row-geometry).
 void TimelinePanelComponent::layoutTrackHeaders() {
-    // Themed with a literal fallback, same pattern as resized() above — and the SAME value
-    // (token x vertical-zoom scale) synth::ui::TimelineClipLaneArea reads for its own row height,
-    // so header rows and clip rows never drift apart.
-    const int rowHeight = currentRowHeight();
-
+    const auto& layout = clipLaneArea_.getRowLayout();
     const int count = trackHeaderList_.headers.size();
     const int width = std::max(0, trackHeaderViewport_.getMaximumVisibleWidth());
 
-    trackHeaderList_.setSize(width, std::max(count * rowHeight, trackHeaderViewport_.getMaximumVisibleHeight()));
-    for (int i = 0; i < count; ++i)
-        trackHeaderList_.headers.getUnchecked(i)->setBounds(0, i * rowHeight, width, rowHeight);
+    // The header viewport is taller than the lanes view (the "+ Track" strip above it is shorter than
+    // the ruler), so without the slack below it could never scroll as far as maxTrackScrollPx() lets
+    // the lanes go -- its clamped visibleAreaChanged would pull trackScrollY back and leave the
+    // bottom rows (a revealed last lane row) cut off in the lanes.
+    const int viewHeight = trackHeaderViewport_.getMaximumVisibleHeight();
+    const int slack = gridLanesBounds_.isEmpty() ? 0 : std::max(0, viewHeight - gridLanesBounds_.getHeight());
+    trackHeaderList_.setSize(width, std::max(layout.getTotalHeight() + slack, viewHeight));
+    for (int i = 0; i < count; ++i) {
+        auto* header = trackHeaderList_.headers.getUnchecked(i);
+        header->setBounds(0, layout.trackRowTop(i), width, layout.getTrackRowHeight());
+        header->setAutomationLanesExpanded(trackLanes_.isExpanded(header->getTrackId()));
+    }
+    trackLanes_.layoutRows(layout, width);
 }
 
 // The row itself is the real focus target (TimelineTrackHeaderComponent::setWantsKeyboardFocus);
@@ -468,11 +494,19 @@ bool TimelinePanelComponent::selectAdjacentTrack(int direction) {
 void TimelinePanelComponent::ensureTrackVisible(int index) {
     if (!juce::isPositiveAndBelow(index, trackHeaderList_.headers.size()))
         return;
-    const int rowHeight = currentRowHeight();
-    const int rowTop = index * rowHeight;
-    const int rowBottom = rowTop + rowHeight;
+    const auto& layout = clipLaneArea_.getRowLayout();
+    ensureContentRangeVisible(layout.trackRowTop(index), layout.trackRowTop(index) + layout.getTrackRowHeight());
+}
+
+// Scrolls the rows by the least amount that brings content [top, bottom) fully into view (the top
+// wins when the range is taller than the view). The view is the SHORTER of the two columns: the
+// header viewport sits under the "+ Track" strip and the clip lanes under the ruler (and the strip,
+// when it is open), and a row must end up visible in both.
+void TimelinePanelComponent::ensureContentRangeVisible(int rowTop, int rowBottom) {
     const int viewTop = (int)std::llround(viewState_.trackScrollY);
-    const int viewHeight = trackHeaderViewport_.getMaximumVisibleHeight();
+    int viewHeight = trackHeaderViewport_.getMaximumVisibleHeight();
+    if (!gridLanesBounds_.isEmpty())
+        viewHeight = std::min(viewHeight, gridLanesBounds_.getHeight());
     if (rowTop < viewTop)
         scrollTrackRows((double)(rowTop - viewTop));
     else if (rowBottom > viewTop + viewHeight)
@@ -488,12 +522,10 @@ int TimelinePanelComponent::trackDropBoundaryForScreenY(int screenY) const {
     // this row" idiom PanelResizeHandle::desiredHeightFor uses, just resolved against the list instead
     // of the panel.
     const int localY = trackHeaderList_.getLocalPoint(nullptr, juce::Point<int>(0, screenY)).y;
-    const int rowHeight = currentRowHeight();
-    if (rowHeight <= 0)
-        return 0;
-    // Rounds to the NEAREST row boundary (not the row the pointer is over) so the drop indicator
-    // reads as "insert here between these two rows" rather than "replace this row".
-    return juce::jlimit(0, count, (localY + rowHeight / 2) / rowHeight);
+    // Rounds to the NEAREST track-block boundary (not the row the pointer is over) so the drop
+    // indicator reads as "insert here between these two tracks" rather than "replace this row";
+    // expanded lane rows travel with their track, so no boundary ever falls inside a block.
+    return juce::jlimit(0, count, clipLaneArea_.getRowLayout().dropBoundaryAt(localY));
 }
 
 void TimelinePanelComponent::beginTrackDrag(synth::TrackId trackId, int screenY) {
@@ -570,10 +602,10 @@ void TimelinePanelComponent::TrackHeaderList::paintOverChildren(juce::Graphics& 
     if (owner_.dragInsertionIndex_ < 0)
         return;
 
-    const int rowHeight = owner_.currentRowHeight();
     // Clamped so the full 2px line stays visible at both the top boundary (0) and the bottom one
     // (getHeight()), rather than being clipped in half by this component's own edge.
-    const int centreY = juce::jlimit(1, std::max(1, getHeight() - 1), owner_.dragInsertionIndex_ * rowHeight);
+    const int centreY = juce::jlimit(1, std::max(1, getHeight() - 1),
+                                     owner_.clipLaneArea_.getRowLayout().boundaryY(owner_.dragInsertionIndex_));
 
     juce::Colour line = juce::Colours::white;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))

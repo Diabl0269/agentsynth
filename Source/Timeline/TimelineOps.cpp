@@ -2,6 +2,7 @@
 
 #include "../AppUndoManager.h"
 #include "AutomationBinding.h"
+#include "AutomationPlacement.h"
 #include "MidiClipFile.h"
 #include "TimelineValidator.h"
 
@@ -647,29 +648,22 @@ TimelineOpsResult runWriteLane(const juce::String& where, juce::DynamicObject& o
         points.push_back(point);
     }
 
-    // find-or-create, the rule MainComponent::automateParameter implements for the user's own
-    // "Automate this parameter" gesture: the lane if one already exists for this parameter
-    // (anywhere in the doc — lane identity is doc-wide), otherwise a new lane on the document's ONE
-    // Automation track, creating that track too when there is none yet.
+    // find-or-create through the ONE placement seam MainComponent::automateParameter also uses
+    // (synth::findOrCreateLaneHostTrack): the lane if one already exists for this parameter
+    // (anywhere in the doc — lane identity is doc-wide), otherwise a new lane on the track that
+    // owns the module, falling back to the document's ONE Automation track (created when missing).
     LaneId laneId;
     if (existing != nullptr) {
         laneId = existing->id;
     } else {
-        TrackId automationTrack;
-        for (const auto& track : doc.getTracks()) {
-            if (track.kind == TrackKind::Automation) {
-                automationTrack = track.id;
-                break;
-            }
-        }
-        if (!automationTrack.isValid()) {
-            if (static_cast<int>(doc.getTracks().size()) >= TimelineDoc::kMaxTracks)
-                return fail(where + "needs an Automation track, but the timeline is already at its limit of " +
-                            juce::String(TimelineDoc::kMaxTracks) + " tracks.");
-            automationTrack = doc.addTrack(TrackKind::Automation, "Automation");
-            if (!automationTrack.isValid())
-                return fail(where + "could not create the Automation track.");
-        }
+        const bool needsNewTrack =
+            !resolveOwningTrack(graph, doc, nodeUuid).has_value() && !findAutomationTrack(doc).isValid();
+        if (needsNewTrack && static_cast<int>(doc.getTracks().size()) >= TimelineDoc::kMaxTracks)
+            return fail(where + "needs an Automation track, but the timeline is already at its limit of " +
+                        juce::String(TimelineDoc::kMaxTracks) + " tracks.");
+        const TrackId automationTrack = findOrCreateLaneHostTrack(graph, doc, nodeUuid);
+        if (!automationTrack.isValid())
+            return fail(where + "could not create the Automation track.");
 
         if (const auto* track = doc.getTrack(automationTrack);
             track != nullptr && static_cast<int>(track->lanes.size()) >= TimelineDoc::kMaxLanesPerTrack)

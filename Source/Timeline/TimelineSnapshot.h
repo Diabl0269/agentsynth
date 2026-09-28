@@ -69,6 +69,8 @@ struct TimelineSnapshot {
         int numLanes = 0;
         int firstAudioClip = 0; // range into audioClips[]
         int numAudioClips = 0;
+        int firstController = 0; // range into controllers[]
+        int numControllers = 0;
     };
 
     struct NoteEvent {
@@ -128,11 +130,23 @@ struct TimelineSnapshot {
         double sourceStartSeconds = 0.0; // where inside the asset this clip starts reading
     };
 
+    // One unmuted MIDI clip's CC lane (docs/timeline/piano-roll-lanes.md). Beats are absolute;
+    // the lane's points are a run in points[] with ABSOLUTE beats.
+    struct ControllerInfo {
+        int ccNumber = 0;
+        std::uint16_t channelMask = 1; // bit (channel - 1) set for every channel to emit on
+        double startBeat = 0.0;        // the owning clip's window
+        double endBeat = 0.0;
+        int firstPoint = 0; // range into points[]
+        int numPoints = 0;
+    };
+
     static_assert(std::is_trivially_copyable_v<TrackInfo>, "audio-thread PODs only - no juce::String, no vectors");
     static_assert(std::is_trivially_copyable_v<NoteEvent>, "audio-thread PODs only - no juce::String, no vectors");
     static_assert(std::is_trivially_copyable_v<LaneInfo>, "audio-thread PODs only - no juce::String, no vectors");
     static_assert(std::is_trivially_copyable_v<Point>, "audio-thread PODs only - no juce::String, no vectors");
     static_assert(std::is_trivially_copyable_v<AudioClipInfo>, "audio-thread PODs only - no juce::String, no vectors");
+    static_assert(std::is_trivially_copyable_v<ControllerInfo>, "audio-thread PODs only - no juce::String, no vectors");
 
     TimelineSnapshot();
     ~TimelineSnapshot();
@@ -148,6 +162,8 @@ struct TimelineSnapshot {
     std::vector<Point> points;    // per-lane runs, sorted by beat
     // Per-track runs, sorted by startBeat. Only Audio-kind tracks contribute.
     std::vector<AudioClipInfo> audioClips;
+    // Per-track runs, sorted by startBeat. Only MIDI tracks contribute.
+    std::vector<ControllerInfo> controllers;
 
     // True when at least one MIDI track has soloed set. Solo is a document-wide predicate ("is
     // anything soloed?" decides whether a non-soloed track is silent), so it is computed ONCE in

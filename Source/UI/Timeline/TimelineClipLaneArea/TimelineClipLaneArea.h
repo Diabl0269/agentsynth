@@ -6,6 +6,7 @@
 #include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelineViewState.h"
+#include "UI/Timeline/TrackRowLayout.h"
 #include <array>
 #include <cmath>
 #include <functional>
@@ -15,6 +16,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -183,6 +185,10 @@ public:
     // guard reads this so a drag in progress and an auto-scroll page-flip never fight over
     // firstVisibleBeat in the same 100ms. Marquee/Draw are deliberately excluded: neither one drags
     // an EXISTING clip's position, so neither is what follow-playhead needs to stay clear of.
+    // "Automation follows events": clip moves/copies/deletes also carry the track's own lane points.
+    void setAutomationFollowsClips(bool follows) noexcept { automationFollowsClips_ = follows; }
+    bool isAutomationFollowsClips() const noexcept { return automationFollowsClips_; }
+
     bool isDragInProgress() const noexcept {
         return dragMode_ == DragMode::Move || dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight;
     }
@@ -374,6 +380,9 @@ public:
     // rather than read from a theme so this stays callable with no LookAndFeel installed at all.
     static juce::Rectangle<int> computeClipRect(const TimelineViewState& viewState, int trackIndex, double startBeat,
                                                 double lengthBeats, int rowHeight);
+    // The same rect for a row whose top sits at content y `rowTop` (a TrackRowLayout top).
+    static juce::Rectangle<int> computeClipRectAtRowTop(const TimelineViewState& viewState, int rowTop,
+                                                        double startBeat, double lengthBeats, int rowHeight);
 
     // ---- Waveform bucket geometry — pure, no doc/component/LookAndFeel state ----
     // A half-open [firstBucket, firstBucket + bucketCount) range into `peaks.buckets` (bucket
@@ -394,6 +403,8 @@ public:
 
     // The row height this instance currently lays out at (themed, with a headless fallback).
     int getRowHeight() const;
+    // The row geometry every vertical question in the timeline reads; rebuilt lazily, never stale.
+    const TrackRowLayout& getRowLayout() const;
 
     // The live rect for a clip id, using its CURRENT doc geometry (never a mid-drag preview) —
     // what tests use to compute where to synthesize a mouse event. Returns an empty rect if the id
@@ -502,8 +513,10 @@ private:
 
     // The track row `pos.y` falls on, or nullopt when there is no doc or it is below the last row.
     std::optional<int> trackIndexAt(juce::Point<int> pos) const;
-    // The row's full-width rect (the same y/height computeClipRect gives that row).
-    juce::Rectangle<int> rowBounds(int trackIndex, int rowHeight) const;
+    // The track row's full-width rect (the same y/height clipRectFor gives that row).
+    juce::Rectangle<int> rowBounds(int trackIndex) const;
+    // A clip rect on track row `trackIndex` (extrapolated off either end), via getRowLayout().
+    juce::Rectangle<int> clipRectFor(int trackIndex, double startBeat, double lengthBeats) const;
 
     // ---- Authoring (double-click on empty lane space) ----
     // A clip on `track` at `startBeat`, as ONE recordTimelineChange, selected, then
@@ -594,6 +607,13 @@ private:
 
     TimelineViewState& viewState_;
     ClipSelectionModel& selection_;
+    bool automationFollowsClips_ = false;
+    mutable TrackRowLayout rowLayout_;
+    // What rowLayout_ was built from (see getRowLayout).
+    mutable const synth::TimelineDoc* rowLayoutDoc_ = nullptr;
+    mutable std::int64_t rowLayoutRevision_ = -1;
+    mutable int rowLayoutRowHeight_ = -1;
+    mutable std::set<std::int64_t> rowLayoutExpanded_;
     synth::TimelineDoc* doc_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;

@@ -7,7 +7,9 @@
 
 #include "TimelineDoc.h"
 
+#include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace synth {
 namespace detail {
@@ -110,6 +112,75 @@ inline AutomationLane::Breakpoint makeBreakpoint(const AutomationLane::RangeSnap
     point.curve = curve;
     return point;
 }
+
+// -- controller (CC) lanes ------------------------------------------------------
+// Shared by TimelineDocControllers.cpp (the mutation API) and the fromVar loader, which must agree
+// exactly on what a legal CC lane is.
+
+inline bool isValidCcNumber(int cc) noexcept { return cc >= 0 && cc <= 127; }
+
+// Hold or Linear only. Bezier (2) is reserved for automation lanes and has no CC meaning, so a CC
+// lane never stores it — refusing it here keeps the snapshot free of a curve nobody evaluates.
+inline bool isValidControllerCurve(int curve) noexcept {
+    return curve == static_cast<int>(BreakpointCurve::Hold) || curve == static_cast<int>(BreakpointCurve::Linear);
+}
+
+inline bool isValidControllerPoint(const ControllerPoint& point) noexcept {
+    return isFiniteAtOrAfterZero(point.beat) && std::isfinite(point.value) && isValidControllerCurve(point.curve);
+}
+
+// Sorts by beat, collapses same-beat duplicates (the LAST one wins, the same rule a repeated
+// addBreakpoint follows) and clamps every value into the 7-bit CC range. Callers validate first.
+inline std::vector<ControllerPoint> normalisedControllerPoints(std::vector<ControllerPoint> points) {
+    std::stable_sort(points.begin(), points.end(),
+                     [](const ControllerPoint& a, const ControllerPoint& b) { return a.beat < b.beat; });
+    std::vector<ControllerPoint> out;
+    out.reserve(points.size());
+    for (auto point : points) {
+        point.value = juce::jlimit(0.0, 127.0, point.value);
+        if (!out.empty() && out.back().beat == point.beat)
+            out.back() = point;
+        else
+            out.push_back(point);
+    }
+    return out;
+}
+
+inline bool controllerLaneLess(const ClipControllerLane& a, const ClipControllerLane& b) noexcept {
+    return a.ccNumber < b.ccNumber;
+}
+
+// The lane's value at a clip-relative beat, with the audio thread's semantics (AutomationKernel):
+// flat outside the lane's own span, a segment shaped by its LEFT point (Hold keeps the left value,
+// Linear lerps). `curveOut` receives the shaping curve in force at `beat`. Message thread only —
+// the structural edits (split) use it to cut a lane without changing what it plays.
+inline double controllerValueAt(const std::vector<ControllerPoint>& points, double beat, int& curveOut) noexcept {
+    curveOut = static_cast<int>(BreakpointCurve::Linear);
+    if (points.empty())
+        return 0.0;
+    if (beat <= points.front().beat) {
+        curveOut = points.front().curve;
+        return points.front().value;
+    }
+    for (size_t i = 0; i + 1 < points.size(); ++i) {
+        const auto& a = points[i];
+        const auto& b = points[i + 1];
+        if (beat < b.beat) {
+            curveOut = a.curve;
+            if (a.curve == static_cast<int>(BreakpointCurve::Hold) || !(b.beat > a.beat))
+                return a.value;
+            return a.value + (b.value - a.value) * ((beat - a.beat) / (b.beat - a.beat));
+        }
+    }
+    curveOut = points.back().curve;
+    return points.back().value;
+}
+
+// Structural-edit halves for CC lanes, defined in TimelineDocControllers.cpp beside their contracts.
+void splitControllerLanes(const std::vector<ClipControllerLane>& lanes, double atBeat,
+                          std::vector<ClipControllerLane>& leftOut, std::vector<ClipControllerLane>& rightOut);
+bool mergeControllerLanes(const std::vector<ClipControllerLane>& a, const std::vector<ClipControllerLane>& b,
+                          double rebaseB, std::vector<ClipControllerLane>& out);
 
 } // namespace detail
 } // namespace synth

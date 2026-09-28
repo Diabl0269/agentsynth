@@ -14,6 +14,7 @@
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
 #include "Timeline/AutomationBinding.h"
+#include "Timeline/AutomationPlacement.h"
 #include "Timeline/TakePlacement.h"
 #include "Timeline/TimelineReconciler.h"
 #include "UserSettings.h"
@@ -698,9 +699,10 @@ int MainComponent::cleanUnusedAssets() {
 
 // Right-click-any-knob's headless hook, and the production entry point
 // GraphEditor::onAutomateParameterRequested is wired to. Resolves `nodeId`'s uuid (assigning
-// one if it has none yet — the same ensure-uuid idiom createTrackInNode() uses), finds-or-
-// creates the doc's Automation-kind track, binds a lane for `paramId` with the parameter's real
-// NormalisableRange, and opens the timeline panel's automation strip on it. A no-op (with a
+// one if it has none yet — the same ensure-uuid idiom createTrackInNode() uses), picks the lane's
+// track through synth::findOrCreateLaneHostTrack (the owning track, else the Automation-kind one),
+// binds a lane for `paramId` with the parameter's real NormalisableRange, and reveals it
+// (TimelinePanelComponent::revealAutomationLane: under its track, or in the bottom strip). A no-op (with a
 // status-bar message) if `nodeId` doesn't resolve to a live ModuleBase or `paramId` doesn't
 // resolve to a real parameter on it.
 void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
@@ -752,15 +754,9 @@ void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, 
     synth::LaneId laneId;
     const juce::String uuidCopy = uuid;
     auto mutate = [this, &laneId, uuidCopy, paramId, param] {
-        synth::TrackId trackId;
-        for (const auto& track : timelineDoc.getTracks()) {
-            if (track.kind == synth::TrackKind::Automation) {
-                trackId = track.id;
-                break;
-            }
-        }
-        if (!trackId.isValid())
-            trackId = timelineDoc.addTrack(synth::TrackKind::Automation, "Automation");
+        // The ONE placement seam (synth::findOrCreateLaneHostTrack): the owning track's lanes when
+        // exactly one track reaches this module, else the doc's Automation-kind track.
+        const auto trackId = synth::findOrCreateLaneHostTrack(audioEngine.getGraph(), timelineDoc, uuidCopy);
         if (!trackId.isValid())
             return; // kMaxTracks reached — nothing to bind onto
 
@@ -775,5 +771,5 @@ void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, 
         return;
 
     ensureBottomDockOpen();
-    timelinePanel.showAutomationLane(laneId);
+    timelinePanel.revealAutomationLane(laneId);
 }

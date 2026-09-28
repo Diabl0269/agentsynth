@@ -83,9 +83,9 @@ Everything else lives in the named area `CLAUDE.md` — full rule, mechanism, an
 
 - `Source/CLAUDE.md` — audio thread, host modes, `EpochExchange`, MIDI Remote threading, timeline ownership, solo/sends, unsaved-changes guard, autosave, ASCII literals, NaN/Inf scrub
 - `Source/Modules/CLAUDE.md` — stereo/Dual I/O legs, fixed channel counts, Wavetable warp aliasing, gain staging
-- `Source/Timeline/CLAUDE.md` — audio-clip streaming, automation-lane binding
+- `Source/Timeline/CLAUDE.md` — audio-clip streaming, automation-lane binding and placement
 - `Source/AI/CLAUDE.md` — `applyJSONToGraph` auto-connect, patch-format reserved fields, conversation-history entitlement, refresh-token rotation, AI model discovery ordering
-- `Source/UI/CLAUDE.md`, `Source/Plugin/CLAUDE.md` — repaint/animation budget, cable identity, theming, plugin editor look-and-feel, logging limits, `GraphEditor` collaborator ownership, mixer-column/parameter unbinding, MIDI Learn registry
+- `Source/UI/CLAUDE.md`, `Source/Plugin/CLAUDE.md` — repaint/animation budget, cable identity, theming, plugin editor look-and-feel, logging limits, `GraphEditor` collaborator ownership, mixer-column/parameter unbinding, MIDI Learn registry, timeline row geometry (`TrackRowLayout`)
 - `.github/CLAUDE.md` — CI cache correctness, PR title convention, required status checks
 
 ## Docs map

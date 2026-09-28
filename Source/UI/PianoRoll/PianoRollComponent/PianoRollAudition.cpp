@@ -214,6 +214,10 @@ juce::String PianoRollComponent::getTooltipFor(juce::Point<int> pos) const {
         return scaleTooltipText();
     if (scaleFilterButtonBounds_.contains(pos))
         return scaleFilterTooltipText();
+    if (lanesButtonBounds_.contains(pos))
+        return "Show or hide the velocity / CC lanes";
+    if (midiButtonBounds_.contains(pos))
+        return "Import a MIDI file into this clip, or export it";
     return {};
 }
 

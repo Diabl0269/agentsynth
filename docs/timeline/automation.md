@@ -1,8 +1,12 @@
 # Timeline Automation Strip
 
-A horizontal strip docked at the BOTTOM of the lanes region (`gridLanesBounds_`), toggled open by
-selecting a lane — from the lane picker inside the strip itself, from a track header's `A` button
-([tracks](tracks.md#the-automation-button)), or from ANY generic auto-UI knob's right-click menu.
+A horizontal strip docked at the BOTTOM of the lanes region (`gridLanesBounds_`) for the **global**
+lanes — those on Automation-kind tracks, i.e. automation of modules no single track owns. A
+track-owned lane is edited in its own row under its track instead
+([track-automation](track-automation.md)). Toggled open by selecting a lane — from the lane picker
+inside the strip itself, from an Automation track header's `A` button
+([tracks](tracks.md#the-automation-button)), from the toolbar's global-automation button, or from a
+knob's right-click menu when the knob's module is global.
 
 While open it takes exactly `Metrics::timelineAutomationStripHeight` (72, code-only) off the bottom
 of `gridLanesBounds_`, so `TimelineClipLaneArea` / `PianoRollComponent` — and the playhead overlay,
@@ -14,9 +18,11 @@ track-header column are untouched.
 `TimelinePanelComponent`'s own members, laid out in `resized()`: a header row above
 `synth::ui::AutomationLaneEditor`, the curve canvas. The header carries
 
-- four tool `juce::TextButton`s (glyphs `P` / `✎` / `╱` / `⌫`, radio-grouped so exactly one is
-  down; `kAutomationToolButtonWidth` is 28 px),
-- a lane-picker `juce::ComboBox` — every doc lane, labelled `"NodeName · Parameter name"` via
+- five tool `juce::TextButton`s (glyphs `P` / `✎` / `╱` / `⌫` / `~`, radio-grouped so exactly one is
+  down; `kAutomationToolButtonWidth` is 28 px) — the fifth, Shape, shows a popup of
+  `synth::ShapeKind` names instead of toggling on click (see [Tools](#tools) below),
+- a lane-picker `juce::ComboBox` — every GLOBAL lane (on an Automation-kind track), labelled
+  `"NodeName · Parameter name"` (`automationLaneLabel`, shared with the lane-row headers) via
   `TrackHeaderHost::getNodeDisplayName(lane.nodeUuid)` (falling back to the uuid's first 8
   characters when it does not resolve) and `TrackHeaderHost::getParameterDisplayName` (falling
   back to the raw `paramId`; a hosted plugin's paramIds are opaque, e.g. a VST3's are numbers).
@@ -25,16 +31,21 @@ track-header column are untouched.
   `TrackHeaderHost::getAvailablePluginLaneOptions()` — a hosted plugin's not-yet-automated instance
   parameters, and (FRO292) every ACTIVE, not-yet-automated `ChannelStripModule` send slot, labelled
   "Send to \<target\>" ([modulation.md](../modules/modulation.md#hosted-plugin-parameters-as-automation-lanes)) —
-  choosing one calls `addPluginAutomationLane` (find-or-create) and shows the result exactly like
-  picking an existing lane.
+  choosing one calls `addPluginAutomationLane` (find-or-create through the placement seam) and
+  reveals the result (`revealAutomationLane`: under its track when a track owns the module,
+  otherwise here).
 - a record-mode `juce::ComboBox` (Off/Read/Touch/Latch/Write, 1-based combo id = `LaneRecordMode` +
   1) bound to `TimelineDoc::setLaneRecordMode` through `AppUndoManager::recordTimelineChange` — a
   manual selector change IS a user gesture, unlike `AutomationRecorder`'s own programmatic
   Write-drops-to-Touch-on-stop call; see that setter's header comment.
 - a close `✕` button.
 
-Panel API: `showAutomationLane(LaneId)` / `closeAutomationStrip()` / `isAutomationStripVisible()`.
-Headless hooks: `applyAutomationLaneMenuChoice(int)` / `applyAutomationRecordModeChoice(int)`,
+Panel API: `showAutomationLane(LaneId)` / `closeAutomationStrip()` / `isAutomationStripVisible()` /
+`toggleGlobalAutomationStrip()` (the toolbar button: closes an open strip, else opens it on a global
+lane, else opens it EMPTY — no lane selected — on its "Add lane..." picker; an empty strip stays
+open across doc changes, a strip whose shown lane was removed closes).
+Headless hooks: `applyAutomationLaneMenuChoice(int)` / `applyAutomationRecordModeChoice(int)` /
+`applyShapeToolChoice(int)` (menu id = 1 + the `synth::ShapeKind` enum value, Sine=1..Random=6),
 since a `juce::PopupMenu` or `ComboBox` never runs in a test — the same headless-hook idiom every
 other timeline sub-component's context menu follows.
 
@@ -71,9 +82,40 @@ produce.
 | Pencil | Freehand drag collects raw (beat, value) samples — no snapping, that is the point of freehand. On mouse-up they are thinned by `synth::AutomationRecorder::thinPoints` (reused, not re-implemented — its RDP helper is `public static` precisely so a second caller can reach it) at the SAME `kThinningEpsilonFraction` scaled to the lane's own range, and replace whatever existed inside the dragged beat span |
 | Line | Drag previews a straight line from press to release; mouse-up replaces the dragged span with exactly the two snapped endpoints, Linear |
 | Eraser | Drag removes every handle it touches — collected into a set as the pointer passes over them (dimmed in the preview), deleted on mouse-up |
+| Shape | Press sets the start beat and one extreme value; drag sets the end beat (horizontal) and the other extreme (vertical). Period is the shared view-state's current snap division (`divisionBeatsRaw`; 1 beat when snap is Off). Previewed live via `synth::generateAutomationShape` (see [Shape generation](#shape-generation) below); mouse-up replaces every point inside the dragged span with the generated run, in ONE `editBreakpoints` call |
 
 Right-click a SEGMENT shows Hold/Linear, ticking the current one, routed through the headless
 `applySegmentCurveChoice(beat, curve)` hook. Right-click a HANDLE shows `{Delete point}`.
+
+## Shape generation
+
+`Source/Timeline/AutomationShapes.h` (`synth::generateAutomationShape`, Core target — pure math, no
+UI dependency) is the Shape tool's waveform generator, and the one place `synth::ShapeKind` (Sine,
+Triangle, Square, SawUp, SawDown, Random) is defined:
+
+```cpp
+std::vector<AutomationLane::Breakpoint> generateAutomationShape(
+    ShapeKind kind, double startBeat, double endBeat, double periodBeats,
+    double lowValue, double highValue, double phase = 0.0, std::uint32_t randomSeed = 1);
+```
+
+- **Sine** is densely sampled (16 `Linear` points per period) since `AutomationKernel` has no sine
+  evaluator; **Triangle** places one `Linear` point per peak/trough (the kernel's own interpolation
+  IS the ramp between them); **Square** and **Random** (deterministic sample-and-hold, keyed off
+  `randomSeed`) place `Hold` points at each transition; **SawUp**/**SawDown** are a `Linear` ramp per
+  cycle plus an instantaneous reset offset by a tiny epsilon beat (`1/960`), since a lane's beats
+  must be unique. Never emits `BreakpointCurve::Bezier` (reserved, no evaluator).
+- `phase` (radians) picks which extreme the shape starts at — 0 starts low, `PI` starts high — which
+  is how `AutomationLaneEditor::buildShapePoints()` encodes "which of the press/drag values came
+  first"; Random ignores it.
+- Bounded by `TimelineDoc::kMaxBreakpointsPerLane` always: a period tiny next to the dragged span
+  coarsens (a larger effective period) rather than growing the point count without limit. The LAST
+  point's beat is always exactly `endBeat`, so the drawn shape ends there cleanly.
+- `periodBeats <= 0` (or non-finite) is treated as one cycle spanning the whole span; `endBeat <=
+  startBeat` returns an empty run.
+
+`AutomationLaneEditor::setTool(Tool::Shape)` + `setShapeKind(ShapeKind)` select it; the strip's `~`
+button's popup is the only current caller (`TimelinePanelComponent::applyShapeToolChoice`).
 
 Escape clears in-flight tool-drag state and returns `true`; when idle it returns `false` so the key
 falls through to `TimelinePanelComponent`'s own `keyPressed`, which closes the strip — the same
@@ -114,11 +156,16 @@ is a `GraphEditor` host seam mirroring `onSaveSnippetRequested` exactly: `GraphE
 
 `MainComponent::automateParameter(nodeId, paramId)` — public, and also the test's headless hook —
 resolves the node's uuid (ensure-uuid, mirrored into the processor, the same idiom
-`createTrackInNode()` and `AIStateMapper` use at every uuid writer site), finds the first
-`TrackKind::Automation` track or creates one, binds a lane with the parameter's real
+`createTrackInNode()` and `AIStateMapper` use at every uuid writer site), picks the lane's track
+through the placement seam `synth::findOrCreateLaneHostTrack` (the track that owns the module, else
+the first `TrackKind::Automation` track, created when missing —
+[track-automation](track-automation.md#the-placement-seam)), binds a lane with the parameter's real
 `NormalisableRange` (`addLane` dedupes doc-wide — a repeat call for an already-automated parameter
-is a no-op that returns the existing lane), opens the timeline panel via the SAME toggle-button
-click path `simulateToggleTimelineClick()` uses if it is hidden, and opens the strip on that lane.
+is a no-op that returns the existing lane, wherever it lives), opens the timeline panel via the SAME
+toggle-button click path `simulateToggleTimelineClick()` uses if it is hidden, and reveals the lane
+(`TimelinePanelComponent::revealAutomationLane`): a track-owned lane expands its track, scrolls its
+row into view and focuses it; a global lane opens the strip on it. A hosted-plugin card knob goes
+through `addPluginAutomationLane`, which ends in the same reveal.
 
 See [`modulation.md`](../modules/modulation.md) for the user-facing description of the right-click route.
 
@@ -147,8 +194,19 @@ collide with the first's own new identity. `swapLaneParams` mutates both sides i
 
 ## Tests
 
+Track lane rows, lane placement and "automation follows clips" have their own list in
+[track-automation](track-automation.md#tests).
+
 `Tests/UI/Timeline/AutomationEditorTests.cpp` — `AutomationLaneEditor` gesture and
 publish-discipline coverage (mirroring the `TimelineClipLaneArea` / `PianoRollComponent`
-hand-built-`juce::MouseEvent` idiom against a bare `TimelineDoc` + `AppUndoManager`), the panel's
-strip open/close and record-mode selector, and a `MainComponent` integration test for the knob
-entry point.
+hand-built-`juce::MouseEvent` idiom against a bare `TimelineDoc` + `AppUndoManager`, including the
+Shape tool's one-mutation-per-drag/snap-period/replaces-inside-span/Escape-cancels coverage), the
+panel's strip open/close, record-mode selector and Shape-tool popup headless hook
+(`applyShapeToolChoice`), and a `MainComponent` integration test for the knob entry point.
+
+`Tests/Timeline/AutomationShapesTests.cpp` — `synth::generateAutomationShape` in isolation: point
+counts and the `kMaxBreakpointsPerLane` cap/coarsen under a huge-span/tiny-period stress case for
+every `ShapeKind`, extremes clamped within range, unique sorted beats, the forced
+exactly-`endBeat` landmark, period honoured (checked by evaluating generated points through the SAME
+`AutomationKernel::evaluate` the audio thread and curve canvas use, at quarter-period beats),
+Random's seed-determinism, and the zero/negative-span and zero/negative-period edge cases.

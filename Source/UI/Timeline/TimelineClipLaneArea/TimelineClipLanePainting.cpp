@@ -49,8 +49,9 @@ using namespace detail;
 // computing them separately is how a drawn affordance drifts from the one a test pins (the same
 // reasoning GraphEditor::buildVisibleCables() states).
 juce::Rectangle<int> TimelineClipLaneArea::dragGhostRectFor(const DragOrigin& origin, int rowHeight) const {
-    return computeClipRect(viewState_, origin.trackIndex + previewRowDelta_, origin.originalStart + previewDeltaBeats_,
-                           origin.lengthBeats, rowHeight);
+    juce::ignoreUnused(rowHeight);
+    return clipRectFor(origin.trackIndex + previewRowDelta_, origin.originalStart + previewDeltaBeats_,
+                       origin.lengthBeats);
 }
 
 std::vector<juce::Rectangle<int>> TimelineClipLaneArea::getDragGhostRectsForTest() const {
@@ -343,9 +344,7 @@ void TimelineClipLaneArea::updateLiveRecording(const LiveRecordingInfo& info) {
     liveRecording_ = info;
     livePeaks_ = std::move(peaks);
 
-    const int rowHeight = getRowHeight();
-    const auto newRect = computeClipRect(viewState_, trackIndex, info.punchBeat,
-                                         std::max(0.0, info.currentBeat - info.punchBeat), rowHeight);
+    const auto newRect = clipRectFor(trackIndex, info.punchBeat, std::max(0.0, info.currentBeat - info.punchBeat));
 
     // Repaint-on-arrival: only when new peak buckets actually landed (or this is the strip's very
     // first frame) is a repaint issued — the transport tick alone (which moves the rect's right

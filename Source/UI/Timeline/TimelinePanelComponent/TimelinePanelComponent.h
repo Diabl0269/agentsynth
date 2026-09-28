@@ -12,6 +12,7 @@
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"
 #include "UI/Timeline/TimelineViewState.h"
+#include "UI/Timeline/TrackAutomationLanes/TrackAutomationLanes.h"
 #include <array>
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
@@ -223,10 +224,23 @@ public:
     };
     std::vector<AutomationLaneOption> collectAutomationLaneOptions() const;
 
+    // ---- Track automation lanes (docs/timeline/track-automation.md) ----
+    // Track-owned lane: expand, scroll to and focus its row; a global lane: open the strip on it.
+    void revealAutomationLane(synth::LaneId id);
+    // The toolbar's global toggle: close the strip, else open it on a global lane (or its picker).
+    void toggleGlobalAutomationStrip();
+    int getGlobalAutomationLaneCount() const; // lanes on Automation-kind tracks
+    // Persisted under "timelineAutomationFollowsClips", default OFF.
+    void setAutomationFollowsClips(bool follows);
+    bool isAutomationFollowsClips() const noexcept { return clipLaneArea_.isAutomationFollowsClips(); }
+    TrackAutomationLanes& getTrackAutomationLanes() noexcept { return trackLanes_; }
+
     // ---- Headless hooks (juce::PopupMenu::showMenuAsync's "doesn't run headlessly" idiom applies
     // here too — tests drive the choice directly rather than through a live juce::ComboBox) ----
     void applyAutomationLaneMenuChoice(int selectedId);
     void applyAutomationRecordModeChoice(int selectedId);
+    // `menuId` is 1 + the synth::ShapeKind enum value (Sine=1 .. Random=6); see its definition.
+    void applyShapeToolChoice(int menuId);
 
     // Escape closes the strip when it's open and idle -- see its definition in
     // TimelinePanelShortcuts.cpp for how it interacts with AutomationLaneEditor's own Escape.
@@ -477,12 +491,18 @@ private:
     // it; otherwise open it on the track's first lane. A track with no lanes is a no-op (the button
     // is hidden in that case anyway — see TimelineTrackHeaderComponent::refreshFromDoc()).
     void toggleAutomationForTrack(synth::TrackId trackId);
+    // Called once, from the constructor -- see its definition for why it is its own function.
+    void setUpAutomationStripToolbar();
     // Repopulates the lane picker from the doc, preserving the current selection when it still
     // resolves. Called whenever the doc notifies while the strip is open, and by showAutomationLane().
     void syncAutomationLaneCombo();
     // Re-reads the active lane's recordMode into the combo (no notification — this is a REFLECTION
     // of doc state, not an edit).
     void syncAutomationRecordModeCombo();
+    void setUpTrackAutomationLanes(); // constructor step, TimelinePanelTrackLanes.cpp
+    void refreshAutomationToolbar();
+    void restoreAutomationFollowsClipsPref();
+    void ensureContentRangeVisible(int rowTop, int rowBottom); // content px
 
     // ---- Clip clipboard ----
     // One captured clip, relative to the earliest selected clip's start at copy time (see
@@ -498,7 +518,8 @@ private:
         double relativeStartBeat = 0.0;
         double lengthBeats = 4.0;
         juce::String name;
-        std::vector<synth::MidiNote> notes; // each note's own muted flag travels with it
+        std::vector<synth::MidiNote> notes;                 // each note's own muted flag travels with it
+        std::vector<synth::ClipControllerLane> controllers; // CC lanes (clip-relative) travel too
         bool muted = false;
         // Audio fields — captured and restored so copy/paste of an audio clip yields the same
         // clip, not a silent husk pointing at nothing (they were dropped before, which is exactly
@@ -508,6 +529,8 @@ private:
         double fadeInBeats = 0.0;
         double fadeOutBeats = 0.0;
         double sourceStartSeconds = 0.0;
+        // "Automation follows clips" capture: (source lane, points relative to the clip start).
+        std::vector<std::pair<synth::LaneId, std::vector<synth::AutomationLane::Breakpoint>>> automation;
     };
     std::vector<ClipboardClip> clipClipboard_;
     // The beatsPerBar TimelineViewState::snapBeat needs for pasteClipsAtPlayhead()'s Snap::Bar
@@ -680,6 +703,7 @@ private:
     };
     HeaderViewport trackHeaderViewport_;
     TrackHeaderList trackHeaderList_{*this};
+    TrackAutomationLanes trackLanes_{viewState_, trackHeaderList_}; // after trackHeaderList_ (parents rows)
 
     // The strip's own copy of the undo manager (record-mode/lane-picker edits made directly
     // by this panel, as opposed to automationEditor_'s edits, which it holds its own copy for).
@@ -693,6 +717,7 @@ private:
     juce::TextButton automationToolPencilButton_;
     juce::TextButton automationToolLineButton_;
     juce::TextButton automationToolEraserButton_;
+    juce::TextButton automationToolShapeButton_; // see setUpAutomationStripToolbar()'s definition
     juce::ComboBox laneCombo_;
     juce::ComboBox recordModeCombo_;
     juce::TextButton automationCloseButton_;

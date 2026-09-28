@@ -106,6 +106,116 @@ bool readOptionalArray(const juce::var& v, const juce::Array<juce::var>*& out) {
     return out != nullptr;
 }
 
+// A clip's "notes" array (absent -> no notes). Required ids, the same all-or-nothing rule as the
+// rest of fromVar, and the sort order is REPAIRED rather than trusted: a hand-edited file must not be
+// able to hand a reader an unsorted note list.
+bool readClipNotes(const juce::var& notesVar, Clip& clip, std::set<std::int64_t>& seenNoteIds) {
+    const juce::Array<juce::var>* noteList = nullptr;
+    if (!readOptionalArray(notesVar, noteList))
+        return false;
+    if (noteList == nullptr)
+        return true;
+    if (noteList->size() > TimelineDoc::kMaxNotesPerClip)
+        return false;
+    clip.notes.reserve(static_cast<size_t>(noteList->size()));
+
+    for (const auto& noteVar : *noteList) {
+        auto* nObj = noteVar.getDynamicObject();
+        if (nObj == nullptr)
+            return false;
+        MidiNote note;
+        std::int64_t noteIdValue = 0;
+        // Required, not optional: the dialect never shipped without note ids, so a file missing one
+        // is malformed, not old-format.
+        if (!readId(nObj->getProperty("id"), noteIdValue) || !seenNoteIds.insert(noteIdValue).second)
+            return false;
+        note.id = NoteId{noteIdValue};
+        if (!readOptionalDouble(nObj->getProperty("startBeat"), note.startBeat) ||
+            !readOptionalDouble(nObj->getProperty("lengthBeats"), note.lengthBeats) ||
+            !readOptionalInt(nObj->getProperty("pitch"), note.pitch) ||
+            !readOptionalInt(nObj->getProperty("velocity"), note.velocity) ||
+            !readOptionalInt(nObj->getProperty("channel"), note.channel) ||
+            !readOptionalBool(nObj->getProperty("muted"), note.muted))
+            return false;
+        if (!isValidNote(note))
+            return false;
+        clip.notes.push_back(note);
+    }
+    std::stable_sort(clip.notes.begin(), clip.notes.end(), noteLess);
+    return true;
+}
+
+// A clip's "controllers" array (absent -> no CC lanes: every file written before CC lanes existed).
+// Same rules as TimelineDoc::setControllerLanePoints, which the loader must agree with exactly: a
+// ccNumber outside 0..127 or repeated within the clip, a non-finite/negative beat, a non-finite
+// value, a curve other than Hold/Linear, or too many lanes/points REJECTS the load; the order is
+// repaired, same-beat duplicates collapse (last wins) and values clamp into 0..127.
+bool readClipControllers(const juce::var& controllersVar, Clip& clip) {
+    const juce::Array<juce::var>* laneList = nullptr;
+    if (!readOptionalArray(controllersVar, laneList))
+        return false;
+    if (laneList == nullptr)
+        return true;
+    if (laneList->size() > TimelineDoc::kMaxControllerLanesPerClip)
+        return false;
+
+    std::set<int> seenCcs;
+    for (const auto& laneVar : *laneList) {
+        auto* lObj = laneVar.getDynamicObject();
+        if (lObj == nullptr)
+            return false;
+        ClipControllerLane lane;
+        if (!readInt(lObj->getProperty("ccNumber"), lane.ccNumber) || !isValidCcNumber(lane.ccNumber) ||
+            !seenCcs.insert(lane.ccNumber).second)
+            return false;
+
+        const juce::Array<juce::var>* pointList = nullptr;
+        if (!readOptionalArray(lObj->getProperty("points"), pointList))
+            return false;
+        if (pointList != nullptr) {
+            if (pointList->size() > TimelineDoc::kMaxControllerPointsPerLane)
+                return false;
+            lane.points.reserve(static_cast<size_t>(pointList->size()));
+            for (const auto& pointVar : *pointList) {
+                auto* pObj = pointVar.getDynamicObject();
+                if (pObj == nullptr)
+                    return false;
+                ControllerPoint point;
+                if (!readOptionalDouble(pObj->getProperty("beat"), point.beat) ||
+                    !readOptionalDouble(pObj->getProperty("value"), point.value) ||
+                    !readOptionalInt(pObj->getProperty("curve"), point.curve) || !isValidControllerPoint(point))
+                    return false;
+                lane.points.push_back(point);
+            }
+            lane.points = normalisedControllerPoints(std::move(lane.points));
+        }
+        clip.controllers.push_back(std::move(lane));
+    }
+    std::stable_sort(clip.controllers.begin(), clip.controllers.end(), controllerLaneLess);
+    return true;
+}
+
+// toVar's CC half. Written ALWAYS (an empty array for a clip without lanes), the same
+// one-shape-to-parse rule the audio fields follow. Additive: kFormatVersion stays 1.
+juce::var controllersToVar(const std::vector<ClipControllerLane>& lanes) {
+    juce::Array<juce::var> laneVars;
+    for (const auto& lane : lanes) {
+        juce::DynamicObject::Ptr l = new juce::DynamicObject();
+        l->setProperty("ccNumber", lane.ccNumber);
+        juce::Array<juce::var> pointVars;
+        for (const auto& point : lane.points) {
+            juce::DynamicObject::Ptr p = new juce::DynamicObject();
+            p->setProperty("beat", point.beat);
+            p->setProperty("value", point.value);
+            p->setProperty("curve", point.curve);
+            pointVars.add(juce::var(p.get()));
+        }
+        l->setProperty("points", pointVars);
+        laneVars.add(juce::var(l.get()));
+    }
+    return laneVars;
+}
+
 } // namespace
 
 // -------------------------------------------------------------- serialisation --
@@ -165,6 +275,7 @@ juce::var TimelineDoc::toVar() const {
                 noteVars.add(juce::var(n.get()));
             }
             c->setProperty("notes", noteVars);
+            c->setProperty("controllers", controllersToVar(clip.controllers));
             clipVars.add(juce::var(c.get()));
         }
         t->setProperty("clips", clipVars);
@@ -337,41 +448,9 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                         !isFiniteAtOrAfterZero(clip.sourceStartSeconds))
                         return false;
 
-                    const juce::Array<juce::var>* noteList = nullptr;
-                    if (!readOptionalArray(cObj->getProperty("notes"), noteList))
+                    if (!readClipNotes(cObj->getProperty("notes"), clip, seenNoteIds) ||
+                        !readClipControllers(cObj->getProperty("controllers"), clip))
                         return false;
-                    if (noteList != nullptr) {
-                        if (noteList->size() > kMaxNotesPerClip)
-                            return false;
-                        clip.notes.reserve(static_cast<size_t>(noteList->size()));
-
-                        for (const auto& noteVar : *noteList) {
-                            auto* nObj = noteVar.getDynamicObject();
-                            if (nObj == nullptr)
-                                return false;
-                            MidiNote note;
-                            std::int64_t noteIdValue = 0;
-                            // Required, not optional: the dialect never shipped without note ids,
-                            // so a file missing one is malformed, not old-format.
-                            if (!readId(nObj->getProperty("id"), noteIdValue) ||
-                                !seenNoteIds.insert(noteIdValue).second)
-                                return false;
-                            note.id = NoteId{noteIdValue};
-                            if (!readOptionalDouble(nObj->getProperty("startBeat"), note.startBeat) ||
-                                !readOptionalDouble(nObj->getProperty("lengthBeats"), note.lengthBeats) ||
-                                !readOptionalInt(nObj->getProperty("pitch"), note.pitch) ||
-                                !readOptionalInt(nObj->getProperty("velocity"), note.velocity) ||
-                                !readOptionalInt(nObj->getProperty("channel"), note.channel) ||
-                                !readOptionalBool(nObj->getProperty("muted"), note.muted))
-                                return false;
-                            if (!isValidNote(note))
-                                return false;
-                            clip.notes.push_back(note);
-                        }
-                        // Repaired, not trusted: a hand-edited file must not be able to hand a
-                        // reader an unsorted note list.
-                        std::stable_sort(clip.notes.begin(), clip.notes.end(), noteLess);
-                    }
                     track.clips.push_back(std::move(clip));
                 }
                 std::stable_sort(track.clips.begin(), track.clips.end(), clipLess);

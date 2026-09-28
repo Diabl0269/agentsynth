@@ -7,8 +7,57 @@
 #include "TimelinePanelComponent.h"
 
 #include "AppUndoManager.h"
+#include "UI/Timeline/AutomationFollowsClips.h"
 
 namespace synth::ui {
+
+namespace {
+
+// "Automation follows clips" for a paste (docs/timeline/track-automation.md#automation-follows-events):
+// the lane a captured lane's points land on when its clip is pasted onto `target` -- the same lane
+// when it still lives on that track, else the target track's one lane with the same paramId (lane
+// identity is unique doc-wide, so another track can only ever match by parameter id), else none.
+const synth::AutomationLane* pasteLaneFor(const synth::TimelineDoc& doc, synth::LaneId sourceLane,
+                                          synth::TrackId target) {
+    const auto* source = doc.getLane(sourceLane);
+    const auto* owner = doc.getTrackForLane(sourceLane);
+    if (source != nullptr && owner != nullptr && owner->id == target)
+        return source;
+    const auto* track = doc.getTrack(target);
+    if (track == nullptr || source == nullptr)
+        return nullptr;
+    const synth::AutomationLane* found = nullptr;
+    for (const auto& lane : track->lanes)
+        if (lane.paramId == source->paramId) {
+            if (found != nullptr)
+                return nullptr; // ambiguous
+            found = &lane;
+        }
+    return found;
+}
+
+// Writes one pasted clip's captured automation: each carried lane replaces the span it lands on,
+// through editBreakpoints (validated and clamped like any other lane write). Runs inside the
+// paste's own recordTimelineChange, so clip and automation undo together.
+void pasteCapturedAutomation(
+    synth::TimelineDoc& doc, synth::TrackId target, double startBeat, double lengthBeats,
+    const std::vector<std::pair<synth::LaneId, std::vector<synth::AutomationLane::Breakpoint>>>& captured) {
+    for (const auto& [sourceLane, points] : captured) {
+        const auto* lane = pasteLaneFor(doc, sourceLane, target);
+        if (lane == nullptr || points.empty())
+            continue;
+        std::vector<double> removeBeats;
+        for (const auto& p : lane->points)
+            if (p.beat >= startBeat && p.beat < startBeat + lengthBeats)
+                removeBeats.push_back(p.beat);
+        auto shifted = points;
+        for (auto& p : shifted)
+            p.beat += startBeat;
+        doc.editBreakpoints(lane->id, removeBeats, shifted);
+    }
+}
+
+} // namespace
 
 //==============================================================================
 // ---- Clip clipboard ----
@@ -37,7 +86,7 @@ double TimelinePanelComponent::currentBeatsPerBarForPaste() const {
     return beatsPerBar;
 }
 
-// Copies WHOLE clips: notes (each with its own muted flag), name, length, muted flag and every
+// Copies WHOLE clips: notes (each with its own muted flag), CC lanes, name, length, muted flag and every
 // audio field (assetRef, gainDb, the two fades, sourceStartSeconds) -- see the header for the
 // return-value contract.
 bool TimelinePanelComponent::copySelectedClips() {
@@ -78,13 +127,25 @@ bool TimelinePanelComponent::copySelectedClips() {
         entry.relativeStartBeat = clip->startBeat - earliestStart;
         entry.lengthBeats = clip->lengthBeats;
         entry.name = clip->name;
-        entry.notes = clip->notes; // MidiNote copies carry each note's own muted flag
+        entry.notes = clip->notes;             // MidiNote copies carry each note's own muted flag
+        entry.controllers = clip->controllers; // CC lanes are part of the clip
         entry.muted = clip->muted;
         entry.assetRef = clip->assetRef;
         entry.gainDb = clip->gainDb;
         entry.fadeInBeats = clip->fadeInBeats;
         entry.fadeOutBeats = clip->fadeOutBeats;
         entry.sourceStartSeconds = clip->sourceStartSeconds;
+        if (clipLaneArea_.isAutomationFollowsClips())
+            for (const auto& lane : track->lanes) {
+                std::vector<synth::AutomationLane::Breakpoint> points;
+                for (auto p : lane.points)
+                    if (p.beat >= clip->startBeat && p.beat < clip->startBeat + clip->lengthBeats) {
+                        p.beat -= clip->startBeat;
+                        points.push_back(p);
+                    }
+                if (!points.empty())
+                    entry.automation.emplace_back(lane.id, std::move(points));
+            }
         captured.push_back(std::move(entry));
     }
     if (captured.empty())
@@ -139,6 +200,11 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
                 continue;
             for (const auto& note : entry.notes)
                 doc_->addNote(newId, note);
+            // CC lanes go back through the mutation API too (its validation, its sort/dedupe).
+            for (const auto& lane : entry.controllers) {
+                doc_->addControllerLane(newId, lane.ccNumber);
+                doc_->setControllerLanePoints(newId, lane.ccNumber, lane.points);
+            }
             // Through the setters, not into the struct: setClipAsset is the gate that rejects an
             // assetRef that is not bundle-relative, and a clipboard is not a trusted source.
             if (entry.assetRef.isNotEmpty() || entry.sourceStartSeconds != 0.0)
@@ -146,6 +212,7 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
             doc_->setClipGainDb(newId, entry.gainDb);
             doc_->setClipFades(newId, entry.fadeInBeats, entry.fadeOutBeats);
             doc_->setClipMuted(newId, entry.muted);
+            pasteCapturedAutomation(*doc_, targets[i], startBeat, entry.lengthBeats, entry.automation);
             newIds.push_back(newId);
         }
     };
@@ -170,13 +237,24 @@ bool TimelinePanelComponent::duplicateSelectedClips() {
     if (selected.empty())
         return false;
 
+    // "Automation follows clips": each copy lands right after its source (duplicateClip's rule).
+    std::vector<AutomationSpanEdit> spanEdits;
+    if (clipLaneArea_.isAutomationFollowsClips())
+        for (auto id : selected)
+            if (const auto* clip = doc_->getClip(id))
+                if (auto spanEdit =
+                        automationSpanEditForClip(*doc_, id, AutomationSpanEdit::Kind::Copy,
+                                                  doc_->getTrackForClip(id)->id, clip->startBeat + clip->lengthBeats))
+                    spanEdits.push_back(*spanEdit);
+
     std::vector<synth::ClipId> newIds;
-    auto mutate = [this, &selected, &newIds] {
+    auto mutate = [this, &selected, &newIds, &spanEdits] {
         for (auto id : selected) {
             const auto newId = doc_->duplicateClip(id);
             if (newId.isValid())
                 newIds.push_back(newId);
         }
+        applyAutomationSpanEdits(*doc_, spanEdits);
     };
 
     if (undoManager_)
@@ -202,7 +280,13 @@ bool TimelinePanelComponent::cutSelectedClips() {
         return false;
 
     const auto selected = clipSelection_.getSelected();
-    auto mutate = [this, selected] {
+    std::vector<AutomationSpanEdit> spanEdits; // "automation follows clips": the cut takes its automation
+    if (clipLaneArea_.isAutomationFollowsClips())
+        for (auto id : selected)
+            if (auto spanEdit = automationSpanEditForClip(*doc_, id, AutomationSpanEdit::Kind::Remove))
+                spanEdits.push_back(*spanEdit);
+    auto mutate = [this, selected, spanEdits] {
+        applyAutomationSpanEdits(*doc_, spanEdits);
         for (auto id : selected)
             doc_->removeClip(id);
     };
@@ -266,8 +350,18 @@ bool TimelinePanelComponent::repeatSelectedClips(int count) {
 
     const double blockLength = spanEnd - spanStart;
 
+    // "Automation follows clips": every tiled copy carries its source's span, one batched transfer.
+    std::vector<AutomationSpanEdit> spanEdits;
+    if (clipLaneArea_.isAutomationFollowsClips())
+        for (int repeat = 1; repeat <= count; ++repeat)
+            for (const auto& source : sources)
+                if (auto spanEdit =
+                        automationSpanEditForClip(*doc_, source.id, AutomationSpanEdit::Kind::Copy, source.track,
+                                                  source.startBeat + (double)repeat * blockLength))
+                    spanEdits.push_back(*spanEdit);
+
     std::vector<synth::ClipId> newIds;
-    auto mutate = [this, sources, blockLength, count, &newIds] {
+    auto mutate = [this, sources, blockLength, count, spanEdits, &newIds] {
         for (int repeat = 1; repeat <= count; ++repeat) {
             for (const auto& source : sources) {
                 const auto dup = doc_->duplicateClip(source.id);
@@ -280,6 +374,7 @@ bool TimelinePanelComponent::repeatSelectedClips(int count) {
                 newIds.push_back(dup);
             }
         }
+        applyAutomationSpanEdits(*doc_, spanEdits);
     };
 
     if (undoManager_)

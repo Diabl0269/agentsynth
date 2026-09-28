@@ -12,6 +12,7 @@
 #include "Modules/TimelineMidiSourceModule.h" // auditionTrackNote pushes into the bound Track In node
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Timeline/AutomationBinding.h"
+#include "Timeline/AutomationPlacement.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <map>
 #include <set>
@@ -223,6 +224,56 @@ std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> MainComponent::getAvai
     return options;
 }
 
+// The track header's "Add automation lane" submenu: every not-yet-automated parameter of every
+// module `track` OWNS (synth::computeTrackOwnership -- reached from this track's source and from no
+// other track's), grouped per module in graph order. Built-in modules offer their automatable
+// RangedAudioParameters, a hosted plugin its instance parameters, and a Channel Strip its ACTIVE
+// send slots only (the same rule the strip's "Add lane..." list follows). Choosing one goes through
+// addPluginAutomationLane, whose placement seam puts the lane on this very track.
+std::vector<synth::ui::TrackHeaderHost::PluginLaneOption>
+MainComponent::getTrackAutomationParameterOptions(synth::TrackId track) const {
+    std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> options;
+    auto& graph = const_cast<MainComponent*>(this)->audioEngine.getGraph();
+    const auto owners = synth::computeTrackOwnership(graph, timelineDoc);
+    std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> sends;
+    collectChannelStripSendLaneOptions(graph, const_cast<MainComponent*>(this)->graphEditor.getMacros(), timelineDoc,
+                                       sends);
+
+    auto add = [&options, this](const juce::String& uuid, const juce::String& paramId, int index,
+                                const juce::String& label) {
+        if (timelineDoc.getLaneForParam(uuid, paramId) == nullptr)
+            options.push_back({uuid, paramId, index, label});
+    };
+    for (auto* node : graph.getNodes()) {
+        const auto owner = node != nullptr ? owners.find(node->nodeID.uid) : owners.end();
+        if (owner == owners.end() || owner->second != track)
+            continue;
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isEmpty())
+            continue; // same "nothing to offer before ensure-uuid" rule as the strip's list
+
+        if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor())) {
+            if (hosted->hasInstance())
+                for (const auto& param : hosted->getInstanceParameters())
+                    add(uuid, param.paramId, param.index, param.displayName);
+            continue;
+        }
+        const bool isStrip = dynamic_cast<ChannelStripModule*>(node->getProcessor()) != nullptr;
+        for (auto* p : node->getProcessor()->getParameters()) {
+            auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p);
+            if (ranged == nullptr || !ranged->isAutomatable())
+                continue;
+            if (isStrip && ranged->paramID.startsWith("send"))
+                continue; // offered below, active slots only
+            add(uuid, ranged->paramID, -1, ranged->getName(64));
+        }
+        for (const auto& send : sends)
+            if (send.nodeUuid == uuid)
+                options.push_back(send);
+    }
+    return options;
+}
+
 synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) {
     if (option.nodeUuid.isEmpty() || option.paramId.isEmpty())
         return {};
@@ -246,15 +297,8 @@ synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeade
     const juce::String paramIdCopy = option.paramId;
     const int paramIndexCopy = option.paramIndex;
     auto mutate = [this, &laneId, uuidCopy, paramIdCopy, paramIndexCopy, &resolved] {
-        synth::TrackId trackId;
-        for (const auto& track : timelineDoc.getTracks()) {
-            if (track.kind == synth::TrackKind::Automation) {
-                trackId = track.id;
-                break;
-            }
-        }
-        if (!trackId.isValid())
-            trackId = timelineDoc.addTrack(synth::TrackKind::Automation, "Automation");
+        // Same placement seam as automateParameter (synth::findOrCreateLaneHostTrack).
+        const auto trackId = synth::findOrCreateLaneHostTrack(audioEngine.getGraph(), timelineDoc, uuidCopy);
         if (!trackId.isValid())
             return;
 
@@ -270,7 +314,7 @@ synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeade
         return {};
 
     ensureBottomDockOpen();
-    timelinePanel.showAutomationLane(laneId);
+    timelinePanel.revealAutomationLane(laneId);
     return laneId;
 }
 

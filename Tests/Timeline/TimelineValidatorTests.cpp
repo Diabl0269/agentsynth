@@ -200,6 +200,11 @@ std::vector<Case> makeCases() {
         {TimelineValidationError::ReservedKindNotAllowed, "a track uses a reserved TrackKind",
          [](juce::var& root) { trackObj(root).setProperty("kind", 7); }},
 
+        {TimelineValidationError::ControllerOutOfRange, "a clip CC lane names controller 128",
+         [](juce::var& root) {
+             clipObj(root).setProperty("controllers", juce::JSON::parse(R"([{"ccNumber":128,"points":[]}])"));
+         }},
+
         {TimelineValidationError::InternalError, "the loader refuses a next-id counter this gate does not model",
          [](juce::var& root) { obj(root).setProperty("nextClipId", 0); }},
 

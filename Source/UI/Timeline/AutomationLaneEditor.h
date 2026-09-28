@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Timeline/AutomationShapes.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelineViewState.h"
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -28,17 +29,20 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // in-flight tool-drag state and returns true; returns false when idle so the key falls through to
 // TimelinePanelComponent, which closes the strip.
 //
-// Four tools (member `tool_`): Pointer (drag a handle to move it; drag a segment to scrub its
+// Five tools (member `tool_`): Pointer (drag a handle to move it; drag a segment to scrub its
 // left point's tension; double-click empty space adds a point), Pencil (freehand drag, thinned via
 // synth::AutomationRecorder's RDP helper on mouse-up), Line (drag previews a straight line, commits
-// as its two snapped endpoints), Eraser (drag deletes every handle touched, in one mutation).
-// Right-click a segment shows Hold/Linear via the headless applySegmentCurveChoice() hook (menus
-// don't run in tests); right-click a handle shows Delete point.
+// as its two snapped endpoints), Eraser (drag deletes every handle touched, in one mutation), Shape
+// (drag stamps one of synth::ShapeKind's waveforms — see setShapeKind() below — across the dragged
+// span via synth::generateAutomationShape(); period comes from the shared view-state's current
+// snap division). Right-click a segment shows Hold/Linear via the headless
+// applySegmentCurveChoice() hook (menus don't run in tests); right-click a handle shows Delete
+// point.
 namespace synth::ui {
 
 class AutomationLaneEditor : public juce::Component {
 public:
-    enum class Tool { Pointer, Pencil, Line, Eraser };
+    enum class Tool { Pointer, Pencil, Line, Eraser, Shape };
 
     explicit AutomationLaneEditor(TimelineViewState& viewState);
     ~AutomationLaneEditor() override = default;
@@ -71,6 +75,18 @@ public:
     void setTool(Tool tool) noexcept { tool_ = tool; }
     Tool getTool() const noexcept { return tool_; }
 
+    // Which waveform the Shape tool stamps in. Takes effect on the NEXT press; changing it
+    // mid-drag does not retroactively change an in-flight preview.
+    void setShapeKind(synth::ShapeKind kind) noexcept { shapeKind_ = kind; }
+    synth::ShapeKind getShapeKind() const noexcept { return shapeKind_; }
+
+    // Track lane row look: a translucent tint of `tint` over the panel grid instead of the strip's
+    // opaque backdrop, the curve drawn in `tint`. Off (the default) is the strip look.
+    void setTrackLaneStyle(bool enabled, juce::Colour tint);
+    // An accent outline marking the focused lane row. Visual only.
+    void setHighlighted(bool highlighted);
+    bool isHighlighted() const noexcept { return highlighted_; }
+
     // ---- Headless hooks (juce::PopupMenu::showMenuAsync doesn't run headlessly) ----
 
     // Toggles the segment whose LEFT point sits at `leftBeat` to `curve` (a BreakpointCurve value).
@@ -92,7 +108,7 @@ public:
     double yToValue(double y) const;
 
 private:
-    enum class DragMode { None, MoveHandle, TensionScrub, Pencil, Line, Eraser };
+    enum class DragMode { None, MoveHandle, TensionScrub, Pencil, Line, Eraser, Shape };
 
     struct HandleHit {
         double beat = 0.0;
@@ -122,6 +138,15 @@ private:
     double snappedBeatAt(double rawBeat) const;
     double clampValue(double value) const;
 
+    // The Shape tool's period: the shared view-state's current snap division at the lane's
+    // beats-per-bar, or 1 beat when snap is Off — see the definition for why a UI gesture never
+    // hands the generator a zero period itself.
+    double shapePeriodBeats() const;
+    // The waveform the current shape drag would commit, from the press/drag beats and values
+    // recorded so far — read by both the live preview (paintToolPreview) and mouseUp, so the two
+    // can never disagree about what a drag produced.
+    std::vector<synth::AutomationLane::Breakpoint> buildShapePoints() const;
+
     // The beats of every EXISTING breakpoint in [loBeat, hiBeat] (inclusive) — a pure read, handed
     // to TimelineDoc::editBreakpoints' removeBeats list so "replace a span" costs exactly one doc
     // mutation (one revision bump), whatever the span contains.
@@ -142,6 +167,10 @@ private:
 
     synth::LaneId laneId_;
     Tool tool_ = Tool::Pointer;
+    synth::ShapeKind shapeKind_ = synth::ShapeKind::Sine;
+    bool trackLaneStyle_ = false;
+    juce::Colour trackLaneTint_;
+    bool highlighted_ = false;
 
     DragMode dragMode_ = DragMode::None;
     juce::Point<int> mouseDownPos_;
@@ -170,6 +199,14 @@ private:
 
     // ---- Eraser preview (beats of the handles touched so far this drag) ----
     std::set<double> erasedBeats_;
+
+    // ---- Shape preview ---- press sets the start beat and one extreme value; drag sets the end
+    // beat and the other extreme. Order is not normalised until buildShapePoints() reads them, so
+    // painting and hit-testing never disagree with what was actually pressed/dragged.
+    double shapeStartBeat_ = 0.0;
+    double shapePressValue_ = 0.0;
+    double shapeEndBeat_ = 0.0;
+    double shapeDragValue_ = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AutomationLaneEditor)
 };

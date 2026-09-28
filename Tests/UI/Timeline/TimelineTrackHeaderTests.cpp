@@ -637,16 +637,26 @@ TEST(TimelineTrackHeaderTest, KindBadgeTextEmptyWhenTrackIsGone) {
     EXPECT_EQ(f.header->getKindBadgeTextForTest(), juce::String());
 }
 
-TEST(TimelineTrackHeaderTest, AutomationButtonHiddenUntilTheTrackHasALane) {
+// Track automation lanes (docs/timeline/tracks.md#the-automation-button): a Midi/Audio track's A is
+// the expand/collapse toggle for its lane rows, so it is always offered (and lit once there are
+// lanes); only an Automation-kind track keeps the old "hidden until it has a lane" rule.
+TEST(TimelineTrackHeaderTest, AutomationButtonAlwaysOnMidiTracksAndHiddenOnAnEmptyAutomationTrack) {
     HeaderFixture f;
-    EXPECT_FALSE(f.header->getAutomationButton().isVisible());
+    EXPECT_TRUE(f.header->getAutomationButton().isVisible());
+    EXPECT_TRUE(f.header->getAutomationButton().getTooltip().contains("0 lanes"));
 
     synth::AutomationLane::RangeSnapshot range;
     const auto laneId = f.doc.addLane(f.trackId, "node-uuid", "cutoff", range);
     ASSERT_TRUE(laneId.isValid());
     f.header->refreshFromDoc();
-
     EXPECT_TRUE(f.header->getAutomationButton().isVisible());
+    EXPECT_TRUE(f.header->getAutomationButton().getTooltip().contains("1 lane"));
+
+    HeaderFixture automation(TrackKind::Automation);
+    EXPECT_FALSE(automation.header->getAutomationButton().isVisible());
+    automation.doc.addLane(automation.trackId, "node-uuid", "cutoff", range);
+    automation.header->refreshFromDoc();
+    EXPECT_TRUE(automation.header->getAutomationButton().isVisible());
 }
 
 TEST(TimelineTrackHeaderTest, AutomationButtonClickFiresOnAutomationToggleRequestedWithTheTrackId) {

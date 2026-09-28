@@ -36,6 +36,45 @@ float gainFromDecibels(double gainDb) noexcept {
     return (float)std::pow(10.0, gainDb * 0.05);
 }
 
+// The MIDI channels a clip's CC lanes play on: every channel the clip's notes use (muted notes
+// included — a mute silences a note, it does not move the clip to another channel), or channel 1
+// for a clip with no notes. A CC lane has no channel of its own, so this is what "the track's
+// channel(s)" means; computed once here so the audio thread only tests bits.
+std::uint16_t channelMaskFor(const Clip& clip) noexcept {
+    std::uint16_t mask = 0;
+    for (const auto& note : clip.notes)
+        if (note.channel >= 1 && note.channel <= 16)
+            mask = (std::uint16_t)(mask | (1u << (note.channel - 1)));
+    return mask != 0 ? mask : (std::uint16_t)1;
+}
+
+// Appends one clip's CC lanes to the snapshot. Lanes with no points contribute nothing (there is
+// no value to send). Point beats are made ABSOLUTE, like note beats, and are NOT clipped: a point
+// past the clip end still shapes the segment that crosses it — TimelineMidiSourceModule only ever
+// evaluates inside [startBeat, endBeat).
+void flattenControllers(const Clip& clip, TimelineSnapshot& snapshot) {
+    const std::uint16_t mask = channelMaskFor(clip);
+    for (const auto& lane : clip.controllers) {
+        if (lane.points.empty())
+            continue;
+        TimelineSnapshot::ControllerInfo info;
+        info.ccNumber = lane.ccNumber;
+        info.channelMask = mask;
+        info.startBeat = clip.startBeat;
+        info.endBeat = clip.startBeat + clip.lengthBeats;
+        info.firstPoint = static_cast<int>(snapshot.points.size());
+        for (const auto& point : lane.points) {
+            TimelineSnapshot::Point flat;
+            flat.beat = clip.startBeat + point.beat;
+            flat.value = point.value;
+            flat.curve = point.curve;
+            snapshot.points.push_back(flat);
+        }
+        info.numPoints = static_cast<int>(snapshot.points.size()) - info.firstPoint;
+        snapshot.controllers.push_back(info);
+    }
+}
+
 } // namespace
 
 std::atomic<int>& TimelineSnapshot::liveInstanceCount() noexcept {
@@ -75,6 +114,7 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
         // is what decides which half of a clip is flattened; a note left on an audio track is inert
         // rather than half-played, and the same clip's assetRef is inert on a MIDI track.
         info.firstNote = static_cast<int>(snapshot->notes.size());
+        info.firstController = static_cast<int>(snapshot->controllers.size());
 
         if (track.kind == TrackKind::Midi) {
             for (const auto& clip : track.clips) {
@@ -82,6 +122,10 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
                 // flatten policy on TimelineSnapshot.
                 if (clip.muted)
                     continue;
+
+                // Clips are walked in (startBeat, id) order, so the per-track CC run comes out
+                // sorted by startBeat with no merge step.
+                flattenControllers(clip, *snapshot);
 
                 const double clipEnd = clip.startBeat + clip.lengthBeats;
                 const auto runStart = snapshot->notes.size();
@@ -119,6 +163,7 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
         }
 
         info.numNotes = static_cast<int>(snapshot->notes.size()) - info.firstNote;
+        info.numControllers = static_cast<int>(snapshot->controllers.size()) - info.firstController;
 
         // -- audio clips -----------------------------------------------------------
         // Audio tracks only, and no merge step: the doc keeps a track's clips sorted by
@@ -195,6 +240,7 @@ bool TimelineSnapshot::selfCheck() const noexcept {
     const auto laneCount = static_cast<int>(lanes.size());
     const auto pointCount = static_cast<int>(points.size());
     const auto audioClipCount = static_cast<int>(audioClips.size());
+    const auto controllerCount = static_cast<int>(controllers.size());
 
     for (const auto& track : tracks) {
         if (track.firstNote < 0 || track.numNotes < 0 || track.firstNote + track.numNotes > noteCount)
@@ -205,6 +251,9 @@ bool TimelineSnapshot::selfCheck() const noexcept {
             track.firstAudioClip + track.numAudioClips > audioClipCount)
             return false;
         if (track.bindingUuid[kMaxStringBytes - 1] != '\0')
+            return false;
+        if (track.firstController < 0 || track.numControllers < 0 ||
+            track.firstController + track.numControllers > controllerCount)
             return false;
 
         for (int i = track.firstNote + 1; i < track.firstNote + track.numNotes; ++i)
@@ -218,6 +267,17 @@ bool TimelineSnapshot::selfCheck() const noexcept {
             if (i > track.firstAudioClip && clip.startBeat < audioClips[static_cast<std::size_t>(i - 1)].startBeat)
                 return false;
         }
+    }
+
+    for (const auto& controller : controllers) {
+        if (controller.firstPoint < 0 || controller.numPoints < 0 ||
+            controller.firstPoint + controller.numPoints > pointCount)
+            return false;
+        if (controller.ccNumber < 0 || controller.ccNumber > 127 || controller.channelMask == 0)
+            return false;
+        for (int i = controller.firstPoint + 1; i < controller.firstPoint + controller.numPoints; ++i)
+            if (points[static_cast<std::size_t>(i)].beat < points[static_cast<std::size_t>(i - 1)].beat)
+                return false;
     }
 
     for (const auto& lane : lanes) {

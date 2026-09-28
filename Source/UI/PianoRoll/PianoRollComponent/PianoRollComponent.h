@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PianoRollTypes.h"
+#include "Timeline/MidiClipFile.h"
 #include "Timeline/MusicalScale.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/UIAnimation.h"
@@ -15,6 +16,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -46,6 +48,8 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 //
 // See docs/timeline/piano-roll.md#select-tool-gestures for the gesture table.
 namespace synth::ui {
+
+class PianoRollControllerLanes; // Forward declaration (PianoRollControllerLanes/PianoRollControllerLanes.h)
 
 class PianoRollComponent
     : public juce::Component
@@ -277,6 +281,30 @@ public:
     bool isScaleFilterOn() const noexcept;
     bool isRowFilterActive() const noexcept;
 
+    // ---- Velocity / CC lane strip (docs/timeline/piano-roll-lanes.md) ----
+    // A child strip docked under the note canvas; hidden = the roll's layout exactly as without it.
+    void setControllerLanesVisible(bool visible);
+    void toggleControllerLanes();
+    bool areControllerLanesVisible() const noexcept;
+    PianoRollControllerLanes& getControllerLanes() noexcept;
+    juce::Rectangle<int> getLanesButtonBounds() const noexcept;
+    // Read-only view of the note selection (the lanes restrict ramps to it).
+    const NoteSelectionModel& getSelection() const noexcept;
+    // An ABSOLUTE beat snapped to the shared snap division (unchanged with Snap off).
+    double snapBeatForLanes(double absBeat) const;
+    // Bottom edge of the note canvas: the component height minus the visible lane strip.
+    int canvasBottom() const noexcept;
+    // Repaints just these notes' rects (a lane velocity preview changed their colour).
+    void repaintNotesForLanes(const std::vector<synth::NoteId>& ids);
+
+    // ---- MIDI files (the "MIDI" chip; docs/timeline/piano-roll-lanes.md#midi-files) ----
+    juce::Rectangle<int> getMidiButtonBounds() const noexcept;
+    // Imports into the OPEN clip; asks first (promptMidiControllerImport) when the file has CC data.
+    bool importMidiIntoOpenClip(const synth::MidiClipFile::ImportResult& result);
+    // The prompt's answer path (also the headless test seam). One undo step.
+    void applyMidiImportAnswer(synth::ClipId clipId, const synth::MidiClipFile::ImportResult& result,
+                               bool withControllers);
+
     // ---- Follow playhead ----
 
     // When on, setPlayheadBeat page-flips the roll's own horizontal view rather than letting it
@@ -372,9 +400,19 @@ public:
     double getLastExtendPromptLengthForTest() const noexcept;
     synth::ClipId getLastExtendPromptClipForTest() const noexcept;
 
-    // Six header chips, left to right: Back ("Clips"), Quantise, QuantiseLength, QuantisePitches,
-    // Scale, ScaleFilter. ScaleFilter is a TOGGLE (it paints lit); the other four are actions.
-    enum class HeaderButtonId { None, Back, Quantise, QuantiseLength, QuantisePitches, Scale, ScaleFilter };
+    // Eight header chips, left to right (Lanes, then MIDI, last): Back ("Clips"), Quantise, QuantiseLength,
+    // QuantisePitches, Scale, ScaleFilter. ScaleFilter is a TOGGLE (it paints lit); the other four are actions.
+    enum class HeaderButtonId {
+        None,
+        Back,
+        Quantise,
+        QuantiseLength,
+        QuantisePitches,
+        Scale,
+        ScaleFilter,
+        Lanes,
+        Midi
+    };
     HeaderButtonId getHoveredHeaderButtonForTest() const noexcept;
     bool isHeaderButtonHoveredForTest(HeaderButtonId which) const noexcept;
 
@@ -389,6 +427,8 @@ protected:
      *  clip to fit or leave it overrunning. Protected virtual so a headless test can override it
      *  instead of the real async juce::AlertWindow; see PianoRollAudition.cpp for the full contract. */
     virtual void promptExtendClipToFitNotes(synth::ClipId clipId, double requiredLengthBeats);
+    // Async "controller data?" question for a .mid import; a test overrides it (PianoRollMidiFile.cpp).
+    virtual void promptMidiControllerImport(synth::ClipId clipId, const synth::MidiClipFile::ImportResult& result);
 
     // THE edge-auto-scroll timer's seam — see PianoRollMouse.cpp for the full contract.
     virtual void autoScrollTick();
@@ -412,6 +452,12 @@ private:
     double snappedBeatAt(double rawBeat) const;
     void clampToClipWindow(double& start, double& length) const;
     juce::Rectangle<int> gridRegion() const noexcept;
+    // resized()'s lane-strip carve: removes the strip from the bottom of `bounds` when visible.
+    void layoutControllerLanes(juce::Rectangle<int>& bounds);
+    // The "MIDI" chip's menu and its async file choosers (PianoRollMidiFile.cpp).
+    void showMidiMenu();
+    void chooseMidiFileToImport();
+    void chooseMidiFileToExport();
 
     // ---- Row mapping (visiblePitches_) ---- see PianoRollComponent.cpp for the full contract of
     // rebuildVisiblePitches/nearestVisibleRowIndex/rowShiftedPitch (called from setScaleContext,
@@ -854,6 +900,13 @@ private:
     juce::Rectangle<int> scaleFilterButtonBounds_;
     juce::Rectangle<int> keysColumnBounds_;
     juce::Rectangle<int> noteGridBounds_;
+    // "Lanes" chip: toggles the velocity / CC strip (a toggle, paints lit).
+    juce::Rectangle<int> lanesButtonBounds_;
+    // "MIDI" chip: import into / export the open clip (an action menu).
+    juce::Rectangle<int> midiButtonBounds_;
+    std::unique_ptr<juce::FileChooser> midiFileChooser_; // alive while an async chooser is open
+    // Owned child; never null after construction.
+    std::unique_ptr<PianoRollControllerLanes> controllerLanes_;
 
     // Which header chip (if any) the pointer is currently over — see updateHeaderButtonHover.
     HeaderButtonId hoveredHeaderButton_ = HeaderButtonId::None;

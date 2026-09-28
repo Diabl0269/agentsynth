@@ -98,6 +98,7 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
         appProperties_->getUserSettings()->getBoolValue(kTimelineFollowPlayheadPropertyKey, followPlayhead_);
     followPlayheadButton_.setToggleState(followPlayhead_, juce::dontSendNotification);
     pianoRoll_.setFollowPlayhead(followPlayhead_);
+    restoreAutomationFollowsClipsPref();
 
     // A pure forward -- the transport bar restores/persists ITS OWN two keys
     // ("timelineMetronomeEnabled", "timelineCountInBars") -- this panel has no other reason to know
@@ -359,8 +360,7 @@ int TimelinePanelComponent::currentRowHeight() const {
 }
 
 double TimelinePanelComponent::maxTrackScrollPx() const {
-    const int rows = doc_ != nullptr ? (int)doc_->getTracks().size() : 0;
-    return std::max(0.0, (double)(rows * currentRowHeight() - gridLanesBounds_.getHeight()));
+    return std::max(0.0, (double)(clipLaneArea_.getRowLayout().getTotalHeight() - gridLanesBounds_.getHeight()));
 }
 
 void TimelinePanelComponent::scrollTrackRows(double deltaPx) {
@@ -392,6 +392,7 @@ void TimelinePanelComponent::syncTrackScroll() {
     // setViewPosition fires visibleAreaChanged, whose handler sees an unchanged value and stops —
     // no feedback loop.
     trackHeaderViewport_.setViewPosition(0, (int)std::llround(viewState_.trackScrollY));
+    trackLanes_.layoutEditors(clipLaneArea_.getRowLayout());
     clipLaneArea_.repaint();
     repaint(gridLanesBounds_);
 }
@@ -450,6 +451,11 @@ void TimelinePanelComponent::resized() {
     // The clip-lane area fills EXACTLY the rect the grid below is painted into (paint()'s
     // gridLanesBounds_ loop, unchanged) — so clips line up with the bar/beat grid pixel-for-pixel.
     clipLaneArea_.setBounds(gridLanesBounds_);
+    // The track lane editors ride over the clip lanes in a click-through layer of the same rect,
+    // hidden while the piano roll owns it.
+    trackLanes_.getEditorLayer().setBounds(gridLanesBounds_);
+    trackLanes_.getEditorLayer().setVisible(!rollOpen);
+    trackLanes_.layoutEditors(clipLaneArea_.getRowLayout());
     // The piano roll covers the clip lanes' rect PLUS its own toolbar row and the ruler band between
     // them (see above) — so its canvas is pixel-aligned with the clip lanes and the playhead exactly
     // as before, because canvasTop() accounts for the two rows above it. Closed, the extra rows are
@@ -496,6 +502,7 @@ void TimelinePanelComponent::resized() {
     automationToolPencilButton_.setVisible(stripOpen);
     automationToolLineButton_.setVisible(stripOpen);
     automationToolEraserButton_.setVisible(stripOpen);
+    automationToolShapeButton_.setVisible(stripOpen);
     laneCombo_.setVisible(stripOpen);
     recordModeCombo_.setVisible(stripOpen);
     automationCloseButton_.setVisible(stripOpen);
@@ -506,6 +513,7 @@ void TimelinePanelComponent::resized() {
         automationToolPencilButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
         automationToolLineButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
         automationToolEraserButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
+        automationToolShapeButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
         automationCloseButton_.setBounds(header.removeFromRight(kAutomationCloseButtonWidth).reduced(2));
         recordModeCombo_.setBounds(header.removeFromRight(kAutomationRecordModeComboWidth).reduced(2));
         laneCombo_.setBounds(header.reduced(2));
@@ -519,6 +527,9 @@ void TimelinePanelComponent::resized() {
     snapToggleButton_.setBounds(transportBar.removeFromRight(kSnapToggleButtonWidth).reduced(2));
     // Follow-playhead sits immediately left of the snap toggle — see its member comment.
     followPlayheadButton_.setBounds(transportBar.removeFromRight(kFollowPlayheadButtonWidth).reduced(2));
+    // Automation follows-clips, the global-strip toggle and the Draw tool's curve selector sit
+    // between follow-playhead and the tool strip (TrackAutomationLanes::layoutToolbar).
+    trackLanes_.layoutToolbar(transportBar);
     // The tool strip sits immediately left of the snap controls: both are "how the next edit
     // behaves" chrome, so they read as one group, and neither pushes the transport controls off
     // their left-aligned home. Laid out left-to-right in EditTool order (1, 3, 4, 5, 7, 8).

@@ -125,7 +125,7 @@ void PianoRollComponent::paintGrid(juce::Graphics& g) {
     }
 
     const int width = getWidth();
-    const int height = getHeight();
+    const int height = canvasBottom();
     const int rowHeight = std::max(1, (int)pixelsPerSemitone_);
     const int visibleRows = std::max(0, (height - canvasTop()) / rowHeight) + 2;
     const long long totalRows = (long long)visiblePitches_.size();
@@ -472,6 +472,17 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     drawScaleFilterGlyph(
         g, scaleFilterButtonBounds_,
         filterFill.contrasting(0.9f).withMultipliedAlpha(activeScaleForOpenClip().has_value() ? 1.0f : 0.45f));
+
+    // LANES: the velocity / CC strip toggle (docs/timeline/piano-roll-lanes.md). A toggle, lit while open.
+    const auto lanesFill =
+        paintChip(lanesButtonBounds_, areControllerLanesVisible(), hoveredHeaderButton_ == HeaderButtonId::Lanes);
+    g.setColour(lanesFill.contrasting(0.9f));
+    g.drawText("Lanes", lanesButtonBounds_, juce::Justification::centred, false);
+
+    // MIDI: import into / export this clip as a .mid file (an action menu, never lit).
+    const auto midiFill = paintChip(midiButtonBounds_, false, hoveredHeaderButton_ == HeaderButtonId::Midi);
+    g.setColour(midiFill.contrasting(0.9f));
+    g.drawText("MIDI", midiButtonBounds_, juce::Justification::centred, false);
 }
 
 //==============================================================================
@@ -660,6 +671,10 @@ juce::Rectangle<int> PianoRollComponent::headerButtonBoundsFor(HeaderButtonId wh
         return scaleFilterButtonBounds_;
     case HeaderButtonId::Scale:
         return scaleButtonBounds_;
+    case HeaderButtonId::Lanes:
+        return lanesButtonBounds_;
+    case HeaderButtonId::Midi:
+        return midiButtonBounds_;
     case HeaderButtonId::None:
         break;
     }
@@ -680,6 +695,10 @@ void PianoRollComponent::updateHeaderButtonHover(juce::Point<int> pos) {
         next = HeaderButtonId::ScaleFilter;
     else if (scaleButtonBounds_.contains(pos))
         next = HeaderButtonId::Scale;
+    else if (lanesButtonBounds_.contains(pos))
+        next = HeaderButtonId::Lanes;
+    else if (midiButtonBounds_.contains(pos))
+        next = HeaderButtonId::Midi;
 
     if (next == hoveredHeaderButton_)
         return; // state-change gate: hovering the SAME chip (or none) costs nothing
@@ -771,6 +790,15 @@ void PianoRollComponent::resized() {
     scaleButtonBounds_ = header.removeFromLeft(50).reduced(2, 2);
     header.removeFromLeft(2);
     scaleFilterButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
+    header.removeFromLeft(4);
+    lanesButtonBounds_ = header.removeFromLeft(50).reduced(2, 2);
+    header.removeFromLeft(2);
+    midiButtonBounds_ = header.removeFromLeft(44).reduced(2, 2);
+
+    // The velocity / CC strip docks at the BOTTOM across the full width (its own left gutter lines
+    // up with leftGutterWidth()), carved before the left gutter so the scale panel and the keys
+    // column stop at the canvas bottom. Hidden -> nothing carved: the layout is exactly the old one.
+    layoutControllerLanes(bounds);
 
     // The panel sits WEST of the keys column, below the toolbar and ruler rows (its own controls, not
     // the toolbar's chips, are how the user works it) — carved BEFORE the keys column, at its

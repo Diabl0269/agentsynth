@@ -44,6 +44,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelShortcuts.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackLanes.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
     Source/UI/Timeline/TimelineRulerComponent.h
     Source/UI/Timeline/TimelineRulerComponent.cpp
@@ -119,6 +120,15 @@ set(APPUI_SOURCES
     Source/UI/PianoRoll/PianoRollComponent/PianoRollClipboardAndKeys.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollMouse.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollZoom.cpp
+    Source/UI/PianoRoll/PianoRollComponent/PianoRollControllerLaneGlue.cpp
+    Source/UI/PianoRoll/PianoRollComponent/PianoRollMidiFile.cpp
+    Source/UI/PianoRoll/PianoRollControllerLanes/ControllerLaneEdits.h
+    Source/UI/PianoRoll/PianoRollControllerLanes/ControllerLaneEdits.cpp
+    Source/UI/PianoRoll/PianoRollControllerLanes/PianoRollControllerLanes.h
+    Source/UI/PianoRoll/PianoRollControllerLanes/PianoRollControllerLanes.cpp
+    Source/UI/PianoRoll/PianoRollControllerLanes/PianoRollControllerLanesCC.cpp
+    Source/UI/PianoRoll/PianoRollControllerLanes/PianoRollControllerLanesPainting.cpp
+    Source/UI/PianoRoll/PianoRollControllerLanes/PianoRollControllerLanesVelocity.cpp
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
     Source/UI/Library/ModuleLibraryComponent/ModuleLibrarySearch.cpp
@@ -131,6 +141,17 @@ set(APPUI_SOURCES
     Source/UI/PianoRoll/NoteSelectionModel.h
     Source/UI/Timeline/AutomationLaneEditor.h
     Source/UI/Timeline/AutomationLaneEditor.cpp
+    Source/UI/Timeline/AutomationFollowsClips.h
+    Source/UI/Timeline/TrackRowLayout.h
+    Source/UI/Timeline/TrackRowLayout.cpp
+    Source/UI/Timeline/TrackAutomationLanes/LaneToolMapping.h
+    Source/UI/Timeline/TrackAutomationLanes/LaneGlyphs.h
+    Source/UI/Timeline/TrackAutomationLanes/LaneGlyphs.cpp
+    Source/UI/Timeline/TrackAutomationLanes/TrackLaneHeaderComponent.h
+    Source/UI/Timeline/TrackAutomationLanes/TrackLaneHeaderComponent.cpp
+    Source/UI/Timeline/TrackAutomationLanes/TrackAutomationLanes.h
+    Source/UI/Timeline/TrackAutomationLanes/TrackAutomationLanes.cpp
+    Source/UI/Timeline/TrackAutomationLanes/TrackAutomationLanesToolbar.cpp
     Source/UI/Timeline/TrackColour.h
     Source/UI/Timeline/TimelineViewState.h
     Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp

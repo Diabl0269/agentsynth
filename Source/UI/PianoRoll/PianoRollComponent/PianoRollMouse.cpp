@@ -77,6 +77,14 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
         toggleScaleFilter();
         return;
     }
+    if (lanesButtonBounds_.contains(pos)) {
+        toggleControllerLanes();
+        return;
+    }
+    if (midiButtonBounds_.contains(pos)) {
+        showMidiMenu();
+        return;
+    }
     if (pos.y < canvasTop())
         return; // rest of the header strip: inert
     if (pos.x < leftGutterWidth()) {

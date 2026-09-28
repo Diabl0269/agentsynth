@@ -318,8 +318,12 @@ add_library(Core STATIC
     Source/Timeline/AutomationBinding.cpp
     Source/Timeline/AutomationBinding.h
     Source/Timeline/AutomationKernel.h
+    Source/Timeline/AutomationPlacement.cpp
+    Source/Timeline/AutomationPlacement.h
     Source/Timeline/AutomationRecorder.cpp
     Source/Timeline/AutomationRecorder.h
+    Source/Timeline/AutomationShapes.cpp
+    Source/Timeline/AutomationShapes.h
     Source/Timeline/EpochExchange.h
     Source/Timeline/MidiClipFile.cpp
     Source/Timeline/MidiClipFile.h
@@ -332,6 +336,7 @@ add_library(Core STATIC
     Source/Timeline/TimelineDoc/TimelineDoc.h
     Source/Timeline/TimelineDoc/TimelineDocAutomation.cpp
     Source/Timeline/TimelineDoc/TimelineDocClips.cpp
+    Source/Timeline/TimelineDoc/TimelineDocControllers.cpp
     Source/Timeline/TimelineDoc/TimelineDocCore.cpp
     Source/Timeline/TimelineDoc/TimelineDocInternal.h
     Source/Timeline/TimelineDoc/TimelineDocMarkers.cpp
@@ -381,6 +386,7 @@ add_library(Core STATIC
     Source/Modules/RecordTapModule.h
     Source/Modules/TimelineAudioSourceModule.h
     Source/Modules/TimelineMidiSourceModule.h
+    Source/Modules/TimelineMidiSourceModuleCC.h
     Source/Modules/MacroInletModule.h
     Source/Modules/MacroOutletModule.h
     Source/Modules/MacroMidiInletModule.h

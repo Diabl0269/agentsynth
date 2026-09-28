@@ -130,6 +130,21 @@ struct MidiNote {
     bool muted = false;
 };
 
+// One MIDI CC breakpoint inside a clip. `beat` is CLIP-RELATIVE, `value` is 0..127 and `curve` is
+// Hold or Linear only (the reserved Bezier is refused). See TimelineDocControllers.cpp.
+struct ControllerPoint {
+    double beat = 0.0;
+    double value = 0.0;
+    int curve = static_cast<int>(BreakpointCurve::Linear);
+};
+
+// One MIDI CC lane inside a clip: at most one per ccNumber (0..127) per clip, points sorted by
+// beat with unique beats.
+struct ClipControllerLane {
+    int ccNumber = 1;
+    std::vector<ControllerPoint> points;
+};
+
 // Notes within a clip stay sorted by (startBeat, pitch, id) — that invariant is what makes the
 // audio-thread snapshot build a flatten instead of a sort. The id is only a tiebreaker
 // (startBeat/pitch collisions are legal — e.g. a chord). TimelineDoc's mutation API maintains
@@ -181,6 +196,9 @@ struct Clip {
     // clip's flag (see splitClip / duplicateClip / joinClips). Additive field: absent in a file
     // loads as false, and kFormatVersion stays 1.
     bool muted = false;
+
+    // MIDI CC lanes, sorted by ccNumber. Additive: absent in a file loads empty.
+    std::vector<ClipControllerLane> controllers;
 };
 
 // One automated parameter. Identity is the (nodeUuid, paramId) pair, doc-wide: there is at
@@ -497,6 +515,23 @@ public:
     const MidiNote* getNote(NoteId id) const;
     const Clip* getClipForNote(NoteId id) const;
 
+    // -- Clip controller lanes (velocity + MIDI CC) -----------------------------------
+    // Contracts in full beside the definitions in TimelineDocControllers.cpp.
+    static constexpr int kMaxControllerLanesPerClip = 128; // one per CC number
+    static constexpr int kMaxControllerPointsPerLane = kMaxBreakpointsPerLane;
+
+    // Sets several notes' velocities as ONE mutation. Rejected whole if any id is unknown or any
+    // velocity is outside 1..127.
+    bool setNoteVelocities(const std::vector<std::pair<NoteId, int>>& velocities);
+    // Creates an empty lane for ccNumber (0..127). Already present -> true, no mutation.
+    bool addControllerLane(ClipId clipId, int ccNumber);
+    bool removeControllerLane(ClipId clipId, int ccNumber);
+    // Replaces the lane's whole point list as ONE mutation, creating the lane when absent.
+    // Rejected whole on a bad cc, a bad point (non-finite, negative beat, Bezier) or too many.
+    bool setControllerLanePoints(ClipId clipId, int ccNumber, const std::vector<ControllerPoint>& points);
+    // nullptr when the clip or the lane does not exist. Invalidated by the next mutation.
+    const ClipControllerLane* getControllerLane(ClipId clipId, int ccNumber) const;
+
     // -- Automation lanes ------------------------------------------------------
     // One lane per bound parameter, doc-wide: if a lane for (nodeUuid, paramId) already exists
     // ANYWHERE in the doc, its id is returned and nothing is mutated (no revision bump, no
@@ -532,6 +567,19 @@ public:
     // empty is a no-op (no revision bump, no notification), like every other mutator here.
     bool editBreakpoints(LaneId laneId, const std::vector<double>& removeBeats,
                          const std::vector<AutomationLane::Breakpoint>& addPoints);
+
+    // One clip span's automation edit for transferAutomationSpans (beats absolute, half-open).
+    struct AutomationSpanEdit {
+        enum class Kind { Move, Copy, Remove };
+        Kind kind = Kind::Move;
+        TrackId sourceTrack;
+        double startBeat = 0.0;
+        double endBeat = 0.0;
+        TrackId destTrack;          // Move/Copy only
+        double destStartBeat = 0.0; // Move/Copy only
+    };
+    // Moves/copies/removes the source track's OWN lanes' points in each span, all as ONE mutation.
+    bool transferAutomationSpans(const std::vector<AutomationSpanEdit>& edits);
 
     // Sets the lane's record mode. `mode` must be a LaneRecordMode value (0..4) — anything
     // else is rejected outright rather than clamped, so an out-of-range int can never reach the

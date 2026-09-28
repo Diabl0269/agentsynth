@@ -5,6 +5,7 @@
 // edit tools, audition, clipboard, mouse, zoom).
 
 #include "PianoRollComponent.h"
+#include "UI/PianoRoll/PianoRollControllerLanes/PianoRollControllerLanes.h"
 
 #include "AppUndoManager.h"
 #include "Transport/TransportService.h"
@@ -286,7 +287,7 @@ juce::String PianoRollComponent::keyLabelFor(int pitch, KeyLabelMode mode, int r
 
 juce::Rectangle<int> PianoRollComponent::gridRegion() const noexcept {
     const int gutter = leftGutterWidth();
-    return {gutter, canvasTop(), std::max(0, getWidth() - gutter), std::max(0, getHeight() - canvasTop())};
+    return {gutter, canvasTop(), std::max(0, getWidth() - gutter), std::max(0, canvasBottom() - canvasTop())};
 }
 
 juce::Rectangle<int> PianoRollComponent::computeNoteRect(double absStartBeat, double absLengthBeats, int pitch) const {
@@ -387,7 +388,11 @@ PianoRollComponent::NoteGeometry PianoRollComponent::effectiveGeometryFor(const 
                 return {note.startBeat, note.lengthBeats, note.pitch,
                         juce::jlimit(1, 127, origin.velocity + previewDeltaVelocity_)};
     }
-    return {note.startBeat, note.lengthBeats, note.pitch, note.velocity};
+    // A velocity drag in the lane strip previews here too, so the note body recolours live.
+    const int velocity = controllerLanes_ != nullptr
+                             ? controllerLanes_->previewVelocityFor(note.id).value_or(note.velocity)
+                             : note.velocity;
+    return {note.startBeat, note.lengthBeats, note.pitch, velocity};
 }
 
 //==============================================================================

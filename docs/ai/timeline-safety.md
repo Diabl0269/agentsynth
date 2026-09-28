@@ -96,6 +96,18 @@ accepts, smuggles it into a patch, and asserts `validatePatch` still refuses it.
    - **unknown keys inside a marker object are refused.** Markers are the one container checked with
      a *closed key set*; tracks, clips and notes reject unknown keys at the top level only. The
      reasoning is check 1's, one level down.
+10. **Clip CC lanes** — a clip's optional `"controllers"` array (`synth::ClipControllerLane`:
+    `ccNumber`, `points`; see [`timeline/piano-roll-lanes.md`](../timeline/piano-roll-lanes.md)).
+    Like markers it arrived after the closed-key rule was understood, so it has it from the start:
+    a lane object may carry only `ccNumber` and `points`, a point only `beat`, `value` and `curve`
+    (`MalformedRoot` otherwise). `ccNumber` is required, an integer `0..127`
+    (`ControllerOutOfRange`) and unique within the clip (`MalformedRoot`); a point's `beat` gets the
+    usual `BeatOutOfBounds` bound, its `value` must be finite and inside `0..127` — **rejected, not
+    clamped** (`ControllerOutOfRange`) — and its `curve` must be 0 (Hold) or 1 (Linear): the
+    reserved Bezier is refused outright (`MalformedRoot`). At most `kMaxControllerLanesPerClip`
+    (128) lanes per clip (`TooManyLanes`), `kMaxControllerPointsPerLane` points per lane and
+    `kMaxTotalControllerPointsUntrusted` (65536) points across the document
+    (`TooManyBreakpoints`).
 
 ## Trusted-only forever
 

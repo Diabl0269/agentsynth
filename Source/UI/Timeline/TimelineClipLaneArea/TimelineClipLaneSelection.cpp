@@ -8,6 +8,7 @@
 
 #include "AppUndoManager.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Timeline/AutomationFollowsClips.h"
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -77,7 +78,13 @@ bool TimelineClipLaneArea::keyPressed(const juce::KeyPress& key) {
         if (ids.empty() || doc_ == nullptr)
             return false;
 
-        auto mutate = [this, ids] {
+        std::vector<AutomationSpanEdit> spanEdits; // "automation follows events", see setAutomationFollowsClips
+        if (automationFollowsClips_)
+            for (auto id : ids)
+                if (auto spanEdit = automationSpanEditForClip(*doc_, id, AutomationSpanEdit::Kind::Remove))
+                    spanEdits.push_back(*spanEdit);
+        auto mutate = [this, ids, spanEdits] {
+            applyAutomationSpanEdits(*doc_, spanEdits);
             for (auto id : ids)
                 doc_->removeClip(id);
         };

@@ -10,12 +10,11 @@
 213 Source/AudioEngine/AudioEngineModRouting.cpp::AudioEngine::getModulationRoutings
 246 Source/Modules/OscillatorModule.h::processPolyMode
 380 Source/PresetManager.cpp::PresetManager::getPresetJSON
-329 Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp::TimelineDoc::fromVar
+297 Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp::TimelineDoc::fromVar
 217 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::rebuildVisibleCables
 208 Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp::GraphEditor::completeStereoPairConnections
 550 Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp::SmartConnectionEngine::refreshSmartSuggestions
 294 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::PreferencesSettingsTab
 224 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::layoutContent
 286 Source/UI/Theme/ThemeLoader.cpp::ThemeLoader::parseTheme
-255 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp::TimelinePanelComponent::TimelinePanelComponent
 222 Tools/AIPatchHarness/Main.cpp::main

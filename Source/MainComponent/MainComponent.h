@@ -587,8 +587,8 @@ private:
     void addInstrumentPluginTrack(const synth::PluginIdentity& identity) override;
     std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> getAvailablePluginLaneOptions() const override;
     synth::LaneId addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) override;
-    // The colour picker's favourites shelf persists here — the only TrackHeaderHost override
-    // that isn't graph/timeline plumbing (see ColourPickerPopup.h).
+    std::vector<PluginLaneOption> getTrackAutomationParameterOptions(synth::TrackId track) const override;
+    // The colour picker's favourites shelf persists here (see ColourPickerPopup.h).
     juce::ApplicationProperties* getAppProperties() override { return &appProperties; }
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
     getMidiDestinationOptions(synth::TrackId forTrack) override;

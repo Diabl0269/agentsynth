@@ -189,9 +189,101 @@ TimelineValidationResult validateNote(const juce::var& noteVar, const juce::Stri
     return {};
 }
 
+// A clip's CC lanes ("controllers"). Like markers, a container that arrived after the closed-key
+// rule was understood, so it gets that rule from the start: a lane object may carry only
+// "ccNumber" and "points", a point only "beat", "value" and "curve". Everything else mirrors
+// TimelineDoc::setControllerLanePoints, except that where the doc CLAMPS a value into 0..127 this
+// gate REJECTS it (see the note on notes above), and the reserved Bezier curve is refused outright:
+// a CC lane is Hold or Linear, and there is no evaluator for anything else.
+TimelineValidationResult validateControllerPoint(const juce::var& pointVar, const juce::String& laneText) {
+    auto* pObj = pointVar.getDynamicObject();
+    if (pObj == nullptr)
+        return fail(Error::MalformedRoot, "A point on " + laneText + " is not an object.");
+    for (int i = 0; i < pObj->getProperties().size(); ++i) {
+        const juce::String key = pObj->getProperties().getName(i).toString();
+        if (key != "beat" && key != "value" && key != "curve")
+            return fail(Error::MalformedRoot, "A point on " + laneText + " has the unknown key \"" + key +
+                                                  "\". Only \"beat\", \"value\" and \"curve\" are accepted.");
+    }
+    double beat = 0.0;
+    double value = 0.0;
+    int curve = static_cast<int>(BreakpointCurve::Linear);
+    if (!readOptionalDouble(pObj->getProperty("beat"), beat) ||
+        !readOptionalDouble(pObj->getProperty("value"), value) || !readOptionalInt(pObj->getProperty("curve"), curve))
+        return fail(Error::MalformedRoot, "A point on " + laneText +
+                                              " has a non-numeric \"beat\", \"value\" or "
+                                              "\"curve\".");
+    if (!isBeatInBounds(beat))
+        return fail(Error::BeatOutOfBounds, "A point on " + laneText + " sits at beat " + juce::String(beat) +
+                                                ", which is not a finite beat between " + beatRangeText() +
+                                                ". CC point beats are relative to the clip's own start.");
+    if (!std::isfinite(value) || value < 0.0 || value > 127.0)
+        return fail(Error::ControllerOutOfRange, "The point at beat " + juce::String(beat) + " on " + laneText +
+                                                     " has value " + juce::String(value) +
+                                                     ", outside the MIDI CC range 0 to 127.");
+    if (curve != static_cast<int>(BreakpointCurve::Hold) && curve != static_cast<int>(BreakpointCurve::Linear))
+        return fail(Error::MalformedRoot, "The point at beat " + juce::String(beat) + " on " + laneText +
+                                              " uses curve " + juce::String(curve) +
+                                              ". A CC lane point uses 0 (hold) or 1 (linear).");
+    return {};
+}
+
+TimelineValidationResult validateControllers(const juce::var& controllersVar, const juce::String& clipText,
+                                             std::int64_t& totalControllerPoints) {
+    const juce::Array<juce::var>* laneList = nullptr;
+    if (!readOptionalArray(controllersVar, laneList))
+        return fail(Error::MalformedRoot, clipText + " has a \"controllers\" property that is not an array.");
+    if (laneList == nullptr)
+        return {};
+    if (laneList->size() > TimelineDoc::kMaxControllerLanesPerClip)
+        return fail(Error::TooManyLanes, clipText + " has " + juce::String(laneList->size()) +
+                                             " CC lanes, exceeding the limit of " +
+                                             juce::String(TimelineDoc::kMaxControllerLanesPerClip) + " per clip.");
+
+    std::set<int> seenCcs;
+    for (const auto& laneVar : *laneList) {
+        auto* lObj = laneVar.getDynamicObject();
+        if (lObj == nullptr)
+            return fail(Error::MalformedRoot, "A CC lane in " + clipText + " is not an object.");
+        for (int i = 0; i < lObj->getProperties().size(); ++i) {
+            const juce::String key = lObj->getProperties().getName(i).toString();
+            if (key != "ccNumber" && key != "points")
+                return fail(Error::MalformedRoot, "A CC lane in " + clipText + " has the unknown key \"" + key +
+                                                      "\". Only \"ccNumber\" and \"points\" are accepted.");
+        }
+        int cc = -1;
+        if (!readInt(lObj->getProperty("ccNumber"), cc))
+            return fail(Error::MalformedRoot, "A CC lane in " + clipText + " is missing an integer \"ccNumber\".");
+        if (cc < 0 || cc > 127)
+            return fail(Error::ControllerOutOfRange, "A CC lane in " + clipText + " names controller " +
+                                                         juce::String(cc) + ", outside the MIDI range 0 to 127.");
+        if (!seenCcs.insert(cc).second)
+            return fail(Error::MalformedRoot, clipText + " has two lanes for CC " + juce::String(cc) +
+                                                  ". A clip holds at most one lane per controller number.");
+
+        const juce::String laneText = "CC " + juce::String(cc) + " in " + clipText;
+        const juce::Array<juce::var>* pointList = nullptr;
+        if (!readOptionalArray(lObj->getProperty("points"), pointList))
+            return fail(Error::MalformedRoot, laneText + " has a \"points\" property that is not an array.");
+        if (pointList == nullptr)
+            continue;
+        if (pointList->size() > TimelineDoc::kMaxControllerPointsPerLane)
+            return fail(Error::TooManyBreakpoints, laneText + " has " + juce::String(pointList->size()) +
+                                                       " points, exceeding the limit of " +
+                                                       juce::String(TimelineDoc::kMaxControllerPointsPerLane) + ".");
+        totalControllerPoints += pointList->size();
+        for (const auto& pointVar : *pointList) {
+            const auto result = validateControllerPoint(pointVar, laneText);
+            if (!result.ok)
+                return result;
+        }
+    }
+    return {};
+}
+
 TimelineValidationResult validateClip(const juce::var& clipVar, const juce::String& trackText,
                                       std::set<std::int64_t>& seenClipIds, std::set<std::int64_t>& seenNoteIds,
-                                      std::int64_t& totalNotes) {
+                                      std::int64_t& totalNotes, std::int64_t& totalControllerPoints) {
     auto* cObj = clipVar.getDynamicObject();
     if (cObj == nullptr)
         return fail(Error::MalformedRoot, "A clip on " + trackText + " is not an object.");
@@ -272,7 +364,7 @@ TimelineValidationResult validateClip(const juce::var& clipVar, const juce::Stri
         }
     }
 
-    return {};
+    return validateControllers(cObj->getProperty("controllers"), clipText, totalControllerPoints);
 }
 
 TimelineValidationResult validateLane(const juce::var& laneVar, const juce::String& trackText,
@@ -484,7 +576,7 @@ TimelineValidationResult validateTrack(const juce::var& trackVar,
                                        std::set<std::int64_t>& seenTrackIds, std::set<std::int64_t>& seenClipIds,
                                        std::set<std::int64_t>& seenNoteIds, std::set<std::int64_t>& seenLaneIds,
                                        std::set<std::pair<juce::String, juce::String>>& seenLaneParams,
-                                       std::int64_t& totalNotes) {
+                                       std::int64_t& totalNotes, std::int64_t& totalControllerPoints) {
     auto* tObj = trackVar.getDynamicObject();
     if (tObj == nullptr)
         return fail(Error::MalformedRoot, "A track entry is not an object.");
@@ -545,7 +637,8 @@ TimelineValidationResult validateTrack(const juce::var& trackVar,
                                                  " clips, exceeding the limit of " +
                                                  juce::String(TimelineDoc::kMaxClipsPerTrack) + " per track.");
         for (const auto& clipVar : *clipList) {
-            const auto result = validateClip(clipVar, trackText, seenClipIds, seenNoteIds, totalNotes);
+            const auto result =
+                validateClip(clipVar, trackText, seenClipIds, seenNoteIds, totalNotes, totalControllerPoints);
             if (!result.ok)
                 return result;
         }
@@ -605,6 +698,8 @@ juce::String timelineValidationErrorName(TimelineValidationError error) {
         return "RecordModeNotAllowed";
     case TimelineValidationError::ReservedKindNotAllowed:
         return "ReservedKindNotAllowed";
+    case TimelineValidationError::ControllerOutOfRange:
+        return "ControllerOutOfRange";
     case TimelineValidationError::InternalError:
         return "InternalError";
     }
@@ -660,6 +755,7 @@ TimelineValidationResult validateTimeline(const juce::var& timelineVar, const ju
     std::set<std::int64_t> seenMarkerIds;
     std::set<std::pair<juce::String, juce::String>> seenLaneParams;
     std::int64_t totalNotes = 0;
+    std::int64_t totalControllerPoints = 0;
 
     if (trackList != nullptr) {
         if (trackList->size() > TimelineDoc::kMaxTracks)
@@ -669,7 +765,7 @@ TimelineValidationResult validateTimeline(const juce::var& timelineVar, const ju
 
         for (const auto& trackVar : *trackList) {
             const auto result = validateTrack(trackVar, graphByUuid, seenTrackIds, seenClipIds, seenNoteIds,
-                                              seenLaneIds, seenLaneParams, totalNotes);
+                                              seenLaneIds, seenLaneParams, totalNotes, totalControllerPoints);
             if (!result.ok)
                 return result;
         }
@@ -698,6 +794,11 @@ TimelineValidationResult validateTimeline(const juce::var& timelineVar, const ju
         return fail(Error::TooManyNotes, "Timeline has " + juce::String(totalNotes) +
                                              " notes across all clips, exceeding the limit of " +
                                              juce::String(kMaxTotalNotesUntrusted) + ".");
+
+    if (totalControllerPoints > kMaxTotalControllerPointsUntrusted)
+        return fail(Error::TooManyBreakpoints, "Timeline has " + juce::String(totalControllerPoints) +
+                                                   " CC lane points across all clips, exceeding the limit of " +
+                                                   juce::String(kMaxTotalControllerPointsUntrusted) + ".");
 
     // Belt and braces: prove the document actually loads, into a doc that is thrown away. This is
     // what lets the caller treat a pass as "fromVar will accept this", and it is the only source

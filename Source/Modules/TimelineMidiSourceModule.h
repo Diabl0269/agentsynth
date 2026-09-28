@@ -3,6 +3,7 @@
 #include "../Timeline/TimelineSnapshot.h"
 #include "../Transport/TransportService.h"
 #include "ModuleBase.h"
+#include "TimelineMidiSourceModuleCC.h"
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -64,6 +65,11 @@
  * Ordering: where a note-off and note-on land on the same sample offset, the off is always
  * inserted first (juce::MidiBuffer preserves insertion order at equal positions) — required by
  * Poly MIDI's same-pitch retrigger contract (docs/modules/modules.md#poly-note-contract-machine-midi).
+ *
+ * CC lanes: the clips' MIDI CC lanes play through controllers_ (synth::TimelineControllerPlayer,
+ * TimelineMidiSourceModuleCC.h) into this same buffer, BEFORE each range's notes, so a controller set
+ * at a note's start sample reaches the destination before that note-on does. Every positional flush
+ * below also releases held switch pedals and re-arms the CC chase — see that class's comment.
  */
 class TimelineMidiSourceModule : public ModuleBase {
 public:
@@ -87,6 +93,7 @@ public:
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
         juce::ignoreUnused(sampleRate, samplesPerBlock);
         numActive_ = 0;
+        controllers_.forget();
         haveLastBlock_ = false;
         wasBypassed_ = false;
         wasPlaying_ = false;
@@ -255,6 +262,11 @@ public:
     /** Held notes right now. Diagnostics and tests — not part of the audio contract. */
     int getActiveNoteCount() const noexcept { return numActive_; }
 
+    /** Last CC value sent on (channel, cc), or -1. Diagnostics and tests — not part of the audio contract. */
+    int getLastSentControllerValue(int channel, int cc) const noexcept {
+        return controllers_.lastSentValue(channel, cc);
+    }
+
 private:
     struct ActiveNote {
         int pitch = 0;
@@ -291,8 +303,10 @@ private:
         // PRIMARY range. Capped at the loop end when this block wraps: everything from
         // loopWrapSample on belongs to the next pass, and info.endPpq is the UNWRAPPED virtual end
         // (it overshoots loopEndPpq), so using it here would emit beats the transport never plays.
-        emitRange(snapshot, track, midiMessages, info.startPpq, wraps ? info.loopEndPpq : info.endPpq,
-                  /*baseOffset=*/0, beatsPerSample, lastSample);
+        const double primaryEnd = wraps ? info.loopEndPpq : info.endPpq;
+        controllers_.emitRange(snapshot, track, midiMessages, info.startPpq, primaryEnd, 0, beatsPerSample, lastSample);
+        emitRange(snapshot, track, midiMessages, info.startPpq, primaryEnd, /*baseOffset=*/0, beatsPerSample,
+                  lastSample);
 
         if (!wraps)
             return;
@@ -311,8 +325,10 @@ private:
         // no beat emitted twice and none skipped. For a loop shorter than the block that end is the
         // final partial pass and the whole passes in between are simply not emitted (the multi-wrap
         // bound in the class comment); note hygiene is unaffected, the release above saw to that.
-        emitRange(snapshot, track, midiMessages, info.loopStartPpq, beatFromSample(nextBlockStartSample, info),
-                  wrapOffset, beatsPerSample, lastSample);
+        const double wrappedEnd = beatFromSample(nextBlockStartSample, info);
+        controllers_.emitRange(snapshot, track, midiMessages, info.loopStartPpq, wrappedEnd, wrapOffset, beatsPerSample,
+                               lastSample);
+        emitRange(snapshot, track, midiMessages, info.loopStartPpq, wrappedEnd, wrapOffset, beatsPerSample, lastSample);
     }
 
     // Emits every note edge inside one beat range, at offsets measured from `baseOffset`. Notes are
@@ -435,6 +451,7 @@ private:
     // Used only where this node is about to stop being usable at all (bypass, no transport), because
     // it takes AUDITION notes with it — see flushTimelineNotes for everything else.
     void flushActiveNotes(juce::MidiBuffer& midiMessages, int offset = 0) {
+        controllers_.releaseAndForget(midiMessages, offset);
         for (int i = 0; i < numActive_; ++i)
             midiMessages.addEvent(juce::MidiMessage::noteOff(active_[i].channel, active_[i].pitch), offset);
         numActive_ = 0;
@@ -447,6 +464,8 @@ private:
     // muted, would break exactly the monitor path audition exists to provide. The preview's own
     // note-off (or a bypass) is what ends it.
     void flushTimelineNotes(juce::MidiBuffer& midiMessages, int offset = 0) {
+        // The CC chase re-arms at every positional discontinuity (see TimelineControllerPlayer).
+        controllers_.releaseAndForget(midiMessages, offset);
         for (int i = numActive_ - 1; i >= 0; --i) {
             if (isAuditionNote(active_[i]))
                 continue;
@@ -556,6 +575,7 @@ private:
 
     ActiveNote active_[kMaxActiveNotes];
     int numActive_ = 0;
+    synth::TimelineControllerPlayer controllers_;
 
     // Message thread -> audio thread, single producer / single consumer. Same shape as
     // TransportService's command FIFO: a fixed POD slot array plus a juce::AbstractFifo, so a push

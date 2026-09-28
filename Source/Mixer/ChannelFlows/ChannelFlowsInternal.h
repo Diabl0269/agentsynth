@@ -14,10 +14,14 @@ namespace synth {
 // ChannelFlowsTrackPreset.cpp's outside-modulator walk can reuse them too), same "extern
 // declaration in the shared internal header, one definition in one .cpp" pattern
 // PreferencesSettingsTabInternal.h uses for comboIdFromMode/modeFromComboId.
-extern juce::AudioProcessor* processorFor(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id);
+extern juce::AudioProcessor* processorFor(const juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id);
 extern bool isAttenuverter(const juce::AudioProcessor* p);
 extern bool isStrip(const juce::AudioProcessor* p);
 extern bool isMacroPortNode(const juce::AudioProcessor* p);
+// The plain signal-reach rule and its stop set, defined in ChannelFlowsTrackChannelLink.cpp and shared
+// with the automation-lane ownership walk (Source/Timeline/AutomationPlacement.cpp).
+extern bool isLinkSignalEdge(const juce::AudioProcessorGraph& graph, const juce::AudioProcessorGraph::Connection& conn);
+extern bool isReachTerminal(const juce::AudioProcessor* processor);
 
 // Shared internals behind ChannelFlows.cpp's several concern units (ChannelFlowsDefaultChannel.cpp,
 // ChannelFlowsAutoChannel.cpp, ChannelFlowsMakeChannel.cpp): the one node-creation helper and the one

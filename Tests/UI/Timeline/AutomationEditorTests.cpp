@@ -1,15 +1,16 @@
 // AutomationEditorTests.cpp
 //
-// The automation lane editor — pointer/pencil/line/eraser tools, tension drag, per-segment
+// The automation lane editor — pointer/pencil/line/eraser/shape tools, tension drag, per-segment
 // curve toggle, lane record-mode selector, right-click-any-knob "Show automation lane".
 //
 // Three groups:
-//   1. synth::ui::AutomationLaneEditor in isolation — pointer/pencil/line/eraser gestures, tension
-//      scrub, curve-toggle hook, double-click-adds-point, the publish-discipline pin (no mutation
-//      during mouseDrag, exactly one revision bump on commit) and a paint smoke test. The
+//   1. synth::ui::AutomationLaneEditor in isolation — pointer/pencil/line/eraser/shape gestures,
+//      tension scrub, curve-toggle hook, double-click-adds-point, the publish-discipline pin (no
+//      mutation during mouseDrag, exactly one revision bump on commit) and a paint smoke test. The
 //      component compiles and runs unconditionally, same as TimelineClipLaneArea/PianoRollComponent.
 //   2. synth::ui::TimelinePanelComponent's automation strip — opens/closes with a lane selection,
-//      shrinks the clip-lane area, and the record-mode selector's headless hook.
+//      shrinks the clip-lane area, the record-mode selector's headless hook, and the Shape tool
+//      button's popup headless hook.
 //   3. MainComponent integration — right-click-any-knob's headless hook
 //      (MainComponent::automateParameter).
 
@@ -18,6 +19,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "Timeline/AutomationShapes.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -29,6 +31,7 @@
 
 using synth::AutomationLane;
 using synth::LaneId;
+using synth::ShapeKind;
 using synth::TimelineDoc;
 using synth::TrackKind;
 using synth::ui::AutomationLaneEditor;
@@ -341,6 +344,69 @@ TEST(AutomationLaneEditorTest, SnapshotSmoke) {
     EXPECT_EQ(img.getHeight(), 72);
 }
 
+TEST(AutomationLaneEditorTest, ShapeToolStampsSineRespectingSnapPeriodOneStep) {
+    AutomationEditorFixture f;                              // snap = Quarter -> shapePeriodBeats() == 1.0 beat
+    ASSERT_TRUE(f.doc.addBreakpoint(f.laneId, 2.0, 999.0)); // inside the dragged span — replaced
+    ASSERT_TRUE(f.doc.addBreakpoint(f.laneId, 10.0, 42.0)); // outside the dragged span — untouched
+    const auto revBefore = f.doc.getRevision();
+
+    f.editor.setTool(AutomationLaneEditor::Tool::Shape);
+    f.editor.setShapeKind(ShapeKind::Sine);
+    const juce::Point<float> press((float)f.state.beatToX(0.0), (float)f.editor.valueToY(0.0));
+    const juce::Point<float> drag((float)f.state.beatToX(4.0), (float)f.editor.valueToY(100.0));
+
+    f.editor.mouseDown(leftClick(f.editor, press));
+    EXPECT_EQ(f.doc.getRevision(), revBefore) << "no mutation on mouseDown";
+    f.editor.mouseDrag(leftDrag(f.editor, drag, press));
+    EXPECT_EQ(f.doc.getRevision(), revBefore) << "no mutation during drag (preview only)";
+    f.editor.mouseUp(leftDrag(f.editor, drag, press));
+
+    EXPECT_EQ(f.doc.getRevision(), revBefore + 1) << "the whole drag is ONE mutation";
+    const auto* lane = f.doc.getLane(f.laneId);
+    ASSERT_NE(lane, nullptr);
+
+    bool foundUntouched = false;
+    int insideSpan = 0;
+    for (const auto& bp : lane->points) {
+        if (std::abs(bp.beat - 2.0) < 1e-6)
+            EXPECT_NE(bp.value, 999.0) << "the pre-existing point inside the span must be replaced";
+        if (std::abs(bp.beat - 10.0) < 1e-6) {
+            foundUntouched = true;
+            EXPECT_NEAR(bp.value, 42.0, 1e-6);
+        }
+        if (bp.beat >= 0.0 && bp.beat <= 4.0)
+            ++insideSpan;
+    }
+    EXPECT_TRUE(foundUntouched) << "out-of-span point must survive untouched";
+    // period = 1 beat (Quarter snap) over a 4-beat span -> many sampled points, not just two.
+    EXPECT_GT(insideSpan, 8);
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    const auto* restored = f.doc.getLane(f.laneId);
+    ASSERT_NE(restored, nullptr);
+    ASSERT_EQ(restored->points.size(), 2u);
+}
+
+TEST(AutomationLaneEditorTest, ShapeToolEscapeCancelsInFlightDrag) {
+    AutomationEditorFixture f;
+    const auto revBefore = f.doc.getRevision();
+
+    f.editor.setTool(AutomationLaneEditor::Tool::Shape);
+    const juce::Point<float> press((float)f.state.beatToX(0.0), (float)f.editor.valueToY(0.0));
+    const juce::Point<float> drag((float)f.state.beatToX(4.0), (float)f.editor.valueToY(100.0));
+    f.editor.mouseDown(leftClick(f.editor, press));
+    f.editor.mouseDrag(leftDrag(f.editor, drag, press));
+    ASSERT_TRUE(f.editor.isDragActiveForTest());
+
+    EXPECT_TRUE(f.editor.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_FALSE(f.editor.isDragActiveForTest());
+
+    f.editor.mouseUp(leftDrag(f.editor, drag, press)); // a late mouseUp after cancel is a no-op
+    EXPECT_EQ(f.doc.getRevision(), revBefore);
+    EXPECT_EQ(f.doc.getLane(f.laneId)->points.size(), 0u);
+}
+
 // ============================================================================
 // 2. synth::ui::TimelinePanelComponent — automation strip
 // ============================================================================
@@ -397,6 +463,32 @@ TEST(TimelinePanelAutomationStripTest, RecordModeSelectorWritesDoc) {
     ASSERT_TRUE(undo.canUndo());
     undo.undo();
     EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Read));
+}
+
+TEST(TimelinePanelAutomationStripTest, ShapeToolMenuChoiceSelectsToolAndKind) {
+    TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 400);
+    panel.setTimelineDoc(&doc);
+
+    const auto trackId = doc.addTrack(TrackKind::Automation, "Automation");
+    AutomationLane::RangeSnapshot range;
+    const auto laneId = doc.addLane(trackId, "node-uuid-shape", "cutoff", range);
+    panel.showAutomationLane(laneId);
+
+    EXPECT_EQ(panel.getAutomationLaneEditor().getTool(), AutomationLaneEditor::Tool::Pointer) << "default";
+
+    panel.applyShapeToolChoice(3); // 1-based: Sine=1, Triangle=2, Square=3, SawUp=4, SawDown=5, Random=6
+    EXPECT_EQ(panel.getAutomationLaneEditor().getTool(), AutomationLaneEditor::Tool::Shape);
+    EXPECT_EQ(panel.getAutomationLaneEditor().getShapeKind(), ShapeKind::Square);
+
+    panel.applyShapeToolChoice(0); // out of range -> ignored
+    EXPECT_EQ(panel.getAutomationLaneEditor().getShapeKind(), ShapeKind::Square);
+    panel.applyShapeToolChoice(7); // out of range -> ignored
+    EXPECT_EQ(panel.getAutomationLaneEditor().getShapeKind(), ShapeKind::Square);
+
+    panel.applyShapeToolChoice(6); // Random
+    EXPECT_EQ(panel.getAutomationLaneEditor().getShapeKind(), ShapeKind::Random);
 }
 
 TEST(TimelinePanelAutomationStripTest, TrackHeaderAutomationButtonTogglesTheStripForThatTrack) {
@@ -554,4 +646,106 @@ TEST_F(AutomationEditorMainComponentTest, KnobAutomateHookCreatesLaneOnAutomatio
     mc.automateParameter(node->nodeID, "cutoff");
     EXPECT_EQ(doc.getTrack(autoTrackId)->lanes.size(), 2u);
     EXPECT_EQ(doc.getLaneForParam(uuid, "cutoff")->id, cutoffLaneId);
+}
+
+// ---- Track automation lanes (docs/timeline/track-automation.md) ----------------------------
+
+namespace {
+// The instrument a track's Track In plays (the default patch has oscillators of its own, so the
+// track's instrument is found through the track's binding, never by name).
+juce::AudioProcessorGraph::Node* instrumentPlayedBy(juce::AudioProcessorGraph& graph, const synth::Track& track) {
+    for (auto* node : graph.getNodes())
+        if (node != nullptr && node->properties["uuid"].toString() == track.bindingUuid)
+            for (const auto& c : graph.getConnections())
+                if (c.source.nodeID == node->nodeID && c.source.isMIDI())
+                    return graph.getNodeForId(c.destination.nodeID);
+    return nullptr;
+}
+
+juce::String firstRangedParamId(juce::AudioProcessorGraph::Node* node) {
+    for (auto* p : node->getProcessor()->getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p); ranged != nullptr && ranged->isAutomatable())
+            return ranged->paramID;
+    return {};
+}
+} // namespace
+
+TEST_F(AutomationEditorMainComponentTest, KnobAutomateOnATrackModuleFocusesItsLaneRowUnderTheTrack) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+    auto& doc = mc.getTimelineDoc();
+    ASSERT_EQ(doc.getTracks().size(), 1u);
+    const auto trackId = doc.getTracks().front().id;
+
+    auto* osc = instrumentPlayedBy(mc.getAudioEngine().getGraph(), doc.getTracks().front());
+    ASSERT_NE(osc, nullptr);
+    const auto tracksBefore = doc.getTracks().size();
+    const auto paramId = firstRangedParamId(osc);
+    ASSERT_TRUE(paramId.isNotEmpty());
+
+    mc.automateParameter(osc->nodeID, paramId);
+
+    const auto* lane = doc.getLaneForParam(osc->properties["uuid"].toString(), paramId);
+    ASSERT_NE(lane, nullptr);
+    const auto laneId = lane->id;
+    EXPECT_EQ(doc.getTrackForLane(laneId)->id, trackId) << "the oscillator belongs to the one track that plays it";
+    EXPECT_EQ(doc.getTracks().size(), tracksBefore) << "no Automation track was created";
+
+    auto& panel = mc.getTimelinePanel();
+    EXPECT_FALSE(panel.isAutomationStripVisible());
+    EXPECT_TRUE(panel.getTrackAutomationLanes().isExpanded(trackId));
+    EXPECT_EQ(panel.getTrackAutomationLanes().getFocusedLane(), laneId);
+    ASSERT_NE(panel.getTrackAutomationLanes().getLaneHeaderForLane(laneId), nullptr);
+    EXPECT_TRUE(panel.getTrackAutomationLanes().getLaneHeaderForLane(laneId)->isFocusedLane());
+}
+
+TEST_F(AutomationEditorMainComponentTest, KnobAutomateOnAModuleTwoTracksShareGoesToTheStrip) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    for (int i = 0; i < 2; ++i)
+        mc.getTimelinePanel().applyAddTrackMenuChoice(
+            synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& doc = mc.getTimelineDoc();
+    ASSERT_EQ(doc.getTracks().size(), 2u);
+
+    std::vector<juce::AudioProcessorGraph::Node*> oscillators;
+    for (const auto& track : doc.getTracks())
+        oscillators.push_back(instrumentPlayedBy(graph, track));
+    ASSERT_NE(oscillators[0], nullptr);
+    ASSERT_NE(oscillators[1], nullptr);
+    auto shared = graph.addNode(synth::AIStateMapper::createModule("Filter"));
+    ASSERT_NE(shared, nullptr);
+    for (auto* osc : oscillators)
+        ASSERT_TRUE(graph.addConnection({{osc->nodeID, 0}, {shared->nodeID, 0}}));
+
+    mc.automateParameter(shared->nodeID, "cutoff");
+    const auto* lane = doc.getLaneForParam(shared->properties["uuid"].toString(), "cutoff");
+    ASSERT_NE(lane, nullptr);
+    EXPECT_EQ(doc.getTrackForLane(lane->id)->kind, synth::TrackKind::Automation) << "shared: global";
+    EXPECT_TRUE(mc.getTimelinePanel().isAutomationStripVisible());
+    EXPECT_EQ(mc.getTimelinePanel().getSelectedAutomationLane(), lane->id);
+}
+
+TEST_F(AutomationEditorMainComponentTest, TrackHeaderAddAutomationLaneListsOwnedModulesAndLandsOnTheTrack) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+    auto& doc = mc.getTimelineDoc();
+    ASSERT_EQ(doc.getTracks().size(), 1u);
+    const auto trackId = doc.getTracks().front().id;
+    auto* header = mc.getTimelinePanel().getTrackHeaderAt(0);
+    ASSERT_NE(header, nullptr);
+
+    const auto menu = header->buildContextMenu();
+    int firstAddId = 0;
+    for (juce::PopupMenu::MenuItemIterator it(menu, true); it.next();)
+        if (firstAddId == 0 &&
+            it.getItem().itemID >= synth::ui::TimelineTrackHeaderComponent::kAddAutomationLaneMenuIdBase)
+            firstAddId = it.getItem().itemID;
+    ASSERT_NE(firstAddId, 0) << "the owned instrument chain offers parameters";
+
+    header->applyContextMenuChoice(firstAddId);
+    const auto& lanes = doc.getTrack(trackId)->lanes;
+    ASSERT_EQ(lanes.size(), 1u) << "the lane lands on this very track";
+    EXPECT_EQ(mc.getTimelinePanel().getTrackAutomationLanes().getFocusedLane(), lanes.front().id);
+    EXPECT_TRUE(mc.getTimelinePanel().getTrackAutomationLanes().isExpanded(trackId));
 }

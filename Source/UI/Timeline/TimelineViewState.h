@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <set>
 
 // Pure, headless-testable beat<->pixel mapping shared by the timeline ruler and the lanes grid
 // (and, later, track content). No JUCE dependency and no component lifetime: TimelinePanelComponent
@@ -45,6 +47,9 @@ struct TimelineViewState {
     static constexpr double kMaxRowHeightScale = 3.0;
     double rowHeightScale = 1.0;
     double trackScrollY = 0.0; // px, always clamped >= 0
+    // TrackId values whose automation lane rows are expanded (in-session UI state, never saved).
+    // Read ONLY through synth::ui::TrackRowLayout, which is what keeps headers and lanes in step.
+    std::set<std::int64_t> expandedLaneTracks;
 
     void scaleRowHeight(double factor) noexcept {
         if (!std::isfinite(factor) || factor <= 0.0)

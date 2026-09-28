@@ -70,7 +70,9 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/timeline/edit-tools.md`](timeline/edit-tools.md) — the Cubase-style tool strip shared by the clip lanes and the piano roll
 - [`docs/timeline/clips.md`](timeline/clips.md) — clip lanes: selection, drag/trim, edge auto-scroll, authoring and audio import
 - [`docs/timeline/automation.md`](timeline/automation.md) — the automation strip and its curve canvas
+- [`docs/timeline/track-automation.md`](timeline/track-automation.md) — per-track automation lane rows: lane ownership and placement, row geometry (`TrackRowLayout`), lane-row tools, automation follows clips
 - [`docs/timeline/piano-roll.md`](timeline/piano-roll.md) — the per-clip MIDI note editor
+- [`docs/timeline/piano-roll-lanes.md`](timeline/piano-roll-lanes.md) — the piano roll's velocity and MIDI CC lanes: gestures, the per-clip CC data model, playback and chase
 - [`docs/timeline/scale-assist.md`](timeline/scale-assist.md) — the Scale Assist panel, the scale engine, pitch-row collapse, random generation
 - [`docs/timeline/focus.md`](timeline/focus.md) — which surface Cmd+C/V/D/X/R and Cmd+Shift+A act on
 

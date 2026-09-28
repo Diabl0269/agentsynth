@@ -56,7 +56,7 @@ spatial canvas has no such axis; Duplicate is the graph's answer to "another one
 clip selection:
 
 - `copySelectedClips()` serialises the selected clips — notes (each with its own `muted` flag),
-  name, length, `muted`, and every audio field (`assetRef`, `gainDb`, both fades,
+  CC lanes, name, length, `muted`, and every audio field (`assetRef`, `gainDb`, both fades,
   `sourceStartSeconds`) — with starts relative to the earliest selected clip.
 - `pasteClipsAtPlayhead()` re-inserts them onto their ORIGINAL tracks (by `TrackId`), re-based so
   the earliest clip lands at the transport's CURRENT position (snapped via the shared

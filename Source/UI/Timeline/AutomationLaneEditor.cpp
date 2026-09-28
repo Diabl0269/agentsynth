@@ -40,6 +40,24 @@ double AutomationLaneEditor::clampValue(double value) const {
     return value;
 }
 
+double AutomationLaneEditor::shapePeriodBeats() const {
+    const double raw = viewState_.divisionBeatsRaw(currentBeatsPerBar());
+    return raw > 0.0 ? raw : 1.0; // Snap::Off (or no snap division at all) -> one beat per cycle
+}
+
+// Phase picks which extreme the shape starts at: 0 when the press was the LOWER of the two
+// gesture values (start low), PI when it was the higher (start high) -- see AutomationShapes.h for
+// how each ShapeKind reads that. Saw's phase meaning is a shift into an already-running ramp
+// rather than a hard "start extreme", which is a fair reading of the same two-value rule.
+std::vector<synth::AutomationLane::Breakpoint> AutomationLaneEditor::buildShapePoints() const {
+    const double loBeat = std::min(shapeStartBeat_, shapeEndBeat_);
+    const double hiBeat = std::max(shapeStartBeat_, shapeEndBeat_);
+    const double loValue = std::min(shapePressValue_, shapeDragValue_);
+    const double hiValue = std::max(shapePressValue_, shapeDragValue_);
+    const double phase = (shapePressValue_ <= shapeDragValue_) ? 0.0 : juce::MathConstants<double>::pi;
+    return synth::generateAutomationShape(shapeKind_, loBeat, hiBeat, shapePeriodBeats(), loValue, hiValue, phase);
+}
+
 double AutomationLaneEditor::valueToY(double value) const {
     double minV = 0.0, maxV = 1.0;
     if (doc_ != nullptr && laneId_.isValid())
@@ -144,16 +162,51 @@ void AutomationLaneEditor::paint(juce::Graphics& g) {
     paintHandles(g, *lane);
 }
 
+// Track lane rows (docs/timeline/track-automation.md#lane-rows) keep the panel's bar/beat grid
+// visible underneath -- the row is a transparent child over the clip lanes -- so the lane reads as
+// part of the arrangement: a faint tint of the track colour instead of the strip's opaque bg1.
+void AutomationLaneEditor::setTrackLaneStyle(bool enabled, juce::Colour tint) {
+    if (enabled == trackLaneStyle_ && tint == trackLaneTint_)
+        return;
+    trackLaneStyle_ = enabled;
+    trackLaneTint_ = tint;
+    setOpaque(false);
+    repaint();
+}
+
+void AutomationLaneEditor::setHighlighted(bool highlighted) {
+    if (highlighted == highlighted_)
+        return;
+    highlighted_ = highlighted;
+    repaint();
+}
+
 void AutomationLaneEditor::paintGridBackdrop(juce::Graphics& g) {
     using namespace synth::theme;
-    juce::Colour bg, border;
+    juce::Colour bg, border, accent;
     if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& c = lf->getTheme().colors;
         bg = c.bg1;
         border = c.border;
+        accent = c.accent;
     } else {
         bg = juce::Colours::darkgrey.darker(0.6f);
         border = juce::Colours::grey;
+        accent = juce::Colours::yellow;
+    }
+
+    if (trackLaneStyle_) {
+        g.fillAll(bg.withAlpha(0.55f));
+        g.fillAll(trackLaneTint_.withAlpha(highlighted_ ? 0.10f : 0.05f));
+        g.setColour(border.withAlpha(0.5f));
+        g.drawHorizontalLine(getHeight() - 1, 0.0f, (float)getWidth());
+        g.setColour(border.withAlpha(0.18f));
+        g.drawHorizontalLine(getHeight() / 2, 0.0f, (float)getWidth());
+        if (highlighted_) {
+            g.setColour(accent.withAlpha(0.8f));
+            g.drawRect(getLocalBounds(), 1);
+        }
+        return;
     }
 
     g.fillAll(bg);
@@ -193,7 +246,9 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
     }
 
     juce::Colour curveColour;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+    if (trackLaneStyle_)
+        curveColour = trackLaneTint_; // a track lane's curve wears its track's colour
+    else if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
         curveColour = lf->getTheme().colors.modWire;
     else
         curveColour = juce::Colours::cyan;
@@ -242,6 +297,16 @@ void AutomationLaneEditor::paintToolPreview(juce::Graphics& g) {
         const float y1 = (float)valueToY(lineEndValue_);
         g.setColour(accent);
         g.drawLine(x0, y0, x1, y1, 2.0f);
+    } else if (dragMode_ == DragMode::Shape) {
+        const auto points = buildShapePoints();
+        if (points.size() >= 2) {
+            juce::Path path;
+            path.startNewSubPath((float)viewState_.beatToX(points.front().beat), (float)valueToY(points.front().value));
+            for (size_t i = 1; i < points.size(); ++i)
+                path.lineTo((float)viewState_.beatToX(points[i].beat), (float)valueToY(points[i].value));
+            g.setColour(accent);
+            g.strokePath(path, juce::PathStrokeType(2.0f));
+        }
     }
 }
 
@@ -341,6 +406,13 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
         if (auto hit = hitTestHandle(pos))
             erasedBeats_.insert(hit->beat);
         break;
+    case Tool::Shape:
+        dragMode_ = DragMode::Shape;
+        shapeStartBeat_ = snappedBeatAt(viewState_.xToBeat((double)pos.x));
+        shapePressValue_ = clampValue(yToValue(pos.y));
+        shapeEndBeat_ = shapeStartBeat_;
+        shapeDragValue_ = shapePressValue_;
+        break;
     }
 
     repaint();
@@ -371,6 +443,10 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
     case DragMode::Eraser:
         if (auto hit = hitTestHandle(pos))
             erasedBeats_.insert(hit->beat);
+        break;
+    case DragMode::Shape:
+        shapeEndBeat_ = snappedBeatAt(viewState_.xToBeat((double)pos.x));
+        shapeDragValue_ = clampValue(yToValue(pos.y));
         break;
     case DragMode::None:
         return;
@@ -495,6 +571,20 @@ void AutomationLaneEditor::mouseUp(const juce::MouseEvent&) {
                 mutate();
         }
         erasedBeats_.clear();
+        break;
+    }
+    case DragMode::Shape: {
+        const auto points = buildShapePoints();
+        if (!points.empty()) {
+            const double lo = std::min(shapeStartBeat_, shapeEndBeat_);
+            const double hi = std::max(shapeStartBeat_, shapeEndBeat_);
+            const auto removeBeats = collectBeatsInSpan(lo, hi);
+            auto mutate = [this, laneId, removeBeats, points] { doc_->editBreakpoints(laneId, removeBeats, points); };
+            if (undoManager_)
+                undoManager_->recordTimelineChange(*doc_, mutate);
+            else
+                mutate();
+        }
         break;
     }
     case DragMode::None:

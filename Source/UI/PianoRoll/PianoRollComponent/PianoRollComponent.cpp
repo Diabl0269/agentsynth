@@ -59,6 +59,7 @@
 
 #include "PianoRollComponent.h"
 #include "PianoRollInternal.h"
+#include "UI/PianoRoll/PianoRollControllerLanes/PianoRollControllerLanes.h"
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -91,6 +92,8 @@ PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
     rebuildVisiblePitches();
 
     addChildComponent(scalePanel_); // starts INVISIBLE; the header button / persisted flag show it
+    controllerLanes_ = std::make_unique<PianoRollControllerLanes>(*this);
+    addChildComponent(*controllerLanes_); // starts collapsed; the "Lanes" chip shows it
     scalePanel_.onScaleChanged = [this](std::optional<synth::MusicalScale> scale) {
         if (clipId_.isValid())
             clipScaleMemory_[clipId_].scale = scale;
@@ -142,7 +145,8 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     // A note auditioned in the OLD clip has no mouse-up coming — this IS the end of that gesture.
     stopAudition();
     endKeysColumnPress();
-    autoScrollTimer_.stopTimer(); // a drag from the PREVIOUS clip cannot still be scrolling this one
+    controllerLanes_->cancelGesture(); // a lane drag belongs to the OLD clip too
+    autoScrollTimer_.stopTimer();      // a drag from the PREVIOUS clip cannot still be scrolling this one
     selection_.clear();
     // The line has to be re-announced against the new framing before it is drawn again.
     hasPlayheadX_ = false;
@@ -171,7 +175,7 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     }
     clipId_ = id;
 
-    const int visibleRows = std::max(1, (getHeight() - canvasTop()) / (int)pixelsPerSemitone_);
+    const int visibleRows = std::max(1, (canvasBottom() - canvasTop()) / (int)pixelsPerSemitone_);
     const int median = medianPitchOf(clip->notes);
     firstVisiblePitch_ = juce::jlimit(0, 127, median + visibleRows / 2);
     // A fresh, freshly-computed landing for the clip just opened — never a continuation of
@@ -205,6 +209,7 @@ void PianoRollComponent::closeRoll() {
     // deliberately exempt from every positional flush — see TimelineMidiSourceModule).
     stopAudition();
     endKeysColumnPress();
+    controllerLanes_->cancelGesture();
     clipId_ = {};
     selection_.clear();
     dragMode_ = DragMode::None;
@@ -256,6 +261,7 @@ void PianoRollComponent::refreshFromDoc() {
     // A note add/remove can change which out-of-scale pitches pitch-visibility mode is keeping
     // visible on the note's account alone.
     rebuildVisiblePitches();
+    controllerLanes_->refreshFromDoc();
     repaint();
 }
 
@@ -374,7 +380,7 @@ double PianoRollComponent::minTopRowPosition() const noexcept {
     // loop bounds; here kept exact, since a fractional row of headroom is exactly what should let
     // the lowest row land a fraction short of the bottom edge rather than snapping early).
     const double gridRows =
-        pixelsPerSemitone_ > 0.0 ? (double)std::max(0, getHeight() - canvasTop()) / pixelsPerSemitone_ : 0.0;
+        pixelsPerSemitone_ > 0.0 ? (double)std::max(0, canvasBottom() - canvasTop()) / pixelsPerSemitone_ : 0.0;
     return std::max(0.0, maxTopRowPosition() - std::max(0.0, totalRows - gridRows));
 }
 
