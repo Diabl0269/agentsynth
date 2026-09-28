@@ -431,10 +431,11 @@ public:
         bindings["timelineLoopSelection"] = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
         // F mirrors the transport strip's follow-playhead button, panel-scoped like J/L/P.
         bindings["timelineFollowPlayheadToggle"] = juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0);
-        // Cubase's tool row (see synth::ui::EditTool for why 2, 6 and 9 stay unclaimed). Bare
+        // Cubase's tool row (see synth::ui::EditTool for why 6 and 9 stay unclaimed). Bare
         // digits: category scoping is what makes that safe next to the Ctrl+Shift+digit grid block
         // below — and modifier equality is exact, so Ctrl+Shift+1 can never match a bare 1.
         bindings["timelineToolSelect"] = juce::KeyPress('1', juce::ModifierKeys::noModifiers, 0);
+        bindings["timelineToolRange"] = juce::KeyPress('2', juce::ModifierKeys::noModifiers, 0);
         bindings["timelineToolSplit"] = juce::KeyPress('3', juce::ModifierKeys::noModifiers, 0);
         bindings["timelineToolGlue"] = juce::KeyPress('4', juce::ModifierKeys::noModifiers, 0);
         bindings["timelineToolErase"] = juce::KeyPress('5', juce::ModifierKeys::noModifiers, 0);
@@ -787,6 +788,7 @@ private:
             {"timelineLoopSelection", ShortcutCategory::Timeline},
             {"timelineFollowPlayheadToggle", ShortcutCategory::Timeline},
             {"timelineToolSelect", ShortcutCategory::Timeline},
+            {"timelineToolRange", ShortcutCategory::Timeline},
             {"timelineToolSplit", ShortcutCategory::Timeline},
             {"timelineToolGlue", ShortcutCategory::Timeline},
             {"timelineToolErase", ShortcutCategory::Timeline},

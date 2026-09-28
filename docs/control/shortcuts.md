@@ -1,10 +1,10 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **93 actions** across four categories —
-**General** (49, app-wide or routed per focused editor), **Graph** (6), **Timeline** (25) and
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **94 actions** across four categories —
+**General** (49, app-wide or routed per focused editor), **Graph** (6), **Timeline** (26) and
 **Piano Roll** (13) — every one of them rebindable, including keys that used to be hardcoded:
-nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the six tool
+nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
 any key except Escape commits it, swapping with whatever action in the **same category** already
 held that key. The tab groups rows into one collapsible section per category with a search box
@@ -269,7 +269,7 @@ What each surface does:
 | Surface | Copy | Paste | Duplicate | Cut | Repeat |
 |---|---|---|---|---|---|
 | Graph | Copies the selected modules (unchanged) | Pastes at the next cascade position | Copies the selection one step down-right, clipboard untouched | Composed from Copy + Delete (`copySelection()` then `deleteSelection()`), one undo step | **Inactive** — a spatial canvas has no time axis to tile copies along; Duplicate is the graph's equivalent gesture (see below) |
-| TimelineClips | Serialises the selected clips — notes (each with its own muted flag), name, length, muted flag and every audio field (`assetRef`, gain, both fades, `sourceStartSeconds`) — into the panel's own clip clipboard, starts relative to the earliest selected clip | Re-inserts every clipboard clip onto **its original track**, re-based so the earliest clip lands at the transport's current position (snapped to the view-state's snap setting); the track fallback is **kind-aware** — a clip lands back only on a track that still plays its payload (audio → `TrackKind::Audio`, MIDI → `TrackKind::Midi`), else the doc's first track of the required kind, else the clip is skipped. Audio fields go back through `setClipAsset`/`setClipGainDb`/`setClipFades` (never a raw struct write), so a clipboard `assetRef` is re-validated exactly like a freshly-loaded file's — a clipboard is only as trustworthy as whatever filled it. One undo step for the whole paste; the pasted clips end up selected. | `TimelineDoc::duplicateClip` per selected clip, batched into one undo step; the new clips end up selected | `TimelinePanelComponent::cutSelectedClips()` — copy, then delete the selection, as ONE `recordTimelineChange` (so undo restores it in a single step) | `repeatSelectedClips(count)` — `count` back-to-back copies of the selection's own span (`max end - min start`, not each clip's own length, so a multi-clip rhythm tiles intact), the first starting one span-length after the selection's start. One undo step; every created clip ends up selected. |
+| TimelineClips | Serialises the selected clips — notes (each with its own muted flag), name, length, muted flag and every audio field (`assetRef`, gain, both fades, `sourceStartSeconds`) — into the panel's own clip clipboard, starts relative to the earliest selected clip. With a live **Range** tool range it copies the range instead: each clip's part inside it (`TimelineDoc::clipToRange`), starts relative to the range start — see [clips](../timeline/clips.md#range-tool) | Re-inserts every clipboard clip onto **its original track**, re-based so the earliest clip lands at the transport's current position (snapped to the view-state's snap setting); the track fallback is **kind-aware** — a clip lands back only on a track that still plays its payload (audio → `TrackKind::Audio`, MIDI → `TrackKind::Midi`), else the doc's first track of the required kind, else the clip is skipped. Audio fields go back through `setClipAsset`/`setClipGainDb`/`setClipFades` (never a raw struct write), so a clipboard `assetRef` is re-validated exactly like a freshly-loaded file's — a clipboard is only as trustworthy as whatever filled it. One undo step for the whole paste; the pasted clips end up selected. | `TimelineDoc::duplicateClip` per selected clip, batched into one undo step; the new clips end up selected | `TimelinePanelComponent::cutSelectedClips()` — copy, then delete the selection, as ONE `recordTimelineChange` (so undo restores it in a single step); with a live range, `cutRange()` — the range copy, then the lanes' own range Delete, also one step | `repeatSelectedClips(count)` — `count` back-to-back copies of the selection's own span (`max end - min start`, not each clip's own length, so a multi-clip rhythm tiles intact), the first starting one span-length after the selection's start. One undo step; every created clip ends up selected. |
 | PianoRoll | Copies the selected notes (each field, `muted` included) into the roll's OWN note clipboard, offsets stored relative to the earliest selected note — the clipboard is a member of the roll, so it survives switching clips (`openClip`), and a block copied in one clip pastes into another | `pasteNotesAtPlayhead()` anchors the block at the **snapped, clip-relative playhead position** when that lands inside `[0, clip length)`, else at 0.0; `MainComponent::perform` primes the playhead from the live transport (`setPlayheadBeat(transport.getPositionSnapshot().ppq)`) immediately before pasting, so a paste with the transport stopped still lands under the position the user can see rather than wherever a stale internal beat was left. Notes at/after the clip's end are skipped, an overrunning note's length is clamped to the clip's end. One undo step; the pasted notes end up selected. | Copies the selection to immediately after its own span (same pitches), one undo step, selects the copies — does NOT touch the clipboard (duplicating isn't copying, and silently stomping a clipboard the user filled deliberately would be a surprise) | `cutSelectedNotes()` — copy then delete, one undo step (fills the clipboard first, so a cut is always paste-able) | `repeatSelectedNotes(count)` — `count` copies of the selection block, each one span further along, **clipped at the clip's end**: placement stops at the first block that would fall entirely outside the clip rather than piling every remaining copy onto the last beat. One undo step; every created note ends up selected. |
 | Mixer | **Inactive** — the mixer has no clipboard model of its own; its own keyboard verbs (Left/Right column walk, Up/Down fader nudge, Enter select-on-canvas, M/S/R) are resolved directly by `MixerPanelComponent::keyPressed`, not routed through `resolveEditSurface()` | **Inactive** | **Inactive** | **Inactive** | **Inactive** — same "no time axis to tile along" reasoning as Graph, with no equivalent gesture at all |
 
@@ -536,7 +536,7 @@ the keystroke died in `MainComponent::keyPressed`, which only dispatches command
 `MainComponent::keyPressed` therefore ends with a **last-chance forward** of a two-id whitelist
 (`forwardsToTimelinePanel`) back into `TimelinePanelComponent::keyPressed`. Deliberately a whitelist
 and not a blanket forward: forwarding everything the panel resolves would make its bare letters and
-tool digits (J/L/P/F, 1/3/4/5/7/8) fire while the graph canvas has focus, which is a different
+tool digits (J/L/P/F, 1/2/3/4/5/7/8) fire while the graph canvas has focus, which is a different
 feature with its own design question.
 
 Both jumps are **surface**-resolved rather than commands: a locator jump acts on the timeline's own
@@ -658,10 +658,11 @@ small drawn vector glyphs rather than letters — a second "Q" beside the Quanti
 length-quantise or pitch-quantise would have told the user nothing about which was which. See
 [`timeline/piano-roll.md`](../timeline/piano-roll.md#header-chips).
 
-2 (Range Selection), 6 (Zoom) and 9 (Play/Scrub) are Cubase tools this app doesn't ship yet and stay
-**unassigned on purpose** — `editToolForKeyChar` (`Source/UI/Timeline/EditTool.h`) returns `nullopt` for
-them, so those three digits are simply never consumed rather than remapping the six shipped tools
-onto 1–6. Shipping one of the missing three later costs no rebind: the digit is already reserved.
+6 (Zoom) and 9 (Play/Scrub) are Cubase tools this app doesn't ship yet and stay **unassigned on
+purpose** — `editToolForKeyChar` (`Source/UI/Timeline/EditTool.h`) returns `nullopt` for them, so
+those two digits are simply never consumed rather than remapping the shipped tools onto 1–7.
+Shipping one later costs no rebind: the digit is already reserved — which is exactly how the Range
+tool (`timelineToolRange`, bare **2**) arrived without moving any other key.
 
 ## Command vs surface actions
 

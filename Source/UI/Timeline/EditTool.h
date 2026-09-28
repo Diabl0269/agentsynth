@@ -14,13 +14,17 @@ namespace synth::ui {
  * button wiring both switch on it, and the number-key mapping below is what the panel's
  * keyPressed() consults, so tests can drive tool switching without any UI.
  *
- * Numbering follows Cubase's tool row so the muscle memory transfers: 1 Select, 3 Split, 4 Glue,
- * 5 Erase, 7 Mute, 8 Draw. The gaps are reserved on purpose — 2 (Range Selection), 6 (Zoom) and
- * 9 (Play/Scrub) are Cubase tools we don't ship yet; keeping their digits free means adding one
- * later never reshuffles the keys users already learned.
+ * Numbering follows Cubase's tool row so the muscle memory transfers: 1 Select, 2 Range, 3 Split,
+ * 4 Glue, 5 Erase, 7 Mute, 8 Draw. The gaps are reserved on purpose — 6 (Zoom) and 9 (Play/Scrub)
+ * are Cubase tools we don't ship yet; keeping their digits free means adding one later never
+ * reshuffles the keys users already learned (Range filled its reserved 2 exactly that way).
+ *
+ * The enumerator order is the strip's left-to-right order and indexes per-tool arrays; nothing
+ * persists it, so inserting Range after Select renumbered nothing on disk.
  */
 enum class EditTool {
     Select,
+    Range,
     Split,
     Glue,
     Erase,
@@ -28,8 +32,8 @@ enum class EditTool {
     Draw,
 };
 
-inline constexpr std::array<EditTool, 6> kAllEditTools{
-    EditTool::Select, EditTool::Split, EditTool::Glue, EditTool::Erase, EditTool::Mute, EditTool::Draw,
+inline constexpr std::array<EditTool, 7> kAllEditTools{
+    EditTool::Select, EditTool::Range, EditTool::Split, EditTool::Glue, EditTool::Erase, EditTool::Mute, EditTool::Draw,
 };
 
 /** The Cubase-style number key that selects the tool (see the numbering note on EditTool). */
@@ -37,6 +41,8 @@ constexpr int editToolKeyDigit(EditTool tool) noexcept {
     switch (tool) {
     case EditTool::Select:
         return 1;
+    case EditTool::Range:
+        return 2;
     case EditTool::Split:
         return 3;
     case EditTool::Glue:
@@ -56,6 +62,8 @@ constexpr const char* editToolName(EditTool tool) noexcept {
     switch (tool) {
     case EditTool::Select:
         return "Select";
+    case EditTool::Range:
+        return "Range";
     case EditTool::Split:
         return "Split";
     case EditTool::Glue:

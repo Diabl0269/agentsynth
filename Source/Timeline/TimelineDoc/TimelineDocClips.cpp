@@ -156,7 +156,14 @@ bool TimelineDoc::setClipMuted(ClipId id, bool muted) {
     });
 }
 
-std::pair<ClipId, ClipId> TimelineDoc::splitClip(ClipId id, double atBeat) {
+std::pair<ClipId, ClipId> TimelineDoc::splitClip(ClipId id, double atBeat) { return splitClipImpl(id, atBeat, 0.0); }
+
+// `secondsPerBeat` 0 is splitClip's documented behaviour: the right half's sourceStartSeconds is
+// COPIED UNCHANGED, because converting `atBeat` to seconds needs a tempo map and this document has
+// none by design (see the class comment). A positive value is the tempo-aware variant the range
+// edits need (splitClipAtTempo): the caller supplies the tempo, and an audio right half then starts
+// reading exactly where the left half stopped.
+std::pair<ClipId, ClipId> TimelineDoc::splitClipImpl(ClipId id, double atBeat, double secondsPerBeat) {
     Track* owner = nullptr;
     auto* clip = findClip(id, &owner);
     if (clip == nullptr)
@@ -171,40 +178,12 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClip(ClipId id, double atBeat) {
         const double rightLength = clip->lengthBeats - atBeat;
         const juce::String rightName = clip->name;
 
-        // Partition the existing (sorted) notes into the two halves. A note straddling the
-        // boundary is split in two: the left half keeps the original note's id, the right half
-        // gets a fresh one. Re-based/truncated notes stay individually sorted by the transform
-        // (a uniform shift or a length change never reorders a run), but the two halves have to
-        // be re-sorted against EACH OTHER once combined: a straddling note's right half lands at
-        // beat 0 alongside any entirely-right note that also started exactly at the boundary,
-        // and pitch/id must still break the tie correctly.
+        // The shared cut rule (partitionNotesAt): a straddling note's left half keeps its id, the
+        // right half gets a fresh one.
         std::vector<MidiNote> leftNotes;
         std::vector<MidiNote> rightNotes;
-        leftNotes.reserve(clip->notes.size());
-        rightNotes.reserve(clip->notes.size());
-
-        for (const auto& note : clip->notes) {
-            const double noteEnd = note.startBeat + note.lengthBeats;
-            if (noteEnd <= atBeat) {
-                leftNotes.push_back(note);
-            } else if (note.startBeat >= atBeat) {
-                MidiNote moved = note;
-                moved.startBeat -= atBeat;
-                rightNotes.push_back(moved);
-            } else {
-                MidiNote left = note;
-                left.lengthBeats = atBeat - note.startBeat;
-                leftNotes.push_back(left);
-
-                MidiNote right = note;
-                right.id = NoteId{nextNoteId++};
-                right.startBeat = 0.0;
-                right.lengthBeats = noteEnd - atBeat;
-                rightNotes.push_back(right);
-            }
-        }
-        std::stable_sort(leftNotes.begin(), leftNotes.end(), noteLess);
-        std::stable_sort(rightNotes.begin(), rightNotes.end(), noteLess);
+        partitionNotesAt(
+            clip->notes, atBeat, [this](const MidiNote&) { return NoteId{nextNoteId++}; }, leftNotes, rightNotes);
 
         clip->notes = std::move(leftNotes);
         clip->lengthBeats = atBeat;
@@ -218,14 +197,13 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClip(ClipId id, double atBeat) {
         // The halves keep pointing at the same asset with the same gain, and
         // each keeps the fade at the edge it still owns (the left half's fade-out and the right
         // half's fade-in are at the cut, where there is nothing to fade). `sourceStartSeconds` is
-        // deliberately COPIED UNCHANGED rather than advanced by the split offset: converting
-        // `atBeat` to seconds needs a tempo map, and this document has none by design (see the
-        // class comment). Re-seating the right half's source offset needs that tempo map, so it
-        // is left for later work.
+        // advanced only when the caller supplied a tempo (see above).
         right.assetRef = clip->assetRef;
         right.gainDb = clip->gainDb;
         right.fadeOutBeats = clip->fadeOutBeats;
         right.sourceStartSeconds = clip->sourceStartSeconds;
+        if (secondsPerBeat > 0.0 && clip->assetRef.isNotEmpty())
+            right.sourceStartSeconds += atBeat * secondsPerBeat;
         // Both halves inherit the mute: cutting a muted clip in two is a cut, not an un-mute of
         // half of it. (The left half keeps its own flag by simply not being rewritten.) Each note's
         // own muted flag rides along in the struct copies above, including the straddling note's

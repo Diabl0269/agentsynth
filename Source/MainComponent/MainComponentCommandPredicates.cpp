@@ -33,8 +33,9 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
             // getClipSelection() has no const overload; hasClipSelection() answers the same
             // !clipSelection_.isEmpty() question and is const, so getCommandInfo (const-context
             // predicate) uses it here in place of the non-const getClipSelection().size() > 0
-            // the perform-side action code below still uses for its status-bar count.
-            return timelinePanel.hasClipSelection();
+            // the perform-side action code below still uses for its status-bar count. A live range
+            // (the Range tool) is copyable too.
+            return timelinePanel.hasClipSelection() || timelinePanel.hasRangeSelection();
         case EditSurface::PianoRoll:
             return timelinePanel.getPianoRoll().hasNoteSelection();
         case EditSurface::Graph:
@@ -76,7 +77,7 @@ bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
         // deletes, so anything copyable is cuttable and the two rows can never disagree.
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
-            return timelinePanel.canCutClips();
+            return timelinePanel.canCutClips() || timelinePanel.hasRangeSelection();
         case EditSurface::PianoRoll:
             return timelinePanel.getPianoRoll().hasNoteSelection();
         case EditSurface::Graph:

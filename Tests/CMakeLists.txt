@@ -69,6 +69,7 @@ add_executable(Tests
     Timeline/TimelineDoc/TimelineDocAutomationTests.cpp
     Timeline/TimelineDoc/TimelineDocSerializationTests.cpp
     Timeline/TimelineDoc/TimelineDocMarkersTests.cpp
+    Timeline/TimelineDoc/TimelineDocRangesTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingNotesTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingQuantiseTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingSplitJoinTests.cpp
@@ -423,6 +424,7 @@ add_executable(Tests
     UI/Timeline/TimelineClipLane/TimelineClipLaneEditToolsTests.cpp
     UI/Timeline/TimelineClipLane/TimelineClipLaneMouseTests.cpp
     UI/Timeline/TimelineClipLane/TimelineClipLanePaintingTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLaneRangeTests.cpp
     UI/Timeline/TimelineClipLane/TimelineClipLaneSelectionTests.cpp
     UI/PianoRoll/NoteSelectionModelTests.cpp
     UI/PianoRoll/NoteHitTestMarqueeTests.cpp

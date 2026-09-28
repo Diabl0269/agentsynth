@@ -24,6 +24,7 @@ two or more units in `TimelineClipLaneInternal.h`:
 | `TimelineClipLaneMouse.cpp` | Mouse handling, drag-preview/auto-scroll, double-click clip creation, file drag/drop |
 | `TimelineClipLaneSelection.cpp` | Selected-clip span query, panel-scoped `keyPressed`, marquee begin/update/end |
 | `TimelineClipLaneEditTools.cpp` | Active tool/cursor/gestures and their previews, clip renaming, clip context menu |
+| `TimelineClipLaneRange.cpp` | The Range tool: the range drag and Shift-extension, range painting, the range verbs and menu |
 
 ## Ownership and z-order
 
@@ -211,6 +212,59 @@ cell); release commits. A press that never dragged falls back to `createMidiClip
 one-bar-clip authoring gesture the empty-lane double-click uses, so a plain pencil click and a
 plain double-click land in the same place.
 
+## Range tool
+
+**Range** (key **2**) selects a span of TIME rather than objects: a rectangle of beats across a
+contiguous run of track rows, held by `synth::ui::RangeSelectionModel`
+(`Source/UI/Timeline/RangeSelectionModel.h`). It is independent of `ClipSelectionModel` — a range
+covers parts of clips and empty space alike — and stored as the two corners the user dragged
+between, an **anchor** and an **extent**, each a `(TrackId, beat)` pair. Holding track ids rather
+than row indices means a range survives a track reorder and dies cleanly (`refreshFromDoc` clears
+it) when either corner's track is removed. The lane area owns the model; the panel reads it
+(`getRangeSpan()`) for Copy/Cut.
+
+- **Drag** anywhere — on a clip or on empty space — to make a range. Both edges snap to the grid
+  (never below beat 0); dragging above the first row or below the last clamps to it. A press that
+  never gains width is a click, and a click dismisses the range. Pressing never moves, trims or
+  selects a clip.
+- **Shift+click / Shift+drag** extends the live range from its anchor, so the far edge stays put.
+- **Exclusive with the clip selection.** Making a range clears the clip selection, and a range lives
+  only while the Range tool is active — `setActiveTool` clears it on the way out, as do a paste and
+  Select All (both end with clips selected). So Copy/Cut/Delete are never ambiguous about which of
+  the two they act on.
+- **Painting** is deliberately unlike the marquee (accent fill + accent border all round, gone on
+  release): the range washes its covered rows in `textPrimary` at low alpha and marks only its two
+  time edges with accent lines, because it is a span that stays. The drag repaints only when the
+  snapped extent or its row changes, and only the union of the old and new rects, through the same
+  `requestToolPreviewRepaint` seam the other tool previews use.
+
+**Verbs.** Each is ONE `recordTimelineChange`, with the transport's tempo (`secondsPerBeat()`,
+120 bpm with no transport) handed to the doc so an audio clip cut from the left keeps playing the
+audio that was under it (see [the doc's range edits](../architecture/timeline.md)). The range stays
+after a verb, as in Cubase.
+
+| Input | Verb |
+|---|---|
+| **Delete / Backspace** | delete the range's contents (`RangeChoice::Delete`) — clips inside go, clips crossing an edge are trimmed or split back to it |
+| **Shift+Delete** | the same, then close the gap — every later clip on the range's tracks moves left by its length (`DeleteCloseGap`); automation and markers stay put |
+| **Right-click inside the range** | the range menu: Split at range edges / Delete range / Delete range and close gap (`showRangeContextMenu`, protected virtual; headless tests drive `applyRangeChoice` instead) |
+| **Cmd+C / Cmd+X** | copy / cut the range (`TimelinePanelComponent::copyRange` / `cutRange`) — see below |
+| **Cmd+V** | paste at the playhead, the same paste a clip copy uses |
+| **P** | loop exactly the range's span |
+| **Escape** | dismiss the range |
+
+A verb over empty time (nothing to split or delete) changes nothing and leaves no undo entry.
+
+**Copy/Cut** fill the SAME clip clipboard a clip copy does, so paste — kind-aware target rows,
+snapping, one undo step, the pasted clips ending up selected — is shared rather than written twice.
+Each entry is `TimelineDoc::clipToRange` of a clip on a covered track: the part inside the range,
+notes clipped and re-based, an audio fragment's `sourceStartSeconds` advanced by what was cut off
+its left, and the fade at any cut edge zeroed. Its relative start is measured from the **range
+start**, not the earliest clip, so leading empty space in the range survives the paste. A cut is
+the copy followed by the lanes' own `Delete` verb, so Cut and Delete can never remove different
+things; `MainComponent`'s Copy/Cut commands route to the range whenever
+`TimelinePanelComponent::hasRangeSelection()` is true.
+
 ## Split and draw previews
 
 Both previews are gated on the previewed STATE changing, never on raw pointer movement, mirroring
@@ -346,8 +400,11 @@ owner listening, returns `false` so the key keeps its meaning elsewhere.
 (`TimelineClipLaneSelectionTests.cpp`), pure-geometry tests for `computeClipRect`
 (`TimelineClipLaneAreaTests.cpp`), mouse interaction driven by hand-built `juce::MouseEvent`s
 against a bare `TimelineDoc` + `AppUndoManager` + `TimelineClipLaneArea`, no `MainComponent` needed
-(`TimelineClipLaneMouseTests.cpp`), painting (`TimelineClipLanePaintingTests.cpp`) and the tool
-layer (`TimelineClipLaneEditToolsTests.cpp`).
+(`TimelineClipLaneMouseTests.cpp`), painting (`TimelineClipLanePaintingTests.cpp`), the tool
+layer (`TimelineClipLaneEditToolsTests.cpp`) and the Range tool — the model, the drag and its
+Shift-extension, the repaint gate and every verb (`TimelineClipLaneRangeTests.cpp`). The doc-level
+range edits are `Tests/Timeline/TimelineDoc/TimelineDocRangesTests.cpp`, and the range clipboard is
+`TimelineRangeClipboardTest` in `Tests/UI/Timeline/TimelinePanel/TimelinePanelToolStripTests.cpp`.
 
 The authoring gestures are split across three places, each covering the half it owns: the lane
 area's (`TimelineClipLaneAuthoringTests.cpp` — snapping, one-bar length, one undo step, the

@@ -71,9 +71,8 @@ TEST(TimelineToolStripTest, NumberKeysPickToolsAndReservedDigitsFallThrough) {
     EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('8')));
     EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Draw);
 
-    // 2 (Range), 6 (Zoom) and 9 (Play) are reserved for tools we don't ship: unconsumed, so they
-    // keep whatever meaning they have elsewhere, and the active tool is untouched.
-    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('2')));
+    // 6 (Zoom) and 9 (Play) are reserved for tools we don't ship: unconsumed, so they keep
+    // whatever meaning they have elsewhere, and the active tool is untouched.
     EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('6')));
     EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('9')));
     EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Draw);
@@ -82,6 +81,13 @@ TEST(TimelineToolStripTest, NumberKeysPickToolsAndReservedDigitsFallThrough) {
     EXPECT_FALSE(f.panel.keyPressed(
         juce::KeyPress('1', juce::ModifierKeys(juce::ModifierKeys::commandModifier), juce::juce_wchar('1'))));
     EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Draw);
+
+    // 2 filled its reserved slot with the Range tool.
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('2')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Range);
+    EXPECT_EQ(f.panel.getClipLaneArea().getActiveTool(), synth::ui::EditTool::Range);
+    EXPECT_EQ(f.panel.getPianoRoll().getActiveTool(), synth::ui::EditTool::Select)
+        << "the roll has no range model and takes Range as Select";
 
     EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('1')));
     EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select);
@@ -133,7 +139,9 @@ TEST(TimelineToolStripTest, ToolDigitsFollowARebindAndTheOldDigitStopsWorking) {
     f.panel.setShortcutManager(nullptr);
     EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('3')));
     EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Split);
-    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('2'))) << "2/6/9 stay reserved on the fallback path";
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('6'))) << "6/9 stay reserved on the fallback path";
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('2')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Range);
 }
 
 // The panel's three letter keys go through the same resolution. J is the snap toggle
@@ -550,4 +558,71 @@ TEST(TimelineClipVerbsTest, RepeatRejectsANonPositiveCountAndAnEmptySelection) {
     EXPECT_FALSE(f.panel.repeatSelectedClips(-1));
     EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
     EXPECT_FALSE(f.undo.canUndo());
+}
+
+// ---- Range clipboard (the Range tool) ----
+
+TEST(TimelineRangeClipboardTest, CopyCapturesTheRangeClippedAndPasteLandsItAtThePlayhead) {
+    ToolPanelFixture f;
+    const auto midi = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto audio = f.doc.addTrack(synth::TrackKind::Audio, "Audio");
+    const auto m = f.doc.addClip(midi, 0.0, 8.0, "m");
+    f.doc.addNote(m, synth::MidiNote{{}, 3.0, 1.0, 60, 100, 1, false});
+    const auto a = f.doc.addClip(audio, 4.0, 8.0, "a");
+    ASSERT_TRUE(f.doc.setClipAsset(a, "Audio/a.wav", 0.0));
+
+    f.panel.setActiveTool(synth::ui::EditTool::Range);
+    f.panel.getClipLaneArea().setRange(midi, 2.0, audio, 6.0);
+    ASSERT_TRUE(f.panel.hasRangeSelection());
+    const auto revision = f.doc.getRevision();
+    ASSERT_TRUE(f.panel.copyRange());
+    EXPECT_EQ(f.doc.getRevision(), revision) << "a copy edits nothing";
+    EXPECT_TRUE(f.panel.canPasteClips());
+
+    // No transport is wired, so the paste anchors the range START at beat 0.
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+    EXPECT_FALSE(f.panel.hasRangeSelection()) << "the pasted clips become the selection instead";
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 2u);
+    const auto* midiCopy = f.doc.getTrackForClip(pasted[0])->kind == synth::TrackKind::Midi ? f.doc.getClip(pasted[0])
+                                                                                            : f.doc.getClip(pasted[1]);
+    const auto* audioCopy = midiCopy == f.doc.getClip(pasted[0]) ? f.doc.getClip(pasted[1]) : f.doc.getClip(pasted[0]);
+    EXPECT_DOUBLE_EQ(midiCopy->startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(midiCopy->lengthBeats, 4.0);
+    ASSERT_EQ(midiCopy->notes.size(), 1u);
+    EXPECT_DOUBLE_EQ(midiCopy->notes[0].startBeat, 1.0) << "re-based to the fragment's start";
+    EXPECT_DOUBLE_EQ(audioCopy->startBeat, 2.0) << "the empty time before it in the range is kept";
+    EXPECT_DOUBLE_EQ(audioCopy->lengthBeats, 2.0);
+    EXPECT_DOUBLE_EQ(audioCopy->sourceStartSeconds, 0.0) << "cut on its right edge only";
+}
+
+TEST(TimelineRangeClipboardTest, CutRemovesTheRangeInOneStepAndOverEmptyTimeDoesNothing) {
+    ToolPanelFixture f;
+    const auto midi = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto m = f.doc.addClip(midi, 0.0, 8.0, "m");
+    f.panel.setActiveTool(synth::ui::EditTool::Range);
+
+    f.panel.getClipLaneArea().setRange(midi, 10.0, midi, 12.0);
+    EXPECT_FALSE(f.panel.cutRange()) << "nothing under the range";
+    EXPECT_FALSE(f.undo.canUndo());
+
+    f.panel.getClipLaneArea().setRange(midi, 2.0, midi, 4.0);
+    ASSERT_TRUE(f.panel.cutRange());
+    ASSERT_EQ(f.doc.getTrack(midi)->clips.size(), 2u);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(m)->lengthBeats, 2.0);
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrack(midi)->clips.size(), 1u);
+    EXPECT_FALSE(f.undo.canUndo()) << "copy + delete is one undo step";
+    EXPECT_TRUE(f.panel.canPasteClips());
+}
+
+TEST(TimelineRangeClipboardTest, LeavingTheRangeToolDropsTheRange) {
+    ToolPanelFixture f;
+    const auto midi = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    f.panel.setActiveTool(synth::ui::EditTool::Range);
+    f.panel.getClipLaneArea().setRange(midi, 0.0, midi, 4.0);
+    ASSERT_TRUE(f.panel.hasRangeSelection());
+    f.panel.setActiveTool(synth::ui::EditTool::Select);
+    EXPECT_FALSE(f.panel.hasRangeSelection());
 }

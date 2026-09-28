@@ -122,6 +122,10 @@ bool MainComponent::performCopySelection() {
     // for a caller that invokes perform() directly.
     switch (resolveEditSurface()) {
     case EditSurface::TimelineClips:
+        if (timelinePanel.hasRangeSelection()) { // the Range tool's span wins over the selection
+            statusBar.showMessage(timelinePanel.copyRange() ? "Copied the range" : "Nothing to copy in the range");
+            return true;
+        }
         if (timelinePanel.copySelectedClips())
             statusBar.showMessage("Copied " + juce::String(timelinePanel.getClipSelection().size()) + " clips");
         else
@@ -211,6 +215,10 @@ bool MainComponent::performCutSelection() {
     case EditSurface::TimelineClips:
         // The panel's own verb: copy + delete inside ONE recordTimelineChange. Never wrap it --
         // a second transaction around it would make Cmd+Z a two-step undo for one gesture.
+        if (timelinePanel.hasRangeSelection()) {
+            statusBar.showMessage(timelinePanel.cutRange() ? "Cut the range" : "Nothing to cut in the range");
+            return true;
+        }
         if (timelinePanel.cutSelectedClips())
             statusBar.showMessage("Cut clips");
         else

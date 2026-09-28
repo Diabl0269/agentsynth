@@ -82,7 +82,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
 
     // The edit-tool strip, left of the snap controls in the transport bar (see resized()). Radio
     // buttons rather than a combo: which tool is active has to be readable at a glance mid-edit,
-    // and the six glyphs are the row every DAW user already knows.
+    // and the seven glyphs are the row every DAW user already knows.
     for (auto tool : kAllEditTools) {
         auto button = std::make_unique<juce::DrawableButton>(juce::String(editToolName(tool)) + " Tool",
                                                              juce::DrawableButton::ImageOnButtonBackground);
@@ -333,7 +333,7 @@ void TimelinePanelComponent::setShortcutManager(ShortcutManager* manager) {
 void TimelinePanelComponent::changeListenerCallback(juce::ChangeBroadcaster*) { refreshShortcutTooltips(); }
 
 // Rebuilds every dynamic shortcut-hint tooltip this panel owns (see synth::shortcutHintFor): the
-// six tool-strip buttons, the snap toggle, and the follow-playhead toggle. Called from the
+// seven tool-strip buttons, the snap toggle, and the follow-playhead toggle. Called from the
 // constructor (after those buttons exist), setShortcutManager (both install and clear), and
 // changeListenerCallback.
 void TimelinePanelComponent::refreshShortcutTooltips() {
@@ -342,6 +342,8 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
         switch (tool) {
         case EditTool::Select:
             return "timelineToolSelect";
+        case EditTool::Range:
+            return "timelineToolRange";
         case EditTool::Split:
             return "timelineToolSplit";
         case EditTool::Glue:

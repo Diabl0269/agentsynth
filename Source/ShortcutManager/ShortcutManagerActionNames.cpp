@@ -153,6 +153,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Toggle Follow Playhead";
     if (actionId == "timelineToolSelect")
         return "Select Tool";
+    if (actionId == "timelineToolRange")
+        return "Range Tool";
     if (actionId == "timelineToolSplit")
         return "Split Tool";
     if (actionId == "timelineToolGlue")

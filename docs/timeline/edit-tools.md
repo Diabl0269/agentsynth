@@ -4,10 +4,10 @@
 ([clips](clips.md#edit-tools)) and the piano roll ([piano-roll](piano-roll.md#edit-tools)):
 
 ```cpp
-enum class EditTool { Select, Split, Glue, Erase, Mute, Draw };
+enum class EditTool { Select, Range, Split, Glue, Erase, Mute, Draw };
 ```
 
-plus `kAllEditTools` (an `std::array<EditTool, 6>` in that order), `editToolKeyDigit(tool)` and
+plus `kAllEditTools` (an `std::array<EditTool, 7>` in that order), `editToolKeyDigit(tool)` and
 `editToolName(tool)`. It is deliberately JUCE-free — gesture routing in both editors and the
 strip's button wiring all switch on it, and `editToolForKeyChar(int keyChar)` is what
 `TimelinePanelComponent::keyPressed()` consults for the number-key mapping, so tool switching is
@@ -31,18 +31,26 @@ a different tool.
 
 ## Numbering
 
-Numbering follows Cubase, so the muscle memory transfers: **1** Select, **3** Split, **4** Glue,
-**5** Erase, **7** Mute, **8** Draw.
+Numbering follows Cubase, so the muscle memory transfers: **1** Select, **2** Range, **3** Split,
+**4** Glue, **5** Erase, **7** Mute, **8** Draw.
 
-**2** (Range Selection), **6** (Zoom) and **9** (Play/Scrub) are Cubase tools this app does not
-ship, and the gaps are reserved **on purpose**: `editToolForKeyChar` returns `std::nullopt` for
-them rather than clamping to a shipped tool, so `TimelinePanelComponent::keyPressed()` leaves those
-three digits unconsumed and whatever they mean elsewhere is untouched. Shipping one of the missing
-three later costs no rebind — the digit is already reserved for exactly that tool.
+**6** (Zoom) and **9** (Play/Scrub) are Cubase tools this app does not ship, and the gaps are
+reserved **on purpose**: `editToolForKeyChar` returns `std::nullopt` for them rather than clamping
+to a shipped tool, so `TimelinePanelComponent::keyPressed()` leaves those two digits unconsumed and
+whatever they mean elsewhere is untouched. Shipping one later costs no rebind — the digit is already
+reserved for exactly that tool, which is how **Range** took its **2** without moving any other key.
+The enumerator order is the strip's order and indexes per-tool arrays; nothing persists it, so
+inserting `Range` after `Select` renumbered nothing on disk.
+
+**The piano roll takes Range as Select.** A range is a beat span across tracks and the roll edits
+one clip, so `PianoRollComponent::setActiveTool` maps `Range` to `Select` (its `getActiveTool()`
+then reports `Select` while the panel's says `Range`) — opening a clip with Range active leaves its
+notes editable rather than silently inert. What Range does in the lanes is in
+[clips](clips.md#range-tool).
 
 ## Rebinding
 
-**All six tool digits are rebindable**, unlike the reserved 2/6/9 gaps above, which are not
+**All seven tool digits are rebindable**, unlike the reserved 6/9 gaps above, which are not
 bindings at all. Each digit is a `ShortcutManager` action (`timelineToolSelect`,
 `timelineToolSplit`, …, Timeline category) resolved directly by
 `TimelinePanelComponent::keyPressed()` — a *surface* action, never dispatched through
@@ -62,13 +70,13 @@ so the roll and the panel can never disagree about which tool is active.
 
 ## The strip
 
-Six `juce::DrawableButton`s (`ImageOnButtonBackground`), built unconditionally in
+Seven `juce::DrawableButton`s (`ImageOnButtonBackground`), built unconditionally in
 `TimelinePanelComponent`'s constructor — a headless build simply has no icon to draw in them, and
 `getToolButton(tool)` is never null once the panel exists. One shared radio group id means clicking
 one un-toggles the rest, and each carries a tooltip with the digit (`"Split (3)"`, from
 `editToolName(tool) + " (" + editToolKeyDigit(tool) + ")"`). `kEditToolButtonWidth` is 28 px.
 
-Laid out left-to-right in `kAllEditTools` order (1, 3, 4, 5, 7, 8) immediately left of the snap
+Laid out left-to-right in `kAllEditTools` order (1, 2, 3, 4, 5, 7, 8) immediately left of the snap
 combo and toggle in the transport bar: both are "how the next edit behaves" chrome, so they read as
 one group without pushing the transport controls off their left-aligned home.
 
@@ -87,16 +95,17 @@ active — there is no separate cursor-only asset or tint step to go stale.
 
 Hotspots are not uniform. **Select** hotspots at the arrow's tip `(4, 2)` and **Draw** at the
 pencil's tip `(3, 21)`, because both icons have an obvious off-centre working point, the way every
-DAW places a click point there. **Split/Glue/Erase/Mute** hotspot at the icon's geometric centre
-`(12, 12)`: a scissors' cut happens where the blades cross, and glue, erase and mute act on
-whatever is directly under the pointer, so there is no other candidate point.
+DAW places a click point there. **Range/Split/Glue/Erase/Mute** hotspot at the icon's geometric
+centre `(12, 12)`: a scissors' cut happens where the blades cross, a range starts, and glue, erase
+and mute act, at whatever is directly under the pointer, so there is no other candidate point.
 
 Headless-safe by construction: a null icon (asset library not linked in) falls back to a stock
-cursor per tool — `NormalCursor` for Select, `CrosshairCursor` for Draw and for the remaining four,
+cursor per tool — `NormalCursor` for Select, `IBeamCursor` for Range (a span select, like selecting
+text), `CrosshairCursor` for Draw and for the remaining four,
 since no single stock cursor reads as "split" or "mute" and the crosshair at least telegraphs "a
 non-Select tool is active".
 
-Both `TimelineClipLaneArea` and `PianoRollComponent` cache their own six cursors
+Both `TimelineClipLaneArea` and `PianoRollComponent` cache one cursor per tool
 (`rebuildToolCursors()`), rebuilt only on a theme change — never per mouse-move, since building one
 renders an icon into an `Image`.
 

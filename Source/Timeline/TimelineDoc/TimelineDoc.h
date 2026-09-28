@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <juce_core/juce_core.h>
+#include <optional>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -437,6 +438,24 @@ public:
     // kMaxClipsPerTrack.
     ClipId duplicateClip(ClipId id);
 
+    // -- Ranges (the Range tool's composed edits; see TimelineDocRanges.cpp) -----------------
+    // Every call below takes the caller's `secondsPerBeat` (finite, > 0, else rejected) — this doc
+    // has no tempo, and moving an audio clip's left edge must advance its sourceStartSeconds.
+    // splitClip plus that advance for an audio right half. Same rejections as splitClip.
+    std::pair<ClipId, ClipId> splitClipAtTempo(ClipId id, double atBeat, double secondsPerBeat);
+    // Left edge to absolute `newStartBeat`, strictly inside the clip; the end stays put.
+    bool trimClipStart(ClipId id, double newStartBeat, double secondsPerBeat);
+    // Right edge to absolute `newEndBeat`, strictly inside the clip; notes past it are cut.
+    bool trimClipEnd(ClipId id, double newEndBeat);
+    // Splits `tracks`' clips at both edges; returns the clips then wholly inside [start, end).
+    std::vector<ClipId> splitClipsAtRangeEdges(const std::vector<TrackId>& tracks, double startBeat, double endBeat,
+                                               double secondsPerBeat);
+    // Clears [start, end) on `tracks`; `closeGap` pulls later clips left. False if nothing changed.
+    bool deleteRange(const std::vector<TrackId>& tracks, double startBeat, double endBeat, bool closeGap,
+                     double secondsPerBeat);
+    // The part of `clip` inside [start, end) as a detached copy, or nullopt if they don't overlap.
+    static std::optional<Clip> clipToRange(const Clip& clip, double startBeat, double endBeat, double secondsPerBeat);
+
     // -- Audio clips ------------------------------------------------------------
     // Points the clip at an audio asset. `assetRef` MUST be bundle-root-relative — an absolute
     // path, a Windows drive letter, a leading '/' or '\', or any `..` segment is REJECTED outright
@@ -670,6 +689,8 @@ private:
     }
 
     void finishMutation();
+    // splitClip's body; `secondsPerBeat` 0 keeps sourceStartSeconds unchanged.
+    std::pair<ClipId, ClipId> splitClipImpl(ClipId id, double atBeat, double secondsPerBeat);
 
     Track* findTrack(TrackId id);
     const Track* findTrack(TrackId id) const;
