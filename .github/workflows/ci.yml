@@ -122,6 +122,18 @@ jobs:
       # The cache check is what tells us the build cache broke; if it breaks silently we are back
       # to shipping 100%-cold builds unnoticed. Cheap (~1s, no compiler) so it rides along here.
       run: bash scripts/tests/ci-cache-check.test.sh
+    - name: Test CI cache budget
+      # FRO341: the budget script is what catches a future max_size bump pushing one cache
+      # generation back past the repo's Actions-cache budget. Same deal: ~1s, no compiler, no
+      # network.
+      run: bash scripts/tests/ci-cache-budget.test.sh
+    - name: Check CI cache budget
+      # FRO341: sums every workflow's configured ccache max_size (excluding the label-gated ASAN
+      # job, covered by the runtime usage alarm instead) plus a deps allowance, and fails if one
+      # cache generation would exceed 8 GiB — the static half of the fix for the 2026-09-28
+      # eviction (two generations at ~6.8 GB each blew past GitHub's 10 GB repo limit). See
+      # docs/development/ci-caching.md's FRO341 section.
+      run: bash scripts/ci-cache-budget.sh
     - name: Test Linux dependency install
       # Covers the apt mirror-failover path, which by definition only runs during an outage — the
       # one that burned six hours of runner time on 2026-08-18. Same deal: ~1s, no apt, no network.
@@ -252,9 +264,9 @@ jobs:
         # this did until Aug 2026) minted a fresh ~350 MB entry per platform per workflow on every
         # module PR — 10 CMakeLists edits in nine days, ~2.1 GB apiece, which blew past GitHub's
         # 10 GB per-repo budget and LRU-evicted every ccache entry with it.
-        key: ${{ runner.os }}-deps3-${{ hashFiles('cmake/DependencyVersions.cmake') }}
+        key: ${{ runner.os }}-deps4-${{ hashFiles('cmake/DependencyVersions.cmake') }}
         restore-keys: |
-          ${{ runner.os }}-deps3-
+          ${{ runner.os }}-deps4-
 
     - name: Restore ccache
       id: ccache-cache
@@ -364,9 +376,13 @@ jobs:
     # Concurrency safety: main pushes are queued, not cancelled, by the concurrency group at the
     # top of this file (cancel-in-progress is pull_request-only), so two main runs never prune the
     # same OS family at once — but as a second, cheap guard, this only ever deletes entries OLDER
-    # than the entry this run just saved (never "everything but mine"), and always keeps the 2
-    # most recent generations regardless, so a run working off a stale cache listing can't delete
-    # a sibling run's fresher save. Also prunes superseded build/_deps entries for old
+    # than the entry this run just saved (never "everything but mine"), and always keeps only the
+    # SINGLE most recent generation regardless (FRO341 — dropped from keeping 2, since 2
+    # generations' worth of every cap across both this workflow and build-artifacts.yml is, by
+    # construction, already enough to exceed GitHub's 10 GB repo-wide cache limit; see
+    # scripts/ci-cache-budget.sh for the static total and docs/development/ci-caching.md for the
+    # 2026-09-28 outage this fixes), so a run working off a stale cache listing can't delete a
+    # sibling run's fresher save. Also prunes superseded build/_deps entries for old
     # DependencyVersions.cmake hashes, which accumulate the same way (slower cadence, same fix).
     # Tolerates a missing/partial cache listing (logs and skips rather than failing the job).
     - name: Prune superseded main cache generations
@@ -389,7 +405,7 @@ jobs:
             return 0
           fi
           printf '%s' "$list" | jq -r --arg cutoff "$keep_created" \
-            'sort_by(.createdAt) | reverse | .[2:] | .[] | select(.createdAt < $cutoff) | "\(.id)\t\(.key)"' |
+            'sort_by(.createdAt) | reverse | .[1:] | .[] | select(.createdAt < $cutoff) | "\(.id)\t\(.key)"' |
           while IFS=$'\t' read -r id key; do
             [ -z "$id" ] && continue
             echo "prune: deleting $prefix cache id=$id key=$key"
@@ -397,7 +413,28 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps3-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps4-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+
+        # Runtime usage alarm (FRO341): scripts/ci-cache-budget.sh's static sum bounds what the
+        # workflows COMMIT to writing for one generation; this catches what that can't -- a
+        # superseded deps3/release-deps-ninja3 generation not yet garbage-collected, the ASAN
+        # job's own PR-scoped cache (excluded from the static sum on purpose), GitHub-side
+        # variance. Never fails the build -- an alarm that could fail a build over some OTHER
+        # job's cache growth would get silenced, not fixed.
+        usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \
+                          --jq .active_caches_size_in_bytes 2>/dev/null || true)"
+        case "$usage_bytes" in
+          ''|*[!0-9]*)
+            echo "prune: could not read repo-wide Actions cache usage, skipping the usage alarm"
+            ;;
+          *)
+            gib="$(awk -v b="$usage_bytes" 'BEGIN { printf "%.2f", b / 1073741824 }')"
+            echo "prune: repo-wide Actions cache usage: ${usage_bytes} bytes (~${gib} GiB)"
+            if [ "$usage_bytes" -ge 9126805504 ]; then
+              echo "::warning::Actions cache usage is ~${gib} GiB (${usage_bytes} bytes), at or above the 8.5 GB alarm threshold -- see docs/development/ci-caching.md's FRO341 section for the static budget (scripts/ci-cache-budget.sh) and what to check (an old generation lingering, or a job outside that sum)."
+            fi
+            ;;
+        esac
 
     # Test execution, coverage and its artifact are pull-request concerns; a push run is only here
     # to seed the cache (see the note above the `lint` job).
@@ -470,9 +507,9 @@ jobs:
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
-        key: ${{ runner.os }}-deps3-${{ hashFiles('cmake/DependencyVersions.cmake') }}
+        key: ${{ runner.os }}-deps4-${{ hashFiles('cmake/DependencyVersions.cmake') }}
         restore-keys: |
-          ${{ runner.os }}-deps3-
+          ${{ runner.os }}-deps4-
 
     # The ONE exception to rule 6 of docs/development/ci-caching.md ("PR runs restore only"). This
     # job never runs on push:main, so nothing can seed a main-scoped cache for it, and until
@@ -591,9 +628,9 @@ jobs:
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
-        key: ${{ runner.os }}-deps3-${{ hashFiles('cmake/DependencyVersions.cmake') }}
+        key: ${{ runner.os }}-deps4-${{ hashFiles('cmake/DependencyVersions.cmake') }}
         restore-keys: |
-          ${{ runner.os }}-deps3-
+          ${{ runner.os }}-deps4-
 
     - name: Restore ccache
       id: ccache-cache
@@ -672,8 +709,8 @@ jobs:
 
     # See build-and-test's "Prune superseded main cache generations" step for the full rationale
     # (per-commit ccache keys are immutable, so unpruned entries re-blow the cache budget) and its
-    # concurrency-safety note (only deletes entries older than this run's own save, keeps the 2
-    # most recent generations regardless, tolerates a missing/partial listing).
+    # concurrency-safety note (only deletes entries older than this run's own save, keeps only the
+    # single most recent generation regardless, tolerates a missing/partial listing).
     - name: Prune superseded main cache generations
       if: github.ref == 'refs/heads/main' && steps.ccache-save.outcome == 'success'
       env:
@@ -694,7 +731,7 @@ jobs:
             return 0
           fi
           printf '%s' "$list" | jq -r --arg cutoff "$keep_created" \
-            'sort_by(.createdAt) | reverse | .[2:] | .[] | select(.createdAt < $cutoff) | "\(.id)\t\(.key)"' |
+            'sort_by(.createdAt) | reverse | .[1:] | .[] | select(.createdAt < $cutoff) | "\(.id)\t\(.key)"' |
           while IFS=$'\t' read -r id key; do
             [ -z "$id" ] && continue
             echo "prune: deleting $prefix cache id=$id key=$key"
@@ -702,7 +739,23 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps3-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps4-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+
+        # Runtime usage alarm (FRO341): see build-and-test's identical comment above its own prune step.
+        usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \
+                          --jq .active_caches_size_in_bytes 2>/dev/null || true)"
+        case "$usage_bytes" in
+          ''|*[!0-9]*)
+            echo "prune: could not read repo-wide Actions cache usage, skipping the usage alarm"
+            ;;
+          *)
+            gib="$(awk -v b="$usage_bytes" 'BEGIN { printf "%.2f", b / 1073741824 }')"
+            echo "prune: repo-wide Actions cache usage: ${usage_bytes} bytes (~${gib} GiB)"
+            if [ "$usage_bytes" -ge 9126805504 ]; then
+              echo "::warning::Actions cache usage is ~${gib} GiB (${usage_bytes} bytes), at or above the 8.5 GB alarm threshold -- see docs/development/ci-caching.md's FRO341 section for the static budget (scripts/ci-cache-budget.sh) and what to check (an old generation lingering, or a job outside that sum)."
+            fi
+            ;;
+        esac
 
     # Pull-request only — a push run seeds the cache (see the note above the `lint` job). This is
     # the starkest case: an 8-second cached build was carrying 118 seconds of test execution.
@@ -790,9 +843,9 @@ jobs:
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
-        key: ${{ runner.os }}-deps3-${{ hashFiles('cmake/DependencyVersions.cmake') }}
+        key: ${{ runner.os }}-deps4-${{ hashFiles('cmake/DependencyVersions.cmake') }}
         restore-keys: |
-          ${{ runner.os }}-deps3-
+          ${{ runner.os }}-deps4-
 
     - name: Restore ccache
       id: ccache-cache
@@ -887,7 +940,7 @@ jobs:
             return 0
           fi
           printf '%s' "$list" | jq -r --arg cutoff "$keep_created" \
-            'sort_by(.createdAt) | reverse | .[2:] | .[] | select(.createdAt < $cutoff) | "\(.id)\t\(.key)"' |
+            'sort_by(.createdAt) | reverse | .[1:] | .[] | select(.createdAt < $cutoff) | "\(.id)\t\(.key)"' |
           while IFS=$'\t' read -r id key; do
             [ -z "$id" ] && continue
             echo "prune: deleting $prefix cache id=$id key=$key"
@@ -895,7 +948,23 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps3-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps4-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+
+        # Runtime usage alarm (FRO341): see build-and-test's identical comment above its own prune step.
+        usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \
+                          --jq .active_caches_size_in_bytes 2>/dev/null || true)"
+        case "$usage_bytes" in
+          ''|*[!0-9]*)
+            echo "prune: could not read repo-wide Actions cache usage, skipping the usage alarm"
+            ;;
+          *)
+            gib="$(awk -v b="$usage_bytes" 'BEGIN { printf "%.2f", b / 1073741824 }')"
+            echo "prune: repo-wide Actions cache usage: ${usage_bytes} bytes (~${gib} GiB)"
+            if [ "$usage_bytes" -ge 9126805504 ]; then
+              echo "::warning::Actions cache usage is ~${gib} GiB (${usage_bytes} bytes), at or above the 8.5 GB alarm threshold -- see docs/development/ci-caching.md's FRO341 section for the static budget (scripts/ci-cache-budget.sh) and what to check (an old generation lingering, or a job outside that sum)."
+            fi
+            ;;
+        esac
 
     # Pull-request only — a push run seeds the cache (see the note above the `lint` job).
     # Runs Tests.exe directly (FRO242): this used to be `find build -name Tests.exe -exec {} \;`,

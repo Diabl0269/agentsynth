@@ -34,6 +34,8 @@ bash scripts/coverage.sh
 
 # CI script tests (all run in the Lint job; no compiler, no network, ~1s each)
 bash scripts/tests/ci-cache-check.test.sh          # cache health check (also runs after every CI build)
+bash scripts/tests/ci-cache-budget.test.sh         # one-generation cache budget (FRO341)
+bash scripts/ci-cache-budget.sh                    # cache budget itself, also runs directly in the Lint job
 bash scripts/tests/ci-install-linux-deps.test.sh   # Linux apt install + mirror failover
 bash scripts/tests/check-nonascii-literals.test.sh # no raw/escaped non-ASCII in string literals (fromUTF8/CharPointer_UTF8 exempt)
 bash scripts/tests/utf8-literal-check.test.sh      # non-ASCII \x escape wrapping (also runs directly in the Lint job)

@@ -29,12 +29,25 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # cmake/DependencyVersions.cmake for the full rationale.
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/DependencyVersions.cmake)
 
-# Fetch JUCE
+# Fetch JUCE. GIT_SHALLOW TRUE (FRO341): JUCE's own .git history measured ~294 MB of every ~376 MB
+# build/_deps entry it contributes (a full clone carries the whole upstream history; a build never
+# reads any of it) — only safe because SYNTH_JUCE_GIT_TAG above pins a real tag ("8.0.3"), which a
+# shallow clone can fetch directly, not a bare commit SHA (which a shallow fetch of an arbitrary
+# commit cannot always reach on every git-server configuration). A shallow clone still downloads
+# every blob in that one commit's tree (JUCE ships examples/fonts/images in-tree), just not the
+# multi-commit history pack, so the real saving measured against a fresh configure is smaller than
+# the .git-only figure above suggests — see scripts/ci-cache-budget.sh's DEPS_ALLOWANCE_MB comment
+# for the actual measured numbers. This cache key hashes only
+# cmake/DependencyVersions.cmake (see that file's header) and does not depend on this line, so the
+# workflows' deps cache keys had to be bumped by hand (deps3 -> deps4, release-deps-ninja3 -> 4;
+# see docs/development/ci-caching.md) for the shallow clone to actually take effect instead of
+# forever restoring the old, non-shallow juce-src.
 include(FetchContent)
 FetchContent_Declare(
     juce
     GIT_REPOSITORY ${SYNTH_JUCE_GIT_REPOSITORY}
     GIT_TAG        ${SYNTH_JUCE_GIT_TAG}
+    GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(juce)
 
