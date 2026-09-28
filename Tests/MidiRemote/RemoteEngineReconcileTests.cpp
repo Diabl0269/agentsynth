@@ -64,7 +64,7 @@ Assignment makeParamAssignment(const juce::String& id, const juce::String& contr
     return a;
 }
 
-// FRO253 (docs/control/midi-remote.md#node-command-targets).
+// See docs/control/midi-remote.md#node-command-targets.
 Assignment makeNodeCommandAssignment(const juce::String& id, const juce::String& controlId, MessageType type,
                                      int channel, int number, Encoding encoding, const juce::String& nodeUuid) {
     Assignment a;
@@ -81,7 +81,7 @@ Assignment makeNodeCommandAssignment(const juce::String& id, const juce::String&
     return a;
 }
 
-// FRO236 (docs/control/midi-remote.md#continuous-targets): mirrors makeNodeCommandAssignment above.
+// Mirrors makeNodeCommandAssignment above.
 Assignment makeContinuousAssignment(const juce::String& id, const juce::String& controlId, MessageType type,
                                     int channel, int number, Encoding encoding, ContinuousTargetKind kind) {
     Assignment a;
@@ -290,7 +290,7 @@ TEST(MidiRemoteEngineReconcileTest, DuplicateMessageKeyLeavesTheSecondControlIne
 }
 
 // ============================================================================
-// FRO253: node command targets resolve to a NodeID, orphan/rebind exactly like a parameter target
+// Node command targets resolve to a NodeID, orphan/rebind exactly like a parameter target
 // ============================================================================
 
 TEST(MidiRemoteEngineReconcileTest, NodeCommandResolvesTheNodeIdForAnExistingUuid) {
@@ -353,7 +353,7 @@ TEST(MidiRemoteEngineReconcileTest, NodeCommandSetterAloneKeepsThePreviousResolu
 }
 
 // ============================================================================
-// Continuous targets (FRO236, docs/control/midi-remote.md#continuous-targets)
+// Continuous targets (docs/control/midi-remote.md#continuous-targets)
 // ============================================================================
 
 TEST(MidiRemoteEngineReconcileTest, ContinuousSlotOnAKnobIsNotButtonLike) {

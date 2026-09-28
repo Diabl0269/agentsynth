@@ -263,7 +263,7 @@ TEST(GraphEditorOnboarding, NewPatchClearsGraphAndSeedsAudioOutput) {
     // Act.
     EXPECT_NO_THROW(editor.newPatch());
 
-    // T187: newPatch clears every old node but seeds exactly one fresh Audio Output, so the
+    // newPatch clears every old node but seeds exactly one fresh Audio Output, so the
     // graph is never left with nothing for the first channel's Master splice to target.
     const auto& nodesAfter = engine.getGraph().getNodes();
     ASSERT_EQ(nodesAfter.size(), 1u) << "newPatch must clear old nodes and seed exactly one Audio Output";
@@ -313,7 +313,7 @@ TEST(GraphEditorOnboarding, NewPatchWithUndoManagerIsUndoable) {
 
     // Perform newPatch — must be recorded in the undo stack.
     editor.newPatch();
-    // T187: newPatch seeds a fresh Audio Output as part of the same undo step.
+    // newPatch seeds a fresh Audio Output as part of the same undo step.
     EXPECT_EQ(engine.getGraph().getNodes().size(), 1u) << "Canvas must hold only the seeded Audio Output";
     EXPECT_TRUE(undoManager.canUndo()) << "newPatch must push an undoable action when undoManager is present";
 
@@ -324,7 +324,7 @@ TEST(GraphEditorOnboarding, NewPatchWithUndoManagerIsUndoable) {
     EXPECT_FALSE(GraphEditor::isCanvasEmpty((int)editor.getModuleComponents().size()))
         << "Undo of newPatch must restore prior module components";
 
-    // T187: redo must replay the seeded Audio Output too — the "after" snapshot captured by
+    // Redo must replay the seeded Audio Output too — the "after" snapshot captured by
     // recordStructuralChange was taken post-mutation, so it already contains the seeded node.
     undoManager.redo();
     editor.updateComponents();

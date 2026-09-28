@@ -89,8 +89,8 @@ juce::var AIStateMapper::getPatchSchema() {
     //
     // The envelope (property names, required/optional shape) is generated from synth-platform's
     // Zod source (packages/contracts/src/patch.ts's PatchSchema) — see
-    // Source/AI/generated/PatchEnvelopeSchema.g.h's header comment for the regen/vendor flow
-    // (P6-13). Two things it can't carry, layered on here instead: the "type" enum and the
+    // Source/AI/generated/PatchEnvelopeSchema.g.h's header comment for the regen/vendor flow.
+    // Two things it can't carry, layered on here instead: the "type" enum and the
     // per-choice-parameter enums inside "params", both sourced from THIS build's live module
     // registry (moduleFactory), which synth-platform has no way to see.
     juce::var schema = juce::JSON::parse(juce::String(synth::generated::kPatchEnvelopeSchemaJson));
@@ -128,7 +128,7 @@ namespace {
 // between them — this is a grammar, not a validator; TimelineOps::validate is still the real
 // gate. Field names/types mirror TimelineOps.cpp's readers exactly. "track" is `{"type":
 // "string"}`, not `{}` ("anything goes"): an empty-schema subschema is a confirmed Ollama
-// grammar-compiler bug (P6-13) that mangles output into garbage instead of passing the value
+// grammar-compiler bug that mangles output into garbage instead of passing the value
 // through unconstrained (same defect class documented in synth-platform's
 // packages/inference/src/index.ts for the sibling `params` shape; `params` in getPatchSchema()
 // above never hit this because its `additionalProperties: true` is a JSON Schema *boolean*, not

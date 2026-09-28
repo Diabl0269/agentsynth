@@ -1,4 +1,4 @@
-// TrackPresetMenuTests.cpp — FRO229: headless coverage for the "+ Track" menu's grouped
+// TrackPresetMenuTests.cpp — headless coverage for the "+ Track" menu's grouped
 // saved-preset submenus and "Insert Track Preset from File..." (TimelinePanelTrackHeaders.cpp),
 // exercised through the same two seams TrackPresetDefaultsTests.cpp already uses for the per-type
 // default: TimelinePanelComponent::applyAddTrackMenuChoice (a menu that never runs in a test

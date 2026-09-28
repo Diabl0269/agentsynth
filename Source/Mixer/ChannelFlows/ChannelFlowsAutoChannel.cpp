@@ -1,4 +1,4 @@
-// Concern: T184 auto-channel -- finding a chain's unchanneled output feeds and rebuilding a
+// Concern: auto-channel -- finding a chain's unchanneled output feeds and rebuilding a
 // channel from them (findUnchanneledOutputFeeds / buildChannelForFeeds).
 #include "ChannelFlows.h"
 
@@ -11,12 +11,12 @@
 
 namespace synth {
 
-// T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): BFS forward from `start`,
-// following every outgoing graph edge (audio AND MIDI — an `AudioProcessorGraph::Connection` is always one or the
-// other), to find every point where `start`'s own signal path reaches the output WITHOUT already
-// passing through a `ChannelStripModule`. Each such point is returned as the exact `Connection`
-// that crosses it — the caller (buildChannelForFeeds below) removes those edges and rebuilds a
-// channel from their sources.
+// BFS forward from `start`, following every outgoing graph edge (audio AND MIDI — an
+// `AudioProcessorGraph::Connection` is always one or the other), to find every point where `start`'s own signal
+// path reaches the output WITHOUT already passing through a `ChannelStripModule`. Each such point is returned as
+// the exact `Connection` that crosses it — the caller (buildChannelForFeeds below) removes those edges and
+// rebuilds a channel from their sources
+// (see docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow").
 //
 // Traversal rules:
 //   - Never enter an `AttenuverterModule` node — `AudioEngine::addModRouting` always wraps a
@@ -109,7 +109,7 @@ std::vector<juce::AudioProcessorGraph::Connection> findUnchanneledOutputFeeds(ju
     return exits;
 }
 
-// (GraphEditor::endConnectionDrag's T184 hook is today's only caller of this function.)
+// (GraphEditor::endConnectionDrag's auto-channel hook is today's only caller of this function.)
 DefaultChannel buildChannelForFeeds(juce::AudioProcessorGraph& graph,
                                     const std::vector<juce::AudioProcessorGraph::Connection>& exits,
                                     const DefaultChannelLayout& layout) {

@@ -1,4 +1,4 @@
-// GraphEditorModHover.cpp -- FRO288/FRO312: re-anchoring a cable's destination endpoint onto its
+// GraphEditorModHover.cpp -- re-anchoring a cable's destination endpoint onto its
 // target knob's modulation-ring landing point (docs/layout/cables.md#knob-landing),
 // and the two-directional hover correlation between a cable and the knob it lands on
 // (docs/modules/modulation.md#modulation-rings-on-knobs). GraphEditor is declared in GraphEditor.h;
@@ -26,7 +26,7 @@ ModuleComponent* GraphEditor::moduleComponentForNode(juce::AudioProcessorGraph::
     return nullptr;
 }
 
-// For every cable (FRO312: every KIND now, not just AttenuverterChain -- once a knob-bound jack's
+// For every cable (every KIND, not just AttenuverterChain -- once a knob-bound jack's
 // gutter dot is hidden, ANY routing landing on it -- DirectCV, PolyBus or AttenuverterChain --
 // lands on the knob, since there is no gutter position left for it to draw at; portPos
 // (GraphEditorCables.cpp) already resolves this through ModuleComponent::getPortCenter's own

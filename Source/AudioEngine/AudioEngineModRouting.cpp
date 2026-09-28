@@ -247,7 +247,7 @@ std::vector<AudioEngine::ModulationDisplayInfo>
 AudioEngine::getModulationDisplayInfo(const std::vector<ModulationRouting>& allRoutings) const {
     std::vector<ModulationDisplayInfo> result;
 
-    // FRO287: whether the routing's source swings both sides of centre (LFO) or only rises from
+    // Whether the routing's source swings both sides of centre (LFO) or only rises from
     // rest (an envelope) -- read straight off the live source module, cheap enough for the 30 Hz
     // message-thread poll this feeds (two params at most, this call plus the attenuverter's own).
     // Defaults true (unresolved source, e.g. a dangling routing) so a missing source still bands
@@ -355,7 +355,7 @@ bool AudioEngine::isModBypassed(juce::AudioProcessorGraph::NodeID attenuverterNo
 
 void AudioEngine::updateModuleNames() {
     // Two passes: the total per base type has to be known BEFORE any name is assigned, so a lone
-    // instance can be told apart from one that genuinely needs disambiguating (FRO181). Assigning
+    // instance can be told apart from one that genuinely needs disambiguating. Assigning
     // "<Type> 1" to a module that is the only one of its kind is a spurious rename with no
     // disambiguating purpose — worse, this pass runs incidentally (ModMatrixComponent's node-count
     // watchdog, replaceModule's "Refresh UI" step) on graph changes that never added or removed a

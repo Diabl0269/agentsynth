@@ -1,6 +1,6 @@
 // EQCurveTests.cpp
 // Tests for the Parametric EQ visualiser, its interaction model, and the axis maths it shares
-// with FrequencyResponseComponent (issue #154):
+// with FrequencyResponseComponent:
 //   • synth::ui::FrequencyGrid — log-frequency and dB mappings, their inverses, label formatting
 //   • FrequencyResponseComponent's public statics still agree with the shared grid after the
 //     mapping code was hoisted out of it
@@ -36,7 +36,7 @@ void paintInto(EQCurveComponent& comp, int w = kCurveWidth, int h = kCurveHeight
     comp.setBounds(0, 0, w, h);
     // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
     // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
-    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    // Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
     juce::Image img(juce::Image::ARGB, std::max(1, w), std::max(1, h), true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(comp.paint(g));

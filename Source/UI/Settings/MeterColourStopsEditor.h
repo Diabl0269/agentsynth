@@ -5,7 +5,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// MeterColourStopsEditor.h -- FRO147 ("Preferences > Metering > Appearance" equivalent,
+// MeterColourStopsEditor.h ("Preferences > Metering > Appearance" equivalent,
 // docs/mixer/meters.md / docs/layout/colour-overrides.md's meter colours): a vertical -60..+3 dB
 // scale (the SAME taper/tick marks MixerMeter itself draws -- MixerMeterScale.h) with a live
 // preview bar painted through MeterColourStops::forEachBand across the full range, and one
@@ -14,7 +14,7 @@
 // This component owns its OWN working copy of a MeterColourStops -- it never touches
 // ApplicationProperties or AppLookAndFeel itself, exactly like CableSwatchRow/NoteSwatchRow (the
 // existing Appearance-tab swatch rows) stay ignorant of persistence. AppearanceSettingsTab is the
-// one place that knows how to save an edit and push it live (see its own FRO147 comment on why
+// one place that knows how to save an edit and push it live (see its own comment on why
 // that push goes through MainComponent's settings-file reload rather than a direct pointer).
 //
 // Interaction:

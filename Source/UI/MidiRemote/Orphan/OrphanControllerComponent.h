@@ -3,7 +3,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// OrphanControllerComponent.h -- FRO135 (docs/control/midi-remote-ui.md#controllers-list-left): what the
+// OrphanControllerComponent.h (docs/control/midi-remote-ui.md#controllers-list-left): what the
 // panel's right region shows instead of the control inspector when an orphan controller row is selected
 // -- a project references a controller this machine does not have. Re-link points its assignments at a
 // controller that is here; Recreate mints one from the assignments. A plain view: the panel supplies the
@@ -17,7 +17,7 @@ public:
 
     /** `assignmentCount` is how many of this project's assignments reference the controller;
      *  `canRecreate` is false when no MIDI input is free to recreate it on. `hosted` (the plugin
-     *  build, FRO136) adds that a standalone assignment does not fire inside a host. */
+     *  build) adds that a standalone assignment does not fire inside a host. */
     void setOrphan(const juce::String& name, int assignmentCount, bool canRecreate, bool hosted = false);
     /** Result line under the buttons ("2 assignments stay orphaned ..."); empty clears it. */
     void setStatusText(const juce::String& text);

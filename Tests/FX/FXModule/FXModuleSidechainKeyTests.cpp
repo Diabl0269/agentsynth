@@ -1,4 +1,4 @@
-// FXModuleSidechainKeyTests.cpp — FRO317: the Key (sidechain) input on Compressor and Gate.
+// FXModuleSidechainKeyTests.cpp — the Key (sidechain) input on Compressor and Gate.
 //
 //   • jacks    — Key L/R are APPENDED on raw 7/8 (saved patches keep ch0-6), collapse to one "Key"
 //                jack with Dual I/O off, carry PortRole::Sidechain, and every jack fronts exactly one

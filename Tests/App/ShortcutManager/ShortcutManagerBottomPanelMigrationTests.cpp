@@ -1,4 +1,4 @@
-// Concern: FRO333's one-shot migration (ShortcutManager::migrateBottomPanelToggleKeys) that moves
+// Concern: the one-shot migration (ShortcutManager::migrateBottomPanelToggleKeys) that moves
 // an existing install's Cmd+T off toggleTimelinePanel and onto the new toggleBottomPanel action,
 // giving toggleTimelinePanel its own new Cmd+1 default -- same shape as migrateSaveAsChordSwap.
 #include "../../TestSettingsHelpers.h"
@@ -28,7 +28,7 @@ TEST(ShortcutManagerBottomPanelMigrationTests, AnOldCmdTOnTimelineMovesToTheNewB
         ASSERT_NE(settings, nullptr);
         settings->removeValue("shortcutMigration_bottomPanelCmdT");
         settings->setValue("shortcut_toggleTimelinePanel", ShortcutManager::encodeKeyPress(kCmdT));
-        settings->removeValue("shortcut_toggleBottomPanel"); // absent, like every pre-FRO333 install
+        settings->removeValue("shortcut_toggleBottomPanel"); // absent, like every legacy install
         settings->saveIfNeeded();
     }
 

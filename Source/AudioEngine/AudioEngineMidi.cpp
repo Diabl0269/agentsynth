@@ -11,12 +11,11 @@ juce::Array<juce::MidiDeviceInfo> AudioEngine::availableMidiInputs() const {
     return juce::MidiInput::getAvailableDevices();
 }
 
-// FRO279: the header promises "unless already open", but this used to open unconditionally, and two
-// callers reach the same device: initialiseDevices() opens EVERY available input at engine
-// bring-up, and MainComponent::openMidiRemoteDevices (FRO260: moved out of wireMidiRemoteEngine,
-// which ran before the engine existed) then opens a saved profile's controller by name
-// (ensureMidiDeviceOpen) -- normally finding it already open by the time it runs, since
-// initialiseDevices() now runs FIRST by construction. A second juce::MidiInput on the same
+// The header promises "unless already open", so this must not open unconditionally: two
+// callers reach the same device. initialiseDevices() opens EVERY available input at engine
+// bring-up, and MainComponent::openMidiRemoteDevices then opens a saved profile's controller by
+// name (ensureMidiDeviceOpen) -- normally finding it already open by the time it runs, since
+// initialiseDevices() runs FIRST by construction. A second juce::MidiInput on the same
 // endpoint is a second OS connection with this engine as the callback, so every message was
 // delivered (and applied) twice: a relative encoder at double speed, a toggle that flipped
 // straight back. The identifier-keyed dedupe below is what actually guards this regardless of
@@ -61,7 +60,7 @@ void AudioEngine::openMidiDevicesForRemote(const std::vector<juce::String>& devi
         ensureMidiDeviceOpen(name);
 }
 
-// FRO262: initialiseDevices() only ever opened the MIDI inputs available at that ONE moment (app
+// initialiseDevices() only ever opened the MIDI inputs available at that ONE moment (app
 // launch). A controller plugged in afterwards -- or ticked in the Audio tab once CoreMIDI/the OS
 // enumerates it, which can arrive after that launch loop has already run -- was invisible to MIDI
 // Learn/MIDI Remote and to general MIDI input alike, because nothing ever re-ran the open loop.
@@ -150,8 +149,8 @@ void AudioEngine::handleIncomingMidiMessageFromSource(const juce::String& source
     // message it consumes goes nowhere else
     // (docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph).
     //
-    // This runs on a juce::MidiInput driver thread, which never enters a render pass — the old code
-    // here (pre-FRO197) read remoteMessageSink_ unguarded, so setRemoteMessageSink(nullptr) could
+    // This runs on a juce::MidiInput driver thread, which never enters a render pass — reading
+    // remoteMessageSink_ unguarded here, so setRemoteMessageSink(nullptr) could
     // return and the sink object be destroyed while this thread was already past the load, about to
     // call handleMessage on it: a teardown use-after-free. ScopedRemoteSinkCall's fetch_add, BEFORE
     // the pointer load below (not just wrapping the handleMessage call), fixes that: both it and the

@@ -1,11 +1,11 @@
 // MacroAutoPortCreationTests.cpp
-// Auto-creating macro ports on grouping (founder-review fix F5, docs/macros/auto-ports.md):
+// Auto-creating macro ports on grouping (docs/macros/auto-ports.md):
 // mono crossing, jack dedup, collapsed-stereo, dual-I/O stereo merge, poly-N, MIDI-as-a-separate
-// node, the mod-routing-knob splice (incl. the T144 crossing-knob geometry/drag tests) and
+// node, the mod-routing-knob splice (incl. the crossing-knob geometry/drag tests) and
 // grouping-is-one-undo-step. Shared test modules/helpers live in MacroAutoPortTestHelpers.h.
 //
-// Ungroup/presentation/modal-preference tests live in MacroAutoPortUngroupTests.cpp; the T148/T154
-// auto-delete suite lives in MacroAutoPortDeleteTests.cpp.
+// Ungroup/presentation/modal-preference tests live in MacroAutoPortUngroupTests.cpp; the auto-delete
+// suite lives in MacroAutoPortDeleteTests.cpp.
 
 #include "AudioEngine/AudioEngine.h"
 #include "MacroAutoPortTestHelpers.h"
@@ -143,7 +143,7 @@ TEST(MacroAutoPort, TwoCablesIntoTheSameInternalJackShareOnePort) {
 
 // ============================================================================
 // Collapsed stereo: a collapsed jack's own two-raw-channel span must produce a port
-// presenting the SAME one visible jack the module does (founder-review fix G2) — never the
+// presenting the SAME one visible jack the module does — never the
 // two-jack MacroPortShape::Stereo a hand-picked Configure I/O choice means.
 // ============================================================================
 
@@ -156,8 +156,8 @@ TEST(MacroAutoPort, CollapsedStereoOutputCrossingCreatesAOneJackStereoCollapsedO
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     auto extL = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "ExtL", 700, 60);
     auto extR = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "ExtR", 700, 160);
-    // Reverb defaults to Dual I/O OFF (collapsed): raw ch0/ch1 are ONE "Audio" jack, span 2 — same
-    // as the founder's screenshot (a single "Audio" jack on DELAY/REVERB either side).
+    // Reverb defaults to Dual I/O OFF (collapsed): raw ch0/ch1 are ONE "Audio" jack, span 2 — a
+    // single "Audio" jack on DELAY/REVERB either side.
     engine.getGraph().addConnection({{reverb, 0}, {extL, 0}});
     engine.getGraph().addConnection({{reverb, 1}, {extR, 0}});
 
@@ -189,7 +189,7 @@ TEST(MacroAutoPort, CollapsedStereoOutputCrossingCreatesAOneJackStereoCollapsedO
     EXPECT_FALSE(hasConnection(engine, reverb, 1, extR, 0));
 }
 
-// FRO317: a collapsed Compressor "Key" jack (PortRole::Sidechain, span 2 on raw 7/8) is the same
+// A collapsed Compressor "Key" jack (PortRole::Sidechain, span 2 on raw 7/8) is the same
 // stereo pair shape as a collapsed Audio jack, so a key cable crossing into a channel macro gets a
 // one-jack StereoCollapsed inlet carrying both key legs, not a Poly port.
 TEST(MacroAutoPort, CollapsedKeyInputCrossingCreatesAOneJackStereoCollapsedInlet) {
@@ -389,13 +389,10 @@ TEST(MacroAutoPort, MidiCrossingCreatesMidiInletAndOutletNodes) {
 
 // ============================================================================
 // A mod-routing knob's edge: spliced when the crossing is genuine, left alone when it isn't
-// (founder-review fix G3: "I noticed mod connections don't get routed - they should")
 // ============================================================================
 
 // The genuinely-external case: the mod routing's SOURCE (and therefore its attenuverter) are
-// outside the group; only the TARGET is being grouped. Mirrors the original (pre-G3) pinned test's
-// setup exactly, but now expects a port instead of a bare pass-through -- the founder's own
-// complaint was precisely this shape of crossing.
+// outside the group; only the TARGET is being grouped. Expects a port, not a bare pass-through.
 TEST(MacroAutoPort, AttenuverterAdjacentCrossingIsSplicedForAGenuineExternalCrossing) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -437,7 +434,7 @@ TEST(MacroAutoPort, AttenuverterAdjacentCrossingIsSplicedForAGenuineExternalCros
     ASSERT_NE(inletForA, nullptr);
     ASSERT_NE(inletForB, nullptr);
     // A mono ModCV target (the only shape addModRouting's single-slot channel-0 chain ever lands
-    // on) must produce a mono port -- the one-jack-per-CV-mod-jack rule stage G2 established.
+    // on) must produce a mono port -- the one-jack-per-CV-mod-jack rule.
     EXPECT_EQ(inletForA->getPortShape(), MacroPortShape::Mono);
     EXPECT_EQ(inletForB->getPortShape(), MacroPortShape::Mono);
 
@@ -480,7 +477,7 @@ TEST(MacroAutoPort, AttenuverterAdjacentCrossingIsSplicedForAGenuineExternalCros
 // grouped together. The hidden attenuverter node can never itself be a macro member (it never gets
 // a ModuleComponent), so it is nominally "outside" no matter what -- but splicing here would spawn
 // two spurious ports for a routing the user is grouping wholly inside the macro. This is the one
-// sub-case G3 deliberately leaves un-ported; this test pins that as the CURRENT, intended
+// sub-case the attenuverter splice deliberately leaves un-ported; this test pins that as the CURRENT, intended
 // behaviour (docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter).
 TEST(MacroAutoPort, ModRoutingWithBothRealEndpointsInsideStaysWhollyInternal) {
     AudioEngine engine;
@@ -640,18 +637,17 @@ TEST(MacroAutoPort, UndoRestoresAModRoutingCrossingSpliceExactly) {
     EXPECT_NE(redone[0].destNodeID, dest) << "redo's destination is the port again, not the original module";
 }
 
-// ---- T144: the amount knob for a mod route crossing TWO macro boundaries -----------------
-// Founder review round 3, item 1. A mod chain source->attenuverter->dest, each real endpoint
-// grouped into its OWN macro (so the attenuverter sits between an outlet port on one macro and an
-// inlet port on another — the reported screenshot's exact topology), left the on-canvas knob
-// completely unclickable: GraphEditor::getAttenuverterNodeAt re-derived the chain's source/dest
-// positions from raw graph connections (raw channel index into ModuleComponent::getPortCenter, no
-// mapOutputChannel/mapInputChannel visible-jack mapping, and no collapsed-macro re-anchoring) — an
-// independent geometry computation from the one buildVisibleCables()/paint() actually use, so it
-// silently drifted ~300px off the real knob position the moment either endpoint became a macro
-// port node, in EVERY collapse state including both macros fully expanded. It now reuses
-// buildVisibleCables()'s own AttenuverterChain cable, so hit-testing can never disagree with what
-// is painted (docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter).
+// ---- The amount knob for a mod route crossing TWO macro boundaries -----------------------
+// A mod chain source->attenuverter->dest, each real endpoint grouped into its OWN macro (so the
+// attenuverter sits between an outlet port on one macro and an inlet port on another).
+// GraphEditor::getAttenuverterNodeAt must not re-derive the chain's source/dest positions from raw
+// graph connections (raw channel index into ModuleComponent::getPortCenter, no
+// mapOutputChannel/mapInputChannel visible-jack mapping, and no collapsed-macro re-anchoring) —
+// that independent geometry computation drifts ~300px off the real knob position the moment either
+// endpoint becomes a macro port node, in EVERY collapse state including both macros fully
+// expanded, leaving the on-canvas knob unclickable. It reuses buildVisibleCables()'s own
+// AttenuverterChain cable, so hit-testing can never disagree with what is painted
+// (docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter).
 TEST(MacroAutoPort, TwoMacroCrossingKnobHitTestMatchesPaintedGeometryInEveryCollapseState) {
     AudioEngine engine;
     GraphEditor editor(engine);

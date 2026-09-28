@@ -1,5 +1,5 @@
-// Right-click MIDI Learn on a mixer column's controls (FRO133,
-// docs/control/midi-remote-ui.md#right-click-midi-learn--coverage). Same "drive a real right-click,
+// Right-click MIDI Learn on a mixer column's controls
+// (docs/control/midi-remote-ui.md#right-click-midi-learn--coverage). Same "drive a real right-click,
 // capture via setShowContextMenuHookForTest()" idiom as
 // Tests/UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp -- see that file's header
 // comment for why a direct mouseDown() call on both the child AND the column reproduces the real
@@ -145,9 +145,9 @@ TEST(MixerColumnMidiLearnTests, RightClickSendKnobShowsMidiLearnForTheRightSendP
     EXPECT_EQ(fixture.column.findMidiLearnableParamForTest(knob), fixture.strip->getSendLevelParameter(0));
 }
 
-// FRO294: the pan knob registers in the SAME registry via the SAME onSendKnobBuilt callback as the
+// The pan knob registers in the SAME registry via the SAME onSendKnobBuilt callback as the
 // level knob above, so it gets the identical right-click coverage -- "MIDI Learn '<Param>'...", the
-// real menu text this surface builds (see showParamMidiLearnMenu()), which since FRO292 leads with
+// real menu text this surface builds (see showParamMidiLearnMenu()), which leads with
 // the same "Automate '<Param>'" item the fader and send-level knob get.
 TEST(MixerColumnMidiLearnTests, RightClickPanKnobShowsMidiLearnForTheRightSendParam) {
     ColumnFixture fixture(/*withSend=*/true);
@@ -258,7 +258,7 @@ TEST(MixerColumnMidiLearnTests, BadgePaintsOnlyAfterRefreshMeterObservesAMapping
 }
 
 // ============================================================================
-// Unbind: FRO11's crash-fix invariant, extended to the MIDI-learn registry (Source/UI/CLAUDE.md).
+// Unbind: the crash-fix invariant, extended to the MIDI-learn registry (Source/UI/CLAUDE.md).
 // ============================================================================
 
 TEST(MixerColumnMidiLearnTests, UnbindFromGraphClearsTheRegistrySoARightClickFindsNothing) {
@@ -271,7 +271,7 @@ TEST(MixerColumnMidiLearnTests, UnbindFromGraphClearsTheRegistrySoARightClickFin
 }
 
 // ============================================================================
-// FRO253: Solo is a node command, not a parameter -- right-click opens ITS OWN "MIDI Learn
+// Solo is a node command, not a parameter -- right-click opens ITS OWN "MIDI Learn
 // 'Solo'..." menu (through onSoloMidiLearnRequested/onSoloMidiForgetRequested/
 // onQuerySoloMidiMapping rather than GraphEditor's onMidiLearnRequested), never toggles solo, and
 // a left click still does.
@@ -370,7 +370,7 @@ TEST(MixerColumnMidiLearnTests, SoloBadgePaintsOnlyAfterRefreshMeterObservesAMap
 }
 
 // ============================================================================
-// FRO256: the badge/armed outline must paint AT the control's own on-screen position, not at this
+// The badge/armed outline must paint AT the control's own on-screen position, not at this
 // column's top-left corner. paintMidiLearnOverlays() used to call
 // getLocalArea(control->getParentComponent(), control->getLocalBounds()) -- passing the control's
 // PARENT as the coordinate-frame source but the control's OWN local bounds (always (0,0,w,h)) as
@@ -441,7 +441,7 @@ TEST(MixerColumnMidiLearnTests, MuteBadgePaintsOnTheMuteButtonItselfNotTheColumn
 }
 
 // ============================================================================
-// FRO256: the armed breathing outline must actually keep repainting while armed -- it froze at its
+// The armed breathing outline must actually keep repainting while armed -- it froze at its
 // first-paint alpha (0.4, the dimmest point of the breath cycle) because nothing asked for a
 // repaint after the initial arm edge. refreshMeter() rides the same 10 Hz tick every other
 // per-column visual uses (Source/UI/CLAUDE.md's no-unconditional-repaint rule: only while
@@ -479,7 +479,7 @@ TEST(MixerColumnMidiLearnTests, RefreshMeterKeepsRepaintingTheArmedFaderOutlineW
 }
 
 // ============================================================================
-// FRO292: "Automate '<Param>'" on the fader/pan/send knobs, through GraphEditor's shared
+// "Automate '<Param>'" on the fader/pan/send knobs, through GraphEditor's shared
 // onAutomateParameterRequested (the same route a canvas knob's right-click uses).
 // ============================================================================
 

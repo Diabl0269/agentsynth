@@ -1,4 +1,4 @@
-// MainComponentCommandTableTests.cpp — FRO76: pins the CommandSpec table's shape so the
+// MainComponentCommandTableTests.cpp — pins the CommandSpec table's shape so the
 // getAllCommands/getCommandInfo/perform table rewrite can never silently drop, reorder, or
 // duplicate a command. Uses getCommandTableForTest() (CommandSpec itself stays private -- read
 // via auto, per that accessor's own comment).
@@ -10,7 +10,7 @@
 
 namespace {
 
-// The exact getAllCommands() order from the pre-FRO76 switch-based implementation (see git
+// The exact getAllCommands() order from the legacy switch-based implementation (see git
 // history for MainComponentCommands.cpp) -- the table's row order must reproduce it unchanged,
 // since it is the menu order contract.
 const std::vector<juce::CommandID> kExpectedOrder = {
@@ -56,14 +56,14 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::zoomOutHorizontal,
     AppCommands::zoomInVertical,
     AppCommands::zoomOutVertical,
-    // FRO333: the ONE bottom-dock open/close toggle -- see MainComponentCommandTable.cpp's own
+    // The ONE bottom-dock open/close toggle -- see MainComponentCommandTable.cpp's own
     // comment. The three rows below now each just show their own tab.
     AppCommands::toggleBottomPanel,
     AppCommands::toggleTimelinePanel,
-    // FRO11 (P9-5): the new row sits right after toggleTimelinePanel in
+    // The new row sits right after toggleTimelinePanel in
     // MainComponentCommandTable.cpp -- see that file's own comment for why.
     AppCommands::toggleMixerPanel,
-    // FRO131: same shape as toggleMixerPanel's own row above -- a third tab on the same dock.
+    // Same shape as toggleMixerPanel's own row above -- a third tab on the same dock.
     AppCommands::toggleMidiRemotePanel,
     AppCommands::focusNextRegion,
     AppCommands::focusPrevRegion,
@@ -76,7 +76,7 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::checkForUpdates,
 #endif
     AppCommands::contribute,
-    // FRO125: buildTransportCommandRows(), appended last in commandTable() -- see that function's
+    // buildTransportCommandRows(), appended last in commandTable() -- see that function's
     // own comment for why appending (never interleaving) is always safe here.
     AppCommands::transportPlay,
     AppCommands::transportStop,
@@ -84,17 +84,17 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::transportRecord,
     AppCommands::transportToggleMetronome,
     AppCommands::transportReturnToStart,
-    // FRO271: cursor moves and loop-locator jumps, appended after the FRO125 rows.
+    // Cursor moves and loop-locator jumps, appended after the rows above.
     AppCommands::transportNudgeBackBeat,
     AppCommands::transportNudgeForwardBeat,
     AppCommands::transportNudgeBackBar,
     AppCommands::transportNudgeForwardBar,
     AppCommands::transportJumpToLoopStart,
     AppCommands::transportJumpToLoopEnd,
-    // FRO277: jump to the next/previous timeline marker, appended after the FRO271 rows.
+    // Jump to the next/previous timeline marker, appended after the rows above.
     AppCommands::transportJumpToNextMarker,
     AppCommands::transportJumpToPreviousMarker,
-    // FRO278: buildSelectionStepCommandRows(), appended after the transport rows.
+    // buildSelectionStepCommandRows(), appended after the transport rows.
     AppCommands::selectNextModule,
     AppCommands::selectPreviousModule,
     AppCommands::selectNextTrack,
@@ -126,7 +126,7 @@ TEST_F(MainComponentTest, EveryGetAllCommandsIdHasATableRow) {
     }
 }
 
-// The table's row order IS the menu order contract -- pin it against the pre-FRO76 order.
+// The table's row order IS the menu order contract -- pin it against the legacy order.
 TEST_F(MainComponentTest, TableOrderMatchesHistoricGetAllCommandsOrder) {
     MainComponent mc(std::make_unique<MockProvider>());
     juce::Array<juce::CommandID> ids;
@@ -149,7 +149,7 @@ TEST_F(MainComponentTest, EveryActionIdRoundTripsToItsOwnCommand) {
     }
 }
 
-// FRO94: the Help > contribute item. Dispatched through the command manager (what the menu item does)
+// The Help > contribute item. Dispatched through the command manager (what the menu item does)
 // with the browser launch replaced, so the test sees the URL without opening a real browser.
 TEST_F(MainComponentTest, ContributeCommandOpensTheContributePageExactlyOnce) {
     MainComponent mc(std::make_unique<MockProvider>());

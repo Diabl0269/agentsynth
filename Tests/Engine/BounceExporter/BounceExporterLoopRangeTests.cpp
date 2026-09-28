@@ -1,4 +1,4 @@
-// Topic: P8-17 -- a disengaged loop region is a valid bounce range, and the loop arm state must not change what lands
+// Topic: a disengaged loop region is a valid bounce range, and the loop arm state must not change what lands
 // in the file.
 
 #include "BounceExporterTestHelpers.h"

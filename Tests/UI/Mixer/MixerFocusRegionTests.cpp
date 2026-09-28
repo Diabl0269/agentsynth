@@ -1,5 +1,5 @@
-// MixerFocusRegionTests.cpp -- FRO18: the "mixer" focus region's open predicate, and the fix to
-// "timeline"'s own (MainComponent::registerFocusRegions, plan (a)) now that both share one dock
+// MixerFocusRegionTests.cpp -- the "mixer" focus region's open predicate, and
+// "timeline"'s own (MainComponent::registerFocusRegions) given that both share one dock
 // and only one tab is ever on screen at a time. Isolates BOTH persisted dock keys the shared
 // on-disk settings file carries ("bottomDockActiveTab" via the existing guard, "bottomDockVisible"
 // by reading the current state and only toggling when it disagrees with what each test needs) --
@@ -117,9 +117,9 @@ TEST(MixerFocusRegionTest, TabCycleNeverLandsOnAHiddenDockPanel) {
 }
 
 TEST(MixerFocusRegionTest, RegisterMixerFocusRegionIsReusableAcrossIndependentRegistries) {
-    // FRO18 plan (a)'s FRO12 seam: registerMixerFocusRegion() must work unmodified against a
+    // The detach seam: registerMixerFocusRegion() must work unmodified against a
     // SECOND, independent FocusRegionRegistry driven by a DIFFERENT dockOpen predicate -- exactly
-    // what a future detached mixer window (FRO12) would do, constructing its own registry and
+    // what a future detached mixer window would do, constructing its own registry and
     // calling this same helper with its own open/closed notion instead of MainComponent's
     // isBottomDockVisible-backed one. MainComponent::registerFocusRegions() (registerFocusRegions'
     // "mixer" region -- MainComponentSetup.cpp) exercises the helper with ITS predicate elsewhere;
@@ -152,7 +152,7 @@ TEST(MixerFocusRegionTest, RegisterMixerFocusRegionIsReusableAcrossIndependentRe
 
 TEST(MixerFocusRegionTest, RegisterMixerFocusRegionTreatsANullDockOpenAsAlwaysOpen) {
     // FocusRegion::isOpen's own contract: null means "always open" (the graph canvas has no closed
-    // state at all). A detached FRO12 window with no closed state of its own passes a null/empty
+    // state at all). A detached window with no closed state of its own passes a null/empty
     // std::function rather than `[]{ return true; }` -- must not crash and must behave identically.
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMFRT>());

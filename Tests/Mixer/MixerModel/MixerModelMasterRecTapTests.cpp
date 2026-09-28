@@ -1,4 +1,4 @@
-// MixerModelMasterRecTapTests.cpp -- FRO148 (docs/mixer/mixer.md#master-inserts): the master Rec Tap is spliced in
+// MixerModelMasterRecTapTests.cpp (docs/mixer/mixer.md#master-inserts): the master Rec Tap is spliced in
 // AFTER Master's insert chain when it is created later. ensureMasterRecordTap() re-routes whatever feeds Audio Output
 // into the tap, so a Limiter already sitting between Master and Audio Output ends up ahead of the tap
 // (Master -> Limiter -> Rec Tap -> Audio Output) and the Master column's list is still exactly [Limiter].

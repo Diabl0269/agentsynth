@@ -96,7 +96,7 @@ public:
 
     void setTestMode(bool testMode) { isTestMode = testMode; }
 
-    /** Optional knobs for reproducible structured-output requests (P6-13 corruption
+    /** Optional knobs for reproducible structured-output requests (corruption
         investigation). Unset fields are omitted from the request body entirely, which is
         exactly today's behavior — no production caller sets these, so this is opt-in only,
         used by Tools/AIEvalHarness to pin sampling and to test disabling Ollama's `think`

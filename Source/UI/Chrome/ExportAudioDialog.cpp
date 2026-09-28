@@ -97,7 +97,7 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     fileNameEditor_.setText(stemsMode_ ? initialFileNameBase + " Stems" : initialFileNameBase,
                             juce::dontSendNotification);
     fileNameEditor_.onTextChange = [this] { updateFileNameFromEditor(); };
-    // T153: juce::TextEditor consumes Escape itself before it would ever bubble to keyPressed()
+    // juce::TextEditor consumes Escape itself before it would ever bubble to keyPressed()
     // below, so this field needs its own route to the exact same page-aware handler.
     fileNameEditor_.onEscapeKey = [this] { handleEscapeRequested(); };
     destinationLabel_.setText(destination_.getParentDirectory().getFullPathName(), juce::dontSendNotification);

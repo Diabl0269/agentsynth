@@ -48,7 +48,7 @@ private:
 };
 
 // ============================================================================
-// P6-7: prompt-learning opt-in checkbox test support
+// Prompt-learning opt-in checkbox test support
 // ============================================================================
 namespace {
 
@@ -237,7 +237,7 @@ TEST_F(SettingsWindowTest, AudioTabContainsDeviceSelector) {
     EXPECT_TRUE(audioTab->getDeviceSelector().isVisible());
 }
 
-// FRO136: the stock selector's MIDI checklist cannot carry a per-device "(MIDI Remote)" suffix, so
+// The stock selector's MIDI checklist cannot carry a per-device "(MIDI Remote)" suffix, so
 // the Audio tab names the profiled controllers in a caption under it instead.
 TEST_F(SettingsWindowTest, AudioTabCaptionListsTheControllersThatHaveAMidiRemoteProfile) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
@@ -297,7 +297,7 @@ TEST_F(SettingsWindowTest, AITabPersistsProviderSetting) {
     }
 }
 
-// P4-6: "remote" is no longer hidden, so both providers must be offered.
+// "remote" is not hidden, so both providers must be offered.
 TEST_F(SettingsWindowTest, AITabOffersBothOllamaAndRemoteProviders) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
                                   themeManager, nullptr);
@@ -321,9 +321,9 @@ TEST_F(SettingsWindowTest, AITabOffersBothOllamaAndRemoteProviders) {
     EXPECT_EQ(providerCombo->getItemText(1), "Remote (hosted)");
 }
 
-// Regression lock for the pre-P4-6 host-key collision: Ollama and Remote each persist (and
+// Regression lock for the legacy host-key collision: Ollama and Remote each persist (and
 // display) their OWN host, under separate settings keys ("ollamaHost"/"remoteHost") — the
-// pre-P4-6 code shared a single "ollamaHost" key, so switching providers silently carried one
+// legacy code shared a single "ollamaHost" key, so switching providers silently carried one
 // provider's host text over as the other's (e.g. RemoteProvider ending up pointed at Ollama's
 // port).
 //
@@ -374,7 +374,7 @@ TEST_F(SettingsWindowTest, EachProviderReadsItsOwnPersistedHost) {
 }
 
 // ============================================================================
-// P6-8: local chat-history retention control (AI tab, added after provider/host controls)
+// Local chat-history retention control (AI tab, added after provider/host controls)
 // ============================================================================
 
 namespace {
@@ -579,7 +579,7 @@ TEST_F(SettingsWindowTest, GeneralTabShowsShortcuts) {
 }
 
 // ============================================================================
-// P6-7: prompt-learning opt-in checkbox (AI tab)
+// Prompt-learning opt-in checkbox (AI tab)
 // ============================================================================
 
 TEST_F(SettingsWindowTest, PromptLearningToggleDisabledAndUncheckedWithNoAccountService) {

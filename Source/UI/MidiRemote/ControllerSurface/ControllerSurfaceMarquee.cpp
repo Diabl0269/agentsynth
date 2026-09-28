@@ -1,11 +1,10 @@
-// Concern: FRO270 (docs/control/midi-remote-ui.md#surface-centre) marquee-select / FRO331
-// (docs/control/midi-remote-ui.md#surface-centre) pan -- a press-drag over EMPTY grid space (a
-// press that lands on a cell never reaches here: ControllerSurfaceCell is a real juce::Component
-// covering its own bounds and handles its own mouseDown, so this component's own mouseDown only
-// ever fires for a click that missed every cell). Shift picks which gesture a press can become,
-// decided once at mouseDown and latched for the whole drag (marqueeArmed_) so a modifier changing
-// mid-drag -- which a real OS mostly can't deliver mid-gesture anyway -- can never flip one
-// gesture into the other partway through:
+// Concern (docs/control/midi-remote-ui.md#surface-centre): marquee-select / pan -- a press-drag
+// over EMPTY grid space (a press that lands on a cell never reaches here: ControllerSurfaceCell
+// is a real juce::Component covering its own bounds and handles its own mouseDown, so this
+// component's own mouseDown only ever fires for a click that missed every cell). Shift picks
+// which gesture a press can become, decided once at mouseDown and latched for the whole drag
+// (marqueeArmed_) so a modifier changing mid-drag -- which a real OS mostly can't deliver
+// mid-gesture anyway -- can never flip one gesture into the other partway through:
 //  - Shift held: a marquee (Cmd+Shift additive, matching GraphEditor's own
 //    "isCommandDown() || isCtrlDown()" marquee-additive test) -- mirrors ControllerSurfaceCell's
 //    own click-vs-drag debounce (isDragging_/dragStartMouse_): a Shift-press with no movement is a
@@ -55,8 +54,8 @@ void ControllerSurfaceComponent::mouseDrag(const juce::MouseEvent& event) {
         // Only the changed region -- the union of where the marquee WAS and where it is now,
         // expanded by the border's stroke width (Source/UI/CLAUDE.md's repaint rule: never repaint
         // the whole surface for a drag that only moved a few pixels). content_'s own repaint, not
-        // this component's -- the band is painted in content_'s Content::paintOverChildren() (FRO331,
-        // ControllerSurfaceView.cpp), in content-local space so it stays locked to the cells it is
+        // this component's -- the band is painted in content_'s Content::paintOverChildren()
+        // (ControllerSurfaceView.cpp), in content-local space so it stays locked to the cells it is
         // selecting under pan/zoom.
         content_.repaint(previousRect.getUnion(marqueeRect_).expanded(2));
         return;

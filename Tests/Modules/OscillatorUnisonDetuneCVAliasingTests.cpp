@@ -1,4 +1,4 @@
-// FRO312: Oscillator's Unison/Detune CV inputs (raw ch14/15) were appended AFTER the poly shared
+// Oscillator's Unison/Detune CV inputs (raw ch14/15) were appended AFTER the poly shared
 // mod-CV block, at the SAME raw channel numbers as the Audio R output block (kRightBase = 14) --
 // see OscillatorModule.h's class-level channel-map comment. That is the exact "declared output
 // count above every CV input index" pattern that already protects ch0 (Pitch CV vs Audio L) and
@@ -15,7 +15,7 @@
 // a predictable plateau value rather than an oscillating LFO) fanning out to BOTH Oscillator's
 // Unison/Detune CV AND a plain reference tap wired straight to a graph output with nothing else in
 // between -- exactly "another destination" for the same source buffer. If Oscillator's own
-// output-clearing pass ever aliased and clobbered the shared source buffer (the pre-FRO314-style
+// output-clearing pass ever aliased and clobbered the shared source buffer (the legacy
 // bug this guards against), the reference tap would read back zeroed/garbage samples instead of
 // the ADSR's own plateaued value.
 //

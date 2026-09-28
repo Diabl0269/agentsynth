@@ -128,14 +128,14 @@ public:
     int ends = 0;
 };
 
-// FRO236 (docs/control/midi-remote.md#continuous-targets): records/replays bpm and playhead the
-// same way a real transport would -- currentBpm/currentBeat start at an arbitrary value the test
-// picks, setContinuousValue writes it back, and getContinuousWindow returns whatever the test set
-// (false = inert, mirroring the plugin build).
+// Records/replays bpm and playhead the same way a real transport would -- currentBpm/currentBeat
+// start at an arbitrary value the test picks, setContinuousValue writes it back, and
+// getContinuousWindow returns whatever the test set (false = inert, mirroring the plugin build)
+// (see docs/control/midi-remote.md#continuous-targets).
 class CountingActionInvoker : public RemoteActionInvoker {
 public:
     void invokeRemoteCommand(juce::CommandID commandId) override { invoked.push_back(commandId); }
-    // FRO253: records a nodeCommand invocation the same way invokeRemoteCommand above does.
+    // Records a nodeCommand invocation the same way invokeRemoteCommand above does.
     void invokeNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) override {
         invokedNodeCommands.push_back({nodeId, command});
     }
@@ -165,7 +165,7 @@ public:
     std::vector<std::pair<ContinuousTargetKind, double>> setCalls;
 };
 
-// FRO236: an assignment to a continuous target -- mirrors makeParamAssignment above.
+// An assignment to a continuous target -- mirrors makeParamAssignment above.
 Assignment makeContinuousAssignment(const juce::String& id, const juce::String& controlId, MessageType type,
                                     int channel, int number, Encoding encoding, ContinuousTargetKind kind,
                                     Takeover takeover = Takeover::jump, double rangeMin = 0.0, double rangeMax = 1.0) {
@@ -327,9 +327,9 @@ TEST(MidiRemoteEngineApplyTest, PickupTakeoverWaitsForTheHardwareToCrossTheParam
     EXPECT_TRUE(engaged) << "the upward sweep must have crossed the starting value";
 }
 
-// Hardware found (Launch Control XL 3, 2026-09-29): a fader pushed to max left the parameter at 1.0,
-// and the next gesture starting there could never "cross" 1.0 moving down, so the fader stayed stuck
-// until it went back to the rail. A gesture that starts where the parameter already is engages at once.
+// A fader pushed to max left the parameter at 1.0, and the next gesture starting there could never
+// "cross" 1.0 moving down, so the fader stayed stuck until it went back to the rail. A gesture that
+// starts where the parameter already is engages at once.
 TEST(MidiRemoteEngineApplyTest, PickupGestureStartingAtTheParameterEngagesAtOnceEvenAtARail) {
     ApplyHarness h;
     h.publish({makeProfile({makeControl("p", MessageType::cc, 1, 10, Encoding::abs7)})},
@@ -571,9 +571,9 @@ TEST(MidiRemoteEngineApplyTest, ActionFiresOnPressOnlyForBothButtonModes) {
     }
 }
 
-// ============================================================================
-// FRO253: node command targets fire on press only too (docs/control/midi-remote.md#node-command-targets),
-// for both momentary and toggle button modes -- mirrors ActionFiresOnPressOnlyForBothButtonModes above.
+// ============================================================================ Node command targets
+// fire on press only too (docs/control/midi-remote.md#node-command-targets), for both momentary and
+// toggle button modes -- mirrors ActionFiresOnPressOnlyForBothButtonModes above.
 // ============================================================================
 
 namespace {
@@ -631,12 +631,12 @@ TEST(MidiRemoteEngineApplyTest, OrphanedNodeCommandInvokesNothing) {
     EXPECT_TRUE(invoker.invokedNodeCommands.empty()) << "an orphaned node command must invoke nothing";
 }
 
-// ============================================================================
-// FRO330 end-to-end: the shipped BeatStep template's Play/Stop -- loaded through the real template
-// loader, merged through the real applyControllerTemplate (which is what wires spec -> action, not
-// hand-built Assignments), and fired through the real MMC SysEx byte layout, exactly what a real
-// BeatStep sends and what docs/control/midi-remote-ui.md#templates-and-importexport promises:
-// "already assigned, no MIDI Learn needed".
+// ============================================================================ End-to-end: the
+// shipped BeatStep template's Play/Stop -- loaded through the real template loader, merged through
+// the real applyControllerTemplate (which is what wires spec -> action, not hand-built
+// Assignments), and fired through the real MMC SysEx byte layout, exactly what a real BeatStep
+// sends and what docs/control/midi-remote-ui.md#templates-and-importexport promises: "already
+// assigned, no MIDI Learn needed".
 // ============================================================================
 
 TEST(MidiRemoteEngineApplyTest, BeatStepTemplatePlayAndStopFireTheRealTransportActionsOnLoad) {
@@ -672,10 +672,10 @@ TEST(MidiRemoteEngineApplyTest, BeatStepTemplatePlayAndStopFireTheRealTransportA
     EXPECT_NE(invoker.invoked.back(), AppCommands::kNoCommand);
 }
 
-// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): the Launch Control XL 3's Play/Record --
-// CC on channel 1, per the Programmer's Reference Guide p.9 -- fired the same way BeatStep's MMC
-// Play/Stop are above: the real applyControllerTemplate merge, then a real CC message through
-// handleMessage -> drain.
+// The Launch Control XL 3's Play/Record -- CC on channel 1, per the Programmer's Reference Guide
+// p.9 -- fired the same way BeatStep's MMC Play/Stop are above: the real applyControllerTemplate
+// merge, then a real CC message through handleMessage -> drain (see
+// docs/control/midi-remote-device-handshake.md#device-handshake).
 TEST(MidiRemoteEngineApplyTest, LcxlTemplatePlayTogglesAndRecordFiresTheRealTransportActionsOnLoad) {
     ControllerProfile tmpl;
     ASSERT_TRUE(loadControllerTemplate("template-novation-launch-control-xl-3", tmpl));
@@ -707,8 +707,8 @@ TEST(MidiRemoteEngineApplyTest, LcxlTemplatePlayTogglesAndRecordFiresTheRealTran
     EXPECT_NE(invoker.invoked.back(), AppCommands::kNoCommand);
 }
 
-// ============================================================================
-// Continuous targets (FRO236, docs/control/midi-remote.md#continuous-targets)
+// ============================================================================ Continuous targets
+// (see docs/control/midi-remote.md#continuous-targets)
 // ============================================================================
 
 TEST(MidiRemoteEngineApplyTest, BpmAbsoluteJumpReachesTheWindowMappedValue) {

@@ -335,18 +335,18 @@ TEST_F(GraphEditorTest, CtrlClickTogglesSelectionButCtrlDragDoesNot) {
     editor.getDragDropController().endDragPreview();
 }
 
-// ---- Round 5 regressions: library Ctrl, live downgrade, jack alignment, dual fan ----
+// ---- Library Ctrl, live downgrade, jack alignment, dual fan -------------------------
 
 TEST_F(GraphEditorTest, GhostPortEstimateMatchesTheRealJackCentre) {
     // The drag ghost's jack positions come from GraphEditor::estimatePortCenter while a real card's
     // come from ModuleComponent::getPortCenter. They carried separate header literals (30 vs 38), so
     // every preview cable terminated 8px ABOVE the jack dot it claimed to land on.
     //
-    // FRO312: a KNOB-BOUND input jack is excluded from this exact check -- estimatePortCenter has
+    // A KNOB-BOUND input jack is excluded from this exact check -- estimatePortCenter has
     // no live component to ask which knob a target resolves to (no slider, no tab-page/poly
     // visibility), so it can only approximate that case (see GhostEstimateForAKnobBoundJackIsInsideTheCard
     // below); every jack this loop still checks (audio, and any CV jack with no bound knob) must
-    // still land exactly, unchanged from before FRO312.
+    // still land exactly.
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1000, 700);
@@ -376,7 +376,7 @@ TEST_F(GraphEditorTest, GhostPortEstimateMatchesTheRealJackCentre) {
     }
 }
 
-// FRO312: a knob-bound input jack draws no gutter dot, so its ghost preview during a library drag
+// A knob-bound input jack draws no gutter dot, so its ghost preview during a library drag
 // (no live component yet to resolve the exact knob anchor from) can only approximate -- it lands
 // somewhere inside the card rather than exactly on the eventual knob. Once the drop lands and a
 // real ModuleComponent exists, getPortCenter resolves the exact anchor and the preview cable's
@@ -409,7 +409,7 @@ TEST_F(GraphEditorTest, GhostEstimateForAKnobBoundJackIsInsideTheCard) {
 }
 
 TEST_F(GraphEditorTest, MidiCableAnchorsOnTheDrawnJackNotTheAudioPortStack) {
-    // T149: buildVisibleCables() anchored a MIDI wire's source at portPos(comp, 0, false) — audio
+    // buildVisibleCables() anchored a MIDI wire's source at portPos(comp, 0, false) — audio
     // output jack 0, which paint() offsets DOWN by kPortStep to dodge the MIDI Out dot — instead of
     // the fixed MIDI Out dot itself, so the cable left from below the jack it claimed to leave from.
     // The destination leg carried a second, independent drift: a stale y=30 literal instead of

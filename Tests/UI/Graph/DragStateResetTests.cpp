@@ -1,4 +1,4 @@
-// FRO19 (founder review round 3, item 2): "a module's selection sometimes stays stuck after
+// "a module's selection sometimes stays stuck after
 // clicking it" / "the drag/marquee rectangle sometimes stays drawn after the module has already
 // been dropped". GraphEditor owns a small family of drag-in-progress flags (dragPreviewActive,
 // marqueeActive, selectionDragActive, macroChipDragId) that must all clear once a gesture ends —
@@ -57,8 +57,8 @@ juce::MouseEvent realMouseEvent(juce::Component& eventComp, juce::Point<int> loc
                             mouseDownLocalPos.toFloat(), juce::Time::getCurrentTime(), numClicks, wasDragged);
 }
 
-/** Asserts every GraphEditor-owned drag/marquee flag is at rest — the five flags FRO19's ticket
- *  says "live in GraphEditor and have few reset sites", plus FRO40's macro drag-candidate id. */
+/** Asserts every GraphEditor-owned drag/marquee flag is at rest — the five flags that
+ *  live in GraphEditor and have few reset sites, plus the macro drag-candidate id. */
 void expectNoStuckDragState(GraphEditor& editor, const char* context) {
     EXPECT_FALSE(editor.getDragDropController().isDragPreviewActive()) << context << ": drag-preview ghost left stuck";
     EXPECT_FALSE(editor.isMarqueeActive()) << context << ": marquee rectangle left stuck";
@@ -153,7 +153,7 @@ TEST(DragStateReset, CtrlInsertDragClearsAllStateOnMouseUp) {
     expectNoStuckDragState(editor, "ctrl insert-drag");
 }
 
-// FRO40 regression: the reparent branch (GraphEditor::finalizeMacroMembershipDrag) initially never
+// The reparent branch (GraphEditor::finalizeMacroMembershipDrag) initially never
 // called endDragPreview() — only clearMacroDragCandidate()/repaintCanvas() — so a SUCCESSFUL
 // Cmd-drag reparent left the landing ghost and grid overlay on screen until some unrelated later
 // gesture happened to clear them. A drag with no macro to join (as this test originally set up)
@@ -380,7 +380,7 @@ TEST(DragStateReset, MacroCardDoubleClickRenameCancelsTheArmedCardDrag) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// "Drags that end outside the component" (FRO19's own wording): a release whose reported position
+// "Drags that end outside the component" (the wording): a release whose reported position
 // is far outside the pressed component's local bounds. JUCE's mouse capture keeps mouseDrag/
 // mouseUp routed to the ORIGINAL mouseDown target regardless of where the cursor ends up, so nothing
 // here should behave differently from an ordinary release — this pins that nothing in the handlers

@@ -1,4 +1,4 @@
-// FRO240 (docs/control/midi-remote.md#replace-and-duplicate): "Replace with..." keeps a module's
+// "Replace with..." keeps a module's
 // MIDI Remote mappings, retargeted onto the new node; duplicate/copy-paste still does NOT copy
 // them (pinned here, not just described). Drives the real GraphEditor::replaceModule()/
 // duplicateSelection() entry points -- the same ones the canvas context menu calls -- rather than
@@ -58,7 +58,7 @@ protected:
                                                             statusBar_, synth::ControllerProfileStore(root_));
         remoteEngine_.setClock([this] { return fakeNowMs_; });
 
-        // Same wiring MainComponentSetup.cpp does for "Replace with..." (FRO240).
+        // Same wiring MainComponentSetup.cpp does for "Replace with...".
         graphEditor_->setMidiRemoteProjectDocForUndo(&doc_);
         graphEditor_->onModuleReplaced = [this](const juce::String& oldUuid, NodeID newNodeId) {
             controller_->retargetNode(oldUuid, newNodeId);
@@ -215,7 +215,7 @@ TEST_F(MidiLearnControllerRetargetTest, RedoReappliesTheReplaceAndTheRetargetTog
     EXPECT_NE(redoneUuid, oldUuid);
     ASSERT_EQ(doc_.assignments.size(), 1u);
     EXPECT_EQ(doc_.assignments[0].target.parameter.nodeUuid, redoneUuid);
-    // FRO240's uuid is assigned once, at retarget time, and never reissued by a later redo of the
+    // the uuid is assigned once, at retarget time, and never reissued by a later redo of the
     // SAME action -- the graph SnapshotAction restores the exact node->properties it snapshotted.
     EXPECT_EQ(redoneUuid, newUuidBeforeUndo);
 }

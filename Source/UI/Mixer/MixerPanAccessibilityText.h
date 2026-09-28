@@ -3,9 +3,9 @@
 #include <cmath>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// MixerPanAccessibilityText.h -- FRO228/FRO294: what VoiceOver reads for a pan-law slider's
+// MixerPanAccessibilityText.h: what VoiceOver reads for a pan-law slider's
 // current value -- "Center"/"50% left"/"50% right". Shared by MixerColumnComponent's own strip
-// pan knob and MixerSendList's per-send pan knobs (FRO294), both of which must reapply this AFTER
+// pan knob and MixerSendList's per-send pan knobs, both of which must reapply this AFTER
 // constructing their juce::SliderParameterAttachment -- its constructor unconditionally overwrites
 // slider.textFromValueFunction with one built from the param's own getText(), which has no
 // "% left"/"% right" phrasing (see MixerDbAccessibilityText.h's own comment for the identical fix

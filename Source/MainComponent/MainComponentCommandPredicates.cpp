@@ -1,5 +1,5 @@
 // MainComponentCommandPredicates.cpp -- the isActive predicates MainComponentCommandTable.cpp's
-// table rows share (FRO227 split, purely to keep that file under the repo's 1,000-line cap --
+// table rows share (split, purely to keep that file under the repo's 1,000-line cap --
 // registering the Mixer edit surface pushed it over; no behaviour change). MainComponent is
 // declared in MainComponent.h; the table itself and the named perform() bodies stay in
 // MainComponentCommandTable.cpp.
@@ -23,7 +23,7 @@ bool MainComponent::touchesAnyMacro() const {
 // The Copy/Paste/Duplicate/Cut/Repeat block: each routes by resolveEditSurface(), but the exact
 // per-surface predicate differs by command (see each case) -- moved verbatim out of the former
 // per-command switches in MainComponent::getCommandInfo, now selected by id in one place.
-// FRO227: Mixer is inactive for all five -- its own keyboard verbs (Left/Right/Up/Down/M/S/R) are
+// Mixer is inactive for all five -- its own keyboard verbs (Left/Right/Up/Down/M/S/R) are
 // resolved directly by MixerPanelComponent::keyPressed, never through this table.
 bool MainComponent::isEditSurfaceCommandActive(juce::CommandID id) const {
     switch (id) {

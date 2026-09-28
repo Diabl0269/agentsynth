@@ -1,6 +1,6 @@
 #pragma once
 
-// GENERATED FILE — DO NOT EDIT. Vendored from the synth-platform repo (P6-13); this client repo
+// GENERATED FILE — DO NOT EDIT. Vendored from the synth-platform repo; this client repo
 // has no build-time dependency on pnpm/tsx, so this is a manual copy-and-commit step, not a build
 // step — same discipline as this repo's other synth-platform-derived schema/type headers.
 //
@@ -20,7 +20,7 @@ namespace synth::generated {
 
 // additionalProperties is always the JSON Schema boolean `true` here, never `{}` — Ollama's
 // grammar-constrained decoder mangles an empty-object subschema into a garbage wrapped value
-// instead of leaving it unconstrained (confirmed root cause, P6-13; see
+// instead of leaving it unconstrained (confirmed root cause; see
 // synth-platform/packages/inference/src/index.ts's rewriteEmptyAdditionalProperties).
 inline constexpr const char* kPatchEnvelopeSchemaJson = R"PATCH_SCHEMA({
   "type": "object",

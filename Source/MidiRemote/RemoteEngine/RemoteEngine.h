@@ -12,7 +12,7 @@
 //   message thread        drain(): apply events to parameters exactly as a mouse would
 //                         (beginChangeGesture / setValueNotifyingHost / endChangeGesture), invoke
 //                         action commands, resolve learns, send feedback for every changed mapped
-//                         parameter back out to its controller (FRO139), free retired snapshots.
+//                         parameter back out to its controller, free retired snapshots.
 //   message thread        setProfiles / setAssignments / setSources / reconcile: rebuild the
 //                         snapshot and publish it by atomic pointer swap.
 //
@@ -20,10 +20,10 @@
 // AudioEngine::setRemoteMessageSink(nullptr) return before destroying the engine. That call drains
 // BOTH halves of the handshake -- drainAudioCallbacks() for renderNextBlock's render passes, and
 // drainRemoteSinkCalls() for the two sink reads that happen OUTSIDE a render pass (the standalone
-// MIDI driver thread and the hosted pre-render sink loop, FRO197) -- so once it returns, no reader
+// MIDI driver thread and the hosted pre-render sink loop) -- so once it returns, no reader
 // can run again, which is what makes SnapshotPublisher's destructor safe.
 //
-// Reachable end to end from the shipped UI via right-click MIDI Learn (FRO130/FRO133/FRO253) on a
+// Reachable end to end from the shipped UI via right-click MIDI Learn on a
 // module-card parameter, a transport-bar action, or a mixer column's Solo node command.
 
 #include "MidiRemote/RemoteEngine/RemoteEvent.h"
@@ -58,8 +58,8 @@ inline constexpr int kDrainHz = 60;
 /** One hardware tick of a relative encoder moves a parameter by this much (see
  *  docs/control/midi-remote.md#data-model, "relative -> signed delta x sensitivity"). */
 inline constexpr float kRelativeSensitivity = 1.0f / 127.0f;
-/** A hardware event on a slot silences its own feedback echo for this long afterwards (FRO139,
- *  docs/control/midi-remote.md#controller-feedback) -- the same window as the gesture-idle timeout,
+/** A hardware event on a slot silences its own feedback echo for this long afterwards
+ *  (docs/control/midi-remote.md#controller-feedback) -- the same window as the gesture-idle timeout,
  *  since both exist to answer "has the user actually stopped moving this control yet?". */
 inline constexpr double kFeedbackCooldownMs = kGestureIdleMs;
 
@@ -70,13 +70,13 @@ public:
     virtual ~RemoteActionInvoker() = default;
     /** MESSAGE THREAD. Invoke synchronously, as a menu item or a keypress would. */
     virtual void invokeRemoteCommand(juce::CommandID commandId) = 0;
-    /** MESSAGE THREAD. FRO253: perform `command` on `nodeId`, exactly as a mouse click on the
+    /** MESSAGE THREAD. Perform `command` on `nodeId`, exactly as a mouse click on the
      *  mixer column's own control would (undo bracket included) -- the ONE seam a nodeCommand
      *  target reaches the app layer through, since Core knows neither ChannelStripModule nor
      *  AudioEngine::setChannelStripSoloed. */
     virtual void invokeNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) = 0;
 
-    // ---- FRO236 (docs/control/midi-remote.md#continuous-targets): bpm/playhead only --
+    // ---- Continuous targets (docs/control/midi-remote.md#continuous-targets): bpm/playhead only --
     // masterVolume reuses the parameter path (ContinuousParameterLookup below), never these. ----
 
     /** MESSAGE THREAD. The target's current value in NATIVE units (BPM, or beats). */
@@ -95,10 +95,10 @@ public:
 /** Resolves a ShortcutManager action id to its juce::CommandID. Injected for the same reason. */
 using ActionCommandLookup = std::function<juce::CommandID(const juce::String& actionId)>;
 
-/** FRO236 (docs/control/midi-remote.md#continuous-targets): resolves masterVolume to the SAME
- *  juce::AudioProcessorParameter* the mixer's own master fader binds. Injected because Core must
- *  not include MasterModule.h (Source/CLAUDE.md's Core-layering rule) -- the app layer finds the
- *  Master node and its gain parameter. May return nullptr (orphaned: no Master node yet). */
+/** Resolves masterVolume to the SAME juce::AudioProcessorParameter* the mixer's own master fader
+ *  binds (docs/control/midi-remote.md#continuous-targets). Injected because Core must not include
+ *  MasterModule.h (Source/CLAUDE.md's Core-layering rule) -- the app layer finds the Master node
+ *  and its gain parameter. May return nullptr (orphaned: no Master node yet). */
 using ContinuousParameterLookup =
     std::function<juce::AudioProcessorParameter*(juce::AudioProcessorGraph& graph, ContinuousTargetKind kind)>;
 
@@ -143,13 +143,13 @@ public:
     /** The project's parameter assignments (the "midiRemote" project key). */
     void setAssignments(std::vector<Assignment> assignments);
 
-    /** FRO141 (docs/control/midi-remote.md#focus-bank): replaces the focus bank's transient
-     *  bindings -- never persisted; see the .cpp. */
+    /** Replaces the focus bank's transient bindings -- never persisted; see the .cpp and
+     *  docs/control/midi-remote.md#focus-bank. */
     void setTransientAssignments(std::vector<Assignment> assignments);
     /** Panel display only; the MIDI path reads the engine's own lookup table, never this. */
     const std::vector<Assignment>& getTransientAssignments() const noexcept { return transientAssignments_; }
 
-    // ---- Message thread: pages (FRO142, docs/control/midi-remote.md#pages) ---------------------
+    // ---- Message thread: pages (docs/control/midi-remote.md#pages) -----------------------------
 
     /** 1-based; 1 for a profile never switched away from its default. Message thread only, never persisted. */
     int getActivePage(const juce::String& profileId) const;
@@ -169,9 +169,9 @@ public:
 
     void setActionInvoker(RemoteActionInvoker* invoker) noexcept { actionInvoker_ = invoker; }
 
-    /** FRO139 (docs/control/midi-remote.md#controller-feedback): where drain() sends a mapped
-     *  parameter's new value back out to its controller. Null (the default, and always null in
-     *  HostMode::Hosted -- the app layer never wires one there) means feedback is simply not sent. */
+    /** Where drain() sends a mapped parameter's new value back out to its controller. Null (the
+     *  default, and always null in HostMode::Hosted -- the app layer never wires one there) means
+     *  feedback is simply not sent (see docs/control/midi-remote.md#controller-feedback). */
     void setFeedbackSink(RemoteFeedbackSink* sink) noexcept;
     /** Clears every per-assignment feedback state so the next drain re-sends every mapped
      *  parameter's current value, even one that hasn't changed -- for a feedback sink that just
@@ -186,7 +186,7 @@ public:
         isClaimedByOther_ = std::move(pred);
     }
     void setActionCommandLookup(ActionCommandLookup lookup) { actionLookup_ = std::move(lookup); }
-    /** FRO236: resolves a masterVolume continuous target; see ContinuousParameterLookup's own
+    /** Resolves a masterVolume continuous target; see ContinuousParameterLookup's own
      *  comment. May be left unset (masterVolume then always orphans). */
     void setContinuousParameterLookup(ContinuousParameterLookup lookup) { continuousLookup_ = std::move(lookup); }
 
@@ -244,9 +244,9 @@ private:
     void applyToParameter(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
     void applyToAction(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
     void applyToNodeCommand(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
-    // FRO236: bpm/playhead only -- masterVolume dispatches to applyToParameter above instead.
+    // Bpm/playhead only -- masterVolume dispatches to applyToParameter above instead.
     void applyToContinuous(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
-    // FRO142: next/previous/go on the slot's own profile's active page.
+    // Next/previous/go on the slot's own profile's active page.
     void applyToPage(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
     void expireIdleGestures();
 
@@ -306,17 +306,17 @@ private:
     std::uint32_t snapshotGeneration_ = 0;
     std::vector<ControllerProfile> profiles_;
     std::vector<Assignment> assignments_;
-    /** FRO141: never persisted -- see setTransientAssignments()'s own comment. */
+    /** Never persisted -- see setTransientAssignments()'s own comment. */
     std::vector<Assignment> transientAssignments_;
     Takeover defaultTakeover_ = Takeover::scale;
 
-    /** FRO142: profileId -> active page (1-based). Message thread only, never persisted; a missing
+    /** profileId -> active page (1-based). Message thread only, never persisted; a missing
      *  entry means page 1 (see getActivePage). */
     std::map<juce::String, int> activePages_;
 
     std::map<juce::String, GestureState> gestures_;
 
-    /** FRO236: per-assignment takeover state for a bpm continuous target's ABSOLUTE encoding only
+    /** Per-assignment takeover state for a bpm continuous target's ABSOLUTE encoding only
      *  (playhead is always Jump, so it needs no state; relative encodings bypass takeover
      *  entirely). Message thread only, keyed by assignment id like gestures_ above -- cleaned up the
      *  same way, in rebuildAndPublish and expireIdleGestures. There is no juce host gesture to
@@ -329,7 +329,7 @@ private:
     };
     std::map<juce::String, ContinuousGestureState> continuousGestures_;
 
-    /** Per-assignment feedback state (FRO139). Message thread only; keyed by assignment id, same as
+    /** Per-assignment feedback state. Message thread only; keyed by assignment id, same as
      *  gestures_ above, so it survives a republish that keeps the assignment. */
     struct FeedbackState {
         int lastSent = -1; // the last encoded value sent, or -1 (nothing sent yet)
@@ -343,7 +343,7 @@ private:
     std::uint32_t nextLearnToken_ = 1;
     LearnRequest learnRequest_;
     std::vector<LearnTally> learnTallies_;
-    // FRO130: whether learnFirstEventMs_ has been stamped yet -- NOT "learnFirstEventMs_ != 0.0"
+    // Whether learnFirstEventMs_ has been stamped yet -- NOT "learnFirstEventMs_ != 0.0"
     // (the bug this replaces). A test clock legitimately reads exactly 0.0 at t=0, which made the
     // very first candidate at time zero indistinguishable from "no candidate yet" and left
     // settleLearnIfDue() waiting for a settle window that could never start; a real

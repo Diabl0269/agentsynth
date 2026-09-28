@@ -2,8 +2,7 @@
 // activity LED, output-card identity treatment, modulation rings), the macro-port docked widget's
 // own paint, port-geometry/hit-testing (getPortCenter/getPortForPoint and friends), and resized()'s
 // per-module-type dispatch. ModuleComponent is declared in ModuleComponent.h; the rest of its
-// implementation lives in the sibling ModuleComponent*.cpp units next to this one (FRO65 split of
-// the former single ModuleComponent.cpp).
+// implementation lives in the sibling ModuleComponent*.cpp units next to this one.
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "ModuleComponentModBand.h"
@@ -76,7 +75,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
     // When the cast is null we fall back to a plain themed-ish fill so those tests don't crash.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
-    // Multi-select state (issue #156). The theme already owns the full selected treatment
+    // Multi-select state. The theme already owns the full selected treatment
     // (accent border + glow); this just supplies the flag it was always waiting for.
     const bool isSelected = owner.isNodeSelected(nodeId);
 
@@ -188,7 +187,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
         g.drawText("Midi In", p.x + 10, p.y - 5, 60, 10, juce::Justification::left, false);
     }
 
-    // Inputs -- FRO312: a knob-bound jack (isInputJackKnobBound) draws no gutter dot/label at all;
+    // Inputs -- a knob-bound jack (isInputJackKnobBound) draws no gutter dot/label at all;
     // its cable lands on the knob's own ring instead (see the landing-dot paint in
     // GraphEditorCables.cpp's paintOverChildren). drawnInputJackIndices() is the single list of
     // which raw indices remain.
@@ -201,7 +200,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
         if (auto* mb = dynamic_cast<ModuleBase*>(module))
             label = mb->getInputPortLabel(i);
         else if (dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(module)) {
-            // FRO324: Audio Output's Left is labelled "L / Mono" -- it is the jack that normals,
+            // Audio Output's Left is labelled "L / Mono" -- it is the jack that normals,
             // borrowing Left onto Right at render time for as long as Right stays unpatched (see
             // ModuleComponent::getTooltip() for the jack-hover explanation). Audio Input has no
             // normalling of its own, so its own Left/Right keep the plain labels.
@@ -235,7 +234,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
 
     paintModulationRings(g, mod, jackAccentColour);
 
-    // FRO130: MIDI-mapped badges + the armed-control breathing outline, drawn last so they sit on
+    // MIDI-mapped badges + the armed-control breathing outline, drawn last so they sit on
     // top of every knob/toggle/combo/header button (ModuleComponentMidiLearn.cpp).
     paintMidiLearnOverlays(g);
 }
@@ -252,7 +251,7 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
             if (t.channelIndex != modDropTargetChannel)
                 continue;
             const int si = sliderIndexForModTarget(t);
-            // FRO118: si now resolves even when the knob is hidden behind a swapped-in BPM *Div
+            // si now resolves even when the knob is hidden behind a swapped-in BPM *Div
             // combo (so a jack still lands there) -- but there is no ring to draw on a combo, so
             // skip painting one rather than drawing a circle over it.
             if (si < 0 || !sliders[si]->isVisible())
@@ -290,7 +289,7 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
             continue;
 
         const int si = sliderIndexForModTarget(*target);
-        // FRO118: same reasoning as the drop-target ring above -- a swapped-in BPM combo still
+        // Same reasoning as the drop-target ring above -- a swapped-in BPM combo still
         // resolves an si (real jack anchor), but has no ring to paint over it.
         if (si < 0 || !sliders[si]->isVisible())
             continue;
@@ -310,7 +309,7 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
         if (lf == nullptr)
             continue;
 
-        // FRO287: the reachable-range band goes UNDER the live ring, one per routing (two
+        // The reachable-range band goes UNDER the live ring, one per routing (two
         // routings on one knob -> two bands, never summed) -- visible even at rest, since it
         // answers "how far could this move", not "where is it now".
         const auto band = synth::ui::modDepthBandRange(baseNorm, info.amount, info.sourceBipolar);
@@ -319,7 +318,7 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
             bandNegative ? lf->getTheme().colors.modRingNegative : lf->getTheme().colors.modRingPositive;
         lf->drawModulationDepthBand(g, centre, radius, band.startNorm, band.endNorm, bandColour);
 
-        // FRO288: this ring's routing is correlated with a hover (either a cable hovered on the
+        // This ring's routing is correlated with a hover (either a cable hovered on the
         // canvas that lands here, or this very knob's ring being hovered) -- widen/brighten it.
         // docs/modules/modulation.md#modulation-rings-on-knobs.
         const auto& hovered = owner.getHoveredModTarget();
@@ -330,7 +329,7 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
     }
 }
 
-// Compact docked port widget (P8-15 founder-review fix F2, docs/macros/ports.md#how-a-port-is-drawn): a small
+// Compact docked port widget (docs/macros/ports.md#how-a-port-is-drawn): a small
 // row tinted with the owning macro's colour, showing the port's own NAME (resolved live through
 // GraphEditor — the name lives on synth::MacroPort, not this node, so a rename in the Configure
 // I/O dialog is reflected the next time this repaints, with nothing to cache or invalidate) and
@@ -340,15 +339,14 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
 // drawn after expanding the macro"): getPortForPoint/getPortCenter are otherwise UNCHANGED for these types (just
 // compacted, see the getPortCenter branch above), so drag/drop keeps working exactly as it does for every other module.
 // Only the interior jack goes unlabelled — the resolved name sits next to the boundary one, mirroring the collapsed
-// card's own left/right convention (item 4).
+// card's own left/right convention.
 //
-// Founder-review fix G4 ("too large" — see kMacroPortWidgetWidth's own comment): the drawn jack
-// shrank from a full module card's 10px dot to 7px, the corner radius from 6 to 4 and the name
-// font from 10.5f to 9.5f, all sized down together with the widget's own width/height so the chip
-// reads as a boundary jack rather than a miniature module. NONE of that touches the actual HIT
-// target: getPortForPoint's `< 10` distance check (unchanged, general to every module) still
-// grabs a click several px off the now-smaller dot — a shrunk drawn jack and a shrunk hit radius
-// are two different knobs, and only the first one turned here
+// The drawn jack (see kMacroPortWidgetWidth's own comment) is smaller than a module card's: a
+// 7px dot (not 10px), a corner radius of 4 (not 6) and a 9.5f name font (not 10.5f), all sized
+// with the widget's own width/height so the chip reads as a boundary jack rather than a miniature
+// module. NONE of that touches the actual HIT target: getPortForPoint's `< 10` distance check
+// (general to every module) still grabs a click several px off the smaller dot — the drawn jack
+// size and the hit radius are two different knobs
 // (MacroPortWidgetTests.cpp's `HitTestStaysGenerousAroundTheShrunkJackDot`).
 void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
@@ -369,9 +367,9 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
 
     const juce::Colour audioJackColour = themeColors.audioWire;
     const juce::Colour jackAccentColour = themeColors.accent;
-    constexpr float kJackRadius = 3.5f; // 7px dot, down from a full card's 10px (fix G4)
+    constexpr float kJackRadius = 3.5f; // 7px dot, vs a full card's 10px
 
-    // T162: a port with a user colour (MacroPort::colour, set from the Configure I/O modal's swatch)
+    // A port with a user colour (MacroPort::colour, set from the Configure I/O modal's swatch)
     // paints its dot in THAT colour; otherwise the kind tint (audioWire for MIDI, accent for
     // AudioCV) — the same fallback the collapsed card's MacroCardComponent::paint uses, so an
     // expanded docked widget and a collapsed card read a port's jack identically.
@@ -409,7 +407,7 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
 
     g.setColour(themeColors.textPrimary);
     g.setFont(juce::Font(juce::FontOptions(9.5f)));
-    // Inset 16, not G4's original 12 (P8-15 founder-review polish fix): a jack dot is drawn at
+    // Inset 16, not 12: a jack dot is drawn at
     // x=10/width-10 with a 3.5px radius, i.e. its outer edge sits at 13.5px from the widget's own
     // edge, so a 12px text inset put the name's own text area INSIDE the dot — on a Mono widget
     // showing a realistic name ("Delay 1 Audio") the left dot visibly overlapped the "D". 16 clears
@@ -434,7 +432,7 @@ juce::Colour ModuleComponent::effectiveMacroPortJackColour(const synth::MacroPor
 }
 
 juce::Colour ModuleComponent::resolveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) {
-    // A port user colour wins when set; unset (the default, and every pre-T152 save) falls back to
+    // A port user colour wins when set; unset (the default, and every older save) falls back to
     // the kind tint — a null port (a docked widget whose port entry has drifted away, which by
     // construction shouldn't happen) is exactly the same "unset", i.e. the kind tint too.
     return (port != nullptr) ? port->colour.value_or(kindTint) : kindTint;
@@ -485,16 +483,16 @@ int ModuleComponent::sliderIndexForModTarget(const ModulationTarget& target) con
     return getModRingSliderIndex(knobNameForModTarget(dynamic_cast<const ModuleBase*>(module), target));
 }
 
-// FRO288: see the doc comment on the declaration (ModuleComponent.h) -- this is the ONE place a
+// See the doc comment on the declaration (ModuleComponent.h) -- this is the ONE place a
 // cable's landing point is computed, shared by GraphEditor's cable re-anchor pass
 // (GraphEditorModHover.cpp) so a click near the drawn ring always hits the cable that lands there.
-// FRO313: the anchor sits just OUTSIDE the ring's own arc rather than on it -- at the same
+// The anchor sits just OUTSIDE the ring's own arc rather than on it -- at the same
 // rotary-start angle (norm 0.0f, lower-left), radius pushed out by half the ring's stroke width
 // (clearing the drawn arc itself) + half the landing dot's own diameter (so the dot's edge, not
 // its centre, clears the arc) + a 2px gap, so the dot and the arc never visually overlap. Falls
 // back to the default theme's metrics when there is no themed LnF (headless tests) -- the same
 // guarded-cast pattern paint() uses.
-// FRO313: half the ring's own stroke width (clears the drawn arc itself) + half the landing dot's
+// half the ring's own stroke width (clears the drawn arc itself) + half the landing dot's
 // own diameter (so the dot's EDGE, not its centre, clears the arc) + a 2px gap -- the amount the
 // landing radius is pushed OUTWARD from the ring's plain radius. A free function of the LnF alone
 // (never the knob's bounds), so both a CARD-local caller (getModTargetKnobAnchor) and a
@@ -529,12 +527,12 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
     return std::nullopt;
 }
 
-// FRO312: true when visible input jack `index` is a ModulationTarget whose knob resolves on this
+// True when visible input jack `index` is a ModulationTarget whose knob resolves on this
 // card RIGHT NOW -- recomputed live off getModulationTargets()/mapInputChannel()/
 // sliderIndexForModTarget() every call (poly toggle, Dual I/O and tab pages all change what
 // resolves), never cached across a layout. A module with no ModulationTarget mapping to `index`
 // (an audio/pitch/gate/MIDI jack, or a CV jack with no bound knob, e.g. Oscillator's Pitch CV) is
-// never knob-bound, matching the pre-FRO312 gutter behaviour exactly.
+// never knob-bound, matching the plain gutter behaviour exactly.
 bool ModuleComponent::isInputJackKnobBound(int index) const { return knobAnchorForVisibleInputJack(index).has_value(); }
 
 // Shared by isInputJackKnobBound (the "is it hidden" question) and getPortCenter's redirect
@@ -552,7 +550,7 @@ std::optional<juce::Point<float>> ModuleComponent::knobAnchorForVisibleInputJack
     return std::nullopt;
 }
 
-// FRO312: paint()'s input loop, getPortForPoint()'s input loop, and getInputPortColumns() all read
+// paint()'s input loop, getPortForPoint()'s input loop, and getInputPortColumns() all read
 // THIS list rather than re-deriving "which jacks are hidden" each their own way, so they can never
 // disagree about what's actually on screen. Never cached across a call -- isInputJackKnobBound
 // recomputes live off current slider visibility every time (poly toggle, Dual I/O, tab pages).
@@ -587,8 +585,8 @@ int ModuleComponent::getModRingSliderIndex(const juce::String& paramName) const 
         if (sliders[si]->getSliderStyle() != juce::Slider::RotaryHorizontalVerticalDrag)
             continue;
         // A knob on an inactive tab page keeps the bounds it had when its page was last laid
-        // out, so drawing from them paints a ring over empty card (issue #180 tab strip) --
-        // UNLESS it's hidden only because its own *Div combo has swapped in over it (FRO118 BPM
+        // out, so drawing from them paints a ring over empty card --
+        // UNLESS it's hidden only because its own *Div combo has swapped in over it (BPM
         // mode), which keeps the SAME cell a jack still legitimately lands on; see
         // isEnvelopeDivSwappedForSlider's own comment (ModuleComponentEnvelopeCard.cpp).
         if (!sliders[si]->isVisible() && !isEnvelopeDivSwappedForSlider(si))
@@ -606,7 +604,7 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
         return {getWidth() / 2, getHeight() / 2};
     }
 
-    // Macro-port widget (P8-15 fix F2): same left-input/right-output convention every other card
+    // Macro-port widget: same left-input/right-output convention every other card
     // uses (x=10 / x=width-10, the same inset macroCardPortLayout's own collapsed-card jacks use —
     // "a macro's boundary jacks read like any other module's"), just compacted to the widget's own
     // small header offset/row step instead of a real card's 38/20. A MIDI port's single jack sits
@@ -650,7 +648,7 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
     int clamped = (visible > 0) ? juce::jlimit(0, visible - 1, index) : 0;
 
     if (isInput) {
-        // FRO312: a knob-bound jack (its ModulationTarget resolves to a visible knob on this card)
+        // A knob-bound jack (its ModulationTarget resolves to a visible knob on this card)
         // draws no gutter dot at all -- a cable/routing that names it by this same visible index
         // (portPos in GraphEditorCables.cpp calls this exact function) lands on the knob's own
         // ring-landing anchor instead. This is the ONE place that redirect happens, so every
@@ -724,7 +722,7 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
         }
     }
 
-    // Inputs -- FRO312: a knob-bound jack is never hit-tested here at all (it draws no gutter dot
+    // Inputs -- a knob-bound jack is never hit-tested here at all (it draws no gutter dot
     // to click); the knob claims that click via CardKnobSlider's own gesture wiring instead
     // (wireCardKnobModAmountGesture / wantsCablePickupGestureFor, ModuleComponent.cpp).
     for (int i : drawnInputJackIndices()) {
@@ -745,7 +743,7 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
     return std::nullopt;
 }
 
-// FRO324: Audio Output's "L / Mono" jack (and its Right sibling) are the only jacks with a
+// Audio Output's "L / Mono" jack (and its Right sibling) are the only jacks with a
 // hover explanation today, so this stays a small special case against isAudioOutputIONode rather
 // than a general per-jack tooltip table -- getPortForPoint() already gives the exact same hit-test
 // paint()'s jack dots use, so the tooltip always agrees with what is drawn. Empty for every other
@@ -768,7 +766,7 @@ void ModuleComponent::resized() {
     if (module == nullptr)
         return;
 
-    // The compact macro-port widget (P8-15 fix F2) creates no header buttons and no body controls
+    // The compact macro-port widget creates no header buttons and no body controls
     // (see the constructor's isMacroPortType guard and layoutMacroPortWidget) — nothing here needs
     // positioning.
     if (isMacroPortType(getType(module)))
@@ -879,7 +877,7 @@ void ModuleComponent::resized() {
         return;
     }
 
-    // FRO112: ADSR now falls through to the generic default layout below (see updateLayout()'s
+    // ADSR now falls through to the generic default layout below (see updateLayout()'s
     // comment) — no bespoke apply-pass branch needed here any more.
 
     // --- MIDI Keyboard Layout ---

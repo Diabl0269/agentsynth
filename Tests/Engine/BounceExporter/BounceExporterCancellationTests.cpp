@@ -65,10 +65,10 @@ TEST(BounceExporterTest, CancellingDuringTheTailStopsTheRender) {
 }
 
 // ============================================================================
-// 10. P8-17 - a disengaged loop region is a valid bounce range
+// 10. A disengaged loop region is a valid bounce range
 // ============================================================================
-// "Current loop range" was wired (P8-5) to seed a bounce's [start, end), but the option was offered
-// only while the loop was ARMED. P8-17 decouples it: the loop LOCATORS (loopStartPpq/loopEndPpq)
+// "Current loop range" was wired to seed a bounce's [start, end), but the option was offered
+// only while the loop was ARMED. The range is decoupled from it: the loop LOCATORS (loopStartPpq/loopEndPpq)
 // name a span whether or not looping is live, and that span is a first-class bounce range. These
 // tests pin that a disengaged region bounces the same audio a live one would, that the region is the
 // range source independent of the arm flag, and that nothing in the armed/disengaged state leaks

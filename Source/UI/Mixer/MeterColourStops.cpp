@@ -1,4 +1,4 @@
-// Concern: FRO146 -- MeterColourStops' theme lookup, stop-set maintenance, zone selection and
+// Concern: MeterColourStops' theme lookup, stop-set maintenance, zone selection and
 // positional band iteration.
 #include "MeterColourStops.h"
 
@@ -68,7 +68,7 @@ void MeterColourStops::forEachBand(
 }
 
 //==============================================================================
-// Persistence (FRO147) -- see the header's own comment on each function.
+// Persistence -- see the header's own comment on each function.
 //==============================================================================
 
 namespace {

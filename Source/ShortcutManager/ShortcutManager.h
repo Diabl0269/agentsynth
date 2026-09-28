@@ -74,7 +74,7 @@ public:
         }
     }
 
-    /** FRO333: one-shot, same shape as migrateSaveAsChordSwap above. The bottom-dock toggle used to
+    /** One-shot, same shape as migrateSaveAsChordSwap above. The bottom-dock toggle used to
      *  be toggleTimelinePanel's own Cmd+T; a saved install still holds "shortcut_toggleTimelinePanel"
      *  = Cmd+T (saveToProperties() persists every action, not only rebound ones), which would
      *  otherwise collide with the new toggleBottomPanel action's own Cmd+T default -- both keyed to
@@ -258,7 +258,7 @@ public:
             juce::KeyPress('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         bindings["toggleModMatrix"] = juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0);
         // 'k' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M
-        // / A / L / B, Shift+A, Shift+S) — safe to claim for the minimap toggle (issue #159).
+        // / A / L / B, Shift+A, Shift+S) — safe to claim for the minimap toggle.
         bindings["toggleMinimap"] = juce::KeyPress('k', juce::ModifierKeys::commandModifier, 0);
         // The platform-standard Select All owns the bare Cmd+A chord (every DAW reads it that
         // way), so the AI panel moves off it. On macOS it takes a REAL Ctrl+A — Ctrl is a distinct
@@ -275,10 +275,10 @@ public:
         bindings["toggleLibrary"] = juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0);
         // 't' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M /
         // K / A / L / B, Shift+A, Shift+S, C / V / D) — safe to claim for the ONE bottom-dock
-        // open/close toggle (FRO333; this used to be toggleTimelinePanel's own chord before the
+        // open/close toggle (this used to be toggleTimelinePanel's own chord before the
         // dock grew a single shared toggle — see migrateBottomPanelToggleKeys() below).
         bindings["toggleBottomPanel"] = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
-        // FRO333: Cmd+1/2/3 -- "show this tab" (never closes the dock), in the dock's DEFAULT tab
+        // Cmd+1/2/3 -- "show this tab" (never closes the dock), in the dock's DEFAULT tab
         // order (Timeline, Mixer, Controllers); a drag-reorder keeps Cmd+N pointed at whichever tab
         // is now Nth (BottomDockComponent::permuteShortcutKeysForNewOrder). Free chords: no other
         // binding in this table uses a bare Cmd+digit.
@@ -323,11 +323,11 @@ public:
         bindings["zoomOutVertical"] =
             juce::KeyPress('-', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
 
-        // T159: Tab/Shift+Tab cycle keyboard focus between the app's currently OPEN focus regions
+        // Tab/Shift+Tab cycle keyboard focus between the app's currently OPEN focus regions
         // (Library, Canvas, Timeline, AI Panel, Mod Matrix — see Source/UI/Layout/FocusRegion.h; a closed
         // region is skipped, never opened, by the cycle itself). Bare Tab is free to claim: this
         // codebase has never customized it (no KeyPress::tabKey/FocusTraverser/setExplicitFocusOrder
-        // usage anywhere before T159) — the only prior behaviour was JUCE's own generic
+        // usage anywhere) — the only behaviour is JUCE's own generic
         // ComponentPeer::handleKeyPress fallback (a sibling-order focus jump with no notion of these
         // regions, triggered only when nothing else claims the key), which registering Tab here
         // deliberately supersedes with a well-defined region cycle.
@@ -336,8 +336,7 @@ public:
         // Direct-focus shortcuts OPEN a closed target region before focusing it (unlike Tab-cycling
         // above, which only ever visits what's already open). Cmd+Shift+M is deliberately NOT used
         // for Library: Cmd+M already owns "Toggle Mod Matrix", and 'm' went to "locateMaster"
-        // (Graph, below) instead — FRO45's canvas-only stopgap for the same "find Master" need this
-        // reservation was originally held for, ahead of the eventual mixer panel (P9-5). Free on both
+        // (Graph, below) instead. Free on both
         // counts against the rest of this table: no other binding uses 't' or 'l' with Cmd+Shift
         // (toggleBottomPanel is bare Cmd+T; autoArrange is bare Cmd+L, a different category
         // entirely), and no component keyPressed() override hardcodes either chord.
@@ -345,13 +344,13 @@ public:
             juce::KeyPress('t', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         bindings["focusLibrary"] =
             juce::KeyPress('l', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
-        // T160: bare Cmd+F — free on both counts (no other binding uses 'f' with Cmd, and no
+        // Bare Cmd+F — free on both counts (no other binding uses 'f' with Cmd, and no
         // component keyPressed() override hardcodes it; the only existing 'f' binding is bare,
         // unmodified 'f' for timelineFollowPlayheadToggle, a different chord entirely). Cmd+F reads
         // as "find" the way it does in almost every app, which is exactly what this does.
         bindings["focusLibrarySearch"] = juce::KeyPress('f', juce::ModifierKeys::commandModifier, 0);
 
-        // FRO125: the transport family ships UNBOUND -- an explicit invalid juce::KeyPress(), not
+        // The transport family ships UNBOUND -- an explicit invalid juce::KeyPress(), not
         // an absent map entry. saveToProperties() below indexes `bindings` with `.at()` for every
         // id in `actionIds`, so a genuinely absent entry throws (std::map::at) the moment anyone
         // ever persists; a present-but-invalid KeyPress is indistinguishable from "absent" to
@@ -364,25 +363,25 @@ public:
         bindings["transportRecord"] = juce::KeyPress();
         bindings["transportToggleMetronome"] = juce::KeyPress();
         bindings["transportReturnToStart"] = juce::KeyPress();
-        // FRO271: cursor moves and loop jumps -- same unbound-by-default reasoning as above.
+        // Cursor moves and loop jumps -- same unbound-by-default reasoning as above.
         bindings["transportNudgeBackBeat"] = juce::KeyPress();
         bindings["transportNudgeForwardBeat"] = juce::KeyPress();
         bindings["transportNudgeBackBar"] = juce::KeyPress();
         bindings["transportNudgeForwardBar"] = juce::KeyPress();
         bindings["transportJumpToLoopStart"] = juce::KeyPress();
         bindings["transportJumpToLoopEnd"] = juce::KeyPress();
-        // FRO277: jump to the next/previous timeline marker -- same unbound-by-default reasoning.
+        // Jump to the next/previous timeline marker -- same unbound-by-default reasoning.
         bindings["transportJumpToNextMarker"] = juce::KeyPress();
         bindings["transportJumpToPreviousMarker"] = juce::KeyPress();
-        // FRO278: selection stepping -- unbound like the transport family, reachable from MIDI Remote.
+        // Selection stepping -- unbound like the transport family, reachable from MIDI Remote.
         bindings["selectNextModule"] = juce::KeyPress();
         bindings["selectPreviousModule"] = juce::KeyPress();
         bindings["selectNextTrack"] = juce::KeyPress();
         bindings["selectPreviousTrack"] = juce::KeyPress();
 
-        // FRO333: "show the Controllers tab" -- see toggleTimelinePanel/toggleMixerPanel's own
+        // "show the Controllers tab" -- see toggleTimelinePanel/toggleMixerPanel's own
         // comment above (the Cmd+1/2/3 family, permuted by a drag-reorder). Previously shipped
-        // unbound (FRO131); a returning user's saved unbound value carries forward unchanged, same
+        // unbound; a returning user's saved unbound value carries forward unchanged, same
         // as toggleMixerPanel's old Cmd+Alt+M -- only toggleTimelinePanel's Cmd+T is migrated (see
         // migrateBottomPanelToggleKeys()), since only that one collides with the new
         // toggleBottomPanel default.
@@ -398,15 +397,15 @@ public:
             juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
         // Cmd+G / Cmd+Shift+G — the Cubase/Ableton convention for group/ungroup, and free on both
         // counts: 'g' appears nowhere else in this table, and no component keyPressed() override
-        // matches it either (P8-12).
+        // matches it either.
         bindings["groupSelection"] = juce::KeyPress('g', juce::ModifierKeys::commandModifier, 0);
         bindings["ungroupSelection"] =
             juce::KeyPress('g', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         bindings["collapseMacro"] =
             juce::KeyPress('g', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
-        // FRO45: Cmd+Shift+M — the chord "focusTimeline"/"focusLibrary"'s own comment above earmarked
+        // Cmd+Shift+M — the chord "focusTimeline"/"focusLibrary"'s own comment above earmarked
         // ("'m' is reserved for a future Mixer-focus shortcut") once a mixer existed. Master/Audio
-        // Output locate is exactly that need in its canvas-only, pre-mixer-panel form (P9-5 is the
+        // Output locate is exactly that need in its canvas-only, pre-mixer-panel form (is the
         // eventual destination), so it claims the chord now rather than leaving it idle; free on
         // both counts, same as when it was reserved — no other binding in this table uses 'm' with
         // Cmd+Shift (bare Cmd+M is toggleModMatrix, a different chord entirely; bare unmodified 'm'
@@ -460,7 +459,7 @@ public:
         // same reason `pianoRollNavPrevNote` stores an arrow plus altModifier.
         bindings["timelineJumpToLocator1"] = juce::KeyPress('1', juce::ModifierKeys::altModifier, 0);
         bindings["timelineJumpToLocator2"] = juce::KeyPress('2', juce::ModifierKeys::altModifier, 0);
-        // T161: bare m/s/r toggle Mute/Solo/Arm on whichever track header row currently holds
+        // Bare m/s/r toggle Mute/Solo/Arm on whichever track header row currently holds
         // keyboard focus (TimelineTrackHeaderComponent::keyPressed) — the same J/L/P/F "bare letter,
         // panel-scoped surface action" convention as the block above, just resolved one component
         // deeper (the row itself, not the panel). Free on all three: no other binding in this table
@@ -717,12 +716,12 @@ private:
             {"toggleMinimap", ShortcutCategory::General},
             {"toggleAiPanel", ShortcutCategory::General},
             {"toggleLibrary", ShortcutCategory::General},
-            // FRO333: the ONE bottom-dock open/close toggle (docs/layout/chrome.md) -- opens or
+            // The ONE bottom-dock open/close toggle (docs/layout/chrome.md) -- opens or
             // closes the whole dock, reopening on whichever tab was last active. The three rows
             // below are no longer toggles themselves; each just SHOWS its tab (opening the dock if
             // needed) -- see their own comments.
             {"toggleBottomPanel", ShortcutCategory::General},
-            // FRO333: "show the Timeline/Mixer/Controllers tab" -- default Cmd+1/2/3, in the bottom
+            // "show the Timeline/Mixer/Controllers tab" -- default Cmd+1/2/3, in the bottom
             // dock's default tab order. A drag-reorder of the tab strip PERMUTES these three
             // bindings so Cmd+N keeps naming the tab now in position N (BottomDockComponent::
             // permuteShortcutKeysForNewOrder) -- never a user's own rebind away from the Cmd+digit
@@ -747,7 +746,7 @@ private:
             {"focusTimeline", ShortcutCategory::General},
             {"focusLibrary", ShortcutCategory::General},
             {"focusLibrarySearch", ShortcutCategory::General},
-            // FRO125: transport verbs promoted to command-dispatched actions (docs/control/midi-remote.md
+            // Transport verbs promoted to command-dispatched actions (docs/control/midi-remote.md
             // §4.9's prerequisite) -- deliberately UNBOUND by default (see resetToDefaults()),
             // unlike every other row above. They exist as command/MIDI-Remote targets first; a
             // user may still rebind one in Settings. "transportTogglePlayStop" is not here: it is
@@ -759,17 +758,17 @@ private:
             {"transportRecord", ShortcutCategory::General},
             {"transportToggleMetronome", ShortcutCategory::General},
             {"transportReturnToStart", ShortcutCategory::General},
-            // FRO271: cursor moves and loop jumps, unbound by default like the transport verbs above.
+            // Cursor moves and loop jumps, unbound by default like the transport verbs above.
             {"transportNudgeBackBeat", ShortcutCategory::General},
             {"transportNudgeForwardBeat", ShortcutCategory::General},
             {"transportNudgeBackBar", ShortcutCategory::General},
             {"transportNudgeForwardBar", ShortcutCategory::General},
             {"transportJumpToLoopStart", ShortcutCategory::General},
             {"transportJumpToLoopEnd", ShortcutCategory::General},
-            // FRO277: jump to the next/previous timeline marker, unbound by default.
+            // Jump to the next/previous timeline marker, unbound by default.
             {"transportJumpToNextMarker", ShortcutCategory::General},
             {"transportJumpToPreviousMarker", ShortcutCategory::General},
-            // FRO278: selection stepping, unbound by default.
+            // Selection stepping, unbound by default.
             {"selectNextModule", ShortcutCategory::General},
             {"selectPreviousModule", ShortcutCategory::General},
             {"selectNextTrack", ShortcutCategory::General},
@@ -887,7 +886,7 @@ private:
     // drift apart.
     juce::StringArray actionIds;
 
-    // FRO97: a ShortcutManager is usually a MainComponent-owned member that outlives every UI
+    // A ShortcutManager is usually a MainComponent-owned member that outlives every UI
     // surface holding a raw pointer to it, but a test that declares one as a LOCAL after the
     // component under test gets the opposite lifetime — the manager destructs first (reverse
     // declaration order) and a component whose OWN destructor unconditionally dereferences its
@@ -895,8 +894,8 @@ private:
     // heap-use-after-free the moment it destructs afterwards. Weak-referenceable so a holder that
     // cares (see TimelinePanelComponent::shortcutsWeak_) can guard its teardown against exactly
     // that instead of trusting every call site to remember an explicit setShortcutManager(nullptr)
-    // before scope exit — the idiom PR #381 established and FRO97 applied to the remaining test
-    // files, but which is a test-authoring convention, not a compiler-enforced guarantee.
+    // before scope exit — the idiom the test files use, but which is a test-authoring convention, not a
+    // compiler-enforced guarantee.
     JUCE_DECLARE_WEAK_REFERENCEABLE(ShortcutManager)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)

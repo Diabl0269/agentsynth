@@ -11,7 +11,7 @@ juce::var MacroPort::toVar() const {
     obj->setProperty("name", name);
     obj->setProperty("order", order);
     obj->setProperty("kind", kind == MacroPortKind::Midi ? "midi" : "audioCV");
-    // Omitted entirely when unset, matching how "ports" itself is omitted on a pre-P8-15 macro —
+    // Omitted entirely when unset, matching how "ports" itself is omitted on an older macro —
     // absence, not a sentinel value, is what "no custom colour" looks like on disk.
     if (colour.has_value())
         obj->setProperty("colour", colour->toString()); // same encoding as Macro::colour above
@@ -41,7 +41,7 @@ bool MacroPort::fromVar(const juce::var& v, MacroPort& out) {
         return false; // missing or unrecognised "kind" — reject rather than silently default
 
     // "colour" is decorative-only (unlike kind/nodeUuid above), so it is the one field here that
-    // does NOT follow the all-or-nothing rule: absent (every pre-T152 save) or present-but-not-a-
+    // does NOT follow the all-or-nothing rule: absent (every older save) or present-but-not-a-
     // string both just leave it unset rather than rejecting the whole port over a cosmetic field.
     const juce::var colourVar = obj->getProperty("colour");
     if (colourVar.isString() && colourVar.toString().isNotEmpty())
@@ -134,7 +134,7 @@ bool MacroSet::retainOnly(const std::vector<juce::String>& aliveMemberUuids) {
         if (it->members.size() != before)
             changed = true;
 
-        // Same liveness set: a port whose node died is dropped like any other member (P8-15).
+        // Same liveness set: a port whose node died is dropped like any other member.
         const auto portsBefore = it->ports.size();
         it->ports.erase(std::remove_if(it->ports.begin(), it->ports.end(),
                                        [&](const MacroPort& p) { return alive.find(p.nodeUuid) == alive.end(); }),
@@ -226,7 +226,7 @@ bool MacroSet::fromVar(const juce::var& state) {
             m.members.push_back(uuid);
         }
 
-        // "ports" is optional (P8-15): every macro saved before this key existed has none, and
+        // "ports" is optional: every macro saved before this key existed has none, and
         // that must parse as an empty list rather than reject the whole load.
         if (obj->hasProperty("ports")) {
             auto* portsArr = obj->getProperty("ports").getArray();

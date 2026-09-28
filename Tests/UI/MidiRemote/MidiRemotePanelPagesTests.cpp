@@ -1,4 +1,4 @@
-// MidiRemotePanelPagesTests.cpp -- FRO142 (docs/control/midi-remote.md#pages,
+// MidiRemotePanelPagesTests.cpp (docs/control/midi-remote.md#pages,
 // docs/control/midi-remote-ui.md#pages): the page strip, wired into the real panel, actually
 // switches the engine's active page and the surface's cell labels -- driven through the strip's
 // real button click (Source/UI/CLAUDE.md's "test the real mouse path" convention), never a direct

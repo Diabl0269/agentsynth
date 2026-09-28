@@ -1,6 +1,6 @@
 #pragma once
 
-// FRO127/FRO253/FRO236: synth::midi::RemoteActionInvoker impl, extracted out of MainComponent.h
+// synth::midi::RemoteActionInvoker impl, extracted out of MainComponent.h
 // (which sits at the 1,000-line cap -- root CLAUDE.md's Code structure rule) rather than grown in
 // place. See MainComponentSetup.cpp's wireMidiRemoteEngine() for how MainComponent wires it,
 // including onNodeCommandApplied, which is set there (bottomDock doesn't exist yet at this object's
@@ -32,7 +32,7 @@ public:
     void invokeRemoteCommand(juce::CommandID commandId) override;
     void invokeNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, synth::NodeCommandKind command) override;
 
-    // ---- FRO236 (docs/control/midi-remote.md#continuous-targets) ----
+    // ---- Continuous targets (docs/control/midi-remote.md#continuous-targets) ----
     double getContinuousValue(synth::ContinuousTargetKind kind) override;
     void setContinuousValue(synth::ContinuousTargetKind kind, double native) override;
     bool getContinuousWindow(synth::ContinuousTargetKind kind, double& lo, double& hi) override;

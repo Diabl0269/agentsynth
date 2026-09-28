@@ -1,4 +1,4 @@
-// Drive-vs-loudness measurements for RingModulatorModule (FRO120). `diodeRing` is linear above the
+// Drive-vs-loudness measurements for RingModulatorModule. `diodeRing` is linear above the
 // diode breakpoint `vl`, so without normalisation a same-signal carrier/modulator patch came out at
 // roughly `drive * input` — Drive was an uncompensated gain of up to 8x (+18 dB). The module now
 // divides the wet signal by drive; these tests pin that Drive changes character, not loudness

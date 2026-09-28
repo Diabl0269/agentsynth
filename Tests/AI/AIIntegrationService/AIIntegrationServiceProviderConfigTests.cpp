@@ -74,7 +74,7 @@ TEST_F(AIIntegrationServiceTest, ConfiguredRequestTimeoutSurvivesProviderSwap) {
            "own hardcoded default";
 }
 
-// P6-8: a successful response carrying a conversation id (the server persisted this exchange —
+// A successful response carrying a conversation id (the server persisted this exchange —
 // Pro plan) must be captured and re-pushed to the provider immediately, so the NEXT sendMessage()
 // call in this session continues the same server-side thread.
 TEST_F(AIIntegrationServiceTest, ConversationIdCapturedFromResponseAndRePushedToProvider) {

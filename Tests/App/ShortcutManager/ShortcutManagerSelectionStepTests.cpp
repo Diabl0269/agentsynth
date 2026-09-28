@@ -1,4 +1,4 @@
-// Concern: FRO278's selection-stepping actions (selectNextModule/PreviousModule/NextTrack/PreviousTrack)
+// Concern: the selection-stepping actions (selectNextModule/PreviousModule/NextTrack/PreviousTrack)
 // as table rows -- ids, labels, unbound default, category, command mapping. Dispatch lives in
 // Tests/App/FocusArbitration/FocusArbitrationSelectionStepTests.cpp.
 #include "ShortcutManagerTestFixture.h"

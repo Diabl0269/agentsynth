@@ -23,8 +23,8 @@ juce::AudioProcessorGraph::Node* findMasterNode(juce::AudioProcessorGraph& graph
  *   - every audio connection that fed that node's ch0/ch1 is re-routed into Master — into Mix when
  *     it comes from a Channel Strip, into Direct otherwise (MIDI and wider channels are left alone).
  *
- * NO UNDO — for a caller already inside its own undo transaction (T173a's
- * synth::buildDefaultAudioChannel, called from AppUndoManager::recordGraphTimelineAndMacroChange).
+ * NO UNDO — for a caller already inside its own undo transaction
+ * (synth::buildDefaultAudioChannel, called from AppUndoManager::recordGraphTimelineAndMacroChange).
  * A caller with no transaction of its own should call ensureMasterNode() instead, which wraps this
  * in exactly the ONE recordCombinedChange step it always was.
  *
@@ -39,7 +39,7 @@ juce::AudioProcessorGraph::Node* spliceMasterNode(juce::AudioProcessorGraph& gra
  * spliceMasterNode() above — node, uuid, position and the whole re-splice as ONE compound undo step
  * (AppUndoManager::recordCombinedChange).
  *
- * Only a USER ACTION calls this (the first channel's creation, P9-3) — never a project load, which
+ * Only a USER ACTION calls this (the first channel's creation) — never a project load, which
  * opens existing projects unchanged (docs/mixer/mixer.md#creating-channels-in-an-existing-project).
  *
  * CALLER OBLIGATION: this changes the graph, so the caller must then run the app's reconcile /

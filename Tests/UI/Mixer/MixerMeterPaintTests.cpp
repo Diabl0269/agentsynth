@@ -1,4 +1,4 @@
-// MixerMeterPaintTests.cpp -- FRO146: MixerMeter::paint actually draws POSITIONAL colour bands
+// MixerMeterPaintTests.cpp -- MixerMeter::paint actually draws POSITIONAL colour bands
 // (Cubase/most DAWs' meter convention -- MeterColourStops::forEachBand), not one flat colour for
 // the whole filled bar. Pixel-sampled off a real offscreen render, not just asserted through the
 // colour-model unit tests (MeterColourStopsTests.cpp) -- this is the one place that proves
@@ -39,7 +39,7 @@ TEST(MixerMeterPaintTest, PaintsPositionalBandsNotOneFlatColourAcrossTheBar) {
 
     // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
     // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
-    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    // Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
     juce::Image img(juce::Image::ARGB, kWidth, kHeight, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(meter.paint(g));

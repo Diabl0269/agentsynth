@@ -1,7 +1,7 @@
 // CurveEditorInteractionTests.cpp
 // Tests for synth::ui::CurveEditorComponent's interaction: the public primitives (dragNodeTo,
 // dragBendBy, addPointAt, removeNode, resetBend) AND the real mouse path (mouseDown/mouseDrag/
-// mouseUp/mouseDoubleClick) synthesised via juce::MouseEvent, per FRO111.
+// mouseUp/mouseDoubleClick) synthesised via juce::MouseEvent.
 
 #include "CurveEditorTestHelpers.h"
 #include <gtest/gtest.h>

@@ -38,12 +38,12 @@ inline synth::ui::ModuleCategory categoryForNode(juce::AudioProcessorGraph::Node
     return synth::ui::ModuleCategory::Utility;
 }
 
-// ---- Card jacks (P8-15c, T141, docs/macros/ports.md#cable-rendering-across-the-boundary) ----
+// ---- Card jacks (docs/macros/ports.md#cable-rendering-across-the-boundary) ------------------
 // The collapsed card's fixed footprint — deliberately independent of however large or scattered
 // the group it stands in for is; that is the whole point of collapsing. Matches a standard
 // module card's width so it sits comfortably on the same grid. Hoisted up here (rather than left
 // next to macroCardPortLayout(), where it originally lived) because buildVisibleCables()'s
-// directional edge-anchor treatment (P8-15 fix F3) needs the jack band to clamp a
+// directional edge-anchor treatment needs the jack band to clamp a
 // no-port-involved boundary cable's Y into, same as a real port jack's Y is placed in.
 inline constexpr int kMacroCardHeight = 90;
 // The vertical band jacks lay out in: below the title row (drawn at local y=6..26,
@@ -256,7 +256,7 @@ inline std::vector<std::pair<int, int>> expandAudioJackPairs(const std::vector<i
 
 } // namespace detail
 
-// FRO23 delete heal (GraphEditorDeleteHeal.cpp): one healable audio splice, captured BEFORE
+// Delete heal (GraphEditorDeleteHeal.cpp): one healable audio splice, captured BEFORE
 // `deletedIds` is removed from the graph. `upstreamId`/`downstreamId` are both SURVIVORS (never a
 // member of `deletedIds`), found by walking off each end of a deleted run of exactly-one-audio-
 // in/-out nodes. Applying it wires upstreamId's `upstreamJack` to downstreamId's `downstreamJack`

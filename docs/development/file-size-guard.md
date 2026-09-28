@@ -79,4 +79,5 @@ A docs-only PR is gated by this guard too, through the "Docs" job rather than Li
 
 Two sibling guards check other shapes of the same problem:
 [`function-size-guard.md`](function-size-guard.md) caps a single function, and
-[`header-comment-guard.md`](header-comment-guard.md) enforces comment placement in headers.
+[`header-comment-guard.md`](header-comment-guard.md) enforces comment placement in headers, and
+[`comment-provenance-guard.md`](comment-provenance-guard.md) keeps ticket ids and dates out of comments.

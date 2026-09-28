@@ -1,11 +1,11 @@
 #pragma once
 
-// FRO287: a module card's rotary knob, subclassed only so a click/drag that lands on its
+// A module card's rotary knob, subclassed only so a click/drag that lands on its
 // modulation-ring annulus (or is Alt-modified) can be redirected to a "adjust this routing's
 // attenuverter amount" gesture instead of moving the knob itself. Every other click behaves as a
 // plain juce::Slider -- this class owns no drag state beyond "is the gesture currently active".
 //
-// FRO312: a second, independent gesture pair (wantsCablePickupGesture/onCablePickupGesture) claims
+// A second, independent gesture pair (wantsCablePickupGesture/onCablePickupGesture) claims
 // a click landing on the knob's cable-landing DOT instead -- the jack that gesture used to start
 // from is hidden now that a knob-bound CV jack draws no gutter dot of its own. Checked AFTER the
 // ring-amount gesture (the dot sits just outside the ring, never inside its annulus, so the two
@@ -35,18 +35,18 @@ public:
      *  "amount" param instead (GraphEditor::adjustModAmount). */
     std::function<void(const juce::MouseEvent&, int phase)> onModAmountGesture;
 
-    /** FRO288: fired on mouseEnter(true)/mouseExit(false), for a knob with a live routing, so
+    /** Fired on mouseEnter(true)/mouseExit(false), for a knob with a live routing, so
      *  ModuleComponent can tell GraphEditor::setHoveredModTarget -- the knob-hover-highlights-cable
      *  direction of docs/modules/modulation.md#modulation-rings-on-knobs. Unset for a knob with no
      *  routing (ModuleComponent only wires it up when one exists). */
     std::function<void(bool entered)> onHoverChanged;
 
-    /** FRO312: asked on mouseDown right after wantsModAmountGesture declines -- true claims the
+    /** Asked on mouseDown right after wantsModAmountGesture declines -- true claims the
      *  whole gesture for onCablePickupGesture instead (pick up / redrag / disconnect the cable
      *  landed on this knob). */
     std::function<bool(const juce::MouseEvent&)> wantsCablePickupGesture;
 
-    /** FRO312: down (0) / drag (1) / up (2) once wantsCablePickupGesture has claimed a gesture --
+    /** Down (0) / drag (1) / up (2) once wantsCablePickupGesture has claimed a gesture --
      *  forwards straight into GraphEditor::beginConnectionDrag/dragConnection/endConnectionDrag as
      *  an INPUT drag, exactly what a click on the (now hidden) gutter jack used to start. */
     std::function<void(const juce::MouseEvent&, int phase)> onCablePickupGesture;

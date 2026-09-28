@@ -213,7 +213,7 @@ TEST_F(AIChatComponentTest, RefreshModelsClearsStaleItemsBeforeSecondFetchResolv
     EXPECT_EQ(modelPicker->getNumItems(), 3);
 }
 
-// P4-6: the privacy disclosure label is invisible for a local (non-hosted) provider — same
+// The privacy disclosure label is invisible for a local (non-hosted) provider — same
 // zero-height-when-absent contract as accountRow/planBadge.
 TEST_F(AIChatComponentTest, LocalProviderShowsNoHostedModeNotice) {
     AudioEngine engine;
@@ -238,8 +238,8 @@ TEST_F(AIChatComponentTest, LocalProviderShowsNoHostedModeNotice) {
     EXPECT_FALSE(notice->isVisible());
 }
 
-// P4-6: a hosted provider (isHosted() == true) makes the privacy disclosure visible — this is the
-// "visible line near the model picker" the P4-6 acceptance criteria requires, since a tooltip
+// A hosted provider (isHosted() == true) makes the privacy disclosure visible — this is the
+// "visible line near the model picker" the acceptance criteria require, since a tooltip
 // alone would not satisfy "should not be discoverable only by reading a policy page".
 TEST_F(AIChatComponentTest, HostedProviderShowsHostedModeNotice) {
     AudioEngine engine;
@@ -261,7 +261,7 @@ TEST_F(AIChatComponentTest, HostedProviderShowsHostedModeNotice) {
     EXPECT_TRUE(notice->isVisible());
 }
 
-// P4-6: switching FROM a hosted TO a local provider must hide the notice again — regression lock
+// Switching FROM a hosted TO a local provider must hide the notice again — regression lock
 // for the resync happening in refreshModels() rather than only once at construction.
 TEST_F(AIChatComponentTest, HostedModeNoticeHidesAgainAfterSwitchingToLocalProvider) {
     AudioEngine engine;
@@ -289,7 +289,7 @@ TEST_F(AIChatComponentTest, HostedModeNoticeHidesAgainAfterSwitchingToLocalProvi
     EXPECT_FALSE(notice->isVisible());
 }
 
-// P4-6: a hosted provider's empty-but-successful fetchAvailableModels() result (the service picks
+// A hosted provider's empty-but-successful fetchAvailableModels() result (the service picks
 // its own model server-side — see RemoteProvider::fetchAvailableModels()'s doc comment) must not
 // render as "Error fetching models". That text is actively misleading once hosted is the default
 // provider: nothing failed.
@@ -401,7 +401,7 @@ TEST_F(AIChatComponentTest, SetAccountServiceMakesAccountRowVisibleAndReflectsSn
 }
 
 // ============================================================================
-// Quota error -> upgrade bubble (P4-4)
+// Quota error -> upgrade bubble
 // ============================================================================
 
 TEST_F(AIChatComponentTest, QuotaErrorRendersUpgradeButtonWithServerMessageVerbatim) {
@@ -825,7 +825,7 @@ TEST_F(AIChatComponentTest, SetRequestTimeoutMsFiresAtConfiguredDurationWithDyna
 
     // The waiting-status timer ticks every 500 ms (kWaitingStatusIntervalMs); the tick that can
     // actually observe "elapsed >= 700" lands at ~1000 ms, which left only ~200 ms of slack for a
-    // loaded CI runner to miss before this flaked (macOS CI, 2026-09-04). Widened generously (well
+    // loaded CI runner to miss before this flaked on CI. Widened generously (well
     // past several more 500 ms ticks) so the timeout branch has several chances to fire, without
     // touching the 700 ms timeout constant itself -- the assertion below depends on that exact value.
     juce::MessageManager::getInstance()->runDispatchLoopUntil(3000);

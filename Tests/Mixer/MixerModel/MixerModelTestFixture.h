@@ -83,7 +83,7 @@ inline LinearChannelRigMMT buildLinearChannelRigMMT(juce::AudioProcessorGraph& g
     return rig;
 }
 
-// FRO148: Master -> [Rec Tap ->] Audio Output, built the way production builds it -- Audio Output (and the Rec Tap when
+// Master -> [Rec Tap ->] Audio Output, built the way production builds it -- Audio Output (and the Rec Tap when
 // asked for) first, then synth::spliceMasterNode() puts Master in front of whichever is first in the chain. Nothing
 // feeds Master, which is all a Master column's insert query needs.
 struct MasterRigMMT {

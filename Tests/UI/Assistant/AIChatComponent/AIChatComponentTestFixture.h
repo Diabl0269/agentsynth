@@ -137,7 +137,7 @@ private:
 };
 
 // Synchronously delivers a failed AIResponse with a caller-chosen error kind/message — used to
-// exercise AIChatComponent's failure-branch UI (P4-4: the Quota error's upgrade bubble, and the
+// exercise AIChatComponent's failure-branch UI (the Quota error's upgrade bubble, and the
 // regression lock that every other kind keeps the old flat bubble).
 class ErrorProvider : public synth::AIProvider {
 public:
@@ -175,7 +175,7 @@ private:
     int requestTimeoutMs = 240000;
 };
 
-// P4-6: stands in for RemoteProvider without any network dependency — isHosted() true, and
+// Stands in for RemoteProvider without any network dependency — isHosted() true, and
 // fetchAvailableModels() resolves success=true with an empty list, mirroring RemoteProvider's own
 // "the service picks its own model server-side" contract (see its doc comment).
 class HostedMockProvider : public synth::AIProvider {
@@ -205,7 +205,7 @@ private:
 };
 
 // Returns an assistant response containing a single fenced ```json patch, so tests can exercise
-// AIChatComponent's PatchCard (and its P6-3 thumbs feedback) without a real provider.
+// AIChatComponent's PatchCard (and its thumbs feedback) without a real provider.
 class MockPatchProvider : public synth::AIProvider {
 public:
     juce::String getProviderName() const override { return "MockPatchProvider"; }
@@ -309,7 +309,7 @@ private:
     int requestTimeoutMs = 240000;
 };
 
-// P6-9: like MockPatchProvider (a single fenced ```json patch, so PatchCard/thumbs render), but
+// Like MockPatchProvider (a single fenced ```json patch, so PatchCard/thumbs render), but
 // the response also carries a fixed conversationId + messageId, mirroring a Pro-plan hosted
 // backend whose persistence succeeded — the one condition that makes the rating callback's
 // server-sync path fire at all (see MessageData::serverMessageId).

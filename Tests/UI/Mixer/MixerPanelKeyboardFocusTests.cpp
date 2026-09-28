@@ -1,11 +1,11 @@
-// MixerPanelKeyboardFocusTests.cpp -- FRO18: MixerPanelComponent as the mixer's own keyboard
+// MixerPanelKeyboardFocusTests.cpp -- MixerPanelComponent as the mixer's own keyboard
 // focus-region ROOT (docs/control/shortcuts.md's "Mixer column navigation") -- Left/Right column walk,
 // Up/Down fader nudge, Enter select-on-canvas, and the rebindable M/S/R actions, modeled on
 // TimelineTrackFocusTests.cpp's own drive-keyPressed()-directly style.
 //
 // Drives a real, off-screen MainComponent (MixerPanelComponentTests.cpp's own rig style:
 // newPatchForTest() + simulateAddAudioTrackClick(), which boxes {Track Audio, Gate, EQ, Compressor,
-// Strip} into one macro per T173a) rather than a hand-built graph/doc/macros trio, so the arm key
+// Strip} into one macro) rather than a hand-built graph/doc/macros trio, so the arm key
 // exercises the REAL MainComponent::performTrackEdit wiring end to end, not a stub.
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
@@ -140,7 +140,7 @@ TEST(MixerPanelKeyboardFocusTest, RightIncludesDirectAndMasterColumnsInOrder) {
 }
 
 TEST(MixerPanelKeyboardFocusTest, ArrowWalkPointsAccessibilityFocusAtEachColumnsFader) {
-    // FRO18 review fix: the app's own Left/Right column-walk must move REAL accessibility focus
+    // The app's own Left/Right column-walk must move REAL accessibility focus
     // (not just the visual outline setKeyboardFocused() paints), or VoiceOver never announces the
     // newly-focused column at all. getAccessibilityFocusTargetForTest() resolves WHICH control
     // MixerPanelComponent::grabAccessibilityFocusForFocusedColumn() targets for the current

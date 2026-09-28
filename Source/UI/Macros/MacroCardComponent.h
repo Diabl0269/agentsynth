@@ -13,7 +13,7 @@
 
 class GraphEditor; // Forward declaration
 
-/** The collapsed on-canvas representation of a synth::Macro (P8-12) — "a macro reads as one
+/** The collapsed on-canvas representation of a synth::Macro — "a macro reads as one
  *  card on the canvas". One instance per collapsed macro, owned by GraphEditor's
  *  GraphContentComponent exactly like a ModuleComponent, and only ever visible while its macro
  *  is collapsed (GraphEditor::syncMacroCards hides it otherwise).
@@ -24,7 +24,7 @@ class GraphEditor; // Forward declaration
  *  dragging the card moves every one of its (hidden) members via the exact same group-drag path
  *  a plain multi-select drag uses — see GraphEditor::beginMacroCardDrag.
  *
- *  Also a juce::TooltipClient (Fix 6/P8-12 follow-up): hovering a collapsed card shows its member
+ *  Also a juce::TooltipClient: hovering a collapsed card shows its member
  *  module names, since the content preview drawn on the card is too small to read as text. */
 class MacroCardComponent
     : public juce::Component
@@ -37,7 +37,7 @@ public:
 
     /** Whether this card's own body drag (mouseDown -> beginMacroCardDrag) is currently armed —
      *  GraphEditor::syncMacroCards() checks this before destroying an orphaned card so a macro that
-     *  vanishes mid-drag (FRO19) cancels the drag rather than leaving it stuck with no mouseUp ever
+     *  vanishes mid-drag cancels the drag rather than leaving it stuck with no mouseUp ever
      *  coming. */
     bool isBodyDragActive() const noexcept { return bodyDragActive; }
 
@@ -46,19 +46,18 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
-    void mouseMove(const juce::MouseEvent& e) override; // FRO24: arms hoveredPortUuid_ (see below)
-    void mouseExit(const juce::MouseEvent& e) override; // FRO24: clears hoveredPortUuid_
+    void mouseMove(const juce::MouseEvent& e) override; // arms hoveredPortUuid_ (see below)
+    void mouseExit(const juce::MouseEvent& e) override; // clears hoveredPortUuid_
 
     /** Newline-separated member module names, capped so a huge macro doesn't produce an
      *  unreadable tooltip. */
     juce::String getTooltip() override;
 
-    /** The card's own "N modules[, M ports]" line (founder-review fix G6,
+    /** The card's own "N modules[, M ports]" line (
      * docs/macros/ports.md#member-counts-report-modules-not-ports) — a MODULE count, excluding port
      * nodes, with the port count named alongside it (never silently dropped) whenever the macro actually has one.
-     * Public so a test can pin the exact text against a founder-reported scenario (group 2 modules with a crossing
-     * cable
-     *  -> 2 auto-created ports -> must read "2 modules", never "4 modules"), the same accessor
+     * Public so a test can pin the exact text against the crossing-cable scenario (group 2 modules with a crossing
+     * cable -> 2 auto-created ports -> must read "2 modules", never "4 modules"), the same accessor
      *  pattern getTooltip() above already uses. Empty if `macroId` doesn't resolve. */
     juce::String getModuleCountText() const;
 
@@ -70,7 +69,7 @@ public:
 
     /** Test accessors for the private layout functions below — so a test can assert the title
      *  row (and its double-click rename zone) never overlaps a bypass/mute badge slot, without
-     *  duplicating either rectangle's arithmetic (P8-15d, T142). */
+     *  duplicating either rectangle's arithmetic. */
     juce::Rectangle<float> getToggleBadgeBoundsForTest(bool mute) const { return getToggleBadgeBounds(mute); }
     juce::Rectangle<int> getTitleRowBoundsForTest() const { return getTitleRowBounds(); }
 
@@ -80,7 +79,7 @@ public:
      *  ModuleComponent::setShowContextMenuHookForTest's own comment documents). A null hook
      *  restores the real behaviour rather than leaving the seam disarmed. A test installs a
      *  capturing hook to inspect the menu the real mouseDown() gesture actually built — including
-     *  the T138 addCandidateSelection it was passed — without ever opening a popup. */
+     *  the addCandidateSelection it was passed — without ever opening a popup. */
     void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
         showContextMenuHook_ =
             hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
@@ -92,7 +91,7 @@ public:
     juce::Colour resolvePortJackColour(const juce::String& nodeUuid, const std::optional<juce::Colour>& stored,
                                        juce::Colour kindTint) const; // preview -> stored -> kindTint
 
-    // FRO24: the '+' button's kind/shape choice menu, RETURNED rather than shown — see the .cpp
+    // The '+' button's kind/shape choice menu, RETURNED rather than shown — see the .cpp
     // definition for the choice list and why it doesn't show the popup itself.
     juce::PopupMenu buildAddPortMenu(bool isInput);
 
@@ -101,7 +100,7 @@ public:
     juce::String getHoveredPortUuidForTest() const { return hoveredPortUuid_.value_or(juce::String()); }
 
 private:
-    /** `priorSelection` (T138): whatever was selected right before mouseDown's own reselect —
+    /** `priorSelection`: whatever was selected right before mouseDown's own reselect —
      *  see GraphEditor::buildMacroMenu's addCandidateSelection comment for why this must be
      *  captured by the caller rather than read fresh in here. */
     void showContextMenu(const std::vector<juce::AudioProcessorGraph::NodeID>& priorSelection);
@@ -115,7 +114,7 @@ private:
      *  then finding your way back into them was a guessing game (double-click, undocumented). */
     juce::Rectangle<float> getExpandButtonBounds() const;
 
-    /** One bypass/mute indeterminate-indicator badge's bounds (P8-15d, T142, docs/macros/ports.md
+    /** One bypass/mute indeterminate-indicator badge's bounds (docs/macros/ports.md
      *  docs/macros/ports.md#bypass-and-mute), just left of the expand chevron — `mute=false` is the outer (bypass)
      * slot, `true` the inner (mute) slot nearer the chevron. Purely a function of `getExpandButtonBounds()`, so paint()
      * and getTitleRowBounds() (which reserves room for both slots so a long macro name can never paint under them) read
@@ -134,13 +133,13 @@ private:
      *  computing the rect separately. */
     juce::Rectangle<int> getTitleRowBounds() const;
 
-    // FRO24: the '+' button's bounds for the given side (footer row) — see the .cpp definition.
+    // The '+' button's bounds for the given side (footer row) — see the .cpp definition.
     juce::Rectangle<float> getAddPortButtonBounds(bool isInput) const;
 
-    // FRO24: the port the mouse rests over, kept fresh by mouseMove()/mouseExit() — see those.
+    // The port the mouse rests over, kept fresh by mouseMove()/mouseExit() — see those.
     std::optional<juce::String> hoveredPortUuid_;
 
-    // FRO24: click position an 'x' delete just suppressed hover at — see mouseMove()'s definition.
+    // Click position an 'x' delete just suppressed hover at — see mouseMove()'s definition.
     std::optional<juce::Point<int>> suppressHoverAtPosition_;
 
     GraphEditor& owner;

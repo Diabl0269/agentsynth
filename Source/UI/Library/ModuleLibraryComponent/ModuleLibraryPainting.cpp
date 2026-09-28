@@ -150,7 +150,7 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
             }
         }
 
-        // T160: keyboard-focus outline — a distinct treatment from the hover fill above (an
+        // Keyboard-focus outline — a distinct treatment from the hover fill above (an
         // outline rather than a translucent fill, so the two never read as the same state when a
         // mouse hover and a keyboard focus land on different rows at once). A second pass over
         // `rows` rather than folding into the switch above, so it applies uniformly to every row

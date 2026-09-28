@@ -1,4 +1,4 @@
-// MixerPanelComponentTests.cpp -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): the mixer panel's column
+// MixerPanelComponentTests.cpp (docs/mixer/panel.md#what-the-mixer-shows): the mixer panel's column
 // set, PNG render smoke test (dark + light built-in theme, per the ticket's own test list), and
 // the column-click-selects-macro gesture. Drives a real, off-screen MainComponent
 // (newPatchForTest() + simulateAddAudioTrackClick(), the ChannelFlow suite's own rig style).
@@ -113,7 +113,7 @@ TEST(MixerPanelComponentTests, ClickingAColumnSelectsItsOwningMacroOnTheCanvas) 
     MainComponent mc(std::make_unique<MockProviderMPCT>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
-    mc.simulateAddAudioTrackClick(); // T173a boxes {Track Audio, Gate, EQ, Compressor, Strip} into one macro
+    mc.simulateAddAudioTrackClick(); // boxes {Track Audio, Gate, EQ, Compressor, Strip} into one macro
 
     auto& mixerPanel = mc.getBottomDock().getMixerPanel();
     mixerPanel.rebuild();
@@ -142,7 +142,7 @@ TEST(MixerPanelComponentTests, ClickingAColumnSelectsItsOwningMacroOnTheCanvas) 
     EXPECT_TRUE(mc.getGraphEditor().getMacroController().isMacroSelected(macroId));
 }
 
-// FRO299: an empty graph (the default new patch, before any track or bus exists) shows a hint
+// An empty graph (the default new patch, before any track or bus exists) shows a hint
 // instead of a blank panel; adding a channel hides it again, and removing that channel brings it
 // back -- exercised with createBus() (public, and the smallest path to a column) rather than
 // simulateAddAudioTrackClick()'s full track/macro/channel-flow machinery.

@@ -1,5 +1,5 @@
 // Topic: factory-preset rendering through the real graph -- bypass semantics, stereo balance, silence checks, and the
-// Poly Pad per-block note-injection/jitter determinism regression (FRO84).
+// Poly Pad per-block note-injection/jitter determinism regression.
 
 #include "AudioRenderingTestHelpers.h"
 
@@ -186,7 +186,7 @@ TEST_F(AudioRenderingTest, AllPresetsRenderNonSilent) {
 }
 
 // ===========================================================================
-// Test 8b: the "Poly Pad" preset renders identically twice (issue #198)
+// Test 8b: the "Poly Pad" preset renders identically twice
 //
 // Pushes an over-full chord (12 notes, 8 voices) through the real preset graph — a forward guard
 // against future nondeterminism. Notes go in one per block: MidiKeyboardState::noteOn() stamps

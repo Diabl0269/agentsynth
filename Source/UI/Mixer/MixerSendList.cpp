@@ -1,4 +1,4 @@
-// Concern: FRO15 (P9-9) -- MixerSendList's paint, row menus, level-knob attachments and the four
+// Concern: MixerSendList's paint, row menus, level-knob attachments and the four
 // mutations (add / remove / retarget / pre-post), each ONE recordGraphAndMacroChange around
 // synth::MixerSends' Core flows.
 #include "MixerSendList.h"
@@ -60,7 +60,7 @@ void MixerSendList::rebuildKnobs() {
         const auto& entry = entries_[(size_t)i];
         Row row;
 
-        // FRO295: the M mute toggle. Same button convention as MixerColumnComponent's own strip
+        // The M mute toggle. Same button convention as MixerColumnComponent's own strip
         // mute button (MixerColumnComponent.cpp) -- setClickingTogglesState(false) plus a manual
         // setToggleState kept in step by rebuildKnobs() re-running after every mutation, so its
         // paint (and AX toggle role) come from AppLookAndFeel's buttonOnColourId, not a bespoke
@@ -82,7 +82,7 @@ void MixerSendList::rebuildKnobs() {
         row.knob = std::make_unique<juce::Slider>();
         row.knob->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         row.knob->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
-        // FRO301: the entry may have no valid target (its cable cut on the canvas), in which case
+        // The entry may have no valid target (its cable cut on the canvas), in which case
         // entry.targetName is already the "no target" placeholder -- name the knob by slot instead
         // of repeating that placeholder as if it were a real destination.
         row.knob->setTitle(entry.targetNodeId != juce::AudioProcessorGraph::NodeID{}
@@ -95,20 +95,20 @@ void MixerSendList::rebuildKnobs() {
                                                                            (double)range.interval, (double)range.skew,
                                                                            range.symmetricSkew));
             row.attachment = std::make_unique<juce::SliderParameterAttachment>(*param, *row.knob);
-            // FRO301: juce::SliderParameterAttachment's own constructor unconditionally overwrites
+            // juce::SliderParameterAttachment's own constructor unconditionally overwrites
             // textFromValueFunction with one built from the param's own getText() (a raw
             // "0.0000000", sendNLevel has no unit label) -- must be reapplied AFTER constructing
             // row.attachment or the ctor's own copy gets silently undone (see
             // MixerColumnComponent.cpp's applyPanAccessibilityText comment for the same fix).
             applyDbAccessibilityText(*row.knob);
-            // FRO133: lets the owning MixerColumnComponent register this row's knob in its OWN
+            // Lets the owning MixerColumnComponent register this row's knob in its OWN
             // MIDI-learn registry -- this list stays free of a second registry/menu of its own
             // (see MixerColumnMidiLearn.cpp's file comment).
             if (onSendKnobBuilt)
                 onSendKnobBuilt(*row.knob, param);
         }
 
-        // FRO294: the pan knob, same construction shape as the level knob above -- attached
+        // The pan knob, same construction shape as the level knob above -- attached
         // straight onto sendNPan, so it is host-visible/automatable with no lane plumbing, and
         // registered in the SAME MIDI-learn registry via the SAME onSendKnobBuilt callback.
         row.panKnob = std::make_unique<juce::Slider>();
@@ -219,7 +219,7 @@ void MixerSendList::paint(juce::Graphics& g) {
         row.removeFromRight(kKnobWidth);    // the level knob is a real child component -- see resized()
         row.removeFromRight(kPanKnobWidth); // the pan knob is a real child component -- see resized()
 
-        // FRO294: a small filled dot marks a mono send, painted rather than a new row button (the
+        // A small filled dot marks a mono send, painted rather than a new row button (the
         // row has no room for one). A dot, not a letter: an "M" here read as a second mute button
         // beside the real one. Screen readers get "(mono)" on the pan knob's title instead. Only a
         // mono row gives up name width, so a stereo row's name keeps the full budget.
@@ -239,7 +239,7 @@ void MixerSendList::paint(juce::Graphics& g) {
         g.drawText("+ Send", addRow.reduced(2, 0), juce::Justification::centredLeft, false);
     }
 
-    // FRO296: the drop indicator -- a plain line at the hovered insertion boundary, theme accent
+    // The drop indicator -- a plain line at the hovered insertion boundary, theme accent
     // colour (no new colour, same as every other accent use in this file), drawn last so it always
     // sits on top of the rows either side of it.
     if (draggingRow_ && dragInsertionRow_ >= 0) {
@@ -262,7 +262,7 @@ void MixerSendList::resized() {
             row.panKnob->setBounds(bounds.removeFromRight(kPanKnobWidth).reduced(1));
     }
 
-    // FRO228: same anchor paint()'s own addRow uses.
+    // Same anchor paint()'s own addRow uses.
     const bool addVisible = canAddSend();
     addSendProxy_.setVisible(addVisible);
     if (addVisible)
@@ -290,7 +290,7 @@ void MixerSendList::mouseDown(const juce::MouseEvent& event) {
     // never sees a click landing on any of them -- only the shape of the "everything past them is
     // the target name" test below moves.
     else if (fromRight > kRemoveWidth + kToggleWidth + kMuteWidth + kKnobWidth + kPanKnobWidth)
-        // FRO296: a press on the name area could be a plain click (open the target menu, as
+        // A press on the name area could be a plain click (open the target menu, as
         // before) or the start of a reorder drag -- deferred to mouseDrag/mouseUp's threshold check
         // rather than decided here, the same split TimelineTrackHeaderComponent's own row reorder
         // uses (kRowDragThreshold there).
@@ -353,11 +353,10 @@ std::vector<NodeID> MixerSendList::availableKeyTargets() const {
     return synth::enumerateKeySendTargets(*graph_, stripNodeId_);
 }
 
-// FRO318 (docs/mixer/sends-and-buses.md#sending-to-a-key-input): Key targets go AFTER the bus/strip
-// targets behind their own separator, so the everyday "send to a bus" list reads exactly as before
-// and a Key entry is never mistaken for a channel. Cyclic modules (e.g. the Compressor on this
-// strip's own chain) never appear -- enumerateKeySendTargets applies the same legality rule addSend
-// does.
+// Key targets go AFTER the bus/strip targets behind their own separator, so the everyday "send to a
+// bus" list reads exactly as before and a Key entry is never mistaken for a channel. Cyclic modules
+// (e.g. the Compressor on this strip's own chain) never appear -- enumerateKeySendTargets applies
+// the same legality rule addSend does (see docs/mixer/sends-and-buses.md#sending-to-a-key-input).
 void MixerSendList::appendKeyTargetItems(juce::PopupMenu& menu,
                                          const std::function<void(synth::SendTarget)>& choose) const {
     const auto keyTargets = availableKeyTargets();
@@ -376,7 +375,7 @@ void MixerSendList::showTargetMenu(int rowIndex) {
     const bool mono = entries_[(size_t)rowIndex].mono;
     const auto targets = availableTargets();
     juce::PopupMenu menu;
-    // FRO294: a ticked toggle, not a new row button -- the row has no width budget left for one
+    // A ticked toggle, not a new row button -- the row has no width budget left for one
     // (see this file's own header comment and MixerSendList.h's kMonoMarkerWidth).
     menu.addItem("Mono", true, mono, [this, rowIndex] { toggleMonoForRow(rowIndex); });
     menu.addSeparator();
@@ -390,7 +389,7 @@ void MixerSendList::showTargetMenu(int rowIndex) {
         menu.addItem(targetNameFor(target), true, false, [this, rowIndex, target] { retargetRow(rowIndex, target); });
     appendKeyTargetItems(menu, [this, rowIndex](synth::SendTarget target) { retargetRow(rowIndex, target); });
 
-    // FRO296: a per-item action, not an id+results-callback dispatch, so this is the SAME hookable
+    // A per-item action, not an id+results-callback dispatch, so this is the SAME hookable
     // shape MixerColumnComponent's own MIDI-learn menus use (setShowContextMenuHookForTest) -- a
     // test overrides showMenuHook_ to inspect the built menu (or invoke an item's action directly)
     // rather than the real, headless-incapable juce::PopupMenu::showMenuAsync.

@@ -80,7 +80,7 @@ void GraphEditor::newPatch() {
         patchDocument.clear();
         macros.clear();
 
-        // T187: seed a fresh Audio Output immediately, in the same undo step as the clear, so
+        // Seed a fresh Audio Output immediately, in the same undo step as the clear, so
         // the first channel's Master splice (synth::spliceMasterNode) has something to target
         // right away — otherwise a bare Track Audio in a brand-new project is silently unheard
         // until the user manually adds an Audio Output.

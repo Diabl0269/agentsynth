@@ -186,7 +186,7 @@ TEST_F(ProjectBundleTest, RoundTripGraphAndTimeline) {
 }
 
 // ---------------------------------------------------------------------------
-// P8-4: the autosave sidecar (autosave.json). Same JSON shape as project.json, written/read to a
+// The autosave sidecar (autosave.json). Same JSON shape as project.json, written/read to a
 // SEPARATE file — save()/load() must never see it, and it must never see project.json.
 // ---------------------------------------------------------------------------
 
@@ -287,7 +287,7 @@ TEST_F(ProjectBundleTest, DiscardAutosaveRemovesTheSidecarAndIsANoOpWhenAbsent) 
 }
 
 // ---------------------------------------------------------------------------
-// P8-4 follow-up: the Cubase-style rotating backup history (autosave-<n>.json).
+// The Cubase-style rotating backup history (autosave-<n>.json).
 // ---------------------------------------------------------------------------
 
 TEST_F(ProjectBundleTest, SaveAutosaveRotatesPreviousSidecarsIntoNumberedBackupsAndEvictsTheOldest) {
@@ -789,7 +789,7 @@ TEST_F(ProjectBundleTest, DefaultProjectsDirectoryLivesUnderUserMusic) {
 }
 
 // ============================================================================
-// FRO325 (docs/mixer/mixer.md#pan-law): the "mixerPanLaw" field.
+// The "mixerPanLaw" field (see docs/mixer/mixer.md#pan-law).
 // ============================================================================
 
 TEST_F(ProjectBundleTest, SaveWritesTheGivenPanLawAndItRoundTrips) {
@@ -860,7 +860,7 @@ TEST_F(ProjectBundleTest, LegacyProjectWithNoPanLawKeyLoadsAsBalance) {
         ProjectBundle::save(dir, graph, timeline, patchDocument, macros, midiRemote, synth::MixerPanLaw::Compensated)
             .ok);
 
-    // Simulate a project saved before FRO325 existed: strip the key a real old save would never
+    // Simulate an older project that predates this key: strip the key a real old save would never
     // have written in the first place.
     auto projectFile = dir.getChildFile(ProjectBundle::kProjectFileName);
     auto json = juce::JSON::parse(projectFile);

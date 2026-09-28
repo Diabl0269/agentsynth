@@ -1,4 +1,4 @@
-// LFOModuleCustomShapeTests.cpp (FRO114) -- LFOModule's Custom shape (index 5): the appended
+// LFOModuleCustomShapeTests.cpp -- LFOModule's Custom shape (index 5): the appended
 // choice, the publish/adopt table crossing to the audio thread, bipolar/unipolar output, the
 // getExtraState/setExtraState round-trip (trusted path only -- docs/ai/patch-safety.md), retrig,
 // and the generation counter the card's reverse-sync polls.

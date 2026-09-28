@@ -1,5 +1,5 @@
-// Right-click MIDI Learn on a module-card control (FRO130,
-// docs/control/midi-remote-ui.md#right-click-midi-learn--coverage /
+// Right-click MIDI Learn on a module-card control
+// (docs/control/midi-remote-ui.md#right-click-midi-learn--coverage /
 // docs/control/midi-remote-ui.md#the-learn-interaction). Every test drives a REAL right-click
 // through the control's own mouseDown()/mouseUp() (never a direct menu-builder call) and captures
 // whatever PopupMenu ModuleComponent builds via setShowContextMenuHookForTest() -- the same
@@ -264,7 +264,7 @@ TEST_F(ModuleComponentTest, MappedControlShowsDisabledTitleLearnAgainAndForgetBu
     editor.onQueryMidiMappingsForNode = [](juce::AudioProcessorGraph::NodeID) -> std::map<juce::String, juce::String> {
         return {{"cutoff", "Knob 1 on Launchkey Mini"}};
     };
-    // onEditMidiAssignmentRequested deliberately left unset -- FRO131 (the panel) wires it.
+    // onEditMidiAssignmentRequested deliberately left unset -- the MIDI Remote panel wires it.
 
     auto* slider = findSlider(card, "Cutoff");
     ASSERT_NE(slider, nullptr);
@@ -358,7 +358,7 @@ TEST_F(ModuleComponentTest, TimerCallbackNeverCrashesWithNoMidiLearnHostWired) {
     EXPECT_NO_THROW(card.timerCallback());
 }
 
-// FRO256: this card already repainted the armed control's own bounds on every gated timer tick
+// This card already repainted the armed control's own bounds on every gated timer tick
 // (unlike MixerColumnComponent/MixerMasterColumn/TimelineTransportBar, which had NO such repaint at
 // all) -- this proves it the same way those siblings' new tests do, via a counter, rather than
 // leaning on the fact that it happened to already work.

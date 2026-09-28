@@ -1,5 +1,5 @@
-// Right-click MIDI Learn on Master's fader (FRO133,
-// docs/control/midi-remote-ui.md#right-click-midi-learn--coverage). Master has exactly one
+// Right-click MIDI Learn on Master's fader
+// (docs/control/midi-remote-ui.md#right-click-midi-learn--coverage). Master has exactly one
 // learnable control (its "gain" param -- no pan, no send list, and Mute is out of scope here, same
 // as the mixer column's own row), so this mirrors MixerColumnMidiLearnTests.cpp's idiom on a much
 // smaller surface. Direct is not covered at all: MixerDirectColumn has no fader/pan/M-S of its own
@@ -179,7 +179,7 @@ TEST(MixerMasterColumnMidiLearnTests, UnbindFromGraphClearsTheRegistrySoARightCl
 }
 
 // ============================================================================
-// FRO256: same coordinate-frame bug as MixerColumnMidiLearnTests.cpp's own "not the column's
+// Same coordinate-frame bug as MixerColumnMidiLearnTests.cpp's own "not the column's
 // corner" tests -- paintMidiLearnOverlays() here passed the slider's PARENT (fader_, itself nested
 // inside this column) as the getLocalArea() source but the slider's OWN local bounds as the area,
 // so the badge landed at fader_'s origin translated into this column's frame, not on the slider.
@@ -212,7 +212,7 @@ TEST(MixerMasterColumnMidiLearnTests, BadgePaintsOnTheFaderItselfNotAtAWrongOffs
 }
 
 // ============================================================================
-// FRO256: the armed breathing outline must keep repainting while armed, same fix as
+// The armed breathing outline must keep repainting while armed, same fix as
 // MixerColumnComponent -- refreshMeter() had no such repaint at all before this.
 // ============================================================================
 

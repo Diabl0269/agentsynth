@@ -1,10 +1,10 @@
 #pragma once
 
-// FRO236 (docs/control/midi-remote.md#continuous-targets): the one Core helper every surface that
-// shows a Target::Continuous by name shares -- the picker, the panel's cell/inspector labels, and
-// the (currently rendered-disabled) Inspector Relearn row -- so "Tempo (BPM)" / "Playhead Position" /
-// "Master Volume" is spelled exactly once. Kept out of RemoteModel.h (the headless data model) since
-// this is UI-facing text, not JSON shape.
+// The one Core helper every surface that shows a Target::Continuous by name shares -- the picker, the
+// panel's cell/inspector labels, and the (currently rendered-disabled) Inspector Relearn row -- so
+// "Tempo (BPM)" / "Playhead Position" / "Master Volume" is spelled exactly once. Kept out of
+// RemoteModel.h (the headless data model) since this is UI-facing text, not JSON shape
+// (see docs/control/midi-remote.md#continuous-targets).
 
 #include "MidiRemote/RemoteModel.h"
 

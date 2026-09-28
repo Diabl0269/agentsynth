@@ -10,7 +10,7 @@
 //
 // Static helpers used widely outside a live drag (estimateModuleSize, isSingletonIOModule,
 // graphHasModuleNamed, resolvePlacement, findLeftEdgeSlotBelowModules, dropRoutingsOnHiddenJacks)
-// are not drag-exclusive and STAY on GraphEditor (FRO77 PR3 design) — reached here, when needed,
+// are not drag-exclusive and STAY on GraphEditor — reached here, when needed,
 // through GraphCanvasHost rather than duplicated.
 //
 // Self-contained header: never includes GraphEditor.h (GraphEditor.h includes THIS header to
@@ -55,9 +55,8 @@ public:
     }
 
     /** The current drag-preview fields, packaged for SmartConnectionEngine (see
-     *  SmartConnectionEngine::DragPreviewState). FRO254: GraphEditor's own former
-     *  buildDragPreviewState() forwarder is gone — GraphEditorSmartConnections.cpp and
-     *  GraphEditorDragDrop.cpp now call this directly via the dragDropController_ member. */
+     *  SmartConnectionEngine::DragPreviewState). GraphEditorSmartConnections.cpp and
+     *  GraphEditorDragDrop.cpp call this directly via the dragDropController_ member. */
     SmartConnectionEngine::DragPreviewState buildDragPreviewState() const;
 
     // ---- Alignment guides (UI Phase 7 - Item 4) -------------------------------------------

@@ -1,8 +1,8 @@
 // ADSRClickDiagnosticsTests.cpp
 //
-// FRO116 regression suite: the user reported an audible click on a "pluck" patch --
+// Regression suite: an audible click was reported an audible click on a "pluck" patch --
 // attack=0, hold=0, release=0, decay in the 100-300ms range, sustain=0 -- on top of the
-// intended percussive attack. FRO110 had removed the old 2ms/5ms anti-click PARAMETER clamps so
+// intended percussive attack. The old 2ms/5ms anti-click PARAMETER clamps so
 // 0ms stage times are reachable and displayed; that made a 0ms Attack/Decay/Release a genuine
 // one-sample full-scale level step, which is exactly the click reported here. The fix (see
 // EnvelopeGenerator.h's kMinAttackSeconds / kMinRampSeconds) floors those stages' *effective*
@@ -85,7 +85,7 @@ TEST_F(ADSRTest, FRO116_IsolatedNote_AttackRampIsClickFreeAndFast) {
 
     const auto jump = maxSampleJump(trace);
 
-    // FRO116: attack is floored to kMinAttackSeconds (0.1 ms, ~5 samples at 44.1kHz) rather than
+    // Attack is floored to kMinAttackSeconds (0.1 ms, ~5 samples at 44.1kHz) rather than
     // a genuine one-sample 0 -> 1.0 step -- no single sample should look anywhere near a
     // full-scale cliff, and the largest step should still land within the attack's short ramp.
     EXPECT_LT(jump.value, 0.5f) << "no single sample of the attack should jump anywhere near full scale";
@@ -119,7 +119,7 @@ TEST_F(ADSRTest, FRO116_IsolatedNote_AttackRampIsClickFreeAndFast) {
 
 // ---------------------------------------------------------------------------
 // (b) Back-to-back notes: note-off then note-on on the SAME sample, landing mid-decay (not
-// after settling), sustain=0 -- the gapless mono legato case FRO110 fixed re-articulation for.
+// after settling), sustain=0 -- the gapless mono legato case re-articulation must handle.
 // Confirms the retrigger climbs toward 1.0 gradually over the floored attack ramp, not in a
 // single full jump, and NOT via an extra release-to-0 cut (the code path never calls noteOff()
 // for the same-sample transition -- see ADSRModule::processBlock's midiNoteOnThisSample guard).
@@ -151,7 +151,7 @@ TEST_F(ADSRTest, FRO116_BackToBackNotesMidDecay_RetriggerRampsRatherThanJumpingT
     // would read far closer to 0 than to levelBeforeRetrigger.
     EXPECT_GT(levelAtRetrigger, levelBeforeRetrigger) << "retrigger should move toward the Attack target (1.0)";
 
-    // FRO116: the retrigger re-enters Attack, which is floored to a short but real ~0.1 ms ramp
+    // The retrigger re-enters Attack, which is floored to a short but real ~0.1 ms ramp
     // (kMinAttackSeconds) -- the very first sample of that ramp should cover only a small
     // fraction of the remaining climb to 1.0, not jump straight there in one step.
     EXPECT_LT(retriggerJump, 0.25f * fullClimbRemaining)
@@ -334,7 +334,7 @@ TEST_F(ADSRTest, FRO116_DecayToSustainCascade_NoStepAtNonZeroSustain) {
 
 // ---------------------------------------------------------------------------
 // (g) Oscillator phase interaction: the oscillator is free-running and never resets phase on
-// note-on (by design -- see AntiClickTests.cpp's OscillatorNoPhaseReset). Even with the FRO116
+// note-on (by design -- see AntiClickTests.cpp's OscillatorNoPhaseReset). Even with the attack
 // floor, the envelope-domain step at the very first sample of a 0ms attack is a small, FIXED
 // fraction of full scale (the same fraction every time -- it depends only on the floor and the
 // curve, not on anything oscillator-related), so the VCA'd output at that sample is that fixed

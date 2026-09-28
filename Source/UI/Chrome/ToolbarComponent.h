@@ -35,11 +35,11 @@ public:
         Redo,
         AutoArrange,
         // ToggleMinimap sits before ToggleModMatrix so the right-hand group reads
-        // minimap -> mod matrix -> AI panel -> bottom panel -> theme (issue #159).
+        // minimap -> mod matrix -> AI panel -> bottom panel -> theme.
         ToggleMinimap,
         ToggleModMatrix,
         ToggleAiPanel,
-        // FRO333: the ONE bottom-dock open/close toggle, right before the theme toggle -- replaces
+        // The ONE bottom-dock open/close toggle, right before the theme toggle -- replaces
         // the former separate ToggleTimeline/ToggleMidiRemote slots.
         ToggleBottomPanel,
         ToggleTheme,
@@ -57,7 +57,7 @@ public:
     bool isNarrowMode() const noexcept { return narrowMode_; }
 
     void paint(juce::Graphics& g) override;
-    // T159: focus-region outline (Source/UI/Layout/FocusRegion.h). This component owns no children of its
+    // Focus-region outline (Source/UI/Layout/FocusRegion.h). This component owns no children of its
     // own (the buttons are direct children of MainComponent, see the class comment above), so
     // paintOverChildren vs. appending to paint() makes no practical difference here -- used anyway
     // for consistency with the other five focus-region roots.

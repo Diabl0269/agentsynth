@@ -1,13 +1,13 @@
-// BottomDockMixerMirrorTests.cpp -- FRO336 (docs/mixer/panel.md#placement-and-detachable-windows):
+// BottomDockMixerMirrorTests.cpp (docs/mixer/panel.md#placement-and-detachable-windows):
 // "When a panel opens in its own window: move it there (default) / show it in both places". With
-// "both", detaching the Mixer keeps its tab in the bottom dock's own strip (unlike FRO333's default
+// "both", detaching the Mixer keeps its tab in the bottom dock's own strip (unlike the default
 // "a detached tab leaves the strip") and opens a SECOND, independently live MixerPanelComponent in
 // the window instead of reparenting the docked one -- MixerMirrorController.h's own class comment
 // explains why a real second instance is required (a juce::Component has exactly one parent).
 //
 // Drives a real, off-screen MainComponent, same rig style as MixerPlacementControllerTests.cpp /
 // MixerFaderDragTests.cpp; the real settings-file save/restore guard lives in
-// Tests/TestSettingsHelpers.h (FRO58).
+// Tests/TestSettingsHelpers.h.
 #include "../../TestSettingsHelpers.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
@@ -201,7 +201,7 @@ TEST(BottomDockMixerMirrorTests, SwitchingBackToMoveWhileBothPlacesIsOpenClosesT
     EXPECT_FALSE(dock.isMixerTabActive()) << "the tab leaves the panel again -- applyTabVisibility() falls back";
 }
 
-// FRO336 rework: a real click on either view's own M button must update the OTHER view's M button
+// A real click on either view's own M button must update the OTHER view's M button
 // the instant it happens -- not "on the next rebuild()". The notification path is
 // MixerColumnComponent::onLiveStateChanged -> MixerPanelComponent::onLiveMixerStateChanged, cross-
 // wired symmetrically in MixerMirrorController::open() (mirror -> dock) and BottomDockComponent's
@@ -252,7 +252,7 @@ TEST(BottomDockMixerMirrorTests, ClickingMuteInEitherViewUpdatesTheOtherViewsMut
     EXPECT_FALSE(mirrorColumn->getMuteButtonForTest().getToggleState());
 }
 
-// FRO336 rework: this is the exact gap reported in the coordinator's in-app check -- the mirror
+// The mirror
 // window read "Pan: Comp." while the dock still read "Pan: Bal." at the same moment. Master's
 // onLiveStateChanged (fired from setPanLaw(), MixerMasterColumn.cpp) closes it the same way mute
 // does above.
@@ -283,7 +283,7 @@ TEST(BottomDockMixerMirrorTests, PanLawLabelIsIdenticalInBothViewsAfterAChangeIn
     auto* mirrorMaster = mirrorPanel->getMasterColumnForTest();
     ASSERT_NE(primaryMaster, nullptr);
     ASSERT_NE(mirrorMaster, nullptr);
-    // FRO325: a brand-new project always starts Compensated (MainComponent::clearTimelineForNewPatch's
+    // A brand-new project always starts Compensated (MainComponent::clearTimelineForNewPatch's
     // caller) -- both views' rebuild() picks that up already (MixerMasterColumn::setColumn() now
     // re-reads the engine's law on every rebuild, another stale-label gap this same verification pass
     // found and closed alongside the live cross-view case below).
@@ -313,11 +313,11 @@ TEST(BottomDockMixerMirrorTests, PanLawLabelIsIdenticalInBothViewsAfterAChangeIn
            "repaints the OTHER view's cached button text -- this is the reported bug";
 }
 
-// FRO336 rework: a regression pin, not a new mechanism -- undo of a mute is a graph-snapshot
+// A regression pin, not a new mechanism -- undo of a mute is a graph-snapshot
 // restore (AppUndoManager::pushSnapshotFromCapture), which already reaches BOTH views through the
 // pre-existing unbind-before/rebuild-after hooks (unbindAllMixerViews()/rebuildIfUnboundMixerViews(),
-// wired to GraphEditor::onBeforeDetachAllModuleComponents/onGraphStructureChanged) that FRO336's
-// first pass already extended to the mirror -- see MixerPanelUndoUnbindTests.cpp for the same
+// wired to GraphEditor::onBeforeDetachAllModuleComponents/onGraphStructureChanged) that
+// already extends to the mirror -- see MixerPanelUndoUnbindTests.cpp for the same
 // undo-triggers-unbind-then-rebuild contract on the single-view case.
 TEST(BottomDockMixerMirrorTests, UndoOfAMuteRestoresBothViews) {
     PersistedKeysGuard guard(keysUnderTest());

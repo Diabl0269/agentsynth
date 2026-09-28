@@ -1,4 +1,4 @@
-// MidiRemotePanelFocusBankTests.cpp -- FRO141 (docs/control/midi-remote.md#focus-bank,
+// MidiRemotePanelFocusBankTests.cpp (docs/control/midi-remote.md#focus-bank,
 // docs/control/midi-remote-ui.md#surface-centre): a focus-bank control's surface cell shows
 // "Follows selection" with nothing bound, and "Focus: <param>" once a transient binding exists --
 // driven through the real panel, reusing MidiRemotePanelTestFixture.h exactly like

@@ -28,8 +28,8 @@ namespace synth {
  * order, so the manager is torn down before the engine/graph members even without the explicit call.
  * Losing either mechanism silently would only show up as an intermittent crash on app close.
  *
- * FRO100 (the same FRO12 follow-up bug, fixed here): `HostedPluginEditorWindow` is built
- * `addToDesktop=false` (a deliberate headless-test seam), and JUCE only ever creates a native peer
+ * `HostedPluginEditorWindow` is built `addToDesktop=false` (a deliberate headless-test seam), and
+ * JUCE only ever creates a native peer
  * from a TopLevelWindow constructor's own `addToDesktop=true`, `recreateDesktopWindow()`/
  * `lookAndFeelChanged()` when a peer already exists, or an explicit `addToDesktop()` call — never
  * from `setVisible()` alone. `setCreatesNativeWindows(bool)` gates that explicit call, mirroring
@@ -46,7 +46,7 @@ public:
     virtual ~HostedPluginWindowManager() { closeAll(); }
 
     /** When true, `openEditorFor()` gives the freshly built window a REAL native top-level window
-     *  (a peer), so it actually shows up on screen — see the FRO100 class-comment paragraph above.
+     *  (a peer), so it actually shows up on screen — see the class-comment paragraph above.
      *  Defaults to false so every headless test stays exactly as before. */
     void setCreatesNativeWindows(bool shouldCreate) noexcept { createsNativeWindows_ = shouldCreate; }
     bool isCreatingNativeWindows() const noexcept { return createsNativeWindows_; }
@@ -71,7 +71,7 @@ public:
         // A DocumentWindow's default position is the screen origin, i.e. top-left UNDER the menu
         // bar and behind the app's main window — "Open Editor did nothing" to the user. Centre it
         // at its content size and bring it forward, in that order, around the addToDesktop() call
-        // that promotes it to a real native peer (see the FRO100 class-comment paragraph). Guarded
+        // that promotes it to a real native peer (see the class-comment paragraph). Guarded
         // on a REAL display existing (never the overridable hasPrimaryDisplayForNativeWindow()
         // seam below): centreWithSize dereferences getPrimaryDisplay() itself, unconditionally, so
         // a test subclass simulating "display exists" to probe the promotion gate would otherwise
@@ -80,14 +80,14 @@ public:
         const bool realPrimaryDisplayExists = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() != nullptr;
         if (realPrimaryDisplayExists)
             window->centreWithSize(juce::jmax(1, window->getWidth()), juce::jmax(1, window->getHeight()));
-        // FRO100: promote the window to a real native peer BEFORE setVisible(true) — setVisible()
+        // Promote the window to a real native peer BEFORE setVisible(true) — setVisible()
         // alone never creates one (see setCreatesNativeWindows()'s doc comment above). window's
         // bounds are already the just-centred ones, and TopLevelWindow::addToDesktop() reads the
         // component's CURRENT bounds to size/position the native peer, so they survive unchanged.
         if (createsNativeWindows_ && hasPrimaryDisplayForNativeWindow()) {
             addWindowToDesktop(*window);
 #if JUCE_MAC
-            // FRO337: only once a real native peer exists — see HostedPluginEditorWindow's own
+            // Only once a real native peer exists — see HostedPluginEditorWindow's own
             // installMacKeyMonitor() comment for why.
             window->installMacKeyMonitor();
 #endif

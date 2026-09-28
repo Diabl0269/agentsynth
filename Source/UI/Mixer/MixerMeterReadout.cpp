@@ -1,4 +1,4 @@
-// Concern: FRO146 -- MixerMeterReadout's paint, click-to-reset and accessibility only.
+// Concern: MixerMeterReadout's paint, click-to-reset and accessibility only.
 #include "MixerMeterReadout.h"
 
 #include "MixerMeterScale.h"
@@ -9,7 +9,7 @@ namespace synth::ui {
 
 namespace {
 
-// FRO146: a read-only value interface reporting the readout's own text -- isReadOnly() true means
+// A read-only value interface reporting the readout's own text -- isReadOnly() true means
 // VoiceOver announces it but offers no adjust gesture (there is nothing to set; the readout only
 // ever reflects the engine's own peaks, same convention as MixerMeter's own accessibility
 // handler).

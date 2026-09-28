@@ -12,13 +12,13 @@ TEST_F(PreferencesSettingsTabTest, PaintDoesNotCrash) {
     EXPECT_NO_THROW(tab.resized());
 }
 
-// ---- Round 4 follow-up: the search field must not auto-grab focus on open ---------------------
+// ---- The search field must not auto-grab focus on open ----------------------------------------
 //
 // The actual bug (searchField stealing OS keyboard focus the instant the Settings DialogWindow's
 // peer is first shown) needs a real ComponentPeer — juce::Component::grabKeyboardFocus() is a
 // documented no-op without one (see TimelineClipLaneArea.cpp's identical caveat), and nothing in
 // this suite calls addToDesktop(). So this pins the code-level fix instead of the runtime
-// behaviour it prevents: the tab itself now wants keyboard focus (matching
+// behaviour it prevents: the tab itself wants keyboard focus (matching
 // ShortcutsSettingsTab's identical fix for its own sibling search box), which is what makes it —
 // not the search field — the target the very first, unsolicited focus grab lands on.
 TEST_F(PreferencesSettingsTabTest, TabItselfWantsKeyboardFocusSoItInterceptsTheOpeningFocusGrab) {
@@ -138,7 +138,7 @@ TEST_F(PreferencesSettingsTabTest, ExactlyOneDividerBetweenTwoSurvivingNonAdjace
     EXPECT_EQ(tab.getDividerBoundsForTest().size(), 1u);
 }
 
-// ---- Round 5: hint-label layout (cramped/narrow rendering), kept through round 6's revert -------
+// ---- Hint-label layout (cramped/narrow rendering) -----------------------------------------------
 //
 // naturalScrollingHint and zoomScrollUpZoomsInHint shared the same bug: fixed at 18px tall, room
 // for barely one line, so a hint wider than the row got horizontally squeezed instead of wrapping.
@@ -170,7 +170,7 @@ TEST_F(PreferencesSettingsTabTest, HintLabelsGetTwoLinesOfHeightAndNeverSqueezeH
     }
 }
 
-// T157: when the window is too short to show every group, the group stack lives inside a scroll
+// When the window is too short to show every group, the group stack lives inside a scroll
 // view, so the bottom rows stay reachable via a scrollbar instead of being clipped out (the bug the
 // tab used to have). A window tall enough to hold the whole stack does not overflow; a short window
 // does. Overflow is a function of the window height versus the group stack, independent of the live

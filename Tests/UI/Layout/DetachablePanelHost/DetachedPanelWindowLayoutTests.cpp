@@ -1,4 +1,4 @@
-// DetachedPanelWindowLayoutTests.cpp -- FRO230: render-level coverage for DetachedPanelWindow's
+// DetachedPanelWindowLayoutTests.cpp -- render-level coverage for DetachedPanelWindow's
 // content layout (the private `Content` wrapper: header strip -- title + detach/close button --
 // above the hosted panel). Sibling to DetachedPanelWindowTests.cpp (behaviour/bounds-persistence/
 // focus), scoped to geometry and pixel content instead. Same addToDesktop=false shape throughout:
@@ -8,7 +8,7 @@
 //   1. Header/content bounds at several window sizes -- no overlap, content fills the rest.
 //   2. Minimum-size behaviour -- a window shorter than the header strip clips gracefully.
 //   3. Render-to-image -- header and hosted-panel regions each paint non-empty pixels.
-//   4. FRO228 -- themed background + the header button's own icon actually paints.
+//   4. Themed background + the header button's own icon actually paints.
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
@@ -176,7 +176,7 @@ TEST_F(DetachedPanelWindowLayoutTest, PanelRenderScalesWithSeveralWindowSizes) {
 }
 
 // ============================================================================
-// 4. FRO228 -- themed background + the header button's own icon actually paints
+// 4. Themed background + the header button's own icon actually paints
 // ============================================================================
 
 namespace {
@@ -205,12 +205,12 @@ TEST_F(DetachedPanelWindowLayoutTest, BackgroundMatchesThemeSurfaceAndHeaderButt
     ASSERT_NE(content, nullptr);
     const auto img = content->createComponentSnapshot(content->getLocalBounds());
 
-    // Before FRO228's fix, the reparented header button never had a Drawable assigned to it at
-    // all (an icon-only ImageFitted DrawableButton with none set paints nothing), so every pixel in
-    // its 22x22 bounds was the plain theme surface: AppLookAndFeel::drawDrawableButton() paints NO
-    // fill at all for an enabled, at-rest, non-toggled button (Source/UI/Theme/AppLookAndFeel/
-    // AppLookAndFeelButtons.cpp), so "any non-surface pixel here" is a real proof the icon painted,
-    // not an artifact of some other themed background this test would pass without the fix.
+    // A reparented header button with no Drawable assigned to it (an icon-only ImageFitted
+    // DrawableButton with none set paints nothing) leaves every pixel in its 22x22 bounds the plain
+    // theme surface: AppLookAndFeel::drawDrawableButton() paints NO fill at all for an enabled,
+    // at-rest, non-toggled button (Source/UI/Theme/AppLookAndFeel/AppLookAndFeelButtons.cpp), so
+    // "any non-surface pixel here" is a real proof the icon painted, not an artifact of some other
+    // themed background this test would pass without the icon.
     bool sawNonSurfacePixel = false;
     for (int x = button.getX(); x < button.getRight() && !sawNonSurfacePixel; ++x)
         for (int y = button.getY(); y < button.getBottom() && !sawNonSurfacePixel; ++y)
@@ -220,7 +220,7 @@ TEST_F(DetachedPanelWindowLayoutTest, BackgroundMatchesThemeSurfaceAndHeaderButt
         << "the header's redock/close button must actually paint its icon, not just its background";
 }
 
-// FRO228: a "glass" theme's surface is translucent; filling a top-level window with it let the OS
+// A "glass" theme's surface is translucent; filling a top-level window with it let the OS
 // window backing show through as flat grey. The background must be the surface laid over bg0, opaque.
 TEST_F(DetachedPanelWindowLayoutTest, TranslucentThemeSurfaceStillGivesAnOpaqueBackground) {
     synth::theme::Theme theme;

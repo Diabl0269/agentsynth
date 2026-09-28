@@ -52,7 +52,7 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
 
-    // T161: bare Down on the PANEL ROOT itself seeds keyboard focus into the track-header column.
+    // Bare Down on the PANEL ROOT itself seeds keyboard focus into the track-header column.
     // Cmd+Shift+T / Tab land here (docs/control/shortcuts.md's Focus regions section — every region root
     // wants its own focus, deterministically), not on any row, so without this a keyboard-only user
     // could never reach a track header at all. Scoped to REAL focus being on THIS exact component
@@ -128,7 +128,7 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     // also what "no locators yet" looks like) is a no-op that returns false, so the keystroke stays
     // available to whatever else might claim it rather than being silently swallowed.
     //
-    // REACHABILITY, and it is the whole bug these keys shipped with: this method only runs when the
+    // REACHABILITY: this method only runs when the
     // focused component is INSIDE this panel's subtree (JUCE bubbles an unhandled key up the parent
     // chain), and the only thing under this panel that takes keyboard focus is the clip lane area
     // (and the roll). Setting locators by dragging the RULER — the obvious way to do it — leaves

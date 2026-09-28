@@ -119,8 +119,8 @@ public:
      *  TimelinePanelComponent::getTransportUpdateCountForTest() uses. */
     int getReadoutRepaintCountForTest() const noexcept { return readoutRepaintCount_; }
 
-    // ---- MIDI Learn (FRO133, TimelineTransportBarMidiLearn.cpp — see its file comment for the
-    // design; reuses the FRO130/FRO133 mixer-column pattern via Source/UI/MidiRemote/MidiLearnMenu.h)
+    // ---- MIDI Learn (TimelineTransportBarMidiLearn.cpp — see its file comment for the
+    // design; reuses the mixer-column pattern via Source/UI/MidiRemote/MidiLearnMenu.h)
     // ----
 
     /** "MIDI Learn 'Play/Stop'..." etc — fires with the doc's action id
@@ -135,7 +135,7 @@ public:
      *  build/badge-refresh rather than per-button, since MidiLearnController::queryActionMappings()
      *  already scans every profile in one pass. Wired to MidiLearnController::queryActionMappings(). */
     std::function<std::map<juce::String, juce::String>()> onQueryMidiMappingsForActions;
-    /** "Edit MIDI assignment..." — unset until the MIDI Remote panel exists (FRO131), same as
+    /** "Edit MIDI assignment..." — unset until the MIDI Remote panel exists, same as
      *  GraphEditor::onEditMidiAssignmentRequested. */
     std::function<void(const juce::String& actionId)> onEditMidiAssignmentRequested;
 
@@ -148,11 +148,11 @@ public:
     /** Test/inspection: the action id a right-click on `component` would open MIDI Learn for, or
      *  empty — mirrors ModuleComponent::findMidiLearnableParamForTest. */
     juce::String findMidiLearnableActionForTest(const juce::Component* component) const;
-    /** FRO135: the four glyph buttons, each with its action id, for the pick-target overlay. */
+    /** The four glyph buttons, each with its action id, for the pick-target overlay. */
     void collectPickCandidates(std::vector<PickCandidate>& out) const;
     /** Test/inspection: `component`'s MIDI-mapped badge cache, as of the last refreshMidiLearnBadges(). */
     bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const;
-    /** FRO256: mirrors MixerColumnComponent::getMidiLearnArmedRepaintCountForTest -- see that
+    /** Mirrors MixerColumnComponent::getMidiLearnArmedRepaintCountForTest -- see that
      *  method's own comment on why this exists. */
     int getMidiLearnArmedRepaintCountForTest() const noexcept { return midiLearnArmedRepaintCount_; }
 
@@ -171,7 +171,7 @@ private:
     // PlayStop, outline vs filled-red for Record, dim vs lit-accent for Loop and Metronome. Every
     // glyph is drawn inside a CENTRED SQUARE inset from the button, so a button that isn't square
     // (however short the strip it is handed) never squashes it.
-    // FRO133: right-click-safe (synth::ui::midilearn::RightClickSafeButton, Source/UI/MidiRemote/MidiLearnMenu.h)
+    // right-click-safe (synth::ui::midilearn::RightClickSafeButton, Source/UI/MidiRemote/MidiLearnMenu.h)
     // so a MIDI Learn menu can open on any of the four buttons without also toggling
     // playback/record/loop/metronome — juce::Button has no isPopupMenu() guard of its own.
     class GlyphButton : public synth::ui::midilearn::RightClickSafeButton<juce::Button> {
@@ -192,9 +192,9 @@ private:
         Glyph glyph_;
     };
 
-    // ---- MIDI Learn private helpers (FRO133) -- see the public section above for the wiring ----
+    // ---- MIDI Learn private helpers -- see the public section above for the wiring -------------
     void refreshMidiLearnBadges();
-    /** FRO256: mirrors MixerColumnComponent::repaintArmedMidiLearnOutline -- called from
+    /** Mirrors MixerColumnComponent::repaintArmedMidiLearnOutline -- called from
      *  updateFromTransport()'s existing 10 Hz poll so the breathing outline actually animates. */
     void repaintArmedMidiLearnOutline();
     void paintMidiLearnOverlays(juce::Graphics& g);
@@ -209,7 +209,7 @@ private:
     std::map<GlyphButton::Glyph, bool> midiLearnMappedBadges_;
     juce::String midiLearnArmedActionId_;
     double midiLearnArmedSinceMs_ = 0.0;
-    // FRO256: backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
+    // Backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
     int midiLearnArmedRepaintCount_ = 0;
     std::function<void(juce::PopupMenu&)> showContextMenuHook_ = [](juce::PopupMenu& m) {
         m.showMenuAsync(juce::PopupMenu::Options());

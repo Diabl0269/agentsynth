@@ -85,7 +85,7 @@ TrackChannelLinkSurface::ChannelInfo TrackChannelLinkController::getChannelInfo(
     if (auto* strip = stripFor(info)) {
         out.channelMuted = strip->hasMuteParameter() && strip->isMuted();
         out.channelSoloed = strip->isSoloed();
-        // FRO146: deliberately NOT populated from strip->takeMeterPeak() here. The strip's
+        // Deliberately NOT populated from strip->takeMeterPeak() here. The strip's
         // TrackHeader latch slot is consume-on-read (PeakMeterLatch.h), and the shared 15 Hz tick
         // (getChannelMeterPeak() below) is that slot's ONE reader -- this call runs on a completely
         // different cadence (a doc/graph change, not a per-frame poll), so reading it here would
@@ -107,7 +107,7 @@ float TrackChannelLinkController::getChannelMeterPeak(synth::TrackId track) cons
     auto* strip = node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
     if (strip == nullptr)
         return 0.0f;
-    // FRO146: the TrackHeader reader slot -- the ONE consumer of it (see getChannelInfo()'s own
+    // The TrackHeader reader slot -- the ONE consumer of it (see getChannelInfo()'s own
     // comment above on why that method must never also read it).
     return std::max(strip->takeMeterPeak(synth::MeterReader::TrackHeader, 0),
                     strip->takeMeterPeak(synth::MeterReader::TrackHeader, 1));
@@ -277,7 +277,7 @@ void TrackChannelLinkController::revealChannelForTrack(synth::TrackId track) {
     if (!info.hasChannel)
         return;
 
-    // FRO11 (P9-5): the mixer panel's own reveal, when it exists and can show the strip's column
+    // The mixer panel's own reveal, when it exists and can show the strip's column
     // -- open/focus the dock on the Mixer tab and flash/select the column, per the ticket. Falls
     // through to the canvas reveal below when unset or unsuccessful (docs/mixer/panel.md's "mixer hidden by
     // preference" case -- no such preference exists yet, so today this only differs before the

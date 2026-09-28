@@ -46,7 +46,7 @@ enum class Icon : int {
     WaveformSaw,
     WaveformSquare,
     WaveformTriangle,
-    // Toolbar toggle for the GraphEditor minimap overlay (issue #159).
+    // Toolbar toggle for the GraphEditor minimap overlay.
     ToggleMinimap,
     // Module header: split one Audio jack into Left/Right (Dual I/O).
     ModuleDualIO,
@@ -70,9 +70,9 @@ enum class Icon : int {
     // Appended here rather than grouped next to the other CatXxx entries so every existing
     // enum ordinal (and the IconLibraryTests.cpp spot-checks against them) stays unchanged.
     CatIO,
-    // FRO12 (P9-6, docs/mixer/panel.md): the icon-only "open in window" / "dock back" control
-    // DetachablePanelHost uses for both the Timeline and Mixer panels. Appended immediately
-    // before kCount, same append-only convention as CatIO above.
+    // The icon-only "open in window" / "dock back" control DetachablePanelHost uses for
+    // both the Timeline and Mixer panels. Appended immediately before kCount, same
+    // append-only convention as CatIO above (see docs/mixer/panel.md).
     ActionDetachWindow,
     // EditTool::Range's glyph — appended, not grouped with the Tool* block (append-only, as CatIO).
     ToolRange,

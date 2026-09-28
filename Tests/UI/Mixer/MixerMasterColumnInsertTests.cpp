@@ -1,4 +1,4 @@
-// MixerMasterColumnInsertTests.cpp -- FRO148 (docs/mixer/mixer.md#master-inserts): the Master column's insert list.
+// MixerMasterColumnInsertTests.cpp (docs/mixer/mixer.md#master-inserts): the Master column's insert list.
 //
 //   * list      -- MixerInsertList with source = Master / end = the chain terminator: add splices Master ->
 //                  insert -> terminator on BOTH channels, a second add appends, move/remove work, undo restores;

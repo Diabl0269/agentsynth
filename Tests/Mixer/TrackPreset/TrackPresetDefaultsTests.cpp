@@ -1,4 +1,4 @@
-// Concern: FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default) -- the per-type default track preset
+// Concern: (docs/mixer/track-presets.md#saving-and-setting-a-default) -- the per-type default track preset
 // consulted by "+ Track -> Audio Track" (MainComponentTrackCreation.cpp's addAudioTrack) BEFORE the factory Track Audio
 // -> EQ -> Compressor -> Strip -> Master chain is built. Unlike TrackPresetTests.cpp / TrackPresetCaptureTests.cpp
 // (pure TrackPresetManager, no MainComponent needed), this exercises the real settings key
@@ -17,7 +17,7 @@
 namespace {
 
 // Same shared "Agent Synth" settings file every other MainComponent test resets around itself;
-// mixerDefaultTrackPresetAudio/Instrument are FRO13's own two keys
+// mixerDefaultTrackPresetAudio/Instrument are the two keys
 // (PreferencesSettingsTabInternal.h / MainComponentTrackCreation.cpp -- both copies must agree).
 constexpr const char* kMixerDefaultTrackPresetAudioKey = "mixerDefaultTrackPresetAudio";
 // A preset name no real user or other test is plausibly using, so a stray leftover file can never

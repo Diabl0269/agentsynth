@@ -1,6 +1,6 @@
 // GraphEditorDeleteHeal.cpp
 //
-// FRO23 "reconnect the chain": when deleteSelection()/requestDeleteModule() remove a run of
+// "Reconnect the chain": when deleteSelection()/requestDeleteModule() remove a run of
 // modules that each have exactly one incoming and one outgoing audio cable, splice the surviving
 // upstream/downstream endpoints together instead of leaving the chain broken. GraphEditor is
 // declared in GraphEditor.h; sibling GraphEditor*.cpp files in this directory hold the rest of
@@ -11,7 +11,7 @@
 // captureHealSplices() reads the graph BEFORE any node is removed (a deleted node's own
 // connections are still there to classify), and healDeletedChain() connects the captured survivor
 // endpoints AFTER removal, re-validating each with graph.canConnect() first -- "if invalid, don't
-// heal" (FRO23), the same cycle/legality check AudioProcessorGraph::addConnection runs internally
+// heal", the same cycle/legality check AudioProcessorGraph::addConnection runs internally
 // for a manual cable drag. Both call sites run this BEFORE the macro-port/attenuverter auto-delete
 // sweeps, so a port a heal just gave a fresh cable to is no longer orphaned by the time those run.
 
@@ -28,7 +28,7 @@ namespace {
 // One audio cable's identity from `nodeId`'s own side: which of nodeId's visible jacks it lands
 // on, which node is on the other end, and which visible jack of THAT node it lands on. A stereo
 // pair sharing both these jacks (two raw graph connections) is one leg, not two -- "count audio
-// cables at the visible-jack/logical level" (FRO23).
+// cables at the visible-jack/logical level".
 struct AudioLeg {
     juce::AudioProcessorGraph::NodeID peerId;
     int peerJack = 0;
@@ -84,7 +84,7 @@ std::optional<int> audioVisibleJack(juce::AudioProcessorGraph::Node* node, int r
 // channel as its own distinct cable). That is the right notion for painting a cable, but wrong for
 // THIS heal's eligibility count: a genuine stereo pair -- the deleted node's own L/R landing on the
 // bare node's matching raw channels 0 and 1 -- is still one logical cable, same principle as any
-// other collapsed stereo jack ("count audio cables at the visible-jack level", FRO23). Two legs
+// other collapsed stereo jack ("count audio cables at the visible-jack level"). Two legs
 // merge only when they share BOTH the same peer node AND the same jack on THIS node's own side
 // (`thisJack`) -- i.e. they really did come off one jack of the deleted node -- so two independent
 // mono legs from a splitter/mixer that merely happen to land on raw 0 and 1 of the same bare I/O
@@ -193,8 +193,8 @@ AudioLegs classifyAudioLegs(juce::AudioProcessorGraph& graph, juce::AudioProcess
 // one audio out) to the surviving node at the far end, stepping via each hop's OTHER leg:
 // `viaIncoming` reads each hop's incoming leg (walking upstream), false reads its outgoing leg
 // (walking downstream). Returns nullopt the moment a hop is deleted but not heal-eligible (a
-// branch/fan node) -- the whole run is then left unhealed, FRO23's "if that's complex, heal only
-// single isolated deletions" fallback. Also returns nullopt on revisiting a node already walked:
+// branch/fan node) -- the whole run is then left unhealed (heal only single isolated
+// deletions as a fallback). Also returns nullopt on revisiting a node already walked:
 // a deleted 1-in/1-out RUN can itself be wired into a cycle (e.g. two deleted nodes wired
 // X->Y->X), which would otherwise spin this loop forever on the message thread -- a cycle among
 // the deleted nodes is exactly as unhealable as one involving a survivor.
@@ -205,7 +205,7 @@ std::optional<AudioLeg> walkToSurvivor(juce::AudioProcessorGraph& graph, AudioLe
     std::vector<juce::AudioProcessorGraph::NodeID> visited;
     while (isDeleted(leg.peerId)) {
         // A macro port anywhere along the run is not this heal's to splice through -- see
-        // captureHealSplices' own comment on why (FRO235 owns that case).
+        // captureHealSplices' own comment on why (the macro-port delete preference owns that case).
         if (isMacroPort(leg.peerId))
             return std::nullopt;
         if (std::find(visited.begin(), visited.end(), leg.peerId) != visited.end())
@@ -224,7 +224,7 @@ std::optional<AudioLeg> walkToSurvivor(juce::AudioProcessorGraph& graph, AudioLe
 // isAnInputTo for a cycle (canConnect alone doesn't check one), then canConnect per leg (valid
 // channel, not already connected) -- without touching the graph. Kept separate from the actual
 // connect so a Dual-I/O pair's Left and Right jacks can both be validated before either is wired:
-// "All-or-nothing... never Left-only" (FRO23), now applying across the two SEPARATE jacks a
+// "All-or-nothing... never Left-only", now applying across the two SEPARATE jacks a
 // Dual-I/O pair needs, not just across one jack's own multi-voice fan.
 bool validateHealJackPair(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID upId, ModuleBase* upMb,
                           int upJack, juce::AudioProcessorGraph::NodeID downId, ModuleBase* downMb, int downJack) {
@@ -253,7 +253,7 @@ GraphEditor::captureHealSplices(const std::vector<juce::AudioProcessorGraph::Nod
         return std::find(deletedIds.begin(), deletedIds.end(), id) != deletedIds.end();
     };
     // Deleting a macro port NODE ITSELF is not this heal's call -- that already has its own
-    // dedicated feature and preference (FRO235's spliceCableOnMacroPortDelete, default OFF: the
+    // dedicated feature and preference (spliceCableOnMacroPortDelete, default OFF: the
     // cable is dropped unless the user opts in). Letting this generic, default-ON heal splice
     // through a deleted port too would silently override that default for every macro port
     // deletion. A port anywhere in a deleted RUN leaves the whole run unhealed past it, same as any
@@ -265,7 +265,7 @@ GraphEditor::captureHealSplices(const std::vector<juce::AudioProcessorGraph::Nod
             continue;
         const auto seedLegs = classifyAudioLegs(graph, seed);
         if (seedLegs.incoming.size() != 1 || seedLegs.outgoing.size() != 1)
-            continue; // "more audio legs (mixer, splitters, 2 ins) deletes as today" (FRO23)
+            continue; // "more audio legs (mixer, splitters, 2 ins) deletes as today"
 
         const auto up = walkToSurvivor(graph, seedLegs.incoming.front(), isDeleted, isMacroPort, /*viaIncoming=*/true);
         const auto down =

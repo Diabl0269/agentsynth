@@ -1,12 +1,13 @@
 #!/bin/bash
 # Pre-commit hook: clang-format lint on staged C/C++ sources, plus the file-size, function-size,
-# header-comment-placement and docs-integrity guards.
+# header-comment-placement, comment-provenance and docs-integrity guards.
 #
 # Mirrors the CI "Lint" job's clang-format --dry-run --Werror over Source/ and Tests/, but scoped
 # to the files staged for THIS commit, so it runs fast and catches formatting before it ever
 # reaches CI. The file-size guard (scripts/check-file-sizes.sh, FRO61), the function-size guard
 # (scripts/check-function-sizes.sh, FRO78), the header-comment-placement guard
-# (scripts/check-header-comments.sh, FRO183) and the docs guard (scripts/check-docs.sh, FRO169) all
+# (scripts/check-header-comments.sh, FRO183), the comment-provenance guard
+# (scripts/check-comment-provenance.sh) and the docs guard (scripts/check-docs.sh, FRO169) all
 # run unscoped -- they scan the whole working tree either way, and each is fast enough on its own
 # that there's no benefit to staged-file scoping there the way there is for clang-format. They run
 # for ANY commit with staged changes, not only ones touching C++: a doc or script edit can push a
@@ -84,6 +85,16 @@ if ! bash "$repo_root/scripts/check-header-comments.sh"; then
     echo "" >&2
     echo "pre-commit: header-comment-placement guard failed (see above)." >&2
     echo "  Relocate the member's rationale beside its out-of-line definition, or run --update if it legitimately shrank." >&2
+    echo "  Bypass:   git commit --no-verify" >&2
+    exit 1
+fi
+
+# --- Comment-provenance guard: whole tree, same deal as the file-size guard above. A comment edit
+# anywhere in Source/ or Tests/ can add a ticket id or date, so it runs for every commit.
+if ! bash "$repo_root/scripts/check-comment-provenance.sh"; then
+    echo "" >&2
+    echo "pre-commit: comment-provenance guard failed (see above)." >&2
+    echo "  Rewrite the comment to state the behaviour or reason without the ticket id / date (docs/development/comment-provenance-guard.md), or run --update if it legitimately shrank." >&2
     echo "  Bypass:   git commit --no-verify" >&2
     exit 1
 fi

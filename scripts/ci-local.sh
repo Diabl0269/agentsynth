@@ -29,12 +29,15 @@
 #   5. scripts/check-header-comments.sh against the real tree -- the Lint job's "Check header
 #      comment placement" step: comment-PLACEMENT threshold (comments outnumber code, floor 60,
 #      has a sibling .cpp) + strict ratchet baseline, run directly (not just its unit test).
+#   5b. scripts/check-comment-provenance.sh against the real tree -- the Lint job's "Check comment
+#      provenance" step: per-file count of comment lines carrying a ticket id or date + strict
+#      ratchet baseline, run directly (not just its unit test).
 #   6. scripts/check-docs.sh against the real tree -- docs link/anchor/naming integrity: markdown
 #      link targets, docs/... path mentions, section (§) references, and the docs/ filename
 #      convention, run directly (not just its unit test). See that script's own doc comment.
 #   7. Every scripts/tests/*.test.sh -- ci-cache-check, ci-install-linux-deps,
 #      check-nonascii-literals, ai-eval-ratchet, utf8-literal-check, check-file-sizes,
-#      check-function-sizes, check-header-comments, check-docs as of this writing, globbed so a
+#      check-function-sizes, check-header-comments, check-comment-provenance, check-docs as of this writing, globbed so a
 #      newly added one is picked up automatically. check-nonascii-literals.test.sh's own last case
 #      scans the real Source/ tree, so this also covers the Lint job's ASCII-literal gate.
 #   8. Configure (-DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON, Release) and build EVERY target the
@@ -89,8 +92,8 @@ Usage: bash scripts/ci-local.sh [--open] [--skip-tests] [-h|--help]
 Reproduces .github/workflows/ci.yml's Lint job plus this machine's platform
 build-and-test job: clang-format check, the UTF-8/ASCII literal checks, the
 file-size guard, the function-size guard, the header-comment-placement guard,
-the docs integrity guard, every scripts/tests/*.test.sh, then a full Release
-build of every CMake target CI builds (Core, AppUI, AgentSynth,
+the comment-provenance guard, the docs integrity guard, every scripts/tests/*.test.sh, then a full
+Release build of every CMake target CI builds (Core, AppUI, AgentSynth,
 AgentSynthPlugin, Tests) with
 ENABLE_TESTS=ON, followed by the full test suite. See the header comment in
 this file, and docs/development/local-ci.md, for the
@@ -177,6 +180,10 @@ bash scripts/check-function-sizes.sh || fail "function-size guard failed (see ab
 # --- 5. Header-comment-placement guard, against the real tree -----------------------------------
 step "scripts/check-header-comments.sh (real tree, comment-placement threshold + ratchet baseline)"
 bash scripts/check-header-comments.sh || fail "header-comment-placement guard failed (see above)."
+
+# --- 5b. Comment-provenance guard, against the real tree ---------------------------------------
+step "scripts/check-comment-provenance.sh (real tree, ticket-id/date comment count + ratchet baseline)"
+bash scripts/check-comment-provenance.sh || fail "comment-provenance guard failed (see above)."
 
 # --- 6. Docs guard, against the real tree -------------------------------------------------------
 step "scripts/check-docs.sh (docs link/anchor/naming integrity)"

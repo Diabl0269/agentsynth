@@ -154,12 +154,11 @@ static juce::String parseStringOptional(const juce::var& obj, const juce::String
     return val.toString();
 }
 
-// The "optional, falls back to Theme.h's own default" colour tokens -- meterFill through
-// trackArmOn below used to be one inline `{ auto v = parseColourKey(...); ...}` block per token
-// directly in parseTheme; FRO146 adding three more (meterMid/meterHigh/meterClip) would have
-// pushed that function past its function-size ratchet ceiling (root CLAUDE.md), so this table +
-// loop replaces all of them with one named step -- also removing the duplication the repeated
-// block shape already had. A new optional colour token is a new table row, not a new inline block.
+// The "optional, falls back to Theme.h's own default" colour tokens -- meterFill through trackArmOn below are
+// one table row each, not one inline `{ auto v = parseColourKey(...); ...}` block per token directly in
+// parseTheme, which would push that function past its function-size ratchet ceiling (root CLAUDE.md), so this
+// table + loop replaces all of them with one named step -- also removing the duplication the repeated block
+// shape already had. A new optional colour token is a new table row, not a new inline block.
 struct OptionalColourKey {
     const char* key;
     juce::Colour Colors::* member;

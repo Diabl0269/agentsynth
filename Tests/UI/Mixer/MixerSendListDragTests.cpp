@@ -1,4 +1,4 @@
-// MixerSendListDragTests.cpp -- FRO296 (docs/mixer/sends-and-buses.md#reordering-sends): the
+// MixerSendListDragTests.cpp (docs/mixer/sends-and-buses.md#reordering-sends): the
 // drag-to-reorder gesture on a send row's name area, driven through REAL synthesized
 // mouseDown/mouseDrag/mouseUp (docs/development/test-patterns.md's real-mouse-path convention,
 // MixerFaderDragTests.cpp's template) rather than the headless moveRow() seam directly -- this is

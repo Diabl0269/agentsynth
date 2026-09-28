@@ -1,4 +1,4 @@
-// synth::ui::MacroPortConfigDialog — the "Configure I/O" modal for one Macro (P8-15b, T140).
+// synth::ui::MacroPortConfigDialog — the "Configure I/O" modal for one Macro.
 // Pure UI, exactly like ExportAudioDialog: no graph/synth::MacroSet reference of its own, only a
 // PortRow snapshot handed in and intent callbacks fired out, so these tests drive the real
 // controls and read back what each button would send, with no GraphEditor/AudioEngine/message
@@ -123,7 +123,7 @@ TEST(MacroPortConfigDialogTest, DeleteButtonFiresWithTheRowsUuid) {
     EXPECT_EQ(capturedUuid, "uuid-out");
 }
 
-// F1 founder-review fix: the per-row "Apply Shape" button is gone — picking a new shape in the
+// There is no per-row "Apply Shape" button — picking a new shape in the
 // combo box commits immediately (still delete+re-add of the node as ONE undo step underneath,
 // per GraphEditor::changeMacroPortShape; only the UI gesture collapsed to one step). So selecting
 // Poly alone must fire onChangePortShape, with no separate "Apply" click.
@@ -146,7 +146,7 @@ TEST(MacroPortConfigDialogTest, SelectingANewShapeCommitsImmediately) {
     EXPECT_EQ(capturedShape, MacroPortShape::Poly);
 }
 
-// StereoCollapsed (founder-review fix G2) is auto-derived only and never a choice this dialog's
+// StereoCollapsed is auto-derived only and never a choice this dialog's
 // combo box offers, but an existing auto-created port can still show up here as a row — it
 // genuinely IS a stereo pair, so it must display as "Stereo" (comboIndexFromShape), not fall back
 // to "Mono". Because the combo can never itself produce StereoCollapsed, any real interaction with
@@ -258,14 +258,14 @@ TEST(MacroPortConfigDialogTest, CloseButtonFiresOnRequestClose) {
     EXPECT_TRUE(closed);
 }
 
-// T150: founder-reported regression — renaming a port then closing the dialog without any
-// intervening focus-loss/Return did not apply the new name. Root cause: juce::TextEditor::
-// focusLost() posts an async command message rather than calling onFocusLost synchronously, and
-// Close's own mouseDown grabs keyboard focus away from the name editor (queuing that async
-// commit) before onRequestClose tears the dialog down — so the commit either never landed or
-// landed too late. requestClose() now forces every row's rename (and shape/voice) edit to commit
-// synchronously before onRequestClose fires. setRowNameForTest deliberately does NOT simulate
-// focus-loss/Return first — going straight to Close is the exact repro.
+// Renaming a port then closing the dialog without any intervening focus-loss/Return must apply
+// the new name. juce::TextEditor::focusLost() posts an async command message rather than calling
+// onFocusLost synchronously, and Close's own mouseDown grabs keyboard focus away from the name
+// editor (queuing that async commit) before onRequestClose tears the dialog down — so the commit
+// would either never land or land too late. requestClose() therefore forces every row's rename
+// (and shape/voice) edit to commit synchronously before onRequestClose fires. setRowNameForTest
+// deliberately does NOT simulate focus-loss/Return first — going straight to Close is the exact
+// repro.
 TEST(MacroPortConfigDialogTest, RenameFollowedImmediatelyByCloseAppliesExactlyOnce) {
     MacroPortConfigDialog dialog("My Macro", twoPorts());
 
@@ -293,7 +293,7 @@ TEST(MacroPortConfigDialogTest, RenameFollowedImmediatelyByCloseAppliesExactlyOn
     EXPECT_EQ(renameCallCount, 1);
 }
 
-// T150 regression guard: requestClose()'s per-row commit sweep must NOT re-derive a row's shape
+// Regression guard: requestClose()'s per-row commit sweep must NOT re-derive a row's shape
 // from shapeBox and diff it against committedShape_ the way maybeCommitShape() does everywhere
 // else. comboIndexFromShape maps StereoCollapsed to the same combo item id as plain Stereo (the
 // combo has no separate entry for it), so shapeFromComboIndex(shapeBox.getSelectedId()) always
@@ -324,7 +324,7 @@ TEST(MacroPortConfigDialogTest, ClosingWithAnUntouchedStereoCollapsedRowNeverCha
 }
 
 // ============================================================================
-// T152: drag-to-reorder (item 3.3) — the constraint under test is structural: onReorderPortTo's
+// Drag-to-reorder — the constraint under test is structural: onReorderPortTo's
 // index is scoped to the dragged row's OWN direction group, so there is no argument that could
 // ever mean "become an output" — GraphEditor::reorderMacroPortToIndex (MacroPortFlowTests.cpp)
 // covers the other half: that the resulting `order` values never touch the opposite group.
@@ -359,7 +359,7 @@ TEST(MacroPortConfigDialogTest, DraggingAnInputRowNeverFiresForTheOutputRowAndVi
 }
 
 // ============================================================================
-// T152: per-port colour (item 3.4)
+// Per-port colour
 // ============================================================================
 
 TEST(MacroPortConfigDialogTest, RowWithNoColourDisplaysTheKindTintByDefault) {
@@ -448,7 +448,7 @@ TEST(MacroPortConfigDialogTest, ColourPickerCommitSurvivesTheRowBeingRebuiltWhil
 }
 
 // ============================================================================
-// T153: keyboard accessibility
+// Keyboard accessibility
 // ============================================================================
 
 TEST(MacroPortConfigDialogTest, EscapeClosesTheDialogWhenNothingHasFocus) {
@@ -463,7 +463,7 @@ TEST(MacroPortConfigDialogTest, EscapeClosesTheDialogWhenNothingHasFocus) {
 
 // TextEditor consumes Escape itself before it ever bubbles to the dialog's own keyPressed() —
 // every row's name field is wired with its OWN onEscapeKey for exactly this reason (see the
-// class comment's T153 section), and this drives that wired lambda directly (the same idiom
+// class comment's section), and this drives that wired lambda directly (the same idiom
 // commitRowNameForTest already uses for onFocusLost).
 TEST(MacroPortConfigDialogTest, EscapeFromARowsNameFieldAlsoClosesTheDialog) {
     MacroPortConfigDialog dialog("My Macro", twoPorts());
@@ -525,7 +525,7 @@ TEST(MacroPortConfigDialogTest, ArrowKeyOnARowsDeleteButtonIsConsumedByTheButton
 }
 
 // ============================================================================
-// MacroAutoPortPromptDialog (founder-review fix F5, docs/macros/auto-ports.md#auto-creating-ports-when-grouping)
+// MacroAutoPortPromptDialog (docs/macros/auto-ports.md#auto-creating-ports-when-grouping)
 // ============================================================================
 
 using synth::ui::MacroAutoPortPromptDialog;
@@ -585,8 +585,8 @@ TEST(MacroAutoPortPromptDialogTest, PaintAndResizeDoNotCrash) {
 }
 
 // ============================================================================
-// Founder review round 4 (real-build testing of T152/T153): Up/Down buttons removed, keyboard
-// reorder now Cmd+Up/Cmd+Down; keyboard-focus visibility; "Add a port" panel layout bug.
+// Keyboard reorder (Cmd+Up/Cmd+Down, no Up/Down buttons); keyboard-focus visibility; "Add a port"
+// panel layout.
 // ============================================================================
 
 namespace {
@@ -604,8 +604,8 @@ bool imagesHaveIdenticalPixels(const juce::Image& a, const juce::Image& b) {
 // Diagnosed via Component::createComponentSnapshot rendered to a PNG (docs/development/
 // `createComponentSnapshot` smoke-test pattern): the "Add a port" panel's addBlockArea budgeted
 // height for only 2 of its 3 rows (section label + newRow1), so newRow2 — the name field AND the
-// Add button — was squeezed to zero height and effectively vanished, matching the founder's report
-// of a button that "doesn't appear" but still works via Tab+Return. Root cause was the layout
+// Add button — was squeezed to zero height and effectively vanished: a button that
+// "doesn't appear" but still works via Tab+Return. Root cause was the layout
 // arithmetic in resized(), not colour/contrast.
 TEST(MacroPortConfigDialogTest, AddButtonHasNonTrivialVisibleBounds) {
     MacroPortConfigDialog dialog("My Macro", {});

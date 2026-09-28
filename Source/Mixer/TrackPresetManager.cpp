@@ -72,7 +72,7 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
     if (selection.empty())
         return {};
 
-    // Step 2 (founder requirement, docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box): every
+    // Step 2 (docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box): every
     // outside module feeding this channel through a port (or a raw un-ported jack), transitively.
     for (const auto id : collectOutsideModulatorsForTrackPreset(graph, macros, channelMacroId))
         if (std::find(selection.begin(), selection.end(), id) == selection.end())
@@ -81,8 +81,8 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
     // Step 3: extract verbatim through SnippetManager::extractSnippet — its existing "capture a
     // macro only when EVERY member is inside selection" rule is exactly what makes the channel
     // macro travel intact while an outside module (never fully enclosed, by construction) stays a
-    // bare, unmacro'd node, per the founder's "arrive as fresh copies beside the track's box"
-    // requirement. includeExtraState=true is forced: a track preset must always carry strip
+    // bare, unmacro'd node that arrives as a fresh copy beside the track's box.
+    // includeExtraState=true is forced: a track preset must always carry strip
     // shape/gain/pan, or a Mono strip would silently reload as the Stereo default.
     auto preset = SnippetManager::extractSnippet(graph, selection, name, /*includeExtraState=*/true, macros);
     auto* root = preset.getDynamicObject();
@@ -102,12 +102,12 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
     // Scrub "solo", "isBus", "sends", and "name" from every captured Channel Strip's extra state
     // (root CLAUDE.md tripwire): an imported soloed_=true would silence the whole mix render-wide,
     // regardless of includeExtraState being forced on above for the shape/gain/pan it legitimately
-    // carries. "isBus" and "sends" (FRO15) get the same treatment: a preset captured from a bus
+    // carries. "isBus" and "sends" get the same treatment: a preset captured from a bus
     // strip must not badge an ordinary track channel as BUS wherever it's inserted, and a preset
     // captured from a strip with configured sends must not restore slots whose cable target was
     // never captured (a saved send target is a graph edge, never stored, per
     // docs/mixer/sends-and-buses.md) -- carrying the slot state alone would show "No target" rows on every insert.
-    // "name" (FRO225, docs/mixer/panel.md) is the SOURCE strip's own user-given identity -- applying a
+    // "name" (docs/mixer/panel.md) is the SOURCE strip's own user-given identity -- applying a
     // preset captured from "Lead Vox" to a brand new "Backing Vox" channel must not rename it out
     // from under the user; the destination strip keeps whatever name (or none) it already had.
     if (auto* nodesArr = root->getProperty("nodes").getArray()) {
@@ -127,12 +127,12 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
     return preset;
 }
 
-// FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): TrackPresetKind::Bus is a channel macro
-// with no bound timeline track -- saved from a bus's own macro right-click menu (a bus has no
-// track header of its own to reach "Save Track as Preset..." from), and inserted with no timeline
-// track of its own, just the bus chain the mixer shows as a BUS column. It has no per-type
-// Preferences -> Mixer default (MainComponentTrackPresets.cpp never calls
-// setTrackPresetAsDefault-style bookkeeping for it).
+// TrackPresetKind::Bus is a channel macro with no bound timeline track -- saved from a bus's own
+// macro right-click menu (a bus has no track header of its own to reach "Save Track as Preset..."
+// from), and inserted with no timeline track of its own, just the bus chain the mixer shows as a
+// BUS column. It has no per-type Preferences -> Mixer default (MainComponentTrackPresets.cpp
+// never calls setTrackPresetAsDefault-style bookkeeping for it)
+// (see docs/mixer/track-presets.md#a-third-kind-bus).
 TrackPresetKind TrackPresetManager::getPresetKind(const juce::var& preset) {
     if (auto* obj = preset.getDynamicObject()) {
         const auto kind = obj->getProperty("trackPresetKind").toString();

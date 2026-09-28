@@ -1,5 +1,5 @@
 // ModuleLibraryKeyboardNavTests.cpp
-// T160: keyboard row navigation within the module library sidebar.
+// Keyboard row navigation within the module library sidebar.
 //   • Up/Down walk visible navigable rows (draggable + action + header/subheader), clamped at ends
 //   • Left/Right fold/expand a focused (Sub)Header, no-op on any other focused row kind
 //   • Enter-to-insert dispatches onModuleActivated/onSnippetActivated (new — no prior click path),

@@ -5,10 +5,10 @@
 #include "GeneralFeedbackStore.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// P6-10: the Settings "Feedback" tab — a general, free-text feedback entry point that isn't tied
-// to any one AI-generated patch (that's PatchCard's thumbs up/down, P6-3). P6-16 additionally
+// The Settings "Feedback" tab — a general, free-text feedback entry point that isn't tied
+// to any one AI-generated patch (that's PatchCard's thumbs up/down). It additionally
 // syncs each submission to the server, fire-and-forget, whenever an `accountService` is attached
-// (not Pro-gated). P6-17 extended that further: the sync now fires whether or not the user is
+// (not Pro-gated). The sync fires whether or not the user is
 // signed in — authenticated via the account's access token when signed in, anonymous via this
 // device's own id (`X-Device-Id`, see AuthClient::submitGeneralFeedback) when signed out. See
 // GeneralFeedbackStore's doc comment for the local-only log this still writes unconditionally.
@@ -35,7 +35,7 @@ public:
     juce::TextButton& getSendButtonForTest() { return sendButton; }
     juce::String getStatusTextForTest() const { return statusLabel.getText(); }
 
-    // Testing hook (P6-16): installs a fake AuthClient::HttpPerformer for the send callback's
+    // Testing hook: installs a fake AuthClient::HttpPerformer for the send callback's
     // locally-constructed AuthClient, mirroring AIChatComponent::setFeedbackHttpPerformerForTesting
     // exactly.
     void setFeedbackHttpPerformerForTesting(synth::AuthClient::HttpPerformer performer) {
@@ -52,7 +52,7 @@ private:
 
     synth::GeneralFeedbackStore store;
     synth::AccountService* accountService = nullptr;
-    // P6-16: test injection for the feedback-sync POST sendFeedback() fires on a detached
+    // Test injection for the feedback-sync POST sendFeedback() fires on a detached
     // background thread. Empty (falsy) in production, which makes AuthClient's real libcurl
     // transport constructor run instead — same idiom as AIChatComponent's testFeedbackHttpPerformer.
     synth::AuthClient::HttpPerformer testFeedbackHttpPerformer;

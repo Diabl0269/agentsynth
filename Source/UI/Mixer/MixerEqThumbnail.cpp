@@ -1,4 +1,4 @@
-// Concern: FRO16 (P9-10) -- MixerEqThumbnail's listener/cache lifecycle and its curve paint.
+// Concern: MixerEqThumbnail's listener/cache lifecycle and its curve paint.
 #include "MixerEqThumbnail.h"
 
 #include "EqResponseCurve.h"

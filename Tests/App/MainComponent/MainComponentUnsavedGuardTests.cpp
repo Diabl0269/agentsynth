@@ -1,4 +1,4 @@
-// Concern: P8-2 -- guardUnsavedChanges(), the async dialog-fronted gate on New Patch/Open/the
+// Concern: guardUnsavedChanges(), the async dialog-fronted gate on New Patch/Open/the
 // factory-preset Load branch. See the safety-rule comment below for why every test here must
 // install mc.unsavedChangesPrompt before touching a dirty document.
 #include "AudioEngine/AudioEngine.h"
@@ -7,7 +7,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 // ---------------------------------------------------------------------------
-// P8-2: dirty-state tracking and the unsaved-changes guard.
+// Dirty-state tracking and the unsaved-changes guard.
 //
 // SAFETY RULE FOR EVERY TEST BELOW: never let a real dialog open, because a headless run has no
 // message loop to answer one with and the test would hang forever.
@@ -234,7 +234,7 @@ TEST_F(MainComponentTest, LoadingAPatchFitsTheNewlyLoadedModulesIntoView) {
             << "the loaded patch must be fit into the visible canvas, not left off-screen";
 }
 
-// P8-31: the WHOLE-PROJECT half of the split Load menu guards under "Opening a project", routing
+// The WHOLE-PROJECT half of the split Load menu guards under "Opening a project", routing
 // through openProjectFromFile() just as the patch path routes through openPresetFromFile().
 TEST_F(MainComponentTest, OpeningAProjectAsksBeforeTheChooserOpens) {
     MainComponent mc(std::make_unique<MockProvider>());
@@ -251,7 +251,7 @@ TEST_F(MainComponentTest, OpeningAProjectAsksBeforeTheChooserOpens) {
     EXPECT_EQ(prompt.lastLabel, "Opening a project");
 }
 
-// P8-31 / bug #2: importing a patch onto an existing one (the "Add on top" arm) must be one reversible
+// Importing a patch onto an existing one (the "Add on top" arm) must be one reversible
 // undo step - undo returns to the pre-import patch, redo restores the imported modules. An unwrapped
 // clear-and-rebuild left the history unaware of the swap, so a following redo had nothing to restore.
 TEST_F(MainComponentTest, AddingAPatchOnTopIsOneReversibleUndoStep) {
@@ -295,7 +295,7 @@ TEST_F(MainComponentTest, AddingAPatchOnTopIsOneReversibleUndoStep) {
     EXPECT_EQ(graph.getNumNodes(), afterAppend) << "redoing must restore the imported patch that undo removed";
 }
 
-// P8-31: the mode prompt that openPresetFromFile reaches after a file is chosen. Headless runs have
+// The mode prompt that openPresetFromFile reaches after a file is chosen. Headless runs have
 // no message loop to answer a real AlertWindow, so the test drives patchLoadPrompt straight and asserts
 // it routes to the chosen load mode - Cancel, Append and Replace each must reach the callback.
 // The mechanism Main.cpp's quit path uses, exercised directly: AppApplication itself is not
@@ -437,8 +437,8 @@ TEST_F(MainComponentTest, OpeningALegacyPatchDropsTheBundleTarget) {
 }
 
 // ---------------------------------------------------------------------------
-// FRO325 (docs/mixer/mixer.md#pan-law): New Patch always resets the project to Compensated, and
-// the setting survives a save/load round trip.
+// New Patch always resets the project to Compensated, and the setting survives a save/load round
+// trip (see docs/mixer/mixer.md#pan-law).
 // ---------------------------------------------------------------------------
 
 TEST_F(MainComponentTest, NewPatchSetsTheMixerPanLawToCompensated) {

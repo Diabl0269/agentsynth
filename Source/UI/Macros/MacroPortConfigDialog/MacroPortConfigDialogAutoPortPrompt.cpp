@@ -2,7 +2,7 @@
 
 namespace synth::ui {
 
-// Concern: MacroAutoPortPromptDialog (founder-review fix F5), the small companion "Create
+// Concern: MacroAutoPortPromptDialog, the small companion "Create
 // Ports?" modal declared alongside MacroPortConfigDialog in the same header.
 
 MacroAutoPortPromptDialog::MacroAutoPortPromptDialog(int crossingPortCount) {
@@ -36,7 +36,7 @@ MacroAutoPortPromptDialog::MacroAutoPortPromptDialog(int crossingPortCount) {
 
 MacroAutoPortPromptDialog::~MacroAutoPortPromptDialog() = default;
 
-// T153: see the class comment for the decision — Escape == "Leave Cables As Is", remember forced
+// See the class comment for the decision — Escape == "Leave Cables As Is", remember forced
 // to false regardless of the toggle's current state.
 bool MacroAutoPortPromptDialog::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::escapeKey) {

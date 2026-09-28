@@ -280,7 +280,7 @@ private:
 /**
  * @class GraphAndMacroSnapshotAction
  * @brief Undoable action that restores BOTH graph and synth::MacroSet state together, in ONE
- *        step, for a mutation that changes both (P8-15b: adding, removing, or changing the shape
+ *        step, for a mutation that changes both (adding, removing, or changing the shape
  *        of a Macro I/O port always touches both — a port's node lives in the graph, and its name/
  *        order/kind live on the macro).
  *
@@ -452,7 +452,7 @@ private:
 
 /**
  * @class MixerPanLawAction
- * @brief FRO325: undoable action for the project's mixer-pan-law setting (docs/mixer/mixer.md#pan-law).
+ * @brief Undoable action for the project's mixer-pan-law setting (docs/mixer/mixer.md#pan-law).
  *
  * Same firstPerform-skips-the-already-applied-edit shape as ParameterChangeAction, but the payload
  * is a plain enum written through a caller-supplied setter rather than a graph parameter -- there is
@@ -713,7 +713,7 @@ void AppUndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {
     capturedBeforeState = juce::var();
 }
 
-// Consumes a captureBeforeState() capture for a DIFFERENT recording mechanism (FRO40).
+// Consumes a captureBeforeState() capture for a DIFFERENT recording mechanism.
 //
 // For a gesture that captures "before" state expecting the plain snapshot path above, then
 // discovers mid-gesture it needs recordGraphAndMacroChange's combined transaction instead — a
@@ -796,15 +796,15 @@ bool AppUndoManager::recordCombinedChange(juce::AudioProcessorGraph& graph, synt
     return true;
 }
 
-// FRO240 (docs/control/midi-remote.md#replace-and-duplicate): same shape as recordCombinedChange
-// just above (graph + TimelineDoc), for graph + MidiRemoteProjectDoc instead -- GraphEditor's
-// replaceModule() is the one caller today (a module replace that re-targets the old node's
-// assignments onto the new one, inside the SAME mutation lambda this brackets). `postRestore` is
-// passed straight through to the MidiRemoteSnapshotAction this pushes (mirrors
-// recordMidiRemoteChange's own contract): the graph half already re-resolves live targets against
-// the restored graph via createGraphSnapshotAction's afterRestore hook, but RemoteEngine's own
-// assignment cache only follows a restored doc if the caller's postRestore republishes it (e.g.
-// MidiLearnController::publishAssignments()).
+// Same shape as recordCombinedChange just above (graph + TimelineDoc), for graph +
+// MidiRemoteProjectDoc instead -- GraphEditor's replaceModule() is the one caller today (a module
+// replace that re-targets the old node's assignments onto the new one, inside the SAME mutation
+// lambda this brackets). `postRestore` is passed straight through to the MidiRemoteSnapshotAction
+// this pushes (mirrors recordMidiRemoteChange's own contract): the graph half already re-resolves
+// live targets against the restored graph via createGraphSnapshotAction's afterRestore hook, but
+// RemoteEngine's own assignment cache only follows a restored doc if the caller's postRestore
+// republishes it (e.g. MidiLearnController::publishAssignments())
+// (see docs/control/midi-remote.md#replace-and-duplicate).
 bool AppUndoManager::recordGraphAndMidiRemoteChange(juce::AudioProcessorGraph& graph, synth::MidiRemoteProjectDoc& doc,
                                                     const std::function<void()>& mutation,
                                                     std::function<void()> postRestore) {
@@ -878,7 +878,7 @@ bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph,
 
     undoManager.beginNewTransaction();
 
-    // FRO40: graphBeforeOverride wins when supplied, INSTEAD of a fresh graphToJSON(graph)
+    // graphBeforeOverride wins when supplied, INSTEAD of a fresh graphToJSON(graph)
     // capture — for a caller whose live gesture already wrote intermediate state into the graph
     // before this ever runs (typically ModuleComponent's own captureBeforeState(), handed back via
     // takeCapturedGraphBeforeState() just above — see its own comment for why a fresh capture here
@@ -903,9 +903,9 @@ bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph,
     return true;
 }
 
-// FRO296: the optional fourth (MidiRemoteProjectDoc) domain follows the exact same before/after/
+// The optional fourth (MidiRemoteProjectDoc) domain follows the exact same before/after/
 // push shape recordGraphAndMidiRemoteChange uses for its own MidiRemoteSnapshotAction -- captured
-// and diffed only when `midiRemoteDoc` is non-null, so every pre-FRO296 caller (which never passes
+// and diffed only when `midiRemoteDoc` is non-null, so every caller that never passes
 // one) does exactly the same work as before.
 bool AppUndoManager::recordGraphTimelineAndMacroChange(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc,
                                                        synth::MacroSet& macros, const std::function<void()>& mutation,

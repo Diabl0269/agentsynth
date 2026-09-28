@@ -1,5 +1,5 @@
 // SamplerModuleTests.cpp
-// Unit tests for SamplerModule (issue #146 — Granular / Sample Player):
+// Unit tests for SamplerModule (Granular / Sample Player):
 //   • registration + port/parameter surface
 //   • file loading (success, missing file, unreadable file)
 //   • Sample mode: playback at unity rate, pitch ratio, loop vs one-shot
@@ -126,7 +126,7 @@ TEST_F(SamplerModuleTest, FactoryInitialisation) {
     EXPECT_EQ(module->getModuleType(), ModuleType::Sampler);
     EXPECT_EQ(module->getName(), "Sampler");
     // bypassed, dualIO, playMode, pitch, rootNote, loop, start, grainSize, density, spray, level,
-    // muted  (dualIO added in #219 — the module has always emitted a real stereo pair)
+    // muted  (dualIO only changes the jack layout — the module always emits a real stereo pair)
     EXPECT_EQ(module->getParameters().size(), 12);
     EXPECT_EQ(module->getTotalNumInputChannels(), SamplerModule::kNumChannels);
     EXPECT_EQ(module->getTotalNumOutputChannels(), SamplerModule::kNumChannels);
@@ -145,7 +145,7 @@ TEST_F(SamplerModuleTest, DefaultParameterValues) {
 
 TEST_F(SamplerModuleTest, ModulationTargetsExcludeTriggerJack) {
     auto targets = module->getModulationTargets();
-    EXPECT_EQ(targets.size(), 7u); // FRO312 added Root Note CV as the 7th target
+    EXPECT_EQ(targets.size(), 7u); // Root Note CV is the 7th target
     for (const auto& t : targets)
         EXPECT_NE(t.channelIndex, SamplerModule::kTriggerCh) << "the gate jack must never be auto-attenuverted";
 
@@ -293,7 +293,7 @@ TEST_F(SamplerModuleTest, PitchParameterSetsPlaybackRate) {
     file.deleteFile();
 }
 
-// FRO312: Root Note CV (ch7) modulates the same rootNoteParam a direct knob turn would, once per
+// Root Note CV (ch7) modulates the same rootNoteParam a direct knob turn would, once per
 // block (never smoothed/glided -- see the class's own comment on effectiveRootNote). A constant CV
 // of (72-60)/127 pushes the effective root from the default 60 up to exactly 72, matching
 // modulateNormalised's own "base + cv, in the parameter's own normalised range" contract -- so a
@@ -332,7 +332,7 @@ TEST_F(SamplerModuleTest, MidiNoteTransposesRelativeToRootNote) {
     file.deleteFile();
 }
 
-// FRO246: two Note-Ons with no Note-Off between them (legato) used to collapse onto the block-net
+// Two Note-Ons with no Note-Off between them (legato) used to collapse onto the block-net
 // `midiGateOpen` flag -- the gate never read as "fallen", so the rising-edge check never fired and
 // the second note stayed silent. Sample-accurate retrigger-on-event fixes it whether the two
 // Note-Ons land in different blocks (the common hand-played case) or the same one.
@@ -382,7 +382,7 @@ TEST_F(SamplerModuleTest, ConsecutiveNoteOnsWithinOneBlockBothRetrigger) {
     file.deleteFile();
 }
 
-// FRO246: a transport loop restart whose boundary lands inside one audio block flushes a Note-Off
+// A transport loop restart whose boundary lands inside one audio block flushes a Note-Off
 // then emits the restarted Note-On a few samples later, in the SAME MidiBuffer (see
 // TimelineMidiSourceModule::emitBlock). That used to collapse to "gate never rose" for the block
 // (net effect: still held) and silently drop the first note of the new pass.

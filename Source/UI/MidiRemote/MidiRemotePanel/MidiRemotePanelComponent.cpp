@@ -1,4 +1,4 @@
-// Concern: FRO131 (docs/control/midi-remote-ui.md#the-controllers-panel) -- the panel's own
+// Concern (docs/control/midi-remote-ui.md#the-controllers-panel): the panel's own
 // selection state and the fan-out between its three regions and the live engine/store. The three
 // regions themselves (ControllersListComponent, ControllerSurfaceComponent, ControlInspectorComponent)
 // know nothing about RemoteEngine/MidiLearnController -- this is the one place that does.
@@ -45,7 +45,7 @@ bool parameterTargetResolves(AudioEngine& audioEngine, const synth::Target::Para
 }
 
 // A GLOBAL profile action's display name -- shared by the surface cell label and the inspector's
-// "Drives" row so the two can never disagree. FRO142: a page target's own name mirrors
+// "Drives" row so the two can never disagree. A page target's own name mirrors
 // MidiLearnControllerMapping.cpp's assignControl() targetName exactly.
 juce::String globalActionDisplayName(const synth::Assignment& action) {
     if (action.target.isContinuous())
@@ -67,7 +67,7 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     // this so grabKeyboardFocus() lands deterministically here, not on whichever child JUCE would
     // otherwise pick by Y/X position).
     setWantsKeyboardFocus(true);
-    addMouseListener(&focusOnClick_, true); // FRO273: any press inside routes Cmd+Z here
+    addMouseListener(&focusOnClick_, true); // Any press inside routes Cmd+Z here
 
     addAndMakeVisible(controllersList_);
     addAndMakeVisible(toolbar_);
@@ -94,7 +94,7 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
             device = synth::ControllerProfile::Input{identifier, name};
         setFeedbackOutput(profileId, device);
     };
-    // FRO139: the ONLY call to the live juce::MidiOutput enumeration -- ControllersListComponent
+    // The ONLY call to the live juce::MidiOutput enumeration -- ControllersListComponent
     // itself never calls it (see its own header comment on why: it crashed inside a headless test
     // process). Mirrors showAddControllerPopover()'s identical split for juce::MidiInput.
     controllersList_.queryFeedbackOutputs = [] {
@@ -136,8 +136,8 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     orphanView_.onRelinkRequested = [this](juce::Component& anchor) { showRelinkMenu(anchor); };
     orphanView_.onRecreateRequested = [this](juce::Component& anchor) { showRecreateMenu(anchor); };
 
-    // FRO142 (docs/control/midi-remote.md#pages): the strip acts on the SELECTED profile, never a
-    // profile id of its own -- it knows nothing about which controller is showing.
+    // The strip acts on the SELECTED profile, never a profile id of its own -- it knows
+    // nothing about which controller is showing (see docs/control/midi-remote.md#pages).
     pageStrip_.onPageSelected = [this](int page) {
         if (remoteEngine_ != nullptr && selectedProfileId_.isNotEmpty())
             remoteEngine_->setActivePage(selectedProfileId_, page); // onActivePageChanged refreshes the panel
@@ -162,7 +162,7 @@ void MidiRemotePanelComponent::configure(AudioEngine& audioEngine, synth::midi::
     learnController_ = &learnController;
     doc_ = &doc;
     graphEditor_ = &graphEditor;
-    // FRO142: a page switch (the strip, or a hardware page button) republishes the surface's cell
+    // A page switch (the strip, or a hardware page button) republishes the surface's cell
     // labels and the strip's own highlighted button -- only for the profile currently shown, since
     // switching one controller's page must not disturb what another controller's cells display.
     remoteEngine_->onActivePageChanged = [this](const juce::String& profileId, int newPage) {
@@ -213,7 +213,7 @@ void MidiRemotePanelComponent::rebuildFromProfiles() {
     refreshSurfaceForSelectedProfile();
     refreshInspectorForSelection();
     refreshUndoHint(); // every history change reaches here through onChanged -> scheduleLiveRefresh
-    refreshPortHint(); // FRO339: a device replug/profile edit can change the selected profile's issue
+    refreshPortHint(); // A device replug/profile edit can change the selected profile's issue
 }
 
 void MidiRemotePanelComponent::scheduleLiveRefresh() {
@@ -230,7 +230,7 @@ void MidiRemotePanelComponent::scheduleLiveRefresh() {
 }
 
 // ONE drainActivity() pass feeds everything: the Controllers list's dots, the surface's live
-// widgets, Detect (FRO134) and encoder auto-detect (FRO134) -- a second drain would steal events
+// widgets, Detect and encoder auto-detect -- a second drain would steal events
 // from the first. Detect works on a copy of the selected profile and persists it once, after the
 // drain, so a burst of new controls is one write and one grid rebuild.
 void MidiRemotePanelComponent::refreshActivity() {
@@ -246,7 +246,7 @@ void MidiRemotePanelComponent::refreshActivity() {
     std::vector<synth::midi::RemoteEvent> selectedEvents;
 
     remoteEngine_->drainActivity([&](const juce::String& sourceKey, const synth::midi::RemoteEvent& event) {
-        // FRO272: every profile bound to this device hears it, not just the first one found -- two
+        // Every profile bound to this device hears it, not just the first one found -- two
         // profiles can share an input (an imported copy, a file carried over from another machine),
         // and matching only the first left the other's surface frozen until a tab switch re-seeded it.
         const synth::ControllerProfile* profile = nullptr;
@@ -319,14 +319,14 @@ void MidiRemotePanelComponent::selectProfile(const juce::String& profileId) {
     toolbar_.setProfileSelected(isSelectedProfileUsable());
     refreshSurfaceForSelectedProfile();
     refreshInspectorForSelection();
-    refreshPortHint(); // FRO339: the warning row is per-controller, not per-panel
+    refreshPortHint(); // The warning row is per-controller, not per-panel
 }
 
 void MidiRemotePanelComponent::selectControl(const juce::String& controlId) {
     controllerSurface_.setSelectedControlId(controlId); // fans back into selectControls() below
 }
 
-// FRO270: the surface's onSelectionChanged -- see the header's doc comment on why
+// The surface's onSelectionChanged -- see the header's doc comment on why
 // selectedControlId_ is kept as this set's single member only while size() == 1.
 void MidiRemotePanelComponent::selectControls(const std::vector<juce::String>& controlIds) {
     selectedControlIds_ = controlIds;
@@ -351,15 +351,15 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
         return;
     }
 
-    // FRO142 (docs/control/midi-remote.md#pages): the strip always shows this controller's
-    // effective page count, even with only one page (discoverability, docs/control/midi-remote-ui.md#pages).
+    // The strip always shows this controller's effective page count, even with only one page
+    // (discoverability; see docs/control/midi-remote-ui.md#pages and docs/control/midi-remote.md#pages).
     const int activePage = remoteEngine_ != nullptr ? remoteEngine_->getActivePage(profile->id) : 1;
     const int effectivePageCount = remoteEngine_ != nullptr ? remoteEngine_->getEffectivePageCount(profile->id) : 1;
     pageStrip_.setPages(effectivePageCount, activePage);
     pageStrip_.setVisible(true);
 
-    // FRO141 (docs/control/midi-remote.md#focus-bank): the engine's own transient bindings, for
-    // display only -- fetched once per rebuild rather than per control below.
+    // The engine's own transient bindings, for display only -- fetched once per rebuild
+    // rather than per control below (see docs/control/midi-remote.md#focus-bank).
     const auto transientAssignments =
         remoteEngine_ != nullptr ? remoteEngine_->getTransientAssignments() : std::vector<synth::Assignment>{};
 
@@ -368,9 +368,9 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
         ControllerSurfaceComponent::CellModel cell;
         cell.control = control;
 
-        // FRO253's Target::Kind::nodeCommand (Solo mapping) can also live in doc_->assignments,
+        // A Target::Kind::nodeCommand (Solo mapping) can also live in doc_->assignments,
         // alongside parameter targets -- find whichever one this control has, if any, then branch
-        // on .target.kind to read the right union member. FRO142: only the ACTIVE page's project
+        // on .target.kind to read the right union member. Only the ACTIVE page's project
         // assignment counts -- a control's page-1 and page-2 mapping never both show at once.
         auto projectIt =
             std::find_if(doc_->assignments.begin(), doc_->assignments.end(), [&](const synth::Assignment& a) {
@@ -396,7 +396,7 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
                         const float paramValue = resolution.liveParameter()->getValue();
                         if (projectIt->specEncoding == synth::Encoding::abs7 ||
                             synth::isPairedEncoding(projectIt->specEncoding)) {
-                            // FRO262: Surface widgets show hardware position, not parameter position --
+                            // Surface widgets show hardware position, not parameter position --
                             // activity events are raw 0..1 (RemoteEngineDecode.cpp's pushActivityOnly),
                             // only ever range-mapped on write (RemoteEngineInternal.h's mapThroughRange,
                             // applied in RemoteEngineApply.cpp). Invert that same [rangeMin,rangeMax] map
@@ -427,7 +427,7 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
                 cell.isWarning = true;
             } else {
                 cell.assignmentLabel = moduleName + juce::String::fromUTF8(" \xc2\xb7 Solo");
-                // FRO262: nodeCommand's only target today is Solo (FRO253) -- seed the cell from the
+                // nodeCommand's only target today is Solo -- seed the cell from the
                 // strip's actual current solo state rather than always showing "off".
                 if (auto* processor = resolveProcessor(*audioEngine_, projectIt->target.nodeCommand.nodeUuid)) {
                     if (auto* strip = dynamic_cast<ChannelStripModule*>(processor))
@@ -443,9 +443,9 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
                                                                     a.control.controlId == control.id;
                                                          });
                    transientIt != transientAssignments.end() && transientIt->target.isParameter()) {
-            // FRO141 (docs/control/midi-remote.md#focus-bank): only reached when neither branch
-            // above matched, exactly mirroring RemoteEngineReconcile.cpp's explicit-wins rule --
-            // an active project/global mapping on this control always shows first.
+            // Only reached when neither branch above matched, exactly mirroring
+            // RemoteEngineReconcile.cpp's explicit-wins rule -- an active project/global mapping
+            // on this control always shows first (see docs/control/midi-remote.md#focus-bank).
             cell.isMapped = true;
             juce::String paramName;
             if (auto* processor = resolveProcessor(*audioEngine_, transientIt->target.parameter.nodeUuid)) {
@@ -484,7 +484,7 @@ void MidiRemotePanelComponent::refreshInspectorForSelection() {
 
     const auto* profile = findSelectedProfile();
     ControlInspectorComponent::ControlModel model;
-    // FRO270: 2+ selected -- "N controls selected", every per-control field disabled. selectedControlId_
+    // 2+ selected -- "N controls selected", every per-control field disabled. selectedControlId_
     // is empty in this case (the header's own contract: it's the single-selection anchor only), so
     // this must be checked BEFORE the "nothing selected" empty state below, which would otherwise
     // look identical.
@@ -515,12 +515,12 @@ void MidiRemotePanelComponent::refreshInspectorForSelection() {
     const int activePage = remoteEngine_ != nullptr ? remoteEngine_->getActivePage(profile->id) : 1;
     if (doc_ != nullptr) {
         for (const auto& a : doc_->assignments) {
-            // FRO142 (docs/control/midi-remote.md#pages): only the active page's own project
-            // assignment shows here -- the same control's mapping on another page is invisible
-            // until that page becomes active, same rule the surface cell label follows.
+            // Only the active page's own project assignment shows here -- the same control's
+            // mapping on another page is invisible until that page becomes active, same rule
+            // the surface cell label follows (see docs/control/midi-remote.md#pages).
             if (a.control.profileId != profile->id || a.control.controlId != selectedControlId_ || a.page != activePage)
                 continue;
-            // FRO253's Target::Kind::nodeCommand (Solo mapping) shares this list with parameter
+            // A Target::Kind::nodeCommand (Solo mapping) shares this list with parameter
             // targets -- read the right union member for whichever kind this row actually is.
             ControlInspectorComponent::AssignmentRowModel row;
             row.assignment = a;
@@ -614,7 +614,7 @@ void MidiRemotePanelComponent::setFeedbackOutput(const juce::String& profileId,
     rebuildFromProfiles();
 }
 
-// FRO270: `moves` is one entry per moved control, whether the drag was a lone selection or a
+// `moves` is one entry per moved control, whether the drag was a lone selection or a
 // group -- one updateProfile() call either way, so one undo on the controller history restores
 // every moved control's PREVIOUS position at once.
 void MidiRemotePanelComponent::handleControlsMoved(
@@ -643,9 +643,9 @@ void MidiRemotePanelComponent::handleControlsMoved(
     // very cell whose mouseUp is still executing. Defer to the next message-loop iteration instead,
     // same fix shape as a live-drag survivor elsewhere in this codebase. SafePointer guards against
     // the panel itself being torn down before the deferred call runs (dock closed mid-drag).
-    // FRO270: no explicit re-selection call is needed here -- ControllerSurfaceComponent::setControls()
+    // No explicit re-selection call is needed here -- ControllerSurfaceComponent::setControls()
     // preserves the CURRENT selection across a same-profile rebuild on its own (the automatic
-    // pruning FRO270 added), and re-applying just selectedControlId_ here would wrongly collapse a
+    // pruning), and re-applying just selectedControlId_ here would wrongly collapse a
     // still-live multi-selection down to empty (selectedControlId_ is only the single-selection
     // anchor -- see the header's doc comment).
     juce::Component::SafePointer<MidiRemotePanelComponent> safeThis(this);
@@ -656,7 +656,7 @@ void MidiRemotePanelComponent::handleControlsMoved(
     });
 }
 
-// FRO270: `controlIds` is every id to delete, whether the request came from a lone selection or a
+// `controlIds` is every id to delete, whether the request came from a lone selection or a
 // group -- confirmed ONCE (mirroring ControllersListComponent's own profile-delete confirm, the
 // only existing confirm-before-delete in this panel) with the total assignment count across all of
 // them, then MidiLearnController::deleteControls() in one call so a single undo on either history
@@ -718,7 +718,7 @@ void MidiRemotePanelComponent::handleForgetRequested(const juce::String& assignm
     refreshInspectorForSelection();
 }
 
-// FRO134/FRO264: name / kind / encoding edits from the Inspector. Rebuilds synchronously -- this
+// Name / kind / encoding edits from the Inspector. Rebuilds synchronously -- this
 // is the inspector's own combo/label callback, not a cell's mouse stack.
 void MidiRemotePanelComponent::handleControlEdited(const synth::Control& control) {
     if (learnController_ == nullptr || selectedProfileId_.isEmpty())

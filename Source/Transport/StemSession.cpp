@@ -26,7 +26,7 @@ std::vector<StemStripEntry> collectStemStrips(juce::AudioProcessorGraph& graph) 
     // is the proof such rebuilds happen), so "NN" numbering a given strip is not itself a
     // cross-session guarantee, only a per-export one. STEM NAMING (the "<name>" half of
     // "NN - <name>.<ext>") is a separate concern, resolved in StemSession's constructor below, and
-    // that part DOES optionally look at a synth::TimelineDoc (FRO55) - see its own comment.
+    // that part DOES optionally look at a synth::TimelineDoc - see its own comment.
     std::sort(result.begin(), result.end(),
               [](const StemStripEntry& a, const StemStripEntry& b) { return a.nodeId.uid < b.nodeId.uid; });
     return result;
@@ -45,9 +45,9 @@ StemResult failure(juce::String message) {
     return result;
 }
 
-// ---- FRO55 (docs/mixer/stem-export.md): stem file names, off the TRACK that feeds each strip ----------
+// ---- Stem file names (docs/mixer/stem-export.md), off the TRACK that feeds each strip -----------------
 
-// The stem NAME for the strip at `stripId` (the part between "NN - " and the extension) - FRO55,
+// The stem NAME for the strip at `stripId` (the part between "NN - " and the extension),
 // docs/mixer/stem-export.md. `number` is the strip's own 1-based export position, reused verbatim for the
 // "Channel N" fallback so it always agrees with the file's own "NN" prefix. Exactly one upstream
 // track source resolving to a non-empty TimelineDoc track name wins; zero, several, or an
@@ -58,14 +58,14 @@ StemResult failure(juce::String message) {
 //
 // The walk itself (which tracks feed this strip) and the one-feeder-wins naming rule are
 // synth::channelDisplayName (Source/Mixer/TrackChannelLink.h), shared with the track <-> channel
-// link rule FRO14 decides the same way - see that file. With no TimelineDoc at all (a graph built
+// link rule decides the same way - see that file. With no TimelineDoc at all (a graph built
 // directly by a test), there is no name to find and every strip keeps its "Channel N" fallback.
 //
-// FRO225 (docs/mixer/panel.md): ChannelStripModule now carries a persisted, user-given name of its
-// own (ChannelStripModule::getStripName()) - set from the mixer column header's inline rename.
-// That name wins ahead of everything below whenever it's set (non-empty); empty (unset, and every
-// strip created before FRO225) falls through to exactly the track-walk/bus-fallback rule this
-// function already had, unchanged.
+// ChannelStripModule carries a persisted, user-given name of its own
+// (ChannelStripModule::getStripName()) - set from the mixer column header's inline rename. That
+// name wins ahead of everything below whenever it's set (non-empty); empty (unset, and every
+// strip that predates the name) falls through to exactly the track-walk/bus-fallback rule this
+// function already had, unchanged (see docs/mixer/panel.md).
 juce::String stemStripName(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID stripId, int number,
                            const TimelineDoc* timelineDoc) {
     if (auto* node = graph.getNodeForId(stripId)) {
@@ -74,10 +74,11 @@ juce::String stemStripName(juce::AudioProcessorGraph& graph, juce::AudioProcesso
             return strip->getStripName();
     }
 
-    // FRO15 (docs/mixer/sends-and-buses.md): a group/send bus is a ChannelStrip too, so collectStemStrips
-    // picks it up with no change at all - but it has no feeding track, so "Channel N" would be a
-    // lie about what the file holds. Its fallback is "Bus N" instead (MixerSends.h). A bus that IS
-    // also fed by a track directly still takes the track name below, same as any other strip.
+    // A group/send bus is a ChannelStrip too, so collectStemStrips picks it up with no change at
+    // all - but it has no feeding track, so "Channel N" would be a lie about what the file holds.
+    // Its fallback is "Bus N" instead (MixerSends.h). A bus that IS also fed by a track directly
+    // still takes the track name below, same as any other strip
+    // (see docs/mixer/sends-and-buses.md).
     const juce::String fallback =
         isBusStrip(graph, stripId) ? busFallbackName(graph, stripId) : "Channel " + juce::String(number);
     if (timelineDoc == nullptr)
@@ -170,7 +171,7 @@ StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolde
         StemWriter sw;
         sw.strip = entries[i].strip;
         const auto number = juce::String((int)i + 1).paddedLeft('0', nameWidth);
-        // FRO55: named after the track that feeds this strip, not the strip's own graph-node
+        // Named after the track that feeds this strip, not the strip's own graph-node
         // instance name (that used to be "Channel Strip N" - distinct across strips, but useless) -
         // see stemStripName's own comment.
         const auto legalName =

@@ -9,13 +9,13 @@
 
 namespace {
 
-// Founder-review fix F5 (docs/macros/auto-ports.md). Duplicated from the constexpr
-// GraphEditor::requestGroupSelectionIntoMacro() writes through propertiesFile_ directly for the
-// "remember my choice" case (that modal can fire before this tab, or any Settings window, has
-// ever been constructed) — the same "one-line string not worth a header dependency" reasoning
-// kNaturalScrollingKey below documents, and the two writers MUST agree on the string values below.
-// DEFAULT "ask" (Unset): a silent default of either auto-creating or dropping cables would change
-// existing behaviour with no warning the first time this ships.
+// Duplicated from the constexpr GraphEditor::requestGroupSelectionIntoMacro() writes through
+// propertiesFile_ directly for the "remember my choice" case (that modal can fire before this tab,
+// or any Settings window, has ever been constructed) — the same "one-line string not worth a
+// header dependency" reasoning kNaturalScrollingKey below documents, and the two writers MUST
+// agree on the string values below. DEFAULT "ask" (Unset): a silent default of either
+// auto-creating or dropping cables would change existing behaviour with no warning the first time
+// this ships (see docs/macros/auto-ports.md).
 constexpr const char* kMacroAutoPortPreferenceKey = "macroAutoCreatePorts";
 
 // Settings key for the scroll-direction preference. Duplicated rather than shared with
@@ -43,7 +43,7 @@ constexpr const char* kPianoRollKeyLabelsKey = "pianoRollKeyLabels";
 // for anyone who wants the plain one-bar clip back.
 constexpr const char* kTimelineDoubleClickSpansLocatorsKey = "timelineDoubleClickSpansLocators";
 
-// Autosave (P8-4). Read at use time by MainComponent::maybeAutosave every timerCallback() tick,
+// Autosave. Read at use time by MainComponent::maybeAutosave every timerCallback() tick,
 // duplicated here for the same reason kNaturalScrollingKey above is. DEFAULT ON at 2 minutes:
 // autosave is a safety net, not an opt-in, so an install that never opens this tab still gets it.
 constexpr const char* kAutosaveEnabledKey = "autosaveEnabled";
@@ -55,10 +55,10 @@ constexpr int kDefaultAutosaveIntervalMinutes = 2;
 constexpr const char* kAutosaveBackupCountKey = "autosaveBackupCount";
 constexpr int kDefaultAutosaveBackupCount = 5;
 
-// FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): the per-type default track preset. Value is
-// the preset's sanitised file NAME (no extension), or absent/empty = "use the factory chain". Read at use time by
-// MainComponent::addAudioTrack/addInstrumentTrack, duplicated here for the same "one-line string not worth a header
-// dependency" reason as kAutosaveEnabledKey above.
+// The per-type default track preset. Value is the preset's sanitised file NAME (no extension), or absent/empty =
+// "use the factory chain". Read at use time by MainComponent::addAudioTrack/addInstrumentTrack, duplicated here for
+// the same "one-line string not worth a header dependency" reason as kAutosaveEnabledKey above
+// (see docs/mixer/track-presets.md#saving-and-setting-a-default).
 constexpr const char* kMixerDefaultTrackPresetAudioKey = "mixerDefaultTrackPresetAudio";
 constexpr const char* kMixerDefaultTrackPresetInstrumentKey = "mixerDefaultTrackPresetInstrument";
 // juce::ComboBox reserves id 0 for "nothing selected", so the "Factory Default" sentinel row (which
@@ -66,22 +66,22 @@ constexpr const char* kMixerDefaultTrackPresetInstrumentKey = "mixerDefaultTrack
 constexpr int kMixerDefaultPresetFactoryComboId = 1;
 constexpr int kMixerDefaultPresetComboIdBase = 2;
 
-// FRO12 (P9-6, docs/mixer/panel.md): where the Mixer panel lives. Value is "tab"/"ownPanel"/
-// "window", default "tab" (D4 = A, made configurable) -- read at use time by
-// MixerPlacementController, duplicated here for the same "one-line string not worth a header
-// dependency" reason as kAutosaveEnabledKey above.
+// Where the Mixer panel lives. Value is "tab"/"ownPanel"/ "window", default "tab" --
+// read at use time by MixerPlacementController, duplicated here for
+// the same "one-line string not worth a header dependency" reason as kAutosaveEnabledKey
+// above (see docs/mixer/panel.md).
 constexpr const char* kMixerPlacementKey = "mixerPlacement";
 constexpr int kMixerPlacementTabComboId = 1;
 constexpr int kMixerPlacementOwnPanelComboId = 2;
 constexpr int kMixerPlacementWindowComboId = 3;
 
-// FRO336 (docs/mixer/panel.md#placement-and-detachable-windows): "When a panel opens in its own
-// window" -- move it there (the FRO333 default: the tab leaves the strip) or show it in both
-// places (a second live view opens in the window; the tab stays). Value is "move"/"both", default
-// "move" -- read at use time by BottomDockComponent, duplicated here for the same "one-line string
-// not worth a header dependency" reason as kMixerPlacementKey above. Only the Mixer honours this
-// today (see BottomDockComponent::usesMixerMirrorForDetach) -- Timeline/Controllers still always
-// move.
+// "When a panel opens in its own window" -- move it there (the default: the tab leaves the strip)
+// or show it in both places (a second live view opens in the window; the tab stays). Value is
+// "move"/"both", default "move" -- read at use time by BottomDockComponent, duplicated here for
+// the same "one-line string not worth a header dependency" reason as kMixerPlacementKey above.
+// Only the Mixer honours this today (see BottomDockComponent::usesMixerMirrorForDetach) --
+// Timeline/Controllers still always move
+// (see docs/mixer/panel.md#placement-and-detachable-windows).
 constexpr const char* kPanelDetachModeKey = "detachedPanelBothPlaces";
 constexpr int kPanelDetachModeMoveComboId = 1;
 constexpr int kPanelDetachModeBothComboId = 2;
@@ -97,5 +97,5 @@ extern GraphEditor::SmartConnectionMode modeFromComboId(int id);
 extern int comboIdFromMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref);
 extern GraphEditor::MacroAutoPortPreference macroAutoPortPreferenceFromComboId(int id);
 extern GraphEditor::MacroAutoPortPreference macroAutoPortPreferenceFromString(const juce::String& s);
-// FRO13 (P9-7), defined in PreferencesSettingsTabMixerDefaults.cpp, called from the constructor.
+// Defined in PreferencesSettingsTabMixerDefaults.cpp, called from the constructor.
 extern void populateMixerDefaultPresetCombo(juce::ComboBox& combo, synth::TrackPresetKind kind);

@@ -1,4 +1,4 @@
-// FRO29: automation-launch detection (synth::isNoAudioDeviceLaunch) and the AudioEngine flag it
+// Automation-launch detection (synth::isNoAudioDeviceLaunch) and the AudioEngine flag it
 // drives (setAudioDeviceDisabled/isAudioDeviceDisabled).
 //
 // Headless/deterministic house rules (docs/development/test-patterns.md): a HostMode::Standalone
@@ -71,7 +71,7 @@ TEST(AudioEngineNoAudioDeviceTest, InitialiseNeverOpensADeviceWhenDisabled) {
     // with no device clocking it.
     EXPECT_GT(engine.getGraph().getNodes().size(), 0);
 
-    engine.shutdown(); // Must stay clean with no device/callback ever attached (FRO29).
+    engine.shutdown(); // Must stay clean with no device/callback ever attached.
 }
 
 } // namespace

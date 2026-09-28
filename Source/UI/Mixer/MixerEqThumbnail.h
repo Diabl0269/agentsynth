@@ -6,14 +6,14 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
 
-// MixerEqThumbnail.h -- FRO16 (P9-10, docs/mixer/panel.md#what-the-mixer-shows): a small frequency-response curve on a
+// MixerEqThumbnail.h (docs/mixer/panel.md#what-the-mixer-shows): a small frequency-response curve on a
 // mixer column, Cubase's top-mixer-row idiom. Shown only when the column's first (signal-order)
 // insert is a Parametric EQ (MixerColumnComponent::rebindControls() decides that); hidden
 // otherwise.
 //
 // Lifetime: setEqModule(nullptr) must run BEFORE the bound module's owning node is removed from
 // the graph, not only before a full graph-replacing restore. MixerColumnComponent calls it from
-// two seams: unbindFromGraph() (the FRO11 pre-restore hook, for undo/redo/New Patch/Load/AI
+// two seams: unbindFromGraph() (the pre-restore hook, for undo/redo/New Patch/Load/AI
 // apply) AND MixerInsertList::onBeforeNodeRemoved (fired from MixerInsertList::removeRow, for a
 // live single-insert removal via the mixer's own row menu -- graph.removeNode() frees the
 // processor synchronously, so without this second seam the column's later rebuild

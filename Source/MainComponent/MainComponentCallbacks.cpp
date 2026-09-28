@@ -17,8 +17,8 @@ namespace {
 // has the timeline compiled in — offering it otherwise would let a user save a "project" whose
 // timeline half can never be non-empty.
 constexpr const char* kPatchFileFilter = "*.json;*.agsproj";
-// Subdirectories a saved bundle gets its exports/patch-only snapshots written into by default (P8-5
-// follow-up). Deliberately NOT reserved names on ProjectBundle: unlike Audio/Peaks they carry no
+// Subdirectories a saved bundle gets its exports/patch-only snapshots written into by default.
+// Deliberately NOT reserved names on ProjectBundle: unlike Audio/Peaks they carry no
 // asset-integrity contract and AssetManager::cleanUnusedAssets never looks past Audio/, so nesting
 // them inside the bundle is safe - they are just a destination choice, not part of the bundle's
 // asset policy.
@@ -70,7 +70,7 @@ juce::String MainComponent::computeOutputDeviceInfoText() const {
     if (audioEngine.isHosted())
         return "Host audio";
 
-    // FRO29: an automation launch never opens a device on purpose -- say so explicitly rather
+    // An automation launch never opens a device on purpose -- say so explicitly rather
     // than falling through to the "no device open yet" blank line below, which reads as a
     // transient headless/CI state rather than a deliberate one.
     if (audioEngine.isAudioDeviceDisabled())
@@ -126,7 +126,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
         applyNaturalScrollingPreference();
         applyZoomScrollPreference();
         applyMidiRemotePreferences();
-        // FRO12 (P9-6): a live Preferences placement change applies immediately, no restart --
+        // A live Preferences placement change applies immediately, no restart --
         // idempotent (mixerPlacement_ no-ops when the persisted value already matches), so this is
         // also safe against the same broadcast a DetachedPanelWindow's own bounds-persist
         // (moved()/resized()) fires on every drag frame. applyPlacementPreference() only moves the
@@ -135,7 +135,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
         // placement switch away from Tab would leave the "mixer" region pointing at a component
         // that's no longer showing there -- rebuild every time, same as a detach/redock.
         mixerPlacement_.applyPlacementPreference();
-        // FRO336: the "both places" sibling of the call above -- same idempotent-against-its-own-
+        // The "both places" sibling of the call above -- same idempotent-against-its-own-
         // current-state contract, so this is likewise safe against a DetachedPanelWindow's own
         // bounds-persist broadcast.
         bottomDock.applyDetachBothPlacesPreference();
@@ -146,7 +146,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
         // TimelinePanelComponent::setApplicationProperties already does the initial load.
         timelinePanel.reloadPianoRollAppearancePrefs();
 
-        // FRO147: meter colours live in the same properties file, and AppearanceSettingsTab has no
+        // Meter colours live in the same properties file, and AppearanceSettingsTab has no
         // direct pointer to reach a meter painter (unlike cable colours, which push straight into
         // GraphEditor) — SettingsWindow is its own juce::DialogWindow, so a getLookAndFeel() call
         // from inside the tab is not guaranteed to resolve back to THIS AppLookAndFeel instance,
@@ -171,26 +171,26 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     lookAndFeel->applyTheme(themeManager->getActiveTheme());
     if (auto* top = getTopLevelComponent())
         top->sendLookAndFeelChange();
-    // FRO228: a detached Timeline/Mixer/MIDI Remote window is its OWN top-level Component -- the
+    // A detached Timeline/Mixer/MIDI Remote window is its OWN top-level Component -- the
     // sendLookAndFeelChange() above never reaches it, so without this a theme switch made while a
     // panel is detached left its background/header icon on whichever theme was active when it was
     // last (re)built.
     bottomDock.getTimelineHost().refreshDetachedWindowTheme();
     bottomDock.getMixerHost().refreshDetachedWindowTheme();
     bottomDock.getMidiRemoteHost().refreshDetachedWindowTheme();
-    bottomDock.refreshMixerMirrorWindowTheme(); // FRO336: the "both places" mirror window, if open
+    bottomDock.refreshMixerMirrorWindowTheme(); // The "both places" mirror window, if open
     // Re-tint the toolbar / status-bar icons from the already-retinted IconLibrary cache.
     applyToolbarIcons();
     repaint();
 }
 
-// T159: fires on EVERY keyboard-focus change in the process, not just ones inside our own regions
+// Fires on EVERY keyboard-focus change in the process, not just ones inside our own regions
 // (a focus change elsewhere, e.g. a native file-chooser, still reaches here) — cheap to over-fire
 // since this is just repaint() calls on a handful of components, and correctness needs both the
 // region losing focus and the one gaining it repainted (a still-focused root never calls repaint()
 // on its own, since Component::focusGained/focusLost are no-op virtuals for most components).
 // FocusChangeListener (juce::FocusChangeListener override) — fires on every keyboard-focus
-// change anywhere in the process. Repaints every registered focus-region root so T159's accent
+// change anywhere in the process. Repaints every registered focus-region root so the accent
 // outline (FocusRegion.h's paintFocusRegionOutline) tracks focus moving into or out of it; see
 // FocusRegion.h's comment on paintFocusRegionOutline for why this listener is needed at all.
 void MainComponent::globalFocusChanged(juce::Component*) {
@@ -298,7 +298,7 @@ void MainComponent::timerCallback() {
     // what it did before). This is what starts/stops the playhead's playing-only 30 Hz strip
     // repaint; see docs/layout/animation.md.
     //
-    // FRO11 (P9-5): timelinePanel is now nested inside bottomDock (the Timeline/Mixer tab
+    // timelinePanel is nested inside bottomDock (the Timeline/Mixer tab
     // strip), so its own isVisible() flag only reflects "the Timeline tab is selected", not "the
     // dock is open" -- AND bottomDock.isVisible(), composing both local flags without walking up
     // to a real OS peer, matching bottomDock's own isMixerTabActive() && isVisible() gate for the
@@ -331,11 +331,11 @@ void MainComponent::timerCallback() {
         timelinePanel.getClipLaneArea().updateLiveRecording(liveInfo);
     }
 
-    // FRO11 (P9-5): the mixer's meters, on the SAME existing 10 Hz tick -- no new timer, nothing
+    // The mixer's meters, on the SAME existing 10 Hz tick -- no new timer, nothing
     // at all while the mixer isn't showing ANYWHERE, exactly the Timeline panel's own precedent
     // just above (docs/layout/rendering.md: "rides MainComponent's existing 10 Hz tick,
     // only while the panel is visible"; isVisible(), not isShowing() -- see that block's own
-    // comment). FRO146 follow-up: "showing" now means docked-and-active (isMixerShowing()'s own
+    // comment). "showing" means docked-and-active (isMixerShowing()'s own
     // check, unchanged) OR detached into its own window (also isMixerShowing() -- Window placement
     // detaches the same host) OR the "Own panel" placement's own strip
     // (mixerPlacement_.isOwnPanelShowing()) -- a detached/own-panel mixer previously never ticked
@@ -344,10 +344,10 @@ void MainComponent::timerCallback() {
     if (bottomDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing())
         bottomDock.refreshMeters();
 
-    // FRO131 (docs/control/midi-remote-ui.md#surface-centre): same "existing 10 Hz tick, only
-    // while showing" shape as the mixer meters above -- well under the design doc's <=30 Hz cap,
-    // and no free-running timer of its own. MidiRemote has no Own-panel-style placement, so
-    // isMidiRemoteShowing() alone (docked-and-active OR detached) is the whole gate.
+    // Same "existing 10 Hz tick, only while showing" shape as the mixer meters above -- well
+    // under the design doc's <=30 Hz cap, and no free-running timer of its own. MidiRemote has
+    // no Own-panel-style placement, so isMidiRemoteShowing() alone (docked-and-active OR
+    // detached) is the whole gate (see docs/control/midi-remote-ui.md#surface-centre).
     if (bottomDock.isMidiRemoteShowing())
         bottomDock.refreshMidiRemoteActivity();
 
@@ -492,19 +492,19 @@ void MainComponent::loadFactoryPresetAtIndex(int index) {
     // direction - a clean document stays clean, a dirty one stays dirty.
 }
 
-// T114/P8-10: shared by the Load menu's own factory-preset branch and the welcome screen's "Open
+// Shared by the Load menu's own factory-preset branch and the welcome screen's "Open
 // our default project" button (index 0). hideWelcomeScreen() is the LAST line inside `proceed` —
 // never before or after guardUnsavedChanges() itself — so a Cancel answer leaves the welcome screen
 // exactly as it was (see DirtyDocumentIsGuardedBeforeWelcomeScreenReplacesIt in
 // WelcomeScreenTests.cpp).
-// T114/P8-10: guarded factory-preset load, shared by the Load menu's own preset branch and the
+// Guarded factory-preset load, shared by the Load menu's own preset branch and the
 // welcome screen's "Open our default project" button (index 0). hideWelcomeScreen() runs as the
 // LAST line inside the guard's `proceed` continuation — never before or after
 // guardUnsavedChanges() itself — so a Cancel answer leaves the welcome screen exactly as it was
 // (see DirtyDocumentIsGuardedBeforeWelcomeScreenReplacesIt in WelcomeScreenTests.cpp).
 //
-// FRO325: `isNewDocument` is true ONLY for the welcome screen's call (a brand-new, unsaved
-// document, so the founder's "new projects use the new law" applies) and false for the Load
+// `isNewDocument` is true ONLY for the welcome screen's call (a brand-new, unsaved
+// document, so new projects use the new law) and false for the Load
 // menu's (a factory preset swapped into whatever project is already open, which must leave that
 // project's own pan law alone — same reason the load below never clears the dirty flag). Set
 // inside `proceed`, not before the guard: a Cancel answer must leave the current project,
@@ -524,11 +524,11 @@ void MainComponent::loadPresetGuarded(int index, bool isNewDocument) {
     });
 }
 
-// T114/P8-10: shared by the Load menu's "Recent Projects" submenu and the welcome screen's recent-
+// Shared by the Load menu's "Recent Projects" submenu and the welcome screen's recent-
 // project rows. Goes through openFromFile like every other recent-project open, so autosave
 // recovery and the bundle/plain-preset split both apply unchanged — see openFromFile/
 // loadBundleFromFile/loadAutosaveFromFile's own hideWelcomeScreen() calls on their success paths.
-// T114/P8-10: guarded recent-project open, shared by the Load menu's "Recent Projects" submenu
+// Guarded recent-project open, shared by the Load menu's "Recent Projects" submenu
 // and the welcome screen's recent-project rows. Goes through openFromFile like every other
 // recent-project open, so autosave recovery and the bundle/plain-preset split both apply
 // unchanged.
@@ -537,23 +537,23 @@ void MainComponent::openRecentProjectGuarded(const juce::File& file) {
 }
 
 // Guards BEFORE the dialog opens — the chooser itself is the post-guard half, below.
-// P8-31: the patch half. Opens a `.json` preset, then asks whether to REPLACE the current
+// The patch half. Opens a `.json` preset, then asks whether to REPLACE the current
 // patch or ADD the loaded one on top of it (promptPatchLoadMode, the patchLoadPrompt seam).
 void MainComponent::openPresetFromFile() {
-    // P8-31: no top-level guard here. Loading a patch first offers to REPLACE or APPEND onto the
+    // No top-level guard here. Loading a patch first offers to REPLACE or APPEND onto the
     // current patch; only the destructive REPLACE arm guards unsaved changes (an append keeps them),
     // so the guard lives inside the Replace branch, reached after the user picked a file.
     launchOpenPresetChooser();
 }
 
-// P8-31: the whole-project half of the Load menu. openPresetFromFile opens a plain `.json`
+// The whole-project half of the Load menu. openPresetFromFile opens a plain `.json`
 // patch; this opens a `.agsproj` bundle (graph + timeline) by letting the user select a
 // DIRECTORY (the bundle's folder). Same async shape, and the guard runs before the chooser.
 void MainComponent::openProjectFromFile() {
     guardUnsavedChanges("Opening a project", [this] { launchOpenProjectChooser(); });
 }
 
-// P8-31: the patch half - a plain `.json` preset, an ordinary file pick (never a directory). Once
+// The patch half - a plain `.json` preset, an ordinary file pick (never a directory). Once
 // the user has chosen a file, promptPatchLoadMode asks whether to REPLACE the current patch or add
 // the loaded one on top of it; openFromFile() branches on that flag.
 // The post-guard half of openPresetFromFile() — launches the actual chooser. Split out so
@@ -581,9 +581,9 @@ void MainComponent::launchOpenPresetChooser() {
     });
 }
 
-// P8-31: the project half - a `.agsproj` bundle is a DIRECTORY (project.json + Audio/ + Peaks/),
+// The project half - a `.agsproj` bundle is a DIRECTORY (project.json + Audio/ + Peaks/),
 // so the browser must let the user pick a directory.
-// P8-31: the post-guard half of openProjectFromFile() — patches open a `.json` FILE, projects
+// The post-guard half of openProjectFromFile() — patches open a `.json` FILE, projects
 // open a `.agsproj` DIRECTORY, so each gets its own chooser (and its own filter + selection
 // mode) rather than one combined `.json;*.agsproj` browser that conflated the two.
 void MainComponent::launchOpenProjectChooser() {
@@ -668,7 +668,7 @@ void MainComponent::promptExportPatchOnly() {
     });
 }
 
-// The offline bounce/export flow (P8-5): show the options dialog, then drive a BounceRunner from
+// The offline bounce/export flow: show the options dialog, then drive a BounceRunner from
 // what it reports. See Source/Transport/BounceRunner.h and Source/UI/Chrome/ExportAudioDialog.h for why
 // the render is chunked rather than blocking, and docs/architecture/project-bundle.md#autosave-and-crash-recovery for
 // the full design. The "Export Audio..." menu item's handler: shows synth::ui::ExportAudioDialog, then drives a
@@ -680,7 +680,7 @@ void MainComponent::promptExportAudio() {
     const double arrangementEndBeat = timelineDoc.getArrangementEndBeat();
     const auto position = audioEngine.getTransport().getPositionSnapshot();
     // "Current loop range" is offered as a bounce range whenever the loop LOCATORS describe a
-    // non-degenerate region, independent of whether looping is currently ARMED (P8-17). The region
+    // non-degenerate region, independent of whether looping is currently ARMED. The region
     // is the source, not the live loop: a disengaged loop still names a real span. TransportService
     // always carries a valid [start, end) (its own default is [0, 4)), so only a collapsed region
     // (end <= start) disables the option; there is no separate "locators unset" state to detect. A
@@ -699,7 +699,7 @@ void MainComponent::promptExportAudio() {
     options.componentToCentreAround = this;
     options.useNativeTitleBar = true;
     options.resizable = false;
-    // T153: ExportAudioDialog's own keyPressed() override is the ONE Escape route (page-aware —
+    // ExportAudioDialog's own keyPressed() override is the ONE Escape route (page-aware —
     // it must route to onCancelRender, not onRequestClose, while a bounce is in flight; see its
     // own comment) — not juce::DialogWindow's default, which cannot tell the two pages apart and
     // would silently orphan a running render.
@@ -749,11 +749,11 @@ void MainComponent::promptExportAudio() {
     window->enterModalState(true, nullptr, true);
 }
 
-// The stem export flow (P9-8, docs/mixer/stem-export.md) — the same options dialog as Export Audio,
+// The stem export flow (docs/mixer/stem-export.md) — the same options dialog as Export Audio,
 // opened in its stems mode, driving a StemRunner instead of a BounceRunner. Mirrors
 // promptExportAudio() above closely on purpose: same modal choreography, same isBounceInProgress_
 // gate (shared across both — see its own comment), same progress polling in timerCallback().
-// The "Export Stems..." menu item's handler (P9-8, docs/mixer/stem-export.md): same
+// The "Export Stems..." menu item's handler (docs/mixer/stem-export.md): same
 // synth::ui::ExportAudioDialog, opened in its stems mode, driving a StemRunner instead of a
 // BounceRunner. Shows a status message instead of opening the dialog when the patch has no
 // mixer channels yet (synth::StemExporter::hasChannelStrips).
@@ -811,7 +811,7 @@ void MainComponent::promptExportStems() {
                 statusBar.showMessage(result.message);
             },
             /*chunkBlocks=*/64, /*tickMs=*/10,
-            // FRO55 (docs/mixer/stem-export.md): names each stem after the track that feeds it.
+            // Names each stem after the track that feeds it (see docs/mixer/stem-export.md).
             &timelineDoc);
     };
 

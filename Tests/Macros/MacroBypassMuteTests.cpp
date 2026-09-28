@@ -1,4 +1,4 @@
-// GraphEditor-level tests for the Macro bypass/mute fan-out (P8-15d, T142, docs/macros/ports.md#bypass-and-mute):
+// GraphEditor-level tests for the Macro bypass/mute fan-out (docs/macros/ports.md#bypass-and-mute):
 // "Bypass macro" / "Mute macro" fan ModuleBase::setBypassed/setMuted out over every member as ONE
 // undo step. Both setters are already parameter writes via setValueNotifyingHost, so this is an
 // ordinary parameter change -- no new mutation mechanism, and no macro-level reinterpretation of
@@ -16,7 +16,7 @@
 //                        (the latter via onStatusMessage, matching every other macro refusal)
 //   • card layout    -- the collapsed card's title row never overlaps a badge slot, however long
 //                        the macro's name is (both rectangles come from ONE layout definition,
-//                        MacroCardComponent::getToggleBadgeBounds, the same principle T141's
+//                        MacroCardComponent::getToggleBadgeBounds, the same principle
 //                        macroCardPortLayout applies to port jacks)
 
 #include "AppUndoManager.h"

@@ -1,6 +1,6 @@
-// PluginKnobPickerTests.cpp -- FRO132 (docs/control/plugin-card-layout.md#choosing-knobs): the
+// PluginKnobPickerTests.cpp (docs/control/plugin-card-layout.md#choosing-knobs): the
 // "Choose knobs..." popover. Everything runs against Tests/StubPluginInstance.h, the same fake
-// hosted instance FRO126/FRO128's tests use, and a PickerRig modelled on HostedPluginCardTests.cpp's
+// hosted instance the other picker tests use, and a PickerRig modelled on HostedPluginCardTests.cpp's
 // own Rig (real engine graph node + real PluginCardLayoutStore on a temp directory).
 //
 // Groups:

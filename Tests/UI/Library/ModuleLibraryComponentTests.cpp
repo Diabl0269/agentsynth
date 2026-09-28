@@ -177,7 +177,7 @@ static void simulateMouseExit(ModuleLibraryComponent& comp) {
 }
 
 // Vertical centre of the first draggable row. Resolved from the component's own layout rather
-// than hard-coded: the sidebar gained a Snippets section and a collapse-all strip (issue #156),
+// than hard-coded: the sidebar gained a Snippets section and a collapse-all strip,
 // and every row y shifted. Asking the component keeps these tests about hover behaviour instead
 // of about a magic offset that moves whenever a section is added.
 static int firstDraggableRowY(const ModuleLibraryComponent& comp) {
@@ -298,7 +298,7 @@ TEST(ModuleLibraryPaintSmoke, PaintWithNoHoverNoCrash) {
 
     // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
     // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
-    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    // Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
     juce::Image img(juce::Image::ARGB, 200, 600, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     EXPECT_NO_THROW(comp.paint(g));

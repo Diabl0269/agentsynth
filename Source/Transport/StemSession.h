@@ -16,7 +16,7 @@ namespace synth {
 
 class OfflineTransportDriver;
 class TimelineDoc; // Forward declaration (Source/Timeline/TimelineDoc.h) — see StemSession's
-                   // constructor comment for why this layer now looks at it (FRO55).
+                   // constructor comment for why this layer looks at it.
 // Defined in BounceGuards.h; forward-declared here for the same compile-firewall reason
 // BounceSession.h does — StemSession.cpp includes the real definitions.
 struct MetronomeForceOffGuard;
@@ -58,7 +58,7 @@ public:
     // is touched and no tap stays armed: the engine is restored immediately and failedDuringSetup()
     // is true.
     //
-    // `timelineDoc` (FRO55, docs/mixer/stem-export.md): the live document a stem file's name is resolved
+    // `timelineDoc` (docs/mixer/stem-export.md): the live document a stem file's name is resolved
     // against — each strip is named after the ONE track (Track In / Track Audio, walked upstream
     // through the instrument/macro chain) that feeds it, falling back to "Channel N" when zero or
     // several tracks do, or when this is null (a caller with no timeline at all — every test rig

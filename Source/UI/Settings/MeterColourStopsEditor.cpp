@@ -1,4 +1,4 @@
-// Concern: FRO147 -- MeterColourStopsEditor's layout math, painting, mouse/keyboard interaction
+// Concern: MeterColourStopsEditor's layout math, painting, mouse/keyboard interaction
 // and accessibility. See the header for the interaction contract.
 #include "MeterColourStopsEditor.h"
 

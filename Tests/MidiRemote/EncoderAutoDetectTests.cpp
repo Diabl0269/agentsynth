@@ -1,4 +1,4 @@
-// EncoderAutoDetectTests.cpp -- FRO134 (docs/control/midi-remote-ui.md#inspector-right): the
+// EncoderAutoDetectTests.cpp (docs/control/midi-remote-ui.md#inspector-right): the
 // two-step "turn left... now right" classifier. Every relative pattern plus absolute, the two
 // states that must fail cleanly, and the state machine's phase order.
 #include "MidiRemote/EncoderAutoDetect.h"

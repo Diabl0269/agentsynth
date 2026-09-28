@@ -78,10 +78,10 @@ TEST(MidiRemoteModelTest, MessageSpecRoundTrips) {
     EXPECT_TRUE(parsed == spec);
 }
 
-// FRO330 (docs/control/midi-remote.md#mmc-messages): mmc round-trips like every other MessageType,
-// including its doc-exact camelCase JSON spelling ("mmc") and a command-byte `number` that isn't
-// one of the kMmc* constants -- an unrecognised command is still a legal spec, just one no shipped
-// template's controls will ever match.
+// The mmc MessageType round-trips like every other MessageType
+// (docs/control/midi-remote.md#mmc-messages), including its doc-exact camelCase JSON spelling
+// ("mmc") and a command-byte `number` that isn't one of the kMmc* constants -- an unrecognised
+// command is still a legal spec, just one no shipped template's controls will ever match.
 TEST(MidiRemoteModelTest, MessageSpecRoundTripsMmc) {
     const auto spec = makeSpec(MessageType::mmc, 0, kMmcRecordStrobe);
     MessageSpec parsed;
@@ -178,7 +178,7 @@ TEST(MidiRemoteModelTest, TargetWithNeitherParameterNorActionIsRejected) {
     EXPECT_FALSE(Target::fromVar(v, parsed));
 }
 
-// -- Target::NodeCommand (FRO253, docs/control/midi-remote.md#node-command-targets) -----------------
+// -- Target::NodeCommand (docs/control/midi-remote.md#node-command-targets) -------------------------
 
 TEST(MidiRemoteModelTest, TargetNodeCommandVariantRoundTrips) {
     Target target;
@@ -227,7 +227,7 @@ TEST(MidiRemoteModelTest, TargetNodeCommandRejectsEmptyNodeUuid) {
     EXPECT_FALSE(Target::fromVar(v, parsed));
 }
 
-// -- Target::Continuous (FRO236, docs/control/midi-remote.md#continuous-targets) -----------------
+// -- Target::Continuous (docs/control/midi-remote.md#continuous-targets) -------------------------
 
 TEST(MidiRemoteModelTest, TargetContinuousVariantRoundTripsForEveryKind) {
     for (const auto kind :
@@ -470,7 +470,7 @@ TEST(MidiRemoteModelTest, MidiRemoteProjectDocRoundTrips) {
 TEST(MidiRemoteModelTest, MidiRemoteProjectDocWithNodeCommandAssignmentRoundTrips) {
     Assignment a = makeParameterAssignment("assign-solo");
     a.target.kind = Target::Kind::nodeCommand;
-    a.target.parameter = {}; // FRO253: the previous kind's payload must not survive the switch
+    a.target.parameter = {}; // the previous kind's payload must not survive the switch
     a.target.nodeCommand.nodeUuid = "strip-node-uuid";
     a.target.nodeCommand.command = NodeCommandKind::toggleSolo;
 
@@ -515,7 +515,7 @@ TEST(MidiRemoteModelTest, MidiRemoteProjectDocRejectsMissingVersion) {
     EXPECT_FALSE(parsed.fromVar(v));
 }
 
-// -- 14-bit and NRPN encodings (FRO140) -----------------------------------------------------------------
+// -- 14-bit and NRPN encodings --------------------------------------------------------------------------
 
 TEST(MidiRemoteModelTest, NrpnAndPairedControlsRoundTrip) {
     auto nrpn = makeControl("ctrl-nrpn", makeSpec(MessageType::nrpn, 1, MessageSpec::maxNumber(MessageType::nrpn)));

@@ -83,7 +83,7 @@ TEST(MidiRemoteEngineLearnTest, TieKeepsFirstTallySeen) {
 }
 
 // ============================================================================
-// buttonLike preference (FRO130 -- FRO127 left LearnRequest::buttonLike accepted but unread).
+// buttonLike preference (LearnRequest::buttonLike must be honoured, not just accepted).
 // ============================================================================
 
 TEST(MidiRemoteEngineLearnTest, ButtonLikePrefersNoteOverHigherCountSweep) {
@@ -104,7 +104,7 @@ TEST(MidiRemoteEngineLearnTest, ButtonLikePrefersNoteOverHigherCountSweep) {
     EXPECT_EQ(h.lastResult.spec.number, 60);
 }
 
-// FRO330: an mmc command (the BeatStep's factory Play/Stop) is button-like exactly like a note,
+// An mmc command (the BeatStep's factory Play/Stop) is button-like exactly like a note,
 // so a learn armed buttonLike prefers it over a much higher-count CC sweep -- and the resolved
 // spec is the mmc command, driven through the real handleMessage dispatch with the real MMC byte
 // layout, not a hand-built MessageSpec.

@@ -1,4 +1,4 @@
-// Concern: FRO277's jump-to-next/previous-marker transport actions (transportJumpToNextMarker/
+// Concern: the jump-to-next/previous-marker transport actions (transportJumpToNextMarker/
 // transportJumpToPreviousMarker) -- the marker-search arithmetic, and its reuse of TransportNudge.h's
 // accumulate-on-last-request state so several presses fired faster than the audio thread applies
 // them still step marker-by-marker rather than collapsing onto one stale snapshot. The search

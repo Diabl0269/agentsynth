@@ -1,4 +1,4 @@
-// FRO23 "reconnect the chain": deleting a module that has exactly one incoming and one outgoing
+// "Reconnect the chain": deleting a module that has exactly one incoming and one outgoing
 // audio cable splices its surviving neighbours together. GraphEditor::captureHealSplices()/
 // healDeletedChain() (GraphEditorDeleteHeal.cpp) are exercised only indirectly here, through the
 // real user-facing delete entry points (deleteSelection/requestDeleteModule) — same discipline as
@@ -42,8 +42,8 @@ public:
 };
 
 // Two audio inputs, kept as two SEPARATE visible jacks (ModuleBase's default vis == total input
-// channel count, with no stereo-pair collapsing declared) -- "more audio legs ... deletes as
-// today" (FRO23): this must never be heal-eligible.
+// channel count, with no stereo-pair collapsing declared) -- a module with more audio legs
+// deletes unhealed: this must never be heal-eligible.
 class HealTestTwoAudioInModule : public ModuleBase {
 public:
     explicit HealTestTwoAudioInModule(const juce::String& name)
@@ -119,7 +119,7 @@ NodeID nodeIdForUuid(AudioEngine& engine, const juce::String& uuid) {
 // The headline case: Osc -> Filter -> Distortion -> Output, delete the middle module.
 // Real FX modules (2 audio in/2 audio out, collapsed to one stereo jack by default) stand in for
 // Filter/Distortion so the healed cable is a genuine stereo pair covering both raw legs, not a
-// mono stand-in -- "a stereo pair L+R between the same two jacks counts as one cable" (FRO23).
+// mono stand-in -- "a stereo pair L+R between the same two jacks counts as one cable".
 // ============================================================================
 
 TEST_F(GraphEditorTest, DeletingTheMiddleModuleHealsTheStereoChain) {
@@ -368,9 +368,9 @@ TEST_F(GraphEditorTest, HealsAcrossASurvivingMacroPort) {
 }
 
 // Deleting the macro port NODE ITSELF, not a neighbour of it, is NOT this heal's call: that is
-// FRO235's own dedicated feature, with its own preference (spliceCableOnMacroPortDelete, default
+// the macro-port splice's call, with its own preference (spliceCableOnMacroPortDelete, default
 // OFF -- see MacroPortContextMenu.DeleteFromTheMenuDropsTheCableByDefault,
-// Tests/Macros/MacroPortWidgetTests.cpp). With this heal ON (the default) and FRO235's splice
+// Tests/Macros/MacroPortWidgetTests.cpp). With this heal ON (the default) and the splice
 // preference at its own default OFF, deleting the port must still drop the cable, not splice it --
 // a port anywhere in a deleted run is excluded from this heal at every hop.
 TEST_F(GraphEditorTest, ReconnectChainNeverHealsThroughADeletedMacroPortNodeItself) {
@@ -468,7 +468,7 @@ TEST_F(GraphEditorTest, DeletingFilterInARealOscFilterDistortionOutputChainHeals
     // Filter's own collapsed jack. Filter's mono output landing on that one visible jack broadcasts
     // onto both raw legs (resolvePolyLink's mono-into-collapsed-stereo-pair branch -- the same thing
     // a manual cable drag would do), hence 2 raw connections for what is still ONE logical/visible
-    // cable -- exactly the "count at the visible-jack level" FRO23 asks for.
+    // cable -- exactly the "count at the visible-jack level" the heal's eligibility rule uses.
     ASSERT_EQ(monoConnectionCount(engine, f.filter, f.distortion), 2)
         << "mono Filter broadcast onto Distortion's collapsed stereo input pair";
 
@@ -482,19 +482,18 @@ TEST_F(GraphEditorTest, DeletingFilterInARealOscFilterDistortionOutputChainHeals
 
 // Distortion's own connection into the bare Audio Output node LOOKS like two raw legs, but they
 // land on Output's matching channel pair (raw 0 and 1) off the SAME source jack -- still one
-// logical cable, the ticket's own literal "delete the last effect before Audio Output" case and
-// the founder's example of losing sound (a bare I/O node has no LogicalPort collapsing of its own,
-// ModuleComponentLayout.cpp's getContentTopY reads its RAW getTotalNumOutputChannels(), so its
-// jack-painting/hit-testing genuinely treats each raw channel as its own visible cable --
-// GraphEditorCables.cpp's rebuildVisibleCables falls back to `dstJack =
-// connection.destination.channelIndex` -- but this heal's OWN eligibility count pairs raw 0/1 off
-// one source jack back into a single leg, mergeBareIoChannelPairs in GraphEditorDeleteHeal.cpp).
-// Deleting Distortion therefore DOES heal: Filter -> Audio Output directly. Filter's own collapsed
-// jack is genuinely mono (span 1, confirmed by osc->filter above), so the healed cable lands on
-// Output's Left alone -- one leg, exactly what a manual mono cable into that jack would draw.
-// FRO324 replaced resolvePolyLink's old null-dest mono-broadcast branch (added in #532 for FRO23)
-// with render-time L/Mono normalling: Right borrows Left for as long as Right stays unpatched, so
-// the heal is silent in neither ear without a second EDGE (see Tests/Engine/NormallingTests.cpp for
+// logical cable: the "delete the last effect before Audio Output" case, which must not lose sound
+// (a bare I/O node has no LogicalPort collapsing of its own, ModuleComponentLayout.cpp's
+// getContentTopY reads its RAW getTotalNumOutputChannels(), so its jack-painting/hit-testing
+// genuinely treats each raw channel as its own visible cable -- GraphEditorCables.cpp's
+// rebuildVisibleCables falls back to `dstJack = connection.destination.channelIndex` -- but this
+// heal's OWN eligibility count pairs raw 0/1 off one source jack back into a single leg,
+// mergeBareIoChannelPairs in GraphEditorDeleteHeal.cpp). Deleting Distortion therefore DOES heal:
+// Filter -> Audio Output directly. Filter's own collapsed jack is genuinely mono (span 1, confirmed
+// by osc->filter above), so the healed cable lands on Output's Left alone -- one leg, exactly what
+// a manual mono cable into that jack would draw. No mono-broadcast second leg is added; render-time
+// L/Mono normalling covers it instead: Right borrows Left for as long as Right stays unpatched, so
+// the heal is audible in both ears without a second EDGE (see Tests/Engine/NormallingTests.cpp for
 // the audible proof through a real AudioEngine render).
 TEST_F(GraphEditorTest, DeletingTheLastEffectBeforeAudioOutputHealsToASingleLeftLeg) {
     AudioEngine engine;
@@ -514,8 +513,8 @@ TEST_F(GraphEditorTest, DeletingTheLastEffectBeforeAudioOutputHealsToASingleLeft
 
 // Two DIFFERENT destination nodes, even sitting on the same matching raw-channel numbers, are NOT
 // one leg: the pairing above only merges legs that share the SAME peer node. A splitter/mixer-style
-// module (more than one distinct downstream) still deletes as today, unhealed -- "more audio legs
-// (mixer, splitters) deletes as today" (FRO23).
+// module (more than one distinct downstream) still deletes unhealed, like any module with more
+// audio legs (mixer, splitters).
 TEST_F(GraphEditorTest, TwoDifferentDestinationNodesOnMatchingChannelsStillCountAsTwoLegs) {
     AudioEngine engine;
     GraphEditor editor(engine);

@@ -1,4 +1,4 @@
-// listConversations / getConversation / deleteConversation / deleteAllConversations (P6-8)
+// listConversations / getConversation / deleteConversation / deleteAllConversations
 #include "AuthClientTestHelpers.h"
 
 TEST(AuthClientTest, ListConversationsSuccessParsesConversationsAndDeletionScheduledAt) {

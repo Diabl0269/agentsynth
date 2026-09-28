@@ -1,4 +1,4 @@
-// Concern: FRO125's transport family (play, stop, the togglePlayback alias, toggle loop, record,
+// Concern: the transport family (play, stop, the togglePlayback alias, toggle loop, record,
 // toggle metronome, return to start) -- the docs/control/midi-remote.md#action-targets prerequisite that promotes
 // every transport verb to a command-dispatched AppCommands id, so a MIDI Remote action target can
 // invokeDirectly() it. Two halves: table-shape assertions against a bare ShortcutManager
@@ -256,7 +256,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordRoutesThroughTh
     EXPECT_TRUE(mc.getMidiRecorderForTest().isRecording()) << "an armed MIDI track must actually start a take";
 }
 
-// Deterministic regression test for the FRO210 CI flake in the test above: handleRecordToggle()
+// Regression test for FRO210: deterministic repro of the CI flake in the test above. handleRecordToggle()
 // (MainComponentSetupTimeline.cpp) calls transport.play() -- which only POSTS a command, taking
 // effect on the next processHostBlock -- and THEN MidiRecorder::startRecording(), synchronously.
 // MainComponent's 10 Hz commit-on-stop poll (timerCallback(), MainComponentCallbacks.cpp) commits

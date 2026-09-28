@@ -1,6 +1,6 @@
 // ChannelFlowTests.cpp
 //
-// T173a (FRO226): "+ Track -> Audio Track" now builds a WHOLE mixer channel in one undo step —
+// "+ Track -> Audio Track" now builds a WHOLE mixer channel in one undo step —
 //
 //     Track Audio -> Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor (bypassed)
 //                 -> Channel Strip (Stereo) -> Master (Mix)
@@ -232,10 +232,10 @@ TEST_F(ChannelFlowTest, SecondAudioTrackReusesMaster) {
     EXPECT_EQ(macros.size(), 1);
 }
 
-// T187: before this fix, GraphEditor::newPatch() left the graph with zero nodes, so
-// synth::spliceMasterNode (called from buildDefaultAudioChannel) had no Audio Output to target
-// and silently returned nullptr — a bare Track Audio in a brand-new project was unheard until the
-// user manually added an Audio Output. newPatch() now seeds one as part of the same undo step.
+// GraphEditor::newPatch() seeds an Audio Output as part of the same undo step. With zero nodes,
+// synth::spliceMasterNode (called from buildDefaultAudioChannel) would have no Audio Output to
+// target and silently return nullptr — a bare Track Audio in a brand-new project would be unheard
+// until the user manually added an Audio Output.
 TEST_F(ChannelFlowTest, AudioTrackOnFreshNewPatchGetsMaster) {
     MainComponent mc(std::make_unique<MockProviderCFT>());
     mc.setSize(1600, 900);
@@ -261,7 +261,7 @@ TEST_F(ChannelFlowTest, AudioTrackOnFreshNewPatchGetsMaster) {
     EXPECT_TRUE(graph.isConnected({{master->nodeID, 0}, {output->nodeID, 0}}));
     EXPECT_TRUE(graph.isConnected({{master->nodeID, 1}, {output->nodeID, 1}}));
 
-    // T187 layout follow-up: a bare Audio Output left at the newPatch seed's canvas origin while
+    // A bare Audio Output left at the newPatch seed's canvas origin while
     // Master lands right of the freshly-built chain read as backwards wiring on screen (Master "on
     // the right", Audio Output "top left" with a cable snaking back across everything to reach it —
     // caught live via computer-use testing). addAudioTrack now relocates the seeded Audio Output to
@@ -414,7 +414,7 @@ TEST_F(ChannelFlowTest, RefusedAtMaxTracksCreatesNothing) {
     EXPECT_FALSE(mc.getUndoManager().canUndo()) << "nothing changed in any domain: no undo step";
 }
 
-// FRO226: an old saved project/preset's own JSON — authored before the Gate was added to the
+// An old saved project/preset's own JSON — authored before the Gate was added to the
 // factory default chain — has no Gate node, and loading it must never inject one. This is the one
 // test that actually covers "existing saved projects/presets load unchanged" (buildChannelChain
 // only runs when a NEW channel is built; a trusted applyJSONToGraph load never calls it).
@@ -424,7 +424,7 @@ TEST_F(ChannelFlowTest, LoadingAnOldEqCompressorStripPatchInjectsNoGate) {
     // leaves the cards attached to deleted parameters -- a teardown hang on Linux CI.
     juce::AudioProcessorGraph graph;
 
-    // A pre-FRO226 project's chain: Track Audio -> Parametric EQ -> Compressor -> Channel Strip
+    // A legacy project's chain: Track Audio -> Parametric EQ -> Compressor -> Channel Strip
     // -> Master, no Gate anywhere. Trusted apply, exactly like ProjectBundle::load's own replaying
     // of a saved graph.
     const juce::String oldPatchJson = R"JSON(

@@ -23,12 +23,12 @@ namespace synth::ui {
 class MixerColumnComponent;
 }
 
-// MixerPanelComponent.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): the columns container -- a
+// MixerPanelComponent.h (docs/mixer/panel.md#what-the-mixer-shows): the columns container -- a
 // horizontally scrolling row of columns built from synth::buildMixerSnapshot(), rebuilt on every
 // graph/timeline/macro change notification. Pure layout + rebuild-on-change; owns nothing
 // audio-specific itself.
 //
-// FRO18: also the mixer's own keyboard-focus region ROOT (docs/control/shortcuts.md's "Mixer column
+// Also the mixer's own keyboard-focus region ROOT (docs/control/shortcuts.md's "Mixer column
 // navigation") -- a region ROOT, not per-column leaves: MixerColumnComponent/MixerMasterColumn/
 // MixerDirectColumn's own controls all give up keyboard focus (setWantsKeyboardFocus(false)), so
 // this panel is the single focusable leaf and keyPressed() (MixerPanelKeyboard.cpp) owns Left/
@@ -40,12 +40,12 @@ public:
     MixerPanelComponent();
     ~MixerPanelComponent() override;
 
-    // FRO336: `meterReader` -- own consume-on-read latch slot per live view (see .cpp).
+    // `meterReader` -- own consume-on-read latch slot per live view (see .cpp).
     void configure(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc, synth::MacroSet& macros,
                    AppUndoManager& undoManager, GraphEditor& graphEditor, AudioEngine& audioEngine,
                    synth::MeterReader meterReader = synth::MeterReader::Mixer);
 
-    // FRO336: call once, right after configure() -- see .cpp for exactly what this copies.
+    // Call once, right after configure() -- see .cpp for exactly what this copies.
     void copyWiringFrom(const MixerPanelComponent& other);
 
     /** Forwarded from MixerDirectColumn -- BottomDockComponent wires this to
@@ -57,25 +57,25 @@ public:
      *  BottomDockComponent wires this to MainComponent::reconcileTimelineAfterGraphChange. */
     std::function<void()> onGraphMutated;
 
-    /** FRO336: fired after a real interactive mute/solo/pan-law change -- see the .cpp wiring. */
+    /** Fired after a real interactive mute/solo/pan-law change -- see the .cpp wiring. */
     std::function<void()> onLiveMixerStateChanged;
 
-    /** FRO15 (docs/mixer/sends-and-buses.md): creates a group/send bus channel -- bypassed EQ -> bypassed
-     *  Compressor -> Stereo Strip -> Master(Mix), boxed in a macro named "Bus N" -- as ONE
-     *  recordGraphAndMacroChange step, and returns its strip's node id (invalid on failure). Wired
-     *  to the dock's "Add bus" button and to every send row's "New bus..." item. */
+    /** Creates a group/send bus channel -- bypassed EQ -> bypassed Compressor -> Stereo Strip ->
+     *  Master(Mix), boxed in a macro named "Bus N" -- as ONE recordGraphAndMacroChange step, and
+     *  returns its strip's node id (invalid on failure). Wired to the dock's "Add bus" button and
+     *  to every send row's "New bus..." item (see docs/mixer/sends-and-buses.md). */
     juce::AudioProcessorGraph::NodeID createBus();
 
-    // FRO296 (docs/mixer/sends-and-buses.md#reordering-sends): drag-reorders a send row, one undo step.
+    // Drag-reorders a send row, one undo step (see docs/mixer/sends-and-buses.md#reordering-sends).
     bool moveSendRow(juce::AudioProcessorGraph::NodeID stripNodeId, int fromRow, int toRow);
 
-    // FRO296: nullable MidiRemoteProjectDoc moveSendRow swaps a moved send's mappings on; unset == does less.
+    // Nullable MidiRemoteProjectDoc moveSendRow swaps a moved send's mappings on; unset == does less.
     void setMidiRemoteDoc(synth::MidiRemoteProjectDoc* doc) noexcept { midiRemoteDoc_ = doc; }
 
-    // FRO296: republishes MIDI Remote assignments; called after moveSendRow's edit and as its undo/redo postRestore.
+    // Republishes MIDI Remote assignments; called after moveSendRow's edit and as its undo/redo postRestore.
     std::function<void()> onPublishMidiRemoteAssignments;
 
-    /** FRO18: fires when the Arm key (rebindable "timelineArmFocusedTrack") is pressed with a
+    /** Fires when the Arm key (rebindable "timelineArmFocusedTrack") is pressed with a
      *  linked strip focused -- BottomDockComponent wires this to
      *  MainComponent::performTrackEdit([&doc,id]{ doc.setTrackArmed(id, !doc.getTrack(id)->armed); }),
      *  never a direct TimelineDoc write (that would skip timelineChanged/reconcile -- root
@@ -84,7 +84,7 @@ public:
      *  through regardless). */
     std::function<void(synth::TrackId)> onArmTrack;
 
-    /** FRO18: the ShortcutManager the M/S/R keys resolve their rebindable bindings against
+    /** The ShortcutManager the M/S/R keys resolve their rebindable bindings against
      *  ("timelineMuteFocusedTrack"/"timelineSoloFocusedTrack"/"timelineArmFocusedTrack" -- the
      *  SAME action ids the Timeline track header row already binds, deliberately: a new id would
      *  not inherit a user's existing rebind). Null (the default) falls back to the hardcoded bare
@@ -95,21 +95,21 @@ public:
 
     /** Re-runs buildMixerSnapshot() and rebuilds the column set. Cheap enough to call on every
      *  graph/timeline/macro change (a handful of strips, never per-frame) -- see MixerModel.h.
-     *  FRO18: also re-resolves focusedColumnIndex_ by NodeID/uuid across the rebuild -- see
+     *  Also re-resolves focusedColumnIndex_ by NodeID/uuid across the rebuild -- see
      *  MixerPanelKeyboard.cpp's resolveFocusAfterRebuild() for the by-identity match rule. */
     void rebuild();
 
-    /** FRO11: unbinds every strip column's + Master's fader/pan/mute/solo/meter from whatever
+    /** Unbinds every strip column's + Master's fader/pan/mute/solo/meter from whatever
      *  processor/parameters they currently reference, WITHOUT destroying or rebuilding anything --
      *  wired to GraphEditor::onBeforeDetachAllModuleComponents (MainComponent's own setup), so it
      *  runs before every graph-replacing mutation (undo/redo restore, New Patch, Load, AI patch
      *  apply) frees the nodes those bindings point at. rebuild()'s own stripColumns_.clear() (which
      *  destroys the strip columns' MixerFaders, calling their now-safe idempotent unbind() again)
      *  and buildMixerSnapshot()'s eventual re-bind against the NEW graph both then run afterwards,
-     *  from the after-restore hook -- see docs/mixer/panel.md#unbinding-before-a-graph-change FRO11 crash-fix entry. */
+     *  from the after-restore hook -- see docs/mixer/panel.md#unbinding-before-a-graph-change. */
     void unbindAllColumns();
 
-    /** FRO103: rebuild ONLY if unbindAllColumns() has left the columns detached since the last
+    /** Rebuild ONLY if unbindAllColumns() has left the columns detached since the last
      *  rebuild. The graph-replacing paths (undo/redo restore, New Patch, Load, AI apply) already
      *  rebuild the mixer from their own after-hook, but the single-node removal commands --
      *  GraphEditor::deleteSelection(), requestDeleteModule(), replaceModule() -- do not: the only
@@ -132,14 +132,14 @@ public:
     MixerDirectColumn* getDirectColumnForTest() const { return directColumn_.get(); }
     MixerMasterColumn* getMasterColumnForTest() const { return masterColumn_.get(); }
 
-    /** FRO299: the empty-state hint (see emptyHint_). */
+    /** The empty-state hint (see emptyHint_). */
     const juce::Label& getEmptyHintForTest() const noexcept { return emptyHint_; }
 
-    /** FRO18: -1 when nothing is focused, else an index into the same left-to-right order
+    /** -1 when nothing is focused, else an index into the same left-to-right order
      *  rebuild() lays out (strips, then Direct if visible, then Master if visible). */
     int getFocusedColumnIndexForTest() const noexcept { return focusedColumnIndex_; }
 
-    /** FRO18 review fix: the component setFocusedColumnIndex() would call grabAccessibilityFocus()
+    /** The component setFocusedColumnIndex() would call grabAccessibilityFocus()
      *  toward for the CURRENTLY focused column -- null when nothing is focused. Lets a test assert
      *  WHICH control (a strip/Master's fader slider, or the Direct column itself) the arrow-walk
      *  points real accessibility focus at, without needing the native peer real focus movement
@@ -147,47 +147,47 @@ public:
      *  MixerAccessibilityTests.cpp's own header comment for this suite's established gap). */
     juce::Component* getAccessibilityFocusTargetForTest() const;
 
-    /** FRO11's revealChannelForTrack redirect: scrolls the column for `stripId` into view and
+    /** The revealChannelForTrack redirect: scrolls the column for `stripId` into view and
      *  selects it (MixerColumnComponent::setSelected), clearing selection on every other column.
      *  False when no column matches (nothing to reveal -- the caller falls back to the canvas). */
     bool revealColumn(juce::AudioProcessorGraph::NodeID stripId);
 
     /** One 10 Hz tick while the mixer tab is showing -- measures the elapsed time since the last
-     *  call (juce::Time::getMillisecondCounterHiRes(), FRO146) and ticks every column's meter with
+     *  call (juce::Time::getMillisecondCounterHiRes()) and ticks every column's meter with
      *  it, so the ballistics stay rate-independent of this poll's actual cadence (gated on tab
      *  visibility, so ticks are not always exactly 100 ms apart). The first call after a period of
      *  not ticking (tab just became visible) measures a implausibly large gap and clamps it, so the
      *  very first tick back doesn't snap every bar's release/peak-hold decay instantly to silence. */
     void refreshMeters();
 
-    /** FRO146 follow-up: how many times refreshMeters() has actually run -- the one deterministic
+    /** How many times refreshMeters() has actually run -- the one deterministic
      *  way to prove MainComponent::timerCallback()'s gate (isMixerShowing() ||
      *  mixerPlacement_.isOwnPanelShowing()) did or didn't call it on a given tick, without needing
      *  to render real audio through the graph just to observe a meter move. */
     int getRefreshMetersCallCountForTest() const noexcept { return refreshMetersCallCount_; }
 
-    /** FRO146: the mixer panel header's "Reset Meters" action, and an Option/Alt-click on ANY
+    /** The mixer panel header's "Reset Meters" action, and an Option/Alt-click on ANY
      *  column's own clip readout -- resets every strip/Master readout to "-inf", not clipped. */
     void resetAllMeterReadouts();
 
-    /** FRO133: no-op if no visible column has `nodeId`. */
+    /** No-op if no visible column has `nodeId`. */
     void setMidiLearnArmed(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
     /** Idempotent -- a no-op if nothing is armed. */
     void clearMidiLearnArmed();
 
-    /** FRO253: same contract as setMidiLearnArmed()/clearMidiLearnArmed() above, for Solo. */
+    /** Same contract as setMidiLearnArmed()/clearMidiLearnArmed() above, for Solo. */
     void setMidiLearnArmedSolo(juce::AudioProcessorGraph::NodeID nodeId);
     /** Idempotent -- a no-op if nothing is armed. */
     void clearMidiLearnArmedSolo();
     void collectPickCandidates(std::vector<PickCandidate>& out) const;
 
-    /** FRO253: forwarded to every strip column -- wired once by MainComponent to
+    /** Forwarded to every strip column -- wired once by MainComponent to
      *  MidiLearnController::armNodeCommand/forgetNodeCommand/queryNodeCommandMappings. */
     std::function<void(juce::AudioProcessorGraph::NodeID)> onSoloMidiLearnRequested;
     std::function<void(juce::AudioProcessorGraph::NodeID)> onSoloMidiForgetRequested;
     std::function<juce::String(juce::AudioProcessorGraph::NodeID)> onQuerySoloMidiMapping;
 
-    /** FRO253/FRO336: re-syncs every column's + Master's mute/solo/pan-law visuals -- see the .cpp definition. */
+    /** Re-syncs every column's + Master's mute/solo/pan-law visuals -- see the .cpp definition. */
     void refreshLiveMixerVisuals();
 
     bool keyPressed(const juce::KeyPress& key) override;
@@ -201,7 +201,7 @@ private:
      *  rebuildIfUnbound(). */
     bool columnsUnbound_ = false;
 
-    /** FRO18: one entry per column rebuild() lays out, in the same left-to-right order -- the
+    /** One entry per column rebuild() lays out, in the same left-to-right order -- the
      *  panel's own model of "what can be focused", kept separate from MixerColumnComponent so
      *  that header stays uninvolved in feeding-track bookkeeping it has no other use for (plan's
      *  own file-size budget). */
@@ -215,7 +215,7 @@ private:
         std::vector<synth::TrackId> feedingTracks; // Strip only
     };
 
-    // ---- FRO18 keyboard dispatch -- implemented in MixerPanelKeyboard.cpp ----------------------
+    // ---- Keyboard dispatch -- implemented in MixerPanelKeyboard.cpp ----------------------------
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
     bool moveFocus(int direction);
     bool nudgeFocusedFader(float deltaDb);
@@ -232,7 +232,7 @@ private:
     void setFocusedColumnIndex(int index);
     void syncFocusVisuals();
     void revealFocusedColumn();
-    /** FRO18 review fix: moves REAL accessibility focus (VoiceOver's cursor) onto whatever
+    /** Moves REAL accessibility focus (VoiceOver's cursor) onto whatever
      *  getAccessibilityFocusTargetForTest() currently resolves to. Called ONLY from
      *  setFocusedColumnIndex() -- i.e. real user navigation -- never from rebuild()'s
      *  resolveFocusAfterRebuild() path, which writes focusedColumnIndex_ directly and calls
@@ -243,7 +243,7 @@ private:
     juce::Viewport viewport_;
     juce::Component content_;
 
-    /** FRO299: shown only while there are no columns; see the ctor and rebuild(). */
+    /** Shown only while there are no columns; see the ctor and rebuild(). */
     juce::Label emptyHint_;
 
     juce::AudioProcessorGraph* graph_ = nullptr;
@@ -251,10 +251,10 @@ private:
     synth::MacroSet* macros_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     GraphEditor* graphEditor_ = nullptr;
-    synth::MidiRemoteProjectDoc* midiRemoteDoc_ = nullptr; // FRO296, see setMidiRemoteDoc
+    synth::MidiRemoteProjectDoc* midiRemoteDoc_ = nullptr; // See setMidiRemoteDoc
     AudioEngine* audioEngine_ = nullptr;
     ShortcutManager* shortcuts_ = nullptr;
-    synth::MeterReader meterReader_ = synth::MeterReader::Mixer; // FRO336, see configure()
+    synth::MeterReader meterReader_ = synth::MeterReader::Mixer; // See configure()
 
     std::vector<std::unique_ptr<MixerColumnComponent>> stripColumns_;
     std::unique_ptr<MixerDirectColumn> directColumn_;
@@ -263,14 +263,14 @@ private:
     std::vector<ColumnEntry> columnEntries_;
     int focusedColumnIndex_ = -1;
 
-    juce::AudioProcessorGraph::NodeID midiLearnArmedNodeId_;     // FRO133; invalid = nothing armed
-    juce::AudioProcessorGraph::NodeID midiLearnArmedSoloNodeId_; // FRO253; invalid = nothing armed
+    juce::AudioProcessorGraph::NodeID midiLearnArmedNodeId_;     // Invalid = nothing armed
+    juce::AudioProcessorGraph::NodeID midiLearnArmedSoloNodeId_; // Invalid = nothing armed
 
-    /** FRO146: juce::Time::getMillisecondCounterHiRes() as of the last refreshMeters() call, or 0.0
+    /** juce::Time::getMillisecondCounterHiRes() as of the last refreshMeters() call, or 0.0
      *  before the first one -- lets refreshMeters() measure real elapsed time for the ballistics
      *  rather than assuming a fixed 100 ms step. */
     double lastMeterRefreshMs_ = 0.0;
-    // FRO146 follow-up: backs getRefreshMetersCallCountForTest() -- test-only, never read in
+    // Backs getRefreshMetersCallCountForTest() -- test-only, never read in
     // production.
     int refreshMetersCallCount_ = 0;
 

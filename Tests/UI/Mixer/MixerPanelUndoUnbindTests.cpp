@@ -1,4 +1,4 @@
-// MixerPanelUndoUnbindTests.cpp -- FRO11 crash fix regression: a graph-structural undo/redo (or
+// MixerPanelUndoUnbindTests.cpp -- crash regression: a graph-structural undo/redo (or
 // New Patch) used to destroy the OLD MixerColumnComponent set (MixerPanelComponent::rebuild(),
 // reached from the AFTER-restore hook / reconcileTimelineAfterGraphChange()) AFTER the graph
 // mutation had already freed the ChannelStripModule/MasterModule nodes the mixer's MixerFader
@@ -86,7 +86,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeAGraphRestoreSoUndoNeverT
     mc.newPatchForTest();
 
     // simulateAddAudioTrackClick() creates a Track Audio -> insert chain -> ChannelStrip macro as
-    // ONE undo step (T173a), and reconcileTimelineAfterGraphChange() (the same funnel every graph
+    // ONE undo step, and reconcileTimelineAfterGraphChange() (the same funnel every graph
     // change reaches) rebuilds the mixer right away, binding a real MixerFader to the new strip's
     // live "gain" AudioParameterFloat.
     mc.simulateAddAudioTrackClick();
@@ -145,7 +145,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeNewPatchReplacesTheDocume
     EXPECT_EQ(mixerPanel.getStripColumnForTest(0), nullptr);
 }
 
-// FRO16 review follow-up: GraphEditor::deleteSelection() (a canvas "Delete", or
+// GraphEditor::deleteSelection() (a canvas "Delete", or
 // deleteMacroAndMembers -- the exact repro in MixerPanelKeyboardFocusTests.cpp's
 // DeletingTheFocusedStripClearsFocus) is a THIRD graph-freeing path, distinct from both a
 // graph-replacing restore above and MixerInsertList::removeRow()'s own single-row hook. It has no
@@ -189,18 +189,18 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeDeleteSelectionFreesTheSt
     EXPECT_EQ(mixerPanel.getStripColumnForTest(0), nullptr);
 }
 
-// FRO16's review follow-up closed GraphEditor::deleteSelection() (above), but left the two OTHER
-// single-node removal commands open: requestDeleteModule() -- a module card's own delete button
-// (ModuleComponent.cpp) and its "Delete Module" context-menu item -- and replaceModule(), the
-// "Replace with..." submenu, offered for every module except the singleton Audio Input/Output.
-// Both can free a ChannelStripModule (or MasterModule, which is deliberately kept OUT of any
-// collapsed macro and so is always individually addressable on the canvas) that a mixer column's
-// fader, pan attachment or send rows are still bound to, and neither has a rebuild of its own to
-// lean on: updateComponents() only reaches reconcileTimelineBindingsOnly(), which deliberately
-// never rebuilds the mixer. The dangling binding then sat until an unrelated later graph edit
-// destroyed the old column and dereferenced it -- the exact heap-use-after-free signature (or,
-// non-deterministically, the exit-124 deadlock inside CriticalSection::enter) this file's other
-// three tests exist for.
+// Besides GraphEditor::deleteSelection() (above), two OTHER single-node removal commands free
+// nodes: requestDeleteModule() -- a module card's own delete button (ModuleComponent.cpp) and
+// its "Delete Module" context-menu item -- and replaceModule(), the "Replace with..." submenu,
+// offered for every module except the singleton Audio Input/Output. Both can free a
+// ChannelStripModule (or MasterModule, which is deliberately kept OUT of any collapsed macro and
+// so is always individually addressable on the canvas) that a mixer column's fader, pan
+// attachment or send rows are still bound to, and neither has a rebuild of its own to lean on:
+// updateComponents() only reaches reconcileTimelineBindingsOnly(), which deliberately never
+// rebuilds the mixer. Without an unbind first, the dangling binding would sit until an unrelated
+// later graph edit destroyed the old column and dereferenced it -- the exact heap-use-after-free
+// signature (or, non-deterministically, the exit-124 deadlock inside CriticalSection::enter)
+// this file's other three tests exist for.
 TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeRequestDeleteModuleFreesTheStripsNode) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);
@@ -267,15 +267,15 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeReplaceModuleFreesTheStri
     EXPECT_EQ(countChannelStrips(graph), 0);
 }
 
-// The other half of FRO103. The pre-removal unbind above is what keeps these paths from
-// dereferencing freed parameters, but on its own it also leaves every column attached to nothing:
-// unbindAllColumns() unbinds the WHOLE mixer, including columns whose own nodes were never
-// touched, and nothing on these paths rebuilds the panel (updateComponents() only reaches
+// The other half of the unbind contract. The pre-removal unbind above is what keeps these paths
+// from dereferencing freed parameters, but on its own it also leaves every column attached to
+// nothing: unbindAllColumns() unbinds the WHOLE mixer, including columns whose own nodes were
+// never touched, and nothing on these paths rebuilds the panel (updateComponents() only reaches
 // reconcileTimelineBindingsOnly(), which deliberately never does). Without the matching
-// onAfterGraphNodesRemoved hook, deleting any module from the canvas left every fader on screen
-// but inert until an unrelated later change happened to rebuild -- a visible dead mixer, traded
-// for a fixed crash. This test deletes a module the mixer never bound (an EQ insert) and holds the
-// surviving strip's fader to being live again afterwards, with no manual rebuild() anywhere.
+// onAfterGraphNodesRemoved hook, deleting any module from the canvas would leave every fader on
+// screen but inert until an unrelated later change happened to rebuild -- a visible dead mixer.
+// This test deletes a module the mixer never bound (an EQ insert) and holds the surviving strip's
+// fader to being live again afterwards, with no manual rebuild() anywhere.
 TEST(MixerPanelUndoUnbindTests, MixerColumnsAreReboundAfterAnUnrelatedModuleIsDeleted) {
     MainComponent mc(std::make_unique<MockProviderMPUT>());
     mc.setSize(1400, 900);

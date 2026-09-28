@@ -1,4 +1,4 @@
-// Concern: FRO135 -- an orphan controller row's view and its two repairs, Re-link and Recreate
+// Concern: an orphan controller row's view and its two repairs, Re-link and Recreate
 // (docs/control/midi-remote-ui.md#controllers-list-left,
 // docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project).
 #include "AudioEngine/AudioEngine.h"

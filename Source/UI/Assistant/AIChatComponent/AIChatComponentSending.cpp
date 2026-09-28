@@ -199,14 +199,14 @@ void AIChatComponent::sendButtonClicked() {
                 self->messages.push_back({"assistant", cleanText.trim(), json, /*isExpanded=*/false,
                                           /*showUpgradeAction=*/false, timelineOpsJson, timelineOpsPreview});
                 self->messages.back().responseMs = elapsed;
-                // P6-9: only present on a Pro-plan hosted response whose persistence
+                // Only present on a Pro-plan hosted response whose persistence
                 // succeeded (see AIResponse::messageId's doc comment) — empty for every other
                 // case (local Ollama, free plan, no provider), which is exactly what keeps the
                 // later rating-sync check a no-op for those.
                 self->messages.back().serverMessageId = aiResponse.messageId;
                 self->attachPatchPreview(self->messages.back());
 
-                // P6-8: local-first — every session writes here regardless of plan, right after
+                // Local-first — every session writes here regardless of plan, right after
                 // the assistant turn lands and `messages` reflects the full exchange. Not in
                 // AIIntegrationService::sendMessage()'s own callback: that one can run on a
                 // provider worker thread and only has aiService.chatHistory (unsplit

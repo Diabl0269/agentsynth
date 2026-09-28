@@ -118,7 +118,7 @@ TEST_F(ModuleComponentTest, AdsrPolyToggleIsLaidOutInsideTheModule) {
         << "Poly toggle must sit inside the module's bounds to be visible and clickable";
 }
 
-// FRO112: the ADSR card no longer has its own bespoke slider-grid branch. Its five remaining
+// The ADSR card no longer has its own bespoke slider-grid branch. Its five remaining
 // knobs (attack/hold/decay/sustain/release — attackCurve/decayCurve/releaseCurve moved onto the
 // envelope graph's bend handles, see ModuleComponentEnvelopeCardTests.cpp) flow through the
 // generic layout every other module uses: the "Poly" toggle and the Threshold control (both
@@ -198,7 +198,7 @@ juce::Slider* findAdsrSlider(ModuleComponent& moduleComponent, const juce::Strin
 }
 } // namespace
 
-// FRO110 fix (skew-regression): attack/hold/decay/release keep a LINEAR parameter range (see
+// Skew regression: attack/hold/decay/release keep a LINEAR parameter range (see
 // ADSRModule.h/docs/modules/modules.md#adsr-envelope-module) so AIStateMapper's untrusted rescale heuristic is
 // unaffected, but the knob must still feel skewed at the 1 ms attack default. That skew lives on the SLIDER, applied
 // AFTER its SliderParameterAttachment is built -- setting it before (or relying on NormalisableRange::skew once
@@ -225,7 +225,7 @@ TEST_F(ModuleComponentTest, AdsrTimeSlidersAreSkewedButParameterRangeStaysLinear
 
     // Sustain must stay linear on the slider too -- only the four time params get the UI-side
     // skew. (The three curve params -- attackCurve/decayCurve/releaseCurve -- are no longer
-    // sliders at all as of FRO112; they're edited via the envelope graph's bend handles.)
+    // sliders at all; they're edited via the envelope graph's bend handles.)
     auto* sustainSlider = findAdsrSlider(moduleComponent, "Sustain");
     ASSERT_NE(sustainSlider, nullptr);
     EXPECT_NEAR(sustainSlider->getSkewFactor(), 1.0, 1.0e-9) << "Sustain must stay linear";
@@ -235,7 +235,7 @@ TEST_F(ModuleComponentTest, AdsrTimeSlidersAreSkewedButParameterRangeStaysLinear
             << curveParamName << " must not be its own knob -- it's edited via the envelope graph";
 
     // The parameter's own range must stay linear regardless of the slider's skew -- this is the
-    // actual FRO110 fix: AIStateMapper's untrusted rescale reads the PARAMETER's range, never the
+    // actual fix: AIStateMapper's untrusted rescale reads the PARAMETER's range, never the
     // slider's.
     for (const char* paramId : {"attack", "hold", "decay", "release"}) {
         auto* param = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&processor, paramId));
@@ -270,7 +270,7 @@ TEST_F(ModuleComponentTest, AdsrCardRendersToPngForVisualInspection) {
 
     // SoftwareImageType(): on Windows the default (native) image type is Direct2D-backed, and
     // painting into it then reading pixels back on a GPU-less CI runner yields an all-zero image
-    // (FRO242). Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
+    // Force a software-backed bitmap so getPixelAt() reads what paint() actually drew.
     juce::Image img(juce::Image::ARGB, width, height, true, juce::SoftwareImageType());
     juce::Graphics g(img);
     // paintEntireComponent recurses into children (paint() + paintOverChildren() + each child's

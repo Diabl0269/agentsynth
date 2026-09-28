@@ -1,4 +1,4 @@
-// ControlInspectorComponent.cpp -- FRO131 (docs/control/midi-remote-ui.md#inspector-right): see
+// ControlInspectorComponent.cpp (docs/control/midi-remote-ui.md#inspector-right): see
 // the header for scope. `AssignmentRow` is defined here (not in the header, which only
 // forward-declares it) because it is held by value-semantics ownership in an
 // juce::OwnedArray<AssignmentRow> -- the OwnedArray's deletion needs the complete type, so both
@@ -77,7 +77,7 @@ juce::String formatMessageSpec(const synth::MessageSpec& spec) {
 }
 
 // An NRPN control's value is CC 6 (+ CC 38), so its choices are named for that; a plain CC's paired
-// choices name the MSB/LSB order the hardware sends them in (FRO140).
+// choices name the MSB/LSB order the hardware sends them in.
 juce::String encodingDisplayName(synth::Encoding encoding, synth::MessageType type = synth::MessageType::cc) {
     if (type == synth::MessageType::nrpn) {
         switch (encoding) {
@@ -111,7 +111,7 @@ juce::String encodingDisplayName(synth::Encoding encoding, synth::MessageType ty
 int encodingToComboId(synth::Encoding encoding) { return static_cast<int>(encoding) + 1; }
 synth::Encoding comboIdToEncoding(int id) { return static_cast<synth::Encoding>(juce::jmax(1, id) - 1); }
 
-// Same 1-based, declaration-order ids for the kind picker (FRO134 / FRO264).
+// Same 1-based, declaration-order ids for the kind picker .
 int kindToComboId(synth::ControlKind kind) { return static_cast<int>(kind) + 1; }
 synth::ControlKind comboIdToKind(int id) { return static_cast<synth::ControlKind>(juce::jmax(1, id) - 1); }
 
@@ -176,7 +176,7 @@ void populateEncodingCombo(juce::ComboBox& combo, const synth::Control& control)
     }
 }
 
-// "Default (<the Preferences default>)": the row names what Default currently means (FRO136).
+// "Default (<the Preferences default>)": the row names what Default currently means.
 juce::String defaultTakeoverItemText(synth::Takeover preferencesDefault) {
     switch (preferencesDefault) {
     case synth::Takeover::jump:
@@ -316,7 +316,7 @@ private:
     // Applies to `parameter` and `continuous` targets -- the only two kinds an absolute takeover and
     // a range narrow anything for (docs/control/midi-remote.md#takeover: "not buttons"; an action or
     // nodeCommand target is always button-like, docs/control/midi-remote.md#node-command-targets).
-    // FRO236: a continuous target's range narrows its native-unit window exactly like a parameter's
+    // A continuous target's range narrows its native-unit window exactly like a parameter's
     // normalised one, and bpm/masterVolume both honour takeover (playhead ignores it -- always
     // Jump -- but showing the combo costs nothing and stays consistent with the other two).
     // An orphaned row (its target no longer resolves) offers Forget only.
@@ -417,7 +417,7 @@ private:
 ControlInspectorComponent::ControlInspectorComponent() {
     nameLabel_.setComponentID("controlNameLabel");
     nameLabel_.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
-    nameLabel_.setEditable(false, true, false); // FRO134: double-click to rename
+    nameLabel_.setEditable(false, true, false); // double-click to rename
     nameLabel_.onTextChange = [this] {
         const auto trimmed = nameLabel_.getText().trim();
         if (!model_.hasControl || trimmed.isEmpty() || trimmed == model_.control.name) {
@@ -475,8 +475,9 @@ ControlInspectorComponent::ControlInspectorComponent() {
     buttonModeLabel_.setComponentID("buttonModeLabel");
     addAndMakeVisible(buttonModeLabel_);
 
-    // FRO141 (docs/control/midi-remote.md#focus-bank): membership only -- the CURRENT binding is
-    // never shown/edited here, it lives on the surface cell (ControllerSurfaceComponent).
+    // Membership only -- the CURRENT binding is never shown/edited here, it lives on the
+    // surface cell (ControllerSurfaceComponent)
+    // (see docs/control/midi-remote.md#focus-bank).
     focusBankToggle_.setComponentID("focusBankToggle");
     focusBankToggle_.setTooltip("This control drives whichever module is selected on the canvas");
     focusBankToggle_.onClick = [this] {
@@ -511,7 +512,7 @@ void ControlInspectorComponent::setControl(const ControlModel& model) {
     rebuildRows();
 
     if (!model_.hasControl) {
-        // FRO270: a 2+ multi-selection overrides the ordinary empty-state text; every field below
+        // A 2+ multi-selection overrides the ordinary empty-state text; every field below
         // stays hidden either way, since neither state has one control's own fields to show.
         nameLabel_.setText(model_.selectedCount >= 2 ? juce::String(model_.selectedCount) + " controls selected"
                                                      : juce::String("No control selected"),

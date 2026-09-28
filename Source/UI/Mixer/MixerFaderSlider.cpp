@@ -1,4 +1,4 @@
-// Concern: FRO150 -- MixerFaderSlider's own mouse/wheel handling (Shift fine-drag, Cmd-click and
+// Concern: MixerFaderSlider's own mouse/wheel handling (Shift fine-drag, Cmd-click and
 // double-click reset, Shift fine-wheel). See MixerFaderSlider.h's class comment for why every
 // override below is self-contained rather than calling the juce::Slider base class.
 #include "MixerFaderSlider.h"
@@ -50,7 +50,7 @@ void MixerFaderSlider::mouseDown(const juce::MouseEvent& e) {
     if (!isEnabled())
         return;
 
-    // FRO133: a right-click opens the MIDI Learn menu (MixerColumnComponent::mouseDown, via a
+    // A right-click opens the MIDI Learn menu (MixerColumnComponent::mouseDown, via a
     // MouseListener registered on this slider) rather than starting a drag -- without this guard
     // a right-click would ALSO set dragging_/fire onDragStart, exactly the RightClickSafeButton
     // bug (Source/UI/MidiRemote/MidiLearnMenu.h) but for a Slider instead of a Button.

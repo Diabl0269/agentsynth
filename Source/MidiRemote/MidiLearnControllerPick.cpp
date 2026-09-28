@@ -1,4 +1,4 @@
-// Concern: FRO135 pick-target session -- the panel's "Pick a module control" flow
+// Concern: pick-target session -- the panel's "Pick a module control" flow
 // (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn). The overlay component
 // itself is UI (Source/UI/Graph/PickTargetOverlay/); this is the session that feeds it candidates
 // from every learnable surface and turns the click it reports into an assignment.

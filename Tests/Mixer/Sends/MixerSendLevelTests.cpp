@@ -1,12 +1,12 @@
-// Module-level tests for a Channel Strip's send legs (FRO15 / P9-9, docs/mixer/sends-and-buses.md).
+// Module-level tests for a Channel Strip's send legs (docs/mixer/sends-and-buses.md).
 //
 //   * pre vs post    -- a post-fader send carries exactly what the strip hands Master; a pre-fader
 //                        one carries the signal before gain and pan
 //   * level          -- a dB send level, applied to both legs of the pair
 //   * mute / bypass  -- mute silences every send (the deliberate departure from DAW cue sends);
 //                        bypass makes pre and post coincide
-//   * pan / mono     -- FRO294: a send's own pan law (hard left/right puts the return on only one
-//                        leg; centre + stereo is bit-identical to before FRO294) and its mono flag
+//   * pan / mono-- a send's own pan law (hard left/right puts the return on only one
+//                        leg; centre + stereo is bit-identical to an unpanned send) and its mono flag
 //                        (sums different L/R inputs to the same value on both legs)
 //   * hygiene        -- EVERY branch writes EVERY send channel, so a stale block can never leak
 //                        into a bus
@@ -155,7 +155,7 @@ TEST(MixerSendLevelTest, MuteSilencesPreAndPostSends) {
 }
 
 TEST(MixerSendLevelTest, MuteSilencesOnlyItsOwnSlotAndUnmuteRestoresTheSameLevel) {
-    // FRO295: per-send mute is a silence gate ON TOP of the level parameter, not a level of zero --
+    // Per-send mute is a silence gate ON TOP of the level parameter, not a level of zero --
     // an unmuted sibling slot must keep passing signal, and unmuting must not have moved the level.
     ChannelStripModule strip;
     ASSERT_EQ(strip.addSend(), 0);
@@ -194,7 +194,7 @@ TEST(MixerSendLevelTest, MuteStateRoundTripsThroughExtraStateAndAnOldEntryLoadsU
     EXPECT_TRUE(restored.isSendMuted(0));
     EXPECT_FALSE(restored.isSendMuted(1)) << "only the muted slot carries the bit";
 
-    // An entry saved before FRO295 has no "mute" key at all -- must load unmuted, not default to
+    // An entry saved before send mute existed has no "mute" key at all -- must load unmuted, not default to
     // whatever bit happened to be set before setExtraState() ran (readSendsState clears first).
     ChannelStripModule legacy;
     auto* obj = new juce::DynamicObject();
@@ -231,7 +231,7 @@ TEST(MixerSendLevelTest, BypassMakesPreAndPostSendsIdentical) {
 }
 
 // ============================================================================
-// Pan and mono (FRO294)
+// Pan and mono
 // ============================================================================
 
 TEST(MixerSendLevelTest, SendPanHardLeftPutsTheReturnOnlyOnTheLeftLeg) {
@@ -264,7 +264,7 @@ TEST(MixerSendLevelTest, SendPanHardRightPutsTheReturnOnlyOnTheRightLeg) {
 
 TEST(MixerSendLevelTest, SendPanCentreAndStereoIsBitIdenticalToBeforeFRO294) {
     // send1Pan defaults to 0 (centre) and mono defaults to false -- reproduces
-    // SendLevelScalesTheLegInDecibels's own numbers exactly, proving FRO294 changed nothing at the
+    // SendLevelScalesTheLegInDecibels's own numbers exactly, proving the pan law changes nothing at the
     // default settings (ModuleBase::panGains(0.0f) returns exactly 1.0f on both legs, no rounding).
     ChannelStripModule strip;
     ASSERT_EQ(strip.addSend(), 0);
@@ -307,7 +307,7 @@ TEST(MixerSendLevelTest, MonoStateRoundTripsThroughExtraStateAndAnOldEntryLoadsS
     EXPECT_TRUE(restored.isSendMono(0));
     EXPECT_FALSE(restored.isSendMono(1)) << "only the mono slot carries the bit";
 
-    // An entry saved before FRO294 has no "mono" key at all -- must load stereo, not whatever bit
+    // An entry saved before send mono existed has no "mono" key at all -- must load stereo, not whatever bit
     // happened to be set before setExtraState() ran (readSendsState clears first).
     ChannelStripModule legacy;
     auto* obj = new juce::DynamicObject();

@@ -123,7 +123,7 @@ bool MainComponent::openFromFile(const juce::File& file, bool append) {
     markDocumentClean();
     setCurrentPatchName(file.getFileNameWithoutExtension());
     statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
-    // T114/P8-10 + P8-31: covers the plain-.json patch load (the menu-only "Open Patch") that still
+    // Covers the plain-.json patch load (the menu-only "Open Patch") that still
     // routes through this tail when the welcome screen is up. The "Open an existing project" button now
     // opens a .agsproj bundle, which returns through loadBundleFromFile/loadAutosaveFromFile instead,
     // each with its own call on its own success tail.
@@ -167,16 +167,16 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
         statusBar.showMessage("Load failed: " + result.message);
         return false;
     }
-    // FRO325: the engine's own pan law follows the just-loaded bundle -- absent means Balance
+    // The engine's own pan law follows the just-loaded bundle -- absent means Balance
     // (an existing project's mix is never changed underfoot), never left at whatever the
     // previously open document happened to have.
     audioEngine.setMixerPanLaw(loadedPanLaw);
 
-    // FRO142 (docs/control/midi-remote.md#pages): a freshly loaded project starts every profile on
-    // page 1 -- this is a NEW project's assignments, not the ordinary edits publishAssignments()
-    // below also handles, which must never jump the user's active page.
+    // A freshly loaded project starts every profile on page 1 -- this is a NEW project's
+    // assignments, not the ordinary edits publishAssignments() below also handles, which must
+    // never jump the user's active page (see docs/control/midi-remote.md#pages).
     remoteEngine.resetActivePages();
-    // FRO127/FRO130: ProjectBundle::load just replaced midiRemoteDoc wholesale — the engine's
+    // ProjectBundle::load just replaced midiRemoteDoc wholesale — the engine's
     // own copy (and the module cards' MIDI Learn badges) must follow before the reconcile below
     // re-resolves targets against it.
     midiLearnController_.publishAssignments();
@@ -188,7 +188,7 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     saveRecentProjects();
     setCurrentPatchName(bundleDir.getFileNameWithoutExtension());
     statusBar.showMessage("Loaded: " + bundleDir.getFileNameWithoutExtension());
-    // T114/P8-10: covers both the welcome screen's "Open an existing project" bundle path AND its
+    // Covers both the welcome screen's "Open an existing project" bundle path AND its
     // recent-project rows (both go through openFromFile -> here).
     hideWelcomeScreen();
     return true;
@@ -219,12 +219,12 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
         statusBar.showMessage("Recovery failed: " + result.message);
         return false;
     }
-    // FRO325: same "follows the just-loaded state" rule as loadBundleFromFile.
+    // Same "follows the just-loaded state" rule as loadBundleFromFile.
     audioEngine.setMixerPanLaw(loadedPanLaw);
 
-    // FRO142: same "new project's assignments, reset to page 1" rule as loadBundleFromFile above.
+    // Same "new project's assignments, reset to page 1" rule as loadBundleFromFile above.
     remoteEngine.resetActivePages();
-    // FRO127/FRO130: loadAutosave just replaced midiRemoteDoc wholesale, same as loadBundleFromFile above.
+    // loadAutosave just replaced midiRemoteDoc wholesale, same as loadBundleFromFile above.
     midiLearnController_.publishAssignments();
     reconcileTimelineAfterGraphChange();
     // Deliberately NOT markDocumentClean(): the recovered state is not what's on disk (project.json
@@ -244,7 +244,7 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     // marker reflects the just-restored dirty state, not a stale one.
     setCurrentPatchName(bundleDir.getFileNameWithoutExtension());
     statusBar.showMessage("Recovered unsaved changes: " + bundleDir.getFileNameWithoutExtension());
-    // T114/P8-10: the autosave-recovery Restore arm is one more way a recent-project row (or "Open
+    // The autosave-recovery Restore arm is one more way a recent-project row (or "Open
     // an existing project") can finish opening a bundle — see openFromFile's own comment.
     hideWelcomeScreen();
     return true;
@@ -299,11 +299,11 @@ void MainComponent::promptAutosaveRecovery(std::function<void(AutosaveRecoveryCh
     });
 }
 
-// P8-31: ask whether loading a patch should REPLACE the current one or ADD it on top of it.
+// Ask whether loading a patch should REPLACE the current one or ADD it on top of it.
 // Mirrors promptUnsavedChanges' three-button async shape: the FIRST .withButton ("Add on top")
 // returns 1, the next ("Replace") returns 2, and "Cancel" AND a dismissed/closed window return 0,
 // so the non-destructive Cancel arm is the safe fallback for a keyboard-closed window.
-// Ask whether to replace the current patch or add the loaded one on top of it (P8-31). Same
+// Ask whether to replace the current patch or add the loaded one on top of it. Same
 // async/test-hook shape as promptAutosaveRecovery; routes through the patchLoadPrompt seam when set.
 void MainComponent::promptPatchLoadMode(std::function<void(PatchLoadMode)> onChoice) {
     if (patchLoadPrompt) {
@@ -451,7 +451,7 @@ void MainComponent::guardUnsavedChanges(const juce::String& actionLabel, std::fu
         return;
     }
 
-    // FRO42 review fix: wrapped ONCE here so every arm below that actually goes ahead (not-dirty,
+    // Wrapped ONCE here so every arm below that actually goes ahead (not-dirty,
     // Discard, Save-succeeded) bumps documentGeneration_ right before replacing the document — never
     // on Cancel, a failed Save, or a cancelled Save chooser, all of which return without calling
     // `proceed` at all. See documentGeneration_'s own comment for what reads this.

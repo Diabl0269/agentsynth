@@ -1,4 +1,4 @@
-// Concern: FRO13 (P9-7, docs/mixer/track-presets.md) -- TrackPresetManager's save/load round trip: a
+// Concern: (docs/mixer/track-presets.md) -- TrackPresetManager's save/load round trip: a
 // captured track renders identically once reinserted, ids are renumbered so two inserts of the
 // same preset never collide, and a hostile/malformed preset is refused whole (never partially
 // applied) -- the SnippetManager::insertSnippet / ProjectBundle::load pairing's own contract,
@@ -50,7 +50,7 @@ TEST(TrackPreset, InsertingTwiceProducesTwoIndependentCopies) {
     const auto second = synth::TrackPresetManager::insertTrackPreset(preset, target, {900, 0});
 
     // Track In + Oscillator + Filter + the default Gate -> EQ -> Compressor -> Channel Strip chain
-    // makeChannelFromNode folds the region into (T173a's default channel build-out).
+    // makeChannelFromNode folds the region into (the default channel chain).
     ASSERT_EQ(first.size(), 7u);
     EXPECT_EQ(second.size(), first.size());
     EXPECT_EQ(countNodesOfTypeCFT(target, ModuleType::Oscillator), 2);

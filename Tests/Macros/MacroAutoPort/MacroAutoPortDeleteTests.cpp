@@ -1,6 +1,6 @@
 // MacroAutoPortDeleteTests.cpp
-// T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): auto-delete a macro port once its last cable is gone, hooked
-// at disconnectCable/disconnectPort. T154 extends the same auto-delete primitive to whole-node deletion
+// Auto-deleting a macro port once its last cable is gone (docs/macros/auto-ports.md#ports-on-a-cable-drag), hooked at
+// disconnectCable/disconnectPort, and the same auto-delete primitive extended to whole-node deletion
 // (deleteSelection/deleteModule/requestDeleteModule) via GraphEditor::macroPortDeletionNeighbors. Shared test
 // modules/helpers live in MacroAutoPortTestHelpers.h.
 //
@@ -23,9 +23,9 @@
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 // ============================================================================
-// T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): auto-delete a macro port once its last cable is gone — the
+// Auto-delete a macro port once its last cable is gone — the
 // reverse of the auto-create-on-group behaviour above. GraphEditor::disconnectCable and
-// disconnectPort are the two explicit user-gesture call sites hooked. T154 extends the same
+// disconnectPort are the two explicit user-gesture call sites hooked. Whole-node deletion extends the same
 // auto-delete primitive (autoDeleteOrphanedMacroPort) to whole-node deletion —
 // deleteSelection/deleteModule/requestDeleteModule — via GraphEditor::macroPortDeletionNeighbors,
 // which captures every node OUTSIDE a batch deletion with a live connection INTO it before the
@@ -268,9 +268,9 @@ TEST(MacroAutoPortDelete, DisabledPreferenceLeavesACablelessPortInPlaceRegressio
 }
 
 // ============================================================================
-// T154 (docs/macros/auto-ports.md#auto-deleting-a-port-when-its-last-cable-goes): the same auto-delete primitive, now
-// also swept after a whole-node deletion (deleteSelection/deleteModule/requestDeleteModule) via
-// GraphEditor::macroPortDeletionNeighbors.
+// The same auto-delete primitive, also swept after a whole-node deletion
+// (deleteSelection/deleteModule/requestDeleteModule) via GraphEditor::macroPortDeletionNeighbors
+// (docs/macros/auto-ports.md#auto-deleting-a-port-when-its-last-cable-goes).
 // ============================================================================
 
 TEST(MacroAutoPortDelete, DeletingAnOrdinaryMemberViaRequestDeleteModuleStrandsAndSweepsThePortWhileTheMacroSurvives) {
@@ -344,7 +344,7 @@ TEST(MacroAutoPortDelete, DeletingTheLastOrdinaryMemberViaDeleteSelectionStrands
     const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    // Strip to just `a` (ordinary setup, mirrors the T148 tests above).
+    // Strip to just `a` (ordinary setup, mirrors the auto-create tests above).
     editor.requestDeleteModule(b);
     ASSERT_EQ(editor.getMacros().find(macroId)->members.size(), 1u);
 
@@ -470,7 +470,7 @@ TEST(MacroAutoPortDelete, DisabledPreferenceLeavesACablelessPortInPlaceAfterDele
 }
 
 // ============================================================================
-// FRO22 (founder decision, 2026-09-27, option (a)): a bounded one-extra-hop-through-an-attenuverter
+// A bounded one-extra-hop-through-an-attenuverter
 // special case. Almost every real macro-port-to-modulation-target crossing is spliced through a
 // hidden AttenuverterModule (AudioEngine::addModRouting), which can never itself be a macro member
 // -- so deleting the FAR side of that chain used to strand the port forever, two hops away from

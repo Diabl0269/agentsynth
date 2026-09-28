@@ -53,7 +53,7 @@ public:
     virtual void connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                               juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi, bool recordUndo) = 0;
 
-    // ---- FRO77 PR2: MacroGroupController additions ----------------------------------------
+    // ---- MacroGroupController additions ---------------------------------------------------
     //
     // Nine of these thirteen additions reuse an EXISTING GraphEditor method's name — GraphEditor's
     // own getMacros()/getSelection()/applySelectionChange()/setSelectedNodes()/deleteSelection()/
@@ -132,14 +132,14 @@ public:
      *  growing a differently-named wrapper — autoDeleteOrphanedMacroPort's very first check. */
     virtual bool getAutoDeleteMacroPortsOnLastCableEnabled() const noexcept = 0;
 
-    /** FRO235: the user preference gating whether a MANUAL macro-port delete (Configure I/O's
+    /** The user preference gating whether a MANUAL macro-port delete (Configure I/O's
      *  Delete Port, or the port's own right-click Delete Port) splices the cable back together
      *  (true) or drops it (false, the default) — MacroGroupController::deleteMacroPortManually's
      *  only branch. Unrelated to getAutoDeleteMacroPortsOnLastCableEnabled above, which gates a
      *  different, automatic deletion. */
     virtual bool getSpliceCableOnMacroPortDeleteEnabled() const noexcept = 0;
 
-    // ---- FRO77 PR3: GraphDragDropController additions --------------------------------------
+    // ---- GraphDragDropController additions -------------------------------------------------
     //
     // Nine of these fourteen additions reuse an EXISTING GraphEditor method's name, the same
     // dual-purpose-override trick PR2 used above — clearSmartSuggestions()/refreshSmartSuggestions()/
@@ -159,7 +159,7 @@ public:
     virtual void clearSmartSuggestions() = 0;
 
     /** Applies the app/per-type Dual I/O default to a newly created (not yet on-canvas) processor —
-     *  GraphEditor's own method; unchanged by FRO77 PR3, just exposed for the drag-preview probe
+     *  GraphEditor's own method, exposed here for the drag-preview probe
      *  and library-drop paths that used to reach it directly as a same-class private call. */
     virtual void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor,
                                                 const juce::String& moduleType) const = 0;

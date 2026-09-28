@@ -1,4 +1,4 @@
-// MixerEqThumbnailTests.cpp -- FRO16 (P9-10, docs/mixer/panel.md#what-the-mixer-shows): the mixer column's EQ curve
+// MixerEqThumbnailTests.cpp (docs/mixer/panel.md#what-the-mixer-shows): the mixer column's EQ curve
 // thumbnail. Covers the ticket's own test list -- hidden with no EQ, visible with an enabled
 // band, dark/light PNG render showing a boost/cut difference, dimmed when bypassed, and the
 // recompute-only-on-parameter-change discipline (root CLAUDE.md "No unconditional per-tick
@@ -189,7 +189,7 @@ TEST(MixerEqThumbnailTests, ClickFiresOnClicked) {
     thumbnail.setEqModule(nullptr);
 }
 
-// FRO16 review follow-up: MixerInsertList::removeRow's onBeforeNodeRemoved hook (see
+// MixerInsertList::removeRow's onBeforeNodeRemoved hook (see
 // MixerColumnComponentTests.cpp's own regression test) is not the only way a single node can be
 // freed out from under a bound thumbnail -- a canvas "Delete" on the same EQ module's card
 // (GraphEditor::requestDeleteModule) is a different graph.removeNode() call site with no

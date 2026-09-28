@@ -79,11 +79,11 @@ ControllerProfile makeProfile(const juce::String& id, const juce::String& device
 class CountingActionInvoker : public RemoteActionInvoker {
 public:
     void invokeRemoteCommand(juce::CommandID commandId) override { invoked.push_back(commandId); }
-    // FRO253: records a nodeCommand invocation the same way invokeRemoteCommand above does.
+    // Records a nodeCommand invocation the same way invokeRemoteCommand above does.
     void invokeNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) override {
         invokedNodeCommands.push_back({nodeId, command});
     }
-    // FRO236: this suite doesn't exercise continuous targets -- stub, never called.
+    // This suite doesn't exercise continuous targets -- stub, never called.
     double getContinuousValue(ContinuousTargetKind) override { return 0.0; }
     void setContinuousValue(ContinuousTargetKind, double) override {}
     bool getContinuousWindow(ContinuousTargetKind, double&, double&) override { return false; }

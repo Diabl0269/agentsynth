@@ -32,7 +32,7 @@ protected:
     juce::ApplicationProperties appProperties;
 };
 
-// T157: the preference groups now live inside the tab's scroll view - a juce::Viewport whose owned
+// The preference groups now live inside the tab's scroll view - a juce::Viewport whose owned
 // component (a ContentHost) holds the rows - so a control is no longer a DIRECT child of the tab.
 // These tests walk the whole component tree, mirroring how the Keyboard Shortcuts tab's rows live
 // inside their own scrolled host.

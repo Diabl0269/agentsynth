@@ -1,7 +1,7 @@
-// Concern: FRO135 mapping assistant -- assigning a chosen control to a target from the panel,
-// Forget by assignment id, and the orphan-controller repairs Re-link / Recreate
-// (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn, #controllers-list-left).
-// The pick-target session lives in MidiLearnControllerPick.cpp.
+// Concern: mapping assistant -- assigning a chosen control to a target from the panel, Forget by
+// assignment id, and the orphan-controller repairs Re-link / Recreate
+// (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn,
+// #controllers-list-left). The pick-target session lives in MidiLearnControllerPick.cpp.
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -58,8 +58,9 @@ AssignStatus MidiLearnController::assignControl(const juce::String& profileId, c
         target.continuous.kind = pick.continuous;
         targetName = synth::continuousTargetDisplayName(pick.continuous);
     } else if (pick.kind == PickTarget::Kind::page) {
-        // FRO142 (docs/control/midi-remote.md#pages): engine-internal, GLOBAL like an action --
-        // never resolved through ShortcutManager/ActionCommandLookup (PageCommand's own comment).
+        // Engine-internal, GLOBAL like an action -- never resolved through
+        // ShortcutManager/ActionCommandLookup (PageCommand's own comment) (see
+        // docs/control/midi-remote.md#pages).
         target.kind = synth::Target::Kind::page;
         target.page.command = pick.pageCommand;
         target.page.page = pick.pageNumber;
@@ -86,7 +87,7 @@ AssignStatus MidiLearnController::assignControl(const juce::String& profileId, c
                         param = ranged;
             }
 
-            // FRO137: not one of this node's own RangedAudioParameters -- fall back to the same
+            // Not one of this node's own RangedAudioParameters -- fall back to the same
             // hosted-plugin resolution an automation lane uses
             // (docs/control/plugin-card-layout.md#interaction-with-controllers-and-automation), so
             // the pick-target overlay/panel can also assign a plugin-card knob.
@@ -109,17 +110,18 @@ AssignStatus MidiLearnController::assignControl(const juce::String& profileId, c
         }
     }
 
-    // FRO142 (docs/control/midi-remote.md#pages): a PROJECT-scope assignment (parameter/nodeCommand)
-    // created while the profile's page N is active belongs to page N; a GLOBAL target
-    // (action/continuous) ignores Assignment::page entirely, so it stays at the default (1).
+    // A PROJECT-scope assignment (parameter/nodeCommand) created while the profile's page N is
+    // active belongs to page N; a GLOBAL target (action/continuous) ignores Assignment::page
+    // entirely, so it stays at the default (1) (see docs/control/midi-remote.md#pages).
     const bool projectScoped = target.isParameter() || target.isNodeCommand();
     const int assignmentPage = projectScoped ? remoteEngine_.getActivePage(profileId) : 1;
     const Assignment assignment = makeAssignmentForControl(*profile, control, target, assignmentPage);
 
-    // FRO236: a continuous target is GLOBAL, exactly like an action (docs/control/midi-remote.md#continuous-targets
-    // -- it means the same thing in every project), so it shares this branch and mirrors the action
-    // rule verbatim, just keyed on ContinuousTargetKind instead of an actionId. FRO142: a page target
-    // joins them -- it too is engine-internal and active on every page (PageCommand's own comment).
+    // A continuous target is GLOBAL, exactly like an action
+    // (docs/control/midi-remote.md#continuous-targets -- it means the same thing in every project),
+    // so it shares this branch and mirrors the action rule verbatim, just keyed on
+    // ContinuousTargetKind instead of an actionId. A page target joins them -- it too is
+    // engine-internal and active on every page (PageCommand's own comment).
     if (target.isAction() || target.isContinuous() || target.isPage()) {
         ControllerProfile updated = *profile;
         auto& actions = updated.actions;
@@ -143,9 +145,10 @@ AssignStatus MidiLearnController::assignControl(const juce::String& profileId, c
     } else {
         const juce::var beforeJson = doc_.toVar();
         auto& assignments = doc_.assignments;
-        // FRO142 (docs/control/midi-remote.md#pages): scoped to the SAME page as the new assignment
-        // -- a mapping on page 1 must survive assigning that control (or that target) again on
-        // page 2; each page owns its own "one assignment per control/target" rule independently.
+        // Scoped to the SAME page as the new assignment -- a mapping on page 1 must survive
+        // assigning that control (or that target) again on page 2; each page owns its own "one
+        // assignment per control/target" rule independently (see
+        // docs/control/midi-remote.md#pages).
         assignments.erase(std::remove_if(assignments.begin(), assignments.end(),
                                          [&](const Assignment& a) {
                                              if (a.page != assignment.page)
@@ -268,10 +271,10 @@ juce::String MidiLearnController::recreateController(const juce::String& orphanP
     return profile.id;
 }
 
-// FRO142 (docs/control/midi-remote.md#pages): see MidiLearnController.h's own doc comment on why
-// this widens by the EFFECTIVE count (getEffectivePageCount), not profile.pageCount alone -- a
-// project assignment may already reference a page beyond what the profile itself declares, and
-// "+" must always reveal a genuinely new, empty page.
+// See MidiLearnController.h's own doc comment on why this widens by the EFFECTIVE count
+// (getEffectivePageCount), not profile.pageCount alone -- a project assignment may already
+// reference a page beyond what the profile itself declares, and "+" must always reveal a genuinely
+// new, empty page (see docs/control/midi-remote.md#pages).
 bool MidiLearnController::addPage(const juce::String& profileId) {
     const auto* profile = findProfile(profileId);
     if (profile == nullptr)

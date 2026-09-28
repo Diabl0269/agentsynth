@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
     // (any test that lets a MainComponent's eager scan use the default launcher). Serve that as
     // Main.cpp does and exit BEFORE gtest starts: otherwise the child re-runs the whole suite (and
     // inherits AGENTSYNTH_SETTINGS_DIR / GTEST_SHARD_INDEX), racing its parent on the same
-    // settings file -- the FRO316 flakes.
+    // settings file -- flaky tests.
     {
         juce::StringArray args;
         for (int i = 0; i < argc; ++i)
@@ -38,16 +38,16 @@ int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     ::testing::UnitTest::GetInstance()->listeners().Append(new MessageQueueDrainer());
 
-    // FRO305: the ONE call site that reads AGENTSYNTH_SETTINGS_DIR, so a shipped binary can never
+    // The ONE call site that reads AGENTSYNTH_SETTINGS_DIR, so a shipped binary can never
     // be redirected via it (see test-patterns.md's "on-disk path" section for the full seam).
     const juce::String settingsDirOverride(
         std::getenv("AGENTSYNTH_SETTINGS_DIR") != nullptr ? std::getenv("AGENTSYNTH_SETTINGS_DIR") : "");
     if (settingsDirOverride.isNotEmpty())
         synth::setSettingsDirOverrideForTests(settingsDirOverride);
 
-    // FRO193: every MainComponent's MidiLearnController gets a temp ControllerProfileStore instead
+    // Every MainComponent's MidiLearnController gets a temp ControllerProfileStore instead
     // of the developer's real folder -- set once so ~50 MainComponent*Tests.cpp files don't have
-    // to know MIDI Remote exists. FRO305: nested per-shard (not one fixed name) when sharded, so
+    // to know MIDI Remote exists. Nested per-shard (not one fixed name) when sharded, so
     // concurrent shards don't race each other's deleteRecursively() -- see test-patterns.md.
     const auto controllerProfilesRoot = settingsDirOverride.isNotEmpty()
                                             ? juce::File(settingsDirOverride)

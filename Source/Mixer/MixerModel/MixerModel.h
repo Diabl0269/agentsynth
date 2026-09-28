@@ -1,11 +1,11 @@
 #pragma once
 
-// MixerModel.h -- FRO11 (P9-5, docs/mixer/panel.md): the mixer panel's own Core query
+// MixerModel.h (docs/mixer/panel.md): the mixer panel's own Core query
 // layer. Headless, no juce_gui_basics/AppUI dependency (Source/Mixer/CLAUDE.md's own "Core,
 // no-UI-dep" discipline, same as Source/Mixer/ChannelFlows): everything the mixer panel PAINTS is
 // a pure read off the live graph/TimelineDoc/MacroSet, recomputed on demand -- exactly the same
 // "never cache, the graph can change under you" reasoning ChannelFlowsTrackChannelLink.h states for
-// FRO14's own link query.
+// its own link query.
 
 #include "MacroSet.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
@@ -22,20 +22,20 @@ struct MixerInsertEntry {
     bool bypassed = false;
 };
 
-/** One of a source column's active send slots, in slot order (FRO15, docs/mixer/sends-and-buses.md). The slot index is
+/** One of a source column's active send slots, in slot order (docs/mixer/sends-and-buses.md). The slot index is
  * the identity -- it names the jack, the row, and the `sendNLevel` parameter alike -- and the target is read off the
  * graph every rebuild, never stored. */
 struct MixerSendEntry {
     int slot = 0;
     bool preFader = false;
-    /** FRO295: silenced independent of its level (ChannelStripModule::isSendMuted). */
+    /** Silenced independent of its level (ChannelStripModule::isSendMuted). */
     bool muted = false;
-    /** FRO294: summed to (L+R)*0.5 before its own pan law (ChannelStripModule::isSendMono). */
+    /** Summed to (L+R)*0.5 before its own pan law (ChannelStripModule::isSendMono). */
     bool mono = false;
     /** The bus this slot feeds. Invalid when the slot's cable has been cut on the canvas, in which
      *  case `targetName` is the "no target" placeholder. */
     juce::AudioProcessorGraph::NodeID targetNodeId;
-    /** FRO318: `targetNodeId` is a module whose Key input this send feeds, not a strip. */
+    /** `targetNodeId` is a module whose Key input this send feeds, not a strip. */
     bool keyTarget = false;
     juce::String targetName;
 };
@@ -62,22 +62,22 @@ struct MixerColumn {
     std::vector<TrackId> feedingTracks;
 
     /** The feeding track's own source node -- the insert chain's implicit predecessor (needed to
-     *  splice a new FIRST insert in ahead of an empty/one-entry chain). Master's own node for Kind::Master (FRO148);
-     *  invalid for Direct, for a non-bus orphan strip, and for a Kind::Bus column (FRO15: a bus's own chain has no
+     *  splice a new FIRST insert in ahead of an empty/one-entry chain). Master's own node for Kind::Master;
+     *  invalid for Direct, for a non-bus orphan strip, and for a Kind::Bus column (a bus's own chain has no
      *  external source -- nothing feeds its EQ from outside -- so MixerInsertList::moveRow refuses
      *  to move a row to the very front of a bus's chain rather than splice against an invalid id). */
     juce::AudioProcessorGraph::NodeID sourceNodeId;
 
     /** The chain between this strip and its own upstream source, in signal order
-     * (docs/mixer/mixer.md#inserts-in-a-free-form-graph): the feeding track's source for an ordinary strip, or (FRO15,
-     * docs/mixer/sends-and-buses.md) the strip's own EQ/Compressor chain walked BACKWARD for a Kind::Bus column, which
+     * (docs/mixer/mixer.md#inserts-in-a-free-form-graph): the feeding track's source for an ordinary strip, or
+     * (docs/mixer/sends-and-buses.md) the strip's own EQ/Compressor chain walked BACKWARD for a Kind::Bus column, which
      * has no feeding track to walk forward from. A send feeding the bus (landing on the same strip input channels an
      *  insert's own output would) is excluded from this walk, never counted as a bus insert or as
-     *  branching. Master's (FRO148) is the forward walk to `chainEndNodeId`. Empty for Direct and for a non-bus orphan
+     *  branching. Master's is the forward walk to `chainEndNodeId`. Empty for Direct and for a non-bus orphan
      *  strip. */
     std::vector<MixerInsertEntry> inserts;
 
-    /** Kind::Master only (FRO148): the Rec Tap / Audio Output the chain feeds -- its terminator, never an insert. */
+    /** Kind::Master only: the Rec Tap / Audio Output the chain feeds -- its terminator, never an insert. */
     juce::AudioProcessorGraph::NodeID chainEndNodeId;
 
     /** False => `inserts` is read-only (a branch, a shared node, or -- for a bus -- more than one

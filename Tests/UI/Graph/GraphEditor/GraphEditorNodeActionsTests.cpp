@@ -1,5 +1,5 @@
 // GraphEditor per-node action tests: module title rename (custom card titles), double-click port
-// disconnect (issue #216), output-card identity treatment (module chrome), and Locate Master (FRO45)
+// disconnect, output-card identity treatment (module chrome), and Locate Master
 // — actions and identity checks that target one existing node/card rather than graph wiring.
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
@@ -32,7 +32,7 @@ TEST_F(GraphEditorTest, ModuleTitleRenameCommitsAndFallsBackToTheNumberedName) {
 
     auto& graph = engine.getGraph();
     auto node = graph.addNode(std::make_unique<ChorusModule>());
-    engine.updateModuleNames(); // a lone Chorus needs no number (FRO181): stays bare "Chorus"
+    engine.updateModuleNames(); // a lone Chorus needs no number: stays bare "Chorus"
     editor.updateComponents();
     sizeModuleComponents(editor);
 
@@ -200,9 +200,9 @@ TEST_F(GraphEditorTest, UntrustedPatchDisplayNameIsCappedAndDisplayOnly) {
     EXPECT_EQ(chorusCount, 1) << "the title must not have changed which module type was created";
 }
 
-// --- Knob-landing cables survive a save/load round trip (FRO312) -------------
+// --- Knob-landing cables survive a save/load round trip ----------------------
 //
-// FRO312 hides a knob-bound jack's gutter dot entirely and re-anchors its cable onto the knob's
+// A knob-bound jack's gutter dot is hidden entirely and its cable is re-anchored its cable onto the knob's
 // own ring instead (GraphEditorKnobAnchorTests.cpp proves this for a LIVE graph). A saved project
 // reloads through the SAME applyJSONToGraph path a preset/session file uses, on brand-new node
 // ids and processor instances, so these prove the knob-landing survives that path too rather than
@@ -318,8 +318,8 @@ TEST_F(GraphEditorTest, ModulationCablesLandOnOscillatorKnobsAfterASaveLoadRound
 }
 
 // A hand-authored patch using the OLD raw channel number directly (rather than one derived from a
-// live graphToJSON snapshot) -- proving a project saved before FRO312 existed, whose "destPort" is
-// simply "5" (Oscillator's mono Level CV, unchanged since before FRO285), still lands on the Level
+// live graphToJSON snapshot) -- proving an older project whose "destPort" is simply "5" (Oscillator's mono Level
+// CV raw channel), still lands on the Level
 // knob today instead of silently doing nothing because the jack it used to draw is now hidden.
 TEST_F(GraphEditorTest, APreFRO312PatchModulatingOscillatorMonoLevelOnRawChannelFiveLandsOnTheKnob) {
     AudioEngine engine;
@@ -460,7 +460,7 @@ TEST_F(GraphEditorTest, ModuleTitleRenameIsDismissedByAPressOutsideTheEditor) {
     EXPECT_EQ(editor.getModuleDisplayName(a->nodeID), "Named By Canvas Click") << "Escape still discards";
 }
 
-// --- Double-click port disconnect (issue #216) -------------------------------
+// --- Double-click port disconnect --------------------------------------------
 
 static juce::MouseEvent makeModuleClick(juce::Component& comp, juce::Point<int> position, int clicks) {
     const auto pos = position.toFloat();
@@ -622,7 +622,7 @@ TEST_F(GraphEditorTest, RefreshOutputDeviceInfoClearsTextWhenProviderReturnsEmpt
     EXPECT_TRUE(outComp->getOutputDeviceInfoTextForTest().isEmpty());
 }
 
-// --- Locate Master (FRO45) ----------------------------------------------------------------------
+// --- Locate Master ------------------------------------------------------------------------------
 
 static juce::AudioProcessorGraph::Node* findAudioOutputNodeInGraph(juce::AudioProcessorGraph& graph) {
     using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
@@ -636,8 +636,8 @@ static juce::AudioProcessorGraph::Node* findAudioOutputNodeInGraph(juce::AudioPr
     return nullptr;
 }
 
-// Founder feedback on T183's live check: auto-arrange or a drag can leave Master anywhere on the
-// canvas. GraphEditor::locateMasterOrOutput() selects it and pans the view so it's on screen.
+// Auto-arrange or a drag can leave Master anywhere on the canvas.
+// GraphEditor::locateMasterOrOutput() selects it and pans the view so it's on screen.
 TEST_F(GraphEditorTest, LocateMasterSelectsMasterAndPansItIntoView) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -668,7 +668,7 @@ TEST_F(GraphEditorTest, LocateMasterSelectsMasterAndPansItIntoView) {
 }
 
 // No Master yet (the common case before the first channel exists, docs/mixer/mixer.md) — falls back to
-// Audio Output, which T187 seeds on New Patch (a bare test AudioEngine starts with NEITHER node
+// Audio Output, which New Patch seeds (a bare test AudioEngine starts with NEITHER node
 // until something adds one — see addAudioOutputNode above — so this seeds one explicitly).
 TEST_F(GraphEditorTest, LocateMasterFallsBackToAudioOutputWhenThereIsNoMaster) {
     AudioEngine engine;

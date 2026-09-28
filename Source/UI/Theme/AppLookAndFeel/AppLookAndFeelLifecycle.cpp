@@ -136,7 +136,7 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     // extra timer / repaint is scheduled here (the caller issues the single repaint).
     retintIcons();
 
-    // FRO147: a theme switch moves the meter colours too, UNLESS the user has pinned a custom
+    // A theme switch moves the meter colours too, UNLESS the user has pinned a custom
     // stop set — recomputeMeterColourStops() itself decides which, from meterColourStopsOverride
     // (untouched by applyTheme(), so a pinned override survives across theme switches).
     recomputeMeterColourStops();
@@ -230,7 +230,7 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::TrackAutomation, c.textMuted);
     iconLibrary_.setTintColour(Icon::FollowPlayhead, c.textPrimary);
 
-    // FRO12 (P9-6): DetachablePanelHost's icon-only detach/dock-back control -- muted base, same
+    // DetachablePanelHost's icon-only detach/dock-back control -- muted base, same
     // convention as the toolbar action set above (DetachablePanelHost clones its own hover variant
     // the same way MainComponent::applyToolbarIcons does).
     iconLibrary_.setTintColour(Icon::ActionDetachWindow, c.textMuted);

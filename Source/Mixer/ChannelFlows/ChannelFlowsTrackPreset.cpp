@@ -1,4 +1,4 @@
-// Concern: FRO13 (P9-7, docs/mixer/track-presets.md) -- the track-preset-specific queries:
+// Concern: (docs/mixer/track-presets.md) -- the track-preset-specific queries:
 // collectOutsideModulatorsForTrackPreset (the transitive upstream walk that finds every module
 // outside a channel macro that feeds it through a port, so saving a track also captures a shared
 // LFO) and isChannelMacro (the "is this macro a mixer channel" predicate both the walk's own stop
@@ -48,11 +48,12 @@ bool isChannelMacro(const Macro& macro, juce::AudioProcessorGraph& graph) {
     return false;
 }
 
-// FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): true when one of `macro`'s members is a
-// bus strip (synth::isBusStrip, MixerSends.h) -- a macro with no bound timeline track. Gates the
-// macro's own "Set as Default Track Preset" item (GraphEditorMacroPrompts.cpp -- a bus has no
-// per-type default) and resolves a macro-context "Save Track as Preset..." action to
-// TrackPresetKind::Bus (MainComponentTrackPresets.cpp::handleMacroTrackPresetAction).
+// True when one of `macro`'s members is a bus strip (synth::isBusStrip, MixerSends.h) -- a macro
+// with no bound timeline track. Gates the macro's own "Set as Default Track Preset" item
+// (GraphEditorMacroPrompts.cpp -- a bus has no per-type default) and resolves a macro-context
+// "Save Track as Preset..." action to TrackPresetKind::Bus
+// (MainComponentTrackPresets.cpp::handleMacroTrackPresetAction)
+// (see docs/mixer/track-presets.md#a-third-kind-bus).
 bool isBusMacro(const Macro& macro, juce::AudioProcessorGraph& graph) {
     for (auto* node : graph.getNodes()) {
         const juce::String uuid = node->properties["uuid"].toString();
@@ -64,7 +65,7 @@ bool isBusMacro(const Macro& macro, juce::AudioProcessorGraph& graph) {
 
 // Seeds from every connection landing on a member of `channelMacroId` whose SOURCE is not itself a
 // member (this scans every member's incoming edges rather than only the macro's own ports, which
-// subsumes the ported case for free and also catches a boundary crossing with T148 auto-porting
+// subsumes the ported case for free and also catches a boundary crossing with auto-porting
 // off). From each seed, walks further upstream along every incoming edge to a fixpoint
 // (visited-set, cycle-safe): an Attenuverter on the path IS entered (unlike planMakeChannel's
 // FORWARD walk, which never enters one — here the modulator behind it is invisible otherwise) but

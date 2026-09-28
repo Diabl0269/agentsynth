@@ -16,7 +16,7 @@
 #include "Modules/MacroOutletModule.h"
 
 namespace {
-// FRO20: mirrors GraphEditor::rightAudioLegOf + audioChannelReachableFromJack's rule (the Dual
+// Mirrors GraphEditor::rightAudioLegOf + audioChannelReachableFromJack's rule (the Dual
 // I/O toggle's own "which raw channel is this peer's right leg, and can the user actually reach
 // it" lookup) without pulling in GraphEditor.h, which MacroGroupController deliberately never
 // includes (MacroGroupController.h's class comment: it reaches its host only through
@@ -70,7 +70,7 @@ void MacroGroupController::autoDeleteOrphanedMacroPort(juce::AudioProcessorGraph
         host_.getMacros().remove(m->id); // MacroSet::removeMemberEverywhere's own "zero members" rule
 }
 
-// FRO22 (founder decision, 2026-09-27, option (a)): a bounded ONE-extra-hop special case. Almost
+// A bounded ONE-extra-hop special case. Almost
 // every real macro-port-to-modulation-target crossing is spliced through a hidden
 // AttenuverterModule (AudioEngine::addModRouting always wraps a CV routing as source->
 // attenuverter(ch0)->destination), and an attenuverter can never itself be a macro member
@@ -121,8 +121,8 @@ void MacroGroupController::autoDeleteOrphanedAttenuverter(juce::AudioProcessorGr
     // splice the port out directly, sharing spliceOutMacroPort with every other
     // auto-delete/ungroup path rather than going through autoDeleteOrphanedMacroPort()'s own
     // "zero cables total" test above — that test is right for the direct (non-attenuverter) case,
-    // but a lone interior leg would make it say this port "survives", which is exactly the T154
-    // gap this founder decision closes.
+    // but a lone interior leg would make it say this port "survives", which is exactly the
+    // gap this one-extra-hop case closes.
     const auto portId = resolveMemberNodeId(portUuid);
     bool hasExteriorConnection = false;
     if (portId.uid != 0) {
@@ -276,7 +276,7 @@ void MacroGroupController::deleteMacroPortNode(const juce::String& macroId, cons
     host_.requestRepaint();
 }
 
-// FRO235 (founder decision, 2026-09-27): default DROP for both manual delete paths — Configure
+// Default DROP for both manual delete paths — Configure
 // I/O's Delete Port (removeMacroPort) and the port's own right-click Delete Port used to disagree
 // (the latter always spliced via deleteMacroPortNode). Both UI call sites now go through here
 // instead of calling either primitive directly, so a flip of the "splice the cable back"
@@ -455,7 +455,7 @@ juce::String MacroGroupController::changeMacroPortShape(const juce::String& macr
     const int oldX = oldNode->properties.getWithDefault("x", 0);
     const int oldY = oldNode->properties.getWithDefault("y", 0);
 
-    // FRO20: only a Mono->Stereo/StereoCollapsed grow needs auto-wiring below — every other
+    // Only a Mono->Stereo/StereoCollapsed grow needs auto-wiring below — every other
     // transition (shrinking, Poly<->anything) already got its exact intent from the modal's own
     // voice/shape controls and is left alone.
     MacroPortShape oldShape = MacroPortShape::Mono;
@@ -537,8 +537,8 @@ juce::String MacroGroupController::changeMacroPortShape(const juce::String& macr
                 g.addConnection({{e.otherId, e.otherChannel}, {node->nodeID, e.myChannel}});
         }
 
-        // FRO20: a Mono->Stereo/StereoCollapsed grow adds a raw channel the OLD Mono port never
-        // had, which the replay above leaves silently unwired — the founder's expectation is the
+        // A Mono->Stereo/StereoCollapsed grow adds a raw channel the OLD Mono port never
+        // had, which the replay above leaves silently unwired — the expected result is the
         // same auto-wire the Dual I/O toggle gives an ordinary module that grows a right leg
         // (reachablePeerRightAudioLeg mirrors GraphEditor::rightAudioLegOf's rule for that). Every
         // savedEdge here is a Mono-era ch0 edge (the only raw channel Mono ever exposes), so each
@@ -601,7 +601,7 @@ void MacroGroupController::createMacroPortFromDroppedCable(const juce::String& m
     if (!newProcessor)
         return;
     if (!isMidi) {
-        // FRO234: infer the shape from the dragged cable's own jack fan (same getJackTargets read
+        // Infer the shape from the dragged cable's own jack fan (same getJackTargets read
         // resolvePolyLink already does) instead of always Mono. newPortIsInput true means the drag
         // started at an OUTPUT (this new port receives it), so the OTHER module's relevant side is
         // its output; false is the mirror.
@@ -722,7 +722,7 @@ MacroGroupController::macroPortRowsForDialog(const juce::String& macroId) const 
         row.isInput = p.isInput;
         row.name = p.name;
         row.kind = p.kind;
-        row.colour = p.colour; // T152
+        row.colour = p.colour;
         if (p.kind == synth::MacroPortKind::AudioCV) {
             auto nodeId = resolveMemberNodeId(p.nodeUuid);
             if (auto* node = graph.getNodeForId(nodeId)) {

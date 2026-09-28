@@ -1,10 +1,10 @@
 // =================================================================================================
-// FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make channel" on a track (header menu) or a
-// selected chain (canvas / module menu). The track's exclusive chain moves into a channel macro with the default EQ ->
-// Compressor -> Channel Strip -> Master chain; a module another track also uses stays outside (a shared LFO reaches in
-// through an auto-created port); a merge point becomes its own bus channel; "Duplicate into Channel" gives this channel
-// an independent copy of a shared module; a poly chain gets a Voice Mixer; an already-channeled target is a no-op;
-// every action is ONE undo step.
+// "Make channel" on a track (header menu) or a selected chain (canvas / module menu). The track's exclusive chain moves
+// into a channel macro with the default EQ -> Compressor -> Channel Strip -> Master chain; a module another track also
+// uses stays outside (a shared LFO reaches in through an auto-created port); a merge point becomes its own bus channel;
+// "Duplicate into Channel" gives this channel an independent copy of a shared module; a poly chain gets a Voice Mixer;
+// an already-channeled target is a no-op; every action is ONE undo step
+// (see docs/mixer/mixer.md#make-channel-and-shared-modules).
 //
 // The render-identity tests build the same legacy patch in two Hosted engines, convert one through a
 // standalone GraphEditor, and compare the offline renders sample for sample.
@@ -330,7 +330,7 @@ TEST(ChannelFlowMakeChannelCore, ThreeWayMergeBecomesOneBusChannelAndTheRenderIs
     expectIdenticalRendersCFT(reference.render(16), converted.render(16));
 }
 
-// Two MIDI tracks sharing ONE Oscillator directly (no per-track audio node at all, the T173e
+// Two MIDI tracks sharing ONE Oscillator directly (no per-track audio node at all, the
 // "two tracks, one shared instrument" shape) -- Make Channel on either track must build only the
 // shared instrument's bus, no separate (redundant) strip for the track itself.
 TEST(ChannelFlowMakeChannelCore, TwoMidiTracksSharingOneInstrumentGetJustTheSharedBus) {

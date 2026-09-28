@@ -33,7 +33,7 @@ public:
     // arrangementEndBeat: TimelineDoc::getArrangementEndBeat() - 0.0 ("no clips") disables Whole
     // Arrangement, since there is no length to bounce. hasLoopRange: a non-degenerate loop region
     // exists (loopEndBeat > loopStartBeat), independent of whether looping is currently armed - the
-    // caller (MainComponent::promptExportAudio, P8-17) decides this from the loop LOCATORS alone, so
+    // caller (MainComponent::promptExportAudio) decides this from the loop LOCATORS alone, so
     // "Current loop range" is offered as a bounce range whether or not the loop is live. Anything else
     // (a collapsed region) disables Selection rather than passing an empty range through to fail
     // BounceOptions validation. If both are disabled the Export button stays disabled too (there is
@@ -45,7 +45,7 @@ public:
     // MainComponent::promptExportAudio). initialDestinationDirectory/initialFileNameBase: the
     // folder and base file name (no extension) Export starts pre-filled with; the caller resolves
     // both (bundle-relative Exports/ folder + the project's name) so this class stays free of
-    // ProjectBundle/currentPatchName_ knowledge. stemsMode (P9-8, docs/mixer/stem-export.md): false is the
+    // ProjectBundle/currentPatchName_ knowledge. stemsMode (docs/mixer/stem-export.md): false is the
     // original "Export Audio" shape (a FILE destination); true switches the destination to a FOLDER
     // (defaulted to "<initialFileNameBase> Stems" inside initialDestinationDirectory, no extension
     // tracking, no destination-exists collision prompt — a stems folder is a container, meant to be
@@ -65,7 +65,7 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
-    // T153 keyboard accessibility sweep: Escape triggers whichever cancel/close action the
+    // Escape triggers whichever cancel/close action the
     // currently-visible page shows (onRequestClose on the options page, onCancelRender on the
     // progress page — NOT onRequestClose there, since that would just hide the window while a
     // BounceRunner keeps rendering unseen in the background). Wired here rather than relying

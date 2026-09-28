@@ -1,4 +1,4 @@
-// Concern: FRO277's jump-to-next/previous-marker transport actions (transportJumpToNextMarker/
+// Concern: the jump-to-next/previous-marker transport actions (transportJumpToNextMarker/
 // transportJumpToPreviousMarker). Three layers, mirroring ShortcutManagerCursorActionsTests.cpp:
 // table shape against a bare ShortcutManager (ids, labels, unbound, command mapping), the pure
 // search arithmetic in Transport/MarkerJump.h against a bare list of beats, and invokeDirectly

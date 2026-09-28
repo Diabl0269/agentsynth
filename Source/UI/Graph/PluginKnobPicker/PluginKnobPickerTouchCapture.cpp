@@ -1,4 +1,4 @@
-// PluginKnobPickerTouchCapture.cpp -- gesture (FRO132) + value-change fallback (FRO241) "touch to
+// PluginKnobPickerTouchCapture.cpp -- gesture + value-change fallback "touch to
 // add". See the header's class comment for the two-signal / any-thread contract.
 #include "PluginKnobPickerTouchCapture.h"
 #include <algorithm>

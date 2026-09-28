@@ -1,4 +1,4 @@
-// MidiRemotePanelGroupDeleteTests.cpp -- FRO270 (docs/control/midi-remote-ui.md#surface-centre):
+// MidiRemotePanelGroupDeleteTests.cpp (docs/control/midi-remote-ui.md#surface-centre):
 // the panel's group delete -- confirms once (showPrompt/promptHook_) with the total assignment
 // count, then MidiLearnController::deleteControls() in one call so a single undo on either history
 // restores the whole group; and the Inspector's "N controls selected" state. Suite name contains

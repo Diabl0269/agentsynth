@@ -319,7 +319,7 @@ TEST_F(LFOModuleTest, SampleAndHold) {
     EXPECT_EQ(buffer.getSample(0, 0), buffer.getSample(0, 1));
 }
 
-// --- FRO284: Rate/Level/Glide CV jacks ---
+// --- Rate/Level/Glide CV jacks -----------
 
 TEST_F(LFOModuleTest, CvPortLabelsAndCount) {
     EXPECT_EQ(lfo->getInputPortLabel(0), "Rate");
@@ -357,7 +357,7 @@ TEST_F(LFOModuleTest, RateCvChangesPeriodInHzMode) {
     auto params = lfo->getParameters();
     dynamic_cast<juce::AudioParameterBool*>(params[2])->setValueNotifyingHost(0.0f); // Hz mode
     // Square is choice index 3 (Sine, Triangle, Sawtooth, Square, S&H, Custom) -- set the index
-    // directly (FRO114 appended "Custom" at index 5, which moved this fixed choice's normalised
+    // directly ("Custom" sits at index 5, which moves this fixed choice's normalised
     // fraction) rather than a hardcoded normalised literal that drifts with the choice count.
     *dynamic_cast<juce::AudioParameterChoice*>(params[1]) = 3;
     dynamic_cast<juce::AudioParameterFloat*>(params[4])->setValueNotifyingHost(

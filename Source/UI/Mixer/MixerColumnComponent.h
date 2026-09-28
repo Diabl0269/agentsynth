@@ -21,7 +21,7 @@ class AudioEngine;
 class ModuleBase;
 class ChannelStripModule;
 
-// MixerColumnComponent.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): one ChannelStrip's column --
+// MixerColumnComponent.h (docs/mixer/panel.md#what-the-mixer-shows): one ChannelStrip's column --
 // header, source line, insert list, pan, fader + meter, dB readout (inside MixerFader), M/S, and
 // the tracks-feeding row. A background click (not on a control) selects the strip's macro on the
 // canvas (docs/mixer/panel.md#what-the-mixer-shows's "clicking a column selects its macro").
@@ -29,7 +29,7 @@ namespace synth::ui {
 
 class MixerColumnComponent : public juce::Component {
 public:
-    /** FRO298: the fader's own minimum draggable height (MixerFader.cpp's 16px dB readout plus a
+    /** The fader's own minimum draggable height (MixerFader.cpp's 16px dB readout plus a
      *  slider left at least ~40px tall) -- resized() guarantees this by shrinking the insert/send
      *  lists, the EQ thumbnail and the pan knob first, in that order, before this ever gives way. */
     static constexpr int kMinFaderHeight = 56;
@@ -37,7 +37,7 @@ public:
     MixerColumnComponent();
 
     /** References must outlive this component -- same lifetime contract BottomDockComponent's own
-     *  constructor threads down through MixerPanelComponent. FRO336: `meterReader` defaults to the
+     *  constructor threads down through MixerPanelComponent. `meterReader` defaults to the
      *  pre-existing `MeterReader::Mixer` slot -- pass `MeterReader::MixerMirror` for a column
      *  belonging to the Mixer's optional second live view (MixerMirrorController), so its meter
      *  poll never races the docked view's for the same consume-on-read latch slot. */
@@ -51,11 +51,11 @@ public:
 
     juce::AudioProcessorGraph::NodeID getNodeId() const noexcept { return nodeId_; }
 
-    /** FRO225 test seam: the header this column owns -- a test drives its inline rename through
+    /** Test seam: the header this column owns -- a test drives its inline rename through
      *  MixerColumnHeader::getNameLabelForTest()'s real Label editor gestures. */
     MixerColumnHeader& getHeaderForTest() noexcept { return header_; }
 
-    /** FRO11: unbinds the fader/pan/mute/solo/meter from whatever live processor/parameters they
+    /** Unbinds the fader/pan/mute/solo/meter from whatever live processor/parameters they
      *  currently reference, and clears this column's own raw pointers into the graph -- called by
      *  MixerPanelComponent::unbindAllColumns() from GraphEditor::onBeforeDetachAllModuleComponents,
      *  i.e. BEFORE a graph-replacing mutation (undo/redo restore, New Patch, Load, AI patch apply)
@@ -78,7 +78,7 @@ public:
      *  addModule() directly through this, exactly like the row menu's own async callbacks would. */
     MixerInsertList& getInsertListForTest() noexcept { return insertList_; }
 
-    /** FRO18: toggles this strip's mute/solo through exactly the same path the M/S buttons'
+    /** Toggles this strip's mute/solo through exactly the same path the M/S buttons'
      *  onClick already used (undo bracket, ChannelStripModule::isSoloed via
      *  AudioEngine::setChannelStripSoloed -- never a direct setSoloed(), root CLAUDE.md's
      *  invariant). Reachable both from a real click and from MixerPanelComponent's keyPressed, so
@@ -87,7 +87,7 @@ public:
     void toggleMuted();
     void toggleSoloed();
 
-    /** FRO18: the fader nudged one undo step, or false when nothing is bound (Direct-column-style
+    /** The fader nudged one undo step, or false when nothing is bound (Direct-column-style
      *  no-op) or the fader has no live param (post-unbind). */
     bool nudgeFader(float deltaDb) { return fader_.nudge(deltaDb); }
 
@@ -96,14 +96,14 @@ public:
     juce::Button& getMuteButtonForTest() noexcept { return muteButton_; }
     juce::Button& getSoloButtonForTest() noexcept { return soloButton_; }
 
-    /** FRO18: the strip's own leaf-level keyboard-focus outline, painted in paintOverChildren --
+    /** The strip's own leaf-level keyboard-focus outline, painted in paintOverChildren --
      *  distinct from setSelected()'s reveal highlight (they may co-paint). MixerPanelComponent
      *  sets this when focusedColumnIndex_ changes (real hasKeyboardFocus() is always false
      *  headless with no native peer -- same accepted gap TimelineTrackFocusTests documents). */
     void setKeyboardFocused(bool focused);
     bool isKeyboardFocusedForTest() const noexcept { return keyboardFocused_; }
 
-    /** FRO18 review fix: MixerPanelComponent calls this from setFocusedColumnIndex() (real
+    /** MixerPanelComponent calls this from setFocusedColumnIndex() (real
      *  navigation only, never from a rebuild()-preserved refocus -- see MixerPanelKeyboard.cpp's
      *  own comment on why) so VoiceOver's accessibility cursor tracks the visual keyboard-focus
      *  outline instead of only painting it. Targets the fader -- the control the ticket's own
@@ -130,24 +130,24 @@ public:
     std::function<void(const juce::String&)> onEditOnCanvas;
     /** Forwarded from the insert list and the send list after a topology-changing mutation. */
     std::function<void()> onMutated;
-    /** FRO336: fired at the end of toggleMuted()/toggleSoloed() -- a real interactive toggle only,
+    /** Fired at the end of toggleMuted()/toggleSoloed() -- a real interactive toggle only,
      *  never a rebuild-driven setColumn() application. MixerPanelComponent::rebuild() wires this to
      *  its own onLiveMixerStateChanged, the cheap per-strip refresh signal a sibling live view
      *  (the "both places" mirror, docs/mixer/panel.md) uses to catch up without a full rebuild. */
     std::function<void()> onLiveStateChanged;
 
-    /** FRO15: forwarded to the send list's "+ Send > New bus..." -- see MixerSendList::createBus. */
+    /** Forwarded to the send list's "+ Send > New bus..." -- see MixerSendList::createBus. */
     void setCreateBusProvider(std::function<juce::AudioProcessorGraph::NodeID()> provider) {
         sendList_.createBus = std::move(provider);
     }
 
-    /** FRO296: forwarded to the send list's drag-reorder -- see MixerSendList::moveSendRow. */
+    /** Forwarded to the send list's drag-reorder -- see MixerSendList::moveSendRow. */
     void
     setMoveSendRowProvider(std::function<bool(juce::AudioProcessorGraph::NodeID, int fromRow, int toRow)> provider) {
         sendList_.moveSendRow = std::move(provider);
     }
 
-    /** FRO15 test seam: the send rows this column is showing. */
+    /** Test seam: the send rows this column is showing. */
     MixerSendList& getSendListForTest() noexcept { return sendList_; }
 
     /** One 10 Hz tick -- see MixerMeter's own header comment for the driving chain.
@@ -156,29 +156,29 @@ public:
      *  independent of the poll's actual (tab-visibility-gated) cadence. */
     void refreshMeter(float elapsedSeconds);
 
-    /** FRO146: the meter itself -- a test seam for reading displayed/peak-hold dB directly. */
+    /** The meter itself -- a test seam for reading displayed/peak-hold dB directly. */
     MixerMeter& getMeterForTest() noexcept { return meter_; }
-    /** FRO146: the clip readout -- Cubase's "Meter Peak Level" field. A test seam for reading its
+    /** The clip readout -- Cubase's "Meter Peak Level" field. A test seam for reading its
      *  text/clip state and driving its real mouse-click reset path. */
     MixerMeterReadout& getMeterReadoutForTest() noexcept { return meterReadout_; }
-    /** FRO146: resets this column's clip readout -- called by the header's "Reset Meters" action
+    /** Resets this column's clip readout -- called by the header's "Reset Meters" action
      *  and by an Option/Alt-click on ANY column's readout (see onResetAllMetersRequested below). */
     void resetMeterReadout() { meterReadout_.reset(); }
 
-    /** FRO146: fires when this column's readout is Option/Alt-clicked -- MixerPanelComponent wires
+    /** Fires when this column's readout is Option/Alt-clicked -- MixerPanelComponent wires
      *  every column's instance of this to its own resetAllMeterReadouts(). */
     std::function<void()> onResetAllMetersRequested;
 
-    /** FRO11's revealColumnForStrip highlight -- an accent border while true, so the channel
+    /** The revealColumnForStrip highlight -- an accent border while true, so the channel
      *  chip's click has a visible "found it" result the same way Locate Master's canvas select
      *  does. Exactly one column is selected at a time (MixerPanelComponent enforces it). */
     void setSelected(bool selected);
-    // FRO12 (P9-6): proves a detach/redock (a plain reparent, never a rebuild()) leaves selection
+    // Proves a detach/redock (a plain reparent, never a rebuild()) leaves selection
     // untouched -- see Tests/UI/Layout/DetachablePanelHost/DetachRedockStateTests.cpp.
     bool isSelectedForTest() const noexcept { return selected_; }
 
-    // ---- MIDI Learn (FRO133, MixerColumnMidiLearn.cpp -- see its file comment for the design;
-    // reuses the FRO130 module-card pattern via Source/UI/MidiRemote/MidiLearnMenu.h) ----
+    // ---- MIDI Learn (MixerColumnMidiLearn.cpp -- see its file comment for the design;
+    // reuses the module-card pattern via Source/UI/MidiRemote/MidiLearnMenu.h) ----
 
     /** Test/inspection: the param a right-click on `component` would open MIDI Learn for, or null
      *  -- mirrors ModuleComponent::findMidiLearnableParamForTest. */
@@ -187,10 +187,10 @@ public:
     /** Test/inspection: `component`'s MIDI-mapped badge cache, as of the last refreshMidiLearnBadges(). */
     bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const;
 
-    // FRO256: test seam for the armed breathing outline's per-tick repaint -- see refreshMeter().
+    // Test seam for the armed breathing outline's per-tick repaint -- see refreshMeter().
     int getMidiLearnArmedRepaintCountForTest() const noexcept { return midiLearnArmedRepaintCount_; }
 
-    /** FRO135: appends every learnable control here (parameters, and Solo as a node command) for the
+    /** Appends every learnable control here (parameters, and Solo as a node command) for the
      *  pick-target overlay. */
     void collectPickCandidates(std::vector<PickCandidate>& out) const;
 
@@ -209,11 +209,11 @@ public:
      *  thread only -- called by MidiLearnController via MixerPanelComponent::setMidiLearnArmed. */
     void setMidiLearnArmedParam(const juce::String& paramId);
 
-    /** FRO253: same contract as setMidiLearnArmedParam() above, for the Solo node command's own
+    /** Same contract as setMidiLearnArmedParam() above, for the Solo node command's own
      *  breathing outline -- called by MixerPanelComponent::setMidiLearnArmedSolo/clearMidiLearnArmedSolo. */
     void setMidiLearnArmedSolo(bool armed);
 
-    /** FRO253: forwarded to MixerPanelComponent's single set of Solo-learn callbacks (rebuild()) --
+    /** Forwarded to MixerPanelComponent's single set of Solo-learn callbacks (rebuild()) --
      *  fired from this column's own mouseDown() on a right-click on soloButton_, mirroring how a
      *  registered parameter control fires graphEditor_->onMidiLearnRequested/onMidiForgetRequested.
      *  Null (the default) is a wired-nothing no-op, same contract as GraphEditor's own callbacks. */
@@ -221,9 +221,9 @@ public:
     std::function<void()> onSoloMidiForgetRequested;
     std::function<juce::String()> onQuerySoloMidiMapping;
 
-    /** FRO253: re-reads mute/solo from the bound module/strip and repaints -- called by
+    /** Re-reads mute/solo from the bound module/strip and repaints -- called by
      *  MixerPanelComponent::refreshLiveMixerVisuals() after something OTHER than this column's own
-     *  click changes solo (a MIDI Remote node-command press, or FRO336's sibling-live-view refresh).
+     *  click changes solo (a MIDI Remote node-command press, or a sibling-live-view refresh).
      *  A no-op post-unbind (graph_ null), same guard toggleSoloed() above already uses. */
     void refreshMuteSoloVisual();
 
@@ -231,9 +231,9 @@ private:
     void rebindControls();
     void refreshMuteSoloAccessibility(ModuleBase* module, ChannelStripModule* strip);
 
-    /** FRO225 (docs/mixer/panel.md): header_.onNameEdited's handler -- see MixerColumnHeader.h's own
-     *  class comment for the rename design, and this method's definition (MixerColumnComponent.cpp)
-     *  for why a boxed strip's rename goes to its macro instead of a second, competing name. */
+    /** header_.onNameEdited's handler -- see MixerColumnHeader.h's own class comment for the rename
+     *  design, and this method's definition (MixerColumnComponent.cpp) for why a boxed strip's
+     *  rename goes to its macro instead of a second, competing name (see docs/mixer/panel.md). */
     void commitHeaderRename(const juce::String& newName);
 
     /** Registers `control` as a MIDI-learnable target for `param` (a no-op if `param` is null,
@@ -241,7 +241,7 @@ private:
      *  seen, attaches this column as its MouseListener so a right-click on it reaches mouseDown()
      *  below -- see MixerColumnMidiLearn.cpp. */
     void registerMidiLearnable(juce::Component& control, juce::RangedAudioParameter* param);
-    /** FRO253: same registration shape as registerMidiLearnable() above, for the Solo node command
+    /** Same registration shape as registerMidiLearnable() above, for the Solo node command
      *  entry (no juce::RangedAudioParameter -- ChannelStripModule::soloed_ is engine state). Only
      *  called from rebindControls() when soloButton_ is visible (a ChannelStrip column). */
     void registerSoloMidiLearnable();
@@ -250,14 +250,14 @@ private:
     void appendAutomateMenuItem(juce::PopupMenu& menu, juce::RangedAudioParameter& param);
     void showSoloMidiLearnMenu();
     void refreshMidiLearnBadges();
-    void repaintArmedMidiLearnOutline(); // FRO256: keeps the armed breathing outline animating; see .cpp
+    void repaintArmedMidiLearnOutline(); // Keeps the armed breathing outline animating; see .cpp
     void paintMidiLearnOverlays(juce::Graphics& g);
 
     /** One entry per learnable control currently bound -- cleared and rebuilt by rebindControls()
      *  (and, for send rows, by sendList_'s own onSendKnobBuilt callback fired from inside it),
      *  and cleared again by unbindFromGraph() since `param` is a raw pointer into the graph node
      *  this column is about to be detached from (Source/UI/CLAUDE.md's mixer-unbind invariant).
-     *  FRO253: `param` is null for the Solo entry -- `isSolo` (and `targetName`, used for its menu
+     *  `param` is null for the Solo entry -- `isSolo` (and `targetName`, used for its menu
      *  label/query in place of param->getName()) distinguish it from "not yet resolved". */
     struct MidiLearnableEntry {
         juce::Component* component = nullptr;
@@ -274,11 +274,11 @@ private:
     std::vector<juce::Component*> midiLearnListenerTargets_;
     juce::String midiLearnArmedParamId_;
     double midiLearnArmedSinceMs_ = 0.0;
-    // FRO253: Solo's own armed flag/timestamp -- separate from the paramId-keyed pair above since
+    // Solo's own armed flag/timestamp -- separate from the paramId-keyed pair above since
     // Solo has no juce::RangedAudioParameter identity to key on.
     bool midiLearnArmedSolo_ = false;
     double midiLearnArmedSoloSinceMs_ = 0.0;
-    // FRO256: backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
+    // Backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
     int midiLearnArmedRepaintCount_ = 0;
     /** Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test
      *  replaces it via setShowContextMenuHookForTest(). */
@@ -290,8 +290,8 @@ private:
     juce::AudioProcessorGraph* graph_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     AudioEngine* audioEngine_ = nullptr;
-    synth::MacroSet* macros_ = nullptr; // FRO225: commitHeaderRename() only -- everything else already threads its own
-    // FRO336: which consume-on-read latch slot refreshMeter() polls -- see configure()'s own comment.
+    synth::MacroSet* macros_ = nullptr; // commitHeaderRename() only -- everything else already threads its own
+    // Which consume-on-read latch slot refreshMeter() polls -- see configure()'s own comment.
     synth::MeterReader meterReader_ = synth::MeterReader::Mixer;
 
     juce::AudioProcessorGraph::NodeID nodeId_;
@@ -301,7 +301,7 @@ private:
      *  rebindControls(). Empty when the column has no EQ insert. */
     juce::String eqNodeUuid_;
     /** The same EQ's NodeID -- compared against MixerInsertList::onBeforeNodeRemoved's argument to
-     *  unbind eqThumbnail_ before a live row-menu removal frees the module it's bound to (FRO16 UAF
+     *  unbind eqThumbnail_ before a live row-menu removal frees the module it's bound to (use-after-free
      *  fix; unbindFromGraph() above handles the graph-replacing-restore case, not this one). Empty
      *  (default-constructed) when the column has no EQ insert. */
     juce::AudioProcessorGraph::NodeID eqNodeId_;
@@ -316,7 +316,7 @@ private:
     MixerFader fader_;
     MixerMeter meter_;
     MixerMeterReadout meterReadout_;
-    // FRO133/FRO253: right-click-safe so a MIDI Learn menu can open on Mute/Solo without also
+    // Right-click-safe so a MIDI Learn menu can open on Mute/Solo without also
     // toggling them -- see Source/UI/MidiRemote/MidiLearnMenu.h's RightClickSafeButton comment.
     // Solo's target is a NODE COMMAND, not a juce::RangedAudioParameter (ChannelStripModule::soloed_
     // is engine state, Source/Modules/ChannelStripModule.h) -- see MixerColumnMidiLearn.cpp.

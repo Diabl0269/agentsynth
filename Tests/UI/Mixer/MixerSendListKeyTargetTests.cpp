@@ -1,4 +1,4 @@
-// MixerSendListKeyTargetTests.cpp -- FRO318 (docs/mixer/sends-and-buses.md#sending-to-a-key-input): the
+// MixerSendListKeyTargetTests.cpp (docs/mixer/sends-and-buses.md#sending-to-a-key-input): the
 // send menu's "Key: ..." entries, driven through a real off-screen MainComponent with two audio
 // tracks (each "Add audio track" builds its own Gate -> EQ -> Compressor -> strip channel).
 //

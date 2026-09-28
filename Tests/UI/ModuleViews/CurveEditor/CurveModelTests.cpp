@@ -1,6 +1,6 @@
 // CurveModelTests.cpp
 // Tests for synth::ui::CurveModel — the pure data + edit model behind the reusable breakpoint
-// curve editor (FRO111): node/segment bookkeeping, bend shaping via EnvelopeGenerator::shape,
+// curve editor: node/segment bookkeeping, bend shaping via EnvelopeGenerator::shape,
 // Fixed-mode ripple x-edits, and Free-mode add/remove/reorder.
 
 #include "CurveEditorTestHelpers.h"

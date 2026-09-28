@@ -6,7 +6,7 @@
 
 // Concern: the editor/canvas-behaviour preferences — smart connections, double-click
 // disconnect, alignment guides, Dual I/O (global + per-module popup), the macro auto-port
-// preference and its T148 toggles, and the T184 mixer auto-create-channel toggle.
+// preference and its auto-create/auto-delete toggles, and the mixer auto-create-channel toggle.
 
 namespace {
 // Per-module overrides of "defaultDualIOForNewModules", one compact JSON object: {"TypeName":
@@ -389,8 +389,8 @@ std::unique_ptr<juce::Component> PreferencesSettingsTab::createDualIOPerModuleDe
     return buildDualIOPerModuleDefaultsPopup();
 }
 
-// Builds the macro on/off toggles (T148 auto-create/auto-delete, FRO168 drag without Cmd) plus
-// FRO23's "reconnect the chain on delete" (a general delete-behaviour toggle, not macro-specific,
+// Builds the macro on/off toggles (auto-create/auto-delete, drag without Cmd) plus
+// the "reconnect the chain on delete" (a general delete-behaviour toggle, not macro-specific,
 // folded into this same group/named-step so its construction never grows the ratcheted
 // constructor -- see the getter/setter's own doc comment on GraphEditor::setReconnectChainOnDeleteEnabled
 // for why this preference lives in the "same category" as the macro auto-port toggles below).
@@ -408,10 +408,10 @@ void PreferencesSettingsTab::initMacroToggles() {
         persistReconnectChainOnDelete(reconnectChainOnDeleteToggle.getToggleState());
     };
 
-    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): auto-create/auto-delete are plain on/off, unlike the
-    // tri-state preference above — that one defaults to "ask" because it replaced pre-existing
-    // silent behaviour; these two are brand-new automations the founder asked to ship ON by
-    // default, with a plain escape hatch. Same idiom as doubleClickDisconnectToggle above.
+    // Auto-create/auto-delete are plain on/off, unlike the tri-state preference above — that one defaults to
+    // "ask" because it replaced pre-existing silent behaviour; these two are automations that are ON by
+    // default, with a plain escape hatch. Same idiom as doubleClickDisconnectToggle above
+    // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
     contentHost.addAndMakeVisible(macroAutoCreatePortsOnDragToggle);
     macroAutoCreatePortsOnDragToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("macroAutoCreatePortsOnDrag", true), juce::dontSendNotification);
@@ -435,10 +435,10 @@ void PreferencesSettingsTab::initMacroToggles() {
         persistMacroAutoDeletePortsOnLastCable(macroAutoDeletePortsOnLastCableToggle.getToggleState());
     };
 
-    // FRO235 (docs/macros/auto-ports.md#a-port-node-is-directly-deletable): OFF by default — the two manual delete
-    // affordances (Configure I/O's Delete Port, the port's own right-click Delete Port) drop the
-    // cable unless this is on, in which case both splice it back together instead, the way
-    // ungroup always has.
+    // OFF by default — the two manual delete affordances (Configure I/O's Delete Port, the port's own
+    // right-click Delete Port) drop the cable unless this is on, in which case both splice it back
+    // together instead, the way ungroup always has
+    // (see docs/macros/auto-ports.md#a-port-node-is-directly-deletable).
     contentHost.addAndMakeVisible(macroSpliceCableOnPortDeleteToggle);
     macroSpliceCableOnPortDeleteToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("macroSpliceCableOnPortDelete", false),
@@ -452,7 +452,7 @@ void PreferencesSettingsTab::initMacroToggles() {
         persistMacroSpliceCableOnPortDelete(macroSpliceCableOnPortDeleteToggle.getToggleState());
     };
 
-    // FRO168: plain on/off, ON by default (Cmd-drag reparents either way).
+    // Plain on/off, ON by default (Cmd-drag reparents either way).
     contentHost.addAndMakeVisible(macroDragWithoutCmdToggle);
     macroDragWithoutCmdToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("macroDragWithoutCmd", true),
                                              juce::dontSendNotification);

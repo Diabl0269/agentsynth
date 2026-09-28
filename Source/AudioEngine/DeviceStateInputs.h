@@ -2,7 +2,7 @@
 
 #include <juce_core/juce_core.h>
 
-// FRO27: a saved juce::AudioDeviceManager state must never name an input device unless input
+// A saved juce::AudioDeviceManager state must never name an input device unless input
 // channels are actually enabled in that same state -- see DeviceStateInputs.cpp for the JUCE
 // behaviour this works around (updateXml() always writes an input device name, even for an
 // output-only setup). Shared by AudioEngine (device-state save/load) and MainComponent (the

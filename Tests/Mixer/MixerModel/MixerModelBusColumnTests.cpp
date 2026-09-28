@@ -1,4 +1,4 @@
-// MixerModelBusColumnTests.cpp -- FRO15 (P9-9, docs/mixer/sends-and-buses.md): how buildMixerSnapshot sees
+// MixerModelBusColumnTests.cpp (docs/mixer/sends-and-buses.md): how buildMixerSnapshot sees
 // buses and sends. Headless, same bare AudioEngine/TimelineDoc/MacroSet rig as the rest of the
 // MixerModel suite.
 #include "Mixer/ChannelFlows/ChannelFlows.h"
@@ -144,7 +144,7 @@ TEST(MixerModelBusColumnTests, ABoxedBusTakesItsMacroName) {
     EXPECT_EQ(snapshot.columns[0].name, "Reverb Bus") << "the macro name wins over the Bus N fallback";
 }
 
-// FRO15 in-app finding: a bus created through "+ Bus" showed no insert rows and no EQ thumbnail.
+// A bus created through "+ Bus" showed no insert rows and no EQ thumbnail.
 // Root cause -- buildInsertsForColumn only ever walked FORWARD from a feeding track's source, and a
 // bus has none, so it bailed out before ever looking at the EQ/Compressor buildBusChannel really
 // built. This calls the same Core flow the button's MixerPanelComponent::createBus wraps

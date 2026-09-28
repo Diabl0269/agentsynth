@@ -3,24 +3,25 @@
 
 // Topic: the editor/canvas-behaviour preferences — smart connections, double-click disconnect,
 // alignment guides, Dual I/O (global + per-module popup), the macro auto-port preference and
-// its T148 toggles, and the T184 mixer auto-create-channel toggle.
+// its auto-port toggles, and the mixer auto-create-channel toggle.
 
 TEST_F(PreferencesSettingsTabTest, DefaultsToNewAndUnwiredAndDoubleClickOn) {
     PreferencesSettingsTab tab(appProperties);
     EXPECT_EQ(tab.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewAndUnwired);
     EXPECT_TRUE(tab.isDoubleClickPortDisconnectEnabled());
     EXPECT_FALSE(tab.getDefaultDualIOForNewModules());
-    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): both default ON, unlike the tri-state
-    // getMacroAutoPortPreference() default of "ask" — see its own getter/setter comments.
+    // Both default ON, unlike the tri-state getMacroAutoPortPreference() default of "ask" — see its
+    // own getter/setter comments (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
     EXPECT_TRUE(tab.isMacroAutoCreatePortsOnDragEnabled());
     EXPECT_TRUE(tab.isMacroAutoDeletePortsOnLastCableEnabled());
-    // FRO168: dragging modules into/out of macros without Cmd defaults ON (Cmd works either way).
+    // Dragging modules into/out of macros without Cmd defaults ON (Cmd works either way).
     EXPECT_TRUE(tab.isMacroDragWithoutCmdEnabled());
-    // T184 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): default ON, same shape as the T148 toggles above.
+    // Default ON, same shape as the auto-port toggles above
+    // (see docs/mixer/mixer.md#channels-follow-audio-not-tracks).
     EXPECT_TRUE(tab.isMixerAutoCreateChannelOnConnectEnabled());
 }
 
-// T184: default ON, persisted under its own key, reading the default must not write it, a fresh
+// Default ON, persisted under its own key, reading the default must not write it, a fresh
 // tab restores what was written -- mirrors MacroAutoCreateAndAutoDeleteTogglesDefaultOnAndRoundTrip.
 TEST_F(PreferencesSettingsTabTest, MixerAutoCreateChannelOnConnectTogglesDefaultOnAndRoundTrips) {
     {
@@ -43,7 +44,7 @@ TEST_F(PreferencesSettingsTabTest, MixerAutoCreateChannelOnConnectTogglesDefault
     }
 }
 
-// Mirrors DoubleClickSpansLocatorsDefaultsOnAndRoundTrips for the two T148 toggles: default ON,
+// Mirrors DoubleClickSpansLocatorsDefaultsOnAndRoundTrips for the two auto-port toggles: default ON,
 // each persisted under its own key, reading the default must not write it, a fresh tab restores
 // what was written.
 TEST_F(PreferencesSettingsTabTest, MacroAutoCreateAndAutoDeleteTogglesDefaultOnAndRoundTrip) {
@@ -75,7 +76,7 @@ TEST_F(PreferencesSettingsTabTest, MacroAutoCreateAndAutoDeleteTogglesDefaultOnA
     }
 }
 
-// FRO235: OFF by default (unlike the two T148 toggles above), persisted under its own key, reading
+// OFF by default (unlike the two auto-port toggles above), persisted under its own key, reading
 // the default must not write it, a fresh tab restores what was written.
 TEST_F(PreferencesSettingsTabTest, MacroSpliceCableOnPortDeleteTogglesDefaultOffAndRoundTrips) {
     {
@@ -98,7 +99,7 @@ TEST_F(PreferencesSettingsTabTest, MacroSpliceCableOnPortDeleteTogglesDefaultOff
     }
 }
 
-// FRO168: default ON, persisted under its own key, reading the default must not write it, a fresh
+// Default ON, persisted under its own key, reading the default must not write it, a fresh
 // tab restores what was written -- mirrors MacroAutoCreateAndAutoDeleteTogglesDefaultOnAndRoundTrip.
 TEST_F(PreferencesSettingsTabTest, MacroDragWithoutCmdToggleDefaultsOnAndRoundTrips) {
     {
@@ -167,8 +168,8 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     EXPECT_EQ(appProperties.getUserSettings()->getValue("defaultDualIOForNewModules"), "0");
     EXPECT_FALSE(editor.getDefaultDualIOForNewModules());
 
-    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): a toggle flip must reach the live GraphEditor
-    // immediately.
+    // A toggle flip must reach the live GraphEditor immediately
+    // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
     tab.setMacroAutoCreatePortsOnDragEnabled(false);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoCreatePortsOnDrag"), "0");
     EXPECT_FALSE(editor.getAutoCreateMacroPortsOnDragEnabled());
@@ -185,7 +186,7 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoDeletePortsOnLastCable"), "1");
     EXPECT_TRUE(editor.getAutoDeleteMacroPortsOnLastCableEnabled());
 
-    // FRO168: the drag-without-Cmd toggle reaches the live editor too.
+    // The drag-without-Cmd toggle reaches the live editor too.
     tab.setMacroDragWithoutCmdEnabled(false);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("macroDragWithoutCmd"), "0");
     EXPECT_FALSE(editor.getMacroDragWithoutCmdEnabled());
@@ -194,8 +195,8 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     EXPECT_EQ(appProperties.getUserSettings()->getValue("macroDragWithoutCmd"), "1");
     EXPECT_TRUE(editor.getMacroDragWithoutCmdEnabled());
 
-    // T184 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): a toggle flip must reach the live GraphEditor
-    // immediately.
+    // A toggle flip must reach the live GraphEditor immediately
+    // (see docs/mixer/mixer.md#channels-follow-audio-not-tracks).
     tab.setMixerAutoCreateChannelOnConnectEnabled(false);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("mixerAutoCreateChannelOnConnect"), "0");
     EXPECT_FALSE(editor.getAutoCreateChannelOnConnectEnabled());
@@ -205,7 +206,7 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     EXPECT_TRUE(editor.getAutoCreateChannelOnConnectEnabled());
 }
 
-// Founder-review fix F5 (docs/macros/auto-ports.md#auto-creating-ports-when-grouping): the macro auto-port preference.
+// The macro auto-port preference (docs/macros/auto-ports.md#auto-creating-ports-when-grouping).
 // Tri-state, DEFAULT "ask" (Unset) — a silent default of either behaviour would change what grouping does the first
 // time this ships with no warning.
 TEST_F(PreferencesSettingsTabTest, MacroAutoPortDefaultsToAskAndDoesNotWriteUntouched) {
@@ -726,7 +727,7 @@ TEST_F(PreferencesSettingsTabTest, LoadDualIOPerModuleOverridesParsesWithoutATab
     EXPECT_EQ(overrides.count("Delay"), 0u);
 }
 
-// T147: the macro auto-port boundary tri-state's ApplicationProperties round-trip. A "Remember my
+// The macro auto-port boundary tri-state's ApplicationProperties round-trip. A "Remember my
 // choice" from the modal writes "macroAutoCreatePorts"; on a relaunch MainComponent restores it via
 // loadMacroAutoPortPreference() (independent of any tab — the tab's setGraphEditor only runs when
 // Settings opens), so the modal must not re-ask. Pins the parser that restore relies on, including

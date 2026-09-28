@@ -1,4 +1,4 @@
-// AddControllerPopoverTests.cpp -- FRO134 (docs/control/midi-remote-ui.md#add-controller): the
+// AddControllerPopoverTests.cpp (docs/control/midi-remote-ui.md#add-controller): the
 // "+ Add controller" popover as a pure view over an injected device list -- deterministic, no
 // juce::MidiInput. Suite names contain "MidiRemote" per the ship-task --gtest_filter convention.
 #include "UI/MidiRemote/AddController/AddControllerPopover.h"
@@ -98,10 +98,10 @@ TEST(MidiRemoteAddControllerPopoverTest, OkIsDisabledWithoutADeviceOrAName) {
     EXPECT_FALSE(ok->isEnabled());
 }
 
-// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): choosing a template that
-// declares a port hint (TemplateInfo::handshakePort) preselects the first free device row whose name
-// already contains it -- e.g. "LCXL3 1 DAW Out" over "LCXL3 1 MIDI Out" -- through the same path a
-// manual pick uses, so the name field re-prefills too.
+// Choosing a template that declares a port hint (TemplateInfo::handshakePort) preselects the first
+// free device row whose name already contains it -- e.g. "LCXL3 1 DAW Out" over "LCXL3 1 MIDI Out"
+// -- through the same path a manual pick uses, so the name field re-prefills too (see
+// docs/control/midi-remote-device-handshake.md#device-handshake).
 TEST(MidiRemoteAddControllerPopoverTest, ChoosingAHintedTemplatePreselectsItsPort) {
     std::vector<AddControllerPopover::DeviceRow> devices = {{"id-midi", "LCXL3 1 MIDI Out", ""},
                                                             {"id-daw", "LCXL3 1 DAW Out", ""}};

@@ -5,12 +5,11 @@
 #include "UI/Layout/FocusRegion.h"
 #include <functional>
 
-// MixerFocusRegion.h -- FRO18 plan (a)'s "FRO12 seam": registers the "mixer" T159 focus region
-// against `dock`'s panel, factored out of MainComponent::registerFocusRegions() specifically so a
-// future detached mixer window (P9-6/FRO12) can register the SAME region-registration logic
-// against its OWN FocusRegionRegistry with a different `dockOpen` predicate, rather than
-// re-deriving it. Whichever of FRO12/FRO18 lands second re-threads through this helper (plan's own
-// Risks (g)) -- see FocusRegion.h's own header comment, which already names this future need.
+// MixerFocusRegion.h -- registers the "mixer" focus region against `dock`'s panel, factored out of
+// MainComponent::registerFocusRegions() so a detached mixer window can register the SAME
+// region-registration logic against its OWN FocusRegionRegistry with a different `dockOpen`
+// predicate, rather than re-deriving it. Any second registration site should thread through this
+// helper too -- see FocusRegion.h's own header comment, which names that need.
 namespace synth::ui {
 
 /** Open only when both `dockOpen()` (the dock's own open/closed state -- MainComponent's

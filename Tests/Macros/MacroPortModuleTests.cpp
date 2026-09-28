@@ -1,5 +1,5 @@
 // MacroPortModuleTests.cpp
-// Module-level sanity for the four Macro I/O port node types (P8-15, docs/macros/ports.md#node-types,
+// Module-level sanity for the four Macro I/O port node types (docs/macros/ports.md#node-types,
 // docs/macros/ports.md#node-types) — MacroInlet/MacroOutlet (audio/CV) and MacroMidiInlet/MacroMidiOutlet
 // (MIDI). Driven directly, no graph/engine, the same way RecordTapTests exercises RecordTapModule in isolation.
 //
@@ -127,7 +127,7 @@ TEST(MacroInletModuleTest, ExtraStateClampsVoiceCountToTheDeclaredMaximum) {
 }
 
 TEST(MacroInletModuleTest, AbsentShapeKeyParsesAsMono) {
-    // Every P8-15a save (and every hand-built one predating shape/voices) has no "shape" key.
+    // Every early save (and every hand-built one predating shape/voices) has no "shape" key.
     MacroInletModule inlet;
     auto* obj = new juce::DynamicObject();
     obj->setProperty("voices", 4); // present but irrelevant without a shape saying Poly
@@ -168,7 +168,7 @@ TEST(MacroInletModuleTest, SetPortShapeStereoExposesChannelZeroAndKRightBaseAsTw
     EXPECT_NE(inlet.mapOutputChannel(1).role, PortRole::Audio);
 }
 
-// StereoCollapsed (founder-review fix G2, docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed /
+// StereoCollapsed (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed /
 // docs/macros/auto-ports.md#auto-creating-ports-when-grouping): auto-derived only, produced when a crossing cable lands
 // on an ordinary module's own COLLAPSED stereo jack (e.g. an FX module's single "Audio" jack). The port must present
 // the SAME one visible jack that internal jack does, while still carrying both raw channels — never the two-jack

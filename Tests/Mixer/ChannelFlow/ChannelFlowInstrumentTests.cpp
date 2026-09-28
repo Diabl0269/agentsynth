@@ -1,6 +1,6 @@
 // ChannelFlowInstrumentTests.cpp
 //
-// T183 (P9-3b): "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" — the MIDI-track
+// "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" — the MIDI-track
 // mirror of the Audio Track flow in ChannelFlowTests.cpp. Shared ChannelFlowTest fixture and
 // helpers live in ChannelFlowTestFixture.h.
 
@@ -35,7 +35,7 @@
 #include <thread>
 
 // ---------------------------------------------------------------------------------------------
-// T183 (P9-3b, FRO226): "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds
+// "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds
 //
 //     Track In -> instrument -> Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor (bypassed)
 //              -> Channel Strip (Stereo) -> Master (Mix)
@@ -130,7 +130,7 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorWiresSplitBlockRightLegNeverCh1
         << "Oscillator must no longer feed EQ directly — it goes through the VCA and Gate";
 }
 
-// P9-3i (FRO43): the ADSR gating the VCA above is driven by the same Track In MIDI as the
+// The ADSR gating the VCA above is driven by the same Track In MIDI as the
 // instrument, and its Env output lands on the VCA's mono Gain CV (ch1) — never the audio legs.
 TEST_F(ChannelFlowTest, InstrumentTrackOscillatorEnvelopeGatesTheVCA) {
     MainComponent mc(std::make_unique<MockProviderCFT>());
@@ -263,7 +263,7 @@ TEST_F(ChannelFlowTest, InstrumentTrackDefaultInsertsAreBypassedAndStripIsStereo
     EXPECT_EQ(stripModule->getShape(), ChannelStripModule::Shape::Stereo);
 }
 
-// P9-3i (FRO43) is scoped to Oscillator/Wavetable only — Sampler already has its own one-shot
+// The ADSR+VCA insertion is scoped to Oscillator/Wavetable only — Sampler already has its own one-shot
 // playback envelope and must be completely unaffected: no ADSR/VCA nodes, no change to its wiring
 // or macro membership.
 TEST_F(ChannelFlowTest, InstrumentTrackSamplerGetsNoEnvelopeOrVCA) {
@@ -309,7 +309,7 @@ TEST_F(ChannelFlowTest, InstrumentTrackIsOneCollapsedMacroNamedAfterTrackAndStay
 
     EXPECT_EQ(macro.name, track.name);
     EXPECT_TRUE(macro.collapsed);
-    // T183's scope decision: an instrument track is TrackKind::Midi (a Track In feeding exactly
+    // the scope decision: an instrument track is TrackKind::Midi (a Track In feeding exactly
     // one instrument), not a new TrackKind — see MainComponent::addInstrumentTrack's own comment.
     EXPECT_EQ(track.kind, synth::TrackKind::Midi);
     EXPECT_EQ(track.bindingUuid, nodeUuid(findNodeOfTypeCFT(graph, ModuleType::TimelineMidiSource)));
@@ -329,7 +329,7 @@ TEST_F(ChannelFlowTest, InstrumentTrackIsOneCollapsedMacroNamedAfterTrackAndStay
         << "Master must stay outside the macro";
 }
 
-// P9-3i (FRO43): an Oscillator track's macro must include the new ADSR+VCA members too —
+// An Oscillator track's macro must include the new ADSR+VCA members too —
 // InstrumentTrackIsOneCollapsedMacroNamedAfterTrackAndStaysMidiKind above uses Sampler, which never
 // exercises this membership change.
 TEST_F(ChannelFlowTest, InstrumentTrackOscillatorMacroIncludesEnvelopeAndVCA) {
@@ -392,8 +392,8 @@ TEST_F(ChannelFlowTest, InstrumentTrackOneUndoStepRevertsEverythingAndRedoRestor
 }
 
 // The Wavetable card and the Parametric EQ card are BOTH double-width — the exact overlap shape
-// P9-3a's own bug (see this file's header comment) reproduced for, now two nodes to the left of
-// where it was (P9-3i inserted ADSR+VCA between them). Reuses
+// the bug (see this file's header comment) reproduced for, now two nodes to the left of
+// where it was (the ADSR+VCA insertion puts them between). Reuses
 // ChannelCardsDoNotOverlapAndMasterIsRightOfStrip's real-ModuleComponent approach rather than
 // inferring bounds from positions.
 TEST_F(ChannelFlowTest, InstrumentTrackWavetableCardsDoNotOverlap) {

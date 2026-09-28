@@ -1,5 +1,5 @@
-// MixerPlacementControllerRenderTests.cpp -- FRO230: render-level coverage for the Mixer
-// "Own panel" placement strip MixerPlacementController.{h,cpp} owns (FRO231's own second bottom
+// MixerPlacementControllerRenderTests.cpp -- render-level coverage for the Mixer
+// "Own panel" placement strip MixerPlacementController.{h,cpp} owns (the second bottom
 // strip, distinct from MixerPlacementControllerTests.cpp's placement/focus-region behaviour
 // suite). Same "persist first, then construct" MainComponent harness as that file.
 //

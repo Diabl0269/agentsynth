@@ -110,7 +110,7 @@ TEST(MacroPortFlow, ChangeShapeIsANoOpForAMidiPort) {
 }
 
 // ============================================================================
-// FRO20 (P8-25, founder review round 3, item 3.6): changing an audio port from Mono to Stereo (or
+// Changing an audio port from Mono to Stereo (or
 // StereoCollapsed) must auto-wire the NEW raw channel, reusing the same rule the Dual I/O toggle
 // applies when an ordinary module grows a right leg -- pair with the peer's own right leg when it
 // has one, else sum into the same mono jack it already exposes.

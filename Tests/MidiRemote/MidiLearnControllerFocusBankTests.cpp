@@ -1,11 +1,11 @@
-// FRO141 (docs/control/midi-remote.md#focus-bank): MidiLearnController's canvas-selection polling
-// (focusBankWatcher_, MidiLearnControllerFocusBank.cpp) -- selecting a module binds a profile's
-// focus-bank controls to its parameters in on-card order, selecting a different module rebinds,
-// and deselecting (or selecting several modules) clears the bindings. Drives the real
-// GraphEditor::selectModule/clearSelection API and lets the real 200 ms UiWatcher timer tick via
-// juce::MessageManager::runDispatchLoopUntil, exactly like MidiLearnControllerHostedParameterTests.cpp,
-// rather than calling the polling function directly. Mirrors MidiLearnControllerTests.cpp's fixture.
-// Suite name contains "MidiRemote" per the ship-task --gtest_filter convention.
+// MidiLearnController's canvas-selection polling (focusBankWatcher_, MidiLearnControllerFocusBank.cpp)
+// -- selecting a module binds a profile's focus-bank controls to its parameters in on-card order,
+// selecting a different module rebinds, and deselecting (or selecting several modules) clears the
+// bindings. Drives the real GraphEditor::selectModule/clearSelection API and lets the real 200 ms
+// UiWatcher timer tick via juce::MessageManager::runDispatchLoopUntil, exactly like
+// MidiLearnControllerHostedParameterTests.cpp, rather than calling the polling function directly.
+// Mirrors MidiLearnControllerTests.cpp's fixture. Suite name contains "MidiRemote" per the ship-task
+// --gtest_filter convention (see docs/control/midi-remote.md#focus-bank).
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -178,9 +178,9 @@ TEST_F(MidiLearnControllerFocusBankTest, SelectingTwoModulesClearsTheBindings) {
     EXPECT_TRUE(remoteEngine_.getTransientAssignments().empty());
 }
 
-// FRO141 (docs/control/midi-remote-ui.md): the Inspector's "Follow selection (focus bank)" toggle
-// goes through MidiLearnController::updateControl -- the same profile-edit path as name/kind/
-// encoding -- so it is one step on the controller edit history, undoable there.
+// The Inspector's "Follow selection (focus bank)" toggle goes through
+// MidiLearnController::updateControl -- the same profile-edit path as name/kind/encoding -- so it
+// is one step on the controller edit history, undoable there (see docs/control/midi-remote-ui.md).
 TEST_F(MidiLearnControllerFocusBankTest, TogglingFocusBankThroughUpdateControlIsUndoable) {
     // The fixture's own controls are already focus-bank controls -- flip one OFF to exercise the
     // toggle in the other direction (the inspector's toggle works either way).
@@ -199,7 +199,7 @@ TEST_F(MidiLearnControllerFocusBankTest, TogglingFocusBankThroughUpdateControlIs
     EXPECT_FALSE(controller_->getProfiles()[0].controls[0].focusBank);
 }
 
-// FRO141: never persisted -- a focus-bank binding must never leak into MidiRemoteProjectDoc, so
+// Never persisted -- a focus-bank binding must never leak into MidiRemoteProjectDoc, so
 // saving a project (doc_.toVar()) can never contain it.
 TEST_F(MidiLearnControllerFocusBankTest, FocusBankBindingsAreNeverWrittenToTheProjectDoc) {
     graphEditor_->selectModule(nodeA_->nodeID, false);

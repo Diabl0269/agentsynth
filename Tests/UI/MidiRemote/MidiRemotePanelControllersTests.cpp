@@ -1,4 +1,4 @@
-// MidiRemotePanelControllersTests.cpp -- FRO134: the panel's controller-level flows -- Add
+// MidiRemotePanelControllersTests.cpp -- the panel's controller-level flows -- Add
 // controller (create + open + select), Templates, Import/Export round trip, the "+ Add controller"
 // footer's Hosted rule, and the Inspector's encoder auto-detect / name / kind / encoding edits
 // reaching the profile AND the assignments' denormalised copies. Suite names contain "MidiRemote"
@@ -268,7 +268,7 @@ TEST_F(MidiRemotePanelControllersTest, CancellingTheFirstPromptEndsAutoDetect) {
     EXPECT_EQ(panel_.getEncoderAutoDetectForTest().phase(), synth::midi::EncoderAutoDetect::Phase::idle);
 }
 
-// ---- Send feedback to (FRO139, docs/control/midi-remote.md#controller-feedback) -----------------
+// ---- Send feedback to (docs/control/midi-remote.md#controller-feedback) -------------------------
 
 TEST_F(MidiRemotePanelControllersTest, SetFeedbackOutputWithADeviceSetsHasOutputAndPersists) {
     const auto id = create(AddControllerPopover::StartWith::empty);

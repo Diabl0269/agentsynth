@@ -1,4 +1,4 @@
-// MixerPlacementControllerTests.cpp -- FRO12 (P9-6, docs/mixer/panel.md): the Mixer placement
+// MixerPlacementControllerTests.cpp (docs/mixer/panel.md): the Mixer placement
 // preference (Tab beside the Timeline / Own panel / Window), read once at launch and re-applied
 // live on every settings-file change. Drives a real, off-screen MainComponent, writing
 // "mixerPlacement" into its ApplicationProperties BEFORE construction -- the same "persist first,
@@ -154,12 +154,12 @@ TEST(MixerPlacementControllerTests, LivePreferenceChangeAppliesWithoutRestart) {
 }
 
 // ============================================================================
-// Focus-region rebuild on a live placement change (review follow-up on PR #378)
+// Focus-region rebuild on a live placement change
 //
 // applyPlacementPreference() only moves the Mixer between its three homes -- it does not, on its
 // own, re-evaluate the "mixer"/"timeline" registration guards in MainComponent::rebuildFocusRegions
-// (MainComponentSetup.cpp), so a placement switch away from Tab used to leave a stale "mixer"
-// region pointing at a panel that was no longer showing there. changeListenerCallback now calls
+// (MainComponentSetup.cpp), so without a rebuild a placement switch away from Tab leaves a stale
+// "mixer" region pointing at a panel that is no longer showing there. changeListenerCallback calls
 // rebuildFocusRegions() right after applyPlacementPreference() -- this drives that live wiring, not
 // just the applier.
 // ============================================================================
@@ -196,7 +196,7 @@ TEST(MixerPlacementControllerTests, LivePlacementChangeRebuildsTheMixerFocusRegi
 }
 
 // ============================================================================
-// Own-panel placement's own MainComponent-level mixer focus region (review follow-up on PR #378)
+// Own-panel placement's own MainComponent-level mixer focus region
 //
 // Own panel is still the SAME top-level window as MainComponent (not a DetachedPanelWindow), so
 // Tab-cycling there must be able to reach it -- registerMixerFocusRegion's helper hardcodes

@@ -1,5 +1,5 @@
-// FRO19 (founder review round 3, item 2): DragStateResetTests.cpp's synthetic real-gesture sweep
-// (PR #324) found no leak because every gesture it drives ends with a real mouseUp on the SAME
+// DragStateResetTests.cpp's synthetic real-gesture sweep
+//  found no leak because every gesture it drives ends with a real mouseUp on the SAME
 // component that armed the drag. The actual bug (found by code inspection, not by that sweep) is a
 // component-lifetime race: an async graph rebuild — an AI patch apply's
 // GraphEditor::detachAllModuleComponents(), or the dragged node/macro itself being removed (undo, a
@@ -58,7 +58,7 @@ juce::MouseEvent realMouseEvent(juce::Component& eventComp, juce::Point<int> loc
 void expectNoStuckDragState(GraphEditor& editor, const char* context) {
     EXPECT_FALSE(editor.getDragDropController().isDragPreviewActive()) << context << ": drag-preview ghost left stuck";
     EXPECT_FALSE(editor.isSelectionDragActive()) << context << ": selection-drag bookkeeping left stuck";
-    // FRO40: cancelLiveDragGestures() must clear the macro drag-candidate highlight too, or an
+    // cancelLiveDragGestures() must clear the macro drag-candidate highlight too, or an
     // async rebuild mid-Cmd/Ctrl-drag leaves a hull highlighted with no gesture left to end it.
     EXPECT_FALSE(editor.hasMacroDragCandidate()) << context << ": macro drag candidate hull left stuck";
     EXPECT_EQ(editor.getMacroDragDraggedNodeId(), juce::AudioProcessorGraph::NodeID{})
@@ -101,7 +101,7 @@ TEST(DragStateAsyncRebuild, DetachAllModuleComponentsCancelsLiveBodyDragMidGestu
     expectNoStuckDragState(editor, "after the post-detach updateComponents reconcile");
 }
 
-// FRO40: the macro drag-candidate highlight specifically — armed by actually crossing a real
+// The macro drag-candidate highlight specifically — armed by actually crossing a real
 // expanded macro's hull mid-drag, then cancelled by the same detachAllModuleComponents() path the
 // plain drag-preview case above exercises, with no mouseUp for the dragged component ever coming.
 TEST(DragStateAsyncRebuild, DetachAllModuleComponentsCancelsLiveMacroDragCandidateMidGesture) {

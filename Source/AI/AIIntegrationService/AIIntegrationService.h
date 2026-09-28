@@ -130,11 +130,11 @@ public:
      *  except AIChatComponent, which clears it (empty string) on a plan downgrade. */
     void setConversationId(const juce::String& id);
 
-    /** The current server-side conversation id (P6-9), i.e. what setConversationId()/the
+    /** The current server-side conversation id, i.e. what setConversationId()/the
      *  conversationId re-push contract above most recently stored — NOT the client's own
      *  local-history id (AIChatComponent::currentLocalConversationId is a different, unrelated
      *  identifier). Empty when nothing has been persisted server-side yet (free plan, or no
-     *  successful hosted response so far this session). Used by AIChatComponent's P6-9 rating sync
+     *  successful hosted response so far this session). Used by AIChatComponent's rating sync
      *  to key the feedback POST against the right server conversation. */
     juce::String getConversationId() const { return currentConversationId; }
 

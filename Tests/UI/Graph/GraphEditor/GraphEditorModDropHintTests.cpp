@@ -1,4 +1,4 @@
-// FRO289: the one-time "Drop it on any knob to modulate that parameter" status-bar hint, fired
+// The one-time "Drop it on any knob to modulate that parameter" status-bar hint, fired
 // from GraphEditor::beginConnectionDrag the first time a drag starts from a modulation source's
 // OUTPUT -- never again once shown, never for an audio/MIDI output, never for an INPUT drag.
 

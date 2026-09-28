@@ -1,12 +1,11 @@
-// ModuleComponentEnvelopeCard.cpp -- the ADSR envelope card (FRO112): the graph disclosure
+// ModuleComponentEnvelopeCard.cpp -- the ADSR envelope card: the graph disclosure
 // toggle + curve editor + BPM|MS row, the five knobs' short captions, the two-way sync between
 // attack/hold/decay/sustain/release/*Curve and the curve editor's model, undo-gesture wiring, and
-// the playhead poll. FRO118 added the BPM-mode note-division pickers (attackDiv/holdDiv/decayDiv/
+// the playhead poll. It also has the BPM-mode note-division pickers (attackDiv/holdDiv/decayDiv/
 // releaseDiv): each swaps in over its matching knob's own grid cell while tempoSync is on, the
 // graph's stage durations come from the divisions at the module's last-seen tempo, and an x-drag
 // snaps to the nearest division in log-time. ModuleComponent is declared in ModuleComponent.h;
-// the rest of its implementation lives in the sibling ModuleComponent*.cpp units next to this one
-// (FRO65 split of the former single ModuleComponent.cpp).
+// the rest of its implementation lives in the sibling ModuleComponent*.cpp units next to this one.
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
@@ -82,7 +81,7 @@ int nearestEnvelopeDivisionIndex(double seconds, double bpm) {
     return best;
 }
 
-// BPM-mode tick-label formatter (FRO118): the model's x axis stays in seconds either way (see
+// BPM-mode tick-label formatter: the model's x axis stays in seconds either way (see
 // buildEnvelopeCurveModel), so this only changes how a time is WORDED — in beats at `bpm`, not
 // seconds. Kept simple per the design brief: whole beats read "N beat(s)"; anything else falls
 // back to a plain "x.xx beats" rather than trying to spell out a sub-beat division name from a
@@ -212,8 +211,8 @@ void ModuleComponent::createEnvelopeCardControls() {
     };
     addAndMakeVisible(envelopeGraphToggle.get());
 
-    // BPM|MS segmented control, wired to FRO113's `tempoSync` bool param (FRO117). Its four
-    // *Div note-division params (FRO118) get their own pickers, swapped in over the matching
+    // BPM|MS segmented control, wired to the `tempoSync` bool param. Its four
+    // *Div note-division params get their own pickers, swapped in over the matching
     // knobs by applyEnvelopeSyncModeToControls below rather than the generic per-param grid
     // (shouldSkipGenericChoiceCombo in ModuleComponent.cpp still excludes them from that grid).
     envelopeMsButton = std::make_unique<juce::TextButton>("MS");
@@ -296,7 +295,7 @@ void ModuleComponent::writeEnvelopeParamsFromCurve() {
     const bool bpmMode = tempoSyncParam != nullptr && tempoSyncParam->get();
 
     if (bpmMode) {
-        // FRO118: an x-drag in BPM mode snaps to the nearest division rather than writing a raw
+        // An x-drag in BPM mode snaps to the nearest division rather than writing a raw
         // ms value the DSP would ignore anyway (resolveStageTimes only reads *Div while synced).
         double bpm = 120.0;
         if (auto* adsr = dynamic_cast<ADSRModule*>(module))
@@ -398,7 +397,7 @@ void ModuleComponent::applyEnvelopeDivComboBounds() {
     }
 }
 
-// FRO118 UX fix: a hidden knob whose own *Div combo has swapped in over it (BPM mode) keeps the
+// A hidden knob whose own *Div combo has swapped in over it (BPM mode) keeps the
 // exact same cell a cable/jack already lands on -- unlike a Wavetable inactive-tab knob (whose
 // bounds are stale, from whichever page was last laid out), it must still count as knob-bound so
 // getModRingSliderIndex/drawnInputJackIndices don't fall back to an ordinary gutter jack and grow
@@ -448,7 +447,7 @@ int ModuleComponent::layoutEnvelopeGraphSection(int y, int contentX, int content
         return y;
 
     if (apply) {
-        // FRO118: sliders (and their final bounds) come from layoutKnobGrid, called before this
+        // Sliders (and their final bounds) come from layoutKnobGrid, called before this
         // function in layoutDefaultContent -- safe to read them here on the apply pass.
         applyEnvelopeDivComboBounds();
         constexpr int kBpmMsWidth = 90;

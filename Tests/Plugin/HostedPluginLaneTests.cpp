@@ -509,7 +509,7 @@ TEST(HostedPluginLaneTest, SerializationAdditive) {
 }
 
 // ============================================================================
-// 9. MIDI Learn / Automate share the lane picker's own resolver (FRO137)
+// 9. MIDI Learn / Automate share the lane picker's own resolver
 // ============================================================================
 
 // docs/control/plugin-card-layout.md#interaction-with-controllers-and-automation: "MIDI Learn ...

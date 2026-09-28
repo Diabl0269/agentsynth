@@ -5,11 +5,11 @@
 namespace synth {
 
 /**
- * P6-10: local, append-only log of free-text feedback NOT tied to any specific AI-generated patch
+ * Local, append-only log of free-text feedback NOT tied to any specific AI-generated patch
  * (bug reports, feature requests, general comments) — the general-purpose sibling of
- * PatchFeedbackStore (P6-3, Source/AI/PatchFeedbackStore). Same shape/rationale: one JSON object
+ * PatchFeedbackStore (Source/AI/PatchFeedbackStore). Same shape/rationale: one JSON object
  * per line (JSON Lines), appended, never rewritten, and written unconditionally regardless of
- * sign-in state or sync outcome. P6-16 additionally syncs each record to the server
+ * sign-in state or sync outcome. It additionally syncs each record to the server
  * (`POST /v1/feedback`, fire-and-forget, gated on sign-in only — not Pro) from
  * FeedbackSettingsTab::sendFeedback(); this store itself stays local-only and has no awareness of
  * that sync. See docs/ai/feedback.md#general-feedback.

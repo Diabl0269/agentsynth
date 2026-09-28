@@ -1,4 +1,4 @@
-// ControlInspectorTests.cpp -- FRO131 (docs/control/midi-remote-ui.md#inspector-right):
+// ControlInspectorTests.cpp (docs/control/midi-remote-ui.md#inspector-right):
 // Source/UI/MidiRemote/Inspector/ControlInspectorComponent.{h,cpp}, the MIDI Remote panel's right
 // region. Headless, "test the real mouse path" convention (docs/control/midi-remote-ui.md's Tests
 // section, Source/UI/CLAUDE.md): a click on the "Drives" label is driven through a real
@@ -111,7 +111,7 @@ synth::Assignment makeNodeCommandAssignment() {
     return assignment;
 }
 
-// FRO253's node command target lives in the PROJECT doc alongside parameter targets (never
+// the node command target lives in the PROJECT doc alongside parameter targets (never
 // Global), so it carries the same "Project" scope tag -- MidiRemotePanelComponent's own
 // refreshInspectorForSelection() branches on target.kind only for the drivesLabel/nodeUuid, same
 // as ControlInspectorComponent::isTakeoverEditable() branching on it for the enabled state below.
@@ -265,7 +265,7 @@ TEST_F(ControlInspectorComponentTest, ProjectRowTakeoverRangeAndInvertAreEnabled
     EXPECT_TRUE(invertToggle->isEnabled());
 }
 
-// FRO136: the Default item names what the Preferences default currently is, and follows it.
+// The Default item names what the Preferences default currently is, and follows it.
 TEST_F(ControlInspectorComponentTest, DefaultTakeoverItemNamesThePreferencesDefaultAndFollowsIt) {
     auto takeoverCombo = [&] {
         return dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "assignmentTakeoverCombo0"));
@@ -323,7 +323,7 @@ TEST_F(ControlInspectorComponentTest, GlobalRowDisablesTakeoverRangeInvertButFor
     EXPECT_EQ(forgottenId, "assign-global");
 }
 
-// FRO253's Solo (node command) row: Project scope like a parameter row, but takeover/range/invert
+// the Solo (node command) row: Project scope like a parameter row, but takeover/range/invert
 // disabled like a Global row (isTakeoverEditable() is parameter-only) and Forget still works.
 TEST_F(ControlInspectorComponentTest, NodeCommandRowIsProjectScopedButDisablesTakeoverLikeGlobal) {
     inspector.setControl(makeModel({makeNodeCommandRow()}));
@@ -470,7 +470,7 @@ TEST_F(ControlInspectorComponentTest, CommittingRangeEditorsFiresOnAssignmentEdi
 }
 
 //==============================================================================
-// Relearn stays inert; FRO134 made name, kind, encoding and Auto-detect... live.
+// Relearn stays inert; name, kind, encoding and Auto-detect... are live.
 //==============================================================================
 
 TEST_F(ControlInspectorComponentTest, RelearnIsStillDisabled) {
@@ -512,7 +512,7 @@ TEST_F(ControlInspectorComponentTest, KindComboRetypesTheControl) {
     EXPECT_EQ(edits[0].kind, synth::ControlKind::fader);
 }
 
-// FRO141 (docs/control/midi-remote.md#focus-bank): the "Follow selection (focus bank)" toggle.
+// The "Follow selection (focus bank)" toggle (see docs/control/midi-remote.md#focus-bank).
 TEST_F(ControlInspectorComponentTest, FocusBankToggleFlipsTheControlAndFiresOnControlEdited) {
     inspector.setControl(makeModel({}));
     std::vector<synth::Control> edits;
@@ -594,7 +594,7 @@ TEST_F(ControlInspectorComponentTest, AutoDetectIsEnabledOnlyForACcKnobOrEncoder
 }
 
 //==============================================================================
-// 14-bit and NRPN encodings (FRO140)
+// 14-bit and NRPN encodings
 //==============================================================================
 
 namespace {

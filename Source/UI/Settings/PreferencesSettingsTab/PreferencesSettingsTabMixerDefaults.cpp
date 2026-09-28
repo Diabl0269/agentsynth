@@ -2,8 +2,8 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
 
-// Concern: Mixer -> per-type default track preset combos (FRO13, P9-7,
-// docs/mixer/track-presets.md#saving-and-setting-a-default).
+// Concern: Mixer -> per-type default track preset combos
+// (docs/mixer/track-presets.md#saving-and-setting-a-default).
 
 // Populates `combo` with the "Factory Default" sentinel (kMixerDefaultPresetFactoryComboId) plus
 // every saved `kind` preset (kMixerDefaultPresetComboIdBase + index) — same snapshot-at-populate-
@@ -102,7 +102,7 @@ void PreferencesSettingsTab::setupMixerDefaultTrackPresetControls() {
     mixerDefaultTrackPresetInstrumentCombo.onChange = [this] {
         persistMixerDefaultTrackPresetInstrument(getMixerDefaultTrackPresetInstrument());
     };
-    // FRO12 (P9-6): chained here rather than added as its own call in the constructor -- that
+    // Chained here rather than added as its own call in the constructor -- that
     // function is baselined (scripts/function-size-baseline.txt) and must not grow.
     setupMixerPlacementControls();
 }
@@ -132,7 +132,7 @@ void PreferencesSettingsTab::layoutMixerDefaultTrackPresetGroup(
         mixerDefaultTrackPresetInstrumentCombo.setBounds(row2.removeFromLeft(160));
         y += 24;
     }
-    // FRO12 (P9-6): chained here rather than called from layoutContent directly -- that function
+    // Chained here rather than called from layoutContent directly -- that function
     // is baselined (scripts/function-size-baseline.txt) and must not grow by even one line; this
     // one isn't, so the new group's call lives here instead. See layoutMixerPlacementGroup's own
     // comment for why it takes `visible` rather than the `beginGroup` closure.
@@ -140,9 +140,9 @@ void PreferencesSettingsTab::layoutMixerDefaultTrackPresetGroup(
 }
 
 // ---------------------------------------------------------------------------------------------
-// FRO12 (P9-6, docs/mixer/panel.md): Mixer placement -- Tab beside the Timeline / Own panel /
-// Window. Same "own named step, pulled out of the constructor/layoutContent" pattern the two
-// functions above follow.
+// Mixer placement (docs/mixer/panel.md) -- Tab beside the Timeline / Own panel / Window. Same
+// "own named step, pulled out of the constructor/layoutContent" pattern the two functions above
+// follow.
 // ---------------------------------------------------------------------------------------------
 
 juce::String PreferencesSettingsTab::getMixerPlacement() const {
@@ -184,7 +184,7 @@ void PreferencesSettingsTab::setupMixerPlacementControls() {
     // this to one code path -- same idiom setupMixerDefaultTrackPresetControls() uses above.
     setMixerPlacement(appProperties.getUserSettings()->getValue(kMixerPlacementKey, "tab"));
     mixerPlacementCombo.onChange = [this] { persistMixerPlacement(getMixerPlacement()); };
-    setupPanelDetachModeControls(); // FRO336 -- chained here, the constructor is baselined
+    setupPanelDetachModeControls(); // Chained here, the constructor is baselined
 }
 
 void PreferencesSettingsTab::layoutMixerPlacementGroup(
@@ -194,7 +194,7 @@ void PreferencesSettingsTab::layoutMixerPlacementGroup(
     const std::initializer_list<juce::Component*> mixerPlacementComps = {&mixerPlacementLabel, &mixerPlacementCombo};
     const bool visible = groupMatches(mixerPlacementComps);
     setGroupVisible(mixerPlacementComps, visible);
-    // FRO336: the panel-detach-mode group follows; chained here for the same baselined-layoutContent reason.
+    // The panel-detach-mode group follows; chained here for the same baselined-layoutContent reason.
     const auto chainNext = [&] {
         layoutPanelDetachModeGroup(y, contentWidth, visible || previousGroupWasVisible, groupMatches, setGroupVisible);
     };

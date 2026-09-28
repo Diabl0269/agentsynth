@@ -9,7 +9,7 @@
 // Does NOT register in CMakeLists.txt — add it manually when ready.
 // Mirrors the pattern in MainComponentTests.cpp and AIChatComponentTests.cpp.
 
-#include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h" // timelinePanelBoundsInMainComponent (FRO11)
+#include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h" // timelinePanelBoundsInMainComponent
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
@@ -246,7 +246,7 @@ TEST_F(PanelSlideLayoutTest, TheTimelineSlidesAgainstAPinnedBottomEdge) {
     MainComponent mc(std::make_unique<MockProviderPAL>());
     mc.setSize(1600, 900);
     mc.simulateToggleBottomPanelClick();
-    // FRO11 (P9-5): 220 total carve minus BottomDockComponent's 22px tab strip -- see
+    // 220 total carve minus BottomDockComponent's 22px tab strip -- see
     // timelinePanelBoundsInMainComponent's own comment.
     ASSERT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 198);
 

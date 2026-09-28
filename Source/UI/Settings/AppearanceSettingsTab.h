@@ -35,7 +35,7 @@ public:
     void selectThemeRow(int row);         // simulates a click -> setActiveTheme
     void setGraphEditor(GraphEditor* ge); // called by MainComponent; pushes cable config too
 
-    // ---- Cable colours (issue #157) ----
+    // ---- Cable colours -----------------
     // The tab owns the persisted config; GraphEditor is handed the resolved values and never
     // touches ApplicationProperties itself.
     synth::ui::CableColourMode getCableColourMode() const noexcept { return cableColourMode; }
@@ -83,7 +83,7 @@ public:
     void resetNoteSwatch(int pitchClass);
     void resetAllNoteColours();
 
-    // ---- Meter colours (FRO147, "Preferences > Metering > Appearance" equivalent) ----
+    // ---- Meter colours ---------------------------------------------------------------
     // The actual scale/handles/drag-drop/keyboard editor lives in its own component
     // (MeterColourStopsEditor) so this file stays under the repo's 1,000-line cap -- this tab
     // only owns persistence + the live-apply push (see MeterColourStopsEditor.h's own comment on
@@ -241,7 +241,7 @@ private:
     /** Opens a ColourPickerPopup (with favourites) for pitch class `pitchClass`. */
     void openNoteColourPicker(int pitchClass, juce::Rectangle<int> screenArea);
 
-    // ---- Meter colours (FRO147) ----
+    // ---- Meter colours -------------
     juce::Label meterColoursTitleLabel;
     std::unique_ptr<synth::ui::MeterColourStopsEditor> meterColourStopsEditor;
     juce::TextButton removeMeterStopButton{"Remove"};

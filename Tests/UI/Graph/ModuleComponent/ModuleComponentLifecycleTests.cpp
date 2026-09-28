@@ -1,4 +1,4 @@
-// FRO312: a dangling parameter listener. ModuleComponent's ctor registers itself as an
+// A dangling parameter listener. ModuleComponent's ctor registers itself as an
 // AudioProcessorParameter::Listener on every one of the module's parameters
 // (module->getParameters(), see ModuleComponent.cpp's "Register as parameter listener" block).
 // ~ModuleComponent (via detachFromProcessor()) tries to undo that, but historically decided

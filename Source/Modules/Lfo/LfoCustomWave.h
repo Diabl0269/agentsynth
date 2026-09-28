@@ -1,4 +1,4 @@
-// LfoCustomWave.h -- pure data + edit model for LFOModule's Custom waveform (FRO114): a small
+// LfoCustomWave.h -- pure data + edit model for LFOModule's Custom waveform: a small
 // breakpoint list (shaped exactly like CurveModel's, but headless -- Core has no juce_gui_basics
 // dependency), its JSON round-trip (LFOModule::getExtraState/setExtraState, trusted path only --
 // see docs/ai/patch-safety.md), and the 1024-entry lookup table the audio thread reads. No JUCE

@@ -1,4 +1,4 @@
-// MixerSendReorderTests.cpp -- FRO296 (docs/mixer/sends-and-buses.md#reordering-sends): the Core
+// MixerSendReorderTests.cpp (docs/mixer/sends-and-buses.md#reordering-sends): the Core
 // reorder flows (synth::swapSends / synth::moveSendRow). Headless: a bare graph, no engine
 // rendering and no UI -- except the one render test, which pushes real audio through a source
 // strip to prove a swapped slot's cable really still reaches its bus.

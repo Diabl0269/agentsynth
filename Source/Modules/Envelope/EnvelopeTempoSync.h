@@ -6,7 +6,7 @@ namespace synth {
 
 /** The note-division list shared by every stage's *Div choice parameter on ADSRModule when
  *  `tempoSync` is on. Deliberately the SAME six entries, in the SAME order, as LFOModule's
- *  `rateSync` choice (FRO113) -- one set of division names across the app, not a per-module
+ *  `rateSync` choice -- one set of division names across the app, not a per-module
  *  invention. Local to the envelope rather than shared code with LFOModule.h: six strings and
  *  a beats table is not worth a cross-file dependency for.
  */

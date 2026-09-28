@@ -1,6 +1,6 @@
 // ADSRStageTests.cpp
 // Stage progression: attack/decay/sustain/release timing and levels in mono, including the
-// zero-sustain and sustain==1 edge cases and the FRO110 regression suite (formerly Repro*).
+// zero-sustain and sustain==1 edge cases and the regression suite.
 
 #include "ADSRTestFixture.h"
 #include <cmath>
@@ -30,7 +30,7 @@ TEST_F(ADSRTest, AttackPhase) {
 }
 
 TEST_F(ADSRTest, SustainLevel) {
-    // Set sustain to 0.75. Attack/decay are pinned to their pre-FRO110 default values here
+    // Set sustain to 0.75. Attack/decay are pinned to their legacy default values here
     // (rather than the new fast 1 ms/1 s defaults) so a fixed block count is still enough to
     // settle -- this test is about the sustain readout, not about default timing.
     setFloat(adsr, "sustain", 0.75f);
@@ -203,7 +203,7 @@ TEST_F(ADSRTest, RetriggerDuringRelease) {
 }
 
 TEST_F(ADSRTest, ZeroSustain) {
-    // Set sustain to 0.0, and pin attack/decay to their pre-FRO110 default values (the new
+    // Set sustain to 0.0, and pin attack/decay to their legacy default values (the new
     // default decay is 1 s, deliberately much slower, which this fixed block count isn't
     // meant to exercise -- this test is about the zero-sustain decay target, not timing).
     setFloat(adsr, "sustain", 0.0f);
@@ -272,8 +272,8 @@ TEST_F(ADSRTest, FastAttack) {
 }
 
 TEST_F(ADSRTest, ParameterChangesDuringPlayback) {
-    // Sustain's default changed to 1.0 with FRO110 (a held note now sustains by default); set
-    // it to 0.0 explicitly here, along with the pre-FRO110 attack/decay defaults, so a fixed
+    // Sustain's default is 1.0 (a held note sustains by default); set
+    // it to 0.0 explicitly here, along with the legacy attack/decay defaults, so a fixed
     // block count settles -- this test is about a live sustain change, not about defaults.
     setFloat(adsr, "sustain", 0.0f);
     setFloat(adsr, "attack", 0.05f);
@@ -323,7 +323,7 @@ TEST_F(ADSRTest, ParameterChangesDuringPlayback) {
 }
 
 // ---------------------------------------------------------------------------
-// FRO110 regression suite (formerly the Repro* diagnostics that motivated the rewrite).
+// Regression suite.
 // Each still prints the measured number so a future regression is easy to read.
 // ---------------------------------------------------------------------------
 
@@ -355,7 +355,7 @@ TEST_F(ADSRTest, MonoZeroSustainStillProducesAttackAndDecay) {
 }
 
 // ---------------------------------------------------------------------------
-// FRO110 zero-sustain release: with sustain == 0, EnvelopeGenerator's Decay stage targets 0
+// Zero-sustain release: with sustain == 0, EnvelopeGenerator's Decay stage targets 0
 // (not a rate that could compute to 0 and self-amputate the way juce::ADSR's release rate
 // used to). These tests probe note-off while still in attack/decay (level well above 0) with
 // sustain == 0, both mono and poly, plus the sustain == 1 counterpart.
@@ -555,7 +555,7 @@ TEST_F(ADSRTest, SustainOneStillDecaysAndReleases) {
 }
 
 // ---------------------------------------------------------------------------
-// FRO110 audio-thread-allocation regression: a block bigger than the samplesPerBlock given to
+// Regression test for FRO110: a block bigger than the samplesPerBlock given to
 // prepareToPlay() used to grow a `sustainScratch` vector on the audio thread. There is no
 // scratch buffer left to grow, so this pins that an oversized block still renders correctly.
 // ---------------------------------------------------------------------------

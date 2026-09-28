@@ -1,9 +1,9 @@
-// Concern: macros (P8-12 name/colour/membership, P8-15 ports) surviving extract-and-insert,
+// Concern: macros (name/colour/membership, ports) surviving extract-and-insert,
 // including double-insert producing independent copies and the InsertedMacroSet var round trip.
 #include "SnippetManagerTestHelpers.h"
 
 // ---------------------------------------------------------------------------------------
-// Macros (P8-12 name/colour/membership, P8-15 ports) — T117
+// Macros (name/colour/membership, ports)
 // ---------------------------------------------------------------------------------------
 
 static juce::AudioProcessorGraph::Node::Ptr
@@ -113,7 +113,7 @@ TEST(SnippetMacro, InsertingTwiceProducesTwoIndependentMacrosWithDistinctIds) {
     ASSERT_EQ(SnippetManager::insertSnippet(snippet, target, {0, 0}, false, &first).size(), 2u);
     ASSERT_EQ(first.size(), 1u);
     // MacroSet::add() returns the new macro's id BY VALUE, not a reference into the stored copy
-    // (FRO95: it used to return `Macro&`, and holding that across the SECOND add() below — which
+    // (it used to return `Macro&`, and holding that across the SECOND add() below — which
     // reallocates the underlying storage — was an ASAN heap-use-after-free). Look macros back up
     // via find() only after every add() call has already happened.
     const auto firstId = targetMacros.add(first[0]);

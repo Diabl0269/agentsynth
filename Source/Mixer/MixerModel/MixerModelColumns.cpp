@@ -1,4 +1,4 @@
-// Concern: FRO11 (P9-5) -- buildMixerSnapshot's column enumeration: strips in track order (a
+// Concern: buildMixerSnapshot's column enumeration: strips in track order (a
 // channel fed by two tracks appears once, at its first track's position), then any strip no track
 // reaches (appended by ascending NodeID, mirroring StemExporter's own fallback ordering), then
 // Direct once Master exists, then Master.
@@ -81,9 +81,9 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
             continue;
 
         MixerColumn column;
-        // FRO15 (docs/mixer/sends-and-buses.md#a-bus-is-a-channel-strip): a bus IS a ChannelStrip -- the Kind only
-        // changes what the column PAINTS (a BUS badge and a feeding-strips source line instead of a track chip and
-        // colour link).
+        // A bus IS a ChannelStrip -- the Kind only changes what the column PAINTS (a BUS badge and a
+        // feeding-strips source line instead of a track chip and colour link)
+        // (see docs/mixer/sends-and-buses.md#a-bus-is-a-channel-strip).
         column.kind = isBusStrip(graph, entry.stripId) ? MixerColumn::Kind::Bus : MixerColumn::Kind::Strip;
         column.nodeId = entry.stripId;
         column.uuid = node->properties["uuid"].toString();

@@ -3,7 +3,7 @@
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
-// FRO24's '+'/'x' geometry shares the collapsed card's jack-band constants with
+// The '+'/'x' geometry shares the collapsed card's jack-band constants with
 // MacroGroupControllerGeometry.cpp (macroCardPortLayout) rather than re-deriving them — see
 // GraphEditorInternal.h's own comment for why they live there.
 using namespace detail;
@@ -45,7 +45,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     g.setColour(juce::Colours::white.withAlpha(0.75f));
     g.drawText(getModuleCountText(), countRow, juce::Justification::bottomLeft);
 
-    // ---- Content preview (Fix 6/P8-12 follow-up) ----
+    // ---- Content preview ----------------------------
     // A collapsed macro used to be an opaque box with nothing but a name and a count. Draw a
     // small "minimap" of the member module boxes — their LIVE canvas bounds (still tracking, even
     // hidden — see syncMacroCards), scaled to fit the strip left between the title and the count
@@ -80,7 +80,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     }
     // ---- End content preview ----
 
-    // ---- Port jacks (P8-15c, T141: docs/macros/ports.md#cable-rendering-across-the-boundary) ----
+    // ---- Port jacks (docs/macros/ports.md#cable-rendering-across-the-boundary) ------------------
     // One jack per configured port — inputs down the left edge, outputs down the right, from the
     // SAME owner.getMacroController().macroCardPortLayout() that this card's own hit-testing (endConnectionDrag's jack
     // check) and buildVisibleCables()'s boundary-cable anchoring both read, so the drawn dot is
@@ -89,7 +89,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     // mod-capable input/output jacks -> accent") — audioWire for a MIDI port's jack, accent for an
     // AudioCV one, not the *Wire-at-a-paint-site the CABLE-colour invariant forbids
     // (Source/UI/CLAUDE.md): a JACK dot is not a cable, and this follows the one jack-painting
-    // site in the codebase that already makes this exact call. T152: a port with a user colour
+    // site in the codebase that already makes this exact call. A port with a user colour
     // (set from the Configure I/O modal's swatch) draws its jack in THAT colour instead — still
     // never a *Wire token read at a paint site, since the fallback is the only place this reads
     // one, and only when the port has no custom colour of its own.
@@ -104,11 +104,11 @@ void MacroCardComponent::paint(juce::Graphics& g) {
             g.setColour(resolvePortJackColour(port.nodeUuid, port.colour, kindTint));
             g.fillEllipse((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
 
-            // Port name (founder-review fix F2, item 3/docs/macros/ports.md#cable-rendering-across-the-boundary: "it's
-            // not shown on the module UI... it should be presented"): left-aligned inside the left edge for an input,
-            // right-aligned inside the right edge for an output — mirroring the docked widget's own left/right
-            // convention (docs/macros/ports.md#how-a-port-is-drawn) so an expanded and collapsed macro read a port's
-            // name the same way. Elided (drawFittedText, one line) if the card is too narrow for the full name.
+            // Port name (docs/macros/ports.md#cable-rendering-across-the-boundary): left-aligned inside the left edge
+            // for an input, right-aligned inside the right edge for an output — mirroring the docked widget's own
+            // left/right convention (docs/macros/ports.md#how-a-port-is-drawn) so an expanded and collapsed macro read
+            // a port's name the same way. Elided (drawFittedText, one line) if the card is too narrow for the full
+            // name.
             if (port.name.isNotEmpty()) {
                 g.setColour(juce::Colours::white.withAlpha(0.85f));
                 g.setFont(juce::Font(juce::FontOptions(9.5f)));
@@ -123,7 +123,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         }
     }
 
-    // ---- '+' add-port affordance (FRO24, docs/layout/macro-cards.md#direct-port-addremove-from-the-collapsed-card)
+    // ---- '+' add-port affordance (docs/layout/macro-cards.md#direct-port-addremove-from-the-collapsed-card)
     // ----
     // One '+' per side, in the footer row beside the count text (getAddPortButtonBounds) — a
     // fixed slot that exists regardless of port count, so it is always visible and never in the
@@ -138,7 +138,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         g.drawLine(cross.getX(), cross.getCentreY(), cross.getRight(), cross.getCentreY(), 1.4f);
     }
 
-    // ---- Hovered port 'x' (FRO24) ----
+    // ---- Hovered port 'x' ------------
     // Overlays the jack dot just drawn above while the mouse rests on it (hoveredPortUuid_,
     // kept fresh by mouseMove()/mouseExit() — this Component has no child Button of its own for a
     // jack to hover). mouseDown() re-checks the same hit-test before deleting.
@@ -160,7 +160,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
 
     const auto chevronBounds = getExpandButtonBounds();
 
-    // Bypass/mute indeterminate indicator (P8-15d, T142, docs/macros/ports.md#bypass-and-mute): "mixed-state
+    // Bypass/mute indeterminate indicator (docs/macros/ports.md#bypass-and-mute): "mixed-state
     // members show an indeterminate indicator." Two fixed badge slots sit just left of the expand
     // chevron -- mute nearer the chevron, bypass further out -- so their positions never shift
     // depending on which is actually drawn (a jumping badge would be worse than a missing one).
@@ -227,10 +227,8 @@ juce::Rectangle<float> MacroCardComponent::getToggleBadgeBounds(bool mute) const
 }
 
 juce::Rectangle<float> MacroCardComponent::getAddPortButtonBounds(bool isInput) const {
-    // FRO24 follow-up (founder in-app review): the FIRST cut of this sat at the top of the jack
-    // band and hid itself once a side had 2+ ports (macroCardPortLayout() even-spaces a side's
-    // jacks across the whole band, so the topmost jack marches up toward that same spot as the
-    // count grows) — usable only on an almost-empty side. Moved to the FOOTER row instead, beside
+    // Sits in the FOOTER row, beside
+    // (not the top of the jack band, where macroCardPortLayout() even-spacing would collide with it)
     // the "N modules, M ports" text paint() draws in the card's bottom 14px (textArea.removeFromBottom(14)
     // there, and the SAME kMargin=10/kBottomMargin=6 outer inset getLocalBounds().reduced(10, 6)
     // gives that row) — a fixed slot that exists on every card regardless of port count, so the
@@ -297,15 +295,13 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
     finishRename(true);
 
     if (e.mods.isRightButtonDown()) {
-        // T138: captured BEFORE the reselect below, which otherwise destroys any external batch
+        // Captured BEFORE the reselect below, which otherwise destroys any external batch
         // (or a partial subset of this macro's own members, picked for a targeted "Remove
         // Selection from Macro") the user chose before right-clicking this card — see
         // buildMacroMenu's own comment on addCandidateSelection. Only reselect when there was
         // NO prior selection at all: any non-empty selection, whether it's an addable outside
         // module or a subset of members meant for removal, must survive untouched so its
-        // border keeps showing the user what the menu is about to act on (found via live
-        // testing, 2026-09-10; generalized after a second round surfaced the subset-removal
-        // case, 2026-09-10).
+        // border keeps showing the user what the menu is about to act on.
         const auto priorSelection = owner.getSelectedNodes();
         if (priorSelection.empty())
             owner.getMacroController().selectMacro(macroId, false);
@@ -313,7 +309,7 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
         return;
     }
 
-    // FRO24 (docs/layout/macro-cards.md#direct-port-addremove-from-the-collapsed-card): a hovered
+    // A hovered
     // port's 'x' deletes it and a side's '+' opens the add-port choice menu — both checked at the
     // SAME precedence getExpandButtonBounds() already has below (before shift/cmd multi-select
     // and the drag-arm fallback), so neither steals a card body drag or an expand click. The 'x'
@@ -325,8 +321,8 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
         const auto hit = owner.getMacroController().macroCardPortForPoint(macroId, e.getPosition());
         if (hit.has_value() && hit->nodeUuid == *hoveredPortUuid_) {
             owner.getMacroController().deleteMacroPortManually(macroId, *hoveredPortUuid_);
-            // FRO24 follow-up (founder in-app review): a quick double-click used to delete TWO
-            // ports — the delete reflows macroCardPortLayout(), so the very next jack slides
+            // A quick double-click must not delete TWO
+            // ports: the delete reflows macroCardPortLayout(), so the very next jack slides
             // under the still-resting cursor and immediately shows ITS OWN 'x', which the second
             // click of the double-click then hit. Clearing the hover here is not enough on its
             // own (the next mouseMove would just re-arm it at the same pixel); suppressing hover
@@ -408,7 +404,7 @@ void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
 }
 
 void MacroCardComponent::mouseMove(const juce::MouseEvent& e) {
-    // FRO24 follow-up: a position suppressed by a just-completed 'x' delete (mouseDown's own
+    // A position suppressed by a just-completed 'x' delete (mouseDown's own
     // comment on suppressHoverAtPosition_) stays suppressed until a mouseMove reports a
     // DIFFERENT position — a mouseMove at the identical position (JUCE can dispatch one even with
     // no real movement, e.g. as part of the click plumbing itself) must not re-arm hover on
@@ -478,9 +474,9 @@ void MacroCardComponent::finishRename(bool commit) {
 void MacroCardComponent::showContextMenu(const std::vector<juce::AudioProcessorGraph::NodeID>& priorSelection) {
     // owner.buildMacroMenu is the ONE shared builder — this card's own right-click menu and the
     // expanded-macro hull's right-click menu (GraphEditor::mouseDown) both go through it, so they
-    // cannot drift apart (Fix 4/P8-12 follow-up). This card is the one caller that overrides the
+    // cannot drift apart. This card is the one caller that overrides the
     // default "Rename..." handler: it has a real MacroCardComponent to host the nicer inline
-    // TextEditor rename, which nothing else building this menu has. `priorSelection` (T138) is
+    // TextEditor rename, which nothing else building this menu has. `priorSelection` is
     // whatever was selected right before mouseDown's own reselect — see buildMacroMenu's
     // addCandidateSelection comment.
     juce::Component::SafePointer<MacroCardComponent> safeThis(this);
@@ -495,17 +491,14 @@ void MacroCardComponent::showContextMenu(const std::vector<juce::AudioProcessorG
 }
 
 juce::String MacroCardComponent::getModuleCountText() const {
-    // Founder review: "the number of modules indicator seems to show more then there are - 4
-    // when i grouped the delay and reverb in the default patch - should have shown 2." The bug
-    // was counting graph MEMBERS (which include the auto-created port nodes for the crossing
-    // cable) instead of MODULES. synth::Macro::moduleMemberCount() is the one place that
+    // Counts MODULES, not graph MEMBERS (which include the auto-created port nodes for the crossing
+    // cable). synth::Macro::moduleMemberCount() is the one place that
     // exclusion lives now (MacroSet.h) — every other user-facing count/list routes through it or
     // through memberIsPort(), so this can never drift back out of sync with the tooltip below.
     //
-    // A plain P8-12 macro with no ports reads exactly as it always did ("2 modules") — the
-    // regression risk this fix has to avoid. A macro that DOES have ports names the port count
+    // A plain macro with no ports reads just "2 modules". A macro that DOES have ports names the port count
     // alongside it, rather than silently hiding a real quantity: "2 modules, 2 ports" is more
-    // honest than either "4 modules" (the bug) or a bare "2 modules" that pretends the ports
+    // honest than either "4 modules" or a bare "2 modules" that pretends the ports
     // aren't there.
     const auto* macro = owner.getMacros().find(macroId);
     if (macro == nullptr)

@@ -5,23 +5,23 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
 
-// ActionPickerComponent.h -- FRO135 (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn):
+// ActionPickerComponent.h (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn):
 // "Choose an action" -- a searchable list of the actions a MIDI control can trigger, grouped by
 // ShortcutCategory in the Shortcuts tab's own order and named by ShortcutManager::getActionDescription.
 // Only command-dispatched actions are offered (AppCommands::getCommandForAction != kNoCommand); a
-// surface action such as a bare arrow key has no command to invoke. FRO236
-// (docs/control/midi-remote.md#continuous-targets) appends one more group after every action category -- "Continuous"
+// surface action such as a bare arrow key has no command to invoke. One more group
+// (docs/control/midi-remote.md#continuous-targets) comes after every action category -- "Continuous"
 // -- with a fixed three rows (Tempo/Playhead/Master Volume), named via synth::continuousTargetDisplayName so the picker
-// can never disagree with the panel/inspector's own labels. FRO142 (docs/control/midi-remote.md#pages)
-// appends a further "Pages" group -- Next page / Previous page, then one "Page N" row per page the
+// can never disagree with the panel/inspector's own labels. A "Pages" group (docs/control/midi-remote.md#pages)
+// follows -- Next page / Previous page, then one "Page N" row per page the
 // selected control's OWN controller currently has (docs/control/midi-remote-ui.md#pages) -- so the
 // row count depends on `effectivePageCount`, unlike every group above it.
 namespace synth::ui {
 
 struct ActionPickerRow {
     bool isHeader = false;
-    bool isContinuous = false; // FRO236: this row picks a continuous target, not an action
-    bool isPage = false;       // FRO142: this row picks a page Target, not an action
+    bool isContinuous = false; // This row picks a continuous target, not an action
+    bool isPage = false;       // This row picks a page Target, not an action
     juce::String actionId;     // empty for a header, a continuous row, or a page row
     juce::String label;        // the category name for a header, else the target's description
     synth::ContinuousTargetKind continuousKind = synth::ContinuousTargetKind::bpm; // valid iff isContinuous
@@ -44,12 +44,12 @@ public:
 
     /** An action row was chosen. */
     std::function<void(const juce::String& actionId)> onChosen;
-    /** FRO236: a continuous-target row was chosen. */
+    /** A continuous-target row was chosen. */
     std::function<void(synth::ContinuousTargetKind kind)> onContinuousChosen;
-    /** FRO142: a page row was chosen. */
+    /** A page row was chosen. */
     std::function<void(synth::PageCommand command, int page)> onPageChosen;
 
-    /** FRO142: set BEFORE the picker is shown (MidiRemotePanelComponent::showActionPicker()) so the
+    /** Set BEFORE the picker is shown (MidiRemotePanelComponent::showActionPicker()) so the
      *  "Page N" rows match the selected control's own controller. Rebuilds rows_ under the current
      *  filter; a no-op if the count is unchanged. */
     void setEffectivePageCount(int count);

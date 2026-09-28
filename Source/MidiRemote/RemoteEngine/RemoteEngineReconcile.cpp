@@ -44,7 +44,7 @@ ProcessorByUuid buildProcessorByUuid(juce::AudioProcessorGraph* graph) {
     return result;
 }
 
-// FRO253: uuid -> NodeID, alongside buildProcessorByUuid above -- a nodeCommand target resolves to
+// Uuid -> NodeID, alongside buildProcessorByUuid above -- a nodeCommand target resolves to
 // the node itself (there is no processor-level lookup for it, unlike resolveLaneParameter).
 NodeIdByUuid buildNodeIdByUuid(juce::AudioProcessorGraph* graph) {
     NodeIdByUuid result;
@@ -124,11 +124,11 @@ void resolveParameterTarget(const Assignment& assignment, juce::AudioProcessorGr
     }
 }
 
-// FRO236 (docs/control/midi-remote.md#continuous-targets): resolves a masterVolume continuous
-// target through the injected ContinuousParameterLookup -- otherwise identical to
-// resolveParameterTarget above (a setter's graph==nullptr rebuild keeps the previous resolution).
-// bpm/playhead never call this: addSlot leaves them param==nullptr, orphaned==false unconditionally
-// (there is nothing to resolve against a graph -- see RemoteMappingSnapshot::Slot::continuous).
+// Resolves a masterVolume continuous target through the injected ContinuousParameterLookup --
+// otherwise identical to resolveParameterTarget above (a setter's graph==nullptr rebuild keeps the
+// previous resolution). bpm/playhead never call this: addSlot leaves them param==nullptr,
+// orphaned==false unconditionally (there is nothing to resolve against a graph -- see
+// RemoteMappingSnapshot::Slot::continuous) (see docs/control/midi-remote.md#continuous-targets).
 void resolveContinuousParameterTarget(const Assignment& assignment, juce::AudioProcessorGraph* graph,
                                       const ContinuousParameterLookup& continuousLookup,
                                       const PreviousResolution& previousResolution, RemoteMappingSnapshot::Slot& slot) {
@@ -144,11 +144,11 @@ void resolveContinuousParameterTarget(const Assignment& assignment, juce::AudioP
     }
 }
 
-// FRO253 (docs/control/midi-remote.md#node-command-targets): mirrors resolveParameterTarget above,
-// but resolves to a NodeID rather than a juce::AudioProcessorParameter* -- a node command has no
-// parameter to point at (ChannelStripModule::soloed_ is engine state, not a
-// juce::RangedAudioParameter). Missing from `nodeIdByUuid` means orphaned, same as an unresolved
-// parameter.
+// Mirrors resolveParameterTarget above, but resolves to a NodeID rather than a
+// juce::AudioProcessorParameter* -- a node command has no parameter to point at
+// (ChannelStripModule::soloed_ is engine state, not a juce::RangedAudioParameter). Missing from
+// `nodeIdByUuid` means orphaned, same as an unresolved parameter
+// (see docs/control/midi-remote.md#node-command-targets).
 void resolveNodeCommandTarget(const Assignment& assignment, juce::AudioProcessorGraph* graph,
                               const NodeIdByUuid& nodeIdByUuid, const PreviousResolution& previousResolution,
                               RemoteMappingSnapshot::Slot& slot) {
@@ -183,9 +183,9 @@ void addLookupEntry(const std::vector<ControllerProfile>& profiles,
     pending.emplace_back(key, slotIndex);
 }
 
-// FRO140: a paired-CC slot at CC n is ALSO reached by its LSB partner CC n+32, so the LSB key routes
+// A paired-CC slot at CC n is ALSO reached by its LSB partner CC n+32, so the LSB key routes
 // to the same slot. Appended after every primary entry (see the stable_sort below): an explicit
-// assignment on CC n+32 keeps that message. FRO142: `lookupEligible[i]` mirrors addSlot's own
+// assignment on CC n+32 keeps that message. `lookupEligible[i]` mirrors addSlot's own
 // "on the active page, or not a page-scoped assignment at all" test -- an alias must never reach a
 // slot that inactive-page filtering itself would refuse to route to.
 void addPairedAliasEntries(const std::vector<ControllerProfile>& profiles,
@@ -209,7 +209,7 @@ void addPairedAliasEntries(const std::vector<ControllerProfile>& profiles,
 }
 
 // One parameter-, action- or nodeCommand-target assignment -> one Slot, appended to `fresh`, plus
-// its pending lookup-table entry -- unless `includeInLookup` is false (FRO142: an inactive-page
+// its pending lookup-table entry -- unless `includeInLookup` is false (an inactive-page
 // project assignment). It still gets a real, resolved Slot either way -- see rebuildAndPublish's
 // own comment on why an excluded page must still be resolved -- just no way for the MIDI path to
 // ever reach it.
@@ -262,11 +262,11 @@ void addSlot(const Assignment& assignment, juce::AudioProcessorGraph* graph, con
         addLookupEntry(profiles, fresh.sources, assignment, slotIndex, lookupPending);
 }
 
-// FRO141 (docs/control/midi-remote.md#focus-bank): a transient binding never overrides an explicit
-// one on the same control -- true when `transientAssignment`'s (profileId, controlId) already has
-// an enabled project assignment on that profile's ACTIVE page, or an enabled GLOBAL profile action
-// on that control. A transient binding is itself page-independent, so this ignores its own `page`
-// field entirely (rebuildAndPublish leaves it at the makeAssignmentForControl default).
+// A transient binding never overrides an explicit one on the same control -- true when
+// `transientAssignment`'s (profileId, controlId) already has an enabled project assignment on that
+// profile's ACTIVE page, or an enabled GLOBAL profile action on that control. A transient binding
+// is itself page-independent, so this ignores its own `page` field entirely (rebuildAndPublish
+// leaves it at the makeAssignmentForControl default) (see docs/control/midi-remote.md#focus-bank).
 bool transientBlockedByExplicit(const Assignment& transientAssignment,
                                 const std::vector<Assignment>& projectAssignments,
                                 const std::vector<ControllerProfile>& profiles, int activePage) {
@@ -313,20 +313,20 @@ void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
     }
 
     std::vector<std::pair<std::uint32_t, std::int32_t>> lookupPending;
-    // FRO142: parallel to fresh->slots -- whether the MIDI path may ever reach that slot at all
+    // Parallel to fresh->slots -- whether the MIDI path may ever reach that slot at all
     // (addPairedAliasEntries' own guard). See addSlot's comment for why a page-excluded assignment
     // still gets a Slot pushed here, just with this false.
     std::vector<bool> lookupEligible;
 
-    // FRO142 (docs/control/midi-remote.md#pages): a PROJECT assignment is resolved every real
-    // reconcile regardless of page (a setActivePage()-only rebuild has graph == nullptr and can only
-    // carry a resolution FORWARD from the last real one -- RemoteEngineReconcile.cpp's file header
-    // comment -- so an assignment that never had a Slot before its page became active would stay
-    // unresolved until some unrelated graph change happened to reach reconcile()). Only its own
-    // page's assignment gets a LOOKUP entry, though -- that's what makes the MIDI-path table already
-    // page-filtered, with no page awareness needed in the apply path itself. A GLOBAL profile action
-    // (the loop below) carries no page and is always lookup-eligible -- that's what keeps a page
-    // Target's own button reachable no matter which page is active.
+    // A PROJECT assignment is resolved every real reconcile regardless of page (a
+    // setActivePage()-only rebuild has graph == nullptr and can only carry a resolution FORWARD from
+    // the last real one -- RemoteEngineReconcile.cpp's file header comment -- so an assignment that
+    // never had a Slot before its page became active would stay unresolved until some unrelated
+    // graph change happened to reach reconcile()). Only its own page's assignment gets a LOOKUP
+    // entry, though -- that's what makes the MIDI-path table already page-filtered, with no page
+    // awareness needed in the apply path itself. A GLOBAL profile action (the loop below) carries no
+    // page and is always lookup-eligible -- that's what keeps a page Target's own button reachable
+    // no matter which page is active (see docs/control/midi-remote.md#pages).
     for (const auto& assignment : assignments_) {
         const bool onActivePage = assignment.page == getActivePage(assignment.control.profileId);
         addSlot(assignment, graph, processorByUuid, nodeIdByUuid, previousResolution, profiles_, actionLookup_,
@@ -337,7 +337,7 @@ void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
             addSlot(assignment, graph, processorByUuid, nodeIdByUuid, previousResolution, profiles_, actionLookup_,
                     continuousLookup_, *fresh, lookupPending, lookupEligible, /*includeInLookup=*/true);
 
-    // FRO141: a transient focus-bank binding is resolved and routed exactly like a project
+    // A transient focus-bank binding is resolved and routed exactly like a project
     // assignment, except it is always lookup-eligible regardless of page (page-independent) and is
     // dropped entirely -- no Slot at all -- when an explicit assignment on the same control already
     // claims it (transientBlockedByExplicit above).
@@ -381,7 +381,7 @@ void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
         }
     }
 
-    // Same cleanup for feedback_ (FRO139): an assignment that no longer exists needs no cooldown
+    // Same cleanup for feedback_: an assignment that no longer exists needs no cooldown
     // state kept around for it. Unlike gestures_ this never republishes on setProfiles/setAssignments
     // alone -- see setProfiles()'s own comment for why THAT case clears feedback_ wholesale instead.
     for (auto it = feedback_.begin(); it != feedback_.end();) {
@@ -394,7 +394,7 @@ void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
             ++it;
     }
 
-    // FRO236: same cleanup for continuousGestures_ as gestures_/feedback_ above.
+    // Same cleanup for continuousGestures_ as gestures_/feedback_ above.
     for (auto it = continuousGestures_.begin(); it != continuousGestures_.end();) {
         const bool stillPresent =
             std::any_of(fresh->slots.begin(), fresh->slots.end(),

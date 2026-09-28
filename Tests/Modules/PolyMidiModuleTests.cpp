@@ -134,7 +134,7 @@ TEST_F(PolyMidiModuleTest, VoiceStealingLRU) {
     juce::AudioBuffer<float> buffer(16, 512);
 
     // Switch on 8 voices, one per block. No sleep needed: voice age is a sample counter, not the
-    // wall clock (issue #198).
+    // wall clock.
     for (int i = 0; i < 8; ++i)
         pushBlock(*module, buffer, {{60 + i, 0, true}});
 
@@ -148,7 +148,7 @@ TEST_F(PolyMidiModuleTest, VoiceStealingLRU) {
     EXPECT_NEAR(voicePitch(buffer, 1), noteHz(61), 1.0f) << "only the oldest voice should be stolen";
 }
 
-// The parameter must default to the pre-#198 behaviour so patches saved without it load unchanged.
+// The parameter must default to Oldest so patches saved without it load unchanged.
 TEST_F(PolyMidiModuleTest, VoiceStealDefaultsToOldest) {
     EXPECT_EQ(module->getStealMode(), PolyMidiModule::StealMode::Oldest);
 
@@ -158,8 +158,8 @@ TEST_F(PolyMidiModuleTest, VoiceStealDefaultsToOldest) {
     EXPECT_EQ(p->getIndex(), 0);
 }
 
-// Issue #198's degenerate case: notes arriving inside a single block used to share one millisecond
-// stamp, so every steal in a chord hit voice 0. Sample-offset stamps order them correctly.
+// Degenerate case: notes arriving inside a single block must not share one millisecond stamp, or
+// every steal in a chord hits voice 0. Sample-offset stamps order them correctly.
 TEST_F(PolyMidiModuleTest, SameBlockNotesStealInArrivalOrder) {
     juce::AudioBuffer<float> buffer(16, 512);
 
@@ -194,7 +194,7 @@ TEST_F(PolyMidiModuleTest, OverfullChordInOneBlockStealsInArrivalOrder) {
     EXPECT_NEAR(voicePitch(buffer, 3), noteHz(63), 1.0f);
 }
 
-// Issue #198's headline property: identical input renders identically, every time. Note this alone
+// Headline property: identical input renders identically, every time. Note this alone
 // is a weak detector — wall-clock stamping fails it only when a millisecond boundary happens to
 // fall between the two runs. The tests above are the deterministic ones, because they pin *which*
 // voice gets stolen.
@@ -435,7 +435,7 @@ std::vector<float> renderPolyIntoAdsr(const std::vector<std::vector<Event>>& blo
     setParam(adsr, "decay", 0.01f);
     setParam(adsr, "sustain", 1.0f);
     setParam(adsr, "release", 0.01f);
-    // FRO110: releaseCurve pinned to linear. The default (0.65, fast-first/slow-tail) front-
+    // releaseCurve pinned to linear. The default (0.65, fast-first/slow-tail) front-
     // loads most of the level drop, which would make the re-articulation dip measured below
     // much deeper than the "roughly two-thirds height" this test's timing math assumes.
     setParam(adsr, "releaseCurve", 0.0f);
@@ -468,13 +468,12 @@ float endOfBlock(const std::vector<float>& env, int block) { return env[(size_t)
 
 } // namespace
 
-// Documents the *real* end-to-end behaviour after ADSRModule gained per-sample Schmitt edge
-// detection (#221): PolyMidi's snap-to-zero re-articulation gap is seen on the exact sample it
+// Documents the *real* end-to-end behaviour of ADSRModule's per-sample Schmitt edge
+// detection: PolyMidi's snap-to-zero re-articulation gap is seen on the exact sample it
 // happens, wherever it falls in the block. The dip is PARTIAL by design — the gap is ~1 ms
 // (44 samples) plus the 5 ms gate-smoothing rise back through the Schmitt threshold, against a
 // 10 ms release — so the envelope re-attacks from roughly two-thirds height, it does not fall to
-// silence. (The pre-#221 ADSR sampled the gate once per block, which made mid-block retriggers
-// invisible; that asymmetry is gone, so this test now pins the SAME contract for both placements.)
+// silence. This test pins the SAME contract for a block-aligned and a mid-block retrigger.
 TEST(PolyMidiToAdsrTest, RetriggerReArticulatesAdsrRegardlessOfBlockAlignment) {
     // Retrigger 8 samples before block 2 ends: the falling edge lands late in block 2, the gate
     // climbs back over the Schmitt threshold ~146 samples into block 3.
@@ -485,8 +484,7 @@ TEST(PolyMidiToAdsrTest, RetriggerReArticulatesAdsrRegardlessOfBlockAlignment) {
     EXPECT_GT(spanningDip, 0.3f) << "…but only partially: a ~150-sample gap against a 441-sample release";
     EXPECT_GT(endOfBlock(spanning, 4), 0.9f) << "and re-attack on the rise — a real retrigger";
 
-    // Same retrigger mid-block: per-sample edge detection sees it identically (the pre-#221
-    // block-sampled ADSR missed this one entirely).
+    // Same retrigger mid-block: per-sample edge detection sees it identically.
     const auto midBlock = renderPolyIntoAdsr({{{60, 0, true}}, {}, {{60, 128, true}}, {}, {}});
     const float midDip = minOverBlock(midBlock, 2);
     EXPECT_LT(midDip, 0.8f) << "a mid-block gap re-articulates too";
@@ -495,13 +493,13 @@ TEST(PolyMidiToAdsrTest, RetriggerReArticulatesAdsrRegardlessOfBlockAlignment) {
 }
 
 // ===========================================================================
-// End-to-end: FRO46 (P9-3j) — PolyMidi's per-voice Gate fan driving a poly ADSR (the exact wiring
+// End-to-end: PolyMidi's per-voice Gate fan driving a poly ADSR (the exact wiring
 // synth::addPolyEnvelopeAndVCAForInstrument builds: Poly MIDI ch(8+v) -> ADSR's poly gate ch(v)),
 // with one voice released while another stays held. This is the render-level proof that per-voice
 // gating actually happens — the ADSR's own envelope-per-channel output IS what then drives the
 // poly VCA's per-voice Gain CV (ch(kPolyCVBase+v)), whose own poly-summing multiply/sum is already
 // pinned by VCAModuleTests.cpp's poly-mode coverage. A single shared mono envelope — what the
-// pre-FRO46 forced-non-poly auto-wire gives a poly instrument — could never produce this result:
+// legacy forced-non-poly auto-wire gives a poly instrument — could never produce this result:
 // it has only one release stage, so releasing ANY note would decay ALL voices together.
 // ===========================================================================
 

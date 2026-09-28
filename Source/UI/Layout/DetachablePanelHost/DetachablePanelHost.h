@@ -9,7 +9,7 @@
 
 namespace synth::ui {
 
-// DetachablePanelHost.h -- FRO12 (P9-6, docs/mixer/panel.md): the ONE mechanism that moves a panel
+// DetachablePanelHost.h (docs/mixer/panel.md): the ONE mechanism that moves a panel
 // between its dock slot and its own top-level window, shared by the Timeline and the Mixer panel.
 // Holds `panel` BY REFERENCE -- the same Component instance its owner already constructed, never
 // copied or recreated -- so detach/redock never disturbs the panel's own live state (scroll
@@ -39,7 +39,7 @@ public:
      *  DetachedPanelWindow. Idempotent -- calling with the current state is a no-op. */
     void setDetached(bool detached);
     bool isDetached() const noexcept { return window_ != nullptr; }
-    /** FRO333: brings an already-detached panel's window forward (Cmd+number/the tab strip's own
+    /** Brings an already-detached panel's window forward (Cmd+number/the tab strip's own
      *  "show tab" action on a detached tab) instead of redocking it. No-op while docked. */
     void bringDetachedWindowToFront() {
         if (window_ != nullptr)
@@ -48,7 +48,7 @@ public:
 
     juce::DrawableButton& getDetachButton() noexcept { return detachButton_; }
 
-    /** FRO228: a detached window is a SEPARATE top-level Component, so MainComponent's own
+    /** A detached window is a SEPARATE top-level Component, so MainComponent's own
      *  theme-switch re-skin pass (`getTopLevelComponent()->sendLookAndFeelChange()`) never reaches
      *  it -- a theme switch while a panel is detached otherwise left its background/icon on
      *  whatever theme was active when it was last (re)built. A no-op while docked. */
@@ -65,18 +65,17 @@ public:
     bool isEmbeddedHeader() const noexcept { return embeddedHeader_; }
 
     /** When true, setDetached(true) gives the freshly built DetachedPanelWindow a REAL native
-     *  top-level window (a peer), so it actually shows up on screen -- see the FRO12 follow-up bug
-     *  fixed here: `DetachedPanelWindow` is built `addToDesktop=false` (a deliberate headless-test
-     *  seam -- see that class's header comment) and nothing ever promoted it, so `setVisible(true)`
-     *  alone left the panel detached from its dock with no window anywhere (JUCE only creates a
-     *  peer from a TopLevelWindow constructor's own addToDesktop=true, or an explicit
-     *  addToDesktop() call -- never from setVisible()). `Main.cpp`'s `MainWindow` and
+     *  top-level window (a peer), so it actually shows up on screen. `DetachedPanelWindow` is built
+     *  `addToDesktop=false` (a deliberate headless-test seam -- see that class's header comment),
+     *  and JUCE only creates a peer from a TopLevelWindow constructor's own addToDesktop=true, or
+     *  an explicit addToDesktop() call -- never from setVisible() -- so without this a detached
+     *  panel would leave its dock with no window anywhere. `Main.cpp`'s `MainWindow` and
      *  `PluginEditor.cpp`'s `AgentSynthPluginEditor` -- the app's and the plugin's only REAL
      *  construction sites for a `MainComponent` -- call this true, once, right after construction.
      *  Every headless test builds a `MainComponent`/`BottomDockComponent`/`DetachablePanelHost`
-     *  directly and leaves this at its default of false, so `setDetached(true)` there stays exactly
-     *  as before: no native peer, ever (`DetachRedockStateTests.cpp` detaches a real, off-screen
-     *  `MainComponent` this way). */
+     *  directly and leaves this at its default of false, so `setDetached(true)` there never creates
+     *  a native peer (`DetachRedockStateTests.cpp` detaches a real, off-screen `MainComponent` this
+     *  way). */
     void setCreatesNativeWindows(bool shouldCreate) noexcept { createsNativeWindows_ = shouldCreate; }
     bool isCreatingNativeWindows() const noexcept { return createsNativeWindows_; }
 
@@ -91,7 +90,7 @@ public:
      *  strip, or the owner can re-run registerFocusRegions(). */
     std::function<void()> onDetachedStateChanged;
 
-    /** FRO333: forwarded to every DetachedPanelWindow this host builds -- see its own onAppShortcut. */
+    /** Forwarded to every DetachedPanelWindow this host builds -- see its own onAppShortcut. */
     std::function<bool(const juce::KeyPress&)> onAppShortcutFallback;
 
     void resized() override;

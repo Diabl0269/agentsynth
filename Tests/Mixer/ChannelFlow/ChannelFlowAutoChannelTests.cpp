@@ -1,9 +1,9 @@
 // ChannelFlowAutoChannelTests.cpp
 //
-// T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks): a MIDI track auto-creates the destination's mixer
-// channel on connect. Core-level tests for synth::findUnchanneledOutputFeeds/buildChannelForFeeds first, then
-// real-mouse-gesture coverage through GraphEditor::endConnectionDrag. dragRealMidiCableBetweenCFT below is local to
-// this file.
+// A MIDI track auto-creates the destination's mixer channel on connect. Core-level tests for
+// synth::findUnchanneledOutputFeeds/buildChannelForFeeds first, then real-mouse-gesture coverage through
+// GraphEditor::endConnectionDrag. dragRealMidiCableBetweenCFT below is local to this file
+// (see docs/mixer/mixer.md#channels-follow-audio-not-tracks).
 
 #include "../../StubPluginInstance.h"
 #include "AI/AIProvider.h"
@@ -36,12 +36,12 @@
 #include <thread>
 
 // =================================================================================================
-// T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): a MIDI track auto-creates the
-// destination's mixer channel on connect. Core-level tests for synth::findUnchanneledOutputFeeds /
-// synth::buildChannelForFeeds first, then real-mouse-gesture coverage through GraphEditor's
-// endConnectionDrag (docs/development/test-patterns.md's real-mouse-path guidance — the same reason
-// Tests/Macros/MacroPortRealMouseDragTests.cpp drives ModuleComponent::mouseDown/mouseDrag/mouseUp
-// directly rather than calling GraphEditor's drag methods).
+// A MIDI track auto-creates the destination's mixer channel on connect. Core-level tests for
+// synth::findUnchanneledOutputFeeds / synth::buildChannelForFeeds first, then real-mouse-gesture
+// coverage through GraphEditor's endConnectionDrag (docs/development/test-patterns.md's
+// real-mouse-path guidance — the same reason Tests/Macros/MacroPortRealMouseDragTests.cpp drives
+// ModuleComponent::mouseDown/mouseDrag/mouseUp directly rather than calling GraphEditor's drag
+// methods) (see docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow").
 // =================================================================================================
 
 namespace {
@@ -65,7 +65,7 @@ void dragRealMidiCableBetweenCFT(ModuleComponent& srcComp, ModuleComponent& dstC
 
 } // namespace
 // -------------------------------------------------------------------------------------------
-// Latency (per the T184 brief: STOP and report if either is nonzero rather than working around
+// Latency (STOP and report if either is nonzero rather than working around
 // it — the whole feature premise is inserting this chain into a path that previously went
 // straight to the output).
 // -------------------------------------------------------------------------------------------
@@ -307,7 +307,7 @@ TEST(ChannelFlowAutoChannelCore, BuildChannelForFeedsReusesAnExistingMasterAndCl
 // Real-mouse-gesture coverage through GraphEditor::endConnectionDrag, via a live MainComponent.
 // FIXTURE ORDER MATTERS: createTrackInNode() auto-wires a fresh Track In to the sole existing MIDI
 // instrument when there is exactly one — so every test below starts from newPatchForTest() (zero
-// nodes but a seeded Audio Output, T187) and adds the MIDI track BEFORE any instrument exists,
+// nodes but a seeded Audio Output) and adds the MIDI track BEFORE any instrument exists,
 // keeping Track In unwired until the real-mouse gesture under test wires it.
 // -------------------------------------------------------------------------------------------
 
@@ -323,7 +323,7 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_ToggleOnBuildsOneChannelAsOneUndoSt
     ASSERT_NE(trackIn, nullptr);
 
     // The instrument already wired to the output BY HAND -- exactly the "no channel yet" starting
-    // state T184 targets.
+    // state auto-channel targets.
     juce::String instrumentUuid;
     auto* instrument = addPlainNodeCFT(graph, "Oscillator", {600, 600}, instrumentUuid);
     ASSERT_NE(instrument, nullptr);
@@ -408,7 +408,7 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_AlreadyChanneledInstrumentGetsNoNew
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
 
-    // "+ Track -> Instrument" (T183) builds Track In -> Oscillator -> EQ -> Compressor -> Strip ->
+    // "+ Track -> Instrument" builds Track In -> Oscillator -> EQ -> Compressor -> Strip ->
     // Master in one step; the instrument this test's SECOND Track In targets already has a channel.
     addInstrumentTrack(mc, "Oscillator");
     auto& graph = mc.getAudioEngine().getGraph();
@@ -432,8 +432,8 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_AlreadyChanneledInstrumentGetsNoNew
     auto* trackIn2 = addPlainNodeCFT(graph, "Track In", {50, 900}, trackIn2Uuid);
     ASSERT_NE(trackIn2, nullptr);
     // trackIn2 lives outside the instrument's macro, so a live macro-boundary crossing would
-    // otherwise auto-mint a macro port here (T148) -- a real, separately-tested behaviour this
-    // test isn't about. Disabled so the drag exercises T184's own direct-jack path in isolation.
+    // otherwise auto-mint a macro port here -- a real, separately-tested behaviour this
+    // test isn't about. Disabled so the drag exercises the direct-jack path in isolation.
     mc.getGraphEditor().setAutoCreateMacroPortsOnDragEnabled(false);
     mc.getGraphEditor().updateComponents();
 
@@ -451,7 +451,7 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_AlreadyChanneledInstrumentGetsNoNew
         << "the instrument already has a channel; nothing new should be created";
 }
 
-// Both T148 (macro-boundary auto-porting) and T184 (auto-channel) are ON here — the instrument
+// Both macro-boundary auto-porting and auto-channel are ON here — the instrument
 // lives inside a macro and the Track In driving it lives outside, so the drag crosses a macro
 // boundary AND lands on an unchanneled instrument. This is the highest-risk combined path: a
 // stray nested undo transaction in either feature would split "port + connection + channel" into
@@ -499,7 +499,7 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_NewChainNodesJoinTheInstrumentsExis
 
     dragRealMidiCableBetweenCFT(*trackInComp, *instrumentComp);
 
-    // (a) T148: the boundary crossing minted a macro MIDI inlet port, and Track In wires to it
+    // (a) Auto-porting: the boundary crossing minted a macro MIDI inlet port, and Track In wires to it
     // rather than straight to the instrument.
     auto* port = findNodeOfTypeCFT(graph, ModuleType::MacroMidiInlet);
     ASSERT_NE(port, nullptr) << "the macro boundary crossing must have minted a port";
@@ -511,7 +511,7 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_NewChainNodesJoinTheInstrumentsExis
                                     {instrument->nodeID, juce::AudioProcessorGraph::midiChannelIndex}}))
         << "the drag crossed a macro boundary, so it must route through the port, not directly";
 
-    // (b) T184: the strip was built.
+    // (b) Auto-channel: the strip was built.
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 1);
 
     auto* macro = mc.getGraphEditor().getMacros().find(macroId);

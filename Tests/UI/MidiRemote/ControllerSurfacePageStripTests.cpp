@@ -1,4 +1,4 @@
-// ControllerSurfacePageStripTests.cpp -- FRO142 (docs/control/midi-remote.md#pages,
+// ControllerSurfacePageStripTests.cpp (docs/control/midi-remote.md#pages,
 // docs/control/midi-remote-ui.md#pages): headless tests for ControllerSurfacePageStrip, driven
 // through its REAL mouseDown()/mouseUp() button path with synthesized juce::MouseEvents (the "test
 // the real mouse path" convention, Tests/UI/MidiRemote/ControllerSurfaceSelectionTests.cpp's

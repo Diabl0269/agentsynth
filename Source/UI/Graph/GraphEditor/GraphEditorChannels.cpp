@@ -1,15 +1,14 @@
 // GraphEditorChannels.cpp
 //
-// Auto-create-channel-on-connect, and "Make channel" / "Duplicate into this channel" (FRO25).
+// Auto-create-channel-on-connect, and "Make channel" / "Duplicate into this channel".
 // GraphEditor is declared in GraphEditor.h; sibling GraphEditor*.cpp files in this directory
 // hold the rest of the class.
 //
 // MacroGroupController::MacroPortCrossingGroup (formerly aliased here as MacroPortCrossingEdge/
 // MacroPortCrossingGroup) now owns the crossing-plan math (buildMacroPortCrossingPlan and its
-// add/remove-member variants, spliceMacroPorts/spliceOutMacroPort) outright. FRO91 dropped the
-// GraphEditor.h aliases and the private one-line forwarders this file's duplicate-channel-strip
-// path (buildChannelStripMacroBox / duplicateChannelStrip) used to call by their original name —
-// every call below goes through macroController_ directly.
+// add/remove-member variants, spliceMacroPorts/spliceOutMacroPort) outright, so every call below (including this file's
+// duplicate-channel-strip path, buildChannelStripMacroBox / duplicateChannelStrip) goes through macroController_
+// directly.
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
@@ -25,11 +24,11 @@
 
 using namespace detail;
 
-// ---- Auto-create-channel-on-connect (T184, P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main
+// ---- Auto-create-channel-on-connect (docs/mixer/mixer.md#channels-follow-audio-not-tracks "main
 // workflow") ----------
 
 // True when `nodeId` resolves to a live TimelineMidiSource ("Track In") node — the one
-// trigger condition endConnectionDrag checks before opening the T184 auto-channel path.
+// trigger condition endConnectionDrag checks before opening the auto-channel path.
 bool GraphEditor::nodeIsTimelineMidiSource(juce::AudioProcessorGraph::NodeID nodeId) const {
     auto* node = audioEngine.getGraph().getNodeForId(nodeId);
     if (node == nullptr)
@@ -93,7 +92,7 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
         /*master=*/{masterX, originPos.y},
     };
 
-    // Known BEFORE the build below, the same reason T187's own relocation check needs it: whether
+    // Known BEFORE the build below, the same reason the Audio Output relocation check needs it: whether
     // this call is the one that splices Master for the first time.
     const bool masterExistedBefore = synth::findMasterNode(graph) != nullptr;
 
@@ -108,7 +107,7 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
     if (channel.stripUuid.isEmpty())
         return; // a factory/addNode failure partway — same contract as buildDefaultAudioChannel
 
-    // T187 mirror (MainComponent::addAudioTrack's own comment): on the very first channel, relocate
+    // Mirrors MainComponent::addAudioTrack: on the very first channel, relocate
     // a bare Audio Output to terminate the row instead of leaving the finished chain cabling back
     // across the whole canvas to reach wherever it already sat.
     if (!masterExistedBefore && channel.master != nullptr) {
@@ -148,19 +147,17 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
     }
 }
 
-// FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): "Create channels" for existing projects,
+// "Create channels" for existing projects (docs/mixer/mixer.md#creating-channels-in-an-existing-project),
 // one call per entry in `trackSourceNodeIds`. See the note below for the full
 // trackSourceNodeIds/skip-condition/transaction rationale.
 //
-// FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): "Create channels" for existing projects
-// — runs the exact same per-node channel-creation maybeAutoCreateChannelAfterConnect() already does for T184's
-// connect-triggered case, once per entry in `trackSourceNodeIds` (each track's own bound node — a
-// "Track Audio" or "Track In" — as MainComponent resolves from TimelineDoc, which GraphEditor
-// deliberately owns no reference to). A track that already reaches the output through an existing
-// ChannelStripModule (or reaches nothing at all — an unbound/orphaned entry the caller should not
-// have passed) is silently skipped, same as maybeAutoCreateChannelAfterConnect's own
-// "exits.empty()" early return — a caller can safely pass every track's source node without
-// pre-filtering.
+// It runs the exact same per-node channel-creation maybeAutoCreateChannelAfterConnect() already does for
+// the connect-triggered case, once per entry in `trackSourceNodeIds` (each track's own bound node — a
+// "Track Audio" or "Track In" — as MainComponent resolves from TimelineDoc, which GraphEditor deliberately
+// owns no reference to). A track that already reaches the output through an existing ChannelStripModule (or
+// reaches nothing at all — an unbound/orphaned entry the caller should not have passed) is silently
+// skipped, same as maybeAutoCreateChannelAfterConnect's own "exits.empty()" early return — a caller can
+// safely pass every track's source node without pre-filtering.
 //
 // NO UNDO OF ITS OWN and no updateComponents() call, same contract as
 // maybeAutoCreateChannelAfterConnect — the caller (MainComponent::createChannelsForExistingTracks)
@@ -173,8 +170,7 @@ void GraphEditor::createChannelsForUnchanneledTracks(
         maybeAutoCreateChannelAfterConnect(nodeId);
 }
 
-// ---- FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make channel" / "Duplicate into this
-// channel" -----------
+// ---- "Make channel" / "Duplicate into this channel" (docs/mixer/mixer.md#make-channel-and-shared-modules) -----
 
 namespace {
 
@@ -215,7 +211,7 @@ bool isAttenuverterNode(juce::AudioProcessorGraph& graph, juce::AudioProcessorGr
 // preference, since a shared LFO reaching into the channel is exactly what the port is for —
 // except the new strip's own outputs, which stay plain edges (Strip -> Master must never be a
 // port; see ChannelFlows.h). Master stays outside every macro; a first-ever Master relocates
-// Audio Output (T187 mirror).
+// Audio Output.
 bool GraphEditor::makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, const juce::String& channelName) {
     auto& graph = audioEngine.getGraph();
     const auto plan = synth::planMakeChannel(graph, source, macros);
@@ -233,7 +229,7 @@ bool GraphEditor::makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, 
     if (made.memberUuids.empty() && made.buses.empty())
         return false;
 
-    // T187 mirror (maybeAutoCreateChannelAfterConnect's own comment): the first-ever Master pulls a
+    // As in maybeAutoCreateChannelAfterConnect: the first-ever Master pulls a
     // bare Audio Output in to terminate the row.
     if (!masterExistedBefore)
         if (auto* master = synth::findMasterNode(graph)) {
@@ -424,7 +420,7 @@ std::vector<juce::String> GraphEditor::duplicateIntoChannelTargets(juce::AudioPr
 // GraphEditorChannels.cpp for the boundary-port splice detail.
 //
 // ...and joins the macro — a port only that cable used is spliced back out, and the copy's
-// remaining boundary crossings get ports (addSelectionToMacro's T138 passes).
+// remaining boundary crossings get ports (addSelectionToMacro's passes).
 bool GraphEditor::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId) {
     const auto targets = duplicateIntoChannelTargets(nodeId);
     if (std::find(targets.begin(), targets.end(), macroId) == targets.end())
@@ -541,7 +537,7 @@ bool GraphEditor::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId,
                 macroController_.spliceOutMacroPort(*live, portUuid);
     }
 
-    // 4. Join the macro with addSelectionToMacro's T138 passes: a port for each of the copy's
+    // 4. Join the macro with addSelectionToMacro's passes: a port for each of the copy's
     //    remaining boundary crossings (the inputs it inherited), and any port the join makes interior.
     const juce::String copyUuid = synth::AIStateMapper::ensureNodeUuid(graph.getNodeForId(copyId));
     const auto addPlan = macroController_.buildMacroPortCrossingPlanForNewMembers(macroId, {copyUuid});

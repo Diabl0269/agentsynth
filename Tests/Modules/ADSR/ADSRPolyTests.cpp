@@ -1,5 +1,5 @@
 // ADSRPolyTests.cpp
-// Poly mode: 8 independent per-voice envelopes gated by per-voice Gate CV, plus the FRO110
+// Poly mode: 8 independent per-voice envelopes gated by per-voice Gate CV, plus the
 // zero-sustain release-amputation repros in poly.
 
 #include "ADSRTestFixture.h"
@@ -47,7 +47,7 @@ TEST_F(ADSRTest, PolyMode_GateEdgeDetection) {
 }
 
 // ---------------------------------------------------------------------------
-// FRO110 regression suite (formerly the Repro* diagnostics that motivated the rewrite).
+// Regression suite.
 // Each still prints the measured number so a future regression is easy to read.
 // ---------------------------------------------------------------------------
 

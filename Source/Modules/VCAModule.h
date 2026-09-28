@@ -11,7 +11,7 @@ public:
     //
     // Audio L: ch0 in mono, ch0-7 in poly. Gain CV: ch1 (mono) / ch8-15 (poly). Both unchanged.
     //
-    // Audio R (#219) is a dedicated block at kRightBase, in AND out — a VCA is a processor, so the
+    // Audio R is a dedicated block at kRightBase, in AND out — a VCA is a processor, so the
     // right leg needs an input jack too. It does NOT go on ch1: that is the gain CV input.
     //
     // Legacy quirk, deliberately preserved: mono still copies ch0 onto ch1 after gating, and poly
@@ -38,7 +38,7 @@ public:
         addParameter(gainParam = new juce::AudioParameterFloat("gain", "Gain", 0.0f, 1.0f, 0.5f));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         // Dual I/O comes from the ctor's StereoAudio::Declared above (defaults to split: this module
-        // gates in stereo). Collapsed, its jack layout is exactly what it was before #219 — Audio, CV.
+        // gates in stereo). Collapsed, its jack layout is the plain mono one — Audio, CV.
         addMuteParameter();
         enableVisualBuffer(true);
     }
@@ -50,7 +50,7 @@ public:
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        // FRO324: borrow each voice's Left into its matching Right (kRightBase + voice), sample-
+        // Borrow each voice's Left into its matching Right (kRightBase + voice), sample-
         // exact, while Dual I/O is split and only Left is patched. Before the bypass/mute branches
         // below so both see a filled Right leg exactly as if the user had cabled it.
         applyLeftRightNormalling(buffer, polyParam->get() ? MAX_VOICES : 1);
@@ -181,7 +181,7 @@ public:
     int getVisibleInputPortCount() const override { return splitAudioJackCount() + 1; }
     int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
     int rightAudioLegChannel() const override { return kRightBase; }
-    // FRO324: Audio L/R are read in place at ch0(-7)/kRightBase(+) above -- a genuine stereo
+    // Audio L/R are read in place at ch0(-7)/kRightBase(+) above -- a genuine stereo
     // pair, eligible for render-time L->R normalling.
     bool hasStereoAudioInputPair() const override { return true; }
 

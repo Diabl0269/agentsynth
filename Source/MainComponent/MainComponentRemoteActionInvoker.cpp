@@ -25,13 +25,14 @@ void MainComponentRemoteActionInvoker::invokeRemoteCommand(juce::CommandID comma
     commandManager_.invokeDirectly(commandId, false);
 }
 
-// FRO253 (docs/control/midi-remote.md#node-command-targets): MESSAGE THREAD, called from
-// RemoteEngine::drain() on a buttonPress event for a nodeCommand target. toggleSolo is the only
-// command today -- this does EXACTLY what MixerColumnComponent::toggleSoloed does (same undo
-// bracket, same never-strip->setSoloed()-directly rule, Source/CLAUDE.md's mixer-solo invariant)
-// rather than sharing its body, since Core's RemoteActionInvoker seam can't reach a UI component.
+// MESSAGE THREAD, called from RemoteEngine::drain() on a buttonPress event for a nodeCommand
+// target. toggleSolo is the only command today -- this does EXACTLY what
+// MixerColumnComponent::toggleSoloed does (same undo bracket, same
+// never-strip->setSoloed()-directly rule, Source/CLAUDE.md's mixer-solo invariant) rather than
+// sharing its body, since Core's RemoteActionInvoker seam can't reach a UI component.
 // onNodeCommandApplied then re-syncs the mixer column's own M/S visuals -- see that field's own
-// comment on why nothing else does this for a non-click solo change.
+// comment on why nothing else does this for a non-click solo change
+// (see docs/control/midi-remote.md#node-command-targets).
 void MainComponentRemoteActionInvoker::invokeNodeCommand(juce::AudioProcessorGraph::NodeID nodeId,
                                                          synth::NodeCommandKind command) {
     if (command != synth::NodeCommandKind::toggleSolo)
@@ -51,8 +52,9 @@ void MainComponentRemoteActionInvoker::invokeNodeCommand(juce::AudioProcessorGra
         onNodeCommandApplied(nodeId);
 }
 
-// FRO236 (docs/control/midi-remote.md#continuous-targets): MESSAGE THREAD, called from
-// RemoteEngine::drain() to read a continuous target's current value in native units.
+// MESSAGE THREAD, called from RemoteEngine::drain() to read a continuous target's
+// current value in native units
+// (see docs/control/midi-remote.md#continuous-targets).
 double MainComponentRemoteActionInvoker::getContinuousValue(synth::ContinuousTargetKind kind) {
     const auto snap = audioEngine_.getTransport().getPositionSnapshot();
     if (kind == synth::ContinuousTargetKind::bpm) {
@@ -68,7 +70,7 @@ double MainComponentRemoteActionInvoker::getContinuousValue(synth::ContinuousTar
     }
 
     // playhead: a relative move must accumulate several fast detents inside one audio block exactly
-    // like FRO271's cursor-move actions do (TransportNudge.h's own comment on why
+    // like the cursor-move actions do (TransportNudge.h's own comment on why
     // TransportNudgeState exists) -- return the still-pending request's own target while it is
     // unconsumed (the audio thread hasn't applied it yet), not the stale snapshot. This is the same
     // "unconsumed" check computeNudgeTarget() makes; setContinuousValue below finishes the
@@ -82,7 +84,7 @@ double MainComponentRemoteActionInvoker::getContinuousValue(synth::ContinuousTar
     return unconsumed ? transportNudge_.target : snap.ppq;
 }
 
-// FRO236: MESSAGE THREAD. A no-op in the plugin build -- the host owns the transport
+// MESSAGE THREAD. A no-op in the plugin build -- the host owns the transport
 // (docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host).
 void MainComponentRemoteActionInvoker::setContinuousValue(synth::ContinuousTargetKind kind, double native) {
     if (audioEngine_.isHosted())
@@ -102,7 +104,7 @@ void MainComponentRemoteActionInvoker::setContinuousValue(synth::ContinuousTarge
     synth::locateTransportTracked(transport, transportNudge_, native);
 }
 
-// FRO236: MESSAGE THREAD. bpm never calls this (its window is Core's own
+// MESSAGE THREAD. bpm never calls this (its window is Core's own
 // kRemoteBpmWindowMin/Max); masterVolume never calls this either (it has no window -- it resolves
 // through the parameter path's own [0,1] range). False in the plugin build (no transport to own).
 bool MainComponentRemoteActionInvoker::getContinuousWindow(synth::ContinuousTargetKind kind, double& lo, double& hi) {

@@ -1,4 +1,4 @@
-// The per-leg mixer solo rule (FRO15 / P9-9, docs/mixer/sends-and-buses.md#solo-is-a-per-leg-audible-mask).
+// The per-leg mixer solo rule (docs/mixer/sends-and-buses.md#solo-is-a-per-leg-audible-mask).
 //
 //   * the rule       -- synth::computeSoloAudibleLegs against hand-built graphs: soloing a send bus
 //                        opens only its sources' SEND legs; soloing a group bus opens its sources'
@@ -318,7 +318,7 @@ TEST(MixerBusSoloTest, UndoRedoAcrossAGraphRebuildSettlesTheMasks) {
 
 TEST(MixerBusSoloTest, MasterDirectIsStillGatedByTheGlobalCount) {
     // The per-leg mask is a ChannelStrip concept; Master's Direct input is still gated by the plain
-    // "is anything soloed?" flag on the playhead, unchanged by FRO15.
+    // "is anything soloed?" flag on the playhead.
     synth::TransportService transport;
     MasterModule master;
     master.setPlayHead(&transport);

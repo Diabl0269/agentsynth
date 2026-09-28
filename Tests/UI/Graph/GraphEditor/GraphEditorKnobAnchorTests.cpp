@@ -1,7 +1,7 @@
-// FRO288/FRO312/FRO313: a cable whose destination is a bound, visible knob re-anchors its endpoint
-// onto that knob's modulation-ring LANDING point (just outside the drawn arc, not on it — FRO313)
+// A cable whose destination is a bound, visible knob re-anchors its endpoint
+// onto that knob's modulation-ring LANDING point (just outside the drawn arc, not on it)
 // instead of the gutter jack (GraphEditor::reanchorCablesToKnobTargets, GraphEditorModHover.cpp) --
-// docs/layout/cables.md#knob-landing. FRO312 hides a knob-bound jack's gutter dot entirely, so
+// docs/layout/cables.md#knob-landing. A knob-bound jack's gutter dot is hidden entirely, so
 // EVERY cable kind lands on the knob now, not just AttenuverterChain; only a hidden-page knob keeps
 // the jack.
 
@@ -102,10 +102,10 @@ TEST_F(GraphEditorTest, AttenuverterChainCableLandsOnTheTargetKnobsRingStartPoin
     EXPECT_EQ(hit->destChannel, 2);
 }
 
-// FRO312: the Rate CV jack is knob-bound (Rate (Hz) resolves a knob for it), so it draws no
+// The Rate CV jack is knob-bound (Rate (Hz) resolves a knob for it), so it draws no
 // gutter dot at all -- a raw DirectCV connection into it (bypassing addModRouting entirely) has
 // nowhere else to land any more and lands on the knob exactly like an AttenuverterChain routing
-// does. This replaces the pre-FRO312 `DirectCVCableKeepsTheGutterJackNotTheKnob` expectation, which
+// does. This replaces the legacy `DirectCVCableKeepsTheGutterJackNotTheKnob` expectation, which
 // depended on the gutter jack still existing.
 TEST_F(GraphEditorTest, DirectCVCableAlsoLandsOnTheKnobNowThatItsJackIsHidden) {
     AudioEngine engine;
@@ -137,7 +137,7 @@ TEST_F(GraphEditorTest, DirectCVCableAlsoLandsOnTheKnobNowThatItsJackIsHidden) {
     EXPECT_TRUE(foundDirect) << "expected a DirectCV ModRouting cable to Flanger channel 2";
 }
 
-// FRO313: the landing anchor sits just OUTSIDE the ring's own drawn arc -- never on it, so the
+// The landing anchor sits just OUTSIDE the ring's own drawn arc -- never on it, so the
 // dot GraphEditorCables.cpp draws there can never visually overlap the arc.
 TEST_F(GraphEditorTest, KnobLandingAnchorSitsOutsideTheRingArc) {
     AudioEngine engine;

@@ -476,7 +476,7 @@ TEST(PianoRollEditingTest, AltQQuantiseLengthIsOneUndoStep) {
     EXPECT_FALSE(f.undo.canUndo());
 }
 
-// Snap no longer has its own header chip (FRO108: it duplicated the timeline toolbar's own Snap
+// Snap no longer has its own header chip (it duplicated the timeline toolbar's own Snap
 // button, which reads/writes the SAME shared TimelineViewState::snapEnabled by reference) — the J
 // key is now the only piano-roll-local way to flip it. It toggles grid magnetism and moves no note.
 TEST(PianoRollEditingTest, JKeyTogglesSnapWithoutMovingNotes) {

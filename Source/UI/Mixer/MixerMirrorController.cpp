@@ -1,4 +1,4 @@
-// Concern: FRO336 -- MixerMirrorController's open/close state machine: building, configuring and
+// Concern: MixerMirrorController's open/close state machine: building, configuring and
 // copy-wiring the mirror MixerPanelComponent, and hosting it in a DetachedPanelWindow it owns
 // directly (there is no dock slot to reparent it out of -- see the class comment).
 #include "MixerMirrorController.h"
@@ -33,7 +33,7 @@ void MixerMirrorController::open(MixerPanelComponent& sourcePanel, synth::theme:
     // Re-copied on every open() (idempotent, cheap) rather than only the first time -- MainComponent
     // may rewire a callback on the docked panel between an earlier close() and this open().
     mirror_->copyWiringFrom(sourcePanel);
-    // FRO336: cross-wired here rather than folded into copyWiringFrom()'s blanket copy -- each
+    // Cross-wired here rather than folded into copyWiringFrom()'s blanket copy -- each
     // instance's onLiveMixerStateChanged must point at the OTHER instance's refreshLiveMixerVisuals(),
     // never its own (copyWiringFrom() copying it verbatim would make the mirror refresh itself
     // instead of the dock). Safe to capture sourcePanel by reference: both it and mirror_ are owned
