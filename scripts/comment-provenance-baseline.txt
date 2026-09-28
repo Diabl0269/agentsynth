@@ -18,7 +18,6 @@
 30 Source/UI/Graph/ModuleComponent/ModuleComponent.cpp
 36 Source/UI/Graph/ModuleComponent/ModuleComponent.h
 5 Source/UI/Graph/ModuleComponent/ModuleComponentInternal.h
-2 Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
 1 Source/UI/PianoRoll/PianoRollComponent/PianoRollMouse.cpp
 3 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
 20 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h

@@ -1,8 +1,7 @@
 // ModuleComponentWavetable.cpp -- the Wavetable oscillator's control creation, the hookup of its
 // WavetableTabStrip (the tabbed page body lives in WavetableTabStrip.cpp), and the
-// load/browse/step-through flow for wavetable files and folders. ModuleComponent is declared in ModuleComponent.h; the
-// rest of its implementation lives in the sibling ModuleComponent*.cpp units next to this one
-// (FRO65 split of the former single ModuleComponent.cpp).
+// load/browse/step-through flow for wavetable files and folders. ModuleComponent is declared in
+// ModuleComponent.h; the rest of its implementation lives in the sibling ModuleComponent*.cpp units.
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
