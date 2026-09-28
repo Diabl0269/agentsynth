@@ -33,6 +33,7 @@ set(APPUI_SOURCES
     Source/MidiRemote/MidiLearnControllerPick.cpp
     Source/MidiRemote/MidiLearnControllerHistory.cpp
     Source/MidiRemote/MidiLearnControllerFocusBank.cpp
+    Source/MidiRemote/MidiLearnControllerHandshake.cpp
     Source/MidiRemote/ProfileEditHistory.h
     Source/MidiRemote/ProfileEditHistory.cpp
     Source/MidiRemote/MidiLearnControllerRetarget.cpp

@@ -3,12 +3,16 @@
   "id": "template-novation-launch-control-xl-3",
   "name": "Launch Control XL 3",
   "vendor": "Novation",
-  "source": "Novation Launch Control XL 3 appendix, https://userguides.novationmusic.com/hc/en-gb/articles/26260540230162-Launch-Control-XL-3-appendix, section 'Default Mode (16) parameters' (Mode 16, the fixed default mode; all controls on MIDI channel 16: encoders CC13-36, faders CC5-12, button rows CC37-44 and CC45-52). The encoders' relative/absolute encoding is not stated there, so abs7 is used; use Auto-detect in the inspector if yours sends relative values. No transport binding: the Launch Control XL 3 Programmer's Reference Guide, https://fael-downloads-prod.focusrite.com/customer/prod/downloads/launch_control_xl_3_programmer_s_reference_guide-pdf_en.pdf, p.7 'standalone (MIDI) mode', says the Page, Track, Record, Play, Solo/Arm and Mute/Select buttons are unused in this mode; they only send (Play CC116, Record CC118, channel 1, p.9) after a DAW-mode handshake (p.8), which the app does not send.",
+  "source": "Novation Launch Control XL 3 appendix, https://userguides.novationmusic.com/hc/en-gb/articles/26260540230162-Launch-Control-XL-3-appendix, section 'Default Mode (16) parameters' (Mode 16, the fixed default mode; all controls on MIDI channel 16: encoders CC13-36, faders CC5-12, button rows CC37-44 and CC45-52). The encoders' relative/absolute encoding is not stated there, so abs7 is used; use Auto-detect in the inspector if yours sends relative values. FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): Play and Record now work, per the Launch Control XL 3 Programmer's Reference Guide, https://fael-downloads-prod.focusrite.com/customer/prod/downloads/launch_control_xl_3_programmer_s_reference_guide-pdf_en.pdf -- p.7 'standalone (MIDI) mode' says Page/Track/Record/Play/Solo-Arm/Mute-Select send nothing there; p.8 'DAW mode control' says sending SysEx F0 00 20 29 02 15 02 7F F7 puts the device into DAW mode (F0 00 20 29 02 15 02 00 F7 reverts it), matching Ableton Live 12's own script (hello on connect, goodbye on unload/quit); p.9 says DAW mode then reports Play (CC116) and Record (CC118) on channel 1, with encoders/faders unchanged (channel 16, same CC13-36/5-12 numbers) -- over the DAW In/Out (USB) interface, a SEPARATE port from the plain MIDI In/Out Custom Modes normally use (p.5, p.8). This app has no per-control input-port field, so this template's handshake and all its controls (including Play/Record) are set up on ONE input -- pick the Launch Control XL 3's 'DAW' port (e.g. 'LCXL3 1 DAW'), not its 'MIDI' port, as this controller's input, or Play/Record never receive anything. The guide does not fully spell out whether a Custom Mode's encoders/faders also move to the DAW port once DAW mode is enabled (p.9's own wording is ambiguous on this) or stay on the MIDI port regardless of surface mode -- p.9's diagram uses the SAME CC numbers as Mode 16, and Novation's 'DAW Control Mode' (p.10) exists specifically to mirror a Custom Mode's layout over the DAW port for exactly this kind of generic DAW integration, so this template assumes they move too, matching Ableton's own behaviour; verify with a real device (docs/control/midi-remote-device-handshake.md#device-handshake's own note).",
   "input": {
     "identifier": "",
     "name": ""
   },
   "passMapped": false,
+  "handshake": {
+    "open": [240, 0, 32, 41, 2, 21, 2, 127, 247],
+    "close": [240, 0, 32, 41, 2, 21, 2, 0, 247]
+  },
   "controls": [
     {
       "id": "enc1",
@@ -777,7 +781,92 @@
         "col": 7,
         "row": 5
       }
+    },
+    {
+      "id": "play",
+      "name": "Play",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 116
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 6
+      }
+    },
+    {
+      "id": "record",
+      "name": "Record",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 1,
+        "number": 118
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 6
+      }
     }
   ],
-  "actions": []
+  "actions": [
+    {
+      "id": "action-play",
+      "control": {
+        "profileId": "template-novation-launch-control-xl-3",
+        "controlId": "play"
+      },
+      "spec": {
+        "type": "cc",
+        "channel": 1,
+        "number": 116
+      },
+      "specEncoding": "abs7",
+      "specButtonMode": "momentary",
+      "specControlName": "Play",
+      "target": {
+        "action": {
+          "actionId": "transportPlay"
+        }
+      },
+      "takeover": "default",
+      "range": {
+        "min": 0.0,
+        "max": 1.0
+      },
+      "enabled": true
+    },
+    {
+      "id": "action-record",
+      "control": {
+        "profileId": "template-novation-launch-control-xl-3",
+        "controlId": "record"
+      },
+      "spec": {
+        "type": "cc",
+        "channel": 1,
+        "number": 118
+      },
+      "specEncoding": "abs7",
+      "specButtonMode": "momentary",
+      "specControlName": "Record",
+      "target": {
+        "action": {
+          "actionId": "transportRecord"
+        }
+      },
+      "takeover": "default",
+      "range": {
+        "min": 0.0,
+        "max": 1.0
+      },
+      "enabled": true
+    }
+  ]
 }

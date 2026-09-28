@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MidiRemote/ControllerHandshake.h"
 #include "MidiRemote/ControllerProfileStore.h"
 #include "MidiRemote/MidiRemoteLearnBinder.h"
 #include "MidiRemote/PickTarget.h"
@@ -139,6 +140,16 @@ public:
     bool isArmed() const noexcept;
     /** Esc key / clicking the canvas elsewhere while armed. A no-op if nothing is armed. */
     void cancelArmed();
+
+    // ---- FRO339: device handshake (MidiLearnControllerHandshake.cpp) --------------------------
+
+    /** Message thread only. Wires the handshake coordinator to a real MIDI output sink -- a no-op
+     *  before this runs. */
+    void setHandshakeFeedbackSink(RemoteFeedbackSink& sink);
+
+    /** Message thread only. Sends every currently-open profile's handshake `close` bytes, then
+     *  forgets them. */
+    void shutdownHandshakes();
 
     /** FRO263: fires after every mutation that changes what the MIDI Remote panel shows. May be
      *  null (tests, or before MainComponent finishes wiring). See publishAssignments()'s .cpp
@@ -314,6 +325,10 @@ private:
     bool deleteControlsWithLabel(const juce::String& profileId, const std::vector<juce::String>& controlIds,
                                  const juce::String& editLabel);
 
+    // FRO339: see MidiLearnControllerHandshake.cpp for what each of these actually does.
+    void setProfilesAndReconcileHandshakes();
+    void reconcileHandshakes();
+
     AudioEngine& engine_;
     GraphEditor& graphEditor_;
     RemoteEngine& remoteEngine_;
@@ -324,6 +339,8 @@ private:
     ControllerProfileStore profileStore_;
     std::vector<ControllerProfile> profiles_;
     ProfileEditHistory profileHistory_;
+    // FRO339: unset until setHandshakeFeedbackSink() runs -- see MidiLearnControllerHandshake.cpp.
+    std::optional<ControllerHandshakeCoordinator> handshakeCoordinator_;
     bool applyingProfileHistory_ = false; // recording is suppressed while an undo/redo applies
 
     synth::ui::MixerPanelComponent* mixerPanel_ = nullptr;

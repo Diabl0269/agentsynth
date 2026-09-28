@@ -7,6 +7,7 @@
 // from MainComponent, never owned here. This header only defines values and declares their JSON
 // shape; the JSON is implemented in RemoteModelJson.cpp.
 
+#include <cstdint>
 #include <juce_core/juce_core.h>
 #include <vector>
 
@@ -269,6 +270,24 @@ struct ControllerProfile {
     // docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph's
     // "also pass mapped messages to the patch" toggle, default off
     bool passMapped = false;
+
+    // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): raw MIDI bytes to send once when the
+    // app opens this profile's device, and once when it lets go of it (profile removed/disabled,
+    // device disconnected, or the app quits) -- e.g. Novation LCXL3's DAW-mode enable/disable
+    // SysEx (Programmer's Reference Guide p.8), which the device latches with no keep-alive and
+    // stays in until the close bytes arrive or it is power-cycled. Sent by the app-layer
+    // Source/MidiRemote/ControllerHandshake.h to the MIDI OUTPUT matching this profile's own
+    // `input` (identifier-then-name, same fallback as `output` above) -- never a second
+    // vendor-specific port field, since a template author instead points a profile's `input`
+    // itself at whichever physical port the device wants its handshake and control traffic on.
+    // Empty (both vectors, the default) means "no handshake" -- a pre-FRO339 profile round-trips
+    // to exactly this, byte-identical.
+    struct Handshake {
+        std::vector<std::uint8_t> openMessage;
+        std::vector<std::uint8_t> closeMessage;
+        bool isEmpty() const noexcept { return openMessage.empty() && closeMessage.empty(); }
+    };
+    Handshake handshake;
 
     std::vector<Control> controls;
     // GLOBAL assignments: target.kind == action, continuous, or page only (FRO236: a continuous

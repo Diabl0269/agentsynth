@@ -67,6 +67,29 @@ bool readBool(const juce::var& v, bool& out) {
     return true;
 }
 
+// FRO339: a Handshake message is a flat JSON array of 0..255 ints (readInt already rejects
+// anything wider); an empty array round-trips as an empty vector, same as an absent key.
+bool readByteArray(const juce::var& v, std::vector<std::uint8_t>& out) {
+    if (!v.isArray())
+        return false;
+    std::vector<std::uint8_t> parsed;
+    for (const auto& element : *v.getArray()) {
+        int byte = 0;
+        if (!readInt(element, byte) || byte < 0 || byte > 255)
+            return false;
+        parsed.push_back(static_cast<std::uint8_t>(byte));
+    }
+    out = std::move(parsed);
+    return true;
+}
+
+juce::var byteArrayToVar(const std::vector<std::uint8_t>& bytes) {
+    juce::Array<juce::var> arr;
+    for (auto b : bytes)
+        arr.add(static_cast<int>(b));
+    return arr;
+}
+
 // FRO141: a missing "focusBank" means the pre-FRO141 default (false); a PRESENT one must be a
 // strict bool (never a truthy int/string) or the whole load fails, same all-or-nothing rule as
 // every other field in this file.
@@ -736,6 +759,14 @@ juce::var ControllerProfile::toVar() const {
 
     obj->setProperty("passMapped", passMapped);
 
+    // FRO339: written only when non-empty, so a pre-FRO339 profile round-trips byte-identical.
+    if (!handshake.isEmpty()) {
+        auto* handshakeObj = new juce::DynamicObject();
+        handshakeObj->setProperty("open", byteArrayToVar(handshake.openMessage));
+        handshakeObj->setProperty("close", byteArrayToVar(handshake.closeMessage));
+        obj->setProperty("handshake", juce::var(handshakeObj));
+    }
+
     juce::Array<juce::var> controlArr;
     for (const auto& c : controls)
         controlArr.add(c.toVar());
@@ -795,6 +826,20 @@ bool ControllerProfile::fromVar(const juce::var& state) {
 
     if (!readBool(obj->getProperty("passMapped"), parsed.passMapped))
         return false;
+
+    // FRO339: an absent "handshake" means the pre-FRO339 default (no handshake); a PRESENT one
+    // must carry both byte arrays (an empty array is fine -- "enable with nothing to send" is a
+    // legal, if useless, handshake) or the whole load fails, same all-or-nothing rule as everything
+    // else here.
+    const juce::var handshakeVar = obj->getProperty("handshake");
+    if (!handshakeVar.isVoid()) {
+        auto* handshakeObj = handshakeVar.getDynamicObject();
+        if (handshakeObj == nullptr)
+            return false;
+        if (!readByteArray(handshakeObj->getProperty("open"), parsed.handshake.openMessage) ||
+            !readByteArray(handshakeObj->getProperty("close"), parsed.handshake.closeMessage))
+            return false;
+    }
 
     if (!readControlList(obj->getProperty("controls"), parsed.controls))
         return false;

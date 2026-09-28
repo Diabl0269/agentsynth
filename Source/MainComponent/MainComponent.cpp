@@ -162,6 +162,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
 }
 
 MainComponent::~MainComponent() {
+    // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): send every open handshake's `close`
+    // bytes FIRST, while remoteFeedbackOutputs_ (the sink) and every MIDI output device are still
+    // fully alive -- "the app lets go of the controller" is the very first thing quitting means. A
+    // no-op in HostMode::Hosted and everywhere setHandshakeFeedbackSink() was never called.
+    midiLearnController_.shutdownHandshakes();
+
     // FRO44: unregister FIRST, before anything below (closing native plugin-editor windows
     // included) has a chance to pump the message loop. A `pluginScanCompleted` queued by a scan on
     // another thread would otherwise land mid-destruction and call `savePluginScanList()` /

@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <set>
 #include <utility>
 
@@ -113,7 +114,8 @@ TEST(ControllerTemplatesVendorTest, ArturiaMiniLab3HasTheDocumentedSurface) {
 TEST(ControllerTemplatesVendorTest, NovationLaunchControlXL3HasTheDocumentedSurface) {
     ControllerProfile p;
     ASSERT_TRUE(loadControllerTemplate("template-novation-launch-control-xl-3", p));
-    EXPECT_EQ(p.controls.size(), 48u);
+    // FRO339: +2 controls (Play/Record) over the pre-FRO339 48.
+    EXPECT_EQ(p.controls.size(), 50u);
     int encoders = 0, faders = 0, buttons = 0;
     for (const auto& c : p.controls) {
         switch (c.kind) {
@@ -130,7 +132,9 @@ TEST(ControllerTemplatesVendorTest, NovationLaunchControlXL3HasTheDocumentedSurf
         case ControlKind::button:
             ++buttons;
             EXPECT_EQ(c.message.type, MessageType::cc);
-            EXPECT_EQ(c.message.channel, 16);
+            // FRO339: the Mode-16 grid buttons stay on channel 16 (p.9's own table); Play/Record
+            // (DAW mode, only live once the handshake enables it) are channel 1.
+            EXPECT_TRUE(c.message.channel == 16 || c.message.channel == 1) << c.id.toStdString();
             break;
         default:
             ADD_FAILURE() << "unexpected kind for " << c.id.toStdString();
@@ -138,7 +142,7 @@ TEST(ControllerTemplatesVendorTest, NovationLaunchControlXL3HasTheDocumentedSurf
     }
     EXPECT_EQ(encoders, 24);
     EXPECT_EQ(faders, 8);
-    EXPECT_EQ(buttons, 16);
+    EXPECT_EQ(buttons, 18);
     // Verify specific CC numbers
     auto findControl = [&p](const juce::String& id) -> const Control* {
         for (const auto& c : p.controls)
@@ -155,6 +159,38 @@ TEST(ControllerTemplatesVendorTest, NovationLaunchControlXL3HasTheDocumentedSurf
     const auto* btnBottom8 = findControl("btnBottom8");
     ASSERT_NE(btnBottom8, nullptr);
     EXPECT_EQ(btnBottom8->message.number, 52);
+
+    // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): the DAW-mode enable/disable SysEx,
+    // and the two new transport controls with their actions[] bindings -- same "loads verbatim,
+    // applyControllerTemplate re-points the placeholder ids" shape as BeatStep's Play/Stop above.
+    EXPECT_FALSE(p.handshake.isEmpty());
+    const std::vector<std::uint8_t> expectedOpen = {0xF0, 0x00, 0x20, 0x29, 0x02, 0x15, 0x02, 0x7F, 0xF7};
+    const std::vector<std::uint8_t> expectedClose = {0xF0, 0x00, 0x20, 0x29, 0x02, 0x15, 0x02, 0x00, 0xF7};
+    EXPECT_EQ(p.handshake.openMessage, expectedOpen);
+    EXPECT_EQ(p.handshake.closeMessage, expectedClose);
+
+    const auto* play = findControl("play");
+    ASSERT_NE(play, nullptr);
+    EXPECT_EQ(play->message.channel, 1);
+    EXPECT_EQ(play->message.number, 116);
+    const auto* record = findControl("record");
+    ASSERT_NE(record, nullptr);
+    EXPECT_EQ(record->message.channel, 1);
+    EXPECT_EQ(record->message.number, 118);
+
+    ASSERT_EQ(p.actions.size(), 2u);
+    auto findAction = [&p](const juce::String& actionId) -> const Assignment* {
+        for (const auto& a : p.actions)
+            if (a.target.isAction() && a.target.action.actionId == actionId)
+                return &a;
+        return nullptr;
+    };
+    const auto* playAction = findAction("transportPlay");
+    ASSERT_NE(playAction, nullptr);
+    EXPECT_EQ(playAction->spec, play->message);
+    const auto* recordAction = findAction("transportRecord");
+    ASSERT_NE(recordAction, nullptr);
+    EXPECT_EQ(recordAction->spec, record->message);
 }
 
 TEST(ControllerTemplatesVendorTest, ArturiaBeatStepHasTheDocumentedSurface) {

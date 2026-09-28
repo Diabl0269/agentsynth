@@ -391,10 +391,13 @@ nanoKONTROL2 draws that device's knobs/sliders/buttons correctly without running
 FRO330: a template can also ship pre-wired **actions**, so applying it needs no MIDI Learn for
 those controls — see [Templates can ship actions too](midi-remote.md#templates-can-ship-actions-too).
 The BeatStep's template does this for its factory Play/Stop, which send [MMC](midi-remote.md#mmc-messages)
-rather than a CC or note. The Launch Control XL 3 ships no transport binding: Novation's
-Programmer's Reference Guide says its Play and Record buttons send nothing in the fixed default
-Mode 16 and only send after a DAW-mode handshake, which the app doesn't perform (see this
-template's own `"source"` citation).
+rather than a CC or note. FRO339: the Launch Control XL 3's Play and Record now work too — the
+app switches the device into DAW mode while it holds the controller open and back out when it
+lets go (a profile's optional [device handshake](midi-remote-device-handshake.md)), matching what
+Ableton Live 12's own script does; if the app quits without reaching that teardown (a crash, or
+the process being killed), the device stays in DAW mode until another host disables it or it is
+power-cycled. See this template's own `"source"` citation for the exact page citations and the
+one open question about which port a Custom Mode's encoders/faders end up on.
 
 **⋯** has *Import controller…* / *Export controller…* (JSON file,
 the profile document of [`midi-remote.md`](midi-remote.md#data-model)). Importing a document whose id is already set up on this
@@ -406,9 +409,10 @@ by `synth::midi::listControllerTemplates()` (`Source/MidiRemote/ControllerTempla
 #### Contribute a template
 
 A template file is an ordinary `ControllerProfile` document (`midi-remote.md#data-model`'s JSON
-shape — `version`, `id`, `name`, `input`, `controls[]`, `actions[]`), plus two keys the profile
-schema itself doesn't know about (`ControllerProfile::fromVar` reads named keys only, so it
-tolerates and ignores them). `actions[]` is `[]` for almost every template (there is nothing to
+shape — `version`, `id`, `name`, `input`, `controls[]`, `actions[]`, and the optional `handshake`,
+FRO339, [midi-remote-device-handshake.md](midi-remote-device-handshake.md)), plus two keys the profile schema
+itself doesn't know about (`ControllerProfile::fromVar` reads named keys only, so it tolerates and
+ignores them). `actions[]` is `[]` for almost every template (there is nothing to
 pre-wire) — it is non-empty only when a control's *factory* behaviour is an unambiguous action,
 like the BeatStep's Play/Stop ([Templates can ship actions too](midi-remote.md#templates-can-ship-actions-too)); its `control.profileId`/`control.controlId` are placeholders (this template's own id
 and a matching `controls[]` entry's id) that `applyControllerTemplate` re-derives against the real

@@ -656,6 +656,41 @@ TEST(MidiRemoteEngineApplyTest, BeatStepTemplatePlayAndStopFireTheRealTransportA
     EXPECT_NE(invoker.invoked.back(), AppCommands::kNoCommand);
 }
 
+// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): the Launch Control XL 3's Play/Record --
+// CC on channel 1, per the Programmer's Reference Guide p.9 -- fired the same way BeatStep's MMC
+// Play/Stop are above: the real applyControllerTemplate merge, then a real CC message through
+// handleMessage -> drain.
+TEST(MidiRemoteEngineApplyTest, LcxlTemplatePlayAndRecordFireTheRealTransportActionsOnLoad) {
+    ControllerProfile tmpl;
+    ASSERT_TRUE(loadControllerTemplate("template-novation-launch-control-xl-3", tmpl));
+
+    ControllerProfile profile;
+    profile.id = "profile";
+    profile.name = "profile";
+    profile.input.identifier = kSource;
+    profile.input.name = kSource;
+    const auto result = applyControllerTemplate(profile, tmpl);
+    ASSERT_EQ(result.actionsAdded, 2) << "LCXL3's Play and Record controls must both wire an action";
+
+    ApplyHarness h;
+    CountingActionInvoker invoker;
+    h.engine.setActionInvoker(&invoker);
+    h.engine.setActionCommandLookup(&AppCommands::getCommandForAction);
+    h.publish({profile}, /*projectAssignments=*/{});
+
+    h.send(juce::MidiMessage::controllerEvent(1, 116, 127));
+    h.engine.drain();
+    ASSERT_EQ(invoker.invoked.size(), 1u);
+    EXPECT_EQ(invoker.invoked.front(), AppCommands::getCommandForAction("transportPlay"));
+    EXPECT_NE(invoker.invoked.front(), AppCommands::kNoCommand);
+
+    h.send(juce::MidiMessage::controllerEvent(1, 118, 127));
+    h.engine.drain();
+    ASSERT_EQ(invoker.invoked.size(), 2u);
+    EXPECT_EQ(invoker.invoked.back(), AppCommands::getCommandForAction("transportRecord"));
+    EXPECT_NE(invoker.invoked.back(), AppCommands::kNoCommand);
+}
+
 // ============================================================================
 // Continuous targets (FRO236, docs/control/midi-remote.md#continuous-targets)
 // ============================================================================

@@ -74,7 +74,12 @@ struct TemplateApplyResult {
  *  profile control with that same spec via makeAssignmentForControl (MidiRemoteMapping.h) so the
  *  copy carries a real profile/control id rather than the template's own placeholder ones. A
  *  template action whose spec matches no control in `tmpl.controls` is malformed and is skipped
- *  (never asserted here -- ControllerTemplatesVendorTests.cpp guards template authoring). */
+ *  (never asserted here -- ControllerTemplatesVendorTests.cpp guards template authoring).
+ *
+ *  FRO339: also copies `tmpl.handshake` into `profile.handshake`, but only when `profile` doesn't
+ *  already have one -- unlike controls/actions this isn't keyed on a MessageSpec (there is only
+ *  ever one handshake per profile), so "existing wins" here means "a profile that already
+ *  declares a handshake keeps it" rather than a per-item dedup. */
 TemplateApplyResult applyControllerTemplate(ControllerProfile& profile, const ControllerProfile& tmpl);
 
 } // namespace synth::midi

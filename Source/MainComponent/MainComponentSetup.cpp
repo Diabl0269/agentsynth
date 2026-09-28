@@ -439,6 +439,10 @@ void MainComponent::wireMidiRemoteEngine() {
     // feedbackSink_ stays null there and drain()'s feedback pass is a no-op.
     if (!audioEngine.isHosted())
         remoteEngine.setFeedbackSink(&remoteFeedbackOutputs_);
+    // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): same standalone-only reasoning --
+    // Hosted has no hardware MIDI output to send a handshake through either.
+    if (!audioEngine.isHosted())
+        midiLearnController_.setHandshakeFeedbackSink(remoteFeedbackOutputs_);
 
     // Profiles are loaded once by MidiLearnController's own construction (a member declared right
     // after remoteEngine, so it is already alive here) -- this just republishes that same load.
