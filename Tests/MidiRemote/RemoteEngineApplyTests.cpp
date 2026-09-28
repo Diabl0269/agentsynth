@@ -327,6 +327,22 @@ TEST(MidiRemoteEngineApplyTest, PickupTakeoverWaitsForTheHardwareToCrossTheParam
     EXPECT_TRUE(engaged) << "the upward sweep must have crossed the starting value";
 }
 
+// Hardware found (Launch Control XL 3, 2026-09-29): a fader pushed to max left the parameter at 1.0,
+// and the next gesture starting there could never "cross" 1.0 moving down, so the fader stayed stuck
+// until it went back to the rail. A gesture that starts where the parameter already is engages at once.
+TEST(MidiRemoteEngineApplyTest, PickupGestureStartingAtTheParameterEngagesAtOnceEvenAtARail) {
+    ApplyHarness h;
+    h.publish({makeProfile({makeControl("p", MessageType::cc, 1, 10, Encoding::abs7)})},
+              {makeParamAssignment("a1", "p", MessageType::cc, 1, 10, Encoding::abs7, "cutoff", Takeover::pickup)});
+    h.cutoff()->setValueNotifyingHost(1.0f);
+
+    h.send(juce::MidiMessage::controllerEvent(1, 10, 127)); // first event, already at the parameter
+    h.engine.drain();
+    h.send(juce::MidiMessage::controllerEvent(1, 10, 100)); // moving away from the rail
+    h.engine.drain();
+    EXPECT_NEAR(h.cutoff()->getValue(), 100.0f / 127.0f, 1e-3f) << "a synced fader must follow off the rail";
+}
+
 TEST(MidiRemoteEngineApplyTest, ScaleTakeoverConvergesWithoutJumpingOrOvershooting) {
     ApplyHarness h;
     h.publish({makeProfile({makeControl("s", MessageType::cc, 1, 10, Encoding::abs7)})},
@@ -660,7 +676,7 @@ TEST(MidiRemoteEngineApplyTest, BeatStepTemplatePlayAndStopFireTheRealTransportA
 // CC on channel 1, per the Programmer's Reference Guide p.9 -- fired the same way BeatStep's MMC
 // Play/Stop are above: the real applyControllerTemplate merge, then a real CC message through
 // handleMessage -> drain.
-TEST(MidiRemoteEngineApplyTest, LcxlTemplatePlayAndRecordFireTheRealTransportActionsOnLoad) {
+TEST(MidiRemoteEngineApplyTest, LcxlTemplatePlayTogglesAndRecordFiresTheRealTransportActionsOnLoad) {
     ControllerProfile tmpl;
     ASSERT_TRUE(loadControllerTemplate("template-novation-launch-control-xl-3", tmpl));
 
@@ -681,7 +697,7 @@ TEST(MidiRemoteEngineApplyTest, LcxlTemplatePlayAndRecordFireTheRealTransportAct
     h.send(juce::MidiMessage::controllerEvent(1, 116, 127));
     h.engine.drain();
     ASSERT_EQ(invoker.invoked.size(), 1u);
-    EXPECT_EQ(invoker.invoked.front(), AppCommands::getCommandForAction("transportPlay"));
+    EXPECT_EQ(invoker.invoked.front(), AppCommands::getCommandForAction("transportTogglePlayStop"));
     EXPECT_NE(invoker.invoked.front(), AppCommands::kNoCommand);
 
     h.send(juce::MidiMessage::controllerEvent(1, 118, 127));

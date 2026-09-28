@@ -173,3 +173,5 @@ controller that silently never leaves standalone mode.
   second `juce::MidiOutput`-opening path.
 - [`midi-remote-ui.md`](midi-remote-ui.md#templates-and-importexport) — how a template's
   handshake reaches a real profile, and the Launch Control XL 3's specific template.
+
+The template binds **Play** to `transportTogglePlayStop` (press once to start, again to stop, like the app's own Play button) and **Record** to `transportRecord`.

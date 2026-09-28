@@ -833,7 +833,7 @@
       "specControlName": "Play",
       "target": {
         "action": {
-          "actionId": "transportPlay"
+          "actionId": "transportTogglePlayStop"
         }
       },
       "takeover": "default",

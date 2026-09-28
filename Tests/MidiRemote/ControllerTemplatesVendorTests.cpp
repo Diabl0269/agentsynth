@@ -189,7 +189,7 @@ TEST(ControllerTemplatesVendorTest, NovationLaunchControlXL3HasTheDocumentedSurf
                 return &a;
         return nullptr;
     };
-    const auto* playAction = findAction("transportPlay");
+    const auto* playAction = findAction("transportTogglePlayStop");
     ASSERT_NE(playAction, nullptr);
     EXPECT_EQ(playAction->spec, play->message);
     const auto* recordAction = findAction("transportRecord");

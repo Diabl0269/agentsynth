@@ -306,7 +306,7 @@ Applies only to **absolute continuous** encodings (a 7-bit CC knob/fader; not re
 encoders, not buttons). Per-assignment setting, three values borrowed verbatim from Ableton:
 
 - **Jump** — the parameter jumps to the hardware value immediately.
-- **Pick-up** — nothing changes until the hardware crosses the current value, then it tracks.
+- **Pick-up** — nothing changes until the hardware crosses the current value, then it tracks. A gesture whose first message is already within ~1.5 steps of the value engages at once, so a synced fader parked at a rail (max or min) follows as soon as it moves away (found on a Launch Control XL 3, 2026-09-29).
 - **Scale** — the parameter moves toward the hardware value proportionally, converging without a
   jump (Ableton "Value Scaling").
 
