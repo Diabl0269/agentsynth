@@ -49,6 +49,29 @@ EOF
 
 : >"$WORK/stats-empty.txt"
 
+# FRO341: ccache 4.7+'s "Local storage" section also reports how full the cache is against its
+# configured max_size. Saturated -- a cap this small hides its own growth as extra misses.
+cat >"$WORK/stats-saturated.txt" <<'EOF'
+Cacheable calls:   263 / 268 (98.13%)
+  Hits:            210 / 263 (79.84%)
+  Misses:           53 / 263 (20.16%)
+Local storage:
+  Hits:              210 / 263 (79.84%)
+  Misses:             53 / 263 (20.16%)
+  Cache size (GB):  1.90 / 2.00 (95.05%)
+EOF
+
+# Roomy -- same hit rate, plenty of headroom against max_size, must not warn.
+cat >"$WORK/stats-roomy.txt" <<'EOF'
+Cacheable calls:   263 / 268 (98.13%)
+  Hits:            210 / 263 (79.84%)
+  Misses:           53 / 263 (20.16%)
+Local storage:
+  Hits:              210 / 263 (79.84%)
+  Misses:             53 / 263 (20.16%)
+  Cache size (GB):  0.80 / 2.00 (40.00%)
+EOF
+
 # run <name> <expected_exit> <expected_substring|-> [env assignments...]
 #
 # Every input the script reads is explicitly unset before the test's own assignments are applied.
@@ -62,8 +85,11 @@ run() {
     shift 3
     local out status
     out="$(env -u CACHE_MATCHED_KEY -u DEPS_MATCHED_KEY -u CACHE_WARM_EXPECTED \
-               -u CACHE_MIN_HIT_RATE -u CACHE_CHECK_ENFORCE -u CCACHE_STATS_FILE \
+               -u DEPS_KEY_CHANGED -u GITHUB_BASE_REF \
+               -u CACHE_MIN_HIT_RATE -u CACHE_SATURATION_WARN_PCT -u CACHE_CHECK_ENFORCE \
+               -u CCACHE_STATS_FILE \
                -u BUILD_NINJA BUILD_NINJA=/nonexistent/build.ninja \
+               DEPS_KEY_CHANGED=false \
                "$@" GITHUB_STEP_SUMMARY="$WORK/summary.md" bash "$CHECK" 2>&1)"
     status=$?
 
@@ -91,14 +117,14 @@ defang() { printf '%s' "$1" | sed 's/^::/__/'; }
 # --- healthy path -------------------------------------------------------------------------
 run "healthy: both caches restored, high hit rate" 0 "ccache hit rate   : 79%" \
     CACHE_MATCHED_KEY=Linux-ccache-main-abc \
-    DEPS_MATCHED_KEY=Linux-deps3-def \
+    DEPS_MATCHED_KEY=Linux-deps4-def \
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-modern.txt"
 
 # --- the regression this whole change exists to catch -------------------------------------
 run "broken: ccache did not restore on a PR run" 1 "::error::ccache cache did not restore" \
     CACHE_MATCHED_KEY= \
-    DEPS_MATCHED_KEY=Linux-deps3-def \
+    DEPS_MATCHED_KEY=Linux-deps4-def \
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-cold.txt"
 
@@ -120,19 +146,47 @@ run "broken: neither cache restored — the Aug 2026 state" 1 "::error::" \
 # scope with no read access to the base repository's entries, so a miss is guaranteed and is not
 # something the contributor can fix).
 run "seeding run: cold cache is not a failure" 0 \
-    "::notice::Cache miss on a run not expected to have a warm cache" \
+    "::notice::ccache cache miss on a run not expected to have a warm cache" \
     CACHE_MATCHED_KEY= \
     DEPS_MATCHED_KEY= \
     CACHE_WARM_EXPECTED=false \
     CCACHE_STATS_FILE="$WORK/stats-cold.txt"
 
 run "fork PR: cold cache is not a failure even with enforcement on" 0 \
-    "::notice::Cache miss on a run not expected to have a warm cache" \
+    "::notice::ccache cache miss on a run not expected to have a warm cache" \
     CACHE_MATCHED_KEY= \
     DEPS_MATCHED_KEY= \
     CACHE_WARM_EXPECTED=false \
     CACHE_CHECK_ENFORCE=true \
     CCACHE_STATS_FILE="$WORK/stats-cold.txt"
+
+# --- FRO341: a deps cache key generation bump (e.g. deps3 -> deps4) is expected-cold ------
+# for build/_deps alone, on a same-repo PR run where ccache is otherwise held to the normal
+# standard. DEPS_KEY_CHANGED is normally computed from a git diff against $GITHUB_BASE_REF (see
+# the script's own header comment); the tests always set it explicitly for hermeticity.
+run "deps key bump: deps miss + ccache hit -> not a failure" 0 \
+    "::notice::build/_deps cache miss, but this run changed the deps cache key prefix" \
+    CACHE_MATCHED_KEY=Linux-ccache-main-abc \
+    DEPS_MATCHED_KEY= \
+    CACHE_WARM_EXPECTED=true \
+    DEPS_KEY_CHANGED=true \
+    CCACHE_STATS_FILE="$WORK/stats-modern.txt"
+
+run "deps key bump: deps miss is not a failure, but a genuinely cold ccache still fails" 1 \
+    "::error::ccache cache did not restore" \
+    CACHE_MATCHED_KEY= \
+    DEPS_MATCHED_KEY= \
+    CACHE_WARM_EXPECTED=true \
+    DEPS_KEY_CHANGED=true \
+    CCACHE_STATS_FILE="$WORK/stats-cold.txt"
+
+run "deps miss without a key bump still fails as before" 1 \
+    "::error::build/_deps cache did not restore" \
+    CACHE_MATCHED_KEY=Linux-ccache-main-abc \
+    DEPS_MATCHED_KEY= \
+    CACHE_WARM_EXPECTED=true \
+    DEPS_KEY_CHANGED=false \
+    CCACHE_STATS_FILE="$WORK/stats-modern.txt"
 
 # --- enforcement toggle -------------------------------------------------------------------
 run "enforce=false: reports the failure but exits 0" 0 "::notice::CACHE_CHECK_ENFORCE is not" \
@@ -145,28 +199,62 @@ run "enforce=false: reports the failure but exits 0" 0 "::notice::CACHE_CHECK_EN
 # --- stat parsing -------------------------------------------------------------------------
 run "parses legacy ccache <=4.6 stat format" 0 "ccache hit rate   : 79%" \
     CACHE_MATCHED_KEY=macOS-ccache-main-abc \
-    DEPS_MATCHED_KEY=macOS-deps3-def \
+    DEPS_MATCHED_KEY=macOS-deps4-def \
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-legacy.txt"
 
 run "low hit rate warns but does not fail" 0 "::warning::ccache hit rate 15%" \
     CACHE_MATCHED_KEY=Linux-ccache-main-abc \
-    DEPS_MATCHED_KEY=Linux-deps3-def \
+    DEPS_MATCHED_KEY=Linux-deps4-def \
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-cold.txt"
 
 run "hit-rate floor is configurable" 0 "-" \
     CACHE_MATCHED_KEY=Linux-ccache-main-abc \
-    DEPS_MATCHED_KEY=Linux-deps3-def \
+    DEPS_MATCHED_KEY=Linux-deps4-def \
     CACHE_WARM_EXPECTED=true \
     CACHE_MIN_HIT_RATE=10 \
     CCACHE_STATS_FILE="$WORK/stats-cold.txt"
 
 run "no ccache statistics at all warns" 0 "::warning::No ccache statistics available" \
     CACHE_MATCHED_KEY=Linux-ccache-main-abc \
-    DEPS_MATCHED_KEY=Linux-deps3-def \
+    DEPS_MATCHED_KEY=Linux-deps4-def \
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-empty.txt"
+
+# --- saturation warning (FRO341) -----------------------------------------------------------
+# A cap that's too small hides its own growth as extra MISSES, never extra bytes (ccache evicts
+# to stay under max_size), so nothing about a job's own hit rate distinguishes "cap too small"
+# from any other cause of a low rate. This is the one signal that does.
+run "saturated cache warns" 0 "::warning::ccache is 95.05% full against its configured max_size" \
+    CACHE_MATCHED_KEY=Linux-ccache-main-abc \
+    DEPS_MATCHED_KEY=Linux-deps4-def \
+    CACHE_WARM_EXPECTED=true \
+    CCACHE_STATS_FILE="$WORK/stats-saturated.txt"
+
+# Negative assertion: same hit rate, plenty of headroom -- must not warn about saturation.
+roomy_out="$(env -u CACHE_MATCHED_KEY -u DEPS_MATCHED_KEY -u CACHE_WARM_EXPECTED \
+    -u DEPS_KEY_CHANGED -u GITHUB_BASE_REF \
+    -u CACHE_MIN_HIT_RATE -u CACHE_SATURATION_WARN_PCT -u CACHE_CHECK_ENFORCE -u CCACHE_STATS_FILE \
+    -u BUILD_NINJA BUILD_NINJA=/nonexistent/build.ninja \
+    CACHE_MATCHED_KEY=Linux-ccache-main-abc DEPS_MATCHED_KEY=Linux-deps4-def \
+    CACHE_WARM_EXPECTED=true DEPS_KEY_CHANGED=false \
+    CCACHE_STATS_FILE="$WORK/stats-roomy.txt" \
+    GITHUB_STEP_SUMMARY="$WORK/summary.md" bash "$CHECK" 2>&1)"
+if printf '%s' "$roomy_out" | grep -qF "full against its configured max_size"; then
+    printf 'FAIL  roomy cache does not warn about saturation\n%s\n' "$(defang "$roomy_out")"
+    fail=$((fail + 1))
+else
+    printf 'ok    roomy cache does not warn about saturation\n'
+    pass=$((pass + 1))
+fi
+
+run "saturation warning floor is configurable" 0 "-" \
+    CACHE_MATCHED_KEY=Linux-ccache-main-abc \
+    DEPS_MATCHED_KEY=Linux-deps4-def \
+    CACHE_WARM_EXPECTED=true \
+    CACHE_SATURATION_WARN_PCT=99 \
+    CCACHE_STATS_FILE="$WORK/stats-saturated.txt"
 
 # --- fail-safe cross-validation ------------------------------------------------------------
 # Regression cases for the mis-wired-inputs bug: run 31301691346 restored every cache and hit
@@ -193,8 +281,10 @@ run "fail-safe: empty matched keys + 100% hit rate does not fail" 0 \
 # Negative assertion: the contradiction must not be relabelled as the (benign) seeding-run case,
 # which would hide a mis-wired check behind a reassuring notice.
 contradiction_out="$(env -u CACHE_MATCHED_KEY -u DEPS_MATCHED_KEY -u CACHE_WARM_EXPECTED \
-    -u CACHE_MIN_HIT_RATE -u CACHE_CHECK_ENFORCE -u CCACHE_STATS_FILE \
-    CACHE_MATCHED_KEY= DEPS_MATCHED_KEY= CACHE_WARM_EXPECTED=true CACHE_CHECK_ENFORCE=true \
+    -u DEPS_KEY_CHANGED -u GITHUB_BASE_REF \
+    -u CACHE_MIN_HIT_RATE -u CACHE_SATURATION_WARN_PCT -u CACHE_CHECK_ENFORCE -u CCACHE_STATS_FILE \
+    CACHE_MATCHED_KEY= DEPS_MATCHED_KEY= CACHE_WARM_EXPECTED=true DEPS_KEY_CHANGED=false \
+    CACHE_CHECK_ENFORCE=true \
     CCACHE_STATS_FILE="$WORK/stats-perfect.txt" \
     GITHUB_STEP_SUMMARY="$WORK/summary.md" bash "$CHECK" 2>&1)"
 # Must match the live notice text in ci-cache-check.sh — if this string drifts out of sync the
@@ -286,7 +376,7 @@ EOF
 run "launcher audit: real CMake layout, all compiles wired" 0 \
     "OBJCXX compiles       : 1/1 via ccache" \
     CACHE_MATCHED_KEY=macOS-ccache-main-abc \
-    DEPS_MATCHED_KEY=macOS-deps3-def \
+    DEPS_MATCHED_KEY=macOS-deps4-def \
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-modern.txt" \
     BUILD_NINJA="$WORK/modern/build.ninja"
@@ -294,7 +384,7 @@ run "launcher audit: real CMake layout, all compiles wired" 0 \
 run "launcher audit: real CMake layout, OBJCXX unwired, fails" 1 \
     "::error::2 of 2 OBJCXX compiles do not go through ccache" \
     CACHE_MATCHED_KEY=macOS-ccache-main-abc \
-    DEPS_MATCHED_KEY=macOS-deps3-def \
+    DEPS_MATCHED_KEY=macOS-deps4-def \
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-modern.txt" \
     BUILD_NINJA="$WORK/modern-bad/build.ninja"
@@ -303,7 +393,7 @@ run "launcher audit: real CMake layout, OBJCXX unwired, fails" 1 \
 run "launcher audit: reports the wired language as wired in the same build" 1 \
     "CXX    compiles       : 1/1 via ccache" \
     CACHE_MATCHED_KEY=macOS-ccache-main-abc \
-    DEPS_MATCHED_KEY=macOS-deps3-def \
+    DEPS_MATCHED_KEY=macOS-deps4-def \
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-modern.txt" \
     BUILD_NINJA="$WORK/modern-bad/build.ninja"
@@ -311,7 +401,7 @@ run "launcher audit: reports the wired language as wired in the same build" 1 \
 run "launcher audit: a launcher inlined in the rule (older CMake) counts as wired" 0 \
     "OBJCXX compiles       : 1/1 via ccache" \
     CACHE_MATCHED_KEY=macOS-ccache-main-abc \
-    DEPS_MATCHED_KEY=macOS-deps3-def \
+    DEPS_MATCHED_KEY=macOS-deps4-def \
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-modern.txt" \
     BUILD_NINJA="$WORK/ninja-legacy-inline.ninja"
@@ -320,7 +410,7 @@ run "launcher audit: a launcher inlined in the rule (older CMake) counts as wire
 # counted or flagged. The modern fixture contains one of each, and its run above exits 0.
 run "launcher audit: link and RC statements are out of scope" 0 "-" \
     CACHE_MATCHED_KEY=macOS-ccache-main-abc \
-    DEPS_MATCHED_KEY=macOS-deps3-def \
+    DEPS_MATCHED_KEY=macOS-deps4-def \
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-modern.txt" \
     BUILD_NINJA="$WORK/modern/build.ninja"
@@ -328,7 +418,7 @@ run "launcher audit: link and RC statements are out of scope" 0 "-" \
 run "launcher audit: absent build.ninja is skipped, not a failure" 0 \
     "launcher audit    : skipped" \
     CACHE_MATCHED_KEY=macOS-ccache-main-abc \
-    DEPS_MATCHED_KEY=macOS-deps3-def \
+    DEPS_MATCHED_KEY=macOS-deps4-def \
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-modern.txt"
 
@@ -343,7 +433,7 @@ EOF
 run "launcher audit: unrecognised rule names warn instead of passing quietly" 0 \
     "::warning::Launcher audit recognised no C/CXX/OBJC/OBJCXX compiles" \
     CACHE_MATCHED_KEY=macOS-ccache-main-abc \
-    DEPS_MATCHED_KEY=macOS-deps3-def \
+    DEPS_MATCHED_KEY=macOS-deps4-def \
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-modern.txt" \
     BUILD_NINJA="$WORK/ninja-unparseable.ninja"

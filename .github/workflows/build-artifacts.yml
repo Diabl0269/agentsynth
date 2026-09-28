@@ -197,11 +197,18 @@ jobs:
         # module adding a source line must not invalidate a ~360 MB entry. Under the old
         # CMakeLists-wide key this workflow minted 3 fresh entries (~1.1 GB) on every merge that
         # touched CMakeLists.txt, which together with ci.yml's copies pushed the repo past
-        # GitHub's 10 GB cache budget and LRU-evicted the ccache entries. The "3" is a one-time
-        # bump to orphan the old, wrongly-keyed entries.
-        key: ${{ runner.os }}-release-deps-ninja3-${{ hashFiles('cmake/DependencyVersions.cmake') }}
+        # GitHub's 10 GB cache budget and LRU-evicted the ccache entries. The "3" was a one-time
+        # bump to orphan the old, wrongly-keyed entries; "4" (FRO341) is a second one, needed
+        # because JUCE's FetchContent_Declare gained GIT_SHALLOW TRUE (CMakeLists.txt, not this
+        # pins file) — the hash this key is built from is unchanged, so without the prefix bump
+        # every job would keep restoring the old, non-shallow juce-src forever and the shallow
+        # clone would never actually take effect. This job's own Check Cache Health step already
+        # pins CACHE_WARM_EXPECTED to 'false' (report-only, see below), so the bump can't fail it;
+        # ci.yml's equivalent PR jobs use scripts/ci-cache-check.sh's DEPS_KEY_CHANGED input (see
+        # its own header comment) for the same reason.
+        key: ${{ runner.os }}-release-deps-ninja4-${{ hashFiles('cmake/DependencyVersions.cmake') }}
         restore-keys: |
-          ${{ runner.os }}-release-deps-ninja3-
+          ${{ runner.os }}-release-deps-ninja4-
 
     # ccache. This workflow had none until Aug 2026, so every release build recompiled the whole
     # tree from cold even though ci.yml had just built the identical commit. The key is scoped
@@ -333,12 +340,18 @@ jobs:
     # This family is also keyed per-commit (<os>-release-ccache-<sha>) and immutable, so it
     # accumulates the same way ci.yml's ccache-main family does — see that workflow's
     # build-and-test "Prune superseded main cache generations" step for the full rationale and
-    # concurrency-safety note (only deletes entries older than this run's own save, keeps the 2
-    # most recent generations regardless, tolerates a missing/partial listing). The release-deps
-    # family is NOT pruned here: it's keyed on the DependencyVersions.cmake hash alone, like
-    # ci.yml's deps3, and deliberately kept in a separate key namespace from it (see this
-    # workflow's own "release-deps-ninja3" key comment above) rather than merged, so there is
-    # nothing shared to prune from this job's own history.
+    # concurrency-safety note (only deletes entries older than this run's own save, keeps the
+    # single most recent generation regardless — FRO341 dropped this from 2 generations to 1,
+    # since 2 generations' worth of every cap in both workflows was, by construction, enough on
+    # its own to exceed GitHub's 10 GB repo-wide cache limit — tolerates a missing/partial
+    # listing). release-deps-ninja4 is kept in its own key namespace, separate from ci.yml's
+    # deps4 (see this job's "release-deps-ninja4" key comment above) rather than merged, since the
+    # two workflows populate build/_deps differently (ci.yml also fetches GoogleTest via
+    # ENABLE_TESTS=ON; this workflow never does) — but it is NOT exempt from pruning: FRO341 found
+    # this family had no prune call at all, so a superseded entry from every past
+    # DependencyVersions.cmake pin bump (googletest/Sparkle/WinSparkle version bumps, and now this
+    # PR's own deps3->deps4 rename) has been accumulating here, unpruned, since this workflow's
+    # ccache cache was added.
     - name: Prune superseded main cache generations
       if: github.ref == 'refs/heads/main' && steps.ccache-save.outcome == 'success'
       shell: bash
@@ -360,7 +373,7 @@ jobs:
             return 0
           fi
           printf '%s' "$list" | jq -r --arg cutoff "$keep_created" \
-            'sort_by(.createdAt) | reverse | .[2:] | .[] | select(.createdAt < $cutoff) | "\(.id)\t\(.key)"' |
+            'sort_by(.createdAt) | reverse | .[1:] | .[] | select(.createdAt < $cutoff) | "\(.id)\t\(.key)"' |
           while IFS=$'\t' read -r id key; do
             [ -z "$id" ] && continue
             echo "prune: deleting $prefix cache id=$id key=$key"
@@ -368,6 +381,23 @@ jobs:
           done
         }
         prune "${{ runner.os }}-release-ccache-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-release-deps-ninja4-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+
+        # Runtime usage alarm (FRO341): see ci.yml's identical comment in its own prune step.
+        usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \
+                          --jq .active_caches_size_in_bytes 2>/dev/null || true)"
+        case "$usage_bytes" in
+          ''|*[!0-9]*)
+            echo "prune: could not read repo-wide Actions cache usage, skipping the usage alarm"
+            ;;
+          *)
+            gib="$(awk -v b="$usage_bytes" 'BEGIN { printf "%.2f", b / 1073741824 }')"
+            echo "prune: repo-wide Actions cache usage: ${usage_bytes} bytes (~${gib} GiB)"
+            if [ "$usage_bytes" -ge 9126805504 ]; then
+              echo "::warning::Actions cache usage is ~${gib} GiB (${usage_bytes} bytes), at or above the 8.5 GB alarm threshold -- see docs/development/ci-caching.md's FRO341 section for the static budget (scripts/ci-cache-budget.sh) and what to check (an old generation lingering, or a job outside that sum)."
+            fi
+            ;;
+        esac
 
     # Package Linux
     - name: Package Linux Artifact

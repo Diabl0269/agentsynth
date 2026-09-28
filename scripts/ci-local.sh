@@ -20,6 +20,9 @@
 #      un-decoded UTF-8 escapes" step, run directly (not just its unit test).
 #   3. scripts/check-file-sizes.sh against the real tree -- the Lint job's "Check file sizes"
 #      step: hard 1000-line cap + strict ratchet baseline, run directly (not just its unit test).
+#   3b. scripts/ci-cache-budget.sh against the real workflows -- the Lint job's "Check CI cache
+#      budget" step (FRO341): sums one cache generation's worth of every ccache max_size plus a
+#      deps allowance and fails over an 8 GiB budget, run directly (not just its unit test).
 #   4. scripts/check-function-sizes.sh against the real tree -- the Lint job's "Check function
 #      sizes" step: hard 200-line-per-function cap + strict ratchet baseline, run directly (not
 #      just its unit test).
@@ -162,6 +165,10 @@ bash scripts/utf8-literal-check.sh || fail "un-decoded UTF-8 escape check failed
 # --- 3. File-size guard, against the real tree -------------------------------------------------
 step "scripts/check-file-sizes.sh (real tree, 1000-line cap + ratchet baseline)"
 bash scripts/check-file-sizes.sh || fail "file-size guard failed (see above)."
+
+# --- 3b. CI cache budget guard, against the real workflows (FRO341) ---------------------------
+step "scripts/ci-cache-budget.sh (real ci.yml/build-artifacts.yml, one-generation cache budget)"
+bash scripts/ci-cache-budget.sh || fail "CI cache budget guard failed (see above)."
 
 # --- 4. Function-size guard, against the real tree -----------------------------------------------
 step "scripts/check-function-sizes.sh (real tree, 200-line-per-function cap + ratchet baseline)"

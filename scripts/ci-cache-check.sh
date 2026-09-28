@@ -25,9 +25,25 @@
 #   DEPS_MATCHED_KEY     restore result for the build/_deps entry (empty => nothing restored)
 #   CACHE_WARM_EXPECTED  "true" when a warm cache should already exist (PR runs). On the
 #                        push-to-main run that *creates* the warm cache, set "false".
+#   DEPS_KEY_CHANGED     "true" when THIS run changed the deps cache key prefix itself (e.g.
+#                        deps3 -> deps4, FRO341's JUCE-shallow bump) — a brand-new prefix has
+#                        nothing saved under it anywhere yet, so a miss is expected for the
+#                        build/_deps cache specifically, even on a same-repo PR run where
+#                        CACHE_WARM_EXPECTED is otherwise "true". Does NOT relax the ccache
+#                        check, since ccache's key prefix is unaffected by a deps bump. If unset,
+#                        computed automatically: when $GITHUB_BASE_REF is set (a same-repo PR),
+#                        fetch that ref and diff .github/workflows/ci.yml against it for an added
+#                        or removed "-deps<N>-" key-prefix line; a fetch failure leaves it
+#                        "false" (fail toward the existing error, never toward silently swallowing
+#                        a real cold-cache regression). Outside CI (no GITHUB_BASE_REF) this is
+#                        always "false", so ci-local.sh's behaviour is unaffected.
 #   CCACHE_STATS_FILE    optional: read `ccache --show-stats` output from this file instead of
 #                        invoking ccache (used by the unit tests)
 #   CACHE_MIN_HIT_RATE   integer percent floor for the ccache hit rate (default 25)
+#   CACHE_SATURATION_WARN_PCT  warn when ccache's own reported cache size is at or above this
+#                        percent of its configured max_size (default 90) — visible proof a cap is
+#                        too small, since growth against a full cap shows up as misses, not extra
+#                        bytes, and nothing else surfaces that.
 #   CACHE_CHECK_ENFORCE  "true" (default) => exit 1 on a hard failure; "false" => annotate only
 #   BUILD_NINJA          path to the generated build.ninja for the launcher audit
 #                        (default build/build.ninja; skipped when the file is absent)
@@ -42,13 +58,34 @@ set -euo pipefail
 CACHE_MATCHED_KEY="${CACHE_MATCHED_KEY:-}"
 DEPS_MATCHED_KEY="${DEPS_MATCHED_KEY:-}"
 CACHE_WARM_EXPECTED="${CACHE_WARM_EXPECTED:-true}"
+DEPS_KEY_CHANGED="${DEPS_KEY_CHANGED:-}"
 CACHE_MIN_HIT_RATE="${CACHE_MIN_HIT_RATE:-25}"
+CACHE_SATURATION_WARN_PCT="${CACHE_SATURATION_WARN_PCT:-90}"
 CACHE_CHECK_ENFORCE="${CACHE_CHECK_ENFORCE:-true}"
 CCACHE_STATS_FILE="${CCACHE_STATS_FILE:-}"
 BUILD_NINJA="${BUILD_NINJA:-build/build.ninja}"
 
 failures=0
 warnings=0
+
+# --- deps cache key generation: was it bumped in THIS run? ---------------------------------
+# Only computed when the caller didn't already say (the unit tests always say). $GITHUB_BASE_REF
+# is set by Actions on a same-repo pull_request run and nowhere else, so this is a no-op for
+# push/workflow_dispatch runs (already exempt via CACHE_WARM_EXPECTED) and for ci-local.sh.
+if [ -z "$DEPS_KEY_CHANGED" ]; then
+    DEPS_KEY_CHANGED=false
+    if [ -n "${GITHUB_BASE_REF:-}" ] && command -v git >/dev/null 2>&1 &&
+        git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        if git fetch -q --depth=1 origin "$GITHUB_BASE_REF" 2>/dev/null &&
+            git diff -U0 FETCH_HEAD HEAD -- .github/workflows/ci.yml 2>/dev/null |
+                grep -qE '^[-+][^-+].*-deps[0-9]+-'; then
+            DEPS_KEY_CHANGED=true
+        fi
+        # A fetch/diff failure leaves DEPS_KEY_CHANGED=false — a real cold-cache regression must
+        # still fail loudly, never get silently reclassified as "expected" because this best-effort
+        # detector itself couldn't run.
+    fi
+fi
 
 # GitHub Actions workflow commands degrade to plain text when run outside CI.
 annotate() { # annotate <error|warning|notice> <message>
@@ -88,10 +125,31 @@ parse_stats() {
         }'
 }
 
+# ccache 4.7+ also reports how full the cache is against its configured max_size, e.g.
+#   Local storage:
+#     Cache size (GB): 1.9 / 2.0 (95.05%)
+# max_size is set per job (see ci.yml / build-artifacts.yml's "Configure ccache" steps) from what
+# a warm build measures, but nothing else ever re-checks that the measurement is still right — a
+# cap that has become too small doesn't show up as extra bytes (ccache evicts to stay under it),
+# it shows up as extra MISSES, indistinguishable from any other cause of a lower hit rate. This is
+# the one signal that says "the cap itself", not "something else", so it is worth its own warning.
+parse_cache_size_pct() {
+    printf '%s\n' "$stats" | awk '
+        /^[[:space:]]*Cache size/ {
+            if (match($0, /\([0-9]+\.?[0-9]*%\)/)) {
+                s = substr($0, RSTART + 1, RLENGTH - 2)
+                gsub(/%/, "", s)
+                print s
+                exit
+            }
+        }'
+}
+
 read -r hits misses <<EOF
 $(parse_stats)
 EOF
 total=$((hits + misses))
+cache_size_pct="$(parse_cache_size_pct)"
 
 hit_rate=0
 if [ "$total" -gt 0 ]; then
@@ -111,7 +169,11 @@ summary "| --- | --- |"
 summary "| \`build/_deps\` cache | ${deps_state} |"
 summary "| \`ccache\` cache | ${ccache_state} |"
 summary "| ccache hit rate | ${hit_rate}% (${hits} hits / ${total} compiles) |"
+if [ -n "$cache_size_pct" ]; then
+    summary "| ccache size vs max_size | ${cache_size_pct}% full |"
+fi
 summary "| warm cache expected | ${CACHE_WARM_EXPECTED} |"
+summary "| deps cache key changed this run | ${DEPS_KEY_CHANGED} |"
 
 printf 'build/_deps cache : %s\n' "$deps_state"
 printf 'ccache cache      : %s\n' "$ccache_state"
@@ -144,7 +206,15 @@ action does not expose it). Not failing the build on this."
     warnings=$((warnings + 1))
 fi
 
-if [ "$CACHE_WARM_EXPECTED" = "true" ] && [ "$inputs_suspect" -eq 0 ]; then
+# deps and ccache are checked independently (rather than as one combined verdict) so that
+# DEPS_KEY_CHANGED can relax the deps half alone: bumping the deps cache key's prefix (e.g.
+# deps3 -> deps4, FRO341's JUCE-shallow change) guarantees a miss for every job in the PR that
+# does it, since nothing has ever been saved under the new prefix — that is not a regression in
+# the ccache plumbing, which is unaffected and must still be held to the normal standard.
+deps_warm_expected="$CACHE_WARM_EXPECTED"
+[ "$DEPS_KEY_CHANGED" = "true" ] && deps_warm_expected=false
+
+if [ "$deps_warm_expected" = "true" ] && [ "$inputs_suspect" -eq 0 ]; then
     if [ -z "$DEPS_MATCHED_KEY" ]; then
         annotate error "build/_deps cache did not restore. Every dependency is being re-fetched \
 and rebuilt from scratch. PR runs restore only now — only a push to main (or a manual \
@@ -153,6 +223,23 @@ has run and saved an entry for this runner OS, and that the repo is under GitHub
 limit (gh api repos/:owner/:repo/actions/caches)."
         failures=$((failures + 1))
     fi
+elif [ "$deps_warm_expected" != "true" ] && [ -z "$DEPS_MATCHED_KEY" ]; then
+    if [ "$DEPS_KEY_CHANGED" = "true" ]; then
+        annotate notice "build/_deps cache miss, but this run changed the deps cache key prefix \
+in .github/workflows/ci.yml (e.g. deps3 -> deps4) — nothing has ever been saved under the new \
+prefix yet, so a miss here is expected for this PR, not a regression. Every PR after this one \
+merges will restore normally. Not a defect."
+    else
+        # Covers both runs that legitimately start cold: the push-to-main run that seeds the
+        # cache, and a pull request from a fork, which GitHub gives an isolated cache scope with
+        # no access to the base repository's entries.
+        annotate notice "build/_deps cache miss on a run not expected to have a warm cache — \
+either the push-to-main run that seeds the cache pull requests restore from, or a fork pull \
+request (forks cannot read base-repository caches). Not a defect."
+    fi
+fi
+
+if [ "$CACHE_WARM_EXPECTED" = "true" ] && [ "$inputs_suspect" -eq 0 ]; then
     if [ -z "$CACHE_MATCHED_KEY" ]; then
         annotate error "ccache cache did not restore — this build compiled every translation unit \
 from cold. Verify CCACHE_DIR matches the actions/cache path for this OS. PR runs restore only \
@@ -160,12 +247,11 @@ now — only a push to main (or a manual workflow_dispatch run of this workflow 
 re-seeds this cache."
         failures=$((failures + 1))
     fi
-elif [ "$CACHE_WARM_EXPECTED" != "true" ] &&
-    { [ -z "$DEPS_MATCHED_KEY" ] || [ -z "$CACHE_MATCHED_KEY" ]; }; then
+elif [ "$CACHE_WARM_EXPECTED" != "true" ] && [ -z "$CACHE_MATCHED_KEY" ]; then
     # Covers both runs that legitimately start cold: the push-to-main run that seeds the cache,
     # and a pull request from a fork, which GitHub gives an isolated cache scope with no access to
     # the base repository's entries.
-    annotate notice "Cache miss on a run not expected to have a warm cache — either the \
+    annotate notice "ccache cache miss on a run not expected to have a warm cache — either the \
 push-to-main run that seeds the cache pull requests restore from, or a fork pull request (forks \
 cannot read base-repository caches). Not a defect."
 fi
@@ -180,6 +266,20 @@ fi
 if [ "$total" -eq 0 ]; then
     annotate warning "No ccache statistics available — ccache is not on PATH, or the compiler \
 launcher is not wired up. The build is not being cached at all."
+    warnings=$((warnings + 1))
+fi
+
+# Saturation: never fails the build (a too-small cap is a slower build, not a broken one), but
+# must be visible somewhere, because it looks identical to any other cause of a low hit rate from
+# inside a single job's own logs.
+if [ -n "$cache_size_pct" ] &&
+    awk -v pct="$cache_size_pct" -v floor="$CACHE_SATURATION_WARN_PCT" \
+        'BEGIN { exit !(pct >= floor) }'; then
+    annotate warning "ccache is ${cache_size_pct}% full against its configured max_size. Growth \
+against a saturated cap shows up as extra MISSES, not extra bytes, so a cap that has become too \
+small never shows up any other way. Consider raising this job's max_size (and re-checking \
+scripts/ci-cache-budget.sh's total afterward, since every configured byte counts toward the \
+repo's cache budget)."
     warnings=$((warnings + 1))
 fi
 

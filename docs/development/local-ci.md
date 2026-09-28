@@ -23,6 +23,10 @@ Fast checks first, so a lint failure does not wait on a full build.
    UTF-8 escapes" step, run directly rather than only via its unit test.
 3. `bash scripts/check-file-sizes.sh` against the real tree — see
    [`file-size-guard.md`](file-size-guard.md).
+3b. `bash scripts/ci-cache-budget.sh` against the real `ci.yml`/`build-artifacts.yml` — the Lint
+   job's "Check CI cache budget" step (FRO341): sums one cache generation's worth of configured
+   `ccache` `max_size` values plus a `build/_deps` allowance and fails over an 8 GiB budget — see
+   [`ci-caching.md`](ci-caching.md).
 4. `bash scripts/check-function-sizes.sh` against the real tree — see
    [`function-size-guard.md`](function-size-guard.md).
 5. `bash scripts/check-header-comments.sh` against the real tree — see
