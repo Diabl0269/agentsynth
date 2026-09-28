@@ -33,6 +33,7 @@ set(APPUI_SOURCES
     Source/MidiRemote/MidiLearnControllerPick.cpp
     Source/MidiRemote/MidiLearnControllerHistory.cpp
     Source/MidiRemote/MidiLearnControllerFocusBank.cpp
+    Source/MidiRemote/MidiLearnControllerHandshake.cpp
     Source/MidiRemote/ProfileEditHistory.h
     Source/MidiRemote/ProfileEditHistory.cpp
     Source/MidiRemote/MidiLearnControllerRetarget.cpp
@@ -243,6 +244,7 @@ set(APPUI_SOURCES
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelAssign.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelOrphans.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelUndo.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelHandshake.cpp
     Source/UI/Macros/MacroCardComponent.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp

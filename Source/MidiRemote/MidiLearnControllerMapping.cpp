@@ -195,7 +195,7 @@ bool MidiLearnController::forgetAssignment(const juce::String& assignmentId) {
         if (actions.size() == sizeBefore)
             continue;
         profileStore_.save(profile);
-        remoteEngine_.setProfiles(profiles_);
+        setProfilesAndReconcileHandshakes();
         recordProfileEdit("Forget action", profile.id, std::move(before));
         statusBar_.showMessage("MIDI mapping removed");
         if (onChanged)

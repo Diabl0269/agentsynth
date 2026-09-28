@@ -265,6 +265,8 @@ add_library(Core STATIC
     Source/MidiRemote/EncoderAutoDetect.cpp
     Source/MidiRemote/ControllerTemplates.h
     Source/MidiRemote/ControllerTemplates.cpp
+    Source/MidiRemote/ControllerHandshake.h
+    Source/MidiRemote/ControllerHandshake.cpp
     Source/RecentProjects.cpp
     Source/RecentProjects.h
     Source/SnippetManager.cpp

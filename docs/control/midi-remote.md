@@ -306,7 +306,7 @@ Applies only to **absolute continuous** encodings (a 7-bit CC knob/fader; not re
 encoders, not buttons). Per-assignment setting, three values borrowed verbatim from Ableton:
 
 - **Jump** — the parameter jumps to the hardware value immediately.
-- **Pick-up** — nothing changes until the hardware crosses the current value, then it tracks.
+- **Pick-up** — nothing changes until the hardware crosses the current value, then it tracks. A gesture whose first message is already within ~1.5 steps of the value engages at once, so a synced fader parked at a rail (max or min) follows as soon as it moves away (found on a Launch Control XL 3, 2026-09-29).
 - **Scale** — the parameter moves toward the hardware value proportionally, converging without a
   jump (Ableton "Value Scaling").
 
@@ -700,6 +700,7 @@ ControllerProfile                         // GLOBAL — one per physical control
   input         : { identifier, name }    // juce::MidiDeviceInfo; identifier matches first, name is the fallback
   output        : { identifier, name } | null   // controller feedback's destination -- see Controller feedback
   passMapped    : bool (default false)    // see Are mapped messages consumed
+  handshake     : { open: byte[], close: byte[], port: string } (default empty)  // see midi-remote-device-handshake.md
   controls[]    : Control
   actions[]     : Assignment              // GLOBAL assignments: target.kind == action, continuous, or page only
   pageCount     : 1..16 (default 1)       // see Pages -- a floor; the effective count can be higher
@@ -945,6 +946,9 @@ once would be surprising, not useful — and this is unchanged by FRO240; pinned
 
 ## Related
 
+- [`midi-remote-device-handshake.md`](midi-remote-device-handshake.md) — FRO339: a profile's
+  optional open/close handshake bytes (e.g. the Launch Control XL 3's DAW-mode enable/disable
+  SysEx), `ControllerHandshakeCoordinator`, and every lifecycle hook that sends them.
 - [`midi-remote-ui.md`](midi-remote-ui.md) — the interaction design, the panel, coverage of
   every control surface, and the tests.
 - [`plugin-card-layout.md`](plugin-card-layout.md) — which hosted-plugin parameters show as

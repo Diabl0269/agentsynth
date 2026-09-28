@@ -274,6 +274,8 @@ add_executable(Tests
     MidiRemote/RemoteModelTests.cpp
     MidiRemote/RemoteModelPagesTests.cpp
     MidiRemote/RemoteModelFocusBankTests.cpp
+    MidiRemote/RemoteModelHandshakeTests.cpp
+    MidiRemote/ControllerHandshakeTests.cpp
     MidiRemote/RemoteEnginePagesTests.cpp
     MidiRemote/RemoteEngineFocusBankTests.cpp
     MidiRemote/MidiLearnControllerPagesTests.cpp
@@ -299,6 +301,7 @@ add_executable(Tests
     MidiRemote/ControllerDetectTests.cpp
     MidiRemote/EncoderAutoDetectTests.cpp
     MidiRemote/MidiLearnControllerTests.cpp
+    MidiRemote/MidiLearnControllerHandshakeTests.cpp
     MidiRemote/MidiLearnControllerRetargetTests.cpp
     MidiRemote/MidiLearnControllerHostedParameterTests.cpp
     MidiRemote/ProfileEditHistoryTests.cpp

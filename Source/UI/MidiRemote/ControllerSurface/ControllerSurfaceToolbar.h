@@ -26,6 +26,14 @@ public:
     void setUndoHint(const juce::String& text);
     juce::String getUndoHint() const { return undoHintLabel_.getText(); }
 
+    /** FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): the selected controller's
+     *  handshake port-mismatch warning (MidiLearnController::getHandshakeIssueForProfile), shown as
+     *  its own full-width row below the button row; empty hides it. Same idempotent contract as
+     *  setUndoHint, except (unlike the undo cue) this row changes getPreferredHeight() -- the caller
+     *  must re-layout afterwards, same as setDetectOn(). */
+    void setPortHint(const juce::String& text);
+    juce::String getPortHint() const { return portHintLabel_.getText(); }
+
     /** Height this toolbar wants right now (the hint row adds to it). */
     int getPreferredHeight() const noexcept;
 
@@ -49,6 +57,7 @@ private:
     juce::TextButton moreButton_;
     juce::Label hintLabel_;
     juce::Label undoHintLabel_;
+    juce::Label portHintLabel_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControllerSurfaceToolbar)
 };
