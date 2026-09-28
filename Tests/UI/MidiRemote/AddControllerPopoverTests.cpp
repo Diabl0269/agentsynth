@@ -98,6 +98,44 @@ TEST(MidiRemoteAddControllerPopoverTest, OkIsDisabledWithoutADeviceOrAName) {
     EXPECT_FALSE(ok->isEnabled());
 }
 
+// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): choosing a template that
+// declares a port hint (TemplateInfo::handshakePort) preselects the first free device row whose name
+// already contains it -- e.g. "LCXL3 1 DAW Out" over "LCXL3 1 MIDI Out" -- through the same path a
+// manual pick uses, so the name field re-prefills too.
+TEST(MidiRemoteAddControllerPopoverTest, ChoosingAHintedTemplatePreselectsItsPort) {
+    std::vector<AddControllerPopover::DeviceRow> devices = {{"id-midi", "LCXL3 1 MIDI Out", ""},
+                                                            {"id-daw", "LCXL3 1 DAW Out", ""}};
+    std::vector<synth::midi::TemplateInfo> templates = {
+        {"template-8-knobs", "8 knobs"},
+        {"template-novation-launch-control-xl-3", "Launch Control XL 3", "Novation", "", "DAW"}};
+    AddControllerPopover popover(devices, templates);
+    auto* start = dynamic_cast<juce::ComboBox*>(findById(popover, "addControllerStartCombo"));
+    auto* combo = dynamic_cast<juce::ComboBox*>(findById(popover, "addControllerDeviceCombo"));
+    auto* name = dynamic_cast<juce::TextEditor*>(findById(popover, "addControllerNameEditor"));
+    ASSERT_NE(start, nullptr);
+    ASSERT_EQ(popover.getChoice().deviceIdentifier, "id-midi") << "first free device, before any template pick";
+
+    start->setSelectedItemIndex(2, juce::sendNotificationSync); // "Template: Launch Control XL 3"
+
+    EXPECT_EQ(popover.getChoice().deviceIdentifier, "id-daw");
+    EXPECT_EQ(combo->getSelectedId(), 2);
+    EXPECT_EQ(name->getText(), "LCXL3 1 DAW Out");
+}
+
+TEST(MidiRemoteAddControllerPopoverTest, AHintWithNoMatchingInputLeavesTheDeviceSelectionAlone) {
+    std::vector<synth::midi::TemplateInfo> templates = {
+        {"template-8-knobs", "8 knobs"},
+        {"template-novation-launch-control-xl-3", "Launch Control XL 3", "Novation", "", "DAW"}};
+    AddControllerPopover popover(devices(), templates); // no device name contains "DAW"
+    auto* start = dynamic_cast<juce::ComboBox*>(findById(popover, "addControllerStartCombo"));
+    ASSERT_NE(start, nullptr);
+    const auto before = popover.getChoice().deviceIdentifier;
+
+    start->setSelectedItemIndex(2, juce::sendNotificationSync);
+
+    EXPECT_EQ(popover.getChoice().deviceIdentifier, before);
+}
+
 TEST(MidiRemoteAddControllerPopoverTest, OkReportsTheChoiceAndCancelReportsCancel) {
     AddControllerPopover popover(devices(), templates());
     std::vector<AddControllerPopover::Choice> confirmed;

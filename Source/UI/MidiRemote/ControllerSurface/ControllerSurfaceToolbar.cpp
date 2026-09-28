@@ -63,6 +63,12 @@ ControllerSurfaceToolbar::ControllerSurfaceToolbar() {
     undoHintLabel_.setInterceptsMouseClicks(false, false);
     addChildComponent(undoHintLabel_);
 
+    portHintLabel_.setComponentID("portHintLabel");
+    portHintLabel_.setFont(juce::Font(juce::FontOptions(11.0f)));
+    portHintLabel_.setMinimumHorizontalScale(0.8f);
+    portHintLabel_.setInterceptsMouseClicks(false, false);
+    addChildComponent(portHintLabel_);
+
     setProfileSelected(false);
     setControlSelected(false);
 }
@@ -98,7 +104,25 @@ void ControllerSurfaceToolbar::setUndoHint(const juce::String& text) {
     undoHintLabel_.setVisible(text.isNotEmpty());
 }
 
-int ControllerSurfaceToolbar::getPreferredHeight() const noexcept { return kRowHeight + (detectOn_ ? kHintHeight : 0); }
+// Unlike setUndoHint/setDetectOn's hint row, this one has no other exception to Source/UI/CLAUDE.md's
+// no-unconditional-repaint rule to share layout with -- it gets its own full-width row, so a change
+// here (unlike the undo cue, which just repaints leftover space in the existing row) changes
+// getPreferredHeight() and needs the same "caller re-layouts" contract setDetectOn() already has
+// (see MidiRemotePanelHandshake.cpp's refreshPortHint()).
+void ControllerSurfaceToolbar::setPortHint(const juce::String& text) {
+    if (text == portHintLabel_.getText() && portHintLabel_.isVisible() == text.isNotEmpty())
+        return;
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        portHintLabel_.setColour(juce::Label::textColourId, lf->getTheme().colors.warning);
+    portHintLabel_.setText(text, juce::dontSendNotification);
+    portHintLabel_.setVisible(text.isNotEmpty());
+    resized();
+    repaint();
+}
+
+int ControllerSurfaceToolbar::getPreferredHeight() const noexcept {
+    return kRowHeight + (portHintLabel_.isVisible() ? kHintHeight : 0) + (detectOn_ ? kHintHeight : 0);
+}
 
 void ControllerSurfaceToolbar::resized() {
     auto bounds = getLocalBounds();
@@ -112,6 +136,8 @@ void ControllerSurfaceToolbar::resized() {
     moreButton_.setBounds(row.removeFromLeft(40));
     row.removeFromLeft(8);
     undoHintLabel_.setBounds(row);
+    if (portHintLabel_.isVisible())
+        portHintLabel_.setBounds(bounds.removeFromTop(kHintHeight).reduced(8, 0));
     hintLabel_.setBounds(bounds.reduced(8, 0));
     hintLabel_.setVisible(detectOn_);
 }

@@ -7,6 +7,7 @@
 // from MainComponent, never owned here. This header only defines values and declares their JSON
 // shape; the JSON is implemented in RemoteModelJson.cpp.
 
+#include <cstdint>
 #include <juce_core/juce_core.h>
 #include <vector>
 
@@ -269,6 +270,22 @@ struct ControllerProfile {
     // docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph's
     // "also pass mapped messages to the patch" toggle, default off
     bool passMapped = false;
+
+    // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): raw MIDI bytes to send once when the
+    // app opens this profile's device, and once when it lets go of it. Sent to whichever MIDI OUTPUT
+    // resolveHandshakeOutput() (ControllerHandshake.h) resolves for this profile's own `input` --
+    // never necessarily a device sharing `input`'s own identifier/name (see that function's doc
+    // comment and RemoteModelJson.cpp's own note on `port` for why). `port`: an optional hint (e.g.
+    // "DAW") naming the port word this handshake needs when a device's input/output ports are named
+    // asymmetrically -- empty for a device with no such ambiguity. Empty (both byte vectors and
+    // `port`) means "no handshake" -- a pre-FRO339 profile round-trips byte-identical.
+    struct Handshake {
+        std::vector<std::uint8_t> openMessage;
+        std::vector<std::uint8_t> closeMessage;
+        juce::String port; // e.g. "DAW" -- see above; empty means "no port ambiguity"
+        bool isEmpty() const noexcept { return openMessage.empty() && closeMessage.empty(); }
+    };
+    Handshake handshake;
 
     std::vector<Control> controls;
     // GLOBAL assignments: target.kind == action, continuous, or page only (FRO236: a continuous
