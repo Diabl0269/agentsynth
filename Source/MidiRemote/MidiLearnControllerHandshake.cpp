@@ -7,6 +7,8 @@
 
 #include "AudioEngine/AudioEngine.h"
 
+#include <juce_audio_devices/juce_audio_devices.h>
+
 namespace synth::midi {
 
 // Called once, from MainComponent::wireMidiRemoteEngine() -- never in HostMode::Hosted (hardware
@@ -41,9 +43,32 @@ void MidiLearnController::reconcileHandshakes() {
     if (!handshakeCoordinator_)
         return;
     auto sources = engine_.getOpenMidiInputIdentifiers();
-    if (engine_.isHosted())
+
+    // FRO339: resolveHandshakeOutput() needs every OUTPUT the app can currently see -- real
+    // juce::MidiOutput enumeration in production, availableOutputsQuery_ in a test (see its own doc
+    // comment on why: a headless test process has no CoreMIDI entitlement/bundle).
+    std::vector<ControllerProfile::Input> availableOutputs;
+    if (availableOutputsQuery_) {
+        availableOutputs = availableOutputsQuery_();
+    } else {
+        for (const auto& info : juce::MidiOutput::getAvailableDevices())
+            availableOutputs.push_back({info.identifier, info.name});
+    }
+
+    if (engine_.isHosted()) {
+        // Hosted's synthetic "device" has no real juce::MidiInput/MidiOutput behind it -- mirror the
+        // input side's own hostSourceKey() convenience so a Hosted-mode profile (identifier ==
+        // hostSourceKey()) still resolves an "output" to send its handshake to via the identifier
+        // match, exactly like MidiLearnControllerHandshakeTests.cpp's own fixture expects.
         sources.push_back(hostSourceKey());
-    handshakeCoordinator_->reconcile(profiles_, sources);
+        availableOutputs.push_back({hostSourceKey(), hostSourceKey()});
+    }
+
+    handshakeCoordinator_->reconcile(profiles_, sources, availableOutputs);
+}
+
+juce::String MidiLearnController::getHandshakeIssueForProfile(const juce::String& profileId) const {
+    return handshakeCoordinator_ ? handshakeCoordinator_->getHandshakeIssue(profileId) : juce::String();
 }
 
 } // namespace synth::midi

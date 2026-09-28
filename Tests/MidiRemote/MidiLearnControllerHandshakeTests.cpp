@@ -49,6 +49,11 @@ protected:
         graphEditor_ = std::make_unique<GraphEditor>(*engine_);
         controller_ = std::make_unique<MidiLearnController>(*engine_, *graphEditor_, remoteEngine_, doc_, undo_,
                                                             statusBar_, synth::ControllerProfileStore(root_));
+        // FRO339: a headless test process has no CoreMIDI entitlement/bundle -- see
+        // setAvailableOutputsQueryForTest()'s own doc comment. Hosted mode's own hostSourceKey()
+        // "output" is appended by reconcileHandshakes() itself regardless of what this returns, so
+        // an empty list here is enough for every test in this fixture.
+        controller_->setAvailableOutputsQueryForTest([] { return std::vector<ControllerProfile::Input>{}; });
     }
 
     void TearDown() override { root_.deleteRecursively(); }
@@ -96,4 +101,32 @@ TEST_F(MidiLearnControllerHandshakeTest, ShutdownHandshakesSendsCloseForEveryOpe
     // A second call has nothing left to close.
     controller_->shutdownHandshakes();
     EXPECT_EQ(sink.sent.size(), 2u);
+}
+
+TEST_F(MidiLearnControllerHandshakeTest, GetHandshakeIssueForProfileIsEmptyBeforeASinkIsWiredAndForACleanProfile) {
+    EXPECT_TRUE(controller_->getHandshakeIssueForProfile("p1").isEmpty()) << "no coordinator wired yet";
+
+    FakeFeedbackSink sink;
+    controller_->setHandshakeFeedbackSink(sink);
+    ASSERT_TRUE(controller_->addProfile(makeHandshakeProfile("p1")));
+    // hostSourceKey() resolves by identifier both as the input and (reconcileHandshakes()'s own
+    // synthetic entry) the output -- no port hint, no mismatch, so there is nothing to report.
+    EXPECT_TRUE(controller_->getHandshakeIssueForProfile("p1").isEmpty());
+}
+
+// FRO339: reconcileHandshakes() unconditionally adds a {hostSourceKey(), hostSourceKey()} output for
+// Hosted mode (see its own comment), so a Hosted-mode profile's handshake always resolves by
+// identity regardless of `input.name` -- but describeHandshakeIssue()'s port-hint check is
+// independent of that, and still fires whenever the declared hint isn't in the input's own name.
+// This proves that path reaches all the way through MidiLearnController's wiring, not just
+// ControllerHandshakeCoordinator directly (already covered by ControllerHandshakeTests.cpp).
+TEST_F(MidiLearnControllerHandshakeTest, GetHandshakeIssueForProfileReportsAPortHintMismatch) {
+    FakeFeedbackSink sink;
+    controller_->setHandshakeFeedbackSink(sink);
+    auto profile = makeHandshakeProfile("p1");
+    profile.handshake.port = "DAW"; // input.name (hostSourceKey()) doesn't contain "DAW"
+    ASSERT_TRUE(controller_->addProfile(profile));
+
+    ASSERT_EQ(sink.sent.size(), 1u) << "still resolves and sends -- the hint mismatch is a separate warning";
+    EXPECT_FALSE(controller_->getHandshakeIssueForProfile("p1").isEmpty());
 }

@@ -95,3 +95,47 @@ TEST(MidiRemoteModelHandshakeTest, RejectsNonArrayOpen) {
     ControllerProfile parsed;
     EXPECT_FALSE(parsed.fromVar(v));
 }
+
+// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): the port hint round-trips like every
+// other optional field here -- absent by default, present only when non-empty, and a present but
+// non-string value is a hard rejection, same all-or-nothing convention as the rest of this file.
+TEST(MidiRemoteModelHandshakeTest, PortHintDefaultsToEmptyAndIsOmittedFromJson) {
+    auto p = makeV1Profile();
+    p.handshake.openMessage = {0x01};
+    p.handshake.closeMessage = {0x02};
+    ASSERT_TRUE(p.handshake.port.isEmpty());
+
+    const juce::var v = p.toVar();
+    auto* handshakeObj = v.getDynamicObject()->getProperty("handshake").getDynamicObject();
+    EXPECT_FALSE(handshakeObj->hasProperty("port"));
+
+    ControllerProfile parsed;
+    ASSERT_TRUE(parsed.fromVar(v));
+    EXPECT_TRUE(parsed.handshake.port.isEmpty());
+}
+
+TEST(MidiRemoteModelHandshakeTest, PortHintRoundTrips) {
+    auto p = makeV1Profile();
+    p.handshake.openMessage = {0x01};
+    p.handshake.closeMessage = {0x02};
+    p.handshake.port = "DAW";
+
+    const juce::var v = p.toVar();
+    auto* handshakeObj = v.getDynamicObject()->getProperty("handshake").getDynamicObject();
+    EXPECT_EQ(handshakeObj->getProperty("port").toString(), "DAW");
+
+    ControllerProfile parsed;
+    ASSERT_TRUE(parsed.fromVar(v));
+    EXPECT_EQ(parsed.handshake.port, "DAW");
+}
+
+TEST(MidiRemoteModelHandshakeTest, RejectsNonStringPort) {
+    auto p = makeV1Profile();
+    p.handshake.openMessage = {0x01};
+    p.handshake.closeMessage = {0x02};
+    juce::var v = p.toVar();
+    v.getDynamicObject()->getProperty("handshake").getDynamicObject()->setProperty("port", 7);
+
+    ControllerProfile parsed;
+    EXPECT_FALSE(parsed.fromVar(v));
+}

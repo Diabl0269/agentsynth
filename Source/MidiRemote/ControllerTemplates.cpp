@@ -87,7 +87,7 @@ std::vector<TemplateInfo> listControllerTemplates() {
         juce::String vendor, source;
         if (!parseResource(resourceName, profile, &vendor, &source))
             continue;
-        result.push_back({profile.id, profile.name, vendor, source});
+        result.push_back({profile.id, profile.name, vendor, source, profile.handshake.port});
     }
     std::stable_sort(result.begin(), result.end(), [](const TemplateInfo& a, const TemplateInfo& b) {
         const int ia = orderIndex(a.id);

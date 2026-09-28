@@ -151,6 +151,13 @@ public:
      *  forgets them. */
     void shutdownHandshakes();
 
+    /** ControllerHandshakeCoordinator::getHandshakeIssue()'s result for `profileId`, or "". */
+    juce::String getHandshakeIssueForProfile(const juce::String& profileId) const;
+
+    /** Test seam: see MidiLearnControllerHandshake.cpp's own comment on reconcileHandshakes(). */
+    using AvailableOutputsQuery = std::function<std::vector<ControllerProfile::Input>()>;
+    void setAvailableOutputsQueryForTest(AvailableOutputsQuery query) { availableOutputsQuery_ = std::move(query); }
+
     /** FRO263: fires after every mutation that changes what the MIDI Remote panel shows. May be
      *  null (tests, or before MainComponent finishes wiring). See publishAssignments()'s .cpp
      *  comment for exactly which call sites fire it and why the panel-side handler must defer. */
@@ -341,6 +348,9 @@ private:
     ProfileEditHistory profileHistory_;
     // FRO339: unset until setHandshakeFeedbackSink() runs -- see MidiLearnControllerHandshake.cpp.
     std::optional<ControllerHandshakeCoordinator> handshakeCoordinator_;
+    // FRO339: unset means reconcileHandshakes() uses the real juce::MidiOutput enumeration -- see
+    // setAvailableOutputsQueryForTest()'s own doc comment above.
+    AvailableOutputsQuery availableOutputsQuery_;
     bool applyingProfileHistory_ = false; // recording is suppressed while an undo/redo applies
 
     synth::ui::MixerPanelComponent* mixerPanel_ = nullptr;

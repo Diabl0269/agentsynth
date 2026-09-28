@@ -168,6 +168,10 @@ TEST(ControllerTemplatesVendorTest, NovationLaunchControlXL3HasTheDocumentedSurf
     const std::vector<std::uint8_t> expectedClose = {0xF0, 0x00, 0x20, 0x29, 0x02, 0x15, 0x02, 0x00, 0xF7};
     EXPECT_EQ(p.handshake.openMessage, expectedOpen);
     EXPECT_EQ(p.handshake.closeMessage, expectedClose);
+    // FRO339: confirmed on hardware 2026-09-28 -- the device's ports are named asymmetrically, so
+    // this hint is what lets resolveHandshakeOutput() (and the Add-controller popover's preselect)
+    // find the "DAW" port even when a profile's `input` still names the wrong sibling one.
+    EXPECT_EQ(p.handshake.port, "DAW");
 
     const auto* play = findControl("play");
     ASSERT_NE(play, nullptr);
@@ -300,6 +304,18 @@ TEST(ControllerTemplatesVendorTest, GroupingWithNoGenericTemplatesOmitsTheGeneri
     const auto groups = groupControllerTemplatesByVendor(onlyVendor);
     ASSERT_EQ(groups.size(), 1u);
     EXPECT_EQ(groups[0].vendor, "Zorp");
+}
+
+// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): listControllerTemplates()
+// mirrors a template's own handshake.port -- what AddControllerPopover reads to preselect a matching
+// input -- so it must never require loading the whole ControllerProfile just to find it.
+TEST(ControllerTemplatesVendorTest, ListingExposesTheLaunchControlXL3PortHintAndNothingElseHasOne) {
+    for (const auto& info : listControllerTemplates()) {
+        if (info.id == "template-novation-launch-control-xl-3")
+            EXPECT_EQ(info.handshakePort, "DAW");
+        else
+            EXPECT_TRUE(info.handshakePort.isEmpty()) << info.id.toStdString();
+    }
 }
 
 TEST(ControllerTemplatesVendorTest, AllTemplateIdsAreUniqueAcrossTheWholeLibrary) {

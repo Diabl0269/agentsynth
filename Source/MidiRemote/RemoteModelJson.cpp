@@ -101,6 +101,16 @@ bool readOptionalBool(const juce::var& v, bool& out) {
     return readBool(v, out);
 }
 
+// FRO339 (handshake port hint): a missing "port" means the pre-hint default (""); a PRESENT one
+// must be a string (even "") or the whole load fails, same all-or-nothing rule as every other field.
+bool readOptionalString(const juce::var& v, juce::String& out) {
+    if (v.isVoid()) {
+        out = {};
+        return true;
+    }
+    return readString(v, out);
+}
+
 // -- Enum <-> doc-exact camelCase string ------------------------------------------------------
 // docs/control/midi-remote.md#data-model names every enumerator exactly this way; a string this build doesn't
 // recognise is a hard failure, never a silent default (docs/control/midi-remote.md#persistence-and-the-trust-boundary
@@ -764,6 +774,15 @@ juce::var ControllerProfile::toVar() const {
         auto* handshakeObj = new juce::DynamicObject();
         handshakeObj->setProperty("open", byteArrayToVar(handshake.openMessage));
         handshakeObj->setProperty("close", byteArrayToVar(handshake.closeMessage));
+        // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): `port` is written only when
+        // non-empty, so a pre-port-hint document round-trips byte-identical. 2026-09-28 real-hardware
+        // finding: CoreMIDI can give an input/output pair for the SAME physical port asymmetric
+        // names (the Launch Control XL 3's "LCXL3 1 DAW Out" input pairs with a "LCXL3 1 DAW In"
+        // output, never a device sharing the input's own name) -- `port` names the word
+        // (resolveHandshakeOutput()'s `portHint`) that bridges the two, and is also what
+        // MidiRemotePanelComponent's status line checks the profile's `input` name against.
+        if (handshake.port.isNotEmpty())
+            handshakeObj->setProperty("port", handshake.port);
         obj->setProperty("handshake", juce::var(handshakeObj));
     }
 
@@ -837,7 +856,8 @@ bool ControllerProfile::fromVar(const juce::var& state) {
         if (handshakeObj == nullptr)
             return false;
         if (!readByteArray(handshakeObj->getProperty("open"), parsed.handshake.openMessage) ||
-            !readByteArray(handshakeObj->getProperty("close"), parsed.handshake.closeMessage))
+            !readByteArray(handshakeObj->getProperty("close"), parsed.handshake.closeMessage) ||
+            !readOptionalString(handshakeObj->getProperty("port"), parsed.handshake.port))
             return false;
     }
 

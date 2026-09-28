@@ -50,6 +50,9 @@ public:
 private:
     void selectDevice(int comboId);
     void confirm();
+    /** FRO339: "Start with" changed -- preselects a hinted-port device for a template that declares
+     *  one (TemplateInfo::handshakePort), then re-derives whether OK is allowed. */
+    void handleStartChanged();
 
     std::vector<DeviceRow> devices_;
     std::vector<synth::midi::TemplateInfo> templates_;

@@ -700,7 +700,7 @@ ControllerProfile                         // GLOBAL — one per physical control
   input         : { identifier, name }    // juce::MidiDeviceInfo; identifier matches first, name is the fallback
   output        : { identifier, name } | null   // controller feedback's destination -- see Controller feedback
   passMapped    : bool (default false)    // see Are mapped messages consumed
-  handshake     : { open: byte[], close: byte[] } (default empty)  // see midi-remote-device-handshake.md
+  handshake     : { open: byte[], close: byte[], port: string } (default empty)  // see midi-remote-device-handshake.md
   controls[]    : Control
   actions[]     : Assignment              // GLOBAL assignments: target.kind == action, continuous, or page only
   pageCount     : 1..16 (default 1)       // see Pages -- a floor; the effective count can be higher

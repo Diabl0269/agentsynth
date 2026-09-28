@@ -244,6 +244,7 @@ set(APPUI_SOURCES
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelAssign.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelOrphans.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelUndo.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelHandshake.cpp
     Source/UI/Macros/MacroCardComponent.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp

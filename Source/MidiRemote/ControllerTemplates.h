@@ -26,6 +26,11 @@ struct TemplateInfo {
     // document (with URL and section) its CC/note numbers were sourced from -- required by
     // docs/control/midi-remote-ui.md#contribute-a-template, never left to guesswork.
     juce::String source;
+    // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): mirrors this template's own
+    // ControllerProfile::Handshake::port (e.g. "DAW" for the Launch Control XL 3) -- empty for a
+    // template with no port ambiguity. AddControllerPopover reads this to preselect a matching input
+    // device when this template is chosen as "Start with".
+    juce::String handshakePort;
 };
 
 /** One Templates-menu section: `vendor` (empty means "Generic") and its templates, in the same

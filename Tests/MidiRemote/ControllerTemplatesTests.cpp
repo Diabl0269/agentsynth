@@ -272,6 +272,7 @@ TEST(ControllerTemplatesTest, ApplyToEmptyProfileAlsoCopiesTemplateHandshake) {
 
     EXPECT_EQ(profile.handshake.openMessage, tmpl.handshake.openMessage);
     EXPECT_EQ(profile.handshake.closeMessage, tmpl.handshake.closeMessage);
+    EXPECT_EQ(profile.handshake.port, tmpl.handshake.port); // FRO339: the port hint copies too
 }
 
 TEST(ControllerTemplatesTest, ApplyingATemplateNeverOverwritesAnExistingHandshake) {

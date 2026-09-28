@@ -12,53 +12,46 @@
 
 #include <juce_core/juce_core.h>
 #include <map>
+#include <optional>
 #include <vector>
 
 namespace synth::midi {
 
-/**
- * @class ControllerHandshakeCoordinator
- * @brief Tracks which profiles currently have their handshake "open" sent, so reconcile() never
- *        double-sends open and never leaves a profile enabled with nothing to close it.
- *
- * MESSAGE THREAD ONLY -- reconcile()/shutdownAll() call into the injected RemoteFeedbackSink,
- * exactly like RemoteEngine::drain()'s own feedback send (Source/CLAUDE.md's MIDI Remote
- * threading rule): never called from a MIDI/audio thread. Standalone only -- HostMode::Hosted
- * never opens hardware MIDI, so its caller (MainComponent) never wires this in that mode.
- */
+// See ControllerHandshake.cpp for the port-hint/asymmetric-port rationale behind each of these.
+juce::String applyHandshakePortHint(const juce::String& deviceName, const juce::String& portHint);
+std::optional<ControllerProfile::Input>
+resolveHandshakeOutput(const ControllerProfile::Input& input, const juce::String& portHint,
+                       const std::vector<ControllerProfile::Input>& availableOutputs);
+juce::String describeHandshakeIssue(const ControllerProfile::Input& input, const juce::String& portHint, bool resolved);
+
+/** Tracks which profiles currently have their handshake "open" sent. MESSAGE THREAD ONLY -- see
+ *  ControllerHandshake.cpp for the full contract. */
 class ControllerHandshakeCoordinator {
 public:
-    /** `sink` outlives every call below -- owned by the app layer (MidiRemoteFeedbackOutputs),
-     *  exactly like RemoteEngine::setFeedbackSink()'s own borrowed pointer. */
+    /** `sink` outlives every call below. */
     explicit ControllerHandshakeCoordinator(RemoteFeedbackSink& sink)
         : sink_(sink) {}
 
-    /** Sends `handshake.openMessage` for every profile that declares a non-empty handshake, whose
-     *  input device is in `openSourceKeys` (AudioEngine::getOpenMidiInputIdentifiers(), matched by
-     *  profile.input.identifier -- the same test MidiRemotePanelComponent::isProfilePresent uses),
-     *  and that isn't already tracked as open. Sends `handshake.closeMessage` for every
-     *  previously-open profile that no longer qualifies -- removed, its handshake cleared, or its
-     *  device no longer open (unplugged) -- using the LAST profile state seen open, since a
-     *  removed profile is no longer in `profiles` to re-derive it from. Call after every
-     *  profile-list or open-device-set change (a template application, Add/Remove Controller, a
-     *  replug, app startup). Idempotent: an unchanged set of open handshakes sends nothing. */
-    void reconcile(const std::vector<ControllerProfile>& profiles, const std::vector<juce::String>& openSourceKeys);
+    /** See ControllerHandshake.cpp's own doc comment above the definition. */
+    void reconcile(const std::vector<ControllerProfile>& profiles, const std::vector<juce::String>& openSourceKeys,
+                   const std::vector<ControllerProfile::Input>& availableOutputs);
 
     /** Sends `close` for every profile currently tracked as open, then forgets all of them --
-     *  app quit/teardown. Call once, before the RemoteFeedbackSink this coordinator was built with
-     *  goes away. */
+     *  app quit/teardown. Call once, before `sink` goes away. */
     void shutdownAll();
+
+    /** describeHandshakeIssue()'s result for `profileId` as of the last reconcile() call, or "". */
+    juce::String getHandshakeIssue(const juce::String& profileId) const;
 
 private:
     struct OpenEntry {
         ControllerProfile::Handshake handshake;
-        ControllerProfile::Input input; // the profile's own `input` -- also the handshake's output
+        ControllerProfile::Input output; // see ControllerHandshake.cpp's reconcile() comment
     };
 
     RemoteFeedbackSink& sink_;
-    // profileId -> what's currently open, so close can be sent for a profile no longer present in
-    // the `profiles` reconcile() is next called with.
     std::map<juce::String, OpenEntry> open_;
+    std::map<juce::String, juce::String> issues_;
 };
 
 } // namespace synth::midi

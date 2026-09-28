@@ -396,8 +396,13 @@ app switches the device into DAW mode while it holds the controller open and bac
 lets go (a profile's optional [device handshake](midi-remote-device-handshake.md)), matching what
 Ableton Live 12's own script does; if the app quits without reaching that teardown (a crash, or
 the process being killed), the device stays in DAW mode until another host disables it or it is
-power-cycled. See this template's own `"source"` citation for the exact page citations and the
-one open question about which port a Custom Mode's encoders/faders end up on.
+power-cycled. Confirmed on hardware 2026-09-28: in DAW mode, Play/Record and every encoder/fader
+arrive on the device's **DAW** port, not its **MIDI** port, and the two ports are named
+asymmetrically enough (CoreMIDI) that the app has to resolve the handshake's destination itself
+(`resolveHandshakeOutput()`) rather than matching a name literally — see this template's own
+`"source"` citation and [midi-remote-device-handshake.md](midi-remote-device-handshake.md#the-launch-control-xl-3s-own-ports)
+for the full story. Choosing this template in [Add controller](#add-controller) now preselects the
+DAW-port input for you.
 
 **⋯** has *Import controller…* / *Export controller…* (JSON file,
 the profile document of [`midi-remote.md`](midi-remote.md#data-model)). Importing a document whose id is already set up on this
@@ -453,6 +458,14 @@ creates the profile file, opens the device (`AudioEngine::ensureMidiDeviceOpen`,
 engine ignores a device it has not been told about), selects it
 in the list and, for the default choice, enters Detect. The button is hidden in the plugin build. A controller created implicitly by a
 Learn ([`midi-remote.md`](midi-remote.md#learn-what-does-the-first-message-mean)) is exactly this with *Empty* plus the one detected control.
+
+FRO339: picking a **Start with** template whose handshake declares a
+[port hint](midi-remote-device-handshake.md#device-handshake)
+(`TemplateInfo::handshakePort`, e.g. `"DAW"` for the Launch Control XL 3) preselects the first free
+device row whose name already contains that word — e.g. choosing **Template: Launch Control XL 3**
+selects `"LCXL3 1 DAW Out"` over `"LCXL3 1 MIDI Out"` — through the same code path a manual device
+pick uses, so the Name field re-prefills too. If no device name matches, the selection is left alone
+(the port-hint status line on the Controllers panel still catches a wrong pick after the fact).
 
 ---
 

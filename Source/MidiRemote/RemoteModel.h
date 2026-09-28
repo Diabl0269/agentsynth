@@ -272,19 +272,17 @@ struct ControllerProfile {
     bool passMapped = false;
 
     // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): raw MIDI bytes to send once when the
-    // app opens this profile's device, and once when it lets go of it (profile removed/disabled,
-    // device disconnected, or the app quits) -- e.g. Novation LCXL3's DAW-mode enable/disable
-    // SysEx (Programmer's Reference Guide p.8), which the device latches with no keep-alive and
-    // stays in until the close bytes arrive or it is power-cycled. Sent by the app-layer
-    // Source/MidiRemote/ControllerHandshake.h to the MIDI OUTPUT matching this profile's own
-    // `input` (identifier-then-name, same fallback as `output` above) -- never a second
-    // vendor-specific port field, since a template author instead points a profile's `input`
-    // itself at whichever physical port the device wants its handshake and control traffic on.
-    // Empty (both vectors, the default) means "no handshake" -- a pre-FRO339 profile round-trips
-    // to exactly this, byte-identical.
+    // app opens this profile's device, and once when it lets go of it. Sent to whichever MIDI OUTPUT
+    // resolveHandshakeOutput() (ControllerHandshake.h) resolves for this profile's own `input` --
+    // never necessarily a device sharing `input`'s own identifier/name (see that function's doc
+    // comment and RemoteModelJson.cpp's own note on `port` for why). `port`: an optional hint (e.g.
+    // "DAW") naming the port word this handshake needs when a device's input/output ports are named
+    // asymmetrically -- empty for a device with no such ambiguity. Empty (both byte vectors and
+    // `port`) means "no handshake" -- a pre-FRO339 profile round-trips byte-identical.
     struct Handshake {
         std::vector<std::uint8_t> openMessage;
         std::vector<std::uint8_t> closeMessage;
+        juce::String port; // e.g. "DAW" -- see above; empty means "no port ambiguity"
         bool isEmpty() const noexcept { return openMessage.empty() && closeMessage.empty(); }
     };
     Handshake handshake;
