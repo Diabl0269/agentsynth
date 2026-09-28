@@ -56,6 +56,9 @@ void MidiLearnController::refreshSources() {
     if (engine_.isHosted())
         sources.push_back(hostSourceKey());
     remoteEngine_.setSources(sources);
+    // FRO339: a device opening/closing is exactly when a profile's declared handshake needs
+    // (re)sending or retracting too -- see MidiLearnControllerHandshake.cpp.
+    reconcileHandshakes();
 }
 
 juce::String MidiLearnController::resolveNodeUuid(juce::AudioProcessorGraph::NodeID nodeId) const {
@@ -258,7 +261,7 @@ void MidiLearnController::handleLearned(const LearnResult& result) {
             *existing = outcome.profile;
         else
             profiles_.push_back(outcome.profile);
-        remoteEngine_.setProfiles(profiles_);
+        setProfilesAndReconcileHandshakes();
         recordProfileEdit(outcome.profileIsNew ? "Add controller" : "Learn control", outcome.profile.id,
                           std::move(before));
     }
@@ -321,7 +324,7 @@ void MidiLearnController::handleLearnedAction(const LearnResult& result, LearnBi
         *existing = outcome.profile;
     else
         profiles_.push_back(outcome.profile);
-    remoteEngine_.setProfiles(profiles_);
+    setProfilesAndReconcileHandshakes();
     recordProfileEdit("Learn action", outcome.profile.id, std::move(before));
 
     const juce::String deviceName = deviceNameForSourceKey(result.sourceKey);
@@ -398,7 +401,7 @@ void MidiLearnController::forgetAction(const juce::String& actionId) {
     if (!removedAny)
         return; // nothing was mapped
 
-    remoteEngine_.setProfiles(profiles_);
+    setProfilesAndReconcileHandshakes();
     statusBar_.showMessage("MIDI mapping removed");
     if (onChanged)
         onChanged();
@@ -468,7 +471,7 @@ bool MidiLearnController::updateProfile(const ControllerProfile& profile, const 
     auto before = std::optional<ControllerProfile>(*existing);
     *existing = profile;
     profileStore_.save(profile);
-    remoteEngine_.setProfiles(profiles_);
+    setProfilesAndReconcileHandshakes();
     recordProfileEdit(editLabel, profile.id, std::move(before));
     if (onChanged)
         onChanged();
@@ -480,7 +483,7 @@ bool MidiLearnController::addProfile(const ControllerProfile& profile, const juc
         return false;
     profileStore_.save(profile);
     profiles_.push_back(profile);
-    remoteEngine_.setProfiles(profiles_);
+    setProfilesAndReconcileHandshakes();
     recordProfileEdit(editLabel, profile.id, std::nullopt);
     if (onChanged)
         onChanged();
@@ -514,7 +517,7 @@ MidiLearnController::ImportResult MidiLearnController::importProfile(const juce:
         profiles_.push_back(parsed);
         result.status = ImportStatus::imported;
     }
-    remoteEngine_.setProfiles(profiles_);
+    setProfilesAndReconcileHandshakes();
     recordProfileEdit("Import controller", parsed.id, std::move(before));
     if (onChanged)
         onChanged();
@@ -560,7 +563,7 @@ bool MidiLearnController::updateControl(const juce::String& profileId, const Con
             syncAssignment(a);
 
     profileStore_.save(*profileIt);
-    remoteEngine_.setProfiles(profiles_);
+    setProfilesAndReconcileHandshakes();
     recordProfileEdit("Edit control", profileId, std::move(before));
     if (projectChanged)
         publishAssignments(); // notifies onChanged
@@ -586,7 +589,7 @@ bool MidiLearnController::deleteProfile(const juce::String& profileId) {
     auto before = std::optional<ControllerProfile>(*existing);
     profileStore_.deleteProfile(profileId);
     profiles_.erase(existing);
-    remoteEngine_.setProfiles(profiles_);
+    setProfilesAndReconcileHandshakes();
     recordProfileEdit("Delete controller", profileId, std::move(before));
     if (onChanged)
         onChanged();
@@ -640,7 +643,7 @@ bool MidiLearnController::deleteControlsWithLabel(const juce::String& profileId,
         return false;
 
     profileStore_.save(*profileIt);
-    remoteEngine_.setProfiles(profiles_);
+    setProfilesAndReconcileHandshakes();
     recordProfileEdit(editLabel, profileId, std::move(before));
 
     // The project half goes on AppUndoManager, mirroring forget()'s own before/after-JSON snapshot --
@@ -683,7 +686,7 @@ bool MidiLearnController::updateAssignment(const Assignment& updated) {
             auto before = std::optional<ControllerProfile>(profile);
             *it = updated;
             profileStore_.save(profile);
-            remoteEngine_.setProfiles(profiles_);
+            setProfilesAndReconcileHandshakes();
             recordProfileEdit("Edit assignment", profile.id, std::move(before));
             if (onChanged)
                 onChanged();

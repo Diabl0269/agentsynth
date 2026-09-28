@@ -26,6 +26,11 @@ struct TemplateInfo {
     // document (with URL and section) its CC/note numbers were sourced from -- required by
     // docs/control/midi-remote-ui.md#contribute-a-template, never left to guesswork.
     juce::String source;
+    // FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): mirrors this template's own
+    // ControllerProfile::Handshake::port (e.g. "DAW" for the Launch Control XL 3) -- empty for a
+    // template with no port ambiguity. AddControllerPopover reads this to preselect a matching input
+    // device when this template is chosen as "Start with".
+    juce::String handshakePort;
 };
 
 /** One Templates-menu section: `vendor` (empty means "Generic") and its templates, in the same
@@ -74,7 +79,12 @@ struct TemplateApplyResult {
  *  profile control with that same spec via makeAssignmentForControl (MidiRemoteMapping.h) so the
  *  copy carries a real profile/control id rather than the template's own placeholder ones. A
  *  template action whose spec matches no control in `tmpl.controls` is malformed and is skipped
- *  (never asserted here -- ControllerTemplatesVendorTests.cpp guards template authoring). */
+ *  (never asserted here -- ControllerTemplatesVendorTests.cpp guards template authoring).
+ *
+ *  FRO339: also copies `tmpl.handshake` into `profile.handshake`, but only when `profile` doesn't
+ *  already have one -- unlike controls/actions this isn't keyed on a MessageSpec (there is only
+ *  ever one handshake per profile), so "existing wins" here means "a profile that already
+ *  declares a handshake keeps it" rather than a per-item dedup. */
 TemplateApplyResult applyControllerTemplate(ControllerProfile& profile, const ControllerProfile& tmpl);
 
 } // namespace synth::midi

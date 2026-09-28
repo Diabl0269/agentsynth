@@ -230,6 +230,14 @@ public:
     /** Re-derives the toolbar's "Cmd+Z undoes: ..." hint; repaints only if the text changed. */
     void refreshUndoHint();
 
+    // ---- FRO339: handshake port-hint status line (MidiRemotePanelHandshake.cpp) ----
+    /** Re-derives the toolbar's port-hint warning row for the currently-selected profile
+     *  (MidiLearnController::getHandshakeIssueForProfile) -- a no-op-safe re-layout when the text is
+     *  unchanged. Call after every rebuild/selection change (rebuildFromProfiles(), selectProfile()). */
+    void refreshPortHint();
+    /** FRO339 test seam: the toolbar's port-hint row as last set by refreshPortHint(). */
+    juce::String getPortHintForTest() const { return toolbar_.getPortHint(); }
+
     void resized() override;
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;

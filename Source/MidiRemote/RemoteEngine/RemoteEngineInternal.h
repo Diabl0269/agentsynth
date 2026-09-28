@@ -251,6 +251,10 @@ inline float mapThroughRange(float raw, double rangeMin, double rangeMax) noexce
 
 /** Pick-up: true once the hardware value has crossed the parameter's current value since the
  *  previous hardware value seen for this gesture. */
+/** Pickup's "already there" test for a gesture's first event: the hardware sits within ~1.5 abs7
+ *  steps of the parameter, so they are in sync and the gesture can drive it straight away. */
+inline bool pickupCaught(float cur, float hw) noexcept { return std::abs(hw - cur) <= 1.5f / 127.0f; }
+
 inline bool pickupHasCrossed(float prevHw, float cur, float hw) noexcept {
     return (prevHw <= cur && hw >= cur) || (prevHw >= cur && hw <= cur);
 }

@@ -7,6 +7,8 @@
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
+#include <algorithm>
+
 namespace synth::ui {
 
 namespace {
@@ -44,6 +46,7 @@ AddControllerPopover::AddControllerPopover(std::vector<DeviceRow> devices,
         startCombo_.addItem("Template: " + templates_[i].name, kStartTemplateBaseId + static_cast<int>(i));
     startCombo_.addItem("Empty", kStartEmptyId);
     startCombo_.setSelectedId(kStartDetectId, juce::dontSendNotification);
+    startCombo_.onChange = [this] { handleStartChanged(); };
 
     nameEditor_.onTextChange = [this] {
         nameEditedByUser_ = true;
@@ -74,6 +77,27 @@ AddControllerPopover::~AddControllerPopover() = default;
 void AddControllerPopover::selectDevice(int comboId) {
     if (comboId >= 1 && comboId <= static_cast<int>(devices_.size()) && !nameEditedByUser_) {
         nameEditor_.setText(devices_[static_cast<std::size_t>(comboId - 1)].name, juce::dontSendNotification);
+    }
+    okButton_.setEnabled(canConfirm());
+}
+
+// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): choosing a template whose
+// handshake declares a port hint (TemplateInfo::handshakePort, e.g. the Launch Control XL 3's "DAW")
+// preselects the first free device row whose name already contains that word -- e.g. "LCXL3 1 DAW
+// Out" over "LCXL3 1 MIDI Out" -- through the SAME path a manual device pick uses (selectDevice()),
+// so the name field also re-prefills.
+void AddControllerPopover::handleStartChanged() {
+    const int startId = startCombo_.getSelectedId();
+    if (startId >= kStartTemplateBaseId) {
+        const auto& hint = templates_[static_cast<std::size_t>(startId - kStartTemplateBaseId)].handshakePort;
+        if (hint.isNotEmpty()) {
+            const auto it = std::find_if(devices_.begin(), devices_.end(), [&](const DeviceRow& d) {
+                return d.existingProfileName.isEmpty() && d.name.contains(hint);
+            });
+            if (it != devices_.end())
+                deviceCombo_.setSelectedId(static_cast<int>(std::distance(devices_.begin(), it)) + 1,
+                                           juce::sendNotificationSync);
+        }
     }
     okButton_.setEnabled(canConfirm());
 }

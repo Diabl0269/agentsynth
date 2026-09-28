@@ -213,6 +213,7 @@ void MidiRemotePanelComponent::rebuildFromProfiles() {
     refreshSurfaceForSelectedProfile();
     refreshInspectorForSelection();
     refreshUndoHint(); // every history change reaches here through onChanged -> scheduleLiveRefresh
+    refreshPortHint(); // FRO339: a device replug/profile edit can change the selected profile's issue
 }
 
 void MidiRemotePanelComponent::scheduleLiveRefresh() {
@@ -318,6 +319,7 @@ void MidiRemotePanelComponent::selectProfile(const juce::String& profileId) {
     toolbar_.setProfileSelected(isSelectedProfileUsable());
     refreshSurfaceForSelectedProfile();
     refreshInspectorForSelection();
+    refreshPortHint(); // FRO339: the warning row is per-controller, not per-panel
 }
 
 void MidiRemotePanelComponent::selectControl(const juce::String& controlId) {

@@ -140,7 +140,13 @@ void RemoteEngine::applyToParameter(const RemoteMappingSnapshot::Slot& slot, con
             if (state.takeoverEngaged) {
                 // target already hw
             } else if (isNewGesture) {
-                shouldApply = false;
+                // A gesture that starts where the parameter already is (the usual case once the two
+                // were in sync, and the only way out of a rail: a fader parked at max can never
+                // "cross" its own value moving away) engages at once.
+                if (detail::pickupCaught(cur, hw))
+                    state.takeoverEngaged = true;
+                else
+                    shouldApply = false;
             } else if (detail::pickupHasCrossed(state.lastValue, cur, hw)) {
                 state.takeoverEngaged = true;
             } else {
@@ -226,7 +232,10 @@ void RemoteEngine::applyToContinuous(const RemoteMappingSnapshot::Slot& slot, co
         if (state.takeoverEngaged) {
             // target already hw
         } else if (isNewGesture) {
-            shouldApply = false;
+            if (detail::pickupCaught(cur, hw)) // same "already in sync" rule as applyToParameter
+                state.takeoverEngaged = true;
+            else
+                shouldApply = false;
         } else if (detail::pickupHasCrossed(state.lastValue, cur, hw)) {
             state.takeoverEngaged = true;
         } else {

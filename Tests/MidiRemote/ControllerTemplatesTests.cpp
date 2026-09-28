@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <set>
 
 using namespace synth;
@@ -26,7 +27,8 @@ const std::vector<std::pair<juce::String, size_t>> kExpected = {
     {"template-arturia-beatstep", 34u},
     {"template-arturia-minilab-3", 20u},
     {"template-korg-nanokontrol2", 51u},
-    {"template-novation-launch-control-xl-3", 48u},
+    // FRO339: +2 controls (Play/Record, CC) over the pre-FRO339 48.
+    {"template-novation-launch-control-xl-3", 50u},
 };
 
 ControllerProfile loadOrFail(const juce::String& id) {
@@ -83,10 +85,12 @@ TEST(ControllerTemplatesTest, EveryTemplateLoadsWithTheDocumentedControlCountAnd
         ASSERT_TRUE(loadControllerTemplate(id, p)) << id.toStdString();
         EXPECT_EQ(p.id, id);
         EXPECT_EQ(p.controls.size(), count) << id.toStdString();
-        // FRO330: template-arturia-beatstep is the one template that ships pre-wired actions
-        // (Play/Stop) -- see ControllerTemplatesVendorTests.cpp's ArturiaBeatStepHasTheDocumentedSurface
+        // FRO330/FRO339: template-arturia-beatstep (Play/Stop) and
+        // template-novation-launch-control-xl-3 (Play/Record) are the two templates that ship
+        // pre-wired actions -- see ControllerTemplatesVendorTests.cpp's
+        // ArturiaBeatStepHasTheDocumentedSurface / NovationLaunchControlXL3HasTheDocumentedSurface
         // for the transport-specific coverage. Every other template still ships none.
-        if (id == "template-arturia-beatstep")
+        if (id == "template-arturia-beatstep" || id == "template-novation-launch-control-xl-3")
             EXPECT_EQ(p.actions.size(), 2u) << id.toStdString();
         else
             EXPECT_TRUE(p.actions.empty()) << id.toStdString();
@@ -251,4 +255,45 @@ TEST(ControllerTemplatesTest, TemplateWithNoActionsLeavesProfileActionsUntouched
     EXPECT_EQ(result.actionsAdded, 0);
     EXPECT_EQ(result.actionsSkippedDuplicates, 0);
     EXPECT_TRUE(profile.actions.empty());
+}
+
+// ============================================================================
+// FRO339 (docs/control/midi-remote-device-handshake.md#device-handshake): a template's optional handshake --
+// applyControllerTemplate copies it only into a profile that doesn't already have one.
+// ============================================================================
+
+TEST(ControllerTemplatesTest, ApplyToEmptyProfileAlsoCopiesTemplateHandshake) {
+    const auto tmpl = loadOrFail("template-novation-launch-control-xl-3");
+    ASSERT_FALSE(tmpl.handshake.isEmpty());
+    ControllerProfile profile;
+    profile.id = "p1";
+
+    applyControllerTemplate(profile, tmpl);
+
+    EXPECT_EQ(profile.handshake.openMessage, tmpl.handshake.openMessage);
+    EXPECT_EQ(profile.handshake.closeMessage, tmpl.handshake.closeMessage);
+    EXPECT_EQ(profile.handshake.port, tmpl.handshake.port); // FRO339: the port hint copies too
+}
+
+TEST(ControllerTemplatesTest, ApplyingATemplateNeverOverwritesAnExistingHandshake) {
+    const auto tmpl = loadOrFail("template-novation-launch-control-xl-3");
+    ControllerProfile profile;
+    profile.id = "p1";
+    profile.handshake.openMessage = {0x01};
+    profile.handshake.closeMessage = {0x02};
+
+    applyControllerTemplate(profile, tmpl);
+
+    EXPECT_EQ(profile.handshake.openMessage, (std::vector<std::uint8_t>{0x01}));
+    EXPECT_EQ(profile.handshake.closeMessage, (std::vector<std::uint8_t>{0x02}));
+}
+
+TEST(ControllerTemplatesTest, TemplateWithNoHandshakeLeavesProfileHandshakeEmpty) {
+    const auto tmpl = loadOrFail("template-8-knobs");
+    ControllerProfile profile;
+    profile.id = "p1";
+
+    applyControllerTemplate(profile, tmpl);
+
+    EXPECT_TRUE(profile.handshake.isEmpty());
 }

@@ -87,7 +87,7 @@ std::vector<TemplateInfo> listControllerTemplates() {
         juce::String vendor, source;
         if (!parseResource(resourceName, profile, &vendor, &source))
             continue;
-        result.push_back({profile.id, profile.name, vendor, source});
+        result.push_back({profile.id, profile.name, vendor, source, profile.handshake.port});
     }
     std::stable_sort(result.begin(), result.end(), [](const TemplateInfo& a, const TemplateInfo& b) {
         const int ia = orderIndex(a.id);
@@ -141,6 +141,11 @@ bool loadControllerTemplate(const juce::String& id, ControllerProfile& out) {
 
 TemplateApplyResult applyControllerTemplate(ControllerProfile& profile, const ControllerProfile& tmpl) {
     TemplateApplyResult result;
+
+    // FRO339: a profile that doesn't already declare a handshake picks up the template's --
+    // there is only one per profile, so this is "existing wins" without a per-item dedup.
+    if (profile.handshake.isEmpty())
+        profile.handshake = tmpl.handshake;
 
     // An empty profile keeps the template's own layout; otherwise stack the additions below.
     int rowOffset = 0;
