@@ -557,11 +557,12 @@ void MainComponent::wireMidiRemoteEngine() {
     // here calls after touching it.
     mixerPanel.setMidiRemoteDoc(&midiRemoteDoc);
     mixerPanel.onPublishMidiRemoteAssignments = [this] { midiLearnController_.publishAssignments(); };
-    // FRO253: re-syncs the mixer column's M/S visuals after a hardware press flips solo outside
-    // any column's own click -- see MixerColumnComponent::toggleSoloed's callers for why nothing
-    // else does this (MixerColumnMidiLearn.cpp / RemoteActionInvokerImpl's own comment).
-    remoteActionInvoker_.onNodeCommandApplied = [&mixerPanel](juce::AudioProcessorGraph::NodeID) {
-        mixerPanel.refreshMuteSoloVisuals();
+    // FRO253/FRO336: re-syncs the mixer column's M/S visuals -- and, if the "both places" mirror
+    // (docs/mixer/panel.md) is open, its columns too -- after a hardware press flips solo outside
+    // any column's own click. See MixerColumnComponent::toggleSoloed's callers for why nothing else
+    // does this (MixerColumnMidiLearn.cpp / RemoteActionInvokerImpl's own comment).
+    remoteActionInvoker_.onNodeCommandApplied = [this](juce::AudioProcessorGraph::NodeID) {
+        bottomDock.refreshLiveMixerVisualsEverywhere();
     };
 
     // Installed last: nothing may reach the sink before it has profiles/assignments and at least a

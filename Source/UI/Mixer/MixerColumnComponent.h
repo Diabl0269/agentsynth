@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Mixer/MixerModel/MixerModel.h"
+#include "Mixer/PeakMeterLatch.h"
 #include "MixerColumnHeader.h"
 #include "MixerEqThumbnail.h"
 #include "MixerFader.h"
@@ -36,9 +37,13 @@ public:
     MixerColumnComponent();
 
     /** References must outlive this component -- same lifetime contract BottomDockComponent's own
-     *  constructor threads down through MixerPanelComponent. */
+     *  constructor threads down through MixerPanelComponent. FRO336: `meterReader` defaults to the
+     *  pre-existing `MeterReader::Mixer` slot -- pass `MeterReader::MixerMirror` for a column
+     *  belonging to the Mixer's optional second live view (MixerMirrorController), so its meter
+     *  poll never races the docked view's for the same consume-on-read latch slot. */
     void configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, synth::MacroSet& macros,
-                   GraphEditor& graphEditor, AudioEngine& audioEngine);
+                   GraphEditor& graphEditor, AudioEngine& audioEngine,
+                   synth::MeterReader meterReader = synth::MeterReader::Mixer);
 
     /** `sourceLine`: the feeding tracks' names, comma-joined (computed by the caller, which holds
      *  the TimelineDoc -- Core's MixerColumn only carries TrackIds). */
@@ -125,6 +130,11 @@ public:
     std::function<void(const juce::String&)> onEditOnCanvas;
     /** Forwarded from the insert list and the send list after a topology-changing mutation. */
     std::function<void()> onMutated;
+    /** FRO336: fired at the end of toggleMuted()/toggleSoloed() -- a real interactive toggle only,
+     *  never a rebuild-driven setColumn() application. MixerPanelComponent::rebuild() wires this to
+     *  its own onLiveMixerStateChanged, the cheap per-strip refresh signal a sibling live view
+     *  (the "both places" mirror, docs/mixer/panel.md) uses to catch up without a full rebuild. */
+    std::function<void()> onLiveStateChanged;
 
     /** FRO15: forwarded to the send list's "+ Send > New bus..." -- see MixerSendList::createBus. */
     void setCreateBusProvider(std::function<juce::AudioProcessorGraph::NodeID()> provider) {
@@ -212,9 +222,9 @@ public:
     std::function<juce::String()> onQuerySoloMidiMapping;
 
     /** FRO253: re-reads mute/solo from the bound module/strip and repaints -- called by
-     *  MixerPanelComponent::refreshMuteSoloVisuals() after something OTHER than this column's own
-     *  click changes solo (a MIDI Remote node-command press). A no-op post-unbind (graph_ null),
-     *  same guard toggleSoloed() above already uses. */
+     *  MixerPanelComponent::refreshLiveMixerVisuals() after something OTHER than this column's own
+     *  click changes solo (a MIDI Remote node-command press, or FRO336's sibling-live-view refresh).
+     *  A no-op post-unbind (graph_ null), same guard toggleSoloed() above already uses. */
     void refreshMuteSoloVisual();
 
 private:
@@ -281,6 +291,8 @@ private:
     AppUndoManager* undoManager_ = nullptr;
     AudioEngine* audioEngine_ = nullptr;
     synth::MacroSet* macros_ = nullptr; // FRO225: commitHeaderRename() only -- everything else already threads its own
+    // FRO336: which consume-on-read latch slot refreshMeter() polls -- see configure()'s own comment.
+    synth::MeterReader meterReader_ = synth::MeterReader::Mixer;
 
     juce::AudioProcessorGraph::NodeID nodeId_;
     juce::String uuid_;

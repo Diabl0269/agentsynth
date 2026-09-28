@@ -95,7 +95,9 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // about to free, and a click on one must never assign to a node that no longer exists.
     graphEditor.onBeforeDetachAllModuleComponents = [this] {
         midiLearnController_.cancelPickTarget();
-        bottomDock.getMixerPanel().unbindAllColumns();
+        // FRO336: unbinds the "both places" mirror view too, when one is open -- Source/UI/CLAUDE.md's
+        // mixer-unbind invariant applies to every live MixerPanelComponent, not only the docked one.
+        bottomDock.unbindAllMixerViews();
     };
     // The channel chip's click (TrackChannelLinkSurface::revealChannelForTrack, "THE P9-5 HOOK"
     // per its own comment): open the dock (ensureBottomDockOpen()) before revealColumnForStrip

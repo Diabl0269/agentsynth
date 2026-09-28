@@ -25,6 +25,15 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     , mixerHost_(mixer_, "Mixer", "mixerWindowBounds", &appProperties, lookAndFeel, shortcutManager)
     , midiRemoteHost_(midiRemotePanel_, "Controllers", "midiRemoteWindowBounds", &appProperties, lookAndFeel,
                       shortcutManager)
+    , mixerMirror_(appProperties,
+                   [&audioEngine, &doc, &undoManager, &graphEditor](MixerPanelComponent& panel) {
+                       // FRO336: the exact same configure() call mixer_ itself gets below, just
+                       // against a second instance and the MixerMirror meter-reader slot -- these
+                       // four references outlive `this` for the same reason mixer_.configure()'s
+                       // own call already relies on (MainComponent's declaration order).
+                       panel.configure(audioEngine.getGraph(), doc, graphEditor.getMacros(), undoManager, graphEditor,
+                                       audioEngine, synth::MeterReader::MixerMirror);
+                   })
     , timelineTabButton_(*this, Tab::Timeline, "Timeline")
     , mixerTabButton_(*this, Tab::Mixer, "Mixer")
     , midiRemoteTabButton_(*this, Tab::MidiRemote, "Controllers")
@@ -40,10 +49,17 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     midiRemoteTabButton_.onClick = [this] { setActiveTab(Tab::MidiRemote); };
 
     // FRO12: icon-only, lives in this strip rather than either host's own header -- see
-    // DetachablePanelHost's class comment. Acts on whichever tab is active (activeHost()).
+    // DetachablePanelHost's class comment. Acts on whichever tab is active (activeHost()) --
+    // FRO336: OR, for the Mixer tab with "both places" on, toggles the mirror window instead (see
+    // toggleActiveHostDetach()).
     detachButton_.setClickingTogglesState(false);
-    detachButton_.onClick = [this] { activeHost().setDetached(!activeHost().isDetached()); };
+    detachButton_.onClick = [this] { toggleActiveHostDetach(); };
     addAndMakeVisible(detachButton_);
+
+    // FRO336: keeps the detach button's own label/icon state (refreshDetachButton()) in sync with
+    // the mirror opening/closing, the same way onEitherHostDetachStateChanged below does for a real
+    // detach/redock.
+    mixerMirror_.onOpenedOrClosed = [this] { refreshDetachButton(); };
 
     // Both hosts draw no header of their own while docked here -- this tab strip IS their header.
     // Each host's own constructor already parents its panel (timelinePanel_ / mixer_) into itself
@@ -87,6 +103,12 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     resetMetersButton_.onClick = [this] { mixer_.resetAllMeterReadouts(); };
 
     mixer_.configure(audioEngine.getGraph(), doc, graphEditor.getMacros(), undoManager, graphEditor, audioEngine);
+    // FRO336: the docked mixer's own live mute/solo/pan-law changes reach the "both places" mirror
+    // (if open) the instant they happen -- the mirror's own symmetric half of this cross-wire lives
+    // in MixerMirrorController::open() (mirror_->onLiveMixerStateChanged), which points back at
+    // mixer_.refreshLiveMixerVisuals(). Safe unconditionally: refreshLiveVisualsIfOpen() is a no-op
+    // while the mirror is closed.
+    mixer_.onLiveMixerStateChanged = [this] { mixerMirror_.refreshLiveVisualsIfOpen(); };
 
     // Last, so the top few pixels always belong to the resize gesture whatever tab is showing. The
     // dock is the handle's owner, so the desired height it reports is already the TOTAL dock height.
@@ -125,7 +147,43 @@ void BottomDockComponent::setApplicationProperties(juce::ApplicationProperties* 
         if (sorted == everyTab)
             tabOrder_ = parsed;
     }
+    // FRO336: the plain initial read -- nothing is open yet, so there is no live transition to run
+    // (applyDetachBothPlacesPreference() below is what re-reads this LIVE, on a later settings-file
+    // write).
+    detachBothPlacesEnabled_ = settings->getValue(kDetachBothPlacesKey, "move") == "both";
     applyTabVisibility();
+}
+
+void BottomDockComponent::applyDetachBothPlacesPreference() {
+    if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
+        return;
+    const bool enabled = appProperties_->getUserSettings()->getValue(kDetachBothPlacesKey, "move") == "both";
+    if (enabled == detachBothPlacesEnabled_)
+        return;
+    detachBothPlacesEnabled_ = enabled;
+    // Scoped to Tab placement (mixerTabEnabled_) -- Own-panel/Window placement's own detach state is
+    // MixerPlacementController's, not this preference's, to transition (see this method's own doc
+    // comment on BottomDockComponent.h).
+    if (mixerTabEnabled_) {
+        if (enabled && mixerHost_.isDetached()) {
+            // Was "move" (the real host detached, tab gone from the strip) -- redock it, switch
+            // back to it (redocking alone does not: applyTabVisibility()'s fallback pick never
+            // un-does an earlier fallback just because Mixer became offered again) and open a
+            // mirror instead, so both places show it as the preference now promises.
+            mixerHost_.setDetached(false);
+            setActiveTab(Tab::Mixer);
+            toggleActiveHostDetach(); // Mixer is active + detachBothPlacesEnabled_ is already true -> opens the mirror
+        } else if (!enabled && mixerMirror_.isOpen()) {
+            // Was "both" -- close the mirror and detach the real host instead, which is exactly
+            // FRO333's "a detached tab leaves the strip" behaviour the default preference restores.
+            mixerMirror_.close();
+            mixerHost_.setDetached(true);
+        }
+    } else if (mixerMirror_.isOpen()) {
+        // A mirror should never outlive Tab placement -- see setMixerTabEnabled()'s own comment.
+        mixerMirror_.close();
+    }
+    refreshDetachButton();
 }
 
 void BottomDockComponent::setOnGraphTopologyChanged(std::function<void()> callback) {
@@ -157,6 +215,10 @@ void BottomDockComponent::setMixerTabEnabled(bool enabled) {
     if (mixerTabEnabled_ == enabled)
         return;
     mixerTabEnabled_ = enabled;
+    // FRO336: "both places" is scoped to Tab placement -- a mirror should never outlive it (Own
+    // panel/Window placement have their own, unrelated detach state, MixerPlacementController's).
+    if (!enabled && mixerMirror_.isOpen())
+        mixerMirror_.close();
     // FRO333: no separate "was Mixer active?" branch needed any more -- applyTabVisibility() picks
     // a fallback active tab itself whenever the current one stops being offered, which disabling
     // Mixer while it's active is just one more instance of (a detach is the other).
@@ -217,11 +279,35 @@ BottomDockComponent::Tab BottomDockComponent::pickFallbackActiveTab() const noex
     return activeTab_; // hasAnyVisibleTab() is false -- nothing to fall back to.
 }
 
+// FRO336: replaces the plain activeHost().setDetached(!isDetached()) toggle -- routes the Mixer
+// tab through the mirror instead of a real detach while "both places" is on.
+void BottomDockComponent::toggleActiveHostDetach() {
+    if (usesMixerMirrorForDetach()) {
+        if (mixerMirror_.isOpen())
+            mixerMirror_.close();
+        else
+            openMixerMirror();
+        return;
+    }
+    activeHost().setDetached(!activeHost().isDetached());
+}
+
+void BottomDockComponent::openMixerMirror() {
+    // Same dynamic_cast-with-null-fallback convention refreshDetachButton()/applyIcon() use --
+    // headless tests (no real LookAndFeel installed yet) leave the mirror window unthemed, matching
+    // a real detach's own fallback.
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    mixerMirror_.open(mixer_, lf, shortcutManager_, mixerHost_.onAppShortcutFallback,
+                      mixerHost_.isCreatingNativeWindows());
+}
+
 void BottomDockComponent::refreshDetachButton() {
     // FRO228: same wording as the tooltip -- without an explicit setTitle(), the ctor's
     // "detachActiveTab" component name leaks as the AX title (ButtonAccessibilityHandler::
-    // getTitle()'s getButtonText() fallback).
-    const juce::String label = activeHost().isDetached() ? "Dock back" : "Open in window";
+    // getTitle()'s getButtonText() fallback). FRO336: while "both places" drives the Mixer tab, the
+    // button's own state tracks the MIRROR (mixerHost_ itself never actually detaches then).
+    const bool detached = usesMixerMirrorForDetach() ? mixerMirror_.isOpen() : activeHost().isDetached();
+    const juce::String label = detached ? "Dock back" : "Open in window";
     detachButton_.setTooltip(label);
     detachButton_.setTitle(label);
     // Same dynamic_cast-with-null-fallback convention DetachablePanelHost::applyIcon uses.

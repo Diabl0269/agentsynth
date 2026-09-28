@@ -55,14 +55,21 @@ MixerPanelComponent::MixerPanelComponent() {
 
 MixerPanelComponent::~MixerPanelComponent() = default;
 
+// FRO336: `meterReader` defaults to the pre-existing `MeterReader::Mixer` slot -- the Mixer's
+// optional second live view (MixerMirrorController) passes `MeterReader::MixerMirror` instead, so
+// its columns' meter polls never race the docked view's for the same consume-on-read latch slot
+// (Source/Mixer/PeakMeterLatch.h). Threaded straight through to every strip/Master column configure()
+// call below, and into masterColumn_'s post-insert outputPeakProvider.
 void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc, synth::MacroSet& macros,
-                                    AppUndoManager& undoManager, GraphEditor& graphEditor, AudioEngine& audioEngine) {
+                                    AppUndoManager& undoManager, GraphEditor& graphEditor, AudioEngine& audioEngine,
+                                    synth::MeterReader meterReader) {
     graph_ = &graph;
     doc_ = &doc;
     macros_ = &macros;
     undoManager_ = &undoManager;
     graphEditor_ = &graphEditor;
     audioEngine_ = &audioEngine;
+    meterReader_ = meterReader;
     directColumn_ = std::make_unique<MixerDirectColumn>();
     directColumn_->configure(graph);
     directColumn_->onMakeChannelRequested = [this](juce::AudioProcessorGraph::NodeID source) {
@@ -70,17 +77,44 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
             onMakeChannelForNode(source);
     };
     masterColumn_ = std::make_unique<MixerMasterColumn>();
-    masterColumn_->configure(graph, undoManager, macros, graphEditor, audioEngine);
+    masterColumn_->configure(graph, undoManager, macros, graphEditor, audioEngine, meterReader_);
     // FRO148: post-insert level for the Master meter once the chain has inserts (docs/mixer/meters.md).
     masterColumn_->outputPeakProvider = [this](int leg) -> float {
-        return audioEngine_ != nullptr ? audioEngine_->takeOutputMeterPeak(synth::MeterReader::Mixer, leg) : 0.0f;
+        return audioEngine_ != nullptr ? audioEngine_->takeOutputMeterPeak(meterReader_, leg) : 0.0f;
     };
     masterColumn_->onEditOnCanvas = [this](const juce::String& target) { selectOnCanvas(target); };
     masterColumn_->onMutated = [this] {
         if (onGraphMutated)
             onGraphMutated();
     };
+    // FRO336: onLiveMixerStateChanged is deliberately NOT in copyWiringFrom()'s blanket copy below --
+    // each instance's own copy must reach its SIBLING's refreshLiveMixerVisuals() (BottomDockComponent/
+    // MixerMirrorController do that cross-wire), never its own, or an instance would refresh itself
+    // instead of the other live view.
+    masterColumn_->onLiveStateChanged = [this] {
+        if (onLiveMixerStateChanged)
+            onLiveMixerStateChanged();
+    };
     masterColumn_->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
+}
+
+// FRO336: everything MainComponent wires directly onto a panel instance (never touched by
+// configure() above, which only wires the panel's OWN internal callbacks) -- the one-shot setup a
+// freshly created MixerMirrorController view needs so a right-click MIDI-learn menu, solo-learn
+// arming, MIDI Remote doc lookups and the M/S/R keyboard shortcuts all resolve the same way the
+// docked panel's already do. Deliberately does NOT copy per-view state (columnEntries_,
+// focusedColumnIndex_, scroll position) -- those stay independent by design (each view is its own
+// live view of the same model, not a clone of the other's on-screen state).
+void MixerPanelComponent::copyWiringFrom(const MixerPanelComponent& other) {
+    onMakeChannelForNode = other.onMakeChannelForNode;
+    onGraphMutated = other.onGraphMutated;
+    onArmTrack = other.onArmTrack;
+    onPublishMidiRemoteAssignments = other.onPublishMidiRemoteAssignments;
+    onSoloMidiLearnRequested = other.onSoloMidiLearnRequested;
+    onSoloMidiForgetRequested = other.onSoloMidiForgetRequested;
+    onQuerySoloMidiMapping = other.onQuerySoloMidiMapping;
+    setMidiRemoteDoc(other.midiRemoteDoc_);
+    setShortcutManager(other.shortcuts_);
 }
 
 void MixerPanelComponent::selectOnCanvas(const juce::String& targetId) {
@@ -133,7 +167,7 @@ void MixerPanelComponent::rebuild() {
         if (column.kind != synth::MixerColumn::Kind::Strip && column.kind != synth::MixerColumn::Kind::Bus)
             continue;
         auto widget = std::make_unique<MixerColumnComponent>();
-        widget->configure(*graph_, *undoManager_, *macros_, *graphEditor_, *audioEngine_);
+        widget->configure(*graph_, *undoManager_, *macros_, *graphEditor_, *audioEngine_, meterReader_);
 
         juce::StringArray sourceNames;
         if (column.kind == synth::MixerColumn::Kind::Bus) {
@@ -155,6 +189,10 @@ void MixerPanelComponent::rebuild() {
         widget->onMutated = [this] {
             if (onGraphMutated)
                 onGraphMutated();
+        };
+        widget->onLiveStateChanged = [this] {
+            if (onLiveMixerStateChanged)
+                onLiveMixerStateChanged();
         };
         widget->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
         // FRO253: forwards this panel's single set of Solo-learn callbacks down to the column,
@@ -386,15 +424,21 @@ void MixerPanelComponent::collectPickCandidates(std::vector<PickCandidate>& out)
         masterColumn_->collectPickCandidates(out);
 }
 
-// FRO253: called after a nodeCommand press changes solo OUTSIDE any column's own click (via
-// MainComponentRemoteActionInvoker::invokeNodeCommand) -- MixerColumnComponent::toggleSoloed()'s
-// own refresh only runs on ITS OWN click, so nothing else re-syncs a column's M/S visuals after a
-// hardware toggle. Cheap enough to refresh every column unconditionally (a handful of strips,
-// never per-frame) rather than resolving which one node id maps to.
-void MixerPanelComponent::refreshMuteSoloVisuals() {
+// FRO253/FRO336: called after something OTHER than a click on THIS instance changed mute/solo/
+// pan-law -- a hardware nodeCommand press (MainComponentRemoteActionInvoker::invokeNodeCommand,
+// via BottomDockComponent::refreshLiveMixerVisualsEverywhere()) or a sibling live view's own
+// interactive change (onLiveMixerStateChanged, cross-wired in BottomDockComponent/
+// MixerMirrorController -- see docs/mixer/panel.md#detach-mode-move-or-both-places).
+// MixerColumnComponent::toggleMuted()/toggleSoloed()'s own refresh only runs on ITS OWN click, so
+// nothing else re-syncs a column's or Master's visuals otherwise. Cheap enough to refresh every
+// column unconditionally (a handful of strips, never per-frame) rather than resolving which one
+// node id maps to.
+void MixerPanelComponent::refreshLiveMixerVisuals() {
     for (auto& column : stripColumns_)
         if (column != nullptr)
             column->refreshMuteSoloVisual();
+    if (masterColumn_ != nullptr)
+        masterColumn_->refreshLiveVisuals();
 }
 
 namespace {

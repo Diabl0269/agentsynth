@@ -3,6 +3,7 @@
 #include "MacroSet.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerPanLaw.h"
+#include "Mixer/PeakMeterLatch.h"
 #include "MixerColumnHeader.h"
 #include "MixerFader.h"
 #include "MixerInsertList.h"
@@ -27,8 +28,13 @@ class MixerMasterColumn : public juce::Component {
 public:
     MixerMasterColumn();
 
+    /** FRO336: `meterReader` defaults to the pre-existing `MeterReader::Mixer` slot -- pass
+     *  `MeterReader::MixerMirror` when this column belongs to the Mixer's optional second live view
+     *  (MixerMirrorController), so its own meter poll never races the docked view's for the same
+     *  consume-on-read latch slot (Source/Mixer/PeakMeterLatch.h). */
     void configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, synth::MacroSet& macros,
-                   GraphEditor& graphEditor, AudioEngine& audioEngine);
+                   GraphEditor& graphEditor, AudioEngine& audioEngine,
+                   synth::MeterReader meterReader = synth::MeterReader::Mixer);
     void setNodeId(juce::AudioProcessorGraph::NodeID nodeId);
     /** FRO148: binds to `column` (Kind::Master) -- setNodeId(column.nodeId) plus the insert list's rows. Call after
      *  configure(); the column's chain fields come straight off MixerSnapshot. */
@@ -51,6 +57,9 @@ public:
     /** Forwarded from the insert list -- see MixerInsertList::onEditOnCanvas / onMutated. */
     std::function<void(const juce::String&)> onEditOnCanvas;
     std::function<void()> onMutated;
+    /** FRO336: fired at the end of toggleMuted()/setPanLaw() -- a real interactive change only,
+     *  same contract as MixerColumnComponent::onLiveStateChanged (see that member's comment). */
+    std::function<void()> onLiveStateChanged;
 
     MixerInsertList& getInsertListForTest() noexcept { return insertList_; }
 
@@ -116,6 +125,11 @@ public:
             hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
     }
 
+    /** FRO336: the cheap per-strip refresh for Master -- mute button + pan-law label, no rebuild.
+     *  Called on this instance directly by MixerPanelComponent::refreshLiveMixerVisuals(); see that
+     *  method's comment for who calls it and why. */
+    void refreshLiveVisuals();
+
 private:
     void refreshPanLawButton();
     void showPanLawMenu();
@@ -150,6 +164,8 @@ private:
     // FRO148: true once setColumn() saw >= 1 insert -- switches the meter to outputPeakProvider.
     bool hasInserts_ = false;
     float takeMeterPeak(int leg);
+    // FRO336: which consume-on-read latch slot this instance polls -- see configure()'s own comment.
+    synth::MeterReader meterReader_ = synth::MeterReader::Mixer;
 
     MixerColumnHeader header_;
     MixerInsertList insertList_;

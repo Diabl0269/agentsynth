@@ -71,11 +71,13 @@ MixerMasterColumn::MixerMasterColumn() {
 }
 
 void MixerMasterColumn::configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager,
-                                  synth::MacroSet& macros, GraphEditor& graphEditor, AudioEngine& audioEngine) {
+                                  synth::MacroSet& macros, GraphEditor& graphEditor, AudioEngine& audioEngine,
+                                  synth::MeterReader meterReader) {
     graph_ = &graph;
     undoManager_ = &undoManager;
     graphEditor_ = &graphEditor;
     audioEngine_ = &audioEngine;
+    meterReader_ = meterReader;
     insertList_.configure(graph, undoManager, macros, graphEditor);
     refreshPanLawButton();
 }
@@ -95,6 +97,14 @@ void MixerMasterColumn::setColumn(const synth::MixerColumn& column) {
         for (int leg = 0; leg < 2; ++leg)
             takeMeterPeak(leg);
     }
+    // FRO336: a rebuild is the ONE thing every path that changes the engine's pan law directly --
+    // New Patch's factory-default Compensated write (MainComponent::clearTimelineForNewPatch's
+    // caller), Load, undo/redo -- reaches unconditionally, so re-reading it here is what keeps this
+    // label from going stale indefinitely rather than only on the next menu pick. Found while
+    // verifying this ticket's cross-view pan-law sync fix: without this, a fresh mirror open() (which
+    // DOES call refreshPanLawButton() from configure()) could show the CORRECT current law while an
+    // already-open dock, rebuilt since its own last configure()/menu-pick, still showed a stale one.
+    refreshPanLawButton();
     resized();
 }
 
@@ -107,7 +117,7 @@ float MixerMasterColumn::takeMeterPeak(int leg) {
         return 0.0f;
     auto* node = graph_->getNodeForId(nodeId_);
     if (auto* master = dynamic_cast<MasterModule*>(node != nullptr ? node->getProcessor() : nullptr))
-        return master->takeMeterPeak(synth::MeterReader::Mixer, leg);
+        return master->takeMeterPeak(meterReader_, leg);
     return 0.0f;
 }
 
@@ -150,15 +160,16 @@ void MixerMasterColumn::toggleMuted() {
     undoManager_->pushSnapshotFromCapture(*graph_);
     refreshMuteAccessibility();
     repaint();
+    if (onLiveStateChanged)
+        onLiveStateChanged();
 }
 
 // FRO325 (docs/mixer/mixer.md#pan-law): labels the button by the engine's CURRENT law -- called
-// once from configure() and again after every menu pick, so an undo/redo of the setting (which
-// writes straight to the engine, not through this column) is picked up next time the button is
-// pressed. There is no live-value push from the engine, so a change made elsewhere (another
-// window, a future project-settings surface) is only reflected the next time this repaints via
-// that path -- acceptable since Master's own mute/fader controls have the identical "poll on
-// rebind, not pushed" contract.
+// once from configure(), again after every menu pick (setPanLaw(), below), and (FRO336) from
+// refreshLiveVisuals() when a sibling live view (the mixer mirror, docs/mixer/panel.md) reports its
+// own pan-law change via onLiveStateChanged. An undo/redo of the setting still only reaches this
+// button the next time refreshMeter()'s tick or a rebuild calls it -- see MixerPanLawAction in
+// AppUndoManager.cpp, which has no restore-notification hook at all (pre-existing, unrelated gap).
 void MixerMasterColumn::refreshPanLawButton() {
     if (audioEngine_ == nullptr)
         return;
@@ -203,6 +214,15 @@ void MixerMasterColumn::setPanLaw(synth::MixerPanLaw law) {
     // and makes the change undoable, same as every other mixer control.
     undoManager_->recordMixerPanLawChange([this](synth::MixerPanLaw l) { audioEngine_->setMixerPanLaw(l); }, before,
                                           law);
+    refreshPanLawButton();
+    if (onLiveStateChanged)
+        onLiveStateChanged();
+}
+
+// FRO336: the cheap per-strip refresh a sibling live view's onLiveStateChanged drives this instance
+// with -- mute + pan-law only, no rebuild; see MixerPanelComponent::refreshLiveMixerVisuals().
+void MixerMasterColumn::refreshLiveVisuals() {
+    refreshMuteAccessibility();
     refreshPanLawButton();
 }
 

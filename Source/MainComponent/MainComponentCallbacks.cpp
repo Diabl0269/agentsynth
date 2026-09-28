@@ -135,6 +135,10 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
         // placement switch away from Tab would leave the "mixer" region pointing at a component
         // that's no longer showing there -- rebuild every time, same as a detach/redock.
         mixerPlacement_.applyPlacementPreference();
+        // FRO336: the "both places" sibling of the call above -- same idempotent-against-its-own-
+        // current-state contract, so this is likewise safe against a DetachedPanelWindow's own
+        // bounds-persist broadcast.
+        bottomDock.applyDetachBothPlacesPreference();
         rebuildFocusRegions();
         // Piano-roll key-label mode and note colour overrides live in the same properties file —
         // re-read them on every settings write so an Appearance-tab edit shows up immediately,
@@ -174,6 +178,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     bottomDock.getTimelineHost().refreshDetachedWindowTheme();
     bottomDock.getMixerHost().refreshDetachedWindowTheme();
     bottomDock.getMidiRemoteHost().refreshDetachedWindowTheme();
+    bottomDock.refreshMixerMirrorWindowTheme(); // FRO336: the "both places" mirror window, if open
     // Re-tint the toolbar / status-bar icons from the already-retinted IconLibrary cache.
     applyToolbarIcons();
     repaint();

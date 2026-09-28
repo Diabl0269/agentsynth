@@ -50,8 +50,9 @@ void MainComponent::addCanvasAndPanels() {
         // deliberately never rebuilds the mixer. Left alone, every fader would sit on screen
         // attached to nothing until an unrelated later change rebuilt the panel. This re-binds
         // against the settled graph, and is a no-op unless the columns are actually detached, so
-        // it does NOT turn every structural change into a full mixer rebuild.
-        bottomDock.getMixerPanel().rebuildIfUnbound();
+        // it does NOT turn every structural change into a full mixer rebuild. FRO336: covers the
+        // "both places" mirror view too, when one is open.
+        bottomDock.rebuildIfUnboundMixerViews();
     };
     addAndMakeVisible(aiChatComponent);
     aiChatComponent.setVisible(isAiPanelVisible);
