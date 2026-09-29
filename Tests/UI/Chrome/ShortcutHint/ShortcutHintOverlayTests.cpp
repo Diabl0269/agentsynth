@@ -212,6 +212,7 @@ TEST_F(ShortcutHintOverlayTest, TheOverlayNeverTakesClicksAndIsHiddenFromAccessi
     EXPECT_FALSE(overlay_->isAccessible());
     EXPECT_FALSE(overlay_->getWantsKeyboardFocus());
 
+    host_.setVisible(true); // getComponentAt() only descends into a visible component
     holdCmdFor(500.0);
     EXPECT_EQ(host_.getComponentAt(newButton_.getBounds().getCentre()), &newButton_);
 }
