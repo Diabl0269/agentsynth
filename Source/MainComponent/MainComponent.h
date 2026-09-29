@@ -560,6 +560,7 @@ private:
     synth::ui::MixerPlacementController mixerPlacement_{bottomDock, appProperties}; // after bottomDock
     bool isBottomDockVisible = false;
     bool bottomDockAutoHiddenByEmptyTabs_ = false; // dock auto-hid because its last tab detached
+    bool fitMixerAfterDockSlide_ = false;          // set when the dock starts opening; see finishPanelSlide()
     int timelinePanelHeight_ = 0;                  // 0 only before initialiseCommon() resolves it
     bool wasTransportPlaying_ = false;             // playing->stopped edge for the MIDI recorder's auto-commit
     synth::TransportNudgeState transportNudge_;    // message-thread memory of the last cursor-move request
@@ -631,6 +632,8 @@ private:
     /** THE panel-toggle seam: callers flip the flag, persist it, refresh the toolbar, then call this.
      *  Lands synchronously when nothing can animate (headless). */
     void beginPanelSlide();
+    // Grows the dock or Own panel so the mixer's sections fit; call only when the mixer is newly shown.
+    void fitMixerHostToSections();
     void applyPanelSlideFrame(float t);
     void finishPanelSlide();
 

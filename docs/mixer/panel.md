@@ -43,7 +43,8 @@ from every mixer placement: the Timeline's own "+ Track" button, and "+ Bus" in 
 (FRO298, FRO351).** The Inserts, Sends and EQ rows have one height across every column (see
 [Shared sections](#shared-sections)), so faders line up whatever each channel holds. When the column
 is too short for every section plus a `MixerColumnComponent::kMinFaderHeight` (56 px) fader --
-the bottom dock's default height is -- `MixerSectionLayout::resolve()` keeps the fader's minimum
+showing the mixer grows its host to fit, so this happens only once the user makes it shorter
+again -- `MixerSectionLayout::resolve()` keeps the fader's minimum
 (so the slider itself stays draggable) and takes the shortfall lowest priority first: the EQ row,
 then Sends, then Inserts, then the pan knob, identically in every column. The EQ thumbnail only
 ever gets empty bounds, never toggled invisible, since `isVisible()` means "has EQ". With plenty of
@@ -527,8 +528,21 @@ row and fader still line up; Direct has none of the rows and stays as it was. A 
   detached Mixer window (and the "both places" mirror window) the host cannot grow, so the columns
   take `requiredColumnHeight()` and the panel's viewport scrolls vertically, the rail following its
   scroll. Shrinking a section never shrinks the host: the space goes back to the fader.
-- **Too short for everything.** At the bottom dock's default height (220 px) the sections cannot
-  all fit alongside a 56 px fader. `resolve()` keeps the fader's minimum and takes the shortfall
+- **Showing the mixer fits it.** Whenever the mixer is shown -- the dock opens on (or switches to)
+  the Mixer tab, the Own panel opens, or the app starts with either -- and the panel is shorter than
+  `requiredColumnHeight()` (header and source line, every section at its set height or its 14 px
+  strip, the dividers, pan, readout, a 56 px fader and the M/S row), `MainComponent::
+  fitMixerHostToSections()` (or `MixerPlacementController` for the Own panel) calls
+  `MixerPanelComponent::growHostToFitSections()`, which grows the host through the same
+  `growHost` path a divider drag uses, clamped to what the window allows (the dock keeps the
+  canvas the same minimum its own resize handle does). It only grows, never shrinks, and runs
+  once per show, not on every resize: a user who then drags the dock shorter keeps that height and
+  the squeeze rule below applies. Re-showing a hidden section (rail chevron or its strip) fits the
+  host the same way. In the Own-panel placement `BottomDockComponent::resized()` leaves the Mixer
+  host alone (it is parented in `MixerPlacementController`'s strip then), so opening the dock can
+  no longer resize the host to the dock's height and make this fit misread the panel.
+- **Too short for everything.** When the user makes the host shorter than that (or the window
+  cannot give it the room), the sections cannot all fit alongside a 56 px fader. `resolve()` keeps the fader's minimum and takes the shortfall
   lowest priority first -- the EQ row, then Sends, then Inserts, then the pan knob -- identically
   in every column (see the paragraph under [What the mixer shows](#what-the-mixer-shows)); a
   clipped list scrolls inside what is left.

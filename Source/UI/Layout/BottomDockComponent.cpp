@@ -544,7 +544,11 @@ void BottomDockComponent::resized() {
     }
 
     timelineHost_.setBounds(bounds);
-    mixerHost_.setBounds(mixerBounds);
+    // In the Own-panel placement the host lives in MixerPlacementController's strip, which lays it
+    // out itself; sizing it to the dock here would leave it at the wrong height until that strip's
+    // next layout pass.
+    if (mixerHost_.getParentComponent() == this)
+        mixerHost_.setBounds(mixerBounds);
     midiRemoteHost_.setBounds(bounds);
 }
 

@@ -504,6 +504,7 @@ void MainComponent::wireMidiRemoteEngine() {
     midiLearnController_.setPickPassThrough(bottomDock.getTabButtons());
     bottomDock.onActiveTabChanged = [this] {
         midiLearnController_.refreshPickTarget();
+        fitMixerHostToSections(); // a no-op unless the tab that just became active is the Mixer
         // Rebuilds and layout the switch queued land after this call; re-measure once they have.
         juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)] {
             if (safe != nullptr)

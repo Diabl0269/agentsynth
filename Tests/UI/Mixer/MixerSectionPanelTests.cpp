@@ -267,8 +267,9 @@ TEST_F(MixerSectionPanelTest, DividerHoverLightsTheSameDividerInEveryColumnAndTh
 
 TEST_F(MixerSectionPanelTest, DraggingPastTheFaderMinimumGrowsTheBottomDockAndShrinkingDoesNot) {
     openMixer(2);
+    setDockHeight(220); // the user dragged the dock back to its default after it fitted the sections
     const int dockBefore = mc->getBottomDock().getHeight();
-    ASSERT_EQ(dockBefore, 220) << "the dock opens at its default height";
+    ASSERT_EQ(dockBefore, 220);
     const int panelBefore = panel().getHeight();
     ASSERT_LT(panelBefore, layout().requiredColumnHeight())
         << "at the default dock the fader is already at its minimum";
@@ -299,6 +300,57 @@ TEST_F(MixerSectionPanelTest, DraggingPastTheFaderMinimumGrowsTheBottomDockAndSh
     EXPECT_EQ(layout().getRequestedHeight(MixerSection::Inserts), 72);
     EXPECT_EQ(mc->getBottomDock().getHeight(), grownDock) << "shrinking gives the space to the fader, not back";
     EXPECT_EQ(strips()[0]->getFaderForTest().getHeight(), Layout::kMinFaderHeight + 54);
+}
+
+// Showing the Mixer fits the host to the sections once: a 220 px dock switched to the Mixer tab
+// grows so every section gets its full height beside a minimum-height fader.
+TEST_F(MixerSectionPanelTest, SwitchingToTheMixerTabGrowsADefaultDockToFitTheSections) {
+    mc = std::make_unique<MainComponent>(std::make_unique<MockProviderTL>());
+    mc->setSize(1600, 900);
+    mc->getAudioEngine().suspendDeviceCallback();
+    mc->newPatchForTest();
+    mc->simulateAddAudioTrackClick();
+    mc->simulateToggleBottomPanelClick();
+    ASSERT_NE(mc->getBottomDock().getActiveTab(), Dock::Tab::Mixer);
+    ASSERT_EQ(mc->getBottomDock().getHeight(), 220) << "the Timeline tab leaves the dock alone";
+
+    mc->getBottomDock().setActiveTab(Dock::Tab::Mixer);
+    EXPECT_EQ(panel().getHeight(), layout().requiredColumnHeight());
+    EXPECT_GT(mc->getBottomDock().getHeight(), 220);
+    auto* column = strips()[0];
+    EXPECT_EQ(column->getSectionViewportForTest(MixerSection::Inserts).getHeight(), 90);
+    EXPECT_EQ(column->getSectionViewportForTest(MixerSection::Sends).getHeight(), 60);
+    EXPECT_EQ(column->getFaderForTest().getHeight(), Layout::kMinFaderHeight);
+    for (auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq})
+        EXPECT_GT(panel().getSectionRailForTest().getToggleButtonForTest(section).getHeight(), 0)
+            << "every rail label shows";
+}
+
+TEST_F(MixerSectionPanelTest, AUserShrinkingTheDockAfterTheFitIsKept) {
+    openMixer(1);
+    ASSERT_EQ(panel().getHeight(), layout().requiredColumnHeight()) << "fitted when shown";
+
+    setDockHeight(220); // the dock's own resize handle path
+    ASSERT_EQ(mc->getBottomDock().getHeight(), 220);
+    mc->setSize(1600, 880); // an ordinary window resize is not a new show
+    panel().rebuild();
+    EXPECT_EQ(mc->getBottomDock().getHeight(), 220) << "the fit runs once per show, never on a resize";
+    EXPECT_EQ(strips()[0]->getFaderForTest().getHeight(), Layout::kMinFaderHeight) << "the sections squeeze instead";
+}
+
+TEST_F(MixerSectionPanelTest, ReshowingAHiddenSectionWithTheChevronGrowsTheDockToFit) {
+    openMixer(1);
+    auto& toggle = panel().getSectionRailForTest().getToggleButtonForTest(MixerSection::Sends);
+    click(toggle);
+    ASSERT_TRUE(layout().isHidden(MixerSection::Sends));
+    setDockHeight(220);
+    ASSERT_LT(panel().getHeight(), layout().requiredColumnHeight());
+
+    click(panel().getSectionRailForTest().getToggleButtonForTest(MixerSection::Sends));
+    ASSERT_FALSE(layout().isHidden(MixerSection::Sends));
+    EXPECT_EQ(panel().getHeight(), layout().requiredColumnHeight());
+    EXPECT_EQ(strips()[0]->getSectionViewportForTest(MixerSection::Sends).getHeight(), 60)
+        << "the re-shown section gets its full height";
 }
 
 TEST_F(MixerSectionPanelTest, AHostThatCannotGrowScrollsTheWholeColumnInstead) {

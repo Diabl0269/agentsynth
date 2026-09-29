@@ -30,15 +30,37 @@ bool MixerPanelComponent::contentScrollsVertically() const {
 // host clamps to its own limit, so the next step re-measures rather than assuming the growth
 // happened. Shrinking never shrinks the host: the space goes back to the fader. A host that cannot
 // grow at all (a detached window) is handled by resized() scrolling the content instead.
+//
+// Re-showing a hidden section (the rail chevron or its strip) fits the host the same way a newly
+// shown mixer does -- growHostToFitSections().
 void MixerPanelComponent::onSectionGeometryChanged() {
+    bool reshown = false;
+    for (size_t i = 0; i < lastHidden_.size(); ++i) {
+        const bool hidden = sectionLayout_.isHidden((MixerSection)(int)i);
+        reshown = reshown || (lastHidden_[i] && !hidden);
+        lastHidden_[i] = hidden;
+    }
     if (sectionLayout_.getDraggingDivider() >= 0 && canGrowHost && canGrowHost() && growHost) {
         const int shortfall = sectionLayout_.requiredColumnHeight() - getHeight();
         if (shortfall > 0) {
             grewHostThisDrag_ = true;
             growHost(shortfall, false);
         }
+    } else if (reshown) {
+        growHostToFitSections();
     }
     resized();
+}
+
+// Only grows, by what the sections still need beside a kMinFaderHeight fader; the host clamps to
+// its own limit (3/4 of the window for the dock). Skipped while the panel has no height yet (not
+// laid out, or mid-slide at 0) and for a host that cannot grow (a detached window scrolls instead).
+void MixerPanelComponent::growHostToFitSections() {
+    if (getHeight() <= 0 || !(canGrowHost && canGrowHost()) || !growHost)
+        return;
+    const int shortfall = sectionLayout_.requiredColumnHeight() - getHeight();
+    if (shortfall > 0)
+        growHost(shortfall, false);
 }
 
 void MixerPanelComponent::onSectionAppearanceChanged() {

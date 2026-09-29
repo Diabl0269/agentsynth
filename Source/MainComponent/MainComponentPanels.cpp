@@ -683,6 +683,10 @@ void MainComponent::beginPanelSlide() {
     const bool canAnimate = isShowing();
     const bool libTweening = librarySlide_.retarget(isLibraryVisible ? 1.0f : 0.0f, canAnimate);
     const bool aiTweening = aiPanelSlide_.retarget(isAiPanelVisible ? 1.0f : 0.0f, canAnimate);
+    // The dock opening is a "mixer shown" moment when Mixer is its active tab; the fit waits for the
+    // slide to land, so it measures the panel at its real height.
+    if (isBottomDockVisible && timelineSlide_.getProgress() < 1.0f)
+        fitMixerAfterDockSlide_ = true;
     const bool timelineTweening = timelineSlide_.retarget(isBottomDockVisible ? 1.0f : 0.0f, canAnimate);
 
     if (!(libTweening || aiTweening || timelineTweening)) {
@@ -731,6 +735,26 @@ void MainComponent::finishPanelSlide() {
         bottomDock.setVisible(false);
 
     resized();
+
+    if (fitMixerAfterDockSlide_) {
+        fitMixerAfterDockSlide_ = false;
+        fitMixerHostToSections();
+    }
+}
+
+// Runs once per "the mixer was just shown" (the dock opened or switched to the Mixer tab, the Own
+// panel opened, app start), never on an ordinary resize: a user who then drags the dock shorter
+// keeps that height, and the sections squeeze instead (MixerSectionLayout::resolve). Only ever
+// grows, through the panel's growHost -- the same clamped path a divider drag uses -- so the canvas
+// keeps the minimum the dock's own resize handle leaves it.
+void MainComponent::fitMixerHostToSections() {
+    using Placement = synth::ui::MixerPlacementController::Placement;
+    const bool ownPanelOpen =
+        mixerPlacement_.isOwnPanelShowing() && mixerPlacement_.getCarveHeight() == mixerPlacement_.getOwnPanelHeight();
+    const bool dockedTabShowing = mixerPlacement_.getPlacement() == Placement::Tab && isBottomDockVisible &&
+                                  bottomDock.isMixerTabActive() && timelineSlide_.getProgress() >= 1.0f;
+    if (ownPanelOpen || dockedTabShowing)
+        bottomDock.getMixerPanel().growHostToFitSections();
 }
 
 // No longer a toggle (that's toggleBottomPanelButton's job now, see its onClick) --

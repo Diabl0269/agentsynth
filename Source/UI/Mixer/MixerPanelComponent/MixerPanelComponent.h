@@ -58,6 +58,9 @@ public:
     /** Grows the host by `extraPx` (0 with `commit` only persists); message thread only. */
     std::function<void(int extraPx, bool commit)> growHost;
 
+    /** Grows the host (only grows) so every section fits beside a minimum-height fader. */
+    void growHostToFitSections();
+
     MixerSectionLayout& getSectionLayout() noexcept { return sectionLayout_; }
     MixerSectionRail& getSectionRailForTest() noexcept { return rail_; }
     juce::Viewport& getViewportForTest() noexcept { return viewport_; }
@@ -274,6 +277,7 @@ private:
     MixerSectionRail rail_;
     juce::PropertiesFile* settings_ = nullptr; // See setSettingsStore
     bool grewHostThisDrag_ = false;
+    std::array<bool, MixerSectionLayout::kSectionCount> lastHidden_{}; // detects a re-show
     ScrollReportingViewport viewport_;
     juce::Component content_;
 
