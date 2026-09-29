@@ -1,6 +1,6 @@
 # Macro Cards on the Canvas
 
-`Source/MacroSet.h`, `Source/UI/MacroCardComponent.{h,cpp}`. How a macro looks and behaves on the
+`Source/MacroSet.h`, `Source/UI/Macros/MacroCardComponent/` (`MacroCardComponent.{h,cpp}`, `MacroCardComponentPorts.cpp`). How a macro looks and behaves on the
 patch canvas. The Macro I/O port model — node types, port ordering, poly/stereo shape, cable
 rendering across the boundary — is [`docs/macros/ports.md#cable-rendering-across-the-boundary`](../macros/ports.md#cable-rendering-across-the-boundary); the container concept is
 [`docs/macros/macros.md`](../macros/macros.md).
@@ -79,6 +79,15 @@ computes the same rectangle — the union of live member bounds, expanded by a f
 `GraphContentComponent::paint` draws the dashed outline and name chip around. ONE definition, so
 paint and hit-testing cannot drift. `macroHullAt(canvasPos)` returns the expanded macro whose hull
 contains a point, the smallest one on overlap.
+
+**The hull holds the port sidebars.** The rectangle is the member union plus a fixed margin, widened on
+each side by that side's port strip (longest port name + padding, 26 px minimum) so members keep their
+margin and do not move when a port is added; it grows down when the port rows (16 px each, from 30 px
+below the hull's top) plus the '+'/'-' footer are taller than the members. The strips are painted
+under the port widgets and the outline by `paintMacroPortStrips`
+(`GraphEditorMacroHullStrips.cpp`); the '+' and '-' at their foot are hit-tested in
+`GraphEditor::mouseDown` before the collapse button (`macroHullPortButtonAt`). See
+[`docs/macros/ports.md#how-a-port-is-drawn`](../macros/ports.md#how-a-port-is-drawn).
 
 A left click landing in the hull's empty space — never on a member module's own card, which JUCE
 routes to that `ModuleComponent` directly — selects the whole macro instead of clearing the
@@ -159,16 +168,22 @@ on this now-live card and the next gesture anywhere moves the macro instead of w
 grabbed. The expanded hull's chip keeps using the modal `promptRenameMacro` dialog, since there is
 no card there to host an inline editor.
 
-**A collapsed card previews its contents.** Below the title and member-count text the card draws one
-small filled rounded rect per member — the live union of member `ModuleComponent` bounds, scaled to
-fit inside the existing 90 px card height. `kMacroCardHeight` never changes, because `Macro::bounds`
-is persisted and a taller card would give already-saved macros a second size on the same canvas.
-Each box is coloured by that member's module category (`GraphEditor::categoryPreviewColour`, the
-same `themeColourForCategory` token the canvas uses elsewhere), so the preview echoes what expanding
-would show. `MacroCardComponent` also implements `juce::TooltipClient`, returning a
-newline-separated, capped list of member names, which `MainComponent`'s already-installed
-`juce::TooltipWindow` shows on hover — so a collapsed macro's contents are discoverable without
-expanding it.
+**A collapsed card previews its contents.** Between the two port strips, below the title and above the
+member-count text, the card draws one small filled rounded rect per member — the live union of member
+`ModuleComponent` bounds, scaled to fit the middle column. Each box is coloured by that member's module
+category (`GraphEditor::categoryPreviewColour`, the same `themeColourForCategory` token the canvas uses
+elsewhere), so the preview echoes what expanding would show.
+
+**The card carries a port strip on each side.** Ports lay out on 16 px rows from y = 30, one row per
+port, so names never overlap; the card is 280 px wide and grows taller than its 90 px floor when a side
+has more than three ports (`30 + rows * 16 + 22`). The height is derived from the port count every time
+the cards sync (`GraphEditor::syncMacroCards`) and never persisted — `Macro::bounds` keeps whatever
+height it was saved with. Each strip is as wide as its longest port name plus padding and never changes
+with zoom; below 50 percent zoom the names and the '-' are hidden and the strip shows only jack dots.
+The title, preview and count keep the column between the strips (`getContentArea()`).
+`MacroCardComponent` also implements `juce::TooltipClient`: a newline-separated, capped list of member
+names, shown by `MainComponent`'s `juce::TooltipWindow` — except while a jack is hovered and names are
+hidden, when the tooltip is that port's name.
 
 ## Direct port add/remove from the collapsed card
 
@@ -179,26 +194,24 @@ for everything a single click can't express: rename, reorder, shape and colour. 
 open-ended "make them even slicker" look-and-feel exploration for these jacks is a separate,
 still-unscoped ticket — this covers only the concrete '+'/'x' pair.
 
-**The '+' affordance.** One small '+' per side, drawn in the card's FOOTER row beside the "N
-modules, M ports" text (`MacroCardComponent::getAddPortButtonBounds`), not the jack band
-`GraphEditor::macroCardPortLayout` lays ports out in. **This placement is a fix, not the original
-design** — the first cut sat at the top of the jack band, and because `macroCardPortLayout()`
-even-spaces a side's jacks across that same fixed band, the topmost jack marched up toward that
-spot as the port count grew, hiding the '+' as soon as a side had 2+ ports (founder in-app review,
-2026-09-27). The footer slot exists on every card regardless of port count — its top edge is
-pinned to `kMacroCardJackBandBottom` itself, structurally outside the band rather than merely
-placed to usually clear it — so the '+' is now always visible and can never overlap a jack.
-Clicking it (`MacroCardComponent::buildAddPortMenu`) opens a `juce::PopupMenu` offering the exact
-same four choices `MacroPortConfigDialog`'s own "Add a port" panel does — Audio/CV Mono, Audio/CV
-Stereo, Audio/CV Poly-N, or MIDI
-([`docs/macros/configure-io.md#adding-a-port`](../macros/configure-io.md#adding-a-port)) — never a
-second list. Picking one calls the SAME `MacroGroupController::addMacroPort()` Configure I/O's Add
-button calls, with an empty name (falling back to `defaultMacroPortName()`, exactly like an empty
-name field in the dialog) and, for Poly-N, the dialog's own default voice count (4). The direction
-is already fixed by which side's '+' was clicked, so unlike the dialog this menu has no direction
-combo and no name field — the quick affordance's whole point is the two most common single-port
-operations reachable at a glance, not a second place to type one. `addMacroPort()`'s own
-`recordGraphAndMacroChange` transaction makes this one undo step, same as from the dialog.
+**The '+' and '-' affordances.** One small '+' per side sits at the foot of that side's strip
+(`MacroCardComponent::getAddPortButtonBounds`: 12 px above the card's bottom edge, 4 px in from the
+strip's outer edge), and a '-' beside it (`getRemovePortButtonBounds`, 16 px in) when the side has a port
+and names are visible. The foot is `kMacroPortStripFooter` (22 px) below the last row and the card's
+height follows its port count, so the buttons can never overlap a jack by construction. **This
+placement is a fix, not the original design** — the first cut sat at the top of the jack band, and the
+topmost jack marched up onto it as the port count grew; the second sat in the footer corners, where a
+crowded side's last jack reached it. Clicking '+' (`MacroCardComponent::buildAddPortMenu`, a forwarder
+to `MacroGroupController::buildAddPortMenu`) opens a `juce::PopupMenu` offering the exact same four
+choices `MacroPortConfigDialog`'s own "Add a port" panel does — Audio/CV Mono, Audio/CV Stereo,
+Audio/CV Poly-N, or MIDI ([`docs/macros/configure-io.md#adding-a-port`](../macros/configure-io.md#adding-a-port))
+— never a second list; the open macro's hull '+' builds the very same menu. Picking one calls the
+SAME `MacroGroupController::addMacroPort()` Configure I/O's Add button calls, with an empty name
+(falling back to `defaultMacroPortName()`) and, for Poly-N, the dialog's own default voice count (4).
+The direction is fixed by which side's '+' was clicked. `addMacroPort()`'s own
+`recordGraphAndMacroChange` transaction makes this one undo step. '-' removes the **bottom** port on
+its side (`MacroGroupController::deleteBottomMacroPort`) through the same
+`deleteMacroPortManually()` path the hovered jack's 'x' uses, so it is also one undo step.
 
 **The 'x' affordance.** Hovering a configured jack reveals a small 'x' overlaid on that ONE jack's
 dot (`MacroCardComponent::mouseMove`/`mouseExit` track `hoveredPortUuid_` via the SAME
@@ -246,7 +259,9 @@ A collapsed macro hides its members but not their graph edges, so `rebuildVisibl
 [cables](cables.md)) runs a post-process pass right before it returns: a cable wholly inside one
 collapsed macro is dropped from the visible list entirely, both endpoints being off-screen, and a
 cable crossing a collapsed macro's boundary keeps its outside endpoint but re-anchors its inside
-endpoint to the point where the card's edge faces the other endpoint (`projectToRectEdge`) rather
+endpoint — through the port's jack when it passes through one, otherwise to the card's left (entering)
+or right (leaving) edge with a Y clamped into the card's port-row span (first row's top down to the
+strip footer, `kMacroPortRowsTop` .. `kMacroPortStripFooter` above the card's real bottom edge) — rather
 than pointing at a hidden jack.
 
 **The rectangle projected against is `GraphEditor::macroCableAnchorBounds(macro)` — the LIVE
