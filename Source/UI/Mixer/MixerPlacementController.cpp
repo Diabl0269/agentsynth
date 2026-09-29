@@ -159,6 +159,8 @@ void MixerPlacementController::applyPlacement(Placement placement) {
     resized();
     if (onLayoutNeeded)
         onLayoutNeeded(); // the carve changed; nothing else re-runs MainComponent's layout for a live change
+    if (placement == Placement::OwnPanel)
+        bottomDock_.getMixerPanel().growHostToFitSections(); // shown: fit its sections once
 }
 
 // Tab / Window: the strip is closed with no animation and takes no room.
@@ -224,6 +226,10 @@ void MixerPlacementController::finishSlide() {
         setVisible(false); // hidden only once the slide is done, BEFORE the final carve
     if (onLayoutNeeded)
         onLayoutNeeded();
+    // Opened: the mixer was just shown, so grow the strip once to fit its sections (never on an
+    // ordinary resize -- a later user drag shorter is kept).
+    if (open_ && placement_ == Placement::OwnPanel)
+        bottomDock_.getMixerPanel().growHostToFitSections();
 }
 
 void MixerPlacementController::resized() {

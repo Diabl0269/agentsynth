@@ -58,6 +58,8 @@ void MainComponent::restorePanelPreferences() {
     // here and on every resized() — see clampTimelinePanelHeight().
     timelinePanelHeight_ = clampTimelinePanelHeight(
         appProperties.getUserSettings()->getIntValue(kTimelinePanelHeightKey, defaultTimelinePanelHeight()));
+    // The mixer's shared section heights persist app-wide next to the dock height.
+    bottomDock.getMixerPanel().setSettingsStore(appProperties.getUserSettings());
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
     graphEditor.getSmartConnections().setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
@@ -502,6 +504,7 @@ void MainComponent::wireMidiRemoteEngine() {
     midiLearnController_.setPickPassThrough(bottomDock.getTabButtons());
     bottomDock.onActiveTabChanged = [this] {
         midiLearnController_.refreshPickTarget();
+        fitMixerHostToSections(); // a no-op unless the tab that just became active is the Mixer
         // Rebuilds and layout the switch queued land after this call; re-measure once they have.
         juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)] {
             if (safe != nullptr)

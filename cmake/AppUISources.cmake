@@ -98,6 +98,14 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerEqThumbnail.cpp
     Source/UI/Mixer/MixerSendList.h
     Source/UI/Mixer/MixerSendList.cpp
+    Source/UI/Mixer/MixerSections/MixerSectionLayout.h
+    Source/UI/Mixer/MixerSections/MixerSectionLayout.cpp
+    Source/UI/Mixer/MixerSections/MixerSectionViewport.h
+    Source/UI/Mixer/MixerSections/MixerSectionViewport.cpp
+    Source/UI/Mixer/MixerSections/MixerSectionControls.h
+    Source/UI/Mixer/MixerSections/MixerSectionControls.cpp
+    Source/UI/Mixer/MixerSections/MixerSectionRail.h
+    Source/UI/Mixer/MixerSections/MixerSectionRail.cpp
     Source/UI/Mixer/MixerColumnComponent.h
     Source/UI/Mixer/MixerColumnComponent.cpp
     Source/UI/Mixer/MixerColumnMidiLearn.cpp
@@ -108,6 +116,7 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelSections.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerFocusRegion.h
     Source/UI/Layout/BottomDockComponent.h
     Source/UI/Layout/BottomDockComponent.cpp

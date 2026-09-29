@@ -230,7 +230,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     addUndoButtons();
     wireTimelinePanel();
     addToolbarToggleButtons();
-    assembleToolbar(); // ORDER: setButtons() before setSize()
+    assembleToolbar();        // ORDER: setButtons() before setSize()
+    fitMixerHostToSections(); // ORDER: after the first layout, so an open Mixer at launch fits its sections
     wireStatusBar();
     // This is also where openMidiRemoteDevices() (MainComponentSetup.cpp) runs, from INSIDE
     // initialiseAudioEngine() itself once the engine is actually up -- not listed as its own

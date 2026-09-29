@@ -60,15 +60,19 @@ TEST_F(MixerOwnPanelTest, TabAndWindowPlacementsCarveNothingAndShowNoHandle) {
 
 // ---- The drag ----
 
-TEST_F(MixerOwnPanelTest, DefaultsToTheMinimumHeightWhenNothingIsPersisted) {
+// With nothing persisted the strip opens at its floor, grown once to fit the mixer's sections beside
+// a minimum-height fader (showing the mixer fits its host; see docs/mixer/panel.md#shared-sections).
+TEST_F(MixerOwnPanelTest, OpensAtTheFloorOrTallEnoughForTheMixerSectionsWhenNothingIsPersisted) {
     useOwnPanelPlacement();
     MainComponent mc(std::make_unique<MockProviderTL>());
     showOwnPanel(mc);
     auto& own = mc.getMixerPlacementControllerForTest();
+    auto& panel = mc.getBottomDock().getMixerPanel();
 
-    EXPECT_EQ(own.getOwnPanelHeight(), 220);
-    EXPECT_EQ(own.getCarveHeight(), 220);
-    EXPECT_EQ(own.getHeight(), 220);
+    EXPECT_GE(own.getOwnPanelHeight(), Controller::kOwnPanelMinHeight);
+    EXPECT_EQ(panel.getHeight(), panel.getSectionLayout().requiredColumnHeight());
+    EXPECT_EQ(own.getCarveHeight(), own.getOwnPanelHeight());
+    EXPECT_EQ(own.getHeight(), own.getOwnPanelHeight());
     EXPECT_EQ(own.getBottom(), mc.getStatusBar().getBounds().getY()) << "pinned to the window's bottom edge";
     EXPECT_EQ(readPersistedOwnHeight(mc), -1) << "showing the strip writes no height";
 }
@@ -79,20 +83,21 @@ TEST_F(MixerOwnPanelTest, DraggingResizesLiveAndPersistsOnlyOnMouseUp) {
     showOwnPanel(mc);
     auto& own = mc.getMixerPlacementControllerForTest();
     auto& handle = own.getResizeHandle();
+    const int opened = own.getOwnPanelHeight();
 
     handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
-    // 142 px above the grab point against the pinned bottom edge: 220 + 142.
+    // 142 px above the grab point against the pinned bottom edge: opened + 142.
     handle.mouseDrag(makeDragEvent(handle, {10.0f, -140.0f}, {10.0f, 2.0f}));
 
-    EXPECT_EQ(own.getOwnPanelHeight(), 362);
-    EXPECT_EQ(own.getHeight(), 362) << "LIVE: MainComponent already re-laid out";
+    EXPECT_EQ(own.getOwnPanelHeight(), opened + 142);
+    EXPECT_EQ(own.getHeight(), opened + 142) << "LIVE: MainComponent already re-laid out";
     EXPECT_EQ(own.getBottom(), mc.getStatusBar().getBounds().getY());
     EXPECT_EQ(handle.getBounds(), juce::Rectangle<int>(0, 0, own.getWidth(), Handle::kHeight))
         << "the handle rides the strip's top edge";
     EXPECT_EQ(readPersistedOwnHeight(mc), -1) << "not persisted per pixel";
 
     handle.mouseUp(makeClickEvent(handle, {10.0f, -140.0f}));
-    EXPECT_EQ(readPersistedOwnHeight(mc), 362);
+    EXPECT_EQ(readPersistedOwnHeight(mc), opened + 142);
 }
 
 TEST_F(MixerOwnPanelTest, AStrayClickOnTheHandleNeverPersists) {
@@ -101,10 +106,11 @@ TEST_F(MixerOwnPanelTest, AStrayClickOnTheHandleNeverPersists) {
     showOwnPanel(mc);
     auto& own = mc.getMixerPlacementControllerForTest();
     auto& handle = own.getResizeHandle();
+    const int opened = own.getOwnPanelHeight();
 
     handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
     handle.mouseUp(makeClickEvent(handle, {10.0f, 2.0f}));
-    EXPECT_EQ(own.getOwnPanelHeight(), 220);
+    EXPECT_EQ(own.getOwnPanelHeight(), opened);
     EXPECT_EQ(readPersistedOwnHeight(mc), -1);
 }
 
@@ -169,9 +175,11 @@ TEST_F(MixerOwnPanelTest, PersistedHeightIsHonouredAtConstructionAndReclampedAft
 
 TEST_F(MixerOwnPanelTest, ADragCommitIsReadBackByTheNextWindow) {
     useOwnPanelPlacement();
+    int committed = 0;
     {
         MainComponent mc(std::make_unique<MockProviderTL>());
         showOwnPanel(mc);
+        committed = mc.getMixerPlacementControllerForTest().getOwnPanelHeight() + 102;
         auto& handle = mc.getMixerPlacementControllerForTest().getResizeHandle();
         handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
         handle.mouseDrag(makeDragEvent(handle, {10.0f, -100.0f}, {10.0f, 2.0f}));
@@ -179,7 +187,7 @@ TEST_F(MixerOwnPanelTest, ADragCommitIsReadBackByTheNextWindow) {
     }
     MainComponent mc2(std::make_unique<MockProviderTL>());
     showOwnPanel(mc2);
-    EXPECT_EQ(mc2.getMixerPlacementControllerForTest().getOwnPanelHeight(), 322);
+    EXPECT_EQ(mc2.getMixerPlacementControllerForTest().getOwnPanelHeight(), committed);
 }
 
 // ---- Sharing the window with the dock ----
@@ -230,7 +238,11 @@ TEST_F(MixerOwnPanelTest, TheDocksStoredHeightSurvivesGivingWayToTheOwnPanel) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     showOwnPanel(mc);
     mc.simulateToggleBottomPanelClick();
-    ASSERT_EQ(mc.getBottomDock().getHeight(), 455) << "500 wished, 675 - the Own panel's 220";
+    const int own = mc.getMixerPlacementControllerForTest().getOwnPanelHeight();
+    ASSERT_EQ(mc.getBottomDock().getHeight(), std::min(500, 675 - own)) << "500 wished, 675 - the Own panel";
+    // Regression: the dock's own layout pass must not resize the Mixer host it no longer holds.
+    EXPECT_EQ(mc.getBottomDock().getMixerHost().getHeight(),
+              mc.getMixerPlacementControllerForTest().getHeight() - Handle::kHeight);
 
     EXPECT_EQ(mc.getTimelinePanelHeight(), 500) << "the stored/persisted dock height is untouched";
     mc.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer); // close the Own panel (headless: lands at once)

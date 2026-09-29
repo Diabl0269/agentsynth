@@ -11,6 +11,10 @@
 #include "MixerMeterReadout.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
+#include "UI/Mixer/MixerSections/MixerSectionControls.h"
+#include "UI/Mixer/MixerSections/MixerSectionLayout.h"
+#include "UI/Mixer/MixerSections/MixerSectionViewport.h"
+#include <array>
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -62,10 +66,17 @@ public:
     std::function<void()> onLiveStateChanged;
 
     MixerInsertList& getInsertListForTest() noexcept { return insertList_; }
+    MixerSectionViewport& getInsertViewportForTest() noexcept { return insertViewport_; }
+
+    /** The panel's shared section layout; must outlive this column. Unset, the column uses its own. */
+    void setSectionLayout(MixerSectionLayout& layout);
+    /** Repaints the section dividers after the layout's hover/drag state changed. */
+    void repaintSectionDividers();
 
     /** One 10 Hz tick, same driving chain as MixerColumnComponent::refreshMeter(). */
     void refreshMeter(float elapsedSeconds);
 
+    MixerFader& getFaderForTest() noexcept { return fader_; }
     MixerMeter& getMeterForTest() noexcept { return meter_; }
     MixerMeterReadout& getMeterReadoutForTest() noexcept { return meterReadout_; }
     void resetMeterReadout() { meterReadout_.reset(); }
@@ -168,6 +179,11 @@ private:
 
     MixerColumnHeader header_;
     MixerInsertList insertList_;
+    MixerSectionLayout ownSectionLayout_; // until setSectionLayout() hands over the panel's
+    MixerSectionLayout* sectionLayout_ = &ownSectionLayout_;
+    MixerSectionViewport insertViewport_;
+    std::array<MixerSectionDivider, MixerSectionLayout::kSectionCount> dividers_;
+    MixerCollapsedSection insertsCollapsed_;
     MixerFader fader_;
     MixerMeter meter_;
     MixerMeterReadout meterReadout_;

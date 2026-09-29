@@ -41,6 +41,11 @@ MixerPanelComponent::MixerPanelComponent() {
     addAndMakeVisible(viewport_);
     viewport_.setViewedComponent(&content_, false);
     viewport_.setScrollBarsShown(false, true);
+    viewport_.setWantsKeyboardFocus(false);
+    viewport_.onScrolled = [this] { rail_.setColumnGeometry(content_.getHeight(), viewport_.getViewPositionY()); };
+    addChildComponent(rail_);
+    rail_.setLayout(sectionLayout_);
+    wireSectionLayout();
 
     // A direct child of THIS panel, not content_/viewport_ (which scroll and would clip or
     // slide it). This panel is the single focusable leaf, so the hint is purely decorative: no
@@ -77,6 +82,7 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
             onMakeChannelForNode(source);
     };
     masterColumn_ = std::make_unique<MixerMasterColumn>();
+    masterColumn_->setSectionLayout(sectionLayout_);
     masterColumn_->configure(graph, undoManager, macros, graphEditor, audioEngine, meterReader_);
     // Post-insert level for the Master meter once the chain has inserts (docs/mixer/meters.md).
     masterColumn_->outputPeakProvider = [this](int leg) -> float {
@@ -115,6 +121,7 @@ void MixerPanelComponent::copyWiringFrom(const MixerPanelComponent& other) {
     onQuerySoloMidiMapping = other.onQuerySoloMidiMapping;
     setMidiRemoteDoc(other.midiRemoteDoc_);
     setShortcutManager(other.shortcuts_);
+    setSettingsStore(other.settings_);
 }
 
 void MixerPanelComponent::selectOnCanvas(const juce::String& targetId) {
@@ -197,6 +204,7 @@ void MixerPanelComponent::rebuild() {
         if (column.kind != synth::MixerColumn::Kind::Strip && column.kind != synth::MixerColumn::Kind::Bus)
             continue;
         auto widget = std::make_unique<MixerColumnComponent>();
+        widget->setSectionLayout(sectionLayout_);
         widget->configure(*graph_, *undoManager_, *macros_, *graphEditor_, *audioEngine_, meterReader_);
 
         juce::StringArray sourceNames;
@@ -501,8 +509,6 @@ void MixerPanelComponent::resetAllMeterReadouts() {
 }
 
 void MixerPanelComponent::resized() {
-    viewport_.setBounds(getLocalBounds());
-
     // Same "muted" colour source as MixerInsertList::paint()'s empty-state text -- resolved
     // here (rather than once in the ctor) so a theme switch's re-skin pass is picked up the next
     // time this panel lays out, the same staleness window MixerColumnHeader/sourceLineLabel_ accept
@@ -513,26 +519,46 @@ void MixerPanelComponent::resized() {
     emptyHint_.setFont(juce::Font(juce::FontOptions(13.0f)));
     emptyHint_.setBounds(getLocalBounds().reduced(24));
 
+    // The section rail sits outside the scrolling viewport, so it stays put while columns scroll
+    // sideways; it only shows while there are columns for its rows to line up with.
+    const bool hasColumns = !columnEntries_.empty();
+    rail_.setVisible(hasColumns);
+    auto area = getLocalBounds();
+    if (hasColumns)
+        rail_.setBounds(area.removeFromLeft(MixerSectionRail::kWidth));
+    viewport_.setBounds(area);
+
     int totalColumns = (int)stripColumns_.size();
     if (directColumn_ != nullptr && directColumn_->isVisible())
         ++totalColumns;
     if (masterColumn_ != nullptr && masterColumn_->isVisible())
         ++totalColumns;
 
-    const int contentWidth = juce::jmax(getWidth(), totalColumns * (kColumnWidth + kColumnGap));
-    content_.setSize(contentWidth, getHeight());
+    // A host that cannot grow (a detached window) keeps every section at its full height and lets
+    // the whole column scroll vertically instead of squeezing the sections.
+    const bool scrollsVertically = contentScrollsVertically();
+    viewport_.setScrollBarsShown(scrollsVertically, true);
+    const int columnHeight = scrollsVertically ? sectionLayout_.requiredColumnHeight() : juce::jmax(0, getHeight());
+    const int contentWidth = juce::jmax(viewport_.getWidth(), totalColumns * (kColumnWidth + kColumnGap));
+    content_.setSize(contentWidth, columnHeight);
 
+    // setBounds() alone skips resized() when a column's size did not change, but a section-layout
+    // change moves everything inside it -- so each column is re-laid out explicitly.
     int x = 0;
-    for (auto& column : stripColumns_) {
-        column->setBounds(x, 0, kColumnWidth, getHeight());
+    auto place = [&x, columnHeight](juce::Component& column) {
+        column.setBounds(x, 0, kColumnWidth, columnHeight);
+        column.resized();
         x += kColumnWidth + kColumnGap;
-    }
-    if (directColumn_ != nullptr && directColumn_->isVisible()) {
-        directColumn_->setBounds(x, 0, kColumnWidth, getHeight());
-        x += kColumnWidth + kColumnGap;
-    }
+    };
+    for (auto& column : stripColumns_)
+        place(*column);
+    if (directColumn_ != nullptr && directColumn_->isVisible())
+        place(*directColumn_);
     if (masterColumn_ != nullptr && masterColumn_->isVisible())
-        masterColumn_->setBounds(x, 0, kColumnWidth, getHeight());
+        place(*masterColumn_);
+
+    rail_.setColumnGeometry(columnHeight, viewport_.getViewPositionY());
+    rail_.refreshLayout();
 }
 
 } // namespace synth::ui
