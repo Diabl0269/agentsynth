@@ -40,6 +40,15 @@ and **a send is a plain `AudioProcessorGraph` connection** from those channels i
 see it: JUCE's parallel-path delay compensation, stem export, and the canvas cable renderer. On the
 canvas a send is therefore an ordinary cable on the strip's new visible jacks — no new cable concept.
 
+**A send across a macro boundary goes through macro ports (FRO354).** A track's strip sits inside its
+channel macro, so with "Auto-create macro ports" on (the default) a send between two channels leaves
+the source's macro through an outlet port and enters the target's through one Stereo inlet — the same
+as a hand-drawn cable. Removing or retargeting the send removes the ports it no longer uses, in the
+same undo step. `MixerSendList` runs every row mutation through
+`MacroGroupController::applyProgrammaticConnectionChange`; the Core flows themselves stay
+macro-agnostic. Off, the send is the two direct cables it always was. See
+[`docs/macros/auto-ports.md`](../macros/auto-ports.md#programmatic-connections).
+
 ## Channel layout
 
 | | channels |
@@ -326,7 +335,8 @@ forward to them. Reordering needs nothing new: `swapSends`/`moveSendRow` remap c
 channel, so a Key send moves like any other.
 
 **The target is still never stored.** `synth::resolveSendTarget` walks forward from the slot's raw
-left output: an edge landing on a Sidechain input makes that module a Key target (checked *before*
+left output: an edge landing on a Sidechain input — looking through any macro ports in between, so a
+ported Key send still resolves — makes that module a Key target (checked *before*
 the `isSignalEdge` filter, which drops key edges by design); otherwise the first strip reached, as
 `findSendTarget` always did. The nearest hit wins. `findSendTarget` stays the strip-only view and
 reports a Key send as no strip at all, so every bus/solo/stem caller keeps its meaning.

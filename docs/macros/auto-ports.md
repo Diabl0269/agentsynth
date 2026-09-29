@@ -422,6 +422,69 @@ splice-out on auto-delete is the identical `spliceOutMacroPort` call direct dele
 resulting graph and macro state is indistinguishable from a port deleted that way — nothing in
 [`docs/macros/ports.md`](ports.md#cable-rendering-across-the-boundary)'s table changes.
 
+## Programmatic connections
+
+**FRO354: a connection made by code follows the same rule as a dragged cable.** With
+"Auto-create macro ports" on (`autoCreateMacroPortsOnDragEnabled`, the same toggle as a cable drag,
+default ON), a connection whose one end is an ordinary member of a macro and whose other end is
+outside it enters or leaves that macro through a new port. Off, it is wired straight through, as
+before. The first caller is the mixer's send list: adding a send between two tracks (each strip sits
+in its own channel macro) mints an outlet on the source's macro and an inlet on the target's, wired
+strip to outlet to inlet to strip.
+
+**One seam, diff-based: `MacroGroupController::applyProgrammaticConnectionChange(autoCreatePorts,
+mutation)`.** The caller passes its mutation — for sends, a headless `Source/Mixer/MixerSends` flow
+that knows nothing about macros — and the seam compares the graph's connection set before and after
+it. It runs inside the caller's own `recordGraphAndMacroChange`, so the connection, every port it
+minted and every port it removed are ONE undo step; the caller calls `updateComponents()` after, which
+lays out the new port widgets (splice before layout, the same order grouping keeps).
+
+**Added connections** are routed per macro by the grouping path's own machinery —
+`buildMacroPortCrossingPlan` over the macro's members, then `spliceMacroPorts` — narrowed first:
+
+- only to the connections the mutation just ADDED, so an older crossing the user chose to leave as it
+  is on the same jack is never ported behind their back;
+- only to groups whose inside end is an ORDINARY member, so a connection landing on an existing port
+  never mints a second one (the drag path's rule).
+
+A stereo pair that lands on two SEPARATE mono jacks of one module — a Channel Strip's L and R inputs,
+or a send's L and R outputs, both from the same outside node — is folded into one two-jack `Stereo`
+port rather than two mono ports (the grouping-time merge pass does this only for Dual-I/O modules; a
+strip has the same split-jack layout without the switch). A leg landing on a channel no jack shows (a
+Mono strip's unused right input, which the strip never reads) is dropped instead of ported. After
+each macro's splice the set of fresh connections is re-read, so a connection between two macros gets
+an outlet on one and an inlet on the other, wired port to port, whichever macro is visited first.
+
+**Removed connections** are swept for ports left carrying nothing: an inlet nothing feeds any more,
+or an outlet that feeds nothing. `autoDeleteOrphanedMacroPort`'s zero-connections test can never fire
+here, because a removed send's port keeps its interior leg into the member it fronts; this is the same
+"only the interior leg is left" reading `autoDeleteOrphanedAttenuverter` applies. A spliced-out port's
+port neighbours are re-checked, so removing a send between two macros removes both its ports. Gated on
+the auto-delete toggle, like the cable-gesture sweep. Retargeting a send is both halves at once: the
+old target's ports go, the new target gets its own.
+
+**Reordering sends mints nothing.** `swapSends` re-wires only the SOURCE channel of a slot's cables;
+the destination (an existing port) is unchanged, and a connection landing on a port is never ported.
+
+**The mixer still sees through the ports.** `resolveSendTarget` walks along `isSignalEdge`, which
+already resolves a cable's destination through port nodes (`resolveThroughPorts`, now public in
+`ChannelFlows.h`), and its Key check resolves the same way, so a Key send into a macro still names its
+Compressor. Solo, stems and bus detection walk the same edges.
+
+### Which programmatic connections route
+
+| Caller | Routes? | Why |
+|---|---|---|
+| Mixer send add / retarget / remove (`MixerSendList`) | Yes | A user action in the mixer that draws a cable across a boundary. |
+| Mixer send reorder (`swapSends` / `moveSendRow`) | No-op | Only the source channel moves; the destination port is kept. |
+| Master splice, Make channel's strip-to-Master | No | Deliberately a plain edge: `spliceMasterNode`'s Mix-versus-Direct classification reads it (see above). |
+| Track and channel creation (`ChannelFlows`, `MainComponentTrackCreation`, track presets, timeline tracks) | No | Wires freshly made nodes that are not yet in a macro; the channel macro's own grouping splice runs after. |
+| Mixer insert splice (`MixerModelInserts`) | No | The inserted module joins its neighbour's macro, so nothing crosses. |
+| `applyJSONToGraph` / snapshots (load, AI patch apply, snippet paste, undo restore) | No | Replays a document that carries its own macros and ports; saved projects must load unchanged. |
+| `AudioEngine` default patch, `addModRouting` | No | No macros at startup; mod routings from a cable drag are already handled by the drag path. |
+| Mod matrix source/destination re-point | No | Moves an attenuverter's existing legs; not a new connection a user drew. |
+| Canvas rewiring (stereo leg moves, Replace module, copy channel, delete heal) | No | Re-points existing edges; delete heal never touches a port by design. |
+
 ## Related
 
 - [`docs/macros/macros.md`](macros.md) — the macro model and why ports are proxy nodes.
