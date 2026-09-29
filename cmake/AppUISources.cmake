@@ -192,6 +192,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentAudioDrop.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
+    Source/UI/Graph/ModuleComponent/WavetableTabStrip.cpp
+    Source/UI/Graph/ModuleComponent/WavetableTabStrip.h
     Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp

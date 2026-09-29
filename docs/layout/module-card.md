@@ -366,8 +366,14 @@ more than one column an odd jack count leaves the second column a row short, so 
 the lowest.
 
 **Tabbed control body.** The 23 controls are grouped into five pages — Tune / Unison / Phase / Sub /
-File — by `kWavetablePages` in `ModuleComponentWavetable.cpp`, which maps parameter *display names*
-to pages. Three controls sit outside the strip: `Position` and `Warp` / `Warp Amt` are **pinned**
+File — by the page table in `WavetableTabStrip.cpp`, which maps parameter *display names* to pages.
+The strip is a real collaborator: `WavetableTabStrip` (`Source/UI/Graph/ModuleComponent/`) is a
+`juce::Component` child of the card that owns the tab buttons (`wtTab0`..`wtTab4`, one radio group
+per card), the active page and the control -> page assignment. `ModuleComponent` still owns the
+sliders/combos and lends them to the strip via `addSlider`/`addCombo`, so modulation rings, drop
+targeting and MIDI Learn keep reading the card's own arrays; the strip only toggles their visibility
+and sets their bounds. `ModuleComponent` keeps just the hookup (`createWavetableTabs()`) and the
+`onPageChanged` callback (re-layout, repaint, `notifyModuleContentChanged()`). Three controls sit outside the strip: `Position` and `Warp` / `Warp Amt` are **pinned**
 above it (they are what you actually perform with), and `Table` is laid out in the chrome band
 beside the display it selects.
 
@@ -378,12 +384,13 @@ beside the display it selects.
   `getModRingSliderIndex()` and drop targeting through `getModTargetPortForPoint()`; both return
   "none" for a knob whose page is hidden, so a ring cannot paint over empty card and a hidden knob
   cannot swallow a cable drop.
-- The card is sized to the **tallest** page, not the active one. A card that grew and shrank would
+- The card is sized to the **tallest** page (`WavetableTabStrip::getTallestPageHeight()`), not the
+  active one. A card that grew and shrank would
   shove its neighbours around the canvas on every tab click.
 - Page knob rows are **centred** and page combos run three across — most pages carry fewer than the
   6 available knob columns, and left-aligning them stranded half the card's width.
-- `createWavetableTabs()` must run **after** `createControls()` (it groups the controls that call
-  creates) and must end by calling `updateLayout()` — `createControls()` has already sized the card,
+- `createWavetableTabs()` must run **after** `createControls()` (it hands the strip the controls that
+  call creates) and must end by calling `updateLayout()` — `createControls()` has already sized the card,
   so without a second pass the card keeps its flat-grid height and the tabbed layout never applies.
 
 **Chrome beside the ports.** The display, `Table` combo, button row and caption sit **beside** the

@@ -188,7 +188,7 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
 
         // The Table selector belongs with the display it drives, not buried on a tab page.
         for (int i = 0; i < comboBoxes.size(); ++i) {
-            if (i >= comboTabIndex.size() || comboTabIndex[i] != kTabChrome)
+            if (wavetableTabs == nullptr || !wavetableTabs->isChromeCombo(*comboBoxes[i]))
                 continue;
             if (apply) {
                 comboLabels[i]->setBounds(chromeX, chromeY, chromeW, kLabelHeight);
@@ -229,9 +229,9 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
 
     // A tabbed card (the Wavetable) replaces the two flat grids below with a pinned row, a tab
     // strip and one page of controls. Everything after the grids — toggles, scope — is shared.
-    const bool tabbed = !wavetableTabs.isEmpty();
+    const bool tabbed = wavetableTabs != nullptr;
     if (tabbed)
-        y = layoutWavetableTabs(y, contentX, contentW, apply);
+        y = wavetableTabs->layoutBody(y, contentX, contentW, apply);
 
     // Combos stack one per row on a standard card. A double-width card pairs them up instead —
     // otherwise a high parameter count alone would add ~180px of dead single-column height.
