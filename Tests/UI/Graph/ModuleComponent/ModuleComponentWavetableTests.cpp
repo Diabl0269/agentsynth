@@ -174,7 +174,7 @@ TEST_F(ModuleComponentTest, WavetableCardBuildsFolderBrowserChrome) {
 // stay on the left. Inputs-left / outputs-right is what makes signal flow read left to right,
 // and splitting inputs across both edges costs more in comprehension than the height saves.
 //
-// FRO312: this only holds for the DRAWN (non-knob-bound) jacks. A CV jack whose target resolves to
+// This only holds for the DRAWN (non-knob-bound) jacks. A CV jack whose target resolves to
 // a bound, VISIBLE knob (only the pinned Position/Warp knobs, which never sit behind the tab strip
 // -- docs/modules/modulation.md#drag-to-knob-modulation) draws no gutter dot at all;
 // getPortCenter(i, true) for that `i` returns the knob's own landing anchor instead, which

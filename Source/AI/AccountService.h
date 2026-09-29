@@ -102,8 +102,8 @@ public:
     /** Re-fetches entitlement only (plan/limit/usage), leaving sign-in state untouched. No-op if
         signed out. Fire-and-forget — publishes an updated snapshot via onStateChanged on success,
         silent (logged, non-fatal) on failure, same contract as the entitlement fetch inside
-        completeSignIn(). Intended for "the user may have just paid — check again" moments (P4-4:
-        AIChatComponent calls this right after a Quota error). */
+        completeSignIn(). Intended for "the user may have just paid — check again" moments
+        (AIChatComponent calls this right after a Quota error). */
     void refreshEntitlement();
 
     /** Re-fetches the prompt-learning opt-in preference only, leaving sign-in state and

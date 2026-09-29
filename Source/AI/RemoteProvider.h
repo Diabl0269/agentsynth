@@ -226,7 +226,7 @@ private:
         MessageManager::callAsync for shutdown paths, where the message loop cannot be relied on to
         run the callback before this object is gone. `conversationId` is the (possibly empty)
         `x-conversation-id` response header, and `messageId` the (possibly empty) `x-message-id`
-        response header (P6-9) — both copied onto the delivered AIResponse verbatim. */
+        response header — both copied onto the delivered AIResponse verbatim. */
     void deliverResult(const Request& req, const juce::String& responseText, bool forceSynchronous,
                        const juce::String& conversationId = {}, const juce::String& messageId = {});
 

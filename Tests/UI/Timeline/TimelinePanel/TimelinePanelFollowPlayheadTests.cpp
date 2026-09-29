@@ -172,7 +172,7 @@ TEST(TimelineFollowPlayheadTest, AttachingUnderAnAncestorThatAlreadyHasAThemedLo
 // The three explicit checks the bug report asked for: real (non-empty, in-panel, non-overlapping)
 // bounds at a realistic launch size, and visibility all the way up to the panel. Arithmetic-only
 // coverage — TimelinePanelComponentTest.PanelRegionsTile-style — for resized()'s transport-bar
-// carve order, which the strip-width audit in this task's report shows has headroom today but is
+// carve order, which has headroom today but is
 // exactly the kind of change that could silently zero this button out again.
 TEST(TimelineFollowPlayheadTest, ButtonHasRealNonOverlappingBoundsAndIsVisibleAtRealisticSize) {
     synth::ui::TimelinePanelComponent panel;

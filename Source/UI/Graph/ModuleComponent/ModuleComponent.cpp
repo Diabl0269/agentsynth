@@ -1,7 +1,7 @@
 // ModuleComponent.cpp -- construction/teardown of a graph node's card, per-scope header/theme
 // helpers, and the auto-UI control builder (createControls). ModuleComponent is declared in
 // ModuleComponent.h; the rest of its implementation lives in the sibling ModuleComponent*.cpp
-// units next to this one (FRO65 split of the former single ModuleComponent.cpp).
+// units next to this one.
 #include "ModuleComponent.h"
 #include "AudioEngine/AudioEngine.h"
 #include "CardKnobSlider.h"
@@ -25,7 +25,7 @@ using namespace detail;
 namespace {
 
 // Every module's float-param sliders are rotary knobs. ADSR's five (attack/hold/decay/sustain/
-// release — FRO112 moved its three curve params onto the envelope graph's bend handles instead,
+// release — its three curve params are edited on the envelope graph's bend handles instead,
 // see createControls()) put their text box ABOVE the dial rather than below, so the numeric
 // readout reads as a value sitting over its knob rather than a caption under it; every other
 // module keeps the readout below, matching the label above.
@@ -62,8 +62,8 @@ void applyAdsrTimeSliderSkew(juce::Slider& slider, const juce::AudioParameterFlo
 }
 
 // True for a float param createControls()'s generic auto-slider loop must NOT build a knob for:
-// the threshold slider (it lives inside ThresholdControlComponent instead), or -- ADSR only,
-// FRO112 -- the three curve amounts (edited only via the envelope graph's bend handles).
+// the threshold slider (it lives inside ThresholdControlComponent instead), or -- ADSR only --
+// the three curve amounts (edited only via the envelope graph's bend handles).
 bool shouldSkipGenericFloatSlider(juce::AudioProcessor* module, const juce::AudioParameterFloat& floatParam) {
     if (auto* src = dynamic_cast<ThresholdMeterSource*>(module))
         if (getType(module) != ModuleType::SampleHold && floatParam.paramID == src->getThresholdParamID())
@@ -74,15 +74,15 @@ bool shouldSkipGenericFloatSlider(juce::AudioProcessor* module, const juce::Audi
 }
 
 // True for a bool param createControls()'s generic auto-toggle loop must NOT build a toggle for,
-// beyond the fixed bypassed/muted/dualIO trio: ADSR's tempoSync (FRO113), which the envelope
-// card's own MS|BPM segmented buttons already expose and drive (FRO117).
+// beyond the fixed bypassed/muted/dualIO trio: ADSR's tempoSync, which the envelope
+// card's own MS|BPM segmented buttons already expose and drive.
 bool shouldSkipGenericBoolToggle(juce::AudioProcessor* module, const juce::AudioParameterBool& boolParam) {
     return getType(module) == ModuleType::ADSR && boolParam.paramID == "tempoSync";
 }
 
 // True for a choice param createControls()'s generic auto-combo loop must NOT build a combo for:
-// ADSR's four note-division params (FRO113's attackDiv/holdDiv/decayDiv/releaseDiv). The envelope
-// card builds its own picker for each of these (FRO118, ModuleComponentEnvelopeCard.cpp's
+// ADSR's four note-division params (attackDiv/holdDiv/decayDiv/releaseDiv). The envelope
+// card builds its own picker for each of these (ModuleComponentEnvelopeCard.cpp's
 // ensureEnvelopeDivCombosCreated), swapped in over the matching knob's own grid cell in BPM mode
 // -- excluded here so they never ALSO render as an extra combo+label row in the generic grid.
 bool shouldSkipGenericChoiceCombo(juce::AudioProcessor* module, const juce::AudioParameterChoice& choiceParam) {
@@ -104,7 +104,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     , owner(owner)
     , undoManager(undoMgr) {
 
-    // FRO312: see the member's own comment and detachFromProcessor() for why this is captured
+    // See the member's own comment and detachFromProcessor() for why this is captured
     // up front rather than re-derived later (by the time detachFromProcessor() runs, the node may
     // legitimately have been removed -- that's the case this flag has to tell apart from "never
     // was in a graph to begin with").
@@ -121,7 +121,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         if (auto* vb = modBase->getVisualBuffer()) {
             // Parametric EQ keeps its VisualBuffer for the spectrum analyser's FFT, but a scope
             // on top of that analyser is redundant clutter, so it gets no scope UI. A macro-port
-            // widget (P8-15 fix F2) enables a VisualBuffer too (for a future activity LED — none
+            // widget enables a VisualBuffer too (for a future activity LED — none
             // of the four types draw one today), but "no body" (item 1) rules out a scope toggle
             // here as firmly as it rules out bypass/mute/delete.
             if (getType(module) != ModuleType::ExternalMidi && getType(module) != ModuleType::ParametricEQ &&
@@ -200,10 +200,10 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         addAndMakeVisible(eqPopOutButton.get());
     }
 
-    // Attenuverter has no header at all; a macro-port widget (P8-15 fix F2) has no header CHROME —
+    // Attenuverter has no header at all; a macro-port widget has no header CHROME —
     // "no module header chrome and no body" — so neither gets bypass/mute/delete/Dual I/O buttons.
     if (getType(module) != ModuleType::Attenuverter && !isMacroPortType(getType(module))) {
-        // MidiLearnableDrawableButton (FRO130): plain juce::DrawableButton fires its click on a
+        // MidiLearnableDrawableButton: plain juce::DrawableButton fires its click on a
         // RIGHT click too (Button::mouseDown/mouseUp have no isPopupMenu() guard), which would
         // toggle bypass/mute/Dual I/O before the addMouseListener(this) below ever sees the press.
         bypassButton =
@@ -274,7 +274,7 @@ void ModuleComponent::detachFromProcessor() {
     // Destroy scope component first — it has its own timer reading from the module's VisualBuffer
     scopeComponent.reset();
     scopeToggle.reset();
-    // FRO114: the LFO wave graph holds no module reference of its own, but its onGestureStart/
+    // The LFO wave graph holds no module reference of its own, but its onGestureStart/
     // onGestureEnd lambdas capture a SafePointer<ModuleComponent> and reach back into `module` --
     // reset alongside every other module-referencing child.
     lfoCurveEditor.reset();
@@ -321,7 +321,7 @@ void ModuleComponent::detachFromProcessor() {
     //
     // "Still alive" means something different depending on how this card came to exist:
     //  - The normal case: this card's node WAS part of `owner`'s graph when the card was built
-    //    (nodeWasInGraphAtConstruction_, captured once in the ctor — see FRO312's comment there).
+    //    (nodeWasInGraphAtConstruction_, captured once in the ctor — see the comment there).
     //    A later single-node removal (GraphEditor::deleteSelection / requestDeleteModule /
     //    replaceModule) frees the processor before this destructor runs, so we confirm liveness
     //    by re-checking the CURRENT graph for a node whose processor still matches `module`.
@@ -329,9 +329,8 @@ void ModuleComponent::detachFromProcessor() {
     //    (never true in production — GraphEditor only ever builds a card for an existing node —
     //    but exactly what ModuleComponentKnobCoverageTests.cpp and ModuleComponentLifecycleTests.cpp
     //    do). There the graph can never have freed it out from under us, because the graph never
-    //    owned it in the first place, so it is always safe to detach (FRO312: this used to be
-    //    treated as "gone", which left our listener registration dangling on the still-live
-    //    processor — a real, reproducible heap-use-after-free on the next parameter write).
+    //    owned it in the first place, so it is always safe to detach (treating it as "gone" would leave our listener
+    //    registration dangling on the still-live processor — a heap-use-after-free on the next parameter write).
     bool processorAlive = false;
     if (module != nullptr) {
         if (!nodeWasInGraphAtConstruction_) {
@@ -352,7 +351,7 @@ void ModuleComponent::detachFromProcessor() {
         sliderAttachments.clear();
         comboAttachments.clear();
         buttonAttachments.clear();
-        envelopeDivAttachments_.clear(); // FRO118: same live-processor-pointer contract as comboAttachments
+        envelopeDivAttachments_.clear(); // same live-processor-pointer contract as comboAttachments
         for (auto* param : module->getParameters())
             param->removeListener(this);
     } else {
@@ -507,7 +506,7 @@ void ModuleComponent::timerCallback() {
     // itself no-ops when the (segment, progress) pair is unchanged, so an idle or collapsed card
     // costs nothing beyond the guard check.
     updateEnvelopePlayhead();
-    // FRO114: reverse-sync the LFO wave graph from an undo/redo or preset load this card didn't
+    // Reverse-sync the LFO wave graph from an undo/redo or preset load this card didn't
     // itself just write (writeLfoWaveFromCurve/applyLfoWavePreset/applyLfoWaveTool already keep
     // lfoLastSeenWaveGeneration current for their OWN writes), then poll the playhead -- same
     // gated 15 Hz tick as everything else here.
@@ -584,16 +583,15 @@ void ModuleComponent::timerCallback() {
         repaint();
     }
 
-    // FRO130: MIDI-mapped badges (ONE query per module, repainting only on an actual change --
+    // MIDI-mapped badges (ONE query per module, repainting only on an actual change --
     // see refreshMidiLearnBadges' own comment) and, while a control on THIS card is armed, its
     // breathing outline -- confined to that control's own bounds, never the whole card, and
-    // bounded overall by RemoteEngine's 10 s learn timeout, not by this tick. FRO256: this repaint
-    // is what makes the outline's alpha (computed from wall time on every paint(), see
-    // synth::ui::midilearn::paintMidiLearnArmedOutline) actually animate -- MixerColumnComponent/
-    // MixerMasterColumn/TimelineTransportBar turned out to have NO equivalent repaint at all, which
-    // froze their own outlines at whatever alpha their first paint happened to land on;
-    // midiLearnArmedRepaintCount_ (getMidiLearnArmedRepaintCountForTest()) proves this one already
-    // fires on every tick, the same way those three surfaces' own new counters prove their fix.
+    // bounded overall by RemoteEngine's 10 s learn timeout, not by this tick. This repaint is what
+    // makes the outline's alpha (computed from wall time on every paint(), see
+    // synth::ui::midilearn::paintMidiLearnArmedOutline) actually animate; without a repaint the
+    // outline would freeze at whatever alpha its first paint landed on.
+    // midiLearnArmedRepaintCount_ (getMidiLearnArmedRepaintCountForTest()) proves it fires on every
+    // tick.
     refreshMidiLearnBadges();
     if (midiLearnArmedParamId_.isNotEmpty()) {
         for (const auto& e : midiLearnableRegistry_.entries()) {
@@ -606,7 +604,7 @@ void ModuleComponent::timerCallback() {
     }
 }
 
-// External MIDI's device + channel combos, extracted out of createControls (FRO117) to keep that
+// External MIDI's device + channel combos, extracted out of createControls to keep that
 // function under its own line-count ratchet. Neither combo is ComboBoxParameterAttachment-driven
 // (the device name and channel index are plain module state, not AudioParameters).
 void ModuleComponent::createExternalMidiControls(ExternalMidiModule* extMidi) {
@@ -706,7 +704,7 @@ void ModuleComponent::createControls() {
                     combo->addItemList(choiceParam->choices, 1);
                 }
                 addAndMakeVisible(combo);
-                // Right-click MIDI Learn (FRO130). juce::ComboBox::mouseDown already refuses to
+                // Right-click MIDI Learn. juce::ComboBox::mouseDown already refuses to
                 // open its popup on a right click (checks e.mods.isPopupMenu() itself), so no
                 // subclass is needed here the way the toggle/header buttons below need one.
                 combo->addMouseListener(this, false);
@@ -730,8 +728,8 @@ void ModuleComponent::createControls() {
                 // object finishes destructing), so attaching `this` as the listener rather than a
                 // separately-owned object has no dangling-pointer window to reason about.
                 slider->addMouseListener(this, false);
-                registerMidiLearnable(*slider, floatParam);      // FRO130: right-click MIDI Learn
-                wireCardKnobModAmountGesture(*knob, floatParam); // FRO287
+                registerMidiLearnable(*slider, floatParam); // right-click MIDI Learn
+                wireCardKnobModAmountGesture(*knob, floatParam);
 
                 auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*floatParam, *slider));
                 applyAdsrTimeSliderSkew(*slider, *floatParam);
@@ -749,9 +747,9 @@ void ModuleComponent::createControls() {
                 // slider->setRange(intParam->getRange().start,
                 // intParam->getRange().end, 1.0); // Attachment handles range
                 addAndMakeVisible(slider);
-                slider->addMouseListener(this, false);         // right-click-any-knob, see above
-                registerMidiLearnable(*slider, intParam);      // FRO130: right-click MIDI Learn
-                wireCardKnobModAmountGesture(*knob, intParam); // FRO287
+                slider->addMouseListener(this, false);    // right-click-any-knob, see above
+                registerMidiLearnable(*slider, intParam); // right-click MIDI Learn
+                wireCardKnobModAmountGesture(*knob, intParam);
 
                 auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*intParam, *slider));
                 sliderParams.add(intParam); // param -> control mapping for reflection
@@ -768,7 +766,7 @@ void ModuleComponent::createControls() {
                 auto* toggle = toggles.add(new detail::MidiLearnableToggleButton(boolParam->getName(100)));
                 toggle->setComponentID(boolParam->getName(100)); // ID for Lookup
                 addAndMakeVisible(toggle);
-                // Right-click MIDI Learn (FRO130) -- same idiom as the generic slider loop above.
+                // Right-click MIDI Learn -- same idiom as the generic slider loop above.
                 toggle->addMouseListener(this, false);
                 registerMidiLearnable(*toggle, boolParam);
 
@@ -823,12 +821,12 @@ void ModuleComponent::createControls() {
     updateLayout();
 }
 
-// FRO287: the first live AttenuverterChain routing landing on `param`'s knob, in
+// The first live AttenuverterChain routing landing on `param`'s knob, in
 // getCachedModDisplayInfo() order (several routings on one knob all target the same first one --
 // docs/modules/modulation.md#drag-to-knob-modulation). An invalid NodeID means either `param` isn't
 // a modulation target at all, or it is but nothing is currently routed to it through an
 // attenuverter (a DirectCV/PolyBus routing has none to adjust).
-// FRO288: shared by firstAttenuverterForParam and the knob-hover -> cable-hover wiring in
+// Shared by firstAttenuverterForParam and the knob-hover -> cable-hover wiring in
 // wireCardKnobModAmountGesture, so the two can never resolve a different channel for the same
 // param.
 int ModuleComponent::destChannelForBoundParam(juce::RangedAudioParameter* param) const {
@@ -897,7 +895,7 @@ void ModuleComponent::handleModAmountGesture(juce::RangedAudioParameter* param, 
     modAmountGestureAttenuverterId_ = {};
 }
 
-// FRO312: claims a click on `param`'s knob when its CV jack is knob-bound (hidden -- getPortForPoint
+// Claims a click on `param`'s knob when its CV jack is knob-bound (hidden -- getPortForPoint
 // can no longer offer this parameter's jack as a pickup point, whether or not a cable currently
 // lands here, exactly like a real, empty gutter jack still accepts a click to START a drag) and the
 // click is within a few px of the landing dot GraphEditorCables.cpp paints there -- never inside
@@ -957,7 +955,7 @@ void ModuleComponent::wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& kn
     knob.onModAmountGesture = [this, param](const juce::MouseEvent& e, int phase) {
         handleModAmountGesture(param, e, phase);
     };
-    // FRO288: knob-hover -> cable-hover, the reverse direction of the cable-hover -> ring-highlight
+    // Knob-hover -> cable-hover, the reverse direction of the cable-hover -> ring-highlight
     // wiring in GraphEditorCanvas.cpp's mouseMove. Only correlates while a live AttenuverterChain
     // routing actually lands here (same gate wantsModAmountGestureFor uses) -- a DirectCV/PolyBus
     // target has no cable re-anchored onto it to highlight.
@@ -972,7 +970,7 @@ void ModuleComponent::wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& kn
         owner.setHoveredModTarget(GraphEditor::HoveredModTarget{nodeId, destChannel});
     };
 
-    // FRO312: this knob's own CV jack is hidden when it's a bound modulation target (see
+    // This knob's own CV jack is hidden when it's a bound modulation target (see
     // isInputJackKnobBound) -- a click near where the cable lands (getModTargetKnobAnchor, just
     // outside the ring, never inside its annulus, so this never fights wantsModAmountGestureFor
     // above) is the only way left to pick the cable back up. `&knob` is safe the same way it is

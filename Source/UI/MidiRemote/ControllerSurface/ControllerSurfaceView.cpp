@@ -135,7 +135,7 @@ juce::Rectangle<float> ControllerSurfaceComponent::getVisibleContentRect() const
 }
 
 // Trivial, in-memory, session-only view-per-controller memory. Persisting it to disk
-// (ControllerProfile/the project file) is deliberately out of scope for this ticket -- the surface
+// (ControllerProfile/the project file) is deliberately out of scope -- the surface
 // otherwise has no per-profile UI state at all today, so there is no existing read/write path to
 // extend, and adding one is a real schema/migration decision, not a "while we're here" addition.
 void ControllerSurfaceComponent::restoreOrResetView(const juce::String& newProfileId) {

@@ -322,7 +322,7 @@ TEST(AIUndoWiringTest, MainComponentRoutesAiPatchesThroughUndoManager) {
  * Headless stand-in for the manual "apply a patch, press Cmd+Z, check the editor still renders"
  * check. Drives a real MainComponent through apply -> undo -> redo, pumping the message loop each
  * time (MainComponent::aiPatchApplied defers updateComponents() via callAsync) and painting after
- * every step. Catches the failure this task is really about: the editor keeping ModuleComponents
+ * every step. Catches the failure where the editor keeping ModuleComponents
  * that point into VisualBuffers the rebuilt graph has already freed.
  */
 TEST(AIUndoWiringTest, EditorRebuildsAndRepaintsAcrossUndoAndRedo) {

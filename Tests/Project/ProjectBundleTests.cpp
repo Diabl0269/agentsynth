@@ -845,7 +845,7 @@ TEST_F(ProjectBundleTest, SaveWithBalanceRoundTrips) {
     EXPECT_EQ(loadedLaw, synth::MixerPanLaw::Balance);
 }
 
-// A project saved before this ticket has no "mixerPanLaw" key at all -- absent must load as
+// A project saved before the pan-law setting existed has no "mixerPanLaw" key at all -- absent must load as
 // Balance, so an existing project's mix is never changed underfoot.
 TEST_F(ProjectBundleTest, LegacyProjectWithNoPanLawKeyLoadsAsBalance) {
     juce::AudioProcessorGraph graph;

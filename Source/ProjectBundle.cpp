@@ -229,7 +229,7 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
 
     // Step 2c: validate "midiRemote" into a LOCAL MidiRemoteProjectDoc, same all-or-nothing rule.
     // Deliberately NO reconcile-against-graph-nodes pass here — that is RemoteEngine's runtime
-    // job (a later ticket), not this load path's.
+    // job, not this load path's.
     MidiRemoteProjectDoc localMidiRemote;
     if (hasMidiRemoteKey && !localMidiRemote.fromVar(detachedMidiRemoteVar))
         return {false,

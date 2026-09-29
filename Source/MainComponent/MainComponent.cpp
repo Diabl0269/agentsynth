@@ -72,8 +72,8 @@ MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth:
     // is still being evaluated (declaration order puts these four members before bottomDock; the
     // body only runs once every member, bottomDock included, already exists). Assigning in the body
     // left every DetachablePanelHost/DetachedPanelWindow this ctor's MainComponent ever builds
-    // holding a permanently null lookAndFeel_ -- the detached-window-never-themes bug this ticket
-    // fixes -- even though getLookAndFeelForTest() looked correct immediately afterwards.
+    // holding a permanently null lookAndFeel_ (detached windows would never theme) -- even though
+    // getLookAndFeelForTest() looked correct immediately afterwards.
     : ownedThemeManager(std::make_unique<synth::theme::ThemeManager>())
     , ownedLookAndFeel(std::make_unique<synth::theme::AppLookAndFeel>())
     , themeManager(ownedThemeManager.get())

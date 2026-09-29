@@ -205,7 +205,7 @@ void PreferencesSettingsTab::layoutMixerPlacementGroup(
     if (previousGroupWasVisible) {
         // Same divider math as layoutContent's own addDivider() closure -- inlined rather than
         // shared, since that closure (and the pendingDivider local it tracks) lives inside a
-        // baselined function this ticket must not grow; dividerBounds is a plain member field,
+        // baselined function (function-size ratchet) that must not grow; dividerBounds is a plain member field,
         // reachable directly.
         y += 10;
         dividerBounds.push_back(juce::Rectangle<int>{0, y, contentWidth, 1});

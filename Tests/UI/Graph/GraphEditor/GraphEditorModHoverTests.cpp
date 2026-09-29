@@ -165,7 +165,7 @@ TEST_F(GraphEditorTest, ModulatedKnobRendersToPngForVisualInspection) {
 // the Level CV jack is knob-bound, so its gutter jack is hidden and the cable's own drop endpoint
 // is the pushed-out landing dot on the ring. Mirrors ModulatedKnobRendersToPngForVisualInspection's
 // own pattern (headless render, only written to disk when an env var names a path) but keyed off
-// AGENTSYNTH_SNAPSHOT_DIR/osc-card.png per this task's ask, rather than a per-test path var.
+// AGENTSYNTH_SNAPSHOT_DIR/osc-card.png, rather than a per-test path var.
 TEST_F(GraphEditorTest, OscillatorLevelKnobLandingRendersToPngForVisualInspection) {
     AudioEngine engine;
     GraphEditor editor(engine);

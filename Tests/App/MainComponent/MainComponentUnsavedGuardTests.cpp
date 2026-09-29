@@ -68,7 +68,7 @@ TEST_F(MainComponentTest, NewPatchOnACleanDocumentDoesNotPrompt) {
     EXPECT_EQ(mc.getCurrentPatchName(), "Untitled") << "and the action must have run straight through";
 }
 
-// THE headline test for this ticket. The guard is ASYNCHRONOUS, so the destructive work must not
+// THE headline test for the unsaved-changes guard. The guard is ASYNCHRONOUS, so the destructive work must not
 // have happened yet while the question is still outstanding — a guard that cleared the canvas and
 // then asked would be worse than no guard at all.
 TEST_F(MainComponentTest, NewPatchOnADirtyDocumentPromptsBeforeClearing) {

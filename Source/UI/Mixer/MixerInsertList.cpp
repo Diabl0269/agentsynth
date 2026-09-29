@@ -12,10 +12,10 @@
 namespace synth::ui {
 namespace {
 
-// The insert-eligible effects the add menu offers -- a curated stereo-in/stereo-out set rather than the plan's "reuse
-// the module library's full category/search picker" (see the PR description's deviations): this ticket's own budget
-// did not fit a second copy of that picker's UI. "Limiter" and "Gate" join the set (the Master column's
-// post-fader ceiling, and a strip's gate); the names are the factory's display names (AIStateMapper::createModule).
+// The insert-eligible effects the add menu offers -- a curated stereo-in/stereo-out set rather than the module
+// library's full category/search picker (a second copy of that picker's UI is not worth it here). "Limiter" and "Gate"
+// join the set (the Master column's post-fader ceiling, and a strip's gate); the names are the factory's display names
+// (AIStateMapper::createModule).
 const juce::StringArray kAddableModuleTypes{"Parametric EQ", "Compressor", "Limiter", "Gate",
                                             "Distortion",    "Chorus",     "Phaser",  "Flanger"};
 

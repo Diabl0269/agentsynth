@@ -3,11 +3,10 @@
 // caller-facing contract.
 //
 // Test seams below (test_hooks namespace) are free functions with EXTERNAL linkage, not hook
-// members on the class -- ControllersListComponent.h's contract is locked for this ticket (other
-// agents are concurrently wiring the panel around it), so a member can't be added here. Each hook
-// mirrors an existing hook-member idiom elsewhere in this codebase, just relocated to a free
-// function so Tests/UI/MidiRemote/ControllersListTests.cpp can reach in via its own forward
-// declaration of the same signature instead of widening the class:
+// members on the class -- ControllersListComponent.h's contract stays fixed (the panel is wired around it), so a member
+// isn't added here. Each hook mirrors an existing hook-member idiom elsewhere in this codebase, just relocated to a
+// free function so Tests/UI/MidiRemote/ControllersListTests.cpp can reach in via its own forward declaration of the
+// same signature instead of widening the class:
 //   - contextMenuHookForTest()   mirrors ModuleComponent::setShowContextMenuHookForTest (a real
 //     juce::PopupMenu::showMenuAsync() segfaults on a headless Linux CI runner with no display).
 //   - renamePromptHookForTest()  mirrors GraphEditor::promptRenameMacroForTest.

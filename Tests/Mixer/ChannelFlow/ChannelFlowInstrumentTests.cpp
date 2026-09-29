@@ -229,7 +229,7 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorEnvelopeActuallySilencesAfterNo
     EXPECT_GT(lastEnv, 0.5f) << "a held note must sustain, not decay to silence while still held";
 
     // Note off: after enough blocks for the release stage, the envelope must return to silence —
-    // this is the drone this ticket exists to fix.
+    // a stuck envelope would leave a drone.
     juce::MidiBuffer noteOff;
     noteOff.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
     lastEnv = renderAdsrBlock(noteOff);

@@ -274,7 +274,7 @@ private:
     // Lays out the Mixer placement combo row -- chained from the TAIL of
     // layoutMixerDefaultTrackPresetGroup() (not called from layoutContent directly, and not
     // taking its `beginGroup` closure): layoutContent's own `pendingDivider` local (which
-    // `beginGroup` updates) is a baselined function this ticket must not grow, so
+    // `beginGroup` updates) is a baselined function (function-size ratchet) that must not grow, so
     // `previousGroupWasVisible` carries the one bit that closure would otherwise have tracked,
     // and this draws its own divider directly into `dividerBounds` (a plain member) when needed.
     void layoutMixerPlacementGroup(

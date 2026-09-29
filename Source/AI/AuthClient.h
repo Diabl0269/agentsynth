@@ -203,7 +203,7 @@ public:
                                                                  const std::atomic<bool>& cancelled) const;
 
     /** PUT /v1/prompt-learning with `Authorization: Bearer <accessToken>` and a JSON
-        `{"opted_in": optedIn}` body (P6-7). Toggling to false purges the server's accumulated
+        `{"opted_in": optedIn}` body. Toggling to false purges the server's accumulated
         samples for this user; that purge is a server-side concern, nothing further for the client
         to do. */
     PromptLearningPreferenceResult setPromptLearningPreference(const juce::String& accessToken, bool optedIn,
@@ -229,7 +229,7 @@ public:
 
     /** POST /v1/conversations/:conversationId/messages/:messageId/feedback with
         `Authorization: Bearer <accessToken>` and a JSON `{"rating": rating, "comment"?: comment}`
-        body (P6-9). `rating` is "up" or "down"; `comment` is omitted from the body entirely when
+        body. `rating` is "up" or "down"; `comment` is omitted from the body entirely when
         empty, same convention as PatchFeedbackStore::record()'s local log. Server-side this is
         Pro-gated (403 for a non-Pro account) and returns 404 when the conversation/message id is
         wrong or not owned by this user — this client has no plan awareness of its own (same as
@@ -240,12 +240,12 @@ public:
                                                       const std::atomic<bool>& cancelled) const;
 
     /** POST /v1/feedback with a JSON `{"category": category, "text": text}` body.
-        `category` is "bug", "feature", or "other". Unlike submitMessageFeedback (P6-9), the server
+        `category` is "bug", "feature", or "other". Unlike submitMessageFeedback, the server
         does NOT plan-gate this -- any account, signed in or not, may submit general feedback.
         `Authorization: Bearer <accessToken>` is set only when `accessToken` is non-empty; the
         `X-Device-Id` header is always set from this AuthClient's own device id (see `deviceId`
         below) when non-empty, so a signed-out caller still gets attributed feedback via the
-        device's stable anonymous id (P6-17). Callers pass an empty `accessToken` to submit
+        device's stable anonymous id. Callers pass an empty `accessToken` to submit
         anonymously. */
     SubmitGeneralFeedbackResult submitGeneralFeedback(const juce::String& accessToken, const juce::String& category,
                                                       const juce::String& text,

@@ -102,7 +102,7 @@ TEST(BottomDockComponentTests, ToggleBottomPanelOpensOnTheLastActiveTabThenClose
 TEST(BottomDockComponentTests, ToggleMixerPanelActionIdRoundTripsToItsCommand) {
     // The command table row's actionId must resolve back to AppCommands::toggleMixerPanel -- the
     // same generic tripwire EveryActionIdRoundTripsToItsOwnCommand checks for every row, pinned
-    // here explicitly for this ticket's own new row.
+    // here explicitly for the mixer-panel row.
     EXPECT_EQ(AppCommands::getCommandForAction("toggleMixerPanel"), AppCommands::toggleMixerPanel);
 }
 
