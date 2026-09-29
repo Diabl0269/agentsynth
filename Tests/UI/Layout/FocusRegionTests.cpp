@@ -250,19 +250,24 @@ bool commandIsActive(MainComponent& mc, juce::CommandID cmdId) {
 
 } // namespace
 
+// The launch overlay always shows at construction (no opt-out); tests that need it out of the way
+// hide it the same way MainComponent::hideWelcomeScreen() does.
+static void hideWelcomeScreen(MainComponent& mc) {
+    if (auto* ws = mc.getWelcomeScreenForTest())
+        ws->setVisible(false);
+}
+
 class FocusRegionMainComponentTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // DetachingAPanelDropsItFromMainComponentsRegistryUntilRedocked (below) detaches
         // the real timeline host against a real MainComponent, which persists "timelineWindowBounds"
         // into the same real on-disk settings file every other key here already guards.
-        guard_.emplace(juce::StringArray{"showWelcomeScreenAtLaunch", "librarySidebarVisible", "bottomDockVisible",
-                                         "aiPanelVisible", "timelineWindowBounds"});
-        // A known baseline every test in this fixture starts from: welcome screen hidden (out of the
-        // way for the Tab-cycle/registration tests), Library open, Toolbar/Canvas always open,
+        guard_.emplace(
+            juce::StringArray{"librarySidebarVisible", "bottomDockVisible", "aiPanelVisible", "timelineWindowBounds"});
+        // A known baseline every test in this fixture starts from: Library open, Toolbar/Canvas always open,
         // Timeline/AI Panel/Mod Matrix closed -- i.e. exactly "toolbar" + "library" + "canvas" open
         // at construction.
-        writePref("showWelcomeScreenAtLaunch", "0");
         writePref("librarySidebarVisible", "1");
         writePref("bottomDockVisible", "0");
         writePref("aiPanelVisible", "0");
@@ -282,6 +287,7 @@ TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheEightDocumentedRegionsIn
     // "midiRemote" joined as an 8th region the same way, right after "mixer" -- all three
     // share the one dock now.
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     juce::StringArray ids;
     for (const auto& region : mc.getFocusRegionsForTest().getRegions())
         ids.add(region.id);
@@ -306,6 +312,7 @@ TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheEightDocumentedRegionsIn
 // double-outline guard.
 TEST_F(FocusRegionMainComponentTest, RegionContainingResolvesTheNestedModMatrixNotTheOuterCanvas) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     auto& regs = mc.getFocusRegionsForTest();
     auto& modMatrix = mc.getGraphEditor().getModMatrix();
 
@@ -322,6 +329,7 @@ TEST_F(FocusRegionMainComponentTest, RegionContainingResolvesTheNestedModMatrixN
 // so a real grabKeyboardFocus() call is never exercised end-to-end here).
 TEST_F(FocusRegionMainComponentTest, EveryRegionRootWantsKeyboardFocusItself) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     for (const auto& region : mc.getFocusRegionsForTest().getRegions())
         EXPECT_TRUE(region.root->getWantsKeyboardFocus()) << "region \"" << region.id << "\" root";
 }
@@ -331,6 +339,7 @@ TEST_F(FocusRegionMainComponentTest, EveryRegionRootWantsKeyboardFocusItself) {
 // ever visits what's open, and opening a previously-closed region splices it back into the cycle.
 TEST_F(FocusRegionMainComponentTest, TabCycleOnlyVisitsOpenRegionsAndWraps) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     auto& regs = mc.getFocusRegionsForTest();
 
     ASSERT_TRUE(mc.isLibraryConfiguredVisible());
@@ -356,6 +365,7 @@ TEST_F(FocusRegionMainComponentTest, TabCycleOnlyVisitsOpenRegionsAndWraps) {
 // welcome screen isn't in the way.
 TEST_F(FocusRegionMainComponentTest, KeyPressedTabDispatchesSuccessfullyWhenNotSuppressed) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
     ASSERT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
 
@@ -368,8 +378,9 @@ TEST_F(FocusRegionMainComponentTest, KeyPressedTabDispatchesSuccessfullyWhenNotS
 // Tab-cycling is suppressed entirely while the launch overlay is up front.
 TEST_F(FocusRegionMainComponentTest, TabCyclingSuppressedWhileWelcomeScreenIsVisible) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
-    ASSERT_FALSE(mc.getWelcomeScreenForTest()->isVisible()) << "SetUp forced showWelcomeScreenAtLaunch=0";
+    ASSERT_FALSE(mc.getWelcomeScreenForTest()->isVisible()) << "hidden explicitly after construction";
     EXPECT_TRUE(commandIsActive(mc, AppCommands::focusNextRegion));
     EXPECT_TRUE(commandIsActive(mc, AppCommands::focusPrevRegion));
 
@@ -400,6 +411,7 @@ TEST_F(FocusRegionMainComponentTest, TabCyclingSuppressedWhileWelcomeScreenIsVis
 // side effects rather than asserting real OS focus moved.
 TEST_F(FocusRegionMainComponentTest, CmdShiftTOpensTheTimelinePanelIfClosedThenDispatches) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_FALSE(mc.isBottomDockConfiguredVisible()) << "SetUp forced bottomDockVisible=0";
 
     const auto binding = mc.getShortcutManager().getBinding("focusTimeline");
@@ -415,6 +427,7 @@ TEST_F(FocusRegionMainComponentTest, CmdShiftTOpensTheTimelinePanelIfClosedThenD
 // Cmd+Shift+T on an ALREADY-open Timeline must not close it (it is a focus command, not a toggle).
 TEST_F(FocusRegionMainComponentTest, CmdShiftTOnAnAlreadyOpenTimelineLeavesItOpen) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusTimeline, false));
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
 
@@ -426,6 +439,7 @@ TEST_F(FocusRegionMainComponentTest, CmdShiftTOnAnAlreadyOpenTimelineLeavesItOpe
 TEST_F(FocusRegionMainComponentTest, CmdShiftLOpensTheLibraryIfClosedThenDispatches) {
     writePref("librarySidebarVisible", "0"); // override this fixture's usual "starts open" baseline
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_FALSE(mc.isLibraryConfiguredVisible());
 
     const auto binding = mc.getShortcutManager().getBinding("focusLibrary");
@@ -437,6 +451,7 @@ TEST_F(FocusRegionMainComponentTest, CmdShiftLOpensTheLibraryIfClosedThenDispatc
 
 TEST_F(FocusRegionMainComponentTest, CmdShiftLOnAnAlreadyOpenLibraryLeavesItOpen) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_TRUE(mc.isLibraryConfiguredVisible()) << "SetUp forced librarySidebarVisible=1";
 
     EXPECT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusLibrary, false));
@@ -452,6 +467,7 @@ TEST_F(FocusRegionMainComponentTest, CmdShiftLOnAnAlreadyOpenLibraryLeavesItOpen
 TEST_F(FocusRegionMainComponentTest, CmdFOpensTheLibraryIfClosedThenDispatches) {
     writePref("librarySidebarVisible", "0"); // override this fixture's usual "starts open" baseline
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_FALSE(mc.isLibraryConfiguredVisible());
 
     const auto binding = mc.getShortcutManager().getBinding("focusLibrarySearch");
@@ -463,6 +479,7 @@ TEST_F(FocusRegionMainComponentTest, CmdFOpensTheLibraryIfClosedThenDispatches) 
 
 TEST_F(FocusRegionMainComponentTest, CmdFOnAnAlreadyOpenLibraryLeavesItOpen) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_TRUE(mc.isLibraryConfiguredVisible()) << "SetUp forced librarySidebarVisible=1";
 
     EXPECT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusLibrarySearch, false));
@@ -474,6 +491,7 @@ TEST_F(FocusRegionMainComponentTest, CmdFOnAnAlreadyOpenLibraryLeavesItOpen) {
 // task's own scope: "Suppress ALL TAB CYCLING while welcomeScreen_ is visible").
 TEST_F(FocusRegionMainComponentTest, DirectFocusShortcutsAreNotSuppressedByTheWelcomeScreen) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
     mc.getWelcomeScreenForTest()->setVisible(true);
 
@@ -488,6 +506,7 @@ TEST_F(FocusRegionMainComponentTest, DirectFocusShortcutsAreNotSuppressedByTheWe
 
 TEST_F(FocusRegionMainComponentTest, DetachingAPanelDropsItFromMainComponentsRegistryUntilRedocked) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    hideWelcomeScreen(mc);
     ASSERT_NE(mc.getFocusRegionsForTest().findById("timeline"), nullptr)
         << "docked by default -- the region must already be registered";
 

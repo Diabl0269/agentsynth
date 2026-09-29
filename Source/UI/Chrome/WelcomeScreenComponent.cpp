@@ -73,13 +73,6 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
             onWhatsNewRequested();
     };
 
-    addAndMakeVisible(showAtLaunchToggle);
-    showAtLaunchToggle.setToggleState(true, juce::dontSendNotification);
-    showAtLaunchToggle.onClick = [this] {
-        if (onShowAtLaunchChanged)
-            onShowAtLaunchChanged(showAtLaunchToggle.getToggleState());
-    };
-
     versionLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.6f));
     addAndMakeVisible(versionLabel);
 
@@ -92,10 +85,6 @@ void WelcomeScreenComponent::setRecentProjects(const std::vector<juce::File>& re
         recentFiles_.resize((size_t)kMaxVisibleRecents);
     rebuildRecentProjectButtons();
     resized();
-}
-
-void WelcomeScreenComponent::setShowAtLaunch(bool shouldShow) {
-    showAtLaunchToggle.setToggleState(shouldShow, juce::dontSendNotification);
 }
 
 void WelcomeScreenComponent::setLatestVersionLabel(const juce::String& text) {
@@ -188,8 +177,6 @@ void WelcomeScreenComponent::resized() {
 
     area.removeFromTop(20);
     auto footer = area.removeFromTop(28);
-    showAtLaunchToggle.setBounds(footer.removeFromRight(210));
-    footer.removeFromRight(10);
     whatsNewButton.setBounds(footer.removeFromRight(110));
     footer.removeFromRight(10);
     versionLabel.setBounds(footer);

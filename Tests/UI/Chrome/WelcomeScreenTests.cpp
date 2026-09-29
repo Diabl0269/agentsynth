@@ -205,39 +205,26 @@ TEST_F(WelcomeScreenTest, ShutdownWhileMainComponentAliveDetachesLiveParameterAt
 TEST_F(WelcomeScreenTest, ExistsOnTheStandaloneAppPath) {
     MainComponent mc(std::make_unique<MockProvider>());
     ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
-    EXPECT_TRUE(mc.getWelcomeScreenForTest()->isVisible()) << "shown by default (showWelcomeScreenAtLaunch=true)";
+    EXPECT_TRUE(mc.getWelcomeScreenForTest()->isVisible()) << "shown by default (always shown at launch)";
 }
 
 // ---------------------------------------------------------------------------
-// The persisted "show at launch" preference.
+// Always shown at launch: no opt-out, and a legacy saved preference is ignored.
 // ---------------------------------------------------------------------------
 
-TEST_F(WelcomeScreenTest, HiddenByDefault_WhenShowAtLaunchPreferenceIsFalse) {
+TEST_F(WelcomeScreenTest, ShownAtLaunchEvenWhenOldPreferenceSaidHide) {
     writeShowWelcomeAtLaunchPref("0");
 
     MainComponent mc(std::make_unique<MockProvider>());
     ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
-    EXPECT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
-    EXPECT_FALSE(mc.getWelcomeScreenForTest()->getShowAtLaunchToggleForTest().getToggleState());
+    EXPECT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
 }
 
-TEST_F(WelcomeScreenTest, ShowAtLaunchToggle_PersistsSetting) {
-    MainComponent mc(std::make_unique<MockProvider>());
-    ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
-    auto& toggle = mc.getWelcomeScreenForTest()->getShowAtLaunchToggleForTest();
-    ASSERT_TRUE(toggle.getToggleState()) << "default preference is true";
-
-    // juce::Button::triggerClick() posts an async command message (postCommandMessage) rather
-    // than flipping state inline — same reasoning as every dirty-flag assertion elsewhere in this
-    // codebase needing a pump before it can be observed.
-    toggle.triggerClick();
-    pumpMessageLoop();
-
-    EXPECT_FALSE(mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("showWelcomeScreenAtLaunch", true));
-
-    toggle.triggerClick(); // flip back
-    pumpMessageLoop();
-    EXPECT_TRUE(mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("showWelcomeScreenAtLaunch", false));
+TEST_F(WelcomeScreenTest, HasNoShowAtLaunchToggle) {
+    synth::ui::WelcomeScreenComponent ws;
+    for (auto* child : ws.getChildren())
+        if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child))
+            EXPECT_FALSE(toggle->getButtonText().containsIgnoreCase("launch"));
 }
 
 // ---------------------------------------------------------------------------
@@ -438,10 +425,9 @@ TEST_F(WelcomeScreenTest, ContributeRow_FitsInsideCardWithoutOverlappingNeighbou
     const auto button = ws.getContributeButtonForTest().getBounds();
     const auto label = ws.getContributeLabelForTest().getBounds();
     const auto whatsNew = ws.getWhatsNewButtonForTest().getBounds();
-    const auto toggle = ws.getShowAtLaunchToggleForTest().getBounds();
-    // The card is centred and at most 600 wide / well under 900 tall; the toggle (footer, last row)
-    // and the title-side rows bound it, so check against the union of everything and the overlay.
-    const auto footer = whatsNew.getUnion(toggle);
+    // The card is centred and at most 600 wide / well under 900 tall; the What's New button
+    // (footer, last row) bounds it from below.
+    const auto footer = whatsNew;
     EXPECT_TRUE(ws.getLocalBounds().contains(button));
     EXPECT_TRUE(ws.getLocalBounds().contains(label));
     EXPECT_LE(button.getWidth() + label.getWidth(), 600 - 2 * 28) << "row must fit the card's padded width";
@@ -466,7 +452,7 @@ TEST_F(WelcomeScreenTest, ContributeRow_FitsInsideCardWithoutOverlappingNeighbou
 }
 
 // Regression test for the footer squeezing "What's New..." to ~40px ("What'..."): the version label
-// used to take half the row before the toggle and button were placed.
+// used to take half the row before the button was placed.
 TEST_F(WelcomeScreenTest, FooterGivesWhatsNewItsFullWidth) {
     synth::ui::WelcomeScreenComponent ws;
     ws.setLatestVersionLabel("Agent Synth v0.309.0");
@@ -477,7 +463,6 @@ TEST_F(WelcomeScreenTest, FooterGivesWhatsNewItsFullWidth) {
         ws.getLookAndFeel().getTextButtonFont(dynamic_cast<juce::TextButton&>(whatsNew), whatsNew.getHeight());
     const int textWidth = juce::roundToInt(juce::GlyphArrangement::getStringWidth(font, whatsNew.getButtonText()));
     EXPECT_GE(whatsNew.getWidth(), textWidth + 8);
-    EXPECT_FALSE(whatsNew.getBounds().intersects(ws.getShowAtLaunchToggleForTest().getBounds()));
     for (auto* child : ws.getChildren())
         if (auto* label = dynamic_cast<juce::Label*>(child);
             label != nullptr && label->getText().startsWith("Agent Synth v"))
