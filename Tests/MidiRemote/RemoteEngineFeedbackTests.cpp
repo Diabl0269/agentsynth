@@ -421,3 +421,132 @@ TEST(MidiRemoteEngineFeedbackTest, OnlyTheActivePageIsEchoedAndASwitchEchoesTheN
     ASSERT_EQ(h.sink.sent.size(), 1u);
     EXPECT_EQ(h.sink.sent[0].message.getControllerValue(), juce::roundToInt(resonance->getValue() * 127.0f));
 }
+
+// A profile with no explicit output (the Launch Control XL 3 template) is fed back through
+// the output its device handshake resolved -- its DAW In port. Encoders are endless absolute
+// (manual p.10: an encoder "picks up" the position the DAW sends), so pick-up takeover only engages
+// at once when the encoder's own position was first synced to the parameter.
+namespace {
+
+constexpr const char* kDawIn = "LCXL3 1 DAW In";
+
+ControllerProfile makeLcxlLikeProfile() {
+    auto profile = makeProfile({makeControl("enc1", MessageType::cc, 16, 13, Encoding::abs7)}, false);
+    return profile;
+}
+
+Assignment makePickupAssignment() {
+    auto a = makeParamAssignment("a1", "enc1", MessageType::cc, 16, 13, Encoding::abs7, "cutoff");
+    a.takeover = Takeover::pickup;
+    return a;
+}
+
+std::map<juce::String, ControllerProfile::Input> dawInOutputs() { return {{"profile", {"daw-in-id", kDawIn}}}; }
+
+} // namespace
+
+TEST(MidiRemoteEngineFeedbackTest, NoOutputAndNoHandshakeOutputSendsNothing) {
+    FeedbackHarness h;
+    h.publish({makeLcxlLikeProfile()}, {makePickupAssignment()});
+    h.cutoff()->setValueNotifyingHost(0.5f);
+    h.engine.drain();
+    EXPECT_TRUE(h.sink.sent.empty());
+}
+
+TEST(MidiRemoteEngineFeedbackTest, HandshakeOutputBindSendsCurrentValueOnTheControlsChannelAndNumber) {
+    FeedbackHarness h;
+    h.publish({makeLcxlLikeProfile()}, {makePickupAssignment()});
+    h.cutoff()->setValueNotifyingHost(0.5f);
+    h.engine.drain();
+    ASSERT_TRUE(h.sink.sent.empty());
+
+    h.engine.setHandshakeFeedbackOutputs(dawInOutputs());
+    h.engine.drain();
+
+    ASSERT_EQ(h.sink.sent.size(), 1u);
+    EXPECT_EQ(h.sink.sent[0].device.identifier, "daw-in-id");
+    EXPECT_EQ(h.sink.sent[0].device.name, kDawIn);
+    EXPECT_EQ(h.sink.sent[0].message.getChannel(), 16);
+    EXPECT_EQ(h.sink.sent[0].message.getControllerNumber(), 13);
+    EXPECT_EQ(h.sink.sent[0].message.getControllerValue(), juce::roundToInt(0.5f * 127.0f));
+
+    // An identical republish of the same outputs must not re-announce everything.
+    h.sink.sent.clear();
+    h.engine.setHandshakeFeedbackOutputs(dawInOutputs());
+    h.engine.drain();
+    EXPECT_TRUE(h.sink.sent.empty());
+}
+
+TEST(MidiRemoteEngineFeedbackTest, HandshakeOutputFollowsExternalParameterChanges) {
+    FeedbackHarness h;
+    h.publish({makeLcxlLikeProfile()}, {makePickupAssignment()});
+    h.engine.setHandshakeFeedbackOutputs(dawInOutputs());
+    h.engine.drain();
+    h.sink.sent.clear();
+
+    h.cutoff()->setValueNotifyingHost(0.25f); // e.g. a mouse drag
+    h.engine.drain();
+
+    ASSERT_EQ(h.sink.sent.size(), 1u);
+    EXPECT_EQ(h.sink.sent[0].message.getChannel(), 16);
+    EXPECT_EQ(h.sink.sent[0].message.getControllerValue(), juce::roundToInt(0.25f * 127.0f));
+}
+
+TEST(MidiRemoteEngineFeedbackTest, PickupEngagesAtOnceOnceTheEncoderWasSyncedAndDeviceEventsAreNotEchoed) {
+    FeedbackHarness h;
+    h.publish({makeLcxlLikeProfile()}, {makePickupAssignment()});
+    h.cutoff()->setValueNotifyingHost(0.5f);
+    h.engine.setHandshakeFeedbackOutputs(dawInOutputs());
+    h.engine.drain();
+    ASSERT_EQ(h.sink.sent.size(), 1u);
+    const int syncedTo = h.sink.sent[0].message.getControllerValue(); // the encoder now sits here
+    h.sink.sent.clear();
+
+    // The encoder moves one step from where it was synced -- no crossing needed.
+    ASSERT_TRUE(h.send(juce::MidiMessage::controllerEvent(16, 13, syncedTo + 1)));
+    h.advance(10.0);
+    h.engine.drain();
+    EXPECT_NEAR(h.cutoff()->getValue(), (syncedTo + 1) / 127.0f, 0.01f);
+    EXPECT_TRUE(h.sink.sent.empty()) << "a value that came from the device is not echoed while it is being turned";
+}
+
+// No dead zone in either direction: the first step counter-clockwise moves the parameter too.
+TEST(MidiRemoteEngineFeedbackTest, PickupEngagesAtOnceOnAFirstStepDownToo) {
+    FeedbackHarness h;
+    h.publish({makeLcxlLikeProfile()}, {makePickupAssignment()});
+    h.cutoff()->setValueNotifyingHost(0.5f);
+    h.engine.setHandshakeFeedbackOutputs(dawInOutputs());
+    h.engine.drain();
+    ASSERT_EQ(h.sink.sent.size(), 1u);
+    const int syncedTo = h.sink.sent[0].message.getControllerValue();
+
+    ASSERT_TRUE(h.send(juce::MidiMessage::controllerEvent(16, 13, syncedTo - 1)));
+    h.advance(10.0);
+    h.engine.drain();
+    EXPECT_NEAR(h.cutoff()->getValue(), (syncedTo - 1) / 127.0f, 0.01f);
+}
+
+TEST(MidiRemoteEngineFeedbackTest, AnExplicitOutputWinsOverTheHandshakeOutput) {
+    FeedbackHarness h;
+    auto profile = makeProfile({makeControl("enc1", MessageType::cc, 16, 13, Encoding::abs7)}, true);
+    h.publish({profile}, {makePickupAssignment()});
+    h.engine.setHandshakeFeedbackOutputs(dawInOutputs());
+    h.cutoff()->setValueNotifyingHost(0.5f);
+    h.engine.drain();
+
+    ASSERT_EQ(h.sink.sent.size(), 1u);
+    EXPECT_EQ(h.sink.sent[0].device.identifier, kOutputId);
+}
+
+TEST(MidiRemoteEngineFeedbackTest, ClearingTheHandshakeOutputStopsFeedback) {
+    FeedbackHarness h;
+    h.publish({makeLcxlLikeProfile()}, {makePickupAssignment()});
+    h.engine.setHandshakeFeedbackOutputs(dawInOutputs());
+    h.engine.drain();
+    h.sink.sent.clear();
+
+    h.engine.setHandshakeFeedbackOutputs({}); // the device closed
+    h.cutoff()->setValueNotifyingHost(0.9f);
+    h.engine.drain();
+    EXPECT_TRUE(h.sink.sent.empty());
+}

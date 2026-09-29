@@ -298,3 +298,23 @@ TEST(ControllerHandshakeTest, IssueClearsWhenTheProfileIsRemovedOrTheDeviceClose
     coordinator.reconcile({profile}, {}, lcxl3Outputs()); // device closed
     EXPECT_TRUE(coordinator.getHandshakeIssue("p1").isEmpty());
 }
+
+// The output each open handshake went to is also where mapped-value feedback goes
+// (RemoteEngine::setHandshakeFeedbackOutputs) -- for the LCXL3 that is the asymmetric "DAW In".
+TEST(ControllerHandshakeTest, GetOpenOutputsReportsTheResolvedOutputWhileOpenAndNothingAfterClose) {
+    FakeFeedbackSink sink;
+    ControllerHandshakeCoordinator coordinator(sink);
+    auto profile = makeProfile("p1", "in-id", {0xF0, 0x7F, 0xF7}, {0xF0, 0x00, 0xF7});
+    profile.input.name = "LCXL3 1 DAW Out";
+    profile.handshake.port = "DAW";
+    const std::vector<ControllerProfile::Input> outputs{{"other", "LCXL3 1 MIDI In"}, {"daw-in", "LCXL3 1 DAW In"}};
+
+    EXPECT_TRUE(coordinator.getOpenOutputs().empty());
+    coordinator.reconcile({profile}, {"in-id"}, outputs);
+    const auto open = coordinator.getOpenOutputs();
+    ASSERT_EQ(open.size(), 1u);
+    EXPECT_EQ(open.at("p1").identifier, "daw-in");
+
+    coordinator.reconcile({profile}, {}, outputs); // device closed
+    EXPECT_TRUE(coordinator.getOpenOutputs().empty());
+}
