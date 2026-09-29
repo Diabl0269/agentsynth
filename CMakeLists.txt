@@ -502,6 +502,7 @@ add_library(Core STATIC
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelLifecycle.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelFonts.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelSliders.cpp
+    Source/UI/Theme/AppLookAndFeel/AppLookAndFeelFader.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelButtons.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelComboAndMenus.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelScrollbarsAndChrome.cpp

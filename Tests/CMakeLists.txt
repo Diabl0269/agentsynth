@@ -353,6 +353,7 @@ add_executable(Tests
     Engine/PerformanceTests.cpp
     UI/Theme/ThemeTests.cpp
     UI/Theme/ThemeMeterZoneTests.cpp
+    UI/Theme/FaderRenderTests.cpp
     UI/Theme/IconLibraryTests.cpp
     UI/Chrome/StatusBarTests.cpp
     UI/ModuleViews/FrequencyResponseTests.cpp

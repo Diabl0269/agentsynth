@@ -299,6 +299,7 @@ Theme makeDaylight() {
     // MIDI must read unmistakably PURPLE at 2px next to the indigo modWire — 0xff6D28D9 was tried
     // first and reads near-navy at wire width on a light canvas.
     t.colors.midiWire = juce::Colour(0xff9333EA);    // MIDI wires (royal purple, ~5:1 on bg1/surface)
+    t.colors.midiMapped = juce::Colour(0xff9333EA);  // MIDI Learn badge; the default purple is ~2.6:1 on white
     t.colors.modWire = juce::Colour(0xff4C6EF5);     // modulation CV wires
     t.colors.pitchWire = juce::Colour(0xff15AABF);   // poly pitch wires
     t.colors.gateWire = juce::Colour(0xffFD7E14);    // poly gate wires
