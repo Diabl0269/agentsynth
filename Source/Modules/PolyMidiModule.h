@@ -103,7 +103,7 @@ public:
             }
         }
 
-        // Update atomic voice mask for lock-free UI reads (§4.3)
+        // Update atomic voice mask for lock-free UI reads (docs/modules/modules.md#poly-midi-module)
         uint8_t mask = 0;
         for (int i = 0; i < MAX_VOICES; ++i) {
             if (voices[i].active)

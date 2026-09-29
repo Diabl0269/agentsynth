@@ -6,7 +6,7 @@
 # git-ls-files-based scan would miss is exactly the kind of rename that leaves a stale reference
 # behind), a section gets renumbered or deleted, a link target moves -- and nothing catches it until
 # a reader clicks a dead link or a stale `§N` pointer in a Source/** comment sends them to the wrong
-# place (or nowhere). Seven checks, all against the WORKING TREE via `find` (never `git ls-files` --
+# place (or nowhere). Nine checks, all against the WORKING TREE via `find` (never `git ls-files` --
 # that misses untracked new files, the exact trap that bit an earlier verify script in this repo):
 #
 #   A. Doc filename convention -- every docs/**/*.md basename must be lowercase kebab-case
@@ -25,15 +25,32 @@
 #      a CLAUDE.md line, or another doc's prose (not just markdown link syntax). NOT baselined. The
 #      pattern requires the character immediately before `docs/` to be neither `/` nor alphanumeric
 #      (start-of-string, whitespace, punctuation) -- a qualified path like `synth-platform/docs/x.md`
-#      does not match, so this never misidentifies a DIFFERENT repo's docs/ tree as our own.
+#      does not match, so this never misidentifies a DIFFERENT repo's docs/ tree as our own. One
+#      exception (FRO218): a `/` that directly follows a source/doc FILENAME (`Widget.h/docs/<x>.md`,
+#      a glued typo) still starts our path -- no sibling-repo directory name ends in a file
+#      extension, so no list of repo names is needed. Shared by C/D/F/H/I via docs_boundary_ok.
 #   D. `§`-section references resolve -- `docs/<path>.md` followed by up to 12 characters then
-#      `§<N>`/`§<N.M>`/`§<N.M.K>` must name a section that exists in that doc (a heading
+#      `§<N>`/`§<N.M>`/`§<N.M.K>` must name a section that exists in that doc -- and so must EVERY
+#      further marker chained after it within 12 characters (`docs/<x>.md §1, §2, §3`), not only the
+#      first (FRO218) (a heading
 #      `## 5.3 Foo` satisfies both `§5.3` and the coarser `§5`). NOT baselined -- ZERO TOLERANCE:
 #      every `§`-reference in this repo names a section that actually exists, always. There is no
 #      grandfathering here (unlike check A) -- a stale section reference is actively misleading (it
 #      sends a reader to the wrong place, or nowhere), so it is fixed at the point it goes stale,
 #      not parked for later. FRO169 fixed the last 38 stale references that had accumulated; see
 #      docs/development/docs-guard.md for the mechanism this enforces going forward.
+#   H. Reversed-order references (FRO218) -- `§N of docs/<path>.md`: a section marker written BEFORE
+#      the path, joined to it only by `of`/`in`/`from` (+ optional `the`), is checked against that
+#      later path exactly like check D. It is bound to the LATER path first, so it is never
+#      misattributed to an earlier path on the same line (`docs/<a>.md, §8 of docs/<b>.md` -- §8 is b's;
+#      the FRO217 regression pin). NOT baselined -- ZERO TOLERANCE.
+#   I. Bare section markers (FRO218) -- any `§N` marker that no docs path claims (none before it on
+#      the line, or none within check D's 12-character window) fails: a marker with no docs path
+#      cannot be resolved by a script or a reader, and FRO243 had to hunt 14 of them down by hand.
+#      Write the full `docs/<path>.md#<anchor>` form (or plain words). NOT baselined -- ZERO
+#      TOLERANCE. Exempt: this script, scripts/lib/check-docs-checks.sh, the checker's unit test and
+#      docs/development/docs-guard.md, which DOCUMENT the pattern. D, H and I are one classifier
+#      (marker_scan) and D/H/G resolve sections through the one shared section_in_doc rule.
 #   E. `docs/README.md` map completeness -- every `docs/**/*.md` file except README.md itself must
 #      be linked at least once from `docs/README.md`, and every link `docs/README.md` makes into
 #      docs/ must resolve to a real file. NOT baselined -- the map is either complete or it isn't.
@@ -77,7 +94,7 @@
 #      proof the gap was real, not theoretical.
 #
 # Usage:
-#   bash scripts/check-docs.sh                  # check the tree (A against baseline; B-G hard)
+#   bash scripts/check-docs.sh                  # check the tree (A against baseline; B-I hard)
 #   bash scripts/check-docs.sh --update         # rewrite the naming baseline from the current tree
 #   bash scripts/check-docs.sh --update --allow-growth  # ...and let a new naming entry through
 #   bash scripts/check-docs.sh --list           # summarize current violations in every check
@@ -90,7 +107,7 @@
 #
 # Exit status (check mode only -- --update/--list/--help always exit 0 on success):
 #   0  no violation
-#   1  any check-B/C/D/E/F/G failure, any check-A violation not (or no longer) covered by the
+#   1  any check-B/C/D/E/F/G/H/I failure, any check-A violation not (or no longer) covered by the
 #      baseline, or the tree has zero .md files in scope (see the vacuous-pass fail-safe below)
 #
 # Portable bash 3.2 (macOS default) + grep/sed/find -- no python, no GNU-only flags. Every bash
@@ -150,12 +167,13 @@ usage() {
     cat <<'USAGE'
 Usage: bash scripts/check-docs.sh [--update] [--list] [--root <dir>] [-h|--help]
 
-Seven checks against docs/ and every in-scope *.cpp/*.h/*.sh/*.yml/*.txt/*.json/*.cmake/*.py file in
+Nine checks against docs/ and every in-scope *.cpp/*.h/*.sh/*.yml/*.txt/*.json/*.cmake/*.py file in
 the repo (Source/, Tests/, Tools/, scripts/, .github/ -- see EXTENSIONS/EXCLUDED_PREFIXES below):
 doc filename convention (A), markdown link targets (B), `docs/...` path mentions (C), `§`-section
 references (D), docs/README.md map completeness (E), `docs/...#anchor` mentions outside markdown
 link syntax (F), bare backticked basename references outside markdown link syntax and outside any
-`docs/` path (G). Only A is ratcheted, against scripts/docs-baseline.txt; B, C, D, E, F, G are
+`docs/` path (G), reversed `§N of docs/...` references (H), bare `§N` markers (I). Only A is
+ratcheted, against scripts/docs-baseline.txt; B, C, D, E, F, G, H, I are
 always a hard failure (zero tolerance, never baselined). See this script's own header comment for
 the full mechanism.
 
@@ -437,6 +455,26 @@ run_check() {
         done <<<"$d_out"
     fi
 
+    h_out="$(check_h_violations "$workdir/pairs_all.txt" "$workdir/headings.txt")"
+    if [ -n "$h_out" ]; then
+        while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            echo "::error::check-docs (reversed section): $line"
+            errors=$((errors + 1))
+            d_current_n=$((d_current_n + 1))
+        done <<<"$h_out"
+    fi
+
+    i_out="$(check_i_violations "$workdir/pairs_all.txt" "$workdir/headings.txt")"
+    if [ -n "$i_out" ]; then
+        while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            echo "::error::check-docs (bare section marker): $line"
+            errors=$((errors + 1))
+            d_current_n=$((d_current_n + 1))
+        done <<<"$i_out"
+    fi
+
     e_out="$(check_e_violations "$workdir/scanned.txt")"
     if [ -n "$e_out" ]; then
         while IFS= read -r line; do
@@ -574,6 +612,12 @@ run_list() {
     echo
     echo "=== stale §-section references (check D) ==="
     check_d_violations "$workdir/pairs_all.txt" "$workdir/headings.txt"
+    echo
+    echo "=== reversed-order section references (check H) ==="
+    check_h_violations "$workdir/pairs_all.txt" "$workdir/headings.txt"
+    echo
+    echo "=== bare section markers (check I) ==="
+    check_i_violations "$workdir/pairs_all.txt" "$workdir/headings.txt"
     echo
     echo "=== docs/README.md map completeness (check E) ==="
     check_e_violations "$workdir/scanned.txt"

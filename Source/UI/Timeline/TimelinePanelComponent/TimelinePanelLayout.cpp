@@ -679,7 +679,8 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
     //
     // The ruler's flag says WHAT a marker is; this says WHERE, against the clips. A static painted
     // line at low alpha, repainted only when the doc changes (timelineChanged -> repaint of the
-    // lanes rect) — no timer, no per-frame work, so the §3 animation rules are untouched.
+    // lanes rect) — no timer, no per-frame work, so docs/layout/animation.md#the-time-bounded-animation-rule is
+    // untouched.
     if (doc_ != nullptr && !gridLanesBounds_.isEmpty() && viewState_.pixelsPerBeat > 0.0) {
         const double widthPx = (double)gridLanesBounds_.getWidth();
         for (const auto& marker : doc_->getMarkers()) {

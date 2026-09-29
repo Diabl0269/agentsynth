@@ -15,6 +15,53 @@
 #
 # Same portability rules as check-docs.sh: bash 3.2 + grep/sed/awk/find only, no python, no
 # GNU-only flags, no lazy quantifiers, every bash array access guarded by an explicit length check.
+# --- shared awk helpers -------------------------------------------------------------------------
+
+# CHECK_DOCS_AWK_LIB -- awk function definitions prepended to the program of every check that needs
+# them (`awk ... "$CHECK_DOCS_AWK_LIB"'BEGIN { ... }'`), so each rule exists exactly ONCE instead of
+# being re-typed inside every check's own awk program:
+#   docs_boundary_ok(line, abs_idx) -- may a `docs/` at 1-based position abs_idx of <line> start OUR
+#     docs path? The character before it must be neither alphanumeric nor `/` (so a sibling-repo
+#     path like `synth-platform/docs/<x>.md` is never read as ours) -- with ONE exception: a `/` that
+#     directly follows a source/doc FILENAME (a component ending `.h`, `.cpp`, `.md`, ... e.g. the
+#     typo `ADSRModule.h/docs/modules/modules.md`). No sibling repo directory name ends in a file
+#     extension, so the exception cannot re-admit one, and the rule needs no list of repo names.
+#   load_headings(file) -- fills the global `headings` (relpath -> SOH-joined section numbers) from
+#     a table built by build_headings_file.
+#   section_in_doc(doc, secnum) -- the ONE section-resolution rule: true when a heading number equals
+#     secnum or extends it (`## 5.3 Foo` satisfies both `5.3` and the coarser `5`). Used by check D,
+#     H and G, so they can never disagree about what sections a doc has.
+# No apostrophes anywhere in here: the text is spliced between shell single quotes.
+CHECK_DOCS_AWK_LIB='
+function docs_boundary_ok(line, abs_idx,   prevchar, j, comp) {
+    if (abs_idx <= 1) return 1
+    prevchar = substr(line, abs_idx - 1, 1)
+    if (prevchar !~ /[A-Za-z0-9\/]/) return 1
+    if (prevchar != "/") return 0
+    comp = ""
+    j = abs_idx - 2
+    while (j >= 1 && substr(line, j, 1) ~ /[A-Za-z0-9_.-]/) { comp = substr(line, j, 1) comp; j-- }
+    if (comp ~ /\.(h|hpp|cpp|md|sh|yml|json|txt|py|cmake)$/) return 1
+    return 0
+}
+function load_headings(hfile,   hline, hcols) {
+    while ((getline hline < hfile) > 0) {
+        split(hline, hcols, "\t")
+        headings[hcols[1]] = (hcols[1] in headings) ? headings[hcols[1]] "\x01" hcols[2] : hcols[2]
+    }
+    close(hfile)
+}
+function section_in_doc(doc, secnum,   ns, nums, qq, i) {
+    if (!(doc in headings)) return 0
+    ns = split(headings[doc], nums, "\x01")
+    qq = secnum "."
+    for (i = 1; i <= ns; i++) {
+        if (nums[i] == secnum || index(nums[i], qq) == 1) return 1
+    }
+    return 0
+}
+'
+
 # --- heading helpers --------------------------------------------------------------------------
 
 # build_slugs_file <pairs-file (md-only)> <out-file> -- "relpath\tslug" (GitHub-style: lowercase,
@@ -195,7 +242,7 @@ check_b_violations() {
 # check_d_violations' pass 3 below -- see that function's comment for why.
 awk_scan_docs_path() {
     local pairs="$1"
-    awk -v filelist="$pairs" '
+    awk -v filelist="$pairs" "$CHECK_DOCS_AWK_LIB"'
         BEGIN {
             pat = "docs\\/[A-Za-z0-9_.\\/-]+\\.md"
             while ((getline pairline < filelist) > 0) {
@@ -210,11 +257,7 @@ awk_scan_docs_path() {
                     offset = 0
                     while ((idx = match(remaining, pat)) > 0) {
                         abs_idx = offset + idx
-                        ok = 1
-                        if (abs_idx > 1) {
-                            prevchar = substr(line, abs_idx - 1, 1)
-                            if (prevchar ~ /[A-Za-z0-9\/]/) { ok = 0 }
-                        }
+                        ok = docs_boundary_ok(line, abs_idx)
                         if (ok) {
                             text = substr(remaining, idx, RLENGTH)
                             print relpath "\t" fnr "\t" text
@@ -244,98 +287,112 @@ check_c_violations() {
     done
 }
 
-# --- check D: §-section references -------------------------------------------------------------
+# --- checks D, H, I: section markers -------------------------------------------------------------
 
-# check_d_violations <pairs-file> <headings-file> -- "relpath:line: message" per stale §-reference
-# in the current tree. ZERO TOLERANCE -- unlike check A this is never baselined; see the header
-# comment for why.
+# Files that DOCUMENT the section-marker pattern (or fixture it) and so legitimately carry bare
+# markers -- exempt from check I only. Checks D/H still apply to them.
+BARE_MARKER_EXEMPT="scripts/check-docs.sh|scripts/lib/check-docs-checks.sh|scripts/tests/check-docs.test.sh|docs/development/docs-guard.md"
+
+# marker_scan <pairs-file (all)> <headings-file> <kind: D|H|I> -- "relpath:line: message" for every
+# `§N`/`§N.M`/`§N.M.K` section marker of the requested kind, in every in-scope file. ONE awk program
+# classifies each marker on a line, then prints only the kind asked for (check D/H/I below are
+# three thin callers), so the three checks can never disagree about which path a marker belongs to.
+# NOT baselined -- ZERO TOLERANCE for all three; see the header comment for why.
 #
-# ONE awk process does everything check D needs: loads every docs/**/*.md heading number (from
-# <headings-file>, built once by build_headings_file and shared with check G -- see that function's
-# own comment) into an in-memory table, then scans every in-scope file's content for
-# `docs/<path>.md ... §N` mentions and checks each one against that table directly -- no
-# per-occurrence subshell or external `awk` call. An earlier version built the headings table
-# inline in this same awk invocation (correct, but check G needed the identical table and a THIRD
-# section-resolution implementation is exactly what FRO217 was told not to add); an even earlier
-# version split this into three pieces (a headings-table builder, an occurrence extractor, and a
-# `section_exists` helper invoked once per occurrence via its own `awk` subprocess) for clarity,
-# correct too, but with 500+ §-references in this repo, spawning a process per occurrence was the
-# single largest cost in this script under this environment's per-process overhead. Same boundary
-# check as check C (awk_scan_docs_path) -- the character immediately before "docs/" must be neither
-# `/` nor alphanumeric, so a qualified path like `synth-platform/docs/foo.md §3` is never misread as
-# naming OUR docs/ tree -- and the same greedy-`.{0,12}`-then-first-`§` rule for what one occurrence
-# means (see check C's own comment on the GNU-vs-BSD lazy-quantifier mismatch that greedy works
-# around).
-check_d_violations() {
-    local pairs="$1" headings_file="$2"
-    awk -v filelist="$pairs" -v headingsfile="$headings_file" '
+# Per line, the program collects every boundary-checked `docs/<path>.md` mention (an optional
+# `#anchor` is part of the mention, so a marker after `docs/<x>.md#anchor` is attached to that doc) and
+# every marker, then binds each marker, in this order:
+#   1. REVERSED (kind H): the next path on the line starts right after the marker, separated only by
+#      a preposition (`§8 of docs/<x>.md`, `§2 in the docs/<x>.md`). It belongs to THAT later path. This
+#      is decided FIRST so a marker meant for a later mention is never read as a continuation of an
+#      earlier path on the same line (FRO217: `docs/<a>.md, §8 of docs/<b>.md` -- §8 belongs to the second path).
+#   2. FORWARD (kind D): otherwise it belongs to the nearest path BEFORE it, if within 12 characters
+#      of that path's end -- or, for a second/third marker (`docs/<x>.md §1, §2, §3`), within 12
+#      characters of the previous marker attached to the same path. Every marker in such a chain is
+#      validated, not only the first (the old check D looked at the first one only).
+#   3. Anything else is BARE (kind I): no docs path before it on the line, or none close enough to
+#      claim it. Skipped for files in BARE_MARKER_EXEMPT.
+# D and H resolve against check-D's headings table via section_in_doc (see CHECK_DOCS_AWK_LIB); a
+# docs path that does not exist at all is check C's failure to report, so it is skipped here.
+marker_scan() {
+    local pairs="$1" headings_file="$2" kind="$3"
+    awk -v filelist="$pairs" -v headingsfile="$headings_file" -v kind="$kind" -v exempt="$BARE_MARKER_EXEMPT" "$CHECK_DOCS_AWK_LIB"'
         BEGIN {
-            # Pass 1: which relpaths actually exist (a docpath not in this set is check C''s to
-            # report, not ours -- skip it here rather than double-report).
             while ((getline pairline < filelist) > 0) {
                 split(pairline, cols, "\t")
                 exists[cols[1]] = 1
             }
             close(filelist)
+            load_headings(headingsfile)
+            nex = split(exempt, exl, "|")
+            for (i = 1; i <= nex; i++) isexempt[exl[i]] = 1
 
-            # Pass 2: every h2-h6 heading number in every docs/**/*.md file, keyed by doc, as a
-            # SOH-separated list (awk has no portable 2D array iteration, so a query does its own
-            # split()+loop below rather than a hash lookup -- cheap: a doc has a handful of
-            # headings, not hundreds). Loaded from the shared table build_headings_file already
-            # built -- see this function''s own header comment for why it is no longer built here.
-            while ((getline hline < headingsfile) > 0) {
-                split(hline, hcols, "\t")
-                hrelpath = hcols[1]; hnum = hcols[2]
-                headings[hrelpath] = (hrelpath in headings) ? headings[hrelpath] "\x01" hnum : hnum
-            }
-            close(headingsfile)
-
-            outer = "docs\\/[A-Za-z0-9_.\\/-]+\\.md.{0,12}§[ \t]*[0-9]+(\\.[0-9]+){0,2}"
-            docre = "^docs\\/[A-Za-z0-9_.\\/-]+\\.md"
+            pathre = "docs\\/[A-Za-z0-9_.\\/-]+\\.md(#[A-Za-z0-9_-]+)?"
             secre = "§[ \t]*[0-9]+(\\.[0-9]+){0,2}"
+            revgapre = "^[ \t]+(of|in|from)[ \t]+(the[ \t]+)?$"
 
-            # Pass 3: scan every in-scope file'"'"'s content for occurrences and check each one
-            # in-memory against the headings table built above.
             while ((getline pairline < filelist) > 0) {
-                split(pairline, cols, "\t")
+                n = split(pairline, cols, "\t")
+                if (n < 2) continue
                 relpath = cols[1]; abspath = cols[2]
                 fnr = 0
                 while ((getline line < abspath) > 0) {
                     fnr++
-                    remaining = line
-                    offset = 0
-                    while ((idx = match(remaining, outer)) > 0) {
+                    if (index(line, "§") == 0) continue
+
+                    np = 0; remaining = line; offset = 0
+                    while ((idx = match(remaining, pathre)) > 0) {
+                        len = RLENGTH
                         abs_idx = offset + idx
-                        ok = 1
-                        if (abs_idx > 1) {
-                            prevchar = substr(line, abs_idx - 1, 1)
-                            if (prevchar ~ /[A-Za-z0-9\/]/) { ok = 0 }
+                        if (docs_boundary_ok(line, abs_idx)) {
+                            np++
+                            ps[np] = abs_idx
+                            pe[np] = abs_idx + len - 1
+                            ptext = substr(remaining, idx, len)
+                            hp = index(ptext, "#")
+                            pd[np] = (hp > 0) ? substr(ptext, 1, hp - 1) : ptext
                         }
-                        if (ok) {
-                            text = substr(remaining, idx, RLENGTH)
-                            match(text, docre)
-                            docpath = substr(text, RSTART, RLENGTH)
-                            spos = index(text, "§")
-                            secpart = substr(text, spos)
-                            match(secpart, secre)
-                            secnum = substr(secpart, RSTART, RLENGTH)
-                            sub(/^§[ \t]*/, "", secnum)
-                            if (docpath != "" && secnum != "" && (docpath in exists)) {
-                                found = 0
-                                if (docpath in headings) {
-                                    ns = split(headings[docpath], nums, "\x01")
-                                    qq = secnum "."
-                                    for (i = 1; i <= ns; i++) {
-                                        if (nums[i] == secnum || index(nums[i], qq) == 1) { found = 1; break }
-                                    }
+                        offset += idx + len - 1
+                        remaining = substr(remaining, idx + len)
+                    }
+
+                    nm = 0; remaining = line; offset = 0
+                    while ((idx = match(remaining, secre)) > 0) {
+                        len = RLENGTH
+                        nm++
+                        ms[nm] = offset + idx
+                        me[nm] = offset + idx + len - 1
+                        mv[nm] = substr(remaining, idx, len)
+                        sub(/^§[ \t]*/, "", mv[nm])
+                        offset += idx + len - 1
+                        remaining = substr(remaining, idx + len)
+                    }
+
+                    fwd_path = 0; fwd_end = 0
+                    for (m = 1; m <= nm; m++) {
+                        rk = 0
+                        for (k = 1; k <= np; k++) { if (ps[k] > me[m]) { rk = k; break } }
+                        if (rk > 0 && substr(line, me[m] + 1, ps[rk] - me[m] - 1) ~ revgapre) {
+                            if (kind == "H" && (pd[rk] in exists) && !section_in_doc(pd[rk], mv[m])) {
+                                print relpath ":" fnr ": §" mv[m] " of " pd[rk] " (marker written before the path) -- no such section in " pd[rk]
+                            }
+                            continue
+                        }
+                        pk = 0
+                        for (k = 1; k <= np; k++) { if (pe[k] < ms[m]) pk = k }
+                        if (pk > 0) {
+                            start = (fwd_path == pk) ? fwd_end : pe[pk]
+                            if (ms[m] - start - 1 <= 12) {
+                                fwd_path = pk; fwd_end = me[m]
+                                if (kind == "D" && (pd[pk] in exists) && !section_in_doc(pd[pk], mv[m])) {
+                                    print relpath ":" fnr ": " pd[pk] " §" mv[m] " -- no such section in " pd[pk]
                                 }
-                                if (!found) {
-                                    print relpath ":" fnr ": " docpath " §" secnum " -- no such section in " docpath
-                                }
+                                continue
                             }
                         }
-                        offset += idx + RLENGTH - 1
-                        remaining = substr(remaining, idx + RLENGTH)
+                        if (kind == "I" && !(relpath in isexempt)) {
+                            print relpath ":" fnr ": section marker §" mv[m] " is not attached to a docs/ path (none before it on this line, or too far from it) -- write the full docs/<path>.md#<anchor> form"
+                        }
                     }
                 }
                 close(abspath)
@@ -345,6 +402,17 @@ check_d_violations() {
         }
     '
 }
+
+# check_d_violations <pairs-file> <headings-file> -- forward references: `docs/<path>.md ... §N`
+# (every marker in a chain, see marker_scan) naming a section the doc does not have.
+check_d_violations() { marker_scan "$1" "$2" D; }
+
+# check_h_violations <pairs-file> <headings-file> -- reversed references: `§N of docs/<path>.md`.
+check_h_violations() { marker_scan "$1" "$2" H; }
+
+# check_i_violations <pairs-file> <headings-file> -- bare markers: a section marker with no docs path
+# to attach to. The fix is always the full `docs/<path>.md#<anchor>` form (or plain words).
+check_i_violations() { marker_scan "$1" "$2" I; }
 
 # --- check E: docs/README.md map completeness --------------------------------------------------
 
@@ -430,11 +498,11 @@ check_e_violations() {
 # second slug implementation exists anywhere in this file). Pass 3 scans every in-scope file for the
 # `docs/<path>.md#<anchor>` pattern with the SAME boundary rule as check C's awk_scan_docs_path (the
 # character immediately before "docs/" must be neither `/` nor alphanumeric, so a qualified path
-# like `synth-platform/docs/x.md#y` is never misread as naming OUR docs/ tree either), and checks
+# like `synth-platform/docs/<x>.md#y` is never misread as naming OUR docs/ tree either), and checks
 # each occurrence in-memory against the two tables built above.
 check_f_violations() {
     local pairs="$1" slugs_file="$2"
-    awk -v filelist="$pairs" -v slugsfile="$slugs_file" '
+    awk -v filelist="$pairs" -v slugsfile="$slugs_file" "$CHECK_DOCS_AWK_LIB"'
         BEGIN {
             # Pass 1: which relpaths actually exist (a docpath not in this set is check C'"'"'s to
             # report, not ours -- skip it here rather than double-report).
@@ -466,11 +534,7 @@ check_f_violations() {
                     offset = 0
                     while ((idx = match(remaining, pat)) > 0) {
                         abs_idx = offset + idx
-                        ok = 1
-                        if (abs_idx > 1) {
-                            prevchar = substr(line, abs_idx - 1, 1)
-                            if (prevchar ~ /[A-Za-z0-9\/]/) { ok = 0 }
-                        }
+                        ok = docs_boundary_ok(line, abs_idx)
                         if (ok) {
                             text = substr(remaining, idx, RLENGTH)
                             hashpos = index(text, "#")
@@ -533,7 +597,7 @@ check_f_violations() {
 # check and it is silently fine.
 check_g_violations() {
     local pairs="$1" slugs_file="$2" headings_file="$3"
-    awk -v filelist="$pairs" -v slugsfile="$slugs_file" -v headingsfile="$headings_file" '
+    awk -v filelist="$pairs" -v slugsfile="$slugs_file" -v headingsfile="$headings_file" "$CHECK_DOCS_AWK_LIB"'
         BEGIN {
             # Pass 1: basename -> SOH-joined list of docs/**/*.md relpaths sharing it, plus a count
             # per basename so ambiguity is a single lookup.
@@ -562,12 +626,7 @@ check_g_violations() {
 
             # Pass 3: check D'"'"'s own headings table (see build_headings_file), keyed by relpath as
             # a SOH-joined list of section numbers -- same lookup style check D itself uses.
-            while ((getline hline < headingsfile) > 0) {
-                split(hline, hcols, "\t")
-                hrelpath = hcols[1]; hnum = hcols[2]
-                headings[hrelpath] = (hrelpath in headings) ? headings[hrelpath] "\x01" hnum : hnum
-            }
-            close(headingsfile)
+            load_headings(headingsfile)
 
             # See the header comment above this function for why the gap is whitespace-only and
             # why ambiguity (cnt > 1) is checked independently of whether a marker follows at all.
@@ -634,13 +693,7 @@ check_g_violations() {
                                 resolved = baselist[base]
                                 found = 0
                                 if (markerkind == "section") {
-                                    if (resolved in headings) {
-                                        ns = split(headings[resolved], nums, "\x01")
-                                        qq = markerval "."
-                                        for (i = 1; i <= ns; i++) {
-                                            if (nums[i] == markerval || index(nums[i], qq) == 1) { found = 1; break }
-                                        }
-                                    }
+                                    found = section_in_doc(resolved, markerval)
                                     if (!found) {
                                         printf "%s:%d: bare reference '"'"'%s'"'"' (resolved to %s) §%s -- no such section in %s\n", relpath, fnr, base, resolved, markerval, resolved
                                     }

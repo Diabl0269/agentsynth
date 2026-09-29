@@ -82,9 +82,9 @@ public:
      *  history; see the caller, `MainComponent::saveToFile`). `recordingsRoot` is the same
      *  `<app data>/<settings folder>/Recordings` directory `MainComponent::chooseTakeFiles` writes
      *  into. A ref whose source file is no longer on disk, or that fails to import, is left
-     *  untouched (still resolvable exactly as before, or already the "missing asset" case §2
-     *  handles) — this pass never deletes the original `Recordings/` file either way. Returns the
-     *  number of DISTINCT old refs adopted (0 if the doc has none). */
+     *  untouched (still resolvable exactly as before, or already the "missing asset" case
+     *  docs/architecture/app-wiring.md#asset-management handles) — this pass never deletes the original `Recordings/`
+     * file either way. Returns the number of DISTINCT old refs adopted (0 if the doc has none). */
     static int adoptRecordingsAssets(TimelineDoc& doc, const juce::File& recordingsRoot, const juce::File& bundleRoot);
 
 private:

@@ -1,5 +1,6 @@
 // StatusBarTests.cpp
-// Headless unit tests for StatusBarComponent (§4.1) and AudioEngine voice/mute API (§4.2).
+// Headless unit tests for StatusBarComponent (docs/layout/chrome.md#status-bar) and
+// the AudioEngine voice/mute API (docs/architecture/audio-engine.md#audioengine).
 
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/PolyMidiModule.h"
@@ -332,7 +333,7 @@ TEST(AudioEngineVoiceTest, GetActiveVoiceInfo_ReturnsZeroWithoutPolyModules) {
 
 TEST(AudioEngineVoiceTest, CountsPolyMidiVoices_MaxVoicesEight) {
     // Verify the PolyMidiModule voice-mask logic independently: after a note-on, popcount
-    // should report 1; maxVoices should be 8 per module (spec §4.2).
+    // should report 1; maxVoices should be 8 per module.
     PolyMidiModule pm;
     pm.prepareToPlay(44100.0, 512);
 

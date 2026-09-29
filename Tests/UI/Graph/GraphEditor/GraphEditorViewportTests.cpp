@@ -284,7 +284,7 @@ TEST_F(GraphEditorTest, TheThirtyHzTickInvalidatesTheCableCache) {
     EXPECT_EQ(editor.getCableRebuildCountForTest(), before + 1);
 }
 
-// paint() and hit-testing must read the literal same list — the strengthened §14 invariant.
+// paint() and hit-testing must read the literal same list, never two builds.
 TEST_F(GraphEditorTest, PaintAndHitTestShareOneBuild) {
     AudioEngine engine;
     GraphEditor editor(engine);

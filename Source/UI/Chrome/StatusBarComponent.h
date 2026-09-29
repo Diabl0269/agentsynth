@@ -2,7 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// StatusBarComponent  §4.1
+// StatusBarComponent  (docs/layout/chrome.md#status-bar)
 // Bottom chrome strip: patch name, CPU %, voice count, transport cluster, master-mute button.
 //
 // Headless-safe: all paint paths dynamic_cast<AppLookAndFeel*> and fall back to plain

@@ -96,7 +96,7 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     // FRO127: every assignment's live target is re-resolved against the graph as it now stands —
     // same "graph changed under us" trigger as the timeline reconcile just above, orphaning
     // whatever no longer resolves rather than silently rebinding
-    // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step §8, hook
+    // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step, hook
     // 2).
     remoteEngine.reconcile(audioEngine.getGraph());
 
