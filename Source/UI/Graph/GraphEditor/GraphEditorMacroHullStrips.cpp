@@ -21,7 +21,6 @@ void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom) {
     static const synth::theme::Colors fallbackColors{};
     const auto& colors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
     auto& controller = editor.getMacroController();
-    constexpr int kChipRowHeight = 24; // the strips start below the name chip row
     constexpr float kHullRadius = 10.0f;
 
     for (const auto& macro : editor.getMacros().getAll()) {
@@ -32,7 +31,7 @@ void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom) {
             continue;
 
         const auto [inW, outW] = controller.macroHullStripWidths(macro.id);
-        const float top = (float)(hull.getY() + kChipRowHeight);
+        const float top = (float)(hull.getY() + kMacroChipRowHeight);
         const float height = (float)hull.getBottom() - top;
         if (height <= 0.0f)
             continue;

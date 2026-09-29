@@ -295,11 +295,8 @@ test pins that a port's uuid is still a member, guarding against a future "fix" 
 the count line up by removing ports from membership instead. An all-ports macro reads
 "0 modules, N ports" and draws no preview glyphs; that is the honest answer, not a bug.
 
-This is presentation only and does not change the collapsed card's fixed layout — the count line
-stays in the same bottom 14 px row `kMacroCardHeight` already reserves, and
-`kMacroCardJackBandBottom` sits only 4 px above that row's top, so a macro with enough ports on one
-side to push its bottom-most jack label down near the count row was already at the limit of that
-layout budget.
+This is presentation only. The count line sits in the card's middle column between the two port strips;
+the card grows taller as ports are added (`macroCardHeightFor`), so the count row is never crowded by a jack.
 
 ## Cable rendering across the boundary
 

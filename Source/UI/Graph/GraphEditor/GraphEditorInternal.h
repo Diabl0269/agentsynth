@@ -39,18 +39,11 @@ inline synth::ui::ModuleCategory categoryForNode(juce::AudioProcessorGraph::Node
 }
 
 // ---- Card jacks (docs/macros/ports.md#cable-rendering-across-the-boundary) ------------------
-// The collapsed card's fixed footprint — deliberately independent of however large or scattered
-// the group it stands in for is; that is the whole point of collapsing. Matches a standard
-// module card's width so it sits comfortably on the same grid. Hoisted up here (rather than left
-// next to macroCardPortLayout(), where it originally lived) because buildVisibleCables()'s
-// directional edge-anchor treatment needs the jack band to clamp a
-// no-port-involved boundary cable's Y into, same as a real port jack's Y is placed in.
+// The collapsed card's minimum height — deliberately independent of however large or scattered
+// the group it stands in for is; that is the whole point of collapsing. The card grows past it only
+// to fit its port rows (macroCardHeightFor). Its width matches a standard module card's so it sits
+// comfortably on the same grid.
 inline constexpr int kMacroCardHeight = 90;
-// The vertical band jacks lay out in: below the title row (drawn at local y=6..26,
-// MacroCardComponent::getTitleRowBounds) and above the member-count line (the card's bottom
-// 14px, MacroCardComponent::paint), so a jack never collides with either piece of text.
-inline constexpr int kMacroCardJackBandTop = 30;
-inline constexpr int kMacroCardJackBandBottom = kMacroCardHeight - 16;
 // Same inset from the card's left/right edge ModuleComponent's own MIDI jacks use on an
 // identically-wide kSingleWidth card (x=10 / getWidth()-10) — a macro's boundary jacks read like
 // any other module's.
@@ -63,11 +56,15 @@ inline constexpr float kMacroCardJackHitRadius = 10.0f;
 // longest port name on its side plus padding and NEVER depends on zoom: zoom only decides whether
 // names (and the '-' button) are painted, so every layout below is zoom-independent.
 inline constexpr int kMacroPortRowHeight = 16;
-inline constexpr int kMacroPortRowsTop = 30;           // first row's top on the card (= kMacroCardJackBandTop)
+inline constexpr int kMacroPortRowsTop = 30;           // first row's top on the card, below the title row
 inline constexpr int kMacroPortStripFooter = 22;       // room below the last row for the '+'/'-' pair
 inline constexpr int kMacroPortStripInset = 18;        // name x from the strip's outer edge (jack at 10, + 8)
 inline constexpr int kMacroPortStripPadding = 8;       // after the longest name
 inline constexpr int kMacroHullStripInnerJackRoom = 8; // open macro only: room for the inner jack
+// Height reserved above an open macro's members for its name chip row, and the port rows' first-row
+// offset from the hull's top (the rows start 6px below the chip row).
+inline constexpr int kMacroChipRowHeight = 24;
+inline constexpr int kMacroPortRowsBelowChip = 6;
 inline constexpr float kMacroPortNamesHiddenBelowZoom = 0.5f;
 inline constexpr float kMacroPortNameFontSize = 9.5f;
 /** Card height that fits `portsOnBusiestSide` rows, never below the fixed footprint. */

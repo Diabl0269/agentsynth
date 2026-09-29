@@ -52,6 +52,7 @@ constexpr int kMacroHullMargin = 14;
 // member's ModuleComponent (which would swallow the drag). Must stay >= the chip's own height.
 constexpr int kMacroChipHeight = 18;
 constexpr int kMacroChipTopMargin = kMacroChipHeight + 6;
+static_assert(kMacroChipTopMargin == kMacroChipRowHeight, "the strips start below the chip row");
 
 // {input, output} sidebar strip widths for a macro: the longest port name on each side plus the
 // fixed padding, `innerJackRoom` extra for the open macro's inner jack. A side with no ports gets
@@ -151,9 +152,9 @@ juce::Rectangle<int> computeMacroHullBounds(GraphCanvasHost& host, const synth::
     int inputRows = 0, outputRows = 0;
     for (const auto& p : macro.ports)
         (p.isInput ? inputRows : outputRows) += macroPortRowCountIn(host, p.nodeUuid);
-    expanded.setBottom(juce::jmax(expanded.getBottom(), expanded.getY() + kMacroChipTopMargin + 6 +
-                                                            juce::jmax(inputRows, outputRows) * kMacroPortRowHeight +
-                                                            kMacroPortStripFooter));
+    expanded.setBottom(juce::jmax(expanded.getBottom(),
+                                  expanded.getY() + kMacroChipTopMargin + kMacroPortRowsBelowChip +
+                                      juce::jmax(inputRows, outputRows) * kMacroPortRowHeight + kMacroPortStripFooter));
     return expanded;
 }
 } // namespace
@@ -453,7 +454,7 @@ MacroGroupController::macroHullPortLayout(const juce::String& macroId) const {
 
     // Same widths computeMacroHullBounds widened the hull by, so strips and hull always agree.
     const auto [inW, outW] = macroStripWidths(*macro, kMacroHullStripInnerJackRoom);
-    const int firstRowTop = hull.getY() + kMacroChipTopMargin + 6;
+    const int firstRowTop = hull.getY() + kMacroChipTopMargin + kMacroPortRowsBelowChip;
     int nextRow[2] = {0, 0}; // [output, input]
     for (const auto& port : ports) {
         MacroHullPort entry;
