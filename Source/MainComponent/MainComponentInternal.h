@@ -57,4 +57,23 @@ inline bool isMidiInstrumentNode(juce::AudioProcessor* processor) {
     return isMidiInstrumentType(module->getModuleType());
 }
 
+// Subdirectories a saved bundle gets its exports/patch-only snapshots written into by default.
+// Deliberately NOT reserved names on ProjectBundle: unlike Audio/Peaks they carry no
+// asset-integrity contract and AssetManager::cleanUnusedAssets never looks past Audio/, so nesting
+// them inside the bundle is safe - they are just a destination choice, not part of the bundle's
+// asset policy.
+inline constexpr const char* kExportsFolderName = "Exports";
+inline constexpr const char* kPatchesFolderName = "Patches";
+// The folder a "Export Audio..."/"Export Patch Only..." dialog starts in: <bundle>/<subFolderName>
+// when a real bundle is open (created on demand), otherwise the same Music/AgentSynth root every
+// other save/open dialog defaults to.
+inline juce::File resolveExportSubdirectory(const juce::File& currentBundleDir, const char* subFolderName) {
+    if (currentBundleDir != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir)) {
+        auto dir = currentBundleDir.getChildFile(subFolderName);
+        dir.createDirectory();
+        return dir;
+    }
+    return synth::ProjectBundle::getDefaultProjectsDirectory();
+}
+
 } // namespace detail

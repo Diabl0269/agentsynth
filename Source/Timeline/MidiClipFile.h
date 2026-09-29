@@ -3,6 +3,8 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_core/juce_core.h>
+#include <optional>
+#include <utility>
 #include <vector>
 
 namespace synth {
@@ -17,7 +19,8 @@ namespace synth {
  *
  * TimelineDoc has no tempo map (tempo lives on TransportService, not the document), so tempo,
  * time-signature and every other meta event in an imported file are read but IGNORED for anything
- * except a track's name. Exported files carry no tempo event either. SMPTE time format is rejected
+ * except a track's name. A per-clip export carries no tempo event either (exportArrangement, below,
+ * writes the transport's tempo and time signature itself). SMPTE time format is rejected
  * outright — beats-per-quarter-note (PPQ) is the only time format this class understands.
  *
  * Note pairing: FIFO per (pitch, channel) — the earliest still-open note-on for that key is closed
@@ -93,6 +96,27 @@ public:
     // clip in `doc`, or if the stream write fails.
     static bool exportClip(const TimelineDoc& doc, ClipId clipId, juce::OutputStream& stream);
     static bool exportClipToFile(const TimelineDoc& doc, ClipId clipId, const juce::File& file);
+
+    // What exportArrangement writes besides the notes. TimelineDoc has no tempo map, so the caller
+    // (the transport's current values) supplies one constant tempo and time signature.
+    struct ArrangementExportOptions {
+        double bpm = 120.0;
+        int timeSigNumerator = 4;
+        int timeSigDenominator = 4;
+        // Absolute beats [start, end). When set, the file is TRIMMED to it: notes wholly outside are
+        // dropped, notes crossing a boundary are cut at it, and range start becomes tick 0.
+        std::optional<std::pair<double, double>> rangeBeats;
+    };
+
+    // Exports the whole arrangement as an SMF type 1 file at kExportPpq: a conductor track (tempo +
+    // time signature) followed by one named track per MIDI timeline track, in document order
+    // (audio and automation tracks are skipped). Muted tracks, clips and notes contribute no notes,
+    // matching playback; a muted track is still emitted, empty. Returns false on a non-finite or
+    // non-positive bpm or time signature, a range with end <= start, or a failed stream write.
+    static bool exportArrangement(const TimelineDoc& doc, const ArrangementExportOptions& options,
+                                  juce::OutputStream& stream);
+    static bool exportArrangementToFile(const TimelineDoc& doc, const ArrangementExportOptions& options,
+                                        const juce::File& file);
 
 private:
     MidiClipFile() = delete;

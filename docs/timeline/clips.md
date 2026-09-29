@@ -394,6 +394,18 @@ wires to `transport.setLoop(start, end, /*enabled=*/true)` — the same "the lan
 owner does it" division as `onAudioFileDropped` / `onRelinkAudioRequested`. Nothing selected, or no
 owner listening, returns `false` so the key keeps its meaning elsewhere.
 
+## Exporting the arrangement
+
+**File > Export MIDI...** (`MainComponent::promptExportMidi`, `MidiClipFile::exportArrangement`) writes the whole arrangement as a Standard MIDI File, type 1, 960 ticks per quarter note.
+
+- **Track layout.** Track 0 is a conductor track named "Tempo" holding one tempo event and one time-signature event at tick 0; after it comes one named track per MIDI timeline track, in document order. Audio and automation tracks are skipped. Every note lands at its absolute position (clip start + note start), with its own channel, pitch and velocity.
+- **One constant tempo.** `TimelineDoc` has no tempo map, so the tempo and time signature are the transport's current values at export time; a tempo change made later, or a ramp, is not represented.
+- **Muted content is skipped.** Muted notes, clips and tracks contribute no notes, exactly as they contribute nothing to playback. A muted track still gets its (empty, named) track so the track count matches the timeline.
+- **Range = trim.** When the transport has a loop range (end after start, whether or not looping is armed) the menu item first asks "Whole arrangement" or "Loop range". A loop-range export drops notes wholly outside the range, cuts a note crossing either edge at that edge, and shifts everything so the range start is tick 0. A range with end <= start is rejected.
+- **Empty is valid.** No tracks, no clips or no notes still writes a readable file (the conductor track plus one empty track per MIDI track).
+
+The default destination is `Exports/<patch name>.mid` in an open project bundle, the same folder Export Audio uses. Unlike the audio exports it needs no render, so it is never greyed out while a bounce runs. `MidiClipFile::exportClip` (the per-clip export) is unchanged and still writes no tempo event.
+
 ## Tests
 
 `Tests/UI/Timeline/TimelineClipLane/` — `ClipSelectionModel` and `clipHitTestMarquee` unit coverage

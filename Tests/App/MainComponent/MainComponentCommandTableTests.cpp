@@ -2,6 +2,7 @@
 // getAllCommands/getCommandInfo/perform table rewrite can never silently drop, reorder, or
 // duplicate a command. Uses getCommandTableForTest() (CommandSpec itself stays private -- read
 // via auto, per that accessor's own comment).
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "ShortcutManager/AppCommands.h"
 #include <algorithm>
@@ -20,6 +21,7 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::exportPatchOnly,
     AppCommands::exportAudio,
     AppCommands::exportStems,
+    AppCommands::exportMidi,
     AppCommands::openPreset,
     AppCommands::openProject,
     AppCommands::newPatch,
@@ -164,4 +166,46 @@ TEST_F(MainComponentTest, ContributeCommandOpensTheContributePageExactlyOnce) {
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::contribute, false));
     ASSERT_EQ(opened.size(), 1u);
     EXPECT_EQ(opened[0], juce::String(synth::branding::kContributeUrl));
+}
+
+// Export MIDI is menu-only and never gated on the offline render (it reads the document). With a
+// loop range set it asks for the range, then for a file, and writes a readable .mid.
+TEST_F(MainComponentTest, ExportMidiCommandWritesTheChosenRangeToTheChosenFile) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.getAudioEngine().suspendDeviceCallback();
+
+    juce::ApplicationCommandInfo info(AppCommands::exportMidi);
+    mc.getCommandInfo(AppCommands::exportMidi, info);
+    EXPECT_TRUE((info.flags & juce::ApplicationCommandInfo::isDisabled) == 0) << "must not be greyed out";
+    EXPECT_TRUE(info.defaultKeypresses.isEmpty()) << "menu-only: no chord";
+
+    const auto track = mc.getTimelineDoc().addTrack(synth::TrackKind::Midi, "Lead");
+    const auto clip = mc.getTimelineDoc().addClip(track, 0.0, 8.0, "c");
+    // The transport's default loop is [0, 4): the first note is inside it, the second is not.
+    synth::MidiNote inside;
+    inside.startBeat = 1.0;
+    synth::MidiNote outside;
+    outside.startBeat = 5.0;
+    ASSERT_TRUE(mc.getTimelineDoc().addNote(clip, inside).isValid());
+    ASSERT_TRUE(mc.getTimelineDoc().addNote(clip, outside).isValid());
+
+    int rangePrompts = 0;
+    mc.midiExportSeams.rangePrompt = [&rangePrompts](std::function<void(synth::MidiExportRange)> onChoice) {
+        ++rangePrompts;
+        onChoice(synth::MidiExportRange::LoopRange);
+    };
+    juce::TemporaryFile temp(".mid");
+    mc.midiExportSeams.filePrompt = [&temp](std::function<void(const juce::File&)> onFile) { onFile(temp.getFile()); };
+
+    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::exportMidi, false));
+    EXPECT_EQ(rangePrompts, 1);
+
+    juce::MidiFile written;
+    juce::FileInputStream in(temp.getFile());
+    ASSERT_TRUE(in.openedOk());
+    ASSERT_TRUE(written.readFrom(in));
+    ASSERT_EQ(written.getNumTracks(), 2); // conductor + Lead
+    // Loop range chosen: the beat-5 note is trimmed away, leaving the beat-1 one (on + off + name + end).
+    EXPECT_EQ(written.getTrack(1)->getNumEvents(), 4);
+    EXPECT_DOUBLE_EQ(written.getTrack(1)->getEventPointer(1)->message.getTimeStamp(), 960.0);
 }
