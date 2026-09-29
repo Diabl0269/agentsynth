@@ -6,6 +6,8 @@
 #include "MainComponent/MainComponent.h"
 #include "ShortcutManager/AppCommands.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/BuiltInThemes.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <vector>
@@ -374,4 +376,148 @@ TEST(BottomDockComponentTests, DraggingATabShowsTheDraggingHandCursorAndMouseUpR
 
     button->mouseUp(makeClickEvent(*button, {60.0f, 5.0f}));
     EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::NormalCursor);
+}
+
+namespace {
+
+// Paints the whole dock (children included) into a software-backed image: the default image type
+// is GPU-backed on Windows and reads back as zeros on a headless runner.
+juce::Image paintDock(synth::ui::BottomDockComponent& dock) {
+    juce::Image img(juce::Image::ARGB, dock.getWidth(), dock.getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(img);
+    dock.paintEntireComponent(g, false);
+    return img;
+}
+
+bool isCloseTo(juce::Colour actual, juce::Colour expected, int tolerance = 6) {
+    return std::abs((int)actual.getRed() - (int)expected.getRed()) <= tolerance &&
+           std::abs((int)actual.getGreen() - (int)expected.getGreen()) <= tolerance &&
+           std::abs((int)actual.getBlue() - (int)expected.getBlue()) <= tolerance && actual.getAlpha() > 200;
+}
+
+// A lifted tab sits 4 px above its slot, so its top edge row is the slot's top minus 4.
+constexpr int kLiftRise = 4;
+
+struct LiftedTabFixture {
+    // Declared first so it outlives the MainComponent (and the dock that points at it).
+    synth::theme::AppLookAndFeel laf;
+    BottomDockActiveTabResetGuardMDT resetGuard;
+    MainComponent mc{std::make_unique<MockProviderMDCT>()};
+    synth::ui::BottomDockComponent* dockPtr = nullptr;
+    juce::Component* timeline = nullptr;
+
+    explicit LiftedTabFixture(const synth::theme::Theme& theme = synth::theme::makeObsidian()) {
+        laf.applyTheme(theme);
+        mc.setSize(1400, 900);
+        mc.newPatchForTest();
+        mc.simulateToggleBottomPanelClick();
+        dockPtr = &mc.getBottomDock();
+        dockPtr->setLookAndFeel(&laf);
+        timeline = dockPtr->getTabButtons().front();
+    }
+    ~LiftedTabFixture() { dockPtr->setLookAndFeel(nullptr); }
+    synth::ui::BottomDockComponent& dock() { return *dockPtr; }
+    const synth::theme::Theme& theme() const { return laf.getTheme(); }
+    int liftedRowY() const { return timeline->getY() - kLiftRise; }
+    // Dock x of the pointer after dragging by `dx` from a press 10 px into the Timeline tab.
+    int pointerX(int dx) const { return timeline->getX() + 10 + dx; }
+    void press() { timeline->mouseDown(makeClickEvent(*timeline, {10.0f, 8.0f})); }
+    void dragBy(int dx) { timeline->mouseDrag(makeDragEvent(*timeline, {(float)(10 + dx), 8.0f}, {10.0f, 8.0f})); }
+    void release(int dx) { timeline->mouseUp(makeClickEvent(*timeline, {(float)(10 + dx), 8.0f})); }
+};
+
+} // namespace
+
+TEST(BottomDockComponentTests, DraggingATabDrawsALiftedTabAtThePointerAndMouseUpRemovesIt) {
+    LiftedTabFixture f;
+    const auto& colors = f.theme().colors;
+    ASSERT_GE(f.liftedRowY(), 0) << "the lifted tab must fit inside the dock's own bounds";
+    const int drag = 30;
+    const int x = f.pointerX(drag);
+    const int y = f.liftedRowY();
+    const auto before = paintDock(f.dock()).getPixelAt(x, y);
+
+    f.press();
+    f.dragBy(drag);
+    const auto during = paintDock(f.dock());
+    EXPECT_TRUE(isCloseTo(during.getPixelAt(x, y), colors.accent)) << "the accent outline row of the lifted tab";
+    EXPECT_TRUE(isCloseTo(during.getPixelAt(x, y + 3), colors.surfaceHi)) << "the surfaceHi body of the lifted tab";
+    EXPECT_FALSE(isCloseTo(before, colors.accent));
+
+    f.release(drag);
+    const auto after = paintDock(f.dock()).getPixelAt(x, y);
+    EXPECT_EQ(after, before) << "the lifted look is gone after mouseUp";
+}
+
+TEST(BottomDockComponentTests, LiftedTabFollowsThePointerHorizontally) {
+    LiftedTabFixture f;
+    const auto& colors = f.theme().colors;
+    const int y = f.liftedRowY();
+    f.press();
+    f.dragBy(20);
+    EXPECT_TRUE(isCloseTo(paintDock(f.dock()).getPixelAt(f.pointerX(20), y), colors.accent));
+    // The tab is 1/3 of the strip wide, so a point one tab-width right of the press is off the lifted tab.
+    const int farRight = f.timeline->getRight() + 20;
+    EXPECT_FALSE(isCloseTo(paintDock(f.dock()).getPixelAt(farRight, y), colors.accent));
+    f.dragBy(20 + f.timeline->getWidth() / 2);
+    EXPECT_TRUE(isCloseTo(paintDock(f.dock()).getPixelAt(farRight, y), colors.accent));
+    f.release(20);
+}
+
+TEST(BottomDockComponentTests, DraggedTabSlotShowsADashedBorderOutlineInsteadOfTheTab) {
+    LiftedTabFixture f;
+    const auto& colors = f.theme().colors;
+    // A slot pixel on the outline's left edge, mid-height (a dash boundary can land on any row, so
+    // scan the left edge column for at least one border-coloured pixel).
+    const auto slot = f.timeline->getBounds();
+    f.press();
+    f.dragBy(4);
+    const auto img = paintDock(f.dock());
+    int borderPixels = 0;
+    for (int y = slot.getY() + 4; y < slot.getBottom() - 4; ++y)
+        if (isCloseTo(img.getPixelAt(slot.getX(), y), colors.border, 24))
+            ++borderPixels;
+    EXPECT_GT(borderPixels, 0) << "the slot draws the dashed border outline";
+    EXPECT_LT(borderPixels, slot.getHeight() - 8) << "a dashed (not solid) outline leaves gaps";
+    f.release(4);
+}
+
+TEST(BottomDockComponentTests, ADragSwapKeepsTheLiveSwapAndSavedOrderAndClearsTheLiftOnRelease) {
+    LiftedTabFixture f;
+    using Tab = synth::ui::BottomDockComponent::Tab;
+    const auto& colors = f.theme().colors;
+    auto buttons = f.dock().getTabButtons();
+    ASSERT_GE(buttons.size(), 2u);
+    const int dx = buttons[1]->getBounds().getCentreX() - f.pointerX(0);
+    const int y = f.liftedRowY();
+    // The dragged button moves on the swap, so the pointer's dock x is taken before the drag.
+    const int pointerX = f.pointerX(dx);
+
+    f.press();
+    f.dragBy(dx);
+    const std::vector<Tab> swapped{Tab::Mixer, Tab::Timeline, Tab::MidiRemote};
+    EXPECT_EQ(f.dock().getTabOrderForTest(), swapped) << "the live swap still happens mid-drag";
+    EXPECT_TRUE(isCloseTo(paintDock(f.dock()).getPixelAt(pointerX, y), colors.accent));
+
+    f.release(dx);
+    EXPECT_FALSE(isCloseTo(paintDock(f.dock()).getPixelAt(pointerX, y), colors.accent));
+    auto* settings = f.mc.getAppPropertiesForTest().getUserSettings();
+    ASSERT_NE(settings, nullptr);
+    EXPECT_EQ(settings->getValue("bottomDockTabOrder"), "mixer,timeline,midiRemote");
+    EXPECT_EQ(f.mc.getShortcutManager().getBinding("toggleMixerPanel"),
+              juce::KeyPress('1', juce::ModifierKeys::commandModifier, 0));
+}
+
+TEST(BottomDockComponentTests, APlainClickNeverShowsTheLiftedTab) {
+    LiftedTabFixture f;
+    const auto& colors = f.theme().colors;
+    const int y = f.liftedRowY();
+    const int x = f.pointerX(0);
+    f.press();
+    EXPECT_FALSE(isCloseTo(paintDock(f.dock()).getPixelAt(x, y), colors.accent));
+    // A drag event below JUCE's drag threshold (mouseWasDraggedSinceMouseDown() is false) is still a click.
+    f.timeline->mouseDrag(makeClickEvent(*f.timeline, {12.0f, 8.0f}));
+    EXPECT_FALSE(isCloseTo(paintDock(f.dock()).getPixelAt(x, y), colors.accent));
+    f.release(0);
+    EXPECT_FALSE(isCloseTo(paintDock(f.dock()).getPixelAt(x, y), colors.accent));
 }
