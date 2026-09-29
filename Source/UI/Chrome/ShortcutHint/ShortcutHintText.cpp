@@ -6,6 +6,12 @@ namespace synth::ui::hint {
 
 namespace {
 
+#if JUCE_MAC
+constexpr bool kIsMac = true;
+#else
+constexpr bool kIsMac = false;
+#endif
+
 juce::String keyName(const juce::KeyPress& key, bool macGlyphs) {
     const int code = key.getKeyCode();
     if (code == juce::KeyPress::spaceKey)
@@ -54,7 +60,7 @@ juce::String formatKeyCapText(const juce::KeyPress& key, bool macGlyphs) {
     if (macGlyphs) {
         // Mac order: control, option, shift, command.
         // Off the Mac the control and command flags are the same bit, so only the command glyph applies.
-        if (mods.isCtrlDown() && (JUCE_MAC || !mods.isCommandDown()))
+        if (mods.isCtrlDown() && (kIsMac || !mods.isCommandDown()))
             text += juce::String(juce::CharPointer_UTF8("\xe2\x8c\x83"));
         if (mods.isAltDown())
             text += juce::String(juce::CharPointer_UTF8("\xe2\x8c\xa5"));
