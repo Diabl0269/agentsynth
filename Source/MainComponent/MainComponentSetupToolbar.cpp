@@ -360,23 +360,18 @@ void MainComponent::createWelcomeScreen() {
             // What's New and still see/use the overlay's other options afterward.
             showWhatsNewDialog();
         };
-        welcomeScreen_->onShowAtLaunchChanged = [this](bool shouldShow) {
-            appProperties.getUserSettings()->setValue("showWelcomeScreenAtLaunch", shouldShow);
-            appProperties.saveIfNeeded();
-        };
 
         if (recentProjects.pruneMissing() > 0)
             saveRecentProjects();
         welcomeScreen_->setRecentProjects(recentProjects.getEntries());
-        const bool showAtLaunch = appProperties.getUserSettings()->getBoolValue("showWelcomeScreenAtLaunch", true);
-        welcomeScreen_->setShowAtLaunch(showAtLaunch);
         welcomeScreen_->setLatestVersionLabel(juce::String(synth::branding::kProductName) + " " +
                                               synth::whatsnew::kReleaseTag);
 
         // Added LAST — JUCE paints children in addAndMakeVisible order, so this must come after
         // every other addAndMakeVisible() call above to sit on top of the toolbar/canvas.
         addAndMakeVisible(*welcomeScreen_);
-        welcomeScreen_->setVisible(showAtLaunch);
+        welcomeScreen_->setVisible(true); // always shown at launch: no opt-out. A legacy
+                                          // "showWelcomeScreenAtLaunch" in old settings files is ignored.
         // setSize(1600, 900) above already ran resized() once, before this component existed — a
         // child added afterwards starts at zero bounds and would otherwise sit unsized until the
         // next real window resize. resized() itself is idempotent (every other panel's layout is

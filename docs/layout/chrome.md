@@ -253,8 +253,10 @@ correctly positioned and stacked:
   `showWelcomeScreen()` makes it visible again.
 
 App-only, gated on `ownedAudioEngine != nullptr` — see [architecture/audio-engine.md](../architecture/audio-engine.md)'s
-Welcome screen subsection for the gating rationale, the persisted `"showWelcomeScreenAtLaunch"` key
-and the guard-before-hide ordering that keeps a Cancel answer from dismissing it.
+Welcome screen subsection for the gating rationale and the guard-before-hide ordering that keeps a
+Cancel answer from dismissing it. It always shows at launch in the standalone app (never in the
+plugin) and there is no opt-out; a legacy `showWelcomeScreenAtLaunch` value in an old settings file
+is ignored. Help > Show Welcome Screen reopens it.
 
 Between the Recent Projects list and the footer the card carries a low-key contribute line and a
 "Contribute..." button. It fires `onContributeRequested`, which `MainComponent` wires to

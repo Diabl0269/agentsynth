@@ -31,10 +31,6 @@ public:
     // in spirit (that one shows all 10; this overlay is a smaller, first-look surface).
     void setRecentProjects(const std::vector<juce::File>& recents);
 
-    // Initialises the "Show this screen at launch" toggle WITHOUT firing onShowAtLaunchChanged —
-    // for restoring a persisted preference at construction time, not for reacting to a user click.
-    void setShowAtLaunch(bool shouldShow);
-
     // e.g. "Agent Synth v0.13.2" or "Agent Synth - development build" — sourced from
     // synth::whatsnew::kReleaseTag by the caller so there is one place that decides what version
     // string means "this build".
@@ -45,7 +41,6 @@ public:
     std::function<void()> onOpenExistingProject;
     std::function<void(const juce::File&)> onOpenRecentProject;
     std::function<void()> onWhatsNewRequested;
-    std::function<void(bool)> onShowAtLaunchChanged;
     std::function<void()> onContributeRequested; // Contribute... button; never hides the overlay
 
     // ---- Test accessors ----
@@ -58,7 +53,6 @@ public:
     juce::Button& getWhatsNewButtonForTest() { return whatsNewButton; }
     juce::Button& getContributeButtonForTest() { return contributeButton; }
     juce::Label& getContributeLabelForTest() { return contributeLabel; }
-    juce::ToggleButton& getShowAtLaunchToggleForTest() { return showAtLaunchToggle; }
     int getRecentProjectCountForTest() const { return (int)recentProjectButtons.size(); }
     // Simulates clicking recent row `index` — a no-op (never crashes) if out of range.
     void triggerRecentProjectForTest(int index);
@@ -77,7 +71,6 @@ private:
     juce::TextButton openExistingButton{"Open an existing project..."};
     juce::TextButton whatsNewButton{"What's New..."};
     juce::TextButton contributeButton;
-    juce::ToggleButton showAtLaunchToggle{"Show this screen at launch"};
 
     juce::Label titleLabel;
     juce::Label subtitleLabel;
