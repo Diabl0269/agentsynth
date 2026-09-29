@@ -5,6 +5,7 @@
 // next to this one.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MainComponentShortcutHints.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -200,6 +201,8 @@ void MainComponent::globalFocusChanged(juce::Component*) {
 }
 
 void MainComponent::timerCallback() {
+    // Cmd-hold shortcut hints: the backstop that notices Cmd on the timer we already run (no timer of its own at rest).
+    synth::ui::sampleMainWindowShortcutHints(shortcutHints_.get(), juce::ModifierKeys::getCurrentModifiersRealtime());
     undoButton.setEnabled(undoManager.canUndo());
     redoButton.setEnabled(undoManager.canRedo());
 

@@ -993,6 +993,7 @@ private:
 
     // Provides native-style tooltips for any child Component with a tooltip string set via
     // setTooltip(). Constructed last so all child components exist. Do NOT set tooltips here.
+    std::unique_ptr<juce::Component> shortcutHints_; // Cmd-hold shortcut hints overlay (MainComponentShortcutHints.h)
     juce::TooltipWindow tooltipWindow{this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
