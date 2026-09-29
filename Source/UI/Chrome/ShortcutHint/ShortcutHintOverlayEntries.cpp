@@ -57,8 +57,9 @@ bool ShortcutHintOverlay::isHintable(const juce::Component& c) const {
             return false;
         for (int i = parent->getIndexOfChildComponent(node) + 1; i < parent->getNumChildComponents(); ++i) {
             const auto* above = parent->getChildComponent(i);
-            if (above->isVisible() && above->getBounds().contains(point) &&
-                above->hitTest(point.x - above->getX(), point.y - above->getY()))
+            bool takesClicks = true, childrenTakeClicks = true;
+            above->getInterceptsMouseClicks(takesClicks, childrenTakeClicks);
+            if (above->isVisible() && takesClicks && above->getBounds().contains(point))
                 return false;
         }
         node = parent;
