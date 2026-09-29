@@ -145,6 +145,19 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     bottomDock.onResizeHeightCommitted = [this](int desiredHeight) {
         setTimelinePanelHeight(desiredHeight, /*persist=*/true);
     };
+
+    // A mixer section divider dragged past the fader's minimum grows whichever strip hosts the
+    // mixer through that strip's OWN resize path (the dock's height above, or the Own panel's), so
+    // the clamp and persistence stay in one place. A detached window cannot be grown from here: the
+    // panel scrolls its content instead (docs/mixer/panel.md#shared-sections).
+    auto& mixerPanel = bottomDock.getMixerPanel();
+    mixerPanel.canGrowHost = [this] { return !bottomDock.getMixerHost().isDetached(); };
+    mixerPanel.growHost = [this](int extraPx, bool commit) {
+        if (mixerPlacement_.getPlacement() == synth::ui::MixerPlacementController::Placement::OwnPanel)
+            mixerPlacement_.setOwnPanelHeight(mixerPlacement_.getOwnPanelHeight() + extraPx, commit);
+        else
+            setTimelinePanelHeight(timelinePanelHeight_ + extraPx, commit);
+    };
 }
 
 void MainComponent::wireTimelineHookInventory() {

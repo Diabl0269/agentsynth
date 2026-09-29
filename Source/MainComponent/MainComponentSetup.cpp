@@ -58,6 +58,8 @@ void MainComponent::restorePanelPreferences() {
     // here and on every resized() — see clampTimelinePanelHeight().
     timelinePanelHeight_ = clampTimelinePanelHeight(
         appProperties.getUserSettings()->getIntValue(kTimelinePanelHeightKey, defaultTimelinePanelHeight()));
+    // The mixer's shared section heights persist app-wide next to the dock height.
+    bottomDock.getMixerPanel().setSettingsStore(appProperties.getUserSettings());
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
     graphEditor.getSmartConnections().setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(

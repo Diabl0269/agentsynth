@@ -11,6 +11,10 @@
 #include "MixerSendList.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
+#include "UI/Mixer/MixerSections/MixerSectionControls.h"
+#include "UI/Mixer/MixerSections/MixerSectionLayout.h"
+#include "UI/Mixer/MixerSections/MixerSectionViewport.h"
+#include <array>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
@@ -29,12 +33,15 @@ namespace synth::ui {
 
 class MixerColumnComponent : public juce::Component {
 public:
-    /** The fader's own minimum draggable height (MixerFader.cpp's 16px dB readout plus a
-     *  slider left at least ~40px tall) -- resized() guarantees this by shrinking the insert/send
-     *  lists, the EQ thumbnail and the pan knob first, in that order, before this ever gives way. */
-    static constexpr int kMinFaderHeight = 56;
+    /** The fader's own minimum draggable height -- see MixerSectionLayout::resolve(). */
+    static constexpr int kMinFaderHeight = MixerSectionLayout::kMinFaderHeight;
 
     MixerColumnComponent();
+
+    /** The panel's shared section layout; must outlive this column. Unset, the column uses its own. */
+    void setSectionLayout(MixerSectionLayout& layout);
+    /** Repaints the section dividers after the layout's hover/drag state changed. */
+    void repaintSectionDividers();
 
     /** References must outlive this component -- same lifetime contract BottomDockComponent's own
      *  constructor threads down through MixerPanelComponent. `meterReader` defaults to the
@@ -149,6 +156,11 @@ public:
 
     /** Test seam: the send rows this column is showing. */
     MixerSendList& getSendListForTest() noexcept { return sendList_; }
+    MixerSectionViewport& getSectionViewportForTest(MixerSection section) noexcept;
+    MixerSectionDivider& getSectionDividerForTest(MixerSection section) noexcept { return dividers_[(size_t)section]; }
+    MixerCollapsedSection& getCollapsedSectionForTest(MixerSection section) noexcept {
+        return collapsed_[(size_t)section];
+    }
 
     /** One 10 Hz tick -- see MixerMeter's own header comment for the driving chain.
      *  `elapsedSeconds`: measured once by MixerPanelComponent::refreshMeters() and threaded down
@@ -233,6 +245,8 @@ public:
 
 private:
     void rebindControls();
+    void refreshCollapsedSummaries(int insertCount, int sendCount, bool hasEq);
+    void layoutSections(const MixerSectionLayout::Geometry& geometry, juce::Rectangle<int> inner);
     void refreshMuteSoloAccessibility(ModuleBase* module, ChannelStripModule* strip);
 
     /** header_.onNameEdited's handler -- see MixerColumnHeader.h's own class comment for the rename
@@ -315,6 +329,13 @@ private:
     MixerInsertList insertList_;
     MixerEqThumbnail eqThumbnail_;
     MixerSendList sendList_;
+    // Used only until setSectionLayout() hands over the panel's shared one (a standalone column).
+    MixerSectionLayout ownSectionLayout_;
+    MixerSectionLayout* sectionLayout_ = &ownSectionLayout_;
+    MixerSectionViewport insertViewport_;
+    MixerSectionViewport sendViewport_;
+    std::array<MixerSectionDivider, MixerSectionLayout::kSectionCount> dividers_;
+    std::array<MixerCollapsedSection, MixerSectionLayout::kSectionCount> collapsed_;
     juce::Slider panSlider_;
     std::unique_ptr<juce::SliderParameterAttachment> panAttachment_;
     MixerFader fader_;

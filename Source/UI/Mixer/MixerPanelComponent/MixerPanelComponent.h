@@ -5,6 +5,8 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Mixer/MixerDirectColumn.h"
 #include "UI/Mixer/MixerMasterColumn.h"
+#include "UI/Mixer/MixerSections/MixerSectionLayout.h"
+#include "UI/Mixer/MixerSections/MixerSectionRail.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -47,6 +49,18 @@ public:
 
     // Call once, right after configure() -- see .cpp for exactly what this copies.
     void copyWiringFrom(const MixerPanelComponent& other);
+
+    /** Where the shared section heights persist (nullable; must outlive this panel). Loads them now. */
+    void setSettingsStore(juce::PropertiesFile* settings);
+
+    /** Whether the panel's host can grow taller right now (null or false: the content scrolls instead). */
+    std::function<bool()> canGrowHost;
+    /** Grows the host by `extraPx` (0 with `commit` only persists); message thread only. */
+    std::function<void(int extraPx, bool commit)> growHost;
+
+    MixerSectionLayout& getSectionLayout() noexcept { return sectionLayout_; }
+    MixerSectionRail& getSectionRailForTest() noexcept { return rail_; }
+    juce::Viewport& getViewportForTest() noexcept { return viewport_; }
 
     /** Forwarded from MixerDirectColumn -- BottomDockComponent wires this to
      *  MainComponent::makeChannelForNode, the same "Make channel" entry point every other trigger
@@ -198,6 +212,11 @@ public:
 
 private:
     void selectOnCanvas(const juce::String& targetId);
+    void wireSectionLayout();
+    void onSectionGeometryChanged();
+    void onSectionAppearanceChanged();
+    void onSectionLayoutCommitted();
+    bool contentScrollsVertically() const;
 
     /** True between an unbindAllColumns() and the rebuild() that re-binds -- see
      *  rebuildIfUnbound(). */
@@ -243,7 +262,19 @@ private:
      *  must never yank VoiceOver's cursor into the mixer from wherever the user actually is. */
     void grabAccessibilityFocusForFocusedColumn();
 
-    juce::Viewport viewport_;
+    struct ScrollReportingViewport : juce::Viewport {
+        std::function<void()> onScrolled;
+        void visibleAreaChanged(const juce::Rectangle<int>&) override {
+            if (onScrolled)
+                onScrolled();
+        }
+    };
+
+    MixerSectionLayout sectionLayout_;
+    MixerSectionRail rail_;
+    juce::PropertiesFile* settings_ = nullptr; // See setSettingsStore
+    bool grewHostThisDrag_ = false;
+    ScrollReportingViewport viewport_;
     juce::Component content_;
 
     /** Shown only while there are no columns; see the ctor and rebuild(). */

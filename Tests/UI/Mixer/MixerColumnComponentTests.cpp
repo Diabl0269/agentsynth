@@ -166,9 +166,10 @@ TEST(MixerColumnComponentTests, FaderKeepsItsMinimumHeightAtTheDockDefaultColumn
         << "the fader's own slider (not just its dB readout) must stay usable, not squeezed to nothing";
 }
 
-// The flip side of the guarantee above -- with plenty of room, every part still gets
-// exactly what it asked for, same as before this fix (only a too-short column ever trims anything).
-TEST(MixerColumnComponentTests, InsertAndSendListsKeepPreferredHeightWhenColumnIsTall) {
+// The flip side of the guarantee above -- with plenty of room, every section gets its full SHARED
+// height (never a height sized to this column's own content, so every column's fader lines up), and
+// each list inside its section is at least that tall, scrolling only when it holds more rows.
+TEST(MixerColumnComponentTests, SectionsGetTheirSharedHeightWhenColumnIsTall) {
     AudioEngine engine;
     auto& graph = engine.getGraph();
     graph.setPlayConfigDetails(0, 2, 44100.0, 512);
@@ -189,10 +190,18 @@ TEST(MixerColumnComponentTests, InsertAndSendListsKeepPreferredHeightWhenColumnI
     column.setSize(140, 600);
     column.setColumn(columnModel, "");
 
-    EXPECT_EQ(column.getInsertListForTest().getHeight(), column.getInsertListForTest().getPreferredHeight())
-        << "plenty of room: the insert list must still get exactly its preferred height";
-    EXPECT_EQ(column.getSendListForTest().getHeight(), column.getSendListForTest().getPreferredHeight())
-        << "plenty of room: the send list must still get exactly its preferred height";
+    using synth::ui::MixerSection;
+    using Layout = synth::ui::MixerSectionLayout;
+    auto& inserts = column.getSectionViewportForTest(MixerSection::Inserts);
+    auto& sends = column.getSectionViewportForTest(MixerSection::Sends);
+    EXPECT_EQ(inserts.getHeight(), Layout::defaultHeightOf(MixerSection::Inserts))
+        << "plenty of room: the Inserts section gets its full shared height";
+    EXPECT_EQ(sends.getHeight(), Layout::defaultHeightOf(MixerSection::Sends));
+    EXPECT_EQ(column.getInsertListForTest().getHeight(),
+              juce::jmax(inserts.getHeight(), column.getInsertListForTest().getPreferredHeight()))
+        << "the list is never shorter than its section";
+    EXPECT_FALSE(inserts.isScrollable()) << "3 inserts fit in 5 rows";
+    EXPECT_EQ(column.getEqThumbnailForTest().getHeight(), Layout::kEqHeight);
 }
 
 TEST(MixerColumnComponentTests, ClickForwardsEqUuidThroughOnClicked) {

@@ -313,24 +313,27 @@ TEST(MixerMasterColumnInsertTests, MasterColumnInThePanelShowsItsInsertRowsWitho
     ASSERT_EQ(master->getInsertListForTest().getEntryCountForTest(), 2);
 
     master->setSize(140, 320);
+    // The list sits inside the Inserts section, a viewport sized by the panel's shared section layout.
     auto& list = master->getInsertListForTest();
+    auto& section = master->getInsertViewportForTest();
     auto& meter = master->getMeterForTest();
     auto& readout = master->getMeterReadoutForTest();
     auto& faderSlider = master->getAccessibilityFocusTargetForTest();
     const auto faderBounds = master->getLocalArea(&faderSlider, faderSlider.getLocalBounds());
 
-    EXPECT_GE(list.getY(), 2 + 24) << "the list sits below the 24 px header";
-    EXPECT_EQ(list.getHeight(), list.getPreferredHeight()) << "both rows fit at this height";
-    EXPECT_LE(list.getBottom(), readout.getY()) << "no overlap with the readout row";
-    EXPECT_LE(list.getBottom(), meter.getY());
-    EXPECT_LE(list.getBottom(), faderBounds.getY());
+    EXPECT_GE(section.getY(), 2 + 24) << "the Inserts section sits below the 24 px header";
+    EXPECT_GE(section.getHeight(), list.getPreferredHeight()) << "both rows fit at this height";
+    EXPECT_FALSE(section.isScrollable());
+    EXPECT_LE(section.getBottom(), readout.getY()) << "no overlap with the readout row";
+    EXPECT_LE(section.getBottom(), meter.getY());
+    EXPECT_LE(section.getBottom(), faderBounds.getY());
     EXPECT_LE(readout.getBottom(), meter.getY());
     EXPECT_GT(meter.getHeight(), 0);
     EXPECT_GT(faderBounds.getHeight(), 0) << "the fader keeps real height under the list";
-    EXPECT_TRUE(master->getLocalBounds().contains(list.getBounds()));
+    EXPECT_TRUE(master->getLocalBounds().contains(section.getBounds()));
 }
 
-TEST(MixerMasterColumnInsertTests, MasterColumnListShrinksToAThirdOfATightColumnInsteadOfCrowdingTheFader) {
+TEST(MixerMasterColumnInsertTests, MasterColumnInsertsGiveWayInATightColumnInsteadOfCrowdingTheFader) {
     MainComponent mc(std::make_unique<MockProviderMMCI>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
@@ -349,8 +352,12 @@ TEST(MixerMasterColumnInsertTests, MasterColumnListShrinksToAThirdOfATightColumn
     auto& list = master->getInsertListForTest();
     auto& faderSlider = master->getAccessibilityFocusTargetForTest();
     const auto faderBounds = master->getLocalArea(&faderSlider, faderSlider.getLocalBounds());
-    EXPECT_LE(list.getHeight(), (181 - 4 - 24) / 3) << "capped at a third of what's under the header";
-    EXPECT_LE(list.getBottom(), faderBounds.getY());
+    auto& section = master->getInsertViewportForTest();
+    EXPECT_GE(master->getFaderForTest().getHeight(), synth::ui::MixerSectionLayout::kMinFaderHeight)
+        << "the shared sections give way before the fader drops under its minimum";
+    EXPECT_LE(section.getBottom(), faderBounds.getY());
+    EXPECT_TRUE(section.isScrollable()) << "the four rows scroll inside what is left of the section";
+    EXPECT_GE(list.getHeight(), list.getPreferredHeight());
     EXPECT_GT(faderBounds.getHeight(), 0);
 }
 

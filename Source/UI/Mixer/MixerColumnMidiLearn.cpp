@@ -329,6 +329,10 @@ void MixerColumnComponent::paintMidiLearnOverlays(juce::Graphics& g) {
         // local bounds (the pre-fix code) mixed two different coordinate frames and put every
         // badge/outline at this column's own top-left corner instead of on the control.
         const auto bounds = getLocalArea(e.component, e.component->getLocalBounds());
+        // A send knob scrolled out of its section (or in a hidden one) shows no badge.
+        if (sendViewport_.isParentOf(e.component) &&
+            (!sendViewport_.isVisible() || !sendViewport_.getBounds().contains(bounds.getCentre())))
+            continue;
         synth::ui::midilearn::paintMidiMappedBadge(g, bounds, badgeColour);
     }
 

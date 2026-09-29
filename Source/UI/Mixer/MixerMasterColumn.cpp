@@ -34,7 +34,14 @@ MixerMasterColumn::MixerMasterColumn() {
     addAndMakeVisible(header_);
     header_.setDisplayName("Master");
     header_.setRenameEnabled(false); // Master is a MasterModule, not a ChannelStripModule -- no strip name field
-    addAndMakeVisible(insertList_);
+    insertViewport_.setList(insertList_);
+    addAndMakeVisible(insertViewport_);
+    for (size_t i = 0; i < dividers_.size(); ++i)
+        addAndMakeVisible(dividers_[i]);
+    addChildComponent(insertsCollapsed_);
+    ownSectionLayout_.onGeometryChanged = [this] { resized(); };
+    ownSectionLayout_.onAppearanceChanged = [this] { repaintSectionDividers(); };
+    setSectionLayout(ownSectionLayout_);
     insertList_.onEditOnCanvas = [this](const juce::String& uuid) {
         if (onEditOnCanvas)
             onEditOnCanvas(uuid);
@@ -88,6 +95,7 @@ void MixerMasterColumn::setColumn(const synth::MixerColumn& column) {
     insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,
                            column.sourceNodeId, column.chainEndNodeId);
     const bool hasInserts = !column.inserts.empty();
+    insertsCollapsed_.setSummary(mixerSectionCountSummary((int)column.inserts.size(), "insert", "inserts"));
     if (hasInserts != hasInserts_) {
         hasInserts_ = hasInserts;
         // Both sources are consume-on-read latches that keep the loudest peak since their last read, and only the
@@ -385,24 +393,52 @@ void MixerMasterColumn::paintOverChildren(juce::Graphics& g) {
     g.drawRect(getLocalBounds(), 2);
 }
 
+// Master lays out against the SAME shared MixerSectionLayout geometry as every strip column, so its
+// Inserts row and its fader line up with theirs: the source-line slot under the header stays empty,
+// and so do the Sends, EQ and pan rows Master has no content for.
 void MixerMasterColumn::resized() {
-    // Same meter width/readout-row budget as MixerColumnComponent -- the Master column
-    // stays visually consistent with every strip column's meter (docs/mixer/mixer.md meters section).
+    // Same meter width as MixerColumnComponent -- the Master column stays visually consistent with
+    // every strip column's meter (docs/mixer/mixer.md meters section).
     constexpr int kMeterWidth = 32;
-    constexpr int kMeterReadoutHeight = 12;
 
-    auto bounds = getLocalBounds().reduced(2);
-    header_.setBounds(bounds.removeFromTop(24));
-    // Same sizing rule as a strip column's insert list (MixerColumnComponent::resized).
-    insertList_.setBounds(bounds.removeFromTop(juce::jmin(bounds.getHeight() / 3, insertList_.getPreferredHeight())));
+    const auto geometry = sectionLayout_->resolve(getHeight());
+    const auto inner = getLocalBounds().reduced(MixerSectionLayout::kColumnInset);
+    header_.setBounds(inner.withHeight(MixerSectionLayout::kHeaderHeight));
+    auto row = [&inner](int y, int height) { return juce::Rectangle<int>(inner.getX(), y, inner.getWidth(), height); };
+
+    const size_t inserts = (size_t)MixerSection::Inserts;
+    const bool insertsHidden = sectionLayout_->isHidden(MixerSection::Inserts);
+    const auto insertsArea = row(geometry.sectionTop[inserts], geometry.sectionHeight[inserts]);
+    insertViewport_.setVisible(!insertsHidden);
+    insertViewport_.setBounds(insertsArea);
+    insertViewport_.setContentHeight(insertList_.getPreferredHeight());
+    insertsCollapsed_.setVisible(insertsHidden);
+    insertsCollapsed_.setBounds(insertsArea);
+    for (size_t i = 0; i < dividers_.size(); ++i)
+        dividers_[i].setBounds(row(geometry.dividerTop[i], MixerSectionLayout::kDividerHeight));
+
     // Shares the mute row -- mute on the left, the pan-law control on the right.
-    auto bottomRow = bounds.removeFromBottom(20).reduced(2);
+    auto bottomRow = row(geometry.msTop, MixerSectionLayout::kMsRowHeight).reduced(2);
     muteButton_.setBounds(bottomRow.removeFromLeft(bottomRow.getWidth() / 3));
     panLawButton_.setBounds(bottomRow);
-    meterReadout_.setBounds(bounds.removeFromTop(kMeterReadoutHeight));
-    meter_.setBounds(bounds.removeFromRight(kMeterWidth));
-    bounds.removeFromRight(2);
-    fader_.setBounds(bounds);
+    meterReadout_.setBounds(row(geometry.readoutTop, MixerSectionLayout::kMeterReadoutHeight));
+    auto faderRow = row(geometry.faderTop, geometry.faderHeight);
+    meter_.setBounds(faderRow.removeFromRight(kMeterWidth));
+    faderRow.removeFromRight(2);
+    fader_.setBounds(faderRow);
+}
+
+void MixerMasterColumn::setSectionLayout(MixerSectionLayout& layout) {
+    sectionLayout_ = &layout;
+    for (size_t i = 0; i < dividers_.size(); ++i)
+        dividers_[i].setLayout(sectionLayout_, (MixerSection)(int)i);
+    insertsCollapsed_.setLayout(sectionLayout_, MixerSection::Inserts);
+    resized();
+}
+
+void MixerMasterColumn::repaintSectionDividers() {
+    for (auto& divider : dividers_)
+        divider.repaint();
 }
 
 } // namespace synth::ui

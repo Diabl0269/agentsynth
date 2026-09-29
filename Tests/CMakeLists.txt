@@ -509,6 +509,8 @@ add_executable(Tests
     UI/Mixer/MixerDockMeterGatingTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
+    UI/Mixer/MixerSectionLayoutTests.cpp
+    UI/Mixer/MixerSectionPanelTests.cpp
     UI/Mixer/MixerColumnComponentMeterTests.cpp
     UI/Mixer/MixerColumnMidiLearnTests.cpp
     UI/Mixer/MixerMasterColumnMidiLearnTests.cpp
