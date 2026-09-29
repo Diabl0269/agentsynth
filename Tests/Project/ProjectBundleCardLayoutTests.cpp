@@ -54,7 +54,8 @@ class ProjectBundleCardLayoutTest : public ::testing::Test {
 protected:
     void SetUp() override {
         root_ = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                    .getChildFile("agentsynth-projectbundle-cardlayout-tests");
+                    .getChildFile("agentsynth-projectbundle-cardlayout-tests_" +
+                                  juce::Uuid().toString()); // unique: sharded CI
         root_.deleteRecursively();
         root_.createDirectory();
     }
