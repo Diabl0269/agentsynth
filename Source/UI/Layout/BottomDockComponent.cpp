@@ -14,6 +14,12 @@ namespace synth::ui {
 namespace {
 constexpr int kAddBusButtonWidth = 54;
 constexpr int kResetMetersButtonWidth = 84;
+// How far above its slot a dragged tab is drawn. The tab row starts PanelResizeHandle::kHeight (5)
+// px below the dock's top edge, so a 4 px lift keeps the lifted tab and its 1 px shadow inside the
+// dock's own bounds.
+constexpr int kLiftedTabRise = 4;
+constexpr float kLiftedTabRadius = 4.0f;
+constexpr float kLiftedTabOpacity = 0.95f;
 } // namespace
 
 BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, AudioEngine& audioEngine,
@@ -453,6 +459,11 @@ void BottomDockComponent::dragTab(Tab dragged, const juce::MouseEvent& e) {
     if (!e.mouseWasDraggedSinceMouseDown())
         return;
     const auto pos = e.getEventRelativeTo(this).getPosition();
+    // The lift follows the pointer by the same grab offset the press landed at inside the tab, and
+    // is gated on the same drag threshold as the swap below, so a plain click never shows it.
+    liftedTab_ = dragged;
+    liftedLeft_ = pos.x - e.getMouseDownPosition().x;
+    repaint(0, 0, getWidth(), kTabStripHeight);
     for (Tab other : tabOrder_) {
         if (other == dragged || !isTabOfferedInStrip(other))
             continue;
@@ -472,6 +483,10 @@ bool BottomDockComponent::endTabDrag() {
         permuteShortcutKeysForNewOrder();
     }
     tabDragReordered_ = false;
+    if (liftedTab_.has_value()) {
+        liftedTab_.reset();
+        repaint(0, 0, getWidth(), kTabStripHeight);
+    }
     return reordered;
 }
 
@@ -539,6 +554,58 @@ std::vector<BottomDockComponent::StripTab> BottomDockComponent::getStripTabs() {
         if (isTabOfferedInStrip(t))
             tabs.push_back({&buttonForTab(t), actionIdForTab(t), buttonForTab(t).getButtonText()});
     return tabs;
+}
+
+void BottomDockComponent::DockTabButton::paint(juce::Graphics& g) {
+    // The real tab steps aside for the dashed slot marker while it is the one being dragged.
+    if (owner_.isTabLifted(tab_))
+        owner_.paintTabSlot(g, getLocalBounds());
+    else
+        juce::TextButton::paint(g);
+}
+
+void BottomDockComponent::paintTabSlot(juce::Graphics& g, juce::Rectangle<int> bounds) const {
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    if (lf == nullptr)
+        return;
+    juce::Path outline;
+    outline.addRoundedRectangle(bounds.toFloat().reduced(0.5f), kLiftedTabRadius);
+    juce::Path dashed;
+    const float dashLengths[] = {3.0f, 2.0f};
+    juce::PathStrokeType(1.0f).createDashedStroke(dashed, outline, dashLengths, 2);
+    g.setColour(lf->getTheme().colors.border);
+    g.fillPath(dashed);
+}
+
+// Painted over the children so the lifted tab sits above every tab button and the resize handle.
+// The rectangle is the dragged tab's own slot, raised by kLiftedTabRise and slid to the pointer
+// (clamped to the dock), so it stays the width of the tab it stands in for.
+void BottomDockComponent::paintOverChildren(juce::Graphics& g) {
+    if (!liftedTab_.has_value())
+        return;
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    if (lf == nullptr)
+        return;
+    auto& button = buttonForTab(*liftedTab_);
+    const auto& theme = lf->getTheme();
+    const auto& c = theme.colors;
+    const auto slot = button.getBounds();
+    const int left = juce::jlimit(0, juce::jmax(0, getWidth() - slot.getWidth()), liftedLeft_);
+    const auto tab = slot.withX(left).translated(0, -kLiftedTabRise).toFloat();
+
+    // Cheap drop shadow, the same offset translucent copy AppLookAndFeel's fader cap uses.
+    g.setColour(juce::Colours::black.withAlpha(0.35f * juce::jlimit(0.0f, 1.0f, theme.treatment.shadow)));
+    g.fillRoundedRectangle(tab.translated(0.0f, 1.0f), kLiftedTabRadius);
+
+    g.beginTransparencyLayer(kLiftedTabOpacity);
+    g.setColour(c.surfaceHi);
+    g.fillRoundedRectangle(tab, kLiftedTabRadius);
+    g.setColour(c.accent);
+    g.drawRoundedRectangle(tab.reduced(0.5f), kLiftedTabRadius - 0.5f, 1.0f);
+    g.setColour(c.textPrimary);
+    g.setFont(lf->getTextButtonFont(button, button.getHeight()));
+    g.drawFittedText(button.getButtonText(), tab.toNearestInt().reduced(4, 0), juce::Justification::centred, 1);
+    g.endTransparencyLayer();
 }
 
 void BottomDockComponent::lookAndFeelChanged() { refreshDetachButton(); }

@@ -98,7 +98,11 @@ default `"timeline,mixer,midiRemote"`) alongside `bottomDockActiveTab`.
 - **Drag to reorder.** Dragging a tab button past another swaps their two slots in `tabOrder_` live
   (`BottomDockComponent::dragTab`), and the swap is persisted, and the three tabs' own Cmd+digit key
   bindings re-keyed to match (`permuteShortcutKeysForNewOrder`), only on mouse-up after a real drag —
-  a plain click still fires that tab's `onClick` as usual. The re-key only touches the three
+  a plain click still fires that tab's `onClick` as usual. Once a drag clears JUCE's drag threshold the
+  dragged tab is drawn "lifted" (`BottomDockComponent::paintOverChildren`): it follows the pointer
+  horizontally 4 px above the strip row (a `surfaceHi` fill, 1 px `accent` outline, radius 4, soft
+  shadow, 95% opacity), while the slot it occupies shows a 1 px dashed `border` outline until the live
+  swap moves it; a plain click never shows either. The re-key only touches the three
   bindings when they still form the `{Cmd+1, Cmd+2, Cmd+3}` set (see
   [`docs/control/shortcuts.md`](../control/shortcuts.md)).
 - **A detached tab leaves the strip.** `BottomDockComponent::isTabOfferedInStrip` excludes a tab

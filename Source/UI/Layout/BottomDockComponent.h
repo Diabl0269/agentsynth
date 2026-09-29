@@ -10,6 +10,7 @@
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 #include <vector>
 
 class AppUndoManager;
@@ -250,7 +251,8 @@ public:
     std::vector<StripTab> getStripTabs();
 
     void resized() override;
-    void lookAndFeelChanged() override; // refreshes the tab-strip detach button's themed icon
+    void paintOverChildren(juce::Graphics& g) override; // the lifted tab of a reorder drag
+    void lookAndFeelChanged() override;                 // refreshes the tab-strip detach button's themed icon
 
     /** Total tab-strip height, including the top PanelResizeHandle::kHeight px the handle overlaps. */
     static constexpr int kTabStripHeight = 22;
@@ -298,6 +300,7 @@ private:
             : juce::TextButton(text)
             , owner_(owner)
             , tab_(tab) {}
+        void paint(juce::Graphics& g) override;
         void mouseDown(const juce::MouseEvent& e) override {
             owner_.beginTabDrag();
             juce::TextButton::mouseDown(e);
@@ -359,6 +362,9 @@ private:
 
     // ---- Drag-to-reorder (DockTabButton's own mouse overrides call these; see .cpp) ------------
     void beginTabDrag() noexcept { tabDragReordered_ = false; }
+    /** True while `tab` is being dragged past the drag threshold (its slot shows the dashed outline). */
+    bool isTabLifted(Tab tab) const noexcept { return liftedTab_ == tab; }
+    void paintTabSlot(juce::Graphics& g, juce::Rectangle<int> bounds) const;
     void dragTab(Tab dragged, const juce::MouseEvent& e);
     bool endTabDrag();
     void swapTabOrder(Tab a, Tab b);
@@ -412,6 +418,10 @@ private:
     // True from a mouseDown that turns into a real reorder swap (see dragTab()); read once by
     // endTabDrag() and reset there.
     bool tabDragReordered_ = false;
+    // The tab currently drawn lifted under the pointer, and the left edge (dock coordinates) it
+    // follows; empty outside a drag that has cleared the drag threshold.
+    std::optional<Tab> liftedTab_;
+    int liftedLeft_ = 0;
     // "detachedPanelBothPlaces" -- see applyDetachBothPlacesPreference()'s own comment.
     // Read once in setApplicationProperties() (no live-transition side effects, nothing is open
     // yet) and re-read live thereafter through that same method.
