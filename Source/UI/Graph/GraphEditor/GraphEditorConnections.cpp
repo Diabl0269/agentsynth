@@ -11,7 +11,7 @@
 #include "Modules/MacroMidiInletModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UserSettings.h"
 
 #include <algorithm>

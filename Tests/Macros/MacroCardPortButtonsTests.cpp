@@ -15,7 +15,7 @@
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
 #include <gtest/gtest.h>
@@ -95,7 +95,7 @@ bool runMenuItem(juce::PopupMenu& menu, const juce::String& text) {
 // The '+' affordance: geometry, hiding gracefully when a side is crowded, and the add-port menu.
 // ============================================================================
 
-TEST(MacroCardPortButtons, AddButtonSitsInTheFooterBesideTheCountText) {
+TEST(MacroCardPortButtons, AddButtonSitsAtTheStripFoot) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -108,17 +108,14 @@ TEST(MacroCardPortButtons, AddButtonSitsInTheFooterBesideTheCountText) {
     EXPECT_LT(inBounds.getCentreX(), outBounds.getCentreX()) << "input '+' on the left, output '+' on the right";
     EXPECT_TRUE(card->getLocalBounds().toFloat().contains(inBounds.getCentre()));
     EXPECT_TRUE(card->getLocalBounds().toFloat().contains(outBounds.getCentre()));
-    // Pinned to the footer row, not the jack band this card's own jacks lay out in — its top edge
-    // must sit at or below the jack band's own bottom edge, structurally, not just "usually clear
-    // of it".
-    EXPECT_GE(inBounds.getY(), card->getHeight() - 16.0f) << "off the jack band (kMacroCardJackBandBottom)";
-    EXPECT_GE(outBounds.getY(), card->getHeight() - 16.0f);
+    EXPECT_FLOAT_EQ(inBounds.getY(), card->getHeight() - 12.0f);
+    EXPECT_FLOAT_EQ(outBounds.getY(), card->getHeight() - 12.0f);
+    EXPECT_FLOAT_EQ(inBounds.getX(), 4.0f);
+    EXPECT_FLOAT_EQ(outBounds.getX(), card->getWidth() - 12.0f);
 }
 
-// A '+' at the TOP of the jack band would be usable only on an almost-empty side, since
-// macroCardPortLayout()'s even-spacing pushes the topmost jack toward it as the count grows. The
-// footer placement has no such failure mode: it must stay visible and off the jack band no matter
-// how many ports are on a side.
+// The '+' sits kMacroPortStripFooter below the last row, and the card grows with its port count,
+// so it stays on-card and clear of every jack no matter how many ports a side holds.
 TEST(MacroCardPortButtons, AddButtonStaysVisibleWithManyPortsAndNeverOverlapsAJack) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -127,11 +124,13 @@ TEST(MacroCardPortButtons, AddButtonStaysVisibleWithManyPortsAndNeverOverlapsAJa
     auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
 
-    for (int i = 0; i < 6; ++i)
+    for (int i = 0; i < 12; ++i) {
         editor.getMacroController().addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
                                                  MacroPortShape::Mono, 1, "In " + juce::String(i));
-    editor.getMacroController().addMacroPort(macroId, /*isInput=*/false, synth::MacroPortKind::AudioCV,
-                                             MacroPortShape::Mono, 1, "Out");
+        editor.getMacroController().addMacroPort(macroId, /*isInput=*/false, synth::MacroPortKind::AudioCV,
+                                                 MacroPortShape::Mono, 1, "Out " + juce::String(i));
+    }
+    ASSERT_EQ(card->getHeight(), 244);
 
     const auto inBounds = card->getAddPortButtonBoundsForTest(true);
     const auto outBounds = card->getAddPortButtonBoundsForTest(false);
@@ -140,10 +139,9 @@ TEST(MacroCardPortButtons, AddButtonStaysVisibleWithManyPortsAndNeverOverlapsAJa
     EXPECT_TRUE(card->getLocalBounds().toFloat().contains(outBounds.getCentre()));
 
     for (const auto& port : editor.getMacroController().macroCardPortLayout(macroId)) {
-        const auto dot =
-            juce::Rectangle<float>((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
-        EXPECT_FALSE(inBounds.intersects(dot)) << "the '+' must never overlap a jack: " << port.nodeUuid;
-        EXPECT_FALSE(outBounds.intersects(dot)) << "the '+' must never overlap a jack: " << port.nodeUuid;
+        const auto jack = port.jackPos.toFloat();
+        EXPECT_GE(jack.getDistanceFrom(inBounds.getCentre()), 10.0f) << "the '+' must clear every jack: " << port.name;
+        EXPECT_GE(jack.getDistanceFrom(outBounds.getCentre()), 10.0f) << "the '+' must clear every jack: " << port.name;
     }
 }
 
@@ -499,5 +497,161 @@ TEST(MacroCardPortButtons, AddButtonRegionPaintsVisibleContent) {
     const auto edgePixel = img.getPixelAt((int)card->getAddPortButtonBoundsForTest(true).getX(), (int)centre.y);
     EXPECT_NE(edgePixel, bgPixel);
 
+    card->setLookAndFeel(nullptr);
+}
+
+// ============================================================================
+// Sidebar rows: '+' and a jack clicked at their new positions on a taller card, the '-' button, and
+// names hidden by zoom.
+// ============================================================================
+
+namespace {
+void addInputs(GraphEditor& editor, const juce::String& macroId, int n) {
+    for (int i = 0; i < n; ++i)
+        editor.getMacroController().addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
+                                                 MacroPortShape::Mono, 1, "In " + juce::String(i));
+}
+} // namespace
+
+TEST(MacroCardPortButtons, ClickingAddOnACardThatAlreadyHasThreeInputsStillReachesTheButton) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    addInputs(editor, macroId, 3);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    ASSERT_EQ(card->getHeight(), 100);
+
+    juce::PopupMenu captured;
+    card->setShowContextMenuHookForTest([&captured](juce::PopupMenu& m) { captured = m; });
+
+    hoverThenClick(*card, card->getAddPortButtonBoundsForTest(true).getCentre());
+    ASSERT_TRUE(runMenuItem(captured, "Audio/CV - Mono"));
+
+    EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 4u);
+    undo.undo();
+    EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 3u) << "one undo step takes the whole add back";
+    card->setShowContextMenuHookForTest(nullptr);
+}
+
+TEST(MacroCardPortButtons, ClickingTheSecondOfThreeJacksDeletesThatPort) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    addInputs(editor, macroId, 3);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+
+    const auto layout = editor.getMacroController().macroCardPortLayout(macroId);
+    ASSERT_EQ(layout.size(), 3u);
+    EXPECT_EQ(layout[1].jackPos.y, 54);
+    const juce::String second = layout[1].nodeUuid;
+
+    hoverThenClick(*card, layout[1].jackPos.toFloat());
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_EQ(macro->ports.size(), 2u);
+    for (const auto& p : macro->ports)
+        EXPECT_NE(p.nodeUuid, second) << "the clicked (second) port is the one removed";
+}
+
+TEST(MacroCardPortButtons, MinusRemovesTheBottomPortOnThatSideAsOneUndoStep) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    addInputs(editor, macroId, 3);
+    editor.getMacroController().addMacroPort(macroId, /*isInput=*/false, synth::MacroPortKind::AudioCV,
+                                             MacroPortShape::Mono, 1, "Out");
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+
+    const auto minus = card->getRemovePortButtonBoundsForTest(true);
+    ASSERT_FALSE(minus.isEmpty());
+    EXPECT_GT(minus.getX(), card->getAddPortButtonBoundsForTest(true).getRight()) << "beside the '+', not on it";
+
+    card->mouseDown(makeMouseEvent(*card, minus.getCentre()));
+
+    auto* macro = editor.getMacros().find(macroId);
+    int inputs = 0, outputs = 0;
+    for (const auto& p : macro->ports) {
+        (p.isInput ? inputs : outputs)++;
+        EXPECT_NE(p.name, "In 2") << "the bottom input is the one removed";
+    }
+    EXPECT_EQ(inputs, 2);
+    EXPECT_EQ(outputs, 1) << "the other side is untouched";
+
+    undo.undo();
+    EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 4u) << "one undo step restores the removed port";
+}
+
+TEST(MacroCardPortButtons, MinusIsAbsentForASideWithNoPortAndWhenNamesAreHidden) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    addInputs(editor, macroId, 1);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    auto* content = card->getParentComponent();
+    ASSERT_NE(content, nullptr);
+
+    EXPECT_FALSE(card->getRemovePortButtonBoundsForTest(true).isEmpty());
+    EXPECT_TRUE(card->getRemovePortButtonBoundsForTest(false).isEmpty()) << "no output port to remove";
+
+    content->setTransform(juce::AffineTransform::scale(0.4f));
+    EXPECT_TRUE(card->getRemovePortButtonBoundsForTest(true).isEmpty()) << "hidden below 50 percent zoom";
+    EXPECT_FALSE(card->getAddPortButtonBoundsForTest(true).isEmpty()) << "the '+' never hides";
+    content->setTransform({});
+}
+
+TEST(MacroCardPortButtons, NamesAreNotPaintedBelowTheThresholdZoomAndTheTooltipCarriesTheName) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    addInputs(editor, macroId, 1);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    auto* content = card->getParentComponent();
+    ASSERT_NE(content, nullptr);
+    const auto port = editor.getMacroController().macroCardPortLayout(macroId).front();
+
+    synth::theme::AppLookAndFeel lf;
+    card->setLookAndFeel(&lf);
+    auto renderCard = [&]() {
+        juce::Image img(juce::Image::ARGB, card->getWidth(), card->getHeight(), true, juce::SoftwareImageType());
+        juce::Graphics g(img);
+        card->paint(g);
+        return img;
+    };
+    // True when every pixel in the label area is the strip's own fill (nothing drawn over it).
+    auto labelAreaIsBlank = [&](const juce::Image& img) {
+        // Stops 2px short of the label area's inner edge, where the strip's 1px border line is drawn.
+        const auto ref = img.getPixelAt(port.labelArea.getX(), port.labelArea.getBottom() - 1);
+        for (int y = port.labelArea.getY(); y < port.labelArea.getBottom(); ++y)
+            for (int x = port.labelArea.getX(); x < port.labelArea.getRight() - 2; ++x)
+                if (img.getPixelAt(x, y) != ref)
+                    return false;
+        return true;
+    };
+
+    EXPECT_FALSE(labelAreaIsBlank(renderCard())) << "the name is painted at 100 percent zoom";
+
+    content->setTransform(juce::AffineTransform::scale(0.4f));
+    EXPECT_TRUE(labelAreaIsBlank(renderCard())) << "no name below the threshold";
+
+    card->mouseMove(makeMouseEvent(*card, port.jackPos.toFloat()));
+    EXPECT_EQ(card->getTooltip(), "In 0") << "the hovered jack's tooltip is its name while names are hidden";
+    card->mouseExit(makeMouseEvent(*card, port.jackPos.toFloat()));
+    EXPECT_NE(card->getTooltip(), "In 0") << "unhovered: the member list again";
+
+    content->setTransform({});
     card->setLookAndFeel(nullptr);
 }

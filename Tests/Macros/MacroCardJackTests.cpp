@@ -17,8 +17,9 @@
 #include "Modules/MidiKeyboardModule.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <optional>
@@ -140,11 +141,42 @@ TEST(MacroCardJack, InputsLayOutDownTheLeftEdgeAndOutputsDownTheRightEdgeInOrder
     EXPECT_EQ(inputs[1].nodeUuid, in1);
     EXPECT_LT(inputs[0].jackPos.y, inputs[1].jackPos.y);
 
+    // One 16px row per port, starting at the first row's top.
+    EXPECT_EQ(inputs[0].jackPos.y, 38);
+    EXPECT_EQ(inputs[1].jackPos.y, 54);
+    EXPECT_EQ(outputs[0].jackPos.y, 38);
+
     // Every jack lands inside the card's fixed footprint - never off the card entirely.
     const auto* card = editor.getMacroController().getMacroCardForTest(m.macroId);
     ASSERT_NE(card, nullptr);
     for (const auto& p : layout)
         EXPECT_TRUE(card->getLocalBounds().contains(p.jackPos)) << p.nodeUuid;
+}
+
+// The card is 90px at its floor and grows 16px per port on the busier side beyond that.
+TEST(MacroCardJack, CardGrowsSixteenPixelsPerPortPastTheNinetyPixelFloor) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto m = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(m.macroId.isEmpty());
+    auto* card = editor.getMacroController().getMacroCardForTest(m.macroId);
+    ASSERT_NE(card, nullptr);
+
+    auto addInputs = [&](int n) {
+        for (int i = 0; i < n; ++i)
+            ASSERT_FALSE(editor.getMacroController()
+                             .addMacroPort(m.macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1,
+                                           "In " + juce::String(i))
+                             .isEmpty());
+    };
+    addInputs(1);
+    EXPECT_EQ(card->getHeight(), 90);
+    addInputs(2);
+    EXPECT_EQ(card->getHeight(), 100);
+    addInputs(9);
+    EXPECT_EQ(card->getHeight(), 244);
+    EXPECT_EQ(editor.getMacros().find(m.macroId)->bounds.getHeight(), 90) << "the derived height is never persisted";
 }
 
 // A port's user colour (set from the Configure I/O modal's swatch) flows through to the
@@ -391,9 +423,9 @@ TEST(MacroCardJack, InteriorMemberCableLeavingMacroAnchorsOnTheRightEdge) {
             EXPECT_FLOAT_EQ(cable.p1.x, (float)cardBounds.getRight())
                 << "a cable leaving a collapsed macro must anchor on its RIGHT edge, not wherever "
                    "the external endpoint happens to sit";
-            EXPECT_GE(cable.p1.y, (float)cardBounds.getY())
-                << "the anchor Y must stay clamped inside the card's jack band";
-            EXPECT_LE(cable.p1.y, (float)cardBounds.getBottom());
+            EXPECT_GE(cable.p1.y, (float)(cardBounds.getY() + detail::kMacroPortRowsTop))
+                << "the anchor Y must stay clamped inside the card's port-row span";
+            EXPECT_LE(cable.p1.y, (float)(cardBounds.getBottom() - detail::kMacroPortStripFooter));
         }
     }
     EXPECT_TRUE(found);
@@ -437,8 +469,8 @@ TEST(MacroCardJack, SeveralEdgeAnchoredCablesOnTheSameSideGetDistinctYPositions)
     ASSERT_TRUE(yBelow.has_value());
     EXPECT_NE(*yAbove, *yBelow) << "two crossing cables on the same edge must not collapse onto "
                                    "the same pixel";
-    EXPECT_GE(*yAbove, (float)cardBounds.getY());
-    EXPECT_LE(*yBelow, (float)cardBounds.getBottom());
+    EXPECT_GE(*yAbove, (float)(cardBounds.getY() + detail::kMacroPortRowsTop));
+    EXPECT_LE(*yBelow, (float)(cardBounds.getBottom() - detail::kMacroPortStripFooter));
 }
 
 TEST(MacroCardJack, EdgeAnchoredCableDoesNotLandOnAPortJackOnTheSameSide) {

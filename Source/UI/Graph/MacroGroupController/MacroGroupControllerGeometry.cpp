@@ -8,9 +8,10 @@
 
 #include "MacroGroupController.h"
 
+#include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 using namespace detail;
 
@@ -51,6 +52,24 @@ constexpr int kMacroHullMargin = 14;
 // member's ModuleComponent (which would swallow the drag). Must stay >= the chip's own height.
 constexpr int kMacroChipHeight = 18;
 constexpr int kMacroChipTopMargin = kMacroChipHeight + 6;
+static_assert(kMacroChipTopMargin == kMacroChipRowHeight, "the strips start below the chip row");
+
+// {input, output} sidebar strip widths for a macro: the longest port name on each side plus the
+// fixed padding, `innerJackRoom` extra for the open macro's inner jack. A side with no ports gets
+// the bare minimum, and a very long name is capped at `maxWidth` (its label is shortened with an
+// ellipsis instead) so the card's title column never collapses. Measured with a local font (no
+// juce::Graphics), so paint, hit-testing and anchoring can all call it. Never depends on zoom.
+std::pair<int, int> macroStripWidths(const synth::Macro& macro, int innerJackRoom, int maxWidth) {
+    const int empty = kMacroPortStripInset + kMacroPortStripPadding;
+    const juce::Font font{juce::FontOptions(kMacroPortNameFontSize)};
+    float longestIn = -1.0f, longestOut = -1.0f;
+    for (const auto& p : macro.ports) {
+        float& longest = p.isInput ? longestIn : longestOut;
+        longest = juce::jmax(longest, font.getStringWidthFloat(p.name));
+    }
+    return {longestIn < 0.0f ? empty : juce::jmin(maxWidth, macroPortStripWidthFor(longestIn, innerJackRoom)),
+            longestOut < 0.0f ? empty : juce::jmin(maxWidth, macroPortStripWidthFor(longestOut, innerJackRoom))};
+}
 } // namespace
 
 namespace {
@@ -61,6 +80,21 @@ juce::AudioProcessorGraph::NodeID resolveMemberNodeIdIn(GraphCanvasHost& host, c
         if (node->properties["uuid"].toString() == memberUuid)
             return node->nodeID;
     return {};
+}
+
+// Rows a port's docked widget takes: one, except a Stereo port whose widget has two jack rows.
+// Reads the port node's processor, exactly as ModuleComponent::layoutMacroPortWidget sizes the
+// widget from it.
+int macroPortRowCountIn(GraphCanvasHost& host, const juce::String& portUuid) {
+    auto* node = host.graph().getNodeForId(resolveMemberNodeIdIn(host, portUuid));
+    if (node == nullptr || node->getProcessor() == nullptr)
+        return 1;
+    auto* proc = node->getProcessor();
+    if (proc->acceptsMidi() || proc->producesMidi())
+        return 1;
+    if (auto* mb = dynamic_cast<ModuleBase*>(proc))
+        return juce::jmax(1, mb->getVisibleInputPortCount(), mb->getVisibleOutputPortCount());
+    return 1;
 }
 
 // Shared by macroHullBounds and macroHullBoundsExcluding — the latter is the former with
@@ -109,6 +143,19 @@ juce::Rectangle<int> computeMacroHullBounds(GraphCanvasHost& host, const synth::
     // empty canvas where GraphEditor's own mouse handlers get it.
     auto expanded = hull.expanded(kMacroHullMargin);
     expanded.setTop(hull.getY() - kMacroChipTopMargin);
+
+    // The two port strips sit INSIDE the hull, outside the members' own margin, so the hull grows
+    // outward by each strip's width and members never move when a port is added. When the rows
+    // outrun the members the hull grows down to hold them and the '+'/'-' footer.
+    const auto [inW, outW] = macroStripWidths(macro, kMacroHullStripInnerJackRoom, kMacroHullStripMaxWidth);
+    expanded.setLeft(expanded.getX() - inW);
+    expanded.setRight(expanded.getRight() + outW);
+    int inputRows = 0, outputRows = 0;
+    for (const auto& p : macro.ports)
+        (p.isInput ? inputRows : outputRows) += macroPortRowCountIn(host, p.nodeUuid);
+    expanded.setBottom(juce::jmax(expanded.getBottom(),
+                                  expanded.getY() + kMacroChipTopMargin + kMacroPortRowsBelowChip +
+                                      juce::jmax(inputRows, outputRows) * kMacroPortRowHeight + kMacroPortStripFooter));
     return expanded;
 }
 } // namespace
@@ -280,34 +327,57 @@ MacroGroupController::macroCardPortLayout(const juce::String& macroId) const {
     for (const auto& p : ports)
         (p.isInput ? inputs : outputs).push_back(&p);
 
-    // Evenly spaced within the fixed jack band regardless of count, so N ports on one side never
-    // outgrow the card's fixed footprint.
-    auto placeSide = [&](const std::vector<const synth::MacroPort*>& side, int x) {
+    // One 16px row per port from kMacroPortRowsTop down; the card grows to fit (macroCardHeightFor),
+    // so N ports on one side never outgrow it. The label area spans the strip past the jack.
+    const auto widths = macroCardStripWidths(macroId);
+    auto placeSide = [&](const std::vector<const synth::MacroPort*>& side, int x, bool isInputSide) {
         const int n = (int)side.size();
-        const int bandHeight = kMacroCardJackBandBottom - kMacroCardJackBandTop;
         for (int i = 0; i < n; ++i) {
-            const int y = kMacroCardJackBandTop + (bandHeight * (i + 1)) / (n + 1);
+            const int rowTop = kMacroPortRowsTop + i * kMacroPortRowHeight;
             MacroCardPort port;
             port.nodeUuid = side[i]->nodeUuid;
             port.isInput = side[i]->isInput;
             port.kind = side[i]->kind;
             port.name = side[i]->name;
-            port.jackPos = {x, y};
+            port.row = i;
+            port.jackPos = {x, rowTop + kMacroPortRowHeight / 2};
+            if (isInputSide)
+                port.labelArea = {kMacroPortStripInset, rowTop, widths.first - kMacroPortStripInset,
+                                  kMacroPortRowHeight};
+            else
+                port.labelArea = {synth::LayoutUtil::kSingleWidth - widths.second, rowTop,
+                                  widths.second - kMacroPortStripInset, kMacroPortRowHeight};
             port.colour = side[i]->colour; // MacroCardComponent falls back to the kind tint
             result.push_back(port);
         }
     };
-    placeSide(inputs, kMacroCardJackInsetX);
-    placeSide(outputs, synth::LayoutUtil::kSingleWidth - kMacroCardJackInsetX);
+    placeSide(inputs, kMacroCardJackInsetX, true);
+    placeSide(outputs, synth::LayoutUtil::kSingleWidth - kMacroCardJackInsetX, false);
     return result;
+}
+
+std::pair<int, int> MacroGroupController::macroCardStripWidths(const juce::String& macroId) const {
+    const auto* macro = host_.getMacros().find(macroId);
+    if (macro == nullptr) {
+        const int empty = kMacroPortStripInset + kMacroPortStripPadding;
+        return {empty, empty};
+    }
+    return macroStripWidths(*macro, 0, kMacroCardStripMaxWidth);
 }
 
 std::optional<MacroGroupController::MacroCardPort>
 MacroGroupController::macroCardPortForPoint(const juce::String& macroId, juce::Point<int> cardLocalPos) const {
-    for (const auto& port : macroCardPortLayout(macroId))
-        if (cardLocalPos.toFloat().getDistanceFrom(port.jackPos.toFloat()) < kMacroCardJackHitRadius)
-            return port;
-    return std::nullopt;
+    // Rows are 16px apart but the hit radius is 10, so two jacks' zones overlap: the nearest wins.
+    std::optional<MacroCardPort> best;
+    float bestDistance = kMacroCardJackHitRadius;
+    for (const auto& port : macroCardPortLayout(macroId)) {
+        const float d = cardLocalPos.toFloat().getDistanceFrom(port.jackPos.toFloat());
+        if (d < bestDistance) {
+            bestDistance = d;
+            best = port;
+        }
+    }
+    return best;
 }
 
 MacroCardComponent* MacroGroupController::getMacroCard(const juce::String& macroId) {
@@ -321,15 +391,99 @@ MacroCardComponent* MacroGroupController::getMacroCardForTest(const juce::String
     return nullptr;
 }
 
-namespace {
-// Docked macro-port widget layout (docs/macros/ports.md#how-a-port-is-drawn). Small
-// and fixed regardless of anything else on the canvas — the widget's own getWidth()/getHeight()
-// (set by ModuleComponent::layoutMacroPortWidget, called before this ever runs) decide how big;
-// this only decides WHERE.
-constexpr int kMacroPortDockGap = 6;     // clearance between a widget's inner edge and the hull
-constexpr int kMacroPortDockMarginY = 8; // clearance below the hull's own top edge for port #0
-constexpr int kMacroPortDockSpacing = 6; // vertical gap between two stacked ports on one side
-} // namespace
+std::pair<int, int> MacroGroupController::macroHullStripWidths(const juce::String& macroId) const {
+    const auto* macro = host_.getMacros().find(macroId);
+    if (macro == nullptr) {
+        const int empty = kMacroPortStripInset + kMacroPortStripPadding;
+        return {empty, empty};
+    }
+    return macroStripWidths(*macro, kMacroHullStripInnerJackRoom, kMacroHullStripMaxWidth);
+}
+
+juce::Rectangle<int> MacroGroupController::macroHullAddButtonBounds(const juce::String& macroId, bool isInput) const {
+    const auto hull = macroHullBounds(macroId);
+    if (hull.isEmpty())
+        return {};
+    const int size = (int)kMacroPortFooterButtonSize;
+    const int x =
+        isInput ? hull.getX() + (int)kMacroPortAddButtonInset : hull.getRight() - (int)kMacroPortAddButtonInset - size;
+    return {x, hull.getBottom() - (int)kMacroPortFooterButtonFromBottom, size, size};
+}
+
+juce::Rectangle<int> MacroGroupController::macroHullRemoveButtonBounds(const juce::String& macroId, bool isInput,
+                                                                       float zoom) const {
+    const auto* macro = host_.getMacros().find(macroId);
+    const auto hull = macroHullBounds(macroId);
+    if (macro == nullptr || hull.isEmpty() || !macroPortNamesVisibleAtZoom(zoom))
+        return {};
+    const bool hasPort = std::any_of(macro->ports.begin(), macro->ports.end(),
+                                     [isInput](const synth::MacroPort& p) { return p.isInput == isInput; });
+    if (!hasPort)
+        return {};
+    const int size = (int)kMacroPortFooterButtonSize;
+    const int x = isInput ? hull.getX() + (int)kMacroPortRemoveButtonInset
+                          : hull.getRight() - (int)kMacroPortRemoveButtonInset - size;
+    return {x, hull.getBottom() - (int)kMacroPortFooterButtonFromBottom, size, size};
+}
+
+std::optional<MacroGroupController::HullPortButtonHit>
+MacroGroupController::macroHullPortButtonAt(juce::Point<int> canvasPos, float zoom) const {
+    for (const auto& macro : host_.getMacros().getAll()) {
+        if (macro.collapsed)
+            continue;
+        for (const bool isInput : {true, false}) {
+            if (macroHullAddButtonBounds(macro.id, isInput).contains(canvasPos))
+                return HullPortButtonHit{macro.id, isInput, true};
+            if (macroHullRemoveButtonBounds(macro.id, isInput, zoom).contains(canvasPos))
+                return HullPortButtonHit{macro.id, isInput, false};
+        }
+    }
+    return std::nullopt;
+}
+
+std::vector<MacroGroupController::MacroHullPort>
+MacroGroupController::macroHullPortLayout(const juce::String& macroId) const {
+    std::vector<MacroHullPort> result;
+    const auto* macro = host_.getMacros().find(macroId);
+    const auto hull = macroHullBounds(macroId);
+    if (macro == nullptr || hull.isEmpty() || macro->ports.empty())
+        return result;
+
+    auto ports = macro->ports;
+    std::sort(ports.begin(), ports.end(),
+              [](const synth::MacroPort& a, const synth::MacroPort& b) { return a.order < b.order; });
+
+    // Same widths computeMacroHullBounds widened the hull by, so strips and hull always agree.
+    const auto [inW, outW] = macroStripWidths(*macro, kMacroHullStripInnerJackRoom, kMacroHullStripMaxWidth);
+    const int firstRowTop = hull.getY() + kMacroChipTopMargin + kMacroPortRowsBelowChip;
+    int nextRow[2] = {0, 0}; // [output, input]
+    for (const auto& port : ports) {
+        MacroHullPort entry;
+        entry.nodeUuid = port.nodeUuid;
+        entry.isInput = port.isInput;
+        entry.rows = macroPortRowCountIn(host_, port.nodeUuid);
+        int& row = nextRow[port.isInput ? 1 : 0];
+        entry.row = row;
+        row += entry.rows;
+
+        const int top = firstRowTop + entry.row * kMacroPortRowHeight;
+        const int height = entry.rows * kMacroPortRowHeight;
+        const int jackY = top + kMacroPortRowHeight / 2;
+        // The widget overhangs the hull border by 5px so its boundary jack (5px in from its own
+        // edge) sits exactly on the border; the interior jack sits 5px inside the strip's inner edge.
+        if (port.isInput) {
+            entry.widgetBounds = {hull.getX() - 5, top, inW + 5, height};
+            entry.outerJack = {hull.getX(), jackY};
+            entry.innerJack = {hull.getX() + inW - 5, jackY};
+        } else {
+            entry.widgetBounds = {hull.getRight() - outW, top, outW + 5, height};
+            entry.outerJack = {hull.getRight(), jackY};
+            entry.innerJack = {hull.getRight() - outW + 5, jackY};
+        }
+        result.push_back(entry);
+    }
+    return result;
+}
 
 void MacroGroupController::dockMacroPortWidgets() {
     std::unordered_map<uint32_t, ModuleComponent*> compByNodeUid;
@@ -342,32 +496,16 @@ void MacroGroupController::dockMacroPortWidgets() {
         if (macro.collapsed || macro.ports.empty())
             continue; // hidden with the rest of its members; the collapsed CARD draws its jacks
 
-        const auto hull = macroHullBounds(macro.id);
-        if (hull.isEmpty())
-            continue;
-
-        auto ports = macro.ports;
-        std::sort(ports.begin(), ports.end(),
-                  [](const synth::MacroPort& a, const synth::MacroPort& b) { return a.order < b.order; });
-
-        int inputY = hull.getY() + kMacroPortDockMarginY;
-        int outputY = hull.getY() + kMacroPortDockMarginY;
-        for (const auto& port : ports) {
-            auto nodeId = resolveMemberNodeId(port.nodeUuid);
+        for (const auto& entry : macroHullPortLayout(macro.id)) {
+            auto nodeId = resolveMemberNodeId(entry.nodeUuid);
             auto it = compByNodeUid.find(nodeId.uid);
             if (it == compByNodeUid.end())
                 continue;
-            auto* comp = it->second;
 
-            const int x =
-                port.isInput ? hull.getX() - kMacroPortDockGap - comp->getWidth() : hull.getRight() + kMacroPortDockGap;
-            const int y = port.isInput ? inputY : outputY;
-            (port.isInput ? inputY : outputY) += comp->getHeight() + kMacroPortDockSpacing;
-
-            comp->setTopLeftPosition(x, y);
+            it->second->setBounds(entry.widgetBounds);
             if (auto* node = graph.getNodeForId(nodeId)) {
-                node->properties.set("x", x);
-                node->properties.set("y", y);
+                node->properties.set("x", entry.widgetBounds.getX());
+                node->properties.set("y", entry.widgetBounds.getY());
             }
         }
     }

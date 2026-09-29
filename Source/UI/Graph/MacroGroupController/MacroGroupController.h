@@ -78,7 +78,25 @@ public:
         synth::MacroPortKind kind = synth::MacroPortKind::AudioCV;
         juce::String name;
         juce::Point<int> jackPos;           // card-local
+        int row = 0;                        // index within its side, 0 = topmost
+        juce::Rectangle<int> labelArea;     // card-local; where the name is painted when names are visible
         std::optional<juce::Colour> colour; // unset -> kind tint fallback
+    };
+
+    /** One port's docked widget on an OPEN macro, in canvas coordinates. Rows are 16px, from just
+     *  below the chip row, one column per side; a Stereo port takes two rows (`rows`). The
+     *  widget straddles the hull border by 5px so `outerJack` (the boundary jack, where cables
+     *  from outside land) sits exactly on the border and `innerJack` on the strip's inner edge.
+     *  The ONE layout for the open macro: dockMacroPortWidgets(), cable anchoring and hit-testing
+     *  read it (docs/macros/ports.md#how-a-port-is-drawn). */
+    struct MacroHullPort {
+        juce::String nodeUuid;
+        bool isInput = false;
+        int row = 0;  // first row index within its side
+        int rows = 1; // 2 for a Stereo port
+        juce::Rectangle<int> widgetBounds;
+        juce::Point<int> outerJack;
+        juce::Point<int> innerJack;
     };
 
     /** Tri-state read of a macro's members' bypass (or mute) state (docs/macros/ports.md#bypass-and-mute). See
@@ -202,6 +220,29 @@ public:
     // Non-test-named twin of getMacroCardForTest -- the recolour finder runs on a real user path, not headless.
     MacroCardComponent* getMacroCard(const juce::String& macroId);
     std::vector<MacroCardPort> macroCardPortLayout(const juce::String& macroId) const;
+    /** {input strip width, output strip width} of the collapsed card, card-local pixels. Longest port name on the
+     *  side plus padding; a side with no ports is the bare minimum. Never depends on zoom. */
+    std::pair<int, int> macroCardStripWidths(const juce::String& macroId) const;
+    /** {input, output} sidebar strip widths of the OPEN macro (name + padding + room for the inner jack). */
+    std::pair<int, int> macroHullStripWidths(const juce::String& macroId) const;
+    /** Canvas-space bounds of the '+' / '-' buttons at the foot of an open macro's strips. '-' is empty when
+     *  that side has no port or `zoom` (the canvas scale) hides names. Empty for a collapsed macro. */
+    juce::Rectangle<int> macroHullAddButtonBounds(const juce::String& macroId, bool isInput) const;
+    juce::Rectangle<int> macroHullRemoveButtonBounds(const juce::String& macroId, bool isInput, float zoom) const;
+    struct HullPortButtonHit {
+        juce::String macroId;
+        bool isInput = false;
+        bool isAdd = true;
+    };
+    /** The hull '+' / '-' under `canvasPos`, if any. Same shape as macroCollapseButtonAt. */
+    std::optional<HullPortButtonHit> macroHullPortButtonAt(juce::Point<int> canvasPos, float zoom) const;
+    /** The kind/shape choice menu behind every '+' (collapsed card and open hull), RETURNED not shown. */
+    juce::PopupMenu buildAddPortMenu(const juce::String& macroId, bool isInput);
+    /** Deletes the bottom port (highest MacroPort::order) on one side, through deleteMacroPortManually. */
+    void deleteBottomMacroPort(const juce::String& macroId, bool isInput);
+    /** Every port of an EXPANDED macro, docked as rows inside its hull's sidebars. Empty for a
+     *  collapsed macro or one with no ports. */
+    std::vector<MacroHullPort> macroHullPortLayout(const juce::String& macroId) const;
     std::optional<MacroCardPort> macroCardPortForPoint(const juce::String& macroId,
                                                        juce::Point<int> cardLocalPos) const;
     MacroPortOwner macroPortOwnerFor(juce::AudioProcessorGraph::NodeID nodeId) const;
@@ -324,6 +365,7 @@ public:
 
 private:
     GraphCanvasHost& host_;
+    JUCE_DECLARE_WEAK_REFERENCEABLE(MacroGroupController)
 
     // ---- Internal-only helpers (no cross-file caller outside this class; original visibility
     // on GraphEditor was private and stays private here) ----

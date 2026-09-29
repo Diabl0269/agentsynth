@@ -157,27 +157,18 @@ public:
      *  constant so they cannot drift again. */
     static constexpr int kPortGutterHeaderHeight = 38;
 
-    /** Compact docked-widget geometry for the four macro-port types (Macro In/Out, Macro MIDI
-     *  In/Out — docs/macros/ports.md#how-a-port-is-drawn). Shared with
-     *  GraphEditor::estimateModuleSize (its own drag-ghost estimate must match the real widget) and
-     *  GraphEditor::dockMacroPortWidgets (the widget's docked position reads its live getWidth/
-     *  getHeight, sized from these), the same "one constant so two files cannot drift apart"
-     *  reasoning kPortGutterHeaderHeight's own comment states.
-     *
-     *  The size is a slim edge chip, not a small module card. The values below are a
-     *  tuned point, not a formula — see paintMacroPortWidget()'s own comment for the matching jack/
-     *  font/corner-radius cuts, and MacroPortWidgetTests.cpp's
-     *  `MacroPortWidgetG4.RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize` for the
-     *  constraint that actually bounds how far the width could shrink: a realistic port name
-     *  ("Delay 1 Audio") has to still fit un-truncated. */
-    static constexpr int kMacroPortWidgetWidth = 92;
-    /** y of the first (or only) jack row, and the fixed y a MIDI port's single jack sits at. */
-    static constexpr int kMacroPortWidgetHeaderY = 13;
-    /** Vertical spacing between stacked jack rows — only Stereo (2 visible jacks a side) uses a
-     *  second row; Mono, Poly-N and MIDI are always exactly one row. */
-    static constexpr int kMacroPortWidgetRowStep = 15;
-    /** Clearance reserved below the last jack row. */
-    static constexpr int kMacroPortWidgetBottomPad = 8;
+    /** Docked-widget row geometry for the four macro-port types (Macro In/Out, Macro MIDI In/Out —
+     *  docs/macros/ports.md#how-a-port-is-drawn). A widget is one 16px row per jack row inside its
+     *  macro's sidebar strip; its size is set by GraphEditor::dockMacroPortWidgets from
+     *  MacroGroupController::macroHullPortLayout, so only the row geometry lives here. Equal to
+     *  detail::kMacroPortRowHeight (static_assert in ModuleComponentLayout.cpp), which this header
+     *  cannot include. */
+    static constexpr int kMacroPortWidgetRowStep = 16;
+    /** y of the first (or only) jack row's centre, and the fixed y a MIDI port's single jack sits at. */
+    static constexpr int kMacroPortWidgetHeaderY = kMacroPortWidgetRowStep / 2;
+    /** Inset of a widget's jacks from its left/right edge: the boundary jack sits on the hull border
+     *  and the widget overhangs the hull by exactly this much. */
+    static constexpr int kMacroPortWidgetJackInset = 5;
 
     std::optional<Port> getPortForPoint(juce::Point<int> localPoint);
     juce::Point<int> getPortCenter(int index, bool isInput);
@@ -610,12 +601,14 @@ private:
 
     // Compact docked widget for the four macro-port types
     // (docs/macros/ports.md#how-a-port-is-drawn) — no header chrome, no body. layoutMacroPortWidget sizes the
-    // card from the module's own visible jack count (updateLayout's early branch); its actual
-    // canvas POSITION is decided separately, by GraphEditor::dockMacroPortWidgets against the
-    // owning macro's hull. paintMacroPortWidget draws the tinted row, its jacks and the resolved
-    // MacroPort name (paint()'s early branch).
+    // card's height from the module's own visible jack count (updateLayout's early branch); its
+    // canvas POSITION and width are decided separately, by GraphEditor::dockMacroPortWidgets against the
+    // owning macro's hull sidebar. paintMacroPortWidget draws the jacks and the resolved MacroPort name
+    // (paint()'s early branch); the strip behind it is the canvas's.
     void layoutMacroPortWidget();
     void paintMacroPortWidget(juce::Graphics& g);
+    // False when the canvas zoom is below the names threshold (dots only; the tooltip is the name).
+    bool macroPortNamesShown() const;
 
     // The pending-drop-target ring and the live Serum-style modulation rings on knobs. Split out of
     // paint() (which was at the function-size ratchet's ceiling) rather than grown further.

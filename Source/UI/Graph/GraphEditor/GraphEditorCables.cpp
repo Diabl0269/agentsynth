@@ -11,7 +11,7 @@
 
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace detail;
@@ -442,9 +442,9 @@ void GraphEditor::reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>&
     //     both legs of a pass-through wire on the card's TOP edge when the other endpoint happened
     //     to sit above the card. The Y coordinate still comes from that facing projection (so
     //     several crossing cables keep spreading vertically instead of collapsing onto one pixel)
-    //     but is clamped into the card's jack band, and X lands exactly on the boundary (not
-    //     inset like a real port jack) so this anchor never sits under a case-(a) port dot on the
-    //     same edge; that case is expected (docs/macros/ports.md#cable-rendering-across-the-boundary), not an error.
+    //     but is clamped into the card's port-row span (first row top to the strip footer), and X lands exactly on the
+    //     boundary (not inset like a real port jack) so this anchor never sits under a case-(a) port dot on the same
+    //     edge; that case is expected (docs/macros/ports.md#cable-rendering-across-the-boundary), not an error.
     // The rectangle/jack projected against is macroCableAnchorBounds(macro) — the LIVE
     // MacroCardComponent's bounds while a card exists, not the persisted `macro.bounds`, which is
     // only written back on drop (finalizeMacroCardDrag) and would leave a cable pointing at the
@@ -478,8 +478,8 @@ void GraphEditor::reanchorCablesAroundCollapsedMacros(std::vector<VisibleCable>&
         // X is forced to the card's actual left/right edge -- not the port jacks' inset -- so an
         // edge anchor and a port dot on the same side never land on the same pixel.
         auto directionalEdgeAnchor = [](juce::Rectangle<int> cardBounds, juce::Point<float> facing, bool onLeftEdge) {
-            const float y = juce::jlimit((float)(cardBounds.getY() + kMacroCardJackBandTop),
-                                         (float)(cardBounds.getY() + kMacroCardJackBandBottom), facing.y);
+            const float y = juce::jlimit((float)(cardBounds.getY() + kMacroPortRowsTop),
+                                         (float)(cardBounds.getBottom() - kMacroPortStripFooter), facing.y);
             const float x = onLeftEdge ? (float)cardBounds.getX() : (float)cardBounds.getRight();
             return juce::Point<float>(x, y);
         };
@@ -779,6 +779,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
 
     // ---- Expanded-macro grouping hull (see paintExpandedMacroHulls
     // above, for what it draws and why it's a free function rather than inlined here) ----
+    paintMacroPortStrips(g, editor, getTransform().getScaleFactor()); // under the widgets, under the outline
     paintExpandedMacroHulls(g, editor);
 
     // Draw Line being dragged

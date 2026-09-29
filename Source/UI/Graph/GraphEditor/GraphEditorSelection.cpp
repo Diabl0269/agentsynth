@@ -11,7 +11,7 @@
 #include "CanvasAccessibilityClip.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleStepOrder.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 // ---------------------------------------------------------------------------------------
 // Selection

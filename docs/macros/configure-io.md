@@ -22,6 +22,11 @@ only. A MIDI row hides its shape controls entirely rather than showing them disa
 shape or poly concept applies to a MIDI port. The poly voice count is labelled and shown only for a
 Poly shape.
 
+The '+' at the foot of a macro's port strip reaches the same four choices without opening the dialog:
+the collapsed card's '+' and the open macro's hull '+' both build the menu with
+`MacroGroupController::buildAddPortMenu`, and the strip's '-' removes the bottom port on that side
+([`docs/layout/macro-cards.md`](../layout/macro-cards.md#direct-port-addremove-from-the-collapsed-card)).
+
 `GraphEditor::createMacroPortFromDroppedCable` is the separate convenience path for a cable dropped
 on a collapsed card's body; it is Mono only and wires the external side only
 ([`docs/macros/ports.md`](ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed)).
@@ -74,7 +79,7 @@ sections below, closes that: a re-colour now repaints the jack on *both* the col
 docked widget in real time, and the picker previews it live during the drag). Right-click resets to the kind-tint default
 (`onChangePortColour(nodeUuid, std::nullopt)`).
 
-The colour flows through to `GraphEditor::macroCardPortLayout`'s `MacroCardPort::colour`, so a
+The colour flows through to `MacroGroupController::macroCardPortLayout`'s `MacroCardPort::colour`, so a
 coloured port's jack dot on the collapsed card matches the colour picked here, and
 `ModuleComponent::resolveMacroPortJackColour` reads it for the expanded docked widget too, so an
 expanded widget and its own collapsed card read a coloured port's jack identically. Unset falls back

@@ -13,8 +13,9 @@
 
 #include "GraphEditor.h"
 
+#include "GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 // Syncs macro card components with `macros` and the visibility of their (possibly hidden)
@@ -55,7 +56,12 @@ void GraphEditor::syncMacroCards() {
             card = cards.add(new MacroCardComponent(*this, macro.id));
             content.addAndMakeVisible(card);
         }
-        card->setBounds(macro.bounds);
+        // The card's height is derived from its port count (one 16px row per port on the busier
+        // side), never persisted: macro.bounds keeps whatever height it was saved with.
+        int inputs = 0, outputs = 0;
+        for (const auto& p : macro.ports)
+            (p.isInput ? inputs : outputs)++;
+        card->setBounds(macro.bounds.withHeight(detail::macroCardHeightFor(juce::jmax(inputs, outputs))));
         card->setVisible(macro.collapsed);
     }
 

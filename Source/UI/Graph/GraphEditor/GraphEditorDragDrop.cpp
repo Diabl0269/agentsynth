@@ -20,11 +20,12 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "CanvasAccessibilityClip.h"
+#include "GraphEditorInternal.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroControlModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 // Returns an estimated (w, h) footprint for a module type name.
 // Used when the component does not yet exist (e.g. on drag-drop before layout).
@@ -205,22 +206,13 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
         // +4: the button row has a 6px gap below it.
         return {280, 135};
-    if (typeName == "Macro In" || typeName == "Macro Out")
-        // Not a full module card — a small docked widget (ModuleComponent::layoutMacroPortWidget), constructed Mono
-        // by default (one jack row) — the port-creation flow grows it to two rows for Stereo via the ordinary
-        // component re-layout, same as any other jack-count change. Library-less (the "Configure I/O" modal places
-        // it). Measured against the real card by
-        // MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate (see
-        // docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed and
-        // docs/macros/configure-io.md#adding-a-port).
-        return {ModuleComponent::kMacroPortWidgetWidth,
-                ModuleComponent::kMacroPortWidgetHeaderY + ModuleComponent::kMacroPortWidgetBottomPad};
-    if (typeName == "Macro MIDI In" || typeName == "Macro MIDI Out")
-        // One MIDI jack row, no audio jacks and no body controls — same compact widget, always
-        // one row (MIDI has no Mono/Stereo/Poly-N shape to grow). Measured against the real card
-        // by MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate.
-        return {ModuleComponent::kMacroPortWidgetWidth,
-                ModuleComponent::kMacroPortWidgetHeaderY + ModuleComponent::kMacroPortWidgetBottomPad};
+    if (typeName == "Macro In" || typeName == "Macro Out" || typeName == "Macro MIDI In" ||
+        typeName == "Macro MIDI Out")
+        // A docked port widget is one 16px sidebar row (two for Stereo, which grows through the ordinary component
+        // re-layout) and takes the strip's width when docked, so this is a NOMINAL size: the same first-layout default
+        // ModuleComponent::layoutMacroPortWidget uses, before the dock sets the real width. Library-less (the
+        // "Configure I/O" modal places it).
+        return {detail::kMacroPortStripInset + 60 + detail::kMacroPortStripPadding, detail::kMacroPortRowHeight};
     return {280, 360};
 }
 

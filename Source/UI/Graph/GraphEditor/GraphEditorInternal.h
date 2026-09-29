@@ -39,24 +39,64 @@ inline synth::ui::ModuleCategory categoryForNode(juce::AudioProcessorGraph::Node
 }
 
 // ---- Card jacks (docs/macros/ports.md#cable-rendering-across-the-boundary) ------------------
-// The collapsed card's fixed footprint — deliberately independent of however large or scattered
-// the group it stands in for is; that is the whole point of collapsing. Matches a standard
-// module card's width so it sits comfortably on the same grid. Hoisted up here (rather than left
-// next to macroCardPortLayout(), where it originally lived) because buildVisibleCables()'s
-// directional edge-anchor treatment needs the jack band to clamp a
-// no-port-involved boundary cable's Y into, same as a real port jack's Y is placed in.
+// The collapsed card's minimum height — deliberately independent of however large or scattered
+// the group it stands in for is; that is the whole point of collapsing. The card grows past it only
+// to fit its port rows (macroCardHeightFor). Its width matches a standard module card's so it sits
+// comfortably on the same grid.
 inline constexpr int kMacroCardHeight = 90;
-// The vertical band jacks lay out in: below the title row (drawn at local y=6..26,
-// MacroCardComponent::getTitleRowBounds) and above the member-count line (the card's bottom
-// 14px, MacroCardComponent::paint), so a jack never collides with either piece of text.
-inline constexpr int kMacroCardJackBandTop = 30;
-inline constexpr int kMacroCardJackBandBottom = kMacroCardHeight - 16;
 // Same inset from the card's left/right edge ModuleComponent's own MIDI jacks use on an
 // identically-wide kSingleWidth card (x=10 / getWidth()-10) — a macro's boundary jacks read like
 // any other module's.
 inline constexpr int kMacroCardJackInsetX = 10;
 // Click tolerance, matching ModuleComponent::getPortForPoint's own `< 10`.
 inline constexpr float kMacroCardJackHitRadius = 10.0f;
+
+// ---- Macro port sidebars (docs/macros/ports.md#how-a-port-is-drawn) ---------------------------
+// One port per 16px row, on both the collapsed card and the open macro. A strip's width is the
+// longest port name on its side plus padding and NEVER depends on zoom: zoom only decides whether
+// names (and the '-' button) are painted, so every layout below is zoom-independent.
+inline constexpr int kMacroPortRowHeight = 16;
+inline constexpr int kMacroPortRowsTop = 30;           // first row's top on the card, below the title row
+inline constexpr int kMacroPortStripFooter = 22;       // room below the last row for the '+'/'-' pair
+inline constexpr int kMacroPortStripInset = 18;        // name x from the strip's outer edge (jack at 10, + 8)
+inline constexpr int kMacroPortStripPadding = 8;       // after the longest name
+inline constexpr int kMacroHullStripInnerJackRoom = 8; // open macro only: room for the inner jack
+// Widest a strip gets; a longer name is shortened with an ellipsis. On the 280px card two capped
+// strips still leave 100px for the title, preview and member count.
+inline constexpr int kMacroCardStripMaxWidth = 90;
+inline constexpr int kMacroHullStripMaxWidth = 140;
+// Height reserved above an open macro's members for its name chip row, and the port rows' first-row
+// offset from the hull's top (the rows start 6px below the chip row).
+inline constexpr int kMacroChipRowHeight = 24;
+inline constexpr int kMacroPortRowsBelowChip = 6;
+inline constexpr float kMacroPortNamesHiddenBelowZoom = 0.5f;
+inline constexpr float kMacroPortNameFontSize = 9.5f;
+/** Card height that fits `portsOnBusiestSide` rows, never below the fixed footprint. */
+inline int macroCardHeightFor(int portsOnBusiestSide) {
+    return juce::jmax(kMacroCardHeight,
+                      kMacroPortRowsTop + portsOnBusiestSide * kMacroPortRowHeight + kMacroPortStripFooter);
+}
+inline int macroPortStripWidthFor(float longestNamePx, int extra = 0) {
+    return kMacroPortStripInset + (int)std::ceil(longestNamePx) + kMacroPortStripPadding + extra;
+}
+inline bool macroPortNamesVisibleAtZoom(float zoom) { return zoom >= kMacroPortNamesHiddenBelowZoom; }
+inline constexpr float kMacroPortFooterButtonSize = 8.0f;
+inline constexpr float kMacroPortFooterButtonFromBottom = 12.0f; // button top, up from the strip's bottom edge
+inline constexpr float kMacroPortAddButtonInset = 4.0f;          // '+' x from its strip's outer edge
+inline constexpr float kMacroPortRemoveButtonInset = 16.0f;      // '-' x from its strip's outer edge
+/** The glyph shared by the '+' and '-' buttons on the card and on the open macro's hull: a ring, and one
+ *  horizontal stroke ('-') or a horizontal and a vertical one ('+'). */
+inline void paintMacroPortFooterButton(juce::Graphics& g, juce::Rectangle<float> b, juce::Colour colour, bool isAdd) {
+    g.setColour(colour);
+    g.drawEllipse(b, 1.2f);
+    const auto cross = b.reduced(b.getWidth() * 0.28f);
+    if (isAdd)
+        g.drawLine(cross.getCentreX(), cross.getY(), cross.getCentreX(), cross.getBottom(), 1.4f);
+    g.drawLine(cross.getX(), cross.getCentreY(), cross.getRight(), cross.getCentreY(), 1.4f);
+}
+/** Paints both sidebar strips and their '+'/'-' buttons for every expanded macro, under the port widgets
+ *  (GraphEditorMacroHullStrips.cpp). `zoom` is the content component's scale, deciding whether '-' shows. */
+void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom);
 
 /** True when a source channel carries a structural, absolute-valued signal rather than normalised
  *  modulation. Poly MIDI's pitch fan is raw Hz and its gate fan is a 0/1 trigger; neither should ever
