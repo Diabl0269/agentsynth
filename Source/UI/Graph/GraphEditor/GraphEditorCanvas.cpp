@@ -362,6 +362,10 @@ void GraphEditor::setModuleRasterFrozen(bool frozen) {
             comp->setRasterFrozen(frozen);
 }
 
+// While a zoom gesture is in flight every card's raster scale is pinned, so a wheel tick resamples
+// the cached images instead of re-rendering every panel + slider at a new scale. The gesture ends
+// kZoomSettleMs after the last zoom event and thaws with exactly one crisp re-render. Time-bounded
+// (docs/layout/animation.md#the-time-bounded-animation-rule).
 void GraphEditor::beginOrRefreshZoomGesture() {
     if (!zoomGestureActive) {
         zoomGestureActive = true;

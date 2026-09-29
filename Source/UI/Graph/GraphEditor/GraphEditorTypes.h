@@ -11,6 +11,9 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
+class MacroCardComponent;
+class ModuleComponent;
+
 namespace graph_editor_types {
 
 // ---- Locate Master -------------------------------------------------------------------------
@@ -88,6 +91,38 @@ struct VisibleCable {
     uint32_t destNodeId = 0;
     int destChannel = 0;
     bool landsOnKnob = false;
+};
+
+// ---- Macro auto-port preference ---------------------------------------------------------------
+// Tri-state; GraphEditorMacroPrompts.cpp's requestGroupSelectionIntoMacro() explains the persistence.
+enum class MacroAutoPortPreference { Unset, AutoCreatePorts, LeaveCablesAsIs };
+
+// ---- Macro port recolour ----------------------------------------------------------------------
+// The two surfaces that draw a macro port's jack; card/widget are null when the macro is
+// collapsed/absent.
+struct MacroPortRecolourTargets {
+    MacroCardComponent* card = nullptr;
+    ModuleComponent* widget = nullptr;
+};
+
+// ---- Hover correlation ------------------------------------------------------------------------
+// The modulation target (destination node + RAW channel) correlated with a hover in EITHER
+// direction: hovering a cable that lands on a knob, or hovering the knob/ring itself. Cable paint
+// treats it like the hovered cable id; ModuleComponent's ring paint reads it back to highlight the
+// ring. One shared piece of state, since both directions mean "this routing is what the user is
+// looking at". docs/modules/modulation.md#modulation-rings-on-knobs.
+struct HoveredModTarget {
+    juce::AudioProcessorGraph::NodeID nodeId;
+    int channel = 0;
+    bool operator==(const HoveredModTarget& o) const noexcept { return nodeId == o.nodeId && channel == o.channel; }
+};
+
+// ---- Alignment guides -------------------------------------------------------------------------
+// During drag previews, guide positions stored for visual feedback.
+struct AlignmentGuide {
+    juce::Point<float> start; // line start point (canvas coords)
+    juce::Point<float> end;   // line end point (canvas coords)
+    int type;                 // 0=left,1=right,2=top,3=bottom,4=centerX,5=centerY
 };
 
 } // namespace graph_editor_types
