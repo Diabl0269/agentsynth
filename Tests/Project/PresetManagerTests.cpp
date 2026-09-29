@@ -101,7 +101,7 @@ TEST(PresetManagerTest, PresetNamesMatchPresetList) {
  */
 namespace {
 
-// Mirror the estimateModuleSize table from GraphEditor.cpp (§6.3).
+// Mirror the estimateModuleSize table from GraphEditor.cpp (docs/layout/module-card.md#width-buckets).
 // Keep in sync with GraphEditor.cpp — the AllFactoryPresetsLoadWithoutOverlap test
 // relies on matching sizes here and in PresetManager.cpp.
 // Footprints in canvas pixels (w, h).
@@ -146,7 +146,7 @@ TEST(PresetManagerTest, AllFactoryPresetsLoadWithoutOverlap) {
 
             // Attenuverters are not ModuleComponents and have no bounding box in the
             // canvas layout (they render as a small inline knob). Skip them so they
-            // don't generate false-positive collision failures. (§6.5 Risk #14)
+            // don't generate false-positive collision failures.
             if (proc->getName().containsIgnoreCase("Attenuverter"))
                 continue;
 

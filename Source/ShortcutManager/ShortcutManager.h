@@ -746,8 +746,8 @@ private:
             {"focusTimeline", ShortcutCategory::General},
             {"focusLibrary", ShortcutCategory::General},
             {"focusLibrarySearch", ShortcutCategory::General},
-            // Transport verbs promoted to command-dispatched actions (docs/control/midi-remote.md
-            // §4.9's prerequisite) -- deliberately UNBOUND by default (see resetToDefaults()),
+            // Transport verbs promoted to command-dispatched actions (the prerequisite for
+            // docs/control/midi-remote.md#action-targets) -- deliberately UNBOUND by default (see resetToDefaults()),
             // unlike every other row above. They exist as command/MIDI-Remote targets first; a
             // user may still rebind one in Settings. "transportTogglePlayStop" is not here: it is
             // a pure alias id resolved by AppCommands::getCommandForAction straight to

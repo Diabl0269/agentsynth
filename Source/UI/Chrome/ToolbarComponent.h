@@ -3,7 +3,7 @@
 #include <array>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// ToolbarComponent  §2.2
+// ToolbarComponent  (docs/layout/chrome.md#toolbar)
 // FlexBox-based responsive top strip. Owns NO buttons itself — the buttons are direct
 // children of MainComponent (so existing getChildren() accessors keep working). This
 // component only paints the toolbar background and positions the buttons passed via
