@@ -27,7 +27,7 @@
 #include "PatchDocument.h"
 #include "ProjectBundle.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

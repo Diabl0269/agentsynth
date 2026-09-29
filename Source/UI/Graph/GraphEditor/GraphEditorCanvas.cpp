@@ -14,7 +14,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/FocusRegion.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace detail;

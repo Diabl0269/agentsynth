@@ -253,12 +253,13 @@ set(APPUI_SOURCES
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelOrphans.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelUndo.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelHandshake.cpp
-    Source/UI/Macros/MacroCardComponent.cpp
+    Source/UI/Macros/MacroCardComponent/MacroCardComponent.cpp
+    Source/UI/Macros/MacroCardComponent/MacroCardComponentPorts.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogTestSeams.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogAutoPortPrompt.cpp
-    Source/UI/Macros/MacroCardComponent.h
+    Source/UI/Macros/MacroCardComponent/MacroCardComponent.h
     Source/UI/ModuleViews/FrequencyResponseComponent.h
     Source/UI/ModuleViews/FrequencyGrid.h
     Source/UI/ModuleViews/EQCurveComponent.h

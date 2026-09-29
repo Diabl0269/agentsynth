@@ -24,7 +24,7 @@
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 // True when memberUuid's macro is a mixer channel (synth::isChannelMacro) — a
 // const-callable query since getMacros() itself is non-const.

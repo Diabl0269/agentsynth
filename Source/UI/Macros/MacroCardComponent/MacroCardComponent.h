@@ -12,6 +12,9 @@
 #include <vector>
 
 class GraphEditor; // Forward declaration
+namespace synth::theme {
+struct Colors;
+}
 
 /** The collapsed on-canvas representation of a synth::Macro — "a macro reads as one
  *  card on the canvas". One instance per collapsed macro, owned by GraphEditor's
@@ -97,6 +100,9 @@ public:
 
     // Test accessors for the '+'/'x' hit-testing below — same *ForTest pattern as above.
     juce::Rectangle<float> getAddPortButtonBoundsForTest(bool isInput) const { return getAddPortButtonBounds(isInput); }
+    juce::Rectangle<float> getRemovePortButtonBoundsForTest(bool isInput) const {
+        return getRemovePortButtonBounds(isInput);
+    }
     juce::String getHoveredPortUuidForTest() const { return hoveredPortUuid_.value_or(juce::String()); }
 
 private:
@@ -133,8 +139,24 @@ private:
      *  computing the rect separately. */
     juce::Rectangle<int> getTitleRowBounds() const;
 
-    // The '+' button's bounds for the given side (footer row) — see the .cpp definition.
+    // The middle column between the two port strips (title, preview, count), card-local.
+    juce::Rectangle<int> getContentArea() const;
+
+    // Both strips, the jacks, the names, the '+'/'-' pair and the hovered-jack cross
+    // (MacroCardComponentPorts.cpp).
+    void paintPortStrips(juce::Graphics& g, const synth::Macro& macro, const synth::theme::Colors& themeColors);
+
+    // False when the canvas zoom is below the names threshold: the strips keep their width but
+    // draw dots only (and no '-').
+    bool portNamesVisible() const;
+
+    // The '+' / '-' buttons at the foot of each strip. '-' is empty when the side has no port or
+    // names are hidden. Both are card-local.
     juce::Rectangle<float> getAddPortButtonBounds(bool isInput) const;
+    juce::Rectangle<float> getRemovePortButtonBounds(bool isInput) const;
+
+    // Deletes the bottom port on one side, through the same path the hovered jack's cross uses.
+    void removeBottomPort(bool isInput);
 
     // The port the mouse rests over, kept fresh by mouseMove()/mouseExit() — see those.
     std::optional<juce::String> hoveredPortUuid_;

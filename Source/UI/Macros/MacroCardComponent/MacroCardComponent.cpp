@@ -3,9 +3,8 @@
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
-// The '+'/'x' geometry shares the collapsed card's jack-band constants with
-// MacroGroupControllerGeometry.cpp (macroCardPortLayout) rather than re-deriving them — see
-// GraphEditorInternal.h's own comment for why they live there.
+// The port-strip constants live in GraphEditorInternal.h, shared with
+// MacroGroupControllerGeometry.cpp (macroCardPortLayout) rather than re-derived here.
 using namespace detail;
 
 MacroCardComponent::MacroCardComponent(GraphEditor& owner, juce::String macroId)
@@ -33,7 +32,11 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     if (nameEditor != nullptr)
         return; // editor covers the name; member-count line still reads fine underneath
 
-    auto textArea = getLocalBounds().reduced(10, 6);
+    const auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    static const synth::theme::Colors fallbackColors{};
+    const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+
+    auto textArea = getContentArea();
     textArea.removeFromTop(20); // the title row itself is drawn via getTitleRowBounds() below
     const auto titleRow = getTitleRowBounds();
     g.setColour(juce::Colours::white);
@@ -50,9 +53,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     // small "minimap" of the member module boxes — their LIVE canvas bounds (still tracking, even
     // hidden — see syncMacroCards), scaled to fit the strip left between the title and the count
     // line, one filled rect per member coloured by module CATEGORY so it echoes what expanding
-    // the macro would show. Deliberately drawn INSIDE the existing kMacroCardHeight footprint:
-    // Macro::bounds is persisted, so growing the card would give already-saved macros a second
-    // size on the same canvas.
+    // the macro would show. Drawn in the middle column between the two port strips.
     const auto previewArea = textArea.reduced(0, 2);
     if (!previewArea.isEmpty()) {
         const auto members = owner.getMacroController().macroMemberPreviews(macroId);
@@ -80,83 +81,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     }
     // ---- End content preview ----
 
-    // ---- Port jacks (docs/macros/ports.md#cable-rendering-across-the-boundary) ------------------
-    // One jack per configured port — inputs down the left edge, outputs down the right, from the
-    // SAME owner.getMacroController().macroCardPortLayout() that this card's own hit-testing (endConnectionDrag's jack
-    // check) and buildVisibleCables()'s boundary-cable anchoring both read, so the drawn dot is
-    // never anywhere those two disagree about. Colour matches ModuleComponent::paint's own jack
-    // convention verbatim (its comment: "Audio-signal jacks (MIDI in/out) -> audioWire;
-    // mod-capable input/output jacks -> accent") — audioWire for a MIDI port's jack, accent for an
-    // AudioCV one, not the *Wire-at-a-paint-site the CABLE-colour invariant forbids
-    // (Source/UI/CLAUDE.md): a JACK dot is not a cable, and this follows the one jack-painting
-    // site in the codebase that already makes this exact call. A port with a user colour
-    // (set from the Configure I/O modal's swatch) draws its jack in THAT colour instead — still
-    // never a *Wire token read at a paint site, since the fallback is the only place this reads
-    // one, and only when the port has no custom colour of its own.
-    const auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    static const synth::theme::Colors fallbackColors{};
-    const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
-    {
-        for (const auto& port : owner.getMacroController().macroCardPortLayout(macro->id)) {
-            const juce::Colour kindTint =
-                port.kind == synth::MacroPortKind::Midi ? themeColors.audioWire : themeColors.accent;
-            // An armed preview is the jack's colour; else the stored user colour, else the kind tint.
-            g.setColour(resolvePortJackColour(port.nodeUuid, port.colour, kindTint));
-            g.fillEllipse((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
-
-            // Port name (docs/macros/ports.md#cable-rendering-across-the-boundary): left-aligned inside the left edge
-            // for an input, right-aligned inside the right edge for an output — mirroring the docked widget's own
-            // left/right convention (docs/macros/ports.md#how-a-port-is-drawn) so an expanded and collapsed macro read
-            // a port's name the same way. Elided (drawFittedText, one line) if the card is too narrow for the full
-            // name.
-            if (port.name.isNotEmpty()) {
-                g.setColour(juce::Colours::white.withAlpha(0.85f));
-                g.setFont(juce::Font(juce::FontOptions(9.5f)));
-                const int labelW = juce::jmax(20, getWidth() / 2 - 16);
-                auto labelArea =
-                    port.isInput ? juce::Rectangle<int>(port.jackPos.x + 8, port.jackPos.y - 7, labelW, 14)
-                                 : juce::Rectangle<int>(port.jackPos.x - 8 - labelW, port.jackPos.y - 7, labelW, 14);
-                g.drawFittedText(port.name, labelArea,
-                                 port.isInput ? juce::Justification::centredLeft : juce::Justification::centredRight,
-                                 1);
-            }
-        }
-    }
-
-    // ---- '+' add-port affordance (docs/layout/macro-cards.md#direct-port-addremove-from-the-collapsed-card)
-    // ----
-    // One '+' per side, in the footer row beside the count text (getAddPortButtonBounds) — a
-    // fixed slot that exists regardless of port count, so it is always visible and never in the
-    // jack band macroCardPortLayout() lays ports out in. Drawn as lines, the same "no themed
-    // asset for one small affordance" idiom the expand chevron below already uses.
-    for (const bool isInput : {true, false}) {
-        const auto b = getAddPortButtonBounds(isInput);
-        g.setColour(themeColors.textMuted.withAlpha(0.75f));
-        g.drawEllipse(b, 1.2f);
-        const auto cross = b.reduced(b.getWidth() * 0.28f);
-        g.drawLine(cross.getCentreX(), cross.getY(), cross.getCentreX(), cross.getBottom(), 1.4f);
-        g.drawLine(cross.getX(), cross.getCentreY(), cross.getRight(), cross.getCentreY(), 1.4f);
-    }
-
-    // ---- Hovered port 'x' ------------
-    // Overlays the jack dot just drawn above while the mouse rests on it (hoveredPortUuid_,
-    // kept fresh by mouseMove()/mouseExit() — this Component has no child Button of its own for a
-    // jack to hover). mouseDown() re-checks the same hit-test before deleting.
-    if (hoveredPortUuid_.has_value()) {
-        for (const auto& port : owner.getMacroController().macroCardPortLayout(macro->id)) {
-            if (port.nodeUuid != *hoveredPortUuid_)
-                continue;
-            const auto dot =
-                juce::Rectangle<float>((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
-            g.setColour(themeColors.surface.withAlpha(0.9f));
-            g.fillEllipse(dot);
-            g.setColour(themeColors.error);
-            const auto cross = dot.reduced(dot.getWidth() * 0.22f);
-            g.drawLine(cross.getX(), cross.getY(), cross.getRight(), cross.getBottom(), 1.6f);
-            g.drawLine(cross.getX(), cross.getBottom(), cross.getRight(), cross.getY(), 1.6f);
-            break;
-        }
-    }
+    paintPortStrips(g, *macro, themeColors);
 
     const auto chevronBounds = getExpandButtonBounds();
 
@@ -226,47 +151,14 @@ juce::Rectangle<float> MacroCardComponent::getToggleBadgeBounds(bool mute) const
     return juce::Rectangle<float>(x, y, kToggleBadgeSize, kToggleBadgeSize);
 }
 
-juce::Rectangle<float> MacroCardComponent::getAddPortButtonBounds(bool isInput) const {
-    // At the strip's foot: kMacroPortStripFooter (22px) below the last row a full card holds, so
-    // the button is never on a jack row by construction. The card's height already grows with its
-    // port count (macroCardHeightFor), so the foot follows the card's own bottom edge.
-    constexpr float kSize = 8.0f;
-    const float y = (float)getHeight() - 12.0f;
-    const float x = isInput ? 4.0f : (float)getWidth() - 12.0f;
-    return juce::Rectangle<float>(x, y, kSize, kSize);
-}
-
-juce::PopupMenu MacroCardComponent::buildAddPortMenu(bool isInput) {
-    // The SAME kind/shape choice list synth::ui::MacroPortConfigDialog's own "Add a port" panel
-    // offers (newKindBox_/newShapeBox_, MacroPortConfigDialogLifecycle.cpp: Audio/CV picks
-    // Mono/Stereo/Poly-N, MIDI has no shape) — never a second list — and, on a choice, the SAME
-    // MacroGroupController::addMacroPort() Configure I/O's own Add button calls, so the created
-    // port and its one-undo-step transaction (recordGraphAndMacroChange, inside addMacroPort) are
-    // identical either way. `isInput` is already fixed by which side's '+' was clicked, so unlike
-    // the dialog this menu has no direction combo and no name field — an empty name (like an
-    // empty name field there) falls back to addMacroPort's own defaultMacroPortName(). The Poly-N
-    // voice count matches the dialog's own default ("4", newVoicesEditor_'s initial text); the
-    // quick affordance's whole point is the two most common single-port operations reachable at a
-    // glance, not a second place to type a voice count.
-    juce::PopupMenu menu;
-    juce::Component::SafePointer<MacroCardComponent> safeThis(this);
-    auto addItem = [&menu, safeThis, isInput](const juce::String& text, synth::MacroPortKind kind, MacroPortShape shape,
-                                              int voices) {
-        menu.addItem(text, [safeThis, isInput, kind, shape, voices] {
-            if (safeThis == nullptr)
-                return;
-            safeThis->owner.getMacroController().addMacroPort(safeThis->macroId, isInput, kind, shape, voices, {});
-        });
-    };
-    addItem("Audio/CV - Mono", synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1);
-    addItem("Audio/CV - Stereo", synth::MacroPortKind::AudioCV, MacroPortShape::Stereo, 1);
-    addItem("Audio/CV - Poly-N", synth::MacroPortKind::AudioCV, MacroPortShape::Poly, 4);
-    addItem("MIDI", synth::MacroPortKind::Midi, MacroPortShape::Mono, 1);
-    return menu;
+juce::Rectangle<int> MacroCardComponent::getContentArea() const {
+    // The middle column between the two port strips: title, member preview and count live here.
+    const auto [inW, outW] = owner.getMacroController().macroCardStripWidths(macroId);
+    return getLocalBounds().withTrimmedLeft(inW).withTrimmedRight(outW).reduced(10, 6);
 }
 
 juce::Rectangle<int> MacroCardComponent::getTitleRowBounds() const {
-    auto textArea = getLocalBounds().reduced(10, 6);
+    auto textArea = getContentArea();
     auto titleRow = textArea.removeFromTop(20);
     // Reserve room for the expand chevron AND both bypass/mute badges (getToggleBadgeBounds) —
     // keeps a long macro name's text from painting under either, and keeps the double-click
@@ -324,6 +216,10 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
         if (getAddPortButtonBounds(isInput).contains(e.position)) {
             auto menu = buildAddPortMenu(isInput);
             showContextMenuHook_(menu);
+            return;
+        }
+        if (getRemovePortButtonBounds(isInput).contains(e.position)) {
+            removeBottomPort(isInput);
             return;
         }
     }
@@ -502,6 +398,12 @@ juce::String MacroCardComponent::getModuleCountText() const {
 }
 
 juce::String MacroCardComponent::getTooltip() {
+    // With names hidden by zoom, the only place a port's name is readable is this tooltip.
+    if (hoveredPortUuid_.has_value() && !portNamesVisible())
+        for (const auto& port : owner.getMacroController().macroCardPortLayout(macroId))
+            if (port.nodeUuid == *hoveredPortUuid_)
+                return port.name;
+
     const auto names = owner.getMacroController().macroMemberNames(macroId);
     constexpr int kMaxNamesShown = 10;
 

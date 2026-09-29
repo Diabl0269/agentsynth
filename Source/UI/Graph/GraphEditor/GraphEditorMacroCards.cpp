@@ -15,7 +15,7 @@
 
 #include "GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 // Syncs macro card components with `macros` and the visibility of their (possibly hidden)

@@ -10,7 +10,7 @@
 
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 using namespace detail;
 
@@ -327,10 +327,17 @@ std::pair<int, int> MacroGroupController::macroCardStripWidths(const juce::Strin
 
 std::optional<MacroGroupController::MacroCardPort>
 MacroGroupController::macroCardPortForPoint(const juce::String& macroId, juce::Point<int> cardLocalPos) const {
-    for (const auto& port : macroCardPortLayout(macroId))
-        if (cardLocalPos.toFloat().getDistanceFrom(port.jackPos.toFloat()) < kMacroCardJackHitRadius)
-            return port;
-    return std::nullopt;
+    // Rows are 16px apart but the hit radius is 10, so two jacks' zones overlap: the nearest wins.
+    std::optional<MacroCardPort> best;
+    float bestDistance = kMacroCardJackHitRadius;
+    for (const auto& port : macroCardPortLayout(macroId)) {
+        const float d = cardLocalPos.toFloat().getDistanceFrom(port.jackPos.toFloat());
+        if (d < bestDistance) {
+            bestDistance = d;
+            best = port;
+        }
+    }
+    return best;
 }
 
 MacroCardComponent* MacroGroupController::getMacroCard(const juce::String& macroId) {
