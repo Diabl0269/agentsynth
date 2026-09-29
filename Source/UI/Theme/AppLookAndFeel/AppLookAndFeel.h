@@ -60,6 +60,8 @@ public:
                           float rotaryStartAngle, float rotaryEndAngle, juce::Slider&) override;
     void drawLinearSlider(juce::Graphics&, int x, int y, int width, int height, float sliderPos, float minSliderPos,
                           float maxSliderPos, juce::Slider::SliderStyle, juce::Slider&) override;
+    // Cap-sized end inset so the fader cap is never clipped (AppLookAndFeelFader.cpp).
+    int getSliderThumbRadius(juce::Slider&) override;
     void drawButtonBackground(juce::Graphics&, juce::Button&, const juce::Colour& backgroundColour,
                               bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
     juce::Font getTextButtonFont(juce::TextButton&, int buttonHeight) override;
@@ -153,6 +155,20 @@ public:
     static float modRingAngleForNorm(float norm) {
         return kRotaryStart + juce::jlimit(0.0f, 1.0f, norm) * (kRotaryEnd - kRotaryStart);
     }
+
+    // ---------- shortcut key cap ----------
+    // The physical-key bubble used by the Cmd-hold shortcut hints: a rounded rect (Metrics::
+    // cornerRadiusSmall) filled surfaceHi with a border outline, a thicker bottom edge and a soft
+    // shadow, text in the mono value face. `bounds` is the whole cap (16 px tall, 14 in a dock tab);
+    // size it with getShortcutKeyCapWidth().
+    static constexpr int kKeyCapHeight = 16;
+    static constexpr int kKeyCapCompactHeight = 14;
+    static constexpr int kKeyCapMinWidth = 16;
+    static constexpr int kKeyCapSidePadding = 5;
+    static constexpr int kKeyCapBottomEdge = 2;
+    juce::Font getShortcutKeyCapFont() const;
+    int getShortcutKeyCapWidth(const juce::String& text) const;
+    void drawShortcutKeyCap(juce::Graphics&, juce::Rectangle<int> bounds, const juce::String& text) const;
 
 private:
     void refreshTypefaces();          // (re)load cached typefaces for theme.type.uiFamily/monoFamily

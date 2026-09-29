@@ -756,6 +756,48 @@ transposes by ONE shared delta (never per-note), clamped so the group stays insi
 (`[0, clipLength)`) or the pitch range (`[0, 127]`) as a unit — the same "clamp the group together"
 rule `TimelineClipLaneArea`'s cross-track move drag uses (see [`timeline/clips.md`](../timeline/clips.md#cross-track-drag)).
 
+## Shortcut hints
+
+Hold **Cmd** (Ctrl off the Mac) on its own for about half a second and a small key-cap bubble
+appears on each visible button that has a shortcut: `⌘T` on the Show/Hide Panel toolbar button,
+`⌘1`–`⌘3` inside the bottom-panel tabs, Space on the play buttons. Release and they fade out. The
+overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-window child of
+`MainComponent` that paints only while the hints are up.
+
+- **The key is never hard-coded.** A button is registered with the shortcut *action* it triggers
+  (`MainComponentShortcutHints.cpp` names them); the text is read from `ShortcutManager` each time
+  the hints appear and re-read on a rebind while they are up. An action with no key gets no bubble.
+- **Timing.** They appear 500 ms after Cmd goes down alone and fade in over 120 ms; they fade out
+  over 80 ms on release. Any other key (including a Cmd chord such as Cmd+S), a mouse click, another
+  modifier held with Cmd, or the window losing focus cancels at once with no fade, and the hold stays
+  spent until Cmd is released. A key that a focused text field consumes never reaches the cancel hook,
+  so the hints can still appear there. Nothing runs at rest: a one-shot 500 ms timer is armed only
+  while Cmd is down alone, and the fade animations exist only while a fade is in flight. Cmd is noticed
+  through the global mouse listener (JUCE sends a fake mouse move on every modifier change) and
+  `MainComponent`'s existing 10 Hz poll as a backstop.
+- **Only showing components get one.** Hidden, collapsed, scrolled-away or covered buttons (the
+  centre of the button must hit-test to the button itself) are skipped, and nothing appears while a
+  modal is up.
+- **Placement** (`ShortcutHintLayout.h`, pure geometry): centred under the button, overlapping its
+  bottom edge by 4 px; flipped above if that leaves the window (or the bottom panel, for buttons inside
+  it); an overlapping later bubble slides sideways by the overlap, up to half its width, else it is
+  left out. A dock tab carries its bubble inside the tab, 6 px after the name.
+- **Bottom panel hidden.** The tabs are not on screen, so the panel toggle's hint and each strip
+  tab's line up centred along the window bottom, 8 px above the status bar, in tab order, each as a
+  pill holding the key cap and the name. A tab detached to its own window is left out
+  (`BottomDockComponent::getStripTabs()`).
+- **The look** is one shared function, `AppLookAndFeel::drawShortcutKeyCap`
+  (`AppLookAndFeelShortcutHints.cpp`): a `cornerRadiusSmall` cap, `surfaceHi` fill, `border` outline
+  with a 2 px bottom edge and a soft shadow, the mono value face in `textPrimary` (regular weight —
+  JUCE fonts have no medium cut). Text comes from `hint::formatKeyCapText`: Mac glyphs on macOS,
+  `Ctrl+Shift+Z` style elsewhere.
+- **Never in the way.** The overlay takes no clicks, is hidden from the accessibility tree, never
+  takes keyboard focus and never moves or resizes anything.
+
+Covered today: the toolbar's Library, New, Save, Load, Settings, Undo, Redo, Auto-arrange, Minimap,
+Mod Matrix, AI Panel and Show/Hide Panel buttons; the dock tabs; the timeline transport bar's
+play/stop, record, loop and metronome buttons; and the status bar's play/stop.
+
 ## Canvas mouse gestures
 
 Multi-select is layered on top of the existing pan gesture rather than replacing it, so no existing

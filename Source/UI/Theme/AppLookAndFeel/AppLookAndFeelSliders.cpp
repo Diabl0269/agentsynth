@@ -2,7 +2,7 @@
 
 namespace synth::theme {
 
-// Concern: rotary and linear slider drawing.
+// Concern: rotary slider drawing (the linear slider / fader lives in AppLookAndFeelFader.cpp).
 
 void AppLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
                                       float sliderPosProportional, float /*rotaryStartAngle*/, float /*rotaryEndAngle*/,
@@ -75,43 +75,6 @@ void AppLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width
             const float r = bodyRadius * (0.4f + 0.18f * (float)i);
             g.drawEllipse(juce::Rectangle<float>(r * 2.0f, r * 2.0f).withCentre(centre), 0.6f);
         }
-    }
-
-    juce::ignoreUnused(slider);
-}
-
-void AppLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
-                                      float /*minSliderPos*/, float /*maxSliderPos*/, juce::Slider::SliderStyle style,
-                                      juce::Slider& slider) {
-    const auto& c = theme.colors;
-    const bool vertical = (style == juce::Slider::LinearVertical || style == juce::Slider::LinearBarVertical);
-
-    auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat();
-
-    if (vertical) {
-        const float trackW = 4.0f;
-        auto track = juce::Rectangle<float>(trackW, bounds.getHeight()).withCentre(bounds.getCentre());
-        g.setColour(c.surface);
-        g.fillRoundedRectangle(track, trackW * 0.5f);
-
-        auto filled = track.withTop(sliderPos);
-        g.setColour(c.accent);
-        g.fillRoundedRectangle(filled, trackW * 0.5f);
-
-        g.setColour(c.knobPointer);
-        g.fillEllipse(juce::Rectangle<float>(10.0f, 10.0f).withCentre({bounds.getCentreX(), sliderPos}));
-    } else {
-        const float trackH = 4.0f;
-        auto track = juce::Rectangle<float>(bounds.getWidth(), trackH).withCentre(bounds.getCentre());
-        g.setColour(c.surface);
-        g.fillRoundedRectangle(track, trackH * 0.5f);
-
-        auto filled = track.withRight(sliderPos);
-        g.setColour(c.accent);
-        g.fillRoundedRectangle(filled, trackH * 0.5f);
-
-        g.setColour(c.knobPointer);
-        g.fillEllipse(juce::Rectangle<float>(10.0f, 10.0f).withCentre({sliderPos, bounds.getCentreY()}));
     }
 
     juce::ignoreUnused(slider);

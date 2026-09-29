@@ -165,7 +165,7 @@ Add controller" is [Add controller](#add-controller). In the plugin build the li
 
 The profile's controls drawn on a grid (`col`, `row` from the profile; default cell 56 px,
 snapped) using the app's own widgets: a rotary for `knob`/`encoder`, a vertical slider for
-`fader`, a square for `pad`, a round button for `button`, a horizontal strip for `wheel`.
+`fader` (the small fader look: 4 px slot, 18x7 cap, [`theming.md`](../layout/theming.md#themed-widgets)), a square for `pad`, a round button for `button`, a horizontal strip for `wheel`.
 Each cell shows the control's name above and its **assignment label** below (parameter:
 *"Filter · Cutoff"*, node command (FRO253's Solo): *"Kick · Solo"*, action: *"Play"*, none: *"—"*,
 orphaned node: *"(missing module)"* in the warning colour; a [focus-bank](midi-remote.md#focus-bank)

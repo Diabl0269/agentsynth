@@ -256,6 +256,15 @@ App-only, gated on `ownedAudioEngine != nullptr` — see [architecture/audio-eng
 Welcome screen subsection for the gating rationale, the persisted `"showWelcomeScreenAtLaunch"` key
 and the guard-before-hide ordering that keeps a Cancel answer from dismissing it.
 
+## Shortcut hint overlay
+
+`Source/UI/Chrome/ShortcutHint/ShortcutHintOverlay` is a second full-window overlay: a child of
+`MainComponent` that stays invisible except while Cmd is held, painting key-cap bubbles over the
+toolbar, dock tabs and transport buttons. It is created at the end of `assembleToolbar()`, tracks the
+window size through a `ComponentListener` (no line in `resized()`), raises itself to the front only
+when it appears, and takes no clicks, so its z-order never matters at rest. Rules and placement:
+[control/shortcuts.md](../control/shortcuts.md#shortcut-hints).
+
 ## Mod matrix panel
 
 `Source/UI/Graph/ModMatrixComponent.h/.cpp` is an untransformed sibling overlay on `GraphEditor`,

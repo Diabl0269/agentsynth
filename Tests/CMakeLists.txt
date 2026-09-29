@@ -189,6 +189,10 @@ add_executable(Tests
     App/MainComponent/MainComponentCommandTableTests.cpp
     App/MainComponent/MeterColourStopsSettingsIntegrationTests.cpp
     UI/Chrome/WelcomeScreenTests.cpp
+    UI/Chrome/ShortcutHint/ShortcutHintLayoutTests.cpp
+    UI/Chrome/ShortcutHint/ShortcutHintTextTests.cpp
+    UI/Chrome/ShortcutHint/ShortcutHintOverlayTests.cpp
+    UI/Chrome/ShortcutHint/ShortcutHintMainWindowTests.cpp
     UI/Graph/GraphEditor/GraphEditorTests.cpp
     UI/Graph/GraphEditor/GraphEditorModDropHintTests.cpp
     UI/Graph/GraphEditor/GraphEditorKnobAnchorTests.cpp
@@ -354,6 +358,7 @@ add_executable(Tests
     Engine/PerformanceTests.cpp
     UI/Theme/ThemeTests.cpp
     UI/Theme/ThemeMeterZoneTests.cpp
+    UI/Theme/FaderRenderTests.cpp
     UI/Theme/IconLibraryTests.cpp
     UI/Chrome/StatusBarTests.cpp
     UI/ModuleViews/FrequencyResponseTests.cpp

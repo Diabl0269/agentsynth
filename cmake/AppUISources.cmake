@@ -24,6 +24,8 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentTrackHeaderHost.cpp
     Source/MainComponent/MainComponentTrackCreation.cpp
     Source/MainComponent/MainComponentTrackPresets.cpp
+    Source/MainComponent/MainComponentShortcutHints.h
+    Source/MainComponent/MainComponentShortcutHints.cpp
     Source/UserSettings.h
     Source/MidiRemote/ControllerProfileStore.h
     Source/MidiRemote/ControllerProfileStore.cpp
@@ -279,6 +281,13 @@ set(APPUI_SOURCES
     Source/UI/Settings/SettingsWindow.h
     Source/UI/Chrome/WelcomeScreenComponent.cpp
     Source/UI/Chrome/WelcomeScreenComponent.h
+    Source/UI/Chrome/ShortcutHint/ShortcutHintLayout.h
+    Source/UI/Chrome/ShortcutHint/ShortcutHintLayout.cpp
+    Source/UI/Chrome/ShortcutHint/ShortcutHintText.h
+    Source/UI/Chrome/ShortcutHint/ShortcutHintText.cpp
+    Source/UI/Chrome/ShortcutHint/ShortcutHintOverlay.h
+    Source/UI/Chrome/ShortcutHint/ShortcutHintOverlay.cpp
+    Source/UI/Chrome/ShortcutHint/ShortcutHintOverlayEntries.cpp
     # Plugin hosting UI (TL7-5) — native editor windows for hosted VST3/AU plugins. In AppUI (a
     # window), not Core, mirroring HostedPluginModule/HostedPluginBackend's Core placement above.
     Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
