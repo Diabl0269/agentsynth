@@ -87,6 +87,10 @@ public:
         if (mirror_)
             mirror_->rebuild();
     }
+    void refreshTrackColoursIfOpen() {
+        if (mirror_)
+            mirror_->refreshTrackColours();
+    }
     void refreshMetersIfOpen() {
         if (mirror_)
             mirror_->refreshMeters();

@@ -190,6 +190,8 @@ public:
     /** Re-syncs every column's + Master's mute/solo/pan-law visuals -- see the .cpp definition. */
     void refreshLiveMixerVisuals();
 
+    void refreshTrackColours(); // see the .cpp definition
+
     bool keyPressed(const juce::KeyPress& key) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
@@ -200,6 +202,7 @@ private:
     /** True between an unbindAllColumns() and the rebuild() that re-binds -- see
      *  rebuildIfUnbound(). */
     bool columnsUnbound_ = false;
+    std::vector<juce::uint32> trackColoursSeen_; // doc track colours at the last rebuild()/refreshTrackColours()
 
     /** One entry per column rebuild() lays out, in the same left-to-right order -- the
      *  panel's own model of "what can be focused", kept separate from MixerColumnComponent so

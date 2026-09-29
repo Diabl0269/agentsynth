@@ -34,7 +34,12 @@ constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
 
 // TimelineDoc::Listener — fired once per effective doc mutation. THE publish seam: republishes
 // the timeline to the audio thread and rebuilds the automation recorder's lane bindings.
-void MainComponent::timelineChanged(const synth::TimelineDoc&) { publishTimelineAndRebindRecorder(); }
+void MainComponent::timelineChanged(const synth::TimelineDoc&) {
+    publishTimelineAndRebindRecorder();
+    // a track colour edit (including the picker's live preview, which never reaches a rebuild) re-tints the
+    // mixer columns in place; a no-op for every other doc change.
+    bottomDock.refreshMixerTrackColours();
+}
 
 // Publishes the doc to the engine and re-resolves the recorder's per-lane parameter bindings
 // against the CURRENT graph (the same uuid -> node -> parameter resolution

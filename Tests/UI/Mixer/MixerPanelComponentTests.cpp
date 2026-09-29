@@ -176,3 +176,43 @@ TEST(MixerPanelComponentTests, EmptyHintShowsWithNoChannelsAndHidesOnceOneExists
     EXPECT_EQ(mixerPanel.getColumnCount(), 0);
     EXPECT_TRUE(mixerPanel.getEmptyHintForTest().isVisible());
 }
+
+// (docs/mixer/panel.md#what-the-mixer-shows): a column's header swatch + top stripe show the linked track's
+// colour, and a track colour edit re-tints it live -- through the real doc notification, no manual rebuild().
+TEST(MixerPanelComponentTests, ColumnHeaderShowsLinkedTrackColourAndFollowsColourEdits) {
+    MainComponent mc(std::make_unique<MockProviderMPCT>());
+    mc.setSize(1400, 900);
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+    mc.simulateAddAudioTrackClick();
+
+    auto& doc = mc.getTimelineDoc();
+    ASSERT_EQ(doc.getTracks().size(), 2u);
+    const auto idA = doc.getTracks()[0].id;
+    const auto idB = doc.getTracks()[1].id;
+    doc.setTrackColour(idA, 0xffe0503c);
+    doc.setTrackColour(idB, 0xff3cb0e0);
+
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
+    mixerPanel.rebuild();
+    auto* colA = mixerPanel.getStripColumnForTest(0);
+    auto* colB = mixerPanel.getStripColumnForTest(1);
+    ASSERT_NE(colA, nullptr);
+    ASSERT_NE(colB, nullptr);
+    EXPECT_EQ(colA->getHeaderForTest().getColour(), juce::Colour(0xffe0503c));
+    EXPECT_EQ(colB->getHeaderForTest().getColour(), juce::Colour(0xff3cb0e0));
+
+    // A colour edit in the doc (what the timeline header's picker does) re-tints in place -- same column objects.
+    doc.setTrackColour(idB, 0xff11aa11);
+    EXPECT_EQ(mixerPanel.getStripColumnForTest(1), colB) << "re-tinted in place, not rebuilt";
+    EXPECT_EQ(colB->getHeaderForTest().getColour(), juce::Colour(0xff11aa11));
+    EXPECT_EQ(colA->getHeaderForTest().getColour(), juce::Colour(0xffe0503c)) << "the other column is untouched";
+
+    // The painted header carries the stripe in that colour.
+    auto& header = colB->getHeaderForTest();
+    header.setBounds(0, 0, 140, 28);
+    const auto img = header.createComponentSnapshot(header.getLocalBounds(), false);
+    ASSERT_GT(img.getWidth(), 0);
+    EXPECT_EQ(img.getPixelAt(img.getWidth() / 2, 0), juce::Colour(0xff11aa11));
+    EXPECT_NE(img.getPixelAt(img.getWidth() / 2, 6), juce::Colour(0xff11aa11));
+}

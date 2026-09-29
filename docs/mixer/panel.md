@@ -24,6 +24,13 @@ sends** — its list is the post-fader chain between Master and the Rec Tap or A
 strip's, and `MixerMasterColumn::setColumn()` feeds it from the snapshot. Its column model — ordering,
 kinds and queries — is headless, in `Source/Mixer/MixerModel/`.
 
+**Column colour.** A column's header shows a swatch and a 2px stripe across its top edge in the colour of the
+one track that feeds it (the colour the Timeline shows), so a channel and its track match at a glance. A bus, a
+channel shared by two tracks and an orphan strip have no single track and keep their macro's colour.
+`buildMixerSnapshot` picks the colour; a track colour edit (including the picker's live preview) re-tints the
+existing columns in place through `MixerPanelComponent::refreshTrackColours()`, driven from
+`MainComponent::timelineChanged`, with no rebuild.
+
 Direct only shows once the graph has an Audio Input or MIDI-in tap for it (`snapshot.hasDirect`),
 and Master only shows once a `MasterModule` node exists (`snapshot.hasMaster`) — a brand-new project
 has neither, and no strip either, so the panel would otherwise render nothing at all. **FRO299:**
