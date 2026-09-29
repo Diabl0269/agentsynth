@@ -13,9 +13,8 @@ class GraphEditor;
 // chain terminator (Rec Tap / Audio Output); nothing here is ChannelStrip-specific.
 //
 // Linear chain: a plain list, right-click for "Add...", "Move Up"/"Move Down"/"Remove" on one
-// entry -- a menu-driven reorder rather than the plan's own drag-to-reorder idiom (scope trim: no
-// single existing drag-reorder widget in this codebase was a clean fit within this ticket's
-// budget, see the PR description's deviations). Each mutation is ONE
+// entry -- a menu-driven reorder rather than a drag-to-reorder idiom (no
+// existing drag-reorder widget in this codebase fits a mixer insert list). Each mutation is ONE
 // AppUndoManager::recordGraphAndMacroChange, via MixerModel's spliceOutInsert/spliceInInsert/
 // reorderInsert (Core, pure graph splices).
 //

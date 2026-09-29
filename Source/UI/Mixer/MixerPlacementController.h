@@ -14,7 +14,7 @@ namespace synth::ui {
 // preference (Tab beside the Timeline / Own panel / Window) and moves BottomDockComponent's
 // mixerHost_ (the SAME MixerPanelComponent instance throughout -- DetachablePanelHost's own
 // "never copied" contract) between the three homes it can live in. The ONE collaborator
-// MainComponent.h adds for this ticket (root CLAUDE.md's file-size-budget constraint) -- every
+// MainComponent.h holds for placement (root CLAUDE.md's file-size-budget constraint) -- every
 // placement-specific line lives here, not spread across MainComponent's own members.
 //
 // | Placement     | Mixer lives                                | Bottom dock   | Detach state         |

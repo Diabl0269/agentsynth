@@ -95,7 +95,7 @@ TEST(FocusRegionRegistryTest, NullIsOpenMeansAlwaysOpen) {
     EXPECT_TRUE(region.isCurrentlyOpen());
 }
 
-// The acceptance criterion this task calls out explicitly: Tab-cycling only ever visits regions
+// The key contract: Tab-cycling only ever visits regions
 // that are currently OPEN, skipping closed ones entirely, and wraps at both ends.
 TEST(FocusRegionRegistryTest, NextOpenRegionIdSkipsClosedRegionsAndWrapsBothWays) {
     synth::ui::FocusRegionRegistry reg;

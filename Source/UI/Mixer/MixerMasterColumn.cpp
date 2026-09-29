@@ -99,10 +99,9 @@ void MixerMasterColumn::setColumn(const synth::MixerColumn& column) {
     // A rebuild is the ONE thing every path that changes the engine's pan law directly --
     // New Patch's factory-default Compensated write (MainComponent::clearTimelineForNewPatch's
     // caller), Load, undo/redo -- reaches unconditionally, so re-reading it here is what keeps this
-    // label from going stale indefinitely rather than only on the next menu pick. Found while
-    // verifying this ticket's cross-view pan-law sync fix: without this, a fresh mirror open() (which
-    // DOES call refreshPanLawButton() from configure()) could show the CORRECT current law while an
-    // already-open dock, rebuilt since its own last configure()/menu-pick, still showed a stale one.
+    // label from going stale indefinitely rather than only on the next menu pick. Without this, a fresh mirror open()
+    // (which DOES call refreshPanLawButton() from configure()) could show the CORRECT current law while an already-open
+    // dock, rebuilt since its own last configure()/menu-pick, still showed a stale one.
     refreshPanLawButton();
     resized();
 }

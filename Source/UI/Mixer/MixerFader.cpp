@@ -44,13 +44,12 @@ void MixerFader::bind(juce::AudioProcessorGraph& graph, AppUndoManager& undoMana
     // initial value into the slider under its own (temporary) range.
     attachment_ = std::make_unique<juce::SliderParameterAttachment>(param, slider_);
 
-    // The slider's VALUE stays the param's own dB range (start/end/interval copied field-for-field,
-    // same as before this ticket) -- only convertTo0to1/convertFrom0to1 change, to
-    // faderDbToFraction/faderFractionToDb (MixerFaderTaper.h), so the on-screen THUMB POSITION
-    // follows Cubase's taper while getValue()/setValue() (and therefore the bound parameter) never
-    // leave linear dB. snapToLegalValue keeps the pre-existing 0.1 dB granularity, just re-expressed
-    // as a lambda since the range's own `interval` field is ignored once a custom
-    // snapToLegalValueFunction is supplied (juce::NormalisableRange::snapToLegalValue).
+    // The slider's VALUE stays the param's own dB range (start/end/interval copied field-for-field) -- only
+    // convertTo0to1/convertFrom0to1 change, to faderDbToFraction/faderFractionToDb (MixerFaderTaper.h), so the
+    // on-screen THUMB POSITION follows Cubase's taper while getValue()/setValue() (and therefore the bound parameter)
+    // never leave linear dB. snapToLegalValue keeps the pre-existing 0.1 dB granularity, just re-expressed as a lambda
+    // since the range's own `interval` field is ignored once a custom snapToLegalValueFunction is supplied
+    // (juce::NormalisableRange::snapToLegalValue).
     const auto floatRange = param.getNormalisableRange();
     const double rangeStartDb = (double)floatRange.start;
     const double rangeEndDb = (double)floatRange.end;

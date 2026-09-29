@@ -237,8 +237,8 @@ namespace {
 // Property keys used to remember the last DELTA (in whole cells) this cell actually fired during
 // the live drag, so a slow drag across many pixels reports once per crossed cell boundary rather
 // than once per pixel. Stashed on juce::Component::getProperties() rather than a new private
-// member -- ControllerSurfaceCell.h is a locked contract for this ticket (see the header's own
-// comment), and getProperties() is ordinary per-instance Component state, not shared/static.
+// member -- ControllerSurfaceCell.h stays free of test/gesture bookkeeping, and getProperties() is ordinary
+// per-instance Component state, not shared/static.
 const juce::Identifier kLastFiredDeltaColProperty("lastFiredDeltaCol");
 const juce::Identifier kLastFiredDeltaRowProperty("lastFiredDeltaRow");
 } // namespace

@@ -18,7 +18,7 @@
 // breakpoints below (== kMeterTickDb's own values) -- the one mapping every caller (ticks, the bar
 // fill via MeterColourStops::forEachBand's band edges, the ballistics-independent peak-hold line,
 // and ChannelChipComponent's horizontal fill) goes through, so a taper change here is a single-file
-// change. A later ticket gives the FADER its own Cubase-style taper -- deliberately a SEPARATE
+// change. The FADER has its own Cubase-style taper -- deliberately a SEPARATE
 // mapping (faders and meters read differently in Cubase itself), so nothing here is reused there.
 
 namespace synth::ui {
@@ -88,7 +88,7 @@ inline float meterDbToFraction(float db) noexcept {
 /** The inverse of meterDbToFraction() -- a 0..1 bar-length fraction back to its dB value, through
  *  the SAME breakpoint table. Not used by any painter today (every caller already has a dB value in
  *  hand); exists so the mapping is provably invertible (see MixerMeterScaleTests.cpp's round-trip
- *  cases) ahead of a later ticket giving the fader its own separate taper. */
+ *  cases) independent of the fader's own separate taper. */
 inline float meterFractionToDb(float fraction) noexcept {
     const float clamped = juce::jlimit(0.0f, 1.0f, fraction);
     const auto& bp = detail::kMeterTaperBreakpoints;

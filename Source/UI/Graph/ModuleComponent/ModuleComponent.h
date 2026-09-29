@@ -54,7 +54,7 @@ public:
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
     ~ModuleComponent() override;
 
-    /** FRO324: the Audio Output "L / Mono" jack's hover explanation (and Right's "borrows Left"
+    /** The Audio Output "L / Mono" jack's hover explanation (and Right's "borrows Left"
      *  reply), found via getPortForPoint() against the current mouse position -- the same jack
      *  hit-test paint()/mouseDown() already share. Empty everywhere else, so juce::TooltipWindow
      *  falls through to any per-control setTooltip() as before. See ModuleComponentPaint.cpp. */
@@ -77,7 +77,7 @@ public:
     // Removes listeners, destroys attachments, stops timer, nulls module pointer.
     void detachFromProcessor();
 
-    /** T162: the colour a docked macro-port widget paints its own jack dot with. A port user
+    /** The colour a docked macro-port widget paints its own jack dot with. A port user
      *  colour (synth::MacroPort::colour, set from the Configure I/O modal's swatch) wins when it
      *  is set; otherwise the kind tint passes through — audioWire for a MIDI jack, accent for an
      *  Audio/CV jack — the EXACT fallback MacroCardComponent::paint already uses, so an expanded
@@ -158,16 +158,13 @@ public:
     static constexpr int kPortGutterHeaderHeight = 38;
 
     /** Compact docked-widget geometry for the four macro-port types (Macro In/Out, Macro MIDI
-     *  In/Out — P8-15 founder-review fix F2, docs/macros/ports.md#how-a-port-is-drawn). Shared with
+     *  In/Out — docs/macros/ports.md#how-a-port-is-drawn). Shared with
      *  GraphEditor::estimateModuleSize (its own drag-ghost estimate must match the real widget) and
      *  GraphEditor::dockMacroPortWidgets (the widget's docked position reads its live getWidth/
      *  getHeight, sized from these), the same "one constant so two files cannot drift apart"
      *  reasoning kPortGutterHeaderHeight's own comment states.
      *
-     *  P8-15 founder-review fix G4 ("make the routing more elegant and sleek, it's currently too
-     *  large"): shrunk from a 104x26(mono) box that read as a small module card to a slim edge
-     *  chip — roughly a 30% cut in drawn area (104x26=2704px^2 -> 92x21=1932px^2, -28.6%; the
-     *  104x44/92x36 Stereo pair lands within a point of the same ratio). The values below are a
+     *  The size is a slim edge chip, not a small module card. The values below are a
      *  tuned point, not a formula — see paintMacroPortWidget()'s own comment for the matching jack/
      *  font/corner-radius cuts, and MacroPortWidgetTests.cpp's
      *  `MacroPortWidgetG4.RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize` for the
@@ -185,7 +182,7 @@ public:
     std::optional<Port> getPortForPoint(juce::Point<int> localPoint);
     juce::Point<int> getPortCenter(int index, bool isInput);
 
-    /** FRO312: drawn/hit-tested visible INPUT jack indices, packed (gap-free) order. See .cpp. */
+    /** Drawn/hit-tested visible INPUT jack indices, packed (gap-free) order. See .cpp. */
     std::vector<int> drawnInputJackIndices() const;
 
     /** True when visible input `index` renders as a knob's landing dot, not a gutter jack. See .cpp. */
@@ -201,7 +198,7 @@ public:
      *  widget (no header of its own); they don't participate in the ordinary audio jack stack
      *  getPortCenter lays out. This is the single ground truth paint() and getPortForPoint() both
      *  read from; anything anchoring a MIDI cable/preview must go through it too, or it drifts
-     *  from the drawn jack the way GraphEditor::rebuildVisibleCables once did (T149). */
+     *  from the drawn jack. */
     juce::Point<int> getMidiPortCenter(bool isOutput) const;
 
     /** Re-lays the card after its Dual I/O parameter changed. For an FX pair the raw ch0/ch1 legs
@@ -249,16 +246,16 @@ public:
     /** getModRingSliderIndex for a ModulationTarget, via its bound parameter; -1 if no visible knob. */
     int sliderIndexForModTarget(const ModulationTarget& target) const;
 
-    /** FRO288/FRO313: card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
+    /** Card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
     std::optional<juce::Point<float>> getModTargetKnobAnchor(int destChannel) const;
 
-    /** FRO313: diameter of the knob cable-landing dot. See GraphEditorCables.cpp's paintOverChildren. */
+    /** Diameter of the knob cable-landing dot. See GraphEditorCables.cpp's paintOverChildren. */
     static constexpr float kKnobLandingDotDiameter = 7.0f;
 
-    /** FRO313: how far outside the ring's radius the landing point sits. See .cpp. */
+    /** How far outside the ring's radius the landing point sits. See .cpp. */
     float knobLandingRadiusOffset() const;
 
-    /** FRO287: true when `e` should start a mod-amount drag on `param`'s knob rather than moving
+    /** True when `e` should start a mod-amount drag on `param`'s knob rather than moving
      *  it. `bounds` is the knob's own local bounds. See ModuleComponent.cpp for the rule. */
     bool wantsModAmountGestureFor(juce::RangedAudioParameter* param, juce::Rectangle<float> bounds,
                                   const juce::MouseEvent& e) const;
@@ -316,14 +313,14 @@ public:
             hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
     }
 
-    // ---- MIDI Learn (FRO130, ModuleComponentMidiLearn.cpp -- see its file comment for the design) ----
+    // ---- MIDI Learn (ModuleComponentMidiLearn.cpp -- see its file comment for the design) ----
 
     /** Arms/clears (empty id) the breathing outline for the control bound to `paramId`. Message
      *  thread only. */
     void setMidiLearnArmedParam(const juce::String& paramId);
 
 public:
-    /** Hosted-plugin card only (FRO132); empty otherwise. See ModuleComponentHostedPluginCard.cpp. */
+    /** Hosted-plugin card only; empty otherwise. See ModuleComponentHostedPluginCard.cpp. */
     std::function<void()> onChooseKnobsRequested;
 
     /** No-op unless this is a live Hosted Plugin card. See ModuleComponentHostedPluginCard.cpp. */
@@ -361,7 +358,7 @@ public:
         return false;
     }
 
-    // FRO256: test seam for the armed breathing outline's per-tick repaint -- see timerCallback().
+    // Test seam for the armed breathing outline's per-tick repaint -- see timerCallback().
     int getMidiLearnArmedRepaintCountForTest() const noexcept { return midiLearnArmedRepaintCount_; }
     void collectPickCandidates(std::vector<synth::ui::PickCandidate>& out) const;
 
@@ -374,24 +371,24 @@ private:
 
     juce::AudioProcessor* module;
     juce::AudioProcessorGraph::NodeID nodeId;
-    bool nodeWasInGraphAtConstruction_ = false;     // see detachFromProcessor()'s own comment (FRO312)
+    bool nodeWasInGraphAtConstruction_ = false;     // see detachFromProcessor()'s own comment
     std::optional<juce::Colour> portColourPreview_; // live jack-colour preview; view-layer only
     GraphEditor& owner;
     juce::ComponentDragger dragger;
 
-    // FRO287: in-flight ring-drag gesture state -- see handleModAmountGesture (ModuleComponent.cpp).
+    // In-flight ring-drag gesture state -- see handleModAmountGesture (ModuleComponent.cpp).
     juce::AudioProcessorGraph::NodeID modAmountGestureAttenuverterId_;
     juce::Point<int> modAmountGestureLastPos_;
     juce::AudioProcessorGraph::NodeID firstAttenuverterForParam(juce::RangedAudioParameter* param) const;
     void handleModAmountGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
     void wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& knob, juce::RangedAudioParameter* param);
 
-    /** FRO312: pick up / redrag / disconnect a knob-landed cable, since its gutter jack is hidden. See .cpp. */
+    /** Pick up / redrag / disconnect a knob-landed cable, since its gutter jack is hidden. See .cpp. */
     bool wantsCablePickupGestureFor(juce::RangedAudioParameter* param, juce::Rectangle<float> bounds,
                                     const juce::MouseEvent& e) const;
     void handleCablePickupGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
 
-    /** FRO288: the RAW channel `param` is bound to, or -1. See ModuleComponent.cpp. */
+    /** The RAW channel `param` is bound to, or -1. See ModuleComponent.cpp. */
     int destChannelForBoundParam(juce::RangedAudioParameter* param) const;
 
     // Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test replaces
@@ -452,7 +449,7 @@ private:
     MidiLearnableRegistry midiLearnableRegistry_;
     juce::String midiLearnArmedParamId_; // the control that should breathe, while armed
     double midiLearnArmedSinceMs_ = 0.0;
-    // FRO256: backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
+    // Backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
     int midiLearnArmedRepaintCount_ = 0;
 
     // Attachments need to be kept alive.
@@ -476,7 +473,7 @@ private:
     // each timerCallback() tick, since an async load can flip that at any moment.
     std::unique_ptr<juce::TextButton> openPluginEditorButton;
 
-    // --- Hosted Plugin card body (FRO128, ModuleComponentHostedPluginCard.cpp) ---
+    // --- Hosted Plugin card body (ModuleComponentHostedPluginCard.cpp) ---
     // Declared AFTER the widget arrays above so the attachments are destroyed before the widgets they point at.
     std::unique_ptr<juce::TextButton> chooseKnobsButton;
     juce::OwnedArray<synth::ui::HostedParameterAttachment> hostedAttachments_;
@@ -485,25 +482,25 @@ private:
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
     std::unique_ptr<ThresholdControlComponent> thresholdControl;
 
-    // --- Envelope (ADSR) card: knob-and-graph panel (FRO112) ---
+    // --- Envelope (ADSR) card: knob-and-graph panel ---
     // The breakpoint curve editor, collapsed by default (not persisted — matches the scope/
     // frequency-response toggles, not Macro Group's collapse; docs/modules/modules.md#adsr-envelope-module).
     std::unique_ptr<synth::ui::CurveEditorComponent> envelopeCurveEditor;
     std::unique_ptr<juce::ToggleButton> envelopeGraphToggle;
-    // BPM|MS segmented control, wired to FRO113's `tempoSync` bool param (FRO117).
+    // BPM|MS segmented control, wired to the ADSR `tempoSync` bool param.
     std::unique_ptr<juce::TextButton> envelopeMsButton;
     std::unique_ptr<juce::TextButton> envelopeBpmButton;
     // True between the curve editor's onGestureStart/onGestureEnd (a live node/bend drag): the
     // graph is the gesture's source of truth for that span, so parameterValueChanged's reverse
     // sync (params -> graph) skips rebuilding the model out from under the drag.
     bool envelopeCurveGestureActive = false;
-    // FRO118: attackDiv/holdDiv/decayDiv/releaseDiv pickers, created lazily on first entry to BPM
+    // attackDiv/holdDiv/decayDiv/releaseDiv pickers, created lazily on first entry to BPM
     // mode (never for a card that stays in MS) — see ensureEnvelopeDivCombosCreated().
     juce::OwnedArray<juce::ComboBox> envelopeDivCombos_;
     // Destroyed before envelopeDivCombos_ (declared after, so members unwind in reverse).
     juce::OwnedArray<juce::ComboBoxParameterAttachment> envelopeDivAttachments_;
 
-    // --- LFO custom-waveform card (FRO114) -- see ModuleComponentLfoCard.cpp ---
+    // --- LFO custom-waveform card -- see ModuleComponentLfoCard.cpp ---
     std::unique_ptr<synth::ui::CurveEditorComponent> lfoCurveEditor; // shown only for shape == Custom
     std::unique_ptr<juce::ComboBox> lfoGridCombo;
     std::unique_ptr<juce::TextButton> lfoShapesButton;
@@ -554,7 +551,7 @@ private:
     // True only between a body mouseDown that armed the ComponentDragger and its mouseUp. A
     // Shift-click toggles selection WITHOUT arming the dragger, and this flag stops the
     // subsequent mouseDrag from moving a component the dragger was never started on. Cmd no
-    // longer toggles-without-dragging (FRO40) — see cmdReparentPending below.
+    // longer toggles-without-dragging — see cmdReparentPending below.
     bool bodyDragActive = false;
 
     // Ctrl+press arms an insert-between DRAG and an additive-select TOGGLE at once, because at
@@ -565,12 +562,12 @@ private:
     bool ctrlTogglePending = false;
     std::vector<juce::AudioProcessorGraph::NodeID> ctrlPressSelection;
 
-    // FRO40: Cmd+press arms a deferred additive-select TOGGLE and a macro-membership DRAG at
+    // Cmd+press arms a deferred additive-select TOGGLE and a macro-membership DRAG at
     // once, resolved at mouseUp by whether the press moved. See mouseDown/mouseUp.
     bool cmdReparentPending = false;
     std::vector<juce::AudioProcessorGraph::NodeID> cmdPressSelection;
 
-    // FRO40: whether THIS drag can reparent right now — NOT `ctrlTogglePending ||
+    // Whether THIS drag can reparent right now — NOT `ctrlTogglePending ||
     // cmdReparentPending`, which is also true for a plain macOS Ctrl+drag. Re-derived every
     // mouseDrag tick for a single-module drag, so Cmd pressed/released mid-drag arms/disarms it.
     bool reparentArmed = false;
@@ -605,14 +602,14 @@ private:
     void handleHostedGesture(const juce::AudioProcessorParameter& param, bool starting);
     // The Open Editor + Choose knobs... row; returns the y below it, `y` unchanged for any other module.
     int layoutHostedPluginChrome(int y, int narrowX, int narrowW, bool apply);
-    // External MIDI's device + channel combos, extracted out of createControls (FRO117) to keep
+    // External MIDI's device + channel combos, extracted out of createControls to keep
     // that function under its own line-count ratchet. Neither combo is
     // ComboBoxParameterAttachment-driven (plain module state, not AudioParameters).
     void createExternalMidiControls(ExternalMidiModule* extMidi);
     void updateLayout();
 
-    // Compact docked widget for the four macro-port types (P8-15 founder-review fix F2,
-    // docs/macros/ports.md#how-a-port-is-drawn) — no header chrome, no body. layoutMacroPortWidget sizes the
+    // Compact docked widget for the four macro-port types
+    // (docs/macros/ports.md#how-a-port-is-drawn) — no header chrome, no body. layoutMacroPortWidget sizes the
     // card from the module's own visible jack count (updateLayout's early branch); its actual
     // canvas POSITION is decided separately, by GraphEditor::dockMacroPortWidgets against the
     // owning macro's hull. paintMacroPortWidget draws the tinted row, its jacks and the resolved
@@ -635,7 +632,7 @@ private:
      *  separator, through showContextMenuHook_ so a test can capture it headlessly. */
     void showAutomateMenuForSlider(juce::RangedAudioParameter* param);
 
-    // ---- MIDI Learn (FRO130, ModuleComponentMidiLearn.cpp) ----
+    // ---- MIDI Learn (ModuleComponentMidiLearn.cpp) ----
 
     /** Every control on this card whose right-click should offer MIDI Learn -- see
      *  MidiLearnableRegistry's own comment. Called once per control from createControls(); a null
@@ -674,7 +671,7 @@ private:
     void refreshMidiLearnBadges();
 
 public:
-    // ---- LFO custom-waveform card (FRO114, ModuleComponentLfoCard.cpp) ----
+    // ---- LFO custom-waveform card (ModuleComponentLfoCard.cpp) ----
     // Public so a menu item and a test call the same code as each other.
     void applyLfoWavePreset(int presetIndex); // replaces the whole wave, one undo step
     void applyLfoWaveTool(int toolIndex);     // 0-3: LfoCustomWave::Tool; 4: Reset to Default
@@ -795,7 +792,7 @@ private:
     // hands it to envelopeCurveEditor->setModel(). No-op while envelopeCurveGestureActive (the
     // graph is already the source of truth mid-drag) or outside ADSR/without a curve editor.
     void syncEnvelopeCurveFromParams();
-    // MS|BPM click handler (FRO117): writes `tempoSync` (true for BPM, false for MS) via
+    // MS|BPM click handler: writes `tempoSync` (true for BPM, false for MS) via
     // setValueNotifyingHost, no-op if already at that value or the param isn't present.
     void writeEnvelopeTempoSync(bool bpmMode);
     // Reverse sync for the MS|BPM toggle pair: reads `tempoSync` and sets the two buttons'
@@ -811,17 +808,17 @@ private:
     // ratchet. A no-op returning `y` unchanged when envelopeGraphToggle is null (every non-ADSR
     // module). Mirrors the freqResponseToggle/scopeToggle blocks it sits beside.
     int layoutEnvelopeGraphSection(int y, int contentX, int contentW, bool apply);
-    // FRO118: lazily builds the four *Div combos + attachments on first entry to BPM mode; a
+    // Lazily builds the four *Div combos + attachments on first entry to BPM mode; a
     // later no-op, and never called for a card that stays in MS. See ModuleComponentEnvelopeCard.cpp.
     void ensureEnvelopeDivCombosCreated();
-    // FRO118: BPM mode shows the four *Div combos and hides ATK/HOLD/DEC/REL (SUS stays a knob).
+    // BPM mode shows the four *Div combos and hides ATK/HOLD/DEC/REL (SUS stays a knob).
     void applyEnvelopeSyncModeToControls(bool bpmMode);
-    // FRO118: positions each *Div combo over its slider's bounds; called after layoutKnobGrid.
+    // Positions each *Div combo over its slider's bounds; called after layoutKnobGrid.
     void applyEnvelopeDivComboBounds();
-    // FRO118: true when the slider is hidden only because its *Div combo swapped in over it.
+    // True when the slider is hidden only because its *Div combo swapped in over it.
     bool isEnvelopeDivSwappedForSlider(int sliderIndex) const;
 
-    // --- LFO custom-waveform card (FRO114, ModuleComponentLfoCard.cpp) ---
+    // --- LFO custom-waveform card (ModuleComponentLfoCard.cpp) ---
     void createLfoCardControls();          // toolbar + Free-mode curve editor; LFO only
     void wireLfoGestureCallbacks();        // undo bracket, mirrors wireEnvelopeGestureCallbacks
     void writeLfoWaveFromCurve();          // forward sync: graph -> module

@@ -61,9 +61,8 @@ public:
     // `timelineDoc` (docs/mixer/stem-export.md): the live document a stem file's name is resolved
     // against — each strip is named after the ONE track (Track In / Track Audio, walked upstream
     // through the instrument/macro chain) that feeds it, falling back to "Channel N" when zero or
-    // several tracks do, or when this is null (a caller with no timeline at all — every test rig
-    // built before this ticket, and any future headless caller that doesn't care about names).
-    // MESSAGE THREAD, read once here — never stored past the constructor.
+    // several tracks do, or when this is null (a caller with no timeline at all — a test rig or any headless caller
+    // that doesn't care about names). MESSAGE THREAD, read once here — never stored past the constructor.
     StemSession(AudioEngine& engine, const juce::File& destinationFolder, const BounceOptions& options,
                 const BounceExporter::ProgressCallback& progress = {}, const TimelineDoc* timelineDoc = nullptr);
 

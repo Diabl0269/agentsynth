@@ -126,8 +126,8 @@ TEST_F(MainComponentTest, ExportPatchOnlyWritesByteIdenticalLegacyJson) {
 }
 
 // A plain .json preset (the legacy default, and still what Export Patch Only writes) must still
-// open correctly — openFromFile's non-bundle branch is untouched by this ticket, but the save-side
-// default changing is exactly the kind of change that could have silently broken it by omission.
+// open correctly — openFromFile's non-bundle branch must stay independent of the bundle save path, since a change to
+// the save-side default could otherwise break it by omission.
 TEST_F(MainComponentTest, OpeningLegacyJsonPresetStillWorks) {
     MainComponent mc(std::make_unique<MockProvider>());
     mc.setSize(1600, 900);

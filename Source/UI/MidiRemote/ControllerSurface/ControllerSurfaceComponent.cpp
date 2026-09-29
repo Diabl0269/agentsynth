@@ -14,9 +14,8 @@
 // nothing destructive in response to its own onControlsMoved/onDragEnded: it only computes the
 // clamped new grid position(s) and invokes the callback, then returns. The caller
 // (MidiRemotePanelComponent, one level up) is the one that owns the deferral -- it defers its OWN
-// setControls() rebuild via juce::MessageManager::callAsync after receiving onControlsMoved, per
-// this ticket's brief -- so by the time cells_ is ever rebuilt, the gesture's call stack has long
-// since unwound.
+// setControls() rebuild via juce::MessageManager::callAsync after receiving onControlsMoved -- so by the time cells_ is
+// ever rebuilt, the gesture's call stack has long since unwound.
 
 #include "ControllerSurfaceComponent.h"
 
