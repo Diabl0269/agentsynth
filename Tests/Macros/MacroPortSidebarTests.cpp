@@ -9,6 +9,9 @@
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/LayoutUtil.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
 
 #include "MacroPortWidgetTestHelpers.h" // shared fixtures + graph/lookup helpers
@@ -303,4 +306,36 @@ TEST(MacroPortSidebar, LongPortNamesAreCappedSoTheCardTitleKeepsItsRoom) {
     const auto [hullIn, hullOut] = controller.macroHullStripWidths(macroId);
     EXPECT_LE(hullIn, detail::kMacroHullStripMaxWidth);
     (void)hullOut;
+}
+
+// The collapsed card paints port names, title and member count with theme text colours, not hard-coded white,
+// so they stay readable on the light Daylight theme (a white name on the pale strip was invisible).
+TEST(MacroPortSidebar, CollapsedCardPortNamesAreDarkOnTheLightTheme) {
+    synth::theme::AppLookAndFeel laf; // outlives the editor
+    laf.applyTheme(synth::theme::makeDaylight());
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setLookAndFeel(&laf);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_FALSE(addInlet(editor, macroId, "Cutoff").isEmpty());
+
+    auto* card = editor.getMacroController().getMacroCard(macroId);
+    ASSERT_NE(card, nullptr);
+    const auto entry = editor.getMacroController().macroCardPortLayout(macroId).front();
+    ASSERT_FALSE(entry.labelArea.isEmpty());
+
+    juce::Image img(juce::Image::ARGB, card->getWidth(), card->getHeight(), true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(img);
+        card->paintEntireComponent(g, false);
+    }
+    // Software image: a native-backed one reads back zeros on a headless Windows runner.
+    float darkest = 1.0f;
+    for (int y = entry.labelArea.getY(); y < entry.labelArea.getBottom(); ++y)
+        for (int x = entry.labelArea.getX(); x < entry.labelArea.getRight(); ++x)
+            darkest = juce::jmin(darkest, img.getPixelAt(x, y).getPerceivedBrightness());
+    EXPECT_LT(darkest, 0.5f) << "the port name reads dark against Daylight's pale strip";
+    editor.setLookAndFeel(nullptr);
 }
