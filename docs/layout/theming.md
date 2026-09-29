@@ -60,7 +60,7 @@ are also accepted.
 | `modRingPositive` | `#FF00E5FF` | Modulation ring, positive modulation |
 | `modRingNegative` | `#FFFF6E00` | Modulation ring, negative modulation |
 | `toolActive` | `#FF00D1FF` | Timeline edit-tool strip — active-tool button highlight |
-| `midiMapped` | `#FFB48EF5` | MIDI Learn "mapped" badge on a control with an assignment ([`midi-remote-ui.md`](../control/midi-remote-ui.md#the-learn-interaction)) |
+| `midiMapped` | `#FFB48EF5` | MIDI Learn "mapped" badge on a control with an assignment ([`midi-remote-ui.md`](../control/midi-remote-ui.md#the-learn-interaction)); Daylight overrides it to `#FF9333EA` (the default is ~2.6:1 on white) |
 | `noteFill` | `#FFB48EF5` | Piano-roll note body, unselected — see [colour-overrides](colour-overrides.md#note-colours) |
 | `noteBorder` | `#FF4A3B75` | Piano-roll note outline, unselected — deliberately a distinct literal, not a `.darker()` derivation of `noteFill` |
 | `noteSelected` | `#FF00D1FF` | Piano-roll note border/highlight when selected |
@@ -256,6 +256,22 @@ These stock-widget overrides are implemented in `AppLookAndFeel`:
   submenu chevron, disabled dim). It also paints a 14x14 waveform glyph left of the item text for
   waveform combos; `drawComboBox` renders the selected waveform glyph in the closed combo, and
   `positionComboBoxText` shifts the label right when the selected item carries a glyph.
+- **Linear sliders (the fader)** — `drawLinearSlider` (`AppLookAndFeelFader.cpp`, geometry in
+  `AppLookAndFeelFader.h`) draws every `LinearVertical` / `LinearHorizontal` slider (the Bar styles
+  route the same way) as a fader: a recessed slot (`bg0`, 1 px `border`, 2 px longer than the travel
+  at each end), an `accent` fill from the bottom (left) to the cap centre, and a pill cap with a
+  `surfaceHi` to `knobBody` gradient, 1 px outline, a cheap offset drop shadow (35% black scaled by
+  `treatment.shadow`) and a 1.5 px `knobPointer` centre line, the exact value position. The size
+  follows the slider's real bounds: **large** (slot 6, cap 30x14) for a vertical slider at least 64 px
+  wide and 40 px tall (the mixer strip), **small** (slot 4, cap 18x7) for any other vertical one (the
+  56 px controller-surface cell), **medium** (slot 4, cap 10x18) for a horizontal one, the cap
+  shrinking when the bounds are shorter. `getSliderThumbRadius` insets the travel by half the cap plus
+  2 px so the cap is never clipped, and `MixerFaderSlider`'s drag maths reads the same inset through
+  `getSliderLayout`. States: hover outlines the cap in `textMuted`, a pressed mouse in `accent`,
+  keyboard focus adds a 2 px `accent` ring 3 px outside the cap, disabled dims everything to 45% with a
+  `textDisabled` fill. No colour token is specific to it, so every theme gets a matching fader. There
+  is no readout bubble, tick marks or "automated" marker: the mixer has its own dB readout label and
+  controller-surface faders are display-only.
 - **ScrollBar** — `getDefaultScrollbarWidth()` returns 6 px; `drawScrollbar` (slim track and thumb
   with hover and press states); `drawScrollbarButton` (triangle arrows, for Windows and Linux
   parity).
