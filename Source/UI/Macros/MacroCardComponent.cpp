@@ -227,25 +227,12 @@ juce::Rectangle<float> MacroCardComponent::getToggleBadgeBounds(bool mute) const
 }
 
 juce::Rectangle<float> MacroCardComponent::getAddPortButtonBounds(bool isInput) const {
-    // Sits in the FOOTER row, beside
-    // (not the top of the jack band, where macroCardPortLayout() even-spacing would collide with it)
-    // the "N modules, M ports" text paint() draws in the card's bottom 14px (textArea.removeFromBottom(14)
-    // there, and the SAME kMargin=10/kBottomMargin=6 outer inset getLocalBounds().reduced(10, 6)
-    // gives that row) — a fixed slot that exists on every card regardless of port count, so the
-    // '+' is never hidden and never sits in the jack band (kMacroCardJackBandTop/Bottom) at all,
-    // which is what makes overlapping a jack structurally impossible rather than merely unlikely.
-    // Input '+' sits just left of where the count text starts (x=10); output '+' just right of
-    // where it ends (x=width-10) — touching that margin, never crossing into the text's own span.
-    // Vertically, its TOP edge is pinned to kMacroCardJackBandBottom itself (never a value merely
-    // computed to fall outside the band): jack Y positions are a strict upper-bounded average
-    // over the band (macroCardPortLayout's placeSide, never reaching kMacroCardJackBandBottom for
-    // any finite port count), so anchoring the button's top there — rather than centring it in
-    // the footer row, which would let it creep a pixel or two into the band — makes "off the jack
-    // band" structural, not incidental.
+    // At the strip's foot: kMacroPortStripFooter (22px) below the last row a full card holds, so
+    // the button is never on a jack row by construction. The card's height already grows with its
+    // port count (macroCardHeightFor), so the foot follows the card's own bottom edge.
     constexpr float kSize = 8.0f;
-    constexpr float kTextMargin = 10.0f; // matches paint()'s reduced(10, 6) the count row also uses
-    const float y = (float)kMacroCardJackBandBottom;
-    const float x = isInput ? kTextMargin - kSize : (float)getWidth() - kTextMargin;
+    const float y = (float)getHeight() - 12.0f;
+    const float x = isInput ? 4.0f : (float)getWidth() - 12.0f;
     return juce::Rectangle<float>(x, y, kSize, kSize);
 }
 

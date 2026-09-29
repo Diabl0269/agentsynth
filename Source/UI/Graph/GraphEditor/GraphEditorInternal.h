@@ -58,6 +58,28 @@ inline constexpr int kMacroCardJackInsetX = 10;
 // Click tolerance, matching ModuleComponent::getPortForPoint's own `< 10`.
 inline constexpr float kMacroCardJackHitRadius = 10.0f;
 
+// ---- Macro port sidebars (docs/macros/ports.md#how-a-port-is-drawn) ---------------------------
+// One port per 16px row, on both the collapsed card and the open macro. A strip's width is the
+// longest port name on its side plus padding and NEVER depends on zoom: zoom only decides whether
+// names (and the '-' button) are painted, so every layout below is zoom-independent.
+inline constexpr int kMacroPortRowHeight = 16;
+inline constexpr int kMacroPortRowsTop = 30;           // first row's top on the card (= kMacroCardJackBandTop)
+inline constexpr int kMacroPortStripFooter = 22;       // room below the last row for the '+'/'-' pair
+inline constexpr int kMacroPortStripInset = 18;        // name x from the strip's outer edge (jack at 10, + 8)
+inline constexpr int kMacroPortStripPadding = 8;       // after the longest name
+inline constexpr int kMacroHullStripInnerJackRoom = 8; // open macro only: room for the inner jack
+inline constexpr float kMacroPortNamesHiddenBelowZoom = 0.5f;
+inline constexpr float kMacroPortNameFontSize = 9.5f;
+/** Card height that fits `portsOnBusiestSide` rows, never below the fixed footprint. */
+inline int macroCardHeightFor(int portsOnBusiestSide) {
+    return juce::jmax(kMacroCardHeight,
+                      kMacroPortRowsTop + portsOnBusiestSide * kMacroPortRowHeight + kMacroPortStripFooter);
+}
+inline int macroPortStripWidthFor(float longestNamePx, int extra = 0) {
+    return kMacroPortStripInset + (int)std::ceil(longestNamePx) + kMacroPortStripPadding + extra;
+}
+inline bool macroPortNamesVisibleAtZoom(float zoom) { return zoom >= kMacroPortNamesHiddenBelowZoom; }
+
 /** True when a source channel carries a structural, absolute-valued signal rather than normalised
  *  modulation. Poly MIDI's pitch fan is raw Hz and its gate fan is a 0/1 trigger; neither should ever
  *  be routed through an attenuverter, which would scale an absolute frequency and feed Hz-magnitude

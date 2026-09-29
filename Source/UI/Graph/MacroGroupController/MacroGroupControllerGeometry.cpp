@@ -280,26 +280,49 @@ MacroGroupController::macroCardPortLayout(const juce::String& macroId) const {
     for (const auto& p : ports)
         (p.isInput ? inputs : outputs).push_back(&p);
 
-    // Evenly spaced within the fixed jack band regardless of count, so N ports on one side never
-    // outgrow the card's fixed footprint.
-    auto placeSide = [&](const std::vector<const synth::MacroPort*>& side, int x) {
+    // One 16px row per port from kMacroPortRowsTop down; the card grows to fit (macroCardHeightFor),
+    // so N ports on one side never outgrow it. The label area spans the strip past the jack.
+    const auto widths = macroCardStripWidths(macroId);
+    auto placeSide = [&](const std::vector<const synth::MacroPort*>& side, int x, bool isInputSide) {
         const int n = (int)side.size();
-        const int bandHeight = kMacroCardJackBandBottom - kMacroCardJackBandTop;
         for (int i = 0; i < n; ++i) {
-            const int y = kMacroCardJackBandTop + (bandHeight * (i + 1)) / (n + 1);
+            const int rowTop = kMacroPortRowsTop + i * kMacroPortRowHeight;
             MacroCardPort port;
             port.nodeUuid = side[i]->nodeUuid;
             port.isInput = side[i]->isInput;
             port.kind = side[i]->kind;
             port.name = side[i]->name;
-            port.jackPos = {x, y};
+            port.row = i;
+            port.jackPos = {x, rowTop + kMacroPortRowHeight / 2};
+            if (isInputSide)
+                port.labelArea = {kMacroPortStripInset, rowTop, widths.first - kMacroPortStripInset,
+                                  kMacroPortRowHeight};
+            else
+                port.labelArea = {synth::LayoutUtil::kSingleWidth - widths.second, rowTop,
+                                  widths.second - kMacroPortStripInset, kMacroPortRowHeight};
             port.colour = side[i]->colour; // MacroCardComponent falls back to the kind tint
             result.push_back(port);
         }
     };
-    placeSide(inputs, kMacroCardJackInsetX);
-    placeSide(outputs, synth::LayoutUtil::kSingleWidth - kMacroCardJackInsetX);
+    placeSide(inputs, kMacroCardJackInsetX, true);
+    placeSide(outputs, synth::LayoutUtil::kSingleWidth - kMacroCardJackInsetX, false);
     return result;
+}
+
+std::pair<int, int> MacroGroupController::macroCardStripWidths(const juce::String& macroId) const {
+    const int empty = kMacroPortStripInset + kMacroPortStripPadding;
+    const auto* macro = host_.getMacros().find(macroId);
+    if (macro == nullptr)
+        return {empty, empty};
+    // Measured with a local font (no juce::Graphics), so paint and hit-testing share one width.
+    const juce::Font font{juce::FontOptions(kMacroPortNameFontSize)};
+    float longestIn = -1.0f, longestOut = -1.0f;
+    for (const auto& p : macro->ports) {
+        float& longest = p.isInput ? longestIn : longestOut;
+        longest = juce::jmax(longest, font.getStringWidthFloat(p.name));
+    }
+    return {longestIn < 0.0f ? empty : macroPortStripWidthFor(longestIn),
+            longestOut < 0.0f ? empty : macroPortStripWidthFor(longestOut)};
 }
 
 std::optional<MacroGroupController::MacroCardPort>

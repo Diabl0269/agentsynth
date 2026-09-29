@@ -78,6 +78,8 @@ public:
         synth::MacroPortKind kind = synth::MacroPortKind::AudioCV;
         juce::String name;
         juce::Point<int> jackPos;           // card-local
+        int row = 0;                        // index within its side, 0 = topmost
+        juce::Rectangle<int> labelArea;     // card-local; where the name is painted when names are visible
         std::optional<juce::Colour> colour; // unset -> kind tint fallback
     };
 
@@ -202,6 +204,9 @@ public:
     // Non-test-named twin of getMacroCardForTest -- the recolour finder runs on a real user path, not headless.
     MacroCardComponent* getMacroCard(const juce::String& macroId);
     std::vector<MacroCardPort> macroCardPortLayout(const juce::String& macroId) const;
+    /** {input strip width, output strip width} of the collapsed card, card-local pixels. Longest port name on the
+     *  side plus padding; a side with no ports is the bare minimum. Never depends on zoom. */
+    std::pair<int, int> macroCardStripWidths(const juce::String& macroId) const;
     std::optional<MacroCardPort> macroCardPortForPoint(const juce::String& macroId,
                                                        juce::Point<int> cardLocalPos) const;
     MacroPortOwner macroPortOwnerFor(juce::AudioProcessorGraph::NodeID nodeId) const;

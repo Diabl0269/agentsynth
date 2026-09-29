@@ -303,6 +303,7 @@ void MacroGroupController::renameMacroPort(const juce::String& macroId, const ju
                     p.name = trimmed;
                     break;
                 }
+        host_.updateComponents(); // a new name can change the sidebar strip width, so re-dock
     };
 
     if (host_.undo())
