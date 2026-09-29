@@ -128,7 +128,7 @@ std::vector<juce::String> AudioEngine::getOpenMidiInputIdentifiers() const {
 
 void AudioEngine::handleIncomingMidiMessage(juce::MidiInput* source, const juce::MidiMessage& message) {
     // The MIDI Remote source key is the device *identifier*, not getName()
-    // (docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host §6) — getIdentifier() returns a refcounted
+    // (docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host) — getIdentifier() returns a refcounted
     // juce::String copy, not an allocation. source == nullptr only from a test driving this override directly (see
     // Tests/Engine/DeviceChangeTests.cpp, Tests/Engine/BounceExporterTests.cpp).
     const juce::String sourceKey = source != nullptr ? source->getIdentifier() : juce::String();
