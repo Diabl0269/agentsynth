@@ -227,6 +227,10 @@ public:
      *  A no-op post-unbind (graph_ null), same guard toggleSoloed() above already uses. */
     void refreshMuteSoloVisual();
 
+    /** Re-tints the header swatch (and top stripe) in place -- the cheap path for a track colour edit, which must
+     *  not rebuild the column (MixerPanelComponent::refreshTrackColours()). */
+    void setHeaderColour(juce::Colour colour) { header_.setColour(colour); }
+
 private:
     void rebindControls();
     void refreshMuteSoloAccessibility(ModuleBase* module, ChannelStripModule* strip);

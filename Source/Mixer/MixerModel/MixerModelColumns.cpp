@@ -96,6 +96,16 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
         const auto feeders = findTrackSourcesFeedingStrip(graph, entry.stripId);
         column.linkedToTrack = column.kind == MixerColumn::Kind::Strip && feeders.size() == 1;
 
+        // A channel exactly ONE track feeds shows THAT track's colour (what the timeline shows), overriding the macro
+        // colour; a bus, a shared channel or an orphan keeps the macro colour. Read from `feeders` itself, not from
+        // linkedToTrack, so this stays independent of how the column kind is derived.
+        if (feeders.size() == 1 && !isBusStrip(graph, entry.stripId))
+            for (const auto& track : doc.getTracks())
+                if (resolveTrackSourceNode(graph, track) == feeders[0]) {
+                    column.colour = juce::Colour(track.colourArgb);
+                    break;
+                }
+
         buildInsertsForColumn(graph, doc, macros, column);
         buildBusSourcesForColumn(graph, doc, macros, column);
         buildSendsForColumn(graph, doc, macros, column);

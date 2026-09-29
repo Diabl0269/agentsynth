@@ -91,6 +91,12 @@ public:
         mixer_.rebuild();
         mixerMirror_.rebuildIfOpen();
     }
+    /** Cheap in-place re-tint of every mixer column from the current track colours (docked view and, if open, the
+     *  mirror) -- called on every TimelineDoc notification; a no-op unless a track colour changed. */
+    void refreshMixerTrackColours() {
+        mixer_.refreshTrackColours();
+        mixerMirror_.refreshTrackColoursIfOpen();
+    }
     MixerPanelComponent& getMixerPanel() noexcept { return mixer_; }
     // Const overload for resolveEditSurface(), a const member function.
     const MixerPanelComponent& getMixerPanel() const noexcept { return mixer_; }

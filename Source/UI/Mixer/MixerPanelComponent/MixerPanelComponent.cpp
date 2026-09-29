@@ -140,6 +140,35 @@ void MixerPanelComponent::selectOnCanvas(const juce::String& targetId) {
         }
 }
 
+namespace {
+std::vector<juce::uint32> currentTrackColours(const synth::TimelineDoc& doc) {
+    std::vector<juce::uint32> colours;
+    for (const auto& track : doc.getTracks())
+        colours.push_back(track.colourArgb);
+    return colours;
+}
+} // namespace
+
+// Re-tints each channel column from the timeline's current track colours without rebuilding it. A no-op unless a
+// track colour actually changed since the last rebuild/refresh, so it is safe to call on every TimelineDoc
+// notification.
+void MixerPanelComponent::refreshTrackColours() {
+    if (graph_ == nullptr || doc_ == nullptr || macros_ == nullptr || columnsUnbound_)
+        return;
+    auto colours = currentTrackColours(*doc_);
+    if (colours == trackColoursSeen_)
+        return;
+    trackColoursSeen_ = std::move(colours);
+
+    const auto snapshot = synth::buildMixerSnapshot(*graph_, *doc_, *macros_);
+    for (const auto& column : snapshot.columns)
+        for (size_t i = 0; i < columnEntries_.size() && i < stripColumns_.size(); ++i)
+            if (columnEntries_[i].kind == ColumnEntry::Kind::Strip && columnEntries_[i].nodeId == column.nodeId) {
+                static_cast<MixerColumnComponent*>(columnEntries_[i].component)->setHeaderColour(column.colour);
+                break;
+            }
+}
+
 void MixerPanelComponent::rebuild() {
     if (graph_ == nullptr || doc_ == nullptr || macros_ == nullptr)
         return;
@@ -159,6 +188,7 @@ void MixerPanelComponent::rebuild() {
     focusedColumnIndex_ = -1;
 
     const auto snapshot = synth::buildMixerSnapshot(*graph_, *doc_, *macros_);
+    trackColoursSeen_ = currentTrackColours(*doc_);
 
     stripColumns_.clear();
     for (const auto& column : snapshot.columns) {

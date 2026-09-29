@@ -128,6 +128,8 @@ public:
      * own to select. */
     std::function<void()> onHeaderClicked;
 
+    juce::Colour getColour() const noexcept { return colour_; }
+
     void paint(juce::Graphics& g) override {
         const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
         const auto surface = laf != nullptr ? laf->getTheme().colors.surfaceHi : juce::Colour(0xff232833);
@@ -136,6 +138,13 @@ public:
 
         g.setColour(surface);
         g.fillRect(getLocalBounds());
+
+        // a 2px stripe in the same colour across the top edge, so the channel's track colour reads at a glance
+        // even when the small swatch is skimmed past (Cubase-style).
+        if (colour_.getAlpha() > 0) {
+            g.setColour(colour_);
+            g.fillRect(getLocalBounds().removeFromTop(2));
+        }
 
         auto bounds = getLocalBounds().reduced(4);
         if (colour_.getAlpha() > 0) {
