@@ -19,6 +19,8 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/BottomDockComponent.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineViewState.h"
@@ -554,4 +556,25 @@ TEST_F(AutomationEditorMainComponentTest, KnobAutomateHookCreatesLaneOnAutomatio
     mc.automateParameter(node->nodeID, "cutoff");
     EXPECT_EQ(doc.getTrack(autoTrackId)->lanes.size(), 2u);
     EXPECT_EQ(doc.getLaneForParam(uuid, "cutoff")->id, cutoffLaneId);
+}
+
+// Automate chosen while the Mixer tab is showing (the mixer-column menu fires this same
+// wired GraphEditor callback) must switch the dock to the Timeline tab and select the new lane.
+TEST_F(AutomationEditorMainComponentTest, AutomateFromMixerTabSwitchesDockToTimelineAndSelectsLane) {
+    using Tab = synth::ui::BottomDockComponent::Tab;
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    auto node = mc.getAudioEngine().getGraph().addNode(synth::AIStateMapper::createModule("Filter"));
+    ASSERT_NE(node, nullptr);
+
+    mc.getBottomDock().setActiveTab(Tab::Mixer);
+    ASSERT_EQ(mc.getBottomDock().getActiveTab(), Tab::Mixer);
+    ASSERT_TRUE(mc.getGraphEditor().onAutomateParameterRequested);
+
+    mc.getGraphEditor().onAutomateParameterRequested(node->nodeID, "cutoff");
+
+    EXPECT_EQ(mc.getBottomDock().getActiveTab(), Tab::Timeline);
+    EXPECT_TRUE(mc.isBottomDockConfiguredVisible());
+    const auto* lane = mc.getTimelineDoc().getLaneForParam(node->properties["uuid"].toString(), "cutoff");
+    ASSERT_NE(lane, nullptr);
+    EXPECT_EQ(mc.getTimelinePanel().getSelectedAutomationLane(), lane->id);
 }

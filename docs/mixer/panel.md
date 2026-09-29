@@ -433,7 +433,9 @@ everything else this section covers.
 **FRO292: the same right-click menu leads with "Automate '<Param>'"** on the fader, pan and send
 knobs (Mute and Solo are not automatable lanes). It fires `GraphEditor::onAutomateParameterRequested`
 — the route a canvas knob's own right-click uses — so `MainComponent::automateParameter` creates the
-lane and opens the automation strip on it. It is offered even when no Controllers host is wired.
+lane and opens the automation strip on it. **FRO350:** it also switches the bottom dock to the Timeline
+tab (`showBottomDockTab`, so a detached Timeline window is brought forward instead) and selects the new
+lane. It is offered even when no Controllers host is wired.
 
 **Why a pre-restore hook rather than relying on the rebuild.** A graph-structural undo or redo, New
 Patch, Open, or an AI patch apply freezes the affected `ChannelStripModule`/`MasterModule` nodes'
