@@ -24,28 +24,28 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     auto bounds = getLocalBounds().toFloat();
     const bool selected = owner.getMacroController().isMacroSelected(macroId);
 
+    const auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    static const synth::theme::Colors fallbackColors{};
+    const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+
     g.setColour(macro->colour.withAlpha(0.22f));
     g.fillRoundedRectangle(bounds, 8.0f);
-    g.setColour(selected ? juce::Colours::white : macro->colour);
+    g.setColour(selected ? themeColors.textPrimary : macro->colour);
     g.drawRoundedRectangle(bounds.reduced(1.0f), 8.0f, selected ? 2.0f : 1.5f);
 
     if (nameEditor != nullptr)
         return; // editor covers the name; member-count line still reads fine underneath
 
-    const auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    static const synth::theme::Colors fallbackColors{};
-    const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
-
     auto textArea = getContentArea();
     textArea.removeFromTop(20); // the title row itself is drawn via getTitleRowBounds() below
     const auto titleRow = getTitleRowBounds();
-    g.setColour(juce::Colours::white);
+    g.setColour(themeColors.textPrimary);
     g.setFont(juce::Font(juce::FontOptions(15.0f, juce::Font::bold)));
     g.drawText(macro->name.isNotEmpty() ? macro->name : "Macro", titleRow, juce::Justification::centredLeft);
 
     auto countRow = textArea.removeFromBottom(14);
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.setColour(juce::Colours::white.withAlpha(0.75f));
+    g.setColour(themeColors.textMuted);
     g.drawText(getModuleCountText(), countRow, juce::Justification::bottomLeft);
 
     // ---- Content preview ----------------------------
@@ -130,7 +130,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     juce::Path chevron;
     chevron.addTriangle(chevronBounds.getX() + 3.0f, chevronBounds.getY() + 7.0f, chevronBounds.getRight() - 3.0f,
                         chevronBounds.getY() + 7.0f, chevronBounds.getCentreX(), chevronBounds.getBottom() - 5.0f);
-    g.setColour(juce::Colours::white.withAlpha(0.85f));
+    g.setColour(themeColors.textPrimary);
     g.fillPath(chevron);
 }
 

@@ -82,7 +82,7 @@ void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& 
 
         // Names are painted only at working zoom; below it the strip keeps its width and shows dots.
         if (names && port.name.isNotEmpty()) {
-            g.setColour(juce::Colours::white.withAlpha(0.85f));
+            g.setColour(themeColors.textPrimary);
             g.drawFittedText(port.name, port.labelArea,
                              port.isInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1,
                              1.0f);
