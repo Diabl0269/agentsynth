@@ -354,6 +354,7 @@ void MainComponent::createWelcomeScreen() {
         // project (patch + timeline), so it routes through the project half, not the patch half.
         welcomeScreen_->onOpenExistingProject = [this] { openProjectFromFile(); };
         welcomeScreen_->onOpenRecentProject = [this](const juce::File& file) { openRecentProjectGuarded(file); };
+        welcomeScreen_->onContributeRequested = [this] { openContributePage(); };
         welcomeScreen_->onWhatsNewRequested = [this] {
             // Deliberately does NOT hide the welcome screen — the user should be able to read
             // What's New and still see/use the overlay's other options afterward.

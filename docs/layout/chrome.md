@@ -256,6 +256,11 @@ App-only, gated on `ownedAudioEngine != nullptr` — see [architecture/audio-eng
 Welcome screen subsection for the gating rationale, the persisted `"showWelcomeScreenAtLaunch"` key
 and the guard-before-hide ordering that keeps a Cancel answer from dismissing it.
 
+Between the Recent Projects list and the footer the card carries a low-key contribute line and a
+"Contribute..." button. It fires `onContributeRequested`, which `MainComponent` wires to
+`openContributePage()` (the same `kContributeUrl` page as `AppCommands::contribute`) without hiding
+the overlay, and it shows whenever the overlay is shown.
+
 ## Shortcut hint overlay
 
 `Source/UI/Chrome/ShortcutHint/ShortcutHintOverlay` is a second full-window overlay: a child of

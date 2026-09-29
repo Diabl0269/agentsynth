@@ -13,6 +13,7 @@
 
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
+#include "Branding.h"
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
@@ -393,6 +394,94 @@ TEST_F(WelcomeScreenTest, RecentProjectRow_OpensThatFileAndHidesWelcomeScreen) {
     EXPECT_EQ(mc.getCurrentPatchName(), bundleDir.getFileNameWithoutExtension());
     EXPECT_FALSE(mc.wouldPromptOnSaveForTest()) << "the recent project is now the open bundle";
     EXPECT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
+}
+
+TEST_F(WelcomeScreenTest, ContributeButton_FiresCallbackExactlyOnce) {
+    synth::ui::WelcomeScreenComponent ws;
+    ws.setBounds(0, 0, 1600, 900);
+    int fired = 0;
+    ws.onContributeRequested = [&fired] { ++fired; };
+    auto& button = ws.getContributeButtonForTest();
+    EXPECT_TRUE(button.isVisible());
+    EXPECT_TRUE(button.getTooltip().isNotEmpty());
+    button.triggerClick();
+    pumpMessageLoop(); // triggerClick() dispatches asynchronously
+    EXPECT_EQ(fired, 1);
+}
+
+TEST_F(WelcomeScreenTest, ContributeButton_OpensContributePageAndKeepsOverlayVisible) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    std::vector<juce::String> opened;
+    mc.setUrlOpenerForTest([&opened](const juce::URL& u) { opened.push_back(u.toString(true)); });
+    ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
+    ASSERT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
+
+    mc.getWelcomeScreenForTest()->getContributeButtonForTest().triggerClick();
+    pumpMessageLoop();
+
+    ASSERT_EQ(opened.size(), 1u);
+    EXPECT_EQ(opened[0], juce::String(synth::branding::kContributeUrl));
+    EXPECT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
+}
+
+TEST_F(WelcomeScreenTest, ContributeRow_FitsInsideCardWithoutOverlappingNeighbours) {
+    synth::ui::WelcomeScreenComponent ws;
+    std::vector<juce::File> recents;
+    for (int i = 0; i < 5; ++i)
+        recents.push_back(tempRoot.getChildFile("P" + juce::String(i) + ".agsproj"));
+    ws.setRecentProjects(recents);
+    ws.setBounds(0, 0, 1600, 900);
+    ASSERT_EQ(ws.getRecentProjectCountForTest(), 5);
+
+    const auto button = ws.getContributeButtonForTest().getBounds();
+    const auto label = ws.getContributeLabelForTest().getBounds();
+    const auto whatsNew = ws.getWhatsNewButtonForTest().getBounds();
+    const auto toggle = ws.getShowAtLaunchToggleForTest().getBounds();
+    // The card is centred and at most 600 wide / well under 900 tall; the toggle (footer, last row)
+    // and the title-side rows bound it, so check against the union of everything and the overlay.
+    const auto footer = whatsNew.getUnion(toggle);
+    EXPECT_TRUE(ws.getLocalBounds().contains(button));
+    EXPECT_TRUE(ws.getLocalBounds().contains(label));
+    EXPECT_LE(button.getWidth() + label.getWidth(), 600 - 2 * 28) << "row must fit the card's padded width";
+    EXPECT_GE(label.getHeight(), 30) << "room for two wrapped lines";
+    EXPECT_FALSE(button.intersects(label));
+    EXPECT_FALSE(button.intersects(footer));
+    EXPECT_FALSE(label.intersects(footer));
+    EXPECT_LT(label.getBottom(), footer.getY());
+    EXPECT_LT(button.getBottom(), footer.getY());
+    // Last recent row is the component just above the contribute row.
+    juce::Rectangle<int> lastRecent;
+    for (auto* child : ws.getChildren())
+        if (auto* tb = dynamic_cast<juce::TextButton*>(child); tb != nullptr && tb->getButtonText() == "P4")
+            lastRecent = tb->getBounds();
+    ASSERT_FALSE(lastRecent.isEmpty());
+    EXPECT_LE(lastRecent.getBottom(), label.getY());
+    EXPECT_LE(lastRecent.getBottom(), button.getY());
+    // Card horizontal extent: centred 600-wide card.
+    const auto card = juce::Rectangle<int>(0, 0, 600, 100).withCentre(ws.getLocalBounds().getCentre());
+    EXPECT_GE(label.getX(), card.getX());
+    EXPECT_LE(button.getRight(), card.getRight());
+}
+
+// Regression test for the footer squeezing "What's New..." to ~40px ("What'..."): the version label
+// used to take half the row before the toggle and button were placed.
+TEST_F(WelcomeScreenTest, FooterGivesWhatsNewItsFullWidth) {
+    synth::ui::WelcomeScreenComponent ws;
+    ws.setLatestVersionLabel("Agent Synth v0.309.0");
+    ws.setBounds(0, 0, 1600, 900);
+
+    auto& whatsNew = ws.getWhatsNewButtonForTest();
+    const auto font =
+        ws.getLookAndFeel().getTextButtonFont(dynamic_cast<juce::TextButton&>(whatsNew), whatsNew.getHeight());
+    const int textWidth = juce::roundToInt(juce::GlyphArrangement::getStringWidth(font, whatsNew.getButtonText()));
+    EXPECT_GE(whatsNew.getWidth(), textWidth + 8);
+    EXPECT_FALSE(whatsNew.getBounds().intersects(ws.getShowAtLaunchToggleForTest().getBounds()));
+    for (auto* child : ws.getChildren())
+        if (auto* label = dynamic_cast<juce::Label*>(child);
+            label != nullptr && label->getText().startsWith("Agent Synth v"))
+            EXPECT_LE(label->getRight(), whatsNew.getX());
 }
 
 // THE headline test: the guard must run BEFORE the welcome screen is ever hidden. hideWelcomeScreen()

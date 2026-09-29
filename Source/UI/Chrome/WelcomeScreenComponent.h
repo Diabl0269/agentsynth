@@ -7,8 +7,8 @@
 
 namespace synth::ui {
 
-// The app-only startup overlay offering exactly four actions (New empty project, Open
-// the factory default project, Open an existing project, pick from Recent) instead of always
+// The app-only startup overlay offering New empty project, Open the factory default project, Open
+// an existing project, pick from Recent, plus a low-key contribute request, instead of always
 // silently auto-loading the factory "Default" preset. NOT a separate window — MainComponent adds
 // this as a full-bounds child (see resized()) so it also occludes the toolbar while shown, since
 // none of the toolbar actions make sense until a choice is made. MainComponent constructs and owns
@@ -46,6 +46,7 @@ public:
     std::function<void(const juce::File&)> onOpenRecentProject;
     std::function<void()> onWhatsNewRequested;
     std::function<void(bool)> onShowAtLaunchChanged;
+    std::function<void()> onContributeRequested; // Contribute... button; never hides the overlay
 
     // ---- Test accessors ----
     // Direct accessors rather than getComponentID()+findChildWithID (mirrors
@@ -55,6 +56,8 @@ public:
     juce::Button& getOpenDefaultButtonForTest() { return openDefaultButton; }
     juce::Button& getOpenExistingButtonForTest() { return openExistingButton; }
     juce::Button& getWhatsNewButtonForTest() { return whatsNewButton; }
+    juce::Button& getContributeButtonForTest() { return contributeButton; }
+    juce::Label& getContributeLabelForTest() { return contributeLabel; }
     juce::ToggleButton& getShowAtLaunchToggleForTest() { return showAtLaunchToggle; }
     int getRecentProjectCountForTest() const { return (int)recentProjectButtons.size(); }
     // Simulates clicking recent row `index` — a no-op (never crashes) if out of range.
@@ -73,6 +76,7 @@ private:
     juce::TextButton openDefaultButton{"Open our default project"};
     juce::TextButton openExistingButton{"Open an existing project..."};
     juce::TextButton whatsNewButton{"What's New..."};
+    juce::TextButton contributeButton;
     juce::ToggleButton showAtLaunchToggle{"Show this screen at launch"};
 
     juce::Label titleLabel;
@@ -80,6 +84,7 @@ private:
     juce::Label versionLabel;
     juce::Label recentsHeaderLabel;
     juce::Label noRecentsLabel;
+    juce::Label contributeLabel;
 
     std::vector<juce::File> recentFiles_;
     std::vector<std::unique_ptr<juce::TextButton>> recentProjectButtons;
