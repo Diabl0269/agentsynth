@@ -336,8 +336,8 @@ private:
     juce::ComboBox macroAutoPortCombo_;
     // Plain on/off toggles, ON by default — see their getter/setter declarations above for why these are a
     // different shape from macroAutoPortCombo_ (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
-    juce::ToggleButton macroAutoCreatePortsOnDragToggle{"Auto-create macro ports when dragging a cable across a "
-                                                        "boundary"};
+    juce::ToggleButton macroAutoCreatePortsOnDragToggle{"Auto-create macro ports when a cable or mixer send "
+                                                        "crosses a boundary"};
     juce::ToggleButton macroAutoDeletePortsOnLastCableToggle{"Auto-delete macro ports when their last cable is "
                                                              "removed"};
     // OFF by default, unlike the macro auto-port pair above — see its getter/setter declarations for why.

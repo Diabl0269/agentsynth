@@ -182,6 +182,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroGroupController/MacroGroupControllerGrouping.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerBypassMute.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerPortSplice.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerProgrammaticRouting.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerPorts.cpp
     Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp

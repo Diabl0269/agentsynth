@@ -50,7 +50,7 @@ bool isMacroPortNode(const juce::AudioProcessor* p) {
 // linkage (declared in ChannelFlows.h) so MixerModelInserts.cpp's insert-list walk can reuse the
 // exact same rule instead of re-deriving it -- the whole point being that "what counts as signal"
 // answers identically for "what would Make Channel do" and "what does the mixer column show".
-static juce::AudioProcessorGraph::NodeAndChannel
+juce::AudioProcessorGraph::NodeAndChannel
 resolveThroughPorts(juce::AudioProcessorGraph& graph,
                     const std::vector<juce::AudioProcessorGraph::Connection>& connections,
                     juce::AudioProcessorGraph::NodeAndChannel pin) {

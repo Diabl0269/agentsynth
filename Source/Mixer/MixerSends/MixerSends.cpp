@@ -41,12 +41,16 @@ std::vector<int> keyInputChannels(juce::AudioProcessorGraph& graph, NodeID modul
     return channels;
 }
 
-/** True when `conn` is an audio edge landing on a module's Key input. */
-bool landsOnKey(juce::AudioProcessorGraph& graph, const Connection& conn) {
+/** The module whose Key input `conn` lands on, looking through macro ports (a send into a keyed
+ *  module inside a macro enters through an auto-created port); an invalid id when it lands on none. */
+NodeID keyModuleOf(juce::AudioProcessorGraph& graph, const std::vector<Connection>& connections,
+                   const Connection& conn) {
     if (conn.destination.isMIDI())
-        return false;
-    auto* module = moduleAt(graph, conn.destination.nodeID);
-    return module != nullptr && module->mapInputChannel(conn.destination.channelIndex).role == PortRole::Sidechain;
+        return {};
+    const auto pin = resolveThroughPorts(graph, connections, conn.destination);
+    auto* module = moduleAt(graph, pin.nodeID);
+    const bool isKey = module != nullptr && module->mapInputChannel(pin.channelIndex).role == PortRole::Sidechain;
+    return isKey ? pin.nodeID : NodeID{};
 }
 
 bool isReachTerminal(const juce::AudioProcessor* processor) {
@@ -220,9 +224,9 @@ SendTarget resolveSendTarget(juce::AudioProcessorGraph& graph, NodeID sourceStri
     std::set<NodeID> visited{sourceStrip};
     std::set<NodeID> keyHits;
     const auto follow = [&](const Connection& conn) {
-        if (landsOnKey(graph, conn)) {
-            if (keyHits.insert(conn.destination.nodeID).second)
-                queue.push_back({conn.destination.nodeID, true});
+        if (const auto keyed = keyModuleOf(graph, connections, conn); keyed != NodeID{}) {
+            if (keyHits.insert(keyed).second)
+                queue.push_back({keyed, true});
             return;
         }
         if (!isSignalEdge(graph, connections, conn))

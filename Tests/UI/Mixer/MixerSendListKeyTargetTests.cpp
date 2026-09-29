@@ -5,12 +5,14 @@
 //   * menu       -- "+ Send" (clicked through the real mouse path) lists, after the bus/strip
 //                   targets, "Key: <the bass Compressor> on <bass channel>" and never the kick's own
 //                   Compressor or Gate (keying those from the kick would be a render cycle)
-//   * one step   -- choosing the item wires the Key cables as ONE undo step, and undo removes them
+//   * one step   -- choosing the item wires the Key cables (through the bass macro's port) as ONE
+//                   undo step, and undo removes them
 //   * row        -- the new row and its knob read "Send to Key: ..."
 
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/FX/CompressorModule.h"
@@ -144,15 +146,21 @@ TEST(MixerSendListKeyTargetTests, TheSendMenuOffersTheOtherChannelsKeyAndChoosin
     rig.panel().rebuild();
     EXPECT_EQ(rig.mc->getUndoManager().getEditSerial(), serialBefore + 1) << "exactly one undo step";
     EXPECT_EQ(synth::resolveSendTarget(rig.graph(), kick, 0), (synth::SendTarget{bassComp, true}));
-    EXPECT_TRUE(rig.graph().isConnected(
-        {{kick, ChannelStripModule::sendLeftChannel(0)}, {bassComp, CompressorModule::kKeyBase}}));
+    // The bass Compressor sits inside its channel macro, so the Key cable enters through a macro
+    // port (docs/macros/auto-ports.md#programmatic-connections); it still lands on the Key input.
+    const auto connections = rig.graph().getConnections();
+    juce::AudioProcessorGraph::NodeAndChannel keyLanding;
+    for (const auto& c : connections)
+        if (c.source.nodeID == kick && c.source.channelIndex == ChannelStripModule::sendLeftChannel(0))
+            keyLanding = synth::resolveThroughPorts(rig.graph(), connections, c.destination);
+    EXPECT_EQ(keyLanding, (juce::AudioProcessorGraph::NodeAndChannel{bassComp, CompressorModule::kKeyBase}));
 
     auto* knob = rig.column(0)->getSendListForTest().getKnobForTest(0);
     ASSERT_NE(knob, nullptr);
     EXPECT_TRUE(knob->getTitle().startsWith("Send to Key: Compressor")) << knob->getTitle();
 
-    // Nothing later re-routes the cable (e.g. through a macro port on the bass channel's hull):
-    // after the message loop runs, the send still resolves to the same Key.
+    // Nothing later re-routes the cable: after the message loop runs, the send still resolves to
+    // the same Key.
     for (int i = 0; i < 5; ++i)
         juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
     EXPECT_EQ(synth::resolveSendTarget(rig.graph(), rig.column(0)->getNodeId(), 0),

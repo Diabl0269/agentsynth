@@ -283,6 +283,13 @@ bool isSignalEdge(juce::AudioProcessorGraph& graph,
                   const std::vector<juce::AudioProcessorGraph::Connection>& connections,
                   const juce::AudioProcessorGraph::Connection& c);
 
+/** The pin a cable into `pin` ultimately lands on, following macro port nodes (at most 16 hops);
+ *  `pin` itself when it is not a port. Pure query over `connections`. */
+juce::AudioProcessorGraph::NodeAndChannel
+resolveThroughPorts(juce::AudioProcessorGraph& graph,
+                    const std::vector<juce::AudioProcessorGraph::Connection>& connections,
+                    juce::AudioProcessorGraph::NodeAndChannel pin);
+
 // ---- Track presets (docs/mixer/track-presets.md) ----------------------------------------------------------
 
 /**
