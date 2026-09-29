@@ -37,8 +37,9 @@ Connection edgeConnection(const Group& group, const MacroGroupController::MacroP
                          : Connection{{group.internalNodeId, internal}, {edge.externalNodeId, external}};
 }
 
-/** True when `raw` is a channel no visible jack shows (a Mono Channel Strip's unused right input):
- *  the module never reads it, so a port has nothing to carry there. */
+/** True when `raw` is a channel no visible jack shows (a Mono Channel Strip's unused right input).
+ *  The module never reads it, and a hand-drawn cable into a Mono strip wires only its one jack, so
+ *  such a leg is dropped rather than ported -- the routed result matches what a drag would build. */
 bool isHiddenRawChannel(juce::AudioProcessorGraph& graph, const Group& group, int raw) {
     if (group.isMidi || raw == group.headRawChannel)
         return false;

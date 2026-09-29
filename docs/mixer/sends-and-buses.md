@@ -41,7 +41,7 @@ see it: JUCE's parallel-path delay compensation, stem export, and the canvas cab
 canvas a send is therefore an ordinary cable on the strip's new visible jacks — no new cable concept.
 
 **A send across a macro boundary goes through macro ports (FRO354).** A track's strip sits inside its
-channel macro, so with "Auto-create macro ports" on (the default) a send between two channels leaves
+channel macro, so with "Auto-create macro ports when a cable or mixer send crosses a boundary" on (the default) a send between two channels leaves
 the source's macro through an outlet port and enters the target's through one Stereo inlet — the same
 as a hand-drawn cable. Removing or retargeting the send removes the ports it no longer uses, in the
 same undo step. `MixerSendList` runs every row mutation through

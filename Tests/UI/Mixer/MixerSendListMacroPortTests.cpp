@@ -168,6 +168,8 @@ TEST(MixerSendListMacroPortTests, ASendIntoAChannelMacroEntersThroughAPortAndUnd
     EXPECT_EQ(outR.nodeID, outL.nodeID) << "both legs share the one outlet";
     const auto inR = rig.next(outR.nodeID, outR.channelIndex);
     EXPECT_EQ(inR.nodeID, inL.nodeID) << "both legs share the one inlet";
+    auto* inlet = dynamic_cast<MacroInletModule*>(rig.graph().getNodeForId(inL.nodeID)->getProcessor());
+    EXPECT_EQ(inlet->getPortShape(), MacroPortShape::Stereo) << "the strip's split L/R jacks get one two-jack port";
     EXPECT_EQ(rig.next(inR.nodeID, inR.channelIndex),
               (juce::AudioProcessorGraph::NodeAndChannel{bass, ChannelStripModule::kRightBase}));
 

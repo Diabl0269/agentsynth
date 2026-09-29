@@ -425,8 +425,8 @@ resulting graph and macro state is indistinguishable from a port deleted that wa
 ## Programmatic connections
 
 **FRO354: a connection made by code follows the same rule as a dragged cable.** With
-"Auto-create macro ports" on (`autoCreateMacroPortsOnDragEnabled`, the same toggle as a cable drag,
-default ON), a connection whose one end is an ordinary member of a macro and whose other end is
+"Auto-create macro ports when a cable or mixer send crosses a boundary" on
+(`autoCreateMacroPortsOnDragEnabled`, the same toggle as a cable drag, default ON), a connection whose one end is an ordinary member of a macro and whose other end is
 outside it enters or leaves that macro through a new port. Off, it is wired straight through, as
 before. The first caller is the mixer's send list: adding a send between two tracks (each strip sits
 in its own channel macro) mints an outlet on the source's macro and an inlet on the target's, wired
@@ -482,7 +482,7 @@ Compressor. Solo, stems and bus detection walk the same edges.
 | Mixer insert splice (`MixerModelInserts`) | No | The inserted module joins its neighbour's macro, so nothing crosses. |
 | `applyJSONToGraph` / snapshots (load, AI patch apply, snippet paste, undo restore) | No | Replays a document that carries its own macros and ports; saved projects must load unchanged. |
 | `AudioEngine` default patch, `addModRouting` | No | No macros at startup; mod routings from a cable drag are already handled by the drag path. |
-| Mod matrix source/destination re-point | No | Moves an attenuverter's existing legs; not a new connection a user drew. |
+| Mod matrix source/destination re-point | No | Re-points an attenuverter leg under a graph-only `recordStructuralChange`; out of scope here. |
 | Canvas rewiring (stereo leg moves, Replace module, copy channel, delete heal) | No | Re-points existing edges; delete heal never touches a port by design. |
 
 ## Related

@@ -416,9 +416,9 @@ void PreferencesSettingsTab::initMacroToggles() {
     macroAutoCreatePortsOnDragToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("macroAutoCreatePortsOnDrag", true), juce::dontSendNotification);
     macroAutoCreatePortsOnDragToggle.setTooltip(
-        "When on (the default), dragging a cable across an expanded macro's boundary automatically "
-        "creates a matching Mono port and wires it, instead of connecting straight through to the "
-        "interior member.");
+        "When on (the default), a cable dragged across an expanded macro's boundary, or a mixer send "
+        "into or out of a channel inside a macro, goes through a matching new macro port instead of "
+        "connecting straight through to the interior member.");
     macroAutoCreatePortsOnDragToggle.onClick = [this] {
         persistMacroAutoCreatePortsOnDrag(macroAutoCreatePortsOnDragToggle.getToggleState());
     };
