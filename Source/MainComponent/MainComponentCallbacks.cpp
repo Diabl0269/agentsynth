@@ -5,6 +5,7 @@
 // next to this one.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MainComponentInternal.h"
 #include "MainComponentShortcutHints.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
@@ -18,26 +19,11 @@ namespace {
 // has the timeline compiled in — offering it otherwise would let a user save a "project" whose
 // timeline half can never be non-empty.
 constexpr const char* kPatchFileFilter = "*.json;*.agsproj";
-// Subdirectories a saved bundle gets its exports/patch-only snapshots written into by default.
-// Deliberately NOT reserved names on ProjectBundle: unlike Audio/Peaks they carry no
-// asset-integrity contract and AssetManager::cleanUnusedAssets never looks past Audio/, so nesting
-// them inside the bundle is safe - they are just a destination choice, not part of the bundle's
-// asset policy.
-constexpr const char* kExportsFolderName = "Exports";
-constexpr const char* kPatchesFolderName = "Patches";
-// The folder a "Export Audio..."/"Export Patch Only..." dialog starts in: <bundle>/<subFolderName>
-// when a real bundle is open (created on demand), otherwise the same Music/AgentSynth root every
-// other save/open dialog defaults to.
-juce::File resolveExportSubdirectory(const juce::File& currentBundleDir, const char* subFolderName) {
-    if (currentBundleDir != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir)) {
-        auto dir = currentBundleDir.getChildFile(subFolderName);
-        dir.createDirectory();
-        return dir;
-    }
-    return synth::ProjectBundle::getDefaultProjectsDirectory();
-}
-
 } // namespace
+
+using detail::kExportsFolderName;
+using detail::kPatchesFolderName;
+using detail::resolveExportSubdirectory;
 
 /** Pushes the saved "split L/R jacks" preference onto the patch the app just opened with.
  *  Must run AFTER AudioEngine::initialise() has built it — the preset loader constructs its

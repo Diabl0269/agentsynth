@@ -297,6 +297,7 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     // exportStems is a third menu-only command, same treatment as openPreset above: no
     // ShortcutManager actionId/binding, registered here so the File menu can invoke it.
     expectedCommandCount += 1; // exportStems is menu-only (analogous to openPreset)
+    expectedCommandCount += 1; // exportMidi is menu-only too
     // exportPatchOnly (Cmd+Shift+P) joined exportAudio (Cmd+Shift+E) as a rebindable
     // action with a default binding, so both are now counted through expectedActions above; the old
     // manual `+= 1` for exportPatchOnly no longer applies -- only checkForUpdates (mac), showWelcomeScreen/whatsNew,

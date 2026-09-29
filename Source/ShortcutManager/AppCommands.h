@@ -21,6 +21,9 @@ enum CommandIDs {
     // menu - same "no chord, no Settings row" treatment as openPreset/checkForUpdates below (no
     // ShortcutManager actionId/binding).
     exportStems,
+    // Standard MIDI File export of the arrangement or the current loop range (MidiClipFile). Menu-only,
+    // after Export Stems, same "no chord, no Settings row" treatment; needs no render, so never gated.
+    exportMidi,
     // Two menu entry points open a file:
     // a whole `.agsproj` project and a plain `.json` patch. openProject is the rebindable Cmd+O
     // open (a project); openPreset is a menu-only patch open. Loading a patch asks whether to

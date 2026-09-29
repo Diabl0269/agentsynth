@@ -98,6 +98,7 @@ add_executable(Tests
     Timeline/TimelineMidiSource/TimelineMidiSourceAuditionTests.cpp
     Timeline/MidiRecorderTests.cpp
     Timeline/MidiClipFileTests.cpp
+    Timeline/MidiClipFileArrangementTests.cpp
     Timeline/PeaksFileTests.cpp
     Timeline/RecordTapTests.cpp
     Mixer/ChannelStripTests.cpp

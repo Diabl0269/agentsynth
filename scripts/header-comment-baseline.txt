@@ -28,7 +28,7 @@
 52 Source/Timeline/AutomationApplier.h
 44 Source/Timeline/AutomationBinding.h
 12 Source/Timeline/AutomationRecorder.h
-34 Source/Timeline/MidiClipFile.h
+32 Source/Timeline/MidiClipFile.h
 33 Source/Timeline/MidiRecorder.h
 33 Source/Timeline/PeaksFile.h
 126 Source/Timeline/TimelineDoc/TimelineDoc.h

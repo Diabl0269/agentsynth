@@ -1,5 +1,6 @@
 #include "MidiClipFile.h"
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <optional>
 #include <utility>
@@ -220,6 +221,124 @@ bool MidiClipFile::exportClipToFile(const TimelineDoc& doc, ClipId clipId, const
         return false;
 
     return exportClip(doc, clipId, *stream);
+}
+
+namespace {
+
+long long toTick(double beat) { return std::llround(beat * (double)MidiClipFile::kExportPpq); }
+
+// Appends one note as a noteOn/noteOff pair at absolute-beat position [startBeat, endBeat).
+void addNoteEvents(juce::MidiMessageSequence& sequence, const MidiNote& note, double startBeat, double endBeat) {
+    auto on = juce::MidiMessage::noteOn(note.channel, note.pitch, (juce::uint8)juce::jlimit(1, 127, note.velocity));
+    on.setTimeStamp((double)toTick(startBeat));
+    sequence.addEvent(on);
+
+    auto off = juce::MidiMessage::noteOff(note.channel, note.pitch);
+    off.setTimeStamp((double)toTick(endBeat));
+    sequence.addEvent(off);
+}
+
+// One MIDI timeline track as an SMF track. `origin`/`limit` are the trim range (limit < 0 = none);
+// every beat is shifted by -origin so the range start lands on tick 0.
+juce::MidiMessageSequence buildTrackSequence(const Track& track, double origin, double limit) {
+    juce::MidiMessageSequence sequence;
+    sequence.addEvent(juce::MidiMessage::textMetaEvent(3, track.name));
+
+    const bool trimmed = limit >= 0.0;
+    double endBeat = 0.0;
+    for (const auto& clip : track.clips) {
+        endBeat = std::max(endBeat, clip.startBeat + clip.lengthBeats);
+        if (track.muted || clip.muted)
+            continue;
+        for (const auto& note : clip.notes) {
+            if (note.muted)
+                continue;
+            double start = clip.startBeat + note.startBeat;
+            double end = start + note.lengthBeats;
+            if (trimmed) {
+                if (end <= origin || start >= limit)
+                    continue;
+                start = std::max(start, origin);
+                end = std::min(end, limit);
+            }
+            addNoteEvents(sequence, note, start - origin, end - origin);
+        }
+    }
+
+    if (trimmed)
+        endBeat = std::min(endBeat, limit);
+    const double endTick = std::max((double)toTick(std::max(endBeat - origin, 0.0)), sequence.getEndTime());
+    auto endOfTrack = juce::MidiMessage::endOfTrack();
+    endOfTrack.setTimeStamp(endTick);
+    sequence.addEvent(endOfTrack);
+    return sequence;
+}
+
+juce::MidiMessageSequence buildConductorSequence(const MidiClipFile::ArrangementExportOptions& options,
+                                                 double endTick) {
+    juce::MidiMessageSequence sequence;
+    sequence.addEvent(juce::MidiMessage::textMetaEvent(3, "Tempo"));
+    sequence.addEvent(juce::MidiMessage::tempoMetaEvent((int)std::llround(60.0e6 / options.bpm)));
+    sequence.addEvent(juce::MidiMessage::timeSignatureMetaEvent(options.timeSigNumerator, options.timeSigDenominator));
+    auto endOfTrack = juce::MidiMessage::endOfTrack();
+    endOfTrack.setTimeStamp(endTick);
+    sequence.addEvent(endOfTrack);
+    return sequence;
+}
+
+bool optionsAreValid(const MidiClipFile::ArrangementExportOptions& options) {
+    if (!std::isfinite(options.bpm) || options.bpm <= 0.0 || options.timeSigNumerator < 1 ||
+        options.timeSigDenominator < 1)
+        return false;
+    // The tempo meta event stores microseconds per quarter note in 24 bits.
+    if (std::llround(60.0e6 / options.bpm) > 0xffffff)
+        return false;
+    if (options.rangeBeats.has_value()) {
+        const auto [start, end] = *options.rangeBeats;
+        if (!std::isfinite(start) || !std::isfinite(end) || start < 0.0 || end <= start)
+            return false;
+    }
+    return true;
+}
+
+} // namespace
+
+bool MidiClipFile::exportArrangement(const TimelineDoc& doc, const ArrangementExportOptions& options,
+                                     juce::OutputStream& stream) {
+    if (!optionsAreValid(options))
+        return false;
+
+    const double origin = options.rangeBeats ? options.rangeBeats->first : 0.0;
+    const double limit = options.rangeBeats ? options.rangeBeats->second : -1.0;
+
+    std::vector<juce::MidiMessageSequence> sequences;
+    double maxEndTick = 0.0;
+    for (const auto& track : doc.getTracks()) {
+        if (track.kind != TrackKind::Midi)
+            continue;
+        sequences.push_back(buildTrackSequence(track, origin, limit));
+        maxEndTick = std::max(maxEndTick, sequences.back().getEndTime());
+    }
+
+    juce::MidiFile midiFile;
+    midiFile.setTicksPerQuarterNote(kExportPpq);
+    midiFile.addTrack(buildConductorSequence(options, maxEndTick));
+    for (const auto& sequence : sequences)
+        midiFile.addTrack(sequence);
+    return midiFile.writeTo(stream, 1);
+}
+
+bool MidiClipFile::exportArrangementToFile(const TimelineDoc& doc, const ArrangementExportOptions& options,
+                                           const juce::File& file) {
+    if (!optionsAreValid(options))
+        return false;
+
+    file.deleteFile();
+    auto stream = file.createOutputStream();
+    if (stream == nullptr)
+        return false;
+
+    return exportArrangement(doc, options, *stream);
 }
 
 } // namespace synth

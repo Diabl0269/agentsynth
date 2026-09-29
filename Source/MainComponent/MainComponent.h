@@ -5,6 +5,7 @@
 #include "AI/AccountService.h"
 #include "AppUndoManager.h"
 #include "Branding.h"
+#include "MainComponentExportMidiSeams.h"
 #include "MainComponentRemoteActionInvoker.h"
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemote/MidiRemoteFeedbackOutputs.h"
@@ -326,21 +327,19 @@ public:
     std::function<void(const juce::String& actionLabel, std::function<void(UnsavedChangesChoice)> onChoice)>
         unsavedChangesPrompt;
 
-    /** What the user picked when openFromFile found a pending autosave sidecar. Restore loads
-     *  autosave.json instead of project.json and leaves the document dirty; Discard loads
-     *  project.json normally. Either arm deletes the sidecar — see ProjectBundle::discardAutosave. */
+    /** Pick for a pending autosave sidecar: Restore loads autosave.json (stays dirty), Discard
+     *  loads project.json; either deletes the sidecar (ProjectBundle::discardAutosave). */
     enum class AutosaveRecoveryChoice { Restore, Discard };
 
     /** Test/automation seam for the autosave-recovery prompt, same idiom as unsavedChangesPrompt. */
     std::function<void(std::function<void(AutosaveRecoveryChoice)> onChoice)> autosaveRecoveryPrompt;
 
-    /** The choice the user makes when opening a `.json` patch: replace the current patch, add the
-     *  loaded one on top of it, or cancel the open. */
+    /** The choice when opening a `.json` patch: replace the current one, add on top, or cancel. */
     enum class PatchLoadMode { Replace, Append, Cancel };
 
-    /** Test/automation seam for the patch load-mode prompt, same idiom as unsavedChangesPrompt and
-     *  autosaveRecoveryPrompt. The load only happens on a non-Cancel choice. */
+    /** Test/automation seam for the patch load-mode prompt (same idiom as unsavedChangesPrompt). */
     std::function<void(std::function<void(PatchLoadMode)> onChoice)> patchLoadPrompt;
+    synth::MidiExportSeams midiExportSeams; // Test/automation seams for the Export MIDI prompts.
 
     /** True once an undo-able edit has happened since the last save/load. Deliberately NOT reset
      *  by undoing back to the saved state — see
@@ -627,6 +626,7 @@ private:
     void promptExportPatchOnly();
     void promptExportAudio();
     void promptExportStems();
+    void promptExportMidi();
     void loadFactoryPresetAtIndex(int index);
     void loadPresetGuarded(int index, bool isNewDocument = false);
     void openRecentProjectGuarded(const juce::File& file);

@@ -387,6 +387,17 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildGeneralCommandRows()
              m.promptExportStems();
              return true;
          }},
+        // Menu-only and never gated: a MIDI export reads the document, not the offline render path.
+        {AppCommands::exportMidi,
+         "Export MIDI...",
+         "Save the arrangement or the current loop range as a Standard MIDI File (.mid)",
+         "General",
+         nullptr,
+         {},
+         [](MainComponent& m) {
+             m.promptExportMidi();
+             return true;
+         }},
         // The Patch open is menu-only, like checkForUpdates -- no rebindable action-id, so no
         // default keypress and no Settings row; it asks whether to replace or add onto the patch.
         {AppCommands::openPreset,
