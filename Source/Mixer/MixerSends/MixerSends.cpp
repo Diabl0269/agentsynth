@@ -178,13 +178,17 @@ std::vector<NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph, Nod
 }
 
 // The trusted "isBus" flag is what a freshly added, still-unfed bus has to go on -- it has no
-// predecessors yet. A strip among its signal predecessors is the structural fallback, so a patch
-// built before the flag existed and a hand-wired group bus both still classify.
+// predecessors yet. Strips feeding it with NO track source feeding it is the structural fallback,
+// so a patch built before the flag existed and a hand-wired group bus both still classify. A strip
+// a track plays into is that track's channel whatever else feeds it: a send from track A
+// into track B's channel must not turn B into a bus. Judged live, so no load-time migration.
 bool isBusStrip(juce::AudioProcessorGraph& graph, NodeID stripId) {
     auto* strip = stripAt(graph, stripId);
     if (strip == nullptr)
         return false;
-    return strip->isBus() || !findStripsFeedingStrip(graph, stripId).empty();
+    if (strip->isBus())
+        return true;
+    return !findStripsFeedingStrip(graph, stripId).empty() && findTrackSourcesFeedingStrip(graph, stripId).empty();
 }
 
 // The name a bus column and a bus's stem file fall back to, a bus having no feeding track to take a

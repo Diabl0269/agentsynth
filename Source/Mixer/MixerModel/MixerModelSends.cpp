@@ -38,10 +38,11 @@ juce::String stripColumnName(juce::AudioProcessorGraph& graph, const TimelineDoc
 
 void buildBusSourcesForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
                               MixerColumn& column) {
-    if (column.kind != MixerColumn::Kind::Bus)
+    if (column.kind != MixerColumn::Kind::Bus && column.kind != MixerColumn::Kind::Strip)
         return;
+    auto& names = column.kind == MixerColumn::Kind::Bus ? column.busSources : column.receivesFrom;
     for (const auto sourceId : findStripsFeedingStrip(graph, column.nodeId))
-        column.busSources.push_back(stripColumnName(graph, doc, macros, sourceId));
+        names.push_back(stripColumnName(graph, doc, macros, sourceId));
 }
 
 namespace {

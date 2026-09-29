@@ -20,7 +20,12 @@ and `spliceMasterNode`'s `Strip -> Master(Mix)` classification all unchanged.
 `MixerColumn::Kind::Bus` is **display only**, set when the strip carries `"isBus": true` in its
 trusted extra state — written by "Add bus" and by the merge-point buses — **or**, as a structural
 fallback for patches built before that flag existed, when one of its signal predecessors is another
-strip. A cable into a Compressor or Gate **Key** input is not a signal predecessor
+strip **and no track source feeds it**. **FRO355: a strip a track plays into is that track's channel,
+whatever else feeds it** — a send from track A into track B's channel leaves B a linked track
+channel (it gains a "receives" badge, below), where it used to flip to BUS and drop its link. The
+rule is judged live on every rebuild, so an old patch needs no migration; the one visible change is
+that "Bus N" fallback names (and so stem file names) can renumber on a patch where a track channel
+used to count as a bus. A cable into a Compressor or Gate **Key** input is not a signal predecessor
 (`PortRole::Sidechain`, [`fx-modules.md`](../modules/fx-modules.md#key-inputs-sidechain)), so a bass
 channel keyed from a kick channel stays a channel. **The flag is what a freshly added, still-unfed bus has to go on.** A track preset scrubs
 `"isBus"` from every captured strip
@@ -228,12 +233,18 @@ delay-compensated per-edge mute node, which is out of scope.
 ## The send and bus UI
 
 A bus column is an ordinary strip column with three differences: a **"BUS" badge** instead of the
-linked badge, a source line listing the feeding strips' names instead of tracks, and no track chip or
+link glyph, a source line listing the feeding strips' names instead of tracks, and no track chip or
 colour link. Its insert list works exactly like any other column's — including the bypassed Gate, EQ
 and Compressor "Add bus" builds — via the backward walk
 [`docs/mixer/mixer.md`](mixer.md#inserts-in-a-free-form-graph) describes for a column with no feeding
 track. **Buses sit after the track-driven strips and before Direct**, which is exactly where the
 existing orphan-strip append puts them.
+
+**A track channel that receives sends** (FRO355) keeps its link glyph and track source line and adds
+a compact **"receives" badge** — a small arrow plus the number of strips sending into it — whose
+tooltip lists them ("Receives sends from: Drums, Keys"). The names come from
+`MixerColumn::receivesFrom`, the Strip-kind twin of a bus's `busSources`; the header's tooltip and
+accessible description spell every badge out in words (see [`mixer.md`](mixer.md#column-badges)).
 
 On a source column a compact `MixerSendList` sits under the insert list: one row per active slot — a
 target-bus button, a rotary level knob attached straight onto `sendNLevel`, a rotary **pan knob**

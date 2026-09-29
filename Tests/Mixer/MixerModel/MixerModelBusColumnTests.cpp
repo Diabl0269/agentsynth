@@ -58,6 +58,50 @@ TEST(MixerModelBusColumnTests, BusColumnIsKindBusAndListsItsSourceStrips) {
     EXPECT_EQ(busColumn.busSources[0], "Drums");
     EXPECT_EQ(busColumn.busSources[1], "Bass");
     EXPECT_TRUE(busColumn.feedingTracks.empty()) << "no track chip on a bus column";
+    EXPECT_TRUE(busColumn.receivesFrom.empty()) << "a bus lists its feeders as busSources, not receivesFrom";
+    EXPECT_TRUE(synth::isBusStrip(graph, bus->nodeID)) << "a legacy, unflagged group bus still classifies";
+}
+
+// A send from track A into track B's own channel used to flip B to Bus (dropping its link
+// and renaming it "Bus 1"). A strip a track plays into stays that track's channel.
+TEST(MixerModelBusColumnTests, ATrackChannelReceivingASendStaysALinkedTrackChannel) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    synth::TimelineDoc doc;
+    synth::MacroSet macros;
+
+    const auto trackA = doc.addTrack(synth::TrackKind::Audio, "Drums");
+    const auto trackB = doc.addTrack(synth::TrackKind::Audio, "Bass");
+    const auto rigA = buildLinearChannelRigMMT(graph, doc, trackA);
+    const auto rigB = buildLinearChannelRigMMT(graph, doc, trackB);
+
+    const auto plain = synth::buildMixerSnapshot(graph, doc, macros);
+    const auto* plainB = columnFor(plain, rigB.strip->nodeID);
+    ASSERT_NE(plainB, nullptr);
+    EXPECT_EQ(plainB->kind, synth::MixerColumn::Kind::Strip) << "a plain track channel";
+    EXPECT_TRUE(plainB->linkedToTrack);
+    EXPECT_TRUE(plainB->receivesFrom.empty());
+
+    ASSERT_EQ(synth::addSend(graph, rigA.strip->nodeID, rigB.strip->nodeID), 0);
+    EXPECT_FALSE(synth::isBusStrip(graph, rigB.strip->nodeID));
+    EXPECT_EQ(synth::sendTargetName(graph, nullptr, rigB.strip->nodeID), "Channel") << "never \"Bus N\"";
+
+    const auto snapshot = synth::buildMixerSnapshot(graph, doc, macros);
+    const auto* columnB = columnFor(snapshot, rigB.strip->nodeID);
+    ASSERT_NE(columnB, nullptr);
+    EXPECT_EQ(columnB->kind, synth::MixerColumn::Kind::Strip);
+    EXPECT_TRUE(columnB->linkedToTrack) << "receiving a send never unlinks the track";
+    EXPECT_EQ(columnB->name, "Bass");
+    ASSERT_EQ(columnB->receivesFrom.size(), 1u);
+    EXPECT_EQ(columnB->receivesFrom[0], "Drums");
+    EXPECT_TRUE(columnB->busSources.empty());
+
+    const auto* columnA = columnFor(snapshot, rigA.strip->nodeID);
+    ASSERT_NE(columnA, nullptr);
+    ASSERT_EQ(columnA->sends.size(), 1u);
+    EXPECT_EQ(columnA->sends[0].targetName, "Bass") << "the send row names the track channel, not \"Bus 1\"";
+    EXPECT_TRUE(columnA->receivesFrom.empty());
 }
 
 TEST(MixerModelBusColumnTests, AnEmptyNewBusStillClassifiesAsBus) {
@@ -209,4 +253,8 @@ TEST(MixerModelBusColumnTests, ASendWiredIntoABusIsNeverListedAsAnInsertAndStays
     EXPECT_EQ(busColumn->inserts[1].name, "Parametric EQ");
     EXPECT_EQ(busColumn->inserts[2].name, "Compressor");
     EXPECT_TRUE(busColumn->insertChainIsLinear) << "a feeding send is a source, not a branch";
+    EXPECT_EQ(busColumn->kind, synth::MixerColumn::Kind::Bus) << "a fed Add-bus bus stays a bus";
+    ASSERT_EQ(busColumn->busSources.size(), 1u);
+    EXPECT_EQ(busColumn->busSources[0], "Vocals");
+    EXPECT_TRUE(busColumn->receivesFrom.empty());
 }

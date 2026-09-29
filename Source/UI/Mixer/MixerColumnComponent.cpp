@@ -200,8 +200,13 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
 
     header_.setColour(column.colour);
     header_.setDisplayName(column.name);
-    header_.setLinkedBadgeVisible(column.linkedToTrack);
+    // A linked column has exactly one feeding track, so `sourceLine` is that track's name.
+    header_.setLinkedTrack(column.linkedToTrack, column.linkedToTrack ? sourceLine : juce::String());
     header_.setBusBadgeVisible(column.kind == synth::MixerColumn::Kind::Bus);
+    juce::StringArray receivesFrom;
+    for (const auto& name : column.receivesFrom)
+        receivesFrom.add(name);
+    header_.setReceivesFrom(receivesFrom);
 
     // Doubles as docs/mixer/panel.md#what-the-mixer-shows's "the tracks that play into it" row -- `sourceLine` is the
     // caller-resolved (comma-joined) names of column.feedingTracks, the same tracks a "source line" names for a
