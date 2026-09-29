@@ -5,6 +5,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
 #include "MainComponent.h"
+#include "MainComponentShortcutHints.h"
 #include "UI/Settings/SettingsWindow.h"
 // Generated at CMake CONFIGURE time from local git history -- see the root CMakeLists.txt's
 // "What's New" block. ${CMAKE_BINARY_DIR}/generated is on AppUI's private include path.
@@ -273,6 +274,30 @@ void MainComponent::assembleToolbar() {
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.
     setSize(1600, 900);
+
+    // Cmd-hold shortcut hints: which buttons carry a key-cap bubble, and the action behind each. The
+    // overlay reads the current key from shortcutManager every time it appears. Feedback and the theme
+    // toggle have no shortcut action, so they are simply not listed.
+    synth::ui::MainWindowHintParts hintParts;
+    hintParts.buttons = {{&toggleLibraryButton, "toggleLibrary"},
+                         {&newButton, "newPatch"},
+                         {&saveButton, "savePreset"},
+                         {&loadButton, "openProject"},
+                         {&settingsButton, "openSettings"},
+                         {&undoButton, "undo"},
+                         {&redoButton, "redo"},
+                         {&autoArrangeButton, "autoArrange"},
+                         {&toggleMinimapButton, "toggleMinimap"},
+                         {&toggleModMatrixButton, "toggleModMatrix"},
+                         {&toggleAiPanelButton, "toggleAiPanel"},
+                         {&toggleBottomPanelButton, "toggleBottomPanel"},
+                         {&statusBar.getTransportButton(), "togglePlayback"}};
+    hintParts.dock = &bottomDock;
+    hintParts.transport = &timelinePanel.getTransportBar();
+    hintParts.statusBar = &statusBar;
+    hintParts.toggleBottomPanelButton = &toggleBottomPanelButton;
+    hintParts.isDockOpen = [this] { return isBottomDockVisible; };
+    shortcutHints_ = synth::ui::makeMainWindowShortcutHints(*this, shortcutManager, std::move(hintParts));
 }
 
 void MainComponent::wireStatusBar() {

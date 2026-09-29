@@ -533,6 +533,14 @@ void BottomDockComponent::resized() {
     midiRemoteHost_.setBounds(bounds);
 }
 
+std::vector<BottomDockComponent::StripTab> BottomDockComponent::getStripTabs() {
+    std::vector<StripTab> tabs;
+    for (Tab t : tabOrder_)
+        if (isTabOfferedInStrip(t))
+            tabs.push_back({&buttonForTab(t), actionIdForTab(t), buttonForTab(t).getButtonText()});
+    return tabs;
+}
+
 void BottomDockComponent::lookAndFeelChanged() { refreshDetachButton(); }
 
 } // namespace synth::ui

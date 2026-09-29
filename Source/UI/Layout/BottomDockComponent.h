@@ -239,6 +239,16 @@ public:
         return buttons;
     }
 
+    /** One tab currently offered in the strip, for the Cmd-hold shortcut hints. */
+    struct StripTab {
+        juce::TextButton* button{nullptr};
+        juce::String actionId; // the shortcut action that shows this tab
+        juce::String name;
+    };
+    /** The tabs offered in the strip right now, in the user's tab order; a tab detached to its own
+     *  window (or a disabled Mixer) is absent. Independent of whether the dock itself is open. */
+    std::vector<StripTab> getStripTabs();
+
     void resized() override;
     void lookAndFeelChanged() override; // refreshes the tab-strip detach button's themed icon
 

@@ -507,6 +507,7 @@ add_library(Core STATIC
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelComboAndMenus.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelScrollbarsAndChrome.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelCanvasTreatments.cpp
+    Source/UI/Theme/AppLookAndFeel/AppLookAndFeelShortcutHints.cpp
 )
 
 # Link Core against JUCE: the headers and definitions of every module, and one shared compiled copy

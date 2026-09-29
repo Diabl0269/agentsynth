@@ -25,7 +25,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 ## Layout, canvas & theming
 
 - [`docs/layout/layout.md`](layout/layout.md) — hub: the soft grid, anti-overlap search, auto-arrange, the `LayoutUtil` API, drag affordance and alignment guides
-- [`docs/layout/chrome.md`](layout/chrome.md) — toolbar, status bar, minimum window size, panel collapse and persistence, the welcome overlay, the mod-matrix panel
+- [`docs/layout/chrome.md`](layout/chrome.md) — toolbar, status bar, minimum window size, panel collapse and persistence, the welcome overlay, the Cmd-hold shortcut hint overlay, the mod-matrix panel
 - [`docs/layout/module-card.md`](layout/module-card.md) — a card's own geometry: width buckets, body layout, header buttons, deleting a module (reconnect-the-chain heal, FRO23), custom titles, the Audio Output identity treatment, the Wavetable card
 - [`docs/layout/module-library.md`](layout/module-library.md) — the library sidebar: rows, search, collapsible sections, scrolling, the help popover, the Shortcuts tab that mirrors it
 - [`docs/layout/preset-positions.md`](layout/preset-positions.md) — where factory presets place their modules
@@ -76,7 +76,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 
 ## MIDI, shortcuts & remote control
 
-- [`docs/control/midi-input.md`](control/midi-input.md) · [`docs/control/shortcuts.md`](control/shortcuts.md) — external MIDI routing, keyboard shortcuts
+- [`docs/control/midi-input.md`](control/midi-input.md) · [`docs/control/shortcuts.md`](control/shortcuts.md) — external MIDI routing, keyboard shortcuts (incl. the Cmd-hold hints)
 - [`docs/control/midi-remote.md`](control/midi-remote.md) · [`docs/control/midi-remote-ui.md`](control/midi-remote-ui.md) — Controllers: external controller profiles, drawn surfaces, right-click MIDI Learn on every control, message-thread apply with gestures, scope-by-target-type persistence; the panel and coverage table
 - [`docs/control/midi-remote-mpe.md`](control/midi-remote-mpe.md) — Controllers v2 design (not built): MPE zone detection, member channels kept out of mappings, per-note bend/pressure/timbre into Poly MIDI
 - [`docs/control/midi-remote-mcu-hui.md`](control/midi-remote-mcu-hui.md) — Controllers v2 design (not built): Mackie Control / HUI protocol surfaces, sourced protocol tables, a source-routing sink, the motor-fader/LCD renderer
