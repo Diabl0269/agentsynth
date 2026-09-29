@@ -13,6 +13,86 @@
 #include "WhatsNewData.h"
 #include <algorithm>
 
+// ---- Member declaration order (MainComponent.h) ----
+// Members construct in declaration order and destroy in reverse, so the order in the header is
+// load-bearing:
+//  - ownedThemeManager/ownedLookAndFeel are fallbacks used only by the delegating ctor; themeManager/
+//    lookAndFeel are non-owning and valid after every ctor (external objects or those fallbacks).
+//  - timelineDoc, automationRecorder and midiRemoteDoc precede undoManager so they outlive it: a
+//    TimelineSnapshotAction / MidiRemoteSnapshotAction on the undo stack references them. midiRecorder
+//    has no such constraint (stopAndCommit() takes both as parameters).
+//  - ownedAudioEngine is set only on the standalone paths; the plugin ctor injects the processor's
+//    engine, and `audioEngine` is the single access point either way.
+//  - pluginCardLayoutStore precedes graphEditor so it is destroyed after it (every hosted card
+//    listens to it). pluginWindowManager follows the engine and graphEditor so it is destroyed
+//    FIRST: a window's content can hold a live juce::AudioPluginInstance editor that must not outlive
+//    its graph node.
+//  - welcomeScreen_ is the startup overlay offering New/Open Default/Open Existing/Recent; it is null
+//    in Hosted mode (host-owned document) and added to the component tree LAST so it paints on top.
+//  - appProperties precedes aiChatComponent, whose ctor reads a persisted setting from it (the other
+//    order was UB, seen as a hang in juce::PropertySet::getIntValue). setStorageParameters() still
+//    runs later, in the ctor body. accountService precedes aiChatComponent so reverse-order
+//    destruction tears the chat component down first, while accountService is alive to have the
+//    callback slots it installed cleared; it takes the production host explicitly because its own
+//    localhost default is a dev convenience (a Debug build redirects via AGENTSYNTH_LOCAL_API_URL).
+//  - trackChannelLink_ is its own collaborator rather than more methods here, declared after the
+//    members it references. bottomDock takes timelinePanel by reference (declared just before it) and
+//    only the ADDRESS of shortcutManager, which finishes constructing later. mixerPlacement_ follows
+//    bottomDock so its Mixer-panel reference stays valid.
+//  - bottomDockAutoHiddenByEmptyTabs_ is true only while the dock auto-hid because its last tab was
+//    detached (never for a deliberate close); every deliberate open/close and the matching
+//    auto-reopen clear it, so a later redock never resurrects a panel the user hid on purpose.
+//  - timelinePanelHeight_ is resolved in initialiseCommon() from kTimelinePanelHeightKey and moved by
+//    the panel's top-edge drag. wasTransportPlaying_ is the playing->stopped edge for the MIDI
+//    recorder's auto-commit, updated once per 10 Hz poll. transportNudge_ remembers the last
+//    cursor-move request so nudges fired faster than the audio thread applies them accumulate.
+//  - feedbackGuardLatched_ is true from a guard trip until the armed-Audio-track set goes from NONE
+//    armed to at least one armed again (wasAnyAudioTrackArmed_ is the previous poll's value); while
+//    latched the poll keeps input monitoring off, and merely staying armed must not re-enable it.
+//  - audioTake_ is the in-flight take; currentBundleDir_ is the bundle last saved to/opened from and
+//    decides where a take is written (chooseTakeFiles).
+//  - programmaticApplyScopes is a stack because an undo of a COMBINED (graph + timeline) change
+//    performs two restores, each bracketed by AppUndoManager hooks. aiApplyScope has its own slot
+//    because its open/close pair is NOT guaranteed balanced (a failed applyJSONToGraph never fires
+//    aiPatchApplied); assigning a new scope over an abandoned one closes it, so a failed apply leaves
+//    capture suspended only until the next apply.
+//  - currentPatchName_ precedes statusBar so it is constructed when statusBar's ctor runs.
+//  - isDirty_ is recomputed by changeListenerCallback's AppUndoManager branch and cleared through
+//    markDocumentClean() (saveToFile/openFromFile/newPatch) - NOT by loadFactoryPresetAtIndex, which
+//    keeps the live timeline and so cannot claim the document matches anything on disk, and never by
+//    exportPatchOnly. savedEditSerial_ is the baseline it derives from: the undo manager's change
+//    broadcast is async, so a notification can arrive after the document was reset and must be able
+//    to recompute rather than re-dirty it blindly.
+//  - documentGeneration_ is bumped once by guardUnsavedChanges() just before it runs `proceed`,
+//    never on Cancel or a failed Save. addInstrumentPluginTrack captures it when an async hosted
+//    plugin load starts and compares it on completion: a mismatch means the load's document is gone,
+//    so the completion is dropped (graph/undo untouched).
+//  - lastAutosavedEditSerial_ is autosave's own baseline, SEPARATE from savedEditSerial_: rebased on a
+//    successful autosave write and on markDocumentClean(), so autosave never rewrites an unchanged
+//    sidecar every interval. lastAutosaveMs_ is wall-clock (the shared 10 Hz timer's firing rate is
+//    not exact); markDocumentClean() resets it so a fresh document does not autosave on its first tick.
+//  - isBounceInProgress_ is ONE flag for Export Audio and Export Stems: the offline render path is
+//    exclusive across the two. maybeAutosave() and guardUnsavedChanges() check it, since neither may
+//    touch the document while the engine is offline-prepared. exportDialog_ is polled for progress by
+//    timerCallback(); it is a SafePointer because the modal window can go away independently.
+//  - pluginScanService is settings-backed and UI-driven, installed into the process-wide
+//    DefaultHostedPluginBackend by the ctor and uninstalled by the dtor so a HostedPluginModule
+//    restoring a patch can resolve its identity. activeScanService is the one in use: ours, or the
+//    one already installed when this editor was built on an external engine (the plugin path).
+//  - recentProjects is settings-backed with a single owner, restored on startup and rewritten after
+//    every successful bundle save/open.
+//  - remoteFeedbackOutputs_ is declared BEFORE remoteEngine, which holds a raw RemoteFeedbackSink*
+//    into it, so it must outlive the engine. remoteActionInvoker_ (MainComponentRemoteActionInvoker.h)
+//    is its own file rather than nested here; transportNudge_/timelineDoc are declared earlier so both
+//    references are valid. midiLearnController_ is declared last of its references.
+//  - focusRegions_ is populated once in initialiseCommon() after every region root exists and wraps
+//    the same visibility getters the toolbar toggles use.
+//  - The panel slides: ONE driver moves all three panels because they share a window (a per-panel
+//    animator would leave one frozen half-open). kPanelSlideMs is inside the house 160-220 ms spec.
+//  - beginPanelSlide() lands immediately when nothing can animate (an off-screen component gets no
+//    VBlank), which Tests/UI/Layout/PanelAnimationAndLoadingTests.cpp asserts with no message pump.
+//  - shortcutHints_ and tooltipWindow are constructed last so all child components exist.
+
 // ---- Primary constructor (injected ThemeManager + LookAndFeel from Main.cpp) ----
 MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
                              std::unique_ptr<synth::AIProvider> provider)
@@ -291,4 +371,9 @@ MainComponent::~MainComponent() {
         audioEngine.onMidiDevicesChanged = nullptr;
         audioEngine.shutdown();
     }
+}
+
+// The default is "remote" for a brand-new install, else the long-standing "ollama". Caller: initialiseCommon().
+juce::String MainComponent::resolveDefaultProviderId(bool hasExistingSettingsFile) {
+    return hasExistingSettingsFile ? juce::String("ollama") : juce::String("remote");
 }

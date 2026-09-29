@@ -52,6 +52,11 @@ there is no per-file class boundary. Source layout:
   split into 4 named steps (`createTrackInForInstrumentChain`/`adoptInstrumentNodeForChain`/
   `buildInstrumentEnvelopeChain`/`buildInstrumentChannelAndMacro`) sharing state through
   the private `InstrumentChainBuild` struct.
+- `MainComponentTypes.h` — the nested value types (`EditSurface`, `SlidingPanel`, the three dialog-choice
+  enums, `InstrumentChainBuild`, `AudioTake`), declared at namespace scope in `synth::maincomponent`
+  and re-exported as member aliases so `MainComponent::EditSurface` etc. still compile.
+- `MainComponentTestSeams.cpp` — the out-of-line bodies of every `*ForTest` / `simulate*` hook, each
+  documented with what it bypasses. `MainComponentExportMidiSeams.h` holds Export MIDI's prompt seams.
 - `MainComponentInternal.h` — the handful of file-local helpers shared by more than one of the
   units above (`detail::kRecordingsFolderName`, `detail::isMidiInstrumentNode`,
   `detail::peaksRefForAssetRef`); not part of the public API.

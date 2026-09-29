@@ -377,3 +377,13 @@ void MainComponent::auditionTrackNote(synth::TrackId forTrack, int pitch, int ve
     // block, because this is the mouse-down that is still unwinding.
     source->pushAuditionNote(pitch, velocity, noteOn);
 }
+
+bool MainComponent::isPluginScanInProgress() const { return getPluginScanService().isScanning(); }
+
+void MainComponent::ensureInstrumentPluginsScanned() { maybeStartEagerPluginScan(); }
+
+// The colour picker's favourites shelf persists here: the only TrackHeaderHost override that isn't
+// graph/timeline plumbing (see ColourPickerPopup.h).
+juce::ApplicationProperties* MainComponent::getAppProperties() { return &appProperties; }
+
+synth::ui::TrackChannelLinkSurface* MainComponent::getChannelLinkSurface() { return &trackChannelLink_; }

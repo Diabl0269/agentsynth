@@ -3,7 +3,6 @@
 # its entry; when it shrinks, run `bash scripts/check-comment-provenance.sh --update` so
 # the entry tightens; once it reaches zero the entry must be removed (--update does that).
 # Never add a NEW file here -- rewrite its comments instead. Format: <count> <path>.
-18 Source/MainComponent/MainComponent.h
 14 Source/MainComponent/MainComponentSetupTimeline.cpp
 9 Source/MainComponent/MainComponentTimeline.cpp
 5 Source/MainComponent/MainComponentTrackHeaderHost.cpp

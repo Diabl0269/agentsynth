@@ -121,3 +121,10 @@ bool MainComponent::isZoomCommandActive(juce::CommandID id) const {
     }
     return true;
 }
+
+// Export is unavailable while an Export Audio/Stems render owns the engine.
+bool MainComponent::isExportAvailable() const { return !isBounceInProgress_; }
+
+bool MainComponent::isBottomDockVisibleForSnap() const { return isBottomDockVisible; }
+
+bool MainComponent::isWelcomeScreenHidden() const { return welcomeScreen_ == nullptr || !welcomeScreen_->isVisible(); }

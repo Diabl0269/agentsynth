@@ -15,6 +15,8 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentFileIO.cpp
     Source/MainComponent/MainComponentExportMidi.cpp
     Source/MainComponent/MainComponentExportMidiSeams.h
+    Source/MainComponent/MainComponentTypes.h
+    Source/MainComponent/MainComponentTestSeams.cpp
     Source/MainComponent/MainComponentCommands.cpp
     Source/MainComponent/MainComponentCommandTable.cpp
     Source/MainComponent/MainComponentCommandPredicates.cpp
