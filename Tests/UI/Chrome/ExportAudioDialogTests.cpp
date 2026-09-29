@@ -93,6 +93,27 @@ TEST(ExportAudioDialogTest, SwitchingToAiffStepsDownA32BitSelection) {
     EXPECT_NE(options.bitDepth, 32);
 }
 
+TEST(ExportAudioDialogTest, FlacOffersOnly16And24BitAndDropsAStuck32) {
+    auto dialog = makeDialog();
+    dialog.setBitDepthForTest(32);
+    ASSERT_EQ(dialog.getOptionsForTest().bitDepth, 32);
+
+    dialog.setFormatForTest(BounceFormat::Flac);
+    auto options = dialog.getOptionsForTest();
+    EXPECT_EQ(options.format, BounceFormat::Flac);
+    EXPECT_EQ(options.bitDepth, 24);
+
+    dialog.setBitDepthForTest(16);
+    EXPECT_EQ(dialog.getOptionsForTest().bitDepth, 16);
+    // A "32" request has no matching choice: it must not resolve to an invalid FLAC combination.
+    dialog.setBitDepthForTest(32);
+    EXPECT_NE(dialog.getOptionsForTest().bitDepth, 32);
+
+    dialog.setFormatForTest(BounceFormat::Wav);
+    dialog.setBitDepthForTest(32);
+    EXPECT_EQ(dialog.getOptionsForTest().bitDepth, 32) << "WAV still offers 32-bit float";
+}
+
 TEST(ExportAudioDialogTest, SampleRateAndDestinationRoundTrip) {
     auto dialog = makeDialog();
     dialog.setSampleRateForTest(96000.0);
@@ -224,6 +245,14 @@ TEST(ExportAudioDialogTest, SwitchingFormatKeepsTheTypedFileName) {
     auto dialog = makeDialog(kArrangementEndBeat, false, 0.0, 0.0, true, "My Project");
     dialog.setFormatForTest(BounceFormat::Aiff);
     EXPECT_EQ(dialog.getDestinationForTest().getFileName(), "My Project.aiff");
+}
+
+TEST(ExportAudioDialogTest, SwitchingToFlacRewritesTheDestinationExtension) {
+    auto dialog = makeDialog(kArrangementEndBeat, false, 0.0, 0.0, true, "My Project");
+    dialog.setFormatForTest(BounceFormat::Flac);
+    EXPECT_EQ(dialog.getDestinationForTest().getFileName(), "My Project.flac");
+    dialog.setFormatForTest(BounceFormat::Wav);
+    EXPECT_EQ(dialog.getDestinationForTest().getFileName(), "My Project.wav");
 }
 
 // ---- Tail Seconds/Bars --------------------

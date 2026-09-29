@@ -156,11 +156,8 @@ StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolde
     }
 
     // ---- One writer per strip, on a sibling temp file each, inside the destination folder ----
-    juce::WavAudioFormat wavFormat;
-    juce::AiffAudioFormat aiffFormat;
-    juce::AudioFormat& audioFormat = options_.format == BounceFormat::Aiff ? static_cast<juce::AudioFormat&>(aiffFormat)
-                                                                           : static_cast<juce::AudioFormat&>(wavFormat);
-    const juce::String extension = options_.format == BounceFormat::Aiff ? "aiff" : "wav";
+    const auto audioFormat = createAudioFormatFor(options_.format);
+    const juce::String extension = fileExtensionFor(options_.format);
     // Wide enough that "07" doesn't need to become "007" once an 8th strip exists, but never
     // narrower than 2 digits even for a 1-strip export - see docs/mixer/stem-export.md.
     const int nameWidth = juce::jmax(2, juce::String((int)entries.size()).length());
@@ -189,7 +186,7 @@ StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolde
             return;
         }
 
-        sw.writer.reset(audioFormat.createWriterFor(stream.get(), options_.sampleRate, 2u, options_.bitDepth, {}, 0));
+        sw.writer.reset(audioFormat->createWriterFor(stream.get(), options_.sampleRate, 2u, options_.bitDepth, {}, 0));
         if (sw.writer == nullptr) {
             restoreTransportAndEngine();
             setupFailed_ = true;

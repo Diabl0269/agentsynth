@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_core/juce_core.h>
 
 class AudioEngine;
@@ -15,7 +16,12 @@ namespace synth {
 // renders through; the transport is the app's own transport, driven through its normal
 // stop/locate/play commands; the modules are the live nodes. What differs from playback is only
 // that nobody is waiting for a device: blocks are produced as fast as the CPU can produce them.
-enum class BounceFormat { Wav, Aiff };
+enum class BounceFormat { Wav, Aiff, Flac };
+
+// The file extension (no dot) and a fresh juce::AudioFormat for `format`. The one place the format
+// enum maps to JUCE, shared by BounceSession, StemSession and the export dialog.
+juce::String fileExtensionFor(BounceFormat format);
+std::unique_ptr<juce::AudioFormat> createAudioFormatFor(BounceFormat format);
 
 struct BounceOptions {
     // The range to render, in beats, at the transport's current tempo. Half-open in intent but
@@ -37,8 +43,8 @@ struct BounceOptions {
     int bitDepth = 24; // 16 / 24 = integer PCM, 32 = IEEE float (WAV only - see `format`)
     int numChannels = 2;
 
-    // AIFF has no IEEE-float variant in juce::AiffAudioFormat, so bitDepth 32 is valid only when
-    // format is Wav - validate() rejects the combination rather than silently downgrading it.
+    // AIFF and FLAC have no IEEE-float variant in JUCE, so bitDepth 32 is valid only when format is
+    // Wav - validate() rejects the combination rather than silently downgrading it.
     BounceFormat format = BounceFormat::Wav;
 };
 

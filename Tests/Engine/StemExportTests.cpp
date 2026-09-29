@@ -280,6 +280,30 @@ TEST(StemExportTest, NStripsProduceNFilesWithExpectedNamesAndEqualLength) {
     EXPECT_GT(wavA.lengthInSamples, (juce::int64)0);
 }
 
+TEST(StemExportTest, FlacFormatWritesReadableFlacStemsWithTheFlacExtension) {
+    StemRig rig;
+    ASSERT_TRUE(rig.build());
+
+    ScopedTempDir out("agentsynth_stems_flac");
+    auto options = oneBeatOptions(24);
+    options.format = synth::BounceFormat::Flac;
+    const auto result = StemExporter::exportStems(rig.engine, out.dir, options);
+    ASSERT_TRUE(result.ok) << result.message;
+
+    ASSERT_EQ(result.stemFiles.size(), 2);
+    EXPECT_EQ(result.stemFiles[0].getFileName(), "01 - Channel 1.flac");
+    EXPECT_EQ(result.stemFiles[1].getFileName(), "02 - Channel 2.flac");
+
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    for (auto& f : result.stemFiles) {
+        std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(f));
+        ASSERT_NE(reader, nullptr) << f.getFullPathName();
+        EXPECT_EQ(reader->getFormatName(), "FLAC file");
+        EXPECT_EQ(reader->lengthInSamples, result.samplesWritten);
+    }
+}
+
 TEST(StemExportTest, NoStripsShowsAClearMessageInsteadOfRenderingNothing) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
     engine.initialise();

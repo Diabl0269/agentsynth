@@ -47,6 +47,7 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
 
     formatBox_.addItem("WAV", 1);
     formatBox_.addItem("AIFF", 2);
+    formatBox_.addItem("FLAC", 3);
     formatBox_.setSelectedId(1, juce::dontSendNotification);
     formatBox_.onChange = [this] {
         updateBitDepthChoicesForFormat();
@@ -55,8 +56,7 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
         // mode's destination is a FOLDER (each stem file gets its own extension at export time), so
         // there is no destination extension to track here.
         if (!stemsMode_) {
-            const bool isAiff = formatBox_.getSelectedId() == 2;
-            destination_ = destination_.withFileExtension(isAiff ? "aiff" : "wav");
+            destination_ = destination_.withFileExtension(fileExtensionFor(selectedFormat()));
         }
     };
 
@@ -158,17 +158,28 @@ void ExportAudioDialog::updateExportButtonEnablement() {
     exportButton_.setEnabled(wholeArrangementButton_.isEnabled() || selectionButton_.isEnabled());
 }
 
+BounceFormat ExportAudioDialog::selectedFormat() const {
+    switch (formatBox_.getSelectedId()) {
+    case 2:
+        return BounceFormat::Aiff;
+    case 3:
+        return BounceFormat::Flac;
+    default:
+        return BounceFormat::Wav;
+    }
+}
+
 void ExportAudioDialog::updateBitDepthChoicesForFormat() {
-    const bool isAiff = formatBox_.getSelectedId() == 2;
+    const bool hasFloat = selectedFormat() == BounceFormat::Wav;
     const int previousId = bitDepthBox_.getSelectedId() == 0 ? 2 : bitDepthBox_.getSelectedId();
     bitDepthBox_.clear(juce::dontSendNotification);
     bitDepthBox_.addItem("16-bit", 1);
     bitDepthBox_.addItem("24-bit", 2);
-    // AIFF has no 32-bit float variant (see BounceOptions::format) - offering it here would only
-    // let a user pick a combination validate() rejects at Export time.
-    if (!isAiff)
+    // Only WAV has a 32-bit float variant (see BounceOptions::format) - offering it elsewhere would
+    // only let a user pick a combination validate() rejects at Export time.
+    if (hasFloat)
         bitDepthBox_.addItem("32-bit float", 3);
-    bitDepthBox_.setSelectedId(isAiff && previousId == 3 ? 2 : previousId, juce::dontSendNotification);
+    bitDepthBox_.setSelectedId(!hasFloat && previousId == 3 ? 2 : previousId, juce::dontSendNotification);
 }
 
 void ExportAudioDialog::chooseDestinationFolder() {
@@ -227,7 +238,7 @@ void ExportAudioDialog::currentRange(double& startBeat, double& endBeat) const {
 
 BounceOptions ExportAudioDialog::getOptionsForTest() const {
     BounceOptions options;
-    options.format = formatBox_.getSelectedId() == 2 ? BounceFormat::Aiff : BounceFormat::Wav;
+    options.format = selectedFormat();
     options.sampleRate = kSampleRates[juce::jlimit(1, 3, sampleRateBox_.getSelectedId()) - 1];
     options.bitDepth = kBitDepths[juce::jlimit(1, 3, bitDepthBox_.getSelectedId()) - 1];
     // BounceOptions only ever speaks seconds - Bars is purely a display convenience for the slider.
@@ -245,7 +256,10 @@ BounceOptions ExportAudioDialog::getOptionsForTest() const {
 }
 
 void ExportAudioDialog::setFormatForTest(BounceFormat format) {
-    formatBox_.setSelectedId(format == BounceFormat::Aiff ? 2 : 1, juce::sendNotificationSync);
+    formatBox_.setSelectedId(format == BounceFormat::Flac   ? 3
+                             : format == BounceFormat::Aiff ? 2
+                                                            : 1,
+                             juce::sendNotificationSync);
 }
 
 void ExportAudioDialog::setBitDepthForTest(int bitDepth) {

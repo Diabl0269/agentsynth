@@ -123,6 +123,7 @@ private:
     // The one place Escape (from keyPressed() above, or fileNameEditor_'s own onEscapeKey) routes
     // to — page-aware, per the keyPressed() comment.
     void handleEscapeRequested();
+    BounceFormat selectedFormat() const;
     void updateBitDepthChoicesForFormat();
     void chooseDestinationFolder();
     void updateFileNameFromEditor();
