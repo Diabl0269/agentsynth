@@ -581,3 +581,11 @@ void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
 
     repaintCanvas();
 }
+
+void GraphEditor::setOutputDeviceInfoProvider(std::function<juce::String()> provider) {
+    outputDeviceInfoProvider = std::move(provider);
+}
+
+void GraphEditor::setDualIOPerModuleOverrides(std::map<juce::String, bool> overrides) {
+    dualIOPerModuleOverrides = std::move(overrides);
+}

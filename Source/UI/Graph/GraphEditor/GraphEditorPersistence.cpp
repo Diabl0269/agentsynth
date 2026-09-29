@@ -11,6 +11,10 @@
 #include "SnippetManager.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
+// patchDocument holds the top-level JSON keys this build doesn't understand (e.g. a future
+// "timeline"), stashed on load and re-merged on save so re-saving with an older build never destroys
+// a newer build's data. It is per-loaded-file (newPatch() clears it) and only the user preset
+// save/load path (savePreset/loadPreset) touches it -- undo/redo, snippets and AI apply must not.
 void GraphEditor::autoArrange() {
     auto& graph = audioEngine.getGraph();
     if (undoManager)

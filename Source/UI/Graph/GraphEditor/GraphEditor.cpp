@@ -51,7 +51,7 @@ GraphEditor::GraphContentComponent::GraphContentComponent(GraphEditor& ed)
     setOpaque(true);
 }
 
-// ---- GraphCanvasHost (see GraphEditor.h's private section for the rest, defined inline there) ----
+// ---- GraphCanvasHost overrides (the one-line ones -- accessors of owned members -- stay inline in GraphEditor.h) ----
 // Out-of-line only because it needs ModuleComponent's full definition (getNodeId()), which
 // GraphEditor.h deliberately keeps forward-declared.
 juce::AudioProcessorGraph& GraphEditor::graph() { return audioEngine.getGraph(); }
@@ -84,4 +84,21 @@ void GraphEditor::clearMidiLearnArmed() {
     for (auto* c : content.getModules())
         if (c != nullptr)
             c->setMidiLearnArmedParam({});
+}
+
+void GraphEditor::reportStatusMessage(const juce::String& message) {
+    if (onStatusMessage)
+        onStatusMessage(message);
+}
+
+juce::Point<int> GraphEditor::canvasPositionOfLocalPoint(juce::Point<int> pointOnHost) const {
+    return content.getLocalPoint(this, pointOnHost).roundToInt();
+}
+
+juce::Point<int> GraphEditor::estimateModuleSizeForType(const juce::String& typeName) const {
+    return estimateModuleSize(typeName);
+}
+
+juce::var GraphEditor::resolveSnippetPayload(const juce::String& name) const {
+    return snippetProvider ? snippetProvider(name) : juce::var();
 }
