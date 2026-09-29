@@ -173,6 +173,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorSelection.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroApi.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroCards.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorMacroHullStrips.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
     Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.h
     Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.cpp

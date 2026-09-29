@@ -389,6 +389,56 @@ MacroCardComponent* MacroGroupController::getMacroCardForTest(const juce::String
     return nullptr;
 }
 
+std::pair<int, int> MacroGroupController::macroHullStripWidths(const juce::String& macroId) const {
+    const auto* macro = host_.getMacros().find(macroId);
+    if (macro == nullptr) {
+        const int empty = kMacroPortStripInset + kMacroPortStripPadding;
+        return {empty, empty};
+    }
+    return macroStripWidths(*macro, kMacroHullStripInnerJackRoom);
+}
+
+juce::Rectangle<int> MacroGroupController::macroHullAddButtonBounds(const juce::String& macroId, bool isInput) const {
+    const auto hull = macroHullBounds(macroId);
+    if (hull.isEmpty())
+        return {};
+    const int size = (int)kMacroPortFooterButtonSize;
+    const int x =
+        isInput ? hull.getX() + (int)kMacroPortAddButtonInset : hull.getRight() - (int)kMacroPortAddButtonInset - size;
+    return {x, hull.getBottom() - (int)kMacroPortFooterButtonFromBottom, size, size};
+}
+
+juce::Rectangle<int> MacroGroupController::macroHullRemoveButtonBounds(const juce::String& macroId, bool isInput,
+                                                                       float zoom) const {
+    const auto* macro = host_.getMacros().find(macroId);
+    const auto hull = macroHullBounds(macroId);
+    if (macro == nullptr || hull.isEmpty() || !macroPortNamesVisibleAtZoom(zoom))
+        return {};
+    const bool hasPort = std::any_of(macro->ports.begin(), macro->ports.end(),
+                                     [isInput](const synth::MacroPort& p) { return p.isInput == isInput; });
+    if (!hasPort)
+        return {};
+    const int size = (int)kMacroPortFooterButtonSize;
+    const int x = isInput ? hull.getX() + (int)kMacroPortRemoveButtonInset
+                          : hull.getRight() - (int)kMacroPortRemoveButtonInset - size;
+    return {x, hull.getBottom() - (int)kMacroPortFooterButtonFromBottom, size, size};
+}
+
+std::optional<MacroGroupController::HullPortButtonHit>
+MacroGroupController::macroHullPortButtonAt(juce::Point<int> canvasPos, float zoom) const {
+    for (const auto& macro : host_.getMacros().getAll()) {
+        if (macro.collapsed)
+            continue;
+        for (const bool isInput : {true, false}) {
+            if (macroHullAddButtonBounds(macro.id, isInput).contains(canvasPos))
+                return HullPortButtonHit{macro.id, isInput, true};
+            if (macroHullRemoveButtonBounds(macro.id, isInput, zoom).contains(canvasPos))
+                return HullPortButtonHit{macro.id, isInput, false};
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<MacroGroupController::MacroHullPort>
 MacroGroupController::macroHullPortLayout(const juce::String& macroId) const {
     std::vector<MacroHullPort> result;

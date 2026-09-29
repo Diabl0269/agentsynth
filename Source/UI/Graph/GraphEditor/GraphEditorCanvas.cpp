@@ -701,6 +701,23 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
 
         auto localPos = content.getLocalPoint(this, e.getPosition());
 
+        // The '+' / '-' at the foot of an open macro's port strips, checked first: '+' opens the same kind/shape
+        // menu the collapsed card's '+' does (through the canvas menu hook a test installs; null shows the real
+        // async menu), '-' deletes the bottom port on that side.
+        if (auto hit = macroController_.macroHullPortButtonAt(localPos.roundToInt(),
+                                                              content.getTransform().getScaleFactor())) {
+            if (hit->isAdd) {
+                auto menu = macroController_.buildAddPortMenu(hit->macroId, hit->isInput);
+                if (showCanvasContextMenuHook_)
+                    showCanvasContextMenuHook_(menu);
+                else
+                    menu.showMenuAsync(juce::PopupMenu::Options());
+            } else {
+                macroController_.deleteBottomMacroPort(hit->macroId, hit->isInput);
+            }
+            return;
+        }
+
         // Collapse button - checked BEFORE the chip below, carving its
         // hit zone out of that row explicitly, even though the two rectangles never actually
         // overlap (macroCollapseButtonBounds sits at the row's right end, macroChipBounds at its

@@ -223,6 +223,23 @@ public:
     /** {input strip width, output strip width} of the collapsed card, card-local pixels. Longest port name on the
      *  side plus padding; a side with no ports is the bare minimum. Never depends on zoom. */
     std::pair<int, int> macroCardStripWidths(const juce::String& macroId) const;
+    /** {input, output} sidebar strip widths of the OPEN macro (name + padding + room for the inner jack). */
+    std::pair<int, int> macroHullStripWidths(const juce::String& macroId) const;
+    /** Canvas-space bounds of the '+' / '-' buttons at the foot of an open macro's strips. '-' is empty when
+     *  that side has no port or `zoom` (the canvas scale) hides names. Empty for a collapsed macro. */
+    juce::Rectangle<int> macroHullAddButtonBounds(const juce::String& macroId, bool isInput) const;
+    juce::Rectangle<int> macroHullRemoveButtonBounds(const juce::String& macroId, bool isInput, float zoom) const;
+    struct HullPortButtonHit {
+        juce::String macroId;
+        bool isInput = false;
+        bool isAdd = true;
+    };
+    /** The hull '+' / '-' under `canvasPos`, if any. Same shape as macroCollapseButtonAt. */
+    std::optional<HullPortButtonHit> macroHullPortButtonAt(juce::Point<int> canvasPos, float zoom) const;
+    /** The kind/shape choice menu behind every '+' (collapsed card and open hull), RETURNED not shown. */
+    juce::PopupMenu buildAddPortMenu(const juce::String& macroId, bool isInput);
+    /** Deletes the bottom port (highest MacroPort::order) on one side, through deleteMacroPortManually. */
+    void deleteBottomMacroPort(const juce::String& macroId, bool isInput);
     /** Every port of an EXPANDED macro, docked as rows inside its hull's sidebars. Empty for a
      *  collapsed macro or one with no ports. */
     std::vector<MacroHullPort> macroHullPortLayout(const juce::String& macroId) const;
@@ -348,6 +365,7 @@ public:
 
 private:
     GraphCanvasHost& host_;
+    JUCE_DECLARE_WEAK_REFERENCEABLE(MacroGroupController)
 
     // ---- Internal-only helpers (no cross-file caller outside this class; original visibility
     // on GraphEditor was private and stays private here) ----

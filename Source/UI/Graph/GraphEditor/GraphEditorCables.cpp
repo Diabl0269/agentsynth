@@ -779,6 +779,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
 
     // ---- Expanded-macro grouping hull (see paintExpandedMacroHulls
     // above, for what it draws and why it's a free function rather than inlined here) ----
+    paintMacroPortStrips(g, editor, getTransform().getScaleFactor()); // under the widgets, under the outline
     paintExpandedMacroHulls(g, editor);
 
     // Draw Line being dragged

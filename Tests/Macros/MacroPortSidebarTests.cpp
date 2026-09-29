@@ -130,3 +130,155 @@ TEST(MacroPortSidebar, DroppingACableOnAnOuterJackThroughTheRealMouseLandsOnThat
     EXPECT_TRUE(connected(engine, extId, secondNode)) << "the cable lands on the port whose jack was hit";
     EXPECT_FALSE(connected(engine, extId, firstNode));
 }
+
+// ============================================================================
+// The hull's '+' / '-' at the strips' foot, and the strips painted under the port widgets.
+// ============================================================================
+
+namespace {
+
+juce::MouseEvent editorClickAt(GraphEditor& editor, juce::Component& content, juce::Point<int> canvasPos) {
+    const auto pos = editor.getLocalPoint(&content, canvasPos.toFloat());
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos,
+                            juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                            &editor, &editor, juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), 1,
+                            false);
+}
+
+juce::Component& contentOf(GraphEditor& editor, AudioEngine& engine, const juce::String& portUuid) {
+    auto* widget = findComponent(editor, nodeIdForUuid(engine, portUuid));
+    return *widget->getParentComponent();
+}
+
+std::vector<juce::String> menuTexts(juce::PopupMenu& menu) {
+    std::vector<juce::String> texts;
+    juce::PopupMenu::MenuItemIterator it(menu);
+    while (it.next())
+        texts.push_back(it.getItem().text);
+    return texts;
+}
+
+} // namespace
+
+TEST(MacroPortSidebar, HullAddButtonSitsAtTheStripFootInsideTheHull) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    for (int i = 0; i < 3; ++i)
+        addInlet(editor, macroId, "In " + juce::String(i));
+
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
+    const auto in = editor.getMacroController().macroHullAddButtonBounds(macroId, true);
+    const auto out = editor.getMacroController().macroHullAddButtonBounds(macroId, false);
+    EXPECT_TRUE(hull.contains(in));
+    EXPECT_TRUE(hull.contains(out));
+    EXPECT_EQ(in.getY(), hull.getBottom() - 12);
+    EXPECT_EQ(in.getX(), hull.getX() + 4);
+    EXPECT_EQ(out.getRight(), hull.getRight() - 4);
+    for (const auto& p : editor.getMacroController().macroHullPortLayout(macroId))
+        EXPECT_GE(in.getY(), p.widgetBounds.getBottom()) << "the '+' is below every row";
+
+    EXPECT_FALSE(editor.getMacroController().macroHullRemoveButtonBounds(macroId, true, 1.0f).isEmpty());
+    EXPECT_TRUE(editor.getMacroController().macroHullRemoveButtonBounds(macroId, false, 1.0f).isEmpty())
+        << "no output port: nothing to remove";
+    EXPECT_TRUE(editor.getMacroController().macroHullRemoveButtonBounds(macroId, true, 0.4f).isEmpty())
+        << "'-' hides below 50 percent zoom";
+}
+
+TEST(MacroPortSidebar, ClickingTheHullAddButtonOffersTheSameMenuAsTheCard) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto uuid = addInlet(editor, macroId, "In A");
+    auto& content = contentOf(editor, engine, uuid);
+
+    juce::PopupMenu captured;
+    bool shown = false;
+    editor.setShowCanvasContextMenuHookForTest([&](juce::PopupMenu& m) {
+        captured = m;
+        shown = true;
+    });
+
+    const auto button = editor.getMacroController().macroHullAddButtonBounds(macroId, /*isInput=*/false);
+    editor.mouseDown(editorClickAt(editor, content, button.getCentre()));
+    ASSERT_TRUE(shown) << "a real mouseDown on the hull '+' opens the add-port menu";
+
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    auto cardMenu = card->buildAddPortMenu(false);
+    EXPECT_EQ(menuTexts(captured), menuTexts(cardMenu));
+    EXPECT_EQ(menuTexts(captured).size(), 4u);
+
+    // Choosing an item adds the port on the clicked (output) side.
+    juce::PopupMenu::MenuItemIterator it(captured);
+    while (it.next())
+        if (it.getItem().text == "Audio/CV - Mono")
+            it.getItem().action();
+    int outputs = 0;
+    for (const auto& p : editor.getMacros().find(macroId)->ports)
+        outputs += p.isInput ? 0 : 1;
+    EXPECT_EQ(outputs, 1);
+
+    editor.setShowCanvasContextMenuHookForTest(nullptr);
+}
+
+TEST(MacroPortSidebar, ClickingTheHullMinusRemovesTheBottomPortOnThatSide) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    addInlet(editor, macroId, "In A");
+    addInlet(editor, macroId, "In B");
+    const auto last = addInlet(editor, macroId, "In C");
+    auto& content = contentOf(editor, engine, last);
+
+    const auto minus = editor.getMacroController().macroHullRemoveButtonBounds(macroId, true, 1.0f);
+    ASSERT_FALSE(minus.isEmpty());
+    editor.mouseDown(editorClickAt(editor, content, minus.getCentre()));
+
+    const auto* macro = editor.getMacros().find(macroId);
+    ASSERT_EQ(macro->ports.size(), 2u);
+    for (const auto& p : macro->ports)
+        EXPECT_NE(p.name, "In C") << "the bottom input is the one removed";
+}
+
+// The strip is painted by the canvas, under the port widgets: the same strip pixel is present with and without a
+// widget in that row (the widget draws only its jacks and name, no background of its own).
+TEST(MacroPortSidebar, HullStripsPaintUnderThePortWidgets) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto uuid = addInlet(editor, macroId, "In A");
+    auto& content = contentOf(editor, engine, uuid);
+
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
+    const auto entry = editor.getMacroController().macroHullPortLayout(macroId).front();
+    // A pixel on the port's row, clear of its jacks (5px each side of the edges) and its name.
+    const juce::Point<int> onRow{hull.getX() + 8, entry.outerJack.y - 6};
+    // The same column, well below the last row: strip only, no widget.
+    const juce::Point<int> belowRows{onRow.x, entry.outerJack.y + 4 * detail::kMacroPortRowHeight};
+    const juce::Point<int> outsideHull{hull.getX() - 30, onRow.y};
+
+    // Software image: a GPU/native-backed image reads back zeros on a headless Windows runner.
+    juce::Image img(juce::Image::ARGB, hull.getRight() + 40, hull.getBottom() + 40, true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(img);
+        content.paintEntireComponent(g, false);
+    }
+    const auto outside = img.getPixelAt(outsideHull.x, outsideHull.y);
+    const auto strip = img.getPixelAt(belowRows.x, belowRows.y);
+    const auto underWidget = img.getPixelAt(onRow.x, onRow.y);
+    EXPECT_NE(strip, outside) << "the strip is drawn inside the hull";
+    EXPECT_EQ(underWidget, strip) << "the widget does not cover the strip on its own row";
+}

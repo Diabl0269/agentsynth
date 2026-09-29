@@ -79,6 +79,23 @@ inline int macroPortStripWidthFor(float longestNamePx, int extra = 0) {
     return kMacroPortStripInset + (int)std::ceil(longestNamePx) + kMacroPortStripPadding + extra;
 }
 inline bool macroPortNamesVisibleAtZoom(float zoom) { return zoom >= kMacroPortNamesHiddenBelowZoom; }
+inline constexpr float kMacroPortFooterButtonSize = 8.0f;
+inline constexpr float kMacroPortFooterButtonFromBottom = 12.0f; // button top, up from the strip's bottom edge
+inline constexpr float kMacroPortAddButtonInset = 4.0f;          // '+' x from its strip's outer edge
+inline constexpr float kMacroPortRemoveButtonInset = 16.0f;      // '-' x from its strip's outer edge
+/** The glyph shared by the '+' and '-' buttons on the card and on the open macro's hull: a ring, and one
+ *  horizontal stroke ('-') or a horizontal and a vertical one ('+'). */
+inline void paintMacroPortFooterButton(juce::Graphics& g, juce::Rectangle<float> b, juce::Colour colour, bool isAdd) {
+    g.setColour(colour);
+    g.drawEllipse(b, 1.2f);
+    const auto cross = b.reduced(b.getWidth() * 0.28f);
+    if (isAdd)
+        g.drawLine(cross.getCentreX(), cross.getY(), cross.getCentreX(), cross.getBottom(), 1.4f);
+    g.drawLine(cross.getX(), cross.getCentreY(), cross.getRight(), cross.getCentreY(), 1.4f);
+}
+/** Paints both sidebar strips and their '+'/'-' buttons for every expanded macro, under the port widgets
+ *  (GraphEditorMacroHullStrips.cpp). `zoom` is the content component's scale, deciding whether '-' shows. */
+void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom);
 
 /** True when a source channel carries a structural, absolute-valued signal rather than normalised
  *  modulation. Poly MIDI's pitch fan is raw Hz and its gate fan is a 0/1 trigger; neither should ever

@@ -13,23 +13,6 @@
 
 using namespace detail;
 
-namespace {
-constexpr float kFooterButtonSize = 8.0f;
-constexpr float kFooterButtonFromBottom = 12.0f;
-constexpr float kAddButtonInset = 4.0f;     // '+' x from its strip's outer edge
-constexpr float kRemoveButtonInset = 16.0f; // '-' x from its strip's outer edge
-
-// The glyph shared by '+' and '-': a ring, and either one or two strokes across it.
-void paintFooterButton(juce::Graphics& g, juce::Rectangle<float> b, juce::Colour colour, bool withVerticalStroke) {
-    g.setColour(colour);
-    g.drawEllipse(b, 1.2f);
-    const auto cross = b.reduced(b.getWidth() * 0.28f);
-    if (withVerticalStroke)
-        g.drawLine(cross.getCentreX(), cross.getY(), cross.getCentreX(), cross.getBottom(), 1.4f);
-    g.drawLine(cross.getX(), cross.getCentreY(), cross.getRight(), cross.getCentreY(), 1.4f);
-}
-} // namespace
-
 bool MacroCardComponent::portNamesVisible() const {
     // The parent is the canvas content component, whose transform is the zoom (scale + pan).
     const float zoom = getParentComponent() != nullptr ? getParentComponent()->getTransform().getScaleFactor() : 1.0f;
@@ -40,9 +23,10 @@ juce::Rectangle<float> MacroCardComponent::getAddPortButtonBounds(bool isInput) 
     // At the strip's foot: kMacroPortStripFooter below the last row a card of this height holds, so
     // the button can never sit on a jack row. The card's height follows its port count
     // (macroCardHeightFor), so the foot follows the card's own bottom edge.
-    const float y = (float)getHeight() - kFooterButtonFromBottom;
-    const float x = isInput ? kAddButtonInset : (float)getWidth() - kAddButtonInset - kFooterButtonSize;
-    return {x, y, kFooterButtonSize, kFooterButtonSize};
+    const float y = (float)getHeight() - kMacroPortFooterButtonFromBottom;
+    const float x =
+        isInput ? kMacroPortAddButtonInset : (float)getWidth() - kMacroPortAddButtonInset - kMacroPortFooterButtonSize;
+    return {x, y, kMacroPortFooterButtonSize, kMacroPortFooterButtonSize};
 }
 
 juce::Rectangle<float> MacroCardComponent::getRemovePortButtonBounds(bool isInput) const {
@@ -53,22 +37,15 @@ juce::Rectangle<float> MacroCardComponent::getRemovePortButtonBounds(bool isInpu
         hasPort = hasPort || port.isInput == isInput;
     if (!hasPort)
         return {};
-    const float y = (float)getHeight() - kFooterButtonFromBottom;
-    const float x = isInput ? kRemoveButtonInset : (float)getWidth() - kRemoveButtonInset - kFooterButtonSize;
-    return {x, y, kFooterButtonSize, kFooterButtonSize};
+    const float y = (float)getHeight() - kMacroPortFooterButtonFromBottom;
+    const float x = isInput ? kMacroPortRemoveButtonInset
+                            : (float)getWidth() - kMacroPortRemoveButtonInset - kMacroPortFooterButtonSize;
+    return {x, y, kMacroPortFooterButtonSize, kMacroPortFooterButtonSize};
 }
 
 void MacroCardComponent::removeBottomPort(bool isInput) {
-    const MacroGroupController::MacroCardPort* bottom = nullptr;
-    const auto layout = owner.getMacroController().macroCardPortLayout(macroId);
-    for (const auto& port : layout)
-        if (port.isInput == isInput && (bottom == nullptr || port.row > bottom->row))
-            bottom = &port;
-    if (bottom == nullptr)
-        return;
-    const juce::String uuid = bottom->nodeUuid; // the layout dies with the delete's rebuild
     hoveredPortUuid_.reset();
-    owner.getMacroController().deleteMacroPortManually(macroId, uuid);
+    owner.getMacroController().deleteBottomMacroPort(macroId, isInput);
 }
 
 void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& macro,
@@ -114,10 +91,10 @@ void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& 
     // '+' always; '-' only when its side has a port and names are visible.
     const auto glyphColour = themeColors.textMuted.withAlpha(0.75f);
     for (const bool isInput : {true, false}) {
-        paintFooterButton(g, getAddPortButtonBounds(isInput), glyphColour, true);
+        paintMacroPortFooterButton(g, getAddPortButtonBounds(isInput), glyphColour, true);
         const auto minus = getRemovePortButtonBounds(isInput);
         if (!minus.isEmpty())
-            paintFooterButton(g, minus, glyphColour, false);
+            paintMacroPortFooterButton(g, minus, glyphColour, false);
     }
 
     // Hovered jack: a cross over the dot (hoveredPortUuid_ is kept fresh by mouseMove/mouseExit;
@@ -139,26 +116,7 @@ void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& 
     }
 }
 
+// One menu for the card's '+' and the open macro's hull '+': MacroGroupController::buildAddPortMenu.
 juce::PopupMenu MacroCardComponent::buildAddPortMenu(bool isInput) {
-    // The SAME kind/shape choice list synth::ui::MacroPortConfigDialog's own "Add a port" panel
-    // offers (Audio/CV picks Mono/Stereo/Poly-N, MIDI has no shape) and, on a choice, the SAME
-    // MacroGroupController::addMacroPort() Configure I/O's Add button calls, so the created port and
-    // its one-undo-step transaction are identical either way. `isInput` is fixed by which side's '+'
-    // was clicked; an empty name falls back to addMacroPort's own defaultMacroPortName(). The Poly-N
-    // voice count matches the dialog's own default ("4").
-    juce::PopupMenu menu;
-    juce::Component::SafePointer<MacroCardComponent> safeThis(this);
-    auto addItem = [&menu, safeThis, isInput](const juce::String& text, synth::MacroPortKind kind, MacroPortShape shape,
-                                              int voices) {
-        menu.addItem(text, [safeThis, isInput, kind, shape, voices] {
-            if (safeThis == nullptr)
-                return;
-            safeThis->owner.getMacroController().addMacroPort(safeThis->macroId, isInput, kind, shape, voices, {});
-        });
-    };
-    addItem("Audio/CV - Mono", synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1);
-    addItem("Audio/CV - Stereo", synth::MacroPortKind::AudioCV, MacroPortShape::Stereo, 1);
-    addItem("Audio/CV - Poly-N", synth::MacroPortKind::AudioCV, MacroPortShape::Poly, 4);
-    addItem("MIDI", synth::MacroPortKind::Midi, MacroPortShape::Mono, 1);
-    return menu;
+    return owner.getMacroController().buildAddPortMenu(macroId, isInput);
 }

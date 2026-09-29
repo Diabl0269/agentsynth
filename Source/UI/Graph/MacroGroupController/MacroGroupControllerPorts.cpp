@@ -289,6 +289,43 @@ void MacroGroupController::deleteMacroPortManually(const juce::String& macroId, 
         removeMacroPort(macroId, nodeUuid);
 }
 
+void MacroGroupController::deleteBottomMacroPort(const juce::String& macroId, bool isInput) {
+    const auto* macro = host_.getMacros().find(macroId);
+    if (macro == nullptr)
+        return;
+    const synth::MacroPort* bottom = nullptr;
+    for (const auto& p : macro->ports)
+        if (p.isInput == isInput && (bottom == nullptr || p.order > bottom->order))
+            bottom = &p;
+    if (bottom == nullptr)
+        return;
+    const juce::String uuid = bottom->nodeUuid; // the delete rebuilds the set `bottom` points into
+    deleteMacroPortManually(macroId, uuid);
+}
+
+juce::PopupMenu MacroGroupController::buildAddPortMenu(const juce::String& macroId, bool isInput) {
+    // The SAME kind/shape choice list synth::ui::MacroPortConfigDialog's own "Add a port" panel offers
+    // (Audio/CV picks Mono/Stereo/Poly-N, MIDI has no shape) and, on a choice, the SAME addMacroPort()
+    // Configure I/O's Add button calls, so the created port and its one-undo-step transaction are identical
+    // either way. `isInput` is fixed by which side's '+' was clicked; an empty name falls back to
+    // addMacroPort's own defaultMacroPortName(). The Poly-N voice count matches the dialog's own default ("4").
+    // The menu is async, so its actions hold a weak reference: the editor can go away while it is open.
+    juce::PopupMenu menu;
+    juce::WeakReference<MacroGroupController> weakThis(this);
+    auto addItem = [&menu, weakThis, macroId, isInput](const juce::String& text, synth::MacroPortKind kind,
+                                                       MacroPortShape shape, int voices) {
+        menu.addItem(text, [weakThis, macroId, isInput, kind, shape, voices] {
+            if (weakThis != nullptr)
+                weakThis->addMacroPort(macroId, isInput, kind, shape, voices, {});
+        });
+    };
+    addItem("Audio/CV - Mono", synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1);
+    addItem("Audio/CV - Stereo", synth::MacroPortKind::AudioCV, MacroPortShape::Stereo, 1);
+    addItem("Audio/CV - Poly-N", synth::MacroPortKind::AudioCV, MacroPortShape::Poly, 4);
+    addItem("MIDI", synth::MacroPortKind::Midi, MacroPortShape::Mono, 1);
+    return menu;
+}
+
 void MacroGroupController::renameMacroPort(const juce::String& macroId, const juce::String& nodeUuid,
                                            const juce::String& newName) {
     const auto trimmed = newName.trim();
