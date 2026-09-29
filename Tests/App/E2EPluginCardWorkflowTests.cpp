@@ -121,8 +121,10 @@ protected:
         });
         backendOverride_ = std::make_unique<synth::HostedPluginBackend::ScopedDefault>(backend_.get());
 
+        // Unique per test: CI runs shards as parallel processes, and a shared path let one shard's
+        // TearDown delete the bundle another shard was about to reopen.
         bundleDir_ = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                         .getChildFile(juce::String("FRO137E2E") + synth::ProjectBundle::kBundleExtension);
+                         .getChildFile("FRO137E2E-" + juce::Uuid().toString() + synth::ProjectBundle::kBundleExtension);
         bundleDir_.deleteRecursively();
 
         mainComp_ = makeMainComponent();
