@@ -6,6 +6,7 @@ namespace synth::ui {
 namespace {
 constexpr int kCardWidth = 600;
 constexpr int kRecentRowHeight = 28;
+constexpr int kContributeRowHeight = 36;
 } // namespace
 
 WelcomeScreenComponent::WelcomeScreenComponent() {
@@ -46,6 +47,25 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     noRecentsLabel.setText("No recent projects yet", juce::dontSendNotification);
     noRecentsLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.6f));
     addAndMakeVisible(noRecentsLabel);
+
+    contributeLabel.setText("Agent Synth is free and open source, built by one person. If it has earned a place in "
+                            "your setup, you can help build it. No pressure, it stays free either way.",
+                            juce::dontSendNotification);
+    contributeLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+    contributeLabel.setJustificationType(juce::Justification::centredLeft);
+    contributeLabel.setMinimumHorizontalScale(1.0f);
+    contributeLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.7f));
+    addAndMakeVisible(contributeLabel);
+
+    contributeButton.setButtonText(juce::String(juce::CharPointer_UTF8("\xe2\x99\xa5 Contribute...")));
+    contributeButton.setTooltip("Opens agentsynth.app/contribute in your browser: ways to help build Agent Synth.");
+    contributeButton.setTitle("Contribute");
+    contributeButton.setDescription("Opens the Agent Synth contribute page in your browser");
+    addAndMakeVisible(contributeButton);
+    contributeButton.onClick = [this] {
+        if (onContributeRequested)
+            onContributeRequested();
+    };
 
     addAndMakeVisible(whatsNewButton);
     whatsNewButton.onClick = [this] {
@@ -110,12 +130,12 @@ void WelcomeScreenComponent::rebuildRecentProjectButtons() {
 
 juce::Rectangle<int> WelcomeScreenComponent::getCardBounds() const {
     const int recentsHeight = recentFiles_.empty() ? kRecentRowHeight : (int)recentFiles_.size() * kRecentRowHeight;
-    // Title + subtitle + gap + three action buttons + gap + recents header + recents rows + gap +
-    // footer row, plus top/bottom padding. Fixed heights per row rather than FlexBox — this is a
-    // small, static layout with no dynamic resizing needs beyond the recents count.
-    const int cardHeight = 40 /*top pad*/ + 34 /*title*/ + 8 + 22 /*subtitle*/ + 24 + 40 /*New button*/ + 10 +
-                           40 /*Open default*/ + 10 + 40 /*Open existing*/ + 28 + 22 /*recents header*/ + 8 +
-                           recentsHeight + 24 + 32 /*footer*/ + 24 /*bottom pad*/;
+    // Mirrors resized() row for row (pad, title, subtitle, three action buttons, recents header,
+    // recents rows, contribute row, footer, pad) so the drawn card and its children always agree.
+    // Fixed heights rather than FlexBox: a small, static layout whose only variable is the recents count.
+    const int cardHeight = 20 /*top pad*/ + 34 /*title*/ + 4 + 22 /*subtitle*/ + 20 + 36 /*New*/ + 10 +
+                           36 /*Open default*/ + 10 + 36 /*Open existing*/ + 24 + 20 /*recents header*/ + 6 +
+                           recentsHeight + 16 + kContributeRowHeight + 20 + 28 /*footer*/ + 20 /*bottom pad*/;
     // getWidth()/getHeight() can be 0 the moment this runs during construction (setRecentProjects()
     // triggers resized() before the parent has ever called setBounds()) — clamp to 0 rather than
     // let a negative rect flow into every child setBounds() below.
@@ -160,12 +180,19 @@ void WelcomeScreenComponent::resized() {
             button->setBounds(area.removeFromTop(kRecentRowHeight).reduced(0, 2));
     }
 
+    area.removeFromTop(16);
+    auto contributeRow = area.removeFromTop(kContributeRowHeight);
+    contributeButton.setBounds(contributeRow.removeFromRight(120).withSizeKeepingCentre(120, 28));
+    contributeRow.removeFromRight(12);
+    contributeLabel.setBounds(contributeRow);
+
     area.removeFromTop(20);
     auto footer = area.removeFromTop(28);
-    versionLabel.setBounds(footer.removeFromLeft(footer.getWidth() / 2));
-    showAtLaunchToggle.setBounds(footer.removeFromRight(220));
+    showAtLaunchToggle.setBounds(footer.removeFromRight(210));
     footer.removeFromRight(10);
-    whatsNewButton.setBounds(footer.removeFromRight(90));
+    whatsNewButton.setBounds(footer.removeFromRight(110));
+    footer.removeFromRight(10);
+    versionLabel.setBounds(footer);
 }
 
 } // namespace synth::ui
