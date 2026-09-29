@@ -394,7 +394,7 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     g.setColour(themeColors.textPrimary);
     g.setFont(juce::Font(juce::FontOptions(kMacroPortNameFontSize)));
     // The name starts kMacroPortStripInset from the boundary edge and stops short of the interior
-    // jack; drawFittedText compresses or ellipsises rather than clip mid-glyph. First row only.
+    // jack; a name that does not fit is shortened with an ellipsis, never squeezed. First row only.
     constexpr int kInteriorClearance = kMacroPortWidgetJackInset + 8;
     auto textArea = juce::Rectangle<int>(0, 0, getWidth(), kMacroPortWidgetRowStep);
     if (boundaryIsInput)
@@ -402,7 +402,7 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     else
         textArea = textArea.withTrimmedLeft(kInteriorClearance).withTrimmedRight(kMacroPortStripInset);
     g.drawFittedText(name, textArea,
-                     boundaryIsInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1);
+                     boundaryIsInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1, 1.0f);
 }
 
 bool ModuleComponent::macroPortNamesShown() const {

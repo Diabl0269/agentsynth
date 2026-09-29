@@ -203,7 +203,8 @@ several ports and pushed the '+' under a jack; a strip gives every port its own 
 
 - **Width is content, not zoom.** A strip is as wide as the longest port name on its side plus
   padding (`macroPortStripWidthFor`: 18 px jack inset + name + 8 px padding; the open macro adds 8 px
-  for the inner jack). A side with no ports keeps the 26 px minimum so its '+' has a home. Nothing is
+  for the inner jack), capped at 90 px on the card and 140 px on the open macro; a longer name is
+  shortened with an ellipsis, never squeezed. A side with no ports keeps the 26 px minimum so its '+' has a home. Nothing is
   persisted: the width is measured from the names each time, with a local `juce::Font`, so paint,
   hit-testing and cable anchoring all agree without a `Graphics` context.
 - **Zoom decides only what is painted.** Below 50 percent canvas zoom

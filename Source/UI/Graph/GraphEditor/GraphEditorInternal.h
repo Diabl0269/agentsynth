@@ -61,6 +61,10 @@ inline constexpr int kMacroPortStripFooter = 22;       // room below the last ro
 inline constexpr int kMacroPortStripInset = 18;        // name x from the strip's outer edge (jack at 10, + 8)
 inline constexpr int kMacroPortStripPadding = 8;       // after the longest name
 inline constexpr int kMacroHullStripInnerJackRoom = 8; // open macro only: room for the inner jack
+// Widest a strip gets; a longer name is shortened with an ellipsis. On the 280px card two capped
+// strips still leave 100px for the title, preview and member count.
+inline constexpr int kMacroCardStripMaxWidth = 90;
+inline constexpr int kMacroHullStripMaxWidth = 140;
 // Height reserved above an open macro's members for its name chip row, and the port rows' first-row
 // offset from the hull's top (the rows start 6px below the chip row).
 inline constexpr int kMacroChipRowHeight = 24;

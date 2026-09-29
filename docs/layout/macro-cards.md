@@ -178,7 +178,8 @@ elsewhere), so the preview echoes what expanding would show.
 port, so names never overlap; the card is 280 px wide and grows taller than its 90 px floor when a side
 has more than three ports (`30 + rows * 16 + 22`). The height is derived from the port count every time
 the cards sync (`GraphEditor::syncMacroCards`) and never persisted — `Macro::bounds` keeps whatever
-height it was saved with. Each strip is as wide as its longest port name plus padding and never changes
+height it was saved with. Each strip is as wide as its longest port name plus padding (at most 90 px, so
+two strips always leave the title column 100 px; a longer name gets an ellipsis) and never changes
 with zoom; below 50 percent zoom the names and the '-' are hidden and the strip shows only jack dots.
 The title, preview and count keep the column between the strips (`getContentArea()`).
 `MacroCardComponent` also implements `juce::TooltipClient`: a newline-separated, capped list of member

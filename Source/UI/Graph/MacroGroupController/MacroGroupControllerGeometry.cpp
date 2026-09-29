@@ -56,9 +56,10 @@ static_assert(kMacroChipTopMargin == kMacroChipRowHeight, "the strips start belo
 
 // {input, output} sidebar strip widths for a macro: the longest port name on each side plus the
 // fixed padding, `innerJackRoom` extra for the open macro's inner jack. A side with no ports gets
-// the bare minimum. Measured with a local font (no juce::Graphics), so paint, hit-testing and
-// anchoring can all call it. Never depends on zoom.
-std::pair<int, int> macroStripWidths(const synth::Macro& macro, int innerJackRoom) {
+// the bare minimum, and a very long name is capped at `maxWidth` (its label is shortened with an
+// ellipsis instead) so the card's title column never collapses. Measured with a local font (no
+// juce::Graphics), so paint, hit-testing and anchoring can all call it. Never depends on zoom.
+std::pair<int, int> macroStripWidths(const synth::Macro& macro, int innerJackRoom, int maxWidth) {
     const int empty = kMacroPortStripInset + kMacroPortStripPadding;
     const juce::Font font{juce::FontOptions(kMacroPortNameFontSize)};
     float longestIn = -1.0f, longestOut = -1.0f;
@@ -66,8 +67,8 @@ std::pair<int, int> macroStripWidths(const synth::Macro& macro, int innerJackRoo
         float& longest = p.isInput ? longestIn : longestOut;
         longest = juce::jmax(longest, font.getStringWidthFloat(p.name));
     }
-    return {longestIn < 0.0f ? empty : macroPortStripWidthFor(longestIn, innerJackRoom),
-            longestOut < 0.0f ? empty : macroPortStripWidthFor(longestOut, innerJackRoom)};
+    return {longestIn < 0.0f ? empty : juce::jmin(maxWidth, macroPortStripWidthFor(longestIn, innerJackRoom)),
+            longestOut < 0.0f ? empty : juce::jmin(maxWidth, macroPortStripWidthFor(longestOut, innerJackRoom))};
 }
 } // namespace
 
@@ -146,7 +147,7 @@ juce::Rectangle<int> computeMacroHullBounds(GraphCanvasHost& host, const synth::
     // The two port strips sit INSIDE the hull, outside the members' own margin, so the hull grows
     // outward by each strip's width and members never move when a port is added. When the rows
     // outrun the members the hull grows down to hold them and the '+'/'-' footer.
-    const auto [inW, outW] = macroStripWidths(macro, kMacroHullStripInnerJackRoom);
+    const auto [inW, outW] = macroStripWidths(macro, kMacroHullStripInnerJackRoom, kMacroHullStripMaxWidth);
     expanded.setLeft(expanded.getX() - inW);
     expanded.setRight(expanded.getRight() + outW);
     int inputRows = 0, outputRows = 0;
@@ -361,7 +362,7 @@ std::pair<int, int> MacroGroupController::macroCardStripWidths(const juce::Strin
         const int empty = kMacroPortStripInset + kMacroPortStripPadding;
         return {empty, empty};
     }
-    return macroStripWidths(*macro, 0);
+    return macroStripWidths(*macro, 0, kMacroCardStripMaxWidth);
 }
 
 std::optional<MacroGroupController::MacroCardPort>
@@ -396,7 +397,7 @@ std::pair<int, int> MacroGroupController::macroHullStripWidths(const juce::Strin
         const int empty = kMacroPortStripInset + kMacroPortStripPadding;
         return {empty, empty};
     }
-    return macroStripWidths(*macro, kMacroHullStripInnerJackRoom);
+    return macroStripWidths(*macro, kMacroHullStripInnerJackRoom, kMacroHullStripMaxWidth);
 }
 
 juce::Rectangle<int> MacroGroupController::macroHullAddButtonBounds(const juce::String& macroId, bool isInput) const {
@@ -453,7 +454,7 @@ MacroGroupController::macroHullPortLayout(const juce::String& macroId) const {
               [](const synth::MacroPort& a, const synth::MacroPort& b) { return a.order < b.order; });
 
     // Same widths computeMacroHullBounds widened the hull by, so strips and hull always agree.
-    const auto [inW, outW] = macroStripWidths(*macro, kMacroHullStripInnerJackRoom);
+    const auto [inW, outW] = macroStripWidths(*macro, kMacroHullStripInnerJackRoom, kMacroHullStripMaxWidth);
     const int firstRowTop = hull.getY() + kMacroChipTopMargin + kMacroPortRowsBelowChip;
     int nextRow[2] = {0, 0}; // [output, input]
     for (const auto& port : ports) {

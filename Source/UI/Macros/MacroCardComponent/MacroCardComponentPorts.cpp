@@ -84,7 +84,8 @@ void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& 
         if (names && port.name.isNotEmpty()) {
             g.setColour(juce::Colours::white.withAlpha(0.85f));
             g.drawFittedText(port.name, port.labelArea,
-                             port.isInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1);
+                             port.isInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1,
+                             1.0f);
         }
     }
 

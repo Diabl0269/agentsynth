@@ -8,6 +8,7 @@
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/LayoutUtil.h"
 #include <gtest/gtest.h>
 
 #include "MacroPortWidgetTestHelpers.h" // shared fixtures + graph/lookup helpers
@@ -281,4 +282,25 @@ TEST(MacroPortSidebar, HullStripsPaintUnderThePortWidgets) {
     const auto underWidget = img.getPixelAt(onRow.x, onRow.y);
     EXPECT_NE(strip, outside) << "the strip is drawn inside the hull";
     EXPECT_EQ(underWidget, strip) << "the widget does not cover the strip on its own row";
+}
+
+// A very long port name must not squeeze the collapsed card's title column: strips are capped and the
+// name is shortened with an ellipsis instead.
+TEST(MacroPortSidebar, LongPortNamesAreCappedSoTheCardTitleKeepsItsRoom) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_FALSE(addInlet(editor, macroId, "Filter Envelope Amount CV Extra Long Name").isEmpty());
+
+    auto& controller = editor.getMacroController();
+    const auto [cardIn, cardOut] = controller.macroCardStripWidths(macroId);
+    EXPECT_LE(cardIn, detail::kMacroCardStripMaxWidth);
+    EXPECT_GE(synth::LayoutUtil::kSingleWidth - cardIn - cardOut, 100) << "title column keeps at least 100px";
+
+    controller.setMacroCollapsed(macroId, false);
+    const auto [hullIn, hullOut] = controller.macroHullStripWidths(macroId);
+    EXPECT_LE(hullIn, detail::kMacroHullStripMaxWidth);
+    (void)hullOut;
 }
