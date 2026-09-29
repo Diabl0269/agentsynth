@@ -153,12 +153,22 @@ TEST_P(FaderRenderTest, HoverAndDragOutlineColours) {
         synth::theme::fader::paint(g, rig.theme, travel, size, rig.pos(), true, state);
         return img.getPixelAt(edgeX, pos);
     };
-    EXPECT_EQ(channelDistance(outline(false, false), rig.theme.colors.border), 0);
+    EXPECT_EQ(channelDistance(outline(false, false), rig.theme.colors.textDisabled), 0);
     EXPECT_EQ(channelDistance(outline(true, false), rig.theme.colors.textMuted), 0);
     EXPECT_EQ(channelDistance(outline(false, true), rig.theme.colors.accent), 0);
 }
 
 INSTANTIATE_TEST_SUITE_P(Themes, FaderRenderTest, ::testing::Values(0, 1));
+
+// The rest outline must stand out from the cap gradient's two end colours on every built-in theme
+// (border sat within ~20 of surfaceHi on Obsidian, Neon Lab and Warm Console).
+TEST(FaderThemeTest, RestOutlineContrastsWithCapFillInEveryTheme) {
+    for (const auto& t : {synth::theme::makeObsidian(), synth::theme::makeNeon(), synth::theme::makeWarm(),
+                          synth::theme::makeDaylight()}) {
+        EXPECT_GE(channelDistance(t.colors.textDisabled, t.colors.surfaceHi), 100) << t.id.toStdString();
+        EXPECT_GE(channelDistance(t.colors.textDisabled, t.colors.knobBody), 100) << t.id.toStdString();
+    }
+}
 
 TEST(FaderMetricsTest, SizePicksFollowTheRealBounds) {
     using namespace synth::theme::fader;

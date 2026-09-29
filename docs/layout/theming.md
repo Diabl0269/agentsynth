@@ -260,8 +260,9 @@ These stock-widget overrides are implemented in `AppLookAndFeel`:
   `AppLookAndFeelFader.h`) draws every `LinearVertical` / `LinearHorizontal` slider (the Bar styles
   route the same way) as a fader: a recessed slot (`bg0`, 1 px `border`, 2 px longer than the travel
   at each end), an `accent` fill from the bottom (left) to the cap centre, and a pill cap with a
-  `surfaceHi` to `knobBody` gradient, 1 px outline, a cheap offset drop shadow (35% black scaled by
-  `treatment.shadow`) and a 1.5 px `knobPointer` centre line, the exact value position. The size
+  `surfaceHi` to `knobBody` gradient, 1 px outline (`textDisabled` at rest: `border` is too close to
+  the fill on dark themes), a cheap offset drop shadow (35% black
+  scaled by `treatment.shadow`) and a 1.5 px `knobPointer` centre line, the exact value position. The size
   follows the slider's real bounds: **large** (slot 6, cap 30x14) for a vertical slider at least 64 px
   wide and 40 px tall (the mixer strip), **small** (slot 4, cap 18x7) for any other vertical one (the
   56 px controller-surface cell), **medium** (slot 4, cap 10x18) for a horizontal one, the cap

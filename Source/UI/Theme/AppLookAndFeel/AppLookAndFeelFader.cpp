@@ -59,7 +59,8 @@ void drawCap(juce::Graphics& g, const Theme& theme, juce::Rectangle<float> cap, 
     g.setGradientFill(juce::ColourGradient(c.surfaceHi, from, c.knobBody, to, false));
     g.fillRoundedRectangle(cap, m.radius);
 
-    const juce::Colour outline = state.dragging ? c.accent : state.hover ? c.textMuted : c.border;
+    // Rest outline in textDisabled: border is too close to the cap fill on dark themes.
+    const juce::Colour outline = state.dragging ? c.accent : state.hover ? c.textMuted : c.textDisabled;
     g.setColour(outline);
     g.drawRoundedRectangle(cap.reduced(0.5f), juce::jmax(0.0f, m.radius - 0.5f), 1.0f);
 
