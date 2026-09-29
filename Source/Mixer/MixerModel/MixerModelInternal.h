@@ -27,7 +27,8 @@ void buildInsertsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& 
 juce::String stripColumnName(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
                              juce::AudioProcessorGraph::NodeID stripId);
 
-/** Fills `column.busSources` with the feeding strips' names. No-op unless `column` is Kind::Bus. */
+/** Fills the feeding strips' names: `column.busSources` for Kind::Bus, `column.receivesFrom` for
+ *  Kind::Strip (a track channel receiving sends). No-op for Direct/Master. */
 void buildBusSourcesForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
                               MixerColumn& column);
 

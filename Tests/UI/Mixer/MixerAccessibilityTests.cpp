@@ -6,7 +6,9 @@
 // and returns a fresh handler wrapping live state.
 #include "../../TestSettingsHelpers.h"
 #include "AI/AIProvider.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Layout/BottomDockComponent.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
@@ -95,6 +97,51 @@ TEST(MixerAccessibilityTest, ColumnTitleIsTheChannelName) {
     EXPECT_EQ(handler->getTitle(), column->getTitle())
         << "the default getTitle() implementation reads Component::getTitle() -- setColumn() must "
            "have called setTitle(column.name)";
+}
+
+// The header's badges in words -- "Linked to track X" on a plain track channel, plus
+// "Receives sends from: A" once another track sends into it (it stays a track channel, never
+// "Bus"). The same string is the header's tooltip, and the badge area hit-tests to the header
+// itself (not the name label), so hovering the glyph shows that tooltip.
+TEST(MixerAccessibilityTest, HeaderDescribesLinkedAndReceivesBadgesInWords) {
+    MainComponent mc(std::make_unique<MockProviderMACT>());
+    mc.setSize(1400, 900);
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+    mc.simulateAddAudioTrackClick();
+
+    auto& mixerPanel = mc.getBottomDock().getMixerPanel();
+    mixerPanel.rebuild();
+    auto* columnA = mixerPanel.getStripColumnForTest(0);
+    auto* columnB = mixerPanel.getStripColumnForTest(1);
+    ASSERT_NE(columnA, nullptr);
+    ASSERT_NE(columnB, nullptr);
+    const auto nameA = columnA->getTitle();
+    const auto stripA = columnA->getNodeId();
+    const auto stripB = columnB->getNodeId();
+
+    auto& plainHeader = columnB->getHeaderForTest();
+    EXPECT_TRUE(plainHeader.getDescription().startsWith("Linked to track ")) << "got: " << plainHeader.getDescription();
+    EXPECT_FALSE(plainHeader.getDescription().contains("Receives"));
+    EXPECT_EQ(plainHeader.getTooltip(), plainHeader.getDescription());
+
+    ASSERT_EQ(synth::addSend(mc.getAudioEngine().getGraph(), stripA, stripB), 0);
+    mixerPanel.rebuild();
+    auto* receiving = mixerPanel.getStripColumnForTest(1);
+    ASSERT_NE(receiving, nullptr);
+    ASSERT_EQ(receiving->getNodeId(), stripB);
+    auto& header = receiving->getHeaderForTest();
+    const auto description = header.getDescription();
+    EXPECT_TRUE(description.startsWith("Linked to track ")) << "got: " << description;
+    EXPECT_TRUE(description.contains("Receives sends from: " + nameA)) << "got: " << description;
+    EXPECT_FALSE(description.contains("Bus")) << "a track channel receiving a send is not a bus";
+    EXPECT_EQ(header.getTooltip(), description);
+
+    receiving->setSize(140, 400);
+    ASSERT_GT(header.getWidth(), 40);
+    const juce::Point<int> onBadge(header.getWidth() - 10, header.getHeight() / 2);
+    EXPECT_EQ(header.getComponentAt(onBadge), &header)
+        << "the badge area belongs to the header, whose tooltip names the badges";
 }
 
 TEST(MixerAccessibilityTest, MuteSoloButtonsMirrorToggleState) {

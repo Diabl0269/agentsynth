@@ -164,6 +164,21 @@ still drive the strip. And soloing a linked channel silences every other channel
 included, even when that shared channel's own track is note-gate soloed: that is a DAW mixer solo,
 not a bug.
 
+### Column badges
+
+The mixer column header shows at most two small badges to the right of the channel's name
+(`MixerColumnHeader`, FRO355):
+
+- **Link glyph** (two interlocking links, accent colour) — this channel is **linked** to a track
+  under the rule above. Tooltip: "Linked to track Bass". It replaced an earlier cryptic "+R" label.
+- **BUS** — the column is a group/send bus ([`sends-and-buses.md`](sends-and-buses.md#a-bus-is-a-channel-strip));
+  shown instead of the link glyph, since a bus has no track to link to.
+- **Receives** (an arrow plus a count) — other strips send into this track channel. Tooltip:
+  "Receives sends from: Drums, Keys". Receiving a send never unlinks a track or makes it a bus.
+
+The header's tooltip and its accessible description are the same sentence, so a screen reader hears
+"Linked to track Bass. Receives sends from: Drums" rather than a glyph.
+
 ### The channel chip
 
 Every track header whose notes or audio play into a channel — linked or not — shows a small **channel

@@ -21,7 +21,9 @@
 
 namespace synth::ui {
 
-class MixerColumnHeader : public juce::Component {
+class MixerColumnHeader
+    : public juce::Component
+    , public juce::SettableTooltipClient {
 public:
     MixerColumnHeader() {
         setInterceptsMouseClicks(true, false);
@@ -84,24 +86,32 @@ public:
      *  undoing a live edit the label is still showing. */
     void restoreDisplayName() { nameLabel_.setText(name_, juce::dontSendNotification); }
 
-    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks: a small "+R" badge next to the name when this strip is
-     * linked to a track. */
-    void setLinkedBadgeVisible(bool visible) {
-        if (linkedBadgeVisible_ == visible)
+    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks: a small link glyph next to the name when this strip is
+     * linked to a track; `trackName` names it in the tooltip/AX text (empty reads "Linked to a track"). */
+    void setLinkedTrack(bool linked, const juce::String& trackName) {
+        if (linkedBadgeVisible_ == linked && linkedTrackName_ == trackName)
             return;
-        linkedBadgeVisible_ = visible;
-        resized(); // the badge claims space out of nameBounds() too -- see setColour()'s own comment
-        repaint();
+        linkedBadgeVisible_ = linked;
+        linkedTrackName_ = trackName;
+        badgesChanged();
     }
 
-    /** A "BUS" badge in place of the linked badge when this column is a group/send bus -- a bus has no track
+    /** A "BUS" badge in place of the link glyph when this column is a group/send bus -- a bus has no track
      * to link to, so the two are mutually exclusive by construction (see docs/mixer/sends-and-buses.md). */
     void setBusBadgeVisible(bool visible) {
         if (busBadgeVisible_ == visible)
             return;
         busBadgeVisible_ = visible;
-        resized(); // see setColour()'s own comment
-        repaint();
+        badgesChanged();
+    }
+
+    /** The strips sending into this track channel (docs/mixer/sends-and-buses.md): a compact arrow + count
+     *  badge when non-empty. Coexists with the link glyph -- receiving a send never unlinks a track channel. */
+    void setReceivesFrom(const juce::StringArray& sources) {
+        if (receivesFrom_ == sources)
+            return;
+        receivesFrom_ = sources;
+        badgesChanged();
     }
 
     /** Whether double-click-to-rename is armed at all. Direct and Master have no
@@ -144,11 +154,20 @@ public:
             g.fillRoundedRectangle(swatch.toFloat(), 2.0f);
             bounds.removeFromLeft(4);
         }
-        if (busBadgeVisible_ || linkedBadgeVisible_) {
-            auto badge = bounds.removeFromRight(busBadgeVisible_ ? 26 : 20);
-            g.setColour(busBadgeVisible_ ? text.withAlpha(0.7f) : accent);
-            g.setFont(juce::Font(juce::FontOptions(10.0f)));
-            g.drawText(busBadgeVisible_ ? "BUS" : "+R", badge, juce::Justification::centred, false);
+        g.setFont(juce::Font(juce::FontOptions(10.0f)));
+        if (busBadgeVisible_) {
+            g.setColour(text.withAlpha(0.7f));
+            g.drawText("BUS", bounds.removeFromRight(kBusBadgeWidth), juce::Justification::centred, false);
+        } else if (linkedBadgeVisible_) {
+            paintLinkGlyph(g, bounds.removeFromRight(kLinkBadgeWidth).toFloat(), accent);
+        }
+        if (!receivesFrom_.isEmpty()) {
+            // A small right-pointing arrow (audio arriving) followed by the sender count.
+            auto badge = bounds.removeFromRight(kReceivesBadgeWidth).toFloat();
+            const auto arrow = badge.removeFromLeft(9.0f);
+            g.setColour(text.withAlpha(0.7f));
+            g.drawArrow({arrow.getX(), arrow.getCentreY(), arrow.getRight(), arrow.getCentreY()}, 1.2f, 5.0f, 4.0f);
+            g.drawText(juce::String(receivesFrom_.size()), badge, juce::Justification::centred, false);
         }
         // The name itself is nameLabel_ (a real child component, so double-click can turn it into a
         // live text editor) -- resized() positions it over exactly this same reduction of bounds
@@ -179,16 +198,56 @@ private:
         auto bounds = getLocalBounds().reduced(4);
         if (colour_.getAlpha() > 0)
             bounds.removeFromLeft(10 + 4);
-        if (busBadgeVisible_ || linkedBadgeVisible_)
-            bounds.removeFromRight(busBadgeVisible_ ? 26 : 20);
+        if (busBadgeVisible_)
+            bounds.removeFromRight(kBusBadgeWidth);
+        else if (linkedBadgeVisible_)
+            bounds.removeFromRight(kLinkBadgeWidth);
+        if (!receivesFrom_.isEmpty())
+            bounds.removeFromRight(kReceivesBadgeWidth);
         return bounds;
     }
+
+    // The badges in words: the header's tooltip and its accessible description, one string so the
+    // two can never disagree. Empty when no badge shows.
+    juce::String badgeText() const {
+        juce::StringArray parts;
+        if (busBadgeVisible_)
+            parts.add("Bus");
+        else if (linkedBadgeVisible_)
+            parts.add(linkedTrackName_.isNotEmpty() ? "Linked to track " + linkedTrackName_ : "Linked to a track");
+        if (!receivesFrom_.isEmpty())
+            parts.add("Receives sends from: " + receivesFrom_.joinIntoString(", "));
+        return parts.joinIntoString(". ");
+    }
+
+    void badgesChanged() {
+        const auto words = badgeText();
+        setTooltip(words);
+        setDescription(words);
+        resized(); // a badge claims space out of nameBounds() too -- see setColour()'s own comment
+        repaint();
+    }
+
+    // Two interlocking chain links, centred in `area`.
+    static void paintLinkGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour) {
+        const auto centre = area.getCentre();
+        const juce::Rectangle<float> link(0.0f, 0.0f, 7.0f, 4.5f);
+        g.setColour(colour);
+        g.drawRoundedRectangle(link.withCentre(centre.translated(-2.5f, 0.0f)), 2.2f, 1.2f);
+        g.drawRoundedRectangle(link.withCentre(centre.translated(2.5f, 0.0f)), 2.2f, 1.2f);
+    }
+
+    static constexpr int kBusBadgeWidth = 26;
+    static constexpr int kLinkBadgeWidth = 16;
+    static constexpr int kReceivesBadgeWidth = 22;
 
     juce::Colour colour_; // alpha 0 by default -- see setColour()
     juce::String name_;
     juce::Label nameLabel_; // The name itself -- see the class comment's rename design
     bool linkedBadgeVisible_ = false;
+    juce::String linkedTrackName_;
     bool busBadgeVisible_ = false;
+    juce::StringArray receivesFrom_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerColumnHeader)
 };

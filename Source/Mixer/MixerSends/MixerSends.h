@@ -31,7 +31,8 @@ class MacroSet;
 std::vector<juce::AudioProcessorGraph::NodeID> findStripsFeedingStrip(juce::AudioProcessorGraph& graph,
                                                                       juce::AudioProcessorGraph::NodeID stripId);
 
-/** True when `stripId` is a group/send bus (its "isBus" flag, or a strip among its signal predecessors). */
+/** True when `stripId` is a group/send bus: its "isBus" flag, or strips among its signal predecessors
+ *  and no track source among them (a track channel that receives a send stays a track channel). */
 bool isBusStrip(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID stripId);
 
 /** "Bus N", N = `stripId`'s 1-based position among the graph's bus strips in ascending NodeID. */

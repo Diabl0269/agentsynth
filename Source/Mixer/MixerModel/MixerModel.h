@@ -93,6 +93,9 @@ struct MixerColumn {
      *  column shows on its source line instead of feeding-track names. */
     std::vector<juce::String> busSources;
 
+    /** Kind::Strip only: strips sending into this track channel (docs/mixer/sends-and-buses.md). */
+    std::vector<juce::String> receivesFrom;
+
     /** Set only when `insertChainIsLinear` is false: the owning macro's id when the branching/
      *  shared node is boxed, else that node's own uuid. Empty otherwise. */
     juce::String editOnCanvasTargetUuid;
