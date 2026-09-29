@@ -10,6 +10,7 @@
 #include "Modules/ModuleBase.h"
 #include "Modules/SequencerModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -341,86 +342,73 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
 // Only the interior jack goes unlabelled — the resolved name sits next to the boundary one, mirroring the collapsed
 // card's own left/right convention.
 //
-// The drawn jack (see kMacroPortWidgetWidth's own comment) is smaller than a module card's: a
-// 7px dot (not 10px), a corner radius of 4 (not 6) and a 9.5f name font (not 10.5f), all sized
-// with the widget's own width/height so the chip reads as a boundary jack rather than a miniature
-// module. NONE of that touches the actual HIT target: getPortForPoint's `< 10` distance check
-// (general to every module) still grabs a click several px off the smaller dot — the drawn jack
-// size and the hit radius are two different knobs
-// (MacroPortWidgetTests.cpp's `HitTestStaysGenerousAroundTheShrunkJackDot`).
+// The strip behind the widget is painted by the canvas (paintMacroPortStrips), so the widget draws only its jacks and
+// its name. The boundary jack (the one on the hull border, where cables from outside land) is a full 10px dot like the
+// collapsed card's; the interior jack (on the strip's inner edge, where cables to members start) is a 7px dot. NONE of
+// that touches the HIT target: getPortForPoint's `< 10` distance check still grabs a click several px off the smaller
+// dot (MacroPortWidgetTests.cpp's `HitTestStaysGenerousAroundTheShrunkJackDot`). The name is painted only at working
+// zoom; below it the strip shows dots and the tooltip carries the name.
 void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     static const synth::theme::Colors fallbackColors{};
     const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
 
     const auto ownership = owner.getMacroController().macroPortOwnerFor(nodeId);
-    const juce::Colour tint = ownership.macro != nullptr ? ownership.macro->colour : themeColors.accent;
     const juce::String name =
         (ownership.port != nullptr && ownership.port->name.isNotEmpty()) ? ownership.port->name : cardTitle();
     const bool boundaryIsInput = ownership.port != nullptr ? ownership.port->isInput : true;
 
-    auto bounds = getLocalBounds().toFloat();
-    g.setColour(tint.withAlpha(0.22f));
-    g.fillRoundedRectangle(bounds, 4.0f);
-    g.setColour(tint.withAlpha(0.85f));
-    g.drawRoundedRectangle(bounds.reduced(0.75f), 4.0f, 1.0f);
-
-    const juce::Colour audioJackColour = themeColors.audioWire;
-    const juce::Colour jackAccentColour = themeColors.accent;
-    constexpr float kJackRadius = 3.5f; // 7px dot, vs a full card's 10px
-
     // A port with a user colour (MacroPort::colour, set from the Configure I/O modal's swatch)
     // paints its dot in THAT colour; otherwise the kind tint (audioWire for MIDI, accent for
-    // AudioCV) — the same fallback the collapsed card's MacroCardComponent::paint uses, so an
-    // expanded docked widget and a collapsed card read a port's jack identically.
-    const juce::Colour midiJackColour = effectiveMacroPortJackColour(ownership.port, audioJackColour);
-    const juce::Colour cvJackColour = effectiveMacroPortJackColour(ownership.port, jackAccentColour);
+    // AudioCV) — the same fallback the collapsed card's MacroCardComponent uses, so an expanded
+    // docked widget and a collapsed card read a port's jack identically.
+    const juce::Colour midiJackColour = effectiveMacroPortJackColour(ownership.port, themeColors.audioWire);
+    const juce::Colour cvJackColour = effectiveMacroPortJackColour(ownership.port, themeColors.accent);
+
+    auto dot = [&](int index, bool isInput, juce::Colour colour) {
+        const float radius = (isInput == boundaryIsInput) ? 5.0f : 3.5f;
+        const auto p = getPortCenter(index, isInput);
+        g.setColour(colour);
+        g.fillEllipse((float)p.x - radius, (float)p.y - radius, radius * 2.0f, radius * 2.0f);
+    };
 
     if (module->acceptsMidi() || module->producesMidi()) {
-        if (module->acceptsMidi()) {
-            auto p = getPortCenter(0, true);
-            g.setColour(midiJackColour);
-            g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
-        }
-        if (module->producesMidi()) {
-            auto p = getPortCenter(0, false);
-            g.setColour(midiJackColour);
-            g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
-        }
+        if (module->acceptsMidi())
+            dot(0, true, midiJackColour);
+        if (module->producesMidi())
+            dot(0, false, midiJackColour);
     } else {
         int numIns = 0, numOuts = 0;
         if (auto* mb = dynamic_cast<ModuleBase*>(module)) {
             numIns = mb->getVisibleInputPortCount();
             numOuts = mb->getVisibleOutputPortCount();
         }
-        for (int i = 0; i < numIns; ++i) {
-            auto p = getPortCenter(i, true);
-            g.setColour(cvJackColour);
-            g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
-        }
-        for (int i = 0; i < numOuts; ++i) {
-            auto p = getPortCenter(i, false);
-            g.setColour(cvJackColour);
-            g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
-        }
+        for (int i = 0; i < numIns; ++i)
+            dot(i, true, cvJackColour);
+        for (int i = 0; i < numOuts; ++i)
+            dot(i, false, cvJackColour);
     }
 
+    if (!macroPortNamesShown())
+        return;
     g.setColour(themeColors.textPrimary);
-    g.setFont(juce::Font(juce::FontOptions(9.5f)));
-    // Inset 16, not 12: a jack dot is drawn at
-    // x=10/width-10 with a 3.5px radius, i.e. its outer edge sits at 13.5px from the widget's own
-    // edge, so a 12px text inset put the name's own text area INSIDE the dot — on a Mono widget
-    // showing a realistic name ("Delay 1 Audio") the left dot visibly overlapped the "D". 16 clears
-    // the dot's outer edge (13.5) by 2.5px on both sides without moving the dot itself or widening
-    // the widget — see MacroPortWidgetTests.cpp's `RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize`
-    // for the width budget this leaves for the name.
-    auto textArea = getLocalBounds().reduced(16, 2);
-    // drawFittedText never draws outside textArea: it compresses the glyph run horizontally (and,
-    // failing that, ellipsises) rather than clip mid-glyph — the "elide gracefully" requirement —
-    // but at this widget's tuned width a realistic name draws at its natural, unscaled size (see
-    // the test named above), so in practice this is a safety net, not the common case.
+    g.setFont(juce::Font(juce::FontOptions(kMacroPortNameFontSize)));
+    // The name starts kMacroPortStripInset from the boundary edge and stops short of the interior
+    // jack; drawFittedText compresses or ellipsises rather than clip mid-glyph. First row only.
+    constexpr int kInteriorClearance = kMacroPortWidgetJackInset + 8;
+    auto textArea = juce::Rectangle<int>(0, 0, getWidth(), kMacroPortWidgetRowStep);
+    if (boundaryIsInput)
+        textArea = textArea.withTrimmedLeft(kMacroPortStripInset).withTrimmedRight(kInteriorClearance);
+    else
+        textArea = textArea.withTrimmedLeft(kInteriorClearance).withTrimmedRight(kMacroPortStripInset);
     g.drawFittedText(name, textArea,
                      boundaryIsInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1);
+}
+
+bool ModuleComponent::macroPortNamesShown() const {
+    // The parent is the canvas content component, whose transform is the zoom (scale + pan).
+    const float zoom = getParentComponent() != nullptr ? getParentComponent()->getTransform().getScaleFactor() : 1.0f;
+    return macroPortNamesVisibleAtZoom(zoom);
 }
 
 juce::Colour ModuleComponent::effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const {
@@ -604,19 +592,18 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
         return {getWidth() / 2, getHeight() / 2};
     }
 
-    // Macro-port widget: same left-input/right-output convention every other card
-    // uses (x=10 / x=width-10, the same inset macroCardPortLayout's own collapsed-card jacks use —
-    // "a macro's boundary jacks read like any other module's"), just compacted to the widget's own
-    // small header offset/row step instead of a real card's 38/20. A MIDI port's single jack sits
-    // fixed at the header row, mirroring the generic MIDI-jack convention below.
+    // Macro-port widget: same left-input/right-output convention every other card uses, but the jacks
+    // sit kMacroPortWidgetJackInset in from the widget's own edge (the boundary jack lands on the
+    // hull border) and on 16px rows. A MIDI port's single jack sits fixed at the first row.
     if (isMacroPortType(getType(module))) {
+        const int x = isInput ? kMacroPortWidgetJackInset : getWidth() - kMacroPortWidgetJackInset;
         if (module->acceptsMidi() || module->producesMidi())
-            return {isInput ? 10 : getWidth() - 10, kMacroPortWidgetHeaderY};
+            return {x, kMacroPortWidgetHeaderY};
         int visible = 0;
         if (auto* mb = dynamic_cast<ModuleBase*>(module))
             visible = isInput ? mb->getVisibleInputPortCount() : mb->getVisibleOutputPortCount();
         const int clamped = (visible > 0) ? juce::jlimit(0, visible - 1, index) : 0;
-        return {isInput ? 10 : getWidth() - 10, kMacroPortWidgetHeaderY + clamped * kMacroPortWidgetRowStep};
+        return {x, kMacroPortWidgetHeaderY + clamped * kMacroPortWidgetRowStep};
     }
 
     // Macro bank: jacks sit on their macro's row so knob N and jack N line up horizontally.
@@ -750,6 +737,13 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
 // jack/module, so a control's own setTooltip() (juce::SettableTooltipClient) is unaffected;
 // juce::TooltipWindow only calls this while the mouse is actually over this component.
 juce::String ModuleComponent::getTooltip() {
+    // A docked port widget shows its name only at working zoom; below it the tooltip is the name.
+    if (module != nullptr && isMacroPortType(getType(module))) {
+        if (macroPortNamesShown())
+            return {};
+        const auto ownership = owner.getMacroController().macroPortOwnerFor(nodeId);
+        return ownership.port != nullptr ? ownership.port->name : juce::String();
+    }
     if (module == nullptr || !isAudioOutputIONode(module))
         return {};
     const auto port = getPortForPoint(getMouseXYRelative());

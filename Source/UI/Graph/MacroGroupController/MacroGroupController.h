@@ -83,6 +83,22 @@ public:
         std::optional<juce::Colour> colour; // unset -> kind tint fallback
     };
 
+    /** One port's docked widget on an OPEN macro, in canvas coordinates. Rows are 16px, from just
+     *  below the chip row, one column per side; a Stereo port takes two rows (`rows`). The
+     *  widget straddles the hull border by 5px so `outerJack` (the boundary jack, where cables
+     *  from outside land) sits exactly on the border and `innerJack` on the strip's inner edge.
+     *  The ONE layout for the open macro: dockMacroPortWidgets(), cable anchoring and hit-testing
+     *  read it (docs/macros/ports.md#how-a-port-is-drawn). */
+    struct MacroHullPort {
+        juce::String nodeUuid;
+        bool isInput = false;
+        int row = 0;  // first row index within its side
+        int rows = 1; // 2 for a Stereo port
+        juce::Rectangle<int> widgetBounds;
+        juce::Point<int> outerJack;
+        juce::Point<int> innerJack;
+    };
+
     /** Tri-state read of a macro's members' bypass (or mute) state (docs/macros/ports.md#bypass-and-mute). See
      *  GraphEditor::MacroToggleState. */
     enum class MacroToggleState { AllOff, AllOn, Mixed };
@@ -207,6 +223,9 @@ public:
     /** {input strip width, output strip width} of the collapsed card, card-local pixels. Longest port name on the
      *  side plus padding; a side with no ports is the bare minimum. Never depends on zoom. */
     std::pair<int, int> macroCardStripWidths(const juce::String& macroId) const;
+    /** Every port of an EXPANDED macro, docked as rows inside its hull's sidebars. Empty for a
+     *  collapsed macro or one with no ports. */
+    std::vector<MacroHullPort> macroHullPortLayout(const juce::String& macroId) const;
     std::optional<MacroCardPort> macroCardPortForPoint(const juce::String& macroId,
                                                        juce::Point<int> cardLocalPos) const;
     MacroPortOwner macroPortOwnerFor(juce::AudioProcessorGraph::NodeID nodeId) const;

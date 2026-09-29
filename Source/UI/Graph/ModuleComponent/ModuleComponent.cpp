@@ -94,7 +94,8 @@ bool shouldSkipGenericChoiceCombo(juce::AudioProcessor* module, const juce::Audi
 } // namespace
 
 juce::Point<int> ModuleComponent::getMidiPortCenter(bool isOutput) const {
-    return {isOutput ? getWidth() - 10 : 10, midiJackY(module)};
+    const int inset = isMacroPortType(getType(module)) ? kMacroPortWidgetJackInset : 10;
+    return {isOutput ? getWidth() - inset : inset, midiJackY(module)};
 }
 
 ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGraph::NodeID nId, GraphEditor& owner,

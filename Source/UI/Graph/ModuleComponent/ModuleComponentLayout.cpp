@@ -7,9 +7,13 @@
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Layout/LayoutUtil.h"
 
 using namespace detail;
+
+static_assert(ModuleComponent::kMacroPortWidgetRowStep == kMacroPortRowHeight,
+              "a docked port widget's jack rows are the sidebar's rows");
 
 void ModuleComponent::updateLayout() {
     if (isMacroPortType(getType(module))) {
@@ -73,13 +77,13 @@ void ModuleComponent::updateLayout() {
     resized();
 }
 
-// Compact docked widget for the four macro-port types (docs/macros/ports.md#how-a-port-is-drawn): a small, fixed-shape
-// row — no header chrome, no body, no 100px floor a real module card carries. Sized purely from the module's own
-// visible jack count, which for a Mono/Poly-N port (or a MIDI port, no shape at all) is one row on each side
-// (getVisible* PortCount()==1) and for Stereo is two (==2) — MacroInletModule/MacroOutletModule's
-// declare-max/vary-visible mechanism (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's
-// implementation note) already keeps that in sync with the port's shape, so this needs no shape-aware branching of its
-// own.
+// Docked widget for the four macro-port types (docs/macros/ports.md#how-a-port-is-drawn): one 16px row per jack
+// row, no header chrome and no body. The row count comes from the module's own visible jack count, which for a
+// Mono/Poly-N port (or a MIDI port, no shape at all) is one row on each side and for Stereo is two —
+// MacroInletModule/MacroOutletModule's declare-max/vary-visible mechanism keeps that in sync with the port's shape, so
+// this needs no shape-aware branching of its own. The WIDTH is the sidebar strip's and is set by
+// dockMacroPortWidgets (macroHullPortLayout); before the first dock the widget gets a nominal width so it is never
+// zero-sized.
 void ModuleComponent::layoutMacroPortWidget() {
     int rows = 1;
     if (!(module->acceptsMidi() || module->producesMidi())) {
@@ -90,8 +94,8 @@ void ModuleComponent::layoutMacroPortWidget() {
         }
         rows = juce::jmax(1, numIns, numOuts);
     }
-    const int height = kMacroPortWidgetHeaderY + (rows - 1) * kMacroPortWidgetRowStep + kMacroPortWidgetBottomPad;
-    setSize(kMacroPortWidgetWidth, height);
+    constexpr int kNominalWidth = kMacroPortStripInset + 60 + kMacroPortStripPadding;
+    setSize(getWidth() > 0 ? getWidth() : kNominalWidth, rows * kMacroPortWidgetRowStep);
 }
 
 int ModuleComponent::getContentTopY() {
