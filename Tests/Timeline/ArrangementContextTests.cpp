@@ -232,3 +232,18 @@ TEST(ArrangementContextTest, InjectionAppendsWhenNonEmpty) {
     EXPECT_TRUE(content.contains("\"Lead\""));
     EXPECT_TRUE(content.contains("Add a filter"));
 }
+
+// A renamed card is named by its title in the summary too, so the model and the person use one name.
+TEST(ArrangementContextTest, ABoundNodeIsNamedByItsCardTitle) {
+    juce::AudioProcessorGraph graph;
+    auto osc = graph.addNode(std::make_unique<OscillatorModule>());
+    osc->properties.set("uuid", "osc-uuid");
+    osc->properties.set("displayName", "Wobble Lead");
+
+    TimelineDoc doc;
+    const auto lead = doc.addTrack(TrackKind::Midi, "Lead");
+    doc.setTrackBinding(lead, "osc-uuid");
+
+    const juce::String summary = ArrangementContext::summarize(doc, graph, makeSnapshot());
+    EXPECT_TRUE(summary.contains("binding Wobble Lead")) << summary.toStdString();
+}

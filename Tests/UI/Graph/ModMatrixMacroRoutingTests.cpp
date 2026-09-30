@@ -40,7 +40,9 @@ TEST(ModMatrixMacroRouting, PointingARowAtAMemberEntersTheMacroThroughAnInletAnd
     ASSERT_EQ(c.macro().ports.size(), 1u);
     EXPECT_TRUE(c.macro().memberIsPort(c.macro().ports.front().nodeUuid));
 
-    EXPECT_FALSE(c.matrix().getRowSourceComboTextForTest(0).isEmpty()) << "the row's source is the inlet, still listed";
+    const auto sourceText = c.matrix().getRowSourceComboTextForTest(0);
+    EXPECT_TRUE(sourceText.contains(c.nameOf(c.lfo)))
+        << "the row names the LFO, not the port it enters by: " << sourceText;
     const auto destText = c.matrix().getRowDestComboTextForTest(0);
     EXPECT_TRUE(destText.contains(c.nameOf(c.filterIn))) << destText;
     EXPECT_TRUE(destText.contains("Cutoff")) << destText;
@@ -125,6 +127,8 @@ TEST(ModMatrixMacroRouting, ASourceInsideAMacroLeavesThroughAnOutlet) {
     ASSERT_EQ(c.macro().ports.size(), 1u);
     EXPECT_FALSE(c.macro().ports.front().isInput);
     EXPECT_TRUE(c.matrix().getRowDestComboTextForTest(0).contains(c.nameOf(c.filterOut)));
+    EXPECT_EQ(c.matrix().getRowSourceComboForTest(0)->getSelectedId(), (int)(c.lfo.uid << 8))
+        << "the row names the member inside, not the outlet it leaves by";
 }
 
 TEST(ModMatrixMacroRouting, BothEndsInsideTheSameMacroNeedNoPorts) {

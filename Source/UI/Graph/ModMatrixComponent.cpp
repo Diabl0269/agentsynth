@@ -825,11 +825,21 @@ void ModMatrixComponent::ModRow::showPicker(bool forSource) {
         juce::CallOutBox::launchAsynchronously(std::move(picker), combo.getScreenBounds(), nullptr);
 }
 
+// A routing that crosses a macro border runs through ports only it uses; the row names the real modules
+// behind them (the LFO, not "In 1"), so what a person picked is what they read back and can search for.
 void ModMatrixComponent::ModRow::refresh(const AudioEngine::ModRoutingInfo& info) {
-    int srcId = (int)((info.sourceNodeID.uid << 8) | (uint32_t)info.sourceChannelIndex);
-    sourceCombo.setSelectedId(srcId, juce::dontSendNotification);
-    int destId = (int)((info.destNodeID.uid << 8) | (uint32_t)info.destChannelIndex);
-    destCombo.setSelectedId(destId, juce::dontSendNotification);
+    Endpoint source{info.sourceNodeID, info.sourceChannelIndex};
+    Endpoint dest{info.destNodeID, info.destChannelIndex};
+    if (auto* editor = owner.graphEditor) {
+        auto& graph = owner.audioEngine.getGraph();
+        const auto isPort = [editor](NodeID id) { return editor->getMacroController().nodeIsMacroPort(id); };
+        if (const auto real = realEndpointBehindPorts(graph, attenuverterId, /*incoming=*/true, isPort); real.valid())
+            source = real;
+        if (const auto real = realEndpointBehindPorts(graph, attenuverterId, /*incoming=*/false, isPort); real.valid())
+            dest = real;
+    }
+    sourceCombo.setSelectedId((int)((source.node.uid << 8) | (uint32_t)source.channel), juce::dontSendNotification);
+    destCombo.setSelectedId((int)((dest.node.uid << 8) | (uint32_t)dest.channel), juce::dontSendNotification);
 }
 
 void ModMatrixComponent::ModRow::comboBoxChanged(juce::ComboBox* comboBox) {
