@@ -402,3 +402,51 @@ TEST(MixerPanelColumnDragTests, OnlyAHeaderWithReorderHooksShowsTheDraggingHandC
     EXPECT_TRUE(r.panel->getDirectColumnForTest()->getHeaderForTest().getMouseCursor() ==
                 juce::MouseCursor::NormalCursor);
 }
+
+// The name label and the source line under it are children of the handle, and JUCE asks the deepest
+// component for the cursor, so each delegates to the header.
+TEST(MixerPanelColumnDragTests, TheNameLabelAndSourceLineShowTheGrabHandOnlyWhileTheColumnCanBeDragged) {
+    ColumnDragRig r(2);
+    auto* strip = r.panel->getStripColumnForTest(0);
+    ASSERT_NE(strip, nullptr);
+    EXPECT_TRUE(strip->getHeaderForTest().getNameLabelForTest().getMouseCursor() ==
+                juce::MouseCursor::DraggingHandCursor);
+    EXPECT_TRUE(strip->getSourceLineLabelForTest().getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+
+    ASSERT_NE(r.panel->getMasterColumnForTest(), nullptr);
+    EXPECT_TRUE(r.panel->getMasterColumnForTest()->getHeaderForTest().getNameLabelForTest().getMouseCursor() ==
+                juce::MouseCursor::NormalCursor);
+    ASSERT_NE(r.panel->getDirectColumnForTest(), nullptr);
+    EXPECT_TRUE(r.panel->getDirectColumnForTest()->getHeaderForTest().getNameLabelForTest().getMouseCursor() ==
+                juce::MouseCursor::NormalCursor);
+
+    strip->getHeaderForTest().reorderHooks = {};
+    EXPECT_TRUE(strip->getSourceLineLabelForTest().getMouseCursor() == juce::MouseCursor::NormalCursor);
+}
+
+TEST(MixerPanelColumnDragTests, PressingAndDraggingTheSourceLineGrabsAndMovesTheColumn) {
+    ColumnDragRig r(2);
+    auto* strip = r.panel->getStripColumnForTest(0);
+    ASSERT_NE(strip, nullptr);
+    auto& header = strip->getHeaderForTest();
+    auto& line = strip->getSourceLineLabelForTest();
+    int grabs = 0, drags = 0;
+    auto hooks = header.reorderHooks;
+    hooks.onGrab = [&](const juce::MouseEvent&) { ++grabs; };
+    hooks.onDrag = [&](const juce::MouseEvent&) { ++drags; };
+    header.reorderHooks = hooks;
+
+    // Events whose source is the source line, as the header receives them through its mouse listener.
+    const auto down = makeClickEvent(line, {4.0f, 4.0f});
+    const auto drag = makeDragEvent(line, {20.0f, 4.0f}, {4.0f, 4.0f});
+    header.mouseDown(down);
+    header.mouseDrag(drag);
+    EXPECT_EQ(grabs, 1);
+    EXPECT_EQ(drags, 1);
+
+    int selected = 0;
+    header.onHeaderClicked = [&] { ++selected; };
+    header.reorderHooks = {};
+    header.mouseUp(down);
+    EXPECT_EQ(selected, 1) << "a plain click on the source line selects the column like the header background";
+}

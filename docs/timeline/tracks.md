@@ -318,13 +318,23 @@ differ. The destination picker and the add-track auto-wire search both go throug
 `isMidiInstrumentType()`; `AIStateMapper` does not.
 
 **The graph is the truth.** Toggling a row calls `TrackHeaderHost::setMidiDestinationConnected(
-TrackId, nodeUid, connect)` — `MainComponent`'s implementation performs one `recordStructuralChange`
+TrackId, nodeUid, connect)` — `MainComponent`'s implementation performs one `recordGraphAndMacroChange`
 (add or remove the MIDI connection) then always calls `reconcileTimelineAfterGraphChange()` — and
 immediately re-pulls `getMidiDestinationOptions(TrackId)` to rebuild every row from what the graph
 now actually reports, rather than trusting the click. Both host methods are non-pure with inert
 defaults (empty list, no-op) for the same keep-every-implementer-compiling reason
 `getAppProperties()` is, and both no-op cleanly on a stale popup — the track's binding or the
 target node no longer resolves — rather than crashing.
+
+**Through macros.** A destination (or the Track In) inside a macro is reached through macro MIDI ports,
+exactly like a mixer send: the add runs through `applyProgrammaticConnectionChange`
+([auto-ports](../macros/auto-ports.md#programmatic-connections)), which mints the inlet/outlet chain (one
+per macro boundary), and one undo step restores graph and macros together. "Connected" means the Track
+In's MIDI *reaches* the node (`findMidiNodesReachedFrom`, which expands only through macro ports), not
+that a direct cable exists; macro port nodes are never listed as candidates. Unticking removes the last
+leg onto that node, so a port another destination in the same macro still uses survives, and a port left
+carrying nothing is swept (when the auto-delete preference is on). With the auto-port preference off the
+add is a plain direct cable.
 
 ## The channel chip
 
@@ -381,7 +391,7 @@ graph change (a node rename or delete, a MIDI wire, a channel appearing). A shut
 and re-reads when it opens. Rows, top to bottom:
 
 - **Header line:** the track's colour swatch, its name and a small `MIDI` / `Audio` badge.
-- **Plays into:** a combo-style button showing the bound Track In (MIDI track) or Track Audio (audio
+- **Canvas node:** a combo-style button showing the bound Track In (MIDI track) or Track Audio (audio
   track) node's name. Clicking it opens the same re-bind menu as the [binding chip](#binding-chips) —
   kind-aware candidates not claimed by another track, plus "New Track In node" — built by
   `buildTrackBindingMenu` / applied by `applyTrackBindingChoice` (`Source/UI/Timeline/TrackRoutingMenus.h`),
@@ -393,11 +403,11 @@ and re-reads when it opens. Rows, top to bottom:
   the node kind — with the line "Its notes are kept. Pick a new Track In to hear them again." Below a
   live binding, a **Show on canvas** link selects the node with `selectNodeInGraph`, the
   chip's highlight-only path (the canvas is not scrolled).
-- **Notes go to** (MIDI tracks only): the connected MIDI destinations' names, comma-joined, or "None".
+- **MIDI destinations** (MIDI tracks only): the connected MIDI destinations' names, comma-joined, or "None".
   Clicking it opens the [MIDI destination picker](#midi-destinations) in a `CallOutBox`, built by
   `buildTrackMidiDestinationPicker` over `getMidiDestinationOptions` / `setMidiDestinationConnected`
   exactly as the header builds it. An unbound track shows "None" and the picker asks for a binding first.
-- **Sound goes to:** read-only. "Channel · <name>" with the [channel chip](#the-channel-chip)'s
+- **Mixer channel:** read-only. "Channel · <name>" with the [channel chip](#the-channel-chip)'s
   gated level meter (ticked by the panel's existing 15 Hz timer), or "No mixer channel" (muted). A
   **Show in mixer** link calls `TrackChannelLinkSurface::revealChannelForTrack`, which opens the Mixer
   tab on that column. The channel comes from the graph's cables; nothing here chooses it.
@@ -459,7 +469,7 @@ menu: `collectBindingOptions()` / `applyBindingMenuChoice(id)` and `applyContext
 its own.
 
 The routing pane has the same seams: `setShowBindingMenuHookForTest()` receives the menu a real
-click on "Plays into" builds (a test then feeds an item id to `applyBindingMenuChoice()`),
+click on "Canvas node" builds (a test then feeds an item id to `applyBindingMenuChoice()`),
 `setOpenMidiDestinationsHookForTest()` replaces the picker's `CallOutBox`, and
 `createMidiDestinationPickerForTest()` builds the picker unlaunched.
 

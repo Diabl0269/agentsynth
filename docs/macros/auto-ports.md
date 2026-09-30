@@ -503,6 +503,7 @@ Compressor. Solo, stems and bus detection walk the same edges.
 | Caller | Routes? | Why |
 |---|---|---|
 | Mixer send add / retarget / remove (`MixerSendList`) | Yes | A user action in the mixer that draws a cable across a boundary. |
+| Timeline MIDI destinations picker / routing pane (`MainComponent::setMidiDestinationConnected`) | Yes | A user action that draws (or removes) a Track In cable to a destination that may sit in a macro; removal takes the last leg onto the target. |
 | Mixer send reorder (`swapSends` / `moveSendRow`) | No-op | Only the source channel moves; the destination port is kept. |
 | Master splice, Make channel's strip-to-Master | No | Deliberately a plain edge: `spliceMasterNode`'s Mix-versus-Direct classification reads it (see above). |
 | Track and channel creation (`ChannelFlows`, `MainComponentTrackCreation`, track presets, timeline tracks) | No | Wires freshly made nodes that are not yet in a macro; the channel macro's own grouping splice runs after. |

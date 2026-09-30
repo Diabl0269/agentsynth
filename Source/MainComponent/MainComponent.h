@@ -228,6 +228,8 @@ public:
     bool midiRemoteDevicesOpenedAfterEngineUpForTest() const noexcept { return midiRemoteDevicesOpenedAfterEngineUp_; }
     const auto& getCommandTableForTest() const { return commandTable(); } // CommandSpec stays private; read via auto
     void setUrlOpenerForTest(std::function<void(const juce::URL&)> opener);
+    std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption> getMidiDestinationOptionsForTest(synth::TrackId id);
+    void setMidiDestinationConnectedForTest(synth::TrackId id, juce::uint32 nodeUid, bool connect);
     void setEditSurfaceOverrideForTest(std::optional<EditSurface> surface);
     bool isAiPanelConfiguredVisible() const { return isAiPanelVisible; }
     bool isLibraryConfiguredVisible() const { return isLibraryVisible; }

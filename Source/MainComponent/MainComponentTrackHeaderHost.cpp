@@ -7,7 +7,8 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
-#include "Mixer/MixerSends/MixerSends.h" // synth::describeSendSlotLabel, ChannelStripModule send-slot lane options
+#include "Mixer/ChannelFlows/ChannelFlows.h" // findMidiNodesReachedFrom, isMacroPortNode
+#include "Mixer/MixerSends/MixerSends.h"     // synth::describeSendSlotLabel, ChannelStripModule send-slot lane options
 #include "Modules/ChannelStripModule.h"
 #include "Modules/TimelineMidiSourceModule.h" // auditionTrackNote pushes into the bound Track In node
 #include "Plugin/Hosting/HostedPluginModule.h"
@@ -301,10 +302,15 @@ MainComponent::getMidiDestinationOptions(synth::TrackId forTrack) {
         if (node == nullptr)
             continue;
         auto* module = dynamic_cast<ModuleBase*>(node->getProcessor());
-        if (module == nullptr || !module->acceptsMidi())
+        if (module == nullptr || !module->acceptsMidi() || synth::isMacroPortNode(module))
             continue;
         candidates.push_back(node);
     }
+
+    // "Connected" means the Track In's MIDI reaches the node, directly or through macro ports.
+    std::set<juce::uint32> reachedUids;
+    for (const auto& leg : synth::findMidiNodesReachedFrom(graph, trackInNode->nodeID))
+        reachedUids.insert(leg.node.uid);
 
     std::map<juce::String, int> nameOccurrences;
     for (auto* node : candidates)
@@ -314,8 +320,7 @@ MainComponent::getMidiDestinationOptions(synth::TrackId forTrack) {
         const juce::String name = describeNodeForBinding(node);
         const juce::String display =
             nameOccurrences[name] > 1 ? name + " #" + juce::String((int)node->nodeID.uid) : name;
-        const bool connected = graph.isConnected({{trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
-                                                  {node->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
+        const bool connected = reachedUids.count(node->nodeID.uid) != 0;
         options.push_back({display, node->nodeID.uid, connected, detail::isMidiInstrumentNode(node->getProcessor())});
     }
     return options;
@@ -341,18 +346,45 @@ void MainComponent::setMidiDestinationConnected(synth::TrackId forTrack, juce::u
     if (targetNode == nullptr)
         return; // stale popup: the target node no longer resolves
 
-    const juce::AudioProcessorGraph::Connection connection{
-        {trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
-        {targetNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex}};
+    const auto trackInId = trackInNode->nodeID;
+    const auto targetId = targetNode->nodeID;
+    const auto reachLegs = [&graph, trackInId, targetId] {
+        std::vector<juce::AudioProcessorGraph::Connection> legs;
+        for (const auto& leg : synth::findMidiNodesReachedFrom(graph, trackInId))
+            if (leg.node == targetId)
+                legs.push_back(leg.lastLeg);
+        return legs;
+    };
+    if (connect == !reachLegs().empty())
+        return; // already in the requested state
 
-    undoManager.recordStructuralChange(graph, [&graph, connection, connect] {
+    // The cable enters and leaves macros through MIDI ports like a mixer send does; disconnecting removes
+    // the last leg onto the target (not the Track In's first edge) so a port shared by another
+    // destination in the same macro survives.
+    const auto mutation = [&graph, &reachLegs, trackInId, targetId, connect] {
         if (connect)
-            graph.addConnection(connection);
-        else
-            graph.removeConnection(connection);
+            return graph.addConnection({{trackInId, juce::AudioProcessorGraph::midiChannelIndex},
+                                        {targetId, juce::AudioProcessorGraph::midiChannelIndex}});
+        bool removed = false;
+        for (const auto& leg : reachLegs())
+            removed = graph.removeConnection(leg) || removed;
+        return removed;
+    };
+    undoManager.recordGraphAndMacroChange(graph, graphEditor.getMacros(), [&] {
+        graphEditor.getMacroController().applyProgrammaticConnectionChange(
+            graphEditor.getAutoCreateMacroPortsOnDragEnabled(), mutation);
+        graphEditor.updateComponents();
     });
-    graphEditor.updateComponents();
     reconcileTimelineAfterGraphChange();
+}
+
+std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
+MainComponent::getMidiDestinationOptionsForTest(synth::TrackId id) {
+    return getMidiDestinationOptions(id);
+}
+
+void MainComponent::setMidiDestinationConnectedForTest(synth::TrackId id, juce::uint32 nodeUid, bool connect) {
+    setMidiDestinationConnected(id, nodeUid, connect);
 }
 
 void MainComponent::auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) {

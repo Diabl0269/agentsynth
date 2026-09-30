@@ -328,6 +328,22 @@ bool isBusMacro(const Macro& macro, juce::AudioProcessorGraph& graph);
 juce::AudioProcessorGraph::NodeID findStripFedByTrackSource(juce::AudioProcessorGraph& graph,
                                                             juce::AudioProcessorGraph::NodeID trackSourceId);
 
+/** True for a macro's own port node (Macro In/Out, Macro MIDI In/Out): boundary plumbing, never a module. */
+bool isMacroPortNode(const juce::AudioProcessor* p);
+
+/** One node a MIDI walk reached, and the connection (the walk's last leg) that lands on it. A node reached
+ *  by two paths appears once per path. */
+struct MidiReachLeg {
+    juce::AudioProcessorGraph::NodeID node;
+    juce::AudioProcessorGraph::Connection lastLeg;
+};
+
+/** Forward from `sourceId`'s MIDI output over MIDI edges, expanding ONLY through macro port nodes (so a
+ *  cable that enters or leaves a macro still counts as reaching what is behind it). Returns every
+ *  non-port node reached with the leg that lands on it; `sourceId` itself is never reported. */
+std::vector<MidiReachLeg> findMidiNodesReachedFrom(juce::AudioProcessorGraph& graph,
+                                                   juce::AudioProcessorGraph::NodeID sourceId);
+
 /** Backward from a strip, collecting every distinct track-source node whose signal reaches it,
  *  transitively through the instrument/macro chain. Never expands PAST another ChannelStripModule
  *  reached upstream (that strip is another channel's terminus -- whatever feeds IT is not this

@@ -141,4 +141,38 @@ std::vector<juce::AudioProcessorGraph::NodeID> findTrackSourcesFeedingStrip(juce
     return tracks;
 }
 
+// Fans out on purpose (a Track In feeds several instruments), so this is a plain reachability walk over
+// edges rather than resolveThroughPorts' single-edge follow. Only port nodes are expanded: a real module
+// that happens to forward MIDI is a destination in its own right, not a pass-through.
+std::vector<MidiReachLeg> findMidiNodesReachedFrom(juce::AudioProcessorGraph& graph,
+                                                   juce::AudioProcessorGraph::NodeID sourceId) {
+    std::vector<MidiReachLeg> reached;
+    if (graph.getNodeForId(sourceId) == nullptr)
+        return reached;
+
+    const auto connections = graph.getConnections();
+    std::vector<juce::AudioProcessorGraph::NodeID> expanded{sourceId};
+    std::vector<juce::AudioProcessorGraph::NodeID> queue{sourceId};
+    while (!queue.empty()) {
+        const auto nodeId = queue.back();
+        queue.pop_back();
+        for (const auto& conn : connections) {
+            if (conn.source.nodeID != nodeId || conn.source.channelIndex != juce::AudioProcessorGraph::midiChannelIndex)
+                continue;
+            const auto destId = conn.destination.nodeID;
+            if (destId == sourceId)
+                continue;
+            if (!isMacroPortNode(processorFor(graph, destId))) {
+                reached.push_back({destId, conn});
+                continue;
+            }
+            if (!contains(expanded, destId)) {
+                expanded.push_back(destId);
+                queue.push_back(destId);
+            }
+        }
+    }
+    return reached;
+}
+
 } // namespace synth

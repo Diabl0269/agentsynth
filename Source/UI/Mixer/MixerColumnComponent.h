@@ -61,6 +61,7 @@ public:
     /** Test seam: the header this column owns -- a test drives its inline rename through
      *  MixerColumnHeader::getNameLabelForTest()'s real Label editor gestures. */
     MixerColumnHeader& getHeaderForTest() noexcept { return header_; }
+    juce::Label& getSourceLineLabelForTest() noexcept { return sourceLineLabel_; }
 
     /** Unbinds the fader/pan/mute/solo/meter from whatever live processor/parameters they
      *  currently reference, and clears this column's own raw pointers into the graph -- called by
@@ -340,7 +341,7 @@ private:
     juce::AudioProcessorGraph::NodeID eqNodeId_;
 
     MixerColumnHeader header_;
-    juce::Label sourceLineLabel_;
+    CursorDelegatingLabel sourceLineLabel_;
     MixerInsertList insertList_;
     MixerEqThumbnail eqThumbnail_;
     MixerSendList sendList_;
