@@ -450,3 +450,23 @@ TEST(HierarchicalArrange, ABlockWithASignalOutputKeepsItsRowWhenItAlsoModulatesA
 
     EXPECT_LT(out.positions.at("x").y, out.positions.at("in2").y) << "still in track 1's row";
 }
+
+// Columns are shared by every row, so a wide block in another row's cell of the same column must not leave a gap
+// between a pulled-up source and its consumer: the source hugs the right edge of its column.
+TEST(HierarchicalArrange, APulledUpSourceHugsTheRightEdgeOfAWideColumn) {
+    ArrangeInput in;
+    in.blocks = {module("in1", 280, 200, 1), module("m1", 280, 300, 2, 1), module("in2", 2000, 200, 3),
+                 module("m2", 280, 300, 4, 1), module("lfo", 280, 300, 100, 3)};
+    in.edges = {flow("in1", "m1"), flow("in2", "m2"), mod("lfo", "m1")};
+    in.trackStarts = {"in1", "in2"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    const auto lfo = out.positions.at("lfo");
+    const auto m1 = out.positions.at("m1");
+    EXPECT_EQ(out.positions.at("in1").x, kArrangeOriginX) << "the row start stays left-aligned";
+    EXPECT_LT(lfo.x + 280, m1.x) << "still before its consumer";
+    EXPECT_GE(lfo.x + 280 + kLayerGapX, m1.x - 20) << "no gap the width of the other row's wide block";
+    expectTopLevelClear(in, out);
+    EXPECT_EQ(computeHierarchicalArrange(in).positions, out.positions);
+}

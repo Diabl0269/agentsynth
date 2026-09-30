@@ -198,7 +198,9 @@ its tallest column stack.
 and modulation alike). A source block (nothing feeding it inside its row) that is not the row's anchor (the track's
 start, or a component's leftmost source) is then placed as late as possible: one column before its nearest consumer in
 the row, and in the stack slot that consumer has, so a loose LFO sits right before the macro it modulates instead of
-over column 0. The pass runs per level, so it also applies inside open macros.
+over column 0. Such a source is right-aligned in its column (everything else is left-aligned), so a wide block in
+another row's cell of the same column never opens a gap between it and what it feeds. The pass runs per level, so it
+also applies inside open macros.
 A signal edge from a block into its own modulator (an LFO that takes MIDI from the macro it modulates) is left out of
 the column count, so the pair is not a cycle: the modulator stays one column before the block and what follows the block
 keeps its column.

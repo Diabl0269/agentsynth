@@ -504,8 +504,11 @@ Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const s
         int rowHeight = 0;
         for (int i : members) {
             const int k = depth[i];
-            // Left-aligned in its column: a wider block elsewhere in the column never shifts a neighbour sideways.
-            const juce::Point<int> slot{colX[k], y + stackY[k]};
+            // Left-aligned in its column: a wider block elsewhere in the column never shifts a neighbour sideways. A
+            // source pulled up to its consumer is right-aligned instead, so a wide block in another row's cell of
+            // the same column never leaves a gap between it and what it feeds.
+            const int x = consumerOf[i] >= 0 ? colX[k] + colW[k] - gridUp(size[i].x) : colX[k];
+            const juce::Point<int> slot{x, y + stackY[k]};
             const juce::Point<int> anchor{gridUp(slot.x - anchorOff[i].x), gridUp(slot.y - anchorOff[i].y)};
             frame.items.push_back({blocks[i], anchor});
             const juce::Rectangle<int> rect(anchor + anchorOff[i], juce::Point<int>(anchor + anchorOff[i]) + size[i]);
