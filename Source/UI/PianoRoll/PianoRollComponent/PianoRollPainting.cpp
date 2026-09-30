@@ -126,7 +126,7 @@ void PianoRollComponent::paintGrid(juce::Graphics& g) {
     }
 
     const int width = getWidth();
-    const int height = getHeight();
+    const int height = canvasBottom(); // the grid ends where the velocity strip (if shown) begins
     const int rowHeight = std::max(1, (int)pixelsPerSemitone_);
     const int visibleRows = std::max(0, (height - canvasTop()) / rowHeight) + 2;
     const long long totalRows = (long long)visiblePitches_.size();
@@ -473,6 +473,17 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     drawScaleFilterGlyph(
         g, scaleFilterButtonBounds_,
         filterFill.contrasting(0.9f).withMultipliedAlpha(activeScaleForOpenClip().has_value() ? 1.0f : 0.45f));
+
+    // VELOCITY (a toggle, lit while the strip is shown) and HUMANIZE (an action that opens its
+    // amount menu). Words, like "Scale": each names a thing, and a glyph for either would be a guess.
+    const auto velocityFill =
+        paintChip(velocityChipBounds_, velocityLaneVisible_, hoveredHeaderButton_ == HeaderButtonId::Velocity);
+    g.setColour(velocityFill.contrasting(0.9f));
+    g.drawText("Velocity", velocityChipBounds_, juce::Justification::centred, false);
+    const auto humanizeFill =
+        paintChip(humanizeChipBounds_, /*active=*/false, hoveredHeaderButton_ == HeaderButtonId::Humanize);
+    g.setColour(humanizeFill.contrasting(0.9f));
+    g.drawText("Humanize", humanizeChipBounds_, juce::Justification::centred, false);
 }
 
 //==============================================================================
@@ -634,7 +645,7 @@ int PianoRollComponent::getPlayheadLineX() const noexcept {
 }
 
 juce::Rectangle<int> PianoRollComponent::playheadStripFor(int x) const noexcept {
-    return {x - kPlayheadStripHalfWidth, 0, 2 * kPlayheadStripHalfWidth + 1, getHeight()};
+    return {x - kPlayheadStripHalfWidth, 0, 2 * kPlayheadStripHalfWidth + 1, canvasBottom()};
 }
 
 // requestRepaintStrip/requestRepaintPreviewStrip/requestRepaintHeaderButtonStrip are the paint-count
@@ -661,6 +672,10 @@ juce::Rectangle<int> PianoRollComponent::headerButtonBoundsFor(HeaderButtonId wh
         return scaleFilterButtonBounds_;
     case HeaderButtonId::Scale:
         return scaleButtonBounds_;
+    case HeaderButtonId::Velocity:
+        return velocityChipBounds_;
+    case HeaderButtonId::Humanize:
+        return humanizeChipBounds_;
     case HeaderButtonId::None:
         break;
     }
@@ -681,6 +696,10 @@ void PianoRollComponent::updateHeaderButtonHover(juce::Point<int> pos) {
         next = HeaderButtonId::ScaleFilter;
     else if (scaleButtonBounds_.contains(pos))
         next = HeaderButtonId::Scale;
+    else if (velocityChipBounds_.contains(pos))
+        next = HeaderButtonId::Velocity;
+    else if (humanizeChipBounds_.contains(pos))
+        next = HeaderButtonId::Humanize;
 
     if (next == hoveredHeaderButton_)
         return; // state-change gate: hovering the SAME chip (or none) costs nothing
@@ -747,6 +766,9 @@ void PianoRollComponent::resized() {
     //   2. the RULER band        (rulerBandHeight_) — left blank for the panel's ruler, a SIBLING
     //                                                 drawn on top of it (see setRulerBandHeight)
     //   3. the NOTE CANVAS       (the remainder)    — keys column gutter + grid
+    //   4. the VELOCITY STRIP    (velocityLaneHeightPx(), 0 while hidden) — carved from the BOTTOM
+    //                                                 first, full width, so the scale panel, the
+    //                                                 keys column and the grid all stop above it
     //
     // Band 2 is why the toolbar ends up ABOVE the ruler instead of sandwiched between the ruler and
     // the notes: the roll's rect spans the whole unit and simply does not paint that strip.
@@ -772,6 +794,9 @@ void PianoRollComponent::resized() {
     scaleButtonBounds_ = header.removeFromLeft(50).reduced(2, 2);
     header.removeFromLeft(2);
     scaleFilterButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
+    // The Velocity + Humanize chips (next along), the value box (the header's right end) and the
+    // velocity strip (the canvas's bottom band) — see PianoRollVelocity.cpp.
+    layoutVelocityControls(header, bounds);
 
     // The panel sits WEST of the keys column, below the toolbar and ruler rows (its own controls, not
     // the toolbar's chips, are how the user works it) — carved BEFORE the keys column, at its

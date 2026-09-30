@@ -230,6 +230,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Show Only Scale Notes";
     if (actionId == "pianoRollToggleScalePanel")
         return "Toggle Scale Panel";
+    if (actionId == "pianoRollToggleVelocityLane")
+        return "Show or Hide Velocity Strip";
     if (actionId == "mixerToggleInserts")
         return "Show or Hide Mixer Inserts";
     if (actionId == "mixerToggleSends")

@@ -159,6 +159,13 @@ set(APPUI_SOURCES
     Source/UI/PianoRoll/PianoRollComponent/PianoRollAudition.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollClipboardAndKeys.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollMouse.cpp
+    Source/UI/PianoRoll/PianoRollComponent/PianoRollVelocity.cpp
+    Source/UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h
+    Source/UI/PianoRoll/VelocityLane/PianoRollVelocityLane.cpp
+    Source/UI/PianoRoll/VelocityLane/PianoRollVelocityLaneGestures.cpp
+    Source/UI/PianoRoll/VelocityLane/PianoRollVelocityLanePainting.cpp
+    Source/UI/PianoRoll/VelocityLane/VelocityLaneMath.h
+    Source/UI/PianoRoll/VelocityLane/VelocityLaneMath.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollZoom.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollCopyDrag.cpp
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h

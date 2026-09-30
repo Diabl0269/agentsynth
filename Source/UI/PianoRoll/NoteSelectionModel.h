@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include <functional>
 #include <juce_graphics/juce_graphics.h>
 #include <set>
 #include <utility>
@@ -24,7 +25,17 @@ namespace synth::ui {
  */
 class NoteSelectionModel {
 public:
-    void clear() noexcept { ids.clear(); }
+    /** Fired after any call that actually changed the set (never for a no-op). Lets the owner keep
+     *  a view of the selection (the roll's velocity box) in step however the selection was edited,
+     *  including by tests that reach the model directly. */
+    std::function<void()> onChange;
+
+    void clear() {
+        if (ids.empty())
+            return;
+        ids.clear();
+        notify();
+    }
     bool isEmpty() const noexcept { return ids.empty(); }
     int size() const noexcept { return (int)ids.size(); }
     bool contains(synth::NoteId id) const noexcept { return ids.find(id) != ids.end(); }
@@ -33,13 +44,19 @@ public:
      *  selectable.
      *  @return true if the id was newly added (false when already present or invalid). */
     bool add(synth::NoteId id) {
-        if (!id.isValid())
+        if (!id.isValid() || !ids.insert(id).second)
             return false;
-        return ids.insert(id).second;
+        notify();
+        return true;
     }
 
     /** @return true if the id was present and removed. */
-    bool remove(synth::NoteId id) { return ids.erase(id) > 0; }
+    bool remove(synth::NoteId id) {
+        if (ids.erase(id) == 0)
+            return false;
+        notify();
+        return true;
+    }
 
     /** Adds the id when absent, removes it when present.
      *  @return the id's selected state AFTER the toggle. */
@@ -53,9 +70,14 @@ public:
 
     /** Replaces the whole selection. Invalid ids are dropped, duplicates collapse. */
     void setSelection(const std::vector<synth::NoteId>& newIds) {
-        ids.clear();
+        std::set<synth::NoteId> next;
         for (auto id : newIds)
-            add(id);
+            if (id.isValid())
+                next.insert(id);
+        if (next == ids)
+            return;
+        ids = std::move(next);
+        notify();
     }
 
     /** Selected ids in ascending id order. */
@@ -70,10 +92,18 @@ public:
         const auto before = ids.size();
         for (auto it = ids.begin(); it != ids.end();)
             it = (aliveSet.find(*it) == aliveSet.end()) ? ids.erase(it) : std::next(it);
-        return ids.size() != before;
+        if (ids.size() == before)
+            return false;
+        notify();
+        return true;
     }
 
 private:
+    void notify() {
+        if (onChange)
+            onChange();
+    }
+
     std::set<synth::NoteId> ids;
 };
 

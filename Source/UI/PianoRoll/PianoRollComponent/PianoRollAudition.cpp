@@ -214,6 +214,11 @@ juce::String PianoRollComponent::getTooltipFor(juce::Point<int> pos) const {
         return scaleTooltipText();
     if (scaleFilterButtonBounds_.contains(pos))
         return scaleFilterTooltipText();
+    if (velocityChipBounds_.contains(pos))
+        return velocityTooltipText();
+    if (humanizeChipBounds_.contains(pos))
+        return juce::String::fromUTF8("Humanize velocities \xE2\x80\x94 adds a small random offset to the selected "
+                                      "notes, or to every note when none is selected");
     return {};
 }
 

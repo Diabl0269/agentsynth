@@ -1,9 +1,9 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **97 actions** across five categories —
-**General** (49, app-wide or routed per focused editor), **Graph** (6), **Timeline** (26),
-**Piano Roll** (13) and **Mixer** (3) — every one of them rebindable, including keys that used to be hardcoded:
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **101 actions** across five categories —
+**General** (52, app-wide or routed per focused editor), **Graph** (6), **Timeline** (26),
+**Piano Roll** (14) and **Mixer** (3) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
 any key except Escape commits it, swapping with whatever action in the **same category** already
@@ -611,7 +611,7 @@ moved — a held key parked at a clamp says so instead of implying another step 
 
 ## Piano Roll
 
-All thirteen are surface-resolved — consulted directly by `PianoRollComponent::keyPressed()`, never
+All fourteen are surface-resolved — consulted directly by `PianoRollComponent::keyPressed()`, never
 dispatched through `ApplicationCommandManager`:
 
 | Shortcut | Action |
@@ -625,6 +625,7 @@ dispatched through `ApplicationCommandManager`:
 | Option+Shift+Q | Quantise Note Pitches to Scale (`pianoRollQuantisePitches`) — snaps the selected notes' PITCHES (or all notes when nothing is selected) into the scale picked in Scale Assist, via `MusicalScale::snapPitch`. Falls THROUGH (returns `false`) when no scale is chosen: "No scale" has nothing to quantise into. Matched BEFORE bare Q, since it is the more specific chord |
 | J | Toggle Snap — grid magnetism on/off, the **shared** `timelineSnapToggle` the timeline panel also uses (one binding, one key, whichever surface has focus; deliberately NOT duplicated into a piano-roll action, since two "Toggle Snap" rows on the same key flipping the same flag is a Settings list nobody could reason about). **Magnetism only: the chosen grid stays VISIBLE either way**. The roll's own Snap header chip was removed as redundant with the timeline toolbar's own Snap button — both read/write this same shared flag by reference, and J remains the roll's own control for it |
 | Ctrl+S | Toggle the Scale Assist panel (`pianoRollToggleScalePanel`) — real Control, not Cmd (Cmd+S stays the app's save); inert while a text field inside the panel has focus |
+| Ctrl+V (macOS) / Cmd+Shift+V (Windows, Linux) | **Show or Hide Velocity Strip** (`pianoRollToggleVelocityLane`) — the Velocity header chip's twin. A real Control on macOS, where Cmd+V is Paste; on Windows/Linux JUCE's Cmd *is* Ctrl, so Ctrl+V would be Paste and those platforms take Cmd+Shift+V instead — the same per-platform split as the AI panel's Ctrl+A / Cmd+Shift+A. Inert while a text field (the header's velocity box) has focus. See [`timeline/piano-roll.md`](../timeline/piano-roll.md#velocity-strip) |
 | Option+S | **Show Only Scale Notes** (`pianoRollToggleScaleFilter`) — collapses the out-of-scale rows out of the grid, and makes ↑/↓ step by scale degree (above). One modifier away from Ctrl+S on purpose: adjacent verbs on adjacent chips should rhyme, and modifier equality is exact so they cannot collide. Remembered per clip; falls through with no clip open |
 
 Every arrow/octave/nav action returns `false` (falls through) when nothing is selected, so the key
@@ -650,7 +651,7 @@ bindings already use, and the reason they survive the platform's own key transla
 
 **Most of these keys have a header chip twin**, and each chip does exactly one thing on a plain
 click (no modifier variants anywhere in the header any more): **Quantise**, **Quantise Length**,
-**Quantise Pitches**, **Scale** and **Show Only Scale Notes**. One key is deliberately keyboard-only
+**Quantise Pitches**, **Scale**, **Show Only Scale Notes** and **Velocity**. One key is deliberately keyboard-only
 with no chip: `J` (Toggle Snap — its chip was removed as redundant with the timeline
 toolbar's own Snap button, which shares the same underlying flag). Four of the remaining chips carry
 small drawn vector glyphs rather than letters — a second "Q" beside the Quantise chip for
@@ -686,16 +687,16 @@ arrows: see [`mixer/panel.md`](../mixer/panel.md#side-pane-zones-and-visibility)
 
 ## Command vs surface actions
 
-The 92 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 101 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
-- **Command-dispatched** (64 actions) — every General action (including the transport family
+- **Command-dispatched** (68 actions) — every General action (including the transport family
   above), all six Graph actions, and the Timeline category's eight grid-set + two grid-cycle
   commands. `AppCommands::getCommandForAction(actionId)`
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
   their enabled/disabled state is whatever `getCommandInfo` reports.
-- **Surface-resolved** (28 actions) — the timeline panel's own keys (`timelineSnapToggle`,
+- **Surface-resolved** (33 actions) — the timeline panel's own keys (`timelineSnapToggle`,
   `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, the six
   `timelineTool*` digits, and the two `timelineJumpToLocator*` keys), the three track-header
   keys (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`), and every

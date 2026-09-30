@@ -81,8 +81,18 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
         toggleScaleFilter();
         return;
     }
+    if (velocityChipBounds_.contains(pos)) {
+        toggleVelocityLane();
+        return;
+    }
+    if (humanizeChipBounds_.contains(pos)) {
+        showHumanizeMenu();
+        return;
+    }
     if (pos.y < canvasTop())
         return; // rest of the header strip: inert
+    if (pos.y >= canvasBottom())
+        return; // the velocity strip's band: its own child component handles it
     if (pos.x < leftGutterWidth()) {
         // KEYS COLUMN = a virtual keyboard. Pressing a key auditions that pitch through the SAME
         // onAuditionNote path a note click uses, so it reaches the same destination modules the
@@ -588,7 +598,7 @@ void PianoRollComponent::mouseDoubleClick(const juce::MouseEvent& e) {
     if (activeTool_ != EditTool::Select)
         return;
     const auto pos = e.getPosition();
-    if (pos.y < canvasTop() || pos.x < leftGutterWidth())
+    if (pos.y < canvasTop() || pos.y >= canvasBottom() || pos.x < leftGutterWidth())
         return;
 
     // JUCE dispatches this AFTER the second mouseDown/mouseUp pair, so whatever those did (select a

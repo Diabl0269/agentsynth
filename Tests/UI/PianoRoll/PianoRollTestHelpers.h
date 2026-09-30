@@ -101,6 +101,10 @@ struct PianoRollFixture {
         state.snap = TimelineViewState::Snap::Quarter;
         roll.setTimelineDoc(&doc);
         roll.setUndoManager(&undo);
+        // The velocity strip is shown by default and takes the bottom 64 px; every grid test here is
+        // written against a grid that runs to the roll's bottom edge, so the shared fixture hides it
+        // (session-only: no properties file). The strip's own tests turn it back on.
+        roll.setVelocityLaneVisible(false);
         roll.setSize(900, 160);
     }
 
