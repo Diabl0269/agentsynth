@@ -247,8 +247,8 @@ public:
     float knobLandingRadiusOffset() const;
 
     /** True when `e` should start a mod-amount drag on `param`'s knob rather than moving
-     *  it. `bounds` is the knob's own local bounds. See ModuleComponent.cpp for the rule. */
-    bool wantsModAmountGestureFor(juce::RangedAudioParameter* param, juce::Rectangle<float> bounds,
+     *  it. `knob`'s local bounds are used. See ModuleComponent.cpp for the rule. */
+    bool wantsModAmountGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
                                   const juce::MouseEvent& e) const;
 
     /** Applies an automation-driven value to whichever slider/combo was built for `param`,
@@ -375,7 +375,7 @@ private:
     void wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& knob, juce::RangedAudioParameter* param);
 
     /** Pick up / redrag / disconnect a knob-landed cable, since its gutter jack is hidden. See .cpp. */
-    bool wantsCablePickupGestureFor(juce::RangedAudioParameter* param, juce::Rectangle<float> bounds,
+    bool wantsCablePickupGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
                                     const juce::MouseEvent& e) const;
     void handleCablePickupGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
 

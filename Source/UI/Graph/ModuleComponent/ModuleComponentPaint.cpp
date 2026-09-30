@@ -260,7 +260,8 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
             const auto b = sliders[si]->getBounds().toFloat();
             const float radius = std::min(b.getWidth(), b.getHeight()) / 2.0f - 6.0f;
             g.setColour(jackAccentColour);
-            g.drawEllipse(b.getCentreX() - radius, b.getCentreY() - 10.0f - radius, radius * 2.0f, radius * 2.0f, 2.0f);
+            const auto c = modRingCentreFor(*sliders[si], b);
+            g.drawEllipse(c.x - radius, c.y - radius, radius * 2.0f, radius * 2.0f, 2.0f);
             break;
         }
     }
@@ -296,7 +297,7 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
             continue;
 
         auto sliderBounds = sliders[si]->getBounds().toFloat();
-        const auto centre = modRingCentreFor(sliderBounds);
+        const auto centre = modRingCentreFor(*sliders[si], sliderBounds);
         const float radius = modRingRadiusFor(sliderBounds);
 
         float baseNorm = 0.5f;
@@ -508,7 +509,7 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
         // CARD-local: sliders[si]->getBounds() is relative to this card (its parent), matching
         // this method's own CARD-local contract (see the declaration's comment).
         const auto sliderBounds = sliders[si]->getBounds().toFloat();
-        const auto centre = modRingCentreFor(sliderBounds);
+        const auto centre = modRingCentreFor(*sliders[si], sliderBounds);
         const float landingRadius = modRingRadiusFor(sliderBounds) + knobLandingRadiusOffset();
         return modRingPointForNorm(centre, landingRadius, 0.0f);
     }

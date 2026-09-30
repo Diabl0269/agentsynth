@@ -19,11 +19,22 @@ namespace detail {
 
 // ---- Modulation-ring geometry --------------------------------------------------------
 // The ONE place the ring/band centre and radius are computed from a knob's bounds -- shared by
-// paintModulationRings (ModuleComponentPaint.cpp) and CardKnobSlider's annulus hit-test
-// (wantsModAmountGesture, wired up in ModuleComponent::createControls), so a drag gesture's "am I
-// on the ring" test can never drift from what actually gets painted there.
-inline juce::Point<float> modRingCentreFor(juce::Rectangle<float> sliderBounds) {
-    return {sliderBounds.getCentreX(), sliderBounds.getCentreY() - 10.0f};
+// paintModulationRings (ModuleComponentPaint.cpp), the drop-target ring, getModTargetKnobAnchor and
+// CardKnobSlider's annulus hit-tests (wantsModAmountGesture, wired up in
+// ModuleComponent::createControls), so a drag gesture's "am I on the ring" test can never drift
+// from what actually gets painted there.
+// The dial is not centred in the slider's bounds: the value text box takes a strip on one side
+// (below for most knobs, ABOVE for ADSR -- see setAdsrAwareSliderStyle), so the centre is shifted
+// by the slider's own layout (getSliderLayout().sliderBounds, the rect drawRotarySlider paints in)
+// relative to its local bounds. `boundsInCallerSpace` is the slider's bounds in whatever frame the
+// caller works in (card-local getBounds(), or the knob's own getLocalBounds()); only its size and
+// position are used, the layout offset is frame-independent. Below-text-box knobs get exactly the
+// old centreY - 10.
+inline juce::Point<float> modRingCentreFor(const juce::Slider& slider, juce::Rectangle<float> boundsInCallerSpace) {
+    const auto layoutCentre =
+        slider.getLookAndFeel().getSliderLayout(const_cast<juce::Slider&>(slider)).sliderBounds.toFloat().getCentre();
+    const auto offset = layoutCentre - slider.getLocalBounds().toFloat().getCentre();
+    return boundsInCallerSpace.getCentre() + offset;
 }
 inline float modRingRadiusFor(juce::Rectangle<float> sliderBounds) {
     return std::min(sliderBounds.getWidth(), sliderBounds.getHeight()) / 2.0f - 11.0f;
