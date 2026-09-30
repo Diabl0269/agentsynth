@@ -426,6 +426,11 @@ feature needs. What carries over when that epic starts:
 Bespoke cards (EQ, Envelope, Wavetable, Sampler) are the hard part: their bodies are not a knob
 grid, so "edit layout" there means at most hide/reorder of the knobs they *do* expose.
 
+The design for built-in modules is [module-card-layout.md](../layout/module-card-layout.md): it
+extends `CardLayout` to version 2 (sections, widget kinds, a hidden list with a "More" row), stores a
+built-in module's instance override as a node property rather than extra state, and keeps hosted
+cards writing version 1 unless they use a v2 feature.
+
 ---
 
 ## Tests
