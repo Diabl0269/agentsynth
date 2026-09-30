@@ -41,6 +41,7 @@ void PreferencesSettingsTab::layoutPanelDetachModeGroup(
     int& y, int contentWidth, bool previousGroupWasVisible,
     const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
     const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible) {
+    layoutCategory = Category::Panels;
     const std::initializer_list<juce::Component*> panelDetachModeComps = {&panelDetachModeLabel, &panelDetachModeCombo};
     const bool visible = groupMatches(panelDetachModeComps);
     setGroupVisible(panelDetachModeComps, visible);

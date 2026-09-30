@@ -92,3 +92,57 @@ void PreferencesSettingsTab::styleMutedHintLabel(juce::Label& hint) {
     hint.setMinimumHorizontalScale(1.0f);
     hint.setJustificationType(juce::Justification::topLeft);
 }
+
+// Lays out the Timeline category's rows (loop locators, wheel direction, piano roll key labels).
+void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool& pendingDivider,
+                                                  const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible,
+                                                  const BeginGroupFn& beginGroup) {
+    layoutCategory = Category::Timeline;
+    // Group 5: the two loop-locator toggles (no divider between them).
+    {
+        const bool visible = groupMatches({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle});
+        setGroupVisible({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            loopSelectionArmsToggle.setBounds({0, y, contentWidth, 24});
+            y += 34;
+            doubleClickSpansLocatorsToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 6: the two wheel-direction toggles + their hints.
+    {
+        const bool visible = groupMatches(
+            {&naturalScrollingToggle, &naturalScrollingHint, &zoomScrollUpZoomsInToggle, &zoomScrollUpZoomsInHint});
+        setGroupVisible(
+            {&naturalScrollingToggle, &naturalScrollingHint, &zoomScrollUpZoomsInToggle, &zoomScrollUpZoomsInHint},
+            visible);
+        beginGroup(visible);
+        if (visible) {
+            naturalScrollingToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+            // Indented under the toggle it explains, so the hint reads as a caption.
+            naturalScrollingHint.setBounds({24, y, contentWidth - 24, kHintHeight});
+            y += kHintHeight + 10;
+            zoomScrollUpZoomsInToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+            zoomScrollUpZoomsInHint.setBounds({24, y, contentWidth - 24, kHintHeight});
+            y += kHintHeight;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 7: piano roll key labels
+    {
+        const bool visible = groupMatches({&pianoRollKeyLabelsToggle});
+        setGroupVisible({&pianoRollKeyLabelsToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            pianoRollKeyLabelsToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+}

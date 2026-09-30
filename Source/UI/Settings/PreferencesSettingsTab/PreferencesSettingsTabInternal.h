@@ -9,6 +9,12 @@
 
 namespace {
 
+// Height for a muted hint label under a preference row enough for TWO lines at the
+// hint's 11.5pt font, so text wider than the row wraps instead of being horizontally squeezed
+// (a one-line height would squeeze it, and neither hint's text is short enough to be one line at
+// the tab's real width).
+constexpr int kHintHeight = 32;
+
 // Duplicated from the constexpr GraphEditor::requestGroupSelectionIntoMacro() writes through
 // propertiesFile_ directly for the "remember my choice" case (that modal can fire before this tab,
 // or any Settings window, has ever been constructed) — the same "one-line string not worth a

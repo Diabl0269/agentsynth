@@ -15,6 +15,10 @@
 // port disconnect. Each control persists through juce::ApplicationProperties and, when a
 // GraphEditor is wired, pushes live so the canvas does not wait for a restart.
 //
+// The rows are grouped into categories (Category below), picked from a drop-down under the title;
+// only the selected category's rows are laid out, inside a scrolling viewport. A search query
+// looks across every category. Adding a row: docs/layout/settings-preferences.md.
+//
 // NOTE: PreferencesSettingsTab.cpp MUST be added to BOTH the app target AND the test
 // target in CMakeLists.txt.
 class PreferencesSettingsTab : public juce::Component {
@@ -24,6 +28,14 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+
+    // The category picker's entries, in drop-down order. Each layout*Groups unit lays out exactly
+    // one category (its rows), so a new row goes into the unit named for its category.
+    enum class Category { Graph, Timeline, Files, Mixer, Panels, MidiRemote };
+    static juce::String categoryName(Category category);
+    Category getSelectedCategory() const { return selectedCategory; }
+    // Same path as picking the entry in the drop-down (fires the combo's onChange synchronously).
+    void setSelectedCategory(Category category);
 
     // Called by SettingsWindow once the tab exists; pushes the persisted values onto the canvas.
     void setGraphEditor(GraphEditor* ge);
@@ -168,6 +180,10 @@ public:
     // sendNotificationSync), exactly as it would a real click.
     std::unique_ptr<juce::Component> createDualIOPerModuleDefaultsPopupForTest();
 
+    // Test seams: the real category selector and the scroll view the rows live in.
+    juce::ComboBox& getCategoryComboForTest() { return categoryCombo; }
+    juce::Viewport& getContentViewportForTest() { return contentViewport; }
+
     // Test-only: the hairline dividers paint() draws between preference groups, so a test can
     // assert one falls where the Dual I/O row ends without reaching into paint() itself.
     const std::vector<juce::Rectangle<int>>& getDividerBoundsForTest() const { return dividerBounds; }
@@ -193,6 +209,22 @@ public:
     }
 
 private:
+    // The layout helpers' shared closures: layoutContent's own filter / visibility / divider steps.
+    using GroupMatchFn = std::function<bool(std::initializer_list<juce::Component*>)>;
+    using SetVisibleFn = std::function<void(std::initializer_list<juce::Component*>, bool)>;
+    using BeginGroupFn = std::function<void(bool)>;
+
+    // One per category: lays out that category's groups (and sets layoutCategory first).
+    void layoutGraphGroups(int& y, int contentWidth, bool& pendingDivider, const GroupMatchFn& groupMatches,
+                           const SetVisibleFn& setGroupVisible, const BeginGroupFn& beginGroup);
+    void layoutTimelineGroups(int& y, int contentWidth, bool& pendingDivider, const GroupMatchFn& groupMatches,
+                              const SetVisibleFn& setGroupVisible, const BeginGroupFn& beginGroup);
+    void layoutAutosaveGroup(int& y, int contentWidth, bool& pendingDivider, const GroupMatchFn& groupMatches,
+                             const SetVisibleFn& setGroupVisible, const BeginGroupFn& beginGroup);
+    void layoutMixerGroups(int& y, int contentWidth, bool& pendingDivider, const GroupMatchFn& groupMatches,
+                           const SetVisibleFn& setGroupVisible, const BeginGroupFn& beginGroup);
+    void setupCategorySelector();
+
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
     void persistReconnectChainOnDelete(bool enabled);
@@ -315,6 +347,11 @@ private:
     // choice ModuleLibraryComponent's own search box makes for the module library). Esc clears it,
     // matching ModuleLibraryComponent::searchEditor's onEscapeKey.
     juce::TextEditor searchField;
+    // Category picker, left of the search field; one entry per Category, id = enum value + 1.
+    juce::ComboBox categoryCombo;
+    Category selectedCategory{Category::Graph};
+    // The category whose groups the layout pass is currently walking (set by each layout*Groups).
+    Category layoutCategory{Category::Graph};
     juce::String searchQuery; // trimmed, case-insensitive-compared in applySearchFilter/resized()
 
     juce::Label titleLabel;

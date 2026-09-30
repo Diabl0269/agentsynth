@@ -28,20 +28,22 @@ TEST_F(PreferencesSettingsTabTest, TabItselfWantsKeyboardFocusSoItInterceptsTheO
            "steals keyboard focus the moment the Settings window is first shown";
 }
 
-// An untouched filter must reproduce the exact unfiltered layout — the empty-query fast path
-// groupMatches()/resized() rely on, and also the state every existing bounds-sensitive test above
-// (e.g. DualIOGroupIsOneLineWithADividerBelow) assumes.
-TEST_F(PreferencesSettingsTabTest, EmptySearchFilterShowsEveryRow) {
+// An untouched filter shows exactly the selected category's rows (the Graph category on open) — the
+// empty-query path groupMatches() relies on, and the state every bounds-sensitive test (e.g.
+// DualIOGroupIsOneLineWithADividerBelow) assumes.
+TEST_F(PreferencesSettingsTabTest, EmptySearchFilterShowsEveryRowOfTheSelectedCategory) {
     PreferencesSettingsTab tab(appProperties);
     tab.setSize(500, 700);
     EXPECT_TRUE(tab.getSearchFilterForTest().isEmpty());
+    ASSERT_EQ(tab.getSelectedCategory(), PreferencesSettingsTab::Category::Graph);
 
-    for (const juce::String& label : {"Double-click port to disconnect", "Show Alignment Guides",
-                                      "Split Left/Right jacks on new modules", "Label every key"}) {
+    for (const juce::String& label :
+         {"Double-click port to disconnect", "Show Alignment Guides", "Split Left/Right jacks on new modules"}) {
         auto* toggle = findToggleByText(tab, label);
         ASSERT_NE(toggle, nullptr) << label;
         EXPECT_TRUE(toggle->isVisible()) << label << " should be visible with no filter applied";
     }
+    EXPECT_FALSE(findToggleByText(tab, "Label every key")->isVisible()) << "a Timeline row is not in Graph";
 }
 
 TEST_F(PreferencesSettingsTabTest, SearchFilterHidesNonMatchingRowsByLabelText) {
@@ -90,8 +92,9 @@ TEST_F(PreferencesSettingsTabTest, ClearingSearchFilterRestoresEveryRow) {
     ASSERT_FALSE(findToggleByText(tab, "Label every key")->isVisible());
 
     tab.setSearchFilterForTest("");
-    EXPECT_TRUE(findToggleByText(tab, "Label every key")->isVisible());
+    EXPECT_TRUE(findToggleByText(tab, "Double-click port to disconnect")->isVisible());
     EXPECT_TRUE(findToggleByText(tab, "Show Alignment Guides")->isVisible());
+    EXPECT_FALSE(findToggleByText(tab, "Label every key")->isVisible()) << "back to the selected category only";
 }
 
 // Esc clears the field — driven by invoking the real onEscapeKey callback (see
@@ -107,7 +110,7 @@ TEST_F(PreferencesSettingsTabTest, EscapeClearsTheSearchFilter) {
 
     tab.triggerSearchEscapeForTest();
     EXPECT_TRUE(tab.getSearchFilterForTest().isEmpty());
-    EXPECT_TRUE(findToggleByText(tab, "Label every key")->isVisible());
+    EXPECT_TRUE(findToggleByText(tab, "Double-click port to disconnect")->isVisible());
 }
 
 // Dividers must collapse sensibly: when only ONE group matches, there is nothing left for a
@@ -148,6 +151,7 @@ TEST_F(PreferencesSettingsTabTest, ExactlyOneDividerBetweenTwoSurvivingNonAdjace
 TEST_F(PreferencesSettingsTabTest, HintLabelsGetTwoLinesOfHeightAndNeverSqueezeHorizontally) {
     PreferencesSettingsTab tab(appProperties);
     tab.setSize(500, 700);
+    tab.setSelectedCategory(PreferencesSettingsTab::Category::Timeline);
 
     juce::Label* naturalHint = nullptr;
     juce::Label* zoomHint = nullptr;
