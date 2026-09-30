@@ -620,6 +620,8 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
     if (!collapsed) {
         nudgeHullIntoCanvas(macroId);
         makeRoomFor("m:" + macroId);
+    } else {
+        returnDisplacedNeighbours(macroId); // neighbours pushed aside when it opened come back if they still can
     }
 }
 

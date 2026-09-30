@@ -85,6 +85,18 @@ struct Macro {
 
     std::vector<juce::String> members; // node uuids
 
+    /** One neighbour pushed clear when this macro grew (docs/layout/layout.md#making-room-when-something-grows).
+     *  `unitKey` is the layout unit ("n:<nodeUid>" / "m:<macroId>"), `delta` how far it was pushed and `landedAt` its
+     *  top-left afterwards, so collapsing (or deleting a port) can tell whether the user has moved it since. */
+    struct DisplacedNeighbour {
+        juce::String unitKey;
+        juce::Point<int> delta;
+        juce::Point<int> landedAt;
+    };
+    /** Transient, in push order: NEVER written to or read from a project file, and lost across an undo/redo snapshot
+     *  restore (snapshots go through toVar/fromVar). Cleared once the neighbours have been offered their way back. */
+    std::vector<DisplacedNeighbour> displaced;
+
     // Named jacks on this macro's boundary. Every port's nodeUuid MUST also appear in
     // `members` — an inlet/outlet is a member like any other node (docs/macros/ports.md#node-types) — and
     // MacroSet::fromVar rejects a saved macro where that does not hold. Order in this vector is

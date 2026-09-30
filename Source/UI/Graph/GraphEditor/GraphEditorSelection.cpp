@@ -169,6 +169,11 @@ void GraphEditor::deleteSelection() {
         // find its surviving neighbours (and healing a whole run of them in one pass) needs the
         // graph as it stood before any of `ids` was removed.
         const auto healSplices = captureHealSplices(ids);
+        // The macros that lose a member (a port included) shrink, so neighbours pushed aside when they grew may return.
+        std::set<juce::String> shrunkMacros;
+        for (auto id : ids)
+            if (const auto* owner = macroController_.macroForNode(id))
+                shrunkMacros.insert(owner->id);
         // graph.removeNode() below frees each node's processor
         // synchronously, same as a full graph-replacing restore -- but nothing here reaches
         // MixerPanelComponent::rebuild() until the NEXT unrelated graph edit (this path's own
@@ -195,6 +200,8 @@ void GraphEditor::deleteSelection() {
             macroController_.autoDeleteOrphanedMacroPort(n);
         selection.clear();
         updateComponents();
+        for (const auto& macroId : shrunkMacros)
+            macroController_.returnDisplacedNeighbours(macroId, /*keepBlocked=*/true);
     };
 
     if (undoManager)
@@ -335,7 +342,14 @@ void GraphEditor::finalizeSelectionDrag() {
         auto snapped = synth::LayoutUtil::snap(groupBounds.getTopLeft());
         // Collide against unselected modules only — members are moving together and must not be
         // treated as obstacles by one another.
-        auto obstacles = collectModuleBoxes(/*selectedOnly=*/false, /*excludeSelected=*/true);
+        // Layout units, like a single drop (resolvePlacement): collapsed cards and open hulls block, hidden members do
+        // not.
+        std::vector<juce::AudioProcessorGraph::NodeID> movingIds;
+        for (const auto& [nodeId, startPos] : selectionDragStartPositions) {
+            juce::ignoreUnused(startPos);
+            movingIds.push_back(nodeId);
+        }
+        auto obstacles = macroController_.placementBlockers(movingIds);
         auto clear = synth::LayoutUtil::findFreeSlot(snapped, groupBounds.getWidth(), groupBounds.getHeight(),
                                                      obstacles, juce::AudioProcessorGraph::NodeID{});
         auto offset = clear - groupBounds.getTopLeft();

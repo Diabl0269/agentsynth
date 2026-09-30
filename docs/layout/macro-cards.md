@@ -386,5 +386,6 @@ leaving the process, and keep the shape, the same as they keep a Sampler's sampl
 
 Whatever makes a macro's hull or card bigger (grouping, nesting, adding modules, expanding, adding a
 port) pushes the units beside it out of the way, as whole rigid units, inside the same undo step.
-Collapsing never pulls anything back. See
+Collapsing (or deleting a port or member) brings back the neighbours that growth pushed, when the user has
+not moved them and their old spot is still free. See
 [Making room when something grows](layout.md#making-room-when-something-grows).

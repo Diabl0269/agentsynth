@@ -201,6 +201,20 @@ public:
     /** Pushes every neighbour clear of `growerKey`, then repeats one level up. Call it INSIDE the undo record of
      *  whatever grew the unit; it opens none of its own. */
     void makeRoomFor(const juce::String& growerKey);
+    /** The other half of makeRoomFor: walks `macroId`'s recorded pushes newest-first and moves each neighbour back
+     *  by its delta when the user has not moved it since AND its home spot is clear of every other unit at that level
+     *  (the collapsed card included). Clears the record (`keepBlocked`: except pushes that only lacked room, for a
+     * macro that stays open). Call it inside the undo record of whatever shrank the macro (collapse, port delete); it
+     * opens none of its own. */
+    void returnDisplacedNeighbours(const juce::String& macroId, bool keepBlocked = false);
+    /** What a module being PLACED must keep clear of, as boxes for LayoutUtil::findFreeSlot: every visible module,
+     *  every collapsed card and every open hull, flattened across nesting levels, except `excludeNodes` themselves,
+     *  every macro that contains them (their own hull and its ancestors), the collapsed macros a drag of them carries,
+     *  and `joinMacroId` with its ancestors (a drop that will join it is meant to land inside). Hidden members of a
+     *  collapsed macro never appear: the card stands in for them. Macro boxes carry sentinel ids that no node has. */
+    std::vector<synth::LayoutUtil::Box>
+    placementBlockers(const std::vector<juce::AudioProcessorGraph::NodeID>& excludeNodes,
+                      const juce::String& joinMacroId = {}) const;
     /** `macroHullBounds` above, but with `excludedMemberUuid` left out of the union too —
      *  the LEAVE half of a Cmd-drag needs this because the plain hull is a LIVE union of
      *  member bounds, so the member being dragged OUT keeps inflating its own hull and could never

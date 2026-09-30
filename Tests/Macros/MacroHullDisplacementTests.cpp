@@ -129,19 +129,156 @@ TEST(MacroHullDisplacement, ExpandingANestedMacroGrowsTheOuterHullAndClearsItsNe
     EXPECT_FALSE(c.rect(neighbour).intersects(hullAfter));
 }
 
-TEST(MacroHullDisplacement, CollapsingNeverPullsANeighbourBack) {
+TEST(MacroHullDisplacement, CollapsingReturnsAPushedNeighbour) {
+    Canvas c;
+    const auto m1 = c.osc(400, 300);
+    const auto m2 = c.osc(700, 300);
+    const auto neighbour = c.osc(c.rect(m2).getRight() + 20, 300);
+    const auto home = c.rect(neighbour);
+    const auto macroId = c.group({m1, m2});
+    c.ctl().setMacroCollapsed(macroId, false);
+    ASSERT_NE(c.rect(neighbour).getPosition(), home.getPosition()) << "premise: opening pushed it";
+
+    c.ctl().setMacroCollapsed(macroId, true);
+
+    EXPECT_EQ(c.rect(neighbour), home);
+    auto* node = c.engine.getGraph().getNodeForId(neighbour);
+    EXPECT_EQ(juce::Point<int>((int)node->properties["x"], (int)node->properties["y"]), home.getPosition())
+        << "the node property follows, not just the component";
+}
+
+// A neighbour the user has moved since it was pushed stays exactly where they put it.
+TEST(MacroHullDisplacement, CollapsingLeavesANeighbourTheUserMoved) {
     Canvas c;
     const auto m1 = c.osc(400, 300);
     const auto m2 = c.osc(700, 300);
     const auto neighbour = c.osc(c.rect(m2).getRight() + 20, 300);
     const auto macroId = c.group({m1, m2});
     c.ctl().setMacroCollapsed(macroId, false);
+    c.ctl().moveUnitBy("n:" + juce::String((juce::int64)neighbour.uid), {0, 48}); // what a drag would do
+    c.editor.updateComponents();
+    const auto moved = c.rect(neighbour);
+
+    c.ctl().setMacroCollapsed(macroId, true);
+
+    EXPECT_EQ(c.rect(neighbour), moved);
+}
+
+// The home spot got taken while the macro was open: the neighbour stays where it is instead of piling on top.
+TEST(MacroHullDisplacement, CollapsingKeepsANeighbourWhoseHomeIsOccupied) {
+    Canvas c;
+    const auto m1 = c.osc(400, 300);
+    const auto m2 = c.osc(700, 300);
+    const auto neighbour = c.osc(c.rect(m2).getRight() + 20, 300);
+    const auto home = c.rect(neighbour);
+    const auto macroId = c.group({m1, m2});
+    c.ctl().setMacroCollapsed(macroId, false);
     const auto pushed = c.rect(neighbour);
-    ASSERT_NE(pushed.getPosition(), juce::Point<int>(c.rect(m2).getRight() + 20, 300));
+    const auto squatter = c.osc(1800, 1800);
+    c.ctl().moveUnitBy("n:" + juce::String((juce::int64)squatter.uid),
+                       home.getPosition() - c.rect(squatter).getPosition());
+    c.editor.updateComponents();
+    ASSERT_EQ(c.rect(squatter).getPosition(), home.getPosition());
 
     c.ctl().setMacroCollapsed(macroId, true);
 
     EXPECT_EQ(c.rect(neighbour), pushed);
+}
+
+// Collapsing an inner macro returns what its expansion pushed at the OUTER level too.
+TEST(MacroHullDisplacement, CollapsingANestedMacroReturnsNeighboursPushedAtTheParentLevel) {
+    Canvas c;
+    const auto a = c.osc(400, 300);
+    const auto b = c.osc(700, 300);
+    const auto e = c.osc(400, 900);
+    const auto outer = c.group({a, b, e});
+    c.ctl().setMacroCollapsed(outer, false);
+    const auto inner = c.group({a, b});
+    ASSERT_EQ(c.editor.getMacros().parentOf(inner), outer);
+    const auto neighbour = c.osc(c.ctl().macroHullBounds(outer).getRight() + 30, 500);
+    const auto home = c.rect(neighbour);
+
+    c.ctl().setMacroCollapsed(inner, false);
+    ASSERT_NE(c.rect(neighbour).getPosition(), home.getPosition()) << "premise: the outer hull grew into it";
+
+    c.ctl().setMacroCollapsed(inner, true);
+
+    EXPECT_EQ(c.rect(neighbour), home);
+}
+
+// A port that grows the hull pushes the module below; deleting it (the default path, which drops the cable rather
+// than splicing it) brings the module back.
+TEST(MacroHullDisplacement, DeletingThePortThatPushedAModuleReturnsIt) {
+    Canvas c;
+    const auto a = c.osc(400, 300);
+    const auto b = c.osc(700, 300);
+    const auto macroId = c.group({a, b});
+    c.ctl().setMacroCollapsed(macroId, false);
+    const auto hull = c.ctl().macroHullBounds(macroId);
+    const auto below = c.osc(hull.getX() + 140, hull.getBottom() + 60);
+    const auto home = c.rect(below);
+
+    int added = 0;
+    while (c.rect(below) == home && added < 40) {
+        c.ctl().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1,
+                             "In " + juce::String(added));
+        ++added;
+    }
+    ASSERT_NE(c.rect(below).getPosition(), home.getPosition()) << "premise: enough ports pushed it";
+
+    for (int i = 0; i < added; ++i)
+        c.ctl().deleteBottomMacroPort(macroId, true);
+
+    EXPECT_EQ(c.rect(below), home);
+}
+
+// The same, through the splicing delete path.
+TEST(MacroHullDisplacement, DeletingThePortThatPushedAModuleReturnsItOnTheSplicePath) {
+    Canvas c;
+    c.editor.setSpliceCableOnMacroPortDeleteEnabled(true);
+    const auto a = c.osc(400, 300);
+    const auto b = c.osc(700, 300);
+    const auto macroId = c.group({a, b});
+    c.ctl().setMacroCollapsed(macroId, false);
+    const auto hull = c.ctl().macroHullBounds(macroId);
+    const auto below = c.osc(hull.getX() + 140, hull.getBottom() + 60);
+    const auto home = c.rect(below);
+
+    int added = 0;
+    while (c.rect(below) == home && added < 40) {
+        c.ctl().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1,
+                             "In " + juce::String(added));
+        ++added;
+    }
+    ASSERT_NE(c.rect(below).getPosition(), home.getPosition());
+
+    for (int i = 0; i < added; ++i)
+        c.ctl().deleteBottomMacroPort(macroId, true);
+
+    EXPECT_EQ(c.rect(below), home);
+}
+
+// One undo of the collapse brings the pushed state back; redo returns the neighbour again.
+TEST(MacroHullDisplacement, OneUndoOfTheCollapseRestoresThePushedNeighbour) {
+    Canvas c;
+    const auto m1 = c.osc(400, 300);
+    const auto m2 = c.osc(700, 300);
+    const auto neighbour = c.osc(c.rect(m2).getRight() + 20, 300);
+    const auto home = c.rect(neighbour);
+    const auto macroId = c.group({m1, m2});
+    c.ctl().setMacroCollapsed(macroId, false);
+    const auto pushed = c.rect(neighbour);
+    c.undo.clearUndoHistory();
+
+    c.ctl().setMacroCollapsed(macroId, true);
+    ASSERT_EQ(c.rect(neighbour), home);
+
+    ASSERT_TRUE(c.undo.undo());
+    EXPECT_EQ(c.rect(neighbour), pushed);
+    EXPECT_FALSE(c.editor.getMacros().find(macroId)->collapsed);
+
+    ASSERT_TRUE(c.undo.redo());
+    EXPECT_EQ(c.rect(neighbour), home);
 }
 
 TEST(MacroHullDisplacement, AddingPortsPushesAModuleBelowTheHull) {
