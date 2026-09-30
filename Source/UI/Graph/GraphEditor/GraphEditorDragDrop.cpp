@@ -572,15 +572,18 @@ void GraphEditor::clearMacroDragCandidate() {
 
 // macroHullBounds(macroId), except while a reparent drag is pulling one of macroId's OWN members
 // out: then it's macroHullBoundsExcluding that member, so the hull visibly shrinks away from the
-// module instead of the live union chasing it. Paint-only. Only the macro the dragged module is
-// CURRENTLY a member of (the one a LEAVE would remove it from) gets the excluding hull. A macro it
+// module instead of the live union chasing it. Paint-only. The macro the dragged module is
+// CURRENTLY a member of (the one a LEAVE would remove it from) gets the excluding hull, and so does
+// each of its ancestors (their live hulls union the child's, so they would chase the module too). A macro it
 // might JOIN is by construction not its current macro (a transfer joins a DIFFERENT one, per
 // macroDragJoinOrLeaveTarget), so the dragged module contributes nothing to that hull and it keeps
 // its live bounds.
 juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& macroId) const {
     if (macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{}) {
         const auto* ownMacro = macroController_.macroForNode(macroDragDraggedNodeId_);
-        if (ownMacro != nullptr && ownMacro->id == macroId) {
+        const auto ancestors = ownMacro != nullptr ? macros.ancestorChain(ownMacro->id) : std::vector<juce::String>();
+        if (ownMacro != nullptr &&
+            (ownMacro->id == macroId || std::find(ancestors.begin(), ancestors.end(), macroId) != ancestors.end())) {
             const juce::String uuid = macroController_.nodeUuidFor(macroDragDraggedNodeId_);
             return macroController_.macroHullBoundsExcluding(macroId, uuid);
         }
@@ -614,6 +617,33 @@ void GraphEditor::setMacroDropCandidate(const juce::String& macroId) {
     macroDragJoinId_ = macroId;
     repaintCanvas();
 }
+
+// The membership half of a reparent drop, across nesting levels. The module leaves its current macro one
+// level at a time (each step builds its own port plan against the graph as it then stands, see the
+// TRANSFER ORDERING note below) until it sits directly in `joinId`, or in no macro when `joinId` is empty:
+// so pulling a child's member out of both the child and its parent is one gesture. Stepping down into a
+// macro nested below the module's owner needs no leave at all (the owner's boundary is unchanged): the
+// module just moves to that descendant. `leaveId` is only a sanity gate: the walk starts from the
+// module's real owner.
+namespace {
+void applyMacroMembershipChange(synth::MacroSet& macros, MacroGroupController& controller, const juce::String& uuid,
+                                const juce::String& leaveId, const juce::String& joinId) {
+    if (leaveId.isNotEmpty()) {
+        for (const auto* owner = macros.findByMember(uuid); owner != nullptr && owner->id != joinId;
+             owner = macros.findByMember(uuid)) {
+            const auto chain = joinId.isNotEmpty() ? macros.ancestorChain(joinId) : std::vector<juce::String>();
+            if (std::find(chain.begin(), chain.end(), owner->id) != chain.end()) {
+                auto* live = macros.find(owner->id);
+                live->members.erase(std::remove(live->members.begin(), live->members.end(), uuid), live->members.end());
+                break;
+            }
+            controller.removeSelectionFromMacro(owner->id, {uuid}, /*recordUndo=*/false);
+        }
+    }
+    if (joinId.isNotEmpty())
+        controller.addSelectionToMacro(joinId, {uuid}, /*recordUndo=*/false);
+}
+} // namespace
 
 // The single-undo-step finalize (docs/macros/menu-and-membership.md): modeled on
 // finalizeMacroCardDrag (GraphEditorSelection.cpp) — ONE lambda runs the ordinary position finalize
@@ -676,10 +706,7 @@ void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juc
 
     auto doFinalize = [this, module, leaveId, joinId, uuid] {
         finalizeModuleDrag(module);
-        if (leaveId.isNotEmpty())
-            macroController_.removeSelectionFromMacro(leaveId, {uuid}, /*recordUndo=*/false);
-        if (joinId.isNotEmpty())
-            macroController_.addSelectionToMacro(joinId, {uuid}, /*recordUndo=*/false);
+        applyMacroMembershipChange(macros, macroController_, uuid, leaveId, joinId);
     };
 
     if (undoManager)

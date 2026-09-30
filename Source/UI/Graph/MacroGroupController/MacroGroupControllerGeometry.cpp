@@ -207,37 +207,6 @@ juce::Rectangle<int> MacroGroupController::macroHullBoundsExcluding(const juce::
     return computeMacroHullBounds(host_, *macro, excludedMemberUuid);
 }
 
-// The ONE query behind the Cmd-drag-across-a-hull gesture (docs/macros/menu-and-membership.md).
-//
-// LEAVE test: the plain hull is a LIVE union of member bounds, so the member being dragged OUT
-// keeps inflating its own macro's hull and would never test as outside it. The test is therefore
-// against macroHullBoundsExcluding(current, uuid). An EMPTY excluding hull (the dragged node is
-// the macro's only ordinary member, so there is nothing left to union) also means "staying": with
-// no remaining body to leave, the gesture is a plain move.
-//
-// JOIN test: the same live-union trap bites from the other side. The dragged module is one of
-// A's members, so A's live hull always contains the module's own centre, and macroHullAt (smallest
-// hull under the centre) would answer A itself (or nothing smaller than it) every time. The JOIN
-// scan therefore skips the macro being left (macroHullAtExcluding) and only considers macros the
-// node is NOT a member of, where the live hull carries no contribution from it. That is what
-// makes `leave` + `join` a transfer.
-MacroGroupController::MacroDragTargets
-MacroGroupController::macroDragJoinOrLeaveTarget(juce::AudioProcessorGraph::NodeID draggedNodeId,
-                                                 juce::Point<int> canvasCentre) const {
-    const juce::String uuid = nodeUuidFor(draggedNodeId);
-    if (uuid.isEmpty())
-        return {};
-
-    const auto* currentMacro = host_.getMacros().findByMember(uuid);
-    if (currentMacro == nullptr)
-        return {{}, macroHullAt(canvasCentre)};
-
-    const auto hullExcludingSelf = macroHullBoundsExcluding(currentMacro->id, uuid);
-    if (hullExcludingSelf.isEmpty() || hullExcludingSelf.contains(canvasCentre))
-        return {};
-    return {currentMacro->id, macroHullAtExcluding(canvasCentre, currentMacro->id)};
-}
-
 namespace {
 // The shared body of macroHullAt / macroChipAt / macroCollapseButtonAt: of the macros whose
 // `boundsOf` rect contains the point, the DEEPEST wins (a nested child's rect always lies inside its
@@ -264,6 +233,61 @@ juce::String deepestMacroAt(const synth::MacroSet& macros, juce::Point<int> canv
     return best;
 }
 } // namespace
+
+// The ONE query behind the Cmd-drag-across-a-hull gesture (docs/macros/menu-and-membership.md).
+//
+// LEAVE test: the plain hull is a LIVE union of member bounds, so the member being dragged OUT
+// keeps inflating its own macro's hull and would never test as outside it. The test is therefore
+// against macroHullBoundsExcluding(current, uuid). An EMPTY excluding hull (the dragged node is
+// the macro's only ordinary member, so there is nothing left to union) also means "staying": with
+// no remaining body to leave, the gesture is a plain move.
+//
+// JOIN test: the same live-union trap bites from the other side. The dragged module is one of
+// A's members, so A's live hull always contains the module's own centre; the JOIN scan therefore
+// skips the macro being left and only considers macros where the live hull carries no
+// contribution from it. That is what makes `leave` + `join` a transfer.
+//
+// NESTED macros: the trap repeats at every level, since a parent's live hull unions its child's, so
+// each ANCESTOR of the macro being left is tested through macroHullBoundsExcluding too. The join
+// candidate is the deepest expanded hull under the centre. Pulling C's member out into parent P's
+// space yields {leave C, join P}; out of P as well, {leave C, join none}: the finalize walks the
+// member out through every level in that one gesture. Still inside C, only a hull nested BELOW C
+// counts (a transfer down into a child of C).
+MacroGroupController::MacroDragTargets
+MacroGroupController::macroDragJoinOrLeaveTarget(juce::AudioProcessorGraph::NodeID draggedNodeId,
+                                                 juce::Point<int> canvasCentre) const {
+    const juce::String uuid = nodeUuidFor(draggedNodeId);
+    if (uuid.isEmpty())
+        return {};
+
+    const auto& macros = host_.getMacros();
+    const auto* currentMacro = macros.findByMember(uuid);
+    if (currentMacro == nullptr)
+        return {{}, macroHullAt(canvasCentre)};
+
+    const auto hullExcludingSelf = macroHullBoundsExcluding(currentMacro->id, uuid);
+    if (hullExcludingSelf.isEmpty())
+        return {};
+    const bool stillInside = hullExcludingSelf.contains(canvasCentre);
+
+    const auto ancestors = macros.ancestorChain(currentMacro->id);
+    const auto isAncestor = [&ancestors](const juce::String& id) {
+        return std::find(ancestors.begin(), ancestors.end(), id) != ancestors.end();
+    };
+    const juce::String join = deepestMacroAt(macros, canvasCentre, [&](const synth::Macro& macro) {
+        if (macro.id == currentMacro->id)
+            return juce::Rectangle<int>();
+        if (stillInside) {
+            const auto chain = macros.ancestorChain(macro.id);
+            if (std::find(chain.begin(), chain.end(), currentMacro->id) == chain.end())
+                return juce::Rectangle<int>(); // only macros nested below the current one
+        }
+        return isAncestor(macro.id) ? macroHullBoundsExcluding(macro.id, uuid) : macroHullBounds(macro.id);
+    });
+    if (stillInside && join.isEmpty())
+        return {};
+    return {currentMacro->id, join};
+}
 
 juce::String MacroGroupController::macroHullAt(juce::Point<int> canvasPos) const {
     return macroHullAtExcluding(canvasPos, {});

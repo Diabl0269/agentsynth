@@ -166,6 +166,31 @@ void MacroGroupController::addSelectionToMacro(const juce::String& macroId,
     host_.requestRepaint();
 }
 
+namespace {
+// Takes `uuid` out of `macroId` one level: into the parent macro when there is one (a nested
+// macro's member leaves to its parent's own space), out of every macro otherwise. A macro left
+// with no direct members and no children dissolves, exactly as removeMemberEverywhere does.
+void moveMemberUpOneLevel(synth::MacroSet& macros, const juce::String& macroId, const juce::String& uuid) {
+    const juce::String parentId = macros.parentOf(macroId);
+    auto* macro = macros.find(macroId);
+    if (parentId.isEmpty() || macro == nullptr) {
+        macros.removeMemberEverywhere(uuid);
+        return;
+    }
+    macro->members.erase(std::remove(macro->members.begin(), macro->members.end(), uuid), macro->members.end());
+    macros.addMember(parentId, uuid);
+    if (macro->members.empty() && macros.childrenOf(macroId).empty())
+        macros.remove(macroId);
+}
+
+// The macro a selected node stands for in a collapse toggle: the outermost collapsed macro above
+// it (a hidden node's card is what the user sees), else its direct owner.
+const synth::Macro* toggleTargetFor(const synth::MacroSet& macros, const juce::String& uuid) {
+    const juce::String collapsedId = macros.outermostCollapsedAncestorOf(uuid);
+    return collapsedId.isNotEmpty() ? macros.find(collapsedId) : macros.findByMember(uuid);
+}
+} // namespace
+
 void MacroGroupController::removeSelectionFromMacro(const juce::String& macroId,
                                                     const std::vector<juce::String>& memberUuids, bool recordUndo) {
     const auto* macro = host_.getMacros().find(macroId);
@@ -201,7 +226,7 @@ void MacroGroupController::removeSelectionFromMacro(const juce::String& macroId,
             if (auto* liveMacro = host_.getMacros().find(macroId))
                 spliceOutMacroPort(*liveMacro, portUuid);
         for (const auto& uuid : toRemove)
-            host_.getMacros().removeMemberEverywhere(uuid);
+            moveMemberUpOneLevel(host_.getMacros(), macroId, uuid);
         host_.updateComponents();
     };
 
@@ -241,16 +266,34 @@ bool MacroGroupController::selectionHasCrossingMacroCable() const {
     return !buildMacroPortCrossingPlan(ids).empty();
 }
 
-void MacroGroupController::ungroupSelection() {
-    auto ids = host_.getSelection().getSelected();
-    std::set<juce::String> macroIdsToRemove;
-    for (auto id : ids) {
-        const juce::String uuid = nodeUuidFor(id);
-        if (uuid.isEmpty())
+namespace {
+// The macros an ungroup acts on: each selected node's direct owner, widened to the OUTERMOST ancestor
+// whose whole subtree is selected (selecting a parent selects every nested module, and that means
+// "ungroup the parent", not "ungroup every level").
+std::set<juce::String> ungroupTargets(const synth::MacroSet& macros, const std::set<juce::String>& selectedUuids) {
+    std::set<juce::String> targets;
+    for (const auto& uuid : selectedUuids) {
+        const auto* owner = macros.findByMember(uuid);
+        if (owner == nullptr)
             continue;
-        if (auto* m = host_.getMacros().findByMember(uuid))
-            macroIdsToRemove.insert(m->id);
+        juce::String target = owner->id;
+        for (const auto& ancestorId : macros.ancestorChain(owner->id)) {
+            const auto subtree = macros.descendantMembers(ancestorId);
+            if (std::includes(selectedUuids.begin(), selectedUuids.end(), subtree.begin(), subtree.end()))
+                target = ancestorId; // chain runs inner -> outer, so the last hit is the outermost
+        }
+        targets.insert(target);
     }
+    return targets;
+}
+} // namespace
+
+void MacroGroupController::ungroupSelection() {
+    std::set<juce::String> selectedUuids;
+    for (auto id : host_.getSelection().getSelected())
+        if (const auto uuid = nodeUuidFor(id); uuid.isNotEmpty())
+            selectedUuids.insert(uuid);
+    const auto macroIdsToRemove = ungroupTargets(host_.getMacros(), selectedUuids);
 
     if (macroIdsToRemove.empty()) {
         host_.reportStatusMessage("Select a macro's modules to ungroup it.");
@@ -265,23 +308,41 @@ void MacroGroupController::ungroupSelection() {
             if (m == nullptr)
                 continue; // defensive: shouldn't happen mid-transaction
 
-            // Ungroup removes the macro's input/output ports. Splice every one of this macro's ports back out FIRST —
-            // auto- created and hand-added alike — restoring the external<->internal wiring each one proxied, before
-            // falling through to the plain-module behaviour below. Iterate a COPY: each call mutates
+            // What the ungrouped macro held, for the re-selection below: its own modules and every nested
+            // child's (never a port node: those are spliced out or belong to a surviving child).
+            std::vector<juce::String> promoted;
+            for (const auto& uuid : macro_nesting::orderedDescendantMembers(host_.getMacros(), macroId)) {
+                const auto* owner = host_.getMacros().findByMember(uuid);
+                if (owner == nullptr || !owner->memberIsPort(uuid))
+                    promoted.push_back(uuid);
+            }
+
+            // Ungroup removes THIS macro's input/output ports (a child keeps its own). Splice every one of them back
+            // out FIRST — auto-created and hand-added alike — restoring the external<->internal wiring each one
+            // proxied, before falling through to the plain-module behaviour below. Iterate a COPY: each call mutates
             // m->ports/m->members as it goes.
             const auto portsToSplice = m->ports;
             for (const auto& port : portsToSplice)
                 spliceOutMacroPort(*m, port.nodeUuid);
 
-            // Ungrouping is still presentation-only for the macro's real modules — every member
-            // left in m->members at this point is an ordinary module, never deleted, never
-            // disconnected.
-            for (const auto& uuid : m->members) {
+            // Ungrouping is still presentation-only for the macro's real modules — every member left in m->members
+            // at this point is an ordinary module, never deleted, never disconnected. Its direct members move up to
+            // the parent macro (or top level); MacroSet::remove re-parents its child macros the same way.
+            m = host_.getMacros().find(macroId);
+            if (m == nullptr)
+                continue;
+            const juce::String parentId = m->parentId;
+            if (parentId.isNotEmpty())
+                for (const auto& uuid : m->members)
+                    host_.getMacros().addMember(parentId, uuid);
+            host_.getMacros().remove(macroId);
+
+            for (const auto& uuid : promoted) {
                 auto nodeId = resolveMemberNodeId(uuid);
-                if (nodeId.uid != 0)
+                if (nodeId.uid != 0 &&
+                    std::find(newSelection.begin(), newSelection.end(), nodeId) == newSelection.end())
                     newSelection.push_back(nodeId);
             }
-            host_.getMacros().remove(macroId);
         }
         host_.updateComponents();
         host_.setSelectedNodes(newSelection);
@@ -303,7 +364,7 @@ void MacroGroupController::toggleSelectionMacrosCollapsed() {
         const juce::String uuid = nodeUuidFor(id);
         if (uuid.isEmpty())
             continue;
-        if (auto* m = host_.getMacros().findByMember(uuid)) {
+        if (const auto* m = toggleTargetFor(host_.getMacros(), uuid)) {
             touchedMacroIds.insert(m->id);
             if (!m->collapsed)
                 anyExpanded = true;
@@ -345,7 +406,7 @@ void MacroGroupController::groupOrToggleSelectionMacros() {
     int looseCount = 0;
     for (auto id : ids) {
         const juce::String uuid = nodeUuidFor(id);
-        const auto* m = uuid.isEmpty() ? nullptr : host_.getMacros().findByMember(uuid);
+        const auto* m = uuid.isEmpty() ? nullptr : toggleTargetFor(host_.getMacros(), uuid);
         if (m != nullptr)
             touchedMacroIds.insert(m->id);
         else

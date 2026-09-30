@@ -204,8 +204,9 @@ void MacroGroupController::sweepOneSidedMacroPorts(std::vector<NodeID> candidate
             continue;
         const auto macroId = macro->id;
         spliceOutMacroPort(*macro, uuid);
-        if (auto* left = host_.getMacros().find(macroId); left != nullptr && left->members.empty())
-            host_.getMacros().remove(macroId); // MacroSet::removeMemberEverywhere's own "zero members" rule
+        if (auto* left = host_.getMacros().find(macroId);
+            left != nullptr && left->members.empty() && host_.getMacros().childrenOf(macroId).empty())
+            host_.getMacros().remove(macroId); // MacroSet's own cascade rule: no direct members AND no children
         candidates.insert(candidates.end(), neighbours.begin(), neighbours.end());
     }
 }
