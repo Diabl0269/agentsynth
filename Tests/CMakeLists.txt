@@ -374,6 +374,7 @@ add_executable(Tests
     UI/ModuleViews/CurveEditor/CurveEditorPaintTests.cpp
     UI/ModuleViews/CurveEditor/CurveEditorGridSnapTests.cpp
     UI/Layout/UIAnimationTests.cpp
+    UI/Layout/ScrollTweenTests.cpp
     UI/Graph/GraphEditorOnboardingTests.cpp
     UI/Library/ModuleLibraryComponentTests.cpp
     UI/Library/ModuleLibraryCollapseTests.cpp
@@ -460,6 +461,7 @@ add_executable(Tests
     UI/PianoRoll/PianoRollHeaderChipsTests.cpp
     UI/PianoRoll/PianoRollAuditionTests.cpp
     UI/PianoRoll/PianoRollMouseTests.cpp
+    UI/PianoRoll/PianoRollCopyDragTests.cpp
     Timeline/MusicalScaleTests.cpp
     UI/PianoRoll/NoteColourTests.cpp
     UI/Timeline/MidiDestinationPickerTests.cpp

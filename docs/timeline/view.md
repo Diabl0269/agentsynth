@@ -126,6 +126,16 @@ A plain-scroll branch, by contrast, reads the axis the gesture actually ARRIVED 
 and a trackpad's own sideways `deltaX` are both still "the amount to move by", so picking the
 dominant one there would be wrong.
 
+**A mouse-wheel notch eases; a trackpad does not.** A plain-scroll event with neither `isSmooth` nor
+`isInertial` (a notched wheel: one big jump per click) is not applied at once but fed to a
+`synth::ui::ScrollTweenRunner` (`Source/UI/Layout/ScrollTween.h`), which eases the view origin toward
+the accumulated target over ~120 ms (`easeOutCubic`, VBlank-driven). A notch that lands mid-ease adds
+to the remaining distance and continues from the current position. Zoom and trackpad/inertial events
+keep the direct path and end the ease first, and anything else that moves the view (a drag's
+edge-scroll, follow-playhead) ends it too, as does hitting a clamp. A panel that is not showing
+(headless tests) applies the amount immediately. Horizontal scroll repaints only the ruler and the
+lanes region, never the track headers.
+
 ## Natural scrolling
 
 `Settings → Preferences → "Natural scrolling"` (default ON) is the one plain-scroll preference

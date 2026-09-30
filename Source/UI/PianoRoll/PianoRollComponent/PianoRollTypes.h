@@ -32,6 +32,16 @@ struct NoteOrigin {
     int velocity = 100;
 };
 
+// The copy ghost's short-lived settle after a drop or an Esc cancel: the dragged notes' origins plus
+// the preview offset they were released at, and the eased 0..1 progress of the 140 ms tween.
+struct GhostSettle {
+    std::vector<NoteOrigin> notes;
+    double deltaBeats = 0.0;
+    int deltaRows = 0;
+    bool dropped = true; // false = cancelled (the ghost flies back to its origin and fades)
+    float t = 0.0f;
+};
+
 /** One copied note, stored RELATIVE to the earliest note in the copied block rather than in
  *  absolute (or even clip-relative) beats. That is what lets a copy survive being pasted into a
  *  different clip at a different position — the block keeps its internal shape and only its

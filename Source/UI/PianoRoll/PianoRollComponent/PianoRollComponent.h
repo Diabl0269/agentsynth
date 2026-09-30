@@ -3,6 +3,7 @@
 #include "PianoRollTypes.h"
 #include "Timeline/MusicalScale.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/PianoRoll/NoteSelectionModel.h"
@@ -101,6 +102,8 @@ public:
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
+    // Pressing/releasing Option mid-drag toggles copy <-> move; see PianoRollCopyDrag.cpp.
+    void modifierKeysChanged(const juce::ModifierKeys& mods) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
     // Cmd+wheel        -> horizontal zoom around the beat under the cursor
     // Cmd+Shift+wheel  -> vertical zoom (pixels per semitone) around the pitch under the cursor
@@ -331,6 +334,7 @@ public:
     NoteSelectionModel& getSelectionForTest() noexcept;
 
     void tickAutoScrollForTest();
+    bool isCopyDragForTest() const noexcept;
     bool isAutoScrollTimerRunningForTest() const noexcept;
 
     const std::vector<int>& getVisiblePitchesForTest() const noexcept;
@@ -451,6 +455,14 @@ private:
     void beginMarquee(juce::Point<int> anchor, bool additive);
     void updateMarquee(juce::Point<int> current);
     void endMarquee();
+
+    // ---- Option+drag copy (PianoRollCopyDrag.cpp) ---- message thread only.
+    void setCopyDrag(bool copy);
+    void commitCopyDrag();
+    bool cancelNoteDrag(); // Esc: true when a Move/copy drag was in flight and is now abandoned
+    void startGhostSettle(bool dropped);
+    void clearGhostSettle();
+    void paintCopyGhosts(juce::Graphics& g);
 
     // ---- Edge auto-scroll (see EdgeAutoScroll.h) ---- updateDragPreviewFromLastPointer/
     // updateAutoScrollArming — see PianoRollMouse.cpp for the full contract.
@@ -687,6 +699,11 @@ private:
     // ignores it for a resize (one modifier, one meaning — "do this smoothly"). Latched at mouse-down
     // for the same reason resizeUnquantized_ is.
     bool moveUnquantized_ = false;
+    // Move drag currently placing COPIES (Option held now, re-read every drag event).
+    bool copyDrag_ = false;
+    // Post-drop / post-cancel ghost tween; runs on scalePanelVblankUpdater_ (created lazily).
+    std::optional<pianoroll::GhostSettle> ghostSettle_;
+    synth::ui::AnimationDriver ghostAnim_;
     // Cmd+CLICK on a note is an additive-select TOGGLE, but Cmd+DRAG is an unsnapped move — and at
     // mouse-down the two are indistinguishable. So the note is ADDED immediately (the drag needs it in
     // the selection) and, if the gesture turns out not to have moved anything, mouse-up undoes that:
@@ -796,6 +813,10 @@ private:
     // vblankUpdater, which is `this` (a juce::Component) and must therefore not exist before the
     // component does.
     std::optional<juce::VBlankAnimatorUpdater> scalePanelVblankUpdater_;
+    // Eases a mouse-wheel NOTCH (axis 0 = beats, 1 = rows). Stopped before any other view move.
+    synth::ui::ScrollTweenRunner wheelTween_;
+    void scrollByWheel(int axis, double amount, bool eased);
+    void applyWheelScroll(int axis, double amount);
     // Within the house 160-220 ms spec (docs/layout/animation.md), matching MainComponent's own
     // kPanelSlideMs (~190 ms) feel for the app's other show/hide sidebars.
     static constexpr double kScalePanelAnimMs = 200.0;

@@ -224,6 +224,7 @@ void PianoRollComponent::setActiveTool(EditTool tool) {
     resizeNotes_.clear();
     resizeUnquantized_ = false;
     moveUnquantized_ = false;
+    copyDrag_ = false;
     cmdToggleNote_ = {};
     cmdToggleWasSelected_ = false;
     previewDeltaBeats_ = 0.0;

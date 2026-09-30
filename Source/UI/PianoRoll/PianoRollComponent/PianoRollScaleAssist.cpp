@@ -370,7 +370,8 @@ double PianoRollComponent::resizePreviewLengthFor(const NoteOrigin& origin) cons
 }
 
 PianoRollComponent::NoteGeometry PianoRollComponent::effectiveGeometryFor(const synth::MidiNote& note) const {
-    if (dragMode_ == DragMode::Move) {
+    // A copy drag leaves the originals exactly where they are; only the ghost (paintCopyGhosts) moves.
+    if (dragMode_ == DragMode::Move && !copyDrag_) {
         for (const auto& origin : dragNotes_)
             if (origin.id == note.id)
                 return {origin.startBeat + previewDeltaBeats_, origin.lengthBeats,

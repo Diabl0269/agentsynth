@@ -267,6 +267,8 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
     const double zoomMagnitude = std::abs((double)dominantWheelDelta(wheel)) * kZoomWheelSensitivity;
     const double zoomFactor = std::exp(zoomingIn ? zoomMagnitude : -zoomMagnitude);
 
+    if (e.mods.isCommandDown())
+        wheelTween_.stop();
     if (e.mods.isCommandDown() && e.mods.isShiftDown()) {
         zoomTrackRows(zoomFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
         return;
@@ -281,6 +283,7 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
     // with juce::Viewport's sign convention (natural), plus this panel's inversion preference —
     // and both of these origins DO grow the Viewport way (firstVisibleBeat is the beat at x == 0,
     // trackScrollY the pixels scrolled off the top), so no extra axis mapping is needed here.
+    const bool eased = !wheel.isSmooth && !wheel.isInertial; // a mouse-wheel notch, not a trackpad
     const bool horizontal = e.mods.isShiftDown() || std::abs(wheel.deltaX) > std::abs(wheel.deltaY);
     if (horizontal) {
         // Which axis the gesture arrived on, NOT "the dominant delta": a Shift+wheel that the OS
@@ -288,13 +291,37 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
         // either one is the amount to move by.
         const float delta = std::abs(wheel.deltaX) > std::abs(wheel.deltaY) ? wheel.deltaX : wheel.deltaY;
         const double deltaPx = (double)scrollAmount(delta, scrollInverted_) * kScrollPixelsPerWheelUnit;
-        viewState_.scrollBeats(deltaPx / viewState_.pixelsPerBeat);
-        ruler_.repaint();
-        repaint();
+        if (deltaPx != 0.0)
+            scrollByWheel(0, deltaPx / viewState_.pixelsPerBeat, eased);
         return;
     }
 
-    scrollTrackRows((double)scrollAmount(wheel.deltaY, scrollInverted_) * kScrollPixelsPerWheelUnit);
+    const double deltaY = (double)scrollAmount(wheel.deltaY, scrollInverted_) * kScrollPixelsPerWheelUnit;
+    if (deltaY != 0.0)
+        scrollByWheel(1, deltaY, eased);
+}
+
+// Direct events, and a host that isn't showing (headless tests), apply at once after ending any
+// tween; a notch eases in via ScrollTweenRunner instead.
+void TimelinePanelComponent::scrollByWheel(int axis, double amount, bool eased) {
+    const auto read = [this](int a) { return a == 0 ? viewState_.firstVisibleBeat : viewState_.trackScrollY; };
+    const auto scroll = [this](int a, double d) { applyWheelScroll(a, d); };
+    if (eased && wheelTween_.push(*this, axis, amount, read, scroll))
+        return;
+    wheelTween_.stop();
+    applyWheelScroll(axis, amount);
+}
+
+// Horizontal scroll moves only the ruler and the lanes region (grid, clips/roll, automation lane,
+// marker stems, playhead) -- never the track headers, which scroll only vertically.
+void TimelinePanelComponent::applyWheelScroll(int axis, double amount) {
+    if (axis == 1) {
+        scrollTrackRows(amount);
+        return;
+    }
+    viewState_.scrollBeats(amount);
+    ruler_.repaint();
+    repaint(gridLanesBounds_);
 }
 
 void TimelinePanelComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFactor) {

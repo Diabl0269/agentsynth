@@ -165,34 +165,10 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
     return true;
 }
 
-bool TimelinePanelComponent::duplicateSelectedClips() {
-    if (doc_ == nullptr)
-        return false;
-
-    const auto selected = clipSelection_.getSelected();
-    if (selected.empty())
-        return false;
-
-    std::vector<synth::ClipId> newIds;
-    auto mutate = [this, &selected, &newIds] {
-        for (auto id : selected) {
-            const auto newId = doc_->duplicateClip(id);
-            if (newId.isValid())
-                newIds.push_back(newId);
-        }
-    };
-
-    if (undoManager_)
-        undoManager_->recordTimelineChange(*doc_, mutate);
-    else
-        mutate();
-
-    if (newIds.empty())
-        return false;
-
-    clipSelection_.setSelection(newIds);
-    return true;
-}
+// Duplicate is one repeat: the copies tile forward as ONE block after the selection's end. Calling
+// duplicateClip per clip instead dropped each copy right after its OWN source, so selecting two
+// adjacent clips put the first copy on top of the second original.
+bool TimelinePanelComponent::duplicateSelectedClips() { return repeatSelectedClips(1); }
 
 bool TimelinePanelComponent::canCutClips() const noexcept { return doc_ != nullptr && !clipSelection_.isEmpty(); }
 

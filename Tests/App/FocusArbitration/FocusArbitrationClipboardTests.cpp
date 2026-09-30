@@ -234,8 +234,9 @@ TEST_F(FocusArbitrationTest, DuplicateClipsOneStep) {
     MainComponent mc(std::make_unique<FocusMockProvider>());
     auto& doc = mc.getTimelineDoc();
     const auto trackA = doc.addTrack(synth::TrackKind::Midi, "A");
+    // Back to back: the case where a per-clip duplicate dropped C1's copy on top of C2.
     const auto clip1 = doc.addClip(trackA, 0.0, 4.0, "C1");
-    const auto clip2 = doc.addClip(trackA, 8.0, 4.0, "C2");
+    const auto clip2 = doc.addClip(trackA, 4.0, 4.0, "C2");
     ASSERT_TRUE(clip1.isValid());
     ASSERT_TRUE(clip2.isValid());
 
@@ -248,7 +249,12 @@ TEST_F(FocusArbitrationTest, DuplicateClipsOneStep) {
 
     const auto selected = clipSelection.getSelected();
     ASSERT_EQ(selected.size(), 2u) << "the new copies end up selected";
-    EXPECT_EQ(doc.getTrack(trackA)->clips.size(), 4u);
+    const auto& clips = doc.getTrack(trackA)->clips;
+    ASSERT_EQ(clips.size(), 4u);
+    EXPECT_DOUBLE_EQ(clips[2].startBeat, 8.0) << "the first copy starts where the selection ends";
+    EXPECT_DOUBLE_EQ(clips[3].startBeat, 12.0) << "and the block keeps its spacing";
+    for (std::size_t i = 1; i < clips.size(); ++i)
+        EXPECT_GE(clips[i].startBeat, clips[i - 1].startBeat + clips[i - 1].lengthBeats) << "no overlap at " << i;
 
     auto& um = mc.getUndoManager();
     ASSERT_TRUE(um.canUndo());

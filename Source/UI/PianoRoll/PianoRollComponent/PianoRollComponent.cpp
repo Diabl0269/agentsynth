@@ -86,6 +86,7 @@ PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
     setComponentID("pianoRollComponent");
     setInterceptsMouseClicks(true, false);
     setWantsKeyboardFocus(true);
+    setOpaque(true); // paint() starts with an opaque g.fillAll(bg0), so the parent need not repaint behind us
     // No scale context yet, so this just fills visiblePitches_ with every pitch — see the class
     // comment and rebuildVisiblePitches.
     rebuildVisiblePitches();
@@ -125,19 +126,24 @@ PianoRollComponent::~PianoRollComponent() {
     // The AnimationDriver's callbacks capture 'this' indirectly (see setScalePanelVisible); an
     // animation still running when this object goes away would call back into a destroyed
     // component, exactly the hazard ModuleLibraryComponent's own destructor guards against.
-    if (scalePanelVblankUpdater_.has_value())
+    if (scalePanelVblankUpdater_.has_value()) {
         scalePanelAnim_.stop(*scalePanelVblankUpdater_);
+        ghostAnim_.stop(*scalePanelVblankUpdater_);
+    }
 }
 
 //==============================================================================
 // ---- Entry/exit ----
 
 void PianoRollComponent::openClip(synth::ClipId id) {
+    wheelTween_.stop();
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
     resizeNotes_.clear();
     resizeUnquantized_ = false;
     moveUnquantized_ = false;
+    setCopyDrag(false);
+    clearGhostSettle(); // a ghost from the old clip must not paint over this one
     cmdToggleNote_ = {};
     // A note auditioned in the OLD clip has no mouse-up coming — this IS the end of that gesture.
     stopAudition();
@@ -198,6 +204,7 @@ void PianoRollComponent::openClip(synth::ClipId id) {
 }
 
 void PianoRollComponent::closeRoll() {
+    wheelTween_.stop();
     // BEFORE clipId_ is cleared, exactly like openClip's ordering — and load-bearing, not just
     // symmetry: stopAudition() calls out to the owner, and the owner resolves which track to send the
     // note-off to FROM THE OPEN CLIP. Clearing clipId_ first made isOpen() false while that note-off
@@ -212,6 +219,8 @@ void PianoRollComponent::closeRoll() {
     resizeNotes_.clear();
     resizeUnquantized_ = false;
     moveUnquantized_ = false;
+    setCopyDrag(false);
+    clearGhostSettle(); // a ghost from the old clip must not paint over this one
     cmdToggleNote_ = {};
     autoScrollTimer_.stopTimer(); // no clip left for a drag to be scrolling
 

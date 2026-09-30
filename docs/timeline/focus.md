@@ -66,8 +66,8 @@ clip selection:
   Audio fields go back through `setClipAsset` / `setClipGainDb` / `setClipFades` rather than a raw
   struct write, **so a clipboard `assetRef` is re-validated exactly like a freshly-loaded file's —
   a clipboard is only as trustworthy as whatever filled it.**
-- `duplicateSelectedClips()` calls `TimelineDoc::duplicateClip()` per selected clip, batched the
-  same way.
+- `duplicateSelectedClips()` is `repeatSelectedClips(1)` (below): the copies land as one block
+  starting where the selection ends, so duplicating adjacent clips never overlaps an original.
 - `cutSelectedClips()` is copy then delete the selection, as ONE `recordTimelineChange`, never
   wrapped a second time — that would make Cmd+Z a two-step undo for one gesture.
 - `repeatSelectedClips(count)` makes `count` back-to-back copies of the selection's own span (`max
