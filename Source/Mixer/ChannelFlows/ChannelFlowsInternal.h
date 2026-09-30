@@ -10,7 +10,7 @@
 namespace synth {
 
 // Shared across the several ChannelFlows*.cpp concern units — defined once in
-// ChannelFlowsMakeChannel.cpp (FRO13, P9-7: lifted out of that file's anonymous namespace so
+// ChannelFlowsMakeChannel.cpp (lifted out of that file's anonymous namespace so
 // ChannelFlowsTrackPreset.cpp's outside-modulator walk can reuse them too), same "extern
 // declaration in the shared internal header, one definition in one .cpp" pattern
 // PreferencesSettingsTabInternal.h uses for comboIdFromMode/modeFromComboId.
@@ -49,21 +49,21 @@ juce::AudioProcessorGraph::Node* addChainNode(juce::AudioProcessorGraph& graph, 
 }
 
 // The shared builder behind both buildDefaultAudioChannel (one fixed stereo-pair source) and
-// buildChannelForFeeds (T184: an arbitrary set of left/right feeds gathered from
+// buildChannelForFeeds (an arbitrary set of left/right feeds gathered from
 // findUnchanneledOutputFeeds). Builds Gate(bypassed) -> EQ(bypassed) -> Compressor(bypassed) ->
 // Channel Strip (Stereo) -> Master (Mix) and wires every entry in `leftFeeds`/`rightFeeds` into the
 // Gate's ch0/ch1 respectively (AudioProcessorGraph sums multiple sources landing on the same input
 // channel, so more than one feed a side is fine). Same ordering as buildDefaultAudioChannel's own
 // contract: chain wired first, THEN spliceMasterNode, THEN Strip->Master as plain edges.
 //
-// FRO226: Gate is added exactly like EQ/Compressor below (bypassed, same node-creation helper) so
+// Gate is added exactly like EQ/Compressor below (bypassed, same node-creation helper) so
 // every flow through this one builder gets it uniformly, matching this file's "one chain builder,
 // no parallel implementations" rule (docs/mixer/mixer.md#building-a-channel). An old saved
 // project/preset's own JSON has no Gate node and is never migrated to add one (docs/mixer/track-presets.md)
 // — this only changes what a NEW channel is built from.
 //
-// FRO25 (P9-3d): `sink` says where the strip's output goes. The default (toMaster, no extra
-// destinations) is every pre-FRO25 caller's behaviour. "Make channel" on a track that merges into a
+// `sink` says where the strip's output goes. The default (toMaster, no extra
+// destinations) is every plain-strip caller's behaviour. "Make channel" on a track that merges into a
 // shared module sends the strip's L/R to that module's original input pins as well (or instead,
 // toMaster=false, when the track has no output of its own) — plain edges, same reason as
 // Strip->Master (see ChannelFlowsDefaultChannel.cpp's buildDefaultAudioChannel comment).

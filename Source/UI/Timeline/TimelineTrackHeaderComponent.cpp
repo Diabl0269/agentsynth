@@ -10,7 +10,7 @@ namespace synth::ui {
 
 namespace {
 
-// T161: the hardcoded fallback for a bare m/s/r action when no ShortcutManager is installed — same
+// The hardcoded fallback for a bare m/s/r action when no ShortcutManager is installed — same
 // idiom as TimelinePanelComponent's own plainKey() (duplicated rather than shared; see
 // TimelinePanelComponent::matchesAction's own comment on why this three-line check is copied per
 // surface rather than factored out).
@@ -27,7 +27,7 @@ constexpr int kToggleWidth = 24;
 // left them still touching.
 constexpr int kToggleGap = 4;
 constexpr int kRowPadding = 3;
-// T166: pixel distance a background mouseDrag must cross before it commits to a track-reorder
+// Pixel distance a background mouseDrag must cross before it commits to a track-reorder
 // drag rather than staying a plain click-to-select — small enough to feel immediate, large enough
 // that an ordinary click's jitter never starts one.
 constexpr float kRowDragThreshold = 4.0f;
@@ -115,7 +115,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     , host_(host) {
     setComponentID("timelineTrackHeader");
     setMouseCursor(dragGrabCursor()); // the row background is a grab handle; child widgets keep their own cursor
-    // T161: makes this row a real focus target (Up/Down between rows, M/S/R for the row that holds
+    // Makes this row a real focus target (Up/Down between rows, M/S/R for the row that holds
     // focus) — same setWantsKeyboardFocus(true) pattern TimelineClipLaneArea/PianoRollComponent
     // already use for the surfaces they own.
     setWantsKeyboardFocus(true);
@@ -135,12 +135,12 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     addAndMakeVisible(nameLabel_);
     nameLabel_.setComponentID("trackNameLabel");
     nameLabel_.setTooltip("Double-click to rename this track");
-    // Double-click to rename — a single click must stay free for selecting the track row (T161's
+    // Double-click to rename — a single click must stay free for selecting the track row (the
     // mouseDown()/onSelectRequested; the label forwards its presses to this row).
     nameLabel_.setEditable(false, true, false);
     nameLabel_.onTextChange = [this] {
         const juce::String newName = nameLabel_.getText();
-        // FRO14 (docs/mixer/mixer.md#channels-follow-audio-not-tracks (a)): a LINKED track renames its channel too, as
+        // docs/mixer/mixer.md#channels-follow-audio-not-tracks (a): a LINKED track renames its channel too, as
         // one undo step. Unlinked (or no host) falls through to the plain track-only edit, unchanged.
         if (auto* link = linkSurface(); link != nullptr && link->renameLinkedTrackAndChannel(trackId_, newName))
             return;
@@ -152,7 +152,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
         button.setComponentID(componentId);
         button.setClickingTogglesState(false); // the doc is the truth; refreshFromDoc sets the state
         button.onClick = onClick;
-        // T161: juce::Button opts INTO keyboard focus by default, and a click grabs it — without
+        // juce::Button opts INTO keyboard focus by default, and a click grabs it — without
         // this, clicking M/S/R would silently move real focus off the row and onto the button,
         // leaving the row's own focusGained/focusLost (and TimelinePanelComponent::focusedTrackIndex_,
         // which they keep in sync) stale. Same fix TimelinePanelComponent's own tool-strip buttons
@@ -177,7 +177,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     automationButton_.setComponentID("trackHeaderAutomationButton");
     automationButton_.setClickingTogglesState(false);
     automationButton_.setTooltip("Show/hide this track's automation lane");
-    // T161: same focus opt-out as the M/S/R toggles above (see setUpToggle) — this button isn't
+    // Same focus opt-out as the M/S/R toggles above (see setUpToggle) — this button isn't
     // built through that lambda since it isn't a doc-state toggle.
     automationButton_.setWantsKeyboardFocus(false);
     automationButton_.setMouseClickGrabsKeyboardFocus(false);
@@ -190,9 +190,9 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     bindingChip_.setComponentID("trackBindingChip");
     bindingChip_.onClick = [this] { handleChipClick(true); };
 
-    // FRO14: the channel chip. Visibility and text are doc/graph-driven (refreshFromDoc); the click
-    // goes straight back to the app, which owns "where is that channel" (P9-5 redirects it to the
-    // mixer column with no change here).
+    // The channel chip. Visibility and text are doc/graph-driven (refreshFromDoc); the click
+    // goes straight back to the app, which owns "where is that channel" (it reveals the
+    // channel's mixer column).
     addAndMakeVisible(channelChip_);
     channelChip_.onClick = [this] {
         if (auto* link = linkSurface())
@@ -239,7 +239,7 @@ void TimelineTrackHeaderComponent::toggleMuted() {
     const auto* t = track();
     if (t == nullptr)
         return;
-    // FRO14 (docs/mixer/mixer.md#channels-follow-audio-not-tracks (c)): a LINKED track's M IS the channel's mute -- one
+    // docs/mixer/mixer.md#channels-follow-audio-not-tracks (c): a LINKED track's M IS the channel's mute -- one
     // mute, not two. The surface returns false for a shared channel (or no channel at all), and note gating below is
     // then exactly what it has always been. The refresh is explicit because a strip write is not a doc change: nothing
     // notifies the header otherwise.
@@ -280,7 +280,7 @@ std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::buil
     const juce::uint32 originalColour = t->colourArgb;
 
     juce::ApplicationProperties* props = host_ != nullptr ? host_->getAppProperties() : nullptr;
-    // FRO14 (docs/mixer/mixer.md#channels-follow-audio-not-tracks (b)): a LINKED track's picker fans every preview
+    // docs/mixer/mixer.md#channels-follow-audio-not-tracks (b): a LINKED track's picker fans every preview
     // write out to the channel macro as well, and commits both as ONE undo step. Null for anything else -- the
     // single-target body below is then reached byte-for-byte as before.
     if (auto* link = linkSurface(); link != nullptr) {
@@ -381,7 +381,7 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
 
     nameLabel_.setText(t->name, juce::dontSendNotification);
 
-    // FRO14: re-derived from the live graph on every refresh rather than cached across edits --
+    // Re-derived from the live graph on every refresh rather than cached across edits --
     // a cable drag elsewhere can form or break this track's link with no doc change at all.
     channelInfo_ = {};
     if (auto* link = linkSurface())
@@ -496,7 +496,7 @@ void TimelineTrackHeaderComponent::resized() {
     kindBadgeBounds_ = topRow.removeFromLeft(kKindBadgeWidth);
     nameLabel_.setBounds(topRow);
 
-    // Bottom row: the binding chip, sharing with the channel chip when one is showing (FRO14).
+    // Bottom row: the binding chip, sharing with the channel chip when one is showing.
     auto bottomRow = bounds.reduced(0, 1);
     if (channelChip_.isVisible()) {
         channelChip_.setBounds(bottomRow.removeFromRight(bottomRow.getWidth() / 2));
@@ -568,7 +568,7 @@ void TimelineTrackHeaderComponent::paintOverChildren(juce::Graphics& g) {
         g.setColour(accent.withMultipliedAlpha(lift_));
         g.drawRect(getLocalBounds(), 1);
     }
-    // T161: reuses T159's region-root outline verbatim (same colour/alpha/thickness) rather than a
+    // Reuses the region-root outline verbatim (same colour/alpha/thickness) rather than a
     // bespoke treatment — a track header row is now a real focusable leaf exactly the way a region
     // root is, just nested one level deeper (see docs/timeline/tracks.md#focus-outline).
     synth::ui::paintFocusRegionOutline(*this, g);
@@ -578,8 +578,8 @@ void TimelineTrackHeaderComponent::paintOverChildren(juce::Graphics& g) {
 void TimelineTrackHeaderComponent::mouseDown(const juce::MouseEvent& e) {
     // This only ever fires for a right-click that lands on the row's OWN background — a right-click
     // on nameLabel_ or the M/S/R/A toggles reaches showContextMenu() straight from THEIR OWN
-    // mouseDown() instead (ContextMenuForwardingLabel/ContextMenuForwardingButton in the header;
-    // FRO60), since JUCE dispatches a click to whichever component is directly under the cursor and
+    // mouseDown() instead (ContextMenuForwardingLabel/ContextMenuForwardingButton in the header),
+    // since JUCE dispatches a click to whichever component is directly under the cursor and
     // never routes it through here first.
     if (e.mods.isPopupMenu()) {
         showContextMenu();
@@ -590,7 +590,7 @@ void TimelineTrackHeaderComponent::mouseDown(const juce::MouseEvent& e) {
     // 4 px threshold decides whether it ever becomes a drag.
     if (onRowPressed)
         onRowPressed(e.getScreenPosition().y);
-    // T161: click-to-select — the comment this replaces reserved a plain click for exactly this.
+    // Click-to-select.
     // grabKeyboardFocus() is what makes a subsequent Up/Down or M/S/R keystroke route here in the
     // real app; onSelectRequested tells the panel directly (see its own comment for why that can't
     // wait on a real focusGained() round trip).
@@ -604,7 +604,7 @@ void TimelineTrackHeaderComponent::mouseDrag(const juce::MouseEvent& e) {
         return;
 
     if (!draggingRow_) {
-        // T166: small threshold so an ordinary click's few pixels of jitter never starts a drag —
+        // Small threshold so an ordinary click's few pixels of jitter never starts a drag —
         // see onRowDragStarted's own comment for why this row (rather than the panel) owns the
         // threshold check: it's the one component that actually sees the raw gesture.
         if (e.getDistanceFromDragStart() < kRowDragThreshold)
@@ -643,7 +643,7 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
     // Up/Down move focus to the previous/next row — this component owns neither the sibling list
     // nor the shared scroll state, so it just reports the direction (see onFocusMoveRequested's own
     // comment). Deliberately NOT a ShortcutManager action (arrow-key row navigation isn't rebindable
-    // anywhere else in this app either — see ModuleLibraryComponent's T160 precedent).
+    // anywhere else in this app either — see ModuleLibraryComponent's row navigation).
     if (key.isKeyCode(juce::KeyPress::upKey)) {
         if (onFocusMoveRequested)
             onFocusMoveRequested(-1);
@@ -769,10 +769,10 @@ void TimelineTrackHeaderComponent::applyContextMenuChoice(int menuId) {
 
 juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
     juce::PopupMenu menu;
-    // FRO25 (P9-3d): disabled rather than hidden once the track has a channel, so the row sits in
+    // Disabled rather than hidden once the track has a channel, so the row sits in
     // a stable place (the canvas menu's "Locate Master" idiom).
     menu.addItem(kMakeChannelMenuId, "Make Channel", host_ != nullptr && host_->canMakeChannelForTrack(trackId_));
-    // FRO13 (P9-7): same disabled-not-hidden precedent, gated on the track already having a
+    // Same disabled-not-hidden precedent, gated on the track already having a
     // channel of its own (canSaveTrackPresetForTrack).
     const bool canSavePreset = host_ != nullptr && host_->canSaveTrackPresetForTrack(trackId_);
     menu.addItem(kSaveTrackPresetMenuId, "Save Track as Preset...", canSavePreset);

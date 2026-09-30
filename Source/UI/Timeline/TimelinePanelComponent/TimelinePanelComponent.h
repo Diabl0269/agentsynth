@@ -51,7 +51,7 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 //     docked at its top, a bar/beat grid painted directly by this component below it.
 //
 // The panel has no resize affordance of its own: the bottom dock's one top-edge handle
-// (BottomDockComponent, FRO231) resizes the whole dock from every tab. The panel never sets its
+// (BottomDockComponent) resizes the whole dock from every tab. The panel never sets its
 // own bounds.
 //
 // The single synth::ui::TimelineViewState (beat<->pixel mapping — zoom, scroll, snap) is owned
@@ -66,7 +66,7 @@ class TimelinePanelComponent
     : public juce::Component
     , private synth::TimelineDoc::Listener
     , private juce::ChangeListener
-    // FRO14: ONE shared timer for the header column's channel-chip meters -- see timerCallback()
+    // ONE shared timer for the header column's channel-chip meters -- see timerCallback()
     // below.
     , private juce::Timer {
 public:
@@ -74,7 +74,7 @@ public:
     ~TimelinePanelComponent() override;
 
     void paint(juce::Graphics& g) override;
-    // T159: focus-region outline, drawn OVER children -- see paintOverChildren()'s definition in
+    // Focus-region outline, drawn OVER children -- see paintOverChildren()'s definition in
     // TimelinePanelLayout.cpp for why.
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
@@ -329,23 +329,23 @@ public:
     // It shares this menu because "+ Track" is where a user reaches for "add something to the
     // arrangement", and a second button for one item would not earn its pixels.
     static constexpr int kAddMarkerMenuId = 3;
-    // T183 (P9-3b): the Instrument submenu's three audio-producing MIDI instrument choices — see
+    // The Instrument submenu's three audio-producing MIDI instrument choices — see
     // TrackHeaderHost::addInstrumentTrack's own comment for why the set is exactly these three (not
     // every isMidiInstrumentType() member: Poly MIDI/Sequencer/Poly Sequencer don't produce audio).
     static constexpr int kAddInstrumentOscillatorMenuId = 4;
     static constexpr int kAddInstrumentWavetableMenuId = 5;
     static constexpr int kAddInstrumentSamplerMenuId = 6;
-    // FRO48 (P9-3k): poly variants of the Oscillator/Wavetable entries above — Sampler has no "poly"
+    // Poly variants of the Oscillator/Wavetable entries above — Sampler has no "poly"
     // parameter, so it has no poly entry.
     static constexpr int kAddInstrumentOscillatorPolyMenuId = 7;
     static constexpr int kAddInstrumentWavetablePolyMenuId = 8;
-    // FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): "Create channels" for existing
+    // docs/mixer/mixer.md#creating-channels-in-an-existing-project: "Create channels" for existing
     // projects. Lives on this same menu rather than a per-track context menu or a mixer panel — there is no mixer panel
-    // yet (P9-5), and "+ Track" is already where every other channel-creating action in this doc lives (Audio Track,
+    // yet, and "+ Track" is already where every other channel-creating action in this doc lives (Audio Track,
     // Instrument Track); a project-wide sweep belongs beside them, not off a single track header, since it acts on
     // every track at once.
     static constexpr int kCreateChannelsMenuId = 9;
-    // FRO42 (P9-3h): the Instrument submenu's "Plugin" sub-submenu. The single disabled row shown
+    // The Instrument submenu's "Plugin" sub-submenu. The single disabled row shown
     // in place of an empty/scanning submenu (never actually selectable — JUCE never delivers a
     // disabled item's id — but named for clarity and so applyAddTrackMenuChoice has an explicit
     // no-op to ignore rather than falling through by luck). Every real plugin entry's id is
@@ -359,12 +359,12 @@ public:
     // opening and the click landing can silently change what index N means, resolving the click
     // against a plugin the menu never actually showed at that row. Resolving against a snapshot
     // taken when the menu was built (what the user is actually looking at) closes that: see
-    // applyAddTrackMenuChoice. Deliberately 10, not 9 — FRO26's kCreateChannelsMenuId already
+    // applyAddTrackMenuChoice. Deliberately 10, not 9 — kCreateChannelsMenuId already
     // claims 9 on this same flat "+ Track" menu, and every flat id here must stay <
     // kAddInstrumentPluginMenuIdBase (100) with no collisions between them.
     static constexpr int kAddInstrumentPluginNoneMenuId = 10;
     static constexpr int kAddInstrumentPluginMenuIdBase = 100;
-    // FRO13 (P9-7, docs/mixer/track-presets.md): "Insert Track Preset from File..." (next free fixed id
+    // docs/mixer/track-presets.md: "Insert Track Preset from File..." (next free fixed id
     // after 10), and the two grouped preset submenus (Audio/Instrument), each `base + index` into
     // its own snapshot vector below — same click-time-collector hazard as the plugin list
     // (a preset can be saved/deleted between menu-open and click), same snapshot-resolution fix.
@@ -373,7 +373,7 @@ public:
     static constexpr int kInsertTrackPresetFromFileMenuId = 11;
     static constexpr int kAddTrackPresetAudioMenuIdBase = 5000;
     static constexpr int kAddTrackPresetInstrumentMenuIdBase = 6000;
-    static constexpr int kAddTrackPresetBusMenuIdBase = 7000; // FRO297, same contract as the two above
+    static constexpr int kAddTrackPresetBusMenuIdBase = 7000; // same contract as the two above
 
     /** Adds a marker at the transport's current position, named "Marker N", coloured from the
      *  theme (see defaultMarkerColourArgb) — ONE recordTimelineChange when an undo manager is
@@ -405,7 +405,7 @@ public:
                    : nullptr;
     }
 
-    // ---- T161: focused track (ephemeral UI state — NOT on TimelineDoc, never touches undo/reconcile) ----
+    // ---- focused track (ephemeral UI state — NOT on TimelineDoc, never touches undo/reconcile) ----
     // Which track header row currently holds keyboard focus, as an index into the doc's track order
     // (-1 = none) -- see TimelinePanelTrackHeaders.cpp for the full focus-movement contract.
     int getFocusedTrackIndexForTest() const noexcept { return focusedTrackIndex_; }
@@ -439,12 +439,12 @@ private:
     // Rebuilds the header components when the set of track ids changed, and otherwise just
     // refreshes the existing ones in place (a mute toggle must not destroy and re-create rows).
     void syncTrackHeaders();
-    // FRO14: ticks every header's channel chip. Started by setTrackHeaderHost() (nothing to meter
+    // Ticks every header's channel chip. Started by setTrackHeaderHost() (nothing to meter
     // before the app wires one up) and defined in TimelinePanelTrackHeaders.cpp.
     void timerCallback() override;
     void layoutTrackHeaders();
 
-    // ---- T161: focused track index -------------------------------------------
+    // ---- focused track index -------------------------------------------
     // The index a track header row's onSelectRequested (click) reports lands here directly —
     // resolved from a TrackId rather than trusting a captured loop index, so it stays correct even
     // if track order/set changed between the header being built and the click landing.
@@ -458,7 +458,7 @@ private:
     void ensureTrackVisible(int index);
     int focusedTrackIndex_ = -1;
 
-    // ---- FRO42 (P9-3h): Instrument -> Plugin submenu click-resolution snapshot ----
+    // ---- Instrument -> Plugin submenu click-resolution snapshot ----
     // The exact option list `buildAddTrackMenu()` used to populate the "Plugin" sub-submenu, so
     // `applyAddTrackMenuChoice` resolves `kAddInstrumentPluginMenuIdBase + index` against what the
     // user actually saw rather than re-running collectInstrumentPluginMenuOptions() (which can have
@@ -466,12 +466,12 @@ private:
     // (never cleared on dismiss/apply): a stale snapshot from a menu that was shown but never acted
     // on is harmless, since nothing indexes it until another click arrives.
     std::vector<synth::PluginIdentity> instrumentPluginMenuSnapshot_;
-    // FRO13 (P9-7): same snapshot-not-re-collect contract, for the two grouped preset submenus.
+    // Same snapshot-not-re-collect contract, for the two grouped preset submenus.
     std::vector<synth::TrackPresetInfo> audioTrackPresetMenuSnapshot_;
     std::vector<synth::TrackPresetInfo> instrumentTrackPresetMenuSnapshot_;
-    std::vector<synth::TrackPresetInfo> busTrackPresetMenuSnapshot_; // FRO297, same contract
+    std::vector<synth::TrackPresetInfo> busTrackPresetMenuSnapshot_; // same contract
 
-    // ---- T166 / FRO371: track-reorder drag (whole-row drag) ----
+    // ---- track-reorder drag (whole-row drag) ----
     // The row detects the gesture and hands up raw screen Y; this panel feeds it to the shared
     // ReorderDragAnimator (vertical axis, list coordinates). See TimelinePanelTrackDrag.cpp.
     void beginTrackDrag(synth::TrackId trackId, int screenY);
@@ -558,7 +558,7 @@ private:
     void parentHierarchyChanged() override;
 
     // The Viewport's content: a plain container whose height is (track count * row height). Also
-    // draws the FRO371 track-reorder gap marker -- see its paint() definition in
+    // draws the track-reorder gap marker -- see its paint() definition in
     // TimelinePanelTrackDrag.cpp.
     struct TrackHeaderList : juce::Component {
         explicit TrackHeaderList(TimelinePanelComponent& owner)

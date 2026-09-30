@@ -85,7 +85,7 @@ void MainComponent::publishTimelineAndRebindRecorder() {
 // ONLY when the reconcile itself changed nothing — a reconcile that flips a flag is a doc
 // mutation, so timelineChanged has already published by the time it returns.
 void MainComponent::reconcileTimelineAfterGraphChange() {
-    // FRO14 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): a link forming around an already-muted/soloed track
+    // docs/mixer/mixer.md#channels-follow-audio-not-tracks: a link forming around an already-muted/soloed track
     // moves that state onto its channel (and a link can only form or break via a graph change, which is exactly what
     // reaches here). Runs FIRST so the reconcile/publish below already sees the transferred doc flags. Deliberately not
     // undoable — same rule as the orphan flag next to it.
@@ -98,28 +98,28 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     if (!synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph()))
         publishTimelineAndRebindRecorder();
 
-    // FRO127: every assignment's live target is re-resolved against the graph as it now stands —
+    // Every assignment's live target is re-resolved against the graph as it now stands —
     // same "graph changed under us" trigger as the timeline reconcile just above, orphaning
     // whatever no longer resolves rather than silently rebinding
     // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step, hook
     // 2).
     remoteEngine.reconcile(audioEngine.getGraph());
 
-    // FRO263: an assignment's target can flip between resolved and orphaned ("(missing module)") by
+    // An assignment's target can flip between resolved and orphaned ("(missing module)") by
     // the reconcile() call just above -- publishAssignments()'s own onChanged notify never reaches
     // this path (it's not a MIDI Remote doc/profile mutation), so the panel needs its own catch-up
     // call here, same "cheap enough for every graph change" contract bottomDock.rebuildMixer() below
     // already relies on.
     bottomDock.rebuildMidiRemote();
 
-    // FRO14: a LINKED track's M/S live on its channel strip, not in the doc, so a graph change (an
+    // A LINKED track's M/S live on its channel strip, not in the doc, so a graph change (an
     // undo of a channel mute/solo included) moves state no doc notification would ever report.
     // Every header re-reads its channel here; refreshFromDoc() is idempotent and cheap.
     for (int i = 0; i < timelinePanel.getTrackHeaderCount(); ++i)
         if (auto* header = timelinePanel.getTrackHeaderAt(i))
             header->refreshFromDoc();
 
-    // FRO11 (P9-5): the mixer's own column set (strips/inserts/links) can change from ANY graph
+    // The mixer's own column set (strips/inserts/links) can change from ANY graph
     // edit that reaches here -- undo/redo, a canvas delete, a macro regroup, not just the mixer's
     // own insert-list mutations -- so it rebuilds unconditionally here too, the same "cheap enough
     // to call on every change" contract buildMixerSnapshot documents (a handful of strips, never
@@ -133,7 +133,7 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
 // there would be waste.
 void MainComponent::reconcileTimelineBindingsOnly() {
     synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph());
-    // FRO127: the 2b/2c catch-all
+    // The 2b/2c catch-all
     // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step) — MIDI
     // Remote's own assignments need the same re-resolve the timeline bindings just got, for the same reasons (a canvas
     // delete with no explicit reconcile site, a hosted plugin's async load completing).
@@ -401,7 +401,7 @@ void MainComponent::newPatch() {
     // than into a bundle this patch no longer belongs to.
     currentBundleDir_ = juce::File();
     refreshAssetRoots(); // No bundle any more, so no bundle-relative ref resolves
-    // FRO325: a brand-new project always starts Compensated (docs/mixer/mixer.md#pan-law) — this is
+    // A brand-new project always starts Compensated (docs/mixer/mixer.md#pan-law) — this is
     // a direct engine write, not an undo step, the same "not itself undoable, like BPM" posture the
     // graph/timeline resets around it already have (this call runs after both, so nothing above it
     // can leave the law stale on an undo back into THIS document).
@@ -412,7 +412,7 @@ void MainComponent::newPatch() {
     markDocumentClean();
     setCurrentPatchName("Untitled");
     statusBar.showMessage("New patch");
-    // T114/P8-10: the welcome screen's "New empty project" button reaches this via
+    // The welcome screen's "New empty project" button reaches this via
     // AppCommands::newPatch's own guard — this line is what actually hides it, only once the guard
     // has let the action proceed (a Cancel answer never runs newPatch() at all).
     hideWelcomeScreen();
@@ -481,7 +481,7 @@ juce::String MainComponent::createTrackInNode() {
 // Twin of createTrackInNode(): a "Track Audio" node with a fresh uuid. Returns its uuid, empty on
 // failure. Called INSIDE the caller's undo transaction.
 //
-// `wireDirectlyToMasterBus` (T173a): true (the default) wires the node stereo straight into the
+// `wireDirectlyToMasterBus`: true (the default) wires the node stereo straight into the
 // master bus — the Rec Tap when one is spliced in, otherwise the Audio Output node directly, so
 // the two orderings compose (adding an audio track before or after the first take both end up
 // with the track's audio flowing THROUGH the tap) — the behaviour createAndBindTrackInNode()'s
@@ -738,7 +738,7 @@ void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, 
         }
     }
     if (param == nullptr) {
-        // A hosted plugin-card knob (FRO137): its parameter is not a RangedAudioParameter, so hand
+        // A hosted plugin-card knob: its parameter is not a RangedAudioParameter, so hand
         // it to the lane picker's own hosted path, which captures the index hint and the 0..1 range.
         if (dynamic_cast<synth::HostedPluginModule*>(module) != nullptr) {
             synth::ui::TrackHeaderHost::PluginLaneOption option;

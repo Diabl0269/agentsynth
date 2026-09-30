@@ -1,7 +1,7 @@
 // MainComponentSetupTimeline.cpp -- initialiseCommon()'s timeline-panel wiring step
 // (wireTimelinePanel), split by concern into services/shortcuts, the 4-hook TimelineDoc
 // inventory, clip-lane callbacks, and the transport-bar record toggle. Split out of the former
-// single MainComponent.cpp (FRO76) -- see MainComponent::initialiseCommon in MainComponent.cpp.
+// single MainComponent.cpp -- see MainComponent::initialiseCommon in MainComponent.cpp.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
@@ -37,7 +37,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     timelinePanel.setMetronome(&audioEngine.getMetronome());
     timelinePanel.setApplicationProperties(&appProperties);
 
-    // FRO11 (P9-5): the dock's own persisted-tab key, read once and written on every tab click
+    // The dock's own persisted-tab key, read once and written on every tab click
     // (docs/layout/chrome.md's "Panel collapse and persistence" table); the graph-topology-mutated and
     // Direct's "Make channel" callbacks route the mixer's own actions through the SAME funnels
     // every other "Make channel" trigger and every other graph-structural edit already use.
@@ -45,21 +45,21 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     bottomDock.setOnGraphTopologyChanged([this] { reconcileTimelineAfterGraphChange(); });
     bottomDock.setOnMakeChannelForNode(
         [this](juce::AudioProcessorGraph::NodeID source) { makeChannelForNode(source); });
-    // FRO12 (P9-6): each panel's ONE detached-window focus region (docs/control/shortcuts.md) --
+    // Each panel's ONE detached-window focus region (docs/control/shortcuts.md) --
     // stored on the host now, applied to whichever DetachedPanelWindow it builds later. Re-running
     // MainComponent's own registration pass on every detach/redock (rather than reordering/renaming
     // anything already registered above) is the guard rule the plan's focus section spells out.
     bottomDock.getMidiRemoteHost().setHostedPanelFocusRegion("midiRemote", bottomDock.getMidiRemotePanel());
     bottomDock.getTimelineHost().setHostedPanelFocusRegion("timeline", timelinePanel);
     bottomDock.getMixerHost().setHostedPanelFocusRegion("mixer", bottomDock.getMixerPanel());
-    // FRO333: app-wide shortcuts (Cmd+T, Cmd+1..9) still fire while a detached tab's own window has
+    // App-wide shortcuts (Cmd+T, Cmd+1..9) still fire while a detached tab's own window has
     // focus -- see DetachedPanelWindow::onAppShortcut's own comment on why it can't just reach
     // MainComponent::keyPressed directly.
     auto appShortcutFallback = [this](const juce::KeyPress& key) { return keyPressed(key); };
     bottomDock.getTimelineHost().onAppShortcutFallback = appShortcutFallback;
     bottomDock.getMixerHost().onAppShortcutFallback = appShortcutFallback;
     bottomDock.getMidiRemoteHost().onAppShortcutFallback = appShortcutFallback;
-    // FRO333: keeps isBottomDockVisible in sync with bottomDock.hasAnyVisibleTab() -- see
+    // Keeps isBottomDockVisible in sync with bottomDock.hasAnyVisibleTab() -- see
     // bottomDockAutoHiddenByEmptyTabs_'s own comment (MainComponent.h) for why the reopen half is
     // gated on that flag rather than firing on every "a tab came back" edge.
     bottomDock.onPanelDetachStateChanged = [this] {
@@ -81,7 +81,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // panels already exist by this point in initialiseCommon()'s ORDER) and again on every
     // settings-file write, see MainComponent::changeListenerCallback's settings branch.
     mixerPlacement_.applyPlacementPreference();
-    // FRO11 crash fix: the mixer's fader/pan bindings are raw pointers into live processor
+    // The mixer's fader/pan bindings are raw pointers into live processor
     // parameters, exactly like ModuleComponent's own -- so they unbind through the SAME seam
     // ModuleComponent already uses (GraphEditor::onBeforeDetachAllModuleComponents, fired at the
     // top of detachAllModuleComponents() -- every graph-replacing path funnels through it,
@@ -91,15 +91,15 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // called from the AFTER-restore hook) AFTER the restore already freed the param --
     // MixerFader::unbind()'s removeListener() on that freed memory is what hung the Linux CI build
     // (deadlock inside CriticalSection::enter on freed memory) that this fixes.
-    // FRO135: a pick-target session also ends here -- its candidates are components this rebuild is
+    // A pick-target session also ends here -- its candidates are components this rebuild is
     // about to free, and a click on one must never assign to a node that no longer exists.
     graphEditor.onBeforeDetachAllModuleComponents = [this] {
         midiLearnController_.cancelPickTarget();
-        // FRO336: unbinds the "both places" mirror view too, when one is open -- Source/UI/CLAUDE.md's
+        // Unbinds the "both places" mirror view too, when one is open -- Source/UI/CLAUDE.md's
         // mixer-unbind invariant applies to every live MixerPanelComponent, not only the docked one.
         bottomDock.unbindAllMixerViews();
     };
-    // The channel chip's click (TrackChannelLinkSurface::revealChannelForTrack, "THE P9-5 HOOK"
+    // The channel chip's click (TrackChannelLinkSurface::revealChannelForTrack, the mixer-reveal hook
     // per its own comment): open the dock (ensureBottomDockOpen()) before revealColumnForStrip
     // switches tabs and scrolls to the column -- a closed dock has nothing on screen to scroll to yet.
     trackChannelLink_.setMixerRevealHook([this](juce::AudioProcessorGraph::NodeID stripId) {
@@ -117,7 +117,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     timelinePanel.setShortcutManager(&shortcutManager);
     timelinePanel.getPianoRoll().setShortcutManager(&shortcutManager);
     timelinePanel.getClipLaneArea().setShortcutManager(&shortcutManager);
-    // FRO18: the mixer panel resolves the SAME "timelineMuteFocusedTrack"/"timelineSoloFocusedTrack"/
+    // The mixer panel resolves the SAME "timelineMuteFocusedTrack"/"timelineSoloFocusedTrack"/
     // "timelineArmFocusedTrack" action ids the track-header row above already binds -- a user's
     // rebind of M/S/R applies to whichever of the two surfaces has focus. Not part of the "MUST
     // stay together" strict-resolution group above: the mixer panel falls back to hardcoded bare
@@ -125,7 +125,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // installed" contract every other surface action in this app follows, rather than requiring
     // every id it consults to be pre-registered.
     bottomDock.getMixerPanel().setShortcutManager(&shortcutManager);
-    // FRO18: Arm reaches the focused strip's linked track through the SAME performTrackEdit
+    // Arm reaches the focused strip's linked track through the SAME performTrackEdit
     // one-undo-step path the Timeline header row's own R key uses -- never a direct TimelineDoc
     // write (that would skip the undo bracket every other track edit goes through). Routed through
     // setOnArmTrack, the sibling forwarder to setOnGraphTopologyChanged/setOnMakeChannelForNode
@@ -145,7 +145,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
         bottomDock.rebuildMixer();
     });
 
-    // The dock's top-edge drag (FRO231: one handle for every tab, not the Timeline panel's own)
+    // The dock's top-edge drag (one handle for every tab, not the Timeline panel's own)
     // reports a desired TOTAL dock-carve height, measured from the dock's pinned bottom edge --
     // exactly what setTimelinePanelHeight owns, so no translation. THIS component clamps it, lays
     // out live, and persists once the drag ends (not per pixel).
@@ -250,7 +250,7 @@ void MainComponent::wireTimelineRecordToggle() {
     timelinePanel.getTransportBar().onRecordToggled = [this](bool wantRecording) { handleRecordToggle(wantRecording); };
 }
 
-// The transport bar's onRecordToggled body, extracted out of wireTimelineRecordToggle() (FRO76).
+// The transport bar's onRecordToggled body, extracted out of wireTimelineRecordToggle().
 void MainComponent::handleRecordToggle(bool wantRecording) {
     if (!wantRecording) {
         // Both are no-ops unless their own kind of take is in flight, so Record-off can call
@@ -317,7 +317,7 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
     // capture start synchronously, right here. A poll tick landing in that gap would otherwise see
     // a stale wasTransportPlaying_==true left over from an earlier roll, the snapshot still
     // reporting not-playing, and the take that just started as "isRecording()==true", and mistake
-    // it for an unrelated take stopping -- cancelling a take it never even saw start (FRO210).
+    // it for an unrelated take stopping -- cancelling a take it never even saw start.
     // Anchoring to snap.playing (false here) closes that gap; anchoring to snap.playing rather than
     // an unconditional false also preserves the mid-roll case just below (Record pressed while
     // already playing, no transport.play() posted) -- there wasTransportPlaying_ must stay true so

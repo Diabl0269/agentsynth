@@ -14,7 +14,7 @@
 namespace synth::ui {
 
 namespace {
-// FRO42 review fix: the Instrument -> Plugin submenu ALWAYS appends the format so a VST3 and an AU
+// The Instrument -> Plugin submenu ALWAYS appends the format so a VST3 and an AU
 // build of the same product (e.g. "Massive") don't show as two identical, unlabelled rows — same
 // "disambiguate by format" job ModuleLibraryComponent's plugin sub-headers do for the library
 // sidebar, just inline on the row instead of a separate group label (this submenu is flat, with no
@@ -35,7 +35,7 @@ void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     // the new one rather than refreshed.
     trackHeaderList_.headers.clear();
     syncTrackHeaders();
-    // FRO14: the channel-chip meter tick. Started here rather than in the constructor -- there is
+    // The channel-chip meter tick. Started here rather than in the constructor -- there is
     // nothing to meter until an app host exists, and the constructor is already at its size cap.
     if (host != nullptr)
         startTimerHz(15);
@@ -43,7 +43,7 @@ void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
         stopTimer();
 }
 
-// FRO14: ONE shared 15 Hz timer for every header row's channel chip -- never one per row (up to
+// ONE shared 15 Hz timer for every header row's channel chip -- never one per row (up to
 // TimelineDoc::kMaxTracks of them). Unconditional iteration, deliberately GATED repaints:
 // TimelineTrackHeaderComponent::tickChannelMeter() only repaints when the drawn level actually
 // moved (ChannelChipComponent::kMeterRepaintThreshold), which is the same shape ModuleComponent's
@@ -93,14 +93,14 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
     else if (menuId == kInsertTrackPresetFromFileMenuId)
         trackHeaderHost_->addTrackFromPresetFile();
     else if (menuId >= kAddTrackPresetBusMenuIdBase) {
-        // FRO297: resolved against the snapshot buildAddTrackMenu() captured, same reason the
+        // Resolved against the snapshot buildAddTrackMenu() captured, same reason the
         // Audio/Instrument submenus are — see busTrackPresetMenuSnapshot_'s own comment. Checked
         // BEFORE kAddTrackPresetInstrumentMenuIdBase since its base (7000) sits above it (6000).
         const int index = menuId - kAddTrackPresetBusMenuIdBase;
         if (index >= 0 && index < (int)busTrackPresetMenuSnapshot_.size())
             trackHeaderHost_->addBusFromPreset(busTrackPresetMenuSnapshot_[(size_t)index].name);
     } else if (menuId >= kAddTrackPresetInstrumentMenuIdBase) {
-        // FRO13: resolved against the snapshot buildAddTrackMenu() captured, same reason the
+        // Resolved against the snapshot buildAddTrackMenu() captured, same reason the
         // plugin list is (a preset can be saved/deleted between menu-open and click) — see
         // instrumentTrackPresetMenuSnapshot_'s own comment.
         const int index = menuId - kAddTrackPresetInstrumentMenuIdBase;
@@ -113,7 +113,7 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
             trackHeaderHost_->addTrackFromPreset(audioTrackPresetMenuSnapshot_[(size_t)index].name,
                                                  synth::TrackPresetKind::Audio);
     } else if (menuId >= kAddInstrumentPluginMenuIdBase) {
-        // FRO42: resolved against the SNAPSHOT buildAddTrackMenu() captured when this menu was
+        // Resolved against the SNAPSHOT buildAddTrackMenu() captured when this menu was
         // built, never by re-running collectInstrumentPluginMenuOptions() here — the known-plugin
         // list can be mutated by a background scan between the menu opening and this click landing
         // (see instrumentPluginMenuSnapshot_'s own comment). kAddInstrumentPluginNoneMenuId itself
@@ -179,19 +179,19 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
     juce::PopupMenu menu;
     menu.addItem(kAddMidiTrackMenuId, "MIDI Track");
     menu.addItem(kAddAudioTrackMenuId, "Audio Track");
-    // T183 (P9-3b): a submenu rather than three flat entries — these are all "Instrument Track",
+    // A submenu rather than three flat entries — these are all "Instrument Track",
     // differing only by which audio-producing MIDI instrument drives it.
     juce::PopupMenu instrumentMenu;
     instrumentMenu.addItem(kAddInstrumentOscillatorMenuId, "Oscillator");
     instrumentMenu.addItem(kAddInstrumentWavetableMenuId, "Wavetable");
     instrumentMenu.addItem(kAddInstrumentSamplerMenuId, "Sampler");
-    // FRO48 (P9-3k): poly variants below a separator — Sampler has no "poly" parameter, so it has
+    // Poly variants below a separator — Sampler has no "poly" parameter, so it has
     // no poly entry.
     instrumentMenu.addSeparator();
     instrumentMenu.addItem(kAddInstrumentOscillatorPolyMenuId, "Oscillator (Poly)");
     instrumentMenu.addItem(kAddInstrumentWavetablePolyMenuId, "Wavetable (Poly)");
 
-    // FRO42 (P9-3h): a hosted plugin as the instrument, in its own sub-submenu rather than a flat
+    // A hosted plugin as the instrument, in its own sub-submenu rather than a flat
     // "Plugin..." entry — effects are filtered out host-side (getInstrumentPluginOptions), so
     // everything listed here really is choosable.
     instrumentMenu.addSeparator();
@@ -216,7 +216,7 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
 
     menu.addSubMenu("Instrument Track", instrumentMenu);
 
-    // FRO13 (P9-7, docs/mixer/track-presets.md): every saved track preset, grouped by type — independent of
+    // docs/mixer/track-presets.md: every saved track preset, grouped by type — independent of
     // the per-type default (Preferences -> Mixer), which only steers the two plain entries above.
     // Snapshotted at build time, same reason instrumentPluginMenuSnapshot_ is: a preset can be
     // saved/deleted between the menu opening and the click landing.
@@ -242,7 +242,7 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
                                          instrumentTrackPresetMenuSnapshot_[(size_t)i].name);
         menu.addSubMenu("Instrument Track from Preset", instrumentPresetMenu);
     }
-    // FRO297 (docs/mixer/track-presets.md#a-third-kind-bus): a Bus preset creates no timeline track
+    // docs/mixer/track-presets.md#a-third-kind-bus: a Bus preset creates no timeline track
     // at all, just the bus chain — still listed here, grouped like the other two kinds, since
     // "+ Track" is where every saved chain (track-bearing or not) is inserted from.
     const auto busPresets = synth::TrackPresetManager::listTrackPresets(dir, synth::TrackPresetKind::Bus);
@@ -271,7 +271,7 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
 void TimelinePanelComponent::openAddTrackMenu() {
     juce::PopupMenu menu = buildAddTrackMenu();
 
-    // FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): disabled rather than hidden when
+    // docs/mixer/mixer.md#creating-channels-in-an-existing-project: disabled rather than hidden when
     // every track already has a channel (or there are no tracks at all) — a hidden entry would look like the feature
     // disappeared; a disabled one still tells the user it exists and why it's greyed out.
     menu.addSeparator();
@@ -346,7 +346,7 @@ void TimelinePanelComponent::syncTrackHeaders() {
         return;
     }
 
-    // T161: preserve WHICH TRACK is focused across the rebuild (by id, never by index — the whole
+    // Preserve WHICH TRACK is focused across the rebuild (by id, never by index — the whole
     // point of resolving by id is that a track deleted ABOVE the focused one must not silently hand
     // focus to whatever track now sits at the old numeric index). Invalid (default-constructed) when
     // nothing was focused, and the loop below never matches an invalid id against a real track.
@@ -372,12 +372,12 @@ void TimelinePanelComponent::syncTrackHeaders() {
         // decides open vs. close.
         const auto trackId = track.id;
         header->onAutomationToggleRequested = [this, trackId](synth::TrackId) { toggleAutomationForTrack(trackId); };
-        // T161: click-to-select and Up/Down between rows — see the two callbacks' own doc comments
+        // Click-to-select and Up/Down between rows — see the two callbacks' own doc comments
         // in TimelineTrackHeaderComponent.h for why these are explicit callbacks rather than a real
         // focusGained() round trip.
         header->onSelectRequested = [this, trackId] { setFocusedTrack(trackId); };
         header->onFocusMoveRequested = [this](int direction) { moveFocusedTrack(direction); };
-        // T166: whole-row drag-to-reorder — see TimelineTrackHeaderComponent::onRowDragStarted's
+        // Whole-row drag-to-reorder — see TimelineTrackHeaderComponent::onRowDragStarted's
         // own comment for the division of labour (the row detects the gesture, this panel resolves
         // screen Y against the ordered header list). The row hands us raw screen Y rather than
         // computing an insertion index itself because it doesn't know where its siblings are;
@@ -450,7 +450,7 @@ void TimelinePanelComponent::moveFocusedTrack(int direction) {
     ensureTrackVisible(focusedTrackIndex_);
 }
 
-// FRO278: moves track-header focus one row `direction` (-1 up, +1 down) -- the same step the header's
+// Moves track-header focus one row `direction` (-1 up, +1 down) -- the same step the header's
 // own Up/Down keys take, so M/S/R then act on that track. Clamps at the ends. Returns false when the
 // timeline has no tracks.
 bool TimelinePanelComponent::selectAdjacentTrack(int direction) {

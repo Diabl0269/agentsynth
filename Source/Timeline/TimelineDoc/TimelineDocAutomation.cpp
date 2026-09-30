@@ -227,7 +227,7 @@ bool TimelineDoc::rebindLane(LaneId id, const juce::String& newNodeUuid) {
     });
 }
 
-// FRO296: whichever side HAS a lane gets the OTHER paramId; a side with no lane stays that way (no
+// Whichever side HAS a lane gets the OTHER paramId; a side with no lane stays that way (no
 // lane is created) -- so a mixer send-slot swap (docs/mixer/sends-and-buses.md#reordering-sends)
 // carries an automation lane along with it, without a delete+recreate that would lose its points or
 // record mode. ONE revision bump / one Listener::timelineChanged call for BOTH retargets together,

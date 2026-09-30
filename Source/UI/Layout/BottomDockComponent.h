@@ -32,14 +32,13 @@ class MidiLearnController;
 
 // BottomDockComponent.h (docs/mixer/panel.md): the bottom dock's own tab strip.
 //
-// The ONE component MainComponent.h holds for this ticket (see the plan's file-size-budget
-// constraint, docs/mixer/panel.md#what-the-mixer-shows): owns `timelinePanel` by reference (NOT a
+// The ONE component MainComponent.h holds for the dock (see
+// docs/mixer/panel.md#what-the-mixer-shows): owns `timelinePanel` by reference (NOT a
 // copy/move -- MainComponent still owns and constructs it) and a MixerPanelComponent by value.
 // MainComponent::resized()'s existing dock carve (`timelinePanel.setBounds(...)`) becomes
 // `bottomDock.setBounds(...)` -- one line changed, not two new carve blocks; the open/close slide,
 // height and persisted-visible state stay MainComponent's own (isBottomDockVisible/timelineSlide_),
-// gating the whole dock rather than just the Timeline tab -- the rename to a dock-neutral name
-// is done; this class and isBottomDockVisible both carry it now.
+// gating the whole dock rather than just the Timeline tab.
 namespace synth::ui {
 
 class BottomDockComponent : public juce::Component {

@@ -142,7 +142,7 @@ dedupedBindingOptions(const std::vector<std::pair<juce::String, juce::String>>& 
     return options;
 }
 
-// T166: hand-built MouseEvent, same pattern as TimelinePanelTests.cpp's makeClickEvent/
+// Hand-built MouseEvent, same pattern as TimelinePanelTests.cpp's makeClickEvent/
 // makeDragEvent — no OS event queue reaches a headless test, so mouseDown/mouseDrag/mouseUp are
 // driven directly with events carrying exactly the position/mouseDownPosition pair the row's own
 // threshold check (e.getDistanceFromDragStart()) reads.
@@ -416,7 +416,7 @@ TEST(TimelineTrackHeaderTest, RowBackgroundShowsTheDraggingHandCursorOnHoverAndD
 }
 
 // =============================================================================
-// 4b. T166: whole-row drag-to-reorder — the row's own threshold/callback contract, independent
+// 4b. whole-row drag-to-reorder — the row's own threshold/callback contract, independent
 // of TimelinePanelComponent (which owns turning these screen positions into an actual reorder;
 // see TimelinePanelTests.cpp's own drag test for that half).
 // =============================================================================
