@@ -449,7 +449,24 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
         menu.addItem("Relink audio...", [this, id] { onRelinkAudioRequested(id); });
     }
 
-    menu.showMenuAsync(juce::PopupMenu::Options());
+    auto options = juce::PopupMenu::Options();
+    if (keyboardMenuAnchor_)
+        options = options.withTargetScreenArea(*keyboardMenuAnchor_);
+    menu.showMenuAsync(options);
+}
+
+bool TimelineClipLaneArea::showContextMenuForKeyboardFocus() {
+    if (selection_.isEmpty())
+        return false;
+    const auto id = selection_.getSelected().front();
+    const auto rect = getClipRect(id);
+    if (rect.isEmpty())
+        return false;
+    // The pointer position is the clip's middle, so "Split at pointer" is offered the way a click there would.
+    keyboardMenuAnchor_ = localAreaToGlobal(rect);
+    showClipContextMenu(id, rect.getCentre());
+    keyboardMenuAnchor_.reset();
+    return true;
 }
 
 void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextChoice choice, double pointerBeat) {

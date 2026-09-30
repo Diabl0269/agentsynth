@@ -2,6 +2,7 @@
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -51,6 +52,8 @@ public:
     void resized() override;
     void lookAndFeelChanged() override;
     bool keyPressed(const juce::KeyPress& key) override;
+    /** Stands in for the real keyboard focus (which needs a native peer) when the open-context-menu key resolves. */
+    void setFocusedComponentOverrideForTest(juce::Component* focused) { focusedComponentOverrideForTest_ = focused; }
 
     /** Fired on the close button -- this window never destroys itself (same contract as
      *  HostedPluginEditorWindow::onCloseRequested). DetachablePanelHost installs this to redock
@@ -121,6 +124,7 @@ private:
     std::unique_ptr<Content> content_;
     std::unique_ptr<juce::TooltipWindow> tooltipWindow_;
     synth::ui::FocusRegionRegistry focusRegions_;
+    juce::Component::SafePointer<juce::Component> focusedComponentOverrideForTest_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DetachedPanelWindow)
 };

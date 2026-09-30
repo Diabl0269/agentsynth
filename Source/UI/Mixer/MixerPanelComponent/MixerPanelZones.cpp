@@ -186,7 +186,7 @@ void MixerPanelComponent::moveChannelWithinZone(const juce::String& channelId, c
 
 // Right-click on a column header: where should this channel sit? The current zone is ticked; Unpin is
 // only offered for a pinned channel.
-void MixerPanelComponent::showChannelMenu(const juce::String& channelId) {
+void MixerPanelComponent::showChannelMenu(const juce::String& channelId, std::optional<juce::Rectangle<int>> anchor) {
     const auto zone = viewDoc_->getZone(channelId);
     juce::Component::SafePointer<MixerPanelComponent> safe(this);
     juce::PopupMenu menu;
@@ -202,7 +202,14 @@ void MixerPanelComponent::showChannelMenu(const juce::String& channelId) {
         if (safe != nullptr)
             safe->pinChannel(channelId, synth::MixerZone::Scrolling);
     });
-    showZoneMenuHook_(menu);
+    if (showZoneMenuHook_) {
+        showZoneMenuHook_(menu);
+        return;
+    }
+    auto options = juce::PopupMenu::Options();
+    if (anchor)
+        options = options.withTargetScreenArea(*anchor);
+    menu.showMenuAsync(options);
 }
 
 void MixerPanelComponent::wireHeaderMenus() {

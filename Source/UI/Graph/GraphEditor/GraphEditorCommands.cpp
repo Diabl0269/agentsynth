@@ -189,7 +189,7 @@ bool GraphEditor::duplicateSelection() {
 
 // Right-click on empty canvas: paste / select-all. Built here rather than inline in mouseDown
 // so the menu stays out of the hit-testing path.
-void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
+void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos, std::optional<juce::Rectangle<int>> screenAnchor) {
     juce::Component::SafePointer<GraphEditor> safeThis(this);
 
     juce::PopupMenu m;
@@ -240,7 +240,32 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
         showCanvasContextMenuHook_(m);
         return;
     }
-    m.showMenuAsync(juce::PopupMenu::Options());
+    auto options = juce::PopupMenu::Options();
+    if (screenAnchor)
+        options = options.withTargetScreenArea(*screenAnchor);
+    m.showMenuAsync(options);
+}
+
+bool GraphEditor::showContextMenuForKeyboardFocus() {
+    if (modMatrix.hasKeyboardFocus(true))
+        return false;
+
+    if (selection.size() == 1) {
+        const auto selectedId = selection.getSelected().front();
+        for (auto* card : getModuleComponents()) {
+            if (card->getNodeId() == selectedId && card->isVisible()) {
+                card->showContextMenu(card->getScreenBounds());
+                return true;
+            }
+        }
+    }
+
+    // Anchored at the middle of the view, where "Paste Here" lands a paste.
+    const auto centre = getLocalBounds().getCentre();
+    const auto screenCentre = localPointToGlobal(centre);
+    showCanvasContextMenu(content.getLocalPoint(this, centre),
+                          juce::Rectangle<int>(screenCentre, screenCentre).expanded(1));
+    return true;
 }
 
 // Canvas-scoped keys: Delete/Backspace removes the selection, Escape clears it. Deliberately

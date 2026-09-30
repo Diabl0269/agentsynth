@@ -349,6 +349,8 @@ public:
         // unmodified 'f' for timelineFollowPlayheadToggle, a different chord entirely). Cmd+F reads
         // as "find" the way it does in almost every app, which is exactly what this does.
         bindings["focusLibrarySearch"] = juce::KeyPress('f', juce::ModifierKeys::commandModifier, 0);
+        // The platform-standard "show the context menu" chord; nothing else binds F10.
+        bindings["openContextMenu"] = juce::KeyPress(juce::KeyPress::F10Key, juce::ModifierKeys::shiftModifier, 0);
 
         // The transport family ships UNBOUND -- an explicit invalid juce::KeyPress(), not
         // an absent map entry. saveToProperties() below indexes `bindings` with `.at()` for every
@@ -788,6 +790,7 @@ private:
             {"focusTimeline", ShortcutCategory::General},
             {"focusLibrary", ShortcutCategory::General},
             {"focusLibrarySearch", ShortcutCategory::General},
+            {"openContextMenu", ShortcutCategory::General},
             // Transport verbs promoted to command-dispatched actions (the prerequisite for
             // docs/control/midi-remote.md#action-targets) -- deliberately UNBOUND by default (see resetToDefaults()),
             // unlike every other row above. They exist as command/MIDI-Remote targets first; a

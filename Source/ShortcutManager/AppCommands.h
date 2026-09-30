@@ -128,6 +128,8 @@ enum CommandIDs {
     // docs/control/shortcuts.md's Focus regions section for why those are two different destinations. Same
     // General/command-dispatched treatment as the other three Focus* actions above.
     focusLibrarySearch,
+    // Opens the right-click menu of whatever holds keyboard focus (KeyboardContextMenu.h).
+    openContextMenu,
     // Selects Master (falling back to Audio Output when there is no Master yet) and pans it
     // into view — the canvas-only answer to auto-arrange or a drag leaving
     // either node anywhere (GraphEditor::locateMasterOrOutput). Appended here per the
@@ -294,6 +296,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return focusLibrary;
     if (actionId == "focusLibrarySearch")
         return focusLibrarySearch;
+    if (actionId == "openContextMenu")
+        return openContextMenu;
     if (actionId == "locateMaster")
         return locateMaster;
     if (actionId == "transportPlay")

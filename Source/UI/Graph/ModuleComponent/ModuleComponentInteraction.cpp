@@ -631,28 +631,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
         // the same press, so the legacy one-button-mouse affordance loses here; right-click and
         // two-finger tap still open the menu on every platform.
         if (e.mods.isRightButtonDown()) {
-            // A docked macro-port widget gets its OWN small menu (Delete, plus Rename/Configure
-            // I/O when its macro is still alive) rather than the generic module menu below — it
-            // has no Copy/Duplicate/Bypass/Replace concept, and is never part of the ordinary
-            // module selection (the early return above), so there is nothing for a selection
-            // retarget to do here either.
-            if (isMacroPortType(getType(module))) {
-                auto menu = buildMacroPortContextMenu();
-                showContextMenuHook_(menu);
-                return;
-            }
-
-            // Right-clicking outside the current selection retargets it to this module, so the
-            // menu always acts on something the user can see is selected. This has to run BEFORE
-            // buildModuleContextMenu() below reads owner.getSelectionCount() / builds its items,
-            // not folded into that method itself: it is a real side effect of the CLICK, whereas
-            // buildModuleContextMenu() also needs to be callable standalone (from a test) without
-            // repeating a gesture that already happened.
-            if (!owner.isNodeSelected(nodeId))
-                owner.selectModule(nodeId, false);
-
-            auto menu = buildModuleContextMenu();
-            showContextMenuHook_(menu);
+            showContextMenu();
         } else {
             // ---- Selection semantics + Ctrl insert-between -----------------
             //
@@ -840,6 +819,41 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
         if (auto* p = getParentComponent())
             p->repaint();
     }
+}
+
+void ModuleComponent::showContextMenu(std::optional<juce::Rectangle<int>> screenAnchor) {
+    menuAnchor_ = screenAnchor;
+
+    // A docked macro-port widget gets its OWN small menu (Delete, plus Rename/Configure
+    // I/O when its macro is still alive) rather than the generic module menu below — it
+    // has no Copy/Duplicate/Bypass/Replace concept, and is never part of the ordinary
+    // module selection, so there is nothing for a selection retarget to do here either.
+    if (isMacroPortType(getType(module))) {
+        auto menu = buildMacroPortContextMenu();
+        showContextMenuHook_(menu);
+        menuAnchor_.reset();
+        return;
+    }
+
+    // Right-clicking outside the current selection retargets it to this module, so the
+    // menu always acts on something the user can see is selected. This has to run BEFORE
+    // buildModuleContextMenu() below reads owner.getSelectionCount() / builds its items,
+    // not folded into that method itself: it is a real side effect of the CLICK, whereas
+    // buildModuleContextMenu() also needs to be callable standalone (from a test) without
+    // repeating a gesture that already happened.
+    if (!owner.isNodeSelected(nodeId))
+        owner.selectModule(nodeId, false);
+
+    auto menu = buildModuleContextMenu();
+    showContextMenuHook_(menu);
+    menuAnchor_.reset();
+}
+
+void ModuleComponent::showRealContextMenu(juce::PopupMenu& menu) {
+    auto options = juce::PopupMenu::Options();
+    if (menuAnchor_)
+        options = options.withTargetScreenArea(*menuAnchor_);
+    menu.showMenuAsync(options);
 }
 
 void ModuleComponent::mouseUp(const juce::MouseEvent& e) {

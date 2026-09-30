@@ -160,6 +160,11 @@ bool DetachedPanelWindow::keyPressed(const juce::KeyPress& key) {
     if (shortcutManager_ != nullptr) {
         if (const auto forward = synth::ui::resolveFocusCycleKeyPress(key, *shortcutManager_))
             return focusRegions_.cycleFocus(*forward);
+        // Same story for the open-context-menu key: MainComponent's command never sees it here.
+        if (synth::ui::isOpenContextMenuKeyPress(key, *shortcutManager_))
+            return synth::ui::openContextMenuForFocusedComponent(focusedComponentOverrideForTest_ != nullptr
+                                                                     ? focusedComponentOverrideForTest_.getComponent()
+                                                                     : juce::Component::getCurrentlyFocusedComponent());
     }
     // Not a focus-cycle key -- give the app-wide shortcut dispatch a chance (Cmd+T, Cmd+1..9)
     // before giving up; see onAppShortcut's own comment.

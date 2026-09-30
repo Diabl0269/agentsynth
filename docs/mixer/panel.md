@@ -321,6 +321,11 @@ which tab is showing (`"timeline"` default, or `"mixer"`/`"midiRemote"`) — see
 
 ### Per window keyboard focus
 
+Shift+F10 (Open Context Menu, see [`control/shortcuts.md`](../control/shortcuts.md#open-context-menu)) on the
+focused column opens the same Pin left / Pin right / Unpin menu a right-click on its header does, placed at
+the column. `MixerPanelComponent` is the provider because it is the single focusable leaf; both paths call
+`showChannelMenu`.
+
 `MainComponent::keyPressed` is the sole Tab dispatch point and is unreachable from a separate
 top-level window, so **`DetachedPanelWindow` resolves Tab and Shift+Tab itself** against its OWN
 one-region `FocusRegionRegistry`, via the shared `synth::ui::resolveFocusCycleKeyPress()`

@@ -739,6 +739,11 @@ juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
     return menu;
 }
 
+bool TimelineTrackHeaderComponent::showContextMenuForKeyboardFocus() {
+    showContextMenu();
+    return true;
+}
+
 void TimelineTrackHeaderComponent::showContextMenu() {
     auto menu = buildContextMenu();
     if (showContextMenuHook_) {

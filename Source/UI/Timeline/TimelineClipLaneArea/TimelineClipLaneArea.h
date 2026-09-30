@@ -2,6 +2,7 @@
 
 #include "Timeline/PeaksFile.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/EditTool.h"
@@ -139,6 +140,7 @@ inline juce::Colour gridLineColourFor(GridLineLevel level, juce::Colour base, ju
 class TimelineClipLaneArea
     : public juce::Component
     , public juce::FileDragAndDropTarget
+    , public KeyboardContextMenuProvider
     , private juce::Timer {
 public:
     TimelineClipLaneArea(TimelineViewState& viewState, ClipSelectionModel& selection);
@@ -306,6 +308,10 @@ public:
     std::function<void(synth::ClipId)> onKeyboardClipChanged;
     std::function<void(synth::TrackId)> onReturnToTrackHeaderRequested;
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
+    /** Opens the right-click menu of the selected clip (the first one when several are selected),
+     *  anchored at the clip. False when no selected clip has a place on screen. */
+    bool showContextMenuForKeyboardFocus() override;
 
     /** The user's binding for the one rebindable key this component owns: P, loop the selection
      *  ("timelineLoopSelection" — the SAME action id TimelinePanelComponent's own P fallback
@@ -660,6 +666,8 @@ private:
     void clearLiveRecording();
 
     TimelineViewState& viewState_;
+    // Screen area the real clip menu opens at while showContextMenuForKeyboardFocus() runs; empty = at the mouse.
+    std::optional<juce::Rectangle<int>> keyboardMenuAnchor_;
     ClipSelectionModel& selection_;
     synth::TimelineDoc* doc_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;

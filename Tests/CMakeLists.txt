@@ -644,6 +644,7 @@ add_executable(Tests
     Mixer/MixerModel/MixerModelMasterRecTapTests.cpp
     UI/Mixer/MixerMasterColumnInsertTests.cpp
     Engine/OutputMeterTapTests.cpp
+    UI/Layout/KeyboardContextMenuTests.cpp
 )
 
 # MainComponent.h (AppUI) pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h)

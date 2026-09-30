@@ -111,13 +111,7 @@ void ModuleLibraryComponent::mouseDown(const juce::MouseEvent& e) {
     }
 
     if (entry.kind == RowKind::Snippet && pressSuppressesRowDrag(e.mods)) {
-        const auto name = entry.text;
-        juce::PopupMenu m;
-        m.addItem("Delete Snippet", [this, name] {
-            if (onSnippetDeleteRequested)
-                onSnippetDeleteRequested(name);
-        });
-        m.showMenuAsync(juce::PopupMenu::Options());
+        showSnippetContextMenu(index);
         return;
     }
 
@@ -130,6 +124,37 @@ void ModuleLibraryComponent::mouseDown(const juce::MouseEvent& e) {
         return;
 
     startDragForEntry(index);
+}
+
+void ModuleLibraryComponent::showSnippetContextMenu(int index, std::optional<juce::Rectangle<int>> screenAnchor) {
+    const auto name = entries[(size_t)index].text;
+    juce::PopupMenu m;
+    m.addItem("Delete Snippet", [this, name] {
+        if (onSnippetDeleteRequested)
+            onSnippetDeleteRequested(name);
+    });
+    if (showContextMenuHook_) {
+        showContextMenuHook_(m);
+        return;
+    }
+    auto options = juce::PopupMenu::Options();
+    if (screenAnchor)
+        options = options.withTargetScreenArea(*screenAnchor);
+    m.showMenuAsync(options);
+}
+
+bool ModuleLibraryComponent::showContextMenuForKeyboardFocus() {
+    if (keyboardFocusedIndex < 0 || keyboardFocusedIndex >= (int)entries.size() ||
+        entries[(size_t)keyboardFocusedIndex].kind != RowKind::Snippet)
+        return false;
+    for (const auto& row : buildRows()) {
+        if (row.entryIndex != keyboardFocusedIndex)
+            continue;
+        const juce::Rectangle<int> rowBounds(0, row.y - scrollOffset, getWidth(), row.height);
+        showSnippetContextMenu(keyboardFocusedIndex, localAreaToGlobal(rowBounds));
+        return true;
+    }
+    return false;
 }
 
 void ModuleLibraryComponent::mouseDrag(const juce::MouseEvent& e) {

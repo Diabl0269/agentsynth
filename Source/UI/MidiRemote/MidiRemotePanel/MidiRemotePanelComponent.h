@@ -2,6 +2,7 @@
 
 #include "MidiRemote/EncoderAutoDetect.h"
 #include "MidiRemote/PickTarget.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/MidiRemote/AddController/AddControllerPopover.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfacePageStrip.h"
@@ -39,9 +40,15 @@ class MidiLearnController;
 // MainComponent::wireMidiRemoteEngine().
 namespace synth::ui {
 
-class MidiRemotePanelComponent : public juce::Component {
+class MidiRemotePanelComponent
+    : public juce::Component
+    , public KeyboardContextMenuProvider {
 public:
     MidiRemotePanelComponent();
+
+    /** Opens the selected controller's right-click menu (Rename, Export, Delete, feedback output) at
+     *  its row in the Controllers list. False when no controller is selected. */
+    bool showContextMenuForKeyboardFocus() override { return controllersList_.showContextMenuForSelectedRow(); }
     ~MidiRemotePanelComponent() override;
 
     /** Wires the live engine/profile/project/canvas dependencies and does the first rebuild.
