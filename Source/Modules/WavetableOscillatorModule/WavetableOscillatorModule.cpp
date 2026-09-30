@@ -340,7 +340,7 @@ void WavetableOscillatorModule::prepareToPlay(double sampleRate, int samplesPerB
     blockPeakWarpAmount = 0.0f;
 }
 
-void WavetableOscillatorModule::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+void WavetableOscillatorModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     if (buffer.getNumChannels() == 0)
         return;
 

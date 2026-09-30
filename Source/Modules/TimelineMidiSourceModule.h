@@ -138,7 +138,7 @@ public:
         return count;
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         // This module REPLACES the graph-supplied MIDI buffer (the ExternalMidiModule contract):
         // it is a source, so whatever the graph handed it is not ours to forward.
         midiMessages.clear();

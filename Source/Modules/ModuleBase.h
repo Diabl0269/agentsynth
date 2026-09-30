@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -308,6 +309,39 @@ public:
     void setNormalLeftToRight(bool normal) noexcept { normalLeftToRight_.store(normal, std::memory_order_relaxed); }
     bool isNormalLeftToRight() const noexcept { return normalLeftToRight_.load(std::memory_order_relaxed); }
 
+    // -------------------------------------------------------------------------
+    // Stereo down-mix into a mono input (docs/architecture/audio-engine.md#stereo-down-mix-fro326)
+    //
+    // The graph sums every edge into a raw input channel at unity, so a stereo pair (a source's
+    // Left AND Right legs) cabled into one mono jack plays L+R -- up to +6 dB. The standard
+    // down-mix (Web Audio, Ableton Utility) is the average, 0.5 * (L + R). AudioEngine::refreshNormalling
+    // marks each raw input channel whose feeds are ALL complete L/R pairs; processBlock halves
+    // those channels before the module sees them. A channel with any unpaired feed is a mix the
+    // user built by hand and stays at unity. Render-time only, never an edge (like normalling).
+    // -------------------------------------------------------------------------
+
+    /** The down-mix gain: -6 dB, i.e. the average of Left and Right. */
+    static constexpr float kStereoDownMixGain = 0.5f;
+    /** Raw input channels past this cannot be marked (the mask is one 64-bit word). */
+    static constexpr int kMaxDownMixChannels = 64;
+
+    /** MESSAGE THREAD write (AudioEngine::refreshNormalling); bit c set = raw input c is fed only
+        by complete stereo pairs. Audio-thread read once per block in processBlock. */
+    void setInputDownMixMask(std::uint64_t mask) noexcept { inputDownMixMask_.store(mask, std::memory_order_relaxed); }
+    std::uint64_t getInputDownMixMask() const noexcept { return inputDownMixMask_.load(std::memory_order_relaxed); }
+
+    /** Scales every marked raw input channel by kStereoDownMixGain, in place. A no-op (one relaxed
+        load) while nothing is marked. */
+    void applyInputDownMix(juce::AudioBuffer<float>& buffer) const noexcept {
+        const auto mask = inputDownMixMask_.load(std::memory_order_relaxed);
+        if (mask == 0)
+            return;
+        const int channels = std::min({buffer.getNumChannels(), getTotalNumInputChannels(), kMaxDownMixChannels});
+        for (int c = 0; c < channels; ++c)
+            if ((mask >> c) & 1u)
+                buffer.applyGain(c, 0, buffer.getNumSamples(), kStereoDownMixGain);
+    }
+
     /** Visible audio jacks for a split-block module: 2 when dual, 1 when collapsed. */
     int splitAudioJackCount() const { return isDualIO() ? 2 : 1; }
 
@@ -548,7 +582,17 @@ public:
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override = 0;
     void releaseResources() override {}
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override = 0;
+    /** Final on purpose: every module's render goes through here so the stereo down-mix below
+        (applyInputDownMix) can never be forgotten by one module. Override processModuleBlock. */
+    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) final {
+        applyInputDownMix(buffer);
+        processModuleBlock(buffer, midiMessages);
+    }
+
+    /** The module's own render. Runs after applyInputDownMix(), so a stereo pair summed into one
+        input already reads as its average; the bypass/mute contract (Source/CLAUDE.md) and
+        applyLeftRightNormalling() start here, exactly as they did at the top of processBlock. */
+    virtual void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) = 0;
 
     bool hasEditor() const override { return true; }
     juce::AudioProcessorEditor* createEditor() override { return nullptr; } // To be implemented later
@@ -869,6 +913,8 @@ private:
     // Right-borrows-Left normalling. Message-thread write via setNormalLeftToRight;
     // audio-thread read once per block via applyLeftRightNormalling().
     std::atomic<bool> normalLeftToRight_{false};
+    // See setInputDownMixMask().
+    std::atomic<std::uint64_t> inputDownMixMask_{0};
     std::unique_ptr<VisualBuffer> visualBuffer;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedOutputLevel;
 

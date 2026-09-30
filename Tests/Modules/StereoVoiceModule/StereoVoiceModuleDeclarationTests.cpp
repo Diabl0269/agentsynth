@@ -57,7 +57,7 @@ public:
         : ModuleBase("Shape Only", 4, 2) {} // 2 audio + 2 CV in, stereo out — the Distortion shape
 
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Distortion; }
 };
 

@@ -38,7 +38,7 @@ public:
         prepareOutputLevel(currentSampleRate);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         // Borrow Left into Right's raw channel, sample-exact, while Dual I/O is
         // split and only Left is patched. Must run before the bypass/mute branches below so
         // both see a filled Right leg exactly as if the user had cabled it.

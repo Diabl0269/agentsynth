@@ -213,3 +213,34 @@ edge**: `AudioEngine::refreshNormalling()` recomputes two atomics by scanning th
   mono cable onto Output's raw ch0 AND ch1, added in #532 for FRO23's "reconnect the chain" heal).
   A mono cable — hand-drawn or healed — now lands on Output's Left alone; normalling fills Right
   for as long as it stays unpatched, which is audible rather than a second edge.
+
+### Stereo down-mix (FRO326)
+
+A stereo pair cabled into one **mono-only input** plays the **average**, `0.5 * (L + R)` (-6 dB),
+not the sum — the standard down-mix (Web Audio, Ableton Utility), and the second half of the FRO323
+policy. JUCE's graph sums every edge landing on one input channel at unity and has no per-edge gain,
+so without this a Dual I/O source's Left and Right both cabled into one jack (by hand, or by
+splitting the source mid-chain — [fx-modules.md](../modules/fx-modules.md#splitting-a-split-block-module-that-was-wired-mono))
+jumped up to +6 dB. **Render-time only, never a graph edge.**
+
+- **The scan.** `synth::publishStereoDownMix` (`Source/AudioEngine/StereoDownMix.cpp`) runs at the
+  end of `refreshNormalling()`, so it shares normalling's three triggers (publishTimeline, the
+  plugin's `setStateInformation`, the graph's change broadcast). For every `ModuleBase` it sets a
+  64-bit mask, `ModuleBase::setInputDownMixMask`: bit `c` is set iff every feed into raw input `c`
+  is one leg of a **whole** stereo pair from one source node, and at least one pair is there. A
+  `ModuleBase` source pairs voice `v`'s Left (raw `v`) with its Right (`rightAudioLegChannel() + v`);
+  any other source (the graph's Audio Input node) pairs ch0/ch1.
+- **Hand-built mixes stay at unity.** A channel with any unpaired feed (a third mono cable, one leg
+  only, legs from two different sources) is left alone: the graph has already summed the feeds, so
+  one pair cannot be scaled without scaling the rest. Two whole pairs into one jack are each
+  averaged.
+- **The gain.** `ModuleBase::processBlock` is `final` and calls `applyInputDownMix` (scale every
+  marked channel by `ModuleBase::kStereoDownMixGain`, 0.5) before the module's own
+  `processModuleBlock`. So it runs before the bypass/mute branches and before L/Mono normalling: a
+  Dual I/O Left fed by a pair is averaged first, then Right borrows the average. Fixed at -6 dB; a
+  -3/-4.5 dB preference was considered and not built.
+- **Not covered.** A collapsed stereo jack dropped onto a mono jack wires Left only
+  (`GraphEditor::resolvePolyLink`), so there is no sum to average; widening that to both legs is a
+  separate behaviour change. Hosted plugins report no right leg (`rightAudioLegChannel()` is -1), so
+  their L/R outputs into one jack still sum.
+- Pinned by `Tests/Engine/StereoDownMixTests.cpp`.

@@ -199,7 +199,7 @@ public:
         meterLatches_[1].reset();
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         juce::ignoreUnused(midiMessages);
         const int numSamples = buffer.getNumSamples();
         if (buffer.getNumChannels() < kNumOutputs) {

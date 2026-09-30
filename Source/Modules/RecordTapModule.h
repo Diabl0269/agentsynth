@@ -78,7 +78,7 @@ public:
 
     // ---- juce::AudioProcessor ----
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
 
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }

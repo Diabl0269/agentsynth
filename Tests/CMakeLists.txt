@@ -579,6 +579,7 @@ add_executable(Tests
     Engine/FeedbackGuardTests.cpp
     Engine/NonFiniteOutputGuardTests.cpp
     Engine/NormallingTests.cpp
+    Engine/StereoDownMixTests.cpp
     Engine/OfflineTransportDriverTests.cpp
     Engine/BounceExporter/BounceExporterCancellationTests.cpp
     Engine/BounceExporter/BounceExporterCorrectnessTests.cpp

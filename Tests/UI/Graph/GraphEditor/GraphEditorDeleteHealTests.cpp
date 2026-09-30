@@ -37,7 +37,7 @@ public:
         setModuleName(name);
     }
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Math; }
 };
 
@@ -51,7 +51,7 @@ public:
         setModuleName(name);
     }
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Math; }
 };
 
@@ -65,7 +65,7 @@ public:
         setModuleName(name);
     }
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Math; }
     int getVisibleInputPortCount() const override { return 2; }
     LogicalPort mapInputChannel(int raw) const override {

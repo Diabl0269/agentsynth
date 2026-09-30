@@ -67,7 +67,7 @@ public:
         juce::ignoreUnused(sampleRate, samplesPerBlock);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         midiMessages.clear(); // a pure audio source: whatever the graph handed us is not ours to pass on
 
         const int numSamples = buffer.getNumSamples();

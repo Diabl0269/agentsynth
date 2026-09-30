@@ -47,7 +47,7 @@ public:
         }
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         int numSamples = buffer.getNumSamples();
 
         // Voice age is measured in samples elapsed since prepareToPlay, never in wall-clock time
