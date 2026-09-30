@@ -326,8 +326,8 @@ the time the create or delete runs; the double-click is the last word either way
 **Eight** drawn chips — not child `juce::Button`s; they are painted shapes hit-tested by position,
 `HeaderButtonId` — left to right: **"Clips"** (back), **Quantise**, **Quantise Length**, **Quantise
 Pitches**, **"Scale"**, **Show Only Scale Notes**, **"Velocity"**, **"Humanize"**. The three
-quantise verbs (position, length, pitch) are grouped together in that order. The header's right end
-holds the one real child control, the velocity value box (see **Velocity strip**).
+quantise verbs (position, length, pitch) are grouped together in that order. Right after
+"Humanize" sits the one real child control, the velocity value box (see **Velocity strip**).
 
 Each is a `juce::Rectangle<int>` member carved in `resized()` and resolved through the single seam
 `headerButtonBoundsFor(which)`, which `updateHeaderButtonHover()` and `paintHeader()`'s hover wash
@@ -406,7 +406,7 @@ that ends where it started writes nothing. The Ctrl-drag scrub on notes is uncha
 preview moves the sticks too, since they read `effectiveGeometryFor`.
 
 **Toolbar.** The **Velocity** chip shows or hides the strip and paints lit while it is shown. The
-**value box** (a `juce::TextEditor` at the header's right end, titled "Velocity of selected notes"
+**value box** (a `juce::TextEditor` right after the Humanize chip, so the three velocity controls sit together, titled "Velocity of selected notes"
 for screen readers) shows the selected notes' common velocity — blank with nothing selected, an em
 dash when they differ — kept current through `NoteSelectionModel::onChange`, which fires on every
 real selection change from any path. Typing 1..127 and pressing Return sets the selected notes, or

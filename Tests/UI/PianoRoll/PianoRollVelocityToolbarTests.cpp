@@ -168,6 +168,17 @@ TEST(PianoRollVelocityChipTest, TheNewChipsAndTheBoxNeverOverlapAnyOtherHeaderCo
     }
 }
 
+// The value box belongs to the velocity group: it sits just right of Humanize, not stranded at the
+// header's far end where nobody connects it to the strip.
+TEST(PianoRollVelocityChipTest, TheValueBoxSitsRightAfterTheHumanizeChip) {
+    VelocityLaneFixture f;
+    const auto humanize = f.roll.getHumanizeChipBounds();
+    const auto box = f.roll.getVelocityValueBox().getBounds();
+    EXPECT_GT(box.getX(), humanize.getRight());
+    EXPECT_LE(box.getX() - humanize.getRight(), 8);
+    EXPECT_EQ(box.getCentreY(), humanize.getCentreY());
+}
+
 TEST(PianoRollVelocityChipTest, HoverLightsTheVelocityChipAndItsTooltipNamesTheShortcut) {
     VelocityLaneFixture f;
     f.roll.mouseMove(hover(f.roll, centreOf(f.roll.getVelocityChipBounds())));

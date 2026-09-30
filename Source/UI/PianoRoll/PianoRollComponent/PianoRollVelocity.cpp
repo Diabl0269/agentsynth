@@ -103,15 +103,16 @@ int PianoRollComponent::velocityLaneHeightPx() const noexcept {
 }
 
 // Called from resized() right after the Scale-filter chip is carved: the Velocity toggle and the
-// Humanize action continue the chip row (4 px group gap, 2 px within), the value box takes the
-// header's right end, and the strip is carved from the canvas band's BOTTOM before the scale panel,
-// keys column and grid are laid out from what is left — so all three stop above it.
+// Humanize action continue the chip row (4 px group gap, 2 px within), the value box follows them
+// so the three velocity controls read as one group, and the strip is carved from the canvas band's BOTTOM before the
+// scale panel, keys column and grid are laid out from what is left — so all three stop above it.
 void PianoRollComponent::layoutVelocityControls(juce::Rectangle<int>& header, juce::Rectangle<int>& canvas) {
     header.removeFromLeft(4);
     velocityChipBounds_ = header.removeFromLeft(kVelocityChipWidth).reduced(2, 2);
     header.removeFromLeft(2);
     humanizeChipBounds_ = header.removeFromLeft(kHumanizeChipWidth).reduced(2, 2);
-    velocityBox_.setBounds(header.removeFromRight(kValueBoxWidth).reduced(2, 2));
+    header.removeFromLeft(2);
+    velocityBox_.setBounds(header.removeFromLeft(kValueBoxWidth).reduced(2, 2));
 
     velocityLane_->setBounds(canvas.removeFromBottom(velocityLaneHeightPx()));
     velocityLane_->setVisible(velocityLaneVisible_);
