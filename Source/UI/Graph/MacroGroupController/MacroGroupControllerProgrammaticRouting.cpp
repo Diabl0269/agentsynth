@@ -204,9 +204,17 @@ void MacroGroupController::sweepOneSidedMacroPorts(std::vector<NodeID> candidate
             continue;
         const auto macroId = macro->id;
         spliceOutMacroPort(*macro, uuid);
-        if (auto* left = host_.getMacros().find(macroId);
-            left != nullptr && left->members.empty() && host_.getMacros().childrenOf(macroId).empty())
-            host_.getMacros().remove(macroId); // MacroSet's own cascade rule: no direct members AND no children
+        // MacroSet's cascade rule: a macro with no direct members AND no children dissolves, and a parent
+        // emptied by losing its last child dissolves with it.
+        auto& macros = host_.getMacros();
+        for (juce::String id = macroId; id.isNotEmpty();) {
+            const auto* left = macros.find(id);
+            if (left == nullptr || !left->members.empty() || !macros.childrenOf(id).empty())
+                break;
+            const juce::String parentId = left->parentId;
+            macros.remove(id);
+            id = parentId;
+        }
         candidates.insert(candidates.end(), neighbours.begin(), neighbours.end());
     }
 }

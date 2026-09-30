@@ -645,3 +645,80 @@ TEST(MacroAutoPortDelete, DeletingTheFarModuleThroughAnAttenuverterIsOneUndoStep
     EXPECT_TRUE(hasConnection(engine, restoredPortId, 0, attenId, 0));
     EXPECT_TRUE(hasConnection(engine, attenId, 0, filter, 0));
 }
+
+// ============================================================================
+// sweepOneSidedMacroPorts (reached through applyProgrammaticConnectionChange): a macro dissolves only when
+// it has no direct members AND no children, and dissolving cascades to a parent left empty.
+// ============================================================================
+
+namespace {
+// Macro {a, b} with one input port wired from an external module; returns the port's uuid.
+struct SweepSetup {
+    NodeID a, b, ext;
+    juce::String macroId, portUuid;
+};
+
+SweepSetup makeMacroWithWiredPort(AudioEngine& engine, GraphEditor& editor) {
+    SweepSetup s;
+    s.a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    s.b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    s.ext = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext", 100, 100);
+    editor.setSelectedNodes({s.a, s.b});
+    s.macroId = editor.getMacroController().groupSelectionIntoMacro();
+    s.portUuid = editor.getMacroController().addMacroPort(s.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
+                                                          MacroPortShape::Mono, 1, "In");
+    return s;
+}
+
+// The graph mutation a sweep test hands to applyProgrammaticConnectionChange: drop ext -> port.
+bool dropExternalCable(AudioEngine& engine, const SweepSetup& s) {
+    return engine.getGraph().removeConnection({{s.ext, 0}, {nodeIdForUuid(engine, s.portUuid), 0}});
+}
+} // namespace
+
+TEST(MacroAutoPortDelete, SweepOfAOneSidedPortKeepsAFlatMacroThatStillHasMembers) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    const auto s = makeMacroWithWiredPort(engine, editor);
+    ASSERT_FALSE(s.portUuid.isEmpty());
+    const auto portId = nodeIdForUuid(engine, s.portUuid);
+    engine.getGraph().addConnection({{s.ext, 0}, {portId, 0}});
+
+    editor.getMacroController().applyProgrammaticConnectionChange(false, [&] { return dropExternalCable(engine, s); });
+
+    EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr) << "the one-sided port is swept";
+    const auto* macro = editor.getMacros().find(s.macroId);
+    ASSERT_NE(macro, nullptr) << "the flat macro keeps its ordinary members";
+    EXPECT_EQ(macro->members.size(), 2u);
+}
+
+TEST(MacroAutoPortDelete, SweepDissolvesAChildLeftEmptyAndThenItsParentLeftWithNothing) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    const auto s = makeMacroWithWiredPort(engine, editor);
+    ASSERT_FALSE(s.portUuid.isEmpty());
+    const auto portId = nodeIdForUuid(engine, s.portUuid);
+    engine.getGraph().addConnection({{s.ext, 0}, {portId, 0}});
+
+    // Leave the child with only its port as a direct member, inside a parent that has no members of its own.
+    auto& macros = editor.getMacros();
+    auto* child = macros.find(s.macroId);
+    child->members = {s.portUuid};
+    synth::Macro parent;
+    parent.name = "Parent";
+    const auto parentId = macros.add(parent);
+    ASSERT_TRUE(macros.setParent(s.macroId, parentId));
+    const auto nodesBefore = engine.getGraph().getNumNodes();
+
+    editor.getMacroController().applyProgrammaticConnectionChange(false, [&] { return dropExternalCable(engine, s); });
+
+    EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr) << "the one-sided port is swept";
+    EXPECT_EQ(macros.find(s.macroId), nullptr) << "the child had no members and no children left";
+    EXPECT_EQ(macros.find(parentId), nullptr) << "and the parent, with no members and no children, goes too";
+    EXPECT_TRUE(macros.empty());
+    EXPECT_EQ(engine.getGraph().getNumNodes(), nodesBefore - 1) << "only the port node was removed";
+    EXPECT_NE(engine.getGraph().getNodeForId(s.a), nullptr);
+    EXPECT_NE(engine.getGraph().getNodeForId(s.ext), nullptr);
+}
