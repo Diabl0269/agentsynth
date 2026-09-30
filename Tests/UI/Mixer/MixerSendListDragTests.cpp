@@ -6,6 +6,10 @@
 //
 //   * a real drag past the threshold reorders the rows, as ONE undo step, and undo restores the
 //     cables and the row order together
+//   * during the drag nothing is committed: the held row follows the pointer, the other row glides
+//     into the vacated slot (headless, so the animator lands every glide at once); Esc puts both
+//     back and commits nothing
+//   * the target-name area shows the grab cursor, the buttons and knobs do not
 //   * a press that never crosses the threshold is a plain click: it still opens the target menu
 //     (setShowMenuHookForTest, the same "PopupMenu never runs headless" seam
 //     MixerColumnComponent::setShowContextMenuHookForTest already uses elsewhere) rather than
@@ -16,6 +20,7 @@
 #include "MainComponent/MainComponent.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/ChannelStripModule.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include <gtest/gtest.h>
 
@@ -169,4 +174,138 @@ TEST(MixerSendListDragTests, AClickWithoutMovementStillOpensTheTargetMenuAndReor
     EXPECT_EQ(rig.mc->getUndoManager().getEditSerial(), editSerialBefore) << "no reorder, no undo step";
     EXPECT_EQ(synth::findSendTarget(rig.graph(), sourceId, 0), rig.busA) << "nothing moved";
     EXPECT_EQ(synth::findSendTarget(rig.graph(), sourceId, 1), rig.busB);
+}
+
+namespace {
+constexpr float kNameX = 5.0f; // well left of the M button / knobs / PRE-POST / x
+
+// A synthesized drag on row 0's name area, in the send list's own coordinates.
+struct RowDrag {
+    synth::ui::MixerSendList& list;
+    juce::Point<float> down;
+
+    explicit RowDrag(synth::ui::MixerSendList& l)
+        : list(l)
+        , down(kNameX, (float)l.getKnobForTest(0)->getBounds().getCentreY()) {}
+
+    void press() { list.mouseDown(sendListMouseEvent(list, down, down, false)); }
+    void dragBy(float dy) { list.mouseDrag(sendListMouseEvent(list, down.translated(0.0f, dy), down, true)); }
+    void release(float dy) { list.mouseUp(sendListMouseEvent(list, down.translated(0.0f, dy), down, dy != 0.0f)); }
+};
+} // namespace
+
+TEST(MixerSendListDragTests, TheReorderIsCommittedOnceOnReleaseAndNotWhileHeld) {
+    DragRig rig;
+    auto* column = rig.sourceColumn();
+    ASSERT_NE(column, nullptr);
+    const auto sourceId = column->getNodeId();
+    auto& sendList = column->getSendListForTest();
+    int commits = 0;
+    const auto original = sendList.moveSendRow;
+    sendList.moveSendRow = [&](NodeID strip, int from, int to) {
+        ++commits;
+        return original(strip, from, to);
+    };
+
+    RowDrag drag(sendList);
+    drag.press();
+    drag.dragBy(12.0f);
+    drag.dragBy(25.0f);
+    EXPECT_EQ(commits, 0) << "nothing is committed while the row is held";
+    EXPECT_EQ(synth::findSendTarget(rig.graph(), sourceId, 0), rig.busA);
+    EXPECT_EQ(synth::findSendTarget(rig.graph(), sourceId, 1), rig.busB);
+    drag.release(25.0f);
+
+    EXPECT_EQ(commits, 1);
+}
+
+TEST(MixerSendListDragTests, TheHeldRowFollowsThePointerAndTheOtherRowGlidesIntoItsSlot) {
+    DragRig rig;
+    auto& sendList = rig.sourceColumn()->getSendListForTest();
+    ASSERT_EQ(sendList.getRowTopForTest(0), 0);
+    ASSERT_EQ(sendList.getRowTopForTest(1), 20);
+
+    RowDrag drag(sendList);
+    drag.press();
+    drag.dragBy(12.0f);
+    EXPECT_TRUE(sendList.isRowDragActiveForTest());
+    EXPECT_EQ(sendList.getRowTopForTest(0), 12) << "the lifted row sits where the pointer holds it";
+    EXPECT_EQ(sendList.getRowTopForTest(1), 20) << "not yet past the neighbour's midpoint";
+
+    drag.dragBy(25.0f);
+    EXPECT_EQ(sendList.getRowTopForTest(0), 20) << "held at the end of the list";
+    EXPECT_EQ(sendList.getRowTopForTest(1), 0) << "the other row moved up into the vacated slot";
+    drag.release(25.0f);
+}
+
+TEST(MixerSendListDragTests, EscapeMidDragCommitsNothingAndPutsBothRowsBack) {
+    DragRig rig;
+    auto* column = rig.sourceColumn();
+    const auto sourceId = column->getNodeId();
+    auto& sendList = column->getSendListForTest();
+    int commits = 0;
+    const auto original = sendList.moveSendRow;
+    sendList.moveSendRow = [&](NodeID strip, int from, int to) {
+        ++commits;
+        return original(strip, from, to);
+    };
+    const int serialBefore = rig.mc->getUndoManager().getEditSerial();
+
+    RowDrag drag(sendList);
+    drag.press();
+    drag.dragBy(25.0f);
+    ASSERT_TRUE(sendList.isRowDragActiveForTest());
+    EXPECT_TRUE(sendList.sendEscapeToRowDragForTest());
+    drag.release(25.0f);
+
+    EXPECT_EQ(commits, 0);
+    EXPECT_EQ(rig.mc->getUndoManager().getEditSerial(), serialBefore) << "no undo step";
+    EXPECT_FALSE(sendList.isRowDragActiveForTest());
+    EXPECT_EQ(sendList.getRowTopForTest(0), 0);
+    EXPECT_EQ(sendList.getRowTopForTest(1), 20);
+    EXPECT_EQ(synth::findSendTarget(rig.graph(), sourceId, 0), rig.busA);
+    EXPECT_EQ(synth::findSendTarget(rig.graph(), sourceId, 1), rig.busB);
+}
+
+TEST(MixerSendListDragTests, TheDropSettleIsHandedToTheRebuiltListOfTheSameStrip) {
+    DragRig rig;
+    auto& oldList = rig.sourceColumn()->getSendListForTest();
+    EXPECT_EQ(oldList.getLastSettleForTest().row, -1);
+
+    RowDrag drag(oldList);
+    drag.press();
+    drag.dragBy(25.0f); // held at the end of the list: y 20
+    drag.release(25.0f);
+
+    // The commit rebuilt the mixer, so this is a NEW list (the old one is gone).
+    EXPECT_FALSE(rig.panel().hasPendingSendSettleForTest()) << "consumed and cleared by the rebuild";
+    const auto settle = rig.sourceColumn()->getSendListForTest().getLastSettleForTest();
+    EXPECT_EQ(settle.row, 1) << "the dropped row's final index";
+    EXPECT_FLOAT_EQ(settle.fromY, 20.0f) << "where it was drawn when released";
+    EXPECT_FALSE(rig.sourceColumn()->getSendListForTest().isSettlingForTest()) << "headless lands at once";
+}
+
+TEST(MixerSendListDragTests, ARefusedOrUnmovedDropLeavesNoPendingSettle) {
+    DragRig rig;
+    auto& list = rig.sourceColumn()->getSendListForTest();
+    RowDrag drag(list);
+    drag.press();
+    drag.dragBy(6.0f); // lifted, but not past the neighbour: released where it started
+    drag.release(6.0f);
+    EXPECT_FALSE(rig.panel().hasPendingSendSettleForTest());
+    EXPECT_EQ(rig.sourceColumn()->getSendListForTest().getLastSettleForTest().row, -1);
+}
+
+TEST(MixerSendListDragTests, TheTargetNameAreaShowsTheGrabCursorAndTheButtonsDoNot) {
+    DragRig rig;
+    auto& sendList = rig.sourceColumn()->getSendListForTest();
+    const float y = (float)sendList.getKnobForTest(0)->getBounds().getCentreY();
+
+    const juce::Point<float> onName(kNameX, y);
+    sendList.mouseMove(sendListMouseEvent(sendList, onName, onName, false));
+    EXPECT_TRUE(sendList.getMouseCursor() == synth::ui::dragGrabCursor());
+
+    const juce::Point<float> onRemove((float)sendList.getWidth() - 4.0f, y);
+    sendList.mouseMove(sendListMouseEvent(sendList, onRemove, onRemove, false));
+    EXPECT_FALSE(sendList.getMouseCursor() == synth::ui::dragGrabCursor());
 }

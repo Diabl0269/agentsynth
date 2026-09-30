@@ -290,13 +290,21 @@ every other row mutation uses.
 
 **FRO296: drag a row by its target-name area to reorder it.** The name area is the same region a
 plain click already used to open the target menu, so `MixerSendList` defers the click-vs-drag
-decision to a small pixel threshold (`kRowDragThreshold`, the same value/reasoning
+decision to the reorder animator's 4 px threshold (the same value
 `TimelineTrackHeaderComponent`'s own row-reorder drag uses) — a press that never crosses it is a
-plain click and still opens the menu; one that does becomes a drag. While dragging, a thin insertion
-line (the theme's accent colour, no new colour) is painted at the hovered drop boundary. Releasing
-calls `MixerPanelComponent::moveSendRow` — the one place graph, `TimelineDoc` and macros are all
+plain click and still opens the menu; one that does becomes a drag. The drag is the shared
+[reorder drag](../layout/animation.md#reorder-drag) (`ReorderDragSession`): the row under the pointer is
+lifted (raised wash, 1 px accent border) and follows it, the other row glides aside (160 ms), Esc
+glides everything back with nothing committed, and the name area shows the grab cursor on hover and
+during the drag. Nothing is committed while the row is held. Releasing calls `MixerPanelComponent::moveSendRow` — the one place graph, `TimelineDoc` and macros are all
 reachable together — which does the real swap and lane rebind (see "Slots are sparse" above) as ONE
-undo step. The knobs, M button, PRE/POST and `x` all keep working exactly as before: only a press that
+undo step. The commit rebuilds the mixer and destroys this list, so the drop's settle is handed over:
+just before committing, the list reports `{final row, y it was drawn at}` (`onSettlePending`) up through
+`MixerColumnComponent` to `MixerPanelComponent`, which keeps it with the strip's node id (like
+`columnReorder_` does for columns); at the end of `rebuild()` it calls `startSettleFrom()` on the new
+column of that strip, and the dropped row glides from the drop y into its slot (140 ms `easeOutCubic`,
+`ReorderDragSession::settleInto`; its neighbours already sit in their final places). The pending settle
+is cleared whether or not a column is found, and by a refused move. Not showing, it lands at once. The knobs, M button, PRE/POST and `x` all keep working exactly as before: only a press that
 lands on the name area itself, past the menu-vs-drag threshold, is claimed by the drag.
 
 **FRO292: an active send's level can carry its own automation lane.** Right-click the send knob

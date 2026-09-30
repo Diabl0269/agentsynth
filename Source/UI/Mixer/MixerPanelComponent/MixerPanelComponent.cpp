@@ -1,6 +1,7 @@
 // Concern: MixerPanelComponent's rebuild-from-snapshot and click-to-select-macro
 // routing (shared by every column kind's onColumnClicked/onEditOnCanvas/onMakeChannelRequested).
 #include "MixerPanelComponent.h"
+#include <utility>
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -285,6 +286,10 @@ void MixerPanelComponent::rebuild() {
             return moveSendRow(stripNodeId, fromRow, toRow);
         });
 
+        widget->setSendSettlePendingHandler([this, stripId = column.nodeId](int finalRow, float fromY) {
+            pendingSendSettle_ = {stripId, finalRow, fromY};
+        });
+
         widget->onColumnClicked = [this, uuid = column.uuid] { selectOnCanvas(uuid); };
         widget->onEditOnCanvas = [this](const juce::String& target) { selectOnCanvas(target); };
         widget->onMutated = [this] {
@@ -376,6 +381,14 @@ void MixerPanelComponent::rebuild() {
     syncFocusVisuals();
 
     resized();
+
+    // A dropped send row glides into its slot on the new column of the same strip; the pending
+    // settle is cleared whether or not that column exists.
+    const auto settle = std::exchange(pendingSendSettle_, PendingSendSettle{});
+    if (settle.row >= 0)
+        for (auto& column : stripColumns_)
+            if (column != nullptr && column->getNodeId() == settle.strip)
+                column->startSendSettle(settle.row, settle.fromY);
 }
 
 juce::AudioProcessorGraph::NodeID MixerPanelComponent::createBus() {
@@ -460,6 +473,8 @@ bool MixerPanelComponent::moveSendRow(juce::AudioProcessorGraph::NodeID stripNod
     // postRestore only fires from perform()/undo() on the UNDO STACK, never for the initial edit itself.
     if (changed && midiRemoteDoc_ != nullptr && onPublishMidiRemoteAssignments)
         onPublishMidiRemoteAssignments();
+    if (!changed)
+        pendingSendSettle_ = {}; // a refused move rebuilds nothing, so nothing is left to settle
     return changed;
 }
 

@@ -5,6 +5,8 @@
 // loop involved at all. GraphEditor-side wiring (promptConfigureMacroIO) and the port-mutation
 // API these callbacks are meant to reach are covered separately in Tests/MacroPortFlowTests.cpp.
 
+#include "../UI/Timeline/TimelinePanel/TimelinePanelTestEvents.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <gtest/gtest.h>
@@ -356,6 +358,152 @@ TEST(MacroPortConfigDialogTest, DraggingAnInputRowNeverFiresForTheOutputRowAndVi
 
     ASSERT_EQ(capturedUuids.size(), 1u);
     EXPECT_EQ(capturedUuids[0], "uuid-in") << "dragging the input row must never report the output row's uuid";
+}
+
+// ---- The real mouse path: lift, glide aside, one commit on release, Esc cancels -----------------
+// Headless, so the dialog is not showing and the animator lands every glide instantly: a row's bounds
+// are exactly where the animator says they are.
+
+namespace {
+std::vector<Row> threeInputsOneOutput() {
+    std::vector<Row> rows;
+    for (const char* name : {"A", "B", "C"}) {
+        Row in;
+        in.nodeUuid = juce::String("uuid-") + name;
+        in.isInput = true;
+        in.name = name;
+        rows.push_back(in);
+    }
+    Row out;
+    out.nodeUuid = "uuid-out";
+    out.isInput = false;
+    out.name = "Out";
+    rows.push_back(out);
+    return rows;
+}
+
+// Hand-built events on a row's grab handle. The list position is turned into handle-local coordinates
+// at every event, because the handle moves with its row while the row is dragged.
+struct HandleDrag {
+    MacroPortConfigDialog& dialog;
+    int row;
+    float pressY;
+
+    juce::Component& handle() const { return *dialog.getRowDragHandleForTest(row); }
+    juce::Point<float> local(float listY) const {
+        auto& content = dialog.getRowsContentForTest();
+        const float x = content.getLocalPoint(&handle(), handle().getLocalBounds().toFloat().getCentre()).x;
+        return handle().getLocalPoint(&content, juce::Point<float>(x, listY));
+    }
+    void down() { handle().mouseDown(makeClickEvent(handle(), local(pressY))); }
+    void dragBy(float dy) { handle().mouseDrag(makeDragEvent(handle(), local(pressY + dy), local(pressY))); }
+    void up(float dy) { handle().mouseUp(makeClickEvent(handle(), local(pressY + dy))); }
+};
+
+HandleDrag handleDragOf(MacroPortConfigDialog& dialog, int row) {
+    return {dialog, row, (float)dialog.getRowBoundsForTest(row).getCentreY()};
+}
+
+constexpr float kRowStride = 36.0f; // row height 32 + gap 4
+} // namespace
+
+TEST(MacroPortConfigDialogTest, DraggingAcrossTwoRowsCommitsOnceOnReleaseWithTheFinalIndex) {
+    MacroPortConfigDialog dialog("My Macro", threeInputsOneOutput());
+    std::vector<std::pair<juce::String, int>> commits;
+    dialog.onReorderPortTo = [&](const juce::String& uuid, int index) { commits.emplace_back(uuid, index); };
+
+    auto drag = handleDragOf(dialog, 0);
+    drag.down();
+    drag.dragBy(kRowStride);
+    drag.dragBy(2.0f * kRowStride + 4.0f);
+    EXPECT_TRUE(commits.empty()) << "nothing is committed while the row is still held";
+    drag.up(2.0f * kRowStride + 4.0f);
+
+    ASSERT_EQ(commits.size(), 1u);
+    EXPECT_EQ(commits[0].first, "uuid-A");
+    EXPECT_EQ(commits[0].second, 2) << "same final index the old line-and-release drag produced";
+}
+
+TEST(MacroPortConfigDialogTest, TheDraggedRowFollowsThePointerWhileItsNeighboursGlideAside) {
+    MacroPortConfigDialog dialog("My Macro", threeInputsOneOutput());
+    int commits = 0;
+    dialog.onReorderPortTo = [&](const juce::String&, int) { ++commits; };
+    const auto a = dialog.getRowBoundsForTest(0);
+    const auto c = dialog.getRowBoundsForTest(2);
+
+    auto drag = handleDragOf(dialog, 0);
+    drag.down();
+    drag.dragBy(40.0f); // past B's midpoint, short of C's
+
+    EXPECT_EQ(commits, 0);
+    EXPECT_TRUE(dialog.isRowDragActiveForTest());
+    EXPECT_EQ(dialog.getRowBoundsForTest(0).getY(), a.getY() + 40) << "the lifted row sits under the pointer";
+    EXPECT_EQ(dialog.getRowBoundsForTest(1).getY(), a.getY()) << "B moved up into the vacated slot";
+    EXPECT_EQ(dialog.getRowBoundsForTest(2).getY(), c.getY()) << "C stays put";
+
+    drag.dragBy(2.0f * kRowStride + 4.0f);
+    EXPECT_EQ(dialog.getRowBoundsForTest(0).getY(), c.getY()) << "held inside the group, at its last slot";
+    EXPECT_EQ(dialog.getRowBoundsForTest(2).getY(), dialog.getRowBoundsForTest(1).getY() + (int)kRowStride)
+        << "C moved up one slot";
+
+    drag.up(2.0f * kRowStride + 4.0f);
+    EXPECT_EQ(commits, 1);
+}
+
+TEST(MacroPortConfigDialogTest, ADraggedInputNeverLeavesItsOwnGroup) {
+    MacroPortConfigDialog dialog("My Macro", threeInputsOneOutput());
+    int capturedIndex = -1;
+    dialog.onReorderPortTo = [&](const juce::String&, int index) { capturedIndex = index; };
+    const int outputY = dialog.getRowBoundsForTest(3).getY();
+
+    auto drag = handleDragOf(dialog, 0);
+    drag.down();
+    drag.dragBy(500.0f); // far below the output row
+    EXPECT_LT(dialog.getRowBoundsForTest(0).getY(), outputY) << "the lifted input stops at the end of the inputs";
+    drag.up(500.0f);
+
+    EXPECT_EQ(capturedIndex, 2) << "the index is the last slot of the input group";
+}
+
+TEST(MacroPortConfigDialogTest, EscapeMidDragCommitsNothingAndPutsEveryRowBack) {
+    MacroPortConfigDialog dialog("My Macro", threeInputsOneOutput());
+    int commits = 0;
+    dialog.onReorderPortTo = [&](const juce::String&, int) { ++commits; };
+    std::vector<int> before;
+    for (int i = 0; i < 4; ++i)
+        before.push_back(dialog.getRowBoundsForTest(i).getY());
+
+    auto drag = handleDragOf(dialog, 0);
+    drag.down();
+    drag.dragBy(2.0f * kRowStride + 4.0f);
+    ASSERT_TRUE(dialog.isRowDragActiveForTest());
+    EXPECT_TRUE(dialog.sendEscapeToRowDragForTest());
+    drag.up(2.0f * kRowStride + 4.0f);
+
+    EXPECT_EQ(commits, 0);
+    EXPECT_FALSE(dialog.isRowDragActiveForTest());
+    for (int i = 0; i < 4; ++i)
+        EXPECT_EQ(dialog.getRowBoundsForTest(i).getY(), before[(size_t)i]) << "row " << i;
+}
+
+TEST(MacroPortConfigDialogTest, EscapeMidDragCancelsTheDragInsteadOfClosingTheDialog) {
+    MacroPortConfigDialog dialog("My Macro", threeInputsOneOutput());
+    bool closed = false;
+    dialog.onRequestClose = [&] { closed = true; };
+    auto drag = handleDragOf(dialog, 0);
+    drag.down();
+    drag.dragBy(2.0f * kRowStride);
+
+    dialog.simulateEscapeKeyForTest();
+    EXPECT_FALSE(closed);
+    dialog.simulateEscapeKeyForTest();
+    EXPECT_TRUE(closed) << "with no drag live, Escape closes the dialog as before";
+}
+
+TEST(MacroPortConfigDialogTest, TheGrabHandleShowsTheGrabCursor) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+    ASSERT_NE(dialog.getRowDragHandleForTest(0), nullptr);
+    EXPECT_TRUE(dialog.getRowDragHandleForTest(0)->getMouseCursor() == synth::ui::dragGrabCursor());
 }
 
 // ============================================================================

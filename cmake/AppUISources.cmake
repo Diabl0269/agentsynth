@@ -153,6 +153,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/ReorderDrag/ReorderDragAnimator.cpp
     Source/UI/Layout/ReorderDrag/ReorderCancelKey.h
     Source/UI/Layout/ReorderDrag/ReorderFramePump.h
+    Source/UI/Layout/ReorderDrag/ReorderDragSession.h
+    Source/UI/Layout/ReorderDrag/ReorderLiftLook.h
     Source/UI/Layout/DragCursor.h
     Source/UI/Layout/PanelResizeHandle.h
     Source/UI/Layout/PanelResizeHandle.cpp
@@ -264,6 +266,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/HostedParameterAttachment.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.cpp
+    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentDrag.cpp
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentRows.cpp
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentScope.cpp
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentTestSeams.cpp

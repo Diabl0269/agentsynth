@@ -43,12 +43,19 @@ void PluginKnobPickerComponent::commitRowLabelForTest(int row) {
         rows_[row]->commitLabelForTest();
 }
 
-// Calls commitReorder directly with the given target index -- what a real drag's onDragUpdated does
-// once it has computed a target row, without needing to synthesize a mouseDown/mouseDrag/mouseUp
-// sequence on a row with no real on-screen peer (MacroPortConfigDialog::dragRowToIndexInGroupForTest
-// is the precedent this mirrors exactly).
+// Calls commitReorder directly with the given target index -- what a real drag's release does once
+// it has worked out the target, without synthesizing a mouseDown/mouseDrag/mouseUp sequence
+// (MacroPortConfigDialog::dragRowToIndexInGroupForTest is the precedent this mirrors exactly).
 void PluginKnobPickerComponent::dragCheckedRowToIndexForTest(const juce::String& paramId, int newIndexAmongChecked) {
     commitReorder(paramId, newIndexAmongChecked);
+}
+
+juce::Component* PluginKnobPickerComponent::getRowDragHandleForTest(int row) {
+    return row >= 0 && row < rows_.size() ? &rows_[row]->getDragHandleForTest() : nullptr;
+}
+
+juce::Rectangle<int> PluginKnobPickerComponent::getRowBoundsForTest(int row) const {
+    return row >= 0 && row < rows_.size() ? rows_[row]->getBounds() : juce::Rectangle<int>();
 }
 
 void PluginKnobPickerComponent::setApplyToAllInstancesForTest(bool allInstances) {

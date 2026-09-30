@@ -3,6 +3,7 @@
 #include "MixerZonesRow.h"
 
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
 
 namespace synth::ui {
 
@@ -124,10 +125,7 @@ void MixerZonesRow::paint(juce::Graphics& g) {
 
     auto bounds = getLocalBounds();
     if (lift_ > 0.0f) {
-        g.setColour(surface);
-        g.fillRoundedRectangle(bounds.toFloat().reduced(1.0f), 3.0f);
-        g.setColour(accent.withMultipliedAlpha(lift_));
-        g.drawRoundedRectangle(bounds.toFloat().reduced(1.0f), 3.0f, 1.0f);
+        paintReorderLift(g, bounds.toFloat(), lift_, surface, accent);
     } else if (isMouseOver(true)) {
         g.setColour(surface.withAlpha(0.6f));
         g.fillRoundedRectangle(bounds.toFloat().reduced(1.0f), 3.0f);

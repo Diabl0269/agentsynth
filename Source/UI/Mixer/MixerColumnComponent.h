@@ -154,6 +154,13 @@ public:
         sendList_.moveSendRow = std::move(provider);
     }
 
+    /** Forwarded to the send list's drop hand-off -- see MixerSendList::onSettlePending. */
+    void setSendSettlePendingHandler(std::function<void(int finalRow, float fromY)> handler) {
+        sendList_.onSettlePending = std::move(handler);
+    }
+    /** Starts the dropped send row's settle on this (rebuilt) column -- see MixerSendList::startSettleFrom. */
+    void startSendSettle(int finalRow, float fromY) { sendList_.startSettleFrom(finalRow, fromY); }
+
     /** Test seam: the send rows this column is showing. */
     MixerSendList& getSendListForTest() noexcept { return sendList_; }
     MixerSectionViewport& getSectionViewportForTest(MixerSection section) noexcept;

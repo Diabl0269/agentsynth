@@ -139,6 +139,15 @@ public:
     // Drag-reorders a send row, one undo step (see docs/mixer/sends-and-buses.md#reordering-sends).
     bool moveSendRow(juce::AudioProcessorGraph::NodeID stripNodeId, int fromRow, int toRow);
 
+    // A dropped send row's settle, kept across the rebuild its commit causes (the send list is
+    // destroyed with its column): rebuild() hands it to the new column of the same strip, then clears it.
+    struct PendingSendSettle {
+        juce::AudioProcessorGraph::NodeID strip;
+        int row = -1;
+        float fromY = 0.0f;
+    };
+    PendingSendSettle pendingSendSettle_;
+
     // Nullable MidiRemoteProjectDoc moveSendRow swaps a moved send's mappings on; unset == does less.
     void setMidiRemoteDoc(synth::MidiRemoteProjectDoc* doc) noexcept { midiRemoteDoc_ = doc; }
 
@@ -212,6 +221,8 @@ public:
     MixerDirectColumn* getDirectColumnForTest() const { return directColumn_.get(); }
     MixerMasterColumn* getMasterColumnForTest() const { return masterColumn_.get(); }
     /** True from the first drag step of a column reorder until its drop has finished settling. */
+    /** A dropped send row's settle is waiting for the rebuild that will consume it. */
+    bool hasPendingSendSettleForTest() const noexcept { return pendingSendSettle_.row >= 0; }
     bool isColumnReorderActiveForTest() const noexcept { return columnReorder_.isReordering(); }
     /** The Esc key press a real column drag would receive from the window. */
     bool sendEscapeToColumnDragForTest() {

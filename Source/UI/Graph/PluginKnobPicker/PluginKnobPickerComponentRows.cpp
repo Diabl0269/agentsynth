@@ -1,6 +1,6 @@
 // PluginKnobPickerComponentRows.cpp -- the row list itself: search filtering, tick/untick, label
-// edits, drag-reorder (scoped to the checked group, same as MacroPortConfigDialog's own direction-
-// scoped reorder), touch-to-add's model-side half, and the one function every mutation ends in,
+// edits, the reorder commit (the drag itself is PluginKnobPickerComponentDrag.cpp), touch-to-add's
+// model-side half, and the one function every mutation ends in,
 // applyCurrentLayout(). See docs/control/plugin-card-layout.md#choosing-knobs.
 #include "PluginKnobPickerComponent.h"
 #include "PluginKnobPickerRow.h"
@@ -16,6 +16,8 @@ namespace synth::ui {
 // doc's mock. A checked row whose parameter has since gone missing has no row at all here (it lives
 // in missingSlots_ and only ever shows up in the missing-count line).
 void PluginKnobPickerComponent::rebuildRows() {
+    if (rowDrag_.animator().isPressed() || rowDrag_.animator().isDragging())
+        rowDrag_.discard(); // a lifted row cannot outlive its component; a settle in flight carries on
     rows_.clear();
     const auto search = searchEditor_.getText().trim().toLowerCase();
     const auto matches = [&](const juce::String& name) {
@@ -51,25 +53,9 @@ void PluginKnobPickerComponent::addRow(const ParamInfo& info, bool checked, cons
     row->onToggled = [this, paramId](bool nowChecked) { setParamChecked(paramId, nowChecked); };
     row->onLabelCommitted = [this, paramId](const juce::String& text) { setParamLabel(paramId, text); };
 
-    row->onDragStarted = [this, paramId] {
-        draggingParamId_ = paramId;
-        auto it = std::find_if(workingSlots_.begin(), workingSlots_.end(),
-                               [&](const CardSlot& s) { return s.paramId == paramId; });
-        dragStartIndexAmongChecked_ = it == workingSlots_.end() ? -1 : static_cast<int>(it - workingSlots_.begin());
-    };
-    row->onDragUpdated = [this](int deltaY) {
-        if (draggingParamId_.isEmpty() || dragStartIndexAmongChecked_ < 0)
-            return;
-        const int slots = deltaY / PluginKnobPickerRow::kRowHeight;
-        const int target =
-            juce::jlimit(0, static_cast<int>(workingSlots_.size()) - 1, dragStartIndexAmongChecked_ + slots);
-        if (target != dragStartIndexAmongChecked_)
-            commitReorder(draggingParamId_, target);
-    };
-    row->onDragEnded = [this] {
-        draggingParamId_.clear();
-        dragStartIndexAmongChecked_ = -1;
-    };
+    row->onDragStarted = [this, paramId](const juce::MouseEvent& e) { beginRowDrag(paramId, e); };
+    row->onDragUpdated = [this](const juce::MouseEvent& e) { updateRowDrag(e); };
+    row->onDragEnded = [this] { endRowDrag(); };
 }
 
 // ---- Mutations: every one re-applies to the current scope and, when the checked set or its order
@@ -118,7 +104,6 @@ void PluginKnobPickerComponent::commitReorder(const juce::String& paramId, int n
     workingSlots_.erase(it);
     newIndexAmongChecked = juce::jlimit(0, static_cast<int>(workingSlots_.size()), newIndexAmongChecked);
     workingSlots_.insert(workingSlots_.begin() + newIndexAmongChecked, moved);
-    dragStartIndexAmongChecked_ = newIndexAmongChecked;
     applyCurrentLayout();
     rebuildRows();
 }

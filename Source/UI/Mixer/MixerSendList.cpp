@@ -9,6 +9,8 @@
 #include "MixerPanAccessibilityText.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/DragCursor.h"
+#include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -41,6 +43,8 @@ void MixerSendList::configure(juce::AudioProcessorGraph& graph, AppUndoManager& 
 }
 
 void MixerSendList::setEntries(const std::vector<synth::MixerSendEntry>& entries, NodeID stripNodeId) {
+    pressedRow_ = -1;
+    rowDrag_.discard(); // a lifted row cannot outlive the rows it was lifted from
     entries_ = entries;
     stripNodeId_ = stripNodeId;
     rebuildKnobs();
@@ -196,71 +200,75 @@ juce::String MixerSendList::targetNameFor(const synth::SendTarget& target) const
     return graph_ != nullptr ? synth::sendTargetName(*graph_, macros_, target) : juce::String("No target");
 }
 
-void MixerSendList::paint(juce::Graphics& g) {
+float MixerSendList::rowTop(int rowIndex) const {
+    if (rowDrag_.isReordering() && rowIndex >= 0 && rowIndex < (int)entries_.size()) {
+        const auto& animator = rowDrag_.animator();
+        return rowIndex == animator.getDraggedKey() ? animator.getDraggedStart() : animator.getLayoutStart(rowIndex);
+    }
+    return (float)(rowIndex * kRowHeight);
+}
+
+// The painted parts of a row (name, PRE/POST, x, the mono dot) are drawn at rowTop() here; the
+// real child controls are moved to the same place by placeRows(). A lifted row is drawn last, so it
+// sits over the rows gliding past it.
+void MixerSendList::paintRow(juce::Graphics& g, int rowIndex, float lift) {
     const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const auto text = laf != nullptr ? laf->getTheme().colors.textPrimary : juce::Colour(0xffEAEEF3);
     const auto muted = laf != nullptr ? laf->getTheme().colors.textMuted : juce::Colour(0xff8A93A0);
     const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const auto surface = laf != nullptr ? laf->getTheme().colors.surfaceHi : juce::Colour(0xff232833);
+
+    const auto& entry = entries_[(size_t)rowIndex];
+    auto row = getLocalBounds().withY((int)std::lround(rowTop(rowIndex))).withHeight(kRowHeight);
+    paintReorderLift(g, row.toFloat(), lift, surface, accent);
+
+    auto remove = row.removeFromRight(kRemoveWidth);
+    g.setColour(muted);
+    g.drawText("x", remove, juce::Justification::centred, false);
+
+    auto toggle = row.removeFromRight(kToggleWidth);
+    g.setColour(entry.preFader ? accent : muted);
+    g.drawText(entry.preFader ? "PRE" : "POST", toggle, juce::Justification::centred, false);
+
+    row.removeFromRight(kMuteWidth);    // the M button is a real child component -- see placeRows()
+    row.removeFromRight(kKnobWidth);    // the level knob is a real child component -- see placeRows()
+    row.removeFromRight(kPanKnobWidth); // the pan knob is a real child component -- see placeRows()
+
+    // A small filled dot marks a mono send, painted rather than a new row button (the
+    // row has no room for one). A dot, not a letter: an "M" here read as a second mute button
+    // beside the real one. Screen readers get "(mono)" on the pan knob's title instead. Only a
+    // mono row gives up name width, so a stereo row's name keeps the full budget.
+    if (entry.mono) {
+        const auto monoTag = row.removeFromLeft(kMonoMarkerWidth).toFloat();
+        g.setColour(muted);
+        g.fillEllipse(monoTag.withSizeKeepingCentre(4.0f, 4.0f));
+    }
+
+    g.setColour(entry.targetNodeId == juce::AudioProcessorGraph::NodeID{} ? muted : text);
+    g.drawText(entry.targetName, row.reduced(2, 0), juce::Justification::centredLeft, true);
+}
+
+void MixerSendList::paint(juce::Graphics& g) {
+    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
 
     g.setFont(juce::Font(juce::FontOptions(10.0f)));
-    for (int i = 0; i < (int)entries_.size(); ++i) {
-        const auto& entry = entries_[(size_t)i];
-        auto row = getLocalBounds().withY(i * kRowHeight).withHeight(kRowHeight);
-
-        auto remove = row.removeFromRight(kRemoveWidth);
-        g.setColour(muted);
-        g.drawText("x", remove, juce::Justification::centred, false);
-
-        auto toggle = row.removeFromRight(kToggleWidth);
-        g.setColour(entry.preFader ? accent : muted);
-        g.drawText(entry.preFader ? "PRE" : "POST", toggle, juce::Justification::centred, false);
-
-        row.removeFromRight(kMuteWidth);    // the M button is a real child component -- see resized()
-        row.removeFromRight(kKnobWidth);    // the level knob is a real child component -- see resized()
-        row.removeFromRight(kPanKnobWidth); // the pan knob is a real child component -- see resized()
-
-        // A small filled dot marks a mono send, painted rather than a new row button (the
-        // row has no room for one). A dot, not a letter: an "M" here read as a second mute button
-        // beside the real one. Screen readers get "(mono)" on the pan knob's title instead. Only a
-        // mono row gives up name width, so a stereo row's name keeps the full budget.
-        if (entry.mono) {
-            const auto monoTag = row.removeFromLeft(kMonoMarkerWidth).toFloat();
-            g.setColour(muted);
-            g.fillEllipse(monoTag.withSizeKeepingCentre(4.0f, 4.0f));
-        }
-
-        g.setColour(entry.targetNodeId == juce::AudioProcessorGraph::NodeID{} ? muted : text);
-        g.drawText(entry.targetName, row.reduced(2, 0), juce::Justification::centredLeft, true);
-    }
+    const int lifted = rowDrag_.isReordering() ? rowDrag_.animator().getDraggedKey() : -1;
+    for (int i = 0; i < (int)entries_.size(); ++i)
+        if (i != lifted)
+            paintRow(g, i, 0.0f);
+    if (lifted >= 0 && lifted < (int)entries_.size())
+        paintRow(g, lifted, rowDrag_.animator().getLift());
 
     if (canAddSend()) {
         auto addRow = getLocalBounds().withY((int)entries_.size() * kRowHeight).withHeight(kRowHeight);
         g.setColour(accent);
         g.drawText("+ Send", addRow.reduced(2, 0), juce::Justification::centredLeft, false);
     }
-
-    // The drop indicator -- a plain line at the hovered insertion boundary, theme accent
-    // colour (no new colour, same as every other accent use in this file), drawn last so it always
-    // sits on top of the rows either side of it.
-    if (draggingRow_ && dragInsertionRow_ >= 0) {
-        const float lineY = (float)(dragInsertionRow_ * kRowHeight);
-        g.setColour(accent);
-        g.fillRect(juce::Rectangle<float>(0.0f, lineY - 1.0f, (float)getWidth(), 2.0f));
-    }
 }
 
 void MixerSendList::resized() {
-    for (int i = 0; i < (int)rows_.size(); ++i) {
-        auto& row = rows_[(size_t)i];
-        auto bounds = getLocalBounds().withY(i * kRowHeight).withHeight(kRowHeight);
-        bounds.removeFromRight(kRemoveWidth + kToggleWidth);
-        if (row.muteButton != nullptr)
-            row.muteButton->setBounds(bounds.removeFromRight(kMuteWidth).reduced(1));
-        if (row.knob != nullptr)
-            row.knob->setBounds(bounds.removeFromRight(kKnobWidth).reduced(1));
-        if (row.panKnob != nullptr)
-            row.panKnob->setBounds(bounds.removeFromRight(kPanKnobWidth).reduced(1));
-    }
+    placeRows();
 
     // Same anchor paint()'s own addRow uses.
     const bool addVisible = canAddSend();
@@ -269,9 +277,67 @@ void MixerSendList::resized() {
         addSendProxy_.setBounds(getLocalBounds().withY((int)entries_.size() * kRowHeight).withHeight(kRowHeight));
 }
 
+// Called on every frame of a drag, so it only moves the controls (a setBounds to the same bounds is
+// free) and repaints; a settled list is never asked to.
+void MixerSendList::placeRows() {
+    const int lifted = rowDrag_.isReordering() ? rowDrag_.animator().getDraggedKey() : -1;
+    for (int i = 0; i < (int)rows_.size(); ++i) {
+        auto& row = rows_[(size_t)i];
+        auto bounds = getLocalBounds().withY((int)std::lround(rowTop(i))).withHeight(kRowHeight);
+        bounds.removeFromRight(kRemoveWidth + kToggleWidth);
+        if (row.muteButton != nullptr)
+            row.muteButton->setBounds(bounds.removeFromRight(kMuteWidth).reduced(1));
+        if (row.knob != nullptr)
+            row.knob->setBounds(bounds.removeFromRight(kKnobWidth).reduced(1));
+        if (row.panKnob != nullptr)
+            row.panKnob->setBounds(bounds.removeFromRight(kPanKnobWidth).reduced(1));
+        if (i == lifted) {
+            for (juce::Component* control :
+                 {static_cast<juce::Component*>(row.muteButton.get()), static_cast<juce::Component*>(row.knob.get()),
+                  static_cast<juce::Component*>(row.panKnob.get())})
+                if (control != nullptr)
+                    control->toFront(false);
+        }
+    }
+    repaint();
+}
+
+bool MixerSendList::isNameArea(juce::Point<int> position) const {
+    if (rowIndexAt(position) < 0)
+        return false;
+    // The M button, the level knob and the pan knob are real child components between the PRE/POST
+    // toggle and the target name, so a press never reaches this list on any of them -- only the
+    // shape of the "everything past them is the name" test moves.
+    const int fromRight = getWidth() - position.x;
+    return fromRight > kRemoveWidth + kToggleWidth + kMuteWidth + kKnobWidth + kPanKnobWidth;
+}
+
+void MixerSendList::updateHoverCursor(juce::Point<int> position) {
+    const bool grab = rowDrag_.animator().isDragging() || isNameArea(position);
+    setMouseCursor(grab ? dragGrabCursor() : juce::MouseCursor(juce::MouseCursor::NormalCursor));
+}
+
+void MixerSendList::mouseMove(const juce::MouseEvent& event) { updateHoverCursor(event.getPosition()); }
+
+void MixerSendList::mouseExit(const juce::MouseEvent&) {
+    if (!rowDrag_.animator().isDragging())
+        endDragCursor(*this);
+}
+
+// The slots are the rows' static positions. The pointer is converted into this list's own
+// coordinates on every event (never getMouseDownPosition(), which JUCE re-derives in the moving
+// component's space); the grab offset is captured once, here.
+void MixerSendList::beginRowDrag(int rowIndex, const juce::MouseEvent& event) {
+    std::vector<ReorderDragAnimator::Slot> slots;
+    for (int i = 0; i < (int)entries_.size(); ++i)
+        slots.push_back({(float)(i * kRowHeight), (float)kRowHeight});
+    const float pointer = event.getEventRelativeTo(this).position.y;
+    rowDrag_.begin(slots, rowIndex, pointer - slots[(size_t)rowIndex].start, pointer);
+}
+
 void MixerSendList::mouseDown(const juce::MouseEvent& event) {
-    dragFromRow_ = -1;
-    draggingRow_ = false;
+    pressedRow_ = -1;
+    rowDrag_.discard();
 
     const int row = rowIndexAt(event.getPosition());
     if (row < 0) {
@@ -285,60 +351,72 @@ void MixerSendList::mouseDown(const juce::MouseEvent& event) {
         removeRow(row);
     else if (fromRight <= kRemoveWidth + kToggleWidth)
         togglePreFaderForRow(row);
-    // The M button (kMuteWidth), the level knob (kKnobWidth) and the pan knob (kPanKnobWidth) are
-    // real child components between the PRE/POST toggle and the target-name area, so this handler
-    // never sees a click landing on any of them -- only the shape of the "everything past them is
-    // the target name" test below moves.
-    else if (fromRight > kRemoveWidth + kToggleWidth + kMuteWidth + kKnobWidth + kPanKnobWidth)
-        // A press on the name area could be a plain click (open the target menu, as
-        // before) or the start of a reorder drag -- deferred to mouseDrag/mouseUp's threshold check
-        // rather than decided here, the same split TimelineTrackHeaderComponent's own row reorder
-        // uses (kRowDragThreshold there).
-        dragFromRow_ = row;
+    else if (isNameArea(event.getPosition())) {
+        // A press on the name area could be a plain click (open the target menu, as before) or the
+        // start of a reorder drag -- deferred to mouseDrag/mouseUp's threshold check rather than
+        // decided here, the same split TimelineTrackHeaderComponent's own row reorder uses.
+        pressedRow_ = row;
+        beginRowDrag(row, event);
+    }
 }
 
 void MixerSendList::mouseDrag(const juce::MouseEvent& event) {
-    if (dragFromRow_ < 0)
+    if (pressedRow_ < 0)
         return;
-    if (!draggingRow_) {
-        if (event.getDistanceFromDragStart() < kRowDragThreshold)
-            return;
-        draggingRow_ = true;
-    }
-    const int insertion = insertionRowAt(event.y);
-    if (insertion != dragInsertionRow_) {
-        dragInsertionRow_ = insertion;
-        repaint();
+    if (rowDrag_.dragTo(event.getEventRelativeTo(this).position.y)) {
+        updateHoverCursor(event.getPosition());
+        placeRows();
     }
 }
 
 void MixerSendList::mouseUp(const juce::MouseEvent& event) {
-    if (dragFromRow_ < 0)
+    if (pressedRow_ < 0)
         return;
-    const int fromRow = dragFromRow_;
-    const bool wasDragging = draggingRow_;
-    const int insertion = dragInsertionRow_;
-    dragFromRow_ = -1;
-    draggingRow_ = false;
-    dragInsertionRow_ = -1;
-    repaint();
-
-    if (!wasDragging) {
-        showTargetMenu(fromRow); // a click that never crossed the threshold -- today's behaviour
-        return;
+    const int pressed = pressedRow_;
+    pressedRow_ = -1;
+    switch (rowDrag_.end()) {
+    case ReorderDragSession::End::Click:
+        showTargetMenu(pressed); // a click that never crossed the threshold -- today's behaviour
+        break;
+    case ReorderDragSession::End::Commit:
+        commitRowDrag(pressed);
+        return; // the commit may have rebuilt the mixer, this list included
+    case ReorderDragSession::End::Cancelled:
+    case ReorderDragSession::End::Nothing:
+        break;
     }
-
-    // insertion is a BOUNDARY index (0..entries_.size()); dropping the row that used to be at
-    // fromRow so the boundary now sits right where the cursor is means: if the boundary is at or
-    // before fromRow, the row lands exactly there; if it's after, removing fromRow first shifts
-    // every later boundary down by one.
-    const int toRow = insertion <= fromRow ? insertion : insertion - 1;
-    if (toRow != fromRow)
-        moveRow(fromRow, juce::jlimit(0, (int)entries_.size() - 1, toRow));
+    updateHoverCursor(event.getPosition());
 }
 
-int MixerSendList::insertionRowAt(int y) const {
-    return juce::jlimit(0, (int)entries_.size(), (y + kRowHeight / 2) / kRowHeight);
+// The rows glide into the order the drop produces, and the move goes out ONCE, last: moveRow() ends
+// in onMutated(), which normally rebuilds the mixer and destroys this list.
+void MixerSendList::commitRowDrag(int pressedRow) {
+    const auto& animator = rowDrag_.animator();
+    const int toRow = animator.getInsertionIndex();
+    const auto newOrder = animator.getNewOrder();
+    std::vector<float> finalStarts(newOrder.size(), 0.0f);
+    for (size_t place = 0; place < newOrder.size(); ++place)
+        finalStarts[(size_t)newOrder[place]] = (float)((int)place * kRowHeight);
+    const float droppedAt = animator.getDraggedStart();
+    rowDrag_.release(finalStarts);
+    placeRows();
+    if (toRow == pressedRow)
+        return;
+    if (onSettlePending)
+        onSettlePending(toRow, droppedAt);
+    moveRow(pressedRow, toRow);
+}
+
+// The list a drop rebuilt: rows already sit in the new order, so only the dropped row glides.
+void MixerSendList::startSettleFrom(int rowIndex, float fromY) {
+    if (rowIndex < 0 || rowIndex >= (int)entries_.size())
+        return;
+    std::vector<ReorderDragAnimator::Slot> slots;
+    for (int i = 0; i < (int)entries_.size(); ++i)
+        slots.push_back({(float)(i * kRowHeight), (float)kRowHeight});
+    lastSettle_ = {rowIndex, fromY};
+    rowDrag_.settleInto(slots, rowIndex, fromY);
+    placeRows();
 }
 
 std::vector<NodeID> MixerSendList::availableTargets() const {

@@ -3,6 +3,8 @@
 #include "MacroSet.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerSends/MixerSends.h"
+#include "UI/Layout/ReorderDrag/ReorderDragSession.h"
+#include <cmath>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -56,7 +58,7 @@ public:
      *  can size canvas cards. */
     std::function<juce::AudioProcessorGraph::NodeID()> createBus;
 
-    /** Drag-reorder a row -- `fromRow`/`toRow` are VISIBLE row indices (positions in
+    /** Drag-reorder a row -- fired ONCE, on release; `fromRow`/`toRow` are VISIBLE row indices (positions in
      *  `entries_`, same addressing as removeRow/retargetRow above). Supplied by MixerPanelComponent,
      *  the one component that owns both the AppUndoManager (for ONE
      *  recordGraphTimelineAndMacroChange step, docs/mixer/sends-and-buses.md#reordering-sends) and
@@ -65,6 +67,14 @@ public:
      *  Returns whether anything actually changed (false for `fromRow == toRow` or a refused swap),
      *  which is what moveRow() below uses to decide whether to fire onMutated(). */
     std::function<bool(juce::AudioProcessorGraph::NodeID, int fromRow, int toRow)> moveSendRow;
+
+    /** Fired just before a drag's commit, with the dropped row's final index and where it was drawn
+     *  (this list's coordinates). The commit normally rebuilds the mixer and destroys this list, so
+     *  the panel keeps the settle and hands it to the NEW list's startSettleFrom(). */
+    std::function<void(int finalRow, float fromY)> onSettlePending;
+
+    /** Glides row `rowIndex` from `fromY` into its slot (the settle of a drop this list did not see). */
+    void startSettleFrom(int rowIndex, float fromY);
 
     int getPreferredHeight() const noexcept;
 
@@ -97,7 +107,8 @@ public:
     /** The real mutation behind a completed drag -- calls the moveSendRow callback and, on
      *  success, onMutated(), same shape as every other row mutation's mutateAndNotify. A synthesized
      *  test drag (mouseDown/mouseDrag past the threshold/mouseUp on the name area) reaches this
-     *  through the real mouse path; a test that wants to skip the gesture can call it directly. */
+     *  through the real mouse path; a test that wants to skip the gesture can call it directly.
+     *  onMutated() normally rebuilds the mixer and destroys this list: nothing may follow moveRow(). */
     void moveRow(int fromRow, int toRow);
     std::vector<juce::AudioProcessorGraph::NodeID> availableTargets() const;
     /** Modules whose Key input this strip may feed (synth::enumerateKeySendTargets). */
@@ -132,10 +143,24 @@ public:
      *  click-vs-drag decision is deferred to here/mouseUp rather than taken in mouseDown. */
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
+    /** The target-name area is a grab handle: the grab cursor on hover and during the drag. */
+    void mouseMove(const juce::MouseEvent& event) override;
+    void mouseExit(const juce::MouseEvent& event) override;
 
-    /** Test seam: the insertion boundary a synthesized drag is currently hovering, or -1 when
-     *  no drag is live -- lets a test assert the insertion line without decoding paint() output. */
-    int getDragInsertionRowForTest() const noexcept { return draggingRow_ ? dragInsertionRow_ : -1; }
+    /** Test seams for the reorder drag: whether a row is lifted or still gliding, where a row's
+     *  content is drawn (its top in this list's coordinates), and Esc delivered through the listener
+     *  a real key press reaches. */
+    bool isRowDragActiveForTest() const noexcept { return rowDrag_.isReordering(); }
+    int getRowTopForTest(int rowIndex) const { return (int)std::lround(rowTop(rowIndex)); }
+    /** Whether the row is gliding into its slot, and where it is being drawn right now. */
+    bool isSettlingForTest() const noexcept { return rowDrag_.isReordering(); }
+    /** The last startSettleFrom() this list received: row -1 if none. */
+    struct SettleForTest {
+        int row = -1;
+        float fromY = 0.0f;
+    };
+    SettleForTest getLastSettleForTest() const noexcept { return lastSettle_; }
+    bool sendEscapeToRowDragForTest() { return rowDrag_.sendEscapeForTest(); }
 
 private:
     static constexpr int kRowHeight = 20;
@@ -146,10 +171,6 @@ private:
     static constexpr int kRemoveWidth = 14;
     // Painted (not a real component) only when a row is mono -- see paint()'s own comment.
     static constexpr int kMonoMarkerWidth = 6;
-    // Pixel distance a name-area press must cross before it commits to a reorder drag rather
-    // than the click that opens the target menu -- same value/reasoning as
-    // TimelineTrackHeaderComponent's own kRowDragThreshold.
-    static constexpr float kRowDragThreshold = 4.0f;
 
     struct Row {
         std::unique_ptr<juce::Slider> knob;
@@ -175,9 +196,17 @@ private:
     };
 
     int rowIndexAt(juce::Point<int> position) const;
-    /** The insertion BOUNDARY (0..entries_.size()) nearest `y` -- boundary k sits between
-     *  visible rows k-1 and k, and dragging to it means "insert before row k". */
-    int insertionRowAt(int y) const;
+    /** Whether `position` is on a row's target name (a grab handle), not its buttons or knobs. */
+    bool isNameArea(juce::Point<int> position) const;
+    void updateHoverCursor(juce::Point<int> position);
+    /** Where row `rowIndex` is drawn: its static slot, or the animator's place for it while a drag
+     *  is live or settling. */
+    float rowTop(int rowIndex) const;
+    /** Moves every row's child controls to match rowTop() and repaints. */
+    void placeRows();
+    void paintRow(juce::Graphics& g, int rowIndex, float lift);
+    void beginRowDrag(int rowIndex, const juce::MouseEvent& event);
+    void commitRowDrag(int pressedRow);
     void rebuildKnobs();
     void showTargetMenu(int rowIndex);
     void showAddMenu();
@@ -197,12 +226,12 @@ private:
     juce::AudioProcessorGraph::NodeID stripNodeId_;
     AddSendAccessibilityProxy addSendProxy_;
 
-    // Drag-reorder gesture state. dragFromRow_ is armed on a name-area mouseDown and stays
-    // set for the whole press (drag or not); draggingRow_ flips true only once the threshold is
-    // crossed, exactly like TimelineTrackHeaderComponent's own draggingRow_.
-    int dragFromRow_ = -1;
-    bool draggingRow_ = false;
-    int dragInsertionRow_ = -1;
+    // Drag-reorder gesture. pressedRow_ is armed on a name-area mouseDown and stays set for the whole
+    // press (drag or not); the animator's keys are the rows' indices at the press. The press only
+    // becomes a drag past the animator's threshold, so a plain click still opens the target menu.
+    int pressedRow_ = -1;
+    SettleForTest lastSettle_;
+    ReorderDragSession rowDrag_{*this, [this] { placeRows(); }};
 
     // See setShowMenuHookForTest's own comment.
     std::function<void(juce::PopupMenu&)> showMenuHook_ = [](juce::PopupMenu& m) {

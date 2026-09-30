@@ -14,6 +14,7 @@
 //      juce::CallOutBox, which would otherwise crash a display-less runner).
 
 #include "../../../StubPluginInstance.h"
+#include "../../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/CardLayout.h"
@@ -23,6 +24,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.h"
+#include "UI/Layout/DragCursor.h"
 #include <chrono>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -231,6 +233,144 @@ TEST(PluginKnobPickerTest, DraggingAcheckedRowToANewIndexReordersTheLayout) {
     ASSERT_EQ(parsed.layout.slots.size(), 2u);
     EXPECT_EQ(parsed.layout.slots[0].paramId, "b");
     EXPECT_EQ(parsed.layout.slots[1].paramId, "a");
+}
+
+// ---- Reordering with the real mouse path: lift, glide aside, ONE commit on release, Esc cancels ----
+// Headless, so the picker is not showing and the animator lands every glide instantly.
+
+namespace {
+constexpr float kRowStride = 26.0f; // PluginKnobPickerRow::kRowHeight
+
+// Hand-built events on a row's grab handle. The list position is turned into handle-local coordinates
+// at every event, because the handle moves with its row while the row is dragged.
+struct GripDrag {
+    PluginKnobPickerComponent& picker;
+    int row;
+    float pressY;
+
+    juce::Component& handle() const { return *picker.getRowDragHandleForTest(row); }
+    juce::Point<float> local(float listY) const {
+        auto& content = picker.getRowsContentForTest();
+        const float x = content.getLocalPoint(&handle(), handle().getLocalBounds().toFloat().getCentre()).x;
+        return handle().getLocalPoint(&content, juce::Point<float>(x, listY));
+    }
+    void down() { handle().mouseDown(makeClickEvent(handle(), local(pressY))); }
+    void dragBy(float dy) { handle().mouseDrag(makeDragEvent(handle(), local(pressY + dy), local(pressY))); }
+    void up(float dy) { handle().mouseUp(makeClickEvent(handle(), local(pressY + dy))); }
+};
+
+GripDrag gripDragOf(PluginKnobPickerComponent& picker, int row) {
+    return {picker, row, static_cast<float>(picker.getRowBoundsForTest(row).getCentreY())};
+}
+
+std::vector<juce::String> committedOrder(const PickerRig::Node& node) {
+    std::vector<juce::String> ids;
+    for (const auto& slot : CardLayout::fromVar(node.module->getCardLayoutOverride()).layout.slots)
+        ids.push_back(slot.paramId);
+    return ids;
+}
+
+/** Ticks the first `count` parameters, leaving them checked in order a, b, c, ... */
+void checkFirst(PluginKnobPickerComponent& picker, int count) {
+    for (int i = 0; i < count; ++i)
+        picker.triggerRowToggleForTest(i);
+}
+} // namespace
+
+TEST(PluginKnobPickerTest, ADragAcrossTwoRowsCommitsOnceOnReleaseAsOneUndoStep) {
+    PickerRig rig;
+    auto node = rig.addPlugin({knobSpec("a", "Alpha"), knobSpec("b", "Beta"), knobSpec("c", "Gamma")});
+    AppUndoManager undo;
+    auto picker = rig.makePicker(node, &undo);
+    checkFirst(*picker, 3);
+    ASSERT_EQ(committedOrder(node), (std::vector<juce::String>{"a", "b", "c"}));
+    const int serialBefore = undo.getEditSerial();
+
+    auto drag = gripDragOf(*picker, 0);
+    drag.down();
+    drag.dragBy(kRowStride);
+    drag.dragBy(2.0f * kRowStride + 4.0f);
+    EXPECT_EQ(undo.getEditSerial(), serialBefore) << "nothing is committed while the row is still held";
+    EXPECT_EQ(committedOrder(node), (std::vector<juce::String>{"a", "b", "c"}));
+    drag.up(2.0f * kRowStride + 4.0f);
+
+    EXPECT_EQ(committedOrder(node), (std::vector<juce::String>{"b", "c", "a"})) << "same final order as before";
+    EXPECT_EQ(undo.getEditSerial(), serialBefore + 1) << "a multi-row drag is ONE undo step, not one per row passed";
+    EXPECT_FALSE(picker->isRowDragActiveForTest());
+}
+
+TEST(PluginKnobPickerTest, TheDraggedRowFollowsThePointerWhileItsNeighboursGlideAside) {
+    PickerRig rig;
+    auto node = rig.addPlugin({knobSpec("a", "Alpha"), knobSpec("b", "Beta"), knobSpec("c", "Gamma")});
+    auto picker = rig.makePicker(node);
+    checkFirst(*picker, 3);
+    const auto a = picker->getRowBoundsForTest(0);
+    const auto c = picker->getRowBoundsForTest(2);
+
+    auto drag = gripDragOf(*picker, 0);
+    drag.down();
+    drag.dragBy(30.0f); // past Beta's midpoint, short of Gamma's
+
+    EXPECT_TRUE(picker->isRowDragActiveForTest());
+    EXPECT_EQ(picker->getRowBoundsForTest(0).getY(), a.getY() + 30) << "the lifted row sits under the pointer";
+    EXPECT_EQ(picker->getRowBoundsForTest(1).getY(), a.getY()) << "Beta moved up into the vacated slot";
+    EXPECT_EQ(picker->getRowBoundsForTest(2).getY(), c.getY()) << "Gamma stays put";
+    EXPECT_EQ(picker->getVisibleRowParamIdForTest(0), "a") << "the rows are not rebuilt during the drag";
+
+    drag.dragBy(2.0f * kRowStride + 4.0f);
+    EXPECT_EQ(picker->getRowBoundsForTest(0).getY(), c.getY()) << "held inside the list, at its last slot";
+    EXPECT_EQ(picker->getRowBoundsForTest(2).getY(), picker->getRowBoundsForTest(1).getY() + 26) << "Gamma moved up";
+    drag.up(2.0f * kRowStride + 4.0f);
+}
+
+TEST(PluginKnobPickerTest, EscapeMidDragCommitsNothingAndPutsEveryRowBack) {
+    PickerRig rig;
+    auto node = rig.addPlugin({knobSpec("a", "Alpha"), knobSpec("b", "Beta"), knobSpec("c", "Gamma")});
+    AppUndoManager undo;
+    auto picker = rig.makePicker(node, &undo);
+    checkFirst(*picker, 3);
+    const int serialBefore = undo.getEditSerial();
+    std::vector<int> before;
+    for (int i = 0; i < 3; ++i)
+        before.push_back(picker->getRowBoundsForTest(i).getY());
+
+    auto drag = gripDragOf(*picker, 0);
+    drag.down();
+    drag.dragBy(2.0f * kRowStride + 4.0f);
+    ASSERT_TRUE(picker->isRowDragActiveForTest());
+    EXPECT_TRUE(picker->sendEscapeToRowDragForTest());
+    drag.up(2.0f * kRowStride + 4.0f);
+
+    EXPECT_EQ(undo.getEditSerial(), serialBefore) << "no undo step";
+    EXPECT_EQ(committedOrder(node), (std::vector<juce::String>{"a", "b", "c"}));
+    EXPECT_FALSE(picker->isRowDragActiveForTest());
+    for (int i = 0; i < 3; ++i)
+        EXPECT_EQ(picker->getRowBoundsForTest(i).getY(), before[static_cast<size_t>(i)]) << "row " << i;
+}
+
+TEST(PluginKnobPickerTest, TheDropLandsRightWhenASearchHidesSomeCheckedRows) {
+    PickerRig rig;
+    auto node = rig.addPlugin({knobSpec("a", "Alpha"), knobSpec("b", "Bravo"), knobSpec("c", "Alpha Two")});
+    auto picker = rig.makePicker(node);
+    checkFirst(*picker, 3);
+    picker->setSearchTextForTest("alpha"); // hides the checked "Bravo"
+    ASSERT_EQ(picker->getVisibleRowCountForTest(), 2);
+
+    auto drag = gripDragOf(*picker, 1); // "Alpha Two" (c)
+    drag.down();
+    drag.dragBy(-kRowStride - 4.0f);
+    drag.up(-kRowStride - 4.0f);
+
+    EXPECT_EQ(committedOrder(node), (std::vector<juce::String>{"c", "a", "b"}));
+}
+
+TEST(PluginKnobPickerTest, TheGrabHandleShowsTheGrabCursor) {
+    PickerRig rig;
+    auto node = rig.addPlugin({knobSpec("a", "Alpha")});
+    auto picker = rig.makePicker(node);
+    checkFirst(*picker, 1);
+    ASSERT_NE(picker->getRowDragHandleForTest(0), nullptr);
+    EXPECT_TRUE(picker->getRowDragHandleForTest(0)->getMouseCursor() == synth::ui::dragGrabCursor());
 }
 
 // ============================================================================
