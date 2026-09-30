@@ -2,6 +2,7 @@
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Layout/PanelResizeHandle.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
@@ -312,7 +313,9 @@ private:
         DockTabButton(BottomDockComponent& owner, Tab tab, const juce::String& text)
             : juce::TextButton(text)
             , owner_(owner)
-            , tab_(tab) {}
+            , tab_(tab) {
+            setMouseCursor(dragGrabCursor()); // a tab is a grab handle: the hand on hover and while dragging
+        }
         void paint(juce::Graphics& g) override;
         void mouseDown(const juce::MouseEvent& e) override {
             owner_.beginTabDrag(tab_, e);
@@ -320,14 +323,9 @@ private:
         }
         void mouseDrag(const juce::MouseEvent& e) override {
             owner_.dragTab(e);
-            // Only once the gesture is a real drag (the animator's own move threshold, the same
-            // gate dragTab() itself uses) -- a stray click never shows the dragging-hand cursor.
-            if (owner_.isTabLifted(tab_))
-                setMouseCursor(juce::MouseCursor::DraggingHandCursor);
             juce::TextButton::mouseDrag(e);
         }
         void mouseUp(const juce::MouseEvent& e) override {
-            setMouseCursor(juce::MouseCursor::NormalCursor);
             if (!owner_.endTabDrag())
                 juce::TextButton::mouseUp(e);
             else

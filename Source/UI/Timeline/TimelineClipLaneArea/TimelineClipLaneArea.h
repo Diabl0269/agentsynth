@@ -589,6 +589,8 @@ private:
     // ---- Tool cursors (built once per theme — never per mouse move) ----
     void rebuildToolCursors();
     void applyToolCursor();
+    /** Grab (copy while Alt-copying) cursor once a Move drag has actually moved the clips. */
+    void updateMoveCursor();
 
     // ---- Inline rename ----
     // Tears the editor down and, when `commit`, pushes its text through renameClip().

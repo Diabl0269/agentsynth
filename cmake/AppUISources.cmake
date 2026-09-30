@@ -144,6 +144,7 @@ set(APPUI_SOURCES
     Source/UI/Layout/ReorderDrag/ReorderDragAnimator.cpp
     Source/UI/Layout/ReorderDrag/ReorderCancelKey.h
     Source/UI/Layout/ReorderDrag/ReorderFramePump.h
+    Source/UI/Layout/DragCursor.h
     Source/UI/Layout/PanelResizeHandle.h
     Source/UI/Layout/PanelResizeHandle.cpp
     Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h

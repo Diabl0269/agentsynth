@@ -2,6 +2,8 @@
 // accessibility text and mouse handling.
 #include "MixerZonesRow.h"
 
+#include "UI/Layout/DragCursor.h"
+
 namespace synth::ui {
 
 namespace {
@@ -68,7 +70,7 @@ void MixerZonesLink::paintButton(juce::Graphics& g, bool highlighted, bool) {
 MixerZonesRow::MixerZonesRow(Hooks hooks)
     : hooks_(std::move(hooks)) {
     setWantsKeyboardFocus(false);
-    setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+    setMouseCursor(dragGrabCursor());
     addAndMakeVisible(eye_);
     eye_.onToggle = [this] {
         if (hooks_.onToggleHidden)

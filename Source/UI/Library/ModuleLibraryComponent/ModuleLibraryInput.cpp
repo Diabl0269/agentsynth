@@ -2,6 +2,7 @@
 // (Up/Down/Left/Right/Enter, including the searchEditor KeyListener interception) and starting a
 // drag-and-drop session for a row.
 #include "ModuleLibraryComponent.h"
+#include "UI/Layout/DragCursor.h"
 
 void ModuleLibraryComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
     if (verticalScrollBar.isVisible())
@@ -45,7 +46,7 @@ void ModuleLibraryComponent::mouseMove(const juce::MouseEvent& e) {
     // Update cursor: grab hand for draggable items, pointing hand for the clickable chrome.
     // An unavailable row is not draggable, so it must not advertise the grab hand.
     if (hoveredIndex >= 0 && isDraggableEntry(hoveredIndex) && isEntryEnabled(hoveredIndex))
-        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+        setMouseCursor(synth::ui::dragGrabCursor());
     else if (topStripHovered || isHeaderEntry(entryUnderMouse) || isSubHeaderEntry(entryUnderMouse) ||
              isActionEntry(hoveredIndex))
         setMouseCursor(juce::MouseCursor::PointingHandCursor);

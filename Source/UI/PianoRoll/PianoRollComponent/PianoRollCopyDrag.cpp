@@ -7,6 +7,7 @@
 #include "PianoRollComponent.h"
 
 #include "PianoRollInternal.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -29,11 +30,28 @@ void PianoRollComponent::setCopyDrag(bool copy) {
     if (copy == copyDrag_)
         return;
     copyDrag_ = copy;
-    if (copy)
-        setMouseCursor(juce::MouseCursor::CopyingCursor);
-    else
-        applyToolCursor();
+    if (copy) {
+        showDragCursor(*this, true);
+        dragCursorShown_ = true;
+    } else {
+        updateMoveCursor();
+    }
     repaint();
+}
+
+// The cursor follows the move gesture: copy while an Option copy is active, grab once a plain move
+// has actually shifted the notes, and the tool cursor again as soon as neither holds (release, Esc,
+// or Option released before the notes moved). The tool cursor stays in charge until then.
+void PianoRollComponent::updateMoveCursor() {
+    const bool moving =
+        dragMode_ == DragMode::Move && (copyDrag_ || std::abs(previewDeltaBeats_) > 1e-9 || previewDeltaPitch_ != 0);
+    if (moving) {
+        showDragCursor(*this, copyDrag_);
+        dragCursorShown_ = true;
+    } else if (dragCursorShown_) {
+        dragCursorShown_ = false;
+        applyToolCursor();
+    }
 }
 
 bool PianoRollComponent::isCopyDragForTest() const noexcept { return dragMode_ == DragMode::Move && copyDrag_; }
@@ -87,6 +105,7 @@ bool PianoRollComponent::cancelNoteDrag() {
     cmdToggleNote_ = {};
     cmdToggleWasSelected_ = false;
     setCopyDrag(false);
+    updateMoveCursor();
     autoScrollTimer_.stopTimer();
     stopAudition();
     repaint();

@@ -8,6 +8,7 @@
 #include "TimelineClipLaneArea.h"
 
 #include "AppUndoManager.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/ToolCursors.h"
 #include <algorithm>
@@ -103,6 +104,12 @@ void TimelineClipLaneArea::applyToolCursor() {
     if (!toolCursorsBuilt_)
         rebuildToolCursors();
     setMouseCursor(toolCursors_[(std::size_t)activeTool_]);
+}
+
+void TimelineClipLaneArea::updateMoveCursor() {
+    const bool started = dragMode_ == DragMode::Move && (std::abs(previewDeltaBeats_) > 1e-9 || previewRowDelta_ != 0);
+    if (started)
+        showDragCursor(*this, copyDrag_);
 }
 
 // Split/Glue/Erase/Mute act immediately on press (a DAW's tool click is expected to land under
