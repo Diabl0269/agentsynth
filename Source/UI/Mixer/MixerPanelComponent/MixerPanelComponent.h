@@ -426,8 +426,10 @@ private:
     };
 
     MixerSectionLayout sectionLayout_;
-    MixerPanelToolbar toolbar_;
+    // Declared before toolbar_ so it is destroyed after it: the toolbar's toggle button unbinds from
+    // this pane in its destructor (SidePaneToggleButton: the pane must outlive the button).
     SidePane sidePane_;
+    MixerPanelToolbar toolbar_;
     MixerZonesPane zonesPane_;
     Zone leftZone_;
     Zone rightZone_;
