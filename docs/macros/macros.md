@@ -39,9 +39,20 @@ visible set. This is a **rendering** rule — the underlying graph edges are unt
 
 ## The macro model
 
-**The model is flat.** A node in one macro cannot be grouped into a second one; `Cmd+G` refuses that
-with a status message rather than doing something ad hoc. A macro inside a macro is refused the same
-way.
+**The canvas is still flat.** A node in one macro cannot be grouped into a second one; `Cmd+G` refuses
+that with a status message rather than doing something ad hoc. A macro inside a macro is refused the
+same way.
+
+**The data model already supports nesting.** `Macro::parentId` (empty = top level) links a macro to
+the one that contains it; `members` stays the *direct* members only, and every node uuid is a direct
+member of exactly one macro (`MacroSet::findByMember` returns that innermost owner). A macro is valid
+if it has direct members or children, so a container-only parent is fine, and one that loses its last
+member and last child dissolves (`retainOnly`, `removeMemberEverywhere`), cascading up the chain.
+Removing a macro re-parents its children to its own parent. `MacroSet` carries the hierarchy queries
+(`parentOf`, `childrenOf`, `depth`, `ancestorChain`, `descendantMembers`, `outermostOf`,
+`outermostCollapsedAncestorOf`, `isEffectivelyCollapsed`, `isVisible`) and `setParent`, which rejects
+cycles and unknown parents. The optional `"parent"` key is written only when set, so flat saves are
+byte-identical and older files load as top level; `fromVar` rejects a dangling or cyclic parent.
 
 **Nodes are addressed by uuid, everywhere.** Timeline bindings, automation lanes
 (`synth::resolveLaneParameter`), the AI patch format and the undo system all address a node by its

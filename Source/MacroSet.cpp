@@ -1,4 +1,5 @@
 #include "MacroSet.h"
+#include <map>
 #include <set>
 #include <utility>
 
@@ -87,7 +88,131 @@ juce::String MacroSet::add(Macro macro) {
     return id;
 }
 
+/** Id of `macroId`'s parent; empty if top level or unknown. */
+juce::String MacroSet::parentOf(const juce::String& macroId) const {
+    const auto* m = find(macroId);
+    return m != nullptr ? m->parentId : juce::String();
+}
+
+/** Ids of the macros whose parent is `macroId`, in stored order. */
+std::vector<juce::String> MacroSet::childrenOf(const juce::String& macroId) const {
+    std::vector<juce::String> out;
+    if (macroId.isEmpty())
+        return out;
+    for (const auto& m : macros_)
+        if (m.parentId == macroId)
+            out.push_back(m.id);
+    return out;
+}
+
+/** Ancestors of `macroId`, parent first, outermost last; excludes `macroId`. */
+std::vector<juce::String> MacroSet::ancestorChain(const juce::String& macroId) const {
+    std::vector<juce::String> chain;
+    juce::String cur = parentOf(macroId);
+    // The size bound is belt and braces: setParent/fromVar never admit a cycle.
+    while (cur.isNotEmpty() && find(cur) != nullptr && chain.size() <= macros_.size()) {
+        chain.push_back(cur);
+        cur = parentOf(cur);
+    }
+    return chain;
+}
+
+/** 0 for a top-level (or unknown) macro, 1 for its child, and so on. */
+int MacroSet::depth(const juce::String& macroId) const { return (int)ancestorChain(macroId).size(); }
+
+/** Every node uuid directly in `macroId` or in any macro nested below it. */
+std::set<juce::String> MacroSet::descendantMembers(const juce::String& macroId) const {
+    std::set<juce::String> out;
+    std::vector<juce::String> pending{macroId};
+    while (!pending.empty()) {
+        const juce::String id = pending.back();
+        pending.pop_back();
+        if (const auto* m = find(id))
+            out.insert(m->members.begin(), m->members.end());
+        for (const auto& child : childrenOf(id))
+            pending.push_back(child);
+    }
+    return out;
+}
+
+/** Outermost macro containing node `uuid` (top of its owner's chain); empty if in none. */
+juce::String MacroSet::outermostOf(const juce::String& uuid) const {
+    const auto* owner = findByMember(uuid);
+    if (owner == nullptr)
+        return {};
+    const auto chain = ancestorChain(owner->id);
+    return chain.empty() ? owner->id : chain.back();
+}
+
+/** Outermost COLLAPSED macro in `uuid`'s owner chain (its card stands in for the node);
+ *  empty if the node is in no macro or none in the chain is collapsed. */
+juce::String MacroSet::outermostCollapsedAncestorOf(const juce::String& uuid) const {
+    const auto* owner = findByMember(uuid);
+    if (owner == nullptr)
+        return {};
+    juce::String result;
+    if (owner->collapsed)
+        result = owner->id;
+    for (const auto& id : ancestorChain(owner->id))
+        if (const auto* a = find(id); a != nullptr && a->collapsed)
+            result = id; // chain runs inner -> outer, so the last hit is the outermost
+    return result;
+}
+
+/** `macroId` or any ancestor is collapsed. */
+bool MacroSet::isEffectivelyCollapsed(const juce::String& macroId) const {
+    const auto* m = find(macroId);
+    return m != nullptr && (m->collapsed || !isVisible(macroId));
+}
+
+/** No ANCESTOR is collapsed (the macro itself may be: it is then drawn as a card). */
+bool MacroSet::isVisible(const juce::String& macroId) const {
+    for (const auto& id : ancestorChain(macroId))
+        if (const auto* a = find(id); a != nullptr && a->collapsed)
+            return false;
+    return true;
+}
+
+/** Parent `macroId` under `parentId` (empty = top level). False, no change, if either is unknown
+ *  or the link would form a cycle. Moves no members. */
+bool MacroSet::setParent(const juce::String& macroId, const juce::String& parentId) {
+    auto* m = find(macroId);
+    if (m == nullptr)
+        return false;
+    if (parentId.isNotEmpty()) {
+        if (parentId == macroId || find(parentId) == nullptr)
+            return false;
+        for (const auto& ancestor : ancestorChain(parentId))
+            if (ancestor == macroId)
+                return false; // parentId is already below macroId: would form a cycle
+    }
+    m->parentId = parentId;
+    return true;
+}
+
+bool MacroSet::dissolveEmpty() {
+    bool changed = false;
+    for (bool again = true; again;) {
+        again = false;
+        for (const auto& m : macros_) {
+            if (m.members.empty() && childrenOf(m.id).empty()) {
+                remove(m.id);
+                again = changed = true;
+                break; // macros_ changed; rescan (a parent may now be empty too)
+            }
+        }
+    }
+    return changed;
+}
+
 bool MacroSet::remove(const juce::String& macroId) {
+    const auto* target = find(macroId);
+    if (target == nullptr)
+        return false;
+    const juce::String grandparent = target->parentId;
+    for (auto& m : macros_)
+        if (m.parentId == macroId)
+            m.parentId = grandparent;
     const auto before = macros_.size();
     macros_.erase(std::remove_if(macros_.begin(), macros_.end(), [&](const Macro& m) { return m.id == macroId; }),
                   macros_.end());
@@ -115,8 +240,7 @@ juce::String MacroSet::removeMemberEverywhere(const juce::String& memberUuid) {
         it->ports.erase(std::remove_if(it->ports.begin(), it->ports.end(),
                                        [&](const MacroPort& p) { return p.nodeUuid == memberUuid; }),
                         it->ports.end());
-        if (it->members.empty())
-            macros_.erase(it);
+        dissolveEmpty();
         return touchedId;
     }
     return {};
@@ -142,14 +266,12 @@ bool MacroSet::retainOnly(const std::vector<juce::String>& aliveMemberUuids) {
         if (it->ports.size() != portsBefore)
             changed = true;
 
-        if (it->members.empty()) {
-            it = macros_.erase(it);
-            changed = true;
-        } else {
-            ++it;
-        }
+        ++it;
     }
 
+    // Now that members are pruned, dissolve bottom-up (a parent emptied of its last child too).
+    if (dissolveEmpty())
+        changed = true;
     return changed;
 }
 
@@ -161,6 +283,9 @@ juce::var MacroSet::toVar() const {
         obj->setProperty("name", m.name);
         obj->setProperty("colour", m.colour.toString());
         obj->setProperty("collapsed", m.collapsed);
+        // Written only when nested, so a flat set serialises exactly as it did before nesting.
+        if (m.parentId.isNotEmpty())
+            obj->setProperty("parent", m.parentId);
 
         auto boundsObj = new juce::DynamicObject();
         boundsObj->setProperty("x", m.bounds.getX());
@@ -183,6 +308,38 @@ juce::var MacroSet::toVar() const {
     }
     return arr;
 }
+
+namespace {
+
+/** Every parent exists, no chain loops, and each macro has direct members or children. */
+bool validateHierarchy(const std::vector<Macro>& macros) {
+    std::map<juce::String, const Macro*> byId;
+    for (const auto& m : macros)
+        byId[m.id] = &m;
+
+    std::set<juce::String> hasChild;
+    for (const auto& m : macros) {
+        if (m.parentId.isEmpty())
+            continue;
+        if (byId.find(m.parentId) == byId.end())
+            return false; // dangling parent
+        hasChild.insert(m.parentId);
+    }
+
+    for (const auto& m : macros) {
+        if (m.members.empty() && hasChild.count(m.id) == 0)
+            return false; // an empty macro is not a representable state — see dissolveEmpty
+        const Macro* cur = &m;
+        for (size_t steps = 0; !cur->parentId.isEmpty(); ++steps) {
+            if (steps > macros.size())
+                return false; // cycle
+            cur = byId[cur->parentId];
+        }
+    }
+    return true;
+}
+
+} // namespace
 
 bool MacroSet::fromVar(const juce::var& state) {
     // Not an array at all -> reject rather than silently treating it as "no macros"; an absent
@@ -216,8 +373,16 @@ bool MacroSet::fromVar(const juce::var& state) {
         }
 
         auto* memberArr = obj->getProperty("members").getArray();
-        if (memberArr == nullptr || memberArr->isEmpty())
-            return false; // an empty macro is not a representable state — see removeMemberEverywhere
+        if (memberArr == nullptr)
+            return false;
+        // Emptiness (no members AND no children) is checked once every macro is parsed, below.
+
+        if (obj->hasProperty("parent")) {
+            const juce::var parentVar = obj->getProperty("parent");
+            if (!parentVar.isString() || parentVar.toString().isEmpty())
+                return false;
+            m.parentId = parentVar.toString();
+        }
 
         for (const auto& memberVar : *memberArr) {
             const juce::String uuid = memberVar.toString();
@@ -250,6 +415,9 @@ bool MacroSet::fromVar(const juce::var& state) {
 
         parsed.push_back(std::move(m));
     }
+
+    if (!validateHierarchy(parsed))
+        return false;
 
     macros_ = std::move(parsed);
     return true;
