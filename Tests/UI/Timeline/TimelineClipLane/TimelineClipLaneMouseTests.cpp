@@ -322,3 +322,43 @@ TEST(TimelineClipLaneAutoScrollTimerTest, TickIsANoOpOnceTheDragHasEnded) {
     f.lane.tickAutoScrollForTest();
     EXPECT_DOUBLE_EQ(f.state.firstVisibleBeat, beatBefore);
 }
+
+// The Select tool's cursor stays in charge until a move drag has actually moved the clips; then the
+// grab hand shows (the copy cursor while Alt-copying) and the tool cursor returns on release.
+TEST(TimelineClipLaneInteractionTest, MoveDragShowsTheGrabCursorAndReleaseRestoresTheToolCursor) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 4.0, "Clip A");
+    ASSERT_TRUE(clipId.isValid());
+    f.selection.setSelection({clipId});
+
+    const auto anchor = centreOf(f.lane.getClipRect(clipId));
+    const juce::Point<float> dragged(anchor.x + 52.0f, anchor.y);
+
+    f.lane.mouseDown(leftClick(f.lane, anchor));
+    EXPECT_TRUE(f.lane.getMouseCursor() == juce::MouseCursor::NormalCursor) << "a press alone changes nothing";
+    f.lane.mouseDrag(leftDrag(f.lane, dragged, anchor));
+    EXPECT_TRUE(f.lane.getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+    f.lane.mouseUp(leftDrag(f.lane, dragged, anchor));
+    EXPECT_TRUE(f.lane.getMouseCursor() == juce::MouseCursor::NormalCursor);
+}
+
+TEST(TimelineClipLaneInteractionTest, AltCopyDragShowsTheCopyCursorAndReleaseRestoresTheToolCursor) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 4.0, "Clip A");
+    ASSERT_TRUE(clipId.isValid());
+    f.selection.setSelection({clipId});
+
+    const auto anchor = centreOf(f.lane.getClipRect(clipId));
+    const juce::Point<float> dragged(anchor.x + 52.0f, anchor.y);
+    constexpr int kAlt = juce::ModifierKeys::altModifier;
+
+    f.lane.mouseDown(leftClick(f.lane, anchor, kAlt));
+    f.lane.mouseDrag(leftDrag(f.lane, dragged, anchor, kAlt));
+    EXPECT_TRUE(f.lane.getMouseCursor() == juce::MouseCursor::CopyingCursor);
+    f.lane.mouseDrag(leftDrag(f.lane, dragged, anchor)); // Alt released mid-drag: the move continues
+    EXPECT_TRUE(f.lane.getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+    f.lane.mouseUp(leftDrag(f.lane, dragged, anchor));
+    EXPECT_TRUE(f.lane.getMouseCursor() == juce::MouseCursor::NormalCursor);
+}

@@ -13,6 +13,7 @@
 #include "Mixer/MasterSplice.h"
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -599,7 +600,7 @@ void GraphEditor::mouseMove(const juce::MouseEvent& e) {
     const bool overChip = !macroController_.macroChipAt(localPos.roundToInt()).isEmpty();
     if (overChip != hoveringMacroChip) {
         hoveringMacroChip = overChip;
-        setMouseCursor(overChip ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
+        setMouseCursor(overChip ? synth::ui::dragGrabCursor() : juce::MouseCursor(juce::MouseCursor::NormalCursor));
     }
     if (overChip)
         return;

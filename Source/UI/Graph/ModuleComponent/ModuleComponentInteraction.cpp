@@ -11,6 +11,7 @@
 #include "Modules/ModuleBase.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Layout/LayoutUtil.h"
 #include <cmath>
 
@@ -798,6 +799,8 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
             return; // modifier-click toggled selection; the dragger was never armed
 
         dragger.dragComponent(this, e, nullptr);
+        if (getPosition() != dragStartPosition)
+            synth::ui::showDragCursor(*this); // the move has really started
         // Carry every other selected module by the same delta from its own recorded origin.
         owner.dragSelectionBy(getPosition() - dragStartPosition, this);
         // Update the landing ghost to follow the live drag position.
@@ -834,6 +837,7 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     if (!bodyDragActive)
         return;
     bodyDragActive = false;
+    synth::ui::endDragCursor(*this); // first: the release below may rebuild and destroy this card
 
     const bool moved = getPosition() != dragStartPosition;
 

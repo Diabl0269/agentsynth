@@ -184,6 +184,7 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
         copyDrag_ = e.mods.isAltDown();
     lastDragPointer_ = e.getPosition();
     updateDragPreviewFromLastPointer();
+    updateMoveCursor();
     updateAutoScrollArming();
     repaint();
 }
@@ -191,6 +192,7 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
 void TimelineClipLaneArea::modifierKeysChanged(const juce::ModifierKeys& mods) {
     if (dragMode_ == DragMode::Move && copyDrag_ != mods.isAltDown()) {
         copyDrag_ = mods.isAltDown();
+        updateMoveCursor();
         repaint();
     }
     juce::Component::modifierKeysChanged(mods); // keep the default bubbling to the parent
@@ -432,6 +434,8 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
         }
     }
 
+    if (dragMode_ == DragMode::Move)
+        applyToolCursor(); // the grab/copy cursor ends with the move
     dragMode_ = DragMode::None;
     dragClips_.clear();
     previewDeltaBeats_ = 0.0;

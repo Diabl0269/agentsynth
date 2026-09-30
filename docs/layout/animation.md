@@ -180,6 +180,26 @@ Owners: `BottomDockComponent` (`beginTabDrag`/`dragTab`/`commitTabDrag`, [tab st
 `MixerPanelComponent` (`MixerPanelColumnDrag.cpp`, [reordering columns](../mixer/panel.md#reordering-columns))
 and `TimelinePanelComponent` (`TimelinePanelTrackDrag.cpp`, [drag to reorder](../timeline/tracks.md#drag-to-reorder), vertical axis).
 
+### Drag-and-drop cursor
+
+Every place the user drags an item to move, reorder or drop it shows the grabbing-hand cursor,
+consistently, through one header-only helper: `Source/UI/Layout/DragCursor.h`
+(`synth::ui::dragGrabCursor()`, `dragCopyCursor()`, `showDragCursor(component, copying)`,
+`endDragCursor(component, rest)`). No site sets `DraggingHandCursor` or `CopyingCursor` by hand.
+
+- **Dedicated grab handles** (a thing whose only job is to be picked up: bottom-dock tab, timeline
+  track header background, mixer column header, mixer zones row, list drag handles, MIDI-remote
+  controller surface cell, module library row, timeline ruler marker flag) show
+  `juce::MouseCursor::DraggingHandCursor` on hover AND during the drag. A mixer column header
+  shows it only while it has reorder hooks set (Direct, Master and pinned columns stay normal).
+- **Tool-driven canvases** (timeline clips, piano roll notes, module cards, macro cards) keep the
+  tool cursor on hover (`ToolCursors.h` / `applyToolCursor` stay in charge). The grab cursor shows
+  only once a move drag has actually started (past its threshold), the copy cursor shows while an
+  Option/Alt copy-drag is active (toggling Option mid-drag switches between copy and grab), and
+  the tool or normal cursor returns on release or Esc.
+- **Out of scope:** cable drags between ports, value drags (knobs, faders, sliders, curve points),
+  resize handles, marquee selection, pan/scroll, and OS file drops.
+
 ## Motion rules
 
 Every animation in the app follows these; a new one that cannot is a design question, not a
@@ -196,6 +216,10 @@ shortcut.
 - **Reorder.** The dragged item stays under the grab point, its neighbours make room, and nothing
   teleports. One shared helper (`ReorderDragAnimator`) serves every reorderable list — never a
   second implementation per list. See [Reorder drag](#reorder-drag).
+- **Drag and drop.** Every drag-to-move shows the grab cursor (copy cursor for a copy), the moving
+  item or a ghost of it follows the pointer, and a reorderable list makes room with
+  `ReorderDragAnimator` — see [Drag-and-drop cursor](#drag-and-drop-cursor) and
+  [Reorder drag](#reorder-drag).
 - **Interruption.** A retargeted animation starts from the CURRENT value, never from its start: a
   re-toggle, a second insertion change or a drop mid-glide continues from where the thing is.
 - **Time-bounded.** Nothing repaints once it has settled: frames run for a finite duration and

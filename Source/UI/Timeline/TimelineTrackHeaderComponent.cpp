@@ -2,6 +2,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "TrackColour.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -113,6 +114,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     , trackId_(trackId)
     , host_(host) {
     setComponentID("timelineTrackHeader");
+    setMouseCursor(dragGrabCursor()); // the row background is a grab handle; child widgets keep their own cursor
     // T161: makes this row a real focus target (Up/Down between rows, M/S/R for the row that holds
     // focus) — same setWantsKeyboardFocus(true) pattern TimelineClipLaneArea/PianoRollComponent
     // already use for the surfaces they own.
@@ -608,7 +610,6 @@ void TimelineTrackHeaderComponent::mouseDrag(const juce::MouseEvent& e) {
         if (e.getDistanceFromDragStart() < kRowDragThreshold)
             return;
         draggingRow_ = true;
-        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
         if (onRowDragStarted)
             onRowDragStarted(e.getScreenPosition().y);
         return;
@@ -625,7 +626,6 @@ void TimelineTrackHeaderComponent::mouseUp(const juce::MouseEvent& e) {
     // Every member write happens BEFORE onRowDragEnded — see that callback's own ordering-hazard
     // comment: it can (and normally does) destroy this component before this function returns.
     draggingRow_ = false;
-    setMouseCursor(juce::MouseCursor::NormalCursor);
     const int screenY = e.getScreenPosition().y;
     if (onRowDragEnded)
         onRowDragEnded(screenY); // may destroy `this` — nothing may follow this call

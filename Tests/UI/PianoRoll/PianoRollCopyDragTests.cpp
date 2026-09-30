@@ -278,6 +278,29 @@ TEST(PianoRollCopyDragTest, OptionDragNoLongerChangesVelocity) {
     EXPECT_NE(noteAt(f, bed.clipId, 2.0, 61), nullptr);
 }
 
+// The tool cursor stays in charge until the notes have actually moved; then a plain move shows the
+// grab hand and an Option copy the copy cursor, and toggling Option off mid-drag goes back to grab
+// (the move continues), never to the tool cursor. Release restores the tool cursor.
+TEST(PianoRollCopyDragTest, MoveShowsGrabCopyShowsCopyAndReleaseRestoresTheToolCursor) {
+    PianoRollFixture f;
+    const auto bed = makeCopyBed(f);
+    f.roll.getSelectionForTest().setSelection({bed.a});
+
+    const auto anchor = centreOf(f.roll.getNoteRect(bed.a));
+    const juce::Point<float> dragged(anchor.x + 40.0f, anchor.y);
+
+    f.roll.mouseDown(leftClick(f.roll, anchor));
+    EXPECT_TRUE(f.roll.getMouseCursor() == juce::MouseCursor::NormalCursor) << "a press alone changes nothing";
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor));
+    EXPECT_TRUE(f.roll.getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor, kAlt));
+    EXPECT_TRUE(f.roll.getMouseCursor() == juce::MouseCursor::CopyingCursor);
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor));
+    EXPECT_TRUE(f.roll.getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "Option off: still moving";
+    f.roll.mouseUp(leftDrag(f.roll, dragged, anchor));
+    EXPECT_TRUE(f.roll.getMouseCursor() == juce::MouseCursor::NormalCursor);
+}
+
 #if JUCE_MAC
 // macOS only: Cmd is a separate flag there, so plain Ctrl scrubs. On Windows/Linux Ctrl IS the Cmd
 // modifier (the unsnapped-move chord), which is why Ctrl+Alt exists.

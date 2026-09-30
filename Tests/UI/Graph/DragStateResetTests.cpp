@@ -312,6 +312,61 @@ TEST(DragStateReset, MacroCardDragClearsAllStateOnMouseUp) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The grab cursor shows on a module or macro card only once its move drag has really started, and
+// the release puts the normal cursor back.
+// ---------------------------------------------------------------------------------------------
+
+TEST(DragStateReset, ModuleCardDragShowsTheGrabCursorUntilRelease) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto oscId = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto* comp = compFor(editor, oscId);
+    ASSERT_NE(comp, nullptr);
+
+    const juce::ModifierKeys leftClick(juce::ModifierKeys::leftButtonModifier);
+    const juce::Point<int> pressPos(comp->getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    const juce::Point<int> dragPos = pressPos + juce::Point<int>(40, 30);
+
+    comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, leftClick));
+    EXPECT_TRUE(comp->getMouseCursor() == juce::MouseCursor::NormalCursor) << "a press alone changes nothing";
+    comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, leftClick, /*wasDragged=*/true));
+    EXPECT_TRUE(comp->getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+    comp->mouseUp(realMouseEvent(*comp, dragPos, pressPos, leftClick, /*wasDragged=*/true));
+    comp = compFor(editor, oscId);
+    ASSERT_NE(comp, nullptr);
+    EXPECT_TRUE(comp->getMouseCursor() == juce::MouseCursor::NormalCursor);
+}
+
+TEST(DragStateReset, MacroCardDragShowsTheGrabCursorUntilRelease) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+
+    const juce::Point<int> pressPos(card->getWidth() / 2, card->getHeight() - 20);
+    const juce::Point<int> dragPos = pressPos + juce::Point<int>(30, 15);
+    const juce::ModifierKeys leftClick(juce::ModifierKeys::leftButtonModifier);
+
+    card->mouseDown(realMouseEvent(*card, pressPos, pressPos, leftClick));
+    EXPECT_TRUE(card->getMouseCursor() == juce::MouseCursor::NormalCursor) << "a press alone changes nothing";
+    card->mouseDrag(realMouseEvent(*card, dragPos, pressPos, leftClick, /*wasDragged=*/true));
+    EXPECT_TRUE(card->getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+    card->mouseUp(realMouseEvent(*card, dragPos, pressPos, leftClick, /*wasDragged=*/true));
+    card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    EXPECT_TRUE(card->getMouseCursor() == juce::MouseCursor::NormalCursor);
+}
+
+// ---------------------------------------------------------------------------------------------
 // Regression coverage for the two ALREADY-FIXED "modal rename swallows the drag's mouseUp" bugs —
 // both fixes drop the armed drag unconditionally inside mouseDoubleClick rather than depending on
 // a mouseUp that a modal AlertWindow's enterModalState(true, ...) will steal. These pin that fix.
