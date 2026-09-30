@@ -260,6 +260,7 @@ add_executable(Tests
     AI/AIIntegrationService/AIIntegrationServiceArrangeModeTests.cpp
     AI/AIUndoTests.cpp
     UI/Graph/ModMatrixTests.cpp
+    UI/Graph/ModMatrixMacroRoutingTests.cpp
     FX/FXModule/FXModuleAttenuverterTests.cpp
     FX/FXModule/FXModuleBitcrusherTests.cpp
     FX/FXModule/FXModuleChorusTests.cpp

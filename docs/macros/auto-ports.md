@@ -510,8 +510,30 @@ Compressor. Solo, stems and bus detection walk the same edges.
 | Mixer insert splice (`MixerModelInserts`) | No | The inserted module joins its neighbour's macro, so nothing crosses. |
 | `applyJSONToGraph` / snapshots (load, AI patch apply, snippet paste, undo restore) | No | Replays a document that carries its own macros and ports; saved projects must load unchanged. |
 | `AudioEngine` default patch, `addModRouting` | No | No macros at startup; mod routings from a cable drag are already handled by the drag path. |
-| Mod matrix source/destination re-point | No | Re-points an attenuverter leg under a graph-only `recordStructuralChange`; out of scope here. |
+| Mod matrix source/destination re-point, row delete, "Add Modulation" | Yes | A user action that draws (or removes) a routing across a boundary, like a dragged mod cable; "Add" only creates an unconnected row and is its own undo step. See [the matrix paragraph](#the-mod-matrix-re-points-like-a-drag) below. |
 | Canvas rewiring (stereo leg moves, Replace module, copy channel, delete heal) | No | Re-points existing edges; delete heal never touches a port by design. |
+
+### The Mod Matrix re-points like a drag
+
+A `ModMatrixComponent` row re-point goes through `applyProgrammaticConnectionChange` inside
+`recordGraphAndMacroChange` (then `updateComponents()`), the same shape `MixerSendList` uses, so a routing
+from an LFO outside a macro to a module inside it enters through a minted inlet instead of cutting into the
+macro, and the edge and its ports are one undo step. The panel reaches the seam through the `GraphEditor`
+it is a child of; a bare panel (no editor) stays a plain graph edit. Turning the drag preference off wires
+straight through, as before.
+
+**It builds the dragged cable's topology, not the seam's raw one.** A dragged mod cable puts the hidden
+attenuverter next to the REAL destination, after any port: source, then inlet, then attenuverter, then the
+member. The seam alone would treat the attenuverter as the outside endpoint (the grouping-time shape) and
+produce source, attenuverter, inlet, member, leaving the port as the row's destination. So after the seam
+the row slides the attenuverter past every inlet it feeds. A source inside a macro needs no adjustment
+(member, outlet, attenuverter, destination is already what the seam builds). Either way the row names the
+real destination, and the source is the port when one is crossed, as for a dragged cable.
+
+**The side the user did not touch is re-resolved through this routing's own ports** (a port with exactly
+one edge in and one out), so re-pointing away removes the port it no longer needs (the one-sided sweep,
+gated on the auto-delete toggle) and a new path mints its own. A port shared with another routing is left
+alone.
 
 ## Related
 

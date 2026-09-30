@@ -2,10 +2,14 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
+#include <functional>
 #include <map>
+#include <optional>
 
 namespace {
 // MacroInletModule deliberately declares NO getModulationTargets() — GraphEditor::connectPorts()
@@ -26,11 +30,151 @@ std::vector<ModulationTarget> destinationCandidatesForCombo(ModuleBase* module) 
         targets.push_back({"In", 0});
     return targets;
 }
+
+using NodeID = juce::AudioProcessorGraph::NodeID;
+using Connection = juce::AudioProcessorGraph::Connection;
+
+/** One end of a routing: a node and the channel the attenuverter's edge lands on or leaves from. */
+struct Endpoint {
+    NodeID node;
+    int channel = 0;
+    bool valid() const noexcept { return node.uid != 0; }
+};
+
+/** The attenuverter's channel-0 edge in (incoming) or out, if it has one. */
+std::optional<Connection> attenuverterEdge(juce::AudioProcessorGraph& graph, NodeID atten, bool incoming) {
+    for (const auto& c : graph.getConnections())
+        if (incoming ? (c.destination.nodeID == atten && c.destination.channelIndex == 0)
+                     : (c.source.nodeID == atten && c.source.channelIndex == 0))
+            return c;
+    return std::nullopt;
+}
+
+/** The edges landing on and leaving `node`. */
+void edgesAround(juce::AudioProcessorGraph& graph, NodeID node, std::vector<Connection>& in,
+                 std::vector<Connection>& out) {
+    for (const auto& c : graph.getConnections()) {
+        if (c.destination.nodeID == node)
+            in.push_back(c);
+        if (c.source.nodeID == node)
+            out.push_back(c);
+    }
+}
+
+/** The real module at one end of the attenuverter's routing: the far end of its edge, looking through
+ *  every macro port that routing alone uses (one edge in, one out). Invalid when the edge is absent. */
+Endpoint resolveThroughPorts(juce::AudioProcessorGraph& graph, NodeID atten, bool incoming,
+                             const std::function<bool(NodeID)>& isPort) {
+    auto edge = attenuverterEdge(graph, atten, incoming);
+    if (!edge)
+        return {};
+    for (;;) {
+        const NodeID far = incoming ? edge->source.nodeID : edge->destination.nodeID;
+        if (!isPort(far))
+            break;
+        std::vector<Connection> in, out;
+        edgesAround(graph, far, in, out);
+        if (in.size() != 1 || out.size() != 1)
+            break; // shared with another routing: it stays where it is
+        edge = incoming ? in.front() : out.front();
+    }
+    return incoming ? Endpoint{edge->source.nodeID, edge->source.channelIndex}
+                    : Endpoint{edge->destination.nodeID, edge->destination.channelIndex};
+}
+
+/** Moves the attenuverter downstream of every macro inlet its output feeds, so a routing entering a macro
+ *  reads source -> inlet -> attenuverter -> member: the shape a dragged cable builds, and the one that
+ *  keeps the real destination (not the port) on the matrix row. The crossing-plan splice the programmatic
+ *  seam reuses puts the port after the attenuverter instead (the grouping-time shape). */
+void slideAttenuverterPastInlets(juce::AudioProcessorGraph& graph, NodeID atten) {
+    for (;;) {
+        const auto in = attenuverterEdge(graph, atten, true);
+        const auto out = attenuverterEdge(graph, atten, false);
+        if (!in || !out)
+            return;
+        auto* portNode = graph.getNodeForId(out->destination.nodeID);
+        if (portNode == nullptr || dynamic_cast<MacroInletModule*>(portNode->getProcessor()) == nullptr)
+            return;
+        std::vector<Connection> portIn, portOut;
+        edgesAround(graph, portNode->nodeID, portIn, portOut);
+        if (portIn.size() != 1 || portOut.size() != 1)
+            return;
+        const Connection next = portOut.front();
+        graph.removeConnection(*in);
+        graph.removeConnection(*out);
+        graph.removeConnection(next);
+        graph.addConnection({in->source, out->destination});
+        graph.addConnection({next.source, {atten, 0}});
+        graph.addConnection({{atten, 0}, next.destination});
+    }
+}
 } // namespace
 
-ModMatrixComponent::ModMatrixComponent(AudioEngine& engine, AppUndoManager* undoMgr)
+struct ModMatrixComponent::ModRow
+    : public juce::Component
+    , public juce::ComboBox::Listener
+    , public juce::AudioProcessorParameter::Listener {
+    ModRow(ModMatrixComponent& owner, juce::AudioProcessorGraph::NodeID id);
+
+    void parameterValueChanged(int parameterIndex, float newValue) override;
+    void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
+    ~ModRow() override;
+
+    void setRowIndex(int index) {
+        rowIndex = index;
+        repaint();
+    }
+    int rowIndex = 0;
+
+    void paint(juce::Graphics& g) override;
+    void resized() override;
+    void mouseEnter(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    void comboBoxChanged(juce::ComboBox* comboBox) override;
+    void lookAndFeelChanged() override;
+
+    // Re-applies the themed bypass/delete icons; called from the constructor and again from
+    // lookAndFeelChanged() on every theme switch (mirrors ModuleComponent::applyHeaderButtonIcons).
+    void applyButtonIcons();
+
+    ModMatrixComponent& owner;
+    juce::AudioProcessorGraph::NodeID attenuverterId;
+
+    // Keeps the attenuverter's processor alive for at least as long as this row holds parameter
+    // attachments into it. juce::ParameterAttachment's destructor unconditionally calls
+    // parameter.removeListener() on the reference it captured at construction, so the processor
+    // MUST outlive amountAttachment/bypassAttachment — including when the node has already been
+    // removed from the graph (removeModRouting) before updateRowsFromGraph() erases this row.
+    // Graph nodes are reference counted; removeNode() drops the node from the processing list
+    // immediately, and holding this Ptr only defers destruction of the object itself.
+    juce::AudioProcessorGraph::Node::Ptr attenuverterNode;
+
+    juce::ComboBox sourceCombo;
+    juce::ComboBox destCombo;
+    juce::Slider amountSlider;
+    juce::Label amountValueLabel;
+    std::unique_ptr<juce::DrawableButton> bypassToggle;
+    std::unique_ptr<juce::DrawableButton> deleteButton;
+
+    std::unique_ptr<juce::SliderParameterAttachment> amountAttachment;
+    std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
+
+    std::map<int, float> gestureStartValues;
+
+    void detach();
+    void refresh(const ModRoutingInfo& info);
+    void populateCombos();
+
+    // Re-points the attenuverter's edges and runs the change as ONE undo step.
+    void reroute(bool sourceChanged, Endpoint source, Endpoint dest);
+    // Runs graph mutations, in order, through the macro-port seam (or plain, in a bare panel) as ONE undo step.
+    void applyRoutingChange(const std::vector<std::function<bool()>>& mutations, bool slideAttenuverter);
+};
+
+ModMatrixComponent::ModMatrixComponent(AudioEngine& engine, AppUndoManager* undoMgr, GraphEditor* editor)
     : audioEngine(engine)
-    , undoManager(undoMgr) {
+    , undoManager(undoMgr)
+    , graphEditor(editor) {
     // Makes grabKeyboardFocus() on THIS component (the "modMatrix" focus region's root)
     // succeed deterministically rather than depending on JUCE's position-ordered descent into
     // children finding a focus-wanting one (see the identical comment in ModuleLibraryComponent's
@@ -53,6 +197,31 @@ ModMatrixComponent::ModMatrixComponent(AudioEngine& engine, AppUndoManager* undo
 }
 
 ModMatrixComponent::~ModMatrixComponent() { stopTimer(); }
+
+void ModMatrixComponent::clearRows() {
+    rows.clear();
+    repaint();
+}
+
+juce::String ModMatrixComponent::getRowSourceComboTextForTest(int rowIndex) const {
+    if (rowIndex < 0 || rowIndex >= (int)rows.size())
+        return {};
+    return rows[(size_t)rowIndex]->sourceCombo.getText();
+}
+
+juce::String ModMatrixComponent::getRowDestComboTextForTest(int rowIndex) const {
+    if (rowIndex < 0 || rowIndex >= (int)rows.size())
+        return {};
+    return rows[(size_t)rowIndex]->destCombo.getText();
+}
+
+juce::ComboBox* ModMatrixComponent::getRowSourceComboForTest(int rowIndex) {
+    return rowIndex >= 0 && rowIndex < (int)rows.size() ? &rows[(size_t)rowIndex]->sourceCombo : nullptr;
+}
+
+juce::ComboBox* ModMatrixComponent::getRowDestComboForTest(int rowIndex) {
+    return rowIndex >= 0 && rowIndex < (int)rows.size() ? &rows[(size_t)rowIndex]->destCombo : nullptr;
+}
 
 void ModMatrixComponent::setFlatSourceMenu(bool shouldBeFlat) {
     if (isSourceMenuFlat != shouldBeFlat) {
@@ -234,7 +403,11 @@ void ModMatrixComponent::updateRowsFromGraph() {
 
 void ModMatrixComponent::addModulation() {
     // Just add an unconnected attenuverter node to create an "empty" row
-    audioEngine.addEmptyModRouting();
+    auto add = [this] { audioEngine.addEmptyModRouting(); };
+    if (undoManager)
+        undoManager->recordStructuralChange(audioEngine.getGraph(), add);
+    else
+        add();
     updateRowsFromGraph();
 }
 
@@ -275,12 +448,12 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     sourceCombo.addListener(this);
     destCombo.addListener(this);
     deleteButton->onClick = [this] {
-        if (owner.undoManager) {
-            owner.undoManager->recordStructuralChange(owner.audioEngine.getGraph(),
-                                                      [this] { owner.audioEngine.removeModRouting(attenuverterId); });
-        } else {
-            owner.audioEngine.removeModRouting(attenuverterId);
-        }
+        // Through the seam so the ports only this routing used go with it.
+        applyRoutingChange({[this] {
+                               owner.audioEngine.removeModRouting(attenuverterId);
+                               return true;
+                           }},
+                           /*slideAttenuverter=*/false);
     };
 
     bypassToggle->setClickingTogglesState(true);
@@ -567,46 +740,83 @@ void ModMatrixComponent::ModRow::refresh(const AudioEngine::ModRoutingInfo& info
 }
 
 void ModMatrixComponent::ModRow::comboBoxChanged(juce::ComboBox* comboBox) {
-    if (comboBox == &sourceCombo || comboBox == &destCombo) {
-        uint32_t srcEncoded = (uint32_t)sourceCombo.getSelectedId();
-        uint32_t destEncoded = (uint32_t)destCombo.getSelectedId();
+    if (comboBox != &sourceCombo && comboBox != &destCombo)
+        return;
+    const auto decode = [](const juce::ComboBox& combo) {
+        const auto encoded = (juce::uint32)combo.getSelectedId();
+        return Endpoint{NodeID(encoded >> 8), (int)(encoded & 0xFF)};
+    };
+    const auto source = decode(sourceCombo);
+    const auto dest = decode(destCombo);
+    if (source.valid() || dest.valid())
+        reroute(comboBox == &sourceCombo, source, dest);
+}
 
-        uint32_t srcNodeId = srcEncoded >> 8;
-        int srcChannel = (int)(srcEncoded & 0xFF);
+void ModMatrixComponent::ModRow::reroute(bool sourceChanged, Endpoint source, Endpoint dest) {
+    auto& graph = owner.audioEngine.getGraph();
+    auto* editor = owner.graphEditor;
+    const bool throughPorts = editor != nullptr && editor->getAutoCreateMacroPortsOnDragEnabled();
 
-        uint32_t dstNodeId = destEncoded >> 8;
-        int dstChannel = (int)(destEncoded & 0xFF);
-
-        if (srcNodeId != 0 || dstNodeId != 0) {
-            auto doReroute = [this, srcNodeId, srcChannel, dstNodeId, dstChannel] {
-                auto& graph = owner.audioEngine.getGraph();
-
-                for (auto& conn : graph.getConnections()) {
-                    if (conn.destination.nodeID == attenuverterId && conn.destination.channelIndex == 0) {
-                        graph.removeConnection(conn);
-                        break;
-                    }
-                }
-                if (srcNodeId != 0)
-                    graph.addConnection(
-                        {{juce::AudioProcessorGraph::NodeID(srcNodeId), srcChannel}, {attenuverterId, 0}});
-
-                for (auto& conn : graph.getConnections()) {
-                    if (conn.source.nodeID == attenuverterId && conn.source.channelIndex == 0) {
-                        graph.removeConnection(conn);
-                        break;
-                    }
-                }
-                if (dstNodeId != 0)
-                    graph.addConnection(
-                        {{attenuverterId, 0}, {juce::AudioProcessorGraph::NodeID(dstNodeId), dstChannel}});
-            };
-
-            if (owner.undoManager) {
-                owner.undoManager->recordStructuralChange(owner.audioEngine.getGraph(), doReroute);
-            } else {
-                doReroute();
-            }
-        }
+    if (throughPorts) {
+        // The side the user did not touch may sit behind a port this routing alone uses, and the
+        // combo shows that port. Re-point from the real module behind it, so the old port goes when it
+        // is no longer needed and a fresh one is minted where the new path needs it.
+        const auto isPort = [editor](NodeID id) { return editor->getMacroController().nodeIsMacroPort(id); };
+        const auto kept = resolveThroughPorts(graph, attenuverterId, /*incoming=*/!sourceChanged, isPort);
+        if (kept.valid())
+            (sourceChanged ? dest : source) = kept;
     }
+
+    // Two steps, because the seam only routes edges that are NEW across the call: tearing the old
+    // edges down first lets it sweep the ports they leave idle, and re-adding both ends afterwards
+    // makes the untouched end a fresh edge too, so it gets a port if the new path needs one.
+    const auto removeEdges = [this, &graph] {
+        if (auto edge = attenuverterEdge(graph, attenuverterId, true))
+            graph.removeConnection(*edge);
+        if (auto edge = attenuverterEdge(graph, attenuverterId, false))
+            graph.removeConnection(*edge);
+        return true;
+    };
+    const auto addEdges = [this, &graph, source, dest] {
+        if (source.valid())
+            graph.addConnection({{source.node, source.channel}, {attenuverterId, 0}});
+        if (dest.valid())
+            graph.addConnection({{attenuverterId, 0}, {dest.node, dest.channel}});
+        return true;
+    };
+    applyRoutingChange({removeEdges, addEdges}, /*slideAttenuverter=*/throughPorts);
+}
+
+// With a canvas behind the panel, the edit goes through the macro-port seam the mixer sends use: the edge
+// and every port it mints or strands are ONE undo step, and the canvas relays out afterwards. A bare panel
+// (headless unit tests) has no macros to honour and does a plain graph edit.
+void ModMatrixComponent::ModRow::applyRoutingChange(const std::vector<std::function<bool()>>& mutations,
+                                                    bool slideAttenuverter) {
+    auto& graph = owner.audioEngine.getGraph();
+    auto* editor = owner.graphEditor;
+    if (editor == nullptr) {
+        const auto runAll = [&] {
+            for (const auto& mutation : mutations)
+                mutation();
+        };
+        if (owner.undoManager)
+            owner.undoManager->recordStructuralChange(graph, runAll);
+        else
+            runAll();
+        return;
+    }
+
+    const bool autoPorts = editor->getAutoCreateMacroPortsOnDragEnabled();
+    const auto id = attenuverterId;
+    auto step = [&] {
+        for (const auto& mutation : mutations)
+            editor->getMacroController().applyProgrammaticConnectionChange(autoPorts, mutation);
+        if (slideAttenuverter)
+            slideAttenuverterPastInlets(graph, id);
+        editor->updateComponents();
+    };
+    if (owner.undoManager)
+        owner.undoManager->recordGraphAndMacroChange(graph, editor->getMacros(), step);
+    else
+        step();
 }
