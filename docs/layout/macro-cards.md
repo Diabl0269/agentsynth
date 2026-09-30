@@ -285,6 +285,46 @@ visible immediately rather than catching up on the next 30 Hz tick; `MacroCardCo
 does not call `getParentComponent()->repaint()` itself, since `dragMacroCardBy` is the one repaint
 call for the gesture.
 
+## Nested macros
+
+A macro can sit inside another (`Macro::parentId`, see
+[`docs/macros/macros.md`](../macros/macros.md)). The canvas draws, hides and hit-tests nested macros
+as described here; **no UI creates one yet** (grouping still refuses already-grouped nodes), so this
+only matters for saved patches and tests until creating and editing nested macros from the UI lands
+in a later step. A patch with no nesting behaves exactly as before.
+
+- **A parent's hull wraps its children.** `computeMacroHullBounds` is recursive: the union is the
+  parent's own non-port members plus, for each child, the child's full hull (child expanded) or its
+  live card (child collapsed, the same rect `macroCableAnchorBounds` returns); the margins, chip row
+  and port strips are then added as for any macro. `macro.bounds` is the fallback only when that
+  union is empty. The reparent drag's excluded member is excluded inside the children too.
+- **Effective collapse.** A macro with a collapsed ancestor is hidden completely: no hull, chip,
+  strips, card or port widgets, and its members stay hidden (`MacroSet::isEffectivelyCollapsed`,
+  `isVisible`, `outermostCollapsedAncestorOf`). Its own `collapsed` flag is kept, so a child that was
+  collapsed shows as a card again when its parent expands. `syncMacroCards` shows a card only for a
+  macro that is collapsed and has no collapsed ancestor.
+- **Clicks go to the innermost macro.** `macroHullAt`, `macroChipAt` and `macroCollapseButtonAt`
+  pick the deepest visible macro under the point, then the smallest one when two unrelated macros at
+  the same depth overlap. So the hull-drag preference moves the inner macro when the press lands in
+  its hull, and the outer one only from space that belongs to the parent alone.
+- **Paint order is parents first** (`macro_nesting::macrosParentsFirst`, used by both the hull
+  painter and `paintMacroPortStrips`), so a child's outline, chip and strips draw over its parent's.
+- **Selecting a macro selects everything inside it.** `selectMacro` selects the members of the macro
+  and of every macro nested under it; `isMacroSelected` compares against that same set. The card's
+  module preview and name list, bypass/mute state and fan-out, and "Delete Macro and Members" are
+  transitive too (a nested macro's port nodes are still left out of the previews).
+- **Moving a parent carries its collapsed children.** A collapsed child is its own card component,
+  which a member drag does not move. `dragSelectionBy` moves the live card of every collapsed macro
+  carried by the drag, and the drop (`finalizeSelectionDrag`, which `finalizeMacroCardDrag` also
+  runs) shifts its `bounds` by the members' final delta, so it does not reappear in the old place
+  when its parent expands. "Carried" means collapsed, with every member moving and every member of
+  its parent moving too (`macro_nesting::collapsedMacrosCarriedBy`). A top-level card being dragged,
+  or a nested card dragged on its own, is not carried, so its own drag writes its bounds as before.
+  The chip and hull drag, and a group drag started on a member module, record graph and macros as
+  one undo step for this reason.
+- **Cables** map a hidden node to its outermost collapsed ancestor, the one card drawn for it; see
+  [cables](cables.md#nested-macros).
+
 ## Undo and persistence
 
 A macro mutation that also changes the graph (delete) goes through

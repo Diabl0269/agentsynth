@@ -53,6 +53,8 @@ Removing a macro re-parents its children to its own parent. `MacroSet` carries t
 `outermostCollapsedAncestorOf`, `isEffectivelyCollapsed`, `isVisible`) and `setParent`, which rejects
 cycles and unknown parents. The optional `"parent"` key is written only when set, so flat saves are
 byte-identical and older files load as top level; `fromVar` rejects a dangling or cyclic parent.
+The canvas already draws, hides, hit-tests and re-anchors cables around nested macros
+([macro-cards](../layout/macro-cards.md#nested-macros)); only the UI that creates them is still to come.
 
 **Nodes are addressed by uuid, everywhere.** Timeline bindings, automation lanes
 (`synth::resolveLaneParameter`), the AI patch format and the undo system all address a node by its
@@ -146,7 +148,8 @@ macro from a validated node set — never a `"macros"` key the model writes dire
 
 ## Deliberate limits
 
-- **Nested macros.** The flat model stands; a macro inside a macro is refused with a status message.
+- **Nested macros from the UI.** Grouping still refuses already-grouped nodes with a status message, so
+  nothing in the UI creates a nested macro yet; the model and the canvas already handle one.
 - **A macro is not a saveable library item.** Snippets already cover "save this group and paste it
   again" (`SnippetManager`); a macro-as-preset is a different feature.
 - **No per-voice macro instancing.** One macro instantiated per voice is the case that would justify

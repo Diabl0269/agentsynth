@@ -8,6 +8,7 @@
 
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
+#include "UI/Graph/MacroGroupController/MacroNesting.h"
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -23,9 +24,9 @@ void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom) {
     auto& controller = editor.getMacroController();
     constexpr float kHullRadius = 10.0f;
 
-    for (const auto& macro : editor.getMacros().getAll()) {
-        if (macro.collapsed)
-            continue;
+    // Parents first, so a nested child's strips paint over its parent's interior.
+    for (const auto* macroPtr : macro_nesting::macrosParentsFirst(editor.getMacros())) {
+        const auto& macro = *macroPtr;
         const auto hull = controller.macroHullBounds(macro.id);
         if (hull.isEmpty())
             continue;

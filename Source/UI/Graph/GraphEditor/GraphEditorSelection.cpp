@@ -9,6 +9,7 @@
 #include "GraphEditorInternal.h" // GraphEditor::HealSplice's full definition (captureHealSplices)
 
 #include "CanvasAccessibilityClip.h"
+#include "UI/Graph/MacroGroupController/MacroNesting.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleStepOrder.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
@@ -241,6 +242,46 @@ void GraphEditor::endMarquee() {
 
 // ---- Group drag ----
 
+namespace {
+using DragStarts = std::vector<std::pair<juce::AudioProcessorGraph::NodeID, juce::Point<int>>>;
+
+// Uuids of the nodes a selection drag is moving; empty when no macro is nested, since only a nested
+// collapsed macro can be carried (macro_nesting::collapsedMacrosCarriedBy), so a flat patch pays nothing.
+std::set<juce::String> movedUuidsForCarry(const synth::MacroSet& macros, const MacroGroupController& controller,
+                                          const DragStarts& starts) {
+    std::set<juce::String> uuids;
+    const auto& all = macros.getAll();
+    if (std::none_of(all.begin(), all.end(), [](const synth::Macro& m) { return m.parentId.isNotEmpty(); }))
+        return uuids;
+    for (const auto& [nodeId, startPos] : starts) {
+        juce::ignoreUnused(startPos);
+        if (auto uuid = controller.nodeUuidFor(nodeId); uuid.isNotEmpty())
+            uuids.insert(uuid);
+    }
+    return uuids;
+}
+
+// A nested collapsed macro riding inside a moving container is drawn as its own card component,
+// which the member drag does not move. Mid-drag (`commit` false) its live card follows at
+// bounds + delta — `bounds` is untouched until the drop, so it is still the start position; on the
+// drop (`commit` true) `bounds` itself shifts, so the macro does not reappear in its old place when
+// its parent expands, and the card lands on it.
+void shiftCarriedMacroCards(synth::MacroSet& macros, juce::OwnedArray<MacroCardComponent>& cards,
+                            const std::set<juce::String>& movedUuids, juce::Point<int> delta, bool commit) {
+    if (movedUuids.empty())
+        return;
+    for (const auto& id : macro_nesting::collapsedMacrosCarriedBy(macros, movedUuids)) {
+        auto* macro = macros.find(id);
+        if (commit)
+            macro->bounds.setPosition(macro->bounds.getPosition() + delta);
+        const auto cardPos = commit ? macro->bounds.getPosition() : macro->bounds.getPosition() + delta;
+        for (auto* card : cards)
+            if (card != nullptr && card->getMacroId() == id)
+                card->setTopLeftPosition(cardPos);
+    }
+}
+} // namespace
+
 void GraphEditor::beginSelectionDrag() {
     selectionDragStartPositions.clear();
     for (auto* comp : content.getModules()) {
@@ -264,6 +305,8 @@ void GraphEditor::dragSelectionBy(juce::Point<int> delta, ModuleComponent* initi
             break;
         }
     }
+    shiftCarriedMacroCards(macros, content.getMacroCards(),
+                           movedUuidsForCarry(macros, macroController_, selectionDragStartPositions), delta, false);
 }
 
 void GraphEditor::finalizeSelectionDrag() {
@@ -301,6 +344,15 @@ void GraphEditor::finalizeSelectionDrag() {
             comp->setTopLeftPosition(comp->getPosition() + offset);
             updateModulePosition(comp);
         }
+
+        // Every member moved by the same drag delta + snap offset; carried nested cards take exactly that.
+        for (const auto& [nodeId, startPos] : selectionDragStartPositions)
+            if (members.front()->getNodeId() == nodeId) {
+                shiftCarriedMacroCards(macros, content.getMacroCards(),
+                                       movedUuidsForCarry(macros, macroController_, selectionDragStartPositions),
+                                       members.front()->getPosition() - startPos, true);
+                break;
+            }
     }
 
     // A WHOLE-macro selection (selectMacro() — chip drag, or Cmd/Shift-selecting a macro's every

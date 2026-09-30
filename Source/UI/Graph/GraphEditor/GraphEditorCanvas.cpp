@@ -777,7 +777,8 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         if (moveMacroOnHullDragEnabled && !e.mods.isShiftDown()) {
             const auto hullId = macroController_.macroHullAt(localPos.roundToInt());
             const auto* hullMacro = hullId.isNotEmpty() ? getMacros().find(hullId) : nullptr;
-            if (hullMacro != nullptr && hullMacro->members.size() > 1) {
+            // Counted transitively: a parent with one direct member and a nested child still moves.
+            if (hullMacro != nullptr && getMacros().descendantMembers(hullId).size() > 1) {
                 beginMacroBodyDrag(hullId);
                 return;
             }
@@ -842,9 +843,15 @@ void GraphEditor::mouseUp(const juce::MouseEvent& e) {
         // mouse travelled, and finalizing would push a no-delta undo entry that visibly does nothing.
         const bool moved = isSelectionDragActive() && canvasPos != macroChipDragStartCanvasPos;
         if (moved) {
-            finalizeSelectionDrag(); // snaps + de-overlaps the group as one rigid body
+            // Graph AND macros in one step: the drop can shift a carried nested collapsed macro's
+            // `bounds` (finalizeSelectionDrag). The graph "before" is the mouseDown capture, since
+            // every drag tick already wrote live positions into the graph.
+            auto doFinalize = [this] { finalizeSelectionDrag(); }; // snaps + de-overlaps as one rigid body
             if (undoManager)
-                undoManager->pushSnapshotFromCapture(audioEngine.getGraph());
+                undoManager->recordGraphAndMacroChange(audioEngine.getGraph(), macros, doFinalize,
+                                                       undoManager->takeCapturedGraphBeforeState());
+            else
+                doFinalize();
         } else {
             cancelSelectionDrag();
         }
