@@ -106,7 +106,7 @@ void PreferencesSettingsTab::layoutPatchSaveLocationGroup(int& y, int contentWid
                                                           const GroupMatchFn& groupMatches,
                                                           const SetVisibleFn& setGroupVisible,
                                                           const BeginGroupFn& beginGroup) {
-    layoutCategory = Category::Files;
+    enterCategory(Category::Files, y);
     const std::initializer_list<juce::Component*> comps = {&patchSaveLabel, &patchSaveCombo, &patchSaveChooseButton,
                                                            &patchSaveHint};
     const bool visible = groupMatches(comps);

@@ -17,8 +17,9 @@
 // GraphEditor is wired, pushes live so the canvas does not wait for a restart.
 //
 // The rows are grouped into categories (Category below), picked from a drop-down under the title;
-// only the selected category's rows are laid out, inside a scrolling viewport. A search query
-// looks across every category. Adding a row: docs/layout/settings-preferences.md.
+// only the selected category's rows are laid out, inside a scrolling viewport. "All" shows every
+// category under its own collapsible header. A search query looks across every category.
+// Adding a row: docs/layout/settings-preferences.md.
 //
 // NOTE: PreferencesSettingsTab.cpp MUST be added to BOTH the app target AND the test
 // target in CMakeLists.txt.
@@ -32,7 +33,10 @@ public:
 
     // The category picker's entries, in drop-down order. Each layout*Groups unit lays out exactly
     // one category (its rows), so a new row goes into the unit named for its category.
-    enum class Category { Graph, Timeline, Files, Mixer, Panels, MidiRemote };
+    // All is last in the enum (so the other ids stay put) but first in the drop-down; it is never a
+    // layoutCategory, only a selection that shows every category under a collapsible header.
+    enum class Category { Graph, Timeline, Files, Mixer, Panels, MidiRemote, All };
+    static constexpr int kNumSections = 6; // every Category before All
     static juce::String categoryName(Category category);
     Category getSelectedCategory() const { return selectedCategory; }
     // Same path as picking the entry in the drop-down (fires the combo's onChange synchronously).
@@ -196,6 +200,15 @@ public:
     // assert one falls where the Dual I/O row ends without reaching into paint() itself.
     const std::vector<juce::Rectangle<int>>& getDividerBoundsForTest() const { return dividerBounds; }
 
+    // Collapsible sections of the "All" view (folds are ignored while a filter is active).
+    bool isSectionCollapsed(Category category) const;
+    void setSectionCollapsed(Category category, bool collapsed);
+    void setAllSectionsCollapsed(bool collapsed);
+    // Test seams: a section's header, and the Expand all / Collapse all buttons.
+    juce::Button& getSectionHeaderForTest(Category category);
+    juce::Button& getExpandAllButtonForTest() { return expandAllButton; }
+    juce::Button& getCollapseAllButtonForTest() { return collapseAllButton; }
+
     // Test seam: is the scrolled content taller than the visible viewport (i.e. is a
     // vertical scrollbar active)? Answers "does this tab clip its bottom groups" without reaching
     // into layoutContent. True when a window is too short to show every group, false when they fit.
@@ -232,6 +245,15 @@ private:
     void layoutMixerGroups(int& y, int contentWidth, bool& pendingDivider, const GroupMatchFn& groupMatches,
                            const SetVisibleFn& setGroupVisible, const BeginGroupFn& beginGroup);
     void setupCategorySelector();
+
+    // "All" view. Every layout*Groups unit calls enterCategory() first: it records where the
+    // category's rows begin so placeSectionHeaders() can slot a header above them afterwards.
+    void enterCategory(Category category, int y);
+    bool categoryShown(Category category) const;
+    bool sectionHeadersActive() const { return selectedCategory == Category::All && searchQuery.isEmpty(); }
+    void placeSectionHeaders(int contentWidth);
+    void refreshSectionTitles();
+    void setupSectionControls(); // chained from setupCategorySelector()
 
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
@@ -368,6 +390,22 @@ private:
     Category selectedCategory{Category::Graph};
     // The category whose groups the layout pass is currently walking (set by each layout*Groups).
     Category layoutCategory{Category::Graph};
+    // "All" view state: per-section fold, where each section's rows began in the last layout pass
+    // (-1 = not laid out), and the header buttons. Fold state is per tab instance, not persisted.
+    bool sectionCollapsed[kNumSections] = {};
+    int sectionStartY[kNumSections] = {};
+    // A fold header of the "All" view (defined in ...Sections.cpp). A juce::Button so it is
+    // keyboard-reachable and named for screen readers.
+    struct SectionHeader : juce::Button {
+        SectionHeader(PreferencesSettingsTab& o, Category c);
+        void refreshTitle();
+        void paintButton(juce::Graphics& g, bool hot, bool down) override;
+        PreferencesSettingsTab& owner;
+        Category category;
+    };
+    std::unique_ptr<SectionHeader> sectionHeaders[kNumSections];
+    juce::TextButton expandAllButton{"Expand all"};
+    juce::TextButton collapseAllButton{"Collapse all"};
     juce::String searchQuery; // trimmed, case-insensitive-compared in applySearchFilter/resized()
 
     juce::Label titleLabel;

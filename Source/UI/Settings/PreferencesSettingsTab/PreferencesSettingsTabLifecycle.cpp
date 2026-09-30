@@ -393,6 +393,15 @@ void PreferencesSettingsTab::resized() {
     auto pickerRow = bounds.removeFromTop(26);
     categoryCombo.setBounds(pickerRow.removeFromLeft(200));
     pickerRow.removeFromLeft(8);
+    const bool showFoldButtons = sectionHeadersActive();
+    expandAllButton.setVisible(showFoldButtons);
+    collapseAllButton.setVisible(showFoldButtons);
+    if (showFoldButtons) {
+        expandAllButton.setBounds(pickerRow.removeFromLeft(76));
+        pickerRow.removeFromLeft(4);
+        collapseAllButton.setBounds(pickerRow.removeFromLeft(86));
+        pickerRow.removeFromLeft(8);
+    }
     searchField.setBounds(pickerRow);
     bounds.removeFromTop(12);
 
@@ -401,7 +410,10 @@ void PreferencesSettingsTab::resized() {
     // gutter, so a control never runs under the thumb; reserving the gutter unconditionally
     // keeps the layout independent of whether the bar shows this very pass.
     contentViewport.setBounds(bounds);
-    layoutContent(juce::jmax(0, contentViewport.getWidth() - contentViewport.getScrollBarThickness()));
+    const int contentWidth = juce::jmax(0, contentViewport.getWidth() - contentViewport.getScrollBarThickness());
+    std::fill(std::begin(sectionStartY), std::end(sectionStartY), -1);
+    layoutContent(contentWidth);
+    placeSectionHeaders(contentWidth);
 }
 
 void PreferencesSettingsTab::layoutContent(int contentWidth) {
@@ -431,7 +443,7 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
     };
     auto groupMatches = [&](std::initializer_list<juce::Component*> comps) {
         if (query.isEmpty())
-            return layoutCategory == selectedCategory;
+            return categoryShown(layoutCategory);
         for (auto* c : comps)
             if (textOf(*c).containsIgnoreCase(query))
                 return true;
