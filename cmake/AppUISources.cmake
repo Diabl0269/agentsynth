@@ -53,6 +53,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelShortcuts.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipKeyboard.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackDrag.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
@@ -87,6 +88,10 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneSelection.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneEditTools.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneRange.cpp
+    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneKeyboard.cpp
+    Source/UI/Timeline/ClipAccessibilityText.h
+    Source/UI/Timeline/ClipKeyboardNav.h
+    Source/UI/Timeline/ClipKeyboardNav.cpp
     Source/UI/Timeline/ClipSelectionModel.h
     Source/UI/Timeline/RangeSelectionModel.h
     Source/UI/Mixer/MixerColumnHeader.h

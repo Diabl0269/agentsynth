@@ -41,6 +41,9 @@ std::optional<std::pair<double, double>> TimelineClipLaneArea::getSelectedClipSp
 // cross-panel key arbitration — MainComponent::resolveEditSurface decides which panel's
 // keyPressed even gets called.
 bool TimelineClipLaneArea::keyPressed(const juce::KeyPress& key) {
+    if (handleKeyboardClipKey(key))
+        return true;
+
     // P = loop the selection (Cubase's locators-to-selection). Rebindable through
     // "timelineLoopSelection" but NOT a command: it is resolved right here, on the surface that
     // knows the span, so no selection (or no owner listening) returns false and the key keeps

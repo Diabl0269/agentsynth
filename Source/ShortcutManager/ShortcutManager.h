@@ -478,6 +478,17 @@ public:
         bindings["timelineMuteFocusedTrack"] = juce::KeyPress('m', juce::ModifierKeys::noModifiers, 0);
         bindings["timelineSoloFocusedTrack"] = juce::KeyPress('s', juce::ModifierKeys::noModifiers, 0);
         bindings["timelineArmFocusedTrack"] = juce::KeyPress('r', juce::ModifierKeys::noModifiers, 0);
+        // Clip keyboard mode: bare arrows step between clips (Right on a track header enters its
+        // clips), Return opens the clip in its editor, Alt+Left/Right move it one grid step.
+        // Piano-roll and mixer arrow keys live in other categories, so nothing here conflicts.
+        const juce::ModifierKeys none, alt{juce::ModifierKeys::altModifier};
+        bindings["timelineClipPrevious"] = juce::KeyPress(juce::KeyPress::leftKey, none, 0);
+        bindings["timelineClipNext"] = juce::KeyPress(juce::KeyPress::rightKey, none, 0);
+        bindings["timelineClipAbove"] = juce::KeyPress(juce::KeyPress::upKey, none, 0);
+        bindings["timelineClipBelow"] = juce::KeyPress(juce::KeyPress::downKey, none, 0);
+        bindings["timelineClipOpen"] = juce::KeyPress(juce::KeyPress::returnKey, none, 0);
+        bindings["timelineClipMoveEarlier"] = juce::KeyPress(juce::KeyPress::leftKey, alt, 0);
+        bindings["timelineClipMoveLater"] = juce::KeyPress(juce::KeyPress::rightKey, alt, 0);
 
         // REAL ctrlModifier, not commandModifier. On macOS the Ctrl+digit space is genuinely free
         // (Cmd+digit is reserved by hosts and by the native menu bar), which is what the user asked
@@ -829,6 +840,13 @@ private:
             {"timelineMuteFocusedTrack", ShortcutCategory::Timeline},
             {"timelineSoloFocusedTrack", ShortcutCategory::Timeline},
             {"timelineArmFocusedTrack", ShortcutCategory::Timeline},
+            {"timelineClipPrevious", ShortcutCategory::Timeline},
+            {"timelineClipNext", ShortcutCategory::Timeline},
+            {"timelineClipAbove", ShortcutCategory::Timeline},
+            {"timelineClipBelow", ShortcutCategory::Timeline},
+            {"timelineClipOpen", ShortcutCategory::Timeline},
+            {"timelineClipMoveEarlier", ShortcutCategory::Timeline},
+            {"timelineClipMoveLater", ShortcutCategory::Timeline},
             {"snapSetWhole", ShortcutCategory::Timeline},
             {"snapSetHalf", ShortcutCategory::Timeline},
             {"snapSetQuarter", ShortcutCategory::Timeline},

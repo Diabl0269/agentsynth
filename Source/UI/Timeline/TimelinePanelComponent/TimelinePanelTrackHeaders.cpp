@@ -381,6 +381,7 @@ void TimelinePanelComponent::syncTrackHeaders() {
         // focusGained() round trip.
         header->onSelectRequested = [this, trackId] { setFocusedTrack(trackId); };
         header->onFocusMoveRequested = [this](int direction) { moveFocusedTrack(direction); };
+        header->onEnterClipsRequested = [this, trackId] { return enterTrackClips(trackId); };
         // Whole-row drag-to-reorder — see TimelineTrackHeaderComponent::onRowDragStarted's
         // own comment for the division of labour (the row detects the gesture, this panel resolves
         // screen Y against the ordered header list). The row hands us raw screen Y rather than

@@ -362,6 +362,9 @@ public:
      *  waiting on an OS focus event that may never arrive. */
     std::function<void()> onSelectRequested;
 
+    /** The "Next Clip" key was pressed; returns false (key not consumed) when the track has no clips. */
+    std::function<bool()> onEnterClipsRequested;
+
     // ---- Binding chip ---------------------------------------------------------
     // The chip shows the bound node's name; it turns amber when the track is UNBOUND (never had a
     // node) or ORPHANED (had one, and it is gone) — two different messages, one warning colour.

@@ -484,6 +484,12 @@ private:
     void ensureTrackVisible(int index);
     int focusedTrackIndex_ = -1;
 
+    // ---- Clip keyboard mode (TimelinePanelClipKeyboard.cpp) ----
+    bool enterTrackClips(synth::TrackId trackId);
+    void followKeyboardClip(synth::ClipId id);
+    void returnToTrackHeader(synth::TrackId trackId);
+    void wireClipLaneCallbacks();
+
     // ---- Instrument -> Plugin submenu click-resolution snapshot ----
     // The exact option list `buildAddTrackMenu()` used to populate the "Plugin" sub-submenu, so
     // `applyAddTrackMenuChoice` resolves `kAddInstrumentPluginMenuIdBase + index` against what the

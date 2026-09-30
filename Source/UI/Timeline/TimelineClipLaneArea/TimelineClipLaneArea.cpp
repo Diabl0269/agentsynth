@@ -58,6 +58,8 @@ TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSel
     // entirely, which is exactly why this hole survived until a user hit it — see
     // ClipLaneAcceptsKeyboardFocusSoSurfaceVerbsCanRoute for the guard that now pins it.
     setWantsKeyboardFocus(true);
+    setTitle("Clips");
+    setDescription("Timeline clips. Arrow keys step between clips.");
     audioFormats_.registerBasicFormats();
     // The production chooser, installed as the DEFAULT rather than called directly, so a test can
     // replace it wholesale (see setAudioFileChooser).
@@ -82,6 +84,7 @@ void TimelineClipLaneArea::refreshFromDoc() {
                 alive.push_back(clip.id);
     }
     selection_.retainOnly(alive);
+    refreshKeyboardClip();
     // A range whose corner track was removed has no rows left to cover — drop it rather than keep
     // a selection nothing can paint or act on.
     if (range_.isActive() && (doc_ == nullptr || !range_.coveredRows(*doc_)))
@@ -343,6 +346,8 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
         for (const auto& clip : track.clips)
             paintClip(g, clip, track, trackIndex, rowHeight);
     }
+
+    paintKeyboardClipRing(g);
 
     if (liveRecording_.active)
         paintLiveRecordingStrip(g);

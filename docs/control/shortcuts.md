@@ -1,8 +1,8 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **101 actions** across five categories —
-**General** (52, app-wide or routed per focused editor), **Graph** (6), **Timeline** (26),
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **108 actions** across five categories —
+**General** (52, app-wide or routed per focused editor), **Graph** (6), **Timeline** (33),
 **Piano Roll** (14) and **Mixer** (3) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
@@ -469,6 +469,28 @@ narrows to "mute". A row's own keyboard-focus outline reuses `paintFocusRegionOu
 the Focus regions section above) — same colour/alpha/thickness as a whole region root's, just painted
 around one row via the row's own `paintOverChildren`.
 
+**Clip keyboard mode** — from a focused track header, **Right** moves keyboard focus into that track's
+clips, and the arrow keys then walk them without the mouse. The "keyboard clip" is the single
+selected clip (stepping replaces the selection, so every selection-based verb — Delete, Cmd+C, the
+Split/Mute/Loop-the-selection keys — applies to it), drawn with an accent ring. All seven keys are
+rebindable Timeline-category actions, resolved by `TimelineClipLaneArea::keyPressed` (and, for the
+header's Right, `TimelineTrackHeaderComponent::keyPressed`). See
+[`timeline/focus.md`](../timeline/focus.md#clip-keyboard-mode).
+
+| Shortcut | Action |
+|----------|--------|
+| → (on a track header) | Next Clip (`timelineClipNext`) — enters that track's clips: the first clip starting at or after the playhead, else the track's first. Does nothing on a track with no clips |
+| ← / → (in clip mode) | Previous Clip / Next Clip (`timelineClipPrevious` / `timelineClipNext`) — the neighbour on the same track; the first/last clip stays put |
+| ↑ / ↓ | Clip on Track Above / Below (`timelineClipAbove` / `timelineClipBelow`) — the clip nearest in start time on the closest track above/below that has clips (empty tracks are skipped; an exact tie goes to the earlier clip) |
+| Return | Open Clip in Editor (`timelineClipOpen`) — the same hook a double-click on the clip fires (the piano roll for a MIDI clip) |
+| Alt+← / Alt+→ | Move Clip Earlier / Later by One Grid Step (`timelineClipMoveEarlier` / `timelineClipMoveLater`) — one grid division (the chosen Snap division even with the snap switch off; one beat with Snap Off), one undo step, clamped at beat 0 |
+| Esc | Back to the clip's track header. Fixed, like Delete (not in the action table); the clip stays selected |
+
+Left/Right share `timelineClipNext`/`timelineClipPrevious` between the header and the lane because two
+Timeline actions on one default key would read as a binding conflict in Settings. No existing action
+covered any of these verbs: `pianoRollNudge*` moves notes inside the roll and `transportNudge*` moves
+the playhead, so clip movement is new.
+
 ### Mixer column navigation
 
 **Mixer column navigation** — parallel to Track header focus above, but the region ROOT is the focusable leaf
@@ -692,7 +714,7 @@ arrows: see [`mixer/panel.md`](../mixer/panel.md#side-pane-zones-and-visibility)
 
 ## Command vs surface actions
 
-The 101 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 108 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
 - **Command-dispatched** (68 actions) — every General action (including the transport family
@@ -701,11 +723,11 @@ doesn't this key do anything":
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
   their enabled/disabled state is whatever `getCommandInfo` reports.
-- **Surface-resolved** (33 actions) — the timeline panel's own keys (`timelineSnapToggle`,
+- **Surface-resolved** (40 actions) — the timeline panel's own keys (`timelineSnapToggle`,
   `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, the six
   `timelineTool*` digits, and the two `timelineJumpToLocator*` keys), the three track-header
-  keys (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`), and every
-  piano roll action. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
+  keys (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`), the seven
+  clip-keyboard keys (`timelineClip*`), and every piano roll action. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
   `juce::ApplicationCommandManager`'s own "not a command" value) for every one of these — they are
   never dispatched through the command manager at all. Instead, the owning component's own
   `keyPressed()` calls a small `matchesAction(key, actionId, fallback)` helper that reads

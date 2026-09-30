@@ -182,6 +182,21 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Solo Focused Track";
     if (actionId == "timelineArmFocusedTrack")
         return "Arm Focused Track";
+    // Clip keyboard mode. "Next Clip" also carries a track header into that track's clips.
+    if (actionId == "timelineClipPrevious")
+        return "Previous Clip";
+    if (actionId == "timelineClipNext")
+        return "Next Clip";
+    if (actionId == "timelineClipAbove")
+        return "Clip on Track Above";
+    if (actionId == "timelineClipBelow")
+        return "Clip on Track Below";
+    if (actionId == "timelineClipOpen")
+        return "Open Clip in Editor";
+    if (actionId == "timelineClipMoveEarlier")
+        return "Move Clip Earlier by One Grid Step";
+    if (actionId == "timelineClipMoveLater")
+        return "Move Clip Later by One Grid Step";
     // Labelled with the same note values the snap combo shows ("1", "1/2", …) rather than
     // "Whole"/"Half", so the shortcut list and the selector name the grid identically.
     if (actionId == "snapSetWhole")

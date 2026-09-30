@@ -116,7 +116,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // grid (painted by this component's own paint(), which — as a parent — always paints before
     // its children) and below the playhead.
     addAndMakeVisible(clipLaneArea_);
-    clipLaneArea_.onClipDoubleClicked = [this](synth::ClipId id) { openPianoRoll(id); };
+    wireClipLaneCallbacks();
     // Edge-scroll during a clip drag moves the SHARED view state; the ruler has no other way to
     // learn its beats moved (it isn't a drag participant), so this is the one pair-of-repaints
     // seam every other viewState_ scroll/zoom writer in this class already uses.
