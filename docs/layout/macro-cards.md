@@ -194,7 +194,9 @@ fill recedes from 0.55 to 0.25 opacity; at or below 50 percent zoom the strip sh
 The title, preview and count keep the column between the strips (`getContentArea()`).
 Expanding a macro whose hull would extend past canvas x or y < 0 (the strips make the hull 96 px wider on each side, and
 that area is clipped and unclickable) first translates its members and any carried collapsed cards rigidly into the
-canvas (`MacroGroupController::nudgeHullIntoCanvas`), persisted as an ordinary node move inside the expand's undo step.
+canvas (`MacroGroupController::nudgeHullIntoCanvas`), persisted as an ordinary node move inside the expand's undo step. The nudge and the card's pre-expand top-left are
+remembered on the macro (transient, never saved); collapsing puts the card and its hidden members back by that nudge, so the
+card lands exactly where it was before expanding, unless a member has been moved since or the spot is taken.
 `MacroCardComponent` also implements `juce::TooltipClient`: a newline-separated, capped list of member
 names, shown by `MainComponent`'s `juce::TooltipWindow` — except while a jack is hovered and its name is
 faded or ellipsised, when the tooltip is that port's full name.
@@ -386,5 +388,6 @@ leaving the process, and keep the shape, the same as they keep a Sampler's sampl
 
 Whatever makes a macro's hull or card bigger (grouping, nesting, adding modules, expanding, adding a
 port) pushes the units beside it out of the way, as whole rigid units, inside the same undo step.
-Collapsing never pulls anything back. See
+Collapsing (or deleting a port or member) brings back the neighbours that growth pushed, when the user has
+not moved them and their old spot is still free. See
 [Making room when something grows](layout.md#making-room-when-something-grows).

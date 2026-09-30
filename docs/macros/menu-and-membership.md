@@ -229,6 +229,7 @@ and never touches Ctrl):
 | Platform | Gesture | `reparentArmed` | Result |
 |---|---|---|---|
 | macOS | Cmd-drag | true | reparent (join or leave) only |
+| macOS | plain drag of a single module (the drag-without-Cmd preference, on by default) | true | reparent (join or leave) only |
 | macOS | Ctrl-drag | false — `isCommandDown()` is false, distinct keys | insert-between only, unchanged |
 | Windows and Linux | Ctrl-drag, which IS Cmd-drag (`commandModifier` is `ctrlModifier`) | true | **both**: insert-between AND reparent, if the drag crosses a hull |
 
@@ -461,6 +462,12 @@ live re-derivation in `mouseDrag`. The preference adds two exclusions, both corr
 - **Never with Ctrl held (macOS).** A macOS Ctrl-drag is the insert-between gesture and stays that
   alone; the preference does not arm it. (On Windows and Linux Ctrl IS Cmd, so the platform matrix
   above applies unchanged.)
+
+**Landing inside the hull.** A module that will join a hull is not blocked by it: `resolvePlacement` leaves the
+join candidate's hull (and its ancestors') out of the placement blockers, so it lands where it was released, inside
+the hull, instead of being pushed clear. A collapsed card is different: it is a solid obstacle and dropping on it
+never joins. A library drag sets the join candidate BEFORE placing its ghost, for the same reason.
+See [placement blockers](../layout/layout.md#making-room-when-something-grows).
 
 **Why you may want to turn it off.** With a small macro the "excluding hull" a member is tested
 against is tiny (for two members it is just the other member's footprint), so plainly rearranging a

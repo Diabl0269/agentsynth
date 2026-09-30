@@ -325,6 +325,8 @@ void MacroGroupController::removeSelectionFromMacro(const juce::String& macroId,
         for (const auto& uuid : toRemove)
             moveMemberUpOneLevel(host_.getMacros(), macroId, uuid);
         host_.updateComponents();
+        // The hull shrank: neighbours its growth pushed aside may return (a no-op when the macro dissolved).
+        returnDisplacedNeighbours(macroId, /*keepBlocked=*/true);
     };
 
     // See addSelectionToMacro's matching comment above.
@@ -615,11 +617,20 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
         const auto origin = groupBounds.isEmpty() ? m->bounds.getTopLeft() : groupBounds.getTopLeft();
         m->bounds = juce::Rectangle<int>(origin.x, origin.y, synth::LayoutUtil::kSingleWidth, kMacroCardHeight);
     }
+    const auto preExpandOrigin = m->bounds.getTopLeft();
     m->collapsed = collapsed;
     host_.updateComponents();
     if (!collapsed) {
-        nudgeHullIntoCanvas(macroId);
+        const auto nudge = nudgeHullIntoCanvas(macroId);
+        if (auto* live = host_.getMacros().find(macroId)) {
+            live->hasExpandRecord = true;
+            live->expandNudge = nudge;
+            live->preExpandCardOrigin = preExpandOrigin;
+        }
         makeRoomFor("m:" + macroId);
+    } else {
+        restoreCardAfterCollapse(macroId);
+        returnDisplacedNeighbours(macroId); // neighbours pushed aside when it opened come back if they still can
     }
 }
 
@@ -628,15 +639,16 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
 // everything that defines it, rigidly: every non-port member module (persisted the way a finished selection drag does,
 // as node x/y) and the collapsed nested cards a drag of those members carries (their `bounds`). Runs inside
 // setMacroCollapsed's undo lambda, so undo restores the old positions with the rest of the graph and macro state.
-void MacroGroupController::nudgeHullIntoCanvas(const juce::String& macroId) {
+juce::Point<int> MacroGroupController::nudgeHullIntoCanvas(const juce::String& macroId) {
     const auto hull = macroHullBounds(macroId);
     const int dx = juce::jmax(0, -hull.getX());
     const int dy = juce::jmax(0, -hull.getY());
     if (hull.isEmpty() || (dx == 0 && dy == 0))
-        return;
+        return {};
 
     moveUnitBy("m:" + macroId, {dx, dy});
     host_.updateComponents();
+    return {dx, dy};
 }
 
 void MacroGroupController::setMacroCollapsed(const juce::String& macroId, bool collapsed) {

@@ -426,6 +426,7 @@ add_executable(Tests
     Macros/MacroAutoPort/MacroAutoPortNameTests.cpp
     Macros/MacroAutoPort/MacroAutoPortNestedTests.cpp
     Macros/MacroCardJackTests.cpp
+    Macros/MacroDropPlacementTests.cpp
     Macros/MacroHullDisplacementTests.cpp
     Macros/MacroProjectLoadTests.cpp
     Macros/MacroCardPortButtonsTests.cpp

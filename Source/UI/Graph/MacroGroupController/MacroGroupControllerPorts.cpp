@@ -270,6 +270,7 @@ void MacroGroupController::deleteMacroPortNode(const juce::String& macroId, cons
         if (macro_nesting::isEmptyMacro(host_.getMacros(), macroId))
             host_.getMacros().remove(macroId); // matches MacroSet::removeMemberEverywhere's own zero-members rule
         host_.updateComponents();
+        returnDisplacedNeighbours(macroId, /*keepBlocked=*/true); // no-op when the macro just dissolved
     };
 
     if (host_.undo())

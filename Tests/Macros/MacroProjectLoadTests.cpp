@@ -135,3 +135,20 @@ TEST(MacroProjectLoad, EveryModuleTypeInsideACollapsedMacroOpensAsSaved) {
         c.expectLoadedAsSaved({members[0]}, !hasNoCard);
     }
 }
+
+// Opening a project never runs the collapse-time restore: a neighbour that sits on an open macro's hull stays where
+// it was saved, and no displacement record exists afterwards.
+TEST(MacroProjectLoad, LoadNeverMovesNeighboursOrRecordsDisplacement) {
+    for (const bool collapsed : {false, true}) {
+        SCOPED_TRACE(collapsed ? "collapsed" : "open");
+        LoadCanvas c;
+        auto m1 = c.addSavedNode(std::make_unique<OscillatorModule>(), 400, 300);
+        auto m2 = c.addSavedNode(std::make_unique<OscillatorModule>(), 700, 300);
+        auto neighbour = c.addSavedNode(std::make_unique<OscillatorModule>(), 1000, 300);
+        c.addMacro({m1, m2}, collapsed);
+        c.openProject();
+        c.expectLoadedAsSaved({m1, m2, neighbour});
+        for (const auto& macro : c.editor.getMacros().getAll())
+            EXPECT_TRUE(macro.displaced.empty());
+    }
+}

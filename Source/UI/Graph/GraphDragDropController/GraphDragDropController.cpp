@@ -270,9 +270,10 @@ GraphDragDropController::macroJoinTargetForDrop(const juce::DragAndDropTarget::S
 
 void GraphDragDropController::itemDragMove(const juce::DragAndDropTarget::SourceDetails& dragSourceDetails) {
     auto canvasPos = host_.canvasPositionOfLocalPoint(dragSourceDetails.localPosition);
-    updateDragPreview(ghostTopLeftForCursor(canvasPos));
-    // Highlight the hull the drop would join, through the same emphasis a module reparent drag uses.
+    // Highlight the hull the drop would join, through the same emphasis a module reparent drag uses. Set BEFORE the
+    // ghost is placed: resolvePlacement treats the join hull as room to land in rather than an obstacle.
     host_.setMacroDropCandidate(dragPreviewIsPlainModule_ ? macroJoinTargetForDrop(dragSourceDetails) : juce::String());
+    updateDragPreview(ghostTopLeftForCursor(canvasPos));
 }
 
 void GraphDragDropController::itemDragExit(const juce::DragAndDropTarget::SourceDetails&) {

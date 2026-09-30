@@ -101,7 +101,22 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
 - **Undo.** It runs inside the undo step of whatever caused the growth, so one undo puts the
   neighbours back with the macro. Positions are written at once, so hulls, port strips and cables
   are correct immediately.
-- **Shrinking.** Collapsing a macro or removing a port never pulls neighbours back.
+- **Shrinking.** Whatever a macro's growth pushed is remembered on that macro (`Macro::displaced`: which unit, how
+  far, where it landed; never saved to a project file, and lost when an undo or redo restores a snapshot). Collapsing the
+  macro, deleting one of its members or ports, or a member leaving it (drag or menu), offers each pushed unit its way back, newest push first
+  (`returnDisplacedNeighbours`), repeating over the still-blocked ones until a pass returns nothing so a cascade unwinds fully: a unit returns only if the user has not moved it since (it is still exactly where the
+  push left it) and its old spot is clear, with the usual 12 px clearance, of every other unit at that level, the
+  collapsed card included. A unit that cannot return stays put. Collapse clears the record; a delete on a macro that
+  stays open keeps the pushes that only lacked room. It runs inside the same undo step as the collapse or delete. Before neighbours return, a collapse first undoes the
+  expand's canvas nudge (`restoreCardAfterCollapse`) when the members have not moved since and the card's old spot is
+  clear, so the card sits where it was and the neighbours' old spots are clear of it again.
+- **Placement blockers.** A module being dropped or dragged lands through `findFreeSlot` against the same layout
+  units, flattened over every level (`MacroGroupController::placementBlockers`): each visible module, each collapsed
+  card, each open hull. The hidden members of a collapsed macro are not blockers (they still sit at their
+  pre-collapse spots under and around the card, which is why a module set just below a card used to jump away).
+  Left out are the placed module itself, every macro that contains it (its own hull and its ancestors'), the
+  collapsed macros a group drag carries, and the macro the drop is about to join, whose hull is where the module is
+  meant to land. Used by single drags and drops (`resolvePlacement`), the group drag finalize and the add-track slot.
 - **Loading never pushes.** A card that is still being constructed (opening a project, undo, paste)
   has not "grown": its saved position is authoritative and no neighbour moves for it. Only a card
   already on the canvas that changes size makes room. `updateComponents()` is not re-entrant, so

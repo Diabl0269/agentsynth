@@ -201,6 +201,20 @@ public:
     /** Pushes every neighbour clear of `growerKey`, then repeats one level up. Call it INSIDE the undo record of
      *  whatever grew the unit; it opens none of its own. */
     void makeRoomFor(const juce::String& growerKey);
+    /** The other half of makeRoomFor: walks `macroId`'s recorded pushes newest-first and moves each neighbour back
+     *  by its delta when the user has not moved it since AND its home spot is clear of every other unit at that level
+     *  (the collapsed card included). Clears the record (`keepBlocked`: except pushes that only lacked room, for a
+     * macro that stays open). Call it inside the undo record of whatever shrank the macro (collapse, port delete); it
+     * opens none of its own. */
+    void returnDisplacedNeighbours(const juce::String& macroId, bool keepBlocked = false);
+    /** What a module being PLACED must keep clear of, as boxes for LayoutUtil::findFreeSlot: every visible module,
+     *  every collapsed card and every open hull, flattened across nesting levels, except `excludeNodes` themselves,
+     *  every macro that contains them (their own hull and its ancestors), the collapsed macros a drag of them carries,
+     *  and `joinMacroId` with its ancestors (a drop that will join it is meant to land inside). Hidden members of a
+     *  collapsed macro never appear: the card stands in for them. Macro boxes carry sentinel ids that no node has. */
+    std::vector<synth::LayoutUtil::Box>
+    placementBlockers(const std::vector<juce::AudioProcessorGraph::NodeID>& excludeNodes,
+                      const juce::String& joinMacroId = {}) const;
     /** `macroHullBounds` above, but with `excludedMemberUuid` left out of the union too —
      *  the LEAVE half of a Cmd-drag needs this because the plain hull is a LIVE union of
      *  member bounds, so the member being dragged OUT keeps inflating its own hull and could never
@@ -391,7 +405,13 @@ private:
     // on GraphEditor was private and stays private here) ----
     void applyMacroCollapsed(const juce::String& macroId, bool collapsed);
     // Shifts an expanded macro's members (and carried collapsed cards) so its hull lies within canvas x,y >= 0.
-    void nudgeHullIntoCanvas(const juce::String& macroId);
+    // Returns the translation applied (zero when the hull already fitted).
+    juce::Point<int> nudgeHullIntoCanvas(const juce::String& macroId);
+    // Right after a collapse seeded the card: undoes the expand's canvas nudge (card and hidden members, rigidly) when
+    // the members are still where the nudge left them and the original spot is clear. Clears the expand record.
+    void restoreCardAfterCollapse(const juce::String& macroId);
+    // The light refresh after units moved without any node appearing or vanishing (no component reconcile).
+    void refreshAfterMove();
     juce::String macroHullAtExcluding(juce::Point<int> canvasPos, const juce::String& excludedMacroId) const;
     std::vector<juce::AudioProcessorGraph::NodeID> resolvedMacroMemberModuleNodes(const juce::String& macroId) const;
     static juce::String macroPortNodeTypeName(bool isInput, synth::MacroPortKind kind);

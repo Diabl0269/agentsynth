@@ -339,6 +339,10 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
 
     auto newProcessor = synth::AIStateMapper::createModule(name);
 
+    // The new card is about to join joinMacroId, so that hull is not an obstacle to placing it (resolvePlacement).
+    juce::ScopedValueSetter<juce::String> joinScope(macroDragJoinId_,
+                                                    joinMacroId.isNotEmpty() ? joinMacroId : macroDragJoinId_);
+
     if (newProcessor) {
         applyDefaultDualIOForNewModule(*newProcessor, name);
         if (configure)
@@ -451,12 +455,10 @@ void GraphEditor::dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID no
 
 juce::Point<int> GraphEditor::resolvePlacement(juce::Point<int> desired, int w, int h,
                                                juce::AudioProcessorGraph::NodeID selfId) {
-    std::vector<synth::LayoutUtil::Box> boxes;
-    for (auto* comp : content.getModules()) {
-        if (comp == nullptr)
-            continue;
-        boxes.push_back({comp->getNodeId(), comp->getBounds()});
-    }
+    // Layout units, not raw components (hidden members of collapsed macros are not obstacles; collapsed cards and
+    // open hulls are). macroDragJoinId_ is the macro this placement is about to join: landing inside it is the point.
+    const auto boxes = macroController_.placementBlockers(
+        selfId.uid != 0 ? std::vector{selfId} : std::vector<juce::AudioProcessorGraph::NodeID>{}, macroDragJoinId_);
     auto snapped = synth::LayoutUtil::snap(desired);
     return synth::LayoutUtil::findFreeSlot(snapped, w, h, boxes, selfId);
 }
@@ -472,10 +474,8 @@ juce::Point<int> GraphEditor::findLeftEdgeSlotBelowModules(int w, int h) {
     int bottom = synth::LayoutUtil::kArrangeOriginY;
     bool any = false;
 
-    for (auto* comp : content.getModules()) {
-        if (comp == nullptr)
-            continue;
-        const auto bounds = comp->getBounds();
+    for (const auto& box : macroController_.placementBlockers({})) {
+        const auto& bounds = box.rect;
         left = any ? std::min(left, bounds.getX()) : bounds.getX();
         bottom = any ? std::max(bottom, bounds.getBottom()) : bounds.getBottom();
         any = true;
