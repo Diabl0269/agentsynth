@@ -1,10 +1,10 @@
 #pragma once
 
-// AccessibilityBaseline.h -- today's accessibility gap counts per audited surface, a strict ratchet
+// AccessibilityBaseline.h -- today's accessibility gap counts per audited surface, a ratchet
 // (see docs/development/accessibility.md). A count above its entry fails the test (a new control
-// shipped without a name or tooltip); a count below it fails too, so the entry is lowered in the
-// same change that fixed the gap. NEVER raise an entry: fix the control instead. A new surface may
-// only be added with its real counts.
+// shipped without a name or tooltip); a count below it passes with a NOTE line asking to lower the
+// entry (some controls exist only on some machines), and the change that fixed the gap lowers it. NEVER raise an entry:
+// fix the control instead. A new surface may only be added with its real counts.
 
 #include <cstring>
 

@@ -47,8 +47,9 @@ surface: **missingName** (empty `setTitle`, and for a button empty text; a custo
 entry in `Tests/UI/Accessibility/AccessibilityBaseline.h`:
 
 - More gaps than the entry fails and prints every gap path: fix the control you just added.
-- Fewer gaps than the entry fails too: lower the entry in the same change (a strict ratchet, like
-  `scripts/file-size-baseline.txt`).
+- Fewer gaps than the entry passes but prints a `[ NOTE ]` line: lower the entry in the same change
+  that fixed the gap. (Equality would be stricter, but a few controls exist only on some machines, so
+  it would fail on one CI platform or another.)
 - Never raise an entry. A new surface is added with its real counts.
 
 ## Verifying for real
