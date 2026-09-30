@@ -11,6 +11,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/HierarchicalArrange.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 using namespace detail;
@@ -54,6 +55,12 @@ constexpr int kMacroChipHeight = 18;
 constexpr int kMacroChipTopMargin = kMacroChipHeight + 6;
 static_assert(kMacroChipTopMargin == kMacroChipRowHeight,
               "the port rows start below the chip row (the strip fill itself spans from the hull top)");
+static_assert(kMacroHullMargin == synth::LayoutUtil::kHullMargin &&
+                  kMacroChipTopMargin == synth::LayoutUtil::kHullChipRow &&
+                  kMacroPortRowsBelowChip == synth::LayoutUtil::kHullPortRowsBelowChip &&
+                  kMacroPortRowHeight == synth::LayoutUtil::kHullPortRowHeight &&
+                  kMacroPortStripFooter == synth::LayoutUtil::kHullPortFooter,
+              "synth::LayoutUtil::openMacroHull (shared with auto-arrange) draws the hull these constants describe");
 static_assert(kMacroHullMargin + kMacroHullStripWidth == synth::LayoutUtil::kMacroHullSideOutset,
               "LayoutUtil::kMacroHullSideOutset is the hull's side reach; keep it in sync");
 
@@ -162,26 +169,14 @@ juce::Rectangle<int> hullBoundsIn(GraphCanvasHost& host, const CompByNodeUid& co
         hull = macro.bounds;
     }
 
-    // The top margin is DEEPER than the other three: the name chip is drawn at the hull's
-    // top-left and doubles as the macro's drag handle, but it is PAINTED, not a component, so it
-    // has no z-order of its own — reserving kMacroChipTopMargin above the member row keeps it on
-    // empty canvas where GraphEditor's own mouse handlers get it.
-    auto expanded = hull.expanded(kMacroHullMargin);
-    expanded.setTop(hull.getY() - kMacroChipTopMargin);
-
-    // The two port strips sit INSIDE the hull, outside the members' own margin, so the hull grows
-    // outward by each strip's width and members never move when a port is added. When the rows
-    // outrun the members the hull grows down to hold them and the '+'/'-' footer.
-    const auto [inW, outW] = macroStripWidths(true);
-    expanded.setLeft(expanded.getX() - inW);
-    expanded.setRight(expanded.getRight() + outW);
+    // The hull around the members: deeper top for the chip row (PAINTED, not a component, so reserving the depth
+    // keeps it on empty canvas where GraphEditor's own mouse handlers get it), a fixed port strip on each side
+    // INSIDE the hull so members never move when a port is added, and a bottom that grows to hold the port rows
+    // and the '+'/'-' footer. The one definition lives in synth::LayoutUtil::openMacroHull, shared with auto-arrange.
     int inputRows = 0, outputRows = 0;
     for (const auto& p : macro.ports)
         (p.isInput ? inputRows : outputRows) += macroPortRowCountIn(host, p.nodeUuid);
-    expanded.setBottom(juce::jmax(expanded.getBottom(),
-                                  expanded.getY() + kMacroChipTopMargin + kMacroPortRowsBelowChip +
-                                      juce::jmax(inputRows, outputRows) * kMacroPortRowHeight + kMacroPortStripFooter));
-    return expanded;
+    return synth::LayoutUtil::openMacroHull(hull, juce::jmax(inputRows, outputRows));
 }
 } // namespace
 

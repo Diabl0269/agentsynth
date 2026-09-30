@@ -1,6 +1,6 @@
 // GraphEditorPersistence.cpp
 //
-// Auto-arrange, and patch save/load/new-patch. GraphEditor is declared in GraphEditor.h;
+// Patch save/load/new-patch. GraphEditor is declared in GraphEditor.h;
 // sibling GraphEditor*.cpp files in this directory hold the rest of the class.
 
 #include "AudioEngine/AudioEngine.h"
@@ -15,39 +15,6 @@
 // "timeline"), stashed on load and re-merged on save so re-saving with an older build never destroys
 // a newer build's data. It is per-loaded-file (newPatch() clears it) and only the user preset
 // save/load path (savePreset/loadPreset) touches it -- undo/redo, snippets and AI apply must not.
-void GraphEditor::autoArrange() {
-    auto& graph = audioEngine.getGraph();
-    if (undoManager)
-        undoManager->captureBeforeState(graph);
-
-    auto sizeOf = [this](synth::LayoutUtil::NodeID id) -> juce::Point<int> {
-        for (auto* c : content.getModules()) {
-            if (c != nullptr && c->getNodeId() == id)
-                return {c->getWidth(), c->getHeight()};
-        }
-        return {synth::LayoutUtil::kSingleWidth, 300};
-    };
-
-    std::vector<std::pair<synth::LayoutUtil::NodeID, synth::LayoutUtil::NodeID>> extra;
-    for (const auto& r : audioEngine.getModulationRoutings()) {
-        if (r.hasSource && r.hasDest)
-            extra.push_back({r.sourceNodeID, r.destNodeID});
-    }
-
-    auto layout = synth::LayoutUtil::computeAutoArrange(graph, sizeOf, extra);
-    for (const auto& a : layout) {
-        if (auto* n = graph.getNodeForId(a.id)) {
-            n->properties.set("x", a.pos.x);
-            n->properties.set("y", a.pos.y);
-        }
-    }
-
-    updateComponents();
-
-    if (undoManager)
-        undoManager->pushSnapshotFromCapture(graph);
-}
-
 void GraphEditor::savePreset(juce::File file) {
     auto json = synth::AIStateMapper::graphToJSON(audioEngine.getGraph());
     // Re-merge whatever unknown top-level keys were stashed on the last load (e.g. a future

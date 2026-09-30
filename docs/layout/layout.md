@@ -2,7 +2,7 @@
 
 `Source/UI/Layout/LayoutUtil.h` / `.cpp` (`synth::LayoutUtil`) is the headless, JUCE-GUI-free
 geometry behind every module placement on the patch canvas: the grid a module snaps to, the search
-that keeps two cards from overlapping, the topological auto-arrange, and the ghost drawn while a
+that keeps two cards from overlapping, the row-and-column auto-arrange, and the ghost drawn while a
 drag is in flight.
 
 This folder holds the rest of the editor's presentation layer:
@@ -121,7 +121,9 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   has not "grown": its saved position is authoritative and no neighbour moves for it. Only a card
   already on the canvas that changes size makes room. `updateComponents()` is not re-entrant, so
   anything that runs while it builds cards must not call it back.
-- **No glide yet.** Neighbours land in their new place at once; there is no animated slide.
+- **No glide yet.** Neighbours land in their new place at once; there is no animated slide (auto-arrange lands at
+  once too). A card cannot paint outside its own bounds, and hulls, cables and hit-testing read live bounds, so a
+  paint-only slide would need a canvas-level overlay of cached card images rather than an offset on the card.
 
 ## Output dock
 
@@ -157,69 +159,83 @@ Master (once any mixer channel exists), the Rec Tap (if the project has one) and
 
 ## Auto-arrange
 
-`GraphEditor::autoArrange()` (Cmd+L, or the toolbar button) rearranges every visible module into a
-left-to-right topological signal-flow layout in one undo step.
+`GraphEditor::autoArrange()` (Cmd+L, or the toolbar button) lays the whole canvas out in one undo step. The rule is
+built for people who are not graph experts: things that belong together stay together, the result is predictable, and
+running it twice changes nothing. The pure layout is `computeHierarchicalArrange`
+(`Source/UI/Layout/HierarchicalArrange.{h,cpp}`: blocks, edges and track order in, positions out, no graph or
+component types); `GraphEditorAutoArrange.cpp` flattens the live canvas into that input and writes the result back.
 
-**Collect arrangeable nodes.** Every graph node whose processor is a `ModuleBase` subclass (which
-includes Audio Input), plus the `AudioGraphIOProcessor` IO nodes — Audio Output and, in a patch
-still holding one, a raw `audioInputNode`. `AttenuverterModule` nodes are skipped entirely: they
-are implementation details of the modulation graph and never appear as visible cards.
+**Rows, top to bottom.**
 
-**Build directed edges.** Edges come from `AudioProcessorGraph::getConnections()`, skipping any
-edge touching an `AttenuverterModule` node. Modulation routings from
-`AudioEngine::getModulationRoutings()` (source to destination, collapsing attenuverter chains to
-logical endpoints) are added as `extraEdges`. Duplicate edges and self-loops are removed.
+1. **The shared-modulator row.** A modulator (a block with no signal cable at all and nothing feeding it, such as an
+   LFO or an envelope) whose consumers sit in two or more rows goes in one row on top, ordered by consumer count
+   (most first), then node id. A modulator whose consumers are all in one row joins that row instead.
+2. **One row per track, in track order.** Track order is the timeline's: `GraphEditor::trackSourceOrder` (set by
+   `MainComponent`) returns each track's Track In / Track Audio node uuid in timeline order, the same order the mixer
+   lists its channels in ([`docs/mixer/mixer.md`](../mixer/mixer.md#channels-follow-audio-not-tracks)). Without that
+   callback (plugin, tests) track source nodes are ordered by node id. A track's row holds everything its source
+   reaches through signal cables (the channel macro, instrument modules, effects, a bus it sends to) plus whatever is
+   wired into that chain. A block reachable from two tracks belongs to the earlier one; a track whose source an
+   earlier track already claimed gets no row of its own.
+3. **One row per remaining connected component**, ordered by the id of the component's leftmost source (its first
+   block with nothing feeding it). A loose module with no cables is a component of one.
 
-**Assign depth by longest path.** A Kahn-style topological traversal gives each node a depth equal
-to the length of its longest incoming path; nodes with no incoming edges get depth 0. Any cycle is
-broken by ignoring back-edges to already-visited nodes, so the traversal always terminates. The
-Audio Output IO node is forced to the maximum depth, the rightmost column.
+Cables between rows are still drawn but never influence placement. Row gap is `kIntraLayerGapY`; a row is as tall as
+its tallest column stack.
 
-**Group into layers.** All nodes at one depth form a column. Within a column, nodes sort by role
-rank for a stable, readable ordering, then by node UID for full determinism across runs:
+**Columns are aligned across rows.** Inside a row a block's column is its longest-path depth from that row's sources
+(signal cables and modulation routings both count; a cycle is broken by ignoring back-edges). Column k has ONE x for
+every row and is as wide as the widest block at depth k in any row, so matching stages (Gate, EQ, Compressor, channel
+strip) line up vertically down the tracks. Inside one column of one row blocks stack by role rank (sources, then
+filters/EQ/VCA, then effects, then modulators), then node id; the shared-modulator row stacks by its own order.
 
 | Rank | Module types |
 |------|-------------|
-| 0 | Oscillator, Sequencer, MIDI Keyboard |
-| 1 | Filter, VCA |
-| 2 | FX modules (Delay, Reverb, Distortion, ...) |
-| 3 | ADSR, LFO |
+| 0 | Oscillator, Sequencer, MIDI Keyboard and the other sources |
+| 1 | Filter, EQ, VCA, Voice Mixer |
+| 2 | FX modules (Delay, Reverb, Distortion, Gate, Compressor, ...) |
+| 3 | ADSR, LFO and the other modulators |
 
-**Assign pixel coordinates.**
+**What is a block.**
 
-```
-x = kArrangeOriginX          // 40 px left margin
-for d in 0..maxDepth:
-    layerWidth = max(sizeOf(n).x for n in layers[d])
-    y = kArrangeOriginY      // 40 px top margin per column
-    for n in layers[d]:
-        nodeX = x + (layerWidth - w) / 2   // centre narrow cards in a wide column
-        emit { n, snap({nodeX, y}) }
-        y += h + kIntraLayerGapY            // 40 px between cards
-    x += layerWidth + kLayerGapX            // 80 px between columns
-```
+- **Loose module** or **collapsed macro**: one card-sized block. Nothing inside a collapsed macro is arranged; its
+  hidden members are translated rigidly by the card's delta (`MacroGroupController::moveUnitBy`), so their offsets to
+  the card never change.
+- **Open macro**: arranged recursively with the same rule (members and child macros are blocks; port widgets are
+  excluded because they dock to the hull), then placed as ONE block whose size is its hull footprint. The hull is
+  `LayoutUtil::openMacroHull(memberUnion, portRows)`, the same function `macroHullBounds` draws: the union grown by
+  the margin, the chip row on top and `kMacroHullSideOutset` of port strip each side, so the outer hull contains the
+  inner one and a hull never starts left of the canvas (the first column starts at `kArrangeOriginX`). A macro with
+  nothing to arrange inside (only ports) stays one rigid rectangle.
+- **The output dock is not arranged.** Master, Rec Tap and Audio Output are skipped; after positions are written
+  `reflowOutputDock()` places them right of everything, on the first row's y (Audio Output's own stored y is set to it).
+- A cable endpoint that resolves to nothing (the dock, a hidden helper node) contributes no edge; a macro port node or
+  a member hidden inside a collapsed macro stands in as its macro's block.
 
-Every emitted position passes through `snap()` and is clamped to
-`[0, kCanvasMax - w] x [0, kCanvasMax - h]`.
+**Pixel coordinates.** Everything is on `kGridSize`: columns and stacks advance by grid-rounded sizes, a card is
+left-aligned in its column (a wider block elsewhere in the column never shifts it sideways), and an open macro's anchor (the origin its members' offsets are measured from) is
+chosen so every member lands on the grid while the hull, which can sit a few pixels off-grid, stays within its slot.
+The origin is `(kArrangeOriginX, kArrangeOriginY)`.
 
 | Constant | Value | Meaning |
 |----------|-------|---------|
-| `kLayerGapX` | 80 px | Horizontal gap between adjacent layer columns |
-| `kIntraLayerGapY` | 40 px | Vertical gap between stacked modules in one layer |
-| `kArrangeOriginX` | 40 px | Left margin — where the first layer column starts |
-| `kArrangeOriginY` | 40 px | Top margin — where each column's first module starts |
+| `kLayerGapX` | 80 px | Horizontal gap between adjacent columns |
+| `kIntraLayerGapY` | 40 px | Gap between stacked blocks and between rows |
+| `kArrangeOriginX` | 40 px | Left margin where the first column starts |
+| `kArrangeOriginY` | 40 px | Top margin where the first row starts |
 
-All four are multiples of `kGridSize`, so arranged positions are always on-grid.
+**Idempotent by construction.** Positions depend only on sizes, topology and row order, never on where anything
+currently is, so a second Cmd+L moves nothing (and pushes no undo step: `recordGraphAndMacroChange` records nothing
+when nothing changed). Collapsing or expanding one macro and arranging again changes only that block's footprint.
 
-The column advance for single-width modules works out to `kSingleWidth + kLayerGapX` = 360 px; it
-is a consequence of the algorithm, not a named constant. A double-width module advances the cursor
-by `kDoubleWidth + kLayerGapX` = 640 px, because `sizeOf` reports its real 560 px width and
-`layerWidth` follows — see [module-card](module-card.md#width-buckets).
+**Undo and "home".** The whole write (node x/y, collapsed cards' persisted bounds, the dock) is one
+`recordGraphAndMacroChange` step, so one Cmd+Z restores every node and every collapsed card. Arranging also clears every
+macro's transient make-room record (`Macro::displaced`, the expand nudge): the layout is the new "home", so a later
+collapse never drags a neighbour back to a spot the layout has left.
 
-`autoArrange()` wraps every position write in one undo snapshot:
-`undoManager->captureBeforeState(graph)` before computing the layout,
-`undoManager->pushSnapshotFromCapture(graph)` after `updateComponents()`. One Cmd+Z restores every
-module to its pre-arrange position.
+**Synchronous geometry.** Node x/y, macro bounds and live component bounds are written together; then only the light
+refresh runs (`syncMacroCards`, port widgets re-docked, `reflowOutputDock`, repaint). Auto-arrange never calls
+`updateComponents()`, which is not re-entrant.
 
 ## LayoutUtil API
 
@@ -320,27 +336,17 @@ the lowest thing they collided with, then run through `findFreeSlot`, so results
 gap-respecting. The sweep is deterministic (top-to-bottom, then left-to-right, then id) and the
 cascade is capped at `kResolveMaxRounds` passes.
 
-**`computeAutoArrange`**
+**`computeHierarchicalArrange`**
 
 ```cpp
-struct ArrangeResult { NodeID id; juce::Point<int> pos; };
-
-std::vector<ArrangeResult>
-computeAutoArrange(juce::AudioProcessorGraph& graph,
-                   const std::function<juce::Point<int>(NodeID)>& sizeOf,
-                   const std::vector<std::pair<NodeID, NodeID>>& extraEdges);
+ArrangeOutput computeHierarchicalArrange(const ArrangeInput& input);
 ```
 
-Computes the topological layout above and returns one `ArrangeResult` per arrangeable node
-(`AttenuverterModule` nodes excluded). The caller writes `pos.x` / `pos.y` back to
-`node->properties` and calls `updateComponents()`.
-
-`sizeOf` returns the pixel footprint `{width, height}` for a `NodeID`, typically backed by the live
-`ModuleComponent` dimensions; it falls back to `{kSingleWidth, 300}` for a node with no visible
-component. `extraEdges` carries additional directed edges (for example from
-`getModulationRoutings()`) merged into the graph edge set before depths are computed, so an
-envelope-to-VCA modulation influences column ordering even though the attenuverter nodes it passes
-through are excluded from the arrangeable set.
+The pure layout behind [Auto-arrange](#auto-arrange): `ArrangeInput` carries the blocks (module, collapsed macro, open
+macro with children), the edges (signal and modulation, between any block ids), aliases (hidden members and port nodes
+mapped to the block standing in for them) and the track starts in track order. `ArrangeOutput` carries a position per
+block at every level (an open macro's position is its anchor) and the open macros' hulls. `openMacroHull` is the one
+definition of the hull around a member union. The same header holds `arrangeRoleRank`.
 
 ## Drag affordance
 

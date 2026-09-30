@@ -3,6 +3,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "Mixer/MasterSplice.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/FX/ChorusModule.h"
 #include "Modules/FX/CompressorModule.h"
@@ -28,6 +29,8 @@
 #include <gtest/gtest.h>
 #include <iostream>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <limits>
+#include <map>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -771,6 +774,29 @@ TEST_F(E2EWorkflowTest, AutoArrangeOnLoadedPresetClearsOverlapsKeepsGraph) {
                                             << "' (" << modBounds[j].bounds.toString() << ") with gap=" << gap;
         }
     }
+
+    // The output dock is not arranged: it sits right of every other card.
+    int rightmostOther = 0;
+    int leftmostDock = std::numeric_limits<int>::max();
+    for (auto* child : content->getChildren())
+        if (auto* mc = dynamic_cast<ModuleComponent*>(child)) {
+            if (synth::isOutputDockProcessor(mc->getModule()))
+                leftmostDock = std::min(leftmostDock, mc->getX());
+            else
+                rightmostOther = std::max(rightmostOther, mc->getRight());
+        }
+    ASSERT_LT(leftmostDock, std::numeric_limits<int>::max()) << "the preset has an Audio Output";
+    EXPECT_GT(leftmostDock, rightmostOther);
+
+    // Arranging again changes nothing.
+    std::map<juce::uint32, juce::Point<int>> first;
+    for (auto* node : graph().getNodes())
+        first[node->nodeID.uid] = {static_cast<int>(node->properties["x"]), static_cast<int>(node->properties["y"])};
+    editor().autoArrange();
+    for (auto* node : graph().getNodes())
+        EXPECT_EQ(juce::Point<int>(static_cast<int>(node->properties["x"]), static_cast<int>(node->properties["y"])),
+                  first[node->nodeID.uid])
+            << "node " << node->nodeID.uid << " moved on the second arrange";
 }
 
 // "App works fine" guard: every factory preset, when loaded into a fresh graph,

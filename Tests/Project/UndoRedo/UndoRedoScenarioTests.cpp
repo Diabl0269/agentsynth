@@ -283,7 +283,7 @@ TEST_F(UndoRedoTest, AutoArrangeIsSingleUndoStep) {
         beforeArrange[node->nodeID] = {x, y};
     }
 
-    // Call autoArrange — this should use captureBeforeState + pushSnapshotFromCapture
+    // Call autoArrange — one recordGraphAndMacroChange step (positions and macro bounds)
     editor.autoArrange();
 
     // Capture positions after arrange

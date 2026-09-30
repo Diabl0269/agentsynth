@@ -492,6 +492,8 @@ add_library(Core STATIC
     Source/UI/Layout/CableCurve.h
     Source/UI/Layout/LayoutUtil.h
     Source/UI/Layout/LayoutUtil.cpp
+    Source/UI/Layout/HierarchicalArrange.h
+    Source/UI/Layout/HierarchicalArrange.cpp
     Source/UI/Graph/ModuleStepOrder.h
     Source/UI/Graph/SelectionModel.h
     Source/UI/Chrome/StatusBarComponent.h

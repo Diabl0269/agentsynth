@@ -249,6 +249,14 @@ void MainComponent::wireGraphEditorCallbacks() {
     // GraphEditor owns no file dialogs and the sidebar owns no filesystem access, so
     // MainComponent brokers between them.
     graphEditor.onSaveSnippetRequested = [this] { promptSaveSnippet(); };
+    // Auto-arrange gives each timeline track a row, in timeline order.
+    graphEditor.trackSourceOrder = [this] {
+        std::vector<juce::String> uuids;
+        for (const auto& track : timelineDoc.getTracks())
+            if (track.bindingUuid.isNotEmpty())
+                uuids.push_back(track.bindingUuid);
+        return uuids;
+    };
     // Macros: GraphEditor owns no status bar — see onStatusMessage's own comment.
     graphEditor.onStatusMessage = [this](const juce::String& msg) { statusBar.showMessage(msg); };
     // The canvas/module menus' "Make Channel" and "Duplicate into Channel" route here so their ONE

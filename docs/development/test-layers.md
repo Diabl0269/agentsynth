@@ -485,8 +485,7 @@ Pure/headless tests for the grid-layout and anti-overlap helpers in
 
 `LayoutUtilTest` covers `snap` round-trips (negative-safe, midpoint), `intersectsAny` gap
 enforcement plus selfId exclusion, `findFreeSlot` returning the desired slot when clear and
-resolving a dense cluster (the returned slot overlaps none), `computeAutoArrange` signal-depth
-layering (x strictly increases per depth, Audio Output in the last column, no result-box overlaps);
+resolving a dense cluster (the returned slot overlaps none), the pure auto-arrange layout lives in `HierarchicalArrangeTests.cpp` (rows, aligned columns, shared modulators, macros as hull blocks, idempotence);
 **width-bucket mapping** (Sequencer/PolySequencer/MidiKeyboard→Double, Attenuverter→Narrow, all
 others→Single); **bucket constants on grid** (`kNarrowWidth`/`kSingleWidth`/`kDoubleWidth` all
 %8==0, `kDoubleWidth == 2 × kSingleWidth`); **column stride** (`kSingleWidth + kLayerGapX == 360`);
@@ -685,7 +684,7 @@ conventions these depend on are in
 | Mod matrix | Add an empty routing, configure source/dest, adjust CV amount, delete a routing |
 | Undo/redo | Undo add-module, complex sequences, preset-load-then-modify, a rapid 5-module sequence |
 | Combined workflows | Full preset-modify-connect-undo-redo workflow |
-| Layout / auto-arrange | Load a preset, call `autoArrange()`; all module components non-overlapping AND connection/node counts unchanged |
+| Layout / auto-arrange | Load a preset, call `autoArrange()`; all module components non-overlapping, the dock right of everything, connection/node counts unchanged, and a second arrange changes nothing. Tracks, macros and undo: `AutoArrangeTests.cpp`, `AutoArrangeMacroTests.cpp` |
 
 ## AI patch validation
 

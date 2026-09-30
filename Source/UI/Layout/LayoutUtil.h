@@ -125,10 +125,4 @@ std::vector<UnitMove> resolveDisplacement(const juce::String& growerKey, const s
 std::vector<juce::Point<int>> computeOutputDock(const std::vector<LayoutUnit>& content,
                                                 const std::vector<juce::Point<int>>& dockSizes, int dockTopY);
 
-// Topological signal-flow layout. sizeOf returns (w,h) footprint for a node id. extraEdges carries
-// modulation routing edges (src->dst) so envelope->VCA etc. influence layering depth.
-std::vector<ArrangeResult> computeAutoArrange(juce::AudioProcessorGraph& graph,
-                                              const std::function<juce::Point<int>(NodeID)>& sizeOf,
-                                              const std::vector<std::pair<NodeID, NodeID>>& extraEdges);
-
 } // namespace synth::LayoutUtil

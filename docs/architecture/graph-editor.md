@@ -21,7 +21,8 @@ layer map, signal flow and the index of the other topic docs.
 - `GraphEditorCommands.cpp` — snippets, copy/paste/duplicate, context menu, keyboard, delete/replace, timer
 - `GraphEditorDragDrop.cpp` — estimated module size, drag-preview API, file/plugin drop, drop placement
 - `GraphEditorStereoWiring.cpp` — dual-I/O wiring, stereo-pair completion, module-resize handling
-- `GraphEditorPersistence.cpp` — auto-arrange, patch save/load/new-patch
+- `GraphEditorAutoArrange.cpp` — auto-arrange: flattens the canvas for the pure layout and writes it back in one undo step
+- `GraphEditorPersistence.cpp` — patch save/load/new-patch
 
 `Source/UI/Graph/SmartConnectionEngine/` — `SmartConnectionEngine`, the first real
 collaborator class extracted out of `GraphEditor`: owns smart-connection mode/suggestion state and
@@ -60,7 +61,7 @@ The visual patching interface. Lives in the `AgentSynth` app target.
 - **Poly toggle rewire** — `rewireForPolyChange` re-anchors a module's existing cables to its new channel layout when its `poly` parameter changes (mono <-> fan), driven by `ModuleComponent`'s `"poly"` parameter listener.
 - **Module drag** — `finalizeModuleDrag` snaps the released module to the 8 px grid and resolves overlaps via spiral search. A live drag-preview system (`beginDragPreview` / `updateDragPreview` / `endDragPreview`) shows a themed grid-dot overlay plus a snapped landing ghost during drags.
 - **Library drops** — `resolvePlacement` + `finalizeModuleDrag` run on the real component after `updateComponents()` so the final position anti-overlaps using true pixel dimensions.
-- **Auto-arrange** — `autoArrange()` (triggered by Cmd+L or the toolbar button) topologically layers modules by signal-flow depth in a single undo step. See [`docs/layout/layout.md`](../layout/layout.md) for the full layout model.
+- **Auto-arrange** — `autoArrange()` (triggered by Cmd+L or the toolbar button) lays the canvas out in rows (shared modulators, then one per track, then one per remaining component) and aligned signal-flow columns, macros as blocks, in a single undo step. See [`docs/layout/layout.md`](../layout/layout.md) for the full layout model.
 - **Delete** — `requestDeleteModule(NodeID)` is the canonical deletion entry point; `ModuleComponent::deleteButton.onClick` delegates here.
 
 See [`docs/layout/layout.md`](../layout/layout.md) for the grid model, anti-overlap algorithm, and `autoArrange` constants.

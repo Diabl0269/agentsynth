@@ -1,13 +1,8 @@
 #include "Modules/AttenuverterModule.h"
-#include "Modules/FilterModule.h"
-#include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
-#include "Modules/OscillatorModule.h"
-#include "Modules/VCAModule.h"
 #include "UI/Layout/LayoutUtil.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
-#include <map>
 
 // ============================================================================
 // SnapRoundsToNearestGridMultiple
@@ -169,115 +164,6 @@ TEST(LayoutUtilTest, CollisionGapIsEnforcedOnce) {
     auto placed = findFreeSlot({vca.getX(), vca.getY()}, vca.getWidth(), vca.getHeight(), others, self);
     EXPECT_EQ(placed.x, snap(vca.getX())) << "VCA must stay in its column, not get bumped";
     EXPECT_EQ(placed.y, snap(vca.getY()));
-}
-
-// ============================================================================
-// ComputeAutoArrangeLayersBySignalDepth
-// ============================================================================
-
-TEST(LayoutUtilTest, ComputeAutoArrangeLayersBySignalDepth) {
-    using namespace synth::LayoutUtil;
-
-    // Build a real AudioProcessorGraph:
-    //   AudioInput -> Oscillator -> Filter -> VCA -> AudioOutput
-    //   LFO -> Filter (extraEdge, simulating mod routing)
-    juce::AudioProcessorGraph graph;
-
-    // Add IO processors
-    graph.addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
-        juce::AudioProcessorGraph::AudioGraphIOProcessor::audioInputNode));
-    graph.addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
-        juce::AudioProcessorGraph::AudioGraphIOProcessor::audioOutputNode));
-
-    // Get actual NodeIDs after insertion
-    NodeID audioInId, audioOutId;
-    NodeID oscId, filterId, vcaId, lfoId;
-
-    for (auto* node : graph.getNodes()) {
-        if (auto* io = dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(node->getProcessor())) {
-            if (io->getType() == juce::AudioProcessorGraph::AudioGraphIOProcessor::audioInputNode)
-                audioInId = node->nodeID;
-            else if (io->getType() == juce::AudioProcessorGraph::AudioGraphIOProcessor::audioOutputNode)
-                audioOutId = node->nodeID;
-        }
-    }
-
-    oscId = graph.addNode(std::make_unique<OscillatorModule>())->nodeID;
-    filterId = graph.addNode(std::make_unique<FilterModule>())->nodeID;
-    vcaId = graph.addNode(std::make_unique<VCAModule>())->nodeID;
-    lfoId = graph.addNode(std::make_unique<LFOModule>())->nodeID;
-
-    // Signal chain edges in the graph
-    // Module->module audio connections exercise the getConnections() edge path
-    // (these succeed because the modules expose matching audio channels).
-    graph.addConnection({{oscId, 0}, {filterId, 0}}); // Oscillator -> Filter
-    graph.addConnection({{filterId, 0}, {vcaId, 0}}); // Filter -> VCA
-
-    // Edges that touch IO nodes (AudioIn -> Osc, VCA -> AudioOut) cannot be created via
-    // addConnection here: the graph has no setPlayConfigDetails, so the IO processors expose
-    // 0 channels, and the Oscillator has no audio input. Feed them (plus the LFO mod edge)
-    // through extraEdges, which computeAutoArrange treats as topology edges directly.
-    std::vector<std::pair<NodeID, NodeID>> extraEdges = {{audioInId, oscId}, {vcaId, audioOutId}, {lfoId, filterId}};
-
-    // sizeOf stub: return fixed 280x300 for all
-    auto sizeOf = [](NodeID) -> juce::Point<int> { return {280, 300}; };
-
-    auto results = computeAutoArrange(graph, sizeOf, extraEdges);
-
-    // Must have a result for every non-attenuverter node
-    // AudioIn, AudioOut, Osc, Filter, VCA, LFO => 6 nodes
-    ASSERT_GE(static_cast<int>(results.size()), 4) << "Must arrange at least the signal-chain modules";
-
-    // Build result map: nodeId -> x position
-    std::map<NodeID, juce::Point<int>> posMap;
-    for (auto& r : results)
-        posMap[r.id] = r.pos;
-
-    // AudioOutput must be in the results
-    ASSERT_TRUE(posMap.count(audioOutId)) << "AudioOutput must be in arrange results";
-
-    // Helper: get x for a node (skip if not present)
-    auto xOf = [&](NodeID id) -> int {
-        auto it = posMap.find(id);
-        return (it != posMap.end()) ? it->second.x : -1;
-    };
-
-    // Signal chain: AudioIn <= Osc <= Filter <= VCA <= AudioOut
-    // x must strictly increase per depth layer
-    if (posMap.count(audioInId) && posMap.count(oscId))
-        EXPECT_LE(xOf(audioInId), xOf(oscId)) << "AudioInput x must be <= Oscillator x";
-    if (posMap.count(oscId) && posMap.count(filterId))
-        EXPECT_LT(xOf(oscId), xOf(filterId)) << "Oscillator x must be < Filter x";
-    if (posMap.count(filterId) && posMap.count(vcaId))
-        EXPECT_LT(xOf(filterId), xOf(vcaId)) << "Filter x must be < VCA x";
-    if (posMap.count(vcaId))
-        EXPECT_LT(xOf(vcaId), xOf(audioOutId)) << "VCA x must be < AudioOutput x";
-
-    // AudioOutput must be in the last column (no node should have x > audioOut x,
-    // unless the result is clamped — check it's at least as far as VCA)
-    int audioOutX = xOf(audioOutId);
-    if (posMap.count(vcaId))
-        EXPECT_GE(audioOutX, xOf(vcaId)) << "AudioOutput must be in last or later column than VCA";
-
-    // All result positions must be on-grid
-    for (auto& r : results) {
-        EXPECT_EQ(r.pos.x % kGridSize, 0) << "x must be on-grid for node " << r.id.uid;
-        EXPECT_EQ(r.pos.y % kGridSize, 0) << "y must be on-grid for node " << r.id.uid;
-    }
-
-    // No two result boxes should overlap (with gap=kCollisionGap)
-    const int w = 280, h = 300;
-    for (size_t i = 0; i < results.size(); ++i) {
-        juce::Rectangle<int> ri{results[i].pos.x, results[i].pos.y, w, h};
-        for (size_t j = i + 1; j < results.size(); ++j) {
-            juce::Rectangle<int> rj{results[j].pos.x, results[j].pos.y, w, h};
-            // Inflate both by half-gap and check for intersection
-            auto riInflated = ri.expanded(kCollisionGap / 2);
-            auto rjInflated = rj.expanded(kCollisionGap / 2);
-            EXPECT_FALSE(riInflated.intersects(rjInflated))
-                << "Modules " << results[i].id.uid << " and " << results[j].id.uid << " overlap in auto-arrange result";
-        }
-    }
 }
 
 // ============================================================================
