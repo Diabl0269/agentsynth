@@ -244,6 +244,24 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
     rows.rowOf.assign(g.n, -1);
     rows.stackOrder.assign(g.n, 0);
 
+    // A modulator's row follows what it modulates, not what feeds it: a block with modulation consumers and no signal
+    // cable leaving it (only a MIDI retrigger cable coming in, say) is placed like a pure modulator further down, so a
+    // signal edge into it never pulls it into the row of whatever feeds it.
+    std::vector<bool> modulator(g.n, false);
+    for (int i = 0; i < g.n; ++i)
+        modulator[i] = g.flowOut[i].empty() && !g.modOut[i].empty() && g.modIn[i].empty();
+    auto withoutModulators = [&](const std::vector<std::vector<int>>& adjacency) {
+        auto kept = adjacency;
+        for (int i = 0; i < g.n; ++i) {
+            if (modulator[i])
+                kept[i].clear();
+            kept[i].erase(std::remove_if(kept[i].begin(), kept[i].end(), [&](int j) { return modulator[j]; }),
+                          kept[i].end());
+        }
+        return kept;
+    };
+    const auto flowAll = withoutModulators(g.flowAll);
+
     // Track rows: each start claims what its chain reaches, unless an earlier track already did.
     int trackNo = 0;
     for (const auto& s : starts) {
@@ -260,7 +278,7 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
             const int u = stack.back();
             stack.pop_back();
             for (int v : g.flowOut[u])
-                if (rows.rowOf[v] < 0) {
+                if (rows.rowOf[v] < 0 && !modulator[v]) {
                     rows.rowOf[v] = row;
                     stack.push_back(v);
                 }
@@ -268,14 +286,14 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
     }
     // Things feeding a track's chain (an instrument before its Track In's channel...) join the earliest track they
     // touch.
-    propagateRows(rows.rowOf, g.flowAll);
-    assignComponentRows(rows, g, g.flowAll, g.flowIn, /*includeIsolated=*/false);
+    propagateRows(rows.rowOf, flowAll);
+    assignComponentRows(rows, g, flowAll, g.flowIn, /*includeIsolated=*/false);
 
-    // A pure modulator (no signal cables at all, nothing feeding it) whose consumers sit in two or more rows is shared:
-    // it goes in the shared row on top. One consumer row: it joins that row.
+    // A modulator whose consumers sit in two or more rows is shared: it goes in the shared row on top. One consumer
+    // row: it joins that row.
     std::vector<std::pair<int, int>> shared; // (-consumers, index)
     for (int i = 0; i < g.n; ++i) {
-        if (rows.rowOf[i] >= 0 || !g.flowAll[i].empty() || !g.modIn[i].empty() || g.modOut[i].empty())
+        if (rows.rowOf[i] >= 0 || !modulator[i])
             continue;
         std::set<int> consumerRows;
         for (int c : g.modOut[i])

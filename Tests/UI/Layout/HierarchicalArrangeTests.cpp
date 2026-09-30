@@ -420,3 +420,33 @@ TEST(HierarchicalArrange, AModulatorFeedingTwoMacrosOfOneRowSitsBeforeTheNearerO
     EXPECT_EQ(out.positions.at("lfo").x, out.positions.at("in").x);
     EXPECT_LT(out.positions.at("lfo").x, out.positions.at("m1").x);
 }
+
+// A modulator's row follows what it modulates: MIDI from track 1's start must not pull an LFO that only modulates track
+// 2's macro into track 1's row.
+TEST(HierarchicalArrange, AModulatorFedFromAnotherRowLandsInItsConsumersRow) {
+    ArrangeInput in;
+    in.blocks = {module("in1", 280, 200, 1), card("m1", 280, 90, 2), module("in2", 280, 200, 3), card("m2", 280, 90, 4),
+                 module("lfo", 280, 300, 100, 3)};
+    in.edges = {flow("in1", "m1"), flow("in2", "m2"), flow("in1", "lfo"), mod("lfo", "m2")};
+    in.trackStarts = {"in1", "in2"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    EXPECT_GT(out.positions.at("lfo").y, out.positions.at("m1").y + 90) << "below track 1's row";
+    EXPECT_EQ(out.positions.at("lfo").y, out.positions.at("m2").y);
+    EXPECT_LT(out.positions.at("lfo").x, out.positions.at("m2").x);
+    EXPECT_EQ(computeHierarchicalArrange(in).positions, out.positions);
+}
+
+// A block with a real signal output keeps its row even when it also modulates another row.
+TEST(HierarchicalArrange, ABlockWithASignalOutputKeepsItsRowWhenItAlsoModulatesAnotherRow) {
+    ArrangeInput in;
+    in.blocks = {module("in1", 280, 200, 1), module("x", 280, 300, 2, 3), card("m1", 280, 90, 3),
+                 module("in2", 280, 200, 4), card("m2", 280, 90, 5)};
+    in.edges = {flow("in1", "x"), flow("x", "m1"), flow("in2", "m2"), mod("x", "m2")};
+    in.trackStarts = {"in1", "in2"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    EXPECT_LT(out.positions.at("x").y, out.positions.at("in2").y) << "still in track 1's row";
+}

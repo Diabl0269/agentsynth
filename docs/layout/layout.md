@@ -178,7 +178,9 @@ component types); `GraphEditorAutoArrange.cpp` flattens the live canvas into tha
 
 1. **The shared-modulator row.** A modulator (a block with no signal cable at all and nothing feeding it, such as an
    LFO or an envelope) whose consumers sit in two or more rows goes in one row on top, ordered by consumer count
-   (most first), then node id. A modulator whose consumers are all in one row joins that row instead.
+   (most first), then node id. A modulator whose consumers are all in one row joins that row instead. A block with modulation consumers and no signal cable leaving it (an LFO
+   that only takes a MIDI retrigger cable in) counts as a modulator too, so that incoming cable never pulls it into the
+   feeding track's row.
 2. **One row per track, in track order.** Track order is the timeline's: `GraphEditor::trackSourceOrder` (set by
    `MainComponent`) returns each track's Track In / Track Audio node uuid in timeline order, the same order the mixer
    lists its channels in ([`docs/mixer/mixer.md`](../mixer/mixer.md#channels-follow-audio-not-tracks)). Without that
