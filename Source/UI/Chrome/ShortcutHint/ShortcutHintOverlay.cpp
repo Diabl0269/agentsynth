@@ -42,19 +42,57 @@ void ShortcutHintOverlay::addTarget(juce::Component& component, const juce::Stri
     targets_.push_back({juce::Component::SafePointer<juce::Component>(&component), actionId});
 }
 
-bool ShortcutHintOverlay::isCommandAlone(const juce::ModifierKeys& mods) noexcept {
-    return (mods.getRawFlags() & juce::ModifierKeys::allKeyboardModifiers) == juce::ModifierKeys::commandModifier;
+void ShortcutHintOverlay::addAreaTarget(juce::Component& owner, std::function<juce::Rectangle<int>()> areaInOwner,
+                                        const juce::String& actionId) {
+    targets_.push_back({juce::Component::SafePointer<juce::Component>(&owner), actionId, std::move(areaInOwner)});
+}
+
+// Raw flags, so "alone" means exactly that one modifier. Off the Mac JUCE's commandModifier IS
+// ctrlModifier, so Ctrl is already the Cmd case there and is never handled a second time.
+ShortcutHintOverlay::HintModifier ShortcutHintOverlay::hintModifierOf(const juce::ModifierKeys& mods) noexcept {
+    const int held = mods.getRawFlags() & juce::ModifierKeys::allKeyboardModifiers;
+    if (held == juce::ModifierKeys::commandModifier)
+        return HintModifier::Cmd;
+#if JUCE_MAC
+    if (held == juce::ModifierKeys::ctrlModifier)
+        return HintModifier::Ctrl;
+#endif
+    if (held == juce::ModifierKeys::altModifier)
+        return HintModifier::Alt;
+    return HintModifier::None;
+}
+
+bool ShortcutHintOverlay::isAnyHintModifierDown(const juce::ModifierKeys& mods) noexcept {
+#if JUCE_MAC
+    if (mods.isCtrlDown())
+        return true;
+#endif
+    return mods.isCommandDown() || mods.isAltDown();
+}
+
+// Cmd shows every bound target; Ctrl and Option only those whose CURRENT binding uses that key.
+bool ShortcutHintOverlay::bindingShownInMode(const juce::KeyPress& binding) const noexcept {
+    switch (mode_) {
+    case HintModifier::Ctrl:
+        return binding.getModifiers().isCtrlDown();
+    case HintModifier::Alt:
+        return binding.getModifiers().isAltDown();
+    case HintModifier::Cmd:
+    case HintModifier::None:
+        break;
+    }
+    return true;
 }
 
 void ShortcutHintOverlay::sample(const juce::ModifierKeys& mods) {
     // A held mouse button is a click: cancel, like any other key.
     if (mods.isAnyMouseButtonDown()) {
         cancelNow();
-        armed_ = !mods.isCommandDown();
+        armed_ = !isAnyHintModifierDown(mods);
         return;
     }
 
-    if (!mods.isCommandDown()) {
+    if (!isAnyHintModifierDown(mods)) {
         armed_ = true;
         if (state_ == State::Pending)
             hideNow();
@@ -63,18 +101,29 @@ void ShortcutHintOverlay::sample(const juce::ModifierKeys& mods) {
         return;
     }
 
-    if (!isCommandAlone(mods)) {
-        // Cmd plus another modifier: that is a chord in the making, not a hint request.
+    const auto mode = hintModifierOf(mods);
+    if (mode == HintModifier::None) {
+        // A modifier plus another (Cmd+Shift): that is a chord in the making, not a hint request.
+        cancelNow();
+        return;
+    }
+
+    // Switching modifiers mid-hold cancels; a DIFFERENT one pressed after a release (mid fade-out)
+    // starts over from the delay.
+    if (state_ == State::FadingOut && armed_ && mode != mode_)
+        hideNow();
+    else if (state_ != State::Idle && mode != mode_) {
         cancelNow();
         return;
     }
 
     if (state_ == State::Idle && armed_) {
+        mode_ = mode;
         state_ = State::Pending;
         pressedAtMs_ = clock_();
         startTimer(static_cast<int>(kShowDelayMs));
     } else if (state_ == State::FadingOut && armed_) {
-        resumeFadeIn(); // Cmd pressed again mid fade-out: no second delay
+        resumeFadeIn(); // the same modifier pressed again mid fade-out: no second delay
     } else if (state_ == State::Pending && clock_() - pressedAtMs_ >= kShowDelayMs) {
         showHints();
     }
@@ -82,7 +131,7 @@ void ShortcutHintOverlay::sample(const juce::ModifierKeys& mods) {
 
 void ShortcutHintOverlay::timerCallback() {
     stopTimer();
-    // The timer is the deadline; the live modifier state confirms Cmd is still the only thing down.
+    // The timer is the deadline; the live modifier state confirms the hint modifier is still the only thing down.
     if (state_ == State::Pending)
         sample(juce::ModifierKeys::getCurrentModifiersRealtime());
 }
@@ -90,8 +139,9 @@ void ShortcutHintOverlay::timerCallback() {
 bool ShortcutHintOverlay::keyPressed(const juce::KeyPress& key, juce::Component*) {
     if (state_ != State::Idle)
         cancelNow();
-    // A chord (Cmd+S) pressed before Cmd was ever sampled still latches the hints off for this hold.
-    if (key.getModifiers().isCommandDown())
+    // A chord (Cmd+S, Ctrl+V) pressed before its modifier was ever sampled still latches the hints off for
+    // this hold.
+    if (isAnyHintModifierDown(key.getModifiers()))
         armed_ = false;
     return false;
 }
@@ -119,7 +169,7 @@ void ShortcutHintOverlay::changeListenerCallback(juce::ChangeBroadcaster*) {
 void ShortcutHintOverlay::cancelNow() {
     const bool wasActive = state_ != State::Idle;
     hideNow();
-    // Stay quiet until Cmd is released, so one hold never hints twice.
+    // Stay quiet until the modifier is released, so one hold never hints twice.
     if (wasActive)
         armed_ = false;
 }

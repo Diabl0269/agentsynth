@@ -296,6 +296,8 @@ void MainComponent::assembleToolbar() {
                          {&statusBar.getTransportButton(), "togglePlayback"}};
     hintParts.dock = &bottomDock;
     hintParts.transport = &timelinePanel.getTransportBar();
+    hintParts.pianoRoll = &timelinePanel.getPianoRoll();
+    hintParts.mixer = &bottomDock.getMixerPanel();
     hintParts.statusBar = &statusBar;
     hintParts.toggleBottomPanelButton = &toggleBottomPanelButton;
     hintParts.isDockOpen = [this] { return isBottomDockVisible; };

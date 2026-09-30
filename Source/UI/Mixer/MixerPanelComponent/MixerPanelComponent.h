@@ -78,6 +78,9 @@ public:
     SidePane& getSidePane() noexcept { return sidePane_; }
     /** The toolbar button that shows and hides it. */
     SidePaneToggleButton& getSidePaneButton() noexcept { return toolbar_.getSidePaneButton(); }
+    /** The toolbar's Inserts / Sends / EQ toggle and the shortcut action it mirrors (shortcut hints). */
+    juce::Button& getSectionToggle(MixerSection section) noexcept { return toolbar_.getSectionToggle(section); }
+    static juce::String sectionToggleActionId(MixerSection section);
     /** Shows or hides the side pane; `forceOpen` only ever opens it. Always true (the mixer has a pane). */
     bool toggleSidePane(bool forceOpen = false);
 
@@ -327,7 +330,6 @@ private:
 
     // ---- Keyboard dispatch -- implemented in MixerPanelKeyboard.cpp ----------------------------
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
-    static juce::String sectionToggleActionId(MixerSection section);
     static juce::KeyPress defaultSectionToggleKey(MixerSection section);
     juce::String sectionToggleShortcutText(MixerSection section) const;
     bool moveFocus(int direction);

@@ -31,7 +31,8 @@ int ShortcutHintOverlay::capWidth(const juce::String& text, bool compact) const 
 }
 
 juce::String ShortcutHintOverlay::keyTextFor(const juce::String& actionId) const {
-    return hint::formatKeyCapTextForPlatform(shortcuts_.getBinding(actionId));
+    const auto binding = shortcuts_.getBinding(actionId);
+    return bindingShownInMode(binding) ? hint::formatKeyCapTextForPlatform(binding) : juce::String();
 }
 
 juce::Rectangle<int> ShortcutHintOverlay::boundsInOverlay(const juce::Component& c) const {
@@ -43,10 +44,12 @@ juce::Rectangle<int> ShortcutHintOverlay::boundsInOverlay(const juce::Component&
 // sibling at any level covering that centre. Deliberately not isShowing() or getComponentAt(): the
 // first also wants a native window and the second wants the host itself visible, and neither
 // changes anything in the real app (the host is on screen whenever Cmd is held).
-bool ShortcutHintOverlay::isHintable(const juce::Component& c) const {
+// `pointInC` is the spot that must be visible and uncovered: the centre for a component, the area's
+// centre for a painted region of one.
+bool ShortcutHintOverlay::isHintable(const juce::Component& c, juce::Point<int> pointInC) const {
     if (!host_.isParentOf(&c))
         return false;
-    auto point = c.getLocalBounds().getCentre();
+    auto point = pointInC;
     const juce::Component* node = &c;
     while (node != &host_) {
         const auto* parent = node->getParentComponent();
@@ -86,13 +89,16 @@ void ShortcutHintOverlay::addBubbleEntries(const DockHintInfo& dock) {
 
     for (const auto& target : targets_) {
         auto* c = target.component.getComponent();
-        if (c == nullptr || !isHintable(*c))
+        if (c == nullptr)
+            continue;
+        const auto area = target.area ? target.area() : c->getLocalBounds();
+        if (area.isEmpty() || !isHintable(*c, area.getCentre()))
             continue;
         const auto text = keyTextFor(target.actionId);
         if (text.isEmpty())
             continue;
         hint::BubbleRequest request;
-        request.anchor = boundsInOverlay(*c);
+        request.anchor = getLocalArea(c, area);
         request.size = {capWidth(text), AppLookAndFeel::kKeyCapHeight};
         if (!dockBounds.isEmpty() && dock.dock->isParentOf(c))
             request.container = dockBounds;

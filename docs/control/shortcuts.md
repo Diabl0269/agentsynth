@@ -791,6 +791,18 @@ button it labels; release and they shrink back and fade out. The
 overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-window child of
 `MainComponent` that paints only while the hints are up.
 
+- **Three hold keys.** **Cmd** alone shows every target that has any binding. **Ctrl** alone (macOS
+  only; off the Mac Ctrl is Cmd) and **Option/Alt** alone show only the targets whose *current*
+  binding uses that key -- the Mac Ctrl+letter and Option+letter shortcuts (`⌃V` on the piano roll's
+  Velocity chip, `⌥S` on its Scale filter chip, the mixer's `⌃I`/`⌃S`/`⌃E` toggles, `⌃A` on the AI
+  Panel button). The filter reads the binding fresh each time, so a rebind moves a target in or out
+  of the set and its bubble follows the new key. Switching from one hold key to another, or adding a
+  second modifier, cancels like any chord; the latch, fade-out resume and delay all work per key. A
+  different key pressed while the hints are fading out starts over from the 500 ms delay.
+- **Area targets.** The piano roll's header chips are painted rectangles, not child components, so
+  they register with `addAreaTarget(owner, areaInOwner, actionId)`: the same visibility check runs on
+  the area's centre through the owner's parents (a closed roll gives no bubble) and the bubble
+  anchors on the chip (`PianoRollComponent::getHeaderChipBounds`).
 - **The key is never hard-coded.** A button is registered with the shortcut *action* it triggers
   (`MainComponentShortcutHints.cpp` names them); the text is read from `ShortcutManager` each time
   the hints appear and re-read on a rebind while they are up. An action with no key gets no bubble.
@@ -834,7 +846,9 @@ overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-wind
 
 Covered today: the toolbar's Library, New, Save, Load, Settings, Undo, Redo, Auto-arrange, Minimap,
 Mod Matrix, AI Panel and Show/Hide Panel buttons; the dock tabs; the timeline transport bar's
-play/stop, record, loop and metronome buttons; and the status bar's play/stop.
+play/stop, record, loop and metronome buttons; the status bar's play/stop; the mixer toolbar's
+Inserts, Sends and EQ toggles; and, while a clip is open, the piano roll's Quantise, Quantise length,
+Quantise pitches, Scale, Scale filter and Velocity chips.
 
 ## Canvas mouse gestures
 

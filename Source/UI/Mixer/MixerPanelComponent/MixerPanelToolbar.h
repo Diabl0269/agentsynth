@@ -32,7 +32,8 @@ public:
     void bindSidePane(SidePane& pane);
     SidePaneToggleButton& getSidePaneButton() noexcept { return paneButton_; }
 
-    juce::Button& getSectionToggleForTest(MixerSection section) noexcept { return toggles_[(size_t)section]; }
+    juce::Button& getSectionToggle(MixerSection section) noexcept { return toggles_[(size_t)section]; }
+    juce::Button& getSectionToggleForTest(MixerSection section) noexcept { return getSectionToggle(section); }
     juce::TextButton& getAddBusButtonForTest() noexcept { return addBusButton_; }
     juce::TextButton& getResetMetersButtonForTest() noexcept { return resetMetersButton_; }
 

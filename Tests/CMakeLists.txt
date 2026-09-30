@@ -200,6 +200,7 @@ add_executable(Tests
     UI/Chrome/ShortcutHint/ShortcutHintTextTests.cpp
     UI/Chrome/ShortcutHint/ShortcutHintOverlayTests.cpp
     UI/Chrome/ShortcutHint/ShortcutHintMainWindowTests.cpp
+    UI/Chrome/ShortcutHint/ShortcutHintModifierTests.cpp
     UI/Graph/GraphEditor/GraphEditorTests.cpp
     UI/Graph/GraphEditor/GraphEditorModDropHintTests.cpp
     UI/Graph/GraphEditor/GraphEditorKnobAnchorTests.cpp

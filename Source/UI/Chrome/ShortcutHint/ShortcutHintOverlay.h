@@ -27,8 +27,9 @@ struct DockHintInfo {
     std::vector<DockTabHint> tabs; // offered in the strip, in tab order (detached tabs excluded)
 };
 
-// ShortcutHintOverlay: hold Cmd on its own for ~500 ms and a key-cap bubble appears on every
-// visible registered button; release and they fade out. Any other key, a mouse click or a loss of
+// ShortcutHintOverlay: hold Cmd (or, on macOS, Ctrl; or Option/Alt) on its own for ~500 ms and a key-cap
+// bubble appears on every visible registered button; Ctrl and Option show only the buttons whose live
+// binding uses that key. Release and they fade out. Any other key, a mouse click or a loss of
 // window focus cancels at once. A full-window child of the host that paints only while showing and
 // never takes a click (docs/control/shortcuts.md#shortcut-hints).
 //
@@ -55,6 +56,9 @@ public:
     /** Registers a button that triggers `actionId`; the key shown is always read from the
      *  ShortcutManager. A registered component that is hidden, clipped or covered gets no hint. */
     void addTarget(juce::Component& component, const juce::String& actionId);
+    /** Like addTarget, for a painted region (a header chip) of `owner`; `areaInOwner` is read fresh each time. */
+    void addAreaTarget(juce::Component& owner, std::function<juce::Rectangle<int>()> areaInOwner,
+                       const juce::String& actionId);
     /** Supplies the bottom dock's tabs and toggle; called each time the hints appear. */
     void setDockSource(std::function<DockHintInfo()> source) { dockSource_ = std::move(source); }
 
@@ -94,7 +98,10 @@ private:
     struct Target {
         juce::Component::SafePointer<juce::Component> component;
         juce::String actionId;
+        std::function<juce::Rectangle<int>()> area; // empty: the whole component
     };
+    // The one modifier whose hold drives the hints; None = no hint modifier, or more than one.
+    enum class HintModifier { None, Cmd, Ctrl, Alt };
 
     void timerCallback() override;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
@@ -104,7 +111,9 @@ private:
     void mouseMove(const juce::MouseEvent& e) override { sample(e.mods); }
     void componentMovedOrResized(juce::Component&, bool, bool) override;
 
-    static bool isCommandAlone(const juce::ModifierKeys& mods) noexcept;
+    static HintModifier hintModifierOf(const juce::ModifierKeys& mods) noexcept;
+    static bool isAnyHintModifierDown(const juce::ModifierKeys& mods) noexcept;
+    bool bindingShownInMode(const juce::KeyPress& binding) const noexcept;
     void cancelNow();
     void showHints();
     void beginFadeOut();
@@ -112,7 +121,8 @@ private:
     void setOpacity(float value);
     void hideNow();
     void applyEntryTween(juce::Graphics& g, const Entry& entry) const;
-    bool isHintable(const juce::Component& c) const;
+    bool isHintable(const juce::Component& c, juce::Point<int> pointInC) const;
+    bool isHintable(const juce::Component& c) const { return isHintable(c, c.getLocalBounds().getCentre()); }
 
     void rebuildEntries();
     void addBubbleEntries(const DockHintInfo& dock);
@@ -131,7 +141,8 @@ private:
     std::vector<Entry> entries_;
 
     State state_{State::Idle};
-    // False after a cancel until Cmd has been fully released, so one Cmd hold can never hint twice.
+    HintModifier mode_{HintModifier::Cmd}; // the modifier of the current hold
+    // False after a cancel until every hint modifier has been released, so one hold can never hint twice.
     bool armed_{true};
     double pressedAtMs_{0.0};
     float opacity_{0.0f};
