@@ -39,6 +39,24 @@ TEST(CablePathDirection, BackwardCableLeavesRightAndArrivesFromTheLeft) {
     EXPECT_LE(c.end.x - c.c2.x, synth::ui::kCableMaxBackHandle);
 }
 
+TEST(CablePathDirection, BackwardCableLoopIsVisibleOutOfTheOutput) {
+    // An LFO's CV output feeding a module ~800 px to its left and 250 px up: the cable must visibly swing
+    // right of the jack before turning back, not leave with a hook too small to read.
+    const juce::Point<float> out(920.0f, 387.0f), in(110.0f, 138.0f);
+    const auto bounds = GraphEditor::buildCablePath(out, in).getBounds();
+    EXPECT_GE(bounds.getRight(), out.x + 25.0f);
+    EXPECT_LE(bounds.getX(), in.x - 25.0f);
+}
+
+TEST(CablePathDirection, ShortForwardHopDoesNotOvershootIntoAKink) {
+    // A macro's interior jack to a member's jack ~30 px right and 44 px down: the handles must not cross
+    // past the opposite end (the minimum handle is capped at half the vertical gap).
+    const auto c = readCubic(GraphEditor::buildCablePath({0.0f, 0.0f}, {30.0f, 44.0f}));
+    EXPECT_LE(c.c1.x, c.end.x);
+    EXPECT_GE(c.c2.x, c.start.x);
+    EXPECT_GT(c.c1.x, c.start.x) << "still leaves heading right";
+}
+
 TEST(CablePathDirection, VeryFarBackwardCableIsBounded) {
     const auto c = readCubic(GraphEditor::buildCablePath({5000.0f, 0.0f}, {0.0f, 0.0f}));
     EXPECT_FLOAT_EQ(c.c1.x, 5000.0f + synth::ui::kCableMaxBackHandle);

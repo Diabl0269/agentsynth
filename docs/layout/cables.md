@@ -35,9 +35,11 @@ pan alone can never move a cable — only a graph edit invalidates it.
 **Direction rule.** `p1` is always the output (source) end and `p2` the input (destination) end, fixed
 by the caller (the in-progress drag wire swaps its endpoints when the drag started on an input). The
 cable leaves `p1` heading right and enters `p2` heading right, from the left. Forward cables use a
-handle of half the run, at least 50 px (`kCableMinHandle`), so anything 100 px or more apart is the
-plain half-run curve. Backward and near-vertical cables loop with a handle of half the run clamped to
-50 to 150 px (`kCableMaxBackHandle`), so a cable never leaves over its own card or arrives from below.
+handle of half the run, at least 50 px (`kCableMinHandle`) but never more than half the vertical gap, so
+anything 100 px or more apart is the plain half-run curve, a near-vertical cable still bulges out
+sideways, and a short hop (a macro's interior jack to a member) doesn't overshoot into a kink. Backward
+cables use a handle of the full backward run clamped to 50 to 300 px (`kCableMaxBackHandle`), which keeps
+the loop out of the output visibly to the right of its card, so a cable never leaves over its own card or arrives from below.
 
 `buildVisibleCables()` returns a **memoized `const&`**: it is rebuilt only when
 `GraphEditor::repaintCanvas()` invalidates the memo (see [rendering](rendering.md)), not on every
