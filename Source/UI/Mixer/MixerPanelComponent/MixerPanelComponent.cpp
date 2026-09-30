@@ -22,15 +22,8 @@ constexpr int kColumnGap = 4;
 // Horizontal step between the four cards a new bus channel places on the canvas.
 constexpr int kBusCardGap = 220;
 
-// "+ Bus" only exists on BottomDockComponent's tab strip, shown only while the Mixer tab
-// is the active, enabled tab there (BottomDockComponent::updateTabVisuals's own `mixerActive`) --
-// MixerPlacementController::applyPlacement disables that tab for both the Own-panel and detached
-// Window placements, so this panel (shared by all three placements) cannot name a location that is
-// reachable from every one of them; "in the bottom panel" is accurate for the common Tab placement
-// and at worst points at where the control lives when it IS visible. "+ Track" lives on the
-// Timeline's track header instead, unaffected by mixer placement, so it is named unconditionally.
 const char* const kEmptyHintText =
-    "No channels yet. Add a track from the Timeline's + Track button, or a bus with + Bus in the bottom panel.";
+    "No channels yet. Add a track from the Timeline's + Track button, or a bus with + Bus above.";
 } // namespace
 
 MixerPanelComponent::MixerPanelComponent() {
@@ -43,9 +36,14 @@ MixerPanelComponent::MixerPanelComponent() {
     viewport_.setViewedComponent(&content_, false);
     viewport_.setScrollBarsShown(false, true);
     viewport_.setWantsKeyboardFocus(false);
-    viewport_.onScrolled = [this] { rail_.setColumnGeometry(content_.getHeight(), viewport_.getViewPositionY()); };
-    addChildComponent(rail_);
-    rail_.setLayout(sectionLayout_);
+    // Always shown, even with no columns: "+ Bus" is how an empty mixer gets its first bus.
+    addAndMakeVisible(toolbar_);
+    toolbar_.setLayout(sectionLayout_);
+    toolbar_.onAddBus = [this] {
+        createBus();
+        rebuild(); // the new bus's own column, without waiting for the owner's reconcile
+    };
+    toolbar_.onResetMeters = [this] { resetAllMeterReadouts(); };
     wireSectionLayout();
 
     // A direct child of THIS panel, not content_/viewport_ (which scroll and would clip or
@@ -518,15 +516,11 @@ void MixerPanelComponent::resized() {
     const auto muted = laf != nullptr ? laf->getTheme().colors.textMuted : juce::Colour(0xff8A93A0);
     emptyHint_.setColour(juce::Label::textColourId, muted);
     emptyHint_.setFont(juce::Font(juce::FontOptions(13.0f)));
-    emptyHint_.setBounds(getLocalBounds().reduced(24));
+    emptyHint_.setBounds(getLocalBounds().withTrimmedTop(MixerPanelToolbar::kHeight).reduced(24));
 
-    // The section rail sits outside the scrolling viewport, so it stays put while columns scroll
-    // sideways; it only shows while there are columns for its rows to line up with.
-    const bool hasColumns = !columnEntries_.empty();
-    rail_.setVisible(hasColumns);
+    // The toolbar sits outside the scrolling viewport, so it stays put while columns scroll.
     auto area = getLocalBounds();
-    if (hasColumns)
-        rail_.setBounds(area.removeFromLeft(MixerSectionRail::kWidth));
+    toolbar_.setBounds(area.removeFromTop(MixerPanelToolbar::kHeight));
     viewport_.setBounds(area);
 
     int totalColumns = (int)stripColumns_.size();
@@ -539,7 +533,8 @@ void MixerPanelComponent::resized() {
     // the whole column scroll vertically instead of squeezing the sections.
     const bool scrollsVertically = contentScrollsVertically();
     viewport_.setScrollBarsShown(scrollsVertically, true);
-    const int columnHeight = scrollsVertically ? sectionLayout_.requiredColumnHeight() : juce::jmax(0, getHeight());
+    const int columnHeight =
+        scrollsVertically ? sectionLayout_.requiredColumnHeight() : juce::jmax(0, area.getHeight());
     const int contentWidth = juce::jmax(viewport_.getWidth(), totalColumns * (kColumnWidth + kColumnGap));
     content_.setSize(contentWidth, columnHeight);
 
@@ -558,8 +553,7 @@ void MixerPanelComponent::resized() {
     if (masterColumn_ != nullptr && masterColumn_->isVisible())
         place(*masterColumn_);
 
-    rail_.setColumnGeometry(columnHeight, viewport_.getViewPositionY());
-    rail_.refreshLayout();
+    toolbar_.refresh();
 }
 
 } // namespace synth::ui

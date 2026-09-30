@@ -12,6 +12,17 @@
 #include <gtest/gtest.h>
 
 // ============================================================================
+// easeInCubic
+// ============================================================================
+
+TEST(UIAnimationEasing, EaseInCubicIsSlowAtFirstAndPinnedAtBothEnds) {
+    EXPECT_FLOAT_EQ(synth::ui::easeInCubic(0.0f), 0.0f);
+    EXPECT_FLOAT_EQ(synth::ui::easeInCubic(1.0f), 1.0f);
+    EXPECT_LT(synth::ui::easeInCubic(0.5f), 0.5f) << "back-loaded, the mirror of easeOutCubic";
+    EXPECT_FLOAT_EQ(synth::ui::easeInCubic(0.5f), 0.125f);
+}
+
+// ============================================================================
 // easeOutCubic
 // ============================================================================
 

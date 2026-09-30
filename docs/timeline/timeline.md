@@ -145,9 +145,8 @@ minimum**:
   be resized from Timeline, Mixer and Controllers alike (and while the Timeline is detached into
   its own window). It *overlaps* the top 5 px of the 22 px tab strip: the strip keeps its full
   height so the content below never moves, but the tab/detach buttons are laid out beneath it, so a
-  resize grab never lands on a button. FRO338: `+ Bus`/Reset Meters moved off the tab strip
-  entirely — they sit in their own Mixer-only toolbar row inside the content area now (see
-  [`docs/mixer/panel.md`](../mixer/panel.md)), so switching tabs never changes the tab strip's own
+  resize grab never lands on a button. `+ Bus`/Reset Meters are not on the tab strip at all — they are the mixer panel's own
+  toolbar (see [`docs/mixer/panel.md`](../mixer/panel.md#the-toolbar)), so switching tabs never changes the tab strip's own
   width split. The Timeline panel itself has no handle
   and no resize callbacks; its transport bar uses its whole `Metrics::timelineTransportBarHeight`
   strip. Idle the handle paints a 1 px border hairline along the dock's top edge; hovered or

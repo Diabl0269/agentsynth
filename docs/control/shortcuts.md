@@ -761,19 +761,21 @@ rule `TimelineClipLaneArea`'s cross-track move drag uses (see [`timeline/clips.m
 
 Hold **Cmd** (Ctrl off the Mac) on its own for about half a second and a small key-cap bubble
 appears on each visible button that has a shortcut: `⌘T` on the Show/Hide Panel toolbar button,
-`⌘1`–`⌘3` inside the bottom-panel tabs, Space on the play buttons. Release and they fade out. The
+`⌘1`–`⌘3` inside the bottom-panel tabs, Space on the play buttons. Each bubble grows out of the
+button it labels; release and they shrink back and fade out. The
 overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-window child of
 `MainComponent` that paints only while the hints are up.
 
 - **The key is never hard-coded.** A button is registered with the shortcut *action* it triggers
   (`MainComponentShortcutHints.cpp` names them); the text is read from `ShortcutManager` each time
   the hints appear and re-read on a rebind while they are up. An action with no key gets no bubble.
-- **Timing.** They appear 500 ms after Cmd goes down alone and fade in over 120 ms; they fade out
-  over 80 ms on release. Any other key (including a Cmd chord such as Cmd+S), a mouse click, another
+- **Timing.** They appear 500 ms after Cmd goes down alone and animate in over 160 ms
+  (`easeOutCubic`); on release the same motion runs back over 110 ms (`easeInCubic`). Pressing Cmd
+  again while they are fading out resumes from where they are, with no second delay. Any other key (including a Cmd chord such as Cmd+S), a mouse click, another
   modifier held with Cmd, or the window losing focus cancels at once with no fade, and the hold stays
   spent until Cmd is released. A key that a focused text field consumes never reaches the cancel hook,
   so the hints can still appear there. Nothing runs at rest: a one-shot 500 ms timer is armed only
-  while Cmd is down alone, and the fade animations exist only while a fade is in flight. Cmd is noticed
+  while Cmd is down alone, and the one `AnimationDriver` exists only while the tween is in flight. Cmd is noticed
   through the global mouse listener (JUCE sends a fake mouse move on every modifier change) and
   `MainComponent`'s existing 10 Hz poll as a backstop.
 - **Only showing components get one.** Hidden, collapsed, scrolled-away or covered buttons (the
@@ -783,14 +785,24 @@ overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-wind
   bottom edge by 4 px; flipped above if that leaves the window (or the bottom panel, for buttons inside
   it); an overlapping later bubble slides sideways by the overlap, up to half its width, else it is
   left out. A dock tab carries its bubble inside the tab, 6 px after the name.
+- **Motion.** One tween value `t` (0 hidden, 1 settled) drives every bubble's scale, position and
+  opacity: `hint::animatedBubbleBounds(target, origin, t)` is `target` at t = 1 and, at t = 0, 0.6 of
+  its size centred on `origin`. The origin is the labelled button's centre for a bubble below or
+  above it (so it slides down or up out of the button), the tab's centre for an in-tab cap (slides
+  right), and the pill's own centre 12 px lower for the hidden-panel row (rises). Placement and
+  collision use the settled rectangles only.
 - **Bottom panel hidden.** The tabs are not on screen, so the panel toggle's hint and each strip
   tab's line up centred along the window bottom, 8 px above the status bar, in tab order, each as a
-  pill holding the key cap and the name. A tab detached to its own window is left out
+  pill (24 px tall, label one point above the `label` size) holding the key cap and the name. A tab detached to its own window is left out
   (`BottomDockComponent::getStripTabs()`).
 - **The look** is one shared function, `AppLookAndFeel::drawShortcutKeyCap`
-  (`AppLookAndFeelShortcutHints.cpp`): a `cornerRadiusSmall` cap, `surfaceHi` fill, `border` outline
-  with a 2 px bottom edge and a soft shadow, the mono value face in `textPrimary` (regular weight —
-  JUCE fonts have no medium cut). Text comes from `hint::formatKeyCapText`: Mac glyphs on macOS,
+  (`AppLookAndFeelShortcutHints.cpp`): a `cornerRadiusSmall` cap 20 px tall (at least 20 wide, 6 px
+  side padding), `surfaceHi` fill, a `textDisabled` outline with a 2 px bottom edge (`border` is
+  nearly the fill on dark themes, so the cap vanished), a soft shadow (0.5 alpha, 2 px down, blur
+  radius 4), the mono face at the `value` size plus 2 px in `textPrimary`. The medium weight comes from
+  requesting `Font::bold` on the mono family: the embedded mono faces load their Medium cut for it.
+  The in-tab cap is 15 px tall with the `value` size plus 1 px (the tab is 17 px tall, so the cap keeps
+  a pixel above and below; the strip does not grow). Text comes from `hint::formatKeyCapText`: Mac glyphs on macOS,
   `Ctrl+Shift+Z` style elsewhere.
 - **Never in the way.** The overlay takes no clicks, is hidden from the accessibility tree, never
   takes keyboard focus and never moves or resizes anything.

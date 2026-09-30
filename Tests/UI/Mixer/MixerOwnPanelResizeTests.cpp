@@ -70,7 +70,7 @@ TEST_F(MixerOwnPanelTest, OpensAtTheFloorOrTallEnoughForTheMixerSectionsWhenNoth
     auto& panel = mc.getBottomDock().getMixerPanel();
 
     EXPECT_GE(own.getOwnPanelHeight(), Controller::kOwnPanelMinHeight);
-    EXPECT_EQ(panel.getHeight(), panel.getSectionLayout().requiredColumnHeight());
+    EXPECT_EQ(panel.getHeight(), panel.requiredPanelHeight());
     EXPECT_EQ(own.getCarveHeight(), own.getOwnPanelHeight());
     EXPECT_EQ(own.getHeight(), own.getOwnPanelHeight());
     EXPECT_EQ(own.getBottom(), mc.getStatusBar().getBounds().getY()) << "pinned to the window's bottom edge";
@@ -157,12 +157,12 @@ TEST_F(MixerOwnPanelTest, AnOpenDockReservesItsMinimumOutOfTheOwnPanelsBudget) {
 
 TEST_F(MixerOwnPanelTest, PersistedHeightIsHonouredAtConstructionAndReclampedAfterAShrink) {
     useOwnPanelPlacement();
-    writeSetting(Controller::kOwnPanelHeightKey, 400);
+    writeSetting(Controller::kOwnPanelHeightKey, 480);
     MainComponent mc(std::make_unique<MockProviderTL>());
     showOwnPanel(mc);
     auto& own = mc.getMixerPlacementControllerForTest();
-    EXPECT_EQ(own.getOwnPanelHeight(), 400);
-    EXPECT_EQ(own.getHeight(), 400);
+    EXPECT_EQ(own.getOwnPanelHeight(), 480);
+    EXPECT_EQ(own.getHeight(), 480);
 
     mc.setSize(1000, 400);
     EXPECT_EQ(own.getOwnPanelHeight(), 300) << "75% of the 400 px window";
@@ -170,7 +170,7 @@ TEST_F(MixerOwnPanelTest, PersistedHeightIsHonouredAtConstructionAndReclampedAft
     EXPECT_GT(mc.getGraphEditor().getBounds().getHeight(), 0);
 
     mc.setSize(1600, 900);
-    EXPECT_EQ(own.getHeight(), 400) << "a layout pass never rewrites the user's stored height";
+    EXPECT_EQ(own.getHeight(), 480) << "a layout pass never rewrites the user's stored height";
 }
 
 TEST_F(MixerOwnPanelTest, ADragCommitIsReadBackByTheNextWindow) {

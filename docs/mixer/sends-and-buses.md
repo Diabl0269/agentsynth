@@ -325,7 +325,7 @@ existence, channel bounds and "not already connected", and **accepts a cycle wit
 hand on the canvas. **A refusal changes nothing at all, so no empty undo step is recorded** — and the
 same holds for every other refusal (a non-strip target, self, out of slots).
 
-**"Add bus"** — `+ Bus` on the dock's tab strip, and "New bus..." in every send menu — builds a
+**"Add bus"** — `+ Bus` on the mixer panel's toolbar, and "New bus..." in every send menu — builds a
 bypassed Gate, bypassed EQ, bypassed Compressor, Stereo Strip, Master(Mix) chain via the shared chain
 builder, boxed in a macro named "Bus N". A boxed bus takes its macro's name.
 

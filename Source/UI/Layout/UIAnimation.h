@@ -33,6 +33,9 @@ inline float easeOutCubic(float t) noexcept {
     return 1.0f - u * u * u;
 }
 
+/** Cubic ease-in: starts slow, accelerates to the end. */
+inline float easeInCubic(float t) noexcept { return t * t * t; }
+
 /** Cubic ease-in-out: slow start, fast middle, slow finish. */
 inline float easeInOutCubic(float t) noexcept {
     if (t < 0.5f)

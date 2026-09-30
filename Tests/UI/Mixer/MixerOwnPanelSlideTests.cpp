@@ -32,7 +32,7 @@ TEST_F(MixerOwnPanelTest, HeadlessToggleLandsSynchronouslyBothWays) {
 
 TEST_F(MixerOwnPanelTest, MidSlideCarveFollowsTheFraction) {
     useOwnPanelPlacement();
-    writeSetting(Controller::kOwnPanelHeightKey, 400);
+    writeSetting(Controller::kOwnPanelHeightKey, 480);
     MainComponent mc(std::make_unique<MockProviderTL>());
     showOwnPanel(mc);
     auto& own = mc.getMixerPlacementControllerForTest();
@@ -40,7 +40,7 @@ TEST_F(MixerOwnPanelTest, MidSlideCarveFollowsTheFraction) {
     for (const float progress : {0.25f, 0.5f, 0.9f}) {
         own.setSlideProgressForTest(progress);
         mc.resized();
-        const int expected = (int)std::lround(progress * 400.0);
+        const int expected = (int)std::lround(progress * 480.0);
         EXPECT_EQ(own.getCarveHeight(), expected) << progress;
         EXPECT_EQ(own.getHeight(), expected) << progress;
         EXPECT_EQ(own.getBottom(), mc.getStatusBar().getBounds().getY()) << "pinned bottom edge, " << progress;

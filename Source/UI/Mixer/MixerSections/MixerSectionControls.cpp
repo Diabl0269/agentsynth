@@ -9,16 +9,15 @@ namespace {
 struct DividerColours {
     juce::Colour border;
     juce::Colour accent;
-    juce::Colour grip;
 };
 
 // Literal fallbacks: a headless test has no themed LookAndFeel installed.
 DividerColours dividerColoursFor(const juce::Component& c) {
     if (const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&c.getLookAndFeel())) {
         const auto& colors = laf->getTheme().colors;
-        return {colors.border, colors.accent, colors.textMuted};
+        return {colors.border, colors.accent};
     }
-    return {juce::Colour(0xff2A2F38), juce::Colour(0xff00D1FF), juce::Colour(0xff8A93A0)};
+    return {juce::Colour(0xff2A2F38), juce::Colour(0xff00D1FF)};
 }
 } // namespace
 
@@ -41,11 +40,6 @@ void MixerSectionDivider::setLayout(MixerSectionLayout* layout, MixerSection sec
     repaint();
 }
 
-void MixerSectionDivider::setShowsGrip(bool showsGrip) {
-    showsGrip_ = showsGrip;
-    repaint();
-}
-
 // The EQ section is a single fixed-height curve, so its divider is a plain line: no resize cursor and
 // no drag.
 bool MixerSectionDivider::isResizable() const noexcept { return layout_ != nullptr && section_ != MixerSection::Eq; }
@@ -57,7 +51,7 @@ bool MixerSectionDivider::isHighlighted() const noexcept {
 }
 
 // Idle: a 1 px border line through the middle of the 6 px hit area. Hovered or dragging (in ANY
-// column or the rail -- the state lives on the shared layout): a 2 px accent line, so the whole row
+// column -- the state lives on the shared layout): a 2 px accent line, so the whole row
 // lights up together.
 void MixerSectionDivider::paint(juce::Graphics& g) {
     const auto colours = dividerColoursFor(*this);
@@ -69,12 +63,6 @@ void MixerSectionDivider::paint(juce::Graphics& g) {
         g.setColour(colours.border);
         g.fillRect(0, mid, getWidth(), 1);
     }
-    if (!showsGrip_ || !isResizable())
-        return;
-    g.setColour(colours.grip);
-    const float cx = (float)getWidth() / 2.0f;
-    for (int i = -1; i <= 1; ++i)
-        g.fillEllipse(cx + (float)i * 4.0f - 1.0f, (float)mid - 1.0f, 2.0f, 2.0f);
 }
 
 void MixerSectionDivider::mouseEnter(const juce::MouseEvent&) {

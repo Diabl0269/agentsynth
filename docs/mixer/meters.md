@@ -152,7 +152,7 @@ ticks.
 
 A plain click resets that column; Option or Alt-click resets every column
 (`onResetAllRequested`, fanned out by `MixerPanelComponent::resetAllMeterReadouts()`); the mixer panel
-header's "Reset Meters" button, next to "+ Bus", calls the same fan-out. `reset()` clears both the max
+toolbar's "Reset Meters" button, next to "+ Bus", calls the same fan-out. `reset()` clears both the max
 and the clip colour.
 
 ## The Master meter and Master inserts
@@ -188,7 +188,7 @@ bar.**
 | `Tests/UI/Mixer/MixerMeterPaintTests.cpp` | `MixerMeter::paint` actually draws POSITIONAL bands, not one flat colour, for a bar spanning multiple zones — pixel-sampled off an offscreen render at the low-zone and high-zone heights of the same bar |
 | `Tests/UI/Mixer/MixerMeterBallisticsTests.cpp` | attack is instant; release falls at `kMeterReleaseDbPerSecond` scaled by the elapsed time passed in; the peak-hold line snaps to a new peak instantly, holds for `kMeterPeakHoldSeconds`, then falls at `kMeterPeakHoldFallDbPerSecond` — every case drives `advanceMeterBallistics` with explicit elapsed-time arguments, never a wall clock |
 | `Tests/UI/Mixer/MixerMeterReadoutTests.cpp` | turns the clip colour once a peak exceeds 0 dBFS and stays that colour across later quiet ticks; `reset()` clears both the max and the clip colour; a real `mouseUp` with no modifiers resets the readout; an Alt-modifier click fires `onResetAllRequested` instead |
-| `Tests/UI/Mixer/MixerColumnComponentMeterTests.cpp` | a column's readout reaches through `MixerPanelComponent::resetAllMeterReadouts()` — an Alt-click on ONE column's readout resets every strip column's and Master's; the dock's "Reset Meters" button does the same |
+| `Tests/UI/Mixer/MixerColumnComponentMeterTests.cpp` | a column's readout reaches through `MixerPanelComponent::resetAllMeterReadouts()` — an Alt-click on ONE column's readout resets every strip column's and Master's; the toolbar's "Reset Meters" button does the same |
 | `Tests/UI/Theme/ThemeMeterZoneTests.cpp` | `meterMid`, `meterHigh` and `meterClip` parse from JSON, fall back to `Theme.h`'s defaults when the keys are absent, a malformed value rejects the whole theme, and all four built-ins populate the three tokens distinctly |
 | `Tests/Mixer/ChannelFlow/ChannelFlowTrackChannelLinkTests.cpp` | the channel chip's meter displays a fraction of the dB scale, not the raw linear peak; the per-reader latch's two independent slots are exercised across the render and solo cases |
 | `Tests/Engine/OutputMeterTapTests.cpp` | `AudioEngine::takeOutputMeterPeak`: each leg latches the graph output's own peak (a negative excursion counts) and reads back once, another `MeterReader`'s slot is untouched, a silent graph latches nothing, a mono buffer's right leg follows its left |

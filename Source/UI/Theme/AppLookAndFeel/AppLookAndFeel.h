@@ -158,17 +158,20 @@ public:
 
     // ---------- shortcut key cap ----------
     // The physical-key bubble used by the Cmd-hold shortcut hints: a rounded rect (Metrics::
-    // cornerRadiusSmall) filled surfaceHi with a border outline, a thicker bottom edge and a soft
-    // shadow, text in the mono value face. `bounds` is the whole cap (16 px tall, 14 in a dock tab);
-    // size it with getShortcutKeyCapWidth().
-    static constexpr int kKeyCapHeight = 16;
-    static constexpr int kKeyCapCompactHeight = 14;
-    static constexpr int kKeyCapMinWidth = 16;
-    static constexpr int kKeyCapSidePadding = 5;
+    // cornerRadiusSmall) filled surfaceHi with a textDisabled outline (border is nearly the fill on
+    // dark themes), a thicker bottom edge and a soft shadow, text in the medium mono face. `bounds`
+    // is the whole cap (20 px tall, 15 in a dock tab, the `compact` flag); size it with
+    // getShortcutKeyCapWidth().
+    static constexpr int kKeyCapHeight = 20;
+    static constexpr int kKeyCapCompactHeight = 15;
+    static constexpr int kKeyCapMinWidth = 20;
+    static constexpr int kKeyCapSidePadding = 6;
     static constexpr int kKeyCapBottomEdge = 2;
-    juce::Font getShortcutKeyCapFont() const;
-    int getShortcutKeyCapWidth(const juce::String& text) const;
-    void drawShortcutKeyCap(juce::Graphics&, juce::Rectangle<int> bounds, const juce::String& text) const;
+    static constexpr int kKeyCapShadowRadius = 4;
+    juce::Font getShortcutKeyCapFont(bool compact = false) const;
+    int getShortcutKeyCapWidth(const juce::String& text, bool compact = false) const;
+    void drawShortcutKeyCap(juce::Graphics&, juce::Rectangle<int> bounds, const juce::String& text,
+                            bool compact = false) const;
 
 private:
     void refreshTypefaces();          // (re)load cached typefaces for theme.type.uiFamily/monoFamily
