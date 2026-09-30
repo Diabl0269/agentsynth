@@ -3,6 +3,9 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
 #include "UI/Layout/PanelResizeHandle.h"
+#include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
+#include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
+#include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include "UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h"
 #include "UI/Mixer/MixerMirrorController.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
@@ -69,6 +72,9 @@ public:
      *  forwarder to setOnGraphTopologyChanged/setOnMakeChannelForNode above: MainComponent talks
      *  to the dock, never reaches through getMixerPanel() to set the panel's own callback field. */
     void setOnArmTrack(std::function<void(synth::TrackId)> callback);
+    /** MainComponent wires this to performTrackEdit(moveTrack) plus a mixer rebuild -- fired when a mixer
+     *  track column is dropped in a new place. */
+    void setOnMoveTrack(std::function<void(synth::TrackId, int newIndex)> callback);
 
     Tab getActiveTab() const noexcept { return activeTab_; }
     bool isMixerTabActive() const noexcept { return activeTab_ == Tab::Mixer; }
@@ -276,10 +282,16 @@ public:
 
     /** Test seam: this dock's own detach/redock button. */
     juce::DrawableButton& getDetachButtonForTest() noexcept { return detachButton_; }
+    /** Test seam: the left edge (dock coordinates) the lifted tab is drawn at. */
+    float getLiftedTabLeftForTest() const { return reorder_.getDraggedStart(); }
+    /** Test seam: the Esc key press a real drag would receive from the window. */
+    bool sendEscapeToTabDragForTest() {
+        return reorderCancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), this);
+    }
     /** Test seam: the tab strip's current drag-reorderable order. */
     const std::vector<Tab>& getTabOrderForTest() const noexcept { return tabOrder_; }
-    /** Test seam: drives the same swap-under-cursor + persist + key-permute path a real
-     *  drag-and-release does, without synthesizing mouse events. */
+    /** Test seam: applies a reorder through the same persist + key-permute path a real
+     *  drag-and-release ends in, without synthesizing mouse events. */
     void reorderTabsForTest(Tab dragged, Tab droppedOnto) {
         swapTabOrder(dragged, droppedOnto);
         persistTabOrder();
@@ -288,7 +300,7 @@ public:
     }
 
 private:
-    // One tab-strip button; reports drags to its owner for reorder-by-swap (see .cpp).
+    // One tab-strip button; reports drags to its owner for drag-to-reorder (see .cpp).
     class DockTabButton : public juce::TextButton {
     public:
         DockTabButton(BottomDockComponent& owner, Tab tab, const juce::String& text)
@@ -297,14 +309,14 @@ private:
             , tab_(tab) {}
         void paint(juce::Graphics& g) override;
         void mouseDown(const juce::MouseEvent& e) override {
-            owner_.beginTabDrag();
+            owner_.beginTabDrag(tab_, e);
             juce::TextButton::mouseDown(e);
         }
         void mouseDrag(const juce::MouseEvent& e) override {
-            owner_.dragTab(tab_, e);
-            // Only once the gesture is a real drag (JUCE's own move threshold, the same
+            owner_.dragTab(e);
+            // Only once the gesture is a real drag (the animator's own move threshold, the same
             // gate dragTab() itself uses) -- a stray click never shows the dragging-hand cursor.
-            if (e.mouseWasDraggedSinceMouseDown())
+            if (owner_.isTabLifted(tab_))
                 setMouseCursor(juce::MouseCursor::DraggingHandCursor);
             juce::TextButton::mouseDrag(e);
         }
@@ -312,6 +324,8 @@ private:
             setMouseCursor(juce::MouseCursor::NormalCursor);
             if (!owner_.endTabDrag())
                 juce::TextButton::mouseUp(e);
+            else
+                setState(isMouseOver() ? buttonOver : buttonNormal); // the drag swallowed the click
         }
 
     private:
@@ -356,12 +370,23 @@ private:
     Tab pickFallbackActiveTab() const noexcept;
 
     // ---- Drag-to-reorder (DockTabButton's own mouse overrides call these; see .cpp) ------------
-    void beginTabDrag() noexcept { tabDragReordered_ = false; }
+    void beginTabDrag(Tab tab, const juce::MouseEvent& e);
     /** True while `tab` is being dragged past the drag threshold (its slot shows the dashed outline). */
     bool isTabLifted(Tab tab) const noexcept { return liftedTab_ == tab; }
     void paintTabSlot(juce::Graphics& g, juce::Rectangle<int> bounds) const;
-    void dragTab(Tab dragged, const juce::MouseEvent& e);
+    void dragTab(const juce::MouseEvent& e);
+    /** True when the gesture was a real drag (the mouse-up must not also click the tab). */
     bool endTabDrag();
+    void commitTabDrag();
+    /** Esc mid-drag: the lifted tab returns to where it was picked up and nothing is committed. */
+    void cancelTabDrag();
+    /** Lays the offered tab buttons out at their static slots, in tabOrder_. */
+    void layoutTabButtons();
+    /** Moves the buttons to where the reorder animator says they are right now. */
+    void applyReorderOffsets();
+    void onReorderFrame();
+    void startReorderFramesIfNeeded();
+    float pointerXInDock(const juce::MouseEvent& e);
     void swapTabOrder(Tab a, Tab b);
     void persistTabOrder();
     /** Permutes the three tabs' own Cmd+digit key bindings to match tabOrder_'s new order. */
@@ -403,13 +428,18 @@ private:
     // rather than always appending it at the end).
     std::vector<Tab> tabOrder_{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
     static constexpr const char* kTabOrderKey = "bottomDockTabOrder";
-    // True from a mouseDown that turns into a real reorder swap (see dragTab()); read once by
-    // endTabDrag() and reset there.
-    bool tabDragReordered_ = false;
-    // The tab currently drawn lifted under the pointer, and the left edge (dock coordinates) it
-    // follows; empty outside a drag that has cleared the drag threshold.
+    // The tab currently drawn lifted (under the pointer, then gliding into its slot); empty outside
+    // a drag that has cleared the drag threshold.
     std::optional<Tab> liftedTab_;
-    int liftedLeft_ = 0;
+    // The strip area the tab buttons share, set by resized().
+    juce::Rectangle<int> tabButtonsArea_;
+    // The tabs offered when the press happened, in display order: the animator's item keys.
+    std::vector<Tab> reorderTabs_;
+    ReorderDragAnimator reorder_;
+    ReorderFramePump reorderFrames_{*this};
+    ReorderCancelKey reorderCancelKey_;
+    bool tabDragCancelled_ = false; // Esc pressed in this gesture: the mouse-up must not click
+    unsigned reorderGenerationSeen_ = 0;
     // "detachedPanelBothPlaces" -- see applyDetachBothPlacesPreference()'s own comment.
     // Read once in setApplicationProperties() (no live-transition side effects, nothing is open
     // yet) and re-read live thereafter through that same method.

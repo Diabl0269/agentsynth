@@ -236,6 +236,11 @@ The bottom dock (Timeline / Mixer / Controllers tabs) is resizable from ONE top-
 `timelinePanelHeight` key once per gesture. The height is the dock's, not a tab's, so it holds when
 switching tabs. Full rules: [`docs/timeline/timeline.md`](../timeline/timeline.md#panel-height).
 
+The dock's tab strip is drag-reorderable through the shared reorder drag (the lifted tab follows the
+grab point, the others glide aside, the order is applied and persisted on release, Esc cancels):
+[`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip) and
+[`docs/layout/animation.md#reorder-drag`](animation.md#reorder-drag).
+
 ## Welcome screen overlay
 
 `Source/UI/WelcomeScreenComponent` is a full-window overlay, not a docked panel — it covers the

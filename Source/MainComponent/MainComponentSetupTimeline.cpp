@@ -137,6 +137,14 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
         });
     });
 
+    // A mixer track column dropped in a new place reorders the timeline's tracks too (the mixer lists
+    // track strips in timeline order): the same one-undo-step path the track list's own drag uses.
+    // The mixer is rebuilt afterwards because a pure doc edit never reaches the graph reconcile.
+    bottomDock.setOnMoveTrack([this](synth::TrackId id, int newIndex) {
+        performTrackEdit([this, id, newIndex] { timelineDoc.moveTrack(id, newIndex); });
+        bottomDock.rebuildMixer();
+    });
+
     // The dock's top-edge drag (FRO231: one handle for every tab, not the Timeline panel's own)
     // reports a desired TOTAL dock-carve height, measured from the dock's pinned bottom edge --
     // exactly what setTimelinePanelHeight owns, so no translation. THIS component clamps it, lays

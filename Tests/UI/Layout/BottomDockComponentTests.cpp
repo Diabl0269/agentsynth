@@ -271,6 +271,38 @@ TEST(BottomDockComponentTests, DragReorderSwapsTabOrderAndPermutesTheCmdDigitBin
               juce::KeyPress('3', juce::ModifierKeys::commandModifier, 0));
 }
 
+// The saved tab order and the Cmd+digit bindings live in separate stores, so they can disagree at
+// launch; loading re-keys the digits from the restored order so the first tab is always Cmd+1.
+TEST(BottomDockComponentTests, LoadingRekeysTheCmdDigitsFromTheRestoredTabOrder) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
+    MainComponent mc(std::make_unique<MockProviderMDCT>());
+    mc.setSize(1400, 900);
+    auto& shortcuts = mc.getShortcutManager();
+    const auto cmd = [](int digit) { return juce::KeyPress('0' + digit, juce::ModifierKeys::commandModifier, 0); };
+    shortcuts.setBinding("toggleMixerPanel", cmd(1));
+    shortcuts.setBinding("toggleTimelinePanel", cmd(2));
+    auto* settings = mc.getAppPropertiesForTest().getUserSettings();
+    ASSERT_NE(settings, nullptr);
+    settings->setValue("bottomDockTabOrder", "timeline,mixer,midiRemote");
+
+    mc.getBottomDock().setApplicationProperties(&mc.getAppPropertiesForTest());
+
+    EXPECT_EQ(shortcuts.getBinding("toggleTimelinePanel"), cmd(1));
+    EXPECT_EQ(shortcuts.getBinding("toggleMixerPanel"), cmd(2));
+    EXPECT_EQ(shortcuts.getBinding("toggleMidiRemotePanel"), cmd(3));
+
+    // A binding the user moved off the Cmd+digit convention is never overridden.
+    shortcuts.setBinding("toggleMixerPanel", juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0));
+    shortcuts.setBinding("toggleTimelinePanel", cmd(2));
+    mc.getBottomDock().setApplicationProperties(&mc.getAppPropertiesForTest());
+    EXPECT_EQ(shortcuts.getBinding("toggleTimelinePanel"), cmd(2));
+    EXPECT_EQ(shortcuts.getBinding("toggleMixerPanel"), juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0));
+
+    shortcuts.setBinding("toggleMixerPanel", cmd(2));
+    shortcuts.setBinding("toggleTimelinePanel", cmd(1));
+    shortcuts.saveToProperties();
+}
+
 // Detaching the ACTIVE tab must never leave the dock showing nothing -- it falls
 // back to the next tab still offered, and hides the whole dock only once none are left.
 TEST(BottomDockComponentTests, DetachingTheActiveTabFallsBackToTheNextOneAndNeverGoesBlank) {
@@ -453,7 +485,7 @@ TEST(BottomDockComponentTests, DraggedTabSlotShowsADashedBorderOutlineInsteadOfT
     f.release(4);
 }
 
-TEST(BottomDockComponentTests, ADragSwapKeepsTheLiveSwapAndSavedOrderAndClearsTheLiftOnRelease) {
+TEST(BottomDockComponentTests, ADragKeepsTheOrderUntilReleaseThenSavesItAndClearsTheLift) {
     LiftedTabFixture f;
     using Tab = synth::ui::BottomDockComponent::Tab;
     const auto& colors = f.theme().colors;
@@ -461,16 +493,18 @@ TEST(BottomDockComponentTests, ADragSwapKeepsTheLiveSwapAndSavedOrderAndClearsTh
     ASSERT_GE(buttons.size(), 2u);
     const int dx = buttons[1]->getBounds().getCentreX() - f.pointerX(0);
     const int y = f.liftedRowY();
-    // The dragged button moves on the swap, so the pointer's dock x is taken before the drag.
+    // The pointer's dock x is taken before the drag.
     const int pointerX = f.pointerX(dx);
 
     f.press();
     f.dragBy(dx);
-    const std::vector<Tab> swapped{Tab::Mixer, Tab::Timeline, Tab::MidiRemote};
-    EXPECT_EQ(f.dock().getTabOrderForTest(), swapped) << "the live swap still happens mid-drag";
+    const std::vector<Tab> unchanged{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
+    EXPECT_EQ(f.dock().getTabOrderForTest(), unchanged) << "the order is not touched mid-drag";
     EXPECT_TRUE(isCloseTo(paintDock(f.dock()).getPixelAt(pointerX, y), colors.accent));
 
     f.release(dx);
+    const std::vector<Tab> dropped{Tab::Mixer, Tab::Timeline, Tab::MidiRemote};
+    EXPECT_EQ(f.dock().getTabOrderForTest(), dropped);
     EXPECT_FALSE(isCloseTo(paintDock(f.dock()).getPixelAt(pointerX, y), colors.accent));
     auto* settings = f.mc.getAppPropertiesForTest().getUserSettings();
     ASSERT_NE(settings, nullptr);
@@ -491,4 +525,118 @@ TEST(BottomDockComponentTests, APlainClickNeverShowsTheLiftedTab) {
     EXPECT_FALSE(isCloseTo(paintDock(f.dock()).getPixelAt(x, y), colors.accent));
     f.release(0);
     EXPECT_FALSE(isCloseTo(paintDock(f.dock()).getPixelAt(x, y), colors.accent));
+}
+
+namespace {
+
+// Emulates what JUCE reports for a press at dock x `pressX`: positions and the mouse-down anchor
+// are both re-derived in the pressed button's CURRENT local space at every event, so a button that
+// moves under the pointer shifts the anchor exactly as it does live.
+struct RealisticTabDrag {
+    juce::Component& button;
+    int pressX;
+    float y = 8.0f;
+    void down() { button.mouseDown(makeClickEvent(button, {(float)(pressX - button.getX()), y})); }
+    void dragTo(int pointerX) {
+        button.mouseDrag(
+            makeDragEvent(button, {(float)(pointerX - button.getX()), y}, {(float)(pressX - button.getX()), y}));
+    }
+    void up(int pointerX) { button.mouseUp(makeClickEvent(button, {(float)(pointerX - button.getX()), y})); }
+};
+
+} // namespace
+
+// Regression test for FRO369: the lifted tab jumped by about one slot per swap because its left
+// edge came from JUCE's mouse-down position, which is re-derived in the (moving) button's local
+// space. The grab offset is captured once now, so the lifted tab stays exactly under the pointer.
+TEST(BottomDockComponentTests, LiftedTabStaysUnderTheGrabPointAcrossEveryInsertionChange) {
+    LiftedTabFixture f;
+    using Tab = synth::ui::BottomDockComponent::Tab;
+    const int x0 = f.timeline->getX();
+    const int w = f.timeline->getWidth();
+    const int grab = 10;
+    RealisticTabDrag drag{*f.timeline, x0 + grab};
+    drag.down();
+
+    for (int pointerX : {x0 + grab + w / 2, x0 + grab + w + w / 4, x0 + grab + w + w / 2 + 3, x0 + grab + w + 20,
+                         x0 + grab + w * 2 - 4}) {
+        drag.dragTo(pointerX);
+        EXPECT_FLOAT_EQ(f.dock().getLiftedTabLeftForTest(), (float)(pointerX - grab)) << "pointer at " << pointerX;
+        const std::vector<Tab> untouched{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
+        EXPECT_EQ(f.dock().getTabOrderForTest(), untouched) << "the order is only applied on release";
+    }
+
+    drag.up(x0 + grab + w * 2 - 4);
+    const std::vector<Tab> dropped{Tab::Mixer, Tab::Timeline, Tab::MidiRemote};
+    EXPECT_EQ(f.dock().getTabOrderForTest(), dropped);
+}
+
+TEST(BottomDockComponentTests, DroppingAtTheStripEndMovesTheTabLastAndPersistsIt) {
+    LiftedTabFixture f;
+    using Tab = synth::ui::BottomDockComponent::Tab;
+    const int x0 = f.timeline->getX();
+    const int w = f.timeline->getWidth();
+    const int stripRight = f.dock().getTabButtons().back()->getRight();
+    RealisticTabDrag drag{*f.timeline, x0 + 10};
+    drag.down();
+    drag.dragTo(x0 + 10 + w);
+    drag.dragTo(x0 + 10 + 3 * w);
+    EXPECT_FLOAT_EQ(f.dock().getLiftedTabLeftForTest(), (float)(stripRight - w))
+        << "the lifted tab is held inside the strip";
+    drag.up(x0 + 10 + 3 * w);
+
+    const std::vector<Tab> expected{Tab::Mixer, Tab::MidiRemote, Tab::Timeline};
+    EXPECT_EQ(f.dock().getTabOrderForTest(), expected);
+    auto* settings = f.mc.getAppPropertiesForTest().getUserSettings();
+    ASSERT_NE(settings, nullptr);
+    EXPECT_EQ(settings->getValue("bottomDockTabOrder"), "mixer,midiRemote,timeline");
+}
+
+// Esc mid-drag: the tab returns where it was, nothing is committed or persisted, and the release
+// that follows must not also switch to the tab.
+TEST(BottomDockComponentTests, EscapeMidDragCancelsWithoutReorderingOrClicking) {
+    LiftedTabFixture f;
+    using Tab = synth::ui::BottomDockComponent::Tab;
+    auto* settings = f.mc.getAppPropertiesForTest().getUserSettings();
+    ASSERT_NE(settings, nullptr);
+    settings->removeValue("bottomDockTabOrder");
+    const auto restingBounds = f.timeline->getBounds();
+    const int x0 = f.timeline->getX();
+    const int w = f.timeline->getWidth();
+    f.dock().setActiveTab(Tab::Mixer);
+
+    RealisticTabDrag drag{*f.timeline, x0 + 10};
+    drag.down();
+    drag.dragTo(x0 + 10 + w + w / 2);
+    ASSERT_TRUE(f.dock().sendEscapeToTabDragForTest());
+    EXPECT_EQ(f.timeline->getBounds(), restingBounds) << "back in its origin slot";
+    EXPECT_FALSE(f.dock().sendEscapeToTabDragForTest()) << "the key listener is gone once the drag is cancelled";
+
+    drag.up(x0 + 10 + w + w / 2);
+    const std::vector<Tab> untouched{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
+    EXPECT_EQ(f.dock().getTabOrderForTest(), untouched);
+    EXPECT_FALSE(settings->containsKey("bottomDockTabOrder")) << "no persistence for a cancelled drag";
+    EXPECT_EQ(f.dock().getActiveTab(), Tab::Mixer) << "the release of a cancelled drag is not a click";
+}
+
+// The click that follows a sub-threshold press is JUCE's own Button::mouseUp, which needs a real
+// mouse button state a synthesized event cannot fake; what this pins is that such a press never
+// lifts, reorders or persists anything.
+TEST(BottomDockComponentTests, APressBelowTheThresholdNeverLiftsOrReordersTabs) {
+    LiftedTabFixture f;
+    using Tab = synth::ui::BottomDockComponent::Tab;
+    auto* settings = f.mc.getAppPropertiesForTest().getUserSettings();
+    ASSERT_NE(settings, nullptr);
+    settings->removeValue("bottomDockTabOrder");
+    auto* mixer = f.dock().getTabButtons()[1];
+    const auto resting = mixer->getBounds();
+    RealisticTabDrag press{*mixer, mixer->getX() + 10};
+    press.down();
+    press.dragTo(mixer->getX() + 12); // 2 px: below the drag threshold
+    EXPECT_FALSE(f.dock().sendEscapeToTabDragForTest()) << "no drag is in progress to cancel";
+    press.up(mixer->getX() + 12);
+    EXPECT_EQ(mixer->getBounds(), resting);
+    const std::vector<Tab> untouched{Tab::Timeline, Tab::Mixer, Tab::MidiRemote};
+    EXPECT_EQ(f.dock().getTabOrderForTest(), untouched);
+    EXPECT_FALSE(settings->containsKey("bottomDockTabOrder"));
 }

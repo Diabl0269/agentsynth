@@ -34,6 +34,9 @@ public:
         // setRenameEnabled(true) below is what actually arms editing AND the tooltip/AX
         // help text together -- see that method's own comment for why the two must never diverge.
         setRenameEnabled(true);
+        // The name label swallows the mouse, but the whole header is the drag handle of a reorderable
+        // column -- so the header listens to the label's events too (see mouseDown() below).
+        nameLabel_.addMouseListener(this, false);
         nameLabel_.onTextChange = [this] {
             // name_ deliberately NOT updated here -- it stays the last value an external
             // setDisplayName() committed until either a rebuild calls setDisplayName() again with
@@ -187,14 +190,37 @@ public:
 
     void resized() override { nameLabel_.setBounds(nameBounds()); }
 
-    // No drag gesture is meaningful on this header (unlike the fader/pan/insert-list siblings), so
-    // every mouseUp inside it is a click -- deliberately not gated on juce::MouseEvent::
+    /** Drag-to-reorder hooks. All three unset (Direct, Master, a bus) leaves the header a plain
+     *  click target. `onRelease` returns true when the gesture was a drag, which swallows the click. */
+    struct ReorderHooks {
+        std::function<void(const juce::MouseEvent&)> onGrab;
+        std::function<void(const juce::MouseEvent&)> onDrag;
+        std::function<bool(const juce::MouseEvent&)> onRelease;
+    };
+    ReorderHooks reorderHooks;
+
+    void mouseDown(const juce::MouseEvent& e) override {
+        if (reorderHooks.onGrab && !e.mods.isPopupMenu())
+            reorderHooks.onGrab(e);
+    }
+    void mouseDrag(const juce::MouseEvent& e) override {
+        if (reorderHooks.onDrag && !e.mods.isPopupMenu())
+            reorderHooks.onDrag(e);
+    }
+
+    // A press that never travels is a click. Deliberately not gated on juce::MouseEvent::
     // mouseWasClicked(), which reads the real MouseInputSource's own press-tracking state rather
     // than this event's own fields, and so does not answer correctly for a synthetic event built
     // by hand (a real test's mouseDown()/mouseUp() pair, not a live press) the way it does for a
-    // genuine user gesture.
-    void mouseUp(const juce::MouseEvent&) override {
-        if (onHeaderClicked)
+    // genuine user gesture. A click that lands on the name label is that label's own (double-click
+    // to rename), so only the header background selects the column.
+    void mouseUp(const juce::MouseEvent& e) override {
+        if (reorderHooks.onRelease) {
+            const auto release = reorderHooks.onRelease; // the hook may rebuild, and destroy, this header
+            if (release(e))
+                return;
+        }
+        if (e.eventComponent != &nameLabel_ && onHeaderClicked)
             onHeaderClicked();
     }
 

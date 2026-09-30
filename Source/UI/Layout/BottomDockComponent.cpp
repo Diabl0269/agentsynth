@@ -7,6 +7,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace synth::ui {
@@ -140,6 +141,10 @@ void BottomDockComponent::setApplicationProperties(juce::ApplicationProperties* 
     // (applyDetachBothPlacesPreference() below is what re-reads this LIVE, on a later settings-file
     // write).
     detachBothPlacesEnabled_ = settings->getValue(kDetachBothPlacesKey, "move") == "both";
+    // The saved order and the Cmd+digit bindings are stored separately, so they can disagree (an order
+    // that was never saved next to bindings that were, or the reverse); the order wins, under the same
+    // "only while all three still use the default Cmd+digit set" guard a drag reorder applies.
+    permuteShortcutKeysForNewOrder();
     applyTabVisibility();
 }
 
@@ -188,6 +193,10 @@ void BottomDockComponent::setOnMakeChannelForNode(std::function<void(juce::Audio
 
 void BottomDockComponent::setOnArmTrack(std::function<void(synth::TrackId)> callback) {
     mixer_.onArmTrack = std::move(callback);
+}
+
+void BottomDockComponent::setOnMoveTrack(std::function<void(synth::TrackId, int)> callback) {
+    mixer_.onMoveTrack = std::move(callback);
 }
 
 void BottomDockComponent::setActiveTab(Tab tab) {
@@ -430,45 +439,167 @@ void BottomDockComponent::permuteShortcutKeysForNewOrder() {
     std::sort(sortedDigits.begin(), sortedDigits.end());
     if (sortedDigits != std::vector<int>{1, 2, 3})
         return; // not currently a {Cmd+1, Cmd+2, Cmd+3} set (shouldn't happen, belt-and-braces).
+    if (digits == std::vector<int>{1, 2, 3})
+        return; // already keyed to tabOrder_: nothing to write
     for (size_t i = 0; i < tabOrder_.size(); ++i)
         shortcutManager_->setBinding(actionIdForTab(tabOrder_[i]),
                                      juce::KeyPress('1' + (int)i, juce::ModifierKeys::commandModifier, 0));
     shortcutManager_->saveToProperties();
 }
 
-void BottomDockComponent::dragTab(Tab dragged, const juce::MouseEvent& e) {
-    if (!e.mouseWasDraggedSinceMouseDown())
-        return;
-    const auto pos = e.getEventRelativeTo(this).getPosition();
-    // The lift follows the pointer by the same grab offset the press landed at inside the tab, and
-    // is gated on the same drag threshold as the swap below, so a plain click never shows it.
-    liftedTab_ = dragged;
-    liftedLeft_ = pos.x - e.getMouseDownPosition().x;
-    repaint(0, 0, getWidth(), kTabStripHeight);
-    for (Tab other : tabOrder_) {
-        if (other == dragged || !isTabOfferedInStrip(other))
+// The pointer's x in dock coordinates, read straight from the event: JUCE re-derives
+// getMouseDownPosition() in the event component's CURRENT local space, and the pressed button moves
+// under the pointer as tabs shift, so only a value captured once (and converted here) stays true.
+float BottomDockComponent::pointerXInDock(const juce::MouseEvent& e) { return e.getEventRelativeTo(this).position.x; }
+
+// Captures everything the gesture needs at press time, while the tabs are still where the user
+// grabbed them: the offered tabs and their extents, and the grab offset inside the pressed tab.
+void BottomDockComponent::beginTabDrag(Tab tab, const juce::MouseEvent& e) {
+    reorderFrames_.stop();
+    reorderCancelKey_.disarm();
+    tabDragCancelled_ = false;
+    liftedTab_.reset();
+    reorderTabs_.clear();
+    std::vector<ReorderDragAnimator::Slot> slots;
+    int pressedKey = -1;
+    for (Tab t : tabOrder_) {
+        if (!isTabOfferedInStrip(t))
             continue;
-        if (buttonForTab(other).getBounds().contains(pos)) {
-            swapTabOrder(dragged, other);
-            tabDragReordered_ = true;
-            resized();
-            break;
-        }
+        if (t == tab)
+            pressedKey = static_cast<int>(reorderTabs_.size());
+        const auto bounds = buttonForTab(t).getBounds();
+        reorderTabs_.push_back(t);
+        slots.push_back({static_cast<float>(bounds.getX()), static_cast<float>(bounds.getWidth())});
     }
+    if (pressedKey < 0) {
+        reorder_.cancel();
+        return;
+    }
+    const float pointer = pointerXInDock(e);
+    reorder_.begin(slots, pressedKey, pointer - slots[static_cast<size_t>(pressedKey)].start, pointer, isShowing());
 }
 
-bool BottomDockComponent::endTabDrag() {
-    const bool reordered = tabDragReordered_;
-    if (reordered) {
+void BottomDockComponent::dragTab(const juce::MouseEvent& e) {
+    if (!reorder_.dragTo(pointerXInDock(e)))
+        return;
+    liftedTab_ = reorderTabs_[static_cast<size_t>(reorder_.getDraggedKey())];
+    if (!reorderCancelKey_.isArmed())
+        reorderCancelKey_.arm(*this, [this] { cancelTabDrag(); });
+    startReorderFramesIfNeeded();
+    applyReorderOffsets();
+}
+
+// A frame pump runs only while a tween is in flight; once the tabs are at rest there is no timer
+// and no repaint until the next pointer event.
+void BottomDockComponent::startReorderFramesIfNeeded() {
+    if (reorder_.getTweenGeneration() == reorderGenerationSeen_)
+        return;
+    reorderGenerationSeen_ = reorder_.getTweenGeneration();
+    if (reorder_.needsFrames())
+        reorderFrames_.run(ReorderDragAnimator::kMakeRoomMs + 20.0, [this] { onReorderFrame(); });
+}
+
+void BottomDockComponent::onReorderFrame() {
+    reorder_.finishIfSettled();
+    if (reorder_.isReordering()) {
+        applyReorderOffsets();
+        return;
+    }
+    liftedTab_.reset();
+    layoutTabButtons();
+    repaint(0, 0, getWidth(), kTabStripHeight);
+}
+
+void BottomDockComponent::applyReorderOffsets() {
+    if (!reorder_.isReordering())
+        return;
+    std::vector<Tab> offered;
+    for (Tab t : tabOrder_)
+        if (isTabOfferedInStrip(t))
+            offered.push_back(t);
+    if (offered.size() != reorderTabs_.size()) { // a tab was detached or redocked mid-gesture
+        reorder_.cancel();
+        liftedTab_.reset();
+        layoutTabButtons();
+        return;
+    }
+    for (size_t key = 0; key < reorderTabs_.size(); ++key) {
+        auto& button = buttonForTab(reorderTabs_[key]);
+        button.setTopLeftPosition(static_cast<int>(std::lround(reorder_.getLayoutStart(static_cast<int>(key)))),
+                                  button.getY());
+    }
+    repaint(0, 0, getWidth(), kTabStripHeight);
+}
+
+// The order is committed only here, on release: while dragging, tabOrder_ never changes and the
+// neighbours merely glide aside. Detached tabs keep their slots in tabOrder_; only the offered
+// tabs are permuted among the positions they occupy.
+void BottomDockComponent::commitTabDrag() {
+    std::vector<Tab> offered;
+    std::vector<size_t> positions;
+    for (size_t i = 0; i < tabOrder_.size(); ++i)
+        if (isTabOfferedInStrip(tabOrder_[i])) {
+            offered.push_back(tabOrder_[i]);
+            positions.push_back(i);
+        }
+    if (offered != reorderTabs_) { // a tab was detached mid-drag: abandon the gesture
+        reorder_.cancel();
+        liftedTab_.reset();
+        resized();
+        return;
+    }
+
+    const auto order = reorder_.getNewOrder();
+    bool changed = false;
+    for (size_t i = 0; i < positions.size(); ++i) {
+        const Tab tab = reorderTabs_[static_cast<size_t>(order[i])];
+        if (tabOrder_[positions[i]] != tab) {
+            tabOrder_[positions[i]] = tab;
+            changed = true;
+        }
+    }
+    if (changed) {
         persistTabOrder();
         permuteShortcutKeysForNewOrder();
     }
-    tabDragReordered_ = false;
-    if (liftedTab_.has_value()) {
+
+    layoutTabButtons();
+    std::vector<float> finalStarts;
+    for (Tab t : reorderTabs_)
+        finalStarts.push_back(static_cast<float>(buttonForTab(t).getX()));
+    reorder_.release(finalStarts);
+    if (!reorder_.isReordering())
         liftedTab_.reset();
-        repaint(0, 0, getWidth(), kTabStripHeight);
+    startReorderFramesIfNeeded();
+    applyReorderOffsets();
+    repaint(0, 0, getWidth(), kTabStripHeight);
+}
+
+// A cancelled gesture is over already; its mouse-up only has to swallow the click.
+bool BottomDockComponent::endTabDrag() {
+    reorderCancelKey_.disarm();
+    if (tabDragCancelled_) {
+        tabDragCancelled_ = false;
+        return true;
     }
-    return reordered;
+    if (!liftedTab_.has_value()) {
+        reorder_.cancel();
+        return false;
+    }
+    commitTabDrag();
+    return true;
+}
+
+// Nothing is committed: tabOrder_ was never touched, so the animator only has to glide everything
+// back to the pickup layout, and no persistence or key re-binding happens.
+void BottomDockComponent::cancelTabDrag() {
+    reorderCancelKey_.disarm();
+    if (!reorder_.isReordering())
+        return;
+    tabDragCancelled_ = true;
+    reorder_.abort();
+    startReorderFramesIfNeeded();
+    onReorderFrame();
 }
 
 bool BottomDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID stripId) {
@@ -476,21 +607,11 @@ bool BottomDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID
     return mixer_.revealColumn(stripId);
 }
 
-void BottomDockComponent::resized() {
-    // The grab strip runs the dock's full width along its top edge, OVERLAPPING the tab strip: the
-    // strip keeps its full kTabStripHeight (the content below never moves), but its buttons are
-    // laid out below the handle so a resize grab never lands on one.
-    resizeHandle_.setBounds(0, 0, getWidth(), PanelResizeHandle::kHeight);
-
-    auto bounds = getLocalBounds();
-    auto tabStrip = bounds.removeFromTop(kTabStripHeight).withTrimmedTop(PanelResizeHandle::kHeight);
-    // Rightmost: the detach button (always present, acts on whichever tab is active).
-    detachButton_.setBounds(tabStrip.removeFromRight(kTabStripHeight));
-
-    // Whatever's left splits between the tabs currently offered (isTabOfferedInStrip --
-    // skips a Mixer disabled by placement AND any detached tab), in tabOrder_'s user-controlled
-    // (drag-to-reorder) order; the last one absorbs the rounding remainder. A tab not offered is
-    // hidden outright -- it has left the strip.
+// Splits tabButtonsArea_ between the tabs currently offered (isTabOfferedInStrip -- skips a Mixer
+// disabled by placement AND any detached tab); the last one absorbs the rounding remainder. A tab
+// not offered is hidden outright -- it has left the strip.
+void BottomDockComponent::layoutTabButtons() {
+    auto tabStrip = tabButtonsArea_;
     std::vector<Tab> offered;
     for (Tab t : tabOrder_)
         if (isTabOfferedInStrip(t))
@@ -505,6 +626,25 @@ void BottomDockComponent::resized() {
     for (Tab t : tabOrder_)
         if (!isTabOfferedInStrip(t))
             buttonForTab(t).setVisible(false);
+}
+
+void BottomDockComponent::resized() {
+    // The grab strip runs the dock's full width along its top edge, OVERLAPPING the tab strip: the
+    // strip keeps its full kTabStripHeight (the content below never moves), but its buttons are
+    // laid out below the handle so a resize grab never lands on one.
+    resizeHandle_.setBounds(0, 0, getWidth(), PanelResizeHandle::kHeight);
+
+    auto bounds = getLocalBounds();
+    auto tabStrip = bounds.removeFromTop(kTabStripHeight).withTrimmedTop(PanelResizeHandle::kHeight);
+    // Rightmost: the detach button (always present, acts on whichever tab is active).
+    detachButton_.setBounds(tabStrip.removeFromRight(kTabStripHeight));
+
+    // Whatever's left splits between the tabs currently offered, in tabOrder_'s user-controlled
+    // (drag-to-reorder) order -- see layoutTabButtons(). A reorder in flight then shifts the
+    // buttons to their animated places.
+    tabButtonsArea_ = tabStrip;
+    layoutTabButtons();
+    applyReorderOffsets();
 
     timelineHost_.setBounds(bounds);
     // In the Own-panel placement the host lives in MixerPlacementController's strip, which lays it
@@ -545,10 +685,11 @@ void BottomDockComponent::paintTabSlot(juce::Graphics& g, juce::Rectangle<int> b
 }
 
 // Painted over the children so the lifted tab sits above every tab button and the resize handle.
-// The rectangle is the dragged tab's own slot, raised by kLiftedTabRise and slid to the pointer
-// (clamped to the dock), so it stays the width of the tab it stands in for.
+// The rectangle is the dragged tab's own width, raised by kLiftedTabRise and placed where the
+// animator says the dragged item is: at the pointer minus the grab offset while dragging, gliding
+// into its slot after release. The raise and the shadow/border strength ease with getLift().
 void BottomDockComponent::paintOverChildren(juce::Graphics& g) {
-    if (!liftedTab_.has_value())
+    if (!liftedTab_.has_value() || !reorder_.isReordering())
         return;
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     if (lf == nullptr)
@@ -556,18 +697,20 @@ void BottomDockComponent::paintOverChildren(juce::Graphics& g) {
     auto& button = buttonForTab(*liftedTab_);
     const auto& theme = lf->getTheme();
     const auto& c = theme.colors;
-    const auto slot = button.getBounds();
-    const int left = juce::jlimit(0, juce::jmax(0, getWidth() - slot.getWidth()), liftedLeft_);
-    const auto tab = slot.withX(left).translated(0, -kLiftedTabRise).toFloat();
+    const float lift = reorder_.getLift();
+    const auto tab = button.getBounds()
+                         .withX(static_cast<int>(std::lround(reorder_.getDraggedStart())))
+                         .toFloat()
+                         .translated(0.0f, -kLiftedTabRise * lift);
 
     // Cheap drop shadow, the same offset translucent copy AppLookAndFeel's fader cap uses.
-    g.setColour(juce::Colours::black.withAlpha(0.35f * juce::jlimit(0.0f, 1.0f, theme.treatment.shadow)));
+    g.setColour(juce::Colours::black.withAlpha(0.35f * juce::jlimit(0.0f, 1.0f, theme.treatment.shadow) * lift));
     g.fillRoundedRectangle(tab.translated(0.0f, 1.0f), kLiftedTabRadius);
 
     g.beginTransparencyLayer(kLiftedTabOpacity);
     g.setColour(c.surfaceHi);
     g.fillRoundedRectangle(tab, kLiftedTabRadius);
-    g.setColour(c.accent);
+    g.setColour(c.accent.withMultipliedAlpha(lift));
     g.drawRoundedRectangle(tab.reduced(0.5f), kLiftedTabRadius - 0.5f, 1.0f);
     g.setColour(c.textPrimary);
     g.setFont(lf->getTextButtonFont(button, button.getHeight()));

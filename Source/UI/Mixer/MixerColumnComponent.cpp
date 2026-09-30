@@ -432,11 +432,34 @@ void MixerColumnComponent::paint(juce::Graphics& g) {
     g.drawRect(getLocalBounds(), selected_ ? 2 : 1);
 }
 
+void MixerColumnComponent::setReorderHooks(MixerColumnHeader::ReorderHooks hooks) {
+    header_.reorderHooks = std::move(hooks);
+}
+
+// A no-op when the strength is unchanged, so the panel can call it every layout without repainting
+// the column's controls.
+void MixerColumnComponent::setLift(float lift) {
+    if (lift == lift_)
+        return;
+    lift_ = lift;
+    repaint();
+}
+
 void MixerColumnComponent::paintOverChildren(juce::Graphics& g) {
     // Badges/armed outline paint OVER every child control they annotate, same as
     // ModuleComponent's paintMidiLearnOverlays() -- must run before the keyboard-focus outline
     // below returns early so a mapped/armed control still shows its overlay on an unfocused column.
     paintMidiLearnOverlays(g);
+
+    // A dragged column reads as raised: a faint light wash and an accent border, both fading with lift_.
+    if (lift_ > 0.0f) {
+        const auto* liftLaf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+        const auto liftAccent = liftLaf != nullptr ? liftLaf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        g.setColour(juce::Colours::white.withAlpha(0.05f * lift_));
+        g.fillRect(getLocalBounds());
+        g.setColour(liftAccent.withMultipliedAlpha(lift_));
+        g.drawRect(getLocalBounds(), 1);
+    }
 
     // The focused column's OWN outline, distinct from setSelected()'s reveal highlight --
     // they may co-paint (a revealed column can also be the keyboard-focused one). Real
