@@ -197,6 +197,34 @@ void MixerPanelComponent::refreshTrackColours() {
             }
 }
 
+// The snapshot is the one source both the columns and the side pane read, so ordering it here keeps them
+// in agreement. Track-less columns keep the positions they occupy; only which of them sits where changes.
+// Hidden buses stay in the saved order (busUuidsInOrder_) so a drag merges into the full list.
+void MixerPanelComponent::applySavedBusOrder(synth::MixerSnapshot& snapshot) {
+    std::vector<size_t> slots;
+    std::vector<juce::String> uuids;
+    for (size_t i = 0; i < snapshot.columns.size(); ++i) {
+        const auto& column = snapshot.columns[i];
+        const bool channel =
+            column.kind == synth::MixerColumn::Kind::Strip || column.kind == synth::MixerColumn::Kind::Bus;
+        if (channel && column.feedingTracks.empty()) {
+            slots.push_back(i);
+            uuids.push_back(column.uuid);
+        }
+    }
+    busUuidsInOrder_ = viewDoc_->orderBuses(uuids);
+
+    std::vector<synth::MixerColumn> original;
+    for (auto slot : slots)
+        original.push_back(snapshot.columns[slot]);
+    for (size_t n = 0; n < slots.size(); ++n) {
+        const auto source = std::find_if(original.begin(), original.end(),
+                                         [&](const synth::MixerColumn& c) { return c.uuid == busUuidsInOrder_[n]; });
+        if (source != original.end())
+            snapshot.columns[slots[n]] = *source;
+    }
+}
+
 void MixerPanelComponent::rebuild() {
     if (graph_ == nullptr || doc_ == nullptr || macros_ == nullptr)
         return;
@@ -219,7 +247,8 @@ void MixerPanelComponent::rebuild() {
     columnEntries_.clear();
     focusedColumnIndex_ = -1;
 
-    const auto snapshot = synth::buildMixerSnapshot(*graph_, *doc_, *macros_);
+    auto snapshot = synth::buildMixerSnapshot(*graph_, *doc_, *macros_);
+    applySavedBusOrder(snapshot);
     trackColoursSeen_ = currentTrackColours(*doc_);
 
     stripColumns_.clear();
@@ -279,7 +308,7 @@ void MixerPanelComponent::rebuild() {
         widget->setHeaderContextMenu([this, channelId](const juce::MouseEvent&) { showChannelMenu(channelId); });
         content_.addAndMakeVisible(*widget);
         // Only the scrolling group reorders: a pinned column stays where the zone puts it.
-        if (!column.feedingTracks.empty() && viewDoc_->getZone(channelId) == synth::MixerZone::Scrolling)
+        if (viewDoc_->getZone(channelId) == synth::MixerZone::Scrolling)
             wireColumnReorder(*widget, column.uuid);
 
         ColumnEntry entry;

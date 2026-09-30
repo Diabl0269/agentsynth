@@ -71,6 +71,45 @@ TEST(MixerViewDocTests, RetainOnlyDropsDanglingIdsButKeepsTheFixedOnes) {
     EXPECT_TRUE(doc.isHidden(MixerViewDoc::kDirectId));
 }
 
+TEST(MixerViewDocTests, BusOrderRoundTripsThroughVarAndDropsEmptyAndDuplicateIds) {
+    MixerViewDoc doc;
+    doc.setBusOrder({"b", "", "a", "b"});
+    EXPECT_EQ(doc.getBusOrder(), (std::vector<juce::String>{"b", "a"}));
+    EXPECT_FALSE(doc.isEmpty());
+
+    MixerViewDoc copy;
+    ASSERT_TRUE(copy.fromVar(doc.toVar()));
+    EXPECT_EQ(copy.getBusOrder(), (std::vector<juce::String>{"b", "a"})) << "the saved order is kept, not sorted";
+    EXPECT_TRUE(copy == doc);
+    MixerViewDoc other;
+    EXPECT_TRUE(other != doc) << "operator== sees the bus order";
+}
+
+TEST(MixerViewDocTests, FromVarRejectsANonStringBusOrderItemAndLeavesTheDocumentUntouched) {
+    MixerViewDoc doc;
+    doc.setBusOrder({"keep"});
+    const auto before = doc;
+    EXPECT_FALSE(doc.fromVar(juce::JSON::parse(R"({"busOrder":["a",1]})")));
+    EXPECT_FALSE(doc.fromVar(juce::JSON::parse(R"({"busOrder":"a"})")));
+    EXPECT_TRUE(doc == before);
+    EXPECT_TRUE(doc.fromVar(juce::JSON::parse(R"({"zones":{}})")));
+    EXPECT_TRUE(doc.getBusOrder().empty()) << "a missing key means no saved order";
+}
+
+TEST(MixerViewDocTests, RetainOnlyPrunesDeadBusIds) {
+    MixerViewDoc doc;
+    doc.setBusOrder({"a", "gone", "b"});
+    doc.retainOnly({"a", "b"});
+    EXPECT_EQ(doc.getBusOrder(), (std::vector<juce::String>{"a", "b"}));
+}
+
+TEST(MixerViewDocTests, OrderBusesPutsSavedIdsFirstAndUnknownOnesAfterInInputOrder) {
+    MixerViewDoc doc;
+    doc.setBusOrder({"c", "a"});
+    EXPECT_EQ(doc.orderBuses({"x", "a", "y", "c"}), (std::vector<juce::String>{"c", "a", "x", "y"}));
+    EXPECT_EQ(MixerViewDoc().orderBuses({"x", "a"}), (std::vector<juce::String>{"x", "a"}));
+}
+
 namespace {
 
 struct LoadedProject {

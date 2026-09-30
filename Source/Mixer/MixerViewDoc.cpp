@@ -1,4 +1,4 @@
-// Concern: MixerViewDoc's zone and hidden bookkeeping and its project-file (de)serialisation.
+// Concern: MixerViewDoc's zone, hidden and bus-order bookkeeping and its project-file (de)serialisation.
 #include "MixerViewDoc.h"
 
 #include <algorithm>
@@ -56,6 +56,26 @@ void MixerViewDoc::setHidden(const juce::String& channelId, bool hidden) {
         hidden_.erase(channelId);
 }
 
+void MixerViewDoc::setBusOrder(std::vector<juce::String> order) {
+    busOrder_.clear();
+    for (auto& id : order)
+        if (id.isNotEmpty() && std::find(busOrder_.begin(), busOrder_.end(), id) == busOrder_.end())
+            busOrder_.push_back(std::move(id));
+}
+
+// Stable: a bus the saved order has never seen (a new bus, or an old project) keeps its input position
+// relative to the other unknown ones and lands after every known one.
+std::vector<juce::String> MixerViewDoc::orderBuses(const std::vector<juce::String>& currentIds) const {
+    auto rank = [&](const juce::String& id) {
+        const auto it = std::find(busOrder_.begin(), busOrder_.end(), id);
+        return it == busOrder_.end() ? busOrder_.size() : static_cast<size_t>(it - busOrder_.begin());
+    };
+    auto ordered = currentIds;
+    std::stable_sort(ordered.begin(), ordered.end(),
+                     [&](const juce::String& a, const juce::String& b) { return rank(a) < rank(b); });
+    return ordered;
+}
+
 void MixerViewDoc::retainOnly(const std::vector<juce::String>& aliveIds) {
     auto alive = [&](const juce::String& id) {
         return id == kMasterId || id == kDirectId || std::find(aliveIds.begin(), aliveIds.end(), id) != aliveIds.end();
@@ -64,6 +84,9 @@ void MixerViewDoc::retainOnly(const std::vector<juce::String>& aliveIds) {
         it = alive(it->first) ? std::next(it) : zones_.erase(it);
     for (auto it = hidden_.begin(); it != hidden_.end();)
         it = alive(*it) ? std::next(it) : hidden_.erase(it);
+    busOrder_.erase(
+        std::remove_if(busOrder_.begin(), busOrder_.end(), [&](const juce::String& id) { return !alive(id); }),
+        busOrder_.end());
 }
 
 // Entries are written in id order, so the same document always serialises to the same text.
@@ -78,11 +101,17 @@ juce::var MixerViewDoc::toVar() const {
     auto* root = new juce::DynamicObject();
     root->setProperty("zones", juce::var(zones));
     root->setProperty("hidden", hidden);
+    if (!busOrder_.empty()) {
+        juce::Array<juce::var> order;
+        for (const auto& id : busOrder_)
+            order.add(id);
+        root->setProperty("busOrder", order);
+    }
     return juce::var(root);
 }
 
 // A zone name other than left/right/scrolling, a non-string id or a non-object/array container rejects the
-// whole value; a missing "zones" or "hidden" is just empty.
+// whole value; a missing "zones", "hidden" or "busOrder" is just empty.
 bool MixerViewDoc::fromVar(const juce::var& v) {
     const auto* root = v.getDynamicObject();
     if (root == nullptr)
@@ -115,8 +144,21 @@ bool MixerViewDoc::fromVar(const juce::var& v) {
         }
     }
 
+    std::vector<juce::String> busOrder;
+    if (root->hasProperty("busOrder")) {
+        const auto* array = root->getProperty("busOrder").getArray();
+        if (array == nullptr)
+            return false;
+        for (const auto& item : *array)
+            if (!item.isString())
+                return false;
+        for (const auto& item : *array)
+            busOrder.push_back(item.toString());
+    }
+
     zones_ = std::move(zones);
     hidden_ = std::move(hidden);
+    setBusOrder(std::move(busOrder));
     return true;
 }
 

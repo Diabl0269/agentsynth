@@ -6,8 +6,11 @@
 #include "../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
+#include "ProjectBundle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerZonesPane/MixerZonesPane.h"
+#include "UI/Mixer/MixerZonesPane/MixerZonesRow.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -188,7 +191,7 @@ TEST(MixerPanelColumnDragTests, ADragReleaseDoesNotAlsoSelectTheColumn) {
         EXPECT_FALSE(r.mc.getGraphEditor().getMacroController().isMacroSelected(macro.id));
 }
 
-TEST(MixerPanelColumnDragTests, BusDirectAndMasterHeadersAreNotDragHandles) {
+TEST(MixerPanelColumnDragTests, DirectAndMasterHeadersAreNotDragHandlesButBusHeadersAre) {
     ColumnDragRig r(2);
     ASSERT_NE(r.panel->createBus(), juce::AudioProcessorGraph::NodeID{});
     r.panel->rebuild();
@@ -197,7 +200,7 @@ TEST(MixerPanelColumnDragTests, BusDirectAndMasterHeadersAreNotDragHandles) {
     EXPECT_TRUE(static_cast<bool>(r.panel->getStripColumnForTest(1)->getHeaderForTest().reorderHooks.onGrab));
     auto* bus = r.panel->getStripColumnForTest(2);
     ASSERT_NE(bus, nullptr);
-    EXPECT_FALSE(static_cast<bool>(bus->getHeaderForTest().reorderHooks.onGrab)) << "a bus has no track to move";
+    EXPECT_TRUE(static_cast<bool>(bus->getHeaderForTest().reorderHooks.onGrab)) << "buses reorder among buses";
     ASSERT_NE(r.panel->getMasterColumnForTest(), nullptr);
     EXPECT_FALSE(static_cast<bool>(r.panel->getMasterColumnForTest()->getHeaderForTest().reorderHooks.onGrab));
     ASSERT_NE(r.panel->getDirectColumnForTest(), nullptr);
@@ -255,4 +258,116 @@ TEST(MixerPanelColumnDragTests, AnUnrelatedRebuildMidDragDiscardsTheGesture) {
     r.panel->rebuild();
     EXPECT_FALSE(r.panel->isColumnReorderActiveForTest());
     EXPECT_EQ(r.panel->getStripColumnForTest(0)->getX(), 0);
+}
+
+namespace {
+
+std::vector<juce::AudioProcessorGraph::NodeID> columnNodes(synth::ui::MixerPanelComponent& panel, int count) {
+    std::vector<juce::AudioProcessorGraph::NodeID> ids;
+    for (int i = 0; i < count; ++i)
+        ids.push_back(panel.getStripColumnForTest(i)->getNodeId());
+    return ids;
+}
+
+// The ids of the bus rows in the side pane, in the order the pane lists them.
+std::vector<juce::String> paneBusIds(synth::ui::MixerPanelComponent& panel) {
+    std::vector<juce::String> ids;
+    auto& pane = panel.getZonesPaneForTest();
+    for (int i = 0; i < pane.getRowCountForTest(); ++i)
+        if (pane.getRowForTest(i)->getChannel().kind == synth::ui::MixerZoneChannelKind::Bus)
+            ids.push_back(pane.getRowForTest(i)->getChannel().id);
+    return ids;
+}
+
+// Two tracks (columns 0-1) and two buses (columns 2-3).
+struct BusDragRig : ColumnDragRig {
+    BusDragRig()
+        : ColumnDragRig(2) {
+        panel->createBus();
+        panel->createBus();
+        panel->rebuild();
+    }
+};
+
+} // namespace
+
+TEST(MixerPanelColumnDragTests, DraggingABusBeforeAnotherSavesTheOrderInOneUndoStep) {
+    BusDragRig r;
+    const auto original = columnNodes(*r.panel, 4);
+    const auto trackOrder = r.trackOrder();
+    const auto originalPane = paneBusIds(*r.panel);
+    ASSERT_EQ(originalPane.size(), 2u);
+    EXPECT_TRUE(r.panel->getViewDoc().getBusOrder().empty());
+
+    auto* second = r.panel->getStripColumnForTest(3);
+    HeaderDrag drag{second->getHeaderForTest(), *second->getParentComponent(), headerGrabX(*second)};
+    drag.down();
+    drag.dragTo(drag.pressX - kPitch - 20);
+    EXPECT_TRUE(r.panel->isColumnReorderActiveForTest());
+    drag.up(drag.pressX - kPitch - 20);
+    second = nullptr; // the drop rebuilds the columns
+
+    const auto reordered = columnNodes(*r.panel, 4);
+    EXPECT_EQ(reordered,
+              (std::vector<juce::AudioProcessorGraph::NodeID>{original[0], original[1], original[3], original[2]}));
+    EXPECT_EQ(r.panel->getViewDoc().getBusOrder(), (std::vector<juce::String>{originalPane[1], originalPane[0]}));
+    EXPECT_EQ(paneBusIds(*r.panel), (std::vector<juce::String>{originalPane[1], originalPane[0]}))
+        << "the side pane lists the buses in the same order";
+    EXPECT_EQ(r.trackOrder(), trackOrder) << "a bus drag never moves a track";
+    EXPECT_FALSE(r.panel->isColumnReorderActiveForTest());
+
+    ASSERT_TRUE(r.mc.getUndoManager().undo());
+    EXPECT_EQ(columnNodes(*r.panel, 4), original) << "one undo step puts the buses back";
+    EXPECT_TRUE(r.panel->getViewDoc().getBusOrder().empty());
+}
+
+TEST(MixerPanelColumnDragTests, ABusDragIsHeldAmongTheBusesAndATrackDragNeverMovesABus) {
+    BusDragRig r;
+    const auto original = columnNodes(*r.panel, 4);
+
+    auto* bus = r.panel->getStripColumnForTest(2);
+    HeaderDrag busDrag{bus->getHeaderForTest(), *bus->getParentComponent(), headerGrabX(*bus)};
+    busDrag.down();
+    busDrag.dragTo(busDrag.pressX - 3 * kPitch);
+    EXPECT_EQ(bus->getX(), 2 * kPitch) << "held at the first bus slot, short of the track strips";
+    busDrag.up(busDrag.pressX - 3 * kPitch);
+    EXPECT_EQ(columnNodes(*r.panel, 4), original);
+    EXPECT_TRUE(r.panel->getViewDoc().getBusOrder().empty()) << "dropping in place saves nothing";
+
+    const auto tracks = r.trackOrder();
+    auto* track = r.panel->getStripColumnForTest(0);
+    HeaderDrag trackDrag{track->getHeaderForTest(), *track->getParentComponent(), headerGrabX(*track)};
+    trackDrag.down();
+    trackDrag.dragTo(trackDrag.pressX + 5 * kPitch);
+    EXPECT_EQ(track->getX(), kPitch) << "held at the last track slot, short of the buses";
+    trackDrag.up(trackDrag.pressX + 5 * kPitch);
+    EXPECT_EQ(r.panel->getStripColumnForTest(2)->getNodeId(), original[2]);
+    EXPECT_EQ(r.panel->getStripColumnForTest(3)->getNodeId(), original[3]);
+    EXPECT_TRUE(r.panel->getViewDoc().getBusOrder().empty()) << "a track drag does not touch the bus order";
+    EXPECT_NE(r.trackOrder(), tracks);
+}
+
+TEST(MixerPanelColumnDragTests, TheBusOrderSurvivesSavingAndReloadingTheProject) {
+    BusDragRig r;
+    const auto originalPane = paneBusIds(*r.panel);
+    auto* second = r.panel->getStripColumnForTest(3);
+    HeaderDrag drag{second->getHeaderForTest(), *second->getParentComponent(), headerGrabX(*second)};
+    drag.down();
+    drag.dragTo(drag.pressX - kPitch - 20);
+    drag.up(drag.pressX - kPitch - 20);
+    ASSERT_EQ(paneBusIds(*r.panel), (std::vector<juce::String>{originalPane[1], originalPane[0]}));
+
+    const auto bundle = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                            .getChildFile("busorder-" + juce::Uuid().toString())
+                            .withFileExtension(synth::ProjectBundle::kBundleExtension);
+    ASSERT_TRUE(r.mc.saveProjectForTest(bundle));
+    r.mc.newPatchForTest();
+    ASSERT_TRUE(r.mc.openProjectForTest(bundle));
+    bundle.deleteRecursively();
+
+    auto& panel = r.mc.getBottomDock().getMixerPanel();
+    panel.rebuild();
+    EXPECT_EQ(panel.getViewDoc().getBusOrder(), (std::vector<juce::String>{originalPane[1], originalPane[0]}));
+    EXPECT_EQ(paneBusIds(panel), (std::vector<juce::String>{originalPane[1], originalPane[0]}))
+        << "NodeIDs are reassigned on load, the saved uuids still order the buses";
 }

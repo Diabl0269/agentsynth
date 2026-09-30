@@ -1,6 +1,7 @@
-// Concern: MixerPanelComponent's drag-to-reorder of track strip columns -- the header hooks, the
-// animator glue, autoscroll, the drop's move of the strip's first track, and column placement while
-// a reorder is in flight.
+// Concern: MixerPanelComponent's drag-to-reorder of strip columns (track-fed strips among themselves,
+// track-less strips and buses among themselves) -- the header hooks, the animator glue, autoscroll, the
+// drop's move of the strip's first track or save of the bus order, and column placement while a reorder
+// is in flight.
 #include "AppUndoManager.h"
 #include "MixerPanelComponent.h"
 #include "MixerPanelInternal.h"
@@ -25,9 +26,9 @@ int indexOfUuid(const std::vector<juce::String>& uuids, const juce::String& uuid
 }
 } // namespace
 
-// Only strips a track feeds are wired: they are the ones whose order the timeline owns. Buses,
-// orphan strips, Direct and Master never get hooks, so their headers stay plain click targets.
-// The hooks capture the panel and a uuid, never a column pointer -- a drop rebuilds the columns.
+// Every strip and bus column in the scrolling group is wired; Direct and Master never get hooks, so
+// their headers stay plain click targets. Which group a drag moves is decided at press time
+// (beginColumnDrag). The hooks capture the panel and a uuid, never a column pointer -- a drop rebuilds the columns.
 void MixerPanelComponent::wireColumnReorder(MixerColumnComponent& column, const juce::String& uuid) {
     MixerColumnHeader::ReorderHooks hooks;
     hooks.onGrab = [this, uuid](const juce::MouseEvent& e) { beginColumnDrag(uuid, e); };
@@ -45,7 +46,8 @@ float MixerPanelComponent::pointerXInContent(const juce::MouseEvent& e) {
 
 // Slots are the static column positions (index within the scrolling group times pitch), not the columns'
 // current bounds, so a press during an earlier drop's settle still starts from the true layout. Only
-// track-fed strips in the scrolling group take part; a pinned column is not reorderable.
+// the pressed column's group takes part -- track-fed strips, or track-less strips and buses -- and only
+// in the scrolling zone; a pinned column is not reorderable.
 void MixerPanelComponent::beginColumnDrag(const juce::String& uuid, const juce::MouseEvent& e) {
     columnFrames_.stop();
     columnCancelKey_.disarm();
@@ -54,16 +56,21 @@ void MixerPanelComponent::beginColumnDrag(const juce::String& uuid, const juce::
     liftedUuid_ = {};
     reorderUuids_.clear();
     reorderFirstTracks_.clear();
+    const auto pressed = std::find_if(columnEntries_.begin(), columnEntries_.end(), [&](const ColumnEntry& entry) {
+        return entry.kind == ColumnEntry::Kind::Strip && entry.uuid == uuid;
+    });
+    if (pressed == columnEntries_.end())
+        return;
+    reorderingBuses_ = pressed->feedingTracks.empty();
     std::vector<ReorderDragAnimator::Slot> slots;
     int pressedKey = -1;
     for (const auto& entry : columnEntries_) {
-        if (entry.kind != ColumnEntry::Kind::Strip || entry.zone != synth::MixerZone::Scrolling ||
-            entry.feedingTracks.empty())
+        if (!inActiveReorderGroup(entry))
             continue;
         if (entry.uuid == uuid)
             pressedKey = static_cast<int>(reorderUuids_.size());
         reorderUuids_.push_back(entry.uuid);
-        reorderFirstTracks_.push_back(entry.feedingTracks.front());
+        reorderFirstTracks_.push_back(reorderingBuses_ ? synth::TrackId{} : entry.feedingTracks.front());
         slots.push_back({static_cast<float>(entry.zoneIndex * kColumnPitch), static_cast<float>(kMixerColumnWidth)});
     }
     if (pressedKey < 0)
@@ -72,6 +79,11 @@ void MixerPanelComponent::beginColumnDrag(const juce::String& uuid, const juce::
     columnReorder_.begin(slots, pressedKey, pointer - slots[static_cast<size_t>(pressedKey)].start, pointer,
                          isShowing());
     lastDraggedStart_ = slots[static_cast<size_t>(pressedKey)].start;
+}
+
+bool MixerPanelComponent::inActiveReorderGroup(const ColumnEntry& entry) const {
+    return entry.kind == ColumnEntry::Kind::Strip && entry.zone == synth::MixerZone::Scrolling &&
+           entry.feedingTracks.empty() == reorderingBuses_;
 }
 
 // Scrolls the viewport while the pointer is within the edge zone; the drag auto-repeat keeps the
@@ -136,6 +148,22 @@ void MixerPanelComponent::onColumnReorderFrame() {
     content_.repaint();
 }
 
+// Replaces the positions the dragged group's visible uuids hold in the full bus list (hidden buses
+// included) with the new visible order, in sequence; every other position is untouched.
+std::vector<juce::String> MixerPanelComponent::mergeBusOrder(const std::vector<juce::String>& visibleBefore,
+                                                             const std::vector<juce::String>& visibleAfter) const {
+    auto merged = busUuidsInOrder_;
+    size_t next = 0;
+    for (auto& uuid : merged)
+        if (indexOfUuid(visibleBefore, uuid) >= 0 && next < visibleAfter.size())
+            uuid = visibleAfter[next++];
+    return merged;
+}
+
+// A bus drop saves the new order in the view document as one undo step (its rebuild is synchronous, so
+// the columns already sit in the new order when the settle starts). A track drop is expressed as a
+// timeline move instead.
+//
 // The move is expressed as a timeline move of the dragged strip's FIRST feeding track (a strip fed
 // by several tracks sits at its first one) to the index of the first track of the strip it takes
 // the place of -- valid in both directions, since TimelineDoc::moveTrack takes the final index.
@@ -150,7 +178,11 @@ void MixerPanelComponent::commitColumnDrag() {
     for (int key : columnReorder_.getNewOrder())
         newOrder.push_back(reorderUuids_[static_cast<size_t>(key)]);
 
-    if (insertion != dragged && onMoveTrack && doc_ != nullptr) {
+    if (reorderingBuses_) {
+        const auto merged = mergeBusOrder(reorderUuids_, newOrder);
+        if (insertion != dragged && merged != busUuidsInOrder_)
+            applyViewEdit([&](synth::MixerViewDoc& d) { d.setBusOrder(merged); });
+    } else if (insertion != dragged && onMoveTrack && doc_ != nullptr) {
         const auto& tracks = doc_->getTracks();
         const auto anchorId = reorderFirstTracks_[static_cast<size_t>(insertion)];
         const auto anchor =
@@ -161,8 +193,7 @@ void MixerPanelComponent::commitColumnDrag() {
 
     std::vector<juce::String> laidOut;
     for (const auto& entry : columnEntries_)
-        if (entry.kind == ColumnEntry::Kind::Strip && entry.zone == synth::MixerZone::Scrolling &&
-            !entry.feedingTracks.empty())
+        if (inActiveReorderGroup(entry))
             laidOut.push_back(entry.uuid);
     if (laidOut != newOrder)
         rebuild();
@@ -170,7 +201,7 @@ void MixerPanelComponent::commitColumnDrag() {
     std::vector<float> finalStarts;
     for (const auto& uuid : reorderUuids_) {
         const auto entry = std::find_if(columnEntries_.begin(), columnEntries_.end(), [&](const ColumnEntry& e) {
-            return e.kind == ColumnEntry::Kind::Strip && e.zone == synth::MixerZone::Scrolling && e.uuid == uuid;
+            return inActiveReorderGroup(e) && e.uuid == uuid;
         });
         if (entry == columnEntries_.end()) { // the strip vanished under the drop
             columnReorder_.cancel();
@@ -228,7 +259,7 @@ void MixerPanelComponent::discardColumnDrag() {
     columnDragCancelled_ = false;
 }
 
-// Track strips in the scrolling group take their x from the animator while a reorder is in flight (the
+// Strips of the active reorder group take their x from the animator while a reorder is in flight (the
 // dragged one from its lifted position); everything else sits at its static slot in its zone. Strips are
 // matched to animator keys by uuid, so this stays right across the rebuild a drop causes.
 void MixerPanelComponent::placeColumns(int columnHeight, bool relayout) {
@@ -246,10 +277,7 @@ void MixerPanelComponent::placeColumns(int columnHeight, bool relayout) {
             continue;
         int x = entry.zoneIndex * kColumnPitch;
         float lift = 0.0f;
-        const int key =
-            reordering && entry.kind == ColumnEntry::Kind::Strip && entry.zone == synth::MixerZone::Scrolling
-                ? indexOfUuid(reorderUuids_, entry.uuid)
-                : -1;
+        const int key = reordering && inActiveReorderGroup(entry) ? indexOfUuid(reorderUuids_, entry.uuid) : -1;
         if (key >= 0) {
             const bool isDragged = key == columnReorder_.getDraggedKey();
             x = static_cast<int>(
