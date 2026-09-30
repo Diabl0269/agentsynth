@@ -11,6 +11,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/PianoRoll/VelocityLane/VelocityLaneMath.h"
+#include "UI/PianoRoll/VelocityLane/VelocityLaneSlide.h"
 #include <algorithm>
 #include <cmath>
 
@@ -19,9 +20,15 @@ namespace synth::ui {
 using namespace synth::ui::detail;
 
 namespace {
-constexpr int kVelocityChipWidth = 64;
-constexpr int kHumanizeChipWidth = 64;
-constexpr int kValueBoxWidth = 40;
+// The group frame: 2 px of padding inside its outline, chips and box 14 px tall inside an 18 px
+// frame (the header is 20 px, its last row is the toolbar's bottom rule).
+constexpr int kGroupPad = 2;
+constexpr int kGroupInsetY = 1;
+constexpr int kGroupContentInsetY = 3;
+constexpr int kVelocityChipWidth = 60;
+constexpr int kHumanizeChipWidth = 60;
+constexpr int kCaptionWidth = 22;
+constexpr int kValueBoxWidth = 36;
 } // namespace
 
 // Called once from the constructor. The lane's Host reads the notes through effectiveGeometryFor —
@@ -78,7 +85,7 @@ void PianoRollComponent::initVelocityControls() {
     velocityBox_.setInputRestrictions(3, "0123456789");
     velocityBox_.setJustification(juce::Justification::centred);
     velocityBox_.setSelectAllWhenFocused(true);
-    velocityBox_.setIndents(2, 1);
+    velocityBox_.setIndents(2, 0);
     velocityBox_.setFont(
         juce::Font(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::plain)));
     velocityBox_.onReturnKey = [this] {
@@ -102,9 +109,13 @@ void PianoRollComponent::initVelocityControls() {
 // The remembered height while shown, re-clamped to [kMinHeight, half the canvas band] at every
 // layout (so a roll that got shorter never keeps a strip that swallows the grid), and never more
 // than the band has room for at all (a tiny test roll).
+// Mid-slide it is round(progress * full): the grid gives up only what the strip has risen so far.
 int PianoRollComponent::velocityLaneHeightPx() const noexcept {
-    if (!velocityLaneVisible_)
-        return 0;
+    return VelocityLaneSlide::revealedHeight(velocityLaneSlide_.progress(), velocityLaneFullHeightPx());
+}
+
+// The strip's own height, whatever the slide is showing: the lane component always keeps this size.
+int PianoRollComponent::velocityLaneFullHeightPx() const noexcept {
     const int band = getHeight() - canvasTop();
     const int clamped = velocitylane::clampLaneHeight(velocityLaneHeight_, band, PianoRollVelocityLane::kMinHeight);
     return juce::jlimit(0, clamped, band);
@@ -140,23 +151,38 @@ void PianoRollComponent::onVelocityLaneResizeCommitted(int desiredHeight) {
     propertiesFile_->saveIfNeeded();
 }
 
-// Called from resized() right after the Scale-filter chip is carved: the Velocity toggle and the
-// Humanize action continue the chip row (4 px group gap, 2 px within), the value box follows them
-// so the three velocity controls read as one group, and the strip is carved from the canvas band's BOTTOM before the
-// scale panel, keys column and grid are laid out from what is left — so all three stop above it.
+// Called from resized() right after the Scale-filter chip is carved: the Velocity toggle, the
+// Humanize action and the value box (captioned "Set") continue the chip row inside ONE rounded
+// frame, so the three velocity controls read as one group. The strip is carved from the canvas
+// band's BOTTOM before the scale panel, keys column and grid are laid out from what is left, so all
+// three stop above it.
 void PianoRollComponent::layoutVelocityControls(juce::Rectangle<int>& header, juce::Rectangle<int>& canvas) {
     header.removeFromLeft(4);
-    velocityChipBounds_ = header.removeFromLeft(kVelocityChipWidth).reduced(2, 2);
-    header.removeFromLeft(2);
-    humanizeChipBounds_ = header.removeFromLeft(kHumanizeChipWidth).reduced(2, 2);
-    header.removeFromLeft(2);
-    velocityBox_.setBounds(header.removeFromLeft(kValueBoxWidth).reduced(2, 2));
+    const int groupWidth =
+        kGroupPad + kVelocityChipWidth + 2 + kHumanizeChipWidth + 2 + kCaptionWidth + kValueBoxWidth + kGroupPad;
+    auto group = header.removeFromLeft(groupWidth);
+    velocityGroupBounds_ = group.reduced(0, kGroupInsetY);
+    auto inner = velocityGroupBounds_.reduced(kGroupPad, kGroupContentInsetY - kGroupInsetY);
+    velocityChipBounds_ = inner.removeFromLeft(kVelocityChipWidth);
+    inner.removeFromLeft(2);
+    humanizeChipBounds_ = inner.removeFromLeft(kHumanizeChipWidth);
+    inner.removeFromLeft(2);
+    velocityCaptionBounds_ = inner.removeFromLeft(kCaptionWidth);
+    velocityBox_.setBounds(inner.removeFromLeft(kValueBoxWidth));
 
-    velocityLane_->setBounds(canvas.removeFromBottom(velocityLaneHeightPx()));
-    velocityLane_->setVisible(velocityLaneVisible_);
+    // The lane keeps its FULL height and its top sits at the grid's new bottom, so mid-slide it
+    // reaches below the roll's bottom edge and the parent clips it: the strip rises with its
+    // content revealed, never squashed. It stays visible for the whole slide, hidden only once a
+    // close has finished (progress 0).
+    canvas.removeFromBottom(velocityLaneHeightPx());
+    velocityLane_->setBounds(canvas.getX(), canvas.getBottom(), canvas.getWidth(), velocityLaneFullHeightPx());
+    velocityLane_->setVisible(velocityLaneVisible_ || velocityLaneSlide_.progress() > 0.0f);
 }
 
-void PianoRollComponent::setVelocityLaneVisible(bool visible) {
+// `velocityLaneVisible_` is the LOGICAL target (what the chip paints lit and what persists); the
+// slide's progress is the visual state. Retargeting starts from the current progress, with the
+// scale panel's duration and easing (see VelocityLaneSlide::start).
+void PianoRollComponent::setVelocityLaneVisible(bool visible, bool animate) {
     if (velocityLaneVisible_ == visible)
         return;
     if (!visible)
@@ -166,8 +192,11 @@ void PianoRollComponent::setVelocityLaneVisible(bool visible) {
         propertiesFile_->setValue(velocityLaneVisibleKey(), visible);
         propertiesFile_->saveIfNeeded();
     }
-    resized();
-    repaint();
+    const auto relayout = [this] {
+        resized();
+        repaint();
+    };
+    velocityLaneSlide_.start(*this, visible ? 1.0f : 0.0f, animate, kScalePanelAnimMs, relayout, relayout);
 }
 
 bool PianoRollComponent::isVelocityLaneVisible() const noexcept { return velocityLaneVisible_; }
@@ -306,5 +335,12 @@ PianoRollVelocityLane& PianoRollComponent::getVelocityLane() noexcept { return *
 juce::TextEditor& PianoRollComponent::getVelocityValueBox() noexcept { return velocityBox_; }
 juce::Rectangle<int> PianoRollComponent::getVelocityChipBounds() const noexcept { return velocityChipBounds_; }
 juce::Rectangle<int> PianoRollComponent::getHumanizeChipBounds() const noexcept { return humanizeChipBounds_; }
+juce::Rectangle<int> PianoRollComponent::getVelocityGroupBounds() const noexcept { return velocityGroupBounds_; }
+juce::Rectangle<int> PianoRollComponent::getVelocityCaptionBounds() const noexcept { return velocityCaptionBounds_; }
+synth::ui::VelocityLaneSlide& PianoRollComponent::velocityLaneSlideForTest() noexcept { return velocityLaneSlide_; }
+void PianoRollComponent::setVelocityLaneSlideProgressForTest(float progress) {
+    velocityLaneSlide_.setProgress(progress);
+    resized();
+}
 
 } // namespace synth::ui

@@ -48,6 +48,7 @@ component that never sees `PianoRollComponent` (see **Velocity strip**):
 | `PianoRollVelocityLaneGestures.cpp` | Stick / pen / ramp drags, Escape-cancel, the one commit on release |
 | `PianoRollVelocityLanePainting.cpp` | Background, the 127 / 64 / 1 scale, sticks, the value readout |
 | `VelocityLaneMath.h` / `.cpp` | Pure maths: y <-> velocity, stick picking, pen/ramp line values, humanize |
+| `VelocityLaneSlide.h` / `.cpp` | The strip's open fraction and the tween that moves it (show / hide slide) |
 
 `PianoRollTypes.h` is a self-contained header (own `#pragma once` plus includes) defining those
 types at namespace scope inside a nested `synth::ui::pianoroll` namespace, so generic names like
@@ -426,7 +427,10 @@ that ends where it started writes nothing. The Ctrl-drag scrub on notes is uncha
 preview moves the sticks too, since they read `effectiveGeometryFor`.
 
 **Toolbar.** The **Velocity** chip shows or hides the strip and paints lit while it is shown. The
-**value box** (a `juce::TextEditor` right after the Humanize chip, so the three velocity controls sit together, titled "Velocity of selected notes"
+Velocity chip, the Humanize chip and the value box sit inside ONE rounded frame (theme `border`
+outline, 2 px inner padding), and a muted "Set" caption sits inside it right before the box, so the
+group reads "Velocity  Humanize  Set [ 100 ]". The frame and caption are painted only; hit-testing
+still uses the chips' own bounds. The **value box** (a `juce::TextEditor` right after the caption, titled "Velocity of selected notes"
 for screen readers) shows the selected notes' common velocity — blank with nothing selected, an em
 dash when they differ — kept current through `NoteSelectionModel::onChange`, which fires on every
 real selection change from any path. Typing 1..127 and pressing Return sets the selected notes, or
@@ -435,6 +439,15 @@ box reverts (Escape and losing focus revert too). The **Humanize** chip opens a 
 ±5 / ±10 / ±20 — that adds a random offset in [-N, +N] to each target note (selection, else every
 note), clamped to 1..127, one undo step. The random source is the roll's own `juce::Random`;
 `setHumanizeRandomSeed` makes it deterministic for tests.
+
+**Slide.** Showing and hiding the strip slides it like the Scale Assist panel: the same 200 ms
+`easeInOutCubic` tween on one `AnimationDriver`, retargeting from the current progress on a mid-flight
+toggle, landing at once when the roll is not on screen. `VelocityLaneSlide` holds the progress p; the
+grid gives up `round(p * full)` px at the bottom (`canvasBottom()` follows every frame) while the
+strip keeps its FULL height with its top at the grid's bottom, so it rises from the roll's bottom
+edge with its content revealed, clipped by the parent rather than squashed. The strip stays visible
+for the whole slide and is hidden only when a close finishes; a gesture in flight is cancelled when
+a close starts. A restore from the properties file never animates.
 
 **Visibility.** Shown by default. The chip and the rebindable `pianoRollToggleVelocityLane`
 shortcut (a real Ctrl+V on macOS, Cmd+Shift+V elsewhere — see
@@ -774,7 +787,8 @@ header chips in `PianoRollHeaderChipsTests.cpp`, and the key bindings in
 `PianoRollShortcutsTests.cpp`. The velocity strip is covered in `PianoRollVelocityLaneTests.cpp`
 (layout band, stick alignment, every gesture driven through the strip's real mouse handlers, Escape,
 live recolour, one undo step), `PianoRollVelocityToolbarTests.cpp` (value box, Humanize, chip,
-shortcut, persistence) and `VelocityLaneMathTests.cpp`; the shared `PianoRollFixture` hides the
+shortcut, persistence), `PianoRollVelocitySlideTests.cpp` (slide maths, retarget, restore, the
+captioned group frame) and `VelocityLaneMathTests.cpp`; the shared `PianoRollFixture` hides the
 strip so every other suite keeps its grid-to-bottom geometry, and `VelocityLaneFixture`
 (`PianoRollVelocityTestHelpers.h`) shows it.
 

@@ -290,6 +290,7 @@ strings.
 | **Shortcut hint bubbles** | One tween value `t` scales (0.6 -> 1), moves (from the labelled button's centre, or 12 px below a hidden-panel pill) and fades every Cmd-hold key-cap bubble: 160 ms `easeOutCubic` in, 110 ms `easeInCubic` back out from the current `t`; pure geometry in `hint::animatedBubbleBounds`; one `AnimationDriver`, no timer besides the 500 ms show delay; see [`docs/control/shortcuts.md`](../control/shortcuts.md#shortcut-hints) | `ShortcutHintOverlay` |
 | **Toolbar toggle pill** | Instant state change (accent pill when on), no timer or animation — driven by `applyToolbarIcons()`'s and `setLibraryVisible()`'s `setToggleState(dontSendNotification)` calls | `ToolbarComponent` |
 | **Velocity strip readout** | The value beside a hovered or dragged stick fades 160 ms `easeOutCubic` in / 110 ms `easeInCubic` out from the current opacity and slides ~4 px from the stick head to its spot (`velocitylane::readoutSlidePx`); stick-to-stick moves and edits keep the current opacity; lands at once when not on screen; one `AnimationDriver` | `PianoRollVelocityLane` |
+| **Velocity strip show/hide** | The grid gives up `round(p * full)` px at the bottom while the strip keeps its full height and rises from the roll's bottom edge (clipped, never squashed); 200 ms (`kScalePanelAnimMs`) `easeInOutCubic`, same as the scale panel, retargets from the current progress, lands at once when not on screen or on a persisted restore | `PianoRollComponent` / `VelocityLaneSlide` |
 
 ## The time-bounded animation rule
 

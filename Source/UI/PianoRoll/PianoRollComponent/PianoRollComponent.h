@@ -8,6 +8,7 @@
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/PianoRoll/NoteSelectionModel.h"
 #include "UI/PianoRoll/ScaleAssistPanel.h"
+#include "UI/PianoRoll/VelocityLane/VelocityLaneSlide.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
 #include "UI/Timeline/TimelineViewState.h"
@@ -220,7 +221,7 @@ public:
     // ---- Velocity strip (PianoRollVelocity.cpp) ----
 
     // Shown by default; persisted through the properties file when one is set.
-    void setVelocityLaneVisible(bool visible);
+    void setVelocityLaneVisible(bool visible, bool animate = true); // slides unless animate is false
     bool isVelocityLaneVisible() const noexcept;
     void toggleVelocityLane();
     // The strip's remembered height before layout's own clamp; dragged on its top edge, persisted.
@@ -235,6 +236,8 @@ public:
     PianoRollVelocityLane& getVelocityLane() noexcept;
     juce::TextEditor& getVelocityValueBox() noexcept;
     juce::Rectangle<int> getVelocityChipBounds() const noexcept;
+    juce::Rectangle<int> getVelocityGroupBounds() const noexcept;   // frame round chips, caption and box
+    juce::Rectangle<int> getVelocityCaptionBounds() const noexcept; // the "Set" text before the box
     juce::Rectangle<int> getHumanizeChipBounds() const noexcept;
 
     // ---- Edit tools (Cubase-style; see EditTool.h) ----
@@ -390,6 +393,8 @@ public:
     float getScalePanelAnimFromForTest() const noexcept;
     bool isScalePanelAnimatingForTest() const noexcept;
     bool isScalePanelTargetVisibleForTest() const noexcept;
+    synth::ui::VelocityLaneSlide& velocityLaneSlideForTest() noexcept;
+    void setVelocityLaneSlideProgressForTest(float progress);
 
     int getAuditionPitchForTest() const noexcept;
     bool isAuditionActiveForTest() const noexcept;
@@ -604,7 +609,8 @@ private:
 
     // ---- Velocity strip plumbing ---- see PianoRollVelocity.cpp.
     void initVelocityControls();
-    int velocityLaneHeightPx() const noexcept;
+    int velocityLaneHeightPx() const noexcept; // the animated band the grid gives up
+    int velocityLaneFullHeightPx() const noexcept;
     void setVelocityLaneHeight(int height);
     int clampedVelocityLaneHeight(int desiredHeight) const noexcept;
     void onVelocityLaneResized(int desiredHeight);
@@ -940,6 +946,8 @@ private:
     juce::TextEditor velocityBox_;
     juce::Rectangle<int> velocityChipBounds_;
     juce::Rectangle<int> humanizeChipBounds_;
+    juce::Rectangle<int> velocityGroupBounds_, velocityCaptionBounds_;
+    synth::ui::VelocityLaneSlide velocityLaneSlide_; // the strip's open fraction + tween
     juce::Random humanizeRandom_;
 
     // Which header chip (if any) the pointer is currently over — see updateHeaderButtonHover.
