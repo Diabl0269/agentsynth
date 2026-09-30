@@ -1,6 +1,7 @@
 #include "TimelineRulerComponent.h"
 #include "AppUndoManager.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -186,7 +187,7 @@ bool TimelineRulerComponent::handleMarkerMouseDown(const juce::MouseEvent& e) {
 
 void TimelineRulerComponent::applyHoverCursor() {
     if (hoveredMarker_.isValid()) {
-        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+        setMouseCursor(dragGrabCursor());
         return;
     }
     if (!hoveredZone_.has_value())

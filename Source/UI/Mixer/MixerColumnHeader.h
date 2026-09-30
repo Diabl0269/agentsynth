@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -203,6 +204,13 @@ public:
         std::function<bool(const juce::MouseEvent&)> onRelease;
     };
     ReorderHooks reorderHooks;
+
+    /** The grab hand on hover and during the drag, but only for a header that can be dragged (hooks
+     *  set); Direct, Master and pinned headers stay a plain click target. Read live, so it follows
+     *  whenever the hooks are assigned. */
+    juce::MouseCursor getMouseCursor() override {
+        return reorderHooks.onGrab ? dragGrabCursor() : juce::Component::getMouseCursor();
+    }
 
     void mouseDown(const juce::MouseEvent& e) override {
         if (reorderHooks.onGrab && !e.mods.isPopupMenu())

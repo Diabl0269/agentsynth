@@ -229,6 +229,7 @@ void PianoRollComponent::mouseDrag(const juce::MouseEvent& e) {
         setCopyDrag(e.mods.isAltDown());
     lastDragPointer_ = e.getPosition();
     updateDragPreviewFromLastPointer();
+    updateMoveCursor();
     updateAutoScrollArming();
 }
 
@@ -495,6 +496,7 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
         dragNotes_.clear();
         moveUnquantized_ = false;
         setCopyDrag(false);
+        updateMoveCursor();
         repaint();
         return;
     }
@@ -573,6 +575,7 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
     previewDeltaVelocity_ = 0;
     previewLengthDelta_ = 0.0;
     setCopyDrag(false);
+    updateMoveCursor();
     repaint();
 }
 

@@ -1,6 +1,7 @@
 #include "MacroCardComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 // The port-strip constants live in GraphEditorInternal.h, shared with
@@ -249,6 +250,8 @@ void MacroCardComponent::mouseDrag(const juce::MouseEvent& e) {
     if (!bodyDragActive)
         return;
     dragger.dragComponent(this, e, nullptr);
+    if (getPosition() != dragStartPosition)
+        synth::ui::showDragCursor(*this); // the move has really started
     // dragMacroCardBy is the one repaint call for this gesture (via GraphEditor::repaintCanvas,
     // which also invalidates the cable cache so boundary cables track this card mid-drag — see
     // its own comment for why a bare getParentComponent()->repaint() here would leave them stale).
@@ -259,6 +262,7 @@ void MacroCardComponent::mouseUp(const juce::MouseEvent&) {
     if (!bodyDragActive)
         return;
     bodyDragActive = false;
+    synth::ui::endDragCursor(*this);
 
     if (getPosition() != dragStartPosition)
         owner.finalizeMacroCardDrag(macroId, getPosition());
@@ -280,6 +284,7 @@ void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
         if (bodyDragActive) {
             owner.cancelMacroCardDrag(macroId);
             bodyDragActive = false;
+            synth::ui::endDragCursor(*this);
         }
         beginRename();
         return;

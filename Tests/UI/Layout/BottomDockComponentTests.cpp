@@ -354,10 +354,9 @@ TEST(BottomDockComponentTests, TabButtonBoundsAreIdenticalWhetherTimelineOrMixer
             << "tab button " << i << " moved when switching tabs";
 }
 
-// A real reorder drag shows the dragging-hand cursor once it clears JUCE's own drag
-// threshold, and mouseUp always restores it -- same reasoning as GraphEditor's macro-chip cursor
-// (GraphEditorCanvas.cpp's mouseMove).
-TEST(BottomDockComponentTests, DraggingATabShowsTheDraggingHandCursorAndMouseUpRestoresNormal) {
+// A tab is a dedicated grab handle: the dragging-hand cursor shows on hover, through the drag, and
+// after the release (the tab is still a grab handle).
+TEST(BottomDockComponentTests, TabsShowTheDraggingHandCursorOnHoverAndThroughTheDrag) {
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDCT>());
     mc.setSize(1400, 900);
@@ -369,16 +368,15 @@ TEST(BottomDockComponentTests, DraggingATabShowsTheDraggingHandCursorAndMouseUpR
     ASSERT_FALSE(buttons.empty());
     auto* button = buttons.front();
 
-    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::NormalCursor);
+    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "hover, before any press";
     button->mouseDown(makeClickEvent(*button, {5.0f, 5.0f}));
-    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::NormalCursor)
-        << "no cursor change from a mouseDown alone";
+    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
 
     button->mouseDrag(makeDragEvent(*button, {60.0f, 5.0f}, {5.0f, 5.0f}));
     EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
 
     button->mouseUp(makeClickEvent(*button, {60.0f, 5.0f}));
-    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::NormalCursor);
+    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
 }
 
 namespace {

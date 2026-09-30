@@ -458,6 +458,7 @@ private:
 
     // ---- Option+drag copy (PianoRollCopyDrag.cpp) ---- message thread only.
     void setCopyDrag(bool copy);
+    void updateMoveCursor(); // grab/copy while a move drag is live, else back to the tool cursor
     void commitCopyDrag();
     bool cancelNoteDrag(); // Esc: true when a Move/copy drag was in flight and is now abandoned
     void startGhostSettle(bool dropped);
@@ -701,6 +702,7 @@ private:
     bool moveUnquantized_ = false;
     // Move drag currently placing COPIES (Option held now, re-read every drag event).
     bool copyDrag_ = false;
+    bool dragCursorShown_ = false; // the grab/copy cursor is up and must be restored on release
     // Post-drop / post-cancel ghost tween; runs on scalePanelVblankUpdater_ (created lazily).
     std::optional<pianoroll::GhostSettle> ghostSettle_;
     synth::ui::AnimationDriver ghostAnim_;

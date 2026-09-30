@@ -401,6 +401,21 @@ TEST(TimelineTrackHeaderTest, NameEditWritesThroughToTheDoc) {
 }
 
 // =============================================================================
+// The row background is a dedicated grab handle: the dragging hand on hover and through the drag.
+// =============================================================================
+
+TEST(TimelineTrackHeaderTest, RowBackgroundShowsTheDraggingHandCursorOnHoverAndDuringTheDrag) {
+    HeaderFixture f;
+    EXPECT_TRUE(f.header->getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "hover";
+
+    f.header->mouseDown(makeRowMouseEvent(*f.header, {80.0f, 20.0f}, {80.0f, 20.0f}));
+    f.header->mouseDrag(makeRowMouseEvent(*f.header, {80.0f, 60.0f}, {80.0f, 20.0f}));
+    EXPECT_TRUE(f.header->getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "during the drag";
+    f.header->mouseUp(makeRowMouseEvent(*f.header, {80.0f, 60.0f}, {80.0f, 20.0f}));
+    EXPECT_TRUE(f.header->getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "after the drop";
+}
+
+// =============================================================================
 // 4b. whole-row drag-to-reorder — the row's own threshold/callback contract, independent
 // of TimelinePanelComponent (which owns turning these screen positions into an actual reorder;
 // see TimelinePanelTests.cpp's own drag test for that half).

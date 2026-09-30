@@ -371,3 +371,34 @@ TEST(MixerPanelColumnDragTests, TheBusOrderSurvivesSavingAndReloadingTheProject)
     EXPECT_EQ(paneBusIds(panel), (std::vector<juce::String>{originalPane[1], originalPane[0]}))
         << "NodeIDs are reassigned on load, the saved uuids still order the buses";
 }
+
+// The header is a grab handle only while it has reorder hooks (track strips and buses); a Direct or
+// Master header is a plain click target and keeps the normal cursor.
+TEST(MixerPanelColumnDragTests, OnlyAHeaderWithReorderHooksShowsTheDraggingHandCursor) {
+    ColumnDragRig r(2);
+    ASSERT_NE(r.panel->createBus(), juce::AudioProcessorGraph::NodeID{});
+    r.panel->rebuild();
+
+    auto* strip = r.panel->getStripColumnForTest(0);
+    ASSERT_NE(strip, nullptr);
+    auto& stripHeader = strip->getHeaderForTest();
+    EXPECT_TRUE(stripHeader.getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "hover";
+
+    HeaderDrag drag{stripHeader, *strip->getParentComponent(), headerGrabX(*strip)};
+    drag.down();
+    drag.dragTo(drag.pressX + kPitch);
+    EXPECT_TRUE(stripHeader.getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "during the drag";
+    drag.up(drag.pressX + kPitch);
+    strip = nullptr; // the drop rebuilds the columns
+
+    auto* bus = r.panel->getStripColumnForTest(2);
+    ASSERT_NE(bus, nullptr);
+    EXPECT_TRUE(bus->getHeaderForTest().getMouseCursor() == juce::MouseCursor::DraggingHandCursor)
+        << "a bus reorders among the buses";
+    ASSERT_NE(r.panel->getMasterColumnForTest(), nullptr);
+    EXPECT_TRUE(r.panel->getMasterColumnForTest()->getHeaderForTest().getMouseCursor() ==
+                juce::MouseCursor::NormalCursor);
+    ASSERT_NE(r.panel->getDirectColumnForTest(), nullptr);
+    EXPECT_TRUE(r.panel->getDirectColumnForTest()->getHeaderForTest().getMouseCursor() ==
+                juce::MouseCursor::NormalCursor);
+}

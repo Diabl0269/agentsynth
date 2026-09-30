@@ -256,3 +256,22 @@ TEST(ControllerSurfaceGroupDragTest, ManySubCellStepsCrossingOccupiedCellsStillL
     EXPECT_EQ(findMove(moves, "pad1")->col, 8);
     EXPECT_EQ(findMove(moves, "pad4")->col, 11);
 }
+
+// A cell is a dedicated grab handle: the dragging hand on hover, through a drag, and after it.
+TEST(ControllerSurfaceGroupDragTest, CellShowsTheDraggingHandCursorOnHoverAndDuringTheDrag) {
+    ControllerSurfaceComponent surface;
+    surface.setSize(600, 600);
+    surface.setControls("profileA", twoAdjacentPlusBystanderModel());
+
+    auto* a = findCell(surface, "a");
+    ASSERT_NE(a, nullptr);
+    EXPECT_TRUE(a->getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "hover, before any press";
+
+    const juce::Point<float> downPos = a->getLocalBounds().getCentre().toFloat();
+    const juce::Point<float> dragPos = downPos + juce::Point<float>(0.0f, (float)ControllerSurfaceCell::kCellPitch);
+    a->mouseDown(surfaceMouseEvent(*a, downPos, downPos, false));
+    a->mouseDrag(surfaceMouseEvent(*a, dragPos, downPos, true));
+    EXPECT_TRUE(a->getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+    a->mouseUp(surfaceMouseEvent(*a, dragPos, downPos, true));
+    EXPECT_TRUE(a->getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+}

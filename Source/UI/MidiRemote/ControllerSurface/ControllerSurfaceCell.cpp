@@ -5,6 +5,7 @@
 
 #include "ControllerSurfaceCell.h"
 
+#include "UI/Layout/DragCursor.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -18,7 +19,10 @@ constexpr int kNameHeight = 14;
 constexpr int kLabelHeight = 12;
 } // namespace
 
-ControllerSurfaceCell::ControllerSurfaceCell() = default;
+ControllerSurfaceCell::ControllerSurfaceCell() {
+    setMouseCursor(dragGrabCursor()); // the whole cell is a grab handle
+}
+
 ControllerSurfaceCell::~ControllerSurfaceCell() = default;
 
 void ControllerSurfaceCell::configure(const synth::Control& control, const juce::String& assignmentLabel,
@@ -253,10 +257,6 @@ void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
     isDragging_ = false;
     getProperties().set(kLastFiredDeltaColProperty, 0);
     getProperties().set(kLastFiredDeltaRowProperty, 0);
-    // A hand cursor for the whole press-to-release span, not only once a whole-cell move is
-    // detected below -- gives a press immediate "this can be dragged" feedback even if it turns out
-    // to be a plain click, which reverts it in mouseUp() below just as promptly.
-    setMouseCursor(juce::MouseCursor::DraggingHandCursor);
     if (onSelected)
         onSelected(event.mods);
 }
@@ -303,7 +303,6 @@ void ControllerSurfaceCell::mouseDrag(const juce::MouseEvent& event) {
 void ControllerSurfaceCell::mouseUp(const juce::MouseEvent&) {
     const bool didDrag = isDragging_;
     isDragging_ = false;
-    setMouseCursor(juce::MouseCursor::NormalCursor);
     if (didDrag) {
         repaint(); // clears the dim-while-dragging overlay
         if (onDragEnded)
