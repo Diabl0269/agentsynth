@@ -1,4 +1,5 @@
 #include "AppLookAndFeel.h"
+#include "UI/Layout/FocusRing.h"
 
 namespace synth::theme {
 
@@ -77,7 +78,8 @@ void AppLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width
         }
     }
 
-    juce::ignoreUnused(slider);
+    // 6. Keyboard focus ring around the whole knob.
+    synth::ui::paintFocusRing(g, juce::Rectangle<float>(size, size).withCentre(centre), slider, size * 0.5f);
 }
 
 } // namespace synth::theme

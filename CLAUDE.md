@@ -64,6 +64,7 @@ Every implementation plan **must** include:
 1. A **Tests** section — list new test cases, the test file, and what each verifies.
 2. A **Docs Updates** section — list which docs (`docs/development/testing.md`, `CLAUDE.md`, etc.) need updating.
 3. A **Structure** check — no file over 1,000 lines after the change; a change that would grow a file listed in `scripts/file-size-baseline.txt` moves the new code into a new per-concern unit instead.
+4. An **Accessibility** section for any UI change: each new or changed control's keyboard path, focus ring, screen-reader name and tooltip ([docs/development/accessibility.md](docs/development/accessibility.md)).
 
 ## Code structure
 

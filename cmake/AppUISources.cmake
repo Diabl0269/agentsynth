@@ -157,6 +157,7 @@ set(APPUI_SOURCES
     Source/UI/Layout/ReorderDrag/ReorderDragSession.h
     Source/UI/Layout/ReorderDrag/ReorderLiftLook.h
     Source/UI/Layout/DragCursor.h
+    Source/UI/Layout/FocusRing.h
     Source/UI/Layout/PanelResizeHandle.h
     Source/UI/Layout/PanelResizeHandle.cpp
     Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h

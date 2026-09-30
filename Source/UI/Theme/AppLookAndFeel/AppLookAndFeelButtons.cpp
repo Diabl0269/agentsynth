@@ -1,4 +1,5 @@
 #include "AppLookAndFeel.h"
+#include "UI/Layout/FocusRing.h"
 
 namespace synth::theme {
 
@@ -151,6 +152,8 @@ void AppLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& but
         g.drawFittedText(button.getButtonText(), button.getLocalBounds().withTrimmedLeft((int)boxSize + 10),
                          juce::Justification::centredLeft, 1);
     }
+
+    synth::ui::paintFocusRing(g, box.expanded(1.0f), button, 5.0f);
 }
 
 } // namespace synth::theme
