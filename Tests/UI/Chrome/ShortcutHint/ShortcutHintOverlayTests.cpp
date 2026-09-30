@@ -306,14 +306,148 @@ TEST(ShortcutHintKeyCap, RendersARaisedCapIntoASoftwareImage) {
 
     EXPECT_EQ(img.getPixelAt(0, 0).getAlpha(), 0) << "nothing outside the cap and its shadow";
     EXPECT_EQ(img.getPixelAt(10 + 3, 10 + 3), colors.surfaceHi) << "the key face";
-    EXPECT_EQ(img.getPixelAt(10 + w / 2, 10 + synth::theme::AppLookAndFeel::kKeyCapHeight - 1), colors.border)
-        << "the thicker bottom edge";
+    EXPECT_EQ(img.getPixelAt(10 + w / 2, 10 + synth::theme::AppLookAndFeel::kKeyCapHeight - 1), colors.textDisabled)
+        << "the thicker bottom edge is textDisabled, not border (border is nearly the fill on dark themes)";
+    EXPECT_EQ(img.getPixelAt(10 + w / 2, 10), colors.textDisabled) << "the outline";
+    EXPECT_NE(colors.textDisabled, colors.surfaceHi);
     EXPECT_GT(img.getPixelAt(10 + w / 2, 10 + synth::theme::AppLookAndFeel::kKeyCapHeight).getAlpha(), 0)
         << "the soft shadow under the cap";
 
     bool hasLabelPixel = false;
-    for (int y = 12; y < 22 && !hasLabelPixel; ++y)
+    for (int y = 12; y < 26 && !hasLabelPixel; ++y)
         for (int x = 12; x < 10 + w - 2 && !hasLabelPixel; ++x)
             hasLabelPixel = img.getPixelAt(x, y).getBrightness() > colors.surfaceHi.getBrightness() + 0.2f;
     EXPECT_TRUE(hasLabelPixel) << "the key text is drawn in the primary text colour";
+}
+
+TEST(ShortcutHintKeyCap, IsBiggerThanItWas) {
+    using LnF = synth::theme::AppLookAndFeel;
+    EXPECT_EQ(LnF::kKeyCapHeight, 20);
+    EXPECT_EQ(LnF::kKeyCapMinWidth, 20);
+    EXPECT_EQ(LnF::kKeyCapSidePadding, 6);
+    EXPECT_EQ(LnF::kKeyCapCompactHeight, 15);
+
+    LnF lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    const auto& type = lf.getTheme().type;
+    EXPECT_TRUE(lf.getShortcutKeyCapFont().isBold()) << "the medium cut is selected through the bold request";
+    EXPECT_EQ(lf.getShortcutKeyCapFont().getTypefaceName(), type.monoFamily);
+    EXPECT_GE(lf.getShortcutKeyCapWidth("T"), LnF::kKeyCapMinWidth);
+    EXPECT_GE(lf.getShortcutKeyCapWidth("T", true), LnF::kKeyCapMinWidth);
+    EXPECT_GT(lf.getShortcutKeyCapWidth("Ctrl+Shift+Z"), lf.getShortcutKeyCapWidth("Z"));
+    EXPECT_GT(lf.getShortcutKeyCapFont().getHeight(), lf.getShortcutKeyCapFont(true).getHeight())
+        << "the in-tab cap's text is a point smaller";
+}
+
+TEST(ShortcutHintKeyCap, CompactCapPaintsAnOutlineToo) {
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    const auto& colors = lf.getTheme().colors;
+    const int h = synth::theme::AppLookAndFeel::kKeyCapCompactHeight;
+    const int w = lf.getShortcutKeyCapWidth("1", true);
+    juce::Image img(juce::Image::ARGB, w + 20, 40, true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(img);
+        lf.drawShortcutKeyCap(g, {10, 10, w, h}, "1", true);
+    }
+    EXPECT_EQ(img.getPixelAt(10 + w / 2, 10 + h - 1), colors.textDisabled);
+}
+
+TEST_F(ShortcutHintOverlayTest, EachBubbleGrowsOutOfItsButtonAndSettlesOnItsTarget) {
+    holdCmdFor(500.0);
+    ASSERT_EQ(overlay_->getEntries().size(), 3u);
+    EXPECT_FLOAT_EQ(overlay_->getOpacity(), 1.0f) << "headless: lands settled";
+    for (const auto& e : overlay_->getEntries()) {
+        EXPECT_EQ(e.cap, e.bounds);
+        EXPECT_FALSE(e.isPill);
+        EXPECT_FALSE(e.compact);
+    }
+    // Every button is 40x40 at y 4, so its centre is 20 px below the top.
+    for (auto* button : {&newButton_, &undoButton_, &panelButton_}) {
+        const auto anchor = host_.getLocalArea(button, button->getLocalBounds());
+        bool found = false;
+        for (const auto& e : overlay_->getEntries())
+            if (e.bounds.getCentreX() == anchor.getCentreX()) {
+                found = true;
+                EXPECT_EQ(e.origin, anchor.getCentre().toFloat()) << "the bubble under a button grows from its centre";
+            }
+        EXPECT_TRUE(found);
+    }
+}
+
+TEST_F(ShortcutHintOverlayTest, AFlippedBubbleStillGrowsOutOfItsButtonCentre) {
+    undoButton_.setBounds(200, 560, 40, 32); // too low for a bubble underneath
+    holdCmdFor(500.0);
+    const auto anchor = host_.getLocalArea(&undoButton_, undoButton_.getLocalBounds());
+    bool found = false;
+    for (const auto& e : overlay_->getEntries())
+        if (e.bounds.getCentreX() == anchor.getCentreX()) {
+            found = true;
+            EXPECT_LT(e.bounds.getCentreY(), anchor.getCentreY()) << "flipped above";
+            EXPECT_EQ(e.origin, anchor.getCentre().toFloat());
+        }
+    EXPECT_TRUE(found);
+}
+
+TEST_F(ShortcutHintOverlayTest, TabBubbleGrowsOutOfTheTabCentreAndFitsTheStripWithAMargin) {
+    juce::Component dock;
+    host_.addAndMakeVisible(dock);
+    dock.setBounds(0, 380, 800, 220);
+    juce::TextButton tab("Timeline");
+    dock.addAndMakeVisible(tab);
+    // The real strip: 22 px tall, the top 5 belong to the resize handle, so a tab is 17 px.
+    tab.setBounds(0, 5, 260, 17);
+    overlay_->setDockSource([&] {
+        synth::ui::DockHintInfo info;
+        info.open = true;
+        info.dock = &dock;
+        info.tabs = {{&tab, "toggleTimelinePanel", "Timeline"}};
+        return info;
+    });
+    holdCmdFor(500.0);
+
+    const auto tabBounds = host_.getLocalArea(&tab, tab.getLocalBounds());
+    bool found = false;
+    for (const auto& e : overlay_->getEntries())
+        if (tabBounds.contains(e.bounds)) {
+            found = true;
+            EXPECT_TRUE(e.compact);
+            EXPECT_EQ(e.origin, tabBounds.toFloat().getCentre());
+            EXPECT_GE(e.bounds.getY() - tabBounds.getY(), 1) << "a pixel above the cap";
+            EXPECT_GE(tabBounds.getBottom() - e.bounds.getBottom(), 1) << "a pixel below the cap";
+        }
+    EXPECT_TRUE(found);
+}
+
+TEST_F(ShortcutHintOverlayTest, HiddenRowPillsAreTallerAndRiseIntoPlace) {
+    juce::Component statusBar;
+    host_.addAndMakeVisible(statusBar);
+    statusBar.setBounds(0, 576, 800, 24);
+    overlay_->setDockSource([&] {
+        synth::ui::DockHintInfo info;
+        info.open = false;
+        info.statusBar = &statusBar;
+        info.toggle = &panelButton_;
+        info.toggleActionId = "toggleBottomPanel";
+        info.toggleLabel = "Show Panel";
+        return info;
+    });
+    holdCmdFor(500.0);
+    bool found = false;
+    for (const auto& e : overlay_->getEntries())
+        if (e.isPill) {
+            found = true;
+            EXPECT_EQ(e.bounds.getHeight(), synth::ui::hint::kPillHeight);
+            EXPECT_EQ(e.cap.getHeight(), synth::theme::AppLookAndFeel::kKeyCapHeight);
+            EXPECT_TRUE(e.bounds.contains(e.cap));
+            EXPECT_FLOAT_EQ(e.origin.x, e.bounds.toFloat().getCentreX());
+            EXPECT_FLOAT_EQ(e.origin.y, e.bounds.toFloat().getCentreY() + 12.0f);
+        }
+    EXPECT_TRUE(found);
+}
+
+TEST_F(ShortcutHintOverlayTest, TheTweenTimingsAreOneSixtyInAndOneTenOut) {
+    EXPECT_DOUBLE_EQ(ShortcutHintOverlay::kFadeInMs, 160.0);
+    EXPECT_DOUBLE_EQ(ShortcutHintOverlay::kFadeOutMs, 110.0);
+    EXPECT_DOUBLE_EQ(ShortcutHintOverlay::kShowDelayMs, 500.0);
 }

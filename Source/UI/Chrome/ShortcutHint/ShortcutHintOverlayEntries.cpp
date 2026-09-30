@@ -23,9 +23,9 @@ int ShortcutHintOverlay::textWidth(const juce::Font& font, const juce::String& t
     return juce::roundToInt(juce::GlyphArrangement::getStringWidth(font, text));
 }
 
-int ShortcutHintOverlay::capWidth(const juce::String& text) const {
+int ShortcutHintOverlay::capWidth(const juce::String& text, bool compact) const {
     if (const auto* lf = themedLook(*this))
-        return lf->getShortcutKeyCapWidth(text);
+        return lf->getShortcutKeyCapWidth(text, compact);
     using LnF = synth::theme::AppLookAndFeel;
     return juce::jmax(LnF::kKeyCapMinWidth, text.length() * 6 + 2 * LnF::kKeyCapSidePadding);
 }
@@ -101,9 +101,13 @@ void ShortcutHintOverlay::addBubbleEntries(const DockHintInfo& dock) {
     }
 
     const auto placed = hint::placeBubbles(requests, getLocalBounds());
-    for (size_t i = 0; i < placed.size(); ++i)
-        if (placed[i])
-            entries_.push_back({*placed[i], *placed[i], texts[i], {}, false});
+    for (size_t i = 0; i < placed.size(); ++i) {
+        if (!placed[i])
+            continue;
+        const auto kind = hint::kindOfPlacedBubble(*placed[i], requests[i].anchor);
+        const auto origin = hint::bubbleOrigin(kind, placed[i]->toFloat(), requests[i].anchor.toFloat());
+        entries_.push_back({*placed[i], *placed[i], texts[i], {}, false, origin, false});
+    }
 }
 
 void ShortcutHintOverlay::addTabEntries(const DockHintInfo& dock) {
@@ -125,9 +129,11 @@ void ShortcutHintOverlay::addTabEntries(const DockHintInfo& dock) {
                                                juce::jmin(16.0f, tab.button->getHeight() * 0.6f), juce::Font::plain))
                 : juce::Font(juce::FontOptions(12.0f));
         const int nameRight = tabBounds.getCentreX() + textWidth(font, tab.name) / 2;
-        const juce::Point<int> size{capWidth(text), AppLookAndFeel::kKeyCapCompactHeight};
-        if (auto bubble = hint::placeInsideTab(tabBounds, nameRight, size))
-            entries_.push_back({*bubble, *bubble, text, {}, false});
+        const juce::Point<int> size{capWidth(text, true), AppLookAndFeel::kKeyCapCompactHeight};
+        if (auto bubble = hint::placeInsideTab(tabBounds, nameRight, size)) {
+            const auto origin = hint::bubbleOrigin(hint::BubbleKind::InsideTab, bubble->toFloat(), tabBounds.toFloat());
+            entries_.push_back({*bubble, *bubble, text, {}, false, origin, true});
+        }
     }
 }
 
@@ -153,9 +159,9 @@ void ShortcutHintOverlay::addHiddenDockRow(const DockHintInfo& dock) {
 
     const auto* lf = themedLook(*this);
     const juce::Font labelFont =
-        lf != nullptr
-            ? juce::Font(juce::FontOptions(lf->getTheme().type.uiFamily, lf->getTheme().type.label, juce::Font::plain))
-            : juce::Font(juce::FontOptions(10.5f));
+        lf != nullptr ? juce::Font(juce::FontOptions(lf->getTheme().type.uiFamily, lf->getTheme().type.label + 1.0f,
+                                                     juce::Font::plain))
+                      : juce::Font(juce::FontOptions(11.5f));
     constexpr int kPillPad = 2;
     constexpr int kCapToLabel = 6;
     constexpr int kLabelEndPad = 8;
@@ -170,7 +176,8 @@ void ShortcutHintOverlay::addHiddenDockRow(const DockHintInfo& dock) {
         const juce::Rectangle<int> cap(row[i].getX() + kPillPad,
                                        row[i].getCentreY() - AppLookAndFeel::kKeyCapHeight / 2, capWidth(items[i].key),
                                        AppLookAndFeel::kKeyCapHeight);
-        entries_.push_back({row[i], cap, items[i].key, items[i].label, true});
+        const auto origin = hint::bubbleOrigin(hint::BubbleKind::HiddenRow, row[i].toFloat(), {});
+        entries_.push_back({row[i], cap, items[i].key, items[i].label, true, origin, false});
     }
 }
 

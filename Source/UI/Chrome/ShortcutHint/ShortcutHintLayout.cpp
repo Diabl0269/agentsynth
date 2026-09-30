@@ -58,6 +58,23 @@ std::optional<juce::Rectangle<int>> placeInsideTab(juce::Rectangle<int> tab, int
     return bubble;
 }
 
+BubbleKind kindOfPlacedBubble(juce::Rectangle<int> bubble, juce::Rectangle<int> anchor) {
+    return bubble.getCentreY() < anchor.getCentreY() ? BubbleKind::AboveAnchor : BubbleKind::BelowAnchor;
+}
+
+juce::Point<float> bubbleOrigin(BubbleKind kind, juce::Rectangle<float> target, juce::Rectangle<float> anchor) {
+    if (kind == BubbleKind::HiddenRow)
+        return target.getCentre().translated(0.0f, kPillRisePx);
+    return anchor.getCentre();
+}
+
+juce::Rectangle<float> animatedBubbleBounds(juce::Rectangle<float> target, juce::Point<float> origin, float t) {
+    t = juce::jlimit(0.0f, 1.0f, t);
+    const float scale = kBubbleStartScale + (1.0f - kBubbleStartScale) * t;
+    const auto centre = origin + (target.getCentre() - origin) * t;
+    return juce::Rectangle<float>(target.getWidth() * scale, target.getHeight() * scale).withCentre(centre);
+}
+
 std::vector<juce::Rectangle<int>> layoutHiddenRow(const std::vector<int>& pillWidths, int pillHeight,
                                                   juce::Rectangle<int> window, int statusBarTop) {
     std::vector<juce::Rectangle<int>> row;

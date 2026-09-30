@@ -32,8 +32,10 @@ struct DockHintInfo {
 // window focus cancels at once. A full-window child of the host that paints only while showing and
 // never takes a click (docs/control/shortcuts.md#shortcut-hints).
 //
+// Each bubble grows out of the button it labels (or, for the hidden-panel pills, rises into place):
+// one tween value `t` scales, moves and fades every bubble together (hint::animatedBubbleBounds).
 // Nothing runs at rest: the 500 ms delay is a one-shot Timer armed only while Cmd is down alone,
-// and the fades use an AnimationDriver that exists only while a fade is in flight. Cmd is noticed
+// and the tween uses an AnimationDriver that exists only while it is in flight. Cmd is noticed
 // by sample(), fed from the host's existing 10 Hz poll and from modifierKeysChanged().
 class ShortcutHintOverlay
     : public juce::Component
@@ -47,8 +49,8 @@ public:
     ~ShortcutHintOverlay() override;
 
     static constexpr double kShowDelayMs = 500.0;
-    static constexpr double kFadeInMs = 120.0;
-    static constexpr double kFadeOutMs = 80.0;
+    static constexpr double kFadeInMs = 160.0;
+    static constexpr double kFadeOutMs = 110.0;
 
     /** Registers a button that triggers `actionId`; the key shown is always read from the
      *  ShortcutManager. A registered component that is hidden, clipped or covered gets no hint. */
@@ -67,6 +69,7 @@ public:
 
     bool areHintsShowing() const noexcept { return state_ == State::Showing || state_ == State::FadingOut; }
     bool isPending() const noexcept { return state_ == State::Pending; }
+    /** The tween value t (0 hidden .. 1 settled); it is also the opacity. */
     float getOpacity() const noexcept { return opacity_; }
 
     struct Entry {
@@ -75,6 +78,8 @@ public:
         juce::String keyText;
         juce::String label; // pill text; empty for a plain bubble
         bool isPill{false};
+        juce::Point<float> origin; // where the bubble grows out of at t = 0 (hint::bubbleOrigin)
+        bool compact{false};       // the smaller in-tab cap
     };
     const std::vector<Entry>& getEntries() const noexcept { return entries_; }
 
@@ -103,8 +108,10 @@ private:
     void cancelNow();
     void showHints();
     void beginFadeOut();
+    void resumeFadeIn();
     void setOpacity(float value);
     void hideNow();
+    void applyEntryTween(juce::Graphics& g, const Entry& entry) const;
     bool isHintable(const juce::Component& c) const;
 
     void rebuildEntries();
@@ -112,7 +119,7 @@ private:
     void addTabEntries(const DockHintInfo& dock);
     void addHiddenDockRow(const DockHintInfo& dock);
     int textWidth(const juce::Font& font, const juce::String& text) const;
-    int capWidth(const juce::String& text) const;
+    int capWidth(const juce::String& text, bool compact = false) const;
     juce::String keyTextFor(const juce::String& actionId) const;
     juce::Rectangle<int> boundsInOverlay(const juce::Component& c) const;
 

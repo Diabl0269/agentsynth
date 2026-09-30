@@ -112,3 +112,87 @@ TEST(ShortcutHintLayout, HiddenDockRowIsCentredInOrderAboveTheStatusBar) {
 TEST(ShortcutHintLayout, HiddenDockRowOfNothingIsEmpty) {
     EXPECT_TRUE(hint::layoutHiddenRow({}, hint::kPillHeight, kWindow, 576).empty());
 }
+
+// ---- The entrance tween ----
+
+TEST(ShortcutHintLayout, AnimatedBubbleStartsSmallAndCentredOnItsOrigin) {
+    const Rectangle<float> target{100.0f, 50.0f, 40.0f, 20.0f};
+    const Point<float> origin{30.0f, 10.0f};
+    const auto start = hint::animatedBubbleBounds(target, origin, 0.0f);
+    EXPECT_NEAR(start.getCentreX(), origin.x, 1e-4f);
+    EXPECT_NEAR(start.getCentreY(), origin.y, 1e-4f);
+    EXPECT_NEAR(start.getWidth(), 40.0f * hint::kBubbleStartScale, 1e-4f);
+    EXPECT_NEAR(start.getHeight(), 20.0f * hint::kBubbleStartScale, 1e-4f);
+    EXPECT_FLOAT_EQ(hint::kBubbleStartScale, 0.6f);
+}
+
+TEST(ShortcutHintLayout, AnimatedBubbleSettlesExactlyOnItsTarget) {
+    const Rectangle<float> target{100.0f, 50.0f, 40.0f, 20.0f};
+    const auto end = hint::animatedBubbleBounds(target, {30.0f, 10.0f}, 1.0f);
+    EXPECT_NEAR(end.getX(), target.getX(), 1e-4f);
+    EXPECT_NEAR(end.getY(), target.getY(), 1e-4f);
+    EXPECT_NEAR(end.getWidth(), target.getWidth(), 1e-4f);
+    EXPECT_NEAR(end.getHeight(), target.getHeight(), 1e-4f);
+    EXPECT_EQ(hint::animatedBubbleBounds(target, {30.0f, 10.0f}, 2.0f), end) << "t clamps at 1";
+    EXPECT_EQ(hint::animatedBubbleBounds(target, {30.0f, 10.0f}, -1.0f),
+              hint::animatedBubbleBounds(target, {30.0f, 10.0f}, 0.0f))
+        << "t clamps at 0";
+}
+
+TEST(ShortcutHintLayout, AnimatedBubbleGrowsAndTravelsMonotonically) {
+    const Rectangle<float> target{100.0f, 50.0f, 40.0f, 20.0f};
+    const Point<float> origin{30.0f, 10.0f};
+    auto previous = hint::animatedBubbleBounds(target, origin, 0.0f);
+    for (int i = 1; i <= 20; ++i) {
+        const auto now = hint::animatedBubbleBounds(target, origin, (float)i / 20.0f);
+        EXPECT_GE(now.getWidth(), previous.getWidth());
+        EXPECT_GE(now.getHeight(), previous.getHeight());
+        EXPECT_GE(now.getCentreX(), previous.getCentreX()) << "moves toward a target right of the origin";
+        EXPECT_GE(now.getCentreY(), previous.getCentreY()) << "moves toward a target below the origin";
+        previous = now;
+    }
+}
+
+TEST(ShortcutHintLayout, BubbleGrowsOutOfTheButtonItLabels) {
+    const Rectangle<int> button{100, 10, 40, 40};
+    const auto below = hint::placeBubble({button, {30, 16}, {}}, kWindow);
+    ASSERT_TRUE(below.has_value());
+    const auto belowKind = hint::kindOfPlacedBubble(*below, button);
+    EXPECT_EQ(belowKind, hint::BubbleKind::BelowAnchor);
+    EXPECT_EQ(hint::bubbleOrigin(belowKind, below->toFloat(), button.toFloat()), Point<float>(120.0f, 30.0f));
+
+    const Rectangle<int> lowButton{100, 570, 40, 24};
+    const auto above = hint::placeBubble({lowButton, {30, 16}, {}}, kWindow);
+    ASSERT_TRUE(above.has_value());
+    const auto aboveKind = hint::kindOfPlacedBubble(*above, lowButton);
+    EXPECT_EQ(aboveKind, hint::BubbleKind::AboveAnchor);
+    EXPECT_EQ(hint::bubbleOrigin(aboveKind, above->toFloat(), lowButton.toFloat()), Point<float>(120.0f, 582.0f))
+        << "a flipped bubble slides up out of the same anchor centre";
+}
+
+TEST(ShortcutHintLayout, TabBubbleGrowsOutOfTheTabCentre) {
+    const Rectangle<int> tab{0, 5, 260, 17};
+    const Rectangle<int> bubble{170, 6, 24, 15};
+    EXPECT_EQ(hint::bubbleOrigin(hint::BubbleKind::InsideTab, bubble.toFloat(), tab.toFloat()),
+              Point<float>(130.0f, 13.5f));
+}
+
+TEST(ShortcutHintLayout, HiddenRowPillRisesFromBelowItsSlot) {
+    const Rectangle<float> pill{300.0f, 540.0f, 90.0f, 24.0f};
+    const auto origin = hint::bubbleOrigin(hint::BubbleKind::HiddenRow, pill, {});
+    EXPECT_FLOAT_EQ(origin.x, pill.getCentreX());
+    EXPECT_FLOAT_EQ(origin.y, pill.getCentreY() + 12.0f);
+    EXPECT_FLOAT_EQ(hint::kPillRisePx, 12.0f);
+}
+
+TEST(ShortcutHintLayout, ResumingAFadePicksUpFromTheCurrentValue) {
+    EXPECT_FLOAT_EQ(hint::tweenUp(0.4f, 0.0f), 0.4f) << "no jump back to 0 when Cmd returns mid fade-out";
+    EXPECT_FLOAT_EQ(hint::tweenUp(0.4f, 1.0f), 1.0f);
+    EXPECT_FLOAT_EQ(hint::tweenDown(0.4f, 0.0f), 0.4f);
+    EXPECT_FLOAT_EQ(hint::tweenDown(0.4f, 1.0f), 0.0f);
+    EXPECT_DOUBLE_EQ(hint::resumeDurationMs(0.75f, 160.0), 40.0) << "only the remaining share of the fade-in";
+    EXPECT_DOUBLE_EQ(hint::resumeDurationMs(1.0f, 160.0), 1.0) << "never zero";
+    EXPECT_DOUBLE_EQ(hint::resumeDurationMs(0.0f, 160.0), 160.0);
+}
+
+TEST(ShortcutHintLayout, HiddenPillsAre24PxTall) { EXPECT_EQ(hint::kPillHeight, 24); }

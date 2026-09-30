@@ -73,6 +73,8 @@ void ShortcutHintOverlay::sample(const juce::ModifierKeys& mods) {
         state_ = State::Pending;
         pressedAtMs_ = clock_();
         startTimer(static_cast<int>(kShowDelayMs));
+    } else if (state_ == State::FadingOut && armed_) {
+        resumeFadeIn(); // Cmd pressed again mid fade-out: no second delay
     } else if (state_ == State::Pending && clock_() - pressedAtMs_ >= kShowDelayMs) {
         showHints();
     }
@@ -159,6 +161,21 @@ void ShortcutHintOverlay::showHints() {
     fade_.start(vblank_, kFadeInMs, easeOutCubic, [this](float t) { setOpacity(t); });
 }
 
+// Picks the tween up from wherever the fade-out had got to, over the remaining share of the fade-in,
+// so a quick release-and-press never snaps the bubbles back to their start.
+void ShortcutHintOverlay::resumeFadeIn() {
+    rebuildEntries();
+    if (entries_.empty()) {
+        hideNow();
+        armed_ = false;
+        return;
+    }
+    state_ = State::Showing;
+    const float from = opacity_;
+    fade_.start(vblank_, hint::resumeDurationMs(from, kFadeInMs), easeOutCubic,
+                [this, from](float e) { setOpacity(hint::tweenUp(from, e)); });
+}
+
 void ShortcutHintOverlay::beginFadeOut() {
     if (!isShowing() || opacity_ <= 0.0f) {
         hideNow();
@@ -167,13 +184,25 @@ void ShortcutHintOverlay::beginFadeOut() {
     state_ = State::FadingOut;
     const float from = opacity_;
     fade_.start(
-        vblank_, kFadeOutMs, easeOutCubic, [this, from](float t) { setOpacity(from * (1.0f - t)); },
+        vblank_, kFadeOutMs, easeInCubic, [this, from](float e) { setOpacity(hint::tweenDown(from, e)); },
         [this] { hideNow(); });
 }
 
 void ShortcutHintOverlay::setOpacity(float value) {
     opacity_ = juce::jlimit(0.0f, 1.0f, value);
     repaint();
+}
+
+// Maps the bubble's settled rectangle onto its current animated one, so the cap and its text scale
+// together. Left untouched once settled, which keeps a resting bubble pixel-crisp.
+void ShortcutHintOverlay::applyEntryTween(juce::Graphics& g, const Entry& entry) const {
+    if (opacity_ >= 1.0f)
+        return;
+    const auto target = entry.bounds.toFloat();
+    const auto now = hint::animatedBubbleBounds(target, entry.origin, opacity_);
+    const float scale = target.getWidth() > 0.0f ? now.getWidth() / target.getWidth() : 1.0f;
+    g.addTransform(juce::AffineTransform::scale(scale, scale, target.getCentreX(), target.getCentreY())
+                       .translated(now.getCentreX() - target.getCentreX(), now.getCentreY() - target.getCentreY()));
 }
 
 void ShortcutHintOverlay::paint(juce::Graphics& g) {
@@ -187,20 +216,23 @@ void ShortcutHintOverlay::paint(juce::Graphics& g) {
 
     const auto& theme = lf->getTheme();
     for (const auto& entry : entries_) {
+        g.saveState();
+        applyEntryTween(g, entry);
         if (entry.isPill) {
             const auto pill = entry.bounds.toFloat().reduced(0.5f);
             g.setColour(theme.colors.surface);
             g.fillRoundedRectangle(pill, theme.metrics.pillRadius);
-            g.setColour(theme.colors.border);
+            g.setColour(theme.colors.textDisabled);
             g.drawRoundedRectangle(pill, theme.metrics.pillRadius, theme.metrics.borderWidth);
 
             g.setColour(theme.colors.textPrimary);
-            g.setFont(juce::Font(juce::FontOptions(theme.type.uiFamily, theme.type.label, juce::Font::plain)));
+            g.setFont(juce::Font(juce::FontOptions(theme.type.uiFamily, theme.type.label + 1.0f, juce::Font::plain)));
             auto text =
                 entry.bounds.withTrimmedLeft(entry.cap.getRight() - entry.bounds.getX() + 6).withTrimmedRight(8);
             g.drawText(entry.label, text, juce::Justification::centredLeft, false);
         }
-        lf->drawShortcutKeyCap(g, entry.cap, entry.keyText);
+        lf->drawShortcutKeyCap(g, entry.cap, entry.keyText, entry.compact);
+        g.restoreState();
     }
 
     if (layer)

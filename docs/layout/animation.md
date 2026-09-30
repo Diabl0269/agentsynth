@@ -11,6 +11,7 @@ Pure, stateless helpers, no component state required:
 | Function | Signature | Curve |
 |---|---|---|
 | `easeOutCubic` | `float easeOutCubic(float t)` | Fast-out deceleration |
+| `easeInCubic` | `float easeInCubic(float t)` | Slow start, accelerating to the end |
 | `easeInOutCubic` | `float easeInOutCubic(float t)` | Smooth in and out |
 | `easeOutBack` | `float easeOutBack(float t)` | Overshoots slightly, then settles |
 
@@ -163,6 +164,7 @@ strings.
 | **Timeline playhead** | 30 Hz vertical position line, **playing only**, repainting only the strip between its old and new x | `TimelinePlayheadOverlay` |
 | **Zoom settle debounce** | `zoomSettleAnim`: a DEBOUNCE `AnimationDriver` (140 ms, `kZoomSettleMs`) with a no-op `onUpdate` — zero repaints while running, all the work in `onComplete`, which thaws the frozen card rasters | `GraphEditor` |
 | **Macro-crossing cable slide + module flash (FRO41)** | On a Cmd-drag finalize that actually crosses an expanded macro's hull: a cable re-routed through an auto-created/removed port slides to its new anchor (220 ms, `easeOutCubic`), and the dragged module gets a fading ring — pure tween state in `MacroCrossingAnimator` (`Source/UI/Graph/MacroCrossingAnimator/`), driven by `macroCrossingDriverAnim_`; see [`docs/macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41`](../macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41) | `GraphEditor` |
+| **Shortcut hint bubbles** | One tween value `t` scales (0.6 -> 1), moves (from the labelled button's centre, or 12 px below a hidden-panel pill) and fades every Cmd-hold key-cap bubble: 160 ms `easeOutCubic` in, 110 ms `easeInCubic` back out from the current `t`; pure geometry in `hint::animatedBubbleBounds`; one `AnimationDriver`, no timer besides the 500 ms show delay; see [`docs/control/shortcuts.md`](../control/shortcuts.md#shortcut-hints) | `ShortcutHintOverlay` |
 | **Toolbar toggle pill** | Instant state change (accent pill when on), no timer or animation — driven by `applyToolbarIcons()`'s and `setLibraryVisible()`'s `setToggleState(dontSendNotification)` calls | `ToolbarComponent` |
 
 ## The time-bounded animation rule
