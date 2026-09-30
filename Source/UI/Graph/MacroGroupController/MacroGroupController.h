@@ -405,7 +405,11 @@ private:
     // on GraphEditor was private and stays private here) ----
     void applyMacroCollapsed(const juce::String& macroId, bool collapsed);
     // Shifts an expanded macro's members (and carried collapsed cards) so its hull lies within canvas x,y >= 0.
-    void nudgeHullIntoCanvas(const juce::String& macroId);
+    // Returns the translation applied (zero when the hull already fitted).
+    juce::Point<int> nudgeHullIntoCanvas(const juce::String& macroId);
+    // Right after a collapse seeded the card: undoes the expand's canvas nudge (card and hidden members, rigidly) when
+    // the members are still where the nudge left them and the original spot is clear. Clears the expand record.
+    void restoreCardAfterCollapse(const juce::String& macroId);
     juce::String macroHullAtExcluding(juce::Point<int> canvasPos, const juce::String& excludedMacroId) const;
     std::vector<juce::AudioProcessorGraph::NodeID> resolvedMacroMemberModuleNodes(const juce::String& macroId) const;
     static juce::String macroPortNodeTypeName(bool isInput, synth::MacroPortKind kind);

@@ -165,3 +165,73 @@ TEST(MacroDropPlacement, LibraryDropWithoutCmdOverAnOpenHullJoinsAndLandsInsideI
     EXPECT_TRUE(c.editor.getMacros().find(macroId)->hasMember(uuidOf(c.engine, created)));
     EXPECT_TRUE(c.ctl().macroHullBounds(macroId).contains(c.rect(created).getCentre()));
 }
+
+namespace {
+// Members this close to the top make expanding nudge the hull down into the canvas.
+struct NearTopMacro {
+    DropCanvas c;
+    NodeID m1, m2;
+    juce::String macroId;
+    juce::Rectangle<int> card;
+
+    NearTopMacro() {
+        m1 = c.osc(100, 20);
+        m2 = c.osc(400, 20);
+        macroId = c.group({m1, m2});
+        card = c.card(macroId);
+    }
+};
+} // namespace
+
+// Expanding nudged the members into the canvas; collapsing puts the card back where it was, so a module dropped
+// right under the card returns to its own spot instead of staying pushed.
+TEST(MacroDropPlacement, CollapseAfterACanvasNudgedExpandRestoresTheCardAndReturnsTheNeighbour) {
+    NearTopMacro t;
+    auto& c = t.c;
+    const auto loose = c.filter(1800, 1500);
+    const auto spot = synth::LayoutUtil::snap({t.card.getX(), t.card.getBottom() + 24});
+    c.dragTo(loose, spot);
+    ASSERT_EQ(c.rect(loose).getPosition(), spot);
+
+    c.ctl().setMacroCollapsed(t.macroId, false);
+    ASSERT_NE(c.rect(t.m1).getY(), 20) << "premise: expanding nudged the members down";
+    ASSERT_NE(c.rect(loose).getPosition(), spot) << "premise: the hull pushed the module";
+
+    c.ctl().setMacroCollapsed(t.macroId, true);
+
+    EXPECT_EQ(c.card(t.macroId), t.card);
+    EXPECT_EQ(c.rect(t.m1).getY(), 20);
+    EXPECT_EQ(c.rect(loose).getPosition(), spot);
+}
+
+// Members the user moved after expanding are not snapped back: the card seeds at their union.
+TEST(MacroDropPlacement, CollapseAfterMovingAMemberKeepsTheSeededCard) {
+    NearTopMacro t;
+    auto& c = t.c;
+    c.ctl().setMacroCollapsed(t.macroId, false);
+    c.ctl().moveUnitBy("n:" + juce::String((juce::int64)t.m1.uid), {48, 0});
+    c.ctl().moveUnitBy("n:" + juce::String((juce::int64)t.m2.uid), {48, 0});
+    c.editor.updateComponents();
+    const auto expected = juce::Point<int>(std::min(c.rect(t.m1).getX(), c.rect(t.m2).getX()),
+                                           std::min(c.rect(t.m1).getY(), c.rect(t.m2).getY()));
+
+    c.ctl().setMacroCollapsed(t.macroId, true);
+
+    EXPECT_EQ(c.card(t.macroId).getPosition(), expected);
+}
+
+TEST(MacroDropPlacement, OneUndoOfTheCollapseRestoresTheExpandedState) {
+    NearTopMacro t;
+    auto& c = t.c;
+    c.ctl().setMacroCollapsed(t.macroId, false);
+    const auto expandedM1 = c.rect(t.m1);
+    const auto hull = c.ctl().macroHullBounds(t.macroId);
+    c.undo.clearUndoHistory();
+
+    c.ctl().setMacroCollapsed(t.macroId, true);
+    ASSERT_TRUE(c.undo.undo());
+
+    EXPECT_FALSE(c.editor.getMacros().find(t.macroId)->collapsed);
+    EXPECT_EQ(c.rect(t.m1), expandedM1);
+    EXPECT_EQ(c.ctl().macroHullBounds(t.macroId), hull);
+}

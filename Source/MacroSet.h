@@ -97,6 +97,13 @@ struct Macro {
      *  restore (snapshots go through toVar/fromVar). Cleared once the neighbours have been offered their way back. */
     std::vector<DisplacedNeighbour> displaced;
 
+    /** Transient like `displaced`: what expanding did to the card, so collapsing can put it back exactly. `expandNudge`
+     *  is the translation that pulled the hull into the canvas (zero if none), `preExpandCardOrigin` the card's
+     *  top-left before the expand. Only meaningful while `hasExpandRecord`. */
+    bool hasExpandRecord = false;
+    juce::Point<int> expandNudge;
+    juce::Point<int> preExpandCardOrigin;
+
     // Named jacks on this macro's boundary. Every port's nodeUuid MUST also appear in
     // `members` — an inlet/outlet is a member like any other node (docs/macros/ports.md#node-types) — and
     // MacroSet::fromVar rejects a saved macro where that does not hold. Order in this vector is

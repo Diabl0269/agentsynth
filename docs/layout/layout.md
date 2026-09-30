@@ -107,7 +107,9 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   (`returnDisplacedNeighbours`): a unit returns only if the user has not moved it since (it is still exactly where the
   push left it) and its old spot is clear, with the usual 12 px clearance, of every other unit at that level, the
   collapsed card included. A unit that cannot return stays put. Collapse clears the record; a delete on a macro that
-  stays open keeps the pushes that only lacked room. It runs inside the same undo step as the collapse or delete.
+  stays open keeps the pushes that only lacked room. It runs inside the same undo step as the collapse or delete. Before neighbours return, a collapse first undoes the
+  expand's canvas nudge (`restoreCardAfterCollapse`) when the members have not moved since and the card's old spot is
+  clear, so the card sits where it was and the neighbours' old spots are clear of it again.
 - **Placement blockers.** A module being dropped or dragged lands through `findFreeSlot` against the same layout
   units, flattened over every level (`MacroGroupController::placementBlockers`): each visible module, each collapsed
   card, each open hull. The hidden members of a collapsed macro are not blockers (they still sit at their

@@ -162,6 +162,30 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey) {
     }
 }
 
+// The card is seeded at the member union's top-left, which an expand's canvas nudge shifted; if nothing has moved the
+// members since, translating everything back by the nudge puts the card exactly where it was before expanding.
+void MacroGroupController::restoreCardAfterCollapse(const juce::String& macroId) {
+    auto* macro = host_.getMacros().find(macroId);
+    if (macro == nullptr || !macro->hasExpandRecord)
+        return;
+    const auto nudge = macro->expandNudge;
+    const bool untouched = macro->bounds.getTopLeft() == macro->preExpandCardOrigin + nudge;
+    const auto target = macro->bounds.translated(-nudge.x, -nudge.y);
+    macro->hasExpandRecord = false;
+    if ((nudge.x == 0 && nudge.y == 0) || !untouched || target.getX() < 0 || target.getY() < 0)
+        return;
+
+    const auto self = macroKey(macroId);
+    const auto units = buildLayoutUnits(macro->parentId);
+    const bool blocked = std::any_of(units.begin(), units.end(), [&](const LayoutUnit& other) {
+        return other.key != self && target.expanded(synth::LayoutUtil::kCollisionGap).intersects(other.rect);
+    });
+    if (blocked)
+        return;
+    moveUnitBy(self, {-nudge.x, -nudge.y});
+    host_.updateComponents();
+}
+
 // A neighbour comes home only if the user has not touched it (still exactly where the push left it) and its old spot
 // is clear of every other unit at that level, the shrunken macro or its collapsed card included. Newest push first,
 // so a unit pushed twice retraces its steps and each landedAt is checked against where the last return left it.
