@@ -10,6 +10,7 @@ class TimelineDoc;          // Forward declaration (Source/Timeline/TimelineDoc/
 class MacroSet;             // Forward declaration (Source/MacroSet.h)
 class MidiRemoteProjectDoc; // Forward declaration (Source/MidiRemote/RemoteModel.h)
 class MixerViewDoc;         // Forward declaration (Source/Mixer/MixerViewDoc.h)
+struct TransportDoc;        // Forward declaration (Source/Transport/TransportDoc.h)
 } // namespace synth
 
 /**
@@ -159,6 +160,10 @@ public:
      *  recordParameterChange -- see the .cpp definition and docs/mixer/mixer.md#pan-law. */
     void recordMixerPanLawChange(std::function<void(synth::MixerPanLaw)> apply, synth::MixerPanLaw before,
                                  synth::MixerPanLaw after);
+
+    /** One undo step for a tempo / time signature / loop edit the caller already applied; a no-op when equal. */
+    void recordTransportChange(std::function<void(const synth::TransportDoc&)> apply, const synth::TransportDoc& before,
+                               const synth::TransportDoc& after);
 
     /**
      * @brief Records a mutation that may touch BOTH the graph and the timeline in a single gesture

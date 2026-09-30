@@ -33,14 +33,22 @@ bool TransportService::setLoop(double startBeat, double endBeat, bool enabled) {
     c.a = std::max(0.0, startBeat);
     c.b = std::max(0.0, endBeat);
     c.flag = enabled && (c.b - c.a >= kMinLoopLengthBeats);
-    return postCommand(c);
+    if (!postCommand(c))
+        return false;
+    documentState_.loopStartBeat = c.a;
+    documentState_.loopEndBeat = c.b;
+    documentState_.loopEnabled = c.flag;
+    return true;
 }
 
 bool TransportService::setBpm(double newBpm) {
     Command c;
     c.type = Command::Type::SetBpm;
     c.a = std::clamp(newBpm, kMinBpm, kMaxBpm);
-    return postCommand(c);
+    if (!postCommand(c))
+        return false;
+    documentState_.bpm = c.a;
+    return true;
 }
 
 bool TransportService::setTimeSignature(int numerator, int denominator) {
@@ -54,7 +62,22 @@ bool TransportService::setTimeSignature(int numerator, int denominator) {
     c.type = Command::Type::SetTimeSignature;
     c.i = numerator;
     c.j = denominator;
-    return postCommand(c);
+    if (!postCommand(c))
+        return false;
+    documentState_.timeSigNumerator = numerator;
+    documentState_.timeSigDenominator = denominator;
+    return true;
+}
+
+// The mirror is updated only once the command is queued, and holds exactly what was queued (the clamped
+// bpm, the computed loop flag). It exists because the audio-side snapshot lags until the next tick() and
+// never updates at all without an audio device, so saving and dirty tracking must read the requested
+// state, never getPositionSnapshot().
+bool TransportService::applyDocumentState(const TransportDoc& doc) {
+    const bool sigOk = setTimeSignature(doc.timeSigNumerator, doc.timeSigDenominator);
+    const bool bpmOk = setBpm(doc.bpm);
+    const bool loopOk = setLoop(doc.loopStartBeat, doc.loopEndBeat, doc.loopEnabled);
+    return sigOk && bpmOk && loopOk;
 }
 
 bool TransportService::postCommand(const Command& command) noexcept {

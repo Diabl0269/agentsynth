@@ -226,6 +226,7 @@ add_library(Core STATIC
     Source/AppUndoManager.cpp
     Source/AppUndoManager.h
     Source/AppUndoManagerMixerView.cpp
+    Source/AppUndoManagerTransport.cpp
     Source/AutomationLaunch.cpp
     Source/AutomationLaunch.h
     Source/Branding.h
@@ -330,9 +331,11 @@ add_library(Core STATIC
     Source/Transport/StemSession.cpp
     Source/Transport/StemSession.h
     Source/Transport/TempoMap.h
+    Source/Transport/TransportDoc.cpp
     Source/Transport/TransportService.cpp
     Source/Transport/MarkerJump.h
     Source/Transport/TransportNudge.h
+    Source/Transport/TransportDoc.h
     Source/Transport/TransportService.h
     # Timeline
     Source/Timeline/ArrangementContext.cpp

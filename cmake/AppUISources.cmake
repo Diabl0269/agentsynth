@@ -13,6 +13,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentSetupTimeline.cpp
     Source/MainComponent/MainComponentCallbacks.cpp
     Source/MainComponent/MainComponentFileIO.cpp
+    Source/MainComponent/MainComponentTransportDoc.cpp
     Source/MainComponent/MainComponentExportMidi.cpp
     Source/MainComponent/MainComponentExportMidiSeams.h
     Source/MainComponent/MainComponentCollectArchive.cpp

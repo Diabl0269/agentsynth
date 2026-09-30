@@ -30,6 +30,7 @@
 #include "Transport/BounceRunner.h"
 #include "Transport/StemExporter.h"
 #include "Transport/StemRunner.h"
+#include "Transport/TransportDoc.h"
 #include "Transport/TransportNudge.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Chrome/ExportAudioDialog.h"
@@ -253,6 +254,7 @@ public:
     bool openProjectForTest(const juce::File& file);
     bool openPatchForTest(const juce::File& file, bool append);
     void runAutosaveTickForTest();
+    void pollTransportEditsForTest(juce::uint32 nowMs);
     void setAutosaveElapsedMsForTest(juce::uint32 elapsedMs);
     bool isRecordingActiveForTest() const;
     void setAudioTakeCapturingForTest(bool capturing);
@@ -511,6 +513,8 @@ private:
     bool isRecordingActive() const;
     void maybeAutosave();
     void performAutosave();
+    void pollTransportEdits(juce::uint32 nowMs);
+    void applyLoadedTransport(const synth::TransportDoc& loaded);
     void notifyDocumentTitleChanged();
 
     void promptUnsavedChanges(const juce::String& actionLabel, std::function<void(UnsavedChangesChoice)> onChoice);
@@ -606,6 +610,10 @@ private:
     int documentGeneration_ = 0; // bumped by guardUnsavedChanges() just before `proceed`; stale async loads compare it
     int lastAutosavedEditSerial_ = 0; // autosave's own baseline, separate from savedEditSerial_
     juce::uint32 lastAutosaveMs_ = 0; // wall-clock (getMillisecondCounter) of the last autosave write
+
+    synth::TransportDoc committedTransport_; // the transport state the undo history and document last recorded
+    synth::TransportDoc pendingTransport_;   // a changed value waiting out its debounce
+    juce::uint32 pendingTransportSinceMs_ = 0;
 
     bool isBounceInProgress_ = false;  // ONE flag for Export Audio and Export Stems: the offline render is exclusive
     bool isCollectInProgress_ = false; // a Collect copy or archive zip is running behind its progress window
