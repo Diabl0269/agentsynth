@@ -308,6 +308,7 @@ public:
     // colour swatch and the M/S/R/A toggles sit flush against this row's left/right edges, so an
     // outline drawn in paint() would be hidden under them.
     void paintOverChildren(juce::Graphics& g) override;
+    void setLift(float lift);
     void resized() override;
     void mouseDown(const juce::MouseEvent& e) override;
     // T166: whole-row drag-to-reorder (see onRowDragStarted below for why this row only ever
@@ -402,6 +403,7 @@ public:
     // Fired once a background mouseDrag crosses a small pixel threshold past mouseDown — a plain
     // click (select) or a click that lands on a child component never reaches here.
     std::function<void(int screenY)> onRowDragStarted;
+    std::function<void(int screenY)> onRowPressed;
     // Fired on every further mouseDrag once a drag is underway.
     std::function<void(int screenY)> onRowDragged;
     // Fired from mouseUp, but ONLY when a drag was actually underway (never for a plain click).
@@ -487,10 +489,29 @@ private:
     // headless test path doesn't install, and this needs no text at all.
     class SwatchButton : public juce::Button {
     public:
-        SwatchButton()
-            : juce::Button("trackColourSwatch") {}
+        explicit SwatchButton(TimelineTrackHeaderComponent& owner)
+            : juce::Button("trackColourSwatch")
+            , owner_(owner) {}
         void paintButton(juce::Graphics& g, bool highlighted, bool /*down*/) override;
+        // A press-drag on the swatch reorders the row like a press anywhere else; a plain click
+        // still opens the colour picker.
+        void mouseDown(const juce::MouseEvent& e) override {
+            juce::Button::mouseDown(e);
+            if (!e.mods.isPopupMenu())
+                owner_.mouseDown(e);
+        }
+        void mouseDrag(const juce::MouseEvent& e) override {
+            juce::Button::mouseDrag(e);
+            owner_.mouseDrag(e);
+        }
+        void mouseUp(const juce::MouseEvent& e) override {
+            juce::Button::mouseUp(e);
+            owner_.mouseUp(e); // may destroy the row, and this swatch with it: nothing may follow
+        }
         juce::Colour colour{juce::Colours::grey};
+
+    private:
+        TimelineTrackHeaderComponent& owner_;
     };
 
     // FRO60: JUCE hands a click to whichever child component is directly under the cursor and never
@@ -514,6 +535,15 @@ private:
                 return;
             }
             juce::Label::mouseDown(e);
+            owner_.mouseDown(e); // the whole row is a drag handle; see mouseDown()
+        }
+        void mouseDrag(const juce::MouseEvent& e) override {
+            juce::Label::mouseDrag(e);
+            owner_.mouseDrag(e);
+        }
+        void mouseUp(const juce::MouseEvent& e) override {
+            juce::Label::mouseUp(e);
+            owner_.mouseUp(e); // may destroy the row, and this label with it: nothing may follow
         }
 
     private:
@@ -617,7 +647,7 @@ private:
     // showContextMenu(). bindingChip_ keeps its own Track In menu and colourSwatch_ (SwatchButton)
     // keeps its own colour picker — neither changes here.
     ContextMenuForwardingLabel nameLabel_{*this};
-    SwatchButton colourSwatch_;
+    SwatchButton colourSwatch_{*this};
     ContextMenuForwardingButton muteButton_{*this, "M"};
     ContextMenuForwardingButton soloButton_{*this, "S"};
     ContextMenuForwardingButton armButton_{*this, "R"};
@@ -633,6 +663,7 @@ private:
     // onRowDragStarted) until the matching mouseUp. Reset to false BEFORE onRowDragEnded fires —
     // see that callback's own ordering-hazard comment.
     bool draggingRow_ = false;
+    float lift_ = 0.0f;
     // Set in resized(); the kind badge itself is drawn straight from track()->kind in paint(), so
     // this is only a hit-rect for tests, not a cache of the badge's text.
     juce::Rectangle<int> kindBadgeBounds_;

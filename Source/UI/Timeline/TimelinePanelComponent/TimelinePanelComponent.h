@@ -2,6 +2,9 @@
 
 #include "Mixer/TrackPresetManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
+#include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
+#include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include "UI/Layout/ScrollTween.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
@@ -385,11 +388,15 @@ public:
      *  runs in a test process. Anything else is ignored. */
     void applyAddTrackMenuChoice(int menuId);
     juce::Viewport& getTrackHeaderViewport() noexcept { return trackHeaderViewport_; }
-    // T166: the Viewport's content component — a pixel-level test seam for the track-reorder drop
-    // indicator (TrackHeaderList::paintOverChildren), which a synthesized-event drag can otherwise
-    // only assert through side effects (the eventual doc mutation), never through what actually
-    // got painted. See createComponentSnapshot() at the call site.
+    // The Viewport's content component — a pixel-level test seam for what a track-reorder drag
+    // paints. See createComponentSnapshot() at the call site.
     juce::Component& getTrackHeaderListForTest() noexcept { return trackHeaderList_; }
+    /** True from the first drag step of a track reorder until its drop has finished settling. */
+    bool isTrackReorderActiveForTest() const noexcept { return trackReorder_.isReordering(); }
+    /** The Esc key press a real track drag would receive from the window. */
+    bool sendEscapeToTrackDragForTest() {
+        return trackCancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), this);
+    }
     int getTrackHeaderCount() const noexcept { return trackHeaderList_.headers.size(); }
     /** Header for the track at `index` in the doc's track order, or nullptr when out of range. */
     TimelineTrackHeaderComponent* getTrackHeaderAt(int index) const noexcept {
@@ -464,19 +471,31 @@ private:
     std::vector<synth::TrackPresetInfo> instrumentTrackPresetMenuSnapshot_;
     std::vector<synth::TrackPresetInfo> busTrackPresetMenuSnapshot_; // FRO297, same contract
 
-    // ---- T166: track-reorder drag (whole-row drag) ----
-    // See syncTrackHeaders()'s definition in TimelinePanelTrackHeaders.cpp for the division of
-    // labour between the row and this panel.
-    synth::TrackId draggingTrackId_; // invalid (default) when no drag is in progress
-    int dragInsertionIndex_ = -1;    // boundary (0..headerCount) the drag would drop at; -1 = none
+    // ---- T166 / FRO371: track-reorder drag (whole-row drag) ----
+    // The row detects the gesture and hands up raw screen Y; this panel feeds it to the shared
+    // ReorderDragAnimator (vertical axis, list coordinates). See TimelinePanelTrackDrag.cpp.
     void beginTrackDrag(synth::TrackId trackId, int screenY);
     void updateTrackDrag(int screenY);
-    void endTrackDrag(int screenY);
-    // Screen Y -> a BOUNDARY index in [0, headerCount] ("insert before row N"), rounded to the
-    // nearest row edge. Shared by updateTrackDrag (live drop-indicator position) and endTrackDrag
-    // (the actual drop target), which is why this returns a boundary rather than a resting index —
-    // endTrackDrag is the one place that converts a boundary into TimelineDoc::moveTrack's target.
-    int trackDropBoundaryForScreenY(int screenY) const;
+    void endTrackDrag();
+    void commitTrackDrag();
+    void cancelTrackDrag();  // Esc
+    void discardTrackDrag(); // a header rebuild is about to destroy the rows a held drag belongs to
+    void startTrackFramesIfNeeded();
+    void onTrackReorderFrame();
+    void autoscrollForTrackPointer(int screenY);
+    float trackPointerY(int screenY) const;
+    // Places every row: static slots, or the animator's positions while a reorder is in flight.
+    void placeTrackHeaders();
+
+    ReorderDragAnimator trackReorder_;
+    ReorderFramePump trackFrames_{*this};
+    ReorderCancelKey trackCancelKey_;
+    std::vector<synth::TrackId> reorderTrackIds_; // animator keys -> track ids, at press time
+    synth::TrackId liftedTrackId_;                // the row drawn lifted (dragged, then settling)
+    unsigned trackGenerationSeen_ = 0;
+    float lastDraggedTrackStart_ = 0.0f;
+    bool trackDragCancelled_ = false; // Esc pressed in this gesture
+    bool committingTrackDrag_ = false;
 
     // ---- Automation strip ----
     // A header's "A" button click lands here. The header itself never knows open/closed state, so
@@ -539,12 +558,12 @@ private:
     void parentHierarchyChanged() override;
 
     // The Viewport's content: a plain container whose height is (track count * row height). Also
-    // draws the T166 track-reorder drop indicator -- see its paintOverChildren() definition in
-    // TimelinePanelTrackHeaders.cpp for why.
+    // draws the FRO371 track-reorder gap marker -- see its paint() definition in
+    // TimelinePanelTrackDrag.cpp.
     struct TrackHeaderList : juce::Component {
         explicit TrackHeaderList(TimelinePanelComponent& owner)
             : owner_(owner) {}
-        void paintOverChildren(juce::Graphics& g) override;
+        void paint(juce::Graphics& g) override;
         juce::OwnedArray<TimelineTrackHeaderComponent> headers;
 
     private:

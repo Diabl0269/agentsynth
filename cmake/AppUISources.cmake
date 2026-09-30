@@ -53,6 +53,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelShortcuts.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackDrag.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
     Source/UI/Timeline/TimelineRulerComponent.h
     Source/UI/Timeline/TimelineRulerComponent.cpp

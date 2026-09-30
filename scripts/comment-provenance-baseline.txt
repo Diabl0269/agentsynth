@@ -13,9 +13,9 @@
 1 Source/Timeline/TimelineDoc/TimelineDocAutomation.cpp
 1 Source/UI/PianoRoll/PianoRollComponent/PianoRollMouse.cpp
 3 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
-20 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
+19 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
 1 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
-18 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
+16 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
 20 Source/UI/Timeline/TimelineTrackHeaderComponent.cpp
 32 Source/UI/Timeline/TimelineTrackHeaderComponent.h
 2 Tests/UI/Timeline/TimelineTrackHeaderTests.cpp
