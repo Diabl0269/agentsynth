@@ -428,6 +428,7 @@ add_executable(Tests
     Macros/MacroPortWidgetTests.cpp
     Macros/MacroPortWidgetColourTests.cpp
     Macros/MacroPortSidebarTests.cpp
+    Macros/MacroPortStripFadeTests.cpp
     Macros/MacroBypassMuteTests.cpp
     UI/Graph/ClipboardTests.cpp
     UI/Layout/PanelAnimationAndLoadingTests.cpp

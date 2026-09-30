@@ -54,21 +54,12 @@ constexpr int kMacroChipHeight = 18;
 constexpr int kMacroChipTopMargin = kMacroChipHeight + 6;
 static_assert(kMacroChipTopMargin == kMacroChipRowHeight, "the strips start below the chip row");
 
-// {input, output} sidebar strip widths for a macro: the longest port name on each side plus the
-// fixed padding, `innerJackRoom` extra for the open macro's inner jack. A side with no ports gets
-// the bare minimum, and a very long name is capped at `maxWidth` (its label is shortened with an
-// ellipsis instead) so the card's title column never collapses. Measured with a local font (no
-// juce::Graphics), so paint, hit-testing and anchoring can all call it. Never depends on zoom.
-std::pair<int, int> macroStripWidths(const synth::Macro& macro, int innerJackRoom, int maxWidth) {
-    const int empty = kMacroPortStripInset + kMacroPortStripPadding;
-    const juce::Font font{juce::FontOptions(kMacroPortNameFontSize)};
-    float longestIn = -1.0f, longestOut = -1.0f;
-    for (const auto& p : macro.ports) {
-        float& longest = p.isInput ? longestIn : longestOut;
-        longest = juce::jmax(longest, font.getStringWidthFloat(p.name));
-    }
-    return {longestIn < 0.0f ? empty : juce::jmin(maxWidth, macroPortStripWidthFor(longestIn, innerJackRoom)),
-            longestOut < 0.0f ? empty : juce::jmin(maxWidth, macroPortStripWidthFor(longestOut, innerJackRoom))};
+// {input, output} sidebar strip widths for a macro: FIXED and equal on both sides, reserved even with no ports,
+// and independent of the port names and of zoom (a long name is ellipsised in its column). The open macro's strip
+// (`openHull`) adds room for its inner jack.
+std::pair<int, int> macroStripWidths(bool openHull) {
+    const int width = openHull ? kMacroHullStripWidth : kMacroCardStripWidth;
+    return {width, width};
 }
 } // namespace
 
@@ -178,7 +169,7 @@ juce::Rectangle<int> hullBoundsIn(GraphCanvasHost& host, const CompByNodeUid& co
     // The two port strips sit INSIDE the hull, outside the members' own margin, so the hull grows
     // outward by each strip's width and members never move when a port is added. When the rows
     // outrun the members the hull grows down to hold them and the '+'/'-' footer.
-    const auto [inW, outW] = macroStripWidths(macro, kMacroHullStripInnerJackRoom, kMacroHullStripMaxWidth);
+    const auto [inW, outW] = macroStripWidths(true);
     expanded.setLeft(expanded.getX() - inW);
     expanded.setRight(expanded.getRight() + outW);
     int inputRows = 0, outputRows = 0;
@@ -402,12 +393,8 @@ MacroGroupController::macroCardPortLayout(const juce::String& macroId) const {
 }
 
 std::pair<int, int> MacroGroupController::macroCardStripWidths(const juce::String& macroId) const {
-    const auto* macro = host_.getMacros().find(macroId);
-    if (macro == nullptr) {
-        const int empty = kMacroPortStripInset + kMacroPortStripPadding;
-        return {empty, empty};
-    }
-    return macroStripWidths(*macro, 0, kMacroCardStripMaxWidth);
+    (void)macroId;
+    return macroStripWidths(false);
 }
 
 std::optional<MacroGroupController::MacroCardPort>
@@ -437,12 +424,8 @@ MacroCardComponent* MacroGroupController::getMacroCardForTest(const juce::String
 }
 
 std::pair<int, int> MacroGroupController::macroHullStripWidths(const juce::String& macroId) const {
-    const auto* macro = host_.getMacros().find(macroId);
-    if (macro == nullptr) {
-        const int empty = kMacroPortStripInset + kMacroPortStripPadding;
-        return {empty, empty};
-    }
-    return macroStripWidths(*macro, kMacroHullStripInnerJackRoom, kMacroHullStripMaxWidth);
+    (void)macroId;
+    return macroStripWidths(true);
 }
 
 juce::Rectangle<int> MacroGroupController::macroHullAddButtonBounds(const juce::String& macroId, bool isInput) const {
@@ -459,7 +442,7 @@ juce::Rectangle<int> MacroGroupController::macroHullRemoveButtonBounds(const juc
                                                                        float zoom) const {
     const auto* macro = host_.getMacros().find(macroId);
     const auto hull = macroHullBounds(macroId);
-    if (macro == nullptr || hull.isEmpty() || !macroPortNamesVisibleAtZoom(zoom))
+    if (macro == nullptr || hull.isEmpty() || !macroPortRemoveClickableAtZoom(zoom))
         return {};
     const bool hasPort = std::any_of(macro->ports.begin(), macro->ports.end(),
                                      [isInput](const synth::MacroPort& p) { return p.isInput == isInput; });
@@ -499,7 +482,7 @@ MacroGroupController::macroHullPortLayout(const juce::String& macroId) const {
               [](const synth::MacroPort& a, const synth::MacroPort& b) { return a.order < b.order; });
 
     // Same widths computeMacroHullBounds widened the hull by, so strips and hull always agree.
-    const auto [inW, outW] = macroStripWidths(*macro, kMacroHullStripInnerJackRoom, kMacroHullStripMaxWidth);
+    const auto [inW, outW] = macroStripWidths(true);
     const int firstRowTop = hull.getY() + kMacroChipTopMargin + kMacroPortRowsBelowChip;
     int nextRow[2] = {0, 0}; // [output, input]
     for (const auto& port : ports) {

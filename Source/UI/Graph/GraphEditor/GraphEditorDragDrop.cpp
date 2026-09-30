@@ -212,7 +212,7 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         // re-layout) and takes the strip's width when docked, so this is a NOMINAL size: the same first-layout default
         // ModuleComponent::layoutMacroPortWidget uses, before the dock sets the real width. Library-less (the
         // "Configure I/O" modal places it).
-        return {detail::kMacroPortStripInset + 60 + detail::kMacroPortStripPadding, detail::kMacroPortRowHeight};
+        return {detail::kMacroCardStripWidth, detail::kMacroPortRowHeight};
     return {280, 360};
 }
 

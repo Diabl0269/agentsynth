@@ -607,8 +607,11 @@ private:
     // (paint()'s early branch); the strip behind it is the canvas's.
     void layoutMacroPortWidget();
     void paintMacroPortWidget(juce::Graphics& g);
-    // False when the canvas zoom is below the names threshold (dots only; the tooltip is the name).
-    bool macroPortNamesShown() const;
+    // Opacity of the docked widget's name at the canvas zoom (0 = dots only; the tooltip is the name), and whether
+    // the name would be ellipsised in its column.
+    float macroPortNameAlpha() const;
+    juce::Rectangle<int> macroPortNameArea(bool boundaryIsInput) const;
+    bool macroPortNameIsTruncated(const juce::String& name, bool boundaryIsInput) const;
 
     // The pending-drop-target ring and the live Serum-style modulation rings on knobs. Split out of
     // paint() (which was at the function-size ratchet's ceiling) rather than grown further.

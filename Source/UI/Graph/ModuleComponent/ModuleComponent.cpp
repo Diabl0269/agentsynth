@@ -987,6 +987,10 @@ void ModuleComponent::wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& kn
 }
 
 void ModuleComponent::setRasterFrozen(bool frozen) {
+    // A docked macro-port widget is never pinned: its name alpha follows the zoom, so it must repaint live
+    // instead of resampling a stale image until the gesture settles.
+    if (frozen && module != nullptr && isMacroPortType(getType(module)))
+        return;
     if (rasterCache != nullptr)
         rasterCache->setFrozen(frozen);
 }

@@ -23,6 +23,7 @@ void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom) {
     const auto& colors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
     auto& controller = editor.getMacroController();
     constexpr float kHullRadius = 10.0f;
+    const float nameAlpha = macroPortNameAlphaAtZoom(zoom);
 
     // Parents first, so a nested child's strips paint over its parent's interior.
     for (const auto* macroPtr : macro_nesting::macrosParentsFirst(editor.getMacros())) {
@@ -43,11 +44,11 @@ void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom) {
                                  true, false);
         right.addRoundedRectangle((float)(hull.getRight() - outW), top, (float)outW, height, kHullRadius, kHullRadius,
                                   false, false, false, true);
-        g.setColour(colors.surfaceHi.withAlpha(0.55f));
+        g.setColour(colors.surfaceHi.withAlpha(macroStripFillAlpha(nameAlpha)));
         g.fillPath(left);
         g.fillPath(right);
 
-        g.setColour(colors.border);
+        g.setColour(colors.border.withMultipliedAlpha(nameAlpha)); // the inner dividers fade with the names
         const float innerLeft = (float)(hull.getX() + inW) - 0.5f;
         const float innerRight = (float)(hull.getRight() - outW) + 0.5f;
         g.drawLine(innerLeft, top, innerLeft, (float)hull.getBottom() - 1.0f, 1.0f);
@@ -57,9 +58,10 @@ void paintMacroPortStrips(juce::Graphics& g, GraphEditor& editor, float zoom) {
         for (const bool isInput : {true, false}) {
             paintMacroPortFooterButton(g, controller.macroHullAddButtonBounds(macro.id, isInput).toFloat(), glyphColour,
                                        true);
-            const auto minus = controller.macroHullRemoveButtonBounds(macro.id, isInput, zoom);
-            if (!minus.isEmpty())
-                paintMacroPortFooterButton(g, minus.toFloat(), glyphColour, false);
+            // The slot at full zoom: the glyph fades with the names even while it is not yet clickable.
+            const auto minus = controller.macroHullRemoveButtonBounds(macro.id, isInput, 1.0f);
+            if (nameAlpha > 0.0f && !minus.isEmpty())
+                paintMacroPortFooterButton(g, minus.toFloat(), glyphColour.withMultipliedAlpha(nameAlpha), false);
         }
     }
 }

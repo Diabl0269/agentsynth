@@ -201,17 +201,19 @@ the user put in the box, and drawing it as a full 280-wide card made a macro of 
 as a macro of four modules. The earlier hanging widgets outside the outline overlapped when a side had
 several ports and pushed the '+' under a jack; a strip gives every port its own row.
 
-- **Width is content, not zoom.** A strip is as wide as the longest port name on its side plus
-  padding (`macroPortStripWidthFor`: 18 px jack inset + name + 8 px padding; the open macro adds 8 px
-  for the inner jack), capped at 90 px on the card and 140 px on the open macro; a longer name is
-  shortened with an ellipsis, never squeezed. A side with no ports keeps the 26 px minimum so its '+' has a home. Nothing is
-  persisted: the width is measured from the names each time, with a local `juce::Font`, so paint,
-  hit-testing and cable anchoring all agree without a `Graphics` context.
-- **Zoom decides only what is painted.** Below 50 percent canvas zoom
-  (`macroPortNamesVisibleAtZoom`) the names and the '-' are not drawn; the strips, jacks and '+' keep
-  their exact positions, so cable ends never move. Hovering a jack then shows its name in the
-  tooltip. The zoom is read at paint time from the parent component's transform scale, so the state
-  flips once per zoom gesture and adds no repaint of its own.
+- **Width is fixed, not content or zoom.** Both strips are the same width and it is reserved even
+  with no ports: 18 px jack inset + a 62 px name column (`kMacroPortNameRoom`) + 8 px padding = 88 px on
+  the card (`kMacroCardStripWidth`), 96 px on the open macro (`kMacroHullStripWidth`, 8 px more for the
+  inner jack). A longer name is shortened with an ellipsis, never squeezed, and its tooltip carries the
+  full name. Adding a port, renaming one or zooming never moves a strip or the hull, so paint,
+  hit-testing and cable anchoring agree without measuring anything.
+- **Zoom fades what is painted.** `macroPortNameAlphaAtZoom` is `easeInOutCubic` over zoom 0.5 to 0.7
+  (0 at or below 0.5, 1 at or above 0.7): the port names, the '-' glyph and each strip's inner divider
+  are painted at that alpha, and the strip fill recedes from 0.55 to 0.25. The '-' is clickable only
+  at alpha >= 0.5. Jacks and '+' never fade, so cable ends never move. While a name is faded a hovered
+  jack shows it in the tooltip. The alpha is a pure function of the zoom read at paint time from the
+  parent component's transform, with no timer; docked port widgets are exempt from the zoom raster
+  freeze so their names repaint live.
 - **Collapsed card.** `MacroGroupController::macroCardPortLayout` puts jack `i` of a side at
   `y = 30 + 16 i + 8`, x = 10 (inputs) / width - 10 (outputs). The card grows to
   `30 + rows * 16 + 22` px when that exceeds its 90 px floor (`macroCardHeightFor`); the height is
@@ -271,7 +273,7 @@ several ports and pushed the '+' under a jack; a strip gives every port its own 
   therefore calls `dockMacroPortWidgets()` unconditionally — a no-op for the whole-macro case, a real
   correction for the partial one.
 - **Size estimation is nominal.** A widget's width is its strip's, set by the dock, so
-  `estimateModuleSize` returns a nominal one-row size (`kMacroPortStripInset + 60 + kMacroPortStripPadding`
+  `estimateModuleSize` returns a nominal one-row size (`kMacroCardStripWidth`
   by `kMacroPortRowHeight`) for all four types — the same first-layout default
   `ModuleComponent::layoutMacroPortWidget` uses before the first dock, pinned by
   `MacroPortWidgetG4.EstimateModuleSizeMatchesTheRealWidgetForEveryPortTypeName`.

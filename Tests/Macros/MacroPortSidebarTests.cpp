@@ -275,37 +275,39 @@ TEST(MacroPortSidebar, HullStripsPaintUnderThePortWidgets) {
     const juce::Point<int> outsideHull{hull.getX() - 30, onRow.y};
 
     // Software image: a GPU/native-backed image reads back zeros on a headless Windows runner.
-    juce::Image img(juce::Image::ARGB, hull.getRight() + 40, hull.getBottom() + 40, true, juce::SoftwareImageType());
+    // The fixed-width strip can push the hull's left edge into negative canvas x, so paint shifted right.
+    constexpr int kShift = 60;
+    juce::Image img(juce::Image::ARGB, hull.getRight() + 40 + kShift, hull.getBottom() + 40, true,
+                    juce::SoftwareImageType());
     {
         juce::Graphics g(img);
+        g.addTransform(juce::AffineTransform::translation((float)kShift, 0.0f));
         content.paintEntireComponent(g, false);
     }
-    const auto outside = img.getPixelAt(outsideHull.x, outsideHull.y);
-    const auto strip = img.getPixelAt(belowRows.x, belowRows.y);
-    const auto underWidget = img.getPixelAt(onRow.x, onRow.y);
+    const auto outside = img.getPixelAt(outsideHull.x + kShift, outsideHull.y);
+    const auto strip = img.getPixelAt(belowRows.x + kShift, belowRows.y);
+    const auto underWidget = img.getPixelAt(onRow.x + kShift, onRow.y);
     EXPECT_NE(strip, outside) << "the strip is drawn inside the hull";
     EXPECT_EQ(underWidget, strip) << "the widget does not cover the strip on its own row";
 }
 
-// A very long port name must not squeeze the collapsed card's title column: strips are capped and the
-// name is shortened with an ellipsis instead.
-TEST(MacroPortSidebar, LongPortNamesAreCappedSoTheCardTitleKeepsItsRoom) {
+// Strip widths are fixed: they never depend on the port names, so a very long name is ellipsised in its column and
+// the collapsed card's title column keeps its room.
+TEST(MacroPortSidebar, CardStripsAreFixedSoTheCardTitleKeepsItsRoom) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
+    auto& controller = editor.getMacroController();
+    const auto empty = controller.macroCardStripWidths(macroId);
     ASSERT_FALSE(addInlet(editor, macroId, "Filter Envelope Amount CV Extra Long Name").isEmpty());
 
-    auto& controller = editor.getMacroController();
     const auto [cardIn, cardOut] = controller.macroCardStripWidths(macroId);
-    EXPECT_LE(cardIn, detail::kMacroCardStripMaxWidth);
+    EXPECT_EQ(cardIn, detail::kMacroCardStripWidth);
+    EXPECT_EQ(cardOut, cardIn) << "equal on both sides";
+    EXPECT_EQ(empty.first, cardIn) << "reserved even with no ports";
     EXPECT_GE(synth::LayoutUtil::kSingleWidth - cardIn - cardOut, 100) << "title column keeps at least 100px";
-
-    controller.setMacroCollapsed(macroId, false);
-    const auto [hullIn, hullOut] = controller.macroHullStripWidths(macroId);
-    EXPECT_LE(hullIn, detail::kMacroHullStripMaxWidth);
-    (void)hullOut;
 }
 
 // The collapsed card paints port names, title and member count with theme text colours, not hard-coded white,

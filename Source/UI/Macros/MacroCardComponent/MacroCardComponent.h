@@ -146,14 +146,18 @@ private:
     // (MacroCardComponentPorts.cpp).
     void paintPortStrips(juce::Graphics& g, const synth::Macro& macro, const synth::theme::Colors& themeColors);
 
-    // False when the canvas zoom is below the names threshold: the strips keep their width but
-    // draw dots only (and no '-').
-    bool portNamesVisible() const;
+    // Opacity of the port names, '-' glyph and inner dividers at the canvas zoom (0 = dots only); the strips keep
+    // their width. portNameIsTruncated: the name would be ellipsised in its column.
+    float portNameAlpha() const;
+    bool portNameIsTruncated(const juce::String& name) const;
 
     // The '+' / '-' buttons at the foot of each strip. '-' is empty when the side has no port or
     // names are hidden. Both are card-local.
     juce::Rectangle<float> getAddPortButtonBounds(bool isInput) const;
     juce::Rectangle<float> getRemovePortButtonBounds(bool isInput) const;
+    // The '-' slot regardless of zoom (what paint fades); getRemovePortButtonBounds is clickable only once >= half
+    // faded in.
+    juce::Rectangle<float> removePortButtonSlot(bool isInput) const;
 
     // Deletes the bottom port on one side, through the same path the hovered jack's cross uses.
     void removeBottomPort(bool isInput);

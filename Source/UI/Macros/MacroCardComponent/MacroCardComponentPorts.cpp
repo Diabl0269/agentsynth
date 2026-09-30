@@ -13,10 +13,15 @@
 
 using namespace detail;
 
-bool MacroCardComponent::portNamesVisible() const {
+float MacroCardComponent::portNameAlpha() const {
     // The parent is the canvas content component, whose transform is the zoom (scale + pan).
     const float zoom = getParentComponent() != nullptr ? getParentComponent()->getTransform().getScaleFactor() : 1.0f;
-    return macroPortNamesVisibleAtZoom(zoom);
+    return macroPortNameAlphaAtZoom(zoom);
+}
+
+bool MacroCardComponent::portNameIsTruncated(const juce::String& name) const {
+    const juce::Font font{juce::FontOptions(kMacroPortNameFontSize)};
+    return font.getStringWidthFloat(name) > (float)kMacroPortNameRoom;
 }
 
 juce::Rectangle<float> MacroCardComponent::getAddPortButtonBounds(bool isInput) const {
@@ -30,8 +35,12 @@ juce::Rectangle<float> MacroCardComponent::getAddPortButtonBounds(bool isInput) 
 }
 
 juce::Rectangle<float> MacroCardComponent::getRemovePortButtonBounds(bool isInput) const {
-    if (!portNamesVisible())
+    if (portNameAlpha() < 0.5f)
         return {};
+    return removePortButtonSlot(isInput);
+}
+
+juce::Rectangle<float> MacroCardComponent::removePortButtonSlot(bool isInput) const {
     bool hasPort = false;
     for (const auto& port : owner.getMacroController().macroCardPortLayout(macroId))
         hasPort = hasPort || port.isInput == isInput;
@@ -52,7 +61,7 @@ void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& 
                                          const synth::theme::Colors& themeColors) {
     auto& controller = owner.getMacroController();
     const auto [inW, outW] = controller.macroCardStripWidths(macro.id);
-    const bool names = portNamesVisible();
+    const float nameAlpha = portNameAlpha();
     const auto layout = controller.macroCardPortLayout(macro.id);
     const float w = (float)getWidth();
     const float h = (float)getHeight();
@@ -63,10 +72,10 @@ void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& 
     juce::Path left, right;
     left.addRoundedRectangle(0.0f, 0.0f, (float)inW, h, kRadius, kRadius, true, false, true, false);
     right.addRoundedRectangle(w - (float)outW, 0.0f, (float)outW, h, kRadius, kRadius, false, true, false, true);
-    g.setColour(themeColors.surfaceHi.withAlpha(0.55f));
+    g.setColour(themeColors.surfaceHi.withAlpha(macroStripFillAlpha(nameAlpha)));
     g.fillPath(left);
     g.fillPath(right);
-    g.setColour(themeColors.border);
+    g.setColour(themeColors.border.withMultipliedAlpha(nameAlpha)); // the inner dividers fade with the names
     g.drawLine((float)inW - 0.5f, 1.0f, (float)inW - 0.5f, h - 1.0f, 1.0f);
     g.drawLine(w - (float)outW + 0.5f, 1.0f, w - (float)outW + 0.5f, h - 1.0f, 1.0f);
 
@@ -80,22 +89,22 @@ void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& 
         g.setColour(resolvePortJackColour(port.nodeUuid, port.colour, kindTint));
         g.fillEllipse((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
 
-        // Names are painted only at working zoom; below it the strip keeps its width and shows dots.
-        if (names && port.name.isNotEmpty()) {
-            g.setColour(themeColors.textPrimary);
+        // Names fade in with zoom; the strip keeps its width and shows dots alone when they are hidden.
+        if (nameAlpha > 0.0f && port.name.isNotEmpty()) {
+            g.setColour(themeColors.textPrimary.withMultipliedAlpha(nameAlpha));
             g.drawFittedText(port.name, port.labelArea,
                              port.isInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1,
                              1.0f);
         }
     }
 
-    // '+' always; '-' only when its side has a port and names are visible.
+    // '+' always; '-' only when its side has a port, fading with the names.
     const auto glyphColour = themeColors.textMuted.withAlpha(0.75f);
     for (const bool isInput : {true, false}) {
         paintMacroPortFooterButton(g, getAddPortButtonBounds(isInput), glyphColour, true);
-        const auto minus = getRemovePortButtonBounds(isInput);
-        if (!minus.isEmpty())
-            paintMacroPortFooterButton(g, minus, glyphColour, false);
+        const auto minus = removePortButtonSlot(isInput);
+        if (nameAlpha > 0.0f && !minus.isEmpty())
+            paintMacroPortFooterButton(g, minus, glyphColour.withMultipliedAlpha(nameAlpha), false);
     }
 
     // Hovered jack: a cross over the dot (hoveredPortUuid_ is kept fresh by mouseMove/mouseExit;

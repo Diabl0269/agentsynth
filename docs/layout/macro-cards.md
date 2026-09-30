@@ -183,13 +183,16 @@ elsewhere), so the preview echoes what expanding would show.
 port, so names never overlap; the card is 280 px wide and grows taller than its 90 px floor when a side
 has more than three ports (`30 + rows * 16 + 22`). The height is derived from the port count every time
 the cards sync (`GraphEditor::syncMacroCards`) and never persisted — `Macro::bounds` keeps whatever
-height it was saved with. Each strip is as wide as its longest port name plus padding (at most 90 px, so
-two strips always leave the title column 100 px; a longer name gets an ellipsis) and never changes
-with zoom; below 50 percent zoom the names and the '-' are hidden and the strip shows only jack dots.
+height it was saved with. Each strip has a FIXED width, equal on both sides and reserved even with no ports
+(`kMacroCardStripWidth` = 18 px jack inset + 62 px name column + 8 px padding = 88 px, so two strips leave
+the title column 104 px; a longer name gets an ellipsis and a tooltip with the full name). The width never changes with
+zoom or with the names. Zoom only fades the port names, the '-' glyph and each strip's inner divider
+(`macroPortNameAlphaAtZoom`: `easeInOutCubic` over zoom 0.5 to 0.7, a pure function of zoom with no timer), while the strip
+fill recedes from 0.55 to 0.25 opacity; at or below 50 percent zoom the strip shows only jack dots and the '+'.
 The title, preview and count keep the column between the strips (`getContentArea()`).
 `MacroCardComponent` also implements `juce::TooltipClient`: a newline-separated, capped list of member
-names, shown by `MainComponent`'s `juce::TooltipWindow` — except while a jack is hovered and names are
-hidden, when the tooltip is that port's name.
+names, shown by `MainComponent`'s `juce::TooltipWindow` — except while a jack is hovered and its name is
+faded or ellipsised, when the tooltip is that port's full name.
 
 ## Direct port add/remove from the collapsed card
 
@@ -203,7 +206,7 @@ still-unscoped ticket — this covers only the concrete '+'/'x' pair.
 **The '+' and '-' affordances.** One small '+' per side sits at the foot of that side's strip
 (`MacroCardComponent::getAddPortButtonBounds`: 12 px above the card's bottom edge, 4 px in from the
 strip's outer edge), and a '-' beside it (`getRemovePortButtonBounds`, 16 px in) when the side has a port
-and names are visible. The foot is `kMacroPortStripFooter` (22 px) below the last row and the card's
+and the names are at least half faded in (the '-' fades with them and is not clickable before). The foot is `kMacroPortStripFooter` (22 px) below the last row and the card's
 height follows its port count, so the buttons can never overlap a jack by construction. **This
 placement is a fix, not the original design** — the first cut sat at the top of the jack band, and the
 topmost jack marched up onto it as the port count grew; the second sat in the footer corners, where a
