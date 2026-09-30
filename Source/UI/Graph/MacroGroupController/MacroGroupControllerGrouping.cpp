@@ -325,6 +325,8 @@ void MacroGroupController::removeSelectionFromMacro(const juce::String& macroId,
         for (const auto& uuid : toRemove)
             moveMemberUpOneLevel(host_.getMacros(), macroId, uuid);
         host_.updateComponents();
+        // The hull shrank: neighbours its growth pushed aside may return (a no-op when the macro dissolved).
+        returnDisplacedNeighbours(macroId, /*keepBlocked=*/true);
     };
 
     // See addSelectionToMacro's matching comment above.

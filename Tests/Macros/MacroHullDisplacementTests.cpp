@@ -388,3 +388,26 @@ TEST(MacroHullDisplacement, HiddenMembersOfACollapsedMacroMoveOnlyWithTheirCard)
     EXPECT_EQ(c.rect(d2).getPosition() - cardAfter.getPosition(), off2);
     EXPECT_FALSE(findComponent(c.editor, d1)->isVisible());
 }
+
+// A chain of pushes (the hull pushes A, A pushes B, B pushes C) unwinds completely when the macro collapses, even
+// though B and C are only free once A has gone home.
+TEST(MacroHullDisplacement, CollapsingReturnsAWholePushedChain) {
+    Canvas c;
+    const auto m1 = c.osc(400, 300);
+    const auto m2 = c.osc(700, 300);
+    const auto a = c.osc(c.rect(m2).getRight() + 20, 300);
+    const auto b = c.osc(c.rect(a).getRight() + 20, 300);
+    const auto d = c.osc(c.rect(b).getRight() + 20, 300);
+    const auto homeA = c.rect(a), homeB = c.rect(b), homeD = c.rect(d);
+    const auto macroId = c.group({m1, m2});
+    c.ctl().setMacroCollapsed(macroId, false);
+    ASSERT_NE(c.rect(a).getPosition(), homeA.getPosition());
+    ASSERT_NE(c.rect(b).getPosition(), homeB.getPosition()) << "premise: the push cascaded to B";
+    ASSERT_NE(c.rect(d).getPosition(), homeD.getPosition()) << "premise: and to C";
+
+    c.ctl().setMacroCollapsed(macroId, true);
+
+    EXPECT_EQ(c.rect(a), homeA);
+    EXPECT_EQ(c.rect(b), homeB);
+    EXPECT_EQ(c.rect(d), homeD);
+}

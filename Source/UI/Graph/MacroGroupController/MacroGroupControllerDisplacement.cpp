@@ -198,30 +198,39 @@ void MacroGroupController::returnDisplacedNeighbours(const juce::String& macroId
     const auto records = std::move(macro->displaced);
     macro->displaced.clear();
 
+    // Newest first. A cascade tail (C pushed by B pushed by A) is checked while B still sits on C's home, so a single
+    // pass would strand it: repeat over what is still blocked until a pass returns nothing.
     bool movedAny = false;
-    std::vector<synth::Macro::DisplacedNeighbour> kept; // newest first
-    for (auto it = records.rbegin(); it != records.rend(); ++it) {
-        const auto units = buildLayoutUnits(containerOfKey(*this, host_.getMacros(), it->unitKey));
-        const auto self =
-            std::find_if(units.begin(), units.end(), [&it](const LayoutUnit& u) { return u.key == it->unitKey; });
-        if (self == units.end() || self->rect.getPosition() != it->landedAt)
-            continue;
+    std::vector<synth::Macro::DisplacedNeighbour> kept(records.rbegin(), records.rend());
+    for (size_t pass = 0; pass <= records.size() && !kept.empty(); ++pass) {
+        std::vector<synth::Macro::DisplacedNeighbour> stillBlocked;
+        bool movedThisPass = false;
+        for (const auto& rec : kept) {
+            const auto units = buildLayoutUnits(containerOfKey(*this, host_.getMacros(), rec.unitKey));
+            const auto self =
+                std::find_if(units.begin(), units.end(), [&rec](const LayoutUnit& u) { return u.key == rec.unitKey; });
+            if (self == units.end() || self->rect.getPosition() != rec.landedAt)
+                continue; // gone or moved by the user: never returns
 
-        const auto home = self->rect.translated(-it->delta.x, -it->delta.y);
-        const bool blocked = home.getX() < 0 || home.getY() < 0 ||
-                             std::any_of(
-                                 units.begin(), units.end(),
-                                 [&](const LayoutUnit& other) {
-                                     return other.key != it->unitKey &&
-                                            home.expanded(synth::LayoutUtil::kCollisionGap).intersects(other.rect);
-                                 });
-        if (blocked) {
-            kept.push_back(*it);
-            continue;
+            const auto home = self->rect.translated(-rec.delta.x, -rec.delta.y);
+            const bool blocked = home.getX() < 0 || home.getY() < 0 ||
+                                 std::any_of(
+                                     units.begin(), units.end(),
+                                     [&](const LayoutUnit& other) {
+                                         return other.key != rec.unitKey &&
+                                                home.expanded(synth::LayoutUtil::kCollisionGap).intersects(other.rect);
+                                     });
+            if (blocked) {
+                stillBlocked.push_back(rec);
+                continue;
+            }
+            moveUnitBy(rec.unitKey, {-rec.delta.x, -rec.delta.y});
+            movedThisPass = movedAny = true;
+            host_.updateComponents(); // the next record's units must see this geometry
         }
-        moveUnitBy(it->unitKey, {-it->delta.x, -it->delta.y});
-        movedAny = true;
-        host_.updateComponents(); // the next record's units must see this geometry
+        kept = std::move(stillBlocked);
+        if (!movedThisPass)
+            break;
     }
 
     if (keepBlocked)

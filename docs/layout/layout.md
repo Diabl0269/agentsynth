@@ -103,8 +103,8 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   are correct immediately.
 - **Shrinking.** Whatever a macro's growth pushed is remembered on that macro (`Macro::displaced`: which unit, how
   far, where it landed; never saved to a project file, and lost when an undo or redo restores a snapshot). Collapsing the
-  macro, or deleting one of its members or ports, offers each pushed unit its way back, newest push first
-  (`returnDisplacedNeighbours`): a unit returns only if the user has not moved it since (it is still exactly where the
+  macro, deleting one of its members or ports, or a member leaving it (drag or menu), offers each pushed unit its way back, newest push first
+  (`returnDisplacedNeighbours`), repeating over the still-blocked ones until a pass returns nothing so a cascade unwinds fully: a unit returns only if the user has not moved it since (it is still exactly where the
   push left it) and its old spot is clear, with the usual 12 px clearance, of every other unit at that level, the
   collapsed card included. A unit that cannot return stays put. Collapse clears the record; a delete on a macro that
   stays open keeps the pushes that only lacked room. It runs inside the same undo step as the collapse or delete. Before neighbours return, a collapse first undoes the

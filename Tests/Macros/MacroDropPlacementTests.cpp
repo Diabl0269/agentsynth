@@ -235,3 +235,30 @@ TEST(MacroDropPlacement, OneUndoOfTheCollapseRestoresTheExpandedState) {
     EXPECT_EQ(c.rect(t.m1), expandedM1);
     EXPECT_EQ(c.ctl().macroHullBounds(t.macroId), hull);
 }
+
+// Joining an open macro by a plain drag grows its hull and pushes a neighbour; dragging the module back out shrinks
+// the hull and the neighbour goes home.
+TEST(MacroDropPlacement, PlainDragJoinPushesANeighbourAndPlainDragOutReturnsIt) {
+    DropCanvas c;
+    const auto m1 = c.osc(400, 300);
+    const auto m2 = c.osc(700, 300);
+    const auto macroId = c.group({m1, m2});
+    c.ctl().setMacroCollapsed(macroId, false);
+    const auto hull = c.ctl().macroHullBounds(macroId);
+    const auto neighbour = c.osc(hull.getRight() + 20, 300);
+    const auto home = c.rect(neighbour);
+    const auto joiner = c.filter(700, 1300);
+    ASSERT_FALSE(c.editor.getMacros().find(macroId)->hasMember(uuidOf(c.engine, joiner)));
+
+    c.editor.setSelectedNodes({joiner});
+    const auto into = c.ctl().macroHullBounds(macroId).getCentre() - c.rect(joiner).getCentre();
+    dragBodyBy(c.comp(joiner), into, kPlainClick);
+    ASSERT_TRUE(c.editor.getMacros().find(macroId)->hasMember(uuidOf(c.engine, joiner))) << "premise: it joined";
+    ASSERT_NE(c.rect(neighbour).getPosition(), home.getPosition()) << "premise: the grown hull pushed it";
+
+    c.editor.setSelectedNodes({joiner});
+    dragBodyBy(c.comp(joiner), {0, 1500}, kPlainClick);
+
+    EXPECT_FALSE(c.editor.getMacros().find(macroId)->hasMember(uuidOf(c.engine, joiner)));
+    EXPECT_EQ(c.rect(neighbour), home);
+}
