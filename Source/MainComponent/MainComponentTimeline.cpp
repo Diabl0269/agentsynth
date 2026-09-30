@@ -406,6 +406,8 @@ void MainComponent::newPatch() {
     // graph/timeline resets around it already have (this call runs after both, so nothing above it
     // can leave the law stale on an undo back into THIS document).
     audioEngine.setMixerPanLaw(synth::MixerPanLaw::Compensated);
+    // ...and starts with Master pinned right and nothing hidden; the reconcile below rebuilds the mixer.
+    bottomDock.getMixerPanel().getViewDoc() = synth::MixerViewDoc::forNewProject();
     reconcileTimelineAfterGraphChange();
     markDocumentClean();
     setCurrentPatchName("Untitled");

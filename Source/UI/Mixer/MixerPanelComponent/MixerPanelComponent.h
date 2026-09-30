@@ -1,15 +1,18 @@
 #pragma once
 
 #include "MacroSet.h"
+#include "Mixer/MixerViewDoc.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
+#include "UI/Layout/SidePane/SidePane.h"
 #include "UI/Mixer/MixerDirectColumn.h"
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelToolbar.h"
 #include "UI/Mixer/MixerSections/MixerSectionLayout.h"
+#include "UI/Mixer/MixerZonesPane/MixerZonesPane.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -22,7 +25,9 @@ class ShortcutManager;
 
 namespace synth {
 class MidiRemoteProjectDoc; // Forward declaration (Source/MidiRemote/RemoteModel.h)
-}
+struct MixerColumn;         // Forward declaration (Source/Mixer/MixerModel/MixerModel.h)
+struct MixerSnapshot;
+} // namespace synth
 
 namespace synth::ui {
 class MixerColumnComponent;
@@ -66,6 +71,44 @@ public:
 
     /** The panel height at which the toolbar and every column at its full section heights fit. */
     int requiredPanelHeight() const noexcept;
+
+    // ---- Side pane, zones and visibility (docs/mixer/panel.md#side-pane-zones-and-visibility) ----
+
+    /** The pane at the left of the panel, which travels with it into a detached window. */
+    SidePane& getSidePane() noexcept { return sidePane_; }
+    /** The toolbar button that shows and hides it. */
+    SidePaneToggleButton& getSidePaneButton() noexcept { return toolbar_.getSidePaneButton(); }
+    /** Shows or hides the side pane; `forceOpen` only ever opens it. Always true (the mixer has a pane). */
+    bool toggleSidePane(bool forceOpen = false);
+
+    /** The project's pin / hide document; the panel owns a default until setViewDoc() shares another. */
+    synth::MixerViewDoc& getViewDoc() noexcept { return *viewDoc_; }
+    /** `doc` (null restores the panel's own) must outlive this panel; the docked panel and its mirror share one. */
+    void setViewDoc(synth::MixerViewDoc* doc) noexcept { viewDoc_ = doc != nullptr ? doc : &ownedViewDoc_; }
+    /** Fired after a pin / hide edit and after its undo or redo; the owner rebuilds every live mixer view. */
+    std::function<void()> onMixerViewChanged;
+
+    /** Each of these is one undo step and rebuilds the mixer. `channelId` is a MixerViewDoc id. */
+    void pinChannel(const juce::String& channelId, synth::MixerZone zone);
+    void setChannelHidden(const juce::String& channelId, bool hidden);
+    void showAllChannels();
+    /** Shows only this channel, or restores the previous hidden set when it already is the only one. */
+    void soloShowChannel(const juce::String& channelId);
+
+    MixerZonesPane& getZonesPaneForTest() noexcept { return zonesPane_; }
+    juce::Viewport& getLeftZoneViewportForTest() noexcept { return leftZone_.viewport; }
+    juce::Viewport& getRightZoneViewportForTest() noexcept { return rightZone_.viewport; }
+    /** The zone the Nth laid-out column (see getFocusedColumnIndexForTest) sits in. */
+    synth::MixerZone getColumnZoneForTest(int index) const {
+        return index >= 0 && index < (int)columnEntries_.size() ? columnEntries_[(size_t)index].zone
+                                                                : synth::MixerZone::Scrolling;
+    }
+    /** The header context menu's "Pin left / Pin right / Unpin" items are driven through this seam. */
+    void setShowZoneMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showZoneMenuHook_ =
+            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+    }
+    void showChannelMenuForTest(const juce::String& channelId) { showChannelMenu(channelId); }
 
     MixerSectionLayout& getSectionLayout() noexcept { return sectionLayout_; }
     MixerPanelToolbar& getToolbarForTest() noexcept { return toolbar_; }
@@ -255,8 +298,11 @@ private:
         enum class Kind { Strip, Direct, Master };
         Kind kind = Kind::Strip;
         juce::Component* component = nullptr;
-        juce::AudioProcessorGraph::NodeID nodeId;  // invalid for Direct
-        juce::String uuid;                         // stable re-resolve key; empty for Direct
+        juce::AudioProcessorGraph::NodeID nodeId; // invalid for Direct
+        juce::String uuid;                        // stable re-resolve key; empty for Direct
+        juce::String channelId;                   // MixerViewDoc's id for this column
+        synth::MixerZone zone = synth::MixerZone::Scrolling;
+        int zoneIndex = 0;                         // position among the columns of the same zone
         bool linkedToTrack = false;                // Strip only
         std::vector<synth::TrackId> feedingTracks; // Strip only
     };
@@ -285,6 +331,26 @@ private:
      *  syncFocusVisuals() on its own: an unrelated graph/timeline/macro change re-running rebuild()
      *  must never yank VoiceOver's cursor into the mixer from wherever the user actually is. */
     void grabAccessibilityFocusForFocusedColumn();
+
+    // ---- Zones -- implemented in MixerPanelZones.cpp ------------------------------------------
+    struct Zone;
+    /** Sorts columnEntries_ into left / scrolling / right zone order, numbers each zone and parents
+     *  every column to its zone's content. */
+    void assignZones();
+    Zone& zoneFor(synth::MixerZone zone) noexcept;
+    juce::Component& zoneContentFor(synth::MixerZone zone) noexcept;
+    /** Lays the zone viewports, dividers and scrolling viewport out inside `area`; returns the column height. */
+    int layoutZones(juce::Rectangle<int> area, bool scrollsVertically);
+    void syncVerticalScroll(juce::Viewport& source);
+    void scrollToColumn(const ColumnEntry& entry);
+    void publishChannelsToPane(const synth::MixerSnapshot& snapshot);
+    static juce::String channelIdFor(const synth::MixerColumn& column);
+    void showChannelMenu(const juce::String& channelId);
+    void wireHeaderMenus();
+
+    // ---- View edits (pin / hide) -- implemented in MixerPanelViewEdits.cpp ---------------------
+    void applyViewEdit(const std::function<void(synth::MixerViewDoc&)>& edit, bool keepSoloRestore = false);
+    void refreshAfterViewChange();
 
     // ---- Column drag-reorder (track strips only) -- implemented in MixerPanelColumnDrag.cpp -----
     void wireColumnReorder(MixerColumnComponent& column, const juce::String& uuid);
@@ -319,8 +385,33 @@ private:
         }
     };
 
+    struct ZoneDivider : juce::Component {
+        void paint(juce::Graphics& g) override;
+    };
+
+    /** A pinned zone: its own viewport (so a zone wider than its cap scrolls inside itself), the content
+     *  its columns live in, and the 2 px divider that sets it off from the scrolling middle. */
+    struct Zone {
+        ScrollReportingViewport viewport;
+        ColumnsContent content;
+        ZoneDivider divider;
+    };
+
     MixerSectionLayout sectionLayout_;
     MixerPanelToolbar toolbar_;
+    SidePane sidePane_;
+    MixerZonesPane zonesPane_;
+    Zone leftZone_;
+    Zone rightZone_;
+    synth::MixerViewDoc ownedViewDoc_ = synth::MixerViewDoc::forNewProject();
+    synth::MixerViewDoc* viewDoc_ = &ownedViewDoc_;
+    std::function<void(juce::PopupMenu&)> showZoneMenuHook_ = [](juce::PopupMenu& m) {
+        m.showMenuAsync(juce::PopupMenu::Options());
+    };
+    std::vector<juce::String> channelIds_;        // every channel of the last rebuild, hidden ones too
+    juce::String soloShownId_;                    // the channel an Alt-click is showing alone
+    std::vector<juce::String> soloRestoreHidden_; // the hidden set to bring back
+    bool syncingScroll_ = false;
     juce::PropertiesFile* settings_ = nullptr; // See setSettingsStore
     bool grewHostThisDrag_ = false;
     std::array<bool, MixerSectionLayout::kSectionCount> lastHidden_{}; // detects a re-show

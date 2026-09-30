@@ -74,6 +74,8 @@ enum CommandIDs {
     toggleTimelinePanel,
     toggleMixerPanel,
     toggleMidiRemotePanel,
+    // Shows or hides the active bottom-panel tab's side pane (docs/layout/side-pane.md).
+    toggleSidePane,
     // ---- Grid division, set outright (Ctrl+Shift+1..8) ----
     // Eight commands rather than one parameterised command because juce::ApplicationCommandManager
     // has no notion of an argument: a menu row and a key binding are per-command, so "set the grid
@@ -252,6 +254,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return toggleMixerPanel;
     if (actionId == "toggleMidiRemotePanel")
         return toggleMidiRemotePanel;
+    if (actionId == "toggleSidePane")
+        return toggleSidePane;
     if (actionId == "snapSetWhole")
         return snapSetWhole;
     if (actionId == "snapSetHalf")

@@ -216,6 +216,7 @@ launches via `ApplicationProperties`:
 | `aiPanelVisible` | `"0"` (false) | `aiChatComponent` right panel |
 | `mixerOwnPanelHeight` | absent (`220`, also the minimum) | the Mixer's "Own panel" strip — written once per resize drag, on mouse-up (FRO231) |
 | `detachedPanelBothPlaces` | `"move"` | FRO336: "move"/"both" — Tab placement's Mixer detach button either moves the panel into its window (default) or keeps it docked and opens a second live view too, see [`docs/mixer/panel.md`](../mixer/panel.md#detach-mode-move-or-both-places) |
+| `sidePaneOpen.<tab>` / `sidePaneWidth.<tab>` | absent (open, `200`) | a bottom-panel tab's side pane (today `sidePaneOpen.mixer`): open state, and its width clamped to 160-320 px; the width is written when a resize drag ends, see [side pane](side-pane.md) |
 | `mixerMirrorWindowBounds` | absent (centred default) | the "both places" mirror window's own position/size — same `DetachedPanelWindow` bounds-persist mechanism as `mixerWindowBounds` |
 
 Both keys are read at the top of `initialiseCommon()`, before any `setVisible()` or

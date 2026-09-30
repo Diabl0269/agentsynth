@@ -600,6 +600,8 @@ void MainComponent::applyToolbarIcons() {
 
     const juce::String bottomPanelBase = isBottomDockVisible ? "Hide Panel" : "Show Panel";
     toggleBottomPanelButton.setTooltip(hint(bottomPanelBase, "toggleBottomPanel"));
+    bottomDock.getMixerPanel().getSidePaneButton().setShortcutText(
+        ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleSidePane")));
 
     const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";
     toggleLibraryButton.setTooltip(hint(libBase, "toggleLibrary"));
@@ -774,6 +776,17 @@ void MainComponent::showBottomDockTab(synth::ui::BottomDockComponent::Tab tab) {
     }
     ensureBottomDockOpen();
     bottomDock.setActiveTab(tab);
+}
+
+// The Cmd+Shift+B action. With the dock hidden the press means "let me see the pane", so the dock opens and
+// the pane is forced open rather than toggled (a remembered-open pane would otherwise close as it appears).
+bool MainComponent::toggleActiveSidePane() {
+    if (!bottomDock.hasActiveSidePane())
+        return false;
+    if (isBottomDockVisible)
+        return bottomDock.toggleActiveSidePane();
+    ensureBottomDockOpen();
+    return bottomDock.toggleActiveSidePane(/*forceOpen=*/true);
 }
 
 // The "open if closed" half other reveal sites (a channel-chip click, "Edit MIDI

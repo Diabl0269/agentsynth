@@ -505,7 +505,9 @@ tab, the Own panel and a detached window (the columns get `panel height - 24`, s
 columns scroll, and it is shown even with no columns -- `+ Bus` is how an empty mixer gets its first
 bus.
 
-- **Left: Inserts / Sends / EQ toggles.** Label-only `juce::DrawableButton`s, so the look-and-feel
+- **Far left: the side-pane button.** Shows and hides the panel's [side pane](#side-pane-zones-and-visibility)
+  (a sidebar glyph, accent wash while the pane is open); Cmd+Shift+B does the same.
+- **Left, after it: Inserts / Sends / EQ toggles.** Label-only `juce::DrawableButton`s, so the look-and-feel
   paints them like the main toolbar's toggles (accent wash and accent label while on). On means the
   section is shown. A click calls `MixerSectionLayout::toggleHidden` -- the same commit and persist
   path a hidden section's strip uses. The layout stays the source of truth: the toggles are re-read
@@ -514,11 +516,54 @@ bus.
   with the toggle state; the tooltip says "Hide Sends" / "Show Sends".
 - **Right: Reset Meters and + Bus.** "Reset Meters" calls `resetAllMeterReadouts()`; "+ Bus" calls
   `createBus()` then `rebuild()`, so the new bus's column is there at once.
-- **No keyboard focus.** All five buttons give up focus, so the panel stays the mixer's single
+- **No keyboard focus.** All six buttons give up focus, so the panel stays the mixer's single
   focusable leaf.
 
 While a section divider is dragged, the panel paints a mono "5 rows" bubble beside the dragged
 divider at the left edge of the first column (`paintDragBubble`).
+
+## Side pane: zones and visibility
+
+The Mixer has a left [side pane](../layout/side-pane.md) (200 px, resizable 160-320 px, open the first
+time the Mixer is opened and then remembered per tab) holding one list of the mixer's channels. The
+pane is a child of `MixerPanelComponent`, so it travels with the panel into a detached window and the
+Own-panel strip. Its content is `MixerZonesPane` (`Source/UI/Mixer/MixerZonesPane/`); the panel edits
+the project's `MixerViewDoc` on its behalf (`MixerPanelViewEdits.cpp`).
+
+**Zones.** The list has three groups: "Left zone", "Scrolling" and "Right zone". A channel is pinned by
+dragging its row from one group to another (the shared vertical `ReorderDragAnimator`: the dragged row
+follows the pointer, neighbours and group headings make room, Esc cancels, the drop only assigns the
+group) or by right-clicking its column header: **Pin left / Pin right / Unpin** (the current zone is
+ticked; Unpin is offered only for a pinned column). Order inside a group is always the mixer's own
+(track order), so the pane never reorders within a group. Pinned columns render **outside** the
+horizontal scroll area: the left zone at the left, the right zone at the right, each set off from the
+scrolling middle by a 2 px divider. Every zone has its own `juce::Viewport` and the scrolling middle
+keeps `viewport_`, so the horizontal scrollbar covers only the middle. Zones take **at most half of the
+columns' width** between them; when both need more than their share the cap is split evenly (a zone
+that needs less gives the rest to the other) and a capped zone scrolls inside itself. The three
+viewports scroll vertically as one. Column drag-to-reorder ([above](#reordering-columns)) keeps working
+inside the scrolling group only; a pinned column has no reorder hooks. A new project starts with Master
+pinned right.
+
+**Show/hide.** Every row has an eye toggle. A hidden channel gets no column at all
+(`MixerPanelComponent::rebuild()` skips it) and disappears from the mixer entirely; its Timeline track is
+untouched. The pane shows "N hidden · Show all". **Alt-click** an eye shows only that channel (Master
+stays, it cannot be hidden), and an Alt-click on the same eye again restores the hidden set from before;
+any other visibility edit forgets that memory. **Master's eye is disabled**; Direct can be hidden.
+Hiding a pinned channel keeps its zone, so showing it puts it back where it was. A filter box and the
+All / Tracks / Buses chips narrow the **list**, never the mixer. Keyboard column navigation
+(Left/Right) walks only the columns that exist, so it skips hidden ones; `revealColumn` for a hidden
+channel returns false and the caller falls back to the canvas.
+
+**Where it is saved.** The state is per project, in the project file's `"mixerView"` key
+([project bundle](../architecture/project-bundle.md)), keyed by a stable channel id: a strip's or
+bus's node `uuid` (a `NodeID` is not stable across a load), or the fixed `"master"` / `"direct"`. A
+pin or hide edit is one **undo step** (`AppUndoManager::recordMixerViewChange`), following the pan law
+and macro collapse: it is project-saved state, and the undo manager's edit serial is the one thing that
+marks a document unsaved, so an edit that skipped it would be lost on quit without a prompt. The
+docked panel and the "both places" mirror share one `MixerViewDoc` and rebuild together through
+`onMixerViewChanged`. Accessibility: the pane button, the filter, the chips, every row, eye and the
+"Show all" link have titles and descriptions.
 
 ## Shared sections
 
@@ -636,8 +681,8 @@ several controls.
 
 `MixerPanelKeyboard.cpp` (`Source/UI/Mixer/MixerPanelComponent/`) owns `keyPressed()`:
 
-- **Left and Right** walk `focusedColumnIndex_` across strips, Direct and Master, clamped, never
-  wrapping.
+- **Left and Right** walk `focusedColumnIndex_` across the columns in the order they are laid out (left
+  zone, scrolling, right zone), clamped, never wrapping; a hidden channel has no column, so it is skipped.
 - **Up and Down** nudge the focused fader 1.0 dB, or 0.1 dB with Shift, as one undo step via
   `MixerFader::nudge()` (begin and end change gesture bracketing a single `setValueNotifyingHost`,
   like a real drag).

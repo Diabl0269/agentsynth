@@ -26,6 +26,10 @@ juce::AudioParameterFloat* findFloatParam(juce::AudioProcessor& processor, const
 }
 } // namespace
 
+void MixerMasterColumn::setHeaderContextMenu(std::function<void(const juce::MouseEvent&)> callback) {
+    header_.onContextMenu = std::move(callback);
+}
+
 MixerMasterColumn::MixerMasterColumn() {
     // Without this, Master's own group AccessibilityHandler (the default, unspecified-role
     // one Component provides) reads an empty title -- MixerDirectColumn's ctor sets the same "own

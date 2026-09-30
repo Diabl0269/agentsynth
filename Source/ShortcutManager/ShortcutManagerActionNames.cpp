@@ -123,6 +123,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Show Mixer Tab";
     if (actionId == "toggleMidiRemotePanel")
         return "Show Controllers Tab";
+    if (actionId == "toggleSidePane")
+        return "Show/Hide Side Pane";
     if (actionId == "zoomInHorizontal")
         return "Zoom In";
     if (actionId == "zoomOutHorizontal")

@@ -148,6 +148,9 @@ public:
     void showBottomDockTab(synth::ui::BottomDockComponent::Tab tab);
     /** The open half of showBottomDockTab(), for sites that open without switching tabs. */
     void ensureBottomDockOpen();
+    /** Shows or hides the active dock tab's side pane. A hidden dock is opened first and the pane is then
+     *  shown (never closed); false, and nothing changes, when the active tab has no pane. */
+    bool toggleActiveSidePane();
 
     /** The settings key the user-dragged timeline height round-trips through (the theme metric is only the default). */
     static constexpr const char* kTimelinePanelHeightKey = "timelinePanelHeight";

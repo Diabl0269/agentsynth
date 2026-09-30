@@ -42,6 +42,7 @@ when reasoning about a key that "does nothing."
 | Cmd+B | Toggle Module Library |
 | Cmd+T | Toggle Bottom Panel (`toggleBottomPanel`) — the ONE show/hide toggle for the whole bottom-docked panel; reopens on whichever tab was last active. See [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) |
 | Cmd+1 / Cmd+2 / Cmd+3 | Show Timeline / Mixer / Controllers Tab (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) — opens the dock if it's hidden and switches to that tab; a second press is a no-op (only Cmd+T closes the dock). The three numbers follow the dock's own tab order, which the tab strip's drag-to-reorder changes — see [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows) |
+| Cmd+Shift+B | Show/Hide Side Pane (`toggleSidePane`) — toggles the ACTIVE bottom-panel tab's left side pane (today only the Mixer has one). With the bottom panel hidden it opens the panel and makes sure the pane is open; a no-op when the active tab has no pane. View menu item "Show/Hide Side Pane"; the pane's toolbar button shows the key in its Cmd-hold hint and tooltip. See [`layout/side-pane.md`](../layout/side-pane.md) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Opt+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |

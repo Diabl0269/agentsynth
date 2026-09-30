@@ -14,11 +14,13 @@ void MixerPanelComponent::wireSectionLayout() {
 }
 
 // Loaded once per store: the heights are app-wide, like the bottom dock's own height, so the docked
-// panel and the "both places" mirror read the same keys.
+// panel and the "both places" mirror read the same keys. The side pane's open state and width load here
+// too, under the Mixer's own tab key.
 void MixerPanelComponent::setSettingsStore(juce::PropertiesFile* settings) {
     settings_ = settings;
     if (settings_ != nullptr)
         sectionLayout_.loadFrom(*settings_);
+    sidePane_.setPersistence(settings_, "mixer");
 }
 
 int MixerPanelComponent::requiredPanelHeight() const noexcept {

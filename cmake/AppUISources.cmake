@@ -117,6 +117,17 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelColumnDrag.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelViewEdits.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelZones.cpp
+    Source/UI/Mixer/MixerZonesPane/MixerZonesPane.h
+    Source/UI/Mixer/MixerZonesPane/MixerZonesPane.cpp
+    Source/UI/Mixer/MixerZonesPane/MixerZonesPaneDrag.cpp
+    Source/UI/Mixer/MixerZonesPane/MixerZonesRow.h
+    Source/UI/Mixer/MixerZonesPane/MixerZonesRow.cpp
+    Source/UI/Layout/SidePane/SidePane.h
+    Source/UI/Layout/SidePane/SidePane.cpp
+    Source/UI/Layout/SidePane/SidePaneToggleButton.h
+    Source/UI/Layout/SidePane/SidePaneToggleButton.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelSections.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelToolbar.h
     Source/UI/Mixer/MixerPanelComponent/MixerPanelToolbar.cpp

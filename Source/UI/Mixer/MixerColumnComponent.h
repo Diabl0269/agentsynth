@@ -246,6 +246,8 @@ public:
     /** Makes the header a drag handle for reordering this column (see MixerColumnHeader::ReorderHooks);
      *  a column that never calls it stays fixed. */
     void setReorderHooks(MixerColumnHeader::ReorderHooks hooks);
+    /** Sets the callback for a right-click on the header (the pin menu). */
+    void setHeaderContextMenu(std::function<void(const juce::MouseEvent&)> callback);
     /** 0..1: how strongly the column is drawn lifted (accent border and tint) while it is dragged. */
     void setLift(float lift);
 

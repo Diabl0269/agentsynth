@@ -291,6 +291,7 @@ void MainComponent::assembleToolbar() {
                          {&toggleModMatrixButton, "toggleModMatrix"},
                          {&toggleAiPanelButton, "toggleAiPanel"},
                          {&toggleBottomPanelButton, "toggleBottomPanel"},
+                         {&bottomDock.getMixerPanel().getSidePaneButton(), "toggleSidePane"},
                          {&statusBar.getTransportButton(), "togglePlayback"}};
     hintParts.dock = &bottomDock;
     hintParts.transport = &timelinePanel.getTransportBar();

@@ -141,6 +141,10 @@ public:
      * own to select. */
     std::function<void()> onHeaderClicked;
 
+    /** Fires on a right-click release over the header (docs/mixer/panel.md#side-pane-zones-and-visibility's pin menu).
+     * Left null, a right-click behaves like any other click. */
+    std::function<void(const juce::MouseEvent&)> onContextMenu;
+
     juce::Colour getColour() const noexcept { return colour_; }
 
     void paint(juce::Graphics& g) override {
@@ -215,6 +219,11 @@ public:
     // genuine user gesture. A click that lands on the name label is that label's own (double-click
     // to rename), so only the header background selects the column.
     void mouseUp(const juce::MouseEvent& e) override {
+        if (e.mods.isPopupMenu() && onContextMenu) {
+            const auto menu = onContextMenu; // the pick may rebuild, and destroy, this header
+            menu(e);
+            return;
+        }
         if (reorderHooks.onRelease) {
             const auto release = reorderHooks.onRelease; // the hook may rebuild, and destroy, this header
             if (release(e))

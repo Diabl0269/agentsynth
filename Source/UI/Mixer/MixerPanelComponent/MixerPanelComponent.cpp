@@ -36,8 +36,26 @@ MixerPanelComponent::MixerPanelComponent() {
     content_.onPaint = [this](juce::Graphics& g) { paintColumnDragChrome(g); };
     viewport_.setScrollBarsShown(false, true);
     viewport_.setWantsKeyboardFocus(false);
+    viewport_.onScrolled = [this] { syncVerticalScroll(viewport_); };
+    for (auto* zone : {&leftZone_, &rightZone_}) {
+        addChildComponent(zone->viewport);
+        addChildComponent(zone->divider);
+        zone->viewport.setViewedComponent(&zone->content, false);
+        zone->viewport.setWantsKeyboardFocus(false);
+        zone->viewport.onScrolled = [this, zone] { syncVerticalScroll(zone->viewport); };
+        zone->divider.setInterceptsMouseClicks(false, false);
+    }
     // Always shown, even with no columns: "+ Bus" is how an empty mixer gets its first bus.
     addAndMakeVisible(toolbar_);
+    addChildComponent(sidePane_);
+    toolbar_.bindSidePane(sidePane_);
+    sidePane_.setContent(&zonesPane_);
+    sidePane_.onOccupiedWidthChanged = [this] { resized(); };
+    zonesPane_.onSetZone = [this](const juce::String& id, synth::MixerZone zone) { pinChannel(id, zone); };
+    zonesPane_.onSetHidden = [this](const juce::String& id, bool hidden) { setChannelHidden(id, hidden); };
+    zonesPane_.onSoloShow = [this](const juce::String& id) { soloShowChannel(id); };
+    zonesPane_.onShowAll = [this] { showAllChannels(); };
+    zonesPane_.onFocusReleased = [this] { grabKeyboardFocus(); };
     toolbar_.setLayout(sectionLayout_);
     toolbar_.onAddBus = [this] {
         createBus();
@@ -101,6 +119,7 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
             onLiveMixerStateChanged();
     };
     masterColumn_->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
+    wireHeaderMenus();
 }
 
 // Everything MainComponent wires directly onto a panel instance (never touched by
@@ -121,6 +140,8 @@ void MixerPanelComponent::copyWiringFrom(const MixerPanelComponent& other) {
     onQuerySoloMidiMapping = other.onQuerySoloMidiMapping;
     setMidiRemoteDoc(other.midiRemoteDoc_);
     setShortcutManager(other.shortcuts_);
+    setViewDoc(other.viewDoc_);
+    onMixerViewChanged = other.onMixerViewChanged;
     setSettingsStore(other.settings_);
 }
 
@@ -169,9 +190,9 @@ void MixerPanelComponent::refreshTrackColours() {
 
     const auto snapshot = synth::buildMixerSnapshot(*graph_, *doc_, *macros_);
     for (const auto& column : snapshot.columns)
-        for (size_t i = 0; i < columnEntries_.size() && i < stripColumns_.size(); ++i)
-            if (columnEntries_[i].kind == ColumnEntry::Kind::Strip && columnEntries_[i].nodeId == column.nodeId) {
-                static_cast<MixerColumnComponent*>(columnEntries_[i].component)->setHeaderColour(column.colour);
+        for (const auto& entry : columnEntries_)
+            if (entry.kind == ColumnEntry::Kind::Strip && entry.nodeId == column.nodeId) {
+                static_cast<MixerColumnComponent*>(entry.component)->setHeaderColour(column.colour);
                 break;
             }
 }
@@ -206,6 +227,10 @@ void MixerPanelComponent::rebuild() {
         // Strips AND buses: a bus is an ordinary strip column with a BUS badge and a feeding-strips
         // source line (docs/mixer/sends-and-buses.md), not a column kind of its own with its own widget.
         if (column.kind != synth::MixerColumn::Kind::Strip && column.kind != synth::MixerColumn::Kind::Bus)
+            continue;
+        // A hidden channel gets no column at all; its zone is kept, so showing it again puts it back.
+        const auto channelId = channelIdFor(column);
+        if (viewDoc_->isHidden(channelId))
             continue;
         auto widget = std::make_unique<MixerColumnComponent>();
         widget->setSectionLayout(sectionLayout_);
@@ -251,8 +276,10 @@ void MixerPanelComponent::rebuild() {
         widget->onQuerySoloMidiMapping = [this, nodeId = column.nodeId]() -> juce::String {
             return onQuerySoloMidiMapping ? onQuerySoloMidiMapping(nodeId) : juce::String();
         };
+        widget->setHeaderContextMenu([this, channelId](const juce::MouseEvent&) { showChannelMenu(channelId); });
         content_.addAndMakeVisible(*widget);
-        if (!column.feedingTracks.empty())
+        // Only the scrolling group reorders: a pinned column stays where the zone puts it.
+        if (!column.feedingTracks.empty() && viewDoc_->getZone(channelId) == synth::MixerZone::Scrolling)
             wireColumnReorder(*widget, column.uuid);
 
         ColumnEntry entry;
@@ -260,6 +287,8 @@ void MixerPanelComponent::rebuild() {
         entry.component = widget.get();
         entry.nodeId = column.nodeId;
         entry.uuid = column.uuid;
+        entry.channelId = channelId;
+        entry.zone = viewDoc_->getZone(channelId);
         entry.linkedToTrack = column.linkedToTrack;
         entry.feedingTracks = column.feedingTracks;
         columnEntries_.push_back(std::move(entry));
@@ -268,14 +297,17 @@ void MixerPanelComponent::rebuild() {
     }
 
     if (directColumn_ != nullptr) {
-        directColumn_->setVisible(snapshot.hasDirect);
-        if (snapshot.hasDirect) {
+        const bool showDirect = snapshot.hasDirect && !viewDoc_->isHidden(synth::MixerViewDoc::kDirectId);
+        directColumn_->setVisible(showDirect);
+        if (showDirect) {
             directColumn_->refreshEnablement();
             content_.addAndMakeVisible(*directColumn_);
 
             ColumnEntry entry;
             entry.kind = ColumnEntry::Kind::Direct;
             entry.component = directColumn_.get();
+            entry.channelId = synth::MixerViewDoc::kDirectId;
+            entry.zone = viewDoc_->getZone(entry.channelId);
             columnEntries_.push_back(std::move(entry));
         }
     }
@@ -291,11 +323,16 @@ void MixerPanelComponent::rebuild() {
                     entry.component = masterColumn_.get();
                     entry.nodeId = column.nodeId;
                     entry.uuid = column.uuid;
+                    entry.channelId = synth::MixerViewDoc::kMasterId;
+                    entry.zone = viewDoc_->getZone(entry.channelId);
                     columnEntries_.push_back(std::move(entry));
                 }
             content_.addAndMakeVisible(*masterColumn_);
         }
     }
+
+    assignZones();
+    publishChannelsToPane(snapshot);
 
     // An empty graph (no strips, no Direct, no Master -- a brand-new project) otherwise
     // rendered a blank panel with nothing telling the user how to get started.
@@ -419,7 +456,9 @@ bool MixerPanelComponent::revealColumn(juce::AudioProcessorGraph::NodeID stripId
     }
     if (target == nullptr)
         return false;
-    viewport_.setViewPosition(target->getX(), 0);
+    for (const auto& entry : columnEntries_)
+        if (entry.component == target)
+            scrollToColumn(entry);
     return true;
 }
 
@@ -523,28 +562,16 @@ void MixerPanelComponent::resized() {
     const auto muted = laf != nullptr ? laf->getTheme().colors.textMuted : juce::Colour(0xff8A93A0);
     emptyHint_.setColour(juce::Label::textColourId, muted);
     emptyHint_.setFont(juce::Font(juce::FontOptions(13.0f)));
-    emptyHint_.setBounds(getLocalBounds().withTrimmedTop(MixerPanelToolbar::kHeight).reduced(24));
-
-    // The toolbar sits outside the scrolling viewport, so it stays put while columns scroll.
+    // The toolbar sits outside the scrolling viewport, so it stays put while columns scroll; the side pane
+    // takes the left of the body, and the zones and the scrolling middle share what is left.
     auto area = getLocalBounds();
     toolbar_.setBounds(area.removeFromTop(MixerPanelToolbar::kHeight));
-    viewport_.setBounds(area);
-
-    int totalColumns = (int)stripColumns_.size();
-    if (directColumn_ != nullptr && directColumn_->isVisible())
-        ++totalColumns;
-    if (masterColumn_ != nullptr && masterColumn_->isVisible())
-        ++totalColumns;
+    sidePane_.setBounds(area.removeFromLeft(sidePane_.getOccupiedWidth()));
+    emptyHint_.setBounds(area.reduced(24));
 
     // A host that cannot grow (a detached window) keeps every section at its full height and lets
     // the whole column scroll vertically instead of squeezing the sections.
-    const bool scrollsVertically = contentScrollsVertically();
-    viewport_.setScrollBarsShown(scrollsVertically, true);
-    const int columnHeight =
-        scrollsVertically ? sectionLayout_.requiredColumnHeight() : juce::jmax(0, area.getHeight());
-    const int contentWidth = juce::jmax(viewport_.getWidth(), totalColumns * (kMixerColumnWidth + kMixerColumnGap));
-    content_.setSize(contentWidth, columnHeight);
-
+    const int columnHeight = layoutZones(area, contentScrollsVertically());
     placeColumns(columnHeight, /*relayout=*/true);
 
     toolbar_.refresh();
