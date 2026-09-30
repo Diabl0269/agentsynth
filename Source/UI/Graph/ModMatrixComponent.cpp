@@ -5,6 +5,7 @@
 #include "Modules/MacroInletModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
+#include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -122,6 +123,22 @@ size_t moduleTitlesSignature(juce::AudioProcessorGraph& graph) {
     }
     return (size_t)hash;
 }
+
+/** A combo that shows its closed label as usual but opens the searchable picker instead of a menu. With no
+ *  picker hook wired it falls back to the stock menu. Reachable by keyboard (Return/Space open it, like any
+ *  combo) and outlined in the accent colour while focused. */
+class PickerComboBox : public juce::ComboBox {
+public:
+    std::function<void()> onShowPicker;
+
+    void showPopup() override {
+        if (onShowPicker)
+            onShowPicker();
+        else
+            juce::ComboBox::showPopup();
+    }
+    void paintOverChildren(juce::Graphics& g) override { synth::ui::paintFocusRegionOutline(*this, g); }
+};
 } // namespace
 
 struct ModMatrixComponent::ModRow
@@ -163,8 +180,13 @@ struct ModMatrixComponent::ModRow
     // immediately, and holding this Ptr only defers destruction of the object itself.
     juce::AudioProcessorGraph::Node::Ptr attenuverterNode;
 
-    juce::ComboBox sourceCombo;
-    juce::ComboBox destCombo;
+    PickerComboBox sourceCombo;
+    PickerComboBox destCombo;
+    // What each picker lists, rebuilt with the combos; and the picker currently open for each, if any.
+    std::vector<synth::ui::ModMatrixPicker::Item> sourceItems;
+    std::vector<synth::ui::ModMatrixPicker::Item> destItems;
+    juce::Component::SafePointer<juce::Component> sourcePicker;
+    juce::Component::SafePointer<juce::Component> destPicker;
     juce::Slider amountSlider;
     juce::Label amountValueLabel;
     std::unique_ptr<juce::DrawableButton> bypassToggle;
@@ -175,7 +197,11 @@ struct ModMatrixComponent::ModRow
 
     std::map<int, float> gestureStartValues;
 
-    bool isPopupOpen() const { return sourceCombo.isPopupActive() || destCombo.isPopupActive(); }
+    bool isPopupOpen() const {
+        return sourceCombo.isPopupActive() || destCombo.isPopupActive() || sourcePicker != nullptr ||
+               destPicker != nullptr;
+    }
+    void showPicker(bool forSource);
 
     void detach();
     void refresh(const ModRoutingInfo& info);
@@ -473,6 +499,12 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
 
     sourceCombo.addListener(this);
     destCombo.addListener(this);
+    sourceCombo.onShowPicker = [this] { showPicker(true); };
+    destCombo.onShowPicker = [this] { showPicker(false); };
+    sourceCombo.setTitle("Modulation source");
+    destCombo.setTitle("Modulation destination");
+    sourceCombo.setTooltip("Modulation source. Click to search the modules that can drive this routing.");
+    destCombo.setTooltip("Modulation destination. Click to search the parameters this routing can drive.");
     deleteButton->onClick = [this] {
         // Through the seam so the ports only this routing used go with it.
         applyRoutingChange({[this] {
@@ -493,6 +525,10 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     }
     bypassToggle->setComponentID("modBypass");
     deleteButton->setComponentID("modDelete");
+    bypassToggle->setTitle("Bypass modulation");
+    deleteButton->setTitle("Remove modulation routing");
+    amountSlider.setTitle("Modulation amount");
+    amountSlider.setTooltip("Modulation amount, from -1 to +1.");
     applyButtonIcons();
 
     // Attach to attenuverter params
@@ -653,6 +689,8 @@ void ModMatrixComponent::ModRow::parameterGestureChanged(int parameterIndex, boo
 void ModMatrixComponent::ModRow::populateCombos() {
     sourceCombo.clear(juce::dontSendNotification);
     destCombo.clear(juce::dontSendNotification);
+    sourceItems.clear();
+    destItems.clear();
 
     auto& graph = owner.audioEngine.getGraph();
     bool useGroups = !owner.isSourceMenuFlat;
@@ -686,12 +724,14 @@ void ModMatrixComponent::ModRow::populateCombos() {
                     if (module->getTotalNumOutputChannels() > 1)
                         label += " Out " + juce::String(i + 1);
                     sourceCombo.addItem(label, itemId);
+                    sourceItems.push_back({itemId, {}, label});
                 }
 
                 auto targets = destinationCandidatesForCombo(module);
                 for (const auto& target : targets) {
                     int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)target.channelIndex);
                     destCombo.addItem(displayName + ": " + target.name, itemId);
+                    destItems.push_back({itemId, {}, displayName + ": " + target.name});
                 }
             }
         }
@@ -703,8 +743,8 @@ void ModMatrixComponent::ModRow::populateCombos() {
         for (auto const& [cat, modules] : modulesByCategory) {
             juce::PopupMenu catSourceSub;
             juce::PopupMenu catDestSub;
-            int sourceItems = 0;
-            int destItems = 0;
+            int sourceCount = 0;
+            int destCount = 0;
 
             for (auto* node : modules) {
                 auto* module = static_cast<ModuleBase*>(node->getProcessor());
@@ -715,6 +755,7 @@ void ModMatrixComponent::ModRow::populateCombos() {
                         int itemId = (int)((node->nodeID.uid << 8) | 0);
                         catSourceSub.addItem(itemId, displayName);
                         sourceCombo.addItem(displayName, itemId);
+                        sourceItems.push_back({itemId, categoryNames[cat], displayName});
                     } else {
                         juce::PopupMenu instSourceSub;
                         for (int i = 0; i < module->getTotalNumOutputChannels(); ++i) {
@@ -725,10 +766,12 @@ void ModMatrixComponent::ModRow::populateCombos() {
                             // "Out N" with no way to tell which module it is.
                             instSourceSub.addItem(itemId, displayName + " - Out " + juce::String(i + 1));
                             sourceCombo.addItem(displayName + " Out " + juce::String(i + 1), itemId);
+                            sourceItems.push_back(
+                                {itemId, categoryNames[cat], displayName + " - Out " + juce::String(i + 1)});
                         }
                         catSourceSub.addSubMenu(displayName, instSourceSub);
                     }
-                    sourceItems++;
+                    sourceCount++;
                 }
 
                 auto targets = destinationCandidatesForCombo(module);
@@ -741,21 +784,45 @@ void ModMatrixComponent::ModRow::populateCombos() {
                         // module name has to be baked in here too.
                         instDestSub.addItem(itemId, displayName + " - " + target.name);
                         destCombo.addItem(displayName + ": " + target.name, itemId);
+                        destItems.push_back({itemId, categoryNames[cat], displayName + " - " + target.name});
                     }
                     catDestSub.addSubMenu(displayName, instDestSub);
-                    destItems++;
+                    destCount++;
                 }
             }
 
-            if (sourceItems > 0)
+            if (sourceCount > 0)
                 sourceMenu.addSubMenu(categoryNames[cat], catSourceSub);
-            if (destItems > 0)
+            if (destCount > 0)
                 destMenu.addSubMenu(categoryNames[cat], catDestSub);
         }
 
         *sourceCombo.getRootMenu() = sourceMenu;
         *destCombo.getRootMenu() = destMenu;
     }
+}
+
+// Opens the searchable picker over the row's combo. A pick selects the combo's id with a synchronous
+// notification, so it lands in comboBoxChanged exactly like a menu choice would (and through the same
+// macro-port routing). One picker per combo at a time.
+void ModMatrixComponent::ModRow::showPicker(bool forSource) {
+    auto& combo = forSource ? sourceCombo : destCombo;
+    auto& open = forSource ? sourcePicker : destPicker;
+    if (open != nullptr)
+        return;
+
+    juce::Component::SafePointer<juce::ComboBox> safeCombo(&combo);
+    auto picker = std::make_unique<synth::ui::ModMatrixPicker>(
+        forSource ? "source" : "destination", forSource ? sourceItems : destItems, combo.getSelectedId(),
+        [safeCombo](int id) {
+            if (safeCombo != nullptr)
+                safeCombo->setSelectedId(id, juce::sendNotificationSync);
+        });
+    open = picker.get();
+    if (owner.pickerLauncher)
+        owner.pickerLauncher(std::move(picker), combo.getScreenBounds());
+    else
+        juce::CallOutBox::launchAsynchronously(std::move(picker), combo.getScreenBounds(), nullptr);
 }
 
 void ModMatrixComponent::ModRow::refresh(const AudioEngine::ModRoutingInfo& info) {

@@ -347,6 +347,8 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/ThresholdControlComponent.h
     Source/UI/Graph/ModMatrixComponent.cpp
     Source/UI/Graph/ModMatrixComponent.h
+    Source/UI/Graph/ModMatrixPicker.cpp
+    Source/UI/Graph/ModMatrixPicker.h
     Source/UI/Settings/AudioSettingsTab.cpp
     Source/UI/Settings/AudioSettingsTab.h
     Source/UI/Settings/SettingsWindow.cpp
