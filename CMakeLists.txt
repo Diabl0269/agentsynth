@@ -238,6 +238,10 @@ add_library(Core STATIC
     Source/PatchDocument.h
     Source/ProjectBundle.cpp
     Source/ProjectBundle.h
+    Source/Project/ModuleFileRefs.cpp
+    Source/Project/ModuleFileRefs.h
+    Source/Project/ProjectCollector.cpp
+    Source/Project/ProjectCollector.h
     Source/MidiRemote/RemoteEngine/RemoteEngine.h
     Source/MidiRemote/RemoteEngine/RemoteEngine.cpp
     Source/MidiRemote/RemoteEngine/RemoteEngineApply.cpp
@@ -367,6 +371,7 @@ add_library(Core STATIC
     Source/Timeline/TimelineValidator.h
     # Modules
     Source/Modules/ModuleBase.h
+    Source/Modules/ModuleFileStateKeys.h
     Source/Modules/PortRole.h
     Source/Modules/AudioInputModule.h
     Source/Modules/OscillatorModule.h

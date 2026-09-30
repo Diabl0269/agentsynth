@@ -202,6 +202,7 @@ private:
                     menu.addCommandItem(&cm, AppCommands::exportAudio);
                     menu.addCommandItem(&cm, AppCommands::exportStems);
                     menu.addCommandItem(&cm, AppCommands::exportMidi);
+                    menu.addCommandItem(&cm, AppCommands::collectAndArchive);
                     menu.addSeparator();
                     // Project and patch open as separate menu items - Open Project (.agsproj
                     // bundle, the rebindable Cmd+O) and Open Patch (.json preset, menu-only). addCommandItem

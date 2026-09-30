@@ -2,6 +2,7 @@
 // WavetableOscillatorModule.h under the file-size cap.
 
 #include "WavetableOscillatorModule.h"
+#include "Modules/ModuleFileStateKeys.h"
 
 // ---- Built-in harmonic specs -------------------------------------------
 float WavetableOscillatorModule::classicShapeHarmonic(int shape, int h) {
@@ -461,8 +462,8 @@ void WavetableOscillatorModule::getStateInformation(juce::MemoryBlock& destData)
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
             state.setProperty(p->paramID, p->getValue(), nullptr);
 
-    state.setProperty("wavetableFile", getWavetableFile().getFullPathName(), nullptr);
-    state.setProperty("wavetableFolder", wavetableFolder.getFullPathName(), nullptr);
+    state.setProperty(synth::module_file_keys::kWavetableFile, getWavetableFile().getFullPathName(), nullptr);
+    state.setProperty(synth::module_file_keys::kWavetableFolder, wavetableFolder.getFullPathName(), nullptr);
     copyXmlToBinary(*state.createXml(), destData);
 }
 
@@ -472,21 +473,24 @@ juce::var WavetableOscillatorModule::getExtraState() const {
         return {};
     juce::DynamicObject::Ptr state = new juce::DynamicObject();
     if (file != juce::File())
-        state->setProperty("wavetableFile", file.getFullPathName());
+        state->setProperty(synth::module_file_keys::kWavetableFile, file.getFullPathName());
     if (wavetableFolder != juce::File())
-        state->setProperty("wavetableFolder", wavetableFolder.getFullPathName());
+        state->setProperty(synth::module_file_keys::kWavetableFolder, wavetableFolder.getFullPathName());
     return juce::var(state.get());
 }
 
+// The file loads BEFORE the folder is set: setWavetableFolder places the < > cursor on whichever
+// folder entry matches the loaded table, so a folder set first would leave the cursor at -1 on
+// every project open, undo and collect.
 void WavetableOscillatorModule::setExtraState(const juce::var& state) {
     if (auto* obj = state.getDynamicObject()) {
-        const juce::String folder = obj->getProperty("wavetableFolder").toString();
-        if (folder.isNotEmpty())
-            setWavetableFolder(juce::File(folder));
-
-        const juce::String path = obj->getProperty("wavetableFile").toString();
+        const juce::String path = obj->getProperty(synth::module_file_keys::kWavetableFile).toString();
         if (path.isNotEmpty())
             loadWavetableFile(juce::File(path));
+
+        const juce::String folder = obj->getProperty(synth::module_file_keys::kWavetableFolder).toString();
+        if (folder.isNotEmpty())
+            setWavetableFolder(juce::File(folder));
     }
 }
 
@@ -497,14 +501,10 @@ void WavetableOscillatorModule::setStateInformation(const void* data, int sizeIn
 
     const juce::ValueTree state = juce::ValueTree::fromXml(*xmlState);
 
-    const juce::String folder = state.getProperty("wavetableFolder", juce::String()).toString();
-    if (folder.isNotEmpty())
-        setWavetableFolder(juce::File(folder));
-
     // Restore the file first: loadWavetableFile() never touches parameters, so the
     // "table" choice restored below stays authoritative. It reads importModeParam, which
     // the loop below has not restored yet — so re-import once the parameters are in.
-    const juce::String path = state.getProperty("wavetableFile", juce::String()).toString();
+    const juce::String path = state.getProperty(synth::module_file_keys::kWavetableFile, juce::String()).toString();
 
     for (auto* param : getParameters())
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
@@ -516,6 +516,11 @@ void WavetableOscillatorModule::setStateInformation(const void* data, int sizeIn
         if (file.existsAsFile())
             loadWavetableFile(file);
     }
+
+    // The folder goes last, for the same cursor reason as setExtraState.
+    const juce::String folder = state.getProperty(synth::module_file_keys::kWavetableFolder, juce::String()).toString();
+    if (folder.isNotEmpty())
+        setWavetableFolder(juce::File(folder));
 }
 
 bool WavetableOscillatorModule::loadWavetableFile(const juce::File& file) {

@@ -174,3 +174,28 @@ TEST_F(WavetableOscillatorModuleTest, StateRoundTripRestoresNewParametersAndFold
 
     folder.deleteRecursively();
 }
+
+// Restoring state used to set the folder before loading the file, so the < > cursor never found
+// the loaded table and every reopened project started browsing from the first entry.
+TEST_F(WavetableOscillatorModuleTest, RestoredStatePutsTheFolderCursorOnTheLoadedTable) {
+    const juce::File folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("wt-cursor-state");
+    folder.deleteRecursively();
+    ASSERT_TRUE(folder.createDirectory());
+    for (const auto* name : {"a.wav", "b.wav", "c.wav"})
+        ASSERT_TRUE(writeWavetableFile(juce::String("wt-cursor-") + name, 2).moveFileTo(folder.getChildFile(name)));
+
+    module->setWavetableFolder(folder);
+    ASSERT_TRUE(module->selectWavetableAt(2));
+
+    auto viaExtra = std::make_unique<WavetableOscillatorModule>();
+    viaExtra->setExtraState(module->getExtraState());
+    EXPECT_EQ(viaExtra->getFolderIndex(), 2);
+
+    juce::MemoryBlock state;
+    module->getStateInformation(state);
+    auto viaBinary = std::make_unique<WavetableOscillatorModule>();
+    viaBinary->setStateInformation(state.getData(), (int)state.getSize());
+    EXPECT_EQ(viaBinary->getFolderIndex(), 2);
+
+    folder.deleteRecursively();
+}

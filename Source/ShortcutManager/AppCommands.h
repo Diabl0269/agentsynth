@@ -179,7 +179,11 @@ enum CommandIDs {
     selectNextModule,
     selectPreviousModule,
     selectNextTrack,
-    selectPreviousTrack
+    selectPreviousTrack,
+    // Copies every external sample/wavetable into the project, saves, and optionally zips it
+    // (MainComponentCollectArchive.cpp). Menu-only like exportMidi -- no ShortcutManager
+    // actionId/binding. Appended last so no existing enumerator's value moves.
+    collectAndArchive
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears

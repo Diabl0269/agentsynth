@@ -1,5 +1,6 @@
 #include "ProjectBundle.h"
 #include "Branding.h"
+#include "Project/ModuleFileRefs.h"
 #include "Timeline/TimelineReconciler.h"
 #include <utility>
 #include <vector>
@@ -21,10 +22,14 @@ bool ProjectBundle::isBundle(const juce::File& dir) {
     return dir.getChildFile(kProjectFileName).existsAsFile();
 }
 
-juce::var ProjectBundle::buildProjectJson(juce::AudioProcessorGraph& graph, const TimelineDoc& timeline,
-                                          PatchDocument& patchDocument, const MacroSet& macros,
-                                          const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw) {
+juce::var ProjectBundle::buildProjectJson(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
+                                          const TimelineDoc& timeline, PatchDocument& patchDocument,
+                                          const MacroSet& macros, const MidiRemoteProjectDoc& midiRemote,
+                                          MixerPanLaw panLaw) {
     auto json = AIStateMapper::graphToJSON(graph);
+    // Module files already inside this bundle are written bundle-relative, so the project keeps
+    // working after it is moved, renamed or unzipped elsewhere; outside files stay absolute.
+    ModuleFileRefs::relativizeForSave(json, bundleDir);
     // Re-merge whatever unknown top-level keys were stashed on this bundle's last load — mirrors
     // GraphEditor::savePreset. A stale "timeline" among them (e.g. this document started life as a
     // plain .json that already carried one) is overwritten below: the live TimelineDoc is
@@ -61,7 +66,7 @@ ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioPr
     if (!peaksDir.exists() && !peaksDir.createDirectory())
         return {false, "io: could not create \"" + peaksDir.getFullPathName() + "\"."};
 
-    auto json = buildProjectJson(graph, timeline, patchDocument, macros, midiRemote, panLaw);
+    auto json = buildProjectJson(bundleDir, graph, timeline, patchDocument, macros, midiRemote, panLaw);
     if (json.getDynamicObject() == nullptr)
         return {false, "io: graphToJSON did not produce a JSON object."};
 
@@ -109,7 +114,7 @@ ProjectLoadResult ProjectBundle::saveAutosave(const juce::File& bundleDir, juce:
     if (!bundleDir.isDirectory())
         return {false, "io: \"" + bundleDir.getFullPathName() + "\" is not a bundle directory."};
 
-    auto json = buildProjectJson(graph, timeline, patchDocument, macros, midiRemote, panLaw);
+    auto json = buildProjectJson(bundleDir, graph, timeline, patchDocument, macros, midiRemote, panLaw);
     if (json.getDynamicObject() == nullptr)
         return {false, "io: graphToJSON did not produce a JSON object."};
 
@@ -203,6 +208,10 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
     }
     // From here on `json`/`rootObj` is "the patch" — timeline-, macros-, midiRemote- and
     // mixerPanLaw-stripped.
+
+    // Bundle-relative module file refs become absolute paths in this bundle before anything reads
+    // them; a ref that escapes the bundle is dropped here (see ModuleFileRefs::resolveOnLoad).
+    ModuleFileRefs::resolveOnLoad(json, projectFile.getParentDirectory());
 
     // Step 1: the untrusted gate. project.json is a file on disk, hand-editable exactly like a
     // preset or a snippet — a malformed patch is rejected whole, never partially applied.

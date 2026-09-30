@@ -5,6 +5,7 @@
 #include "AI/AccountService.h"
 #include "AppUndoManager.h"
 #include "Branding.h"
+#include "MainComponentCollectArchiveSeams.h"
 #include "MainComponentExportMidiSeams.h"
 #include "MainComponentRemoteActionInvoker.h"
 #include "MainComponentTypes.h"
@@ -55,6 +56,9 @@
 
 class AudioEngine;
 class GraphEditor;
+namespace synth {
+struct CollectResult; // Project/ProjectCollector.h
+}
 class MainComponent
     : public juce::Component
     , public juce::DragAndDropContainer
@@ -173,6 +177,7 @@ public:
     std::function<void(std::function<void(AutosaveRecoveryChoice)> onChoice)> autosaveRecoveryPrompt;
     std::function<void(std::function<void(PatchLoadMode)> onChoice)> patchLoadPrompt;
     synth::MidiExportSeams midiExportSeams;
+    synth::CollectArchiveSeams collectArchiveSeams;
 
     /** True once an undo-able edit has happened since the last save/load; NOT reset by undoing back to the saved state.
      */
@@ -298,6 +303,7 @@ private:
 
     // Named isActive predicates shared by more than one row.
     bool isExportAvailable() const;
+    bool isCollectArchiveAvailable() const;
     bool hasSelection() const;
     bool canGroupSelection() const;
     bool touchesAnyMacro() const;
@@ -420,6 +426,15 @@ private:
     void promptExportAudio();
     void promptExportStems();
     void promptExportMidi();
+    // ---- Collect & Archive (MainComponentCollectArchive.cpp); message thread only ----
+    void promptCollectAndArchive();
+    void startCollect(bool thenZip); // requires currentBundleDir_ to be a saved bundle
+    void finishCollect(const synth::CollectResult& result, bool cancelled, bool thenZip);
+    void promptArchiveFile();
+    void writeProjectArchive(const juce::File& zipFile);
+    void runProjectTask(const juce::String& title, bool cancellable, synth::CollectArchiveSeams::Work work,
+                        std::function<void(bool)> done);
+    void reportCollectArchive(const juce::String& title, const juce::String& message);
     void loadFactoryPresetAtIndex(int index);
     void loadPresetGuarded(int index, bool isNewDocument = false);
     void openRecentProjectGuarded(const juce::File& file);
@@ -586,7 +601,8 @@ private:
     int lastAutosavedEditSerial_ = 0; // autosave's own baseline, separate from savedEditSerial_
     juce::uint32 lastAutosaveMs_ = 0; // wall-clock (getMillisecondCounter) of the last autosave write
 
-    bool isBounceInProgress_ = false; // ONE flag for Export Audio and Export Stems: the offline render is exclusive
+    bool isBounceInProgress_ = false;  // ONE flag for Export Audio and Export Stems: the offline render is exclusive
+    bool isCollectInProgress_ = false; // a Collect copy or archive zip is running behind its progress window
     std::unique_ptr<synth::BounceRunner> bounceRunner_;
     std::unique_ptr<synth::StemRunner> stemRunner_; // at most one of bounceRunner_/stemRunner_ is non-null
     juce::Component::SafePointer<synth::ui::ExportAudioDialog> exportDialog_; // owned by its DialogWindow, never by us

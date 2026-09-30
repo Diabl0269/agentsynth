@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "ModuleFileStateKeys.h"
 #include <array>
 #include <bitset>
 #include <cmath>
@@ -201,13 +202,13 @@ public:
         if (loadedPath.isEmpty())
             return {};
         juce::DynamicObject::Ptr state = new juce::DynamicObject();
-        state->setProperty("sampleFile", loadedPath);
+        state->setProperty(synth::module_file_keys::kSampleFile, loadedPath);
         return juce::var(state.get());
     }
 
     void setExtraState(const juce::var& state) override {
         if (auto* obj = state.getDynamicObject()) {
-            const juce::String path = obj->getProperty("sampleFile").toString();
+            const juce::String path = obj->getProperty(synth::module_file_keys::kSampleFile).toString();
             if (path.isNotEmpty())
                 loadSampleFile(juce::File(path));
         }

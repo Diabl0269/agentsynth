@@ -15,6 +15,8 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentFileIO.cpp
     Source/MainComponent/MainComponentExportMidi.cpp
     Source/MainComponent/MainComponentExportMidiSeams.h
+    Source/MainComponent/MainComponentCollectArchive.cpp
+    Source/MainComponent/MainComponentCollectArchiveSeams.h
     Source/MainComponent/MainComponentTypes.h
     Source/MainComponent/MainComponentTestSeams.cpp
     Source/MainComponent/MainComponentCommands.cpp
@@ -166,6 +168,8 @@ set(APPUI_SOURCES
     Source/UI/Assistant/SignInDialog.h
     Source/UI/Chrome/ExportAudioDialog.cpp
     Source/UI/Chrome/ExportAudioDialog.h
+    Source/UI/Chrome/ProgressTaskWindow.cpp
+    Source/UI/Chrome/ProgressTaskWindow.h
     Source/UI/Graph/GraphEditor/GraphEditor.cpp
     Source/UI/Graph/GraphEditor/GraphEditor.h
     Source/UI/Graph/GraphEditor/GraphEditorTypes.h
