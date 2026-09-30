@@ -8,6 +8,8 @@
 // widgets (GlyphButton, PortColourSwatch, DragHandle) and PortRowComponent itself.
 
 #include "MacroPortConfigDialog.h"
+#include "UI/Layout/DragCursor.h"
+#include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -213,6 +215,8 @@ class DragHandle
     : public juce::Component
     , public juce::SettableTooltipClient {
 public:
+    DragHandle() { setMouseCursor(dragGrabCursor()); } // the grab hand on hover and while dragging
+
     void paint(juce::Graphics& g) override {
         const auto& c = liveThemeColours(*this);
         const juce::Colour grip = dragging_ ? c.accent : (isMouseOver() ? c.textPrimary.withAlpha(0.85f) : c.textMuted);
@@ -229,16 +233,18 @@ public:
     void mouseEnter(const juce::MouseEvent&) override { repaint(); }
     void mouseExit(const juce::MouseEvent&) override { repaint(); }
 
-    void mouseDown(const juce::MouseEvent&) override {
+    // The events go up whole: the owner converts each one into its own list coordinates, because the
+    // handle moves with its row while the row is dragged.
+    void mouseDown(const juce::MouseEvent& e) override {
         dragging_ = true;
         repaint();
         if (onDragStart)
-            onDragStart();
+            onDragStart(e);
     }
 
     void mouseDrag(const juce::MouseEvent& e) override {
         if (onDragMove)
-            onDragMove(e.getScreenPosition());
+            onDragMove(e);
     }
 
     void mouseUp(const juce::MouseEvent&) override {
@@ -248,8 +254,8 @@ public:
             onDragEnd();
     }
 
-    std::function<void()> onDragStart;
-    std::function<void(juce::Point<int> screenPos)> onDragMove;
+    std::function<void(const juce::MouseEvent&)> onDragStart;
+    std::function<void(const juce::MouseEvent&)> onDragMove;
     std::function<void()> onDragEnd;
 
 private:
@@ -288,7 +294,7 @@ public:
         // — Escape does not discard anything Close wouldn't). Wired here (rather than relying on the bubble
         // MacroPortConfigDialog::keyPressed catches) because juce::TextEditor consumes Escape itself before it ever
         // bubbles.
-        nameEditor.onEscapeKey = [this] { owner_.requestClose(); };
+        nameEditor.onEscapeKey = [this] { owner_.escapePressed(); };
         addAndMakeVisible(nameEditor);
 
         midiTag.setText("MIDI", juce::dontSendNotification);
@@ -328,7 +334,7 @@ public:
         voicesEditor.onFocusLost = [this] { maybeCommitShape(); };
         voicesEditor.onReturnKey = voicesEditor.onFocusLost;
         voicesEditor.onEscapeKey = [this] { // same reasoning as nameEditor's onEscapeKey above
-            owner_.requestClose();
+            owner_.escapePressed();
         };
         addAndMakeVisible(voicesEditor);
 
@@ -353,8 +359,8 @@ public:
         // The drag-to-reorder handle. Cmd+Up/Cmd+Down on the colour swatch or Delete button below
         // is the keyboard route — this is an ADDITIONAL, mouse-only gesture, never a replacement.
         dragHandle.setTooltip("Drag to reorder (or Cmd+Up/Cmd+Down on a focused control)");
-        dragHandle.onDragStart = [this] { owner_.beginRowDrag(*this); };
-        dragHandle.onDragMove = [this](juce::Point<int> screenPos) { owner_.updateRowDrag(*this, screenPos); };
+        dragHandle.onDragStart = [this](const juce::MouseEvent& e) { owner_.beginRowDrag(*this, e); };
+        dragHandle.onDragMove = [this](const juce::MouseEvent& e) { owner_.updateRowDrag(e); };
         dragHandle.onDragEnd = [this] { owner_.endRowDrag(*this); };
         addAndMakeVisible(dragHandle);
 
@@ -457,11 +463,11 @@ public:
     // otherwise read stale immediately after a same-tick commitColour().
     bool hasCustomColourForTest() const { return customColour.has_value(); }
 
-    // -1 = none, 0 = insertion point is ABOVE this row, 1 = BELOW it. Purely visual — repaints
-    // only on an actual change, matching Source/UI/CLAUDE.md's "no unconditional repaint" rule.
-    void setDropIndicator(int position) {
-        if (dropIndicatorPosition_ != position) {
-            dropIndicatorPosition_ = position;
+    // 0..1: how strongly the row is drawn lifted while it is dragged. Purely visual — repaints only
+    // on an actual change, matching Source/UI/CLAUDE.md's "no unconditional repaint" rule.
+    void setLift(float lift) {
+        if (lift_ != lift) {
+            lift_ = lift;
             repaint();
         }
     }
@@ -566,18 +572,10 @@ public:
         const auto& c = liveThemeColours(*this);
         auto bounds = getLocalBounds().toFloat();
 
+        paintReorderLift(g, bounds, lift_, c.surfaceHi, c.accent);
         if (isMidi) {
             g.setColour(c.midiWire.withAlpha(0.08f));
             g.fillRoundedRectangle(bounds, 5.0f);
-        }
-
-        // Drag insertion indicator — a thin accent line at the edge the dragged row would
-        // land next to. Drawn here (not by MacroPortConfigDialog/rowsContent_) so it always tracks
-        // this row's own live bounds with no separate geometry computation to drift out of sync.
-        if (dropIndicatorPosition_ >= 0) {
-            g.setColour(c.accent);
-            auto local = getLocalBounds();
-            g.fillRect(dropIndicatorPosition_ == 0 ? local.removeFromTop(2) : local.removeFromBottom(2));
         }
     }
 
@@ -599,7 +597,7 @@ private:
     int committedVoices_;
     juce::String committedName_;              // see maybeCommitName()
     std::optional<juce::Colour> customColour; // nullopt = falls back to kindTintColour()
-    int dropIndicatorPosition_ = -1;          // -1 none, 0 above, 1 below
+    float lift_ = 0.0f;                       // see setLift()
 };
 
 } // namespace synth::ui

@@ -265,7 +265,7 @@ card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
 Three units under `Source/UI/Graph/PluginKnobPicker/`, matching the design above:
 `PluginKnobPickerComponent` (the popover itself, split by concern into
 `PluginKnobPickerComponent.cpp` (chrome/layout), `PluginKnobPickerComponentRows.cpp` (search,
-tick/untick, drag-reorder, label, the one `applyCurrentLayout()` write path) and
+tick/untick, the reorder commit, label, the one `applyCurrentLayout()` write path), `PluginKnobPickerComponentDrag.cpp` (the reorder drag) and
 `PluginKnobPickerComponentScope.cpp` (Apply to / presets / Reset to automatic)),
 `PluginKnobPickerRow` (one row's checkbox/name/drag-handle/label controls) and
 `PluginKnobPickerTouchCapture` (touch-to-add's gesture listener + FRO241's value-change fallback).
@@ -281,6 +281,10 @@ tick/untick, drag-reorder, label, the one `applyCurrentLayout()` write path) and
   parameter order, both filtered by the live search text against display name. A checked row shows a
   drag handle (reordering is scoped to the checked group only) and a label field that commits on
   focus-lost/Return; empty text means "the parameter's own name", matching the card's own fallback.
+  Reordering is the shared [reorder drag](../layout/animation.md#reorder-drag): the row under the
+  pointer is lifted and follows it, the other checked rows glide aside, and the release commits ONCE
+  (one undo step however many rows the row passed); Esc cancels with nothing committed. The handle
+  shows the grab cursor.
   Every tick, untick, reorder, or label commit calls the same `applyCurrentLayout()`, which writes
   whichever scope "Apply to" currently names and replays through
   `AppUndoManager::recordNodeExtraStateChange` with a layout-only patch (`HostedPluginModule::

@@ -4,6 +4,7 @@
 #include "Modules/CardLayout.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/Hosting/PluginCardLayoutStore.h"
+#include "UI/Layout/ReorderDrag/ReorderDragSession.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -80,6 +81,14 @@ public:
     /** `newIndexAmongChecked` is 0-based within the checked group only, exactly like
      *  MacroPortConfigDialog::dragRowToIndexInGroupForTest scopes to one direction group. */
     void dragCheckedRowToIndexForTest(const juce::String& paramId, int newIndexAmongChecked);
+    /** The real drag path, for tests that synthesize mouseDown/mouseDrag/mouseUp: the visible row's
+     *  grab handle, the list its rows are placed in, the row's current bounds in that list, whether a
+     *  row is lifted or still gliding, and Esc delivered through the listener a real key press reaches. */
+    juce::Component* getRowDragHandleForTest(int row);
+    juce::Component& getRowsContentForTest() noexcept { return rowsContent_; }
+    juce::Rectangle<int> getRowBoundsForTest(int row) const;
+    bool isRowDragActiveForTest() const noexcept { return rowDrag_.isReordering(); }
+    bool sendEscapeToRowDragForTest() { return rowDrag_.sendEscapeForTest(); }
 
     bool isApplyToAllInstancesForTest() const noexcept { return applyToAllInstances_; }
     void setApplyToAllInstancesForTest(bool allInstances);
@@ -126,6 +135,17 @@ private:
     void updateMissingLabel();
     void applyCurrentLayout();
 
+    // ---- Drag-reorder (PluginKnobPickerComponentDrag.cpp) ----
+    void beginRowDrag(const juce::String& paramId, const juce::MouseEvent& e);
+    void updateRowDrag(const juce::MouseEvent& e);
+    void endRowDrag();
+    /** Places the dragged rows from the animator while a drag is live or settling, and every row at
+     *  its static slot otherwise. */
+    void placeDragRows();
+    /** Where a drop puts `paramId` among all the working slots, given the visible checked rows in the
+     *  order the drop produces (a search can hide some checked rows). */
+    int workingIndexForDrop(const std::vector<juce::String>& visibleOrder, const juce::String& paramId) const;
+
     // ---- Scope + presets (PluginKnobPickerComponentScope.cpp) ----
     void refreshPresetCombo();
     void loadPreset(const juce::String& name);
@@ -165,10 +185,12 @@ private:
 
     std::unique_ptr<PluginKnobPickerTouchCapture> touchCapture_;
 
-    // Drag-reorder state -- one drag at a time (JUCE delivers mouse events to at most one dragged
-    // row), reset once endRowDrag runs. Mirrors MacroPortConfigDialog's draggingNodeUuid_ pattern.
-    juce::String draggingParamId_;
-    int dragStartIndexAmongChecked_ = -1;
+    // Drag state, empty whenever no drag is in progress. The animator's keys are positions in
+    // dragParamIds_ (the visible checked rows as they stood at the press); rows are matched back by
+    // parameter id because the commit rebuilds every row. dragSlotStarts_[p] is the y of slot p.
+    ReorderDragSession rowDrag_{*this, [this] { placeDragRows(); }};
+    std::vector<juce::String> dragParamIds_;
+    std::vector<float> dragSlotStarts_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginKnobPickerComponent)
 };

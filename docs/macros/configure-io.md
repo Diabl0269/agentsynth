@@ -42,7 +42,12 @@ combos above them painted fine. One `kAddBlockHeight` constant is used by both `
 
 `GraphEditor::renameMacroPort` and `GraphEditor::reorderMacroPortToIndex` back the row's name field
 and its drag handle. A row's drag handle (left of the name field) reorders it within its own
-direction group by an arbitrary number of slots in one gesture.
+direction group by an arbitrary number of slots in one gesture. The drag is the shared
+[reorder drag](../layout/animation.md#reorder-drag): the row under the pointer is lifted and follows
+it, the other rows of its group glide aside (an input never crosses into the outputs), and the drop
+settles into its slot. Nothing is committed while the row is held; the release sends one
+`onReorderPortTo`, and Esc glides everything back with nothing committed (it cancels a live drag
+instead of closing the dialog). The handle shows the grab cursor.
 
 **Reordering is structurally scoped to one direction.** `onReorderPortTo`'s index carries no
 `isInput` argument at all, which is what makes "an input cannot be dragged into the output section"

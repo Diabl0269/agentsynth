@@ -173,6 +173,8 @@ void PluginKnobPickerComponent::layOutRows() {
         row->setBounds(0, y, rowsContent_.getWidth(), PluginKnobPickerRow::kRowHeight);
         y += PluginKnobPickerRow::kRowHeight;
     }
+    if (rowDrag_.isReordering())
+        placeDragRows(); // a settle carrying on across the rebuild a commit causes
 }
 
 } // namespace synth::ui

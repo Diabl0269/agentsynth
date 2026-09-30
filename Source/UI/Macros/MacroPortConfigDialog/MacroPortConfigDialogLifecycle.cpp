@@ -86,7 +86,7 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     newVoicesEditor_.setInputRestrictions(2, "0123456789");
     newVoicesEditor_.setJustification(juce::Justification::centred);
     newVoicesEditor_.onReturnKey = [this] { triggerAddPortForTest(); }; // same as newNameEditor_
-    newVoicesEditor_.onEscapeKey = [this] { requestClose(); };
+    newVoicesEditor_.onEscapeKey = [this] { escapePressed(); };
     addAndMakeVisible(newVoicesEditor_);
     updateNewPortVoicesVisibility(); // Mono is the default shape: starts hidden
 
@@ -95,7 +95,7 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     // row's rename/voices fields — pressing Return here is the keyboard equivalent of clicking Add.
     newNameEditor_.onReturnKey = [this] { triggerAddPortForTest(); };
     newNameEditor_.onEscapeKey = [this] { // same "Escape closes the whole modal" decision as elsewhere
-        requestClose();
+        escapePressed();
     };
     addAndMakeVisible(newNameEditor_);
 
@@ -133,7 +133,7 @@ MacroPortConfigDialog::~MacroPortConfigDialog() = default;
 // ALSO gets its own onEscapeKey wired directly rather than relying on this alone.
 bool MacroPortConfigDialog::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::escapeKey) {
-        requestClose();
+        escapePressed();
         return true;
     }
     return false;
@@ -235,6 +235,8 @@ void MacroPortConfigDialog::resized() {
     area.removeFromBottom(6);
     rowsViewport_.setBounds(area);
     layOutOrMeasureRows(/*apply=*/true, area.getWidth() - 2);
+    if (rowDrag_.isReordering())
+        placeDragRows();
 }
 
 int MacroPortConfigDialog::layOutOrMeasureRows(bool apply, int width) {
@@ -299,7 +301,12 @@ int MacroPortConfigDialog::idealDialogHeight() {
     return juce::jlimit(kMinDialogHeight, kMaxDialogHeight, chromeHeight + rowsHeight);
 }
 
+// A row rebuilt under a live drag takes the drag with it (a lifted row cannot outlive its component,
+// and its mouseUp would never arrive). A settle in flight keeps going: the commit's own refreshPorts()
+// lands here, and the new rows pick the glide up by uuid (placeDragRows).
 void MacroPortConfigDialog::rebuildRowComponents() {
+    if (rowDrag_.animator().isPressed() || rowDrag_.animator().isDragging())
+        rowDrag_.discard();
     rowControls_.clear();
 
     for (const auto& row : rows_) {

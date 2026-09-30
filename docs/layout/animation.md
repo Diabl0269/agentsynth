@@ -137,7 +137,7 @@ fractions; each frame it calls `onLayoutNeeded` (wired to `MainComponent::resize
 
 ## Reorder drag
 
-Every reorderable list (the bottom dock's tab strip, the mixer's track columns, the timeline's track list) uses one behaviour, in `Source/UI/Layout/ReorderDrag/`:
+Every reorderable list (the bottom dock's tab strip, the mixer's track columns, the mixer's zones rows and send rows, the timeline's track list, the macro port dialog's rows and the plugin knob picker's rows) uses one behaviour, in `Source/UI/Layout/ReorderDrag/`:
 
 - `ReorderDragAnimator` — pure logic along ONE axis (x for a strip, y for a list), no components and
   no painting, with an injectable clock so it is unit-tested headlessly
@@ -149,6 +149,15 @@ Every reorderable list (the bottom dock's tab strip, the mixer's track columns, 
   cost no timer and no repaint.
 - `ReorderCancelKey` — Esc during the gesture (a mouse press does not move keyboard focus, so it
   listens on the top-level window for exactly the length of the drag).
+- `ReorderDragSession` — the three above wired together for a list that owns one animator: the frame
+  pump started only when the tween generation changes, the Esc listener armed at the first lifted
+  drag event, the drag auto-repeat, and the "Esc already cancelled, so the release must not commit"
+  flag. `end()` tells the release apart (`Click` / `Commit` / `Cancelled` / `Nothing`). The macro
+  port dialog, the knob picker and the mixer send list use it; the older owners above hold the
+  pieces themselves.
+- `ReorderLiftLook.h` — `paintReorderLift()`, the lifted row's look (soft shadow, raised
+  `surfaceHi` fill, 1 px `accent` border, all scaled by the animator's lift). Zones rows, the
+  port dialog, the knob picker and the send list all call it.
 
 The rules it implements:
 
@@ -169,7 +178,9 @@ The rules it implements:
 6. **The order is committed on release, not during the drag.** The owner reads `getNewOrder()`,
    commits it through its normal persistence path, lays out statically, and passes the final starts
    to `release()`; the dragged item then settles from its drop position (140 ms, `easeOutCubic`) and
-   every neighbour finishes from wherever its glide had got to.
+   every neighbour finishes from wherever its glide had got to. A list that rebuilds its rows on
+   commit releases the animator BEFORE sending the commit and matches the new rows to the old keys
+   by identity, so the settle survives the rebuild.
 7. **Esc cancels.** `abort()` sends the dragged item back to where it was picked up (140 ms,
    `easeInCubic`) and the neighbours back to their places (160 ms); nothing is committed and no
    undo step is created.
@@ -178,7 +189,15 @@ The rules it implements:
 
 Owners: `BottomDockComponent` (`beginTabDrag`/`dragTab`/`commitTabDrag`, [tab strip](../mixer/panel.md#the-tab-strip))
 `MixerPanelComponent` (`MixerPanelColumnDrag.cpp`, [reordering columns](../mixer/panel.md#reordering-columns))
+`MixerZonesPane` (`MixerZonesPaneDrag.cpp`, [Zones pane](../mixer/panel.md#side-pane-zones-and-visibility), vertical axis)
 and `TimelinePanelComponent` (`TimelinePanelTrackDrag.cpp`, [drag to reorder](../timeline/tracks.md#drag-to-reorder), vertical axis).
+
+Owners on `ReorderDragSession`, all vertical: `MixerSendList` (`MixerSendList.cpp`, a send row is dragged by its target
+name; the rebuild its commit causes gets the settle handed over via `settleInto`, [reordering sends](../mixer/sends-and-buses.md#reordering-sends)), `MacroPortConfigDialog`
+(`MacroPortConfigDialogRowOrdering.cpp`, [renaming and reordering ports](../macros/configure-io.md#renaming-and-reordering-ports)),
+and `PluginKnobPickerComponent` (`PluginKnobPickerComponentDrag.cpp`,
+[choosing knobs](../control/plugin-card-layout.md#choosing-knobs-as-built-fro132)). The pointer is converted into the list's own
+coordinates on every event, and the commit goes out once, on release.
 
 ### Drag-and-drop cursor
 

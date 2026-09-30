@@ -111,6 +111,14 @@ void MacroPortConfigDialog::dragRowToIndexInGroupForTest(int row, int newIndexIn
         rowControls_[row]->commitDragTo(newIndexInGroup);
 }
 
+juce::Component* MacroPortConfigDialog::getRowDragHandleForTest(int row) {
+    return (row >= 0 && row < (int)rowControls_.size()) ? &rowControls_[row]->dragHandle : nullptr;
+}
+
+juce::Rectangle<int> MacroPortConfigDialog::getRowBoundsForTest(int row) const {
+    return (row >= 0 && row < (int)rowControls_.size()) ? rowControls_[row]->getBounds() : juce::Rectangle<int>();
+}
+
 juce::Colour MacroPortConfigDialog::getRowDisplayColourForTest(int row) const {
     return (row >= 0 && row < (int)rowControls_.size()) ? rowControls_[row]->colourSwatch.colour
                                                         : juce::Colours::transparentBlack;

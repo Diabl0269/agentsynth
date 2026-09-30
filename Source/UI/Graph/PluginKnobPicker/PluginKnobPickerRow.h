@@ -5,6 +5,25 @@
 
 namespace synth::ui {
 
+/** The checked row's grab handle: three short bars that show the grab hand on hover and during a
+ *  drag, and report the press/drag/release, whole, to the row (which forwards them to its owner). */
+class PluginKnobPickerGrip final : public juce::Component {
+public:
+    PluginKnobPickerGrip();
+
+    void paint(juce::Graphics&) override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
+
+    std::function<void(const juce::MouseEvent&)> onPress;
+    std::function<void(const juce::MouseEvent&)> onMove;
+    std::function<void()> onRelease;
+
+private:
+    bool pressed_ = false;
+};
+
 /**
  * One row of PluginKnobPickerComponent's list: a checkbox, the parameter's display name, and --
  * only while checked -- a drag handle (reordering is scoped to the checked group; an unchecked row
@@ -29,22 +48,22 @@ public:
     void setLabelText(const juce::String& text);
     juce::String getLabelText() const { return labelEditor_.getText(); }
 
+    /** 0..1: how strongly the row is drawn lifted while it is dragged. */
+    void setLift(float lift);
+
     void paint(juce::Graphics&) override;
     void resized() override;
-    void mouseDown(const juce::MouseEvent&) override;
-    void mouseDrag(const juce::MouseEvent&) override;
-    void mouseUp(const juce::MouseEvent&) override;
 
     /** The checkbox was ticked/unticked by a click on THIS row. */
     std::function<void(bool checked)> onToggled;
     /** The label field committed (focus lost or Return) with new text (already trimmed). */
     std::function<void(const juce::String& text)> onLabelCommitted;
-    /** A drag on the handle started/moved/ended. `deltaY` in updateDrag is relative to the drag's own
-     *  start point, in this row's parent's coordinate space -- what the owner needs to find the
-     *  target slot among the checked rows. Only fired while checked() (the row hides its handle
-     *  otherwise, so the mouse events driving these never originate on an unchecked row). */
-    std::function<void()> onDragStarted;
-    std::function<void(int deltaY)> onDragUpdated;
+    /** A drag on the handle started/moved/ended. The events arrive whole: the row moves under the
+     *  pointer while it is dragged, so the owner converts each one into its own list coordinates.
+     *  Only fired while checked() (the handle is hidden otherwise). The row may be destroyed by
+     *  the owner's onDragEnded. */
+    std::function<void(const juce::MouseEvent&)> onDragStarted;
+    std::function<void(const juce::MouseEvent&)> onDragUpdated;
     std::function<void()> onDragEnded;
 
     // ---- Test seams: drive the real controls, the MacroPortConfigDialog idiom -------------------
@@ -58,6 +77,7 @@ public:
     }
     void setLabelTextForTest(const juce::String& text) { labelEditor_.setText(text, false); }
     void commitLabelForTest() { commitLabel(); }
+    juce::Component& getDragHandleForTest() noexcept { return dragHandle_; }
 
     static constexpr int kRowHeight = 26;
 
@@ -68,10 +88,8 @@ private:
     juce::ToggleButton checkbox_;
     juce::Label nameLabel_;
     juce::TextEditor labelEditor_;
-    juce::Rectangle<int> dragHandleBounds_; // hit area for the checked-only drag handle; painted in paint()
-
-    bool dragging_ = false;
-    juce::Point<int> dragStartScreenPos_;
+    PluginKnobPickerGrip dragHandle_; // visible only while checked
+    float lift_ = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginKnobPickerRow)
 };

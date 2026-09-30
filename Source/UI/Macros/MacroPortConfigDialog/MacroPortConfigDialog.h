@@ -3,6 +3,7 @@
 #include "MacroSet.h"
 #include "Modules/MacroPortShape.h"
 #include "UI/Chrome/ColourPickerPopup.h" // juce::PropertiesFile (juce_data_structures) + ColourPickerPopup itself
+#include "UI/Layout/ReorderDrag/ReorderDragSession.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -46,12 +47,12 @@ namespace synth::ui {
  * dialog-local key handling, not a ShortcutManager action.
  *
  * Keyboard: tab order follows JUCE's default top-to-bottom/left-to-right traversal, Return
- * commits whichever text field currently has focus, and Escape closes the dialog via the SAME
- * path the Close button uses (`onRequestClose`, via `requestClose()`, described below) —
- * including committing whatever rename/shape edit currently has focus. Arrow-Up/Down on a row's
- * colour swatch or Delete button moves keyboard focus to the same control on the row above/below
- * (never wraps), which does not conflict with a ComboBox's or TextEditor's own arrow-key handling
- * since those controls are not where this is wired.
+ * commits whichever text field currently has focus, and Escape (unless a row drag is live, which it
+ * cancels first) closes the dialog via the SAME path the Close button uses (`onRequestClose`, via
+ * `requestClose()`, described below) — including committing whatever rename/shape edit has focus. Arrow-Up/Down on a
+ * row's colour swatch or Delete button moves keyboard focus to the same control on the row above/below (never wraps),
+ * which does not conflict with a ComboBox's or TextEditor's own arrow-key handling since those controls are not where
+ * this is wired.
  *
  * Focus indication: `juce::Button::paint()` passes `paintButton` only `isOver()`/`isDown()`,
  * never keyboard-focus state, so the custom `GlyphButton`/`PortColourSwatch` classes check
@@ -164,6 +165,14 @@ public:
     // mouseUp does (MacroPortConfigDialog::endRowDrag calls this exact row method), without
     // needing to synthesize mouseDown/mouseDrag/mouseUp sequences to exercise the commit path.
     void dragRowToIndexInGroupForTest(int row, int newIndexInGroup);
+    // The real drag path, for tests that synthesize mouseDown/mouseDrag/mouseUp: the row's grab
+    // handle, the list its rows are placed in, the row's current bounds in that list, whether a row
+    // is lifted or still gliding, and Esc delivered through the listener a real key press reaches.
+    juce::Component* getRowDragHandleForTest(int row);
+    juce::Component& getRowsContentForTest() noexcept { return rowsContent_; }
+    juce::Rectangle<int> getRowBoundsForTest(int row) const;
+    bool isRowDragActiveForTest() const noexcept { return rowDrag_.isReordering(); }
+    bool sendEscapeToRowDragForTest() { return rowDrag_.sendEscapeForTest(); }
     // The colour a row's swatch currently displays — the custom colour if one is set, otherwise
     // whatever kind tint it falls back to.
     juce::Colour getRowDisplayColourForTest(int row) const;
@@ -239,12 +248,19 @@ private:
     // definition for the async-focus-loss race this closes.
     void requestClose();
 
-    // ---- drag-to-reorder plumbing (real mouse path; the *ForTest seams above bypass this
-    // and call PortRowComponent::commitDragTo directly) ----
-    void beginRowDrag(PortRowComponent& row);
-    void updateRowDrag(PortRowComponent& row, juce::Point<int> screenPos);
+    // ---- drag-to-reorder plumbing (real mouse path; the *ForTest seams above that name a drag
+    // call PortRowComponent::commitDragTo directly) ----
+    void beginRowDrag(PortRowComponent& row, const juce::MouseEvent& e);
+    void updateRowDrag(const juce::MouseEvent& e);
     void endRowDrag(PortRowComponent& row);
-    void clearDragIndicators();
+    void commitRowDrag(PortRowComponent& row);
+    /** Places the dragged group's rows from the animator while a drag is live or settling, and
+     *  every row at its static slot otherwise. */
+    void placeDragRows();
+    /** The pointer's y in `rowsContent_`, converted from the event on every call. */
+    float rowDragPointerY(const juce::MouseEvent& e);
+    /** Esc: cancels a live row drag (nothing committed), otherwise closes the dialog. */
+    void escapePressed();
 
     // Moves keyboard focus from `target` on `from` to the same control on the row immediately
     // above/below it in `rowControls_` — deliberately does NOT wrap past either end (an arrow key
@@ -306,11 +322,13 @@ private:
 
     juce::PropertiesFile* colourPickerProps_ = nullptr; // see setColourPickerPropertiesFile
 
-    // Drag state — empty/-1 whenever no drag is in progress. Only ever set from within a
-    // single beginRowDrag/updateRowDrag/endRowDrag sequence (one at a time: JUCE delivers mouse
-    // events to at most one dragged component).
-    juce::String draggingNodeUuid_;
-    int dragDropIndexInGroup_ = -1;
+    // Drag state, empty whenever no drag is in progress. The animator's keys are positions in
+    // dragGroupUuids_ (the dragged row's own direction group, top to bottom, as it stood at the
+    // press); rows are matched back by uuid because the commit's refreshPorts() replaces every row
+    // component. dragSlotStarts_[p] is the y of the group's p-th slot.
+    ReorderDragSession rowDrag_{*this, [this] { placeDragRows(); }};
+    std::vector<juce::String> dragGroupUuids_;
+    std::vector<float> dragSlotStarts_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroPortConfigDialog)
 };

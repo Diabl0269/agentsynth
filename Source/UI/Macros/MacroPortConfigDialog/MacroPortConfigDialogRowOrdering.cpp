@@ -1,87 +1,115 @@
 #include "MacroPortConfigDialog.h"
 #include "MacroPortConfigDialogInternal.h"
+#include <algorithm>
+#include <cmath>
 
 namespace synth::ui {
 
-// Concern: drag-to-reorder (mouse) and keyboard row-focus navigation.
+// Concern: drag-to-reorder (mouse, on the shared vertical ReorderDragAnimator) and keyboard
+// row-focus navigation.
 
 // ---- Drag-to-reorder ---------------------------------------------------------------------------
-// beginRowDrag/updateRowDrag/endRowDrag implement the real mouse path (DragHandle wires straight
-// to these); the *ForTest seams below call PortRowComponent::commitDragTo directly instead of
-// synthesizing a mouseDown/mouseDrag/mouseUp sequence, the same "drive the real controls, skip the
-// mouse plumbing" idiom every other *ForTest seam in this file already uses.
+// The row under the pointer is lifted and follows it, the other rows of its direction group glide
+// aside (an input never crosses into the outputs), and the release commits ONCE through
+// PortRowComponent::commitDragTo -> onReorderPortTo. Esc cancels with nothing committed.
+// beginRowDrag/updateRowDrag/endRowDrag are the real mouse path (DragHandle wires straight to
+// them); dragRowToIndexInGroupForTest calls commitDragTo directly instead, the same "drive the
+// real controls, skip the mouse plumbing" idiom every other *ForTest seam in this file uses.
 
-void MacroPortConfigDialog::beginRowDrag(PortRowComponent& row) {
-    draggingNodeUuid_ = row.nodeUuid;
-    dragDropIndexInGroup_ = -1; // recomputed on the first updateRowDrag; -1 = "no move yet"
+float MacroPortConfigDialog::rowDragPointerY(const juce::MouseEvent& e) {
+    return e.getEventRelativeTo(&rowsContent_).position.y;
 }
 
-void MacroPortConfigDialog::updateRowDrag(PortRowComponent& row, juce::Point<int> screenPos) {
-    if (row.nodeUuid != draggingNodeUuid_)
-        return; // defensive: only the row that started the drag drives it
+// Slots are the rows' static positions (one row height plus the gap each), so a press during an
+// earlier drop's settle still starts from the true layout. The grab offset is captured once, in
+// rowsContent_'s coordinates; the handle moves with its row, so the event's own position cannot be
+// reused.
+void MacroPortConfigDialog::beginRowDrag(PortRowComponent& row, const juce::MouseEvent& e) {
+    rowDrag_.discard();
+    layOutOrMeasureRows(/*apply=*/true, rowsContent_.getWidth());
+    dragGroupUuids_.clear();
+    dragSlotStarts_.clear();
 
     const int draggedIndex = rowControls_.indexOf(&row);
     if (draggedIndex < 0)
         return;
     const bool isInput = rows_[(size_t)draggedIndex].isInput;
-    const int localY = rowsContent_.getLocalPoint(nullptr, screenPos).y;
-
-    // Count how many OTHER rows in the same direction group sit above the drop point — that count
-    // IS the dragged row's new index once it is removed from and reinserted into that group,
-    // exactly the index reorderMacroPortToIndex (GraphEditor.cpp) expects. Excluding the dragged
-    // row itself (rather than comparing against its own, unmoving on-screen position) is what
-    // makes this work with the row staying visually in place during the drag, instead of needing
-    // to follow the cursor like a real "lift and carry" drag would.
-    int dropIndex = 0;
-    int firstOtherInGroup = -1, lastOtherInGroup = -1;
+    std::vector<ReorderDragAnimator::Slot> slots;
+    int pressedKey = -1;
     for (int i = 0; i < rowControls_.size(); ++i) {
-        if (i == draggedIndex || rows_[(size_t)i].isInput != isInput)
+        if (rows_[(size_t)i].isInput != isInput)
             continue;
-        if (firstOtherInGroup < 0)
-            firstOtherInGroup = i;
-        lastOtherInGroup = i;
-        if (localY > rowControls_[i]->getBounds().getCentreY())
-            ++dropIndex;
+        if (i == draggedIndex)
+            pressedKey = (int)slots.size();
+        dragGroupUuids_.push_back(rowControls_[i]->nodeUuid);
+        dragSlotStarts_.push_back((float)rowControls_[i]->getY());
+        slots.push_back({(float)rowControls_[i]->getY(), (float)(kRowHeight + kRowGap)});
     }
-    dragDropIndexInGroup_ = dropIndex;
+    const float pointer = rowDragPointerY(e);
+    rowDrag_.begin(slots, pressedKey, pointer - slots[(size_t)pressedKey].start, pointer);
+}
 
-    // Visual feedback: the two rows straddling the drop point get an insertion-line indicator;
-    // every other row (including the dragged one) clears it. Computed fresh each call rather than
-    // diffed against the previous call — setDropIndicator() itself is the repaint-only-on-change
-    // guard, so this stays cheap.
-    for (int i = 0; i < rowControls_.size(); ++i) {
-        if (i == draggedIndex || rows_[(size_t)i].isInput != isInput) {
-            rowControls_[i]->setDropIndicator(-1);
-            continue;
-        }
-        int otherRank = 0; // this row's rank among the OTHER rows in its group, top to bottom
-        for (int j = firstOtherInGroup; j <= lastOtherInGroup; ++j) {
-            if (j == draggedIndex || rows_[(size_t)j].isInput != isInput)
-                continue;
-            if (j == i)
-                break;
-            ++otherRank;
-        }
-        if (otherRank == dropIndex)
-            rowControls_[i]->setDropIndicator(0); // the drop lands just above this row
-        else if (otherRank == dropIndex - 1)
-            rowControls_[i]->setDropIndicator(1); // the drop lands just below this row
-        else
-            rowControls_[i]->setDropIndicator(-1);
-    }
+void MacroPortConfigDialog::updateRowDrag(const juce::MouseEvent& e) {
+    if (rowDrag_.dragTo(rowDragPointerY(e)))
+        placeDragRows();
 }
 
 void MacroPortConfigDialog::endRowDrag(PortRowComponent& row) {
-    clearDragIndicators();
-    if (row.nodeUuid == draggingNodeUuid_ && dragDropIndexInGroup_ >= 0)
-        row.commitDragTo(dragDropIndexInGroup_);
-    draggingNodeUuid_ = {};
-    dragDropIndexInGroup_ = -1;
+    if (rowDrag_.end() == ReorderDragSession::End::Commit)
+        commitRowDrag(row);
 }
 
-void MacroPortConfigDialog::clearDragIndicators() {
-    for (auto* rc : rowControls_)
-        rc->setDropIndicator(-1);
+// The animator is released BEFORE the commit goes out: the commit's refreshPorts() replaces every
+// row component (and, in the app, arrives asynchronously), and the settle has to survive that. The
+// final starts are the group's slots in the order the drop produces, so the rows land exactly where
+// the rebuilt list will put them.
+void MacroPortConfigDialog::commitRowDrag(PortRowComponent& row) {
+    const auto& animator = rowDrag_.animator();
+    const int draggedKey = animator.getDraggedKey();
+    const int insertion = animator.getInsertionIndex();
+    const auto newOrder = animator.getNewOrder();
+    std::vector<float> finalStarts(dragSlotStarts_.size(), 0.0f);
+    for (size_t place = 0; place < newOrder.size(); ++place)
+        finalStarts[(size_t)newOrder[place]] = dragSlotStarts_[place];
+
+    rowDrag_.release(finalStarts);
+    placeDragRows();
+    if (insertion != draggedKey)
+        row.commitDragTo(insertion);
+}
+
+// While a drag is live or settling, each row of the dragged group takes its place from the animator
+// (matched by uuid, so the rows a commit rebuilds keep their glide); every other row stays where the
+// static layout put it. Once nothing is reordering, the static layout is simply re-applied.
+void MacroPortConfigDialog::placeDragRows() {
+    if (!rowDrag_.isReordering()) {
+        layOutOrMeasureRows(/*apply=*/true, rowsContent_.getWidth());
+        for (auto* rc : rowControls_)
+            rc->setLift(0.0f);
+        return;
+    }
+    const auto& animator = rowDrag_.animator();
+    for (auto* rc : rowControls_) {
+        const auto at = std::find(dragGroupUuids_.begin(), dragGroupUuids_.end(), rc->nodeUuid);
+        if (at == dragGroupUuids_.end())
+            continue;
+        const int key = (int)(at - dragGroupUuids_.begin());
+        const bool dragged = key == animator.getDraggedKey();
+        const float top = dragged ? animator.getDraggedStart() : animator.getLayoutStart(key);
+        rc->setBounds(0, (int)std::lround(top), rowsContent_.getWidth(), kRowHeight);
+        rc->setLift(dragged ? animator.getLift() : 0.0f);
+        if (dragged)
+            rc->toFront(false);
+    }
+}
+
+// A live drag owns Escape: it cancels the drag (the ReorderCancelKey on the window would only see the
+// key after this dialog had already closed itself).
+void MacroPortConfigDialog::escapePressed() {
+    if (rowDrag_.animator().isDragging())
+        rowDrag_.abort();
+    else
+        requestClose();
 }
 
 // ---- Keyboard row navigation --------------------------------------------------------------------
