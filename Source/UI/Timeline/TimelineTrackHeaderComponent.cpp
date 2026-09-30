@@ -122,6 +122,8 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     colourSwatch_.setComponentID("trackColourSwatch");
     colourSwatch_.setTooltip("Click to change this track's colour");
     colourSwatch_.onClick = [this] {
+        if (draggingRow_)
+            return; // the release of a row drag, not a click
         auto popup = buildColourPicker();
         if (popup == nullptr)
             return; // the track is gone — nothing to pick a colour for
@@ -132,8 +134,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     nameLabel_.setComponentID("trackNameLabel");
     nameLabel_.setTooltip("Double-click to rename this track");
     // Double-click to rename — a single click must stay free for selecting the track row (T161's
-    // mouseDown()/onSelectRequested; a click that lands on the label itself doesn't reach this row's
-    // own mouseDown, but a click anywhere else on the row does).
+    // mouseDown()/onSelectRequested; the label forwards its presses to this row).
     nameLabel_.setEditable(false, true, false);
     nameLabel_.onTextChange = [this] {
         const juce::String newName = nameLabel_.getText();
@@ -547,7 +548,24 @@ void TimelineTrackHeaderComponent::paint(juce::Graphics& g) {
     }
 }
 
+// 0..1 strength of the lifted look (a light wash and an accent border) while the row is being
+// reorder-dragged; a no-op when unchanged.
+void TimelineTrackHeaderComponent::setLift(float lift) {
+    if (lift == lift_)
+        return;
+    lift_ = lift;
+    repaint();
+}
+
 void TimelineTrackHeaderComponent::paintOverChildren(juce::Graphics& g) {
+    if (lift_ > 0.0f) {
+        const auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+        const auto accent = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        g.setColour(juce::Colours::white.withAlpha(0.05f * lift_));
+        g.fillRect(getLocalBounds());
+        g.setColour(accent.withMultipliedAlpha(lift_));
+        g.drawRect(getLocalBounds(), 1);
+    }
     // T161: reuses T159's region-root outline verbatim (same colour/alpha/thickness) rather than a
     // bespoke treatment — a track header row is now a real focusable leaf exactly the way a region
     // root is, just nested one level deeper (see docs/timeline/tracks.md#focus-outline).
@@ -566,6 +584,10 @@ void TimelineTrackHeaderComponent::mouseDown(const juce::MouseEvent& e) {
         return;
     }
     draggingRow_ = false; // a fresh gesture; see mouseDrag's threshold check
+    // Reports the press (screen Y) so the panel captures the grab point once; the animator's own
+    // 4 px threshold decides whether it ever becomes a drag.
+    if (onRowPressed)
+        onRowPressed(e.getScreenPosition().y);
     // T161: click-to-select — the comment this replaces reserved a plain click for exactly this.
     // grabKeyboardFocus() is what makes a subsequent Up/Down or M/S/R keystroke route here in the
     // real app; onSelectRequested tells the panel directly (see its own comment for why that can't

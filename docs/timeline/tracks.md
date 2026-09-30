@@ -134,45 +134,59 @@ a no-op — no revision bump, no notification — when the id does not resolve o
 The drag surface is deliberately the WHOLE row rather than a small dedicated handle, which is too
 fiddly a target: everything except the interactive children (name label, swatch, `M`/`S`/`R`/`A`
 buttons, binding chip; each intercepts its own `mouseDown`) starts a drag.
+The name label and the colour swatch cover much of the row, so they forward their own
+`mouseDown` / `mouseDrag` / `mouseUp` to the row (the label keeps double-click-to-rename and the
+right-click menu; a swatch click still opens the colour picker, but not on the release of a drag).
+`DraggingFromTheNameLabelReordersLikeAnyOtherPartOfTheRow` sends its events to the label found by
+`getComponentAt`, the real hit-test target.
 
 `TimelineTrackHeaderComponent` stays sibling-blind about it, exactly like `onFocusMoveRequested`
-above. `mouseDrag()` only commits to a drag once the pointer has moved `kRowDragThreshold` (4 px)
-past `mouseDown` — below that it is a plain click-to-select — and from then on hands raw **screen**
-Y positions up through `onRowDragStarted` / `onRowDragged` / `onRowDragEnded`, the same "compare
-against something that is not this component" idiom
-`PanelResizeHandle::desiredHeightFor` uses for its own drag.
+above. `mouseDown()` reports the press (`onRowPressed`, raw **screen** Y); once `mouseDrag()` has
+moved `kRowDragThreshold` (4 px) past the press it feeds every pointer position up through
+`onRowDragStarted` / `onRowDragged`, and `mouseUp()` ends it with `onRowDragEnded`. Below the
+threshold it is a plain click-to-select.
 
-`TimelinePanelComponent` is the one place that can turn a Y position into "between which two
-tracks", since it owns the ordered header list (`trackHeaderList_.headers`):
-`trackDropBoundaryForScreenY()` converts via `trackHeaderList_.getLocalPoint(nullptr, ...)` — a
-null source component means "the point is already in screen coordinates" — and rounds to the
-nearest row BOUNDARY (`0..headerCount`) so the live drop indicator reads as "insert here between
-these two rows", not "replace this row". `endTrackDrag()` converts that boundary into `moveTrack`'s
-target index (`dropBoundary > fromIndex ? dropBoundary - 1 : dropBoundary` — the track's own old
-slot has already vacated the array below it, so only a boundary ABOVE the old index needs the `-1`
-correction) and drives the mutation through `trackHeaderHost_->performTrackEdit()`, falling back to
-calling `TimelineDoc::moveTrack` directly when no host is installed — the same convention
-`TimelineTrackHeaderComponent::performEdit()` follows, so a panel driven straight against a doc
-still works.
+`TimelinePanelComponent` owns the gesture (`TimelinePanelTrackDrag.cpp`) and uses the shared
+[reorder behaviour](../layout/animation.md#reorder-drag) (`ReorderDragAnimator`, `ReorderFramePump`,
+`ReorderCancelKey`) on the vertical axis, in the header list's own coordinates:
 
-The drop indicator is a 2 px accent line drawn by `TrackHeaderList::paintOverChildren()`. **Over
-children**, because the header rows are children painted AFTER this component and each fills its
-own bounds, so a line drawn in `paint()` would be painted over at every interior boundary — the
-same trap the focus outline below avoids the same way.
-`DropIndicatorPaintsOverTheRowsNotUnderThem` pins it by rendering the header column mid-drag with a
-real theme installed and asserting the accent line is actually visible.
+- At press it captures the rows' static slots (index times row height), the pointer and the grab
+  offset once (`trackPointerY()` converts screen Y with `trackHeaderList_.getLocalPoint(nullptr, ...)`
+  on every event, so the offset survives the rows moving and the list scrolling).
+- Past 4 px the row lifts (light wash and accent border, `TimelineTrackHeaderComponent::setLift`),
+  stays exactly under the grab point and is drawn on top; the other rows glide aside (160 ms,
+  `easeOutCubic`, retargeting from their current position) to open a dashed gap
+  (`TrackHeaderList::paint()`) where it will land.
+- Release commits ONE `TimelineDoc::moveTrack(id, insertionIndex)` through
+  `trackHeaderHost_->performTrackEdit()` (one undo step; called directly when no host is installed,
+  the same convention `TimelineTrackHeaderComponent::performEdit()` follows) and the row settles
+  (140 ms). The animator's insertion index is already the track's final index, so there is no
+  boundary conversion any more.
+- Esc sends the row back (140 ms, `easeInCubic`), the neighbours back (160 ms), and commits nothing:
+  no undo step. The release that follows is neither a click nor a move.
+- The pointer within 32 px of the list viewport's top or bottom edge autoscrolls it (up to 18 px per
+  40 ms auto-repeat step, through `scrollTrackRows()` so the clip lanes stay in step). The auto-repeat
+  is only requested for a showing panel: it is a process-wide mouse-source setting and a synthesized
+  drag never releases.
+- Every row is one `rowHeight` tall today (automation lanes live in their own strip, not in the
+  list); extents are passed per row, so a taller row would work without changing the gesture.
+- The clip lanes to the right are not animated: they follow the new order when the drop commits
+  (`refreshFromDoc()`), and stay in the old order during the drag.
+- A header rebuild that is not the drop itself (an added track, an undo, an AI patch) discards the
+  gesture (`discardTrackDrag()`); the drop's own rebuild is let through by `committingTrackDrag_`.
 
 **Ordering hazard — read before touching this code.** A reorder changes which `TrackId` sits at
 each index, which makes `syncTrackHeaders()`'s "rebuild only when the SET of tracks changed" check
 trip (same ids, different order at each slot) and rebuild the ENTIRE header column — destroying
 every `TimelineTrackHeaderComponent`, *including the one whose `mouseUp()` is still on the call
 stack* that triggered the mutation in the first place (`mouseUp` → `onRowDragEnded` →
-`endTrackDrag` → `performTrackEdit` → `moveTrack` → `timelineChanged` → `syncTrackHeaders()`, all
+`endTrackDrag` → `commitTrackDrag` → `performTrackEdit` → `moveTrack` → `timelineChanged` → `syncTrackHeaders()`, all
 synchronous). Both `TimelineTrackHeaderComponent::mouseUp()` and
-`TimelinePanelComponent::endTrackDrag()` are written so every member write happens BEFORE the call
+`TimelinePanelComponent::commitTrackDrag()` are written so every member write happens BEFORE the call
 that can trigger this, and nothing follows it — see the `ORDERING HAZARD` comment on
-`onRowDragEnded` in `TimelineTrackHeaderComponent.h` and the matching comment in `endTrackDrag()`.
-`WholeRowDragReordersTracksAndSurvivesTheHeaderRebuildMidGesture` drives a real drag through this
+`onRowDragEnded` in `TimelineTrackHeaderComponent.h` and the matching comment in `commitTrackDrag()`.
+`WholeRowDragReordersTracksAndSurvivesTheHeaderRebuildMidGesture` (and the gesture tests in
+`TimelinePanelTrackReorderTests.cpp`) drive a real drag through this
 exact path with no host — the worst case, where the mutation runs with no extra indirection —
 specifically to pin it.
 
