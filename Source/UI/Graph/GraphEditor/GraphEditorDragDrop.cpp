@@ -481,6 +481,10 @@ juce::Point<int> GraphEditor::findLeftEdgeSlotBelowModules(int w, int h) {
         any = true;
     }
 
+    // The head ends up boxed in a channel macro, whose open hull reaches kMacroHullSideOutset left of it: floor x so
+    // that hull opens at x >= 0 rather than being nudged (or clipped) at the canvas edge.
+    left = std::max(left, synth::LayoutUtil::kMacroHullSideOutset);
+
     const juce::Point<int> desired(left, any ? bottom + synth::LayoutUtil::kArrangeOriginY
                                              : synth::LayoutUtil::kArrangeOriginY);
     return resolvePlacement(desired, w, h, juce::AudioProcessorGraph::NodeID{});

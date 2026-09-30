@@ -76,7 +76,7 @@ paint and hit-testing cannot drift. `macroHullAt(canvasPos)` returns the expande
 contains a point, the smallest one on overlap.
 
 **The hull holds the port sidebars.** The rectangle is the member union plus a fixed margin, widened on
-each side by that side's port strip (longest port name + padding, 26 px minimum) so members keep their
+each side by a FIXED 96 px port strip (reserved even with no ports; `LayoutUtil::kMacroHullSideOutset` = margin + strip = 110 px per side) so members keep their
 margin and do not move when a port is added; it grows down when the port rows (16 px each, from 30 px
 below the hull's top) plus the '+'/'-' footer are taller than the members. The strips are painted
 under the port widgets and the outline by `paintMacroPortStrips`

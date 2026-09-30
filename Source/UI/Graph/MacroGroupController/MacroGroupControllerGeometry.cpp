@@ -53,6 +53,8 @@ constexpr int kMacroHullMargin = 14;
 constexpr int kMacroChipHeight = 18;
 constexpr int kMacroChipTopMargin = kMacroChipHeight + 6;
 static_assert(kMacroChipTopMargin == kMacroChipRowHeight, "the strips start below the chip row");
+static_assert(kMacroHullMargin + kMacroHullStripWidth == synth::LayoutUtil::kMacroHullSideOutset,
+              "LayoutUtil::kMacroHullSideOutset is the hull's side reach; keep it in sync");
 
 // {input, output} sidebar strip widths for a macro: FIXED and equal on both sides, reserved even with no ports,
 // and independent of the port names and of zoom (a long name is ellipsised in its column). The open macro's strip

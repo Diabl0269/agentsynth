@@ -84,7 +84,9 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
     const int eqX = gateX + estimateModuleSize("Gate").x + kAutoChannelCardGapX;
     const int compressorX = eqX + estimateModuleSize("Parametric EQ").x + kAutoChannelCardGapX;
     const int stripX = compressorX + estimateModuleSize("Compressor").x + kAutoChannelCardGapX;
-    const int masterX = stripX + estimateModuleSize("Channel Strip").x + kAutoChannelCardGapX;
+    // Master clears the channel macro's open hull (its right strip reaches kMacroHullSideOutset past the Strip).
+    const int masterX =
+        stripX + estimateModuleSize("Channel Strip").x + synth::LayoutUtil::kMacroHullSideOutset + kAutoChannelCardGapX;
     const synth::DefaultChannelLayout layout{
         /*gate=*/{gateX, originPos.y},
         /*eq=*/{eqX, originPos.y},
@@ -187,7 +189,9 @@ synth::DefaultChannelLayout channelLayoutRightOf(juce::AudioProcessorGraph::Node
     const int eqX = gateX + GraphEditor::estimateModuleSize("Gate").x + kAutoChannelCardGapX;
     const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kAutoChannelCardGapX;
     const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kAutoChannelCardGapX;
-    const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x + kAutoChannelCardGapX;
+    // Master clears the channel macro's open hull (see maybeAutoCreateChannelAfterConnect).
+    const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x +
+                        synth::LayoutUtil::kMacroHullSideOutset + kAutoChannelCardGapX;
     return {{gateX, originY}, {eqX, originY}, {compressorX, originY}, {stripX, originY}, {masterX, originY}};
 }
 

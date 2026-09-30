@@ -118,8 +118,8 @@ transaction, so one Cmd+Z removes all of it and redo restores it with the same n
 2. Create a `Track In` node through `AIStateMapper::createModule`, so it round-trips through
    `graphToJSON` / `applyJSONToGraph` — that is how undo, redo and `.agsproj` reproduce it — assign
    a fresh uuid and mirror it into the processor with `ModuleBase::setNodeUuid`, and place it at
-   the canvas' left edge below every existing module
-   (`GraphEditor::findLeftEdgeSlotBelowModules`).
+   the canvas' left edge below every existing module, with x floored at `LayoutUtil::kMacroHullSideOutset` so the
+   channel macro's open hull starts at x >= 0 (`GraphEditor::findLeftEdgeSlotBelowModules`).
 3. **Auto-wire only when unambiguous.** If the patch contains **exactly one** MIDI-driven
    instrument — module type `Poly MIDI`, `Oscillator`, `Wavetable`, `Sampler`, `Sequencer` or
    `Poly Sequencer`; MIDI *sources* (`Track In`, `External MIDI`, `MIDI Keyboard`) are excluded —
