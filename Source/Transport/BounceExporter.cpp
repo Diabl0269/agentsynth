@@ -6,6 +6,30 @@
 
 namespace synth {
 
+juce::String fileExtensionFor(BounceFormat format) {
+    switch (format) {
+    case BounceFormat::Aiff:
+        return "aiff";
+    case BounceFormat::Flac:
+        return "flac";
+    case BounceFormat::Wav:
+        break;
+    }
+    return "wav";
+}
+
+std::unique_ptr<juce::AudioFormat> createAudioFormatFor(BounceFormat format) {
+    switch (format) {
+    case BounceFormat::Aiff:
+        return std::make_unique<juce::AiffAudioFormat>();
+    case BounceFormat::Flac:
+        return std::make_unique<juce::FlacAudioFormat>();
+    case BounceFormat::Wav:
+        break;
+    }
+    return std::make_unique<juce::WavAudioFormat>();
+}
+
 juce::String validateBounceOptions(const BounceOptions& options) {
     if (!(options.sampleRate > 0.0) || !std::isfinite(options.sampleRate))
         return "Sample rate must be a positive number.";
@@ -17,6 +41,8 @@ juce::String validateBounceOptions(const BounceOptions& options) {
         return "Bit depth must be 16, 24 or 32.";
     if (options.format == BounceFormat::Aiff && options.bitDepth == 32)
         return "AIFF has no 32-bit float variant - choose 16 or 24 bit, or export WAV instead.";
+    if (options.format == BounceFormat::Flac && options.bitDepth == 32)
+        return "FLAC has no 32-bit float variant - choose 16 or 24 bit, or export WAV instead.";
     if (!std::isfinite(options.startBeat) || !std::isfinite(options.endBeat))
         return "The bounce range must be finite.";
     if (options.startBeat < 0.0)

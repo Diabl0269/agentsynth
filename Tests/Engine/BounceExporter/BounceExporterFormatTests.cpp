@@ -1,4 +1,4 @@
-// Topic: file format -- WAV/AIFF, bit depth, exact sample length.
+// Topic: file format -- WAV/AIFF/FLAC, bit depth, exact sample length.
 
 #include "BounceExporterTestHelpers.h"
 
@@ -91,3 +91,47 @@ TEST(BounceExporterTest, AiffRejects32BitFloatBeforeAnythingIsWritten) {
 // ============================================================================
 // 2. Energy exactly where the notes are, silence exactly where they aren't
 // ============================================================================
+
+TEST(BounceExporterTest, FlacFormatWritesAReadableNonSilentFlacFile) {
+    Fixture f;
+    ASSERT_TRUE(f.build());
+    ASSERT_TRUE(f.addStandardNotes());
+    f.publish();
+
+    ScopedTempFile out("agentsynth_bounce_format.flac");
+
+    auto options = defaultOptions();
+    options.format = synth::BounceFormat::Flac;
+    const auto result = BounceExporter::bounce(f.engine, out.file, options);
+    ASSERT_TRUE(result.ok) << result.message;
+
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(out.file));
+    ASSERT_NE(reader, nullptr) << "the bounce must open with JUCE's own FLAC reader";
+    EXPECT_EQ(reader->getFormatName(), "FLAC file");
+    EXPECT_EQ((int)reader->bitsPerSample, 24);
+    EXPECT_EQ((int)reader->numChannels, kNumChannels);
+    EXPECT_EQ(reader->sampleRate, kSampleRate);
+    EXPECT_EQ(reader->lengthInSamples, (juce::int64)kEightBeatSamples);
+
+    juce::AudioBuffer<float> audio((int)reader->numChannels, (int)reader->lengthInSamples);
+    reader->read(&audio, 0, (int)reader->lengthInSamples, 0, true, true);
+    EXPECT_GT(audio.getMagnitude(0, audio.getNumSamples()), 0.01f) << "the FLAC bounce must carry the notes";
+}
+
+TEST(BounceExporterTest, FlacRejects32BitFloatBeforeAnythingIsWritten) {
+    Fixture f;
+    ASSERT_TRUE(f.build());
+    f.publish();
+
+    ScopedTempFile out("agentsynth_bounce_flac_float.flac");
+
+    auto options = defaultOptions();
+    options.format = synth::BounceFormat::Flac;
+    options.bitDepth = 32;
+    const auto result = BounceExporter::bounce(f.engine, out.file, options);
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.message.containsIgnoreCase("flac")) << result.message;
+    EXPECT_FALSE(out.file.existsAsFile());
+}

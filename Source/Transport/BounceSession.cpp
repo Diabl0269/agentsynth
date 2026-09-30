@@ -85,12 +85,9 @@ BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, con
         return;
     }
 
-    juce::WavAudioFormat wavFormat;
-    juce::AiffAudioFormat aiffFormat;
-    juce::AudioFormat& audioFormat = options_.format == BounceFormat::Aiff ? static_cast<juce::AudioFormat&>(aiffFormat)
-                                                                           : static_cast<juce::AudioFormat&>(wavFormat);
-    writer_.reset(audioFormat.createWriterFor(stream.get(), options_.sampleRate, (unsigned int)options_.numChannels,
-                                              options_.bitDepth, {}, 0));
+    const auto audioFormat = createAudioFormatFor(options_.format);
+    writer_.reset(audioFormat->createWriterFor(stream.get(), options_.sampleRate, (unsigned int)options_.numChannels,
+                                               options_.bitDepth, {}, 0));
     if (writer_ == nullptr) {
         restoreTransportAndEngine();
         setupFailed_ = true;

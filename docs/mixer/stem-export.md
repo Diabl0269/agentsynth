@@ -24,7 +24,7 @@ exactly like Export Audio. The two pieces both paths would otherwise duplicate
 `Source/Transport/BounceGuards.h`, so `BounceExporter`'s own behaviour and tests are unchanged.
 
 **Strips are enumerated from the graph in ascending node-id order** — the "else node id" fallback,
-whose ORDER has no dependency on the timeline or track model — and named `"NN - <name>.<ext>"`.
+whose ORDER has no dependency on the timeline or track model — and named `"NN - <name>.<ext>"`, where `<ext>` follows the chosen format (`wav`, `aiff` or `flac`; 32-bit float is WAV only).
 
 ## Stem naming
 
@@ -93,7 +93,7 @@ defence-in-depth backstop.
 **"Export Stems..." sits immediately after "Export Audio..."** everywhere that action is offered,
 opening `ExportAudioDialog` in a stems mode: the destination is a **FOLDER** (default
 `"<project name> Stems"` inside the same `Exports/` base Export Audio uses), with the same range, tail,
-format, rate and bit-depth controls and the same progress page, and **no destination-exists collision
+format (WAV, AIFF or FLAC; 32-bit float is WAV only), rate and bit-depth controls and the same progress page, and **no destination-exists collision
 prompt** — a stems folder is a re-exportable container, not a one-shot file. A cancelled or failed
 export leaves no stem files behind, never touches a pre-existing file, and disarms every tap.
 

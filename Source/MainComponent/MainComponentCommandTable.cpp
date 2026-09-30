@@ -373,7 +373,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildGeneralCommandRows()
         // Greyed out rather than re-entrant: only one bounce (and one modal progress window) at a
         // time -- see isBounceInProgress_.
         {AppCommands::exportAudio, "Export Audio...",
-         "Bounce the arrangement or the current loop range to a WAV or AIFF file", "General", "exportAudio",
+         "Bounce the arrangement or the current loop range to a WAV, AIFF or FLAC file", "General", "exportAudio",
          [](const MainComponent& m) { return m.isExportAvailable(); },
          [](MainComponent& m) {
              m.promptExportAudio();
