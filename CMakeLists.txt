@@ -236,6 +236,8 @@ add_library(Core STATIC
     Source/PresetManager.h
     Source/PatchDocument.cpp
     Source/PatchDocument.h
+    Source/PatchSaveLocation.cpp
+    Source/PatchSaveLocation.h
     Source/ProjectBundle.cpp
     Source/ProjectBundle.h
     Source/MidiRemote/RemoteEngine/RemoteEngine.h

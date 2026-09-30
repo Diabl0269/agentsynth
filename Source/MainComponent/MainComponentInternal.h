@@ -63,8 +63,7 @@ inline bool isMidiInstrumentNode(juce::AudioProcessor* processor) {
 // them inside the bundle is safe - they are just a destination choice, not part of the bundle's
 // asset policy.
 inline constexpr const char* kExportsFolderName = "Exports";
-inline constexpr const char* kPatchesFolderName = "Patches";
-// The folder a "Export Audio..."/"Export Patch Only..." dialog starts in: <bundle>/<subFolderName>
+// The folder a "Export Audio..." dialog starts in: <bundle>/<subFolderName>
 // when a real bundle is open (created on demand), otherwise the same Music/AgentSynth root every
 // other save/open dialog defaults to.
 inline juce::File resolveExportSubdirectory(const juce::File& currentBundleDir, const char* subFolderName) {

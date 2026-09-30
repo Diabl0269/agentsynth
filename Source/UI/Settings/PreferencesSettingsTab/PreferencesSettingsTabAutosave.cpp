@@ -46,7 +46,7 @@ void PreferencesSettingsTab::persistAutosaveBackupCount(int count) {
     appProperties.getUserSettings()->saveIfNeeded();
 }
 
-// Lays out the Files category's rows (autosave). A patch-save-location row would go here.
+// Lays out the Files category's rows: autosave, then the patch save location.
 void PreferencesSettingsTab::layoutAutosaveGroup(int& y, int contentWidth, bool& pendingDivider,
                                                  const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible,
                                                  const BeginGroupFn& beginGroup) {
@@ -79,4 +79,5 @@ void PreferencesSettingsTab::layoutAutosaveGroup(int& y, int contentWidth, bool&
         }
         pendingDivider = pendingDivider || visible;
     }
+    layoutPatchSaveLocationGroup(y, contentWidth, pendingDivider, groupMatches, setGroupVisible, beginGroup);
 }

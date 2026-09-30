@@ -338,6 +338,7 @@ add_executable(Tests
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviourTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviourTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosaveTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPatchSaveLocationTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycleTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerPlacementTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachModeTests.cpp
@@ -566,6 +567,7 @@ add_executable(Tests
     Timeline/TimelineE2ETests.cpp
     Project/PatchDocumentTests.cpp
     Project/ProjectBundleTests.cpp
+    Project/PatchSaveLocationTests.cpp
     Project/ProjectBundleCardLayoutTests.cpp
     Project/AutosaveTests.cpp
     Project/RecentProjectsTests.cpp
