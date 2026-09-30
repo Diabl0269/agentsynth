@@ -36,7 +36,8 @@ void PianoRollComponent::setPropertiesFile(juce::PropertiesFile* props) {
     if (props != nullptr) {
         setVelocityLaneHeight(
             props->getIntValue(detail::velocityLaneHeightKey(), PianoRollVelocityLane::kDefaultHeight));
-        setVelocityLaneVisible(props->getBoolValue(detail::velocityLaneVisibleKey(), true));
+        // Like the scale panel, a restore lands at once.
+        setVelocityLaneVisible(props->getBoolValue(detail::velocityLaneVisibleKey(), true), /*animate=*/false);
     }
 }
 

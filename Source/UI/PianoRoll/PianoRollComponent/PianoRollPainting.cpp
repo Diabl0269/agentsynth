@@ -354,7 +354,7 @@ void PianoRollComponent::paintKeysColumn(juce::Graphics& g) {
 
 void PianoRollComponent::paintHeader(juce::Graphics& g) {
     using namespace synth::theme;
-    juce::Colour bg, border, restingFill, activeFill;
+    juce::Colour bg, border, restingFill, activeFill, mutedText = juce::Colours::grey;
     float pillRadius = 3.0f;
     // The header's drawn button labels ("Clips", "Q", "Scale") used to share the theme's micro
     // size (~8.5px) with the keys column's captions — unreadably small for text meant to be READ
@@ -378,6 +378,7 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
         activeFill = c.toolActive;
         buttonFontPx = lf->getTheme().type.value + 1.0f;
         pillRadius = lf->getTheme().metrics.pillRadius;
+        mutedText = c.textMuted;
     } else {
         bg = juce::Colours::darkslategrey;
         border = juce::Colours::grey;
@@ -476,6 +477,13 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
 
     // VELOCITY (a toggle, lit while the strip is shown) and HUMANIZE (an action that opens its
     // amount menu). Words, like "Scale": each names a thing, and a glyph for either would be a guess.
+    // One outline round the Velocity chip, the Humanize chip and the value box, with "Set" captioning
+    // the box ("Set [ 100 ]"). Drawn first so the chips sit inside it; it is not a hit target.
+    g.setColour(border);
+    g.drawRoundedRectangle(velocityGroupBounds_.toFloat().reduced(0.5f), pillRadius + 2.0f, 1.0f);
+    g.setColour(mutedText);
+    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
+    g.drawText("Set", velocityCaptionBounds_, juce::Justification::centredLeft, false);
     const auto velocityFill =
         paintChip(velocityChipBounds_, velocityLaneVisible_, hoveredHeaderButton_ == HeaderButtonId::Velocity);
     g.setColour(velocityFill.contrasting(0.9f));
