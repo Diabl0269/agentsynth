@@ -398,6 +398,14 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildGeneralCommandRows()
              m.promptExportMidi();
              return true;
          }},
+        // Menu-only; greyed out while a collect/zip or a render is running.
+        {AppCommands::collectAndArchive, "Collect & Archive...",
+         "Copy every sample and wavetable the project uses into it, optionally as one zip file", "General", nullptr,
+         [](const MainComponent& m) { return m.isCollectArchiveAvailable(); },
+         [](MainComponent& m) {
+             m.promptCollectAndArchive();
+             return true;
+         }},
         // The Patch open is menu-only, like checkForUpdates -- no rebindable action-id, so no
         // default keypress and no Settings row; it asks whether to replace or add onto the patch.
         {AppCommands::openPreset,

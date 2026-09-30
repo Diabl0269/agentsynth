@@ -188,6 +188,7 @@ add_executable(Tests
     App/MainComponent/MainComponentTeardownTests.cpp
     App/MainComponent/MainComponentMidiRemoteStartupTests.cpp
     App/MainComponent/MainComponentCommandTableTests.cpp
+    App/MainComponent/MainComponentCollectArchiveTests.cpp
     App/MainComponent/MeterColourStopsSettingsIntegrationTests.cpp
     UI/Chrome/WelcomeScreenTests.cpp
     UI/Chrome/ShortcutHint/ShortcutHintLayoutTests.cpp
@@ -568,6 +569,8 @@ add_executable(Tests
     Project/AutosaveTests.cpp
     Project/RecentProjectsTests.cpp
     Project/AssetManagerTests.cpp
+    Project/ModuleFileRefsTests.cpp
+    Project/ProjectCollectorTests.cpp
     App/BrandingTests.cpp
     App/AutomationLaunchTests.cpp
     # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those six units are

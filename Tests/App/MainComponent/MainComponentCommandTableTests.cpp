@@ -22,6 +22,7 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::exportAudio,
     AppCommands::exportStems,
     AppCommands::exportMidi,
+    AppCommands::collectAndArchive,
     AppCommands::openPreset,
     AppCommands::openProject,
     AppCommands::newPatch,

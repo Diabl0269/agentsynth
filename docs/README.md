@@ -7,10 +7,10 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/architecture/architecture.md`](architecture/architecture.md) — hub: project structure, signal flow, quality standards, and the index into the topic docs below
 - [`docs/architecture/audio-engine.md`](architecture/audio-engine.md) — AudioEngine, TransportService (bounce/export, stem export, metronome, input monitoring, mixer solo gate)
 - [`docs/architecture/timeline.md`](architecture/timeline.md) — TimelineDoc, TimelineSnapshot, AutomationKernel/Applier/Recorder, UI reflection
-- [`docs/architecture/project-bundle.md`](architecture/project-bundle.md) — ProjectBundle (.agsproj): open/save, recent projects, dirty state, autosave, welcome screen
+- [`docs/architecture/project-bundle.md`](architecture/project-bundle.md) — ProjectBundle (.agsproj): open/save, bundle-relative module file refs, recent projects, dirty state, autosave, welcome screen
 - [`docs/architecture/module-base.md`](architecture/module-base.md) — ModuleBase (logical-port API, bypass/mute contract, output level stage) + supporting components (LayoutUtil, ModuleComponent, AppUndoManager, LookAndFeel)
 - [`docs/architecture/graph-editor.md`](architecture/graph-editor.md) — GraphEditor: per-concern translation units and the three collaborator classes
-- [`docs/architecture/app-wiring.md`](architecture/app-wiring.md) — who owns the live TimelineDoc and every hook that keeps it in step; audio recording, latency alignment, AudioClipStreamer, asset management
+- [`docs/architecture/app-wiring.md`](architecture/app-wiring.md) — who owns the live TimelineDoc and every hook that keeps it in step; audio recording, latency alignment, AudioClipStreamer, asset management, Collect & Archive
 - [`docs/architecture/plugin-layer.md`](architecture/plugin-layer.md) — VST3/AU host modes, ownership, state format; hosting third-party plugins inside our own graph
 ## Modules
 

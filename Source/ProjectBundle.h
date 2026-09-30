@@ -98,6 +98,10 @@ public:
     /** Reserved asset subdirectory names — see the class comment's Asset policy. */
     static constexpr const char* kAudioSubdirName = "Audio";
     static constexpr const char* kPeaksSubdirName = "Peaks";
+    /** Where Collect & Archive copies Sampler files and Wavetable files/folders — kept out of
+     *  `Audio/` so `AssetManager::cleanUnusedAssets` (clip-refs only) can never sweep them. */
+    static constexpr const char* kSamplesSubdirName = "Samples";
+    static constexpr const char* kWavetablesSubdirName = "Wavetables";
 
     /** True if `dir` exists, is a directory, has the `.agsproj` extension, and contains a
      *  `project.json` file. Does not parse or validate that file's contents. */
@@ -156,8 +160,8 @@ private:
     // Shared by save()/saveAutosave(): graphToJSON -> patchDocument.toVar -> "timeline"/"macros"/
     // "midiRemote" set LAST, in that order. Identical content either way; only the destination
     // file name differs.
-    static juce::var buildProjectJson(juce::AudioProcessorGraph& graph, const TimelineDoc& timeline,
-                                      PatchDocument& patchDocument, const MacroSet& macros,
+    static juce::var buildProjectJson(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
+                                      const TimelineDoc& timeline, PatchDocument& patchDocument, const MacroSet& macros,
                                       const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw);
 
     // Shared by load()/loadAutosave(): the fixed, all-or-nothing validation order documented on the
