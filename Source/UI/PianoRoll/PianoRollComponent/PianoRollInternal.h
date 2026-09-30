@@ -66,6 +66,8 @@ inline juce::KeyPress velocityLaneToggleKey() noexcept {
 
 // The properties-file key remembering whether the velocity strip is shown (absent = shown).
 inline const char* velocityLaneVisibleKey() noexcept { return "pianoRollVelocityLaneVisible"; }
+// ... and the height the user dragged it to (absent = PianoRollVelocityLane::kDefaultHeight).
+inline const char* velocityLaneHeightKey() noexcept { return "pianoRollVelocityLaneHeight"; }
 
 inline bool isBlackKeyPitchClass(int pitchClass) noexcept {
     switch (pitchClass) {

@@ -223,6 +223,8 @@ public:
     void setVelocityLaneVisible(bool visible);
     bool isVelocityLaneVisible() const noexcept;
     void toggleVelocityLane();
+    // The strip's remembered height before layout's own clamp; dragged on its top edge, persisted.
+    int getVelocityLaneHeight() const noexcept;
     // Adds a random offset in [-range, +range] to each selected note (all notes when none is
     // selected), clamped to [1, 127]; one undo step.
     void humanizeVelocities(int range);
@@ -601,6 +603,10 @@ private:
     // ---- Velocity strip plumbing ---- see PianoRollVelocity.cpp.
     void initVelocityControls();
     int velocityLaneHeightPx() const noexcept;
+    void setVelocityLaneHeight(int height);
+    int clampedVelocityLaneHeight(int desiredHeight) const noexcept;
+    void onVelocityLaneResized(int desiredHeight);
+    void onVelocityLaneResizeCommitted(int desiredHeight);
     void layoutVelocityControls(juce::Rectangle<int>& header, juce::Rectangle<int>& canvas);
     void commitVelocities(const std::vector<std::pair<synth::NoteId, int>>& targets);
     std::vector<synth::NoteId> velocityTargetIds() const;
@@ -925,6 +931,8 @@ private:
     // ---- Velocity strip ---- a child component; see PianoRollVelocity.cpp.
     std::unique_ptr<PianoRollVelocityLane> velocityLane_;
     bool velocityLaneVisible_ = true;
+    // The strip's remembered height (top-edge drag); clamped afresh at layout, never mutated by it.
+    int velocityLaneHeight_ = 0; // set to the lane's default in initVelocityControls()
     // The strip gesture's live values, read by effectiveGeometryFor; empty outside a gesture.
     std::map<synth::NoteId, int> velocityPreview_;
     juce::TextEditor velocityBox_;

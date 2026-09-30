@@ -103,3 +103,20 @@ TEST(VelocityLaneMathTest, HumanizeIsDeterministicForASeededSource) {
     juce::Random c(99);
     EXPECT_EQ(humanizedVelocity(80, 0, c), 80) << "a zero range changes nothing";
 }
+
+TEST(VelocityLaneMathTest, LaneHeightClampsToTheMinimumAndHalfTheBand) {
+    EXPECT_EQ(clampLaneHeight(64, 240, 32), 64);
+    EXPECT_EQ(clampLaneHeight(5, 240, 32), 32) << "never below the minimum";
+    EXPECT_EQ(clampLaneHeight(-40, 240, 32), 32) << "a drag past the bottom edge";
+    EXPECT_EQ(clampLaneHeight(500, 240, 32), 120) << "never more than half the band";
+    EXPECT_EQ(clampLaneHeight(500, 50, 32), 32) << "a band too small for the minimum still gets the minimum";
+    EXPECT_EQ(clampLaneHeight(500, -20, 32), 32);
+}
+
+TEST(VelocityLaneMathTest, ReadoutSlideShrinksFromTheFullOffsetToNothingAndIsClamped) {
+    EXPECT_FLOAT_EQ(readoutSlidePx(0.0f), kReadoutSlidePx);
+    EXPECT_FLOAT_EQ(readoutSlidePx(1.0f), 0.0f);
+    EXPECT_FLOAT_EQ(readoutSlidePx(0.5f), kReadoutSlidePx * 0.5f);
+    EXPECT_FLOAT_EQ(readoutSlidePx(-1.0f), kReadoutSlidePx);
+    EXPECT_FLOAT_EQ(readoutSlidePx(2.0f), 0.0f);
+}

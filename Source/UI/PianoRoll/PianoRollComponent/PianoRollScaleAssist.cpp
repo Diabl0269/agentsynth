@@ -9,6 +9,7 @@
 #include "AppUndoManager.h"
 #include "PianoRollInternal.h"
 #include "Transport/TransportService.h"
+#include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -32,8 +33,11 @@ void PianoRollComponent::setPropertiesFile(juce::PropertiesFile* props) {
     setScalePanelVisible(visible, /*animate=*/false);
     // The velocity strip's remembered visibility (absent = shown). Without a properties file the
     // current, session-only state is kept.
-    if (props != nullptr)
+    if (props != nullptr) {
+        setVelocityLaneHeight(
+            props->getIntValue(detail::velocityLaneHeightKey(), PianoRollVelocityLane::kDefaultHeight));
         setVelocityLaneVisible(props->getBoolValue(detail::velocityLaneVisibleKey(), true));
+    }
 }
 
 void PianoRollComponent::setScalePanelVisible(bool visible, bool animate) {

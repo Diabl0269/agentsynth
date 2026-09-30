@@ -1,9 +1,12 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/PanelResizeHandle.h"
+#include "UI/Layout/UIAnimation.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -19,6 +22,11 @@ class PianoRollVelocityLane : public juce::Component {
 public:
     // The strip's height while shown.
     static constexpr int kDefaultHeight = 64;
+    // The least a drag on the top-edge handle can shrink the strip to.
+    static constexpr int kMinHeight = 32;
+    // Readout fade, ms (docs/layout/animation.md "Motion rules").
+    static constexpr double kReadoutFadeInMs = 160.0;
+    static constexpr double kReadoutFadeOutMs = 110.0;
     // How close (px, horizontally) a press must land to a stick to grab it.
     static constexpr int kStickHitPx = 5;
 
@@ -40,11 +48,16 @@ public:
         std::function<void(const std::map<synth::NoteId, int>&)> onPreview;
         std::function<void(const std::vector<std::pair<synth::NoteId, int>>&)> onCommit;
         std::function<void()> onCancel;
+        // The top-edge handle's drag: the height asked for, UNCLAMPED (the owner clamps, re-lays
+        // out and persists); the commit fires once on release, only if the drag moved.
+        std::function<void(int desiredHeight)> onResizeRequest;
+        std::function<void(int desiredHeight)> onResizeCommitted;
     };
 
     enum class Gesture { None, Stick, Pen, Ramp };
 
     PianoRollVelocityLane();
+    ~PianoRollVelocityLane() override;
 
     void setHost(Host host);
 
@@ -59,8 +72,12 @@ public:
 
     // The note whose value is shown next to its stick (hovered or being dragged), or invalid.
     synth::NoteId getReadoutNote() const noexcept;
+    // The readout's fade (0 hidden .. 1 settled); it is also the readout's alpha.
+    float getReadoutOpacity() const noexcept;
+    PanelResizeHandle& getResizeHandle() noexcept;
 
     void paint(juce::Graphics& g) override;
+    void resized() override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
@@ -86,6 +103,13 @@ private:
     void paintScale(juce::Graphics& g, int gutter);
     void paintSticks(juce::Graphics& g, int gutter);
     void paintReadout(juce::Graphics& g, const Stick& stick, int velocity);
+    juce::Rectangle<int> readoutBox(const Stick& stick, int velocity, float t);
+
+    // The one place the readout note changes: fades on appear / disappear only (see .cpp).
+    void setReadout(synth::NoteId next);
+    void fadeReadoutIn();
+    void fadeReadoutOut();
+    void setReadoutOpacity(float value);
 
     Host host_;
     Gesture gesture_ = Gesture::None;
@@ -100,6 +124,16 @@ private:
     juce::Point<float> lastPos_;
     synth::NoteId hovered_;
     synth::NoteId readout_;
+    // The readout as last painted, kept so a fade-out keeps drawing it after readout_ is cleared.
+    struct ShownReadout {
+        Stick stick;
+        int velocity = 0;
+    };
+    std::optional<ShownReadout> shown_;
+    float readoutOpacity_ = 0.0f;
+    PanelResizeHandle resizeHandle_{*this};
+    juce::VBlankAnimatorUpdater vblank_{this};
+    AnimationDriver fade_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PianoRollVelocityLane)
 };

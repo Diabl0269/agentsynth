@@ -41,4 +41,14 @@ std::vector<std::pair<synth::NoteId, int>> lineVelocities(const std::vector<Stic
 // `velocity` plus a random offset in [-range, +range], clamped to [1, 127].
 int humanizedVelocity(int velocity, int range, juce::Random& random);
 
+// The strip height a drag asked for, clamped to [minHeight, half of `available`] (`available` is the
+// canvas band's height, grid included). The half never drops below `minHeight`; a band too small
+// for even that is the caller's own floor to apply.
+int clampLaneHeight(int desired, int available, int minHeight) noexcept;
+
+// How many px the readout box still sits nearer its stick than its resting spot, `t` (0..1) of the
+// way through its fade: the full slide at t = 0, none at t = 1.
+constexpr float kReadoutSlidePx = 4.0f;
+float readoutSlidePx(float t) noexcept;
+
 } // namespace synth::ui::velocitylane

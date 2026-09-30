@@ -375,7 +375,27 @@ note (the host resolves it through the same `resolveNoteColourFor` the grid uses
 take `noteSelected`). The gutter at its left (`leftGutterWidth()`, so it tracks the Scale Assist
 panel) shows a 127 / 64 / 1 scale under the keys column, and the sticks' x comes from the roll's
 own `beatToX`, so a stick sits exactly under its note's left edge at every zoom and with the panel
-open. The value shows beside a stick while it is hovered or dragged.
+open. The value shows beside a stick while it is hovered or dragged, fading in and out rather than
+popping (see **Readout fade** below).
+
+**Resizing.** Drag the strip's top edge (the shared `PanelResizeHandle`, a 5 px child of the lane
+that shows the up/down resize cursor) to make it taller or shorter. The height is at least 32 px
+(`PianoRollVelocityLane::kMinHeight`) and at most half of the editor's canvas band, re-clamped at
+every layout so a shorter roll never keeps a strip that swallows the grid; the grid, keys column
+and Scale Assist panel follow it live. It is remembered under `pianoRollVelocityLaneHeight` in the
+roll's properties file, written when the drag is released (a click that does not move writes
+nothing). The clamp is the pure `velocitylane::clampLaneHeight`. The plot keeps 8 px of padding
+above the 127 line so a full-velocity head sits below the handle.
+
+**Cursor.** With the **Draw** tool active the strip shows the same pen cursor as the grid (a child
+component does not inherit the roll's cursor, so `applyToolCursor()` sets it on the lane too);
+under every other tool it keeps the arrow.
+
+**Readout fade.** The value beside a stick fades in when a stick is first hovered (160 ms
+`easeOutCubic`) and out when the pointer leaves it (110 ms `easeInCubic`), retargeting from the
+current opacity, and slides about 4 px out of the stick head as it does. Moving from one stick
+straight to another, or editing, just moves the label at the current opacity (a press makes it fully
+opaque at once). Headless (not showing), it lands at opacity 1 / 0 immediately.
 
 **The strip is a collaborator, not more roll.** `PianoRollVelocityLane`
 (`Source/UI/PianoRoll/VelocityLane/`) owns painting, hit-testing, the readout and the per-gesture
