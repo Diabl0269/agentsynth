@@ -333,6 +333,7 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachMode.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabCategories.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
     Source/UI/Settings/ShortcutsSettingsTab.cpp
     Source/ShortcutManager/AppCommands.h

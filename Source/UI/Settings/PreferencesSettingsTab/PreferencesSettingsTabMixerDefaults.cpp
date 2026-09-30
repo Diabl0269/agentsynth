@@ -218,3 +218,24 @@ void PreferencesSettingsTab::layoutMixerPlacementGroup(
     y += 24;
     chainNext();
 }
+
+// Lays out the Mixer category's rows, then the chain it heads: the placement row, the Panels &
+// Windows row and the MIDI Remote rows each set their own category as they lay out.
+void PreferencesSettingsTab::layoutMixerGroups(int& y, int contentWidth, bool& pendingDivider,
+                                               const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible,
+                                               const BeginGroupFn& beginGroup) {
+    layoutCategory = Category::Mixer;
+    // Group 4d: mixer auto-create-channel-on-connect toggle.
+    {
+        const bool visible = groupMatches({&mixerAutoCreateChannelOnConnectToggle});
+        setGroupVisible({&mixerAutoCreateChannelOnConnectToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            mixerAutoCreateChannelOnConnectToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+    // Group 9; chains the placement, panel-detach-mode and MIDI Remote groups itself -- see that function.
+    layoutMixerDefaultTrackPresetGroup(y, contentWidth, groupMatches, setGroupVisible, beginGroup);
+}

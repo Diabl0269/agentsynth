@@ -81,12 +81,14 @@ void PreferencesSettingsTab::setupMidiRemoteControls() {
     midiRemoteShowBadgesToggle.onClick = [this] {
         persistMidiRemoteShowBadges(midiRemoteShowBadgesToggle.getToggleState());
     };
+    setupCategorySelector(); // Chained here, the constructor is baselined
 }
 
 void PreferencesSettingsTab::layoutMidiRemoteGroup(
     int& y, int contentWidth, bool previousGroupWasVisible,
     const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
     const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible) {
+    layoutCategory = Category::MidiRemote;
     const std::initializer_list<juce::Component*> comps = {&midiRemoteTakeoverLabel, &midiRemoteTakeoverCombo,
                                                            &midiRemoteShowBadgesToggle};
     const bool visible = groupMatches(comps);

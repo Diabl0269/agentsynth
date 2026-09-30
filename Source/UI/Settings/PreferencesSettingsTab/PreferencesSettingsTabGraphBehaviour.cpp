@@ -514,3 +514,83 @@ bool PreferencesSettingsTab::layoutMacroToggleGroup(
     }
     return visible;
 }
+
+// Lays out the Graph category's rows, top to bottom. To add a Graph preference, add its group here
+// (see PreferencesSettingsTab.h, "Adding a preference").
+void PreferencesSettingsTab::layoutGraphGroups(int& y, int contentWidth, bool& pendingDivider,
+                                               const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible,
+                                               const BeginGroupFn& beginGroup) {
+    layoutCategory = Category::Graph;
+    // Group 1: smart connections
+    {
+        const bool visible = groupMatches({&smartConnectionLabel, &smartConnectionCombo});
+        setGroupVisible({&smartConnectionLabel, &smartConnectionCombo}, visible);
+        beginGroup(visible);
+        if (visible) {
+            juce::Rectangle<int> smartRow(0, y, contentWidth, 24);
+            smartConnectionLabel.setBounds(smartRow.removeFromLeft(160));
+            smartConnectionCombo.setBounds(smartRow.removeFromLeft(220));
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 2: double-click disconnect
+    {
+        const bool visible = groupMatches({&doubleClickDisconnectToggle});
+        setGroupVisible({&doubleClickDisconnectToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            doubleClickDisconnectToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 3: alignment guides
+    {
+        const bool visible = groupMatches({&alignmentGuideToggle});
+        setGroupVisible({&alignmentGuideToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            alignmentGuideToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 4: Dual I/O (one line, one row - see the toggle's declaration comment).
+    {
+        const bool visible = groupMatches({&defaultDualIOToggle, &perModuleDefaultsButton});
+        setGroupVisible({&defaultDualIOToggle, &perModuleDefaultsButton}, visible);
+        beginGroup(visible);
+        if (visible) {
+            juce::Rectangle<int> dualIORow(0, y, contentWidth, 24);
+            perModuleDefaultsButton.changeWidthToFitText(24);
+            const int buttonWidth = juce::jmax(perModuleDefaultsButton.getWidth(), 160);
+            perModuleDefaultsButton.setBounds(dualIORow.removeFromRight(buttonWidth));
+            dualIORow.removeFromRight(12);
+            defaultDualIOToggle.setBounds(dualIORow);
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 4b: macro auto-port preference.
+    {
+        const bool visible = groupMatches({&macroAutoPortLabel_, &macroAutoPortCombo_});
+        setGroupVisible({&macroAutoPortLabel_, &macroAutoPortCombo_}, visible);
+        beginGroup(visible);
+        if (visible) {
+            juce::Rectangle<int> row(0, y, contentWidth, 24);
+            macroAutoPortLabel_.setBounds(row.removeFromLeft(160));
+            macroAutoPortCombo_.setBounds(row.removeFromLeft(220));
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 4c: macro toggles (auto-create/auto-delete, drag without Cmd).
+    pendingDivider =
+        layoutMacroToggleGroup(y, contentWidth, groupMatches, setGroupVisible, beginGroup) || pendingDivider;
+}

@@ -342,6 +342,7 @@ add_executable(Tests
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerPlacementTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachModeTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemoteTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabCategoryTests.cpp
     UI/Settings/FeedbackSettingsTabTests.cpp
     Engine/AudioRendering/AudioRenderingBasicTests.cpp
     Engine/AudioRendering/AudioRenderingFXModuleTests.cpp

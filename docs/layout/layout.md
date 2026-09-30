@@ -316,6 +316,6 @@ guide per type (left / right / top / bottom / centreX / centreY) is shown.
 **Guides are visual only** — they never alter snapping. `findFreeSlot()` still governs where the
 card lands, on the soft 8 px grid. A theme switch re-resolves the guide colour automatically.
 
-A toggle lives at `Settings -> Preferences -> Show Alignment Guides`, persisted as
+A toggle lives at `Settings -> Preferences -> Graph -> Show Alignment Guides` (see [settings-preferences.md](settings-preferences.md)), persisted as
 `alignmentGuidesEnabled` in `juce::ApplicationProperties` and on by default. Off, only the module
 ghost is drawn.

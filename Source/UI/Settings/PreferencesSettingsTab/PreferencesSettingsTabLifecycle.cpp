@@ -13,11 +13,6 @@ namespace {
 // the Keyboard Shortcuts tab's section headers (see its kDividerAlpha — keep the two in step).
 constexpr float kDividerAlpha = 0.12f;
 
-// Height for a muted hint label under a preference row enough for TWO lines at the
-// hint's 11.5pt font, so text wider than the row wraps instead of being horizontally squeezed
-// (a one-line height would squeeze it, and neither hint's text is short enough to be one line at
-// the tab's real width).
-constexpr int kHintHeight = 32;
 } // namespace
 
 int comboIdFromMode(GraphEditor::SmartConnectionMode mode) {
@@ -395,7 +390,10 @@ void PreferencesSettingsTab::resized() {
     // Shortcuts tab keeps its own title/search/collapse strip out of its scrolled region.
     titleLabel.setBounds(bounds.removeFromTop(28));
     bounds.removeFromTop(8);
-    searchField.setBounds(bounds.removeFromTop(26));
+    auto pickerRow = bounds.removeFromTop(26);
+    categoryCombo.setBounds(pickerRow.removeFromLeft(200));
+    pickerRow.removeFromLeft(8);
+    searchField.setBounds(pickerRow);
     bounds.removeFromTop(12);
 
     // Everything below is scrolled content: the viewport clips it and shows a vertical scrollbar
@@ -412,8 +410,9 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
     // ---- Live filter -----------------------------------------------------------------------
     //
     // Each of the groups below is a row for filtering purposes: a group matches when ANY of its
-    // components button/label/tooltip text contains the query (case-insensitive); an empty query
-    // matches everything, so an untouched search field reproduces the usual bounds.
+    // components button/label/tooltip text contains the query (case-insensitive). A query searches
+    // EVERY category; an empty query shows only the selected category's groups (each layout unit
+    // sets layoutCategory before its groups, so groupMatches can tell whose turn it is).
     const juce::String query = searchQuery;
 
     auto textOf = [](juce::Component& c) {
@@ -432,7 +431,7 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
     };
     auto groupMatches = [&](std::initializer_list<juce::Component*> comps) {
         if (query.isEmpty())
-            return true;
+            return layoutCategory == selectedCategory;
         for (auto* c : comps)
             if (textOf(*c).containsIgnoreCase(query))
                 return true;
@@ -459,169 +458,11 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
         if (visible)
             pendingDivider = false;
     };
-    // Group 1: smart connections
-    {
-        const bool visible = groupMatches({&smartConnectionLabel, &smartConnectionCombo});
-        setGroupVisible({&smartConnectionLabel, &smartConnectionCombo}, visible);
-        beginGroup(visible);
-        if (visible) {
-            juce::Rectangle<int> smartRow(0, y, contentWidth, 24);
-            smartConnectionLabel.setBounds(smartRow.removeFromLeft(160));
-            smartConnectionCombo.setBounds(smartRow.removeFromLeft(220));
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 2: double-click disconnect
-    {
-        const bool visible = groupMatches({&doubleClickDisconnectToggle});
-        setGroupVisible({&doubleClickDisconnectToggle}, visible);
-        beginGroup(visible);
-        if (visible) {
-            doubleClickDisconnectToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 3: alignment guides
-    {
-        const bool visible = groupMatches({&alignmentGuideToggle});
-        setGroupVisible({&alignmentGuideToggle}, visible);
-        beginGroup(visible);
-        if (visible) {
-            alignmentGuideToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 4: Dual I/O (one line, one row - see the toggle's declaration comment).
-    {
-        const bool visible = groupMatches({&defaultDualIOToggle, &perModuleDefaultsButton});
-        setGroupVisible({&defaultDualIOToggle, &perModuleDefaultsButton}, visible);
-        beginGroup(visible);
-        if (visible) {
-            juce::Rectangle<int> dualIORow(0, y, contentWidth, 24);
-            perModuleDefaultsButton.changeWidthToFitText(24);
-            const int buttonWidth = juce::jmax(perModuleDefaultsButton.getWidth(), 160);
-            perModuleDefaultsButton.setBounds(dualIORow.removeFromRight(buttonWidth));
-            dualIORow.removeFromRight(12);
-            defaultDualIOToggle.setBounds(dualIORow);
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 4b: macro auto-port preference.
-    {
-        const bool visible = groupMatches({&macroAutoPortLabel_, &macroAutoPortCombo_});
-        setGroupVisible({&macroAutoPortLabel_, &macroAutoPortCombo_}, visible);
-        beginGroup(visible);
-        if (visible) {
-            juce::Rectangle<int> row(0, y, contentWidth, 24);
-            macroAutoPortLabel_.setBounds(row.removeFromLeft(160));
-            macroAutoPortCombo_.setBounds(row.removeFromLeft(220));
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 4c: macro toggles (auto-create/auto-delete, drag without Cmd).
-    pendingDivider =
-        layoutMacroToggleGroup(y, contentWidth, groupMatches, setGroupVisible, beginGroup) || pendingDivider;
-
-    // Group 4d: mixer auto-create-channel-on-connect toggle.
-    {
-        const bool visible = groupMatches({&mixerAutoCreateChannelOnConnectToggle});
-        setGroupVisible({&mixerAutoCreateChannelOnConnectToggle}, visible);
-        beginGroup(visible);
-        if (visible) {
-            mixerAutoCreateChannelOnConnectToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 5: the two loop-locator toggles (no divider between them).
-    {
-        const bool visible = groupMatches({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle});
-        setGroupVisible({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle}, visible);
-        beginGroup(visible);
-        if (visible) {
-            loopSelectionArmsToggle.setBounds({0, y, contentWidth, 24});
-            y += 34;
-            doubleClickSpansLocatorsToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 6: the two wheel-direction toggles + their hints.
-    {
-        const bool visible = groupMatches(
-            {&naturalScrollingToggle, &naturalScrollingHint, &zoomScrollUpZoomsInToggle, &zoomScrollUpZoomsInHint});
-        setGroupVisible(
-            {&naturalScrollingToggle, &naturalScrollingHint, &zoomScrollUpZoomsInToggle, &zoomScrollUpZoomsInHint},
-            visible);
-        beginGroup(visible);
-        if (visible) {
-            naturalScrollingToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-            // Indented under the toggle it explains, so the hint reads as a caption.
-            naturalScrollingHint.setBounds({24, y, contentWidth - 24, kHintHeight});
-            y += kHintHeight + 10;
-            zoomScrollUpZoomsInToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-            zoomScrollUpZoomsInHint.setBounds({24, y, contentWidth - 24, kHintHeight});
-            y += kHintHeight;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 7: piano roll key labels
-    {
-        const bool visible = groupMatches({&pianoRollKeyLabelsToggle});
-        setGroupVisible({&pianoRollKeyLabelsToggle}, visible);
-        beginGroup(visible);
-        if (visible) {
-            pianoRollKeyLabelsToggle.setBounds({0, y, contentWidth, 24});
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-
-    // Group 8: autosave.
-    {
-        const std::initializer_list<juce::Component*> autosaveComps = {
-            &autosaveEnabledToggle,       &autosaveIntervalLabel,    &autosaveIntervalEditor,
-            &autosaveIntervalUnitLabel,   &autosaveBackupCountLabel, &autosaveBackupCountEditor,
-            &autosaveBackupCountUnitLabel};
-        const bool visible = groupMatches(autosaveComps);
-        setGroupVisible(autosaveComps, visible);
-        beginGroup(visible);
-        if (visible) {
-            juce::Rectangle<int> row(0, y, contentWidth, 24);
-            autosaveEnabledToggle.setBounds(row.removeFromLeft(90));
-            row.removeFromLeft(16);
-            autosaveIntervalLabel.setBounds(row.removeFromLeft(40));
-            row.removeFromLeft(4);
-            autosaveIntervalEditor.setBounds(row.removeFromLeft(36));
-            row.removeFromLeft(4);
-            autosaveIntervalUnitLabel.setBounds(row.removeFromLeft(30));
-            row.removeFromLeft(16);
-            autosaveBackupCountLabel.setBounds(row.removeFromLeft(40));
-            row.removeFromLeft(4);
-            autosaveBackupCountEditor.setBounds(row.removeFromLeft(36));
-            row.removeFromLeft(4);
-            autosaveBackupCountUnitLabel.setBounds(row.removeFromLeft(55));
-            y += 24;
-        }
-        pendingDivider = pendingDivider || visible;
-    }
-    // Group 9; chains Group 10 itself -- see that function.
-    layoutMixerDefaultTrackPresetGroup(y, contentWidth, groupMatches, setGroupVisible, beginGroup);
+    layoutGraphGroups(y, contentWidth, pendingDivider, groupMatches, setGroupVisible, beginGroup);
+    layoutTimelineGroups(y, contentWidth, pendingDivider, groupMatches, setGroupVisible, beginGroup);
+    layoutAutosaveGroup(y, contentWidth, pendingDivider, groupMatches, setGroupVisible, beginGroup);
+    // Mixer rows, then the chain they head (placement, panel-detach mode, MIDI Remote).
+    layoutMixerGroups(y, contentWidth, pendingDivider, groupMatches, setGroupVisible, beginGroup);
     // Size the content host to whatever the visible groups consumed; the viewport scrolls it.
     // Width spans the full viewport so the dividers reach the edges; the scrollbar
     // gutter is already excluded from contentWidth.
@@ -631,6 +472,8 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
 
 void PreferencesSettingsTab::applySearchFilter(const juce::String& query) {
     searchQuery = query.trim();
+    // A query searches every category, so the picker has nothing to say until it is cleared.
+    categoryCombo.setEnabled(searchQuery.isEmpty());
     resized();
     repaint();
 }

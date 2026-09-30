@@ -68,7 +68,7 @@ TEST_F(PreferencesSettingsTabTest, MidiRemoteWidgetsPersistThroughTheirOwnCallba
 TEST_F(PreferencesSettingsTabTest, MidiRemoteGroupIsFoundByTheSearchFilterAndLaidOutBelowTheMixerRows) {
     PreferencesSettingsTab tab(appProperties);
     tab.setSize(500, 900);
-    tab.resized();
+    tab.setSelectedCategory(PreferencesSettingsTab::Category::MidiRemote);
 
     auto* badges = findToggleByText(tab, "MIDI badges");
     ASSERT_NE(badges, nullptr);
