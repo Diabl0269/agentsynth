@@ -84,6 +84,9 @@ void MainComponent::restorePanelPreferences() {
     // Default ON (Cmd-drag reparents either way) — see PreferencesSettingsTab's toggle comment.
     graphEditor.setMacroDragWithoutCmdEnabled(
         appProperties.getUserSettings()->getBoolValue("macroDragWithoutCmd", true));
+    // Default OFF — see PreferencesSettingsTab's toggle comment.
+    graphEditor.setMoveMacroOnHullDragEnabled(
+        appProperties.getUserSettings()->getBoolValue("moveMacroOnHullDrag", false));
     // Default ON — see PreferencesSettingsTab's own toggle comment for why this is a plain on/off
     // rather than a tri-state preference (see docs/mixer/mixer.md#channels-follow-audio-not-tracks
     // "main workflow").

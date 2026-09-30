@@ -200,6 +200,10 @@ public:
     /** Preference "macroDragWithoutCmd": reparent by drag without Cmd (single-module drags only). */
     void setMacroDragWithoutCmdEnabled(bool enabled) { macroDragWithoutCmdEnabled = enabled; }
     bool getMacroDragWithoutCmdEnabled() const noexcept { return macroDragWithoutCmdEnabled; }
+    /** Preference "moveMacroOnHullDrag" (off by default): dragging empty space inside an expanded macro's hull moves
+     *  the macro (the name chip's drag) instead of panning. Shift still draws a marquee. */
+    void setMoveMacroOnHullDragEnabled(bool enabled) { moveMacroOnHullDragEnabled = enabled; }
+    bool getMoveMacroOnHullDragEnabled() const noexcept { return moveMacroOnHullDragEnabled; }
     /** Test seam for the Cmd read behind a library drop's macro join; unset reads the live keyboard. */
     void setMacroJoinCommandOverrideForTests(std::optional<bool> down);
     bool isMacroJoinModifierDown() const override;
@@ -736,6 +740,7 @@ private:
     bool autoDeleteMacroPortsOnLastCableEnabled = true;
     bool spliceCableOnMacroPortDeleteEnabled = false; // off by default — a manual delete drops the cable
     bool macroDragWithoutCmdEnabled = true;
+    bool moveMacroOnHullDragEnabled = false; // off by default — hull drag pans
     std::optional<bool> macroJoinCommandOverride_;
     bool autoCreateChannelOnConnectEnabled = true;
     bool reconnectChainOnDeleteEnabled = true; // see the getter/setter's doc comment

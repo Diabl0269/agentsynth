@@ -122,6 +122,16 @@ exactly why it can be a drag handle without stealing the pan gesture: a press an
 hull's empty space, between or around member cards, still falls through to the ordinary pan and
 empty-canvas-click path.
 
+**Optional: drag anywhere in the hull to move the macro.** The Preferences toggle "Drag inside a
+macro's outline to move the macro instead of panning" (`"moveMacroOnHullDrag"`, **off by default**;
+`GraphEditor::setMoveMacroOnHullDragEnabled`) extends the chip's gesture to the whole hull. With it
+on, an unmodified left press on empty space inside an expanded hull (`macroHullAt`) starts the SAME
+group drag the chip starts (one shared lambda in `mouseDown`, so `beginSelectionDrag` /
+`dragSelectionBy` / `finalizeSelectionDrag` and one undo step are the only implementation). The chip
+and an attenuverter under the cursor still win, Shift still starts a marquee, and a macro with fewer
+than two members keeps panning (a group drag cannot arm on one member). A press that never moves
+still just selects the macro. Off, the hull pans as described above.
+
 ## The macro menu
 
 `GraphEditor::buildMacroMenu(macroId, renameAction)` is the single builder behind both the collapsed
