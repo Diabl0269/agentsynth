@@ -91,6 +91,18 @@ inline float macroPortNameAlphaAtZoom(float zoom) {
 inline bool macroPortRemoveClickableAtZoom(float zoom) { return macroPortNameAlphaAtZoom(zoom) >= 0.5f; }
 /** The strip fill's opacity: recedes as the names fade out. */
 inline float macroStripFillAlpha(float nameAlpha) { return 0.25f + 0.30f * nameAlpha; }
+/** Zoomed out, an open macro's strip narrows to this rail along the outline and each port's interior jack slides
+ *  onto its boundary jack (both driven by the one name-fade factor `t`; docs/macros/ports.md). Canvas geometry
+ *  (hull, strip widths, widget bounds) never changes. */
+inline constexpr float kMacroStripRailWidth = 10.0f;
+/** A strip's painted width: the rail at t = 0, the full `fullWidth` at t = 1. */
+inline float macroStripPaintedWidth(float fullWidth, float t) {
+    return kMacroStripRailWidth + (fullWidth - kMacroStripRailWidth) * t;
+}
+/** The interior jack's x: on the boundary jack at t = 0, at its own `interiorX` at t = 1. */
+inline float macroPortInteriorJackX(float boundaryX, float interiorX, float t) {
+    return boundaryX + (interiorX - boundaryX) * t;
+}
 inline constexpr float kMacroPortFooterButtonSize = 8.0f;
 inline constexpr float kMacroPortFooterButtonFromBottom = 12.0f; // button top, up from the strip's bottom edge
 inline constexpr float kMacroPortAddButtonInset = 4.0f;          // '+' x from its strip's outer edge

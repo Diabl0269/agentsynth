@@ -310,6 +310,10 @@ void GraphEditor::updateTransform() {
 
     content.setBounds(0, 0, 10000, 10000);
     content.setTransform(t);
+    // A zoomed-out macro port's interior jack slides onto its boundary jack (getPortCenter reads the zoom), so the
+    // memoized cable endpoints go stale with the zoom itself; the strips/widgets repaint live.
+    if (!getMacros().empty())
+        cablesCacheValid = false;
     repaint();
 
     // Keep the minimap tracking pan/zoom immediately rather than waiting up to 33ms for the next

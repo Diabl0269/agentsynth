@@ -610,6 +610,11 @@ private:
     // Opacity of the docked widget's name at the canvas zoom (0 = dots only; the tooltip is the name), and whether
     // the name would be ellipsised in its column.
     float macroPortNameAlpha() const;
+    // The docked widget's jack x for `isInput`: the boundary jack stays put, the interior jack slides onto it as the
+    // canvas zooms out (macroPortInteriorJackX). getPortCenter, the MIDI jack and the hit-test all go through it.
+    int macroPortJackX(bool isInput) const;
+    // True when the widget's own (boundary) jack is an output, so a press on the merged dot picks that side first.
+    bool macroPortBoundaryIsOutput() const;
     juce::Rectangle<int> macroPortNameArea(bool boundaryIsInput) const;
     bool macroPortNameIsTruncated(const juce::String& name, bool boundaryIsInput) const;
 

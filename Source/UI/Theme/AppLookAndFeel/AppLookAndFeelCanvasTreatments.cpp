@@ -1,5 +1,6 @@
 #include "AppLookAndFeel.h"
 #include "UI/Graph/CableColour.h"
+#include "UI/Layout/CableCurve.h"
 
 namespace synth::theme {
 
@@ -155,11 +156,8 @@ void AppLookAndFeel::drawConnectionWire(juce::Graphics& g, juce::Point<float> p1
 
     // Build the path if the caller didn't.
     juce::Path wire = path;
-    if (wire.isEmpty()) {
-        const float dx = p2.x - p1.x;
-        wire.startNewSubPath(p1);
-        wire.cubicTo(p1.x + dx * 0.5f, p1.y, p2.x - dx * 0.5f, p2.y, p2.x, p2.y);
-    }
+    if (wire.isEmpty())
+        wire = synth::ui::makeCablePath(p1, p2);
 
     // `activity` is a raw signal peak supplied by the caller, and not every CV source is normalised
     // (Poly MIDI's pitch fan carries Hz). Clamp before it scales any geometry — an unbounded value

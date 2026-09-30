@@ -358,6 +358,7 @@ add_executable(Tests
     Modules/ModuleAdoptionTests.cpp
     Project/StateRoundTripTests.cpp
     UI/Graph/CableColourTests.cpp
+    UI/Graph/CablePathDirectionTests.cpp
     Engine/AudioEngineModRoutingTests.cpp
     Engine/PerformanceTests.cpp
     UI/Theme/ThemeTests.cpp
@@ -426,6 +427,7 @@ add_executable(Tests
     Macros/MacroCardJackTests.cpp
     Macros/MacroCardPortButtonsTests.cpp
     Macros/MacroPortWidgetTests.cpp
+    Macros/MacroPortZoomMergeTests.cpp
     Macros/MacroPortWidgetColourTests.cpp
     Macros/MacroPortSidebarTests.cpp
     Macros/MacroPortStripFadeTests.cpp

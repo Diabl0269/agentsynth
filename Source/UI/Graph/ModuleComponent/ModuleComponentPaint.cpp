@@ -367,9 +367,13 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     const juce::Colour cvJackColour = effectiveMacroPortJackColour(ownership.port, themeColors.accent);
 
     auto dot = [&](int index, bool isInput, juce::Colour colour) {
-        const float radius = (isInput == boundaryIsInput) ? 5.0f : 3.5f;
+        const bool isBoundary = isInput == boundaryIsInput;
+        const float radius = isBoundary ? 5.0f : 3.5f;
         const auto p = getPortCenter(index, isInput);
-        g.setColour(colour);
+        const float alpha = isBoundary ? 1.0f : macroPortNameAlpha(); // the interior dot melts into the boundary one
+        if (alpha <= 0.0f)
+            return;
+        g.setColour(colour.withMultipliedAlpha(alpha));
         g.fillEllipse((float)p.x - radius, (float)p.y - radius, radius * 2.0f, radius * 2.0f);
     };
 
@@ -405,6 +409,20 @@ float ModuleComponent::macroPortNameAlpha() const {
     // The parent is the canvas content component, whose transform is the zoom (scale + pan).
     const float zoom = getParentComponent() != nullptr ? getParentComponent()->getTransform().getScaleFactor() : 1.0f;
     return macroPortNameAlphaAtZoom(zoom);
+}
+
+bool ModuleComponent::macroPortBoundaryIsOutput() const {
+    const auto ownership = owner.getMacroController().macroPortOwnerFor(nodeId);
+    return ownership.port != nullptr && !ownership.port->isInput;
+}
+
+int ModuleComponent::macroPortJackX(bool isInput) const {
+    const int x = isInput ? kMacroPortWidgetJackInset : getWidth() - kMacroPortWidgetJackInset;
+    const auto ownership = owner.getMacroController().macroPortOwnerFor(nodeId);
+    if (ownership.port == nullptr || isInput == ownership.port->isInput)
+        return x; // the boundary jack, or a widget with no owning port yet
+    const int boundaryX = ownership.port->isInput ? kMacroPortWidgetJackInset : getWidth() - kMacroPortWidgetJackInset;
+    return juce::roundToInt(macroPortInteriorJackX((float)boundaryX, (float)x, macroPortNameAlpha()));
 }
 
 juce::Rectangle<int> ModuleComponent::macroPortNameArea(bool boundaryIsInput) const {
@@ -605,7 +623,7 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
     // sit kMacroPortWidgetJackInset in from the widget's own edge (the boundary jack lands on the
     // hull border) and on 16px rows. A MIDI port's single jack sits fixed at the first row.
     if (isMacroPortType(getType(module))) {
-        const int x = isInput ? kMacroPortWidgetJackInset : getWidth() - kMacroPortWidgetJackInset;
+        const int x = macroPortJackX(isInput);
         if (module->acceptsMidi() || module->producesMidi())
             return {x, kMacroPortWidgetHeaderY};
         int visible = 0;
@@ -698,43 +716,41 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
         numOuts = mb->getVisibleOutputPortCount();
     }
 
-    // Check for MIDI Output at fixed top-right position
-    if (module->producesMidi()) {
-        auto p = getMidiPortCenter(true); // Matches paint()
-        if (localPoint.getDistanceFrom(p) < 10) {
-            return Port{{p.x - 5, p.y - 5, 10, 10},
-                        juce::AudioProcessorGraph::midiChannelIndex,
-                        false,
-                        true}; // Index 0, Output, IsMidi
+    auto hitOutputs = [&]() -> std::optional<Port> {
+        if (module->producesMidi()) {
+            auto p = getMidiPortCenter(true); // Matches paint()
+            if (localPoint.getDistanceFrom(p) < 10)
+                return Port{{p.x - 5, p.y - 5, 10, 10}, juce::AudioProcessorGraph::midiChannelIndex, false, true};
         }
-    }
-
-    // MIDI Input detection (Top Left)
-    if (module->acceptsMidi()) {
-        auto p = getMidiPortCenter(false); // Top left near header
-        if (localPoint.getDistanceFrom(p) < 10) {
-            return Port{
-                {p.x - 5, p.y - 5, 10, 10}, juce::AudioProcessorGraph::midiChannelIndex, true, true}; // MIDI Input
+        for (int i = 0; i < numOuts; ++i) {
+            auto p = getPortCenter(i, false);
+            if (localPoint.getDistanceFrom(p) < 10)
+                return Port{{p.x - 5, p.y - 5, 10, 10}, i, false, false};
         }
-    }
-
+        return std::nullopt;
+    };
     // Inputs -- a knob-bound jack is never hit-tested here at all (it draws no gutter dot
     // to click); the knob claims that click via CardKnobSlider's own gesture wiring instead
     // (wireCardKnobModAmountGesture / wantsCablePickupGestureFor, ModuleComponent.cpp).
-    for (int i : drawnInputJackIndices()) {
-        auto p = getPortCenter(i, true);
-        if (localPoint.getDistanceFrom(p) < 10) {
-            return Port{{p.x - 5, p.y - 5, 10, 10}, i, true, false};
+    auto hitInputs = [&]() -> std::optional<Port> {
+        if (module->acceptsMidi()) {
+            auto p = getMidiPortCenter(false); // Top left near header
+            if (localPoint.getDistanceFrom(p) < 10)
+                return Port{{p.x - 5, p.y - 5, 10, 10}, juce::AudioProcessorGraph::midiChannelIndex, true, true};
         }
-    }
-
-    // Outputs (audio outputs)
-    for (int i = 0; i < numOuts; ++i) {
-        auto p = getPortCenter(i, false);
-        if (localPoint.getDistanceFrom(p) < 10) {
-            return Port{{p.x - 5, p.y - 5, 10, 10}, i, false, false};
+        for (int i : drawnInputJackIndices()) {
+            auto p = getPortCenter(i, true);
+            if (localPoint.getDistanceFrom(p) < 10)
+                return Port{{p.x - 5, p.y - 5, 10, 10}, i, true, false};
         }
-    }
+        return std::nullopt;
+    };
+    // A docked macro-port widget zoomed out draws its two jacks as one dot: the press picks the boundary side.
+    const bool outputsFirst = isMacroPortType(getType(module)) && macroPortBoundaryIsOutput();
+    if (auto hit = outputsFirst ? hitOutputs() : hitInputs())
+        return hit;
+    if (auto hit = outputsFirst ? hitInputs() : hitOutputs())
+        return hit;
 
     return std::nullopt;
 }

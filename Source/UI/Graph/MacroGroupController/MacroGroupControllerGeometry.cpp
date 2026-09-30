@@ -52,7 +52,8 @@ constexpr int kMacroHullMargin = 14;
 // member's ModuleComponent (which would swallow the drag). Must stay >= the chip's own height.
 constexpr int kMacroChipHeight = 18;
 constexpr int kMacroChipTopMargin = kMacroChipHeight + 6;
-static_assert(kMacroChipTopMargin == kMacroChipRowHeight, "the strips start below the chip row");
+static_assert(kMacroChipTopMargin == kMacroChipRowHeight,
+              "the port rows start below the chip row (the strip fill itself spans from the hull top)");
 static_assert(kMacroHullMargin + kMacroHullStripWidth == synth::LayoutUtil::kMacroHullSideOutset,
               "LayoutUtil::kMacroHullSideOutset is the hull's side reach; keep it in sync");
 
@@ -462,7 +463,7 @@ MacroGroupController::macroHullPortButtonAt(juce::Point<int> canvasPos, float zo
         if (host_.getMacros().isEffectivelyCollapsed(macro.id))
             continue;
         for (const bool isInput : {true, false}) {
-            if (macroHullAddButtonBounds(macro.id, isInput).contains(canvasPos))
+            if (macroPortRemoveClickableAtZoom(zoom) && macroHullAddButtonBounds(macro.id, isInput).contains(canvasPos))
                 return HullPortButtonHit{macro.id, isInput, true};
             if (macroHullRemoveButtonBounds(macro.id, isInput, zoom).contains(canvasPos))
                 return HullPortButtonHit{macro.id, isInput, false};

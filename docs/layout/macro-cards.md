@@ -78,7 +78,9 @@ contains a point, the smallest one on overlap.
 **The hull holds the port sidebars.** The rectangle is the member union plus a fixed margin, widened on
 each side by a FIXED 96 px port strip (reserved even with no ports; `LayoutUtil::kMacroHullSideOutset` = margin + strip = 110 px per side) so members keep their
 margin and do not move when a port is added; it grows down when the port rows (16 px each, from 30 px
-below the hull's top) plus the '+'/'-' footer are taller than the members. The strips are painted
+below the hull's top) plus the '+'/'-' footer are taller than the members. The strip fill spans from the hull's top edge down (under the name chip and collapse button, which paint
+after it, with the outer top corner rounded like the hull); only the port ROWS start below the chip row. Zoomed out (below 0.7, fully at 0.5) each port's interior jack slides onto its boundary jack and the painted strip narrows to a thin rail on the outline, driven by the port-name fade (`docs/macros/ports.md`); the hull and strip layout widths never change.
+The strips are painted
 under the port widgets and the outline by `paintMacroPortStrips`
 (`GraphEditorMacroHullStrips.cpp`); the '+' and '-' at their foot are hit-tested in
 `GraphEditor::mouseDown` before the collapse button (`macroHullPortButtonAt`). See
