@@ -194,6 +194,8 @@ public:
 
     // Test seams: the real category selector and the scroll view the rows live in.
     juce::ComboBox& getCategoryComboForTest() { return categoryCombo; }
+    juce::TextEditor& getSearchFieldForTest() { return searchField; }
+    juce::Component& getContentHostForTest() { return contentHost; }
     juce::Viewport& getContentViewportForTest() { return contentViewport; }
 
     // Test-only: the hairline dividers paint() draws between preference groups, so a test can

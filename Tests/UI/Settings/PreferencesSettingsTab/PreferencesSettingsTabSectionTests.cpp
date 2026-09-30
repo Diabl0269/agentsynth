@@ -135,3 +135,34 @@ TEST_F(PreferencesSettingsTabTest, SectionControlsAreKeyboardReachableAndNamedWi
     EXPECT_FALSE(tab.getCollapseAllButtonForTest().getTooltip().isEmpty());
     EXPECT_TRUE(tab.getExpandAllButtonForTest().getWantsKeyboardFocus());
 }
+
+// Keyboard: pressing Tab repeatedly from the filter field has to reach a control inside the rows
+// before it wraps back to the drop-down, and Shift+Tab has to walk back out, in a single category and in
+// the All view.
+TEST_F(PreferencesSettingsTabTest, TabFromTheFilterFieldReachesTheRowsAndShiftTabComesBack) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(520, 900);
+    auto& filter = tab.getSearchFieldForTest();
+    for (auto category : {Category::Graph, Category::All}) {
+        tab.setSelectedCategory(category);
+        auto traverser = tab.createFocusTraverser();
+        juce::Component* current = &filter;
+        juce::Component* firstRow = nullptr;
+        for (int step = 0; step < 12 && firstRow == nullptr; ++step) {
+            current = traverser->getNextComponent(current);
+            ASSERT_NE(current, nullptr);
+            if (current == &tab.getCategoryComboForTest())
+                break; // wrapped without ever entering the rows
+            if (dynamic_cast<juce::Button*>(current) != nullptr && tab.getContentHostForTest().isParentOf(current))
+                firstRow = current;
+        }
+        ASSERT_NE(firstRow, nullptr) << "Tab never reached a preference row from the filter field";
+        juce::Component* back = firstRow;
+        bool reachedFilter = false;
+        for (int step = 0; step < 12 && !reachedFilter; ++step) {
+            back = traverser->getPreviousComponent(back);
+            reachedFilter = back == &filter || (back != nullptr && filter.isParentOf(back));
+        }
+        EXPECT_TRUE(reachedFilter) << "Shift+Tab did not come back to the filter field";
+    }
+}
