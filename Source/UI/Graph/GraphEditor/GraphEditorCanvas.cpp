@@ -145,6 +145,7 @@ void GraphEditor::updateComponents() {
         }
         macros.retainOnly(aliveUuids);
     }
+    evictOutputDockFromMacros(); // a dock card is never a macro member (a saved project may hold one)
     syncMacroCards();
     macroController_.dockMacroPortWidgets();
     reflowOutputDock(); // load, module add/remove, undo/redo: the dock always sits right of everything

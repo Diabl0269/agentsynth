@@ -72,9 +72,6 @@ struct LoadCanvas {
             EXPECT_EQ(componentCount(n.id), expectComponents ? 1 : 0);
             if (auto* comp = findComponent(editor, n.id)) {
                 // The output dock is the one thing a load moves by design: it sits at computeOutputDock's position.
-                const auto* owner = editor.getMacros().findByMember(n.uuid);
-                if (owner != nullptr && outputdock_test::isDockNode(engine.getGraph(), n.id))
-                    continue; // a dock card forced INTO a macro (this sweep tries every type) is not a dock layout case
                 if (outputdock_test::isDockNode(engine.getGraph(), n.id))
                     EXPECT_EQ(comp->getPosition(), dockPositions.at(n.id.uid)) << "dock card " << (int)n.id.uid;
                 else

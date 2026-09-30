@@ -362,3 +362,96 @@ TEST_F(OutputDockMainTest, ReopeningAProjectWithAnLfoInAMacroAndADockBuildsOneCa
         EXPECT_EQ(compFor(editor, NodeID(uid))->getPosition(), expected);
     root.deleteRecursively();
 }
+
+// ---- The dock never joins a macro ----
+
+TEST(OutputDock, GroupingASelectionThatIncludesAudioOutputGroupsOnlyTheOthers) {
+    Canvas c;
+    const auto out = addAudioOutput(c.editor, c.engine, 40, 40);
+    const auto a = c.osc(400, 300);
+    const auto b = c.osc(400, 700);
+    c.editor.setSelectedNodes({out, a, b});
+
+    const auto macroId = c.editor.getMacroController().groupSelectionIntoMacro();
+
+    ASSERT_FALSE(macroId.isEmpty());
+    const auto* macro = c.editor.getMacros().find(macroId);
+    ASSERT_EQ(macro->members.size(), 2u);
+    for (const auto& uuid : macro->members)
+        EXPECT_NE(uuid, c.engine.getGraph().getNodeForId(out)->properties["uuid"].toString());
+    EXPECT_EQ(c.editor.getMacros().findByMember(c.engine.getGraph().getNodeForId(out)->properties["uuid"].toString()),
+              nullptr);
+}
+
+TEST(OutputDock, AudioOutputPlusOneModuleIsTooSmallToGroup) {
+    Canvas c;
+    const auto out = addAudioOutput(c.editor, c.engine, 40, 40);
+    const auto a = c.osc(400, 300);
+    c.editor.setSelectedNodes({out, a});
+    EXPECT_TRUE(c.editor.getMacroController().groupSelectionIntoMacro().isEmpty());
+    EXPECT_EQ(c.editor.getMacros().size(), 0);
+}
+
+TEST(OutputDock, MasterDraggedIntoAnOpenHullDoesNotJoinIt) {
+    Canvas c;
+    addAudioOutput(c.editor, c.engine, 40, 40);
+    const auto master = addModule(c.editor, c.engine, synth::AIStateMapper::createModule("Master"), 100, 900);
+    const auto m1 = c.osc(400, 300);
+    const auto m2 = c.osc(700, 300);
+    c.editor.setSelectedNodes({m1, m2});
+    const auto macroId = c.editor.getMacroController().groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    c.editor.getMacroController().setMacroCollapsed(macroId, false);
+    c.editor.setMacroDragWithoutCmdEnabled(true); // a plain drag is allowed to join
+    const auto masterUuid = c.engine.getGraph().getNodeForId(master)->properties["uuid"].toString();
+    const auto hull = c.editor.getMacroController().macroHullBounds(macroId);
+
+    auto* comp = compFor(c.editor, master);
+    dragCard(*comp, hull.getCentre() - comp->getBounds().getCentre());
+    EXPECT_EQ(c.editor.getMacros().findByMember(masterUuid), nullptr) << "plain drag";
+
+    c.editor.getMacroController().addSelectionToMacro(macroId, {masterUuid});
+    EXPECT_EQ(c.editor.getMacros().findByMember(masterUuid), nullptr) << "explicit add (menu / library drop)";
+}
+
+TEST_F(OutputDockMainTest, ALoadedProjectWithAudioOutputInAMacroTakesItOutAndDocksIt) {
+    const auto root = synth::userSettingsRootDirectory().getChildFile("agentsynth-outputdock-member-tests");
+    root.deleteRecursively();
+    root.createDirectory();
+    auto dir = root.getChildFile("Member" + juce::String(synth::ProjectBundle::kBundleExtension));
+    dir.createDirectory();
+    dir.getChildFile(synth::ProjectBundle::kAudioSubdirName).createDirectory();
+    dir.getChildFile(synth::ProjectBundle::kPeaksSubdirName).createDirectory();
+    dir.getChildFile(synth::ProjectBundle::kProjectFileName).replaceWithText(R"JSON(
+{
+  "schemaVersion": 1,
+  "nodes": [
+    { "id": 1, "type": "Audio Output", "uuid": "out", "position": { "x": 400, "y": 300 } },
+    { "id": 2, "type": "Oscillator", "uuid": "osc", "position": { "x": 400, "y": 700 } },
+    { "id": 3, "type": "Oscillator", "uuid": "osc2", "position": { "x": 800, "y": 700 } }
+  ],
+  "connections": [],
+  "macros": [
+    { "id": "macro-a", "name": "M", "colour": "ff5a7dff", "collapsed": false,
+      "bounds": { "x": 400, "y": 300, "w": 280, "h": 90 },
+      "members": [ "out", "osc", "osc2" ], "ports": [] }
+  ]
+}
+)JSON");
+
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    const int serialBefore = mc.getUndoManager().getEditSerial();
+    ASSERT_TRUE(mc.openProjectForTest(dir));
+
+    auto& editor = mc.getGraphEditor();
+    auto& graph = mc.getAudioEngine().getGraph();
+    EXPECT_EQ(editor.getMacros().findByMember("out"), nullptr);
+    EXPECT_NE(editor.getMacros().findByMember("osc"), nullptr) << "the rest of the macro is untouched";
+    for (const auto& [uid, expected] : outputdock_test::expectedDockPositions(editor, graph))
+        EXPECT_EQ(compFor(editor, NodeID(uid))->getPosition(), expected);
+    EXPECT_EQ(mc.getUndoManager().getEditSerial(), serialBefore) << "quiet: no undo step";
+    EXPECT_FALSE(mc.getUndoManager().canUndo());
+    root.deleteRecursively();
+}

@@ -118,6 +118,16 @@ void GraphEditor::removeUndeletableOutputNodes(std::vector<juce::AudioProcessorG
         onStatusMessage(refusal);
 }
 
+// The dock is owned by reflowOutputDock, so a dock card is never a macro member. Runs on every reconcile, which is
+// what cleans a saved project that already has one; it edits the MacroSet only, so it opens no undo step.
+void GraphEditor::evictOutputDockFromMacros() {
+    for (auto* node : synth::outputDockNodes(audioEngine.getGraph())) {
+        const auto uuid = node->properties["uuid"].toString();
+        if (uuid.isNotEmpty() && macros.findByMember(uuid) != nullptr)
+            macros.removeMemberEverywhere(uuid);
+    }
+}
+
 // "Go to Output": centres the view on the whole dock, not one card.
 void GraphEditor::frameOutputDock() {
     juce::Rectangle<int> frame;

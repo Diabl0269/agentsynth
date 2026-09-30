@@ -155,6 +155,8 @@ public:
     juce::String outputDockDeleteRefusal(juce::AudioProcessorGraph::NodeID nodeId) const;
     /** Erases from `ids` every node outputDockDeleteRefusal() refuses (status message says why). */
     void removeUndeletableOutputNodes(std::vector<juce::AudioProcessorGraph::NodeID>& ids);
+    /** Takes any dock card out of the macro it is a member of (a saved project can hold one), quietly: no undo step. */
+    void evictOutputDockFromMacros();
     /** Frames the whole dock in view ("Go to Output"). */
     void frameOutputDock();
 

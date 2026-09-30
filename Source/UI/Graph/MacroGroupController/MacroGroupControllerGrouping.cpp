@@ -11,6 +11,7 @@
 #include "MacroSelectionUnits.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "Mixer/MasterSplice.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
@@ -78,13 +79,27 @@ juce::Rectangle<int> unitsFootprint(const MacroGroupController& controller, Grap
     }
     return bounds;
 }
+
+// The output dock (Master / Rec Tap / Audio Output) is owned by GraphEditor::reflowOutputDock and never joins a macro.
+bool isDockUuid(GraphCanvasHost& host, const juce::String& uuid) {
+    for (auto* node : host.graph().getNodes())
+        if (node != nullptr && node->properties["uuid"].toString() == uuid)
+            return synth::isOutputDockProcessor(node->getProcessor());
+    return false;
+}
 } // namespace
 
 // Groups the selection's units into a new collapsed macro whose parent is the units' shared
 // container: loose modules become its direct members, whole macros its children. So "nest whole
 // macros" and "group modules inside an open macro" are the same operation.
 juce::String MacroGroupController::groupSelectionIntoMacro(bool autoCreatePorts) {
-    const auto ids = host_.getSelection().getSelected();
+    auto ids = host_.getSelection().getSelected();
+    ids.erase(std::remove_if(ids.begin(), ids.end(),
+                             [this](juce::AudioProcessorGraph::NodeID id) {
+                                 auto* node = host_.graph().getNodeForId(id);
+                                 return node != nullptr && synth::isOutputDockProcessor(node->getProcessor());
+                             }),
+              ids.end());
     // A module freshly dropped onto the canvas has no "uuid" property yet — it's only ever lazily
     // assigned on first save (synth::AIStateMapper::graphToJSON). Assign it here too, the same way, so
     // grouping newly-placed modules doesn't drop them from the selection.
@@ -210,7 +225,11 @@ AddPlan planAdd(const MacroGroupController& controller, const synth::MacroSet& m
 // Adds the selection to an existing macro under the same unit rule grouping uses: modules beside the
 // macro join it directly, whole macros beside it nest under it.
 void MacroGroupController::addSelectionToMacro(const juce::String& macroId,
-                                               const std::vector<juce::String>& memberUuids, bool recordUndo) {
+                                               const std::vector<juce::String>& requestedUuids, bool recordUndo) {
+    std::vector<juce::String> memberUuids;
+    for (const auto& uuid : requestedUuids)
+        if (!isDockUuid(host_, uuid))
+            memberUuids.push_back(uuid);
     const auto* macro = host_.getMacros().find(macroId);
     if (macro == nullptr || memberUuids.empty())
         return;
