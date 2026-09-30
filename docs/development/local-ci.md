@@ -158,12 +158,13 @@ cmake, no compiler and no real worktree needed:
 
 ## Running suites in parallel
 
-**Two test binaries running at once on the same machine collide through the shared on-disk "Agent
-Synth" `ApplicationProperties` file**, even from separate worktrees with separate build
-directories — see [`test-patterns.md`](test-patterns.md#shared-settings-file-reset-guard). A
-concurrent run can therefore fail a suite that is perfectly healthy: FRO192 hit exactly that, a
-`ProjectLoadStripGainTest` case reported FAILED by one of two sessions running their suites at the
-same time, green alone and green again under a lock.
+**Two test binaries running at once on the same machine used to collide through the shared on-disk
+"Agent Synth" `ApplicationProperties` file.** FRO192 hit exactly that: a `ProjectLoadStripGainTest`
+case reported FAILED by one of two sessions running their suites at the same time, green alone and
+green again under a lock. Every run now gets its own private settings folder (see
+[`test-patterns.md`](test-patterns.md#shared-settings-file-reset-guard)), so that collision is gone
+and a run no longer touches the developer's real settings. Concurrent runs still share the machine's
+audio device, which a stuck run can wedge for everyone.
 
 `scripts/ci-local.sh` therefore takes a lock around its test step (step 10) — `scripts/lib/test-lock.sh`,
 unit-tested by `scripts/tests/ci-local-test-lock.test.sh` in the Lint job:
