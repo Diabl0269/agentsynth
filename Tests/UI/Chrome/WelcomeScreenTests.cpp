@@ -107,7 +107,7 @@ void writeShowWelcomeAtLaunchPref(const char* value) {
 class WelcomeScreenTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Every test in this file shares the real settings file with every other test process-wide
+        // Every test in this file shares the run's settings file with every other test in the run
         // (see MainComponentTests.cpp's resetPanelKeys() for the same concern) — force the default
         // (shown) before AND after each test so run order can't leak a false-hidden welcome screen
         // into an unrelated test.
@@ -116,9 +116,8 @@ protected:
         // directory name -- fine for a single process, but GTest shard sharding can and does split
         // individual tests of the SAME suite across different shard processes, so 3 concurrent
         // shards deleteRecursively()-ing and recreating the identical real temp path would race
-        // each other. synth::userSettingsRootDirectory() is already per-shard-isolated when
-        // AGENTSYNTH_SETTINGS_DIR is set (Source/UserSettings.h) and falls back to the ORIGINAL
-        // system temp location otherwise, so this only changes behaviour for the sharded case.
+        // each other. synth::userSettingsRootDirectory() is private to each run and shard
+        // (Tests/TestMain.cpp), so nesting under it keeps shards apart.
         tempRoot = synth::userSettingsRootDirectory().getChildFile("agentsynth-welcome-screen-tests");
         tempRoot.deleteRecursively();
         tempRoot.createDirectory();

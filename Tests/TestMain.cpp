@@ -40,21 +40,31 @@ int main(int argc, char** argv) {
 
     // The ONE call site that reads AGENTSYNTH_SETTINGS_DIR, so a shipped binary can never
     // be redirected via it (see test-patterns.md's "on-disk path" section for the full seam).
-    const juce::String settingsDirOverride(
+    // Without it, every run still gets a private, fresh settings folder of its own: the suite
+    // must never read or write the developer's real settings file (recent projects, the plugin
+    // scan list, preferences), and two runs in different worktrees must never share one.
+    juce::String settingsDirOverride(
         std::getenv("AGENTSYNTH_SETTINGS_DIR") != nullptr ? std::getenv("AGENTSYNTH_SETTINGS_DIR") : "");
-    if (settingsDirOverride.isNotEmpty())
-        synth::setSettingsDirOverrideForTests(settingsDirOverride);
+    juce::File ownedSettingsDir;
+    if (settingsDirOverride.isEmpty()) {
+        ownedSettingsDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                               .getChildFile("agentsynth-tests-settings-" + juce::Uuid().toDashedString());
+        ownedSettingsDir.createDirectory();
+        settingsDirOverride = ownedSettingsDir.getFullPathName();
+    }
+    synth::setSettingsDirOverrideForTests(settingsDirOverride);
 
     // Every MainComponent's MidiLearnController gets a temp ControllerProfileStore instead
     // of the developer's real folder -- set once so ~50 MainComponent*Tests.cpp files don't have
-    // to know MIDI Remote exists. Nested per-shard (not one fixed name) when sharded, so
-    // concurrent shards don't race each other's deleteRecursively() -- see test-patterns.md.
-    const auto controllerProfilesRoot = settingsDirOverride.isNotEmpty()
-                                            ? juce::File(settingsDirOverride)
-                                            : juce::File::getSpecialLocation(juce::File::tempDirectory);
-    const auto controllerProfilesDir = controllerProfilesRoot.getChildFile("agentsynth-tests-controller-profiles");
+    // to know MIDI Remote exists. Nested in this run's own settings folder, so concurrent runs
+    // and shards don't race each other's deleteRecursively() -- see test-patterns.md.
+    const auto controllerProfilesDir =
+        juce::File(settingsDirOverride).getChildFile("agentsynth-tests-controller-profiles");
     controllerProfilesDir.deleteRecursively();
     MainComponent::setControllerProfileTestDirectory(controllerProfilesDir);
 
-    return RUN_ALL_TESTS();
+    const int result = RUN_ALL_TESTS();
+    if (ownedSettingsDir != juce::File())
+        ownedSettingsDir.deleteRecursively();
+    return result;
 }

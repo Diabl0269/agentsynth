@@ -44,7 +44,9 @@ that env var, so a shipped binary can never be redirected this way. Overriding `
 work for this: on macOS, JUCE expands `~` via the OS user record
 (`File::getSpecialLocation(userHomeDirectory)`), not `getenv("HOME")`.
 
-A local unsharded run needs no env var and behaves exactly as before this ticket. To reproduce the
+A local unsharded run needs no env var: without it `Tests/TestMain.cpp` creates a fresh private
+settings folder under the system temp directory for that run and deletes it at exit, so a local run
+never touches the developer's real settings file either. To reproduce the
 sharded CI step locally: run `./Tests` 3 times concurrently with `GTEST_TOTAL_SHARDS=3`,
 `GTEST_SHARD_INDEX` set to 0/1/2 and `AGENTSYNTH_SETTINGS_DIR` set to 3 different directories — see
 the macOS job's "Run Tests" step in `.github/workflows/ci.yml` for the exact script.

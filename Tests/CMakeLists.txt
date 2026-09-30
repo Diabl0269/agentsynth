@@ -601,6 +601,7 @@ add_executable(Tests
     Project/ModuleFileRefsTests.cpp
     Project/ProjectCollectorTests.cpp
     App/BrandingTests.cpp
+    App/TestSettingsIsolationTests.cpp
     App/AutomationLaunchTests.cpp
     # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those six units are
     # registered in the root CMakeLists.txt (Core), same as RemoteModel.h/RemoteModelJson.cpp right

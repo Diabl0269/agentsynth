@@ -164,8 +164,12 @@ re-hardcoded copy (FRO58 replaced seven byte-identical private copies with that 
   PNG-snapshot test's Mixer-tab switch cannot leak into a later test's "Timeline is the default"
   assumption.
 
-This matters beyond one process: concurrent suites in sibling worktrees share that same settings
-file, which is why [`local-ci.md`](local-ci.md#running-suites-in-parallel) says to serialise them.
+These guards are about tests inside ONE run. Across runs there is nothing to share:
+`Tests/TestMain.cpp` gives every run a private settings folder (`AGENTSYNTH_SETTINGS_DIR` when set,
+otherwise a fresh `agentsynth-tests-settings-<uuid>` temp folder deleted when the run ends), so no run
+ever reads or writes the developer's real settings file (recent projects, the plugin scan list,
+preferences) and two suites in sibling worktrees never see each other's keys.
+`Tests/App/TestSettingsIsolationTests.cpp` fails if the suite ever resolves to the real folder again.
 
 ## Every on-disk path a test writes must go through the override seam
 
