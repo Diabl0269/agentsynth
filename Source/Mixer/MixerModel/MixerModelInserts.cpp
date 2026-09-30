@@ -7,6 +7,7 @@
 #include "MixerModel.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "MixerModelInternal.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/ModuleBase.h"
@@ -79,7 +80,7 @@ void resolveEditOnCanvasTarget(juce::AudioProcessorGraph& graph, const MacroSet&
         auto* module = dynamic_cast<ModuleBase*>(processorFor(graph, nodeId));
         if (module == nullptr)
             continue;
-        if (const auto* macro = macros.findByMember(module->getNodeUuid())) {
+        if (const auto* macro = nearestChannelMacro(graph, macros, module->getNodeUuid())) {
             column.editOnCanvasTargetUuid = macro->id;
             return;
         }

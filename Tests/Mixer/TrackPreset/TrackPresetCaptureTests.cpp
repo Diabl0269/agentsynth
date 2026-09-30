@@ -305,3 +305,53 @@ TEST(TrackPresetCapture, WalkStopsAtAnotherChannelsStrip) {
     EXPECT_EQ(countNodesOfTypeCFT(target, ModuleType::ChannelStrip), 1)
         << "another channel's strip must never be reconstructed alongside this preset's own";
 }
+
+TEST(TrackPresetCapture, ChildMacroInsideTheChannelKeepsItsMembersAndNestingAndItsOutsideModulator) {
+    HostedPatchCFT patch;
+    GraphEditor editor(patch.engine);
+    const auto rig = buildTrackPresetRigCFT(editor, patch.engine, patch.output);
+    ASSERT_NE(rig.macro, nullptr);
+    auto& macros = editor.getMacros();
+
+    // Nest the Filter (the LFO's modulation target) in a child macro of the channel macro.
+    const juce::String channelId = rig.macro->id;
+    const juce::String filterUuid = nodeUuid(rig.filter);
+    const size_t directBefore = rig.macro->members.size();
+    ASSERT_TRUE(macros.find(channelId)->hasMember(filterUuid));
+    macros.removeMemberEverywhere(filterUuid); // leaves the channel macro with its other members
+    synth::Macro child;
+    child.name = "Filter Group";
+    child.members = {filterUuid};
+    const auto childId = macros.add(child);
+    ASSERT_TRUE(macros.setParent(childId, channelId));
+    ASSERT_EQ(macros.find(channelId)->members.size() + 1, directBefore);
+
+    auto preset = synth::TrackPresetManager::extractTrackPreset(patch.engine.getGraph(), macros, channelId,
+                                                                synth::TrackPresetKind::Audio, "Nested");
+    ASSERT_TRUE(preset.isObject());
+    EXPECT_EQ(countNodesOfTypeInPresetCFT(preset, "Filter"), 1) << "the nested Filter travels with the channel";
+    EXPECT_EQ(countNodesOfTypeInPresetCFT(preset, "LFO"), 1)
+        << "the LFO modulates a module inside the CHILD macro, which is still inside the channel";
+    EXPECT_EQ(countNodesOfTypeInPresetCFT(preset, "Channel Strip"), 1);
+
+    juce::AudioProcessorGraph target;
+    std::vector<synth::Macro> outMacros;
+    ASSERT_FALSE(synth::TrackPresetManager::insertTrackPreset(preset, target, {0, 0}, &outMacros).empty());
+    ASSERT_EQ(outMacros.size(), 2u);
+    const auto childIt = std::find_if(outMacros.begin(), outMacros.end(),
+                                      [](const synth::Macro& m) { return m.name == "Filter Group"; });
+    const auto parentIt = std::find_if(outMacros.begin(), outMacros.end(),
+                                       [](const synth::Macro& m) { return m.name != "Filter Group"; });
+    ASSERT_NE(childIt, outMacros.end());
+    ASSERT_NE(parentIt, outMacros.end());
+    EXPECT_EQ(childIt->members.size(), 1u);
+    EXPECT_EQ(childIt->parentId, parentIt->id);
+    EXPECT_TRUE(parentIt->parentId.isEmpty());
+
+    synth::MacroSet reloaded;
+    for (auto& m : outMacros)
+        reloaded.add(m);
+    juce::var serialised = reloaded.toVar();
+    synth::MacroSet roundTrip;
+    EXPECT_TRUE(roundTrip.fromVar(serialised)) << "the restored hierarchy must be a loadable MacroSet";
+}

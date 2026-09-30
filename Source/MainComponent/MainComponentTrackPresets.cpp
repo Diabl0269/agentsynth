@@ -9,6 +9,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/MasterSplice.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/ChannelStripModule.h"
@@ -80,7 +81,8 @@ static bool extractAndSaveTrackPresetForMacro(MainComponent& mc, const juce::Str
 // extraction/save failure) — nothing is left half-written.
 static bool extractAndSaveTrackPreset(MainComponent& mc, const juce::String& bindingUuid, synth::TrackPresetKind kind,
                                       const juce::String& name) {
-    const auto* macro = mc.getGraphEditor().getMacros().findByMember(bindingUuid);
+    const auto* macro =
+        synth::nearestChannelMacro(mc.getAudioEngine().getGraph(), mc.getGraphEditor().getMacros(), bindingUuid);
     if (macro == nullptr)
         return false;
     return extractAndSaveTrackPresetForMacro(mc, macro->id, kind, name);
@@ -161,7 +163,8 @@ void MainComponent::handleMacroTrackPresetAction(const juce::String& macroId, bo
     for (const auto& track : timelineDoc.getTracks()) {
         if (track.bindingUuid.isEmpty())
             continue;
-        const auto* macro = graphEditor.getMacros().findByMember(track.bindingUuid);
+        const auto* macro =
+            synth::nearestChannelMacro(audioEngine.getGraph(), graphEditor.getMacros(), track.bindingUuid);
         if (macro != nullptr && macro->id == macroId) {
             if (setAsDefault)
                 setTrackPresetAsDefault(track.id);
@@ -357,7 +360,8 @@ juce::String MainComponent::insertBusFromPresetVar(const juce::var& preset) {
     // user-renamed before saving arrives with that name already on its captured macro; only a
     // preset whose macro came back nameless falls back to the numbered default.
     const juce::String stripUuid = stripNode->properties["uuid"].toString();
-    auto* insertedMacro = graphEditor.getMacros().findByMember(stripUuid);
+    const auto* nearestMacro = synth::nearestChannelMacro(graph, graphEditor.getMacros(), stripUuid);
+    auto* insertedMacro = nearestMacro != nullptr ? graphEditor.getMacros().find(nearestMacro->id) : nullptr;
     juce::String busName = insertedMacro != nullptr ? insertedMacro->name : juce::String();
     // A preset saved from "Bus 1" and inserted beside it would otherwise show two "Bus 1" columns:
     // a captured name another macro already carries falls back to the numbered default too.

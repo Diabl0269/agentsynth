@@ -6,6 +6,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MidiRemote/RemoteModel.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/ChannelStripModule.h"
@@ -136,7 +137,7 @@ void MixerPanelComponent::selectOnCanvas(const juce::String& targetId) {
         graphEditor_->getMacroController().selectMacro(targetId, false);
         return;
     }
-    if (const auto* macro = macros_->findByMember(targetId)) {
+    if (const auto* macro = synth::nearestChannelMacro(*graph_, *macros_, targetId)) {
         graphEditor_->getMacroController().selectMacro(macro->id, false);
         return;
     }

@@ -119,6 +119,53 @@ TEST(MixerModelInsertTests, EditOnCanvasTargetIsTheOwningMacroWhenTheBranchingNo
     EXPECT_EQ(it->editOnCanvasTargetUuid, macros.getAll().front().id);
 }
 
+TEST(MixerModelInsertTests, EditOnCanvasAndColumnNameResolveToTheChannelMacroNotTheNestedChild) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    synth::TimelineDoc doc;
+    synth::MacroSet macros;
+
+    const auto track = doc.addTrack(synth::TrackKind::Audio, "Drums");
+    juce::String trackAudioUuid, eqUuid, unused, strip2Uuid, stripUuid;
+    auto* trackAudio = addPlainNodeMMT(graph, "Track Audio", trackAudioUuid);
+    auto* eq = addPlainNodeMMT(graph, "Parametric EQ", eqUuid);
+    auto* compressor1 = addPlainNodeMMT(graph, "Compressor", unused);
+    auto* compressor2 = addPlainNodeMMT(graph, "Compressor", unused);
+    auto* strip1 = addPlainNodeMMT(graph, "Channel Strip", stripUuid);
+    auto* strip2 = addPlainNodeMMT(graph, "Channel Strip", strip2Uuid);
+    ASSERT_NE(strip2, nullptr);
+    if (auto* m = dynamic_cast<ChannelStripModule*>(strip1->getProcessor()))
+        m->setShape(ChannelStripModule::Shape::Stereo);
+    if (auto* m = dynamic_cast<ChannelStripModule*>(strip2->getProcessor()))
+        m->setShape(ChannelStripModule::Shape::Stereo);
+
+    connectStereoMMT(graph, *trackAudio, *eq);
+    connectStereoMMT(graph, *eq, *compressor1);
+    connectStereoMMT(graph, *compressor1, *strip1);
+    connectStereoMMT(graph, *eq, *compressor2);
+    connectStereoMMT(graph, *compressor2, *strip2);
+    doc.setTrackBinding(track, trackAudioUuid);
+
+    // The channel macro holds the strip; the branching (shared) EQ sits in a child macro of it.
+    synth::Macro channel;
+    channel.name = "Drums Channel";
+    channel.members = {stripUuid};
+    const auto channelId = macros.add(channel);
+    synth::Macro child;
+    child.name = "Shared EQ";
+    child.members = {eqUuid};
+    const auto childId = macros.add(child);
+    ASSERT_TRUE(macros.setParent(childId, channelId));
+
+    const auto snapshot = synth::buildMixerSnapshot(graph, doc, macros);
+    const auto it = std::find_if(snapshot.columns.begin(), snapshot.columns.end(),
+                                 [&](const auto& c) { return c.nodeId == strip1->nodeID; });
+    ASSERT_NE(it, snapshot.columns.end());
+    EXPECT_EQ(it->editOnCanvasTargetUuid, channelId) << "the channel macro, not the child that boxes the EQ";
+    EXPECT_EQ(it->name, "Drums Channel");
+}
+
 TEST(MixerModelInsertTests, SpliceOutInsertBridgesPredecessorDirectlyToSuccessor) {
     AudioEngine engine;
     auto& graph = engine.getGraph();

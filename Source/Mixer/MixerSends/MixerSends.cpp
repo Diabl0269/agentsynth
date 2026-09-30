@@ -5,6 +5,7 @@
 
 #include "MacroSet.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/RecordTapModule.h"
@@ -295,7 +296,7 @@ juce::String sendTargetName(juce::AudioProcessorGraph& graph, const MacroSet* ma
     if (node == nullptr)
         return "No target";
     if (macros != nullptr)
-        if (const auto* macro = macros->findByMember(node->properties["uuid"].toString()))
+        if (const auto* macro = nearestChannelMacro(graph, *macros, node->properties["uuid"].toString()))
             return macro->name;
     return isBusStrip(graph, target) ? busFallbackName(graph, target) : juce::String("Channel");
 }

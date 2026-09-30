@@ -103,6 +103,11 @@ business, not this preset's.
 box, wired to the same ports the original was — so the imported track sounds identical, with no
 dangling port left unfed and no cross-project aliasing of an original module.
 
+A channel macro's child macros (nested macros) travel with the preset: extraction walks the channel
+macro's own members plus every descendant's (`MacroSet::descendantMembers`), the outside-modulator
+walk counts a child's modules as inside the channel, and applying the preset recreates the child
+macros with their parent links.
+
 ## Loading a preset
 
 **The same trusted and untrusted pairing every disk-sourced patch data uses.**

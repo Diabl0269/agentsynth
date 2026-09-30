@@ -4,6 +4,7 @@
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "MixerPanAccessibilityText.h"
 #include "Modules/ChannelStripModule.h"
@@ -223,7 +224,7 @@ void MixerColumnComponent::commitHeaderRename(const juce::String& rawNewName) {
         return;
     }
 
-    if (const auto* macro = macros_ != nullptr ? macros_->findByMember(uuid_) : nullptr) {
+    if (const auto* macro = macros_ != nullptr ? synth::nearestChannelMacro(*graph_, *macros_, uuid_) : nullptr) {
         if (graphEditor_ != nullptr && newName.isNotEmpty())
             graphEditor_->getMacroController().renameMacro(macro->id, newName);
         else

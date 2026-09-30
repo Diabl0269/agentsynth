@@ -3,6 +3,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MacroSet.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -48,7 +49,7 @@ ChannelStripModule* TrackChannelLinkController::stripFor(const synth::TrackChann
 }
 
 const synth::Macro* TrackChannelLinkController::macroForStrip(const juce::String& stripUuid) const {
-    return stripUuid.isNotEmpty() ? macros().findByMember(stripUuid) : nullptr;
+    return stripUuid.isNotEmpty() ? synth::nearestChannelMacro(graph(), macros(), stripUuid) : nullptr;
 }
 
 synth::TrackId TrackChannelLinkController::linkedTrackForMacro(const juce::String& macroId) const {

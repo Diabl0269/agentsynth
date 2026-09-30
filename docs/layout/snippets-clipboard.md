@@ -18,6 +18,15 @@ Three rules define what it contains:
 | **No Attenuverter nodes**; modulation is stored in the `modulations` array | The same representation the AI patch format uses. `applyJSONToGraph` rebuilds the attenuverter chain on insert. |
 | Positions normalised so the selection's top-left is `(0,0)` | `prepareForInsert()` re-offsets by the drop point, so internal layout is preserved wherever it lands. |
 
+Macros travel with a snippet only when they are **fully contained**: every module of the macro,
+including those of macros nested inside it (`MacroSet::descendantMembers`), is in the selection.
+A nested macro carries `"parent"`, the index of its parent's entry in the snippet's own `macros`
+array, so copy/paste keeps the hierarchy; a child whose parent is only partly selected pastes
+top-level. A parent with no direct members of its own (only children) is captured with an empty
+`members` list. On insert every macro gets a fresh id, an unusable or cyclic `parent` link is dropped,
+and a macro is kept when it has any direct member, or (a container) a surviving child — the same rule
+`MacroSet::fromVar` applies, so a macro shrunk to one member still pastes.
+
 Graph I/O nodes (Audio In/Out, MIDI In) are never captured — they are singletons that already exist
 in the target patch.
 

@@ -234,3 +234,191 @@ TEST(SnippetMacro, SaveLoadInsertRoundTripsNameColourAndPorts) {
 // ---------------------------------------------------------------------------------------
 // Name sanitisation + drag payloads
 // ---------------------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------------------
+// Nested macros
+// ---------------------------------------------------------------------------------------
+
+namespace {
+
+// Inserts `snippet` into a fresh graph and feeds the resulting macros through a MacroSet the way
+// every caller does (add each in order), so a broken parent link would show up as a lost hierarchy.
+MacroSet insertIntoMacroSet(const juce::var& snippet, size_t expectedNodes) {
+    juce::AudioProcessorGraph target;
+    std::vector<Macro> added;
+    EXPECT_EQ(SnippetManager::insertSnippet(snippet, target, {0, 0}, false, &added).size(), expectedNodes);
+    MacroSet set;
+    for (auto& m : added)
+        set.add(m);
+    return set;
+}
+
+const Macro* findMacroNamed(const MacroSet& set, const juce::String& name) {
+    for (const auto& m : set.getAll())
+        if (m.name == name)
+            return &m;
+    return nullptr;
+}
+
+} // namespace
+
+TEST(SnippetMacro, CopyPasteKeepsANestedChildMacroUnderItsParent) {
+    juce::AudioProcessorGraph graph;
+    auto osc = addAtWithUuid(graph, std::make_unique<OscillatorModule>(), 0, 0);
+    auto filter = addAtWithUuid(graph, std::make_unique<FilterModule>(), 300, 0);
+    auto vca = addAtWithUuid(graph, std::make_unique<VCAModule>(), 600, 0);
+
+    MacroSet macros;
+    Macro inner;
+    inner.name = "Inner";
+    inner.members = {osc->properties["uuid"].toString(), filter->properties["uuid"].toString()};
+    const auto innerId = macros.add(inner);
+    Macro outer;
+    outer.name = "Outer";
+    outer.members = {vca->properties["uuid"].toString()};
+    const auto outerId = macros.add(outer);
+    ASSERT_TRUE(macros.setParent(innerId, outerId));
+
+    auto snippet = SnippetManager::extractSnippet(graph, {osc->nodeID, filter->nodeID, vca->nodeID}, "Nested",
+                                                  /*includeExtraState=*/false, macros);
+    const auto pasted = insertIntoMacroSet(snippet, 3);
+
+    ASSERT_EQ(pasted.size(), 2);
+    const auto* pastedInner = findMacroNamed(pasted, "Inner");
+    const auto* pastedOuter = findMacroNamed(pasted, "Outer");
+    ASSERT_NE(pastedInner, nullptr);
+    ASSERT_NE(pastedOuter, nullptr);
+    EXPECT_EQ(pastedInner->parentId, pastedOuter->id);
+    EXPECT_TRUE(pastedOuter->parentId.isEmpty());
+    EXPECT_EQ(pastedInner->members.size(), 2u);
+    EXPECT_EQ(pastedOuter->members.size(), 1u) << "a parent's own members stay direct, the child's are not folded in";
+    EXPECT_EQ(pasted.descendantMembers(pastedOuter->id).size(), 3u);
+    EXPECT_NE(pastedOuter->id, outerId) << "a pasted macro gets a fresh id";
+
+    MacroSet reloaded;
+    EXPECT_TRUE(reloaded.fromVar(pasted.toVar()));
+}
+
+TEST(SnippetMacro, ContainerOnlyParentWithNoDirectMembersRoundTripsThroughSaveAndLoad) {
+    auto dir =
+        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-nested-snippet-tests");
+    dir.deleteRecursively();
+    dir.createDirectory();
+
+    juce::AudioProcessorGraph graph;
+    auto osc = addAtWithUuid(graph, std::make_unique<OscillatorModule>(), 0, 0);
+    auto filter = addAtWithUuid(graph, std::make_unique<FilterModule>(), 300, 0);
+    auto vca = addAtWithUuid(graph, std::make_unique<VCAModule>(), 600, 0);
+    auto lfo = addAtWithUuid(graph, std::make_unique<LFOModule>(), 900, 0);
+
+    MacroSet macros;
+    Macro a;
+    a.name = "A";
+    a.members = {osc->properties["uuid"].toString(), filter->properties["uuid"].toString()};
+    const auto aId = macros.add(a);
+    Macro b;
+    b.name = "B";
+    b.members = {vca->properties["uuid"].toString()}; // a single-member child
+    const auto bId = macros.add(b);
+    Macro container;
+    container.name = "Container"; // no direct members at all
+    const auto containerId = macros.add(container);
+    ASSERT_TRUE(macros.setParent(aId, containerId));
+    ASSERT_TRUE(macros.setParent(bId, containerId));
+    // A macro that is not inside the selection is not captured.
+    Macro partial;
+    partial.name = "Partial";
+    partial.members = {lfo->properties["uuid"].toString()};
+    macros.add(partial);
+
+    auto snippet = SnippetManager::extractSnippet(graph, {osc->nodeID, filter->nodeID, vca->nodeID}, "Container",
+                                                  /*includeExtraState=*/false, macros);
+    ASSERT_TRUE(SnippetManager::saveSnippet(dir, "Container", snippet));
+    auto loaded = SnippetManager::loadSnippet(SnippetManager::fileForName(dir, "Container"));
+    ASSERT_TRUE(loaded.isObject());
+
+    const auto pasted = insertIntoMacroSet(loaded, 3);
+    ASSERT_EQ(pasted.size(), 3);
+    const auto* pastedContainer = findMacroNamed(pasted, "Container");
+    ASSERT_NE(pastedContainer, nullptr);
+    EXPECT_TRUE(pastedContainer->members.empty());
+    EXPECT_EQ(pasted.childrenOf(pastedContainer->id).size(), 2u);
+    EXPECT_EQ(findMacroNamed(pasted, "B")->members.size(), 1u);
+    EXPECT_EQ(findMacroNamed(pasted, "Partial"), nullptr);
+    MacroSet reloaded;
+    EXPECT_TRUE(reloaded.fromVar(pasted.toVar()));
+
+    dir.deleteRecursively();
+}
+
+TEST(SnippetMacro, ChildWhoseParentIsOnlyPartlySelectedPastesAsTopLevel) {
+    juce::AudioProcessorGraph graph;
+    auto osc = addAtWithUuid(graph, std::make_unique<OscillatorModule>(), 0, 0);
+    auto filter = addAtWithUuid(graph, std::make_unique<FilterModule>(), 300, 0);
+    auto vca = addAtWithUuid(graph, std::make_unique<VCAModule>(), 600, 0);
+
+    MacroSet macros;
+    Macro inner;
+    inner.name = "Inner";
+    inner.members = {osc->properties["uuid"].toString(), filter->properties["uuid"].toString()};
+    const auto innerId = macros.add(inner);
+    Macro outer;
+    outer.name = "Outer";
+    outer.members = {vca->properties["uuid"].toString()};
+    const auto outerId = macros.add(outer);
+    ASSERT_TRUE(macros.setParent(innerId, outerId));
+
+    // The VCA (the parent's own member) is left out, so the parent is not fully contained.
+    auto snippet = SnippetManager::extractSnippet(graph, {osc->nodeID, filter->nodeID}, "Half",
+                                                  /*includeExtraState=*/false, macros);
+    const auto pasted = insertIntoMacroSet(snippet, 2);
+    ASSERT_EQ(pasted.size(), 1);
+    EXPECT_EQ(pasted.getAll()[0].name, "Inner");
+    EXPECT_TRUE(pasted.getAll()[0].parentId.isEmpty());
+}
+
+TEST(SnippetMacro, HandEditedSnippetWithACyclicParentLinkNeverProducesAnUnloadableSet) {
+    juce::AudioProcessorGraph graph;
+    auto osc = addAtWithUuid(graph, std::make_unique<OscillatorModule>(), 0, 0);
+    auto filter = addAtWithUuid(graph, std::make_unique<FilterModule>(), 300, 0);
+    auto vca = addAtWithUuid(graph, std::make_unique<VCAModule>(), 600, 0);
+    auto lfo = addAtWithUuid(graph, std::make_unique<LFOModule>(), 900, 0);
+
+    MacroSet macros;
+    Macro a;
+    a.name = "A";
+    a.members = {osc->properties["uuid"].toString(), filter->properties["uuid"].toString()};
+    macros.add(a);
+    Macro b;
+    b.name = "B";
+    b.members = {vca->properties["uuid"].toString(), lfo->properties["uuid"].toString()};
+    macros.add(b);
+    auto snippet = SnippetManager::extractSnippet(graph, {osc->nodeID, filter->nodeID, vca->nodeID, lfo->nodeID},
+                                                  "Cycle", /*includeExtraState=*/false, macros);
+    auto* list = snippet.getDynamicObject()->getProperty("macros").getArray();
+    ASSERT_NE(list, nullptr);
+    ASSERT_EQ(list->size(), 2);
+    (*list)[0].getDynamicObject()->setProperty("parent", 1);
+    (*list)[1].getDynamicObject()->setProperty("parent", 0);
+
+    const auto pasted = insertIntoMacroSet(snippet, 4);
+    EXPECT_EQ(pasted.size(), 2);
+    MacroSet reloaded;
+    EXPECT_TRUE(reloaded.fromVar(pasted.toVar()));
+}
+
+TEST(SnippetMacro, MacroShrunkToOneMemberStillPastesAsAMacro) {
+    juce::AudioProcessorGraph graph;
+    auto osc = addAtWithUuid(graph, std::make_unique<OscillatorModule>(), 0, 0);
+
+    MacroSet macros;
+    Macro macro;
+    macro.name = "Solo Member";
+    macro.members = {osc->properties["uuid"].toString()};
+    macros.add(macro);
+
+    auto snippet = SnippetManager::extractSnippet(graph, {osc->nodeID}, "One", /*includeExtraState=*/false, macros);
+    const auto pasted = insertIntoMacroSet(snippet, 1);
+    ASSERT_EQ(pasted.size(), 1);
+    EXPECT_EQ(pasted.getAll()[0].name, "Solo Member");
+}
