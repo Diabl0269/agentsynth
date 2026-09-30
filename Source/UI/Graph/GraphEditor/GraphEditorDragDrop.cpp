@@ -212,7 +212,7 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         // re-layout) and takes the strip's width when docked, so this is a NOMINAL size: the same first-layout default
         // ModuleComponent::layoutMacroPortWidget uses, before the dock sets the real width. Library-less (the
         // "Configure I/O" modal places it).
-        return {detail::kMacroPortStripInset + 60 + detail::kMacroPortStripPadding, detail::kMacroPortRowHeight};
+        return {detail::kMacroCardStripWidth, detail::kMacroPortRowHeight};
     return {280, 360};
 }
 
@@ -480,6 +480,10 @@ juce::Point<int> GraphEditor::findLeftEdgeSlotBelowModules(int w, int h) {
         bottom = any ? std::max(bottom, bounds.getBottom()) : bounds.getBottom();
         any = true;
     }
+
+    // The head ends up boxed in a channel macro, whose open hull reaches kMacroHullSideOutset left of it: floor x so
+    // that hull opens at x >= 0 rather than being nudged (or clipped) at the canvas edge.
+    left = std::max(left, synth::LayoutUtil::kMacroHullSideOutset);
 
     const juce::Point<int> desired(left, any ? bottom + synth::LayoutUtil::kArrangeOriginY
                                              : synth::LayoutUtil::kArrangeOriginY);

@@ -7,6 +7,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
+#include "Modules/ADSRModule.h"
 #include "Modules/FX/FlangerModule.h"
 #include "Modules/LFOModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -165,4 +166,60 @@ TEST_F(GraphEditorTest, KnobLandingAnchorSitsOutsideTheRingArc) {
 
     EXPECT_GE(anchor->getDistanceFrom(ringCentre), minExpectedDistance)
         << "the landing dot must clear the ring's own drawn arc, not sit on it";
+}
+
+// The landing anchor (and the drop/live rings and hit-tests that share modRingCentreFor) centres on
+// the DIAL, not the slider's bounds centre: the text box takes a strip on one side (below for most
+// knobs -> dial centre 10px above the bounds centre; ABOVE for ADSR -> 10px below it). The anchor is
+// the ring's norm-0 (arc start) point at radius min(w,h)/2 - 11 + landing offset.
+TEST_F(GraphEditorTest, ModTargetAnchorFollowsTheDialForAdsrAndIsUnchangedForBelowTextBoxKnobs) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+
+    auto f = makeLfoFlangerFixture(engine, editor);
+    ASSERT_NE(f.flangerComp, nullptr);
+    ASSERT_NE(f.rateKnob, nullptr);
+    auto ringTop = [](const ModuleComponent& card, const juce::Slider& knob, float dialOffsetY) {
+        const auto b = knob.getBounds().toFloat();
+        const float radius = std::min(b.getWidth(), b.getHeight()) / 2.0f - 11.0f + card.knobLandingRadiusOffset();
+        const float angle = synth::theme::AppLookAndFeel::modRingAngleForNorm(0.0f);
+        return juce::Point<float>(b.getCentreX() + radius * std::sin(angle),
+                                  b.getCentreY() + dialOffsetY - radius * std::cos(angle));
+    };
+
+    const auto flangerAnchor = f.flangerComp->getModTargetKnobAnchor(2);
+    ASSERT_TRUE(flangerAnchor.has_value());
+    const auto flangerExpected = ringTop(*f.flangerComp, *f.rateKnob, -10.0f);
+    EXPECT_NEAR(flangerAnchor->x, flangerExpected.x, 0.01f);
+    EXPECT_NEAR(flangerAnchor->y, flangerExpected.y, 0.01f);
+
+    auto adsrNode = engine.getGraph().addNode(std::make_unique<ADSRModule>());
+    editor.updateComponents();
+    ModuleComponent* adsrComp = nullptr;
+    if (auto* content = editor.getChildComponent(0))
+        for (auto* child : content->getChildren())
+            if (auto* mod = dynamic_cast<ModuleComponent*>(child))
+                if (mod->getModule() == adsrNode->getProcessor())
+                    adsrComp = mod;
+    ASSERT_NE(adsrComp, nullptr);
+
+    juce::Slider* attackKnob = nullptr;
+    for (auto* child : adsrComp->getChildren())
+        if (auto* s = dynamic_cast<juce::Slider*>(child))
+            if (s->getTextBoxPosition() == juce::Slider::TextBoxAbove && s->isVisible() &&
+                s->getComponentID() == "Attack")
+                attackKnob = s;
+    ASSERT_NE(attackKnob, nullptr);
+
+    int attackChannel = -1;
+    for (const auto& t : dynamic_cast<ModuleBase*>(adsrNode->getProcessor())->getModulationTargets())
+        if (t.paramId == "attack")
+            attackChannel = t.channelIndex;
+    ASSERT_GE(attackChannel, 0);
+    const auto anchor = adsrComp->getModTargetKnobAnchor(attackChannel);
+    ASSERT_TRUE(anchor.has_value());
+    const auto expected = ringTop(*adsrComp, *attackKnob, +10.0f);
+    EXPECT_NEAR(anchor->x, expected.x, 0.01f);
+    EXPECT_NEAR(anchor->y, expected.y, 0.01f);
 }

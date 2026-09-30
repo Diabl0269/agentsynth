@@ -8,6 +8,7 @@
 #pragma once
 
 #include "GraphEditor.h"
+#include "UI/Layout/UIAnimation.h"
 #include <algorithm>
 #include <cmath>
 
@@ -52,34 +53,44 @@ inline constexpr int kMacroCardJackInsetX = 10;
 inline constexpr float kMacroCardJackHitRadius = 10.0f;
 
 // ---- Macro port sidebars (docs/macros/ports.md#how-a-port-is-drawn) ---------------------------
-// One port per 16px row, on both the collapsed card and the open macro. A strip's width is the
-// longest port name on its side plus padding and NEVER depends on zoom: zoom only decides whether
-// names (and the '-' button) are painted, so every layout below is zoom-independent.
+// One port per 16px row, on both the collapsed card and the open macro. A strip's width is FIXED: the
+// same on both sides, reserved even with no ports, and never dependent on zoom or on the port names.
+// Zoom only fades the names, the '-' button and each strip's inner divider, so every layout below is
+// zoom-independent.
 inline constexpr int kMacroPortRowHeight = 16;
 inline constexpr int kMacroPortRowsTop = 30;           // first row's top on the card, below the title row
 inline constexpr int kMacroPortStripFooter = 22;       // room below the last row for the '+'/'-' pair
 inline constexpr int kMacroPortStripInset = 18;        // name x from the strip's outer edge (jack at 10, + 8)
-inline constexpr int kMacroPortStripPadding = 8;       // after the longest name
+inline constexpr int kMacroPortStripPadding = 8;       // after the name column
+inline constexpr int kMacroPortNameRoom = 62;          // the name column's width; a longer name is ellipsised
 inline constexpr int kMacroHullStripInnerJackRoom = 8; // open macro only: room for the inner jack
-// Widest a strip gets; a longer name is shortened with an ellipsis. On the 280px card two capped
-// strips still leave 100px for the title, preview and member count.
-inline constexpr int kMacroCardStripMaxWidth = 90;
-inline constexpr int kMacroHullStripMaxWidth = 140;
+// A card strip's width (88px): on the 280px card two strips leave 104px for the title, preview and
+// member count. The open macro's strip adds room for its inner jack.
+inline constexpr int kMacroCardStripWidth = kMacroPortStripInset + kMacroPortNameRoom + kMacroPortStripPadding;
+inline constexpr int kMacroHullStripWidth = kMacroCardStripWidth + kMacroHullStripInnerJackRoom;
 // Height reserved above an open macro's members for its name chip row, and the port rows' first-row
 // offset from the hull's top (the rows start 6px below the chip row).
 inline constexpr int kMacroChipRowHeight = 24;
 inline constexpr int kMacroPortRowsBelowChip = 6;
-inline constexpr float kMacroPortNamesHiddenBelowZoom = 0.5f;
+// Port names fade in over this zoom range (docs/layout/animation.md): fully hidden at or below Lo,
+// fully drawn at or above Hi.
+inline constexpr float kMacroPortNamesFadeLo = 0.5f;
+inline constexpr float kMacroPortNamesFadeHi = 0.7f;
 inline constexpr float kMacroPortNameFontSize = 9.5f;
 /** Card height that fits `portsOnBusiestSide` rows, never below the fixed footprint. */
 inline int macroCardHeightFor(int portsOnBusiestSide) {
     return juce::jmax(kMacroCardHeight,
                       kMacroPortRowsTop + portsOnBusiestSide * kMacroPortRowHeight + kMacroPortStripFooter);
 }
-inline int macroPortStripWidthFor(float longestNamePx, int extra = 0) {
-    return kMacroPortStripInset + (int)std::ceil(longestNamePx) + kMacroPortStripPadding + extra;
+/** Opacity of the port names, the '-' glyph and the strips' inner dividers: a pure function of zoom. */
+inline float macroPortNameAlphaAtZoom(float zoom) {
+    return synth::ui::easeInOutCubic(
+        juce::jlimit(0.0f, 1.0f, (zoom - kMacroPortNamesFadeLo) / (kMacroPortNamesFadeHi - kMacroPortNamesFadeLo)));
 }
-inline bool macroPortNamesVisibleAtZoom(float zoom) { return zoom >= kMacroPortNamesHiddenBelowZoom; }
+/** The '-' button is clickable only once it is at least half faded in. */
+inline bool macroPortRemoveClickableAtZoom(float zoom) { return macroPortNameAlphaAtZoom(zoom) >= 0.5f; }
+/** The strip fill's opacity: recedes as the names fade out. */
+inline float macroStripFillAlpha(float nameAlpha) { return 0.25f + 0.30f * nameAlpha; }
 inline constexpr float kMacroPortFooterButtonSize = 8.0f;
 inline constexpr float kMacroPortFooterButtonFromBottom = 12.0f; // button top, up from the strip's bottom edge
 inline constexpr float kMacroPortAddButtonInset = 4.0f;          // '+' x from its strip's outer edge

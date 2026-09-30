@@ -294,10 +294,10 @@ TEST(MacroRecolour, PreviewThenCommitBackToTheOriginalColourPushesNoUndoEntry) {
 
 namespace {
 // Matches MacroCardComponent::getTitleRowBounds() exactly (280x90 card: getLocalBounds().
-// reduced(10, 6), top 20 px, minus the right-hand 28 px chevron reservation) -- a point safely
-// inside x:[10,242) y:[6,26). Kept here rather than exposing the private helper to tests: paint()
-// and mouseDoubleClick() sharing the ONE method is what this whole change is guarding.
-constexpr juce::Point<int> kTitleRowPoint(40, 16);
+// reduced(10, 6), top 20 px, minus the chevron reservation, which is nil now that the badges sit in the strip) -- a
+// point safely inside x:[98,182) y:[6,26). Kept here rather than exposing the private helper to tests: paint() and
+// mouseDoubleClick() sharing the ONE method is what this whole change is guarding.
+constexpr juce::Point<int> kTitleRowPoint(140, 16);
 constexpr juce::Point<int> kBodyPoint(140, 60); // below the title row, still inside the card
 } // namespace
 

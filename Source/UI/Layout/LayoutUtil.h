@@ -17,6 +17,10 @@ inline constexpr int kLayerGapX = 80;      // horizontal gap between adjacent la
 inline constexpr int kIntraLayerGapY = 40; // vertical gap between stacked modules in the same layer
 inline constexpr int kArrangeOriginX = 40; // left margin where layer 0 starts
 inline constexpr int kArrangeOriginY = 40; // top margin where each layer column starts
+// Horizontal reach of an OPEN macro's hull past its member union, on each side: the hull margin (14) plus the
+// fixed port strip (96). Anything that must sit clear of an open hull (a track head's x floor, Master right of a
+// channel's Strip) budgets this. MacroGroupControllerGeometry.cpp static_asserts it equals margin + strip width.
+inline constexpr int kMacroHullSideOutset = 110;
 // ---- Module width buckets ----
 inline constexpr int kNarrowWidth = 40;  // Attenuverter
 inline constexpr int kSingleWidth = 280; // standard module

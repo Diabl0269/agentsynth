@@ -164,7 +164,9 @@ juce::Rectangle<int> MacroCardComponent::getTitleRowBounds() const {
     // keeps a long macro name's text from painting under either, and keeps the double-click
     // rename zone off them too. Derived from getToggleBadgeBounds' own outer edge rather than a
     // second copy of the "28 + 2 slots" arithmetic, so the two can never drift apart.
-    const int reserve = getWidth() - (int)getToggleBadgeBounds(false).getX();
+    // With the fixed-width strips the chevron and badges sit in the output strip, beyond this column, so only the
+    // part that actually intrudes into the title row is reserved.
+    const int reserve = juce::jmax(0, titleRow.getRight() - (int)getToggleBadgeBounds(false).getX());
     titleRow.removeFromRight(reserve);
     return titleRow;
 }
@@ -398,11 +400,14 @@ juce::String MacroCardComponent::getModuleCountText() const {
 }
 
 juce::String MacroCardComponent::getTooltip() {
-    // With names hidden by zoom, the only place a port's name is readable is this tooltip.
-    if (hoveredPortUuid_.has_value() && !portNamesVisible())
+    // While names are faded by zoom, or ellipsised, the tooltip carries the hovered port's full name.
+    if (hoveredPortUuid_.has_value())
         for (const auto& port : owner.getMacroController().macroCardPortLayout(macroId))
-            if (port.nodeUuid == *hoveredPortUuid_)
-                return port.name;
+            if (port.nodeUuid == *hoveredPortUuid_) {
+                if (portNameAlpha() < 1.0f || portNameIsTruncated(port.name))
+                    return port.name;
+                break;
+            }
 
     const auto names = owner.getMacroController().macroMemberNames(macroId);
     constexpr int kMaxNamesShown = 10;

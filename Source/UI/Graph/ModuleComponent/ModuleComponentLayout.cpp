@@ -94,7 +94,7 @@ void ModuleComponent::layoutMacroPortWidget() {
         }
         rows = juce::jmax(1, numIns, numOuts);
     }
-    constexpr int kNominalWidth = kMacroPortStripInset + 60 + kMacroPortStripPadding;
+    constexpr int kNominalWidth = kMacroCardStripWidth;
     setSize(getWidth() > 0 ? getWidth() : kNominalWidth, rows * kMacroPortWidgetRowStep);
 }
 

@@ -378,6 +378,8 @@ private:
     // ---- Internal-only helpers (no cross-file caller outside this class; original visibility
     // on GraphEditor was private and stays private here) ----
     void applyMacroCollapsed(const juce::String& macroId, bool collapsed);
+    // Shifts an expanded macro's members (and carried collapsed cards) so its hull lies within canvas x,y >= 0.
+    void nudgeHullIntoCanvas(const juce::String& macroId);
     juce::String macroHullAtExcluding(juce::Point<int> canvasPos, const juce::String& excludedMacroId) const;
     std::vector<juce::AudioProcessorGraph::NodeID> resolvedMacroMemberModuleNodes(const juce::String& macroId) const;
     static juce::String macroPortNodeTypeName(bool isInput, synth::MacroPortKind kind);

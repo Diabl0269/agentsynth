@@ -260,7 +260,8 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
             const auto b = sliders[si]->getBounds().toFloat();
             const float radius = std::min(b.getWidth(), b.getHeight()) / 2.0f - 6.0f;
             g.setColour(jackAccentColour);
-            g.drawEllipse(b.getCentreX() - radius, b.getCentreY() - 10.0f - radius, radius * 2.0f, radius * 2.0f, 2.0f);
+            const auto c = modRingCentreFor(*sliders[si], b);
+            g.drawEllipse(c.x - radius, c.y - radius, radius * 2.0f, radius * 2.0f, 2.0f);
             break;
         }
     }
@@ -296,7 +297,7 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
             continue;
 
         auto sliderBounds = sliders[si]->getBounds().toFloat();
-        const auto centre = modRingCentreFor(sliderBounds);
+        const auto centre = modRingCentreFor(*sliders[si], sliderBounds);
         const float radius = modRingRadiusFor(sliderBounds);
 
         float baseNorm = 0.5f;
@@ -389,26 +390,34 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
             dot(i, false, cvJackColour);
     }
 
-    if (!macroPortNamesShown())
+    const float nameAlpha = macroPortNameAlpha();
+    if (nameAlpha <= 0.0f)
         return;
-    g.setColour(themeColors.textPrimary);
+    g.setColour(themeColors.textPrimary.withMultipliedAlpha(nameAlpha));
     g.setFont(juce::Font(juce::FontOptions(kMacroPortNameFontSize)));
     // The name starts kMacroPortStripInset from the boundary edge and stops short of the interior
     // jack; a name that does not fit is shortened with an ellipsis, never squeezed. First row only.
-    constexpr int kInteriorClearance = kMacroPortWidgetJackInset + 8;
-    auto textArea = juce::Rectangle<int>(0, 0, getWidth(), kMacroPortWidgetRowStep);
-    if (boundaryIsInput)
-        textArea = textArea.withTrimmedLeft(kMacroPortStripInset).withTrimmedRight(kInteriorClearance);
-    else
-        textArea = textArea.withTrimmedLeft(kInteriorClearance).withTrimmedRight(kMacroPortStripInset);
-    g.drawFittedText(name, textArea,
+    g.drawFittedText(name, macroPortNameArea(boundaryIsInput),
                      boundaryIsInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1, 1.0f);
 }
 
-bool ModuleComponent::macroPortNamesShown() const {
+float ModuleComponent::macroPortNameAlpha() const {
     // The parent is the canvas content component, whose transform is the zoom (scale + pan).
     const float zoom = getParentComponent() != nullptr ? getParentComponent()->getTransform().getScaleFactor() : 1.0f;
-    return macroPortNamesVisibleAtZoom(zoom);
+    return macroPortNameAlphaAtZoom(zoom);
+}
+
+juce::Rectangle<int> ModuleComponent::macroPortNameArea(bool boundaryIsInput) const {
+    constexpr int kInteriorClearance = kMacroPortWidgetJackInset + 8;
+    auto textArea = juce::Rectangle<int>(0, 0, getWidth(), kMacroPortWidgetRowStep);
+    if (boundaryIsInput)
+        return textArea.withTrimmedLeft(kMacroPortStripInset).withTrimmedRight(kInteriorClearance);
+    return textArea.withTrimmedLeft(kInteriorClearance).withTrimmedRight(kMacroPortStripInset);
+}
+
+bool ModuleComponent::macroPortNameIsTruncated(const juce::String& name, bool boundaryIsInput) const {
+    const juce::Font font{juce::FontOptions(kMacroPortNameFontSize)};
+    return font.getStringWidthFloat(name) > (float)macroPortNameArea(boundaryIsInput).getWidth();
 }
 
 juce::Colour ModuleComponent::effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const {
@@ -508,7 +517,7 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
         // CARD-local: sliders[si]->getBounds() is relative to this card (its parent), matching
         // this method's own CARD-local contract (see the declaration's comment).
         const auto sliderBounds = sliders[si]->getBounds().toFloat();
-        const auto centre = modRingCentreFor(sliderBounds);
+        const auto centre = modRingCentreFor(*sliders[si], sliderBounds);
         const float landingRadius = modRingRadiusFor(sliderBounds) + knobLandingRadiusOffset();
         return modRingPointForNorm(centre, landingRadius, 0.0f);
     }
@@ -737,12 +746,15 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
 // jack/module, so a control's own setTooltip() (juce::SettableTooltipClient) is unaffected;
 // juce::TooltipWindow only calls this while the mouse is actually over this component.
 juce::String ModuleComponent::getTooltip() {
-    // A docked port widget shows its name only at working zoom; below it the tooltip is the name.
+    // A docked port widget's name fades in with zoom; while it is faded, or when it is ellipsised, the tooltip
+    // carries the full name.
     if (module != nullptr && isMacroPortType(getType(module))) {
-        if (macroPortNamesShown())
-            return {};
         const auto ownership = owner.getMacroController().macroPortOwnerFor(nodeId);
-        return ownership.port != nullptr ? ownership.port->name : juce::String();
+        if (ownership.port == nullptr)
+            return {};
+        if (macroPortNameAlpha() >= 1.0f && !macroPortNameIsTruncated(ownership.port->name, ownership.port->isInput))
+            return {};
+        return ownership.port->name;
     }
     if (module == nullptr || !isAudioOutputIONode(module))
         return {};

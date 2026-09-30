@@ -155,7 +155,9 @@ void MainComponent::addAudioTrack() {
             const int eqX = gateX + GraphEditor::estimateModuleSize("Gate").x + kChannelCardGapX;
             const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kChannelCardGapX;
             const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kChannelCardGapX;
-            const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x + kChannelCardGapX;
+            // Master clears the channel macro's open hull (right strip reaches kMacroHullSideOutset past the Strip).
+            const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x +
+                                synth::LayoutUtil::kMacroHullSideOutset + kChannelCardGapX;
             const synth::DefaultChannelLayout layout{
                 /*gate=*/{gateX, trackAudioPosition.y},
                 /*eq=*/{eqX, trackAudioPosition.y},
@@ -467,7 +469,9 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
     const int eqX = gateX + GraphEditor::estimateModuleSize("Gate").x + kChannelCardGapX;
     const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kChannelCardGapX;
     const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kChannelCardGapX;
-    const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x + kChannelCardGapX;
+    // Master clears the channel macro's open hull (right strip reaches kMacroHullSideOutset past the Strip).
+    const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x +
+                        synth::LayoutUtil::kMacroHullSideOutset + kChannelCardGapX;
     const synth::DefaultChannelLayout layout{
         /*gate=*/{gateX, build.chainSourcePosition.y},
         /*eq=*/{eqX, build.chainSourcePosition.y},

@@ -615,6 +615,45 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
     }
     m->collapsed = collapsed;
     host_.updateComponents();
+    if (!collapsed)
+        nudgeHullIntoCanvas(macroId);
+}
+
+// The canvas content is (0,0,10000,10000) and anything left of or above the origin is clipped and unclickable, while
+// the hull grows outward by the fixed strip widths. So an expand whose hull would poke past the top-left translates
+// everything that defines it, rigidly: every non-port member module (persisted the way a finished selection drag does,
+// as node x/y) and the collapsed nested cards a drag of those members carries (their `bounds`). Runs inside
+// setMacroCollapsed's undo lambda, so undo restores the old positions with the rest of the graph and macro state.
+void MacroGroupController::nudgeHullIntoCanvas(const juce::String& macroId) {
+    const auto hull = macroHullBounds(macroId);
+    const int dx = juce::jmax(0, -hull.getX());
+    const int dy = juce::jmax(0, -hull.getY());
+    if (hull.isEmpty() || (dx == 0 && dy == 0))
+        return;
+
+    auto& macros = host_.getMacros();
+    std::set<juce::String> moved;
+    for (const auto& uuid : macro_nesting::orderedDescendantMembers(macros, macroId)) {
+        const auto* owner = macros.findByMember(uuid);
+        if (owner != nullptr && owner->memberIsPort(uuid))
+            continue;
+        auto* node = host_.graph().getNodeForId(resolveMemberNodeId(uuid));
+        if (node == nullptr)
+            continue;
+        moved.insert(uuid);
+        // One new position, written once to both the node property and the live component.
+        juce::Point<int> pos{(int)node->properties["x"], (int)node->properties["y"]};
+        pos += juce::Point<int>(dx, dy);
+        node->properties.set("x", pos.x);
+        node->properties.set("y", pos.y);
+        for (auto* comp : host_.modules())
+            if (comp != nullptr && comp->getNodeId() == node->nodeID)
+                comp->setTopLeftPosition(pos);
+    }
+    for (const auto& id : macro_nesting::collapsedMacrosCarriedBy(macros, moved))
+        if (auto* child = macros.find(id))
+            child->bounds.setPosition(child->bounds.getPosition() + juce::Point<int>(dx, dy));
+    host_.updateComponents();
 }
 
 void MacroGroupController::setMacroCollapsed(const juce::String& macroId, bool collapsed) {

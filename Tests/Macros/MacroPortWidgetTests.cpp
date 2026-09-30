@@ -29,18 +29,6 @@
 #include "MacroPortWidgetTestHelpers.h" // shared fixtures + graph/lookup helpers (shared with the
                                         // MacroPortWidget split -- the single non-duplicated copy).
 
-namespace {
-// The sidebar strip width the open macro reserves for a side whose longest port name is `longest`
-// (empty string: a side with no ports). Measured the way the controller measures it.
-int expectedHullStripWidth(const juce::String& longest) {
-    const int empty = detail::kMacroPortStripInset + detail::kMacroPortStripPadding;
-    if (longest.isEmpty())
-        return empty;
-    const juce::Font font{juce::FontOptions(detail::kMacroPortNameFontSize)};
-    return detail::macroPortStripWidthFor(font.getStringWidthFloat(longest), detail::kMacroHullStripInnerJackRoom);
-}
-} // namespace
-
 // ============================================================================
 // Hull excludes ports (the feedback-loop trap)
 // ============================================================================
@@ -60,12 +48,12 @@ TEST(MacroPortWidget, HullBoundsExcludesPortMembersFromTheUnion) {
                                              MacroPortShape::Mono, 1, "In A");
 
     // The port's own node is not in the member union (no feedback loop), so the hull grows only by the
-    // sidebar strip: the input strip widens from its empty minimum to fit "In A", and nothing else moves.
+    // sidebar strip, whose width is fixed (reserved even with no ports), so nothing moves at all.
     const auto hullAfter = editor.getMacroController().macroHullBounds(macroId);
     EXPECT_EQ(hullAfter.getRight(), hullBefore.getRight());
     EXPECT_EQ(hullAfter.getY(), hullBefore.getY());
     EXPECT_EQ(hullAfter.getHeight(), hullBefore.getHeight());
-    EXPECT_EQ(hullBefore.getX() - hullAfter.getX(), expectedHullStripWidth("In A") - expectedHullStripWidth({}));
+    EXPECT_EQ(hullAfter.getX(), hullBefore.getX());
 }
 
 // ============================================================================
@@ -535,9 +523,9 @@ TEST(MacroPortWidgetG4, HitTestStaysGenerousAroundTheShrunkJackDot) {
     }
 }
 
-TEST(MacroPortWidgetG4, StripWidthFitsTheLongestNameAtFullUnscaledSize) {
-    // The strip is as wide as its longest name needs, so a realistic name like "Delay 1 Audio" is never
-    // squeezed into drawFittedText's compress-or-ellipsise fallback at working zoom.
+TEST(MacroPortWidgetG4, FixedStripWidthFitsARealisticNameAtFullUnscaledSize) {
+    // The fixed strip is wide enough that a realistic name like "Delay 1 Audio" is never squeezed into
+    // drawFittedText's compress-or-ellipsise fallback at working zoom.
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -558,7 +546,7 @@ TEST(MacroPortWidgetG4, StripWidthFitsTheLongestNameAtFullUnscaledSize) {
     // paintMacroPortWidget's text area: inset kMacroPortStripInset from the boundary edge, 13px clear of the
     // interior jack on the other side.
     const int available = layout[0].widgetBounds.getWidth() - detail::kMacroPortStripInset - 13;
-    EXPECT_LE(textWidth, (float)available) << "the strip must be wide enough for its longest name";
+    EXPECT_LE(textWidth, (float)available) << "the fixed strip must be wide enough for a realistic name";
 }
 
 // ============================================================================

@@ -247,8 +247,8 @@ public:
     float knobLandingRadiusOffset() const;
 
     /** True when `e` should start a mod-amount drag on `param`'s knob rather than moving
-     *  it. `bounds` is the knob's own local bounds. See ModuleComponent.cpp for the rule. */
-    bool wantsModAmountGestureFor(juce::RangedAudioParameter* param, juce::Rectangle<float> bounds,
+     *  it. `knob`'s local bounds are used. See ModuleComponent.cpp for the rule. */
+    bool wantsModAmountGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
                                   const juce::MouseEvent& e) const;
 
     /** Applies an automation-driven value to whichever slider/combo was built for `param`,
@@ -375,7 +375,7 @@ private:
     void wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& knob, juce::RangedAudioParameter* param);
 
     /** Pick up / redrag / disconnect a knob-landed cable, since its gutter jack is hidden. See .cpp. */
-    bool wantsCablePickupGestureFor(juce::RangedAudioParameter* param, juce::Rectangle<float> bounds,
+    bool wantsCablePickupGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
                                     const juce::MouseEvent& e) const;
     void handleCablePickupGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
 
@@ -607,8 +607,11 @@ private:
     // (paint()'s early branch); the strip behind it is the canvas's.
     void layoutMacroPortWidget();
     void paintMacroPortWidget(juce::Graphics& g);
-    // False when the canvas zoom is below the names threshold (dots only; the tooltip is the name).
-    bool macroPortNamesShown() const;
+    // Opacity of the docked widget's name at the canvas zoom (0 = dots only; the tooltip is the name), and whether
+    // the name would be ellipsised in its column.
+    float macroPortNameAlpha() const;
+    juce::Rectangle<int> macroPortNameArea(bool boundaryIsInput) const;
+    bool macroPortNameIsTruncated(const juce::String& name, bool boundaryIsInput) const;
 
     // The pending-drop-target ring and the live Serum-style modulation rings on knobs. Split out of
     // paint() (which was at the function-size ratchet's ceiling) rather than grown further.

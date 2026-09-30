@@ -651,7 +651,7 @@ is self-correcting as long as the source JSON has an Audio Output, which every f
 On the very first channel, `MainComponent::addAudioTrack()` also relocates that Audio Output — or any
 bare one the user dropped manually before adding a track — to sit immediately right of the
 newly-spliced Master, once it knows this call is the one that splices Master (checked via
-`synth::findMasterNode` before building the chain). Master already lands right of the chain by design,
+`synth::findMasterNode` before building the chain). Master already lands right of the chain by design (a further `LayoutUtil::kMacroHullSideOutset` past the Strip, so the open channel macro's right port strip does not cover it),
 so the row reads `Track Audio -> Gate -> EQ -> Compressor -> Strip -> Master -> Audio Output` left to right;
 without the move, Audio Output stayed at the newPatch seed's canvas origin while Master jumped to the
 far side of the chain, and the output cable had to run back across the whole canvas. **Only fires the
