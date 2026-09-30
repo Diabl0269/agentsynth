@@ -391,6 +391,7 @@ add_executable(Tests
     Macros/MacroContainer/MacroContainerTests.cpp
     Macros/MacroContainer/MacroContainerGeometryTests.cpp
     Macros/MacroContainer/MacroContainerInteractionTests.cpp
+    Macros/MacroContainer/MacroHullDragTests.cpp
     Macros/MacroContainer/MacroDragMembershipTests.cpp
     Macros/MacroContainer/MacroDragTransferTests.cpp
     Macros/MacroContainer/MacroCrossingAnimationTests.cpp

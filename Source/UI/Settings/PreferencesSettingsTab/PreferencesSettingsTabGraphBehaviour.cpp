@@ -207,6 +207,13 @@ void PreferencesSettingsTab::setMacroDragWithoutCmdEnabled(bool enabled) {
     persistMacroDragWithoutCmd(enabled);
 }
 
+bool PreferencesSettingsTab::isMoveMacroOnHullDragEnabled() const { return moveMacroOnHullDragToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setMoveMacroOnHullDragEnabled(bool enabled) {
+    moveMacroOnHullDragToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistMoveMacroOnHullDrag(enabled);
+}
+
 bool PreferencesSettingsTab::isMixerAutoCreateChannelOnConnectEnabled() const {
     return mixerAutoCreateChannelOnConnectToggle.getToggleState();
 }
@@ -284,6 +291,13 @@ void PreferencesSettingsTab::persistMacroDragWithoutCmd(bool enabled) {
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
         graphEditor->setMacroDragWithoutCmdEnabled(enabled);
+}
+
+void PreferencesSettingsTab::persistMoveMacroOnHullDrag(bool enabled) {
+    appProperties.getUserSettings()->setValue("moveMacroOnHullDrag", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->setMoveMacroOnHullDragEnabled(enabled);
 }
 
 void PreferencesSettingsTab::persistMixerAutoCreateChannelOnConnect(bool enabled) {
@@ -465,6 +479,18 @@ void PreferencesSettingsTab::initMacroToggles() {
     macroDragWithoutCmdToggle.onClick = [this] {
         persistMacroDragWithoutCmd(macroDragWithoutCmdToggle.getToggleState());
     };
+
+    // Plain on/off, OFF by default (dragging inside a hull pans, as before).
+    contentHost.addAndMakeVisible(moveMacroOnHullDragToggle);
+    moveMacroOnHullDragToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("moveMacroOnHullDrag", false), juce::dontSendNotification);
+    moveMacroOnHullDragToggle.setTooltip(
+        "When off (the default), dragging empty space inside an expanded macro's outline pans the "
+        "canvas. When on, it moves the whole macro instead, like dragging its name chip. Shift-drag "
+        "still draws a selection box either way.");
+    moveMacroOnHullDragToggle.onClick = [this] {
+        persistMoveMacroOnHullDrag(moveMacroOnHullDragToggle.getToggleState());
+    };
 }
 
 // Lays out the macro toggle group; returns whether it is visible under the current search filter.
@@ -475,8 +501,8 @@ bool PreferencesSettingsTab::layoutMacroToggleGroup(
     const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible,
     const std::function<void(bool)>& beginGroup) {
     const std::initializer_list<juce::Component*> comps = {
-        &reconnectChainOnDeleteToggle, &macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle,
-        &macroSpliceCableOnPortDeleteToggle, &macroDragWithoutCmdToggle};
+        &reconnectChainOnDeleteToggle,       &macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle,
+        &macroSpliceCableOnPortDeleteToggle, &macroDragWithoutCmdToggle,        &moveMacroOnHullDragToggle};
     const bool visible = groupMatches(comps);
     setGroupVisible(comps, visible);
     beginGroup(visible);

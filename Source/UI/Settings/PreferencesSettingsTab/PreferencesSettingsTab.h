@@ -51,6 +51,10 @@ public:
     // default (Cmd works either way) (see docs/macros/menu-and-membership.md).
     bool isMacroDragWithoutCmdEnabled() const;
     void setMacroDragWithoutCmdEnabled(bool enabled);
+    // Drag empty space inside an expanded macro's outline to move the macro instead of panning.
+    // Plain on/off, OFF by default (docs/layout/macro-cards.md).
+    bool isMoveMacroOnHullDragEnabled() const;
+    void setMoveMacroOnHullDragEnabled(bool enabled);
     // Plain on/off, ON by default — same shape as the two macro auto-port toggles above (a brand-new automation, not a
     // replacement for pre-existing silent behaviour)
     // (see docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow").
@@ -196,6 +200,7 @@ private:
     void persistMacroAutoDeletePortsOnLastCable(bool enabled);
     void persistMacroSpliceCableOnPortDelete(bool enabled);
     void persistMacroDragWithoutCmd(bool enabled);
+    void persistMoveMacroOnHullDrag(bool enabled);
     void persistMixerAutoCreateChannelOnConnect(bool enabled);
     void persistAlignmentGuidesEnabled(bool enabled);
     void persistDefaultDualIOForNewModules(bool enabled);
@@ -344,6 +349,7 @@ private:
     juce::ToggleButton macroSpliceCableOnPortDeleteToggle{"When deleting a macro port by hand, splice the cable "
                                                           "back together instead of dropping it"};
     juce::ToggleButton macroDragWithoutCmdToggle{"Drag modules into and out of macros without Cmd"};
+    juce::ToggleButton moveMacroOnHullDragToggle{"Drag inside a macro's outline to move the macro instead of panning"};
     // Not macro-specific -- see initMacroToggles()' own comment for why it lives here.
     juce::ToggleButton reconnectChainOnDeleteToggle{"Reconnect the chain when deleting a module"};
     // Plain on/off, ON by default — see the getter/setter declarations above for why this is a different

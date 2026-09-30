@@ -123,6 +123,31 @@ TEST_F(PreferencesSettingsTabTest, MacroDragWithoutCmdToggleDefaultsOnAndRoundTr
     }
 }
 
+// Default OFF, persisted under its own key, reading the default must not write it, and it reaches an attached editor.
+TEST_F(PreferencesSettingsTabTest, MoveMacroOnHullDragToggleDefaultsOffAndRoundTrips) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.isMoveMacroOnHullDragEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("moveMacroOnHullDrag"));
+
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        tab.setGraphEditor(&editor);
+        EXPECT_FALSE(editor.getMoveMacroOnHullDragEnabled());
+
+        tab.setMoveMacroOnHullDragEnabled(true);
+        EXPECT_TRUE(tab.isMoveMacroOnHullDragEnabled());
+        EXPECT_TRUE(editor.getMoveMacroOnHullDragEnabled());
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("moveMacroOnHullDrag"), "1");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isMoveMacroOnHullDragEnabled());
+        tab.setMoveMacroOnHullDragEnabled(false);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("moveMacroOnHullDrag"), "0");
+    }
+}
+
 TEST_F(PreferencesSettingsTabTest, LoadsPersistedValues) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", "Off");
     appProperties.getUserSettings()->setValue("doubleClickPortDisconnect", "0");

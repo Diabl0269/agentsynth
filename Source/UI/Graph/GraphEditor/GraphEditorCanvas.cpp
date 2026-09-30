@@ -743,8 +743,9 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         // happens to start on a chip should still be a marquee. The chip is a small target, so
         // letting it swallow Shift+drag would make marquees fail unpredictably near a hull's top
         // edge. Unmodified drag is the chip's gesture; Shift keeps belonging to the marquee.
-        if (auto macroId = macroController_.macroChipAt(localPos.roundToInt());
-            macroId.isNotEmpty() && !e.mods.isShiftDown()) {
+        // The chip's rigid-body drag start, shared with the hull-drag preference below so both
+        // gestures run the ONE beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag path.
+        const auto beginMacroBodyDrag = [this, &localPos](const juce::String& macroId) {
             macroController_.selectMacro(macroId, false);
             if (undoManager)
                 undoManager->captureBeforeState(audioEngine.getGraph());
@@ -752,6 +753,11 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
             macroChipDragId = macroId;
             macroChipDragStartCanvasPos = localPos.roundToInt();
             pendingEmptyCanvasClick = false;
+        };
+
+        if (auto macroId = macroController_.macroChipAt(localPos.roundToInt());
+            macroId.isNotEmpty() && !e.mods.isShiftDown()) {
+            beginMacroBodyDrag(macroId);
             return;
         }
 
@@ -763,6 +769,19 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         }
 
         draggingAttenuverterNodeId = juce::AudioProcessorGraph::NodeID();
+
+        // Preference "moveMacroOnHullDrag" (off by default): an unmodified press on the empty space
+        // inside an expanded hull moves the macro like its name chip does. Checked after the chip and
+        // attenuverter so those keep winning; Shift stays the marquee. A macro with fewer than two
+        // members cannot arm a group drag, so it keeps panning rather than doing nothing.
+        if (moveMacroOnHullDragEnabled && !e.mods.isShiftDown()) {
+            const auto hullId = macroController_.macroHullAt(localPos.roundToInt());
+            const auto* hullMacro = hullId.isNotEmpty() ? getMacros().find(hullId) : nullptr;
+            if (hullMacro != nullptr && hullMacro->members.size() > 1) {
+                beginMacroBodyDrag(hullId);
+                return;
+            }
+        }
 
         // Shift starts a marquee; anything else keeps the historical drag-to-pan behaviour.
         // Cmd/Ctrl alongside Shift makes the marquee additive.

@@ -401,6 +401,10 @@ A third macro toggle, **"Drag modules into and out of macros without Cmd"** (`"m
 is unrelated to ports but lives in the same Preferences group and is likewise a plain on/off; unlike
 these two it defaults ON. See [`docs/macros/menu-and-membership.md`](menu-and-membership.md#dragging-without-cmd-the-preference).
 
+Beside them sits **"Drag inside a macro's outline to move the macro instead of panning"**
+(`"moveMacroOnHullDrag"`, defaults OFF), also a plain on/off; see
+[`docs/layout/macro-cards.md`](../layout/macro-cards.md#the-expanded-hull).
+
 A fourth, **"When deleting a macro port by hand, splice the cable back together instead of
 dropping it"** (`"macroSpliceCableOnPortDelete"`, FRO235), governs the two MANUAL delete
 affordances above (Configure I/O's own Delete Port, and the port's own right-click Delete Port) —
