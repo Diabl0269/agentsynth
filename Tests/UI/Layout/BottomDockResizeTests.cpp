@@ -86,19 +86,11 @@ TEST_P(BottomDockResizeOnEveryTabTest, HandleCoversTheDockTopEdgeAndKeepsTheTabB
     // kTabStripHeight, but no button reaches into the top kHeight px, so a grab never lands on one.
     for (auto* button : dock.getTabButtons())
         EXPECT_GE(button->getY(), Handle::kHeight) << button->getName();
-    // "+ Bus" / "Reset Meters" are carved (and so positioned) only on the Mixer tab.
-    for (auto* button : {&dock.getAddBusButtonForTest(), &dock.getResetMetersButtonForTest()})
-        if (button->isVisible())
-            EXPECT_GE(button->getY(), Handle::kHeight) << button->getName();
-    // Timeline/Controllers always get the dock's full content height -- only the Mixer
-    // host's own top edge moves down, and only while its toolbar row (Add bus/Reset Meters) is
-    // actually showing (i.e. the Mixer tab is active).
+    // Every tab gets the dock's full content height: the mixer's toolbar row lives inside the mixer
+    // panel, so no host is carved.
     EXPECT_EQ(dock.getTimelineHost().getY(), Dock::kTabStripHeight);
     EXPECT_EQ(dock.getMidiRemoteHost().getY(), Dock::kTabStripHeight);
-    const bool mixerToolbarShowing =
-        dock.getAddBusButtonForTest().isVisible() || dock.getResetMetersButtonForTest().isVisible();
-    EXPECT_EQ(dock.getMixerHost().getY(),
-              Dock::kTabStripHeight + (mixerToolbarShowing ? Dock::kMixerToolbarHeight : 0));
+    EXPECT_EQ(dock.getMixerHost().getY(), Dock::kTabStripHeight);
 }
 
 TEST_P(BottomDockResizeOnEveryTabTest, HandleWinsTheHitTestAtTheTopEdgeOverEveryTabButton) {

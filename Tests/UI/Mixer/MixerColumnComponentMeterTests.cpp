@@ -1,5 +1,5 @@
 // MixerColumnComponentMeterTests.cpp -- the clip-readout reset fan-out (an Option/Alt-click
-// on ANY column's readout, or the mixer dock's "Reset Meters" button, resets every strip column's
+// on ANY column's readout, or the mixer panel toolbar's "Reset Meters" button, resets every strip column's
 // AND Master's readout) plus a PNG render-to-file inspection of a clipped meter. Drives a real,
 // off-screen MainComponent (MixerPanelComponentTests.cpp's own rig style) so the columns exist
 // through the real MixerPanelComponent::rebuild() wiring, not a hand-built stand-in.
@@ -105,7 +105,7 @@ TEST(MixerColumnComponentMeterTests, TheResetMetersButtonResetsEveryColumn) {
     column->getMeterReadoutForTest().updatePeak(5.0f);
     ASSERT_TRUE(column->getMeterReadoutForTest().isClippedForTest());
 
-    dock.getResetMetersButtonForTest().onClick();
+    mixerPanel.getToolbarForTest().getResetMetersButtonForTest().onClick();
 
     EXPECT_FALSE(column->getMeterReadoutForTest().isClippedForTest());
 }

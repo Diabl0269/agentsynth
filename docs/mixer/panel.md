@@ -37,7 +37,7 @@ has neither, and no strip either, so the panel would otherwise render nothing at
 `MixerPanelComponent` shows a muted, centred hint instead whenever `columnEntries_` ends up empty
 after a rebuild — a direct child of the panel itself (never `content_`/`viewport_`, so it neither
 scrolls nor takes keyboard focus or mouse clicks), naming the controls that are actually reachable
-from every mixer placement: the Timeline's own "+ Track" button, and "+ Bus" in the bottom panel.
+from every mixer placement: the Timeline's own "+ Track" button, and the mixer toolbar's "+ Bus".
 
 **Every column lays out against the panel's shared sections, and the fader is protected first
 (FRO298, FRO351).** The Inserts, Sends and EQ rows have one height across every column (see
@@ -250,11 +250,9 @@ dock's own top edge — not inside the Timeline panel — so the Mixer and Contr
 dock exactly like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays
 22 px; the tab and detach buttons are laid out below it, so a grab never lands on a button) and
 reports the total dock height through `BottomDockComponent::onResizeHeight` /
-`onResizeHeightCommitted`. FRO338: `+ Bus`/Reset Meters no longer share the tab strip's carve at
-all (they used to be carved from its right edge, Mixer-tab-only, which meant the strip's own width
-split changed depending on which tab was active) — they now sit in their own slim toolbar row
-directly below the tab strip, inside the Mixer tab's content area, laid out only while Mixer is
-active; every other tab gets the full content height instead. The rules (clamp, persistence, live relayout) are in
+`onResizeHeightCommitted`. The dock carves nothing for the Mixer: `+ Bus`/Reset Meters live in the
+mixer panel's own [toolbar](#the-toolbar), so the tab strip's width split never depends on the
+active tab and every tab gets the full content height. The rules (clamp, persistence, live relayout) are in
 [`docs/timeline/timeline.md`](../timeline/timeline.md#panel-height); Own-panel placement is a
 separate strip with its own handle, below.
 
@@ -476,12 +474,36 @@ yet.
 graph rebuild or a panel rebuild. It uses a `juce::Component::SafePointer`, this codebase's standing
 convention for the pattern.
 
+## The toolbar
+
+`MixerPanelComponent` owns a 24 px `MixerPanelToolbar` (`MixerPanelComponent/MixerPanelToolbar.{h,cpp}`)
+along its top edge, so the row belongs to the panel and follows it into every placement: the docked
+tab, the Own panel and a detached window (the columns get `panel height - 24`, see
+`requiredPanelHeight()`). It sits outside the horizontally scrolling viewport, so it stays put while
+columns scroll, and it is shown even with no columns -- `+ Bus` is how an empty mixer gets its first
+bus.
+
+- **Left: Inserts / Sends / EQ toggles.** Label-only `juce::DrawableButton`s, so the look-and-feel
+  paints them like the main toolbar's toggles (accent wash and accent label while on). On means the
+  section is shown. A click calls `MixerSectionLayout::toggleHidden` -- the same commit and persist
+  path a hidden section's strip uses. The layout stays the source of truth: the toggles are re-read
+  from it after every layout change (`MixerPanelToolbar::refresh()`), so clicking a column's
+  collapsed strip flips the toggle back on. Their accessible names are "Inserts", "Sends" and "EQ"
+  with the toggle state; the tooltip says "Hide Sends" / "Show Sends".
+- **Right: Reset Meters and + Bus.** "Reset Meters" calls `resetAllMeterReadouts()`; "+ Bus" calls
+  `createBus()` then `rebuild()`, so the new bus's column is there at once.
+- **No keyboard focus.** All five buttons give up focus, so the panel stays the mixer's single
+  focusable leaf.
+
+While a section divider is dragged, the panel paints a mono "5 rows" bubble beside the dragged
+divider at the left edge of the first column (`paintDragBubble`).
+
 ## Shared sections
 
 A column's Inserts, Sends and EQ are **rows that run across the whole mixer at one shared height**,
 so every fader starts on the same line whatever each channel holds. The heights and hidden flags
 live in one `MixerSectionLayout` (`Source/UI/Mixer/MixerSections/`) that `MixerPanelComponent`
-owns; every strip column, Master and the section rail resolve their geometry from it with
+owns; every strip column and Master resolve their geometry from it with
 `MixerSectionLayout::resolve(columnHeight)`, which depends only on the layout and the column height.
 **A column never sizes a section to its own content.** A column with fewer rows leaves the rest of
 the section empty; Master (no source line, sends, EQ or pan) leaves those rows blank so its Inserts
@@ -490,23 +512,18 @@ row and fader still line up; Direct has none of the rows and stays as it was. A 
 
 - **Defaults.** Inserts 4 rows plus the link row (5 x 18 = 90 px), Sends 2 rows plus "+ Send"
   (3 x 20 = 60 px), EQ shown (28 px).
-- **Section rail.** `MixerSectionRail`, 74 px on the panel's left edge (`bg0`, a 1 px `border` on
-  its right), outside the horizontally scrolling viewport so it stays put while columns scroll
-  sideways; it hides with the columns when the panel shows its empty-state hint. Per section: an
-  8 px chevron (down while shown, right while hidden) and the name in `micro` caps, `textMuted`.
-  The chevron-plus-name is one button titled "Hide Inserts" / "Show Inserts" that toggles the
-  section in every column.
+- **Show/hide.** The [toolbar](#the-toolbar)'s Inserts / Sends / EQ toggles hide or show the section
+  in every column.
 - **Hidden section.** Shrinks to a 14 px `MixerCollapsedSection` strip in every column saying what
   it holds ("2 sends", "no inserts", "EQ" / "no EQ") in 9 px `textDisabled`; clicking the strip in
-  any column, or the rail chevron, shows it again. The strip is an accessibility button titled
+  any column, or its toolbar toggle, shows it again. The strip is an accessibility button titled
   "Show Sends" etc. **The EQ curve's show/hide is this same control** (see
   [the EQ curve thumbnail](#the-eq-curve-thumbnail)).
-- **Dividers.** A 6 px `MixerSectionDivider` under each section in every column and in the rail
-  (the rail's carries grip dots): a 1 px `border` line, or a 2 px `accent` line while hovered or
+- **Dividers.** A 6 px `MixerSectionDivider` under each section in every column: a 1 px `border` line, or a 2 px `accent` line while hovered or
   dragged -- the hover state lives on the shared layout, so the whole row lights up together. The
   Inserts and Sends dividers show the vertical-resize cursor; dragging one resizes that section in
   every column, snapping to whole rows (18 px inserts, 20 px sends, 1 to 16 rows), with a mono
-  "5 rows" bubble on the rail while dragging; a double-click resets it to its default. The drag is
+  "5 rows" bubble beside the divider while dragging; a double-click resets it to its default. The drag is
   measured in screen pixels from the press, never as a running delta, because growing the dock
   moves the whole panel up under the pointer (the same reason `PanelResizeHandle` measures from its
   owner's fixed bottom edge). Dragging a hidden section's divider down shows it again. The EQ curve
@@ -526,18 +543,17 @@ row and fader still line up; Direct has none of the rows and stays as it was. A 
   `MixerPlacementController::setOwnPanelHeight` in the Own-panel placement -- wired by
   `MainComponent` onto the panel's `canGrowHost`/`growHost`, and persisted on release only. In a
   detached Mixer window (and the "both places" mirror window) the host cannot grow, so the columns
-  take `requiredColumnHeight()` and the panel's viewport scrolls vertically, the rail following its
-  scroll. Shrinking a section never shrinks the host: the space goes back to the fader.
+  take `requiredColumnHeight()` and the panel's viewport scrolls vertically under the toolbar. Shrinking a section never shrinks the host: the space goes back to the fader.
 - **Showing the mixer fits it.** Whenever the mixer is shown -- the dock opens on (or switches to)
   the Mixer tab, the Own panel opens, or the app starts with either -- and the panel is shorter than
-  `requiredColumnHeight()` (header and source line, every section at its set height or its 14 px
+  `requiredPanelHeight()` (the toolbar, plus header and source line, every section at its set height or its 14 px
   strip, the dividers, pan, readout, a 56 px fader and the M/S row), `MainComponent::
   fitMixerHostToSections()` (or `MixerPlacementController` for the Own panel) calls
   `MixerPanelComponent::growHostToFitSections()`, which grows the host through the same
   `growHost` path a divider drag uses, clamped to what the window allows (the dock keeps the
   canvas the same minimum its own resize handle does). It only grows, never shrinks, and runs
   once per show, not on every resize: a user who then drags the dock shorter keeps that height and
-  the squeeze rule below applies. Re-showing a hidden section (rail chevron or its strip) fits the
+  the squeeze rule below applies. Re-showing a hidden section (its toolbar toggle or its strip) fits the
   host the same way. In the Own-panel placement `BottomDockComponent::resized()` leaves the Mixer
   host alone (it is parented in `MixerPlacementController`'s strip then), so opening the dock can
   no longer resize the host to the dock's height and make this fit misread the panel.
@@ -579,7 +595,7 @@ for only the first one in signal order**, Cubase's own single-slot idiom and a d
 - **Finding the EQ** — `MixerColumnComponent::setColumn()` walks `column.inserts` (already signal
   ordered) and binds the first `ParametricEQModule` it finds.
 - **Show/hide (FRO352)** — the EQ row is one of the [shared sections](#shared-sections), so its
-  rail chevron hides the curve in every column at once and the choice persists app-wide
+  toolbar toggle hides the curve in every column at once and the choice persists app-wide
   (`mixerSectionEqHidden`). A hidden EQ row leaves a 14 px strip reading "EQ" (or "no EQ") that
   shows it again on click, and the fader gets the 14 px difference. The thumbnail's bounds go empty
   while hidden; its `isVisible()` keeps meaning "this column has an EQ".
@@ -671,10 +687,10 @@ already applies for the fader's own "-3.0 dB" text (see that class's `applyDbAcc
 `SliderParameterAttachment`, rather than a second copy of the formatting.
 
 **The section controls never take keyboard focus either.** The section viewports (a
-`juce::Viewport` wants focus by default), dividers, hidden-section strips and the rail's chevron
+`juce::Viewport` wants focus by default), dividers, hidden-section strips and the toolbar's
 buttons all set `setWantsKeyboardFocus(false)`, so the panel stays the single focusable leaf. The
-rail's chevrons are buttons titled "Hide Sends"/"Show Sends", and a hidden section's strip is a
-button titled "Show Sends", so both are reachable from a screen reader; a hidden section's insert
+toolbar's section toggles are toggle buttons named "Inserts"/"Sends"/"EQ", and a hidden section's
+strip is a button titled "Show Sends", so both are reachable from a screen reader; a hidden section's insert
 or send rows leave the accessibility tree with it.
 
 **Insert rows, "+ Send" and "Make channel" are real, named, reachable AX children, not just painted

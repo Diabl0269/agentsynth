@@ -12,8 +12,6 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kAddBusButtonWidth = 54;
-constexpr int kResetMetersButtonWidth = 84;
 // How far above its slot a dragged tab is drawn. The tab row starts PanelResizeHandle::kHeight (5)
 // px below the dock's top edge, so a 4 px lift keeps the lifted tab and its 1 px shadow inside the
 // dock's own bounds.
@@ -92,21 +90,6 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     addAndMakeVisible(timelineHost_);
     addAndMakeVisible(mixerHost_);
     addAndMakeVisible(midiRemoteHost_);
-
-    // "Add bus" sits on the tab strip and is visible only on the Mixer tab -- it has no meaning
-    // while the Timeline tab is showing (see docs/mixer/sends-and-buses.md).
-    addAndMakeVisible(addBusButton_);
-    addBusButton_.setClickingTogglesState(false);
-    addBusButton_.onClick = [this] {
-        mixer_.createBus();
-        mixer_.rebuild(); // the new bus's own column, without waiting for the owner's reconcile
-    };
-
-    // Sits beside "+ Bus", same Mixer-tab-only visibility -- resets every column's clip
-    // readout to "-inf", not clipped.
-    addAndMakeVisible(resetMetersButton_);
-    resetMetersButton_.setClickingTogglesState(false);
-    resetMetersButton_.onClick = [this] { mixer_.resetAllMeterReadouts(); };
 
     mixer_.configure(audioEngine.getGraph(), doc, graphEditor.getMacros(), undoManager, graphEditor, audioEngine);
     // The docked mixer's own live mute/solo/pan-law changes reach the "both places" mirror
@@ -364,8 +347,6 @@ void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     timelineTabButton_.setToggleState(timelineActive, juce::dontSendNotification);
     mixerTabButton_.setToggleState(mixerActive, juce::dontSendNotification);
     midiRemoteTabButton_.setToggleState(midiRemoteActive, juce::dontSendNotification);
-    addBusButton_.setVisible(mixerActive);
-    resetMetersButton_.setVisible(mixerActive);
     if (mixerActive && allowMixerRebuild)
         mixer_.rebuild();
     // Catches up on any profile/assignment change that happened while this tab was hidden,
@@ -503,12 +484,7 @@ void BottomDockComponent::resized() {
 
     auto bounds = getLocalBounds();
     auto tabStrip = bounds.removeFromTop(kTabStripHeight).withTrimmedTop(PanelResizeHandle::kHeight);
-    // Rightmost: the detach button (always present, acts on whichever tab is active). The
-    // "+ Bus"/"Reset Meters" buttons are NOT carved from here: doing so only while Mixer was
-    // active would shrink the tabs' shared area on Mixer alone, visibly resizing every tab button
-    // on a tab switch. They live in their own slim toolbar row carved from the CONTENT area below
-    // (see the Mixer-only block right after), so the tab strip's width split is identical
-    // regardless of activeTab_.
+    // Rightmost: the detach button (always present, acts on whichever tab is active).
     detachButton_.setBounds(tabStrip.removeFromRight(kTabStripHeight));
 
     // Whatever's left splits between the tabs currently offered (isTabOfferedInStrip --
@@ -530,25 +506,12 @@ void BottomDockComponent::resized() {
         if (!isTabOfferedInStrip(t))
             buttonForTab(t).setVisible(false);
 
-    // The Mixer-only toolbar (Add bus/Reset Meters) is carved from the MIXER HOST'S OWN
-    // content area only, below the tab strip -- Timeline and Controllers always get `bounds`
-    // unmodified, so switching to Mixer never shrinks anything but the Mixer tab's own content, and
-    // switching away never leaves a stale shrink behind (recomputed from `bounds` every resized()).
-    auto mixerBounds = bounds;
-    if (addBusButton_.isVisible() || resetMetersButton_.isVisible()) {
-        auto toolbar = mixerBounds.removeFromTop(kMixerToolbarHeight);
-        if (addBusButton_.isVisible())
-            addBusButton_.setBounds(toolbar.removeFromRight(kAddBusButtonWidth));
-        if (resetMetersButton_.isVisible())
-            resetMetersButton_.setBounds(toolbar.removeFromRight(kResetMetersButtonWidth));
-    }
-
     timelineHost_.setBounds(bounds);
     // In the Own-panel placement the host lives in MixerPlacementController's strip, which lays it
     // out itself; sizing it to the dock here would leave it at the wrong height until that strip's
     // next layout pass.
     if (mixerHost_.getParentComponent() == this)
-        mixerHost_.setBounds(mixerBounds);
+        mixerHost_.setBounds(bounds);
     midiRemoteHost_.setBounds(bounds);
 }
 

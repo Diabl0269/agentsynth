@@ -5,8 +5,8 @@
 #include <juce_data_structures/juce_data_structures.h>
 
 // MixerSectionLayout.h (docs/mixer/panel.md#shared-sections): the Inserts/Sends/EQ section heights
-// and hidden flags every mixer column shares. The panel owns one; columns and the section rail read it
-// and resolve the same geometry from the same column height, so every fader starts on the same line.
+// and hidden flags every mixer column shares. The panel owns one; columns read it and
+// resolve the same geometry from the same column height, so every fader starts on the same line.
 namespace synth::ui {
 
 enum class MixerSection { Inserts = 0, Sends = 1, Eq = 2 };
@@ -73,7 +73,7 @@ public:
     /** The column height at which every section gets its full height and the fader its minimum. */
     int requiredColumnHeight() const noexcept;
 
-    // ---- Divider gestures (hover, drag, reset), shared by the columns and the rail ----
+    // ---- Divider gestures (hover, drag, reset), shared by the columns ----
     int getHoveredDivider() const noexcept { return hoveredDivider_; }
     void setHoveredDivider(int dividerIndex);
     int getDraggingDivider() const noexcept { return draggingDivider_; }
@@ -85,9 +85,9 @@ public:
     void loadFrom(const juce::PropertySet& settings);
     void saveTo(juce::PropertySet& settings) const;
 
-    /** Heights or hidden flags changed: every column and the rail re-lay out. */
+    /** Heights or hidden flags changed: every column re-lays out. */
     std::function<void()> onGeometryChanged;
-    /** Hover or drag state changed: dividers and the rail repaint. */
+    /** Hover or drag state changed: dividers repaint. */
     std::function<void()> onAppearanceChanged;
     /** A gesture finished (drag end, show/hide, reset): the owner persists. */
     std::function<void()> onCommitted;

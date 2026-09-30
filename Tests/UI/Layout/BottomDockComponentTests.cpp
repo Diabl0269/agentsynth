@@ -300,10 +300,8 @@ TEST(BottomDockComponentTests, DetachingTheActiveTabFallsBackToTheNextOneAndNeve
     EXPECT_TRUE(dock.isMixerTabActive());
 }
 
-// Add-bus/reset-meters used to be carved from the tab strip's own right edge, Mixer-tab-
-// only -- switching to Mixer visibly shrank the tab strip's shared area, so every tab button's own
-// bounds changed depending on which tab was active. They now live in their own toolbar row above
-// the Mixer content instead, so the tab strip's width split must be identical on every tab.
+// The tab strip's width split must be identical on every tab: nothing Mixer-only is carved from it
+// (the mixer's own toolbar row lives inside the mixer panel).
 TEST(BottomDockComponentTests, TabButtonBoundsAreIdenticalWhetherTimelineOrMixerIsActive) {
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDCT>());
@@ -322,33 +320,6 @@ TEST(BottomDockComponentTests, TabButtonBoundsAreIdenticalWhetherTimelineOrMixer
     for (size_t i = 0; i < timelineActiveBounds.size(); ++i)
         EXPECT_EQ(dock.getTabButtons()[i]->getBounds(), timelineActiveBounds[i])
             << "tab button " << i << " moved when switching tabs";
-}
-
-// The buttons are Mixer-only, and now that they've moved off the tab strip they must sit
-// entirely below it (never sharing a pixel with a tab button).
-TEST(BottomDockComponentTests, AddBusAndResetMetersAreMixerOnlyAndNeverOverlapTheTabStrip) {
-    BottomDockActiveTabResetGuardMDT resetGuard;
-    MainComponent mc(std::make_unique<MockProviderMDCT>());
-    mc.setSize(1400, 900);
-    mc.newPatchForTest();
-    mc.simulateToggleBottomPanelClick();
-    auto& dock = mc.getBottomDock();
-
-    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
-    EXPECT_FALSE(dock.getAddBusButtonForTest().isVisible());
-    EXPECT_FALSE(dock.getResetMetersButtonForTest().isVisible());
-
-    dock.setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
-    EXPECT_TRUE(dock.getAddBusButtonForTest().isVisible());
-    EXPECT_TRUE(dock.getResetMetersButtonForTest().isVisible());
-
-    const juce::Rectangle<int> tabStripArea(0, 0, dock.getWidth(), synth::ui::BottomDockComponent::kTabStripHeight);
-    EXPECT_FALSE(tabStripArea.intersects(dock.getAddBusButtonForTest().getBounds()));
-    EXPECT_FALSE(tabStripArea.intersects(dock.getResetMetersButtonForTest().getBounds()));
-    for (auto* button : dock.getTabButtons()) {
-        EXPECT_FALSE(button->getBounds().intersects(dock.getAddBusButtonForTest().getBounds()));
-        EXPECT_FALSE(button->getBounds().intersects(dock.getResetMetersButtonForTest().getBounds()));
-    }
 }
 
 // A real reorder drag shows the dragging-hand cursor once it clears JUCE's own drag

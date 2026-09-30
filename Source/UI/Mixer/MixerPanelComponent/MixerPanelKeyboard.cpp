@@ -209,6 +209,7 @@ void MixerPanelComponent::paintOverChildren(juce::Graphics& g) {
     // with no native peer (same accepted gap TimelineTrackFocusTests documents). The two may
     // co-paint, same as a region root and a focused row elsewhere in this app.
     synth::ui::paintFocusRegionOutline(*this, g);
+    paintDragBubble(g);
 }
 
 } // namespace synth::ui

@@ -1,8 +1,9 @@
 // Concern: MixerPanelComponent's shared section layout -- relaying layout changes to every column
-// and the rail, growing the host while a divider drag needs room, and persisting the sections.
+// and the toolbar, growing the host while a divider drag needs room, and persisting the sections.
 #include "MixerPanelComponent.h"
 
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
 
@@ -20,9 +21,13 @@ void MixerPanelComponent::setSettingsStore(juce::PropertiesFile* settings) {
         sectionLayout_.loadFrom(*settings_);
 }
 
+int MixerPanelComponent::requiredPanelHeight() const noexcept {
+    return sectionLayout_.requiredColumnHeight() + MixerPanelToolbar::kHeight;
+}
+
 bool MixerPanelComponent::contentScrollsVertically() const {
     const bool hostCanGrow = canGrowHost && canGrowHost();
-    return !hostCanGrow && sectionLayout_.requiredColumnHeight() > getHeight();
+    return !hostCanGrow && requiredPanelHeight() > getHeight();
 }
 
 // A divider drag takes space from the fader first; once the fader would drop under its minimum, the
@@ -31,7 +36,7 @@ bool MixerPanelComponent::contentScrollsVertically() const {
 // happened. Shrinking never shrinks the host: the space goes back to the fader. A host that cannot
 // grow at all (a detached window) is handled by resized() scrolling the content instead.
 //
-// Re-showing a hidden section (the rail chevron or its strip) fits the host the same way a newly
+// Re-showing a hidden section (its toolbar toggle or its strip) fits the host the same way a newly
 // shown mixer does -- growHostToFitSections().
 void MixerPanelComponent::onSectionGeometryChanged() {
     bool reshown = false;
@@ -41,7 +46,7 @@ void MixerPanelComponent::onSectionGeometryChanged() {
         lastHidden_[i] = hidden;
     }
     if (sectionLayout_.getDraggingDivider() >= 0 && canGrowHost && canGrowHost() && growHost) {
-        const int shortfall = sectionLayout_.requiredColumnHeight() - getHeight();
+        const int shortfall = requiredPanelHeight() - getHeight();
         if (shortfall > 0) {
             grewHostThisDrag_ = true;
             growHost(shortfall, false);
@@ -50,7 +55,10 @@ void MixerPanelComponent::onSectionGeometryChanged() {
         growHostToFitSections();
     }
     resized();
+    repaintDragBubbleStrip();
 }
+
+void MixerPanelComponent::repaintDragBubbleStrip() { repaint(0, viewport_.getY(), 72, viewport_.getHeight()); }
 
 // Only grows, by what the sections still need beside a kMinFaderHeight fader; the host clamps to
 // its own limit (3/4 of the window for the dock). Skipped while the panel has no height yet (not
@@ -58,7 +66,7 @@ void MixerPanelComponent::onSectionGeometryChanged() {
 void MixerPanelComponent::growHostToFitSections() {
     if (getHeight() <= 0 || !(canGrowHost && canGrowHost()) || !growHost)
         return;
-    const int shortfall = sectionLayout_.requiredColumnHeight() - getHeight();
+    const int shortfall = requiredPanelHeight() - getHeight();
     if (shortfall > 0)
         growHost(shortfall, false);
 }
@@ -68,7 +76,7 @@ void MixerPanelComponent::onSectionAppearanceChanged() {
         column->repaintSectionDividers();
     if (masterColumn_ != nullptr)
         masterColumn_->repaintSectionDividers();
-    rail_.repaint();
+    repaintDragBubbleStrip();
 }
 
 // Persists on gesture end only (drag release, show/hide, double-click reset), never per drag step --
@@ -79,11 +87,49 @@ void MixerPanelComponent::onSectionLayoutCommitted() {
         if (growHost)
             growHost(0, true);
     }
-    rail_.refreshLayout();
+    toolbar_.refresh();
     if (settings_ == nullptr)
         return;
     sectionLayout_.saveTo(*settings_);
     settings_->saveIfNeeded();
+}
+
+juce::String MixerPanelComponent::getDragBubbleTextForTest() const {
+    const int dragging = sectionLayout_.getDraggingDivider();
+    if (dragging < 0)
+        return {};
+    const int rows = sectionLayout_.getRowCount((MixerSection)dragging);
+    return juce::String(rows) + (rows == 1 ? " row" : " rows");
+}
+
+// The row-count bubble rides the divider being dragged, at the left edge of the first column and
+// painted in the value (mono) face. The divider's y is the shared geometry every column resolves,
+// offset by the panel's vertical scroll.
+void MixerPanelComponent::paintDragBubble(juce::Graphics& g) const {
+    const auto text = getDragBubbleTextForTest();
+    if (text.isEmpty())
+        return;
+    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    const auto fill = laf != nullptr ? laf->getTheme().colors.surfaceHi : juce::Colour(0xff232833);
+    const auto outline = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const auto textColour = laf != nullptr ? laf->getTheme().colors.textPrimary : juce::Colour(0xffEAEEF3);
+    const juce::String mono = laf != nullptr ? laf->getTheme().type.monoFamily : juce::String("JetBrains Mono");
+    const float size = laf != nullptr ? laf->getTheme().type.value : 10.0f;
+
+    const auto geometry = sectionLayout_.resolve(content_.getHeight());
+    const int dividerY = viewport_.getY() + geometry.dividerTop[(size_t)sectionLayout_.getDraggingDivider()] +
+                         MixerSectionLayout::kDividerHeight / 2 - viewport_.getViewPositionY();
+    constexpr int kBubbleWidth = 56;
+    constexpr int kBubbleHeight = 14;
+    const juce::Rectangle<float> bubble(6.0f, (float)(dividerY - kBubbleHeight / 2), (float)kBubbleWidth,
+                                        (float)kBubbleHeight);
+    g.setColour(fill);
+    g.fillRoundedRectangle(bubble, 7.0f);
+    g.setColour(outline);
+    g.drawRoundedRectangle(bubble.reduced(0.5f), 7.0f, 1.0f);
+    g.setColour(textColour);
+    g.setFont(juce::Font(juce::FontOptions(mono, size, juce::Font::plain)));
+    g.drawText(text, bubble, juce::Justification::centred, false);
 }
 
 } // namespace synth::ui

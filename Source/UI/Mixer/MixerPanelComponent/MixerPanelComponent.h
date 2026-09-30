@@ -5,8 +5,8 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Mixer/MixerDirectColumn.h"
 #include "UI/Mixer/MixerMasterColumn.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelToolbar.h"
 #include "UI/Mixer/MixerSections/MixerSectionLayout.h"
-#include "UI/Mixer/MixerSections/MixerSectionRail.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -61,8 +61,13 @@ public:
     /** Grows the host (only grows) so every section fits beside a minimum-height fader. */
     void growHostToFitSections();
 
+    /** The panel height at which the toolbar and every column at its full section heights fit. */
+    int requiredPanelHeight() const noexcept;
+
     MixerSectionLayout& getSectionLayout() noexcept { return sectionLayout_; }
-    MixerSectionRail& getSectionRailForTest() noexcept { return rail_; }
+    MixerPanelToolbar& getToolbarForTest() noexcept { return toolbar_; }
+    /** The drag bubble's text ("5 rows"), empty while no divider is being dragged. */
+    juce::String getDragBubbleTextForTest() const;
     juce::Viewport& getViewportForTest() noexcept { return viewport_; }
 
     /** Forwarded from MixerDirectColumn -- BottomDockComponent wires this to
@@ -79,7 +84,7 @@ public:
 
     /** Creates a group/send bus channel -- bypassed EQ -> bypassed Compressor -> Stereo Strip ->
      *  Master(Mix), boxed in a macro named "Bus N" -- as ONE recordGraphAndMacroChange step, and
-     *  returns its strip's node id (invalid on failure). Wired to the dock's "Add bus" button and
+     *  returns its strip's node id (invalid on failure). Wired to the toolbar's "+ Bus" button and
      *  to every send row's "New bus..." item (see docs/mixer/sends-and-buses.md). */
     juce::AudioProcessorGraph::NodeID createBus();
 
@@ -183,7 +188,7 @@ public:
      *  to render real audio through the graph just to observe a meter move. */
     int getRefreshMetersCallCountForTest() const noexcept { return refreshMetersCallCount_; }
 
-    /** The mixer panel header's "Reset Meters" action, and an Option/Alt-click on ANY
+    /** The toolbar's "Reset Meters" action, and an Option/Alt-click on ANY
      *  column's own clip readout -- resets every strip/Master readout to "-inf", not clipped. */
     void resetAllMeterReadouts();
 
@@ -220,6 +225,8 @@ private:
     void onSectionAppearanceChanged();
     void onSectionLayoutCommitted();
     bool contentScrollsVertically() const;
+    void paintDragBubble(juce::Graphics& g) const;
+    void repaintDragBubbleStrip();
 
     /** True between an unbindAllColumns() and the rebuild() that re-binds -- see
      *  rebuildIfUnbound(). */
@@ -265,20 +272,12 @@ private:
      *  must never yank VoiceOver's cursor into the mixer from wherever the user actually is. */
     void grabAccessibilityFocusForFocusedColumn();
 
-    struct ScrollReportingViewport : juce::Viewport {
-        std::function<void()> onScrolled;
-        void visibleAreaChanged(const juce::Rectangle<int>&) override {
-            if (onScrolled)
-                onScrolled();
-        }
-    };
-
     MixerSectionLayout sectionLayout_;
-    MixerSectionRail rail_;
+    MixerPanelToolbar toolbar_;
     juce::PropertiesFile* settings_ = nullptr; // See setSettingsStore
     bool grewHostThisDrag_ = false;
     std::array<bool, MixerSectionLayout::kSectionCount> lastHidden_{}; // detects a re-show
-    ScrollReportingViewport viewport_;
+    juce::Viewport viewport_;
     juce::Component content_;
 
     /** Shown only while there are no columns; see the ctor and rebuild(). */

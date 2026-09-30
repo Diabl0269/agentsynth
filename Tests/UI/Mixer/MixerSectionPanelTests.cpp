@@ -1,6 +1,6 @@
 // MixerSectionPanelTests.cpp (docs/mixer/panel.md#shared-sections): the shared Inserts/Sends/EQ
-// sections across a real docked mixer -- faders line up whatever each column holds, the rail's
-// chevron and a hidden section's strip show/hide a section in every column (the EQ one included), a
+// sections across a real docked mixer -- faders line up whatever each column holds, the toolbar's
+// section toggles and a hidden section's strip show/hide a section in every column (the EQ one included), a
 // divider drag resizes every column in whole rows and grows the bottom dock once the fader is at its
 // minimum, a long list scrolls inside its section, and the sections persist app-wide. Real off-screen
 // MainComponent, synthesized mouse events into the real handlers.
@@ -165,13 +165,14 @@ TEST_F(MixerSectionPanelTest, FadersShareOneTopAcrossColumnsWithDifferentInsertC
               yInPanel(panel(), s[0]->getSectionViewportForTest(MixerSection::Inserts)));
 }
 
-TEST_F(MixerSectionPanelTest, RailChevronHidesASectionInEveryColumnAndShowsItAgain) {
+TEST_F(MixerSectionPanelTest, ToolbarToggleHidesASectionInEveryColumnAndShowsItAgain) {
     openMixer(2);
     setDockHeight(600);
-    auto& toggle = panel().getSectionRailForTest().getToggleButtonForTest(MixerSection::Sends);
+    auto& toggle = panel().getToolbarForTest().getSectionToggleForTest(MixerSection::Sends);
     ASSERT_TRUE(toggle.isVisible());
     ASSERT_GT(toggle.getHeight(), 0);
-    EXPECT_EQ(toggle.getTitle(), "Hide Sends");
+    EXPECT_TRUE(toggle.getToggleState()) << "on means the section is shown";
+    EXPECT_EQ(toggle.getTitle(), "Sends");
     const int faderBefore = strips()[0]->getFaderForTest().getHeight();
 
     click(toggle);
@@ -185,16 +186,16 @@ TEST_F(MixerSectionPanelTest, RailChevronHidesASectionInEveryColumnAndShowsItAga
         EXPECT_EQ(column->getFaderForTest().getHeight(), faderBefore + 60 - Layout::kCollapsedHeight)
             << "the fader gets the space back";
     }
-    EXPECT_EQ(panel().getSectionRailForTest().getToggleButtonForTest(MixerSection::Sends).getTitle(), "Show Sends");
+    EXPECT_FALSE(toggle.getToggleState());
     EXPECT_EQ(persistedInt(*mc, Layout::kSendsHiddenKey), 1) << "persisted on the click";
 
-    click(panel().getSectionRailForTest().getToggleButtonForTest(MixerSection::Sends));
+    click(panel().getToolbarForTest().getSectionToggleForTest(MixerSection::Sends));
     EXPECT_FALSE(layout().isHidden(MixerSection::Sends));
     for (auto* column : strips())
         EXPECT_TRUE(column->getSectionViewportForTest(MixerSection::Sends).isVisible());
 }
 
-// The EQ curve's own show/hide is the same control: the rail chevron hides it in every column, and
+// The EQ curve's own show/hide is the same control: the toolbar toggle hides it in every column, and
 // clicking the 14 px strip a column leaves behind brings it back.
 TEST_F(MixerSectionPanelTest, EqToggleHidesTheCurveEverywhereAndTheStripBringsItBack) {
     openMixer(2);
@@ -206,7 +207,7 @@ TEST_F(MixerSectionPanelTest, EqToggleHidesTheCurveEverywhereAndTheStripBringsIt
     ASSERT_TRUE(column->getEqThumbnailForTest().isVisible());
     ASSERT_EQ(column->getEqThumbnailForTest().getHeight(), Layout::kEqHeight);
 
-    click(panel().getSectionRailForTest().getToggleButtonForTest(MixerSection::Eq));
+    click(panel().getToolbarForTest().getSectionToggleForTest(MixerSection::Eq));
     ASSERT_TRUE(layout().isHidden(MixerSection::Eq));
     EXPECT_EQ(column->getEqThumbnailForTest().getHeight(), 0) << "the curve is gone";
     EXPECT_TRUE(column->getEqThumbnailForTest().isVisible()) << "isVisible() still means this column has an EQ";
@@ -227,19 +228,18 @@ TEST_F(MixerSectionPanelTest, DividerDragResizesEveryColumnInWholeRowsAndPersist
     openMixer(2);
     setDockHeight(700);
     auto s = strips();
-    auto& rail = panel().getSectionRailForTest();
 
     DividerDrag drag(s[1]->getSectionDividerForTest(MixerSection::Inserts));
     EXPECT_EQ(layout().getHoveredDivider(), -1);
     drag.moveBy(40); // 90 + 40 = 130 -> 7 rows of 18
-    EXPECT_EQ(rail.getDragBubbleTextForTest(), "7 rows");
+    EXPECT_EQ(panel().getDragBubbleTextForTest(), "7 rows");
     for (auto* column : strips())
         EXPECT_EQ(column->getSectionViewportForTest(MixerSection::Inserts).getHeight(), 126);
     EXPECT_EQ(panel().getMasterColumnForTest()->getInsertViewportForTest().getHeight(), 126);
     EXPECT_EQ(persistedInt(*mc, Layout::kInsertsHeightKey), -1) << "nothing persists mid-drag";
 
     drag.release(40);
-    EXPECT_EQ(rail.getDragBubbleTextForTest(), "");
+    EXPECT_EQ(panel().getDragBubbleTextForTest(), "");
     EXPECT_EQ(persistedInt(*mc, Layout::kInsertsHeightKey), 126);
 
     // Double-click resets to the default.
@@ -250,7 +250,7 @@ TEST_F(MixerSectionPanelTest, DividerDragResizesEveryColumnInWholeRowsAndPersist
     EXPECT_EQ(persistedInt(*mc, Layout::kInsertsHeightKey), 90);
 }
 
-TEST_F(MixerSectionPanelTest, DividerHoverLightsTheSameDividerInEveryColumnAndTheRail) {
+TEST_F(MixerSectionPanelTest, DividerHoverLightsTheSameDividerInEveryColumn) {
     openMixer(2);
     setDockHeight(600);
     auto& divider = strips()[0]->getSectionDividerForTest(MixerSection::Sends);
@@ -271,14 +271,13 @@ TEST_F(MixerSectionPanelTest, DraggingPastTheFaderMinimumGrowsTheBottomDockAndSh
     const int dockBefore = mc->getBottomDock().getHeight();
     ASSERT_EQ(dockBefore, 220);
     const int panelBefore = panel().getHeight();
-    ASSERT_LT(panelBefore, layout().requiredColumnHeight())
-        << "at the default dock the fader is already at its minimum";
+    ASSERT_LT(panelBefore, panel().requiredPanelHeight()) << "at the default dock the fader is already at its minimum";
     EXPECT_EQ(strips()[0]->getFaderForTest().getHeight(), Layout::kMinFaderHeight);
 
     DividerDrag drag(strips()[0]->getSectionDividerForTest(MixerSection::Inserts));
     drag.moveBy(36); // two more insert rows: 126
     ASSERT_EQ(layout().getRequestedHeight(MixerSection::Inserts), 126);
-    const int required = layout().requiredColumnHeight();
+    const int required = panel().requiredPanelHeight();
     EXPECT_EQ(panel().getHeight(), required) << "the dock grew by exactly what the sections needed";
     EXPECT_EQ(mc->getBottomDock().getHeight(), dockBefore + (required - panelBefore));
     for (auto* column : strips()) {
@@ -315,20 +314,20 @@ TEST_F(MixerSectionPanelTest, SwitchingToTheMixerTabGrowsADefaultDockToFitTheSec
     ASSERT_EQ(mc->getBottomDock().getHeight(), 220) << "the Timeline tab leaves the dock alone";
 
     mc->getBottomDock().setActiveTab(Dock::Tab::Mixer);
-    EXPECT_EQ(panel().getHeight(), layout().requiredColumnHeight());
+    EXPECT_EQ(panel().getHeight(), panel().requiredPanelHeight());
     EXPECT_GT(mc->getBottomDock().getHeight(), 220);
     auto* column = strips()[0];
     EXPECT_EQ(column->getSectionViewportForTest(MixerSection::Inserts).getHeight(), 90);
     EXPECT_EQ(column->getSectionViewportForTest(MixerSection::Sends).getHeight(), 60);
     EXPECT_EQ(column->getFaderForTest().getHeight(), Layout::kMinFaderHeight);
     for (auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq})
-        EXPECT_GT(panel().getSectionRailForTest().getToggleButtonForTest(section).getHeight(), 0)
-            << "every rail label shows";
+        EXPECT_GT(panel().getToolbarForTest().getSectionToggleForTest(section).getHeight(), 0)
+            << "every toolbar toggle shows";
 }
 
 TEST_F(MixerSectionPanelTest, AUserShrinkingTheDockAfterTheFitIsKept) {
     openMixer(1);
-    ASSERT_EQ(panel().getHeight(), layout().requiredColumnHeight()) << "fitted when shown";
+    ASSERT_EQ(panel().getHeight(), panel().requiredPanelHeight()) << "fitted when shown";
 
     setDockHeight(220); // the dock's own resize handle path
     ASSERT_EQ(mc->getBottomDock().getHeight(), 220);
@@ -338,17 +337,17 @@ TEST_F(MixerSectionPanelTest, AUserShrinkingTheDockAfterTheFitIsKept) {
     EXPECT_EQ(strips()[0]->getFaderForTest().getHeight(), Layout::kMinFaderHeight) << "the sections squeeze instead";
 }
 
-TEST_F(MixerSectionPanelTest, ReshowingAHiddenSectionWithTheChevronGrowsTheDockToFit) {
+TEST_F(MixerSectionPanelTest, ReshowingAHiddenSectionWithTheToolbarToggleGrowsTheDockToFit) {
     openMixer(1);
-    auto& toggle = panel().getSectionRailForTest().getToggleButtonForTest(MixerSection::Sends);
+    auto& toggle = panel().getToolbarForTest().getSectionToggleForTest(MixerSection::Sends);
     click(toggle);
     ASSERT_TRUE(layout().isHidden(MixerSection::Sends));
     setDockHeight(220);
-    ASSERT_LT(panel().getHeight(), layout().requiredColumnHeight());
+    ASSERT_LT(panel().getHeight(), panel().requiredPanelHeight());
 
-    click(panel().getSectionRailForTest().getToggleButtonForTest(MixerSection::Sends));
+    click(panel().getToolbarForTest().getSectionToggleForTest(MixerSection::Sends));
     ASSERT_FALSE(layout().isHidden(MixerSection::Sends));
-    EXPECT_EQ(panel().getHeight(), layout().requiredColumnHeight());
+    EXPECT_EQ(panel().getHeight(), panel().requiredPanelHeight());
     EXPECT_EQ(strips()[0]->getSectionViewportForTest(MixerSection::Sends).getHeight(), 60)
         << "the re-shown section gets its full height";
 }
@@ -403,9 +402,10 @@ TEST_F(MixerSectionPanelTest, SectionControlsNeverTakeKeyboardFocusFromThePanel)
     for (auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq}) {
         EXPECT_FALSE(column->getSectionDividerForTest(section).getWantsKeyboardFocus());
         EXPECT_FALSE(column->getCollapsedSectionForTest(section).getWantsKeyboardFocus());
-        EXPECT_FALSE(panel().getSectionRailForTest().getToggleButtonForTest(section).getWantsKeyboardFocus());
-        EXPECT_FALSE(panel().getSectionRailForTest().getDividerForTest(section).getWantsKeyboardFocus());
+        EXPECT_FALSE(panel().getToolbarForTest().getSectionToggleForTest(section).getWantsKeyboardFocus());
     }
+    EXPECT_FALSE(panel().getToolbarForTest().getAddBusButtonForTest().getWantsKeyboardFocus());
+    EXPECT_FALSE(panel().getToolbarForTest().getResetMetersButtonForTest().getWantsKeyboardFocus());
     EXPECT_FALSE(column->getSectionViewportForTest(MixerSection::Inserts).getWantsKeyboardFocus());
     EXPECT_FALSE(column->getSectionViewportForTest(MixerSection::Sends).getWantsKeyboardFocus());
 }
@@ -413,7 +413,7 @@ TEST_F(MixerSectionPanelTest, SectionControlsNeverTakeKeyboardFocusFromThePanel)
 TEST_F(MixerSectionPanelTest, SectionsPersistAcrossAppLaunches) {
     openMixer(1);
     setDockHeight(700);
-    click(panel().getSectionRailForTest().getToggleButtonForTest(MixerSection::Sends));
+    click(panel().getToolbarForTest().getSectionToggleForTest(MixerSection::Sends));
     DividerDrag drag(strips()[0]->getSectionDividerForTest(MixerSection::Inserts));
     drag.moveBy(18);
     drag.release(18);
@@ -425,6 +425,89 @@ TEST_F(MixerSectionPanelTest, SectionsPersistAcrossAppLaunches) {
     EXPECT_TRUE(layout().isHidden(MixerSection::Sends));
     EXPECT_FALSE(layout().isHidden(MixerSection::Eq));
     EXPECT_TRUE(strips()[0]->getCollapsedSectionForTest(MixerSection::Sends).isVisible());
+}
+
+TEST_F(MixerSectionPanelTest, ToolbarSitsAtTheTopOfThePanelAndTheColumnsStartBelowIt) {
+    openMixer(2);
+    setDockHeight(600);
+    auto& toolbar = panel().getToolbarForTest();
+    ASSERT_TRUE(toolbar.isVisible());
+    EXPECT_EQ(toolbar.getBounds(),
+              juce::Rectangle<int>(0, 0, panel().getWidth(), synth::ui::MixerPanelToolbar::kHeight));
+
+    std::vector<juce::Component*> buttons{&toolbar.getAddBusButtonForTest(), &toolbar.getResetMetersButtonForTest()};
+    for (auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq})
+        buttons.push_back(&toolbar.getSectionToggleForTest(section));
+    for (auto* button : buttons) {
+        EXPECT_TRUE(button->isVisible()) << button->getName();
+        EXPECT_TRUE(toolbar.getLocalBounds().contains(button->getBounds())) << button->getName();
+    }
+    EXPECT_LT(toolbar.getSectionToggleForTest(MixerSection::Eq).getRight(),
+              toolbar.getResetMetersButtonForTest().getX())
+        << "toggles on the left, actions on the right";
+    EXPECT_LT(toolbar.getResetMetersButtonForTest().getRight(), toolbar.getAddBusButtonForTest().getX());
+    EXPECT_EQ(toolbar.getAddBusButtonForTest().getButtonText(), "+ Bus");
+    EXPECT_EQ(toolbar.getResetMetersButtonForTest().getButtonText(), "Reset Meters");
+
+    for (auto* column : strips())
+        EXPECT_GE(yInPanel(panel(), *column), synth::ui::MixerPanelToolbar::kHeight);
+}
+
+TEST_F(MixerSectionPanelTest, ToolbarTogglesFollowTheLayoutWhoeverChangesIt) {
+    openMixer(2);
+    setDockHeight(600);
+    auto& toolbar = panel().getToolbarForTest();
+    for (auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq})
+        EXPECT_TRUE(toolbar.getSectionToggleForTest(section).getToggleState());
+
+    click(toolbar.getSectionToggleForTest(MixerSection::Inserts));
+    EXPECT_FALSE(toolbar.getSectionToggleForTest(MixerSection::Inserts).getToggleState());
+    EXPECT_TRUE(toolbar.getSectionToggleForTest(MixerSection::Sends).getToggleState()) << "only that section";
+
+    click(strips()[0]->getCollapsedSectionForTest(MixerSection::Inserts));
+    EXPECT_TRUE(toolbar.getSectionToggleForTest(MixerSection::Inserts).getToggleState())
+        << "a strip click that re-shows the section flips the toggle back on";
+}
+
+TEST_F(MixerSectionPanelTest, PlusBusToolbarButtonAddsABusColumn) {
+    openMixer(1);
+    setDockHeight(600);
+    const int before = panel().getColumnCount();
+    click(panel().getToolbarForTest().getAddBusButtonForTest());
+    EXPECT_EQ(panel().getColumnCount(), before + 1) << "the new bus's column is there without another rebuild";
+}
+
+TEST_F(MixerSectionPanelTest, ResetMetersToolbarButtonClearsEveryClippedReadout) {
+    openMixer(2);
+    setDockHeight(600);
+    for (auto* column : strips())
+        column->getMeterReadoutForTest().updatePeak(5.0f);
+    ASSERT_TRUE(strips()[1]->getMeterReadoutForTest().isClippedForTest());
+
+    click(panel().getToolbarForTest().getResetMetersButtonForTest());
+    for (auto* column : strips())
+        EXPECT_FALSE(column->getMeterReadoutForTest().isClippedForTest());
+}
+
+// The toolbar is the panel's own child, so a mixer detached to its own window keeps it -- and its
+// toggles still work there, where the host cannot grow.
+TEST_F(MixerSectionPanelTest, ToolbarTravelsWithThePanelIntoADetachedWindow) {
+    openMixer(2);
+    setDockHeight(600);
+    auto& host = mc->getBottomDock().getMixerHost();
+    host.setDetached(true);
+    ASSERT_TRUE(host.isDetached());
+
+    auto& toolbar = panel().getToolbarForTest();
+    EXPECT_TRUE(panel().isParentOf(&toolbar));
+    EXPECT_TRUE(toolbar.isVisible());
+    EXPECT_EQ(toolbar.getY(), 0);
+
+    click(toolbar.getSectionToggleForTest(MixerSection::Eq));
+    EXPECT_TRUE(layout().isHidden(MixerSection::Eq));
+    EXPECT_FALSE(toolbar.getSectionToggleForTest(MixerSection::Eq).getToggleState());
+
+    host.setDetached(false); // redock, so the fixture's own teardown is a normal dock
 }
 
 // Not a check: renders a docked mixer with four columns of different insert/send counts to a PNG for
@@ -446,7 +529,7 @@ TEST_F(MixerSectionPanelTest, DISABLED_RenderMixerSectionsToPng) {
 
     synth::theme::AppLookAndFeel laf;
     panel().setLookAndFeel(&laf);
-    panel().setSize(74 + 6 * 144, panel().getHeight());
+    panel().setSize(6 * 144, panel().getHeight());
     panel().resized();
     juce::Image image(juce::Image::ARGB, panel().getWidth(), panel().getHeight(), true, juce::SoftwareImageType());
     {
