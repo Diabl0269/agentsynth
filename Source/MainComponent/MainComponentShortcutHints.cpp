@@ -2,6 +2,8 @@
 
 #include "UI/Chrome/ShortcutHint/ShortcutHintOverlay.h"
 #include "UI/Layout/BottomDockComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"
 
 namespace synth::ui {
@@ -24,6 +26,32 @@ std::unique_ptr<juce::Component> makeMainWindowShortcutHints(juce::Component& ho
         overlay->addTarget(parts.transport->getLoopButton(), "transportToggleLoop");
         overlay->addTarget(parts.transport->getMetronomeButton(), "transportToggleMetronome");
     }
+
+    // Piano roll header chips are painted rectangles, not children: each is an area target on the roll, so
+    // the roll being closed (hidden) simply gives no bubble.
+    if (parts.pianoRoll != nullptr) {
+        using Chip = PianoRollComponent::HeaderButtonId;
+        const std::pair<Chip, const char*> chips[] = {{Chip::Quantise, "pianoRollQuantise"},
+                                                      {Chip::QuantiseLength, "pianoRollQuantiseLength"},
+                                                      {Chip::QuantisePitches, "pianoRollQuantisePitches"},
+                                                      {Chip::Scale, "pianoRollToggleScalePanel"},
+                                                      {Chip::ScaleFilter, "pianoRollToggleScaleFilter"},
+                                                      {Chip::Velocity, "pianoRollToggleVelocityLane"}};
+        for (const auto& [chip, actionId] : chips)
+            overlay->addAreaTarget(
+                *parts.pianoRoll,
+                [roll = juce::Component::SafePointer<juce::Component>(parts.pianoRoll), chip = chip] {
+                    const auto* r = static_cast<PianoRollComponent*>(roll.getComponent());
+                    return r != nullptr ? r->getHeaderChipBounds(chip) : juce::Rectangle<int>();
+                },
+                actionId);
+    }
+
+    // Mixer toolbar toggles: Inserts / Sends / EQ.
+    if (parts.mixer != nullptr)
+        for (const auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq})
+            overlay->addTarget(parts.mixer->getSectionToggle(section),
+                               MixerPanelComponent::sectionToggleActionId(section));
 
     overlay->setDockSource([dock = parts.dock, statusBar = parts.statusBar, toggle = parts.toggleBottomPanelButton,
                             isOpen = parts.isDockOpen] {

@@ -658,6 +658,12 @@ void PianoRollComponent::requestRepaintPreviewStrip(juce::Rectangle<int> strip) 
 
 void PianoRollComponent::requestRepaintHeaderButtonStrip(juce::Rectangle<int> strip) { repaint(strip); }
 
+// Public twin of headerButtonBoundsFor: the shortcut-hint overlay anchors a bubble on each painted chip
+// (the chips are not child components), re-reading this each time so a resize never leaves it stale.
+juce::Rectangle<int> PianoRollComponent::getHeaderChipBounds(HeaderButtonId which) const noexcept {
+    return headerButtonBoundsFor(which);
+}
+
 juce::Rectangle<int> PianoRollComponent::headerButtonBoundsFor(HeaderButtonId which) const noexcept {
     switch (which) {
     case HeaderButtonId::Back:

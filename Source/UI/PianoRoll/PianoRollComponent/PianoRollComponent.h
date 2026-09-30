@@ -413,6 +413,8 @@ public:
         Humanize
     };
     HeaderButtonId getHoveredHeaderButtonForTest() const noexcept;
+    /** A header chip's current bounds in this component's coordinates (empty before the first layout). */
+    juce::Rectangle<int> getHeaderChipBounds(HeaderButtonId which) const noexcept;
     bool isHeaderButtonHoveredForTest(HeaderButtonId which) const noexcept;
 
 protected:

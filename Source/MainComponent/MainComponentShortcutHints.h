@@ -10,6 +10,8 @@
 namespace synth::ui {
 
 class BottomDockComponent;
+class MixerPanelComponent;
+class PianoRollComponent;
 class TimelineTransportBar;
 
 /** The main window's parts the Cmd-hold shortcut hints label; MainComponent hands them over once
@@ -19,6 +21,8 @@ struct MainWindowHintParts {
     std::vector<std::pair<juce::Component*, juce::String>> buttons;
     BottomDockComponent* dock{nullptr};
     TimelineTransportBar* transport{nullptr};
+    PianoRollComponent* pianoRoll{nullptr}; // its painted header chips get bubbles while a clip is open
+    MixerPanelComponent* mixer{nullptr};    // its Inserts / Sends / EQ toggles
     juce::Component* statusBar{nullptr};
     juce::Component* toggleBottomPanelButton{nullptr};
     std::function<bool()> isDockOpen;
