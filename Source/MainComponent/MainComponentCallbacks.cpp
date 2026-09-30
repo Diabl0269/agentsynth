@@ -527,6 +527,13 @@ void MainComponent::openRecentProjectGuarded(const juce::File& file) {
     guardUnsavedChanges("Opening a recent project", [this, file] { openFromFile(file); });
 }
 
+// A project handed to the app from outside (a command-line argument, or the OS opening a file with it).
+// The same guarded path as every other Open, so unsaved changes are asked about first; a successful bundle
+// load hides the welcome screen itself (loadBundleFromFile / loadAutosaveFromFile).
+void MainComponent::openProjectFromCommandLine(const juce::File& bundle) {
+    guardUnsavedChanges("Opening a project", [this, bundle] { openFromFile(bundle); });
+}
+
 // Guards BEFORE the dialog opens — the chooser itself is the post-guard half, below.
 // The patch half. Opens a `.json` preset, then asks whether to REPLACE the current
 // patch or ADD the loaded one on top of it (promptPatchLoadMode, the patchLoadPrompt seam).

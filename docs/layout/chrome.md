@@ -241,6 +241,20 @@ comments) — set via `GraphEditor::setPropertiesFile()`, wired by `MainComponen
 `appProperties.getUserSettings()`. A `nullptr` (e.g. a headless test that never calls the setter)
 means the hint never fires and the flag never gets written, rather than crashing.
 
+## Inline label editors and accessibility
+
+An inline-editable label (the BPM and time-signature fields, a mixer channel name, a track name, the MIDI Remote
+control name) is a `synth::ui::NonModalLabel` (`Source/UI/Layout/NonModalLabel.h/.cpp`), never a plain `juce::Label`.
+`juce::Label::showEditor()` calls `enterModalState()`, and on macOS a modal component is reported as
+`isAccessibilityModal`: the window's accessibility tree collapses to the title bar for as long as the editor is open.
+`NonModalLabel::editorShown` schedules `exitModalState()` one message-loop turn later (the call cannot happen
+inside the hook, because `showEditor()` enters modal state right after it returns). Nothing the modal state did is lost:
+the editor is a child holding keyboard focus, and losing that focus commits (or discards, per `setEditable`) through
+`Label::textEditorFocusLost`, as a click outside did via `inputAttemptWhenModal`. The card-title rename is a raw
+`juce::TextEditor` child and was never modal. `NonModalLabelTests.cpp` asserts that no component is modal and no
+sibling is `isCurrentlyBlockedByAnotherModalComponent()` (the condition JUCE's accessibility code keys on) while an
+editor is open; the native tree itself needs a window peer, which the headless suite never creates.
+
 ## Panel collapse and persistence
 
 The library sidebar and the AI panel can each be fully hidden (width 0). State persists across

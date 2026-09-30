@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MidiRemote/RemoteModel.h"
+#include "UI/Layout/NonModalLabel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
@@ -82,7 +83,7 @@ private:
 
     ControlModel model_;
     synth::Takeover defaultTakeover_ = synth::Takeover::scale;
-    juce::Label nameLabel_;
+    synth::ui::NonModalLabel nameLabel_;
     juce::ComboBox kindCombo_;
     juce::Label messageSpecLabel_;
     juce::TextButton relearnButton_{"Relearn"}; // disabled -- needs the panel-side learn primitive

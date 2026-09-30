@@ -87,6 +87,12 @@ PatchValidationResult checkReservedKeysNotAllowed(const juce::DynamicObject* roo
                 "hidden is app-authored project data, not accepted from a patch suggestion. Remove it and resend "
                 "only nodes, connections and modulations."};
 
+    if (rootObj->hasProperty("view"))
+        return {false, PatchValidationError::ViewNotAllowed,
+                "Patch suggestions must not contain a \"view\" property - the canvas zoom and pan are "
+                "app-authored project data, not accepted from a patch suggestion. Remove it and resend "
+                "only nodes, connections and modulations."};
+
     return {};
 }
 
@@ -170,6 +176,8 @@ juce::String patchValidationErrorName(PatchValidationError error) {
         return "MixerPanLawNotAllowed";
     case PatchValidationError::MixerViewNotAllowed:
         return "MixerViewNotAllowed";
+    case PatchValidationError::ViewNotAllowed:
+        return "ViewNotAllowed";
     }
     return "Unknown";
 }

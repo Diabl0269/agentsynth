@@ -1,6 +1,6 @@
 # Timeline Transport Bar
 
-`Source/UI/Timeline/TimelineTransportBar.h/.cpp` (`synth::ui::TimelineTransportBar`) — play/stop,
+`Source/UI/Timeline/TimelineTransportBar.h/.cpp` (`synth::ui::TimelineTransportBar`) — return to start, play/stop,
 record, loop, metronome, count-in, BPM and time-signature editors, and the bar:beat readout,
 left-aligned in the transport-bar strip. The snap combo stays docked right
 ([view](view.md#snap-divisions)); the edit-tool strip sits immediately left of it
@@ -165,6 +165,20 @@ reflects record-ON, not "a take is capturing".
 `MidiRecorder::captureBlock` from `AudioEngine::renderNextBlock`'s one collector-merged buffer. See
 `Tests/Timeline/MidiRecorderTests.cpp` for the model-level coverage and
 `Tests/UI/Timeline/TimelineTransportBarTests.cpp` for the button-to-commit path.
+
+## Return to Start button
+
+The leftmost glyph button (a bar with a left-pointing triangle). A click runs the app's own
+`transportReturnToStart` command through `TimelineTransportBar::onReturnToStart` (wired in
+`MainComponent::wireTimelineRecordToggle`), so the button and the shortcut or MIDI action share one
+locate-and-track-nudge path; with no hook wired it just calls `locateBeat(0)`. Like the command it
+relocates only and never stops playback. It is a `GlyphButton` like the other four, so it is
+keyboard-focusable, draws the accent focus ring (`paintFocusRegionOutline`) and carries a title and description
+for screen readers (every glyph button has a title now) plus the tooltip "Return to Start". It is not a MIDI Learn
+target — the command has no assignment surface on the bar, and `collectPickCandidates` still lists the four
+learnable buttons. No shortcut is bound by default, so the tooltip names none.
+Tests: `TimelineTransportBarReturnToStartTests.cpp` (bar) and
+`ShortcutManagerTransportActionsTests.cpp::ReturnToStartButtonLocatesToBeatZero` (through `MainComponent`).
 
 ## Transport actions
 

@@ -227,6 +227,9 @@ std::vector<Case> makeCases() {
 
         {PatchValidationError::MixerViewNotAllowed, "patch carries a root 'mixerView' key",
          [] { return juce::JSON::parse(R"({"nodes":[],"connections":[],"mixerView":{"zones":{},"hidden":[]}})"); }},
+
+        {PatchValidationError::ViewNotAllowed, "patch carries a root 'view' key",
+         [] { return juce::JSON::parse(R"({"nodes":[],"connections":[],"view":{"zoom":1,"panX":0,"panY":0}})"); }},
     };
 }
 

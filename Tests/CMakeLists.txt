@@ -24,6 +24,7 @@ add_executable(Tests
     Modules/OscillatorTests.cpp
     Modules/CardLayoutTests.cpp
     Modules/FilterTests.cpp
+    Modules/CardViewStateTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModulePanLawTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModuleOscillatorTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModuleFilterTests.cpp
@@ -70,6 +71,7 @@ add_executable(Tests
     Modules/SequencerModuleTests.cpp
     Engine/TransportServiceTests.cpp
     Engine/TransportDocTests.cpp
+    Engine/ViewDocTests.cpp
     Timeline/TimelineDoc/TimelineDocCoreTests.cpp
     Timeline/TimelineDoc/TimelineDocTracksTests.cpp
     Timeline/TimelineDoc/TimelineDocClipsTests.cpp
@@ -193,6 +195,7 @@ add_executable(Tests
     App/MainComponent/MainComponentLayoutTests.cpp
     App/MainComponent/MainComponentDocumentTests.cpp
     App/MainComponent/MainComponentTransportPersistTests.cpp
+    App/MainComponent/MainComponentViewPersistTests.cpp
     App/MainComponent/MainComponentUnsavedGuardTests.cpp
     App/MainComponent/MainComponentProviderMiscTests.cpp
     App/MainComponent/MainComponentTeardownTests.cpp
@@ -224,8 +227,11 @@ add_executable(Tests
     UI/Graph/SmartConnectionEngine/SmartConnectionEngineTests.cpp
     UI/Graph/GraphDragDropController/GraphDragDropControllerTests.cpp
     UI/Layout/ZoomFrozenCachedImageTests.cpp
+    UI/Layout/NonModalLabelTests.cpp
+    UI/Timeline/TimelineTransportBarReturnToStartTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLayoutTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentPortsTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentCardViewTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentInteractionTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentAudioDropTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMacroBankTests.cpp
@@ -621,6 +627,8 @@ add_executable(Tests
     Project/PatchDocumentTests.cpp
     Project/ProjectBundleTests.cpp
     Project/ProjectBundleTransportTests.cpp
+    Project/ProjectBundleViewTests.cpp
+    Project/ProjectCommandLineTests.cpp
     Project/PatchSaveLocationTests.cpp
     Project/ProjectBundleCardLayoutTests.cpp
     Project/AutosaveTests.cpp

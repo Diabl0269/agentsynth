@@ -1,6 +1,7 @@
 #include "Branding.h"
 #include "MainComponent/MainComponent.h"
 #include "Plugin/Hosting/PluginScanService.h"
+#include "Project/ProjectCommandLine.h"
 #include "SettingsMigration.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -8,6 +9,7 @@
 #include "UserSettings.h"
 #include <JuceHeader.h>
 #include <iostream>
+#include <utility>
 
 // True on every platform where JUCE's entry point is a plain main(argc, argv) — i.e. everything
 // except a Windows GUI-subsystem build, whose WinMain gets no argv. See the entry point at the
@@ -39,9 +41,7 @@ public:
     const juce::String getApplicationVersion() override { return ProjectInfo::versionString; }
     bool moreThanOneInstanceAllowed() override { return true; }
 
-    void initialise(const juce::String& commandLine) override {
-        juce::ignoreUnused(commandLine);
-
+    void initialise(const juce::String&) override {
 #if !SYNTH_HAS_ARGV_MAIN
         // Windows GUI fallback for the out-of-process plugin scan. Everywhere else main()
         // below short-circuits before the app object is ever constructed; here JUCE owns WinMain and
@@ -71,6 +71,13 @@ public:
         lookAndFeel.applyTheme(themeManager.getActiveTheme());
         juce::Desktop::getInstance().setDefaultLookAndFeel(&lookAndFeel);
         mainWindow.reset(new MainWindow(getApplicationName(), themeManager, lookAndFeel));
+
+        // `Agent Synth.app/Contents/MacOS/Agent Synth my.agsproj` (or the OS opening a project with the app).
+        // A path the OS hands over before this point waits in pendingProject_.
+        if (const auto bundle = synth::projectBundleFromCommandLine(getCommandLineParameterArray()))
+            pendingProject_ = *bundle;
+        if (pendingProject_ != juce::File())
+            openProject(std::exchange(pendingProject_, juce::File()));
     }
 
     // CRITICAL ordering (spec section 7.1, constraint #1):
@@ -100,9 +107,25 @@ public:
         quit();
     }
 
-    void anotherInstanceStarted(const juce::String& commandLine) override { juce::ignoreUnused(commandLine); }
+    void anotherInstanceStarted(const juce::String& commandLine) override {
+        if (const auto bundle = synth::projectBundleFromCommandLine(commandLine))
+            openProject(*bundle);
+    }
 
 private:
+    // Routes a bundle to the open window (guarded like any Open, so unsaved changes are asked about first), or
+    // holds it until the window exists.
+    void openProject(const juce::File& bundle) {
+        if (mainWindow == nullptr) {
+            pendingProject_ = bundle;
+            return;
+        }
+        if (auto* mc = dynamic_cast<MainComponent*>(mainWindow->getContentComponent())) {
+            mainWindow->toFront(true);
+            mc->openProjectFromCommandLine(bundle);
+        }
+    }
+
     // Must run before anything creates a juce::ApplicationProperties for kSettingsFolderName
     // (MainComponent's constructor does this) — otherwise JUCE creates an empty current-name
     // folder first, and migrateUserData's "already exists" guard skips the real migration.
@@ -245,6 +268,7 @@ private:
     synth::theme::ThemeManager themeManager;
     synth::theme::AppLookAndFeel lookAndFeel;
     std::unique_ptr<MainWindow> mainWindow;
+    juce::File pendingProject_; // a project the OS handed over before the window existed
 };
 
 //==============================================================================

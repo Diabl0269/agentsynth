@@ -165,6 +165,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/DragCursor.h
     Source/UI/Layout/FocusRing.h
     Source/UI/Layout/TooltipHelpHandler.h
+    Source/UI/Layout/NonModalLabel.cpp
+    Source/UI/Layout/NonModalLabel.h
     Source/UI/Layout/PanelResizeHandle.h
     Source/UI/Layout/PanelResizeHandle.cpp
     Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
@@ -271,6 +273,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentInternal.h
     Source/UI/Graph/ModuleComponent/ModuleComponentModBand.h
     Source/UI/Graph/ModuleComponent/CardKnobSlider.h
+    Source/UI/Graph/ModuleComponent/ModuleComponentCardView.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentAudioDrop.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp

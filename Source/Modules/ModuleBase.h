@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CardViewState.h"
 #include "PortRole.h"
 #include "VisualBuffer.h"
 #include <algorithm>
@@ -807,6 +808,12 @@ public:
     virtual juce::var getExtraState() const { return {}; }
     virtual void setExtraState(const juce::var& state) { juce::ignoreUnused(state); }
 
+    // Which optional panels this module's card has open (scope / response / spectrum). Message thread
+    // only; never read by audio. Saved as the node's "cardView" key and, like "state", restored on the
+    // trusted path only -- see CardViewState.h.
+    const synth::CardViewState& getCardViewState() const noexcept { return cardViewState_; }
+    void setCardViewState(const synth::CardViewState& state) noexcept { cardViewState_ = state; }
+
     VisualBuffer* getVisualBuffer() { return visualBuffer.get(); }
     void enableVisualBuffer(bool enable) {
         if (enable && !visualBuffer)
@@ -916,6 +923,7 @@ private:
     // See setInputDownMixMask().
     std::atomic<std::uint64_t> inputDownMixMask_{0};
     std::unique_ptr<VisualBuffer> visualBuffer;
+    synth::CardViewState cardViewState_;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedOutputLevel;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModuleBase)

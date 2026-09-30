@@ -369,7 +369,7 @@ still bind one from Settings like any other action:
 | `transportToggleLoop` | Toggle Looping | Triggers the transport bar's own loop button — the exact `setLoop(start, end, !looping)` verb the surface-resolved `timelineToggleLoop` key already performs, which keeps working unchanged |
 | `transportRecord` | Record | Triggers the transport bar's own Record button, so it reaches `MainComponent::handleRecordToggle`'s armed-track gate exactly as a mouse click would — never bypassed |
 | `transportToggleMetronome` | Toggle Metronome | Triggers the transport bar's own metronome button, so its persisted `timelineMetronomeEnabled` state stays authoritative |
-| `transportReturnToStart` | Return to Start | `TransportService::locateBeat(0)` — relocates only, does not stop |
+| `transportReturnToStart` | Return to Start | `TransportService::locateBeat(0)` — relocates only, does not stop. The transport bar's Return to Start button runs this same command ([`transport.md`](../timeline/transport.md#return-to-start-button)) |
 | `transportNudgeBackBeat` / `transportNudgeForwardBeat` | Move Cursor Back (Beat) / Move Cursor Forward (Beat) | Relocates one beat (a quarter note) back or forward from the current position, clamped at beat 0. Works playing or stopped; never starts or stops the transport |
 | `transportNudgeBackBar` / `transportNudgeForwardBar` | Move Cursor Back (Bar) / Move Cursor Forward (Bar) | As above, by one bar of the current time signature (`numerator × 4 / denominator` beats — 4 in 4/4, 3 in 3/4, 3 in 6/8) |
 | `transportJumpToLoopStart` / `transportJumpToLoopEnd` | Jump to Loop Start / Jump to Loop End | Relocates to the left / right loop locator. A no-op when the locators span no range (end at or before start) |

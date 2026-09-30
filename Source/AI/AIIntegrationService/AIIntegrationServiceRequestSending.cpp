@@ -93,8 +93,10 @@ juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String
     if (auto* obj = graphJson.getDynamicObject()) {
         if (auto* nodeArr = obj->getProperty("nodes").getArray()) {
             for (auto& nodeVar : *nodeArr) {
-                if (auto* nodeObj = nodeVar.getDynamicObject())
+                if (auto* nodeObj = nodeVar.getDynamicObject()) {
                     nodeObj->removeProperty("state");
+                    nodeObj->removeProperty("cardView"); // which card panels are open: nothing a model can act on
+                }
             }
             if (!nodeArr->isEmpty()) {
                 patchSection = "Current patch state:\n```json\n" + juce::JSON::toString(graphJson) + "\n```";

@@ -8,6 +8,7 @@
 #include "TrackChannelLinkSurface.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Layout/NonModalLabel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <vector>
@@ -533,7 +534,7 @@ private:
     // untouched juce::Label behaviour. The binding chip and the colour swatch are deliberately left
     // as plain buttons — they already open a menu/picker of their own on click, and that stays (see
     // docs/timeline/tracks.md#row-context-menu).
-    class ContextMenuForwardingLabel : public juce::Label {
+    class ContextMenuForwardingLabel : public synth::ui::NonModalLabel {
     public:
         explicit ContextMenuForwardingLabel(TimelineTrackHeaderComponent& owner)
             : owner_(owner) {}

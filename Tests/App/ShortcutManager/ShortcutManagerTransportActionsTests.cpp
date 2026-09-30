@@ -377,3 +377,28 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportReturnToStartLocatesT
     engine.processHostBlock(buffer, midi);
     EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 0.0);
 }
+
+// The transport bar's Return to Start button runs the same command, so it locates exactly as the shortcut does.
+TEST_F(ShortcutManagerTransportActionsInvokeTest, ReturnToStartButtonLocatesToBeatZero) {
+    synth::theme::ThemeManager tm;
+    synth::theme::AppLookAndFeel lf;
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+    engine.prepareForHost(44100.0, 512, 0, 2);
+    MainComponent mc(tm, lf, engine, std::make_unique<TransportTestProvider>());
+    auto& transport = engine.getTransport();
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+
+    transport.locateBeat(8.0);
+    engine.processHostBlock(buffer, midi);
+    ASSERT_GT(transport.getPositionSnapshot().ppq, 0.0);
+
+    auto& button = mc.getTimelinePanel().getTransportBar().getReturnToStartButton();
+    ASSERT_TRUE(button.isShowing() || button.isVisible());
+    button.triggerClick(); // posts the click; it lands on the next dispatch pass
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    engine.processHostBlock(buffer, midi);
+    EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 0.0);
+    EXPECT_FALSE(transport.getPositionSnapshot().playing) << "returning to start relocates only; it does not stop";
+}

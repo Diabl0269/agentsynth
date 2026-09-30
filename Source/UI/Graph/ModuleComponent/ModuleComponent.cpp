@@ -134,10 +134,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
                 scopeToggle = std::make_unique<juce::ToggleButton>("Show Scope");
                 scopeToggle->setToggleState(false, juce::dontSendNotification);
                 scopeComponent->setVisible(false);
-                scopeToggle->onClick = [this] {
-                    scopeComponent->setVisible(scopeToggle->getToggleState());
-                    updateLayout();
-                };
+                scopeToggle->onClick = [this] { setScopeShown(scopeToggle->getToggleState()); };
                 addAndMakeVisible(scopeToggle.get());
             }
         }
@@ -163,23 +160,12 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         freqResponseToggle = std::make_unique<juce::ToggleButton>("Show Response");
         freqResponseToggle->setToggleState(false, juce::dontSendNotification);
         freqResponseComponent->setVisible(false);
-        freqResponseToggle->onClick = [this] {
-            const bool show = freqResponseToggle->getToggleState();
-            freqResponseComponent->setVisible(show);
-            if (spectrumToggle != nullptr) {
-                spectrumToggle->setVisible(show);
-                if (!show) {
-                    spectrumToggle->setToggleState(false, juce::dontSendNotification);
-                    freqResponseComponent->setShowSpectrum(false);
-                }
-            }
-            updateLayout();
-        };
+        freqResponseToggle->onClick = [this] { setResponseShown(freqResponseToggle->getToggleState()); };
         addAndMakeVisible(freqResponseToggle.get());
 
         spectrumToggle = std::make_unique<juce::ToggleButton>("Show Spectrum");
         spectrumToggle->setToggleState(false, juce::dontSendNotification);
-        spectrumToggle->onClick = [this] { freqResponseComponent->setShowSpectrum(spectrumToggle->getToggleState()); };
+        spectrumToggle->onClick = [this] { setSpectrumShown(spectrumToggle->getToggleState()); };
         addChildComponent(spectrumToggle.get()); // hidden until the response view is shown
     }
 
@@ -192,7 +178,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         // actual signal, so an idle patch still costs no repaints).
         spectrumToggle = std::make_unique<juce::ToggleButton>("Show Spectrum");
         spectrumToggle->setToggleState(eqCurveComponent->getShowSpectrum(), juce::dontSendNotification);
-        spectrumToggle->onClick = [this] { eqCurveComponent->setShowSpectrum(spectrumToggle->getToggleState()); };
+        spectrumToggle->onClick = [this] { setSpectrumShown(spectrumToggle->getToggleState()); };
         addAndMakeVisible(spectrumToggle.get());
 
         eqPopOutButton = std::make_unique<juce::TextButton>("Open EQ Window");
@@ -260,7 +246,8 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         createLfoCardControls();
     createWavetableTabs(); // after createControls(): it groups the sliders/combos that call made
     applyHeaderButtonIcons();
-    startTimerHz(15); // 15 FPS is plenty for activity glow / step indicator; lower CPU than 30
+    restoreCardView(); // after every panel exists and has had its first layout
+    startTimerHz(15);  // 15 FPS is plenty for activity glow / step indicator; lower CPU than 30
 }
 
 ModuleComponent::~ModuleComponent() { detachFromProcessor(); }

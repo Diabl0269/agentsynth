@@ -194,6 +194,9 @@ public:
 
     void openPresetFromFile();
     void openProjectFromFile();
+    /** Opens a `.agsproj` bundle named on the command line (or by the OS), guarded like any Open. Message thread only.
+     */
+    void openProjectFromCommandLine(const juce::File& bundle);
 
     // ---- Snippets ----
     void refreshSnippetLibrary();
