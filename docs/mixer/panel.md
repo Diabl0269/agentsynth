@@ -517,7 +517,9 @@ bus.
   path a hidden section's strip uses. The layout stays the source of truth: the toggles are re-read
   from it after every layout change (`MixerPanelToolbar::refresh()`), so clicking a column's
   collapsed strip flips the toggle back on. Their accessible names are "Inserts", "Sends" and "EQ"
-  with the toggle state; the tooltip says "Hide Sends" / "Show Sends".
+  with the toggle state; the tooltip says "Hide Sends" / "Show Sends" plus the current binding. With the
+  mixer focused, **Ctrl+I / Ctrl+S / Ctrl+E** (Ctrl+Alt+letter on Windows/Linux) do the same, rebindable
+  in the Mixer shortcut category ([shortcuts](../control/shortcuts.md#mixer)).
 - **Right: Reset Meters and + Bus.** "Reset Meters" calls `resetAllMeterReadouts()`; "+ Bus" calls
   `createBus()` then `rebuild()`, so the new bus's column is there at once.
 - **No keyboard focus.** All six buttons give up focus, so the panel stays the mixer's single
@@ -537,9 +539,13 @@ the project's `MixerViewDoc` on its behalf (`MixerPanelViewEdits.cpp`).
 **Zones.** The list has three groups: "Left zone", "Scrolling" and "Right zone". A channel is pinned by
 dragging its row from one group to another (the shared vertical `ReorderDragAnimator`: the dragged row
 follows the pointer, neighbours and group headings make room, Esc cancels, the drop only assigns the
-group) or by right-clicking its column header: **Pin left / Pin right / Unpin** (the current zone is
+group; a row can't be dropped above the "Left zone" heading, which always stays first) or by right-clicking its column header: **Pin left / Pin right / Unpin** (the current zone is
 ticked; Unpin is offered only for a pinned column). Order inside a group is always the mixer's own
-(track order), so the pane never reorders within a group. Pinned columns render **outside** the
+(track order). Dropping a **track** row elsewhere in its own group reorders the channel exactly like
+dragging its column header: its track moves in the timeline (`MixerPanelComponent::moveChannelWithinZone`,
+through `onMoveTrack`, one undo step). A **bus** row (or a track-less strip) dropped among the buses
+moves in the saved bus order, like a bus column drag (one view edit). Direct, Master, a hidden track and a
+track dropped among buses keep their order and glide back. Pinned columns render **outside** the
 horizontal scroll area: the left zone at the left, the right zone at the right, each set off from the
 scrolling middle by a 2 px divider. Every zone has its own `juce::Viewport` and the scrolling middle
 keeps `viewport_`, so the horizontal scrollbar covers only the middle. Zones take **at most half of the
@@ -568,7 +574,15 @@ and macro collapse: it is project-saved state, and the undo manager's edit seria
 marks a document unsaved, so an edit that skipped it would be lost on quit without a prompt. The
 docked panel and the "both places" mirror share one `MixerViewDoc` and rebuild together through
 `onMixerViewChanged`. Accessibility: the pane button, the filter, the chips, every row, eye and the
-"Show all" link have titles and descriptions.
+"Show all" link have titles and descriptions. The group headings are drawn in sentence case, as written.
+
+**Keyboard.** The list is focusable (`MixerZonesPane`, `MixerZonesPaneKeyboard.cpp`): Cmd+Shift+B opening
+the pane puts focus in it, and a click on a row does too. **Up / Down** move a row cursor over the listed
+rows (clamped, an accent outline, and the screen reader's cursor moves with it), **Space** shows or hides
+the cursor's channel (not Master), **Alt+Up / Alt+Down** move it to the previous or next group (the
+keyboard twin of dragging it across one heading), and **Esc** hands focus back to the mixer. Keys the list
+does not use (M/S/R, the section toggles) fall through to the mixer panel, so they still act on the
+focused column. Closing the pane with Cmd+Shift+B while it has focus returns focus to the mixer.
 
 ## Shared sections
 
@@ -682,7 +696,8 @@ The mixer panel is its own keyboard focus region, registered as the app's sevent
 the bottom dock with `"timeline"`. `MixerPanelComponent` is the region's focusable leaf
 (`setWantsKeyboardFocus(true)`) and **every child control inside a column gives focus back up** — the
 same focus-trap avoidance `TimelineTrackHeaderComponent` uses, one level higher, since a column hosts
-several controls.
+several controls. The one other focusable element is the side pane's channel list, which has keys of its own
+([side pane](#side-pane-zones-and-visibility)) and passes every other key up to the panel.
 
 `MixerPanelKeyboard.cpp` (`Source/UI/Mixer/MixerPanelComponent/`) owns `keyPressed()`:
 

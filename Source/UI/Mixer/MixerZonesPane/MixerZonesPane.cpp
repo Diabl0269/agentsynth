@@ -20,7 +20,7 @@ size_t groupIndex(synth::MixerZone zone) { return static_cast<size_t>(zone); }
 int MixerZonesPane::Item::height() const { return isHeader ? kHeaderHeight : kRowHeight; }
 
 MixerZonesPane::MixerZonesPane() {
-    setWantsKeyboardFocus(false);
+    setWantsKeyboardFocus(true);
 
     addAndMakeVisible(filter_);
     filter_.setTextToShowWhenEmpty("Filter channels", juce::Colour(0xff8A93A0));
@@ -123,7 +123,10 @@ MixerZonesRow& MixerZonesPane::rowFor(const MixerZoneChannel& channel) {
     auto& slot = rows_[channel.id];
     if (slot == nullptr) {
         MixerZonesRow::Hooks hooks;
-        hooks.onGrab = [this](const juce::String& id, const juce::MouseEvent& e) { beginRowDrag(id, e); };
+        hooks.onGrab = [this](const juce::String& id, const juce::MouseEvent& e) {
+            setCursor(id, false);
+            beginRowDrag(id, e);
+        };
         hooks.onDrag = [this](const juce::MouseEvent& e) { dragRow(e); };
         hooks.onRelease = [this](const juce::MouseEvent& e) { endRowDrag(e); };
         hooks.onToggleHidden = [this](const juce::String& id) {
@@ -156,6 +159,7 @@ void MixerZonesPane::rebuildList() {
     }
     refreshSummary();
     layoutList();
+    syncCursorVisuals();
 }
 
 void MixerZonesPane::refreshSummary() {

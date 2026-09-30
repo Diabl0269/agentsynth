@@ -66,6 +66,9 @@ public:
     const MixerZoneChannel& getChannel() const noexcept { return channel_; }
     /** 0..1: how strongly the row is drawn lifted while it is dragged. */
     void setLift(float lift);
+    /** Draws the keyboard cursor's outline on this row. */
+    void setKeyboardCursor(bool shown);
+    bool hasKeyboardCursor() const noexcept { return cursor_; }
     MixerZonesEye& getEyeForTest() noexcept { return eye_; }
 
     void paint(juce::Graphics& g) override;
@@ -81,6 +84,7 @@ private:
     MixerZoneChannel channel_;
     MixerZonesEye eye_;
     float lift_ = 0.0f;
+    bool cursor_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerZonesRow)
 };
@@ -91,6 +95,8 @@ public:
     explicit MixerZonesGroupHeader(synth::MixerZone zone);
     synth::MixerZone getZone() const noexcept { return zone_; }
     static juce::String titleFor(synth::MixerZone zone);
+    /** The text the heading paints: the title as written, in sentence case. */
+    juce::String getDisplayText() const { return titleFor(zone_); }
     void paint(juce::Graphics& g) override;
 
 private:

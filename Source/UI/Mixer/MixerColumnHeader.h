@@ -72,6 +72,7 @@ public:
         // pre-edit name after a refused rename) must never re-fire onTextChange/onNameEdited; only
         // the user's own edit does that, from the constructor's lambda above.
         nameLabel_.setText(name_, juce::dontSendNotification);
+        nameLabel_.setTitle(name_ + " name");
     }
     juce::String getDisplayName() const { return name_; }
 

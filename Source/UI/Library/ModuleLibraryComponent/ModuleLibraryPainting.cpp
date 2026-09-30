@@ -60,7 +60,7 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
                 const juce::Drawable* icon = (lf != nullptr) ? lf->peekIcon(catIcon) : nullptr;
 
                 const juce::Font headerFont(juce::FontOptions(12.0f));
-                const juce::String headerLabel = entry.text.toUpperCase();
+                const juce::String headerLabel = entry.text;
                 if (icon != nullptr) {
                     icon->drawWithin(g, juce::Rectangle<float>(20.0f, (float)row.y + 2.0f, 16.0f, 16.0f),
                                      juce::RectanglePlacement::centred, 1.0f);
@@ -102,8 +102,7 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
                             mutedColour.withAlpha(0.6f));
                 g.setColour(mutedColour.withAlpha(0.6f));
                 g.setFont(juce::Font(juce::FontOptions(10.5f)));
-                g.drawText(entry.text.toUpperCase(), 32, row.y, contentWidth - 44, kItemHeight - 4,
-                           juce::Justification::centredLeft);
+                g.drawText(entry.text, 32, row.y, contentWidth - 44, kItemHeight - 4, juce::Justification::centredLeft);
                 continue;
             }
 

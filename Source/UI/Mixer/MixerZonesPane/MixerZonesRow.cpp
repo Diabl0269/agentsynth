@@ -87,7 +87,8 @@ void MixerZonesRow::setChannel(const MixerZoneChannel& channel) {
                         : channel_.zone == synth::MixerZone::Right ? "Right zone"
                                                                    : "Scrolling";
     setTitle(channel_.name);
-    setDescription(zone + (channel_.hidden ? ", hidden. " : ". ") + "Drag to another group to pin it.");
+    setDescription(zone + (channel_.hidden ? ", hidden. " : ". ") +
+                   "Drag to another group to pin it, or press Alt+Up or Alt+Down. Space shows or hides it.");
     eye_.setToggleState(!channel_.hidden, juce::dontSendNotification);
     eye_.setEnabled(!master);
     eye_.setTitle(channel_.name + " visibility");
@@ -101,6 +102,13 @@ void MixerZonesRow::setLift(float lift) {
     if (lift == lift_)
         return;
     lift_ = lift;
+    repaint();
+}
+
+void MixerZonesRow::setKeyboardCursor(bool shown) {
+    if (shown == cursor_)
+        return;
+    cursor_ = shown;
     repaint();
 }
 
@@ -121,6 +129,11 @@ void MixerZonesRow::paint(juce::Graphics& g) {
     } else if (isMouseOver(true)) {
         g.setColour(surface.withAlpha(0.6f));
         g.fillRoundedRectangle(bounds.toFloat().reduced(1.0f), 3.0f);
+    }
+
+    if (cursor_) {
+        g.setColour(accent);
+        g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 3.0f, 1.5f);
     }
 
     const float dim = channel_.hidden ? 0.45f : 1.0f;
@@ -171,8 +184,7 @@ void MixerZonesGroupHeader::paint(juce::Graphics& g) {
     const auto* theme = zonesThemeOf(*this);
     g.setColour(theme != nullptr ? theme->colors.textMuted : juce::Colour(0xff8A93A0));
     g.setFont(juce::Font(juce::FontOptions(10.0f, juce::Font::bold)));
-    g.drawText(titleFor(zone_).toUpperCase(), getLocalBounds().withTrimmedLeft(kInset), juce::Justification::bottomLeft,
-               false);
+    g.drawText(getDisplayText(), getLocalBounds().withTrimmedLeft(kInset), juce::Justification::bottomLeft, false);
 }
 
 } // namespace synth::ui

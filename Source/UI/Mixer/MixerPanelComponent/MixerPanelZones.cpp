@@ -8,6 +8,7 @@
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
+#include <optional>
 
 namespace synth::ui {
 
@@ -147,6 +148,40 @@ void MixerPanelComponent::publishChannelsToPane(const synth::MixerSnapshot& snap
     for (const auto& channel : channels)
         channelIds_.push_back(channel.id);
     zonesPane_.setChannels(std::move(channels));
+}
+
+// A side-pane row dropped elsewhere in its group. A track channel's place in the mixer IS its track's place
+// in the timeline, so the move goes out exactly like a column drag: the dragged strip's first feeding
+// track moves to the index of the target strip's first track (one undo step, and the owner rebuilds the
+// mixer). Two buses (or track-less strips) swap places in the saved bus order instead, like a bus column
+// drag, as one view edit. Any other pair -- Direct, Master, a hidden track with no column, a track and
+// a bus -- keeps its order.
+void MixerPanelComponent::moveChannelWithinZone(const juce::String& channelId, const juce::String& targetId) {
+    const auto busFrom = std::find(busUuidsInOrder_.begin(), busUuidsInOrder_.end(), channelId);
+    const auto busTo = std::find(busUuidsInOrder_.begin(), busUuidsInOrder_.end(), targetId);
+    if (busFrom != busUuidsInOrder_.end() && busTo != busUuidsInOrder_.end()) {
+        auto order = busUuidsInOrder_;
+        const auto to = static_cast<size_t>(busTo - busUuidsInOrder_.begin());
+        order.erase(order.begin() + (busFrom - busUuidsInOrder_.begin()));
+        order.insert(order.begin() + static_cast<std::ptrdiff_t>(to), channelId);
+        applyViewEdit([&](synth::MixerViewDoc& d) { d.setBusOrder(order); });
+        return;
+    }
+    const auto trackOf = [this](const juce::String& id) -> std::optional<synth::TrackId> {
+        for (const auto& entry : columnEntries_)
+            if (entry.channelId == id && entry.kind == ColumnEntry::Kind::Strip && !entry.feedingTracks.empty())
+                return entry.feedingTracks.front();
+        return std::nullopt;
+    };
+    const auto moved = trackOf(channelId);
+    const auto target = trackOf(targetId);
+    if (!moved || !target || !onMoveTrack || doc_ == nullptr)
+        return;
+    const auto& tracks = doc_->getTracks();
+    const auto anchor =
+        std::find_if(tracks.begin(), tracks.end(), [&](const synth::Track& t) { return t.id == *target; });
+    if (anchor != tracks.end())
+        onMoveTrack(*moved, static_cast<int>(anchor - tracks.begin()));
 }
 
 // Right-click on a column header: where should this channel sit? The current zone is ticked; Unpin is

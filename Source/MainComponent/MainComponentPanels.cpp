@@ -602,6 +602,7 @@ void MainComponent::applyToolbarIcons() {
     toggleBottomPanelButton.setTooltip(hint(bottomPanelBase, "toggleBottomPanel"));
     bottomDock.getMixerPanel().getSidePaneButton().setShortcutText(
         ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleSidePane")));
+    bottomDock.getMixerPanel().refreshShortcutHints();
 
     const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";
     toggleLibraryButton.setTooltip(hint(libBase, "toggleLibrary"));

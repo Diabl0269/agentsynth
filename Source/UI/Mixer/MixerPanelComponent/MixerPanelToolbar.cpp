@@ -1,6 +1,7 @@
 // Concern: MixerPanelToolbar's buttons -- the section toggles' state mirroring and the row layout.
 #include "MixerPanelToolbar.h"
 
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -62,7 +63,9 @@ void MixerPanelToolbar::refresh() {
     for (size_t i = 0; i < toggles_.size(); ++i) {
         const bool hidden = layout_ != nullptr && layout_->isHidden(sectionAt(i));
         toggles_[i].setToggleState(!hidden, juce::dontSendNotification);
-        toggles_[i].setTooltip(juce::String(hidden ? "Show " : "Hide ") + MixerSectionLayout::nameOf(sectionAt(i)));
+        const auto base = juce::String(hidden ? "Show " : "Hide ") + MixerSectionLayout::nameOf(sectionAt(i));
+        toggles_[i].setTooltip(
+            formatShortcutHint(base, shortcutTextFor ? shortcutTextFor(sectionAt(i)) : juce::String()));
     }
 }
 

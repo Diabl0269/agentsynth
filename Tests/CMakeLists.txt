@@ -488,6 +488,7 @@ add_executable(Tests
     UI/Timeline/TimelineViewStateTests.cpp
     UI/Mixer/MixerPanelComponentTests.cpp
     UI/Mixer/MixerPanelColumnDragTests.cpp
+    UI/Mixer/MixerZonesKeyboardTests.cpp
     UI/Mixer/MixerZonesTests.cpp
     UI/Mixer/MixerZonesVisibilityTests.cpp
     UI/Layout/SidePane/SidePaneTests.cpp

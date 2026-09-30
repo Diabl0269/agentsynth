@@ -25,6 +25,8 @@ public:
     /** Fired by the "+ Bus" button and the "Reset Meters" button. */
     std::function<void()> onAddBus;
     std::function<void()> onResetMeters;
+    /** The display text of a section toggle's shortcut ("Ctrl+S"), appended to its tooltip; empty for none. */
+    std::function<juce::String(MixerSection)> shortcutTextFor;
 
     /** The button that shows and hides the panel's side pane; follows `pane` (which must outlive it). */
     void bindSidePane(SidePane& pane);

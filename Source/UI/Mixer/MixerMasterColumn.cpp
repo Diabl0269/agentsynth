@@ -58,6 +58,7 @@ MixerMasterColumn::MixerMasterColumn() {
     fader_.setChannelName("Master");
     addAndMakeVisible(meter_);
     meter_.setTitle("Master meter");
+    meterReadout_.setTitle("Master peak");
     addAndMakeVisible(meterReadout_);
     meterReadout_.onResetAllRequested = [this] {
         if (onResetAllMetersRequested)

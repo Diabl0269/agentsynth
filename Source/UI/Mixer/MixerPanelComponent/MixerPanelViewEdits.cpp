@@ -5,13 +5,20 @@
 
 namespace synth::ui {
 
+// The keyboard path (Cmd+Shift+B): opening puts focus in the channel list so the keys work at once;
+// closing a pane that held focus hands it back to the mixer rather than to nothing.
 bool MixerPanelComponent::toggleSidePane(bool forceOpen) {
     if (!sidePane_.hasContent())
         return false;
+    const bool paneHadFocus = zonesPane_.hasKeyboardFocus(true);
     if (forceOpen)
         sidePane_.setOpen(true);
     else
         sidePane_.toggle();
+    if (sidePane_.isOpen())
+        zonesPane_.focusList();
+    else if (!sidePane_.isOpen() && paneHadFocus)
+        grabKeyboardFocus();
     return true;
 }
 

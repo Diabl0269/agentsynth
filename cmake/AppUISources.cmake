@@ -123,6 +123,7 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerZonesPane/MixerZonesPane.h
     Source/UI/Mixer/MixerZonesPane/MixerZonesPane.cpp
     Source/UI/Mixer/MixerZonesPane/MixerZonesPaneDrag.cpp
+    Source/UI/Mixer/MixerZonesPane/MixerZonesPaneKeyboard.cpp
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.h
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.cpp
     Source/UI/Layout/SidePane/SidePane.h

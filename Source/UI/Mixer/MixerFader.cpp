@@ -127,6 +127,7 @@ bool MixerFader::nudge(float deltaDb) {
 
 void MixerFader::setChannelName(const juce::String& name) {
     slider_.setTitle(name.isEmpty() ? juce::String("Fader") : name + " fader");
+    readout_.setTitle(name.isEmpty() ? juce::String("Fader level") : name + " fader level");
 }
 
 void MixerFader::grabAccessibilityFocus() {
