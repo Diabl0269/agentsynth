@@ -122,7 +122,9 @@ TEST(PianoRollVelocityGroupTest, TheFrameOverlapsNoOtherHeaderControl) {
     EXPECT_LE(group.getRight(), f.roll.getWidth());
 }
 
-TEST(PianoRollVelocityGroupTest, TheCaptionIsNotAHitTargetAndBothChipsStillClick) {
+// Humanize is checked by hover, not a click: a click opens a real PopupMenu, which crashes on a
+// display-less Linux runner while it looks for a screen to place itself on.
+TEST(PianoRollVelocityGroupTest, TheCaptionIsNotAHitTargetAndBothChipsStillHit) {
     VelocityLaneFixture f;
     f.makeBed({100});
     const auto captionCentre = centreOf(f.roll.getVelocityCaptionBounds());
@@ -135,8 +137,9 @@ TEST(PianoRollVelocityGroupTest, TheCaptionIsNotAHitTargetAndBothChipsStillClick
     f.roll.mouseUp(leftClick(f.roll, chip));
     EXPECT_FALSE(f.roll.isVelocityLaneVisible());
 
-    const auto humanize = centreOf(f.roll.getHumanizeChipBounds());
-    f.roll.mouseDown(leftClick(f.roll, humanize));
-    f.roll.mouseUp(leftClick(f.roll, humanize));
-    EXPECT_TRUE(juce::PopupMenu::dismissAllActiveMenus()) << "the Humanize chip opened its amount menu";
+    f.roll.mouseMove(hover(f.roll, centreOf(f.roll.getHumanizeChipBounds())));
+    EXPECT_TRUE(f.roll.isHeaderButtonHoveredForTest(PianoRollComponent::HeaderButtonId::Humanize));
+    f.roll.mouseMove(hover(f.roll, centreOf(f.roll.getVelocityCaptionBounds())));
+    EXPECT_FALSE(f.roll.isHeaderButtonHoveredForTest(PianoRollComponent::HeaderButtonId::Humanize))
+        << "the caption is not part of the Humanize chip";
 }
