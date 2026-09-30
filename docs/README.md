@@ -27,6 +27,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/layout/layout.md`](layout/layout.md) — hub: the soft grid, anti-overlap search, auto-arrange, the `LayoutUtil` API, drag affordance and alignment guides
 - [`docs/layout/chrome.md`](layout/chrome.md) — toolbar, status bar, minimum window size, panel collapse and persistence, the welcome overlay, the Cmd-hold shortcut hint overlay, the mod-matrix panel
 - [`docs/layout/module-card.md`](layout/module-card.md) — a card's own geometry: width buckets, body layout, header buttons, deleting a module (reconnect-the-chain heal, FRO23), custom titles, the Audio Output identity treatment, the Wavetable card
+- [`docs/layout/module-card-layout.md`](layout/module-card-layout.md) — design (not built): data-driven card layouts for built-in modules, `CardLayout` v2, per-module defaults, knob/fader/switch widgets, the Edit Layout editor, the future custom module
 - [`docs/layout/module-library.md`](layout/module-library.md) — the library sidebar: rows, search, collapsible sections, scrolling, the help popover, the Shortcuts tab that mirrors it
 - [`docs/layout/settings-preferences.md`](layout/settings-preferences.md) — Settings > Preferences: the category drop-down, the scrolling viewport, search across categories, and how to add a row
 - [`docs/layout/preset-positions.md`](layout/preset-positions.md) — where factory presets place their modules

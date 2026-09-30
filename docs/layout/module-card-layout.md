@@ -1,0 +1,344 @@
+# Module card layout — data-driven cards for built-in modules
+
+Agent reference. The design for giving every built-in module a card drawn from layout data instead of
+type-specific code: a hand-designed default per module type, a user override per instance or per
+type, knob/fader/switch widgets, and room for a future user-built "custom module".
+
+**Status:** designed, not built. Nothing here describes current behaviour unless it says "today".
+Where the card is drawn today is [module-card.md](module-card.md); the hosted-plugin half of the
+same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-layout.md).
+
+---
+
+## Today
+
+- `ModuleComponent::createControls()` (`Source/UI/Graph/ModuleComponent/ModuleComponent.cpp`) walks
+  `module->getParameters()` and builds one widget per parameter by JUCE type: choice → `ComboBox`,
+  float/int → `CardKnobSlider`, bool → toggle. `layoutDefaultContent()` then stacks **all combos,
+  then all toggles, then a 3-column knob grid**, each group in parameter declaration order. There is
+  no grouping, no widget choice, no label override and no mode-dependent visibility.
+- Exceptions are hard-coded: skip helpers for the ADSR curves/divisions/tempo-sync, the threshold
+  meter swap, the LFO custom-wave editor, the Sampler/Wavetable chrome, the Wavetable tab strip
+  (a name-keyed page table in `WavetableTabStrip.cpp`, the only grouping that exists), and fully
+  bespoke bodies for Sequencer, Poly Sequencer, MIDI Keyboard, Macros, Attenuverter, Parametric EQ
+  and External MIDI.
+- Dual-mode modules show both modes' controls at once (LFO Hz and Sync Rate; Sample & Hold Rate with
+  an external clock; Sampler grain knobs in Sample mode; Pitch Shifter semitones and Hz).
+- `CardLayout` (`Source/Modules/CardLayout.h`) exists but only hosted-plugin cards use it: a flat,
+  ordered list of slots, version 1.
+
+---
+
+## The layout model
+
+`CardLayout` grows to version 2. It stays a plain value type in `Source/Modules/` with no UI or
+plugin knowledge.
+
+```text
+CardLayout (v2)
+  version  : 2
+  basedOn  : string | null      // "<ModuleType>@<defaultRevision>" the user started from
+  sections : Section[]
+  hidden   : string[]           // paramIds the user hid; they render in the "More" row
+Section
+  id       : string             // stable within the layout ("pitch", "user-1")
+  title    : string | null      // null = no header
+  columns  : 1..6               // grid columns; a Double card doubles them
+  presentation : grid | tab     // consecutive "tab" sections render as one tab strip
+  visibleWhen  : Condition | null
+  items    : Item[]
+Item = ParamItem | ViewItem
+ParamItem
+  paramId  : string
+  node     : string | null      // reserved: a node uuid, for the custom module (see below)
+  widget   : auto | knob | knobLarge | faderV | faderH | toggle | choice | segmented | stepper
+  label    : string | null
+  span     : 1..6               // grid cells taken
+  when     : Condition | null   // dim or swap, never resize (see below)
+ViewItem
+  view     : scope | response | spectrum | envelope | lfoShape | lfoCurve | waveform
+           | wavetable | eqCurve | threshold | gainReduction
+  open     : bool               // collapsible views: open by default or not
+Condition
+  param    : string             // a choice or bool parameter of the same module
+  is       : string[]           // choice VALUE strings ("Granular"), or "true"/"false"
+  effect   : show | dim         // show = swap in place of a sibling; dim = greyed out
+```
+
+**Hidden, not shown.** A layout lists what it *hides*, not what it shows. Every parameter that is
+neither placed in a section nor listed in `hidden` is appended to an implicit, folded **More** row at
+the bottom of the card; parameters in `hidden` also render there. So a parameter a later release adds
+to a module appears on every user-customised card automatically, in a known place, rather than being
+silently missing.
+
+**Why.** The v1 rule "absent from the layout = hidden" is safe for hosted plugins, whose automatic
+default is recomputed, but not for built-in modules whose saved layouts outlive a release. It also
+made a hidden parameter unreachable for a new modulation cable, because the cable-drop target lives
+on the widget.
+
+**Conditions never change the card's height while a value is being dragged.** `effect: show` is only
+allowed where the swapped widgets occupy the same cell (LFO Rate in Hz vs a note division), or where
+the condition's parameter is a mode switch the user sets deliberately (Sampler Sample/Granular,
+Pitch Shifter mode, Sample & Hold clock). `effect: dim` greys a control out and keeps its space
+(Detune while Unison is 1, LFO Glide unless the shape is S&H). Numeric conditions are not part of
+the model; a dim rule over a number is expressed in the default layout's code, not in stored JSON.
+
+**Why.** Card height drives canvas make-room ([layout.md](layout.md)); a card that grows while a
+knob turns would shove its neighbours around under the cursor.
+
+**Versioning.** Adding an optional key never bumps `version`; only a change of meaning does. The v2
+reader keeps reading v1 (a v1 layout is one untitled grid section plus the v1 "absent = hidden" rule,
+applied once on read and written back as v2). Hosted-plugin cards keep **writing** v1 unless a layout
+uses a v2-only feature, so a project opened in an older build keeps its plugin cards. Choice
+conditions match value strings, not indices, so appending a choice value never breaks a layout.
+
+**Section titles.** A code default's titles are plain English strings in code (the app has no string
+table). A user layout stores a title only when the user renamed or added the section; `basedOn` lets
+**Reset to default** and a later "update to the new default" diff against the default it started
+from.
+
+---
+
+## Where a layout comes from
+
+First hit wins, per node:
+
+1. **Instance override**: a graph-node property `cardLayout` (JSON), stored and emitted like the
+   custom card title `displayName`, not inside the module's extra state.
+2. **Per-type user default**: `<settings>/ModuleCardLayouts/<ModuleType>/default.json`, presets as
+   sibling `<name>.json` files, the same store shape as `PluginCardLayouts` (one generalised store
+   class with two roots).
+3. **Code default**: `DefaultCardLayouts.cpp` (UI side, keyed by `ModuleType`), one hand-designed
+   layout per type, with a `defaultRevision` bumped whenever it changes.
+4. **Automatic layout**: for a type with no code default, one grid section reproducing today's order
+   (combos, toggles, knobs, in declaration order), so nothing regresses before a type is designed.
+
+**Why a node property and not extra state.** A built-in module's extra state is the module's own
+(`ModuleBase::getExtraState()`, overridden per type), and `applyExtraStateIfChanged` compares the
+whole blob: a UI key inside it would make every layout undo re-apply the module's state, and the
+Sampler and Wavetable reload their files from disk when that happens. A node property has no such
+coupling, and the title property already round-trips through `graphToJSON`, `applyJSONToGraph`
+and undo (`GraphEditorNodeActionsTests` pins a rename's undo). `applySnapshotPreservingNodes`
+restores only position and uuid by name today, so the implementation checks that a node-preserving
+undo restores `cardLayout` and adds it to that path if not. Hosted plugins keep their existing
+extra-state key; nothing migrates.
+
+Width stays per type ([module-card.md](module-card.md#width-buckets)): hiding parameters shortens a
+card, it never moves it to another width bucket. The custom module is the only card whose width a
+layout may choose.
+
+---
+
+## Rendering
+
+A new collaborator class, `CardBody` (`Source/UI/Graph/CardBody/`), owns the widgets of a
+layout-driven card: it resolves the layout, builds one widget per item, and lays them out with a
+single `layout(bool apply)` function (the measure-and-apply rule from `layoutDefaultContent`).
+`ModuleComponent`'s generic branch hands its body to `CardBody`; the bespoke branches are untouched.
+Views are created through a small registry (`view id → factory`) so the existing scope, response,
+envelope, LFO curve and threshold components plug in unchanged.
+
+- **Bindings do not change.** Every parameter keeps its attachment, MIDI Learn registration,
+  modulation-amount gesture and knob-bound CV jack exactly as today; `CardBody` only decides which
+  widget and where. Widgets are looked up by `paramId`, not by display-name component ID.
+- **Hidden parameters stay whole.** They keep their value, stay in the patch `params` map, stay
+  automatable, MIDI-learnable and model-authorable. A cable dragged over the folded More row opens
+  it, so a hidden parameter can still take a new cable.
+- **Heights are measured.** `GraphEditor::estimateModuleSize()` asks `CardBody` to measure the
+  resolved layout instead of its hard-coded table, and
+  `ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` keeps pinning the two together.
+- **Bespoke cards.** Sequencer, Poly Sequencer, MIDI Keyboard, Macros, Attenuverter, Parametric EQ
+  and External MIDI keep their own bodies; their editable surface is at most hide/reorder of a plain
+  knob row they expose. The Wavetable tab strip becomes `presentation: tab` sections, so its page
+  table leaves `WavetableTabStrip.cpp`. ADSR, LFO and Sampler become ordinary layouts with views.
+
+---
+
+## Widgets
+
+| Widget | Use | Notes |
+|---|---|---|
+| `knob` | the default for continuous values | today's `CardKnobSlider` |
+| `knobLarge` | the one control a module is "about" (Cutoff, Drive, Delay Time) | same widget, 60 px dial, spans one cell |
+| `faderV` | levels and stages compared side by side (ADSR stages, Reverb Dry/Wet, Limiter Input/Ceiling) | new `CardFader` |
+| `faderH` | a single level across the card (VCA Gain, Voice Mixer Level, footer output trims) | new `CardFader` |
+| `segmented` | a choice with up to about 6 short values (waveform, filter family, clock source) | new; the ADSR MS/BPM control is the precedent |
+| `choice` | longer choice lists | today's `ComboBox` |
+| `toggle` | booleans | today's toggle; footer toggles are the small pill |
+| `stepper` | a small integer with a musical reading (MIDI Keyboard octave) | new; − value + |
+
+`CardFader` is a `juce::Slider` in a linear style, painted by `AppLookAndFeel::drawLinearSlider`,
+with the shift-fine and reset gestures of `MixerFaderSlider` and **every** gesture `CardKnobSlider`
+carries: MIDI Learn, the modulation-amount drag, the cable-drop target and the right-click menu. The
+knob's modulation ring has no fader equivalent yet: a fader shows modulation as a bar beside the
+slot from the base value to base + CV, in `mod-ring-positive` / `mod-ring-negative`. That bar is
+designed in the widget's own ticket and added to the design system with it.
+
+Every card has the same **footer** row: Poly (where the module has it), the Scope / Spectrum
+toggles, and an effect's output Level as a small horizontal fader. The **More** row sits under it.
+
+---
+
+## Default layouts
+
+The hand-designed default per type. "New" marks a parameter that does not exist yet; a default
+layout only ever names parameters that exist, so each one joins its default when (and if) it is
+added.
+
+| Module | Sections, top to bottom | Contextual rules |
+|---|---|---|
+| Oscillator | waveform `segmented`; Pitch: Octave, Coarse, Fine; Unison: Voices, Detune, (new Pulse Width); Output: Level, Pan, (new Glide); footer | Detune dims at 1 voice; Pulse Width dims unless Square |
+| Filter | `response` view open; Type `choice`; Cutoff `knobLarge`, Resonance, Drive; Modulation: (new Env Amt, new Key Track), Level; footer with Spectrum | — |
+| VCA | Gain `faderH`; footer | — |
+| ADSR | `envelope` view open; Time/Tempo `segmented`; A H D S R `faderV`; (new Velocity) and the `threshold` view; footer | Tempo mode swaps each stage's time for its division in place |
+| LFO | `lfoShape` view; Shape `segmented` (incl. Draw → `lfoCurve` view); Free/Sync `segmented`; Rate `knobLarge`, (new Phase, new Fade in); Level, Glide; footer: Bipolar, Restart on note | Rate swaps Hz ↔ division; Glide dims unless S&H |
+| Noise | Type `segmented`; Color, Level; footer | — |
+| Sampler | `waveform` view + load row; Mode `segmented`; Start, (new End), Level; Pitch, Root (note name), (new Fine); footer: Loop, (new Reverse) | Granular swaps in Grain Size, Density, Spray |
+| Wavetable | as today, as `tab` sections; Pan moves to Tune, Sync In to Phase | — |
+| Delay | (new ms/Sync `segmented`); Time `knobLarge`, Feedback, Mix; footer: (new Ping-pong), Level | Sync swaps Time for a division |
+| Reverb | Room: Size, Damping, (new Pre-delay); Mix: Dry, Wet `faderV`, Width; footer: Level | — |
+| Chorus, Phaser, Flanger | Motion: Rate, Depth, Mix; Tone: Delay or Centre Freq, Feedback; footer: Level | — |
+| Distortion | Type `segmented`; Drive `knobLarge`, Mix; footer: Quality (oversampling), Level | — |
+| Bitcrusher | Bits, Downsample, Mix; footer: Dither, Level | — |
+| Ring Modulator | Drive, Character, Mix; footer: Quality, Level | — |
+| Pitch Shifter | Mode `segmented`; Pitch `knobLarge`, Fine, Mix; Window, Feedback; footer: Level | Frequency mode swaps Pitch+Fine for Shift (Hz) |
+| Compressor | (new `gainReduction` view), Threshold `faderV`; Ratio, Makeup, Attack, Release; footer: (new Knee) | — |
+| Limiter | Input `faderV`, (new `gainReduction`), (new Ceiling `faderV`), Release | — |
+| Gate | `threshold` view; Attack, Hold, Release; footer: Range, Level | — |
+| Sample & Hold | Source, Mode `segmented` side by side; Clock `segmented`; Rate, Slew; Level, Offset | External clock swaps Rate for the `threshold` view |
+| Envelope Follower | Detection `segmented`; Attack, Release, Sensitivity; footer | — |
+| Voice Mixer | Level `faderH` | — |
+| Poly MIDI | Voice Steal `segmented`; footer: Velocity sets gate | — |
+| MIDI Keyboard | bespoke keys plus an Octave `stepper` row (the parameter exists today, with no control) | — |
+| Math | Clip `segmented`; footer | — |
+| Comparator | unchanged (`threshold` view) | — |
+
+Which "New" parameters are added, and whether the Filter gains envelope-amount and key-tracking
+inputs, are product decisions recorded on the implementation tickets, not here. Adding a parameter
+to a built-in module needs no change in `synth-platform/packages/contracts`: a patch node's `params`
+is an open record there, and per-module ranges come from the client.
+
+---
+
+## Editing a layout
+
+- **Quick path, on any control:** the right-click menu gains **Hide from card**, **Show as
+  fader / Show as knob** (for a continuous parameter) and **Edit Layout…**. On a control in the More
+  row, **Show on card** puts it back where the default had it.
+- **The editor:** `PluginKnobPicker` generalises into a card layout editor in a `CallOutBox` beside
+  the card: search, one row per parameter grouped by section with a tick (shown/hidden), drag to
+  reorder, click a label to rename, a Knob/Fader/… choice per row, **+ Add group**, **Apply to: this
+  module / all <Type> modules**, **Presets**, **Reset to default**. The card re-lays out live. The
+  hosted-plugin picker becomes the same component with the plugin's parameter source.
+- **Module menu:** **Edit Layout…** goes in `buildModuleContextMenu`
+  (`ModuleComponentInteraction.cpp`) in the block after Bypass Module, where a hosted plugin's
+  **Choose knobs…** sits today; once the editor is shared, the plugin item is renamed to match.
+- **Undo:** one step per editor session (open → close) and one per quick-path click, recorded like a
+  title change (`AppUndoManager::recordStructuralChange` around the node-property write).
+  **Apply to all** writes the per-type file and clears this instance's override in the same step.
+- **Direct in-card editing** (dragging controls on the card itself) is a later addition on top of the
+  same model; the editor comes first because it is fully keyboard-reachable.
+
+---
+
+## Trust boundary and the AI patch format
+
+`graphToJSON` emits a node's `"cardLayout"` only when it is set, so every other node's JSON stays
+byte-identical. `applyJSONToGraph` applies it on the **trusted path only** (undo snapshots, presets,
+projects, the in-app clipboard); untrusted apply ignores it, and `getPatchSchema()` never advertises
+it, so a provider is never invited to emit one. A `.agsnip` written to disk drops it, like extra
+state. Layout is presentation only: it never changes a parameter's value, id, range or binding, and
+the patch `params` map always carries every parameter, hidden or not.
+
+**Why trusted-only for now, though a layout is display-only like `displayName`.** A hostile layout
+could hide every control of an authorable module. Accepting it untrusted needs a validator (known
+`paramId`s only, bounded sizes, whitelisted keys), which the custom-module work needs anyway; the
+model stays validatable so that path can be opened later without a format change.
+
+---
+
+## Custom module (future)
+
+A user-built "synth in one card" is **a macro with a face**: the user groups ordinary modules
+(Oscillator, ADSR, Filter, LFO, a Macros knob bank for their own knobs) into a macro, and the
+collapsed macro card renders a `CardLayout` whose items point at its members' parameters.
+
+- **Why not a new container module.** A node's parameter set and channel count are fixed for its
+  lifetime (`Source/Modules/CLAUDE.md`), members would leave uuid space and orphan their lanes and
+  bindings, and it would need a second sound engine. A macro reuses every module, poly voices come
+  from members' own Poly flags, and undo is already joint.
+- **What v2 reserves now:** `ParamItem.node` (a member's uuid; null = this module), a layout that can
+  live on a macro (a `layout` key in the macro's own record, next to its ports), and a model that can
+  be validated on the untrusted path. Paste and snippet insert remap `node` through the same id map
+  macro ports use.
+- **What it changes when it starts:** two of the macro design's deliberate limits
+  ([macros.md](../macros/macros.md#deliberate-limits)), "a macro is not a saveable library item" and
+  "no macro-level parameter exposure", are lifted by that work, not this one.
+
+---
+
+## Accessibility
+
+Every widget kind follows the app's accessibility rules: a Tab stop in card
+order (section by section, then the footer, then More), the accent focus ring via
+`Source/UI/Layout/FocusRegion.h`, `setTitle` with the parameter's display label and its value, and a
+tooltip naming the full parameter name when the label was shortened or renamed.
+
+- `segmented`: one Tab stop; Left/Right move the selection; role radio group; each segment titled.
+- `faderV` / `faderH`: arrow keys step, Shift+arrow fine, Home/End to range ends; value text as the
+  accessible value.
+- `stepper`: − and + are separate buttons with titles ("Octave down", "Octave up").
+- More row: a button titled "More controls (N)", Enter/Space unfolds it.
+- Editor: a list with arrow-key navigation, Space ticks, Cmd+Up/Down reorders, Enter renames; every
+  button has a title and tooltip. New keys are rebindable `ShortcutManager` actions.
+- The app's accessibility coverage check passes with no new exemption.
+
+---
+
+## Tests
+
+- `Tests/Modules/CardLayoutTests.cpp`: v2 round trip; v1 read → v2 with the absent-means-hidden rule
+  applied once; unknown keys ignored; newer version refused; conditions match value strings;
+  `hidden` plus unplaced parameters both land in More; a hosted layout without v2 features still
+  writes v1.
+- `Tests/UI/Graph/CardBody/CardBodyLayoutTests.cpp`: automatic layout reproduces today's order and
+  heights for every type without a code default; each code default builds with no missing
+  `paramId`; measure and apply agree; a `show` swap and a `dim` rule change no height;
+  `estimateModuleSize` matches every library type.
+- `Tests/UI/Graph/CardBody/CardBodyBindingTests.cpp`: every widget kind drives its parameter,
+  registers for MIDI Learn and accepts the modulation-amount gesture; a hidden parameter keeps its
+  value, stays in `graphToJSON`'s `params`, and takes a cable dropped on the More row (real
+  synthesized drag).
+- `Tests/UI/Graph/CardBody/CardFaderTests.cpp`: drag, Shift-fine, reset, keyboard steps, modulation
+  bar, software-image paint check.
+- `Tests/AI/CardLayoutTrustTests.cpp`: `cardLayout` round-trips on the trusted path and through a
+  node-preserving undo (`applySnapshotPreservingNodes`); untrusted apply ignores it; `.agsnip` on disk drops it; the in-app
+  clipboard keeps it; not in `getPatchSchema()`.
+- `Tests/UI/Graph/CardLayoutEditor/`: the picker tests, generalised (search, tick, reorder, rename,
+  widget kind, scope switch, presets, reset), plus the real right-click path for Hide / Show as fader
+  / Edit Layout… and one undo step per session.
+- E2E: add a Filter, hide Drive, switch Level to a fader, save, reopen, and the card matches; Apply to
+  all and a second Filter shows it.
+
+---
+
+## Docs Updates
+
+When each part lands, in the same PR: this doc's **Status** line and the section it built;
+[module-card.md](module-card.md) (body layout, measured heights, footer, More row);
+[plugin-card-layout.md](../control/plugin-card-layout.md) (shared editor, v1/v2 writing rule);
+[patch-format.md](../ai/patch-format.md) (the `cardLayout` node field);
+[visualizers.md](visualizers.md) (new views: LFO shape, gain reduction);
+[modules.md](../modules/modules.md) and [fx-modules.md](../modules/fx-modules.md) for any parameter
+added; `Source/UI/CLAUDE.md` for the `CardBody` invariants (bindings unchanged, no height change on a
+value); [macros.md](../macros/macros.md) when the custom module lifts its limits; and the design
+system's component list for every new widget.
+
+---
+
+## Related
+
+- [module-card.md](module-card.md) — card geometry today · [layout.md](layout.md) — make-room
+- [plugin-card-layout.md](../control/plugin-card-layout.md) — `CardLayout` v1 and the picker
+- [macros.md](../macros/macros.md) — the container a custom module builds on
+- [patch-format.md](../ai/patch-format.md) — the trusted/untrusted apply paths
