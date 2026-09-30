@@ -149,9 +149,9 @@ public:
     // the whole paste; the pasted clips end up selected. Returns false (no-op) when the clipboard is
     // empty, there's no doc, or every clip was skipped.
     bool pasteClipsAtPlayhead();
-    // doc_->duplicateClip() per selected clip, batched into one recordTimelineChange however many
-    // clips are selected; the new clips end up selected. Returns false when nothing is selected or
-    // there's no doc.
+    // repeatSelectedClips(1): one copy of the whole selection, starting where the selection ends, in
+    // one recordTimelineChange; the new clips end up selected. Returns false when nothing is
+    // selected or there's no doc.
     bool duplicateSelectedClips();
 
     // copySelectedClips() followed by deleting the selection, as ONE recordTimelineChange — so
