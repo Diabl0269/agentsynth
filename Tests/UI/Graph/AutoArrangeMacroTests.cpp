@@ -12,6 +12,7 @@
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
+#include "Modules/MidiKeyboardModule.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Layout/HierarchicalArrange.h"
 #include <gtest/gtest.h>
@@ -313,4 +314,33 @@ TEST(AutoArrangeMacros, AModulatorJoinsTheColumnBeforeADeepMacroNotColumnZero) {
     autoarrange_test::expectBeforeInRow(c.rect(far), c.ctl().macroHullBounds(macroId), "deep open macro");
     EXPECT_EQ(c.rect(far).getX(), c.rect(pre).getX()) << "the column right before the macro";
     EXPECT_GT(c.rect(far).getX(), c.rect(source).getX());
+}
+
+// The LFO takes a cable from the macro's member (retrigger input) and modulates another member: lifted to the macro
+// block that is macro -> LFO and LFO -> macro. The LFO still sits one column left of the macro, level with it, and what
+// follows the macro keeps its column.
+TEST(AutoArrangeMacros, AModulatorThatAlsoTakesInputFromItsMacroStaysBeforeIt) {
+    Canvas c;
+    const auto keys = addModuleAt(c.editor, c.engine, std::make_unique<MidiKeyboardModule>(), 300, 300);
+    const auto a = c.osc(700, 300);
+    const auto b = c.filter(1100, 300);
+    const auto after = c.filter(1500, 300);
+    const auto lfo = c.lfo(1900, 1400);
+    const auto midi = juce::AudioProcessorGraph::midiChannelIndex;
+    c.connect(a, b);
+    c.connect(b, after);
+    const auto macroId = c.group({keys, a, b});
+    ASSERT_FALSE(macroId.isEmpty());
+    c.ctl().setMacroCollapsed(macroId, false);
+    ASSERT_TRUE(c.engine.getGraph().addConnection({{keys, midi}, {lfo, midi}}));
+    c.modulate(lfo, b);
+
+    c.editor.autoArrange();
+
+    const auto hull = c.ctl().macroHullBounds(macroId);
+    autoarrange_test::expectBeforeInRow(c.rect(lfo), hull, "cycle");
+    EXPECT_GT(c.rect(after).getX(), hull.getRight()) << "the module after the macro stays right of it";
+    const auto first = c.snap();
+    c.editor.autoArrange();
+    EXPECT_TRUE(first == c.snap());
 }

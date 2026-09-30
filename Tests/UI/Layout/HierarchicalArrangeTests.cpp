@@ -387,3 +387,36 @@ TEST(HierarchicalArrange, TheNearestConsumerDecidesAndTheRowStartStaysPut) {
     EXPECT_EQ(out.positions.at("lfo").x, out.positions.at("a").x);
     EXPECT_EQ(out.positions.at("in").x, kArrangeOriginX);
 }
+
+// Macro -> modulator (MIDI retrigger) and modulator -> macro form a cycle at the macro level: the modulator stays one
+// column before the macro and the blocks after the macro keep their columns.
+TEST(HierarchicalArrange, AModulatorFedByItsOwnMacroStaysOneColumnBeforeIt) {
+    ArrangeInput in;
+    in.blocks = {module("in", 280, 200, 1), module("pre", 280, 300, 2, 1), card("macro", 280, 90, 3),
+                 module("post", 280, 300, 4, 2), module("lfo", 280, 300, 100, 3)};
+    in.edges = {flow("in", "pre"), flow("pre", "macro"), flow("macro", "post"), flow("macro", "lfo"),
+                mod("lfo", "macro")};
+    in.trackStarts = {"in"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    EXPECT_EQ(out.positions.at("lfo").x, out.positions.at("pre").x);
+    EXPECT_LT(out.positions.at("pre").x, out.positions.at("macro").x);
+    EXPECT_LT(out.positions.at("macro").x, out.positions.at("post").x);
+    EXPECT_EQ(out.positions.at("lfo").y, out.positions.at("macro").y);
+    EXPECT_EQ(computeHierarchicalArrange(in).positions, out.positions);
+}
+
+// One modulator feeding two macros of the same row sits before the nearer one.
+TEST(HierarchicalArrange, AModulatorFeedingTwoMacrosOfOneRowSitsBeforeTheNearerOne) {
+    ArrangeInput in;
+    in.blocks = {module("in", 280, 200, 1), card("m1", 280, 90, 2), card("m2", 280, 90, 3),
+                 module("lfo", 280, 300, 100, 3)};
+    in.edges = {flow("in", "m1"), flow("m1", "m2"), mod("lfo", "m1"), mod("lfo", "m2")};
+    in.trackStarts = {"in"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    EXPECT_EQ(out.positions.at("lfo").x, out.positions.at("in").x);
+    EXPECT_LT(out.positions.at("lfo").x, out.positions.at("m1").x);
+}

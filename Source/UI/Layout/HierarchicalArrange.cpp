@@ -321,13 +321,29 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
     return rows;
 }
 
+// The edges that do not count for columns: an in-row signal edge u -> v where v also modulates u. v is then u's own
+// modulator taking input from it (an LFO retriggered by MIDI from the macro it modulates), so it belongs before u, not
+// after it; counting both directions would be a cycle that pins both at column 0 and flattens everything after.
+std::vector<bool> feedbackEdges(const Graph& g, const std::vector<int>& rowOf) {
+    std::set<std::pair<int, int>> modulates;
+    for (const auto& e : g.edges)
+        if (e.mod && rowOf[e.a] == rowOf[e.b])
+            modulates.insert({e.a, e.b});
+    std::vector<bool> ignored(g.edges.size(), false);
+    for (size_t i = 0; i < g.edges.size(); ++i) {
+        const auto& e = g.edges[i];
+        ignored[i] = !e.mod && rowOf[e.a] == rowOf[e.b] && modulates.count({e.b, e.a}) > 0;
+    }
+    return ignored;
+}
+
 // Longest path from a row's sources, over the edges inside the row; a cycle is broken by ignoring back-edges.
-std::vector<int> computeDepths(const Graph& g, const std::vector<int>& rowOf) {
+std::vector<int> computeDepths(const Graph& g, const std::vector<int>& rowOf, const std::vector<bool>& ignored) {
     std::vector<int> depth(g.n, 0);
     std::vector<std::vector<int>> out(g.n);
     std::vector<int> indegree(g.n, 0);
-    for (const auto& e : g.edges)
-        if (rowOf[e.a] == rowOf[e.b]) {
+    for (size_t i = 0; i < g.edges.size(); ++i)
+        if (const auto& e = g.edges[i]; rowOf[e.a] == rowOf[e.b] && !ignored[i]) {
             out[e.a].push_back(e.b);
             ++indegree[e.b];
         }
@@ -355,14 +371,16 @@ std::vector<int> computeDepths(const Graph& g, const std::vector<int>& rowOf) {
 // consumer: depth = (smallest consumer depth) - 1. Without this every such block sits over column 0, far from what it
 // feeds. A consumer has an incoming edge, so it is never a source itself and its depth never changes here.
 // `consumerOf[i]` is the consumer a moved block follows (-1 for every block that stayed put).
-std::vector<int> placeSourcesAsLateAsPossible(const Graph& g, const Rows& rows, std::vector<int>& depth) {
+std::vector<int> placeSourcesAsLateAsPossible(const Graph& g, const Rows& rows, const std::vector<bool>& ignored,
+                                              std::vector<int>& depth) {
     std::vector<bool> hasInput(g.n, false);
     std::vector<int> consumerOf(g.n, -1);
-    for (const auto& e : g.edges)
-        if (rows.rowOf[e.a] == rows.rowOf[e.b])
+    for (size_t i = 0; i < g.edges.size(); ++i)
+        if (const auto& e = g.edges[i]; rows.rowOf[e.a] == rows.rowOf[e.b] && !ignored[i])
             hasInput[e.b] = true;
-    for (const auto& e : g.edges)
-        if (rows.rowOf[e.a] == rows.rowOf[e.b] &&
+    for (size_t i = 0; i < g.edges.size(); ++i)
+        if (const auto& e = g.edges[i];
+            rows.rowOf[e.a] == rows.rowOf[e.b] && !ignored[i] &&
             (consumerOf[e.a] < 0 || std::tie(depth[e.b], e.b) < std::tie(depth[consumerOf[e.a]], consumerOf[e.a])))
             consumerOf[e.a] = e.b;
     for (int i = 0; i < g.n; ++i) {
@@ -430,8 +448,9 @@ Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const s
 
     const Graph g = buildGraph(ctx, levelIndex, n);
     const Rows rows = assignRows(ctx, g, levelIndex, starts);
-    auto depth = computeDepths(g, rows.rowOf);
-    const auto consumerOf = placeSourcesAsLateAsPossible(g, rows, depth);
+    const auto ignored = feedbackEdges(g, rows.rowOf);
+    auto depth = computeDepths(g, rows.rowOf, ignored);
+    const auto consumerOf = placeSourcesAsLateAsPossible(g, rows, ignored, depth);
 
     int maxDepth = 0;
     for (int d : depth)
