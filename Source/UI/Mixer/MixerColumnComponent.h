@@ -243,6 +243,12 @@ public:
      *  not rebuild the column (MixerPanelComponent::refreshTrackColours()). */
     void setHeaderColour(juce::Colour colour) { header_.setColour(colour); }
 
+    /** Makes the header a drag handle for reordering this column (see MixerColumnHeader::ReorderHooks);
+     *  a column that never calls it stays fixed. */
+    void setReorderHooks(MixerColumnHeader::ReorderHooks hooks);
+    /** 0..1: how strongly the column is drawn lifted (accent border and tint) while it is dragged. */
+    void setLift(float lift);
+
 private:
     void rebindControls();
     void refreshCollapsedSummaries(int insertCount, int sendCount, bool hasEq);
@@ -349,6 +355,7 @@ private:
     synth::ui::midilearn::RightClickSafeButton<juce::TextButton> soloButton_{"S"};
     bool selected_ = false;
     bool keyboardFocused_ = false;
+    float lift_ = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerColumnComponent)
 };

@@ -39,6 +39,7 @@ public:
     }
     juce::Component& getAccessibilityFocusTargetForTest() noexcept { return *this; }
     juce::Button& getMakeChannelButtonForTest() noexcept { return makeChannelButton_; }
+    MixerColumnHeader& getHeaderForTest() noexcept { return header_; }
 
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;

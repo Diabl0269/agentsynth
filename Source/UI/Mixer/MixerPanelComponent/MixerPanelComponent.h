@@ -3,6 +3,9 @@
 #include "MacroSet.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
+#include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
+#include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include "UI/Mixer/MixerDirectColumn.h"
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelToolbar.h"
@@ -106,6 +109,11 @@ public:
      *  through regardless). */
     std::function<void(synth::TrackId)> onArmTrack;
 
+    /** Fired when a track column is dropped in a new place: moves `trackId` to timeline index
+     *  `newIndex`. BottomDockComponent wires this to MainComponent::performTrackEdit(moveTrack) --
+     *  one undo step -- and rebuilds the mixer; never a direct TimelineDoc write. */
+    std::function<void(synth::TrackId, int newIndex)> onMoveTrack;
+
     /** The ShortcutManager the M/S/R keys resolve their rebindable bindings against
      *  ("timelineMuteFocusedTrack"/"timelineSoloFocusedTrack"/"timelineArmFocusedTrack" -- the
      *  SAME action ids the Timeline track header row already binds, deliberately: a new id would
@@ -153,6 +161,12 @@ public:
     }
     MixerDirectColumn* getDirectColumnForTest() const { return directColumn_.get(); }
     MixerMasterColumn* getMasterColumnForTest() const { return masterColumn_.get(); }
+    /** True from the first drag step of a column reorder until its drop has finished settling. */
+    bool isColumnReorderActiveForTest() const noexcept { return columnReorder_.isReordering(); }
+    /** The Esc key press a real column drag would receive from the window. */
+    bool sendEscapeToColumnDragForTest() {
+        return columnCancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), this);
+    }
 
     /** The empty-state hint (see emptyHint_). */
     const juce::Label& getEmptyHintForTest() const noexcept { return emptyHint_; }
@@ -272,13 +286,46 @@ private:
      *  must never yank VoiceOver's cursor into the mixer from wherever the user actually is. */
     void grabAccessibilityFocusForFocusedColumn();
 
+    // ---- Column drag-reorder (track strips only) -- implemented in MixerPanelColumnDrag.cpp -----
+    void wireColumnReorder(MixerColumnComponent& column, const juce::String& uuid);
+    void beginColumnDrag(const juce::String& uuid, const juce::MouseEvent& e);
+    void dragColumn(const juce::MouseEvent& e);
+    /** True when the gesture was a drag (the header must not also treat the release as a click). */
+    bool endColumnDrag();
+    void commitColumnDrag();
+    void cancelColumnDrag();
+    void discardColumnDrag();
+    void onColumnReorderFrame();
+    void startColumnFramesIfNeeded();
+    void autoscrollForPointer(const juce::MouseEvent& e);
+    float pointerXInContent(const juce::MouseEvent& e);
+    /** Positions every column; a reorder in flight shifts the track strips to their animated places. */
+    void placeColumns(int columnHeight, bool relayout);
+    void paintColumnDragChrome(juce::Graphics& g);
+
+    struct ColumnsContent : juce::Component {
+        std::function<void(juce::Graphics&)> onPaint;
+        void paint(juce::Graphics& g) override {
+            if (onPaint)
+                onPaint(g);
+        }
+    };
+
+    struct ScrollReportingViewport : juce::Viewport {
+        std::function<void()> onScrolled;
+        void visibleAreaChanged(const juce::Rectangle<int>&) override {
+            if (onScrolled)
+                onScrolled();
+        }
+    };
+
     MixerSectionLayout sectionLayout_;
     MixerPanelToolbar toolbar_;
     juce::PropertiesFile* settings_ = nullptr; // See setSettingsStore
     bool grewHostThisDrag_ = false;
     std::array<bool, MixerSectionLayout::kSectionCount> lastHidden_{}; // detects a re-show
-    juce::Viewport viewport_;
-    juce::Component content_;
+    ScrollReportingViewport viewport_;
+    ColumnsContent content_;
 
     /** Shown only while there are no columns; see the ctor and rebuild(). */
     juce::Label emptyHint_;
@@ -299,6 +346,18 @@ private:
 
     std::vector<ColumnEntry> columnEntries_;
     int focusedColumnIndex_ = -1;
+
+    ReorderDragAnimator columnReorder_;
+    ReorderFramePump columnFrames_{*this};
+    ReorderCancelKey columnCancelKey_;
+    std::vector<juce::String> reorderUuids_;         // animator keys -> strip uuids, at press time
+    std::vector<synth::TrackId> reorderFirstTracks_; // animator keys -> first feeding track
+    juce::String liftedUuid_;                        // the column drawn lifted (dragged, then settling)
+    unsigned columnGenerationSeen_ = 0;
+    float lastDraggedStart_ = 0.0f;
+    int lastScrollX_ = 0;
+    bool columnDragCancelled_ = false; // Esc pressed in this gesture: the release must not click
+    bool committingColumnDrag_ = false;
 
     juce::AudioProcessorGraph::NodeID midiLearnArmedNodeId_;     // Invalid = nothing armed
     juce::AudioProcessorGraph::NodeID midiLearnArmedSoloNodeId_; // Invalid = nothing armed

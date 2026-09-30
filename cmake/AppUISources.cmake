@@ -116,6 +116,7 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelColumnDrag.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelSections.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelToolbar.h
     Source/UI/Mixer/MixerPanelComponent/MixerPanelToolbar.cpp
@@ -126,6 +127,10 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerPlacementController.cpp
     Source/UI/Mixer/MixerMirrorController.h
     Source/UI/Mixer/MixerMirrorController.cpp
+    Source/UI/Layout/ReorderDrag/ReorderDragAnimator.h
+    Source/UI/Layout/ReorderDrag/ReorderDragAnimator.cpp
+    Source/UI/Layout/ReorderDrag/ReorderCancelKey.h
+    Source/UI/Layout/ReorderDrag/ReorderFramePump.h
     Source/UI/Layout/PanelResizeHandle.h
     Source/UI/Layout/PanelResizeHandle.cpp
     Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h

@@ -375,6 +375,7 @@ add_executable(Tests
     UI/ModuleViews/CurveEditor/CurveEditorGridSnapTests.cpp
     UI/Layout/UIAnimationTests.cpp
     UI/Layout/ScrollTweenTests.cpp
+    UI/Layout/ReorderDrag/ReorderDragAnimatorTests.cpp
     UI/Graph/GraphEditorOnboardingTests.cpp
     UI/Library/ModuleLibraryComponentTests.cpp
     UI/Library/ModuleLibraryCollapseTests.cpp
@@ -479,6 +480,7 @@ add_executable(Tests
     UI/Timeline/TransportBarMidiLearnTests.cpp
     UI/Timeline/TimelineViewStateTests.cpp
     UI/Mixer/MixerPanelComponentTests.cpp
+    UI/Mixer/MixerPanelColumnDragTests.cpp
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
     UI/Mixer/MixerFaderTests.cpp
     UI/Mixer/MixerFaderTaperTests.cpp

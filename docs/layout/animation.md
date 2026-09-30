@@ -11,7 +11,7 @@ Pure, stateless helpers, no component state required:
 | Function | Signature | Curve |
 |---|---|---|
 | `easeOutCubic` | `float easeOutCubic(float t)` | Fast-out deceleration |
-| `easeInCubic` | `float easeInCubic(float t)` | Slow start, accelerating to the end |
+| `easeInCubic` | `float easeInCubic(float t)` | Slow start, accelerating away (leaving, returning) |
 | `easeInOutCubic` | `float easeInOutCubic(float t)` | Smooth in and out |
 | `easeOutBack` | `float easeOutBack(float t)` | Overshoots slightly, then settles |
 
@@ -135,6 +135,80 @@ mid-flight reversal starts from the current fraction. It never touches the three
 fractions; each frame it calls `onLayoutNeeded` (wired to `MainComponent::resized()`), which reads
 `getCarveHeight()`. Choosing the Own-panel placement (or launching in it) snaps open with no tween.
 
+## Reorder drag
+
+Every reorderable list (the bottom dock's tab strip, the mixer's track columns, later the timeline
+track list) uses one behaviour, in `Source/UI/Layout/ReorderDrag/`:
+
+- `ReorderDragAnimator` — pure logic along ONE axis (x for a strip, y for a list), no components and
+  no painting, with an injectable clock so it is unit-tested headlessly
+  (`Tests/UI/Layout/ReorderDrag/ReorderDragAnimatorTests.cpp`). Inputs: each item's start and extent,
+  the dragged index, the grab offset and the pointer. Outputs: the insertion index, the dragged
+  item's position, and every other item's animated position.
+- `ReorderFramePump` — the VBlank glue (`VBlankAnimatorUpdater` + `AnimationDriver`): frames run only
+  while a tween is in flight, then stop. A held drag with the pointer at rest, and a settled list,
+  cost no timer and no repaint.
+- `ReorderCancelKey` — Esc during the gesture (a mouse press does not move keyboard focus, so it
+  listens on the top-level window for exactly the length of the drag).
+
+The rules it implements:
+
+1. **The owner captures the grab once.** At press it hands over the items' extents, the pointer and
+   the grab offset (pointer minus the item's start), all measured in the OWNER's coordinates.
+   Never re-derive the offset from `MouseEvent::getMouseDownPosition()`: JUCE recomputes it in the
+   event component's *current* local space, and the pressed component moves as neighbours shift, so
+   the lifted item would jump by a slot per change.
+2. **Threshold.** Nothing happens until the pointer has travelled 4 px along the axis, so a click keeps
+   working; `dragTo()` returns false until then.
+3. **The dragged item stays under the grab point** (`pointer - grab offset`, held inside the strip) and
+   is drawn lifted; its slot shows a dashed outline that glides to the insertion gap.
+4. **Insertion by centre.** The insertion index counts the neighbours whose midpoint the dragged
+   item's centre has passed. Neighbour midpoints never move during the drag, so unequal extents
+   cannot ping-pong; pressed against either end of the strip the item takes that end.
+5. **Neighbours make room.** When the insertion index changes each affected item retargets from its
+   CURRENT animated position (never from rest) over 160 ms, `easeOutCubic`.
+6. **The order is committed on release, not during the drag.** The owner reads `getNewOrder()`,
+   commits it through its normal persistence path, lays out statically, and passes the final starts
+   to `release()`; the dragged item then settles from its drop position (140 ms, `easeOutCubic`) and
+   every neighbour finishes from wherever its glide had got to.
+7. **Esc cancels.** `abort()` sends the dragged item back to where it was picked up (140 ms,
+   `easeInCubic`) and the neighbours back to their places (160 ms); nothing is committed and no
+   undo step is created.
+8. **Off-screen owners land instantly** (`animate == false`): no VBlank reaches a component that is
+   not showing, so a headless drag needs no message pump.
+
+Owners: `BottomDockComponent` (`beginTabDrag`/`dragTab`/`commitTabDrag`, [tab strip](../mixer/panel.md#the-tab-strip))
+and `MixerPanelComponent` (`MixerPanelColumnDrag.cpp`, [reordering columns](../mixer/panel.md#reordering-columns)).
+
+## Motion rules
+
+Every animation in the app follows these; a new one that cannot is a design question, not a
+shortcut.
+
+- **Durations.** Hover state 80–120 ms. A small reveal or tooltip 160 ms in, 110 ms out. Reorder
+  make-room 160 ms, settle 140 ms. Panel slides are unchanged (190 ms, `easeInOutCubic`).
+- **Easing.** `easeOutCubic` for anything arriving or moving into place; `easeInCubic` for anything
+  leaving or being sent back. `easeInOutCubic` stays for the panel slides, where a thing both starts
+  and stops at rest.
+- **Origin.** A thing appears out of the element that caused it and returns into it; the direction
+  follows where it sits (a popover under a button grows down from it, a bottom panel rises from its
+  edge).
+- **Reorder.** The dragged item stays under the grab point, its neighbours make room, and nothing
+  teleports. One shared helper (`ReorderDragAnimator`) serves every reorderable list — never a
+  second implementation per list. See [Reorder drag](#reorder-drag).
+- **Interruption.** A retargeted animation starts from the CURRENT value, never from its start: a
+  re-toggle, a second insertion change or a drop mid-glide continues from where the thing is.
+- **Time-bounded.** Nothing repaints once it has settled: frames run for a finite duration and
+  stop (see [the time-bounded animation rule](#the-time-bounded-animation-rule)).
+- **Drag-copy (Option-drag, used by the piano roll).** The original stays put at full opacity. A
+  copy ghost — raised surface, 1 px `accent` border, soft shadow, about 0.85 opacity — follows the
+  pointer at the grab offset, with the copy cursor. On drop it settles 140 ms `easeOutCubic` and
+  becomes the real item. Toggling Option mid-drag switches between copy and move without restarting
+  the drag.
+- **Cancel (Esc, or a release over no valid target).** The dragged item or ghost returns into its
+  origin in 140 ms `easeInCubic` (a ghost also fades), its neighbours glide back in 160 ms, and
+  nothing is committed — no undo step.
+
 ## formatShortcutHint
 
 ```cpp
@@ -158,6 +232,7 @@ strings.
 | **Timeline panel show/hide** | `PanelSlide` fraction tween (190 ms, `easeInOutCubic`), shared driver — same slide, bottom axis | `MainComponent` |
 | **Mixer Own-panel show/hide** | `PanelSlide` fraction tween (190 ms, `easeInOutCubic`) on the controller's OWN driver — not the shared one | `MixerPlacementController` |
 | **Empty-canvas first-run hint** | Static drawn text, no animation — drawn only when `isCanvasEmpty(nodeCount)` returns `true` | `GraphEditor` |
+| **Dock tab and mixer column reorder** | Lifted item follows the pointer; neighbours glide aside (160 ms, `easeOutCubic`); settle on drop (140 ms); Esc returns it (140 ms, `easeInCubic`) — frames only while a tween runs; see [Reorder drag](#reorder-drag) | `BottomDockComponent`, `MixerPanelComponent` via `ReorderDragAnimator` |
 | **Library rows** | Hover highlight; grab / dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()`; search-query substring highlight on matching labels | `ModuleLibraryComponent` |
 | **Preset-load feedback** | Status bar text updated during load; no spinner | `MainComponent` into `StatusBarComponent` |
 | **AI request Cancel and spinner** | Cancel button visible while a request is in flight; pulsing "thinking" spinner, time-bounded — stops on completion or cancel, confined to its region | `AIChatComponent` |

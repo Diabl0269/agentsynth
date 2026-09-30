@@ -66,6 +66,7 @@ public:
     std::function<void()> onLiveStateChanged;
 
     MixerInsertList& getInsertListForTest() noexcept { return insertList_; }
+    MixerColumnHeader& getHeaderForTest() noexcept { return header_; }
     MixerSectionViewport& getInsertViewportForTest() noexcept { return insertViewport_; }
 
     /** The panel's shared section layout; must outlive this column. Unset, the column uses its own. */

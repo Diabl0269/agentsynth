@@ -9,6 +9,7 @@
 #include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerSends/MixerSends.h"
+#include "MixerPanelInternal.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerColumnComponent.h"
@@ -17,8 +18,6 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kColumnWidth = 140;
-constexpr int kColumnGap = 4;
 // Horizontal step between the four cards a new bus channel places on the canvas.
 constexpr int kBusCardGap = 220;
 
@@ -34,6 +33,7 @@ MixerPanelComponent::MixerPanelComponent() {
     setWantsKeyboardFocus(true);
     addAndMakeVisible(viewport_);
     viewport_.setViewedComponent(&content_, false);
+    content_.onPaint = [this](juce::Graphics& g) { paintColumnDragChrome(g); };
     viewport_.setScrollBarsShown(false, true);
     viewport_.setWantsKeyboardFocus(false);
     // Always shown, even with no columns: "+ Bus" is how an empty mixer gets its first bus.
@@ -114,6 +114,7 @@ void MixerPanelComponent::copyWiringFrom(const MixerPanelComponent& other) {
     onMakeChannelForNode = other.onMakeChannelForNode;
     onGraphMutated = other.onGraphMutated;
     onArmTrack = other.onArmTrack;
+    onMoveTrack = other.onMoveTrack;
     onPublishMidiRemoteAssignments = other.onPublishMidiRemoteAssignments;
     onSoloMidiLearnRequested = other.onSoloMidiLearnRequested;
     onSoloMidiForgetRequested = other.onSoloMidiForgetRequested;
@@ -182,6 +183,10 @@ void MixerPanelComponent::rebuild() {
     // Every column below is built and bound fresh, so whatever unbindAllColumns() detached is
     // live again once this returns.
     columnsUnbound_ = false;
+    // A drag still held would be left waiting on a header that is about to be destroyed; a drop
+    // settling in (or being committed by endColumnDrag) survives, its columns are re-found by uuid.
+    if (!committingColumnDrag_ && (columnReorder_.isDragging() || columnReorder_.isPressed()))
+        discardColumnDrag();
 
     // Capture the currently focused column's IDENTITY before the columns it points at are
     // destroyed below -- resolveFocusAfterRebuild() re-finds it afterwards by identity (uuid, or
@@ -247,6 +252,8 @@ void MixerPanelComponent::rebuild() {
             return onQuerySoloMidiMapping ? onQuerySoloMidiMapping(nodeId) : juce::String();
         };
         content_.addAndMakeVisible(*widget);
+        if (!column.feedingTracks.empty())
+            wireColumnReorder(*widget, column.uuid);
 
         ColumnEntry entry;
         entry.kind = ColumnEntry::Kind::Strip;
@@ -535,23 +542,10 @@ void MixerPanelComponent::resized() {
     viewport_.setScrollBarsShown(scrollsVertically, true);
     const int columnHeight =
         scrollsVertically ? sectionLayout_.requiredColumnHeight() : juce::jmax(0, area.getHeight());
-    const int contentWidth = juce::jmax(viewport_.getWidth(), totalColumns * (kColumnWidth + kColumnGap));
+    const int contentWidth = juce::jmax(viewport_.getWidth(), totalColumns * (kMixerColumnWidth + kMixerColumnGap));
     content_.setSize(contentWidth, columnHeight);
 
-    // setBounds() alone skips resized() when a column's size did not change, but a section-layout
-    // change moves everything inside it -- so each column is re-laid out explicitly.
-    int x = 0;
-    auto place = [&x, columnHeight](juce::Component& column) {
-        column.setBounds(x, 0, kColumnWidth, columnHeight);
-        column.resized();
-        x += kColumnWidth + kColumnGap;
-    };
-    for (auto& column : stripColumns_)
-        place(*column);
-    if (directColumn_ != nullptr && directColumn_->isVisible())
-        place(*directColumn_);
-    if (masterColumn_ != nullptr && masterColumn_->isVisible())
-        place(*masterColumn_);
+    placeColumns(columnHeight, /*relayout=*/true);
 
     toolbar_.refresh();
 }

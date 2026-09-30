@@ -12,17 +12,6 @@
 #include <gtest/gtest.h>
 
 // ============================================================================
-// easeInCubic
-// ============================================================================
-
-TEST(UIAnimationEasing, EaseInCubicIsSlowAtFirstAndPinnedAtBothEnds) {
-    EXPECT_FLOAT_EQ(synth::ui::easeInCubic(0.0f), 0.0f);
-    EXPECT_FLOAT_EQ(synth::ui::easeInCubic(1.0f), 1.0f);
-    EXPECT_LT(synth::ui::easeInCubic(0.5f), 0.5f) << "back-loaded, the mirror of easeOutCubic";
-    EXPECT_FLOAT_EQ(synth::ui::easeInCubic(0.5f), 0.125f);
-}
-
-// ============================================================================
 // easeOutCubic
 // ============================================================================
 
@@ -52,6 +41,14 @@ TEST(EaseOutCubic, Monotonic) {
 // ============================================================================
 // easeInOutCubic
 // ============================================================================
+
+TEST(EaseInCubic, EndpointsAndSlowStart) {
+    EXPECT_FLOAT_EQ(synth::ui::easeInCubic(0.0f), 0.0f);
+    EXPECT_FLOAT_EQ(synth::ui::easeInCubic(1.0f), 1.0f);
+    EXPECT_NEAR(synth::ui::easeInCubic(0.5f), 0.125f, 1e-6f) << "leaves slowly";
+    EXPECT_NEAR(synth::ui::easeInCubic(0.5f), 1.0f - synth::ui::easeOutCubic(0.5f), 1e-6f)
+        << "the mirror image of ease-out";
+}
 
 TEST(EaseInOutCubic, Endpoints) {
     EXPECT_FLOAT_EQ(synth::ui::easeInOutCubic(0.0f), 0.0f);

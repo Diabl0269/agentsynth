@@ -62,6 +62,24 @@ the strip's `gain` parameter via `juce::SliderParameterAttachment` and brackets 
 switches to it; a second press is a no-op — see [**The tab strip**](#the-tab-strip) below for the
 dock-wide toggle/show split, the tab order and detach behaviour.
 
+### Reordering columns
+
+A **track strip** column (a strip some track feeds) is dragged by its header, the same shared
+[reorder drag](../layout/animation.md#reorder-drag) the dock tabs use: the column follows the pointer
+at the spot it was grabbed, lifted (raised wash, 1 px `accent` border, soft shadow), the other track
+columns glide aside, and the columns viewport autoscrolls when the pointer nears its left or right
+edge (`MixerPanelColumnDrag.cpp`). Under 4 px of travel the press is an ordinary header click
+(select on canvas, double-click the name to rename); a drag's release is never also a click.
+
+The mixer lists track strips in timeline track order, so a drop **reorders the timeline's tracks
+too**: `MixerPanelComponent::onMoveTrack` moves the dragged strip's *first* feeding track to the
+timeline index of the first track of the strip it takes the place of. `MainComponent` wires it to
+`performTrackEdit(moveTrack)` (one undo step; undo puts both the timeline and the mixer back) and
+rebuilds the mixer. Esc cancels with nothing committed. Buses and orphan strips are **not
+draggable**: their order is by `NodeID` uid, which is reassigned on every load, and the project has
+no persisted mixer-order list to hold a stable one. Direct and Master never move, and a dragged
+column is held inside the track strips.
+
 ### Renaming a channel
 
 Double-click a column's header name to rename it in place — `MixerColumnHeader`'s `nameLabel_` reuses
@@ -103,16 +121,20 @@ default `"timeline,mixer,midiRemote"`) alongside `bottomDockActiveTab`.
   active. `Cmd+1`/`Cmd+2`/`Cmd+3` (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`,
   `MainComponent::showBottomDockTab`) each only show their own tab — opening the dock first if it
   was hidden, otherwise just switching — and never close it.
-- **Drag to reorder.** Dragging a tab button past another swaps their two slots in `tabOrder_` live
-  (`BottomDockComponent::dragTab`), and the swap is persisted, and the three tabs' own Cmd+digit key
-  bindings re-keyed to match (`permuteShortcutKeysForNewOrder`), only on mouse-up after a real drag —
-  a plain click still fires that tab's `onClick` as usual. Once a drag clears JUCE's drag threshold the
-  dragged tab is drawn "lifted" (`BottomDockComponent::paintOverChildren`): it follows the pointer
-  horizontally 4 px above the strip row (a `surfaceHi` fill, 1 px `accent` outline, radius 4, soft
-  shadow, 95% opacity), while the slot it occupies shows a 1 px dashed `border` outline until the live
-  swap moves it; a plain click never shows either. The re-key only touches the three
-  bindings when they still form the `{Cmd+1, Cmd+2, Cmd+3}` set (see
-  [`docs/control/shortcuts.md`](../control/shortcuts.md)).
+- **Drag to reorder.** Pressing a tab button captures, once and in dock coordinates, the offered
+  tabs' extents and the grab offset inside the pressed tab (`BottomDockComponent::beginTabDrag`);
+  the gesture is the shared [`ReorderDragAnimator`](../layout/animation.md#reorder-drag) behaviour.
+  Past a 4 px threshold the dragged tab is drawn "lifted" (`BottomDockComponent::paintOverChildren`):
+  it follows the pointer at exactly `pointer.x - grab offset`, 4 px above the strip row (a
+  `surfaceHi` fill, 1 px `accent` outline, radius 4, soft shadow, 95% opacity; the rise and
+  shadow ease in with the lift), while the other tabs glide aside (160 ms) to open a gap and the gap
+  shows a 1 px dashed `border` outline. **`tabOrder_` does not change while dragging.** On release
+  the order is applied in one go — persisted, and the three tabs' own Cmd+digit key bindings
+  re-keyed to match (`permuteShortcutKeysForNewOrder`) — and the lifted tab settles into its slot
+  (140 ms). Esc returns the tab to where it was picked up and commits nothing. A plain click (under
+  the threshold) still fires that tab's `onClick` as usual; a drag or a cancelled drag does not.
+  The re-key only touches the three bindings when they still form the `{Cmd+1, Cmd+2, Cmd+3}` set
+  (see [`docs/control/shortcuts.md`](../control/shortcuts.md)).
 - **A detached tab leaves the strip.** `BottomDockComponent::isTabOfferedInStrip` excludes a tab
   that's detached to its own window (or, Mixer only, disabled by the Own-panel/Window placement
   preference) from both the layout and the Cmd-digit count; `applyTabVisibility` picks a fallback —
