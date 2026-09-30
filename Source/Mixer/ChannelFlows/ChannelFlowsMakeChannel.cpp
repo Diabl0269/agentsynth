@@ -530,8 +530,10 @@ MakeChannelPlan planMakeChannel(juce::AudioProcessorGraph& graph, juce::AudioPro
     for (auto& bus : plan.buses)
         absorbSideInputs(graph, connections, bus.members, reachedByTracks, plan.members);
 
-    // Flat model (synth::Macro's class comment): a node can't be in two macros, so a node that would
-    // move but is already grouped refuses the whole action rather than silently re-parenting it.
+    // A node has one direct owner (synth::Macro's class comment), so a node that would move but is
+    // already grouped refuses the whole action rather than silently re-parenting it. Nesting the channel
+    // inside that macro instead is not offered: the strip feeds Master directly, and that edge must
+    // never become a port on the outer macro.
     auto inMacro = [&](NodeID id) {
         auto* node = graph.getNodeForId(id);
         const juce::String uuid = node != nullptr ? node->properties["uuid"].toString() : juce::String();

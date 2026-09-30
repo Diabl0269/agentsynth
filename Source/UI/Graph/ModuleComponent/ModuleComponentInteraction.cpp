@@ -370,8 +370,8 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
     if (selectionCount > 1) {
         // Deliberately calls requestGroupSelectionIntoMacro() directly, NOT the Cmd+G dispatch
         // (GraphEditor::groupOrToggleSelectionMacros) — a menu item names one verb
-        // ("Create Macro") and must keep doing exactly what it says, even for a selection
-        // that already touches a macro (where it still refuses, same as always).
+        // ("Create Macro") and must keep doing exactly what it says, even for a selection of
+        // whole macros that Cmd+G would only toggle (grouping them nests them).
         // requestGroupSelectionIntoMacro() gates the auto-port-preference modal
         // (docs/macros/auto-ports.md#auto-creating-ports-when-grouping) the same way Cmd+G does.
         m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules",

@@ -403,6 +403,8 @@ add_executable(Tests
     Macros/MacroContainer/MacroNestedGeometryTests.cpp
     Macros/MacroContainer/MacroNestedCableTests.cpp
     Macros/MacroContainer/MacroNestedMembershipTests.cpp
+    Macros/MacroContainer/MacroNestedGroupingTests.cpp
+    Macros/MacroContainer/MacroNestedGroupingCommandTests.cpp
     Macros/MacroSetTests.cpp
     Macros/MacroSetHierarchyTests.cpp
     Macros/MacroPortModuleTests.cpp

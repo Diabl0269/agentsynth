@@ -206,6 +206,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroGroupController/MacroGroupControllerPorts.cpp
     Source/UI/Graph/MacroGroupController/MacroNesting.h
     Source/UI/Graph/MacroGroupController/MacroNesting.cpp
+    Source/UI/Graph/MacroGroupController/MacroSelectionUnits.h
+    Source/UI/Graph/MacroGroupController/MacroSelectionUnits.cpp
     Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
     Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp

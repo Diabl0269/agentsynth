@@ -131,7 +131,7 @@ public:
     // ---- Grouping / membership / collapse (docs/macros/macros.md) -------------------------------------
     //
     // A Macro is a named, coloured, collapsible container: membership plus presentation, no
-    // graph change. Flat model — a node already in a macro cannot be grouped into a second one.
+    // graph change. Groups units that share one container, nesting the new macro under it.
     // Membership is by node UUID, so it survives save/load and undo/redo exactly like everything
     // else in synth::MacroSet. Collapsed-macro selection/drag/delete are deliberately NOT a
     // parallel mechanism: selecting a macro selects its members in the ordinary SelectionModel, so

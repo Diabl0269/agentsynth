@@ -1,7 +1,7 @@
 // MacroSetHierarchyTests.cpp
 // Pure struct-level tests for nested macros' data model: Macro::parentId, the MacroSet hierarchy
 // queries, parent-aware removal/reconciliation, and the optional "parent" key in toVar/fromVar.
-// No UI: nesting is not reachable from the canvas yet.
+// No UI here; the canvas side is in Tests/Macros/MacroContainer/MacroNested*Tests.cpp.
 
 #include "MacroSet.h"
 #include <gtest/gtest.h>

@@ -60,8 +60,8 @@ struct MacroPort {
  *  lifetime of one loaded graph and is meaningless once serialised (Source/CLAUDE.md's
  *  uuid-mirroring invariant).
  *
- *  Nesting is modelled by `parentId` (empty = top level); UI support lands in later steps, so
- *  GraphEditor::groupSelectionIntoMacro still refuses to group an already-grouped node. `members`
+ *  Nesting is modelled by `parentId` (empty = top level); GraphEditor::groupSelectionIntoMacro
+ *  nests when the selection's units share one container (docs/macros/menu-and-membership.md). `members`
  *  stays the DIRECT members only: a uuid appears in exactly one macro's `members` (its innermost
  *  owner), and a child macro's members belong to its ancestors only transitively — see
  *  MacroSet::descendantMembers. A macro is valid if it has direct members OR children. */

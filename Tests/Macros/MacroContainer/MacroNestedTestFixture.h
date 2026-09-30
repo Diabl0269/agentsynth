@@ -1,8 +1,9 @@
 #pragma once
 
 // Shared fixture for the nested-macro canvas tests (MacroNestedGeometryTests.cpp,
-// MacroNestedCableTests.cpp). No UI creates a nested macro yet, so the fixture groups two flat macros
-// and links them with MacroSet::setParent directly. Header-only; not registered in Tests/CMakeLists.txt.
+// MacroNestedCableTests.cpp, MacroNestedMembershipTests.cpp). The nesting is made the way a user makes
+// it: group the child, then group the whole child plus the parent's own modules (Create Macro's path).
+// Header-only; not registered in Tests/CMakeLists.txt.
 
 #include "MacroContainerTestHelpers.h"
 
@@ -36,9 +37,9 @@ struct NestedMacroFixture {
 
         editor.setSelectedNodes({c1, c2});
         childId = ctl().groupSelectionIntoMacro(autoCreateChildPorts);
-        editor.setSelectedNodes({p1, p2});
+        editor.setSelectedNodes({c1, c2, p1, p2}); // the whole child plus two loose modules
         parentId = ctl().groupSelectionIntoMacro();
-        linked = editor.getMacros().setParent(childId, parentId);
+        linked = parentId.isNotEmpty() && editor.getMacros().parentOf(childId) == parentId;
         editor.clearSelection();
         ctl().setMacroCollapsed(childId, false);
         ctl().setMacroCollapsed(parentId, false);

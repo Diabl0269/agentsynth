@@ -44,8 +44,7 @@ collapsed macro's boundary ends up re-anchored to the macro card. The pass lives
 
 ### Nested macros
 
-With nested macros (see [macro-cards](macro-cards.md#nested-macros); no UI creates them yet, that
-lands in a later step), every hidden node maps to its **outermost collapsed ancestor**: the collapsed
+With nested macros (see [macro-cards](macro-cards.md#nested-macros)), every hidden node maps to its **outermost collapsed ancestor**: the collapsed
 macro with no collapsed ancestor of its own, whose card is the only one on screen for it. The usual
 rules then apply to that card:
 

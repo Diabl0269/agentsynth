@@ -428,8 +428,8 @@ resulting graph and macro state is indistinguishable from a port deleted that wa
 
 ## Nested macros
 
-A macro can sit inside another (`Macro::parentId`; nothing in the UI creates one yet, so tests build them with
-`MacroSet::setParent`). A child's port nodes are direct members of the child and a parent's ports are direct members of
+A macro can sit inside another (`Macro::parentId`; made by Create Macro or Cmd+G on whole macros or on modules inside
+an open macro, see [menu-and-membership](menu-and-membership.md)). A child's port nodes are direct members of the child and a parent's ports are direct members of
 the parent, so a cable that reaches a member of the child from outside the parent crosses **two** boundaries and is
 rebuilt as a chain: external -> parent inlet -> child inlet -> member (an outlet chain mirrors it).
 

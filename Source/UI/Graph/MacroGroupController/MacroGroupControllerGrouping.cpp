@@ -8,6 +8,7 @@
 
 #include "MacroGroupController.h"
 #include "MacroNesting.h"
+#include "MacroSelectionUnits.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
@@ -15,63 +16,115 @@
 
 using namespace detail;
 
-juce::String MacroGroupController::groupSelectionIntoMacro(bool autoCreatePorts) {
-    auto ids = host_.getSelection().getSelected();
-    if (ids.size() < 2) {
-        host_.reportStatusMessage("Select at least two modules to group into a macro.");
-        return {};
-    }
+namespace {
+using macro_units::Unit;
 
-    std::vector<juce::String> memberUuids;
-    juce::Rectangle<int> groupBounds;
-    for (auto id : ids) {
-        // A module freshly dropped onto the canvas has no "uuid" property yet — it's only ever
-        // lazily assigned on first save (synth::AIStateMapper::graphToJSON). Assign it here too,
-        // the same way, so grouping newly-placed modules doesn't drop them from the selection.
-        auto* node = host_.graph().getNodeForId(id);
-        const juce::String uuid = node != nullptr ? synth::AIStateMapper::ensureNodeUuid(node) : juce::String();
-        if (uuid.isEmpty())
-            continue; // no persistent identity to group by — shouldn't happen for a real module
+// Status text for a selection that can't be grouped, or empty when it can: at least two units that
+// share one container (docs/macros/menu-and-membership.md#grouping-rules).
+juce::String groupRefusal(const std::vector<Unit>& units) {
+    if (units.size() < 2)
+        return "Select at least two modules or macros to group into a macro.";
+    if (!macro_units::commonContainer(units))
+        return "Can't group: the selection spans different macros. Select modules inside one macro, or whole "
+               "macros side by side.";
+    return {};
+}
 
-        if (host_.getMacros().findByMember(uuid) != nullptr) {
-            // Flat model, deliberately refused rather than silently merging/re-parenting — see
-            // synth::Macro's class comment.
-            host_.reportStatusMessage("Can't group: a selected module is already in a macro. Ungroup it first.");
-            return {};
+// The loose units' own uuids, in selection order: a new macro's direct members.
+std::vector<juce::String> looseUuids(const std::vector<Unit>& units) {
+    std::vector<juce::String> out;
+    for (const auto& unit : units)
+        if (!unit.isMacro())
+            out.push_back(unit.uuid);
+    return out;
+}
+
+// Moves `units` under `newId`: each loose node leaves its container's direct members (a uuid is a
+// direct member of exactly one macro, and MacroSet::fromVar rejects a save that breaks that), each
+// whole macro is re-parented. Runs after MacroSet::add(newId), so the container keeps a child and
+// never reads as empty.
+void nestUnitsUnder(synth::MacroSet& macros, const juce::String& newId, const std::vector<Unit>& units) {
+    for (const auto& unit : units) {
+        if (unit.isMacro()) {
+            macros.setParent(unit.macroId, newId);
+            continue;
         }
-        memberUuids.push_back(uuid);
+        if (auto* owner = macros.find(unit.container); owner != nullptr && owner->id != newId)
+            owner->members.erase(std::remove(owner->members.begin(), owner->members.end(), unit.uuid),
+                                 owner->members.end());
+    }
+}
 
-        for (auto* comp : host_.modules()) {
-            if (comp != nullptr && comp->getNodeId() == id) {
-                groupBounds = groupBounds.isEmpty() ? comp->getBounds() : groupBounds.getUnion(comp->getBounds());
+// The canvas footprint of `units`: each loose module's card, each whole macro's hull (expanded) or
+// card (collapsed) — where the new macro's own collapsed card is seeded.
+juce::Rectangle<int> unitsFootprint(const MacroGroupController& controller, GraphCanvasHost& host,
+                                    const std::vector<Unit>& units) {
+    juce::Rectangle<int> bounds;
+    auto add = [&bounds](juce::Rectangle<int> r) {
+        if (!r.isEmpty())
+            bounds = bounds.isEmpty() ? r : bounds.getUnion(r);
+    };
+    for (const auto& unit : units) {
+        if (unit.isMacro()) {
+            if (const auto* m = host.getMacros().find(unit.macroId))
+                add(m->collapsed ? controller.macroCableAnchorBounds(*m) : controller.macroHullBounds(unit.macroId));
+            continue;
+        }
+        for (auto* comp : host.modules())
+            if (comp != nullptr && comp->getNodeId() == unit.nodeId) {
+                add(comp->getBounds());
                 break;
             }
-        }
     }
+    return bounds;
+}
+} // namespace
 
-    if (memberUuids.size() < 2) {
-        host_.reportStatusMessage("Select at least two modules to group into a macro.");
+// Groups the selection's units into a new collapsed macro whose parent is the units' shared
+// container: loose modules become its direct members, whole macros its children. So "nest whole
+// macros" and "group modules inside an open macro" are the same operation.
+juce::String MacroGroupController::groupSelectionIntoMacro(bool autoCreatePorts) {
+    const auto ids = host_.getSelection().getSelected();
+    // A module freshly dropped onto the canvas has no "uuid" property yet — it's only ever lazily
+    // assigned on first save (synth::AIStateMapper::graphToJSON). Assign it here too, the same way, so
+    // grouping newly-placed modules doesn't drop them from the selection.
+    for (auto id : ids)
+        if (auto* node = host_.graph().getNodeForId(id))
+            synth::AIStateMapper::ensureNodeUuid(node);
+
+    auto units = macro_units::unitsFor(*this, host_.getMacros(), ids);
+    // No persistent identity to group by — shouldn't happen for a real module.
+    units.erase(
+        std::remove_if(units.begin(), units.end(), [](const Unit& u) { return !u.isMacro() && u.uuid.isEmpty(); }),
+        units.end());
+    if (const auto refusal = groupRefusal(units); refusal.isNotEmpty()) {
+        host_.reportStatusMessage(refusal);
         return {};
     }
 
     // The crossing plan is read off the LIVE graph, before the macro exists — resolveMemberNodeId (which
     // buildMacroPortCrossingPlan uses internally) only knows about macros already in the macro set, so this has to
-    // work off the uuid list directly (see docs/macros/auto-ports.md#the-auto-port-preference).
+    // work off the uuid list directly (see docs/macros/auto-ports.md#the-auto-port-preference). The inside set
+    // holds every nested module and port of a whole child macro, so a cable leaving a child's outlet port gets a
+    // port on the new macro too.
     std::vector<MacroPortCrossingGroup> portPlan;
     if (autoCreatePorts)
-        portPlan = buildMacroPortCrossingPlan(memberUuids);
+        portPlan = buildMacroPortCrossingPlan(macro_units::insideUuids(host_.getMacros(), units));
 
     synth::Macro macro;
     macro.name = "Macro";
-    macro.members = memberUuids;
+    macro.members = looseUuids(units);
+    macro.parentId = *macro_units::commonContainer(units);
     macro.collapsed = true;
-    const auto origin = groupBounds.isEmpty() ? juce::Point<int>() : groupBounds.getTopLeft();
+    const auto footprint = unitsFootprint(*this, host_, units);
+    const auto origin = footprint.isEmpty() ? juce::Point<int>() : footprint.getTopLeft();
     macro.bounds = juce::Rectangle<int>(origin.x, origin.y, synth::LayoutUtil::kSingleWidth, kMacroCardHeight);
 
     auto& graph = host_.graph();
     juce::String newId;
-    auto doGroup = [this, macro, portPlan, &newId] {
+    auto doGroup = [this, macro, units, portPlan, &newId] {
         newId = host_.getMacros().add(macro);
+        nestUnitsUnder(host_.getMacros(), newId, units);
         // Splice BEFORE updateComponents(): the spliced port nodes must exist, and be macro
         // members, before the card/hull layout that updateComponents() triggers runs against
         // them — never group-then-add as a second pass.
@@ -92,56 +145,98 @@ juce::String MacroGroupController::groupSelectionIntoMacro(bool autoCreatePorts)
     return newId;
 }
 
+// Track creation's grouping: `memberUuids` (fresh nodes) must all sit directly in one container
+// (usually top level), and the new macro nests there; members spread across containers abort the call.
 juce::String MacroGroupController::addMacroForMembers(const std::vector<juce::String>& memberUuids,
                                                       const juce::String& name, juce::Point<int> origin) {
     if (memberUuids.empty())
         return {};
 
-    // Same flat-model refusal groupSelectionIntoMacro() applies: a member already claimed by another
-    // macro aborts the whole call rather than silently re-parenting it.
+    auto containerOf = [this](const juce::String& uuid) {
+        const auto* owner = host_.getMacros().findByMember(uuid);
+        return owner != nullptr ? owner->id : juce::String();
+    };
+    const juce::String container = containerOf(memberUuids.front());
     for (const auto& uuid : memberUuids)
-        if (host_.getMacros().findByMember(uuid) != nullptr)
+        if (containerOf(uuid) != container)
             return {};
 
     synth::Macro macro;
     macro.name = name;
     macro.members = memberUuids;
+    macro.parentId = container;
     macro.collapsed = true;
     macro.bounds = juce::Rectangle<int>(origin.x, origin.y, synth::LayoutUtil::kSingleWidth, kMacroCardHeight);
 
+    if (auto* owner = host_.getMacros().find(container))
+        for (const auto& uuid : memberUuids)
+            owner->members.erase(std::remove(owner->members.begin(), owner->members.end(), uuid), owner->members.end());
     return host_.getMacros().add(macro);
 }
 
+namespace {
+// What an add into `macroId` moves, resolved as grouping units (MacroSelectionUnits.h): loose nodes
+// that sit in no macro or directly beside the macro (in its own container), and whole macros beside
+// it, which become its children. Anything already inside `macroId` is skipped. `refused` is set when
+// a unit sits at another level, and the whole add is then abandoned (all-or-nothing, like grouping).
+struct AddPlan {
+    std::vector<Unit> units;
+    bool refused = false;
+};
+
+// An ownerless node is accepted at any depth: the Cmd-drag finalize and a library drop hand this
+// method a node they have just taken out of (or never put in) any macro.
+AddPlan planAdd(const MacroGroupController& controller, const synth::MacroSet& macros, const synth::Macro& macro,
+                const std::vector<juce::String>& memberUuids) {
+    const auto inside = macros.descendantMembers(macro.id);
+    std::vector<macro_units::SelectedNode> candidates;
+    for (const auto& uuid : memberUuids)
+        if (inside.count(uuid) == 0)
+            candidates.push_back({controller.resolveMemberNodeId(uuid), uuid});
+
+    AddPlan plan;
+    plan.units = macro_units::resolveUnits(macros, candidates);
+    for (const auto& unit : plan.units) {
+        const bool beside = unit.container == macro.parentId;
+        const bool ownerless = !unit.isMacro() && unit.container.isEmpty();
+        if (!beside && !ownerless)
+            plan.refused = true;
+    }
+    return plan;
+}
+} // namespace
+
+// Adds the selection to an existing macro under the same unit rule grouping uses: modules beside the
+// macro join it directly, whole macros beside it nest under it.
 void MacroGroupController::addSelectionToMacro(const juce::String& macroId,
                                                const std::vector<juce::String>& memberUuids, bool recordUndo) {
     const auto* macro = host_.getMacros().find(macroId);
     if (macro == nullptr || memberUuids.empty())
         return;
 
-    // Same flat-model refusal groupSelectionIntoMacro() applies: abort the WHOLE add rather than
-    // adding the rest and silently skipping the uuid that's already spoken for.
-    for (const auto& uuid : memberUuids) {
-        if (!macro->hasMember(uuid) && host_.getMacros().findByMember(uuid) != nullptr) {
-            host_.reportStatusMessage("Can't add: a selected module is already in a macro. Ungroup it first.");
-            return;
-        }
+    // Abort the WHOLE add rather than adding the rest and silently skipping a module at another level.
+    const auto plan = planAdd(*this, host_.getMacros(), *macro, memberUuids);
+    if (plan.refused) {
+        host_.reportStatusMessage("Can't add: a selected module is inside a different macro. Ungroup it first.");
+        return;
     }
+    if (plan.units.empty())
+        return;
 
-    // uuids genuinely new to THIS macro — the ones the port-crossing plan below cares about;
-    // a uuid already a member of macroId is silently skipped by addMember() below same as always.
-    std::vector<juce::String> toAdd;
-    for (const auto& uuid : memberUuids)
-        if (!macro->hasMember(uuid))
-            toAdd.push_back(uuid);
+    // Every uuid genuinely new to THIS macro's subtree — the ones the port-crossing plan below cares
+    // about, a nested child's modules and ports included.
+    const auto toAdd = macro_units::insideUuids(host_.getMacros(), plan.units);
 
     // Computed off the PRE-add graph/macro state — pure reads, no mutation yet.
     const auto addPlan = buildMacroPortCrossingPlanForNewMembers(macroId, toAdd);
     const auto portsToSpliceOut = macroPortsThatBecomeInteriorOnAdd(macroId, toAdd);
 
     auto& graph = host_.graph();
-    auto doAdd = [this, macroId, memberUuids, addPlan, portsToSpliceOut] {
-        for (const auto& uuid : memberUuids)
-            host_.getMacros().addMember(macroId, uuid);
+    auto doAdd = [this, macroId, units = plan.units, addPlan, portsToSpliceOut] {
+        nestUnitsUnder(host_.getMacros(), macroId, units);
+        for (const auto& unit : units)
+            if (!unit.isMacro())
+                host_.getMacros().addMember(macroId, unit.uuid);
         if (!addPlan.empty())
             spliceMacroPorts(macroId, addPlan);
         // Splice-out AFTER splice-in — see this method's header comment for the ordering
@@ -251,19 +346,16 @@ void MacroGroupController::removeNodeFromMacro(juce::AudioProcessorGraph::NodeID
     removeSelectionFromMacro(macro->id, {uuid});
 }
 
+// True when grouping the selection would create a macro with a cable crossing its boundary — what
+// gates the auto-port modal. False for a selection grouping would refuse, so the refusal's status
+// message shows instead of a modal. NodeID-based: a freshly-dropped, never-saved module has no "uuid"
+// property yet, so gating on resolvable uuids would silently miss the crossing cable on the single
+// most common real path. buildMacroPortCrossingPlan()'s NodeID overload needs no uuid at all.
 bool MacroGroupController::selectionHasCrossingMacroCable() const {
-    // NodeID-based: a freshly-dropped, never-saved module has no "uuid" property yet, so gating
-    // on resolvable uuids would silently miss the crossing cable on the single most common real
-    // path. buildMacroPortCrossingPlan()'s NodeID overload needs no uuid at all.
-    const auto ids = host_.getSelection().getSelected();
-    if (ids.size() < 2)
+    const auto units = macro_units::unitsFor(*this, host_.getMacros(), host_.getSelection().getSelected());
+    if (units.size() < 2 || !macro_units::commonContainer(units))
         return false;
-    for (auto id : ids) {
-        const juce::String uuid = nodeUuidFor(id);
-        if (uuid.isNotEmpty() && host_.getMacros().findByMember(uuid) != nullptr)
-            return false;
-    }
-    return !buildMacroPortCrossingPlan(ids).empty();
+    return !buildMacroPortCrossingPlan(macro_units::insideNodeIdsFor(*this, host_.getMacros(), units)).empty();
 }
 
 namespace {
@@ -397,11 +489,26 @@ void MacroGroupController::toggleSelectionMacrosCollapsed() {
     host_.requestRepaint();
 }
 
+// Cmd+G's single entry point (docs/macros/menu-and-membership.md#cmdg). In order:
+//  1. only whole macros selected -> toggle them collapsed/expanded, as always;
+//  2. two or more units under one container -> group them (nesting when the container is a macro, or
+//     when a unit is itself a macro);
+//  3. otherwise, a selection touching no macro goes to the group path, which refuses with a status
+//     message; one touching a macro toggles the touched macros and leaves loose modules alone.
 void MacroGroupController::groupOrToggleSelectionMacros() {
-    // Cmd+G's single entry point. Mixed selection (some selected nodes already in a
-    // macro, some loose): toggle wins outright — the touched macros are toggled and the loose
-    // modules are silently left out of any grouping.
-    auto ids = host_.getSelection().getSelected();
+    const auto ids = host_.getSelection().getSelected();
+    const auto units = macro_units::unitsFor(*this, host_.getMacros(), ids);
+    if (macro_units::allWholeMacros(units)) {
+        toggleSelectionMacrosCollapsed();
+        return;
+    }
+    if (units.size() >= 2 && macro_units::commonContainer(units)) {
+        // requestGroupSelectionIntoMacro() (GraphEditor, stays behind) additionally gates the
+        // auto-port-preference modal.
+        host_.requestGroupSelectionIntoMacro();
+        return;
+    }
+
     std::set<juce::String> touchedMacroIds;
     int looseCount = 0;
     for (auto id : ids) {
@@ -414,9 +521,6 @@ void MacroGroupController::groupOrToggleSelectionMacros() {
     }
 
     if (touchedMacroIds.empty()) {
-        // Nothing selected touches a macro — Cmd+G means exactly what it always meant: group.
-        // requestGroupSelectionIntoMacro() (GraphEditor, stays behind) carries its own refusal/
-        // status behaviour and additionally gates the auto-port-preference modal.
         host_.requestGroupSelectionIntoMacro();
         return;
     }
