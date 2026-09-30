@@ -54,7 +54,8 @@ Removing a macro re-parents its children to its own parent. `MacroSet` carries t
 cycles and unknown parents. The optional `"parent"` key is written only when set, so flat saves are
 byte-identical and older files load as top level; `fromVar` rejects a dangling or cyclic parent.
 The canvas already draws, hides, hit-tests and re-anchors cables around nested macros
-([macro-cards](../layout/macro-cards.md#nested-macros)); only the UI that creates them is still to come.
+([macro-cards](../layout/macro-cards.md#nested-macros)), and cables into or out of a nested member are routed through a port
+at each boundary ([auto-ports](auto-ports.md#nested-macros)); only the UI that creates them is still to come.
 
 **Nodes are addressed by uuid, everywhere.** Timeline bindings, automation lanes
 (`synth::resolveLaneParameter`), the AI patch format and the undo system all address a node by its

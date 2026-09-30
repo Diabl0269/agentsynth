@@ -418,6 +418,7 @@ add_executable(Tests
     Macros/MacroAutoPort/MacroAutoPortUngroupTests.cpp
     Macros/MacroAutoPort/MacroAutoPortDeleteTests.cpp
     Macros/MacroAutoPort/MacroAutoPortNameTests.cpp
+    Macros/MacroAutoPort/MacroAutoPortNestedTests.cpp
     Macros/MacroCardJackTests.cpp
     Macros/MacroCardPortButtonsTests.cpp
     Macros/MacroPortWidgetTests.cpp

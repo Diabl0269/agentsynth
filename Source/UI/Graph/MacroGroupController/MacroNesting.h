@@ -23,4 +23,17 @@ std::vector<juce::String> orderedDescendantMembers(const synth::MacroSet& macros
 std::vector<juce::String> collapsedMacrosCarriedBy(const synth::MacroSet& macros,
                                                    const std::set<juce::String>& movedUuids);
 
+/** The macros whose boundary a cable from node `uuid` to somewhere with owner chain `otherChain` crosses at
+ *  `uuid`'s end, innermost first. `uuid`'s owner chain (its direct owner, then that owner's ancestors) minus every
+ *  macro also in `otherChain` (the shared ancestors, which the cable stays inside). A macro port node never
+ *  crosses its own macro's boundary (it already is the crossing), so its owner is left out. */
+std::vector<juce::String> boundariesCrossed(const synth::MacroSet& macros, const juce::String& uuid,
+                                            const std::vector<juce::String>& otherChain);
+
+/** `uuid`'s direct owner then that owner's ancestors, innermost first; empty when `uuid` is in no macro. */
+std::vector<juce::String> ownerChain(const synth::MacroSet& macros, const juce::String& uuid);
+
+/** A macro with no direct members and no children: the only state MacroSet treats as dissolved. */
+bool isEmptyMacro(const synth::MacroSet& macros, const juce::String& macroId);
+
 } // namespace macro_nesting
