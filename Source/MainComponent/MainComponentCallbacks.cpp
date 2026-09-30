@@ -235,6 +235,8 @@ void MainComponent::timerCallback() {
     // tick, and a take still genuinely in flight must still block it.
     maybeAutosave();
 
+    pollTransportEdits(juce::Time::getMillisecondCounter());
+
     // Polls BounceRunner/StemRunner's progress onto the dialog's progress bar - on the SAME 10 Hz
     // driver as everything else here, rather than a second timer just for this. exportDialog_ is a
     // SafePointer: the dialog can only go away by the user closing the (modal) window, but nothing

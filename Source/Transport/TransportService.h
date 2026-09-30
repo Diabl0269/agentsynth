@@ -2,6 +2,7 @@
 
 #include "BlockTimeInfo.h"
 #include "TempoMap.h"
+#include "TransportDoc.h"
 #include <array>
 #include <atomic>
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -42,6 +43,11 @@ public:
     bool setLoop(double startBeat, double endBeat, bool enabled);
     bool setBpm(double newBpm);
     bool setTimeSignature(int numerator, int denominator);
+
+    // Message thread only. The tempo, time signature and loop last requested, valid immediately.
+    const TransportDoc& getDocumentState() const noexcept { return documentState_; }
+    // Message thread only. Posts time signature, bpm and loop; true if all three were queued.
+    bool applyDocumentState(const TransportDoc& doc);
 
     // -- Audio-thread API ----------------------------------------------------
     // Called from the engine's prepareToPlay path (never concurrently with
@@ -203,6 +209,9 @@ private:
     void drainCommands() noexcept;
     void applyCommand(const Command& command) noexcept;
     void publishSnapshot() noexcept;
+
+    // Message thread only; see getDocumentState.
+    TransportDoc documentState_;
 
     // -- Audio-thread state ---------------------------------------------------
     ConstantTempoMap tempoMap;

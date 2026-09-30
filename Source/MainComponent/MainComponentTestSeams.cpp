@@ -101,6 +101,10 @@ bool MainComponent::openPatchForTest(const juce::File& file, bool append) { retu
 // makes on every tick, so a test can drive it without a real juce::Timer.
 void MainComponent::runAutosaveTickForTest() { maybeAutosave(); }
 
+// Runs the transport edit poll once with a caller-supplied clock, so a test can hold a value for the
+// debounce interval without sleeping.
+void MainComponent::pollTransportEditsForTest(juce::uint32 nowMs) { pollTransportEdits(nowMs); }
+
 // Back-dates the "last autosave" wall-clock baseline by `elapsedMs`, so a test can simulate the
 // configured interval having elapsed without a real sleep. Computed relative to the CURRENT
 // counter (not a fixed small value) so it is correct however large

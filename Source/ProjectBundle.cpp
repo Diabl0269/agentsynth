@@ -13,6 +13,7 @@ constexpr const char* kMacrosKey = "macros";
 constexpr const char* kMidiRemoteKey = "midiRemote";
 constexpr const char* kMixerPanLawKey = "mixerPanLaw";
 constexpr const char* kMixerViewKey = "mixerView";
+constexpr const char* kTransportKey = "transport";
 } // namespace
 
 bool ProjectBundle::isBundle(const juce::File& dir) {
@@ -26,7 +27,8 @@ bool ProjectBundle::isBundle(const juce::File& dir) {
 juce::var ProjectBundle::buildProjectJson(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                           const TimelineDoc& timeline, PatchDocument& patchDocument,
                                           const MacroSet& macros, const MidiRemoteProjectDoc& midiRemote,
-                                          MixerPanLaw panLaw, const MixerViewDoc* mixerView) {
+                                          MixerPanLaw panLaw, const MixerViewDoc* mixerView,
+                                          const TransportDoc* transport) {
     auto json = AIStateMapper::graphToJSON(graph);
     // Module files already inside this bundle are written bundle-relative, so the project keeps
     // working after it is moved, renamed or unzipped elsewhere; outside files stay absolute.
@@ -51,6 +53,8 @@ juce::var ProjectBundle::buildProjectJson(const juce::File& bundleDir, juce::Aud
         // Written only when the caller has a view document; the live one is authoritative over any stash.
         if (mixerView != nullptr)
             rootObj->setProperty(kMixerViewKey, mixerView->toVar());
+        if (transport != nullptr)
+            rootObj->setProperty(kTransportKey, transport->toVar());
     }
 
     return json;
@@ -59,7 +63,7 @@ juce::var ProjectBundle::buildProjectJson(const juce::File& bundleDir, juce::Aud
 ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                       const TimelineDoc& timeline, PatchDocument& patchDocument, const MacroSet& macros,
                                       const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw,
-                                      const MixerViewDoc* mixerView) {
+                                      const MixerViewDoc* mixerView, const TransportDoc* transport) {
     if (!bundleDir.exists() && !bundleDir.createDirectory())
         return {false, "io: could not create bundle directory \"" + bundleDir.getFullPathName() + "\"."};
 
@@ -71,7 +75,8 @@ ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioPr
     if (!peaksDir.exists() && !peaksDir.createDirectory())
         return {false, "io: could not create \"" + peaksDir.getFullPathName() + "\"."};
 
-    auto json = buildProjectJson(bundleDir, graph, timeline, patchDocument, macros, midiRemote, panLaw, mixerView);
+    auto json =
+        buildProjectJson(bundleDir, graph, timeline, patchDocument, macros, midiRemote, panLaw, mixerView, transport);
     if (json.getDynamicObject() == nullptr)
         return {false, "io: graphToJSON did not produce a JSON object."};
 
@@ -112,7 +117,7 @@ ProjectLoadResult ProjectBundle::saveAutosave(const juce::File& bundleDir, juce:
                                               const TimelineDoc& timeline, PatchDocument& patchDocument,
                                               const MacroSet& macros, int maxBackups,
                                               const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw,
-                                              const MixerViewDoc* mixerView) {
+                                              const MixerViewDoc* mixerView, const TransportDoc* transport) {
     // No Audio/Peaks directory creation, and no touching project.json — an autosave is a sidecar
     // only. bundleDir itself must already exist (a project with no bundle yet has nowhere to put
     // the sidecar; MainComponent's autosave gate requires ProjectBundle::isBundle(currentBundleDir_)
@@ -120,7 +125,8 @@ ProjectLoadResult ProjectBundle::saveAutosave(const juce::File& bundleDir, juce:
     if (!bundleDir.isDirectory())
         return {false, "io: \"" + bundleDir.getFullPathName() + "\" is not a bundle directory."};
 
-    auto json = buildProjectJson(bundleDir, graph, timeline, patchDocument, macros, midiRemote, panLaw, mixerView);
+    auto json =
+        buildProjectJson(bundleDir, graph, timeline, patchDocument, macros, midiRemote, panLaw, mixerView, transport);
     if (json.getDynamicObject() == nullptr)
         return {false, "io: graphToJSON did not produce a JSON object."};
 
@@ -141,9 +147,9 @@ bool ProjectBundle::hasAutosave(const juce::File& bundleDir) {
 ProjectLoadResult ProjectBundle::loadAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                               TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
                                               MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw,
-                                              MixerViewDoc* outMixerView) {
+                                              MixerViewDoc* outMixerView, TransportDoc* outTransport) {
     return loadFromFile(bundleDir.getChildFile(kAutosaveFileName), graph, timeline, patchDocument, macros, midiRemote,
-                        outPanLaw, outMixerView);
+                        outPanLaw, outMixerView, outTransport);
 }
 
 void ProjectBundle::discardAutosave(const juce::File& bundleDir) {
@@ -155,15 +161,15 @@ void ProjectBundle::discardAutosave(const juce::File& bundleDir) {
 ProjectLoadResult ProjectBundle::load(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                       TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
                                       MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw,
-                                      MixerViewDoc* outMixerView) {
+                                      MixerViewDoc* outMixerView, TransportDoc* outTransport) {
     return loadFromFile(bundleDir.getChildFile(kProjectFileName), graph, timeline, patchDocument, macros, midiRemote,
-                        outPanLaw, outMixerView);
+                        outPanLaw, outMixerView, outTransport);
 }
 
 ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juce::AudioProcessorGraph& graph,
                                               TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
                                               MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw,
-                                              MixerViewDoc* outMixerView) {
+                                              MixerViewDoc* outMixerView, TransportDoc* outTransport) {
     if (!projectFile.existsAsFile())
         return {false, "io: \"" + projectFile.getFullPathName() + "\" does not exist."};
 
@@ -223,8 +229,15 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         detachedMixerViewVar = rootObj->getProperty(kMixerViewKey);
         rootObj->removeProperty(kMixerViewKey);
     }
-    // From here on `json`/`rootObj` is "the patch" — timeline-, macros-, midiRemote-, mixerPanLaw- and
-    // mixerView-stripped.
+    // "transport" is detached for the same reason; unlike mixerView a malformed one rejects the file (below).
+    const bool hasTransportKey = rootObj->hasProperty(kTransportKey);
+    juce::var detachedTransportVar;
+    if (hasTransportKey) {
+        detachedTransportVar = rootObj->getProperty(kTransportKey);
+        rootObj->removeProperty(kTransportKey);
+    }
+    // From here on `json`/`rootObj` is "the patch" — timeline-, macros-, midiRemote-, mixerPanLaw-,
+    // mixerView- and transport-stripped.
 
     // Bundle-relative module file refs become absolute paths in this bundle before anything reads
     // them; a ref that escapes the bundle is dropped here (see ModuleFileRefs::resolveOnLoad).
@@ -260,6 +273,12 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
     if (hasMidiRemoteKey && !localMidiRemote.fromVar(detachedMidiRemoteVar))
         return {false,
                 "midiRemote validation failed: malformed \"midiRemote\" in \"" + projectFile.getFullPathName() + "\"."};
+
+    // Step 2d: "transport" into a LOCAL doc, same all-or-nothing rule as the timeline.
+    TransportDoc localTransport;
+    if (hasTransportKey && !localTransport.fromVar(detachedTransportVar))
+        return {false,
+                "transport validation failed: malformed \"transport\" in \"" + projectFile.getFullPathName() + "\"."};
 
     // All validations passed — only now does anything mutate.
     if (!AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true))
@@ -313,6 +332,9 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         localView.retainOnly(alive);
         *outMixerView = std::move(localView);
     }
+
+    if (outTransport != nullptr)
+        *outTransport = localTransport;
 
     if (outPanLaw != nullptr)
         *outPanLaw = hasMixerPanLawKey ? mixerPanLawFromString(mixerPanLawText) : MixerPanLaw::Balance;

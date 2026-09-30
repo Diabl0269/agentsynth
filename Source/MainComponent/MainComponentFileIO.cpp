@@ -52,7 +52,8 @@ bool MainComponent::saveToFile(const juce::File& file) {
         // editor so the unknown-top-level-key stash a plain preset load filled is re-merged here too.
         const auto result = synth::ProjectBundle::save(
             file, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(), graphEditor.getMacros(),
-            midiRemoteDoc, audioEngine.getMixerPanLaw(), &bottomDock.getMixerPanel().getViewDoc());
+            midiRemoteDoc, audioEngine.getMixerPanLaw(), &bottomDock.getMixerPanel().getViewDoc(),
+            &audioEngine.getTransport().getDocumentState());
         if (!result.ok) {
             statusBar.showMessage("Save failed: " + result.message);
             return false;
@@ -153,9 +154,10 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
 
     synth::MixerPanLaw loadedPanLaw = synth::MixerPanLaw::Balance;
     synth::MixerViewDoc loadedMixerView;
-    const auto result =
-        synth::ProjectBundle::load(bundleDir, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(),
-                                   graphEditor.getMacros(), midiRemoteDoc, &loadedPanLaw, &loadedMixerView);
+    synth::TransportDoc loadedTransport;
+    const auto result = synth::ProjectBundle::load(bundleDir, audioEngine.getGraph(), timelineDoc,
+                                                   graphEditor.getPatchDocument(), graphEditor.getMacros(),
+                                                   midiRemoteDoc, &loadedPanLaw, &loadedMixerView, &loadedTransport);
     // Reconcile the view whatever happened: on failure the load left the graph exactly as it
     // was, and the components still have to come back after the detach above.
     graphEditor.updateComponents();
@@ -175,6 +177,7 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     // Likewise the mixer's pinned / hidden channels: absent means every column scrolling and shown. The
     // mixer is rebuilt from this by reconcileTimelineAfterGraphChange() below.
     bottomDock.getMixerPanel().getViewDoc() = std::move(loadedMixerView);
+    applyLoadedTransport(loadedTransport);
 
     // A freshly loaded project starts every profile on page 1 -- this is a NEW project's
     // assignments, not the ordinary edits publishAssignments() below also handles, which must
@@ -214,9 +217,10 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
 
     synth::MixerPanLaw loadedPanLaw = synth::MixerPanLaw::Balance;
     synth::MixerViewDoc loadedMixerView;
-    const auto result = synth::ProjectBundle::loadAutosave(bundleDir, audioEngine.getGraph(), timelineDoc,
-                                                           graphEditor.getPatchDocument(), graphEditor.getMacros(),
-                                                           midiRemoteDoc, &loadedPanLaw, &loadedMixerView);
+    synth::TransportDoc loadedTransport;
+    const auto result = synth::ProjectBundle::loadAutosave(
+        bundleDir, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(), graphEditor.getMacros(),
+        midiRemoteDoc, &loadedPanLaw, &loadedMixerView, &loadedTransport);
     graphEditor.updateComponents();
     if (!result.ok) {
         currentBundleDir_ = previousBundleDir;
@@ -227,6 +231,7 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     // Same "follows the just-loaded state" rule as loadBundleFromFile.
     audioEngine.setMixerPanLaw(loadedPanLaw);
     bottomDock.getMixerPanel().getViewDoc() = std::move(loadedMixerView);
+    applyLoadedTransport(loadedTransport);
 
     // Same "new project's assignments, reset to page 1" rule as loadBundleFromFile above.
     remoteEngine.resetActivePages();
@@ -432,7 +437,8 @@ void MainComponent::performAutosave() {
             : juce::jlimit(0, 50, settings->getIntValue(kAutosaveBackupCountKey, kDefaultAutosaveBackupCount));
     const auto result = synth::ProjectBundle::saveAutosave(
         currentBundleDir_, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(), graphEditor.getMacros(),
-        backupCount, midiRemoteDoc, audioEngine.getMixerPanLaw(), &bottomDock.getMixerPanel().getViewDoc());
+        backupCount, midiRemoteDoc, audioEngine.getMixerPanLaw(), &bottomDock.getMixerPanel().getViewDoc(),
+        &audioEngine.getTransport().getDocumentState());
     if (result.ok)
         lastAutosavedEditSerial_ = undoManager.getEditSerial();
     else

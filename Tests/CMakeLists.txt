@@ -63,6 +63,7 @@ add_executable(Tests
     Modules/ComparatorModuleTests.cpp
     Modules/SequencerModuleTests.cpp
     Engine/TransportServiceTests.cpp
+    Engine/TransportDocTests.cpp
     Timeline/TimelineDoc/TimelineDocCoreTests.cpp
     Timeline/TimelineDoc/TimelineDocTracksTests.cpp
     Timeline/TimelineDoc/TimelineDocClipsTests.cpp
@@ -184,6 +185,7 @@ add_executable(Tests
     App/MainComponent/MainComponentStartupPanelsTests.cpp
     App/MainComponent/MainComponentLayoutTests.cpp
     App/MainComponent/MainComponentDocumentTests.cpp
+    App/MainComponent/MainComponentTransportPersistTests.cpp
     App/MainComponent/MainComponentUnsavedGuardTests.cpp
     App/MainComponent/MainComponentProviderMiscTests.cpp
     App/MainComponent/MainComponentTeardownTests.cpp
@@ -593,6 +595,7 @@ add_executable(Tests
     Timeline/TimelineE2ETests.cpp
     Project/PatchDocumentTests.cpp
     Project/ProjectBundleTests.cpp
+    Project/ProjectBundleTransportTests.cpp
     Project/PatchSaveLocationTests.cpp
     Project/ProjectBundleCardLayoutTests.cpp
     Project/AutosaveTests.cpp
