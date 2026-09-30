@@ -255,6 +255,7 @@ public:
     void setAudioTakeCapturingForTest(bool capturing);
     bool wouldPromptOnSaveForTest() const;
     void exportPatchOnlyForTest(const juce::File& file);
+    juce::File patchDialogDirectoryForTest() { return patchDialogDirectory(); }
     void relinkClipAssetForTest(synth::ClipId id, const juce::File& chosenFile);
     void importAudioFileToClipForTest(synth::TrackId track, double startBeat, const juce::File& sourceFile);
     int cleanUnusedAssetsForTest();
@@ -423,6 +424,8 @@ private:
     void performSaveProject(bool forceChooser, std::function<void(bool saved)> onFinished = {});
     void exportPatchOnly(const juce::File& file);
     void promptExportPatchOnly();
+    // Start folder of the patch dialogs (Open Patch / Export Patch Only), per the patch-save-location preference.
+    juce::File patchDialogDirectory();
     void promptExportAudio();
     void promptExportStems();
     void promptExportMidi();

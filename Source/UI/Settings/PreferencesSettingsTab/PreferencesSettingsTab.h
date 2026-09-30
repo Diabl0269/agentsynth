@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MidiRemote/RemoteModel.h"
+#include "PatchSaveLocation.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -124,6 +125,13 @@ public:
     // docs/mixer/panel.md#placement-and-detachable-windows).
     juce::String getPanelDetachMode() const;
     void setPanelDetachMode(const juce::String& mode);
+    // Where patch save/open dialogs start (Files & Autosave): with the project (default), the shared
+    // Patches folder, or a chosen folder. Read at use time by MainComponent through
+    // synth::PatchSaveLocation; see docs/layout/settings-preferences.md.
+    synth::PatchSaveMode getPatchSaveMode() const;
+    void setPatchSaveMode(synth::PatchSaveMode mode);
+    juce::File getPatchSaveCustomFolder() const;
+    void setPatchSaveCustomFolder(const juce::File& folder);
     // MIDI Remote group (docs/control/midi-remote-ui.md#settings). Default takeover is never
     // Takeover::useDefault; both are picked up live by MainComponent via the settings file.
     synth::Takeover getMidiRemoteDefaultTakeover() const;
@@ -252,6 +260,14 @@ private:
     void persistDualIOPerModuleOverrides();
     void persistMidiRemoteDefaultTakeover(synth::Takeover takeover);
     void persistMidiRemoteShowBadges(bool enabled);
+    void persistPatchSaveMode(synth::PatchSaveMode mode);
+    // The patch-save-location row: constructs its controls (chained from setupMidiRemoteControls(),
+    // the constructor is baselined), refreshes the hint for the current mode, and lays it out.
+    void setupPatchSaveLocationControls();
+    void updatePatchSaveHint();
+    void launchPatchSaveFolderChooser();
+    void layoutPatchSaveLocationGroup(int& y, int contentWidth, bool& pendingDivider, const GroupMatchFn& groupMatches,
+                                      const SetVisibleFn& setGroupVisible, const BeginGroupFn& beginGroup);
 
     // Constructs/wires the two Mixer -> per-type default track preset combos.
     // Pulled out of the constructor (which was tripping the function-size ratchet) into its own
@@ -447,6 +463,13 @@ private:
     juce::Label midiRemoteTakeoverLabel;
     juce::ComboBox midiRemoteTakeoverCombo;
     juce::ToggleButton midiRemoteShowBadgesToggle{"Show MIDI badges on mapped controls"};
+    // Patch save location: mode combo (ids: PatchSaveMode + 1), the custom-folder button and a hint
+    // that names the folder the current mode resolves to.
+    juce::Label patchSaveLabel;
+    juce::ComboBox patchSaveCombo;
+    juce::TextButton patchSaveChooseButton{"Choose..."};
+    juce::Label patchSaveHint;
+    std::unique_ptr<juce::FileChooser> patchSaveChooser;
 
     // Hairline rules between preference groups, painted in paint() from these bounds.
     std::vector<juce::Rectangle<int>> dividerBounds;

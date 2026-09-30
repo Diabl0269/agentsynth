@@ -2,6 +2,7 @@
 // factory presets, legacy .json patches).
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
+#include "ProjectBundle.h"
 
 TEST_F(MainComponentTest, PatchNameIsDefaultOnStartup) {
     MainComponent mc(std::make_unique<MockProvider>());
@@ -139,4 +140,34 @@ TEST_F(MainComponentTest, OpeningLegacyJsonPresetStillWorks) {
 
     EXPECT_TRUE(mc.openProjectForTest(jsonFile));
     EXPECT_EQ(mc.getCurrentPatchName(), "Legacy");
+}
+
+// ---------------------------------------------------------------------------
+// The patch dialogs (Open Patch / Export Patch Only) start where the "Patch save location"
+// preference says. The shared-folder fallback is covered by PatchSaveLocationTests (it would create
+// a folder under the real Music directory here).
+// ---------------------------------------------------------------------------
+
+TEST_F(MainComponentTest, PatchDialogStartsInTheOpenProjectsPatchesFolderByDefault) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    const auto bundle = tempRoot.getChildFile("PatchDir.agsproj");
+    mc.saveProjectForTest(bundle);
+    ASSERT_TRUE(synth::ProjectBundle::isBundle(bundle));
+
+    EXPECT_EQ(mc.patchDialogDirectoryForTest(), bundle.getChildFile("Patches"));
+}
+
+TEST_F(MainComponentTest, PatchDialogStartsInTheCustomFolderWhenChosen) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    const auto mine = tempRoot.getChildFile("MyPatches");
+    mine.createDirectory();
+    auto* settings = mc.getAppPropertiesForTest().getUserSettings();
+    settings->setValue("patchSaveMode", "custom");
+    settings->setValue("patchSaveCustomDir", mine.getFullPathName());
+
+    EXPECT_EQ(mc.patchDialogDirectoryForTest(), mine);
+    settings->removeValue("patchSaveMode");
+    settings->removeValue("patchSaveCustomDir");
 }

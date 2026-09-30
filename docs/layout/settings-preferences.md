@@ -19,7 +19,7 @@ the Settings window is.
 | --- | --- |
 | Graph | smart connections, double-click to disconnect, alignment guides, Dual I/O default + per-module overrides, macro auto-ports, macro toggles, reconnect the chain on delete |
 | Timeline | loop-locator toggles, natural scrolling, zoom direction, piano roll key labels |
-| Files & Autosave | autosave on/interval/backups |
+| Files & Autosave | autosave on/interval/backups, patch save location (per project / shared folder / chosen folder + Choose...) |
 | Mixer | auto-create channel on connect, default track presets, mixer placement |
 | Panels & Windows | panel detach mode |
 | MIDI Remote | default takeover, badges |
@@ -58,8 +58,11 @@ the Settings window is.
 5. **Test**: extend the matching `Tests/UI/Settings/PreferencesSettingsTab/*Tests.cpp` (round-trip) and,
    for a new category, add a probe row to `PreferencesSettingsTabCategoryTests.cpp`.
 
-Planned rows: a patch save location (Files & Autosave, in `layoutAutosaveGroup`) and a drag-inside-a-macro-hull
-preference (Graph, in `layoutGraphGroups`).
+Planned row: a drag-inside-a-macro-hull preference (Graph, in `layoutGraphGroups`).
+
+Worked example: the patch save location row (`PreferencesSettingsTabPatchSaveLocation.cpp`) is a label, a combo, a
+"Choose..." button and a hint; its group is laid out from the tail of `layoutAutosaveGroup`, its controls are
+chained from `setupMidiRemoteControls()`, and the folder logic lives in `synth::PatchSaveLocation`, not in the tab.
 
 A new **category** needs a `Category` enumerator, a `categoryName` case, an entry in `kCategoriesInOrder`
 (`...Categories.cpp`) and its own `layout*Groups` that sets `layoutCategory`, called from `layoutContent`.

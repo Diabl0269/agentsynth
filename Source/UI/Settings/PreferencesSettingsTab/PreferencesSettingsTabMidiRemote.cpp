@@ -81,7 +81,7 @@ void PreferencesSettingsTab::setupMidiRemoteControls() {
     midiRemoteShowBadgesToggle.onClick = [this] {
         persistMidiRemoteShowBadges(midiRemoteShowBadgesToggle.getToggleState());
     };
-    setupCategorySelector(); // Chained here, the constructor is baselined
+    setupPatchSaveLocationControls(); // Chained here, the constructor is baselined
 }
 
 void PreferencesSettingsTab::layoutMidiRemoteGroup(

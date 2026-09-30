@@ -334,6 +334,7 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviour.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosave.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPatchSaveLocation.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachMode.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp

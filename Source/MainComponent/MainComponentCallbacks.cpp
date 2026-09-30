@@ -7,6 +7,7 @@
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
 #include "MainComponentShortcutHints.h"
+#include "PatchSaveLocation.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -22,7 +23,6 @@ constexpr const char* kPatchFileFilter = "*.json;*.agsproj";
 } // namespace
 
 using detail::kExportsFolderName;
-using detail::kPatchesFolderName;
 using detail::resolveExportSubdirectory;
 
 /** Pushes the saved "split L/R jacks" preference onto the patch the app just opened with.
@@ -549,8 +549,7 @@ void MainComponent::openProjectFromFile() {
 // guardUnsavedChanges can run BEFORE the dialog opens rather than after the user has already
 // picked a file.
 void MainComponent::launchOpenPresetChooser() {
-    fileChooser = std::make_unique<juce::FileChooser>("Load Patch", synth::ProjectBundle::getDefaultProjectsDirectory(),
-                                                      "*.json");
+    fileChooser = std::make_unique<juce::FileChooser>("Load Patch", patchDialogDirectory(), "*.json");
     auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
     fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
         auto file = fc.getResult();
@@ -644,10 +643,17 @@ void MainComponent::exportPatchOnly(const juce::File& file) {
     statusBar.showMessage("Exported patch: " + file.getFileNameWithoutExtension());
 }
 
+// The folder the patch dialogs (Open Patch..., Export Patch Only...) start in, per the "Patch save
+// location" preference (synth::PatchSaveLocation): the open project's Patches folder, the shared
+// one, or the user's own; per-project falls back to the shared folder while no project is saved.
+juce::File MainComponent::patchDialogDirectory() {
+    return synth::PatchSaveLocation::resolveFromSettings(appProperties.getUserSettings(), currentBundleDir_,
+                                                         synth::ProjectBundle::getDefaultProjectsDirectory());
+}
+
 // The chooser-launching wrapper the "Export Patch Only" menu item actually calls.
 void MainComponent::promptExportPatchOnly() {
-    const auto suggested =
-        resolveExportSubdirectory(currentBundleDir_, kPatchesFolderName).getChildFile(currentPatchName_ + ".json");
+    const auto suggested = patchDialogDirectory().getChildFile(currentPatchName_ + ".json");
     fileChooser = std::make_unique<juce::FileChooser>("Export Patch Only", suggested, "*.json");
     auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
     fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
