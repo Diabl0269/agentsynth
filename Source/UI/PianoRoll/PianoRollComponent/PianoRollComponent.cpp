@@ -140,7 +140,8 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     resizeNotes_.clear();
     resizeUnquantized_ = false;
     moveUnquantized_ = false;
-    copyDrag_ = false;
+    setCopyDrag(false);
+    clearGhostSettle(); // a ghost from the old clip must not paint over this one
     cmdToggleNote_ = {};
     // A note auditioned in the OLD clip has no mouse-up coming — this IS the end of that gesture.
     stopAudition();
@@ -215,7 +216,8 @@ void PianoRollComponent::closeRoll() {
     resizeNotes_.clear();
     resizeUnquantized_ = false;
     moveUnquantized_ = false;
-    copyDrag_ = false;
+    setCopyDrag(false);
+    clearGhostSettle(); // a ghost from the old clip must not paint over this one
     cmdToggleNote_ = {};
     autoScrollTimer_.stopTimer(); // no clip left for a drag to be scrolling
 
