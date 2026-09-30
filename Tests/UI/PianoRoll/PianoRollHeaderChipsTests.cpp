@@ -1,5 +1,6 @@
-// PianoRoll header-chip tests: the six header chips' hover wash + resting/active fill affordance,
-// and GENERATE — add-to-existing vs replace, plus the six chips' distinct/non-overlapping bounds.
+// PianoRoll header-chip tests: the header chips' hover wash + resting/active fill affordance, and
+// GENERATE — add-to-existing vs replace, plus the first six chips' distinct/non-overlapping bounds
+// (the Velocity and Humanize chips and the value box: PianoRollVelocityToolbarTests.cpp).
 // Shared PianoRollFixture, rgbDistance and chooseMajorScaleForOpenClip live in
 // PianoRollTestHelpers.h.
 
@@ -9,7 +10,7 @@
 #include "UI/Theme/Theme.h"
 
 // ============================================================================
-// 19. Header button chip affordance (six chips — hover wash + resting/active fill).
+// 19. Header button chip affordance (hover wash + resting/active fill).
 // ============================================================================
 
 TEST(PianoRollHeaderButtonTest, HoverEntersAndLeavesGateRepaintsConfinedToTheChipRect) {

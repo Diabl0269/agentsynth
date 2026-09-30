@@ -20,10 +20,11 @@ juce::KeyPress ctrlPress(int keyCode) { return juce::KeyPress(keyCode, juce::Mod
 // broken) by whatever ShortcutManager::resetToDefaults() happens to know about these ids in any
 // given build. That matters because the defaults land in ShortcutManager in a separate phase.
 const char* const kRollActionIds[] = {
-    "pianoRollNudgeLeft",         "pianoRollNudgeRight",          "pianoRollTransposeUp",     "pianoRollTransposeDown",
-    "pianoRollTransposeOctaveUp", "pianoRollTransposeOctaveDown", "pianoRollNavPrevNote",     "pianoRollNavNextNote",
-    "pianoRollQuantise",          "pianoRollQuantiseLength",      "pianoRollQuantisePitches", "timelineSnapToggle",
-    "pianoRollToggleScalePanel",  "pianoRollToggleScaleFilter"};
+    "pianoRollNudgeLeft",        "pianoRollNudgeRight",        "pianoRollTransposeUp",
+    "pianoRollTransposeDown",    "pianoRollTransposeOctaveUp", "pianoRollTransposeOctaveDown",
+    "pianoRollNavPrevNote",      "pianoRollNavNextNote",       "pianoRollQuantise",
+    "pianoRollQuantiseLength",   "pianoRollQuantisePitches",   "timelineSnapToggle",
+    "pianoRollToggleScalePanel", "pianoRollToggleScaleFilter", "pianoRollToggleVelocityLane"};
 
 void clearRollBindings(ShortcutManager& mgr) {
     for (const char* id : kRollActionIds)

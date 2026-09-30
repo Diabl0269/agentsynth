@@ -16,6 +16,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -47,6 +48,8 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 //
 // See docs/timeline/piano-roll.md#select-tool-gestures for the gesture table.
 namespace synth::ui {
+
+class PianoRollVelocityLane; // UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h
 
 class PianoRollComponent
     : public juce::Component
@@ -80,6 +83,8 @@ public:
     // stroke across the ruler and the roll.
     // canvasTop()/setRulerBandHeight()/getRulerBandHeight() — see PianoRollEditTools.cpp.
     int canvasTop() const noexcept;
+    // The y where the note canvas ends: the component's bottom, less the velocity strip when shown.
+    int canvasBottom() const noexcept;
     void setRulerBandHeight(int heightPx);
     int getRulerBandHeight() const noexcept;
 
@@ -211,6 +216,24 @@ public:
     // contract (addToExisting replace-vs-overlay semantics, grid-step/scale resolution).
     void generateRandomNotesIntoClip(const synth::MusicalScale* scale, int minPitch, int maxPitch, juce::Random& rng,
                                      bool addToExisting = false);
+
+    // ---- Velocity strip (PianoRollVelocity.cpp) ----
+
+    // Shown by default; persisted through the properties file when one is set.
+    void setVelocityLaneVisible(bool visible);
+    bool isVelocityLaneVisible() const noexcept;
+    void toggleVelocityLane();
+    // Adds a random offset in [-range, +range] to each selected note (all notes when none is
+    // selected), clamped to [1, 127]; one undo step.
+    void humanizeVelocities(int range);
+    void setHumanizeRandomSeed(juce::int64 seed);
+    // Sets the selected notes (all when none is selected) to the typed 1..127 value, one undo step;
+    // false (and the box reverts) for anything else.
+    bool applyVelocityValueText(const juce::String& text);
+    PianoRollVelocityLane& getVelocityLane() noexcept;
+    juce::TextEditor& getVelocityValueBox() noexcept;
+    juce::Rectangle<int> getVelocityChipBounds() const noexcept;
+    juce::Rectangle<int> getHumanizeChipBounds() const noexcept;
 
     // ---- Edit tools (Cubase-style; see EditTool.h) ----
 
@@ -376,9 +399,19 @@ public:
     double getLastExtendPromptLengthForTest() const noexcept;
     synth::ClipId getLastExtendPromptClipForTest() const noexcept;
 
-    // Six header chips, left to right: Back ("Clips"), Quantise, QuantiseLength, QuantisePitches,
-    // Scale, ScaleFilter. ScaleFilter is a TOGGLE (it paints lit); the other four are actions.
-    enum class HeaderButtonId { None, Back, Quantise, QuantiseLength, QuantisePitches, Scale, ScaleFilter };
+    // Eight header chips, left to right: Back ("Clips"), Quantise, QuantiseLength, QuantisePitches,
+    // Scale, ScaleFilter, Velocity, Humanize. Scale, ScaleFilter and Velocity paint lit when on.
+    enum class HeaderButtonId {
+        None,
+        Back,
+        Quantise,
+        QuantiseLength,
+        QuantisePitches,
+        Scale,
+        ScaleFilter,
+        Velocity,
+        Humanize
+    };
     HeaderButtonId getHoveredHeaderButtonForTest() const noexcept;
     bool isHeaderButtonHoveredForTest(HeaderButtonId which) const noexcept;
 
@@ -525,6 +558,7 @@ private:
     juce::String quantisePitchTooltipText() const;
     juce::String scaleTooltipText() const;
     juce::String scaleFilterTooltipText() const;
+    juce::String velocityTooltipText() const;
 
     // ---- Header chip glyphs (drawn vector paths — see paintHeader, PianoRollPainting.cpp) ----
     static void drawQuantiseGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
@@ -563,6 +597,16 @@ private:
     std::optional<synth::MusicalScale> activeScaleForOpenClip() const;
     void pushScaleContextFromMemory();
     void restoreScaleMemoryForOpenClip();
+
+    // ---- Velocity strip plumbing ---- see PianoRollVelocity.cpp.
+    void initVelocityControls();
+    int velocityLaneHeightPx() const noexcept;
+    void layoutVelocityControls(juce::Rectangle<int>& header, juce::Rectangle<int>& canvas);
+    void commitVelocities(const std::vector<std::pair<synth::NoteId, int>>& targets);
+    std::vector<synth::NoteId> velocityTargetIds() const;
+    void syncVelocityValueBox();
+    void showHumanizeMenu();
+    void clearVelocityPreview();
 
     // ---- Keys-column audition ---- see PianoRollAudition.cpp for the full contract.
     bool isKeysColumnPoint(juce::Point<int> pos) const noexcept;
@@ -877,6 +921,16 @@ private:
     juce::Rectangle<int> scaleFilterButtonBounds_;
     juce::Rectangle<int> keysColumnBounds_;
     juce::Rectangle<int> noteGridBounds_;
+
+    // ---- Velocity strip ---- a child component; see PianoRollVelocity.cpp.
+    std::unique_ptr<PianoRollVelocityLane> velocityLane_;
+    bool velocityLaneVisible_ = true;
+    // The strip gesture's live values, read by effectiveGeometryFor; empty outside a gesture.
+    std::map<synth::NoteId, int> velocityPreview_;
+    juce::TextEditor velocityBox_;
+    juce::Rectangle<int> velocityChipBounds_;
+    juce::Rectangle<int> humanizeChipBounds_;
+    juce::Random humanizeRandom_;
 
     // Which header chip (if any) the pointer is currently over — see updateHeaderButtonHover.
     HeaderButtonId hoveredHeaderButton_ = HeaderButtonId::None;

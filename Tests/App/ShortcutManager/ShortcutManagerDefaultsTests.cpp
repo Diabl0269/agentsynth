@@ -31,6 +31,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "pianoRollTransposeUp",
         "pianoRollTransposeDown",
         "pianoRollToggleScalePanel",
+        "pianoRollToggleVelocityLane",
         // MixerPanelComponent::keyPressed
         "mixerToggleInserts",
         "mixerToggleSends",

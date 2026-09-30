@@ -540,6 +540,13 @@ void PianoRollComponent::setRulerBandHeight(int heightPx) {
 }
 
 int PianoRollComponent::canvasTop() const noexcept { return kToolbarHeight + rulerBandHeight_; }
+
+// canvasTop()'s twin for the other edge: every "how tall is the grid" read goes through this rather
+// than getHeight(), because the velocity strip (when shown) owns the bottom band of the component.
+// Never above canvasTop(), so a tiny component yields an empty grid rather than a negative one.
+int PianoRollComponent::canvasBottom() const noexcept {
+    return std::max(canvasTop(), getHeight() - velocityLaneHeightPx());
+}
 int PianoRollComponent::getRulerBandHeight() const noexcept { return rulerBandHeight_; }
 
 //==============================================================================

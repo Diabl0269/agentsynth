@@ -475,6 +475,9 @@ add_executable(Tests
     UI/PianoRoll/PianoRollAuditionTests.cpp
     UI/PianoRoll/PianoRollMouseTests.cpp
     UI/PianoRoll/PianoRollCopyDragTests.cpp
+    UI/PianoRoll/PianoRollVelocityLaneTests.cpp
+    UI/PianoRoll/PianoRollVelocityToolbarTests.cpp
+    UI/PianoRoll/VelocityLaneMathTests.cpp
     Timeline/MusicalScaleTests.cpp
     UI/PianoRoll/NoteColourTests.cpp
     UI/Timeline/MidiDestinationPickerTests.cpp

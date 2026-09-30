@@ -182,6 +182,7 @@ TEST(PianoRollAuditionTest, DestructorReleasesAHeldNote) {
         PianoRollComponent roll{state};
         roll.setTimelineDoc(&doc);
         roll.setUndoManager(&undo);
+        roll.setVelocityLaneVisible(false); // grid-to-bottom geometry, as PianoRollFixture
         roll.setSize(900, 160);
         roll.openClip(clipId);
         roll.setHorizontalView(40.0, 0.0);

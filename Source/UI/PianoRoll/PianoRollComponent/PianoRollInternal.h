@@ -2,10 +2,9 @@
 
 // Private to the PianoRollComponent translation units (PianoRollComponent.cpp,
 // PianoRollScaleAssist.cpp, PianoRollPainting.cpp, PianoRollEditTools.cpp, PianoRollAudition.cpp,
-// PianoRollClipboardAndKeys.cpp, PianoRollMouse.cpp, PianoRollZoom.cpp). Not a CMake source file —
-// each unit that needs one of these constants/helpers includes this header directly and brings the
-// names into scope with `using namespace synth::ui::detail;`, so every call site keeps its
-// unqualified spelling.
+// PianoRollClipboardAndKeys.cpp, PianoRollMouse.cpp, PianoRollZoom.cpp, PianoRollVelocity.cpp). Not a CMake source file
+// — each unit that needs one of these constants/helpers includes this header directly and brings the names into scope
+// with `using namespace synth::ui::detail;`, so every call site keeps its unqualified spelling.
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -53,6 +52,20 @@ inline juce::KeyPress plainKey(int keyCode) noexcept {
 inline juce::KeyPress modKey(int keyCode, int modifierFlags) noexcept {
     return juce::KeyPress(keyCode, juce::ModifierKeys(modifierFlags), 0);
 }
+
+// "pianoRollToggleVelocityLane"'s fallback: a REAL Ctrl+V on macOS (Cmd+V is Paste there, and Ctrl
+// is a separate physical key), Cmd+Shift+V elsewhere — on Windows/Linux JUCE's Cmd IS Ctrl, so
+// Ctrl+V would be Paste. Same per-platform split as the AI panel's Ctrl+A / Cmd+Shift+A default.
+inline juce::KeyPress velocityLaneToggleKey() noexcept {
+#if JUCE_MAC
+    return modKey('v', juce::ModifierKeys::ctrlModifier);
+#else
+    return modKey('v', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier);
+#endif
+}
+
+// The properties-file key remembering whether the velocity strip is shown (absent = shown).
+inline const char* velocityLaneVisibleKey() noexcept { return "pianoRollVelocityLaneVisible"; }
 
 inline bool isBlackKeyPitchClass(int pitchClass) noexcept {
     switch (pitchClass) {

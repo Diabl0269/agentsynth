@@ -10,6 +10,7 @@
 #include "AppUndoManager.h"
 #include "PianoRollInternal.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/Timeline/ScrollPolicy.h"
 #include <algorithm>
 #include <cmath>
@@ -177,10 +178,22 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
 
+    // Ctrl+V on macOS, Cmd+Shift+V elsewhere (velocityLaneToggleKey) shows or hides the velocity
+    // strip, the header's Velocity chip's twin. Same focused-text-field guard as Ctrl+S above: the
+    // header's value box is a TextEditor, and a chord typed there must not flip the strip.
+    if (matchesAction(key, "pianoRollToggleVelocityLane", velocityLaneToggleKey())) {
+        if (dynamic_cast<juce::TextEditor*>(juce::Component::getCurrentlyFocusedComponent()) != nullptr)
+            return false;
+        toggleVelocityLane();
+        return true;
+    }
+
     // Escape and Delete/Backspace are FIXED, never manager-resolved: "cancel" and "delete the
     // selection" are platform conventions every surface in the app answers identically, not app
     // shortcuts a user would expect to find in a rebinding list.
     if (key == juce::KeyPress::escapeKey) {
+        if (velocityLane_->cancelGesture())
+            return true; // abandons an in-flight velocity-strip drag; nothing is committed
         if (cancelNoteDrag())
             return true; // abandons an in-flight move/copy drag; nothing is committed
         if (!selection_.isEmpty()) {

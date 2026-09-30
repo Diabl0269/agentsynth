@@ -564,6 +564,14 @@ public:
         // under PianoRoll (a scoped category) rather than General: EveryDefaultBindingIsUnique only
         // checks within a category, by design.
         bindings["pianoRollToggleScalePanel"] = juce::KeyPress('s', juce::ModifierKeys::ctrlModifier, 0);
+        // Show / hide the velocity strip: a REAL Ctrl+V on macOS (Cmd+V is Paste), Cmd+Shift+V on
+        // Windows/Linux, where Cmd IS Ctrl — the same per-platform split as "toggleAiPanel" above.
+#if JUCE_MAC
+        bindings["pianoRollToggleVelocityLane"] = juce::KeyPress('v', juce::ModifierKeys::ctrlModifier, 0);
+#else
+        bindings["pianoRollToggleVelocityLane"] =
+            juce::KeyPress('v', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+#endif
 
         // Show / hide the mixer's Inserts, Sends and EQ rows while the mixer has focus -- the keyboard
         // twins of its toolbar toggles. On macOS a REAL Ctrl+letter, like "pianoRollToggleScalePanel":
@@ -844,6 +852,7 @@ private:
             {"pianoRollQuantiseLength", ShortcutCategory::PianoRoll},
             {"pianoRollQuantisePitches", ShortcutCategory::PianoRoll},
             {"pianoRollToggleScalePanel", ShortcutCategory::PianoRoll},
+            {"pianoRollToggleVelocityLane", ShortcutCategory::PianoRoll},
             {"pianoRollToggleScaleFilter", ShortcutCategory::PianoRoll},
             // Mixer -- consulted by MixerPanelComponent::keyPressed only.
             {"mixerToggleInserts", ShortcutCategory::Mixer},

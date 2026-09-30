@@ -28,6 +28,7 @@ to absolute beats via `clip->startBeat` and back.
 | `PianoRollMouse.cpp` | Mouse handling and edge-auto-scroll |
 | `PianoRollCopyDrag.cpp` | Option+drag note copy: live copy/move toggle, ghost painting and settle tween, commit, Esc cancel |
 | `PianoRollZoom.cpp` | Anchored zoom and `keyPressed` dispatch |
+| `PianoRollVelocity.cpp` | The velocity strip's wiring (its `Host`, layout band, remembered visibility), the header's value box and Humanize |
 | `PianoRollInternal.h` | Private shared constants and helpers; not a CMake source file |
 | `PianoRollTypes.h` | `NoteHit`, `NoteOrigin`, `ClipboardNote`, `NoteGeometry`, `LineRange`, `ClipScaleMemory`; not a CMake source file |
 
@@ -37,6 +38,16 @@ member's maintainer-facing rationale lives as a doc comment next to its out-of-l
 the matching `PianoRoll<Concern>.cpp` unit, where the edit that invalidates it lands in the same
 diff hunk. See the root `CLAUDE.md`'s "Code structure" section and
 [`development/header-comment-guard.md`](../development/header-comment-guard.md) for the guard that enforces it.
+
+The velocity strip itself is a collaborator in `Source/UI/PianoRoll/VelocityLane/`, a child
+component that never sees `PianoRollComponent` (see **Velocity strip**):
+
+| Unit | Concern |
+|---|---|
+| `PianoRollVelocityLane.h` / `.cpp` | The strip component, its `Host` seam and its vertical mapping |
+| `PianoRollVelocityLaneGestures.cpp` | Stick / pen / ramp drags, Escape-cancel, the one commit on release |
+| `PianoRollVelocityLanePainting.cpp` | Background, the 127 / 64 / 1 scale, sticks, the value readout |
+| `VelocityLaneMath.h` / `.cpp` | Pure maths: y <-> velocity, stick picking, pen/ramp line values, humanize |
 
 `PianoRollTypes.h` is a self-contained header (own `#pragma once` plus includes) defining those
 types at namespace scope inside a nested `synth::ui::pianoroll` namespace, so generic names like
@@ -77,7 +88,7 @@ and the same `viewState_.beatToX` mapping it always had.
 
 ## Vertical layout
 
-Toolbar row, then ruler, then note canvas.
+Toolbar row, then ruler, then note canvas, then the velocity strip.
 
 While the roll is CLOSED nothing is unusual: the ruler is the top row of the lanes region and the
 roll occupies exactly `gridLanesBounds_`, the clip-lane rect. While it is **open**, the panel
@@ -90,12 +101,18 @@ own `resized()` is the single carve-up:
 | Chip toolbar | `kToolbarHeight` | the roll (its own chrome) |
 | Ruler | `rulerBandHeight_` | **left blank** for `ruler_`, a sibling drawn on top of it |
 | Note canvas | the remainder | the roll (keys-column gutter plus grid) |
+| Velocity strip | `PianoRollVelocityLane::kDefaultHeight` (64), 0 while hidden | `PianoRollVelocityLane`, a child |
 
 **Why the middle band exists.** It puts the chrome **above** the ruler rather than sandwiching it
 between the ruler and the notes. The owner pushes the ruler's real height in via
 `setRulerBandHeight()` (0 by default, which collapses the layout back to toolbar-then-canvas for a
 bare roll or a test), and the panel calls `ruler_.toFront(false)` while open because the roll was
 added to the panel *after* the ruler and would otherwise paint over it.
+
+The strip is carved from the **bottom** first and spans the full width, so the scale panel, the
+keys column and the grid all stop above it. **`canvasBottom()` is the other edge's seam**: every
+"how tall is the grid" read (`gridRegion()`, row counts, the scroll clamp, the dim band, the playhead
+strip) goes through it rather than `getHeight()`, which would run the grid under the strip.
 
 **`canvasTop()` is the one seam** every grid, row and hit-test coordinate reads — `kToolbarHeight +
 rulerBandHeight_`. Introducing it is what lets the ruler sit between the chrome and the canvas
@@ -281,7 +298,7 @@ mouse-up, so a multi-note move, scrub or delete is one undo step.
 | Mouse-DOWN on any note | **Auditions it** — see **Note audition**. Every note-hit branch sounds the note (select, move, copy, resize, velocity scrub, even a Shift+click that deselects it), so "clicking a note plays it" never depends on which modifier is down |
 | **Double-click a note** | Deletes it, one step — the standard DAW mirror of double-click-to-create |
 | Delete / Backspace | Deletes the selection, one step; returns `false` when the selection is empty |
-| Escape | Cancels an in-flight move or copy drag first (nothing committed); otherwise clears the selection; closes the roll when nothing is selected |
+| Escape | Cancels an in-flight velocity-strip drag or move/copy drag first (nothing committed); otherwise clears the selection; closes the roll when nothing is selected |
 | **Cmd**+drag on a note's BODY | Moves it, and the rest of the selection, with the grid **BYPASSED** — the note follows the raw beat under the pointer. One modifier, one meaning: Cmd on a note says "do this smoothly", whichever part of it you grabbed. Latched at mouse-down (`moveUnquantized_`), never re-read from the live modifiers |
 | **Cmd**+CLICK on a note (no drag) | Additive-select **toggle**: adds an unselected note, removes an already-selected one. Cmd+click and Cmd+drag are indistinguishable at mouse-down, so the note is ADDED immediately (the move needs it in the selection) and mouse-up completes the toggle *only if nothing moved* — the same deferred-classification trick `pendingEmptyClick_` uses for the empty-grid press. A Cmd+drag therefore never deselects what it is moving |
 | **Ctrl**+vertical-drag on a note (macOS) / **Ctrl+Alt**+vertical-drag (Windows, Linux) | Scrubs velocity, ~1/px, clamped to `[1, 127]` independently per note (a multi-selection scrubs all by the same delta). Off Cmd because Cmd means "unsnapped" on both halves of a note, and one modifier meaning "smooth" on the right edge and "change the volume" two pixels to its left is ambiguous; off Option because Option is the copy drag below. The chord is `isVelocityScrubChord` (`PianoRollInternal.h`): `(ctrl && !command) \|\| (ctrl && alt)` — on macOS JUCE's `isCommandDown()` is Cmd and `isCtrlDown()` is Ctrl, so plain Ctrl matches; on Windows/Linux Cmd IS Ctrl, so plain Ctrl is the unsnapped move and the scrub is Ctrl+Alt. Tested BEFORE the Cmd and Option branches. Still additive, never a toggle |
@@ -306,10 +323,11 @@ the time the create or delete runs; the double-click is the last word either way
 
 ## Header chips
 
-**Six** drawn chips — not child `juce::Button`s; they are painted shapes hit-tested by position,
+**Eight** drawn chips — not child `juce::Button`s; they are painted shapes hit-tested by position,
 `HeaderButtonId` — left to right: **"Clips"** (back), **Quantise**, **Quantise Length**, **Quantise
-Pitches**, **"Scale"**, **Show Only Scale Notes**. The three quantise verbs (position, length,
-pitch) are grouped together in that order.
+Pitches**, **"Scale"**, **Show Only Scale Notes**, **"Velocity"**, **"Humanize"**. The three
+quantise verbs (position, length, pitch) are grouped together in that order. Right after
+"Humanize" sits the one real child control, the velocity value box (see **Velocity strip**).
 
 Each is a `juce::Rectangle<int>` member carved in `resized()` and resolved through the single seam
 `headerButtonBoundsFor(which)`, which `updateHeaderButtonHover()` and `paintHeader()`'s hover wash
@@ -319,8 +337,8 @@ Every chip does exactly ONE thing on a plain click; there are no modifier varian
 all. The GAPS carry meaning: 4 px between groups, 2 px within one, so "the three quantise verbs"
 reads as a cluster and "scale plus its row filter" as another.
 
-Only **Show Only Scale Notes** is a toggle, so it is the only one that ever paints lit; the rest
-are actions and merely dim when they would be a no-op. **Quantise** and **Quantise Length**
+**Scale**, **Show Only Scale Notes** and **Velocity** are toggles and paint lit while on; the
+rest are actions and merely dim when they would be a no-op. **Quantise** and **Quantise Length**
 additionally flash on every press, sharing the same `isQuantiseEnabled()` gate; **Quantise
 Pitches** does not, because it is silently a no-op with no scale chosen, matching its own dim.
 
@@ -348,6 +366,61 @@ glyph for "the scale picker" would be a guess. Every tooltip is rebuilt per quer
 `synth::shortcutHintFor` (`quantiseTooltipText()` / `quantiseLengthTooltipText()` /
 `quantisePitchTooltipText()` / `scaleTooltipText()` / `scaleFilterTooltipText()`), so a rebind shows
 up the very next time it is asked for, with no cache and no listener.
+
+## Velocity strip
+
+A 64 px strip (`PianoRollVelocityLane::kDefaultHeight`) under the grid with **one stick per note**
+at the note's start x, its height the velocity (1 at the bottom, 127 at the top), coloured like the
+note (the host resolves it through the same `resolveNoteColourFor` the grid uses; selected sticks
+take `noteSelected`). The gutter at its left (`leftGutterWidth()`, so it tracks the Scale Assist
+panel) shows a 127 / 64 / 1 scale under the keys column, and the sticks' x comes from the roll's
+own `beatToX`, so a stick sits exactly under its note's left edge at every zoom and with the panel
+open. The value shows beside a stick while it is hovered or dragged.
+
+**The strip is a collaborator, not more roll.** `PianoRollVelocityLane`
+(`Source/UI/PianoRoll/VelocityLane/`) owns painting, hit-testing, the readout and the per-gesture
+drag state and preview values; it reads and writes only through its `Host` — a stick provider (id,
+x, velocity, selected, colour), `gutterWidth`, `isDrawToolActive`, and `onPreview` / `onCommit` /
+`onCancel`. `PianoRollVelocity.cpp` is the roll's side of that seam. The pure maths (y <-> velocity,
+which stick a press grabs, the pen/ramp line values, humanize) is free functions in
+`VelocityLaneMath.h`, unit-tested without a component.
+
+| Gesture in the strip | Effect |
+|---|---|
+| Drag starting **on a stick** (within 5 px of its x; a chord's sticks share an x, so the head nearest the pointer's y wins) — unselected note | Sets that one note's velocity **absolutely** from the pointer's y, from the press onwards |
+| The same on a **selected** note | Every selected note moves by the **same delta** (the pointer's travel in velocity units since the press, so nothing jumps on the press), each clamped to 1..127 on its own |
+| Drag starting on **empty strip** | **Pen**: every stick the stroke crosses takes the stroke's value at that x. Each mouse segment is interpolated, so a fast stroke skips no stick; chord notes at one x all take the value. With a selection, only selected notes are touched |
+| **Shift**+drag | **Ramp**: a straight line from the press point to the pointer across the sticks between (selection-restricted likewise); shrinking it back returns the notes it no longer spans to their own values |
+| Any drag while the **Draw** tool is active | A pen stroke, even on a stick |
+| **Escape** mid-drag | Cancels: nothing committed, no undo step. The strip takes focus on a press so Escape reaches it; the roll's own Escape branch cancels a strip drag first too, before it would clear the selection |
+
+Precedence at the press, first match wins: Draw tool, Shift, a stick under the pointer, empty strip.
+
+**Preview and commit.** While dragging, the notes in the grid recolour live: the gesture's values
+reach the roll as a per-note override map (`velocityPreview_`, NoteId -> velocity) that
+`effectiveGeometryFor` applies, so `paintNote`'s `resolveNoteColourFor` and the sticks read the
+same value. It is cleared on commit and on cancel. Release commits only the notes whose value
+changed, exactly like the Ctrl-drag velocity scrub: one `recordTimelineChange` around every
+`setNoteVelocity`, so a gesture is **one undo step** however many notes it touched, and a gesture
+that ends where it started writes nothing. The Ctrl-drag scrub on notes is unchanged, and its
+preview moves the sticks too, since they read `effectiveGeometryFor`.
+
+**Toolbar.** The **Velocity** chip shows or hides the strip and paints lit while it is shown. The
+**value box** (a `juce::TextEditor` right after the Humanize chip, so the three velocity controls sit together, titled "Velocity of selected notes"
+for screen readers) shows the selected notes' common velocity — blank with nothing selected, an em
+dash when they differ — kept current through `NoteSelectionModel::onChange`, which fires on every
+real selection change from any path. Typing 1..127 and pressing Return sets the selected notes, or
+every note in the clip when none is selected, as one undo step; anything else is rejected and the
+box reverts (Escape and losing focus revert too). The **Humanize** chip opens a menu — Humanize
+±5 / ±10 / ±20 — that adds a random offset in [-N, +N] to each target note (selection, else every
+note), clamped to 1..127, one undo step. The random source is the roll's own `juce::Random`;
+`setHumanizeRandomSeed` makes it deterministic for tests.
+
+**Visibility.** Shown by default. The chip and the rebindable `pianoRollToggleVelocityLane`
+shortcut (a real Ctrl+V on macOS, Cmd+Shift+V elsewhere — see
+[shortcuts](../control/shortcuts.md#piano-roll)) toggle it; hiding it mid-drag cancels the drag.
+The state is remembered in the properties file under `"pianoRollVelocityLaneVisible"` (absent =
+shown), restored by `setPropertiesFile`; with no properties file it is session-only.
 
 ## Note audition
 
@@ -678,7 +751,12 @@ fallback, the note clipboard's
 cross-clip survival and its clip-window clamps on paste and repeat, and the arrow keys' shared-delta
 clamp with an empty selection falling through. Audition lives in `PianoRollAuditionTests.cpp`, the
 header chips in `PianoRollHeaderChipsTests.cpp`, and the key bindings in
-`PianoRollShortcutsTests.cpp`.
+`PianoRollShortcutsTests.cpp`. The velocity strip is covered in `PianoRollVelocityLaneTests.cpp`
+(layout band, stick alignment, every gesture driven through the strip's real mouse handlers, Escape,
+live recolour, one undo step), `PianoRollVelocityToolbarTests.cpp` (value box, Humanize, chip,
+shortcut, persistence) and `VelocityLaneMathTests.cpp`; the shared `PianoRollFixture` hides the
+strip so every other suite keeps its grid-to-bottom geometry, and `VelocityLaneFixture`
+(`PianoRollVelocityTestHelpers.h`) shows it.
 
 **Note for wheel tests:** `juce::MouseWheelDetails` has no default member initialisers, so they must
 construct it `{}`-initialised or a garbage `deltaX` decides the branch.

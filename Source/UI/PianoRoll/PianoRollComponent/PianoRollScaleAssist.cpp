@@ -7,6 +7,7 @@
 #include "PianoRollComponent.h"
 
 #include "AppUndoManager.h"
+#include "PianoRollInternal.h"
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -29,6 +30,10 @@ void PianoRollComponent::setPropertiesFile(juce::PropertiesFile* props) {
     const bool visible = props != nullptr && props->getBoolValue(kScalePanelVisiblePropertyKey, false);
     // A restore must never itself look like the panel sliding open.
     setScalePanelVisible(visible, /*animate=*/false);
+    // The velocity strip's remembered visibility (absent = shown). Without a properties file the
+    // current, session-only state is kept.
+    if (props != nullptr)
+        setVelocityLaneVisible(props->getBoolValue(detail::velocityLaneVisibleKey(), true));
 }
 
 void PianoRollComponent::setScalePanelVisible(bool visible, bool animate) {
@@ -286,7 +291,7 @@ juce::String PianoRollComponent::keyLabelFor(int pitch, KeyLabelMode mode, int r
 
 juce::Rectangle<int> PianoRollComponent::gridRegion() const noexcept {
     const int gutter = leftGutterWidth();
-    return {gutter, canvasTop(), std::max(0, getWidth() - gutter), std::max(0, getHeight() - canvasTop())};
+    return {gutter, canvasTop(), std::max(0, getWidth() - gutter), std::max(0, canvasBottom() - canvasTop())};
 }
 
 juce::Rectangle<int> PianoRollComponent::computeNoteRect(double absStartBeat, double absLengthBeats, int pitch) const {
@@ -388,7 +393,11 @@ PianoRollComponent::NoteGeometry PianoRollComponent::effectiveGeometryFor(const 
                 return {note.startBeat, note.lengthBeats, note.pitch,
                         juce::jlimit(1, 127, origin.velocity + previewDeltaVelocity_)};
     }
-    return {note.startBeat, note.lengthBeats, note.pitch, note.velocity};
+    // A velocity-strip gesture's live value (see PianoRollVelocity.cpp) — so the note recolours
+    // while its stick is dragged, through the same resolveNoteColourFor every note paints with.
+    const auto preview = velocityPreview_.find(note.id);
+    const int velocity = preview != velocityPreview_.end() ? preview->second : note.velocity;
+    return {note.startBeat, note.lengthBeats, note.pitch, velocity};
 }
 
 //==============================================================================

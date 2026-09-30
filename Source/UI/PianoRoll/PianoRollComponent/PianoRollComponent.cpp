@@ -59,6 +59,7 @@
 
 #include "PianoRollComponent.h"
 #include "PianoRollInternal.h"
+#include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -115,6 +116,7 @@ PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
         juce::Random rng; // default-seeded — the panel's Generate button always wants a fresh draw
         generateRandomNotesIntoClip(scale.has_value() ? &*scale : nullptr, minPitch, maxPitch, rng, addToExisting);
     };
+    initVelocityControls();
 }
 
 PianoRollComponent::~PianoRollComponent() {
@@ -123,6 +125,10 @@ PianoRollComponent::~PianoRollComponent() {
     // Before the animation teardown, because the callback is the thing with a deadline.
     stopAudition();
     keysColumnPressing_ = false; // no repaint from a dying component; the note-off above is the point
+    // The value box can lose focus while it is being destroyed; nothing may call back into a
+    // half-destroyed roll from there.
+    velocityBox_.onFocusLost = nullptr;
+    selection_.onChange = nullptr;
     // The AnimationDriver's callbacks capture 'this' indirectly (see setScalePanelVisible); an
     // animation still running when this object goes away would call back into a destroyed
     // component, exactly the hazard ModuleLibraryComponent's own destructor guards against.
@@ -137,6 +143,7 @@ PianoRollComponent::~PianoRollComponent() {
 
 void PianoRollComponent::openClip(synth::ClipId id) {
     wheelTween_.stop();
+    clearVelocityPreview(); // a strip gesture on the OLD clip commits nothing
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
     resizeNotes_.clear();
@@ -177,7 +184,7 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     }
     clipId_ = id;
 
-    const int visibleRows = std::max(1, (getHeight() - canvasTop()) / (int)pixelsPerSemitone_);
+    const int visibleRows = std::max(1, (canvasBottom() - canvasTop()) / (int)pixelsPerSemitone_);
     const int median = medianPitchOf(clip->notes);
     firstVisiblePitch_ = juce::jlimit(0, 127, median + visibleRows / 2);
     // A fresh, freshly-computed landing for the clip just opened — never a continuation of
@@ -212,6 +219,7 @@ void PianoRollComponent::closeRoll() {
     // deliberately exempt from every positional flush — see TimelineMidiSourceModule).
     stopAudition();
     endKeysColumnPress();
+    clearVelocityPreview();
     clipId_ = {};
     selection_.clear();
     dragMode_ = DragMode::None;
@@ -383,7 +391,7 @@ double PianoRollComponent::minTopRowPosition() const noexcept {
     // loop bounds; here kept exact, since a fractional row of headroom is exactly what should let
     // the lowest row land a fraction short of the bottom edge rather than snapping early).
     const double gridRows =
-        pixelsPerSemitone_ > 0.0 ? (double)std::max(0, getHeight() - canvasTop()) / pixelsPerSemitone_ : 0.0;
+        pixelsPerSemitone_ > 0.0 ? (double)std::max(0, canvasBottom() - canvasTop()) / pixelsPerSemitone_ : 0.0;
     return std::max(0.0, maxTopRowPosition() - std::max(0.0, totalRows - gridRows));
 }
 
