@@ -127,7 +127,7 @@ Related: look parameters up with `findParameterByID(processor, "paramID")` rathe
 
 `Source/UI/Layout/LayoutUtil.h/.cpp`
 
-Stateless grid-layout helpers (`snap`, `intersectsAny`, `findFreeSlot`, `computeAutoArrange`). No JUCE GUI dependencies — fully headless-testable. See [`docs/layout/layout.md`](../layout/layout.md#layoututil-api) for the full API reference.
+Stateless grid-layout helpers (`snap`, `intersectsAny`, `findFreeSlot`, and, in `HierarchicalArrange.h`, `computeHierarchicalArrange`). No JUCE GUI dependencies — fully headless-testable. See [`docs/layout/layout.md`](../layout/layout.md#layoututil-api) for the full API reference.
 
 ## ModuleComponent
 

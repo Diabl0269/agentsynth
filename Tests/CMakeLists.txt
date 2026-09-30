@@ -16,6 +16,9 @@ add_executable(Tests
     UI/Layout/LayoutUtilTests.cpp
     UI/Layout/LayoutUtilDisplacementTests.cpp
     UI/Layout/LayoutUtilOutputDockTests.cpp
+    UI/Layout/HierarchicalArrangeTests.cpp
+    UI/Graph/AutoArrangeTests.cpp
+    UI/Graph/AutoArrangeMacroTests.cpp
     UI/Graph/OutputDockTests.cpp
     Modules/OscillatorTests.cpp
     Modules/CardLayoutTests.cpp

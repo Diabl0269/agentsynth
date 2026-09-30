@@ -326,6 +326,11 @@ public:
     // GraphEditor owns no TimelineDoc, mirroring onSaveSnippetRequested above.
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onAutomateParameterRequested;
 
+    // The node uuids each timeline track starts from (its Track In / Track Audio), in track order. Set by
+    // MainComponent; auto-arrange gives every track its own row in this order. Unset (tests, plugin): track
+    // source nodes are ordered by node id.
+    std::function<std::vector<juce::String>()> trackSourceOrder;
+
     // ---- MIDI Learn (docs/control/midi-remote-ui.md#the-learn-interaction) ----
     // Set by MainComponent::wireGraphEditorCallbacks(); GraphEditor owns no RemoteEngine/doc.
     std::function<std::map<juce::String, juce::String>(juce::AudioProcessorGraph::NodeID)>
