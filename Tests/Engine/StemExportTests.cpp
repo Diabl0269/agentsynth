@@ -21,6 +21,7 @@
 #include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/MasterModule.h"
 #include "Transport/BounceExporter.h"
+#include "Transport/LameLocator.h"
 #include "Transport/OfflineTransportDriver.h"
 #include "Transport/StemExporter.h"
 #include "Transport/StemSession.h"
@@ -302,6 +303,29 @@ TEST(StemExportTest, FlacFormatWritesReadableFlacStemsWithTheFlacExtension) {
         EXPECT_EQ(reader->getFormatName(), "FLAC file");
         EXPECT_EQ(reader->lengthInSamples, result.samplesWritten);
     }
+}
+
+TEST(StemExportTest, Mp3FormatWritesNonEmptyMp3StemsWithTheMp3Extension) {
+    const auto lame = synth::findLameExecutable();
+    if (!lame.existsAsFile())
+        GTEST_SKIP() << "lame is not installed; MP3 export cannot be exercised here";
+
+    StemRig rig;
+    ASSERT_TRUE(rig.build());
+
+    ScopedTempDir out("agentsynth_stems_mp3");
+    auto options = oneBeatOptions(24);
+    options.format = synth::BounceFormat::Mp3;
+    options.lameExecutable = lame;
+    options.mp3BitrateKbps = 192;
+    const auto result = StemExporter::exportStems(rig.engine, out.dir, options);
+    ASSERT_TRUE(result.ok) << result.message;
+
+    ASSERT_EQ(result.stemFiles.size(), 2);
+    EXPECT_EQ(result.stemFiles[0].getFileName(), "01 - Channel 1.mp3");
+    EXPECT_EQ(result.stemFiles[1].getFileName(), "02 - Channel 2.mp3");
+    for (auto& f : result.stemFiles)
+        EXPECT_GT(f.getSize(), 0) << f.getFullPathName();
 }
 
 TEST(StemExportTest, NoStripsShowsAClearMessageInsteadOfRenderingNothing) {

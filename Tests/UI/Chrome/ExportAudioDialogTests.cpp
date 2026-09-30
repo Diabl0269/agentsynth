@@ -255,6 +255,39 @@ TEST(ExportAudioDialogTest, SwitchingToFlacRewritesTheDestinationExtension) {
     EXPECT_EQ(dialog.getDestinationForTest().getFileName(), "My Project.wav");
 }
 
+// ---- MP3 (needs the user's lame) --------------------
+
+TEST(ExportAudioDialogTest, Mp3IsDisabledUntilLameIsFound) {
+    auto dialog = makeDialog();
+    dialog.setLameExecutable(juce::File("/nonexistent/lame"));
+    EXPECT_FALSE(dialog.isMp3AvailableForTest());
+
+    // A disabled choice cannot be reached, so the dialog stays on a format that works.
+    dialog.setFormatForTest(BounceFormat::Mp3);
+    EXPECT_NE(dialog.getOptionsForTest().format, BounceFormat::Mp3);
+}
+
+TEST(ExportAudioDialogTest, Mp3OffersBitratesAndSetsTheMp3Extension) {
+    const auto lame = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_dialog_lame");
+    ASSERT_TRUE(lame.create());
+    auto dialog = makeDialog(kArrangementEndBeat, false, 0.0, 0.0, true, "My Project");
+    dialog.setLameExecutable(lame);
+    ASSERT_TRUE(dialog.isMp3AvailableForTest());
+
+    dialog.setFormatForTest(BounceFormat::Mp3);
+    dialog.setMp3BitrateForTest(256);
+    const auto options = dialog.getOptionsForTest();
+    EXPECT_EQ(options.format, BounceFormat::Mp3);
+    EXPECT_EQ(options.mp3BitrateKbps, 256);
+    EXPECT_EQ(options.lameExecutable, lame);
+    EXPECT_EQ(dialog.getDestinationForTest().getFileName(), "My Project.mp3");
+    EXPECT_TRUE(synth::validateBounceOptions(options).isEmpty()) << synth::validateBounceOptions(options);
+
+    dialog.setFormatForTest(BounceFormat::Wav);
+    EXPECT_EQ(dialog.getDestinationForTest().getFileName(), "My Project.wav");
+    lame.deleteFile();
+}
+
 // ---- Tail Seconds/Bars --------------------
 
 TEST(ExportAudioDialogTest, TailDefaultsToZeroSeconds) {

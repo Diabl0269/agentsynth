@@ -555,6 +555,7 @@ add_executable(Tests
     Engine/BounceExporter/BounceExporterStreamedClipTests.cpp
     Engine/BounceExporter/BounceExporterTransportTests.cpp
     Engine/BounceRunnerTests.cpp
+    Engine/LameLocatorTests.cpp
     Engine/StemExportTests.cpp
     Engine/StemExportNamingTests.cpp
     Engine/StemRunnerTests.cpp

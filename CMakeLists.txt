@@ -306,6 +306,8 @@ add_library(Core STATIC
     Source/Transport/BounceRunner.h
     Source/Transport/BounceSession.cpp
     Source/Transport/BounceSession.h
+    Source/Transport/LameLocator.cpp
+    Source/Transport/LameLocator.h
     Source/Transport/Metronome.cpp
     Source/Transport/Metronome.h
     Source/Transport/OfflineTransportDriver.cpp

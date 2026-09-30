@@ -156,7 +156,6 @@ StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolde
     }
 
     // ---- One writer per strip, on a sibling temp file each, inside the destination folder ----
-    const auto audioFormat = createAudioFormatFor(options_.format);
     const juce::String extension = fileExtensionFor(options_.format);
     // Wide enough that "07" doesn't need to become "007" once an 8th strip exists, but never
     // narrower than 2 digits even for a 1-strip export - see docs/mixer/stem-export.md.
@@ -186,7 +185,7 @@ StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolde
             return;
         }
 
-        sw.writer.reset(audioFormat->createWriterFor(stream.get(), options_.sampleRate, 2u, options_.bitDepth, {}, 0));
+        sw.writer = createBounceWriter(options_, stream.get(), 2u);
         if (sw.writer == nullptr) {
             restoreTransportAndEngine();
             setupFailed_ = true;
@@ -405,6 +404,15 @@ StemResult StemSession::finish() {
         result.message = "Failed while writing stems to \"" + destinationFolder_.getFullPathName() + "\".";
         finishedResult_ = result;
         return finishedResult_;
+    }
+
+    // Closing a writer is when an MP3 is actually encoded; it fails silently, so look at each file.
+    for (auto& stem : stems_) {
+        if (encodedOutputIsMissing(options_, stem.temporary->getFile())) {
+            result.message = kMp3EncodeFailedMessage;
+            finishedResult_ = result;
+            return finishedResult_;
+        }
     }
 
     // Move every stem into place only once every one of them rendered successfully - see the header

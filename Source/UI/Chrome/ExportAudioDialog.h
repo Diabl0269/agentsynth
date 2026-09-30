@@ -92,6 +92,10 @@ public:
     std::function<void(std::function<void(int)> onChoice)> collisionPromptForTest;
 
     // MESSAGE THREAD. Called by the owner to drive the progress page.
+    // Where the user's `lame` encoder is (see Transport/LameLocator.h); the MP3 choice is enabled
+    // only when this is an existing file. The constructor looks it up; tests inject their own.
+    void setLameExecutable(const juce::File& lameExecutable);
+
     void showProgressPage();
     void reportProgress(double fraction);
     // Stem export has no BounceResult (StemExporter reports StemResult) - both funnel into the same
@@ -104,6 +108,8 @@ public:
     BounceOptions getOptionsForTest() const;
     juce::File getDestinationForTest() const { return destination_; }
     void setFormatForTest(BounceFormat format);
+    void setMp3BitrateForTest(int kbps);
+    bool isMp3AvailableForTest() const { return lameExecutable_.existsAsFile(); }
     void setBitDepthForTest(int bitDepth);
     void setSampleRateForTest(double sampleRate);
     void setUseSelectionForTest(bool useSelection);
@@ -125,6 +131,7 @@ private:
     void handleEscapeRequested();
     BounceFormat selectedFormat() const;
     void updateBitDepthChoicesForFormat();
+    void updateFormatDependentRows();
     void chooseDestinationFolder();
     void updateFileNameFromEditor();
     void currentRange(double& startBeat, double& endBeat) const;
@@ -152,6 +159,10 @@ private:
     juce::ComboBox sampleRateBox_;
     juce::Label bitDepthLabel_{"bitDepthLabel", "Bit depth"};
     juce::ComboBox bitDepthBox_;
+    // MP3 has no bit depth, so this row takes the bit-depth row's place while MP3 is selected.
+    juce::Label bitrateLabel_{"bitrateLabel", "Bitrate"};
+    juce::ComboBox bitrateBox_;
+    juce::File lameExecutable_;
     juce::Label tailLabel_{"tailLabel", "Tail"};
     ExpandingRangeSlider tailSlider_;
     juce::ComboBox tailUnitBox_; // Seconds / Bars - the slider/text range converts, tailSeconds is what ships

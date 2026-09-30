@@ -1,7 +1,9 @@
 #include "BounceExporter.h"
 
 #include "BounceSession.h"
+#include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <limits>
 
 namespace synth {
@@ -12,14 +14,22 @@ juce::String fileExtensionFor(BounceFormat format) {
         return "aiff";
     case BounceFormat::Flac:
         return "flac";
+    case BounceFormat::Mp3:
+        return "mp3";
     case BounceFormat::Wav:
         break;
     }
     return "wav";
 }
 
-std::unique_ptr<juce::AudioFormat> createAudioFormatFor(BounceFormat format) {
+// nullptr for Mp3 when `lameExecutable` is not an existing file: MP3 is encoded by the user's own
+// `lame` (juce::LAMEEncoderAudioFormat, see LameLocator.h) and there is nothing to fall back to.
+std::unique_ptr<juce::AudioFormat> createAudioFormatFor(BounceFormat format, const juce::File& lameExecutable) {
     switch (format) {
+    case BounceFormat::Mp3:
+        if (!lameExecutable.existsAsFile())
+            return nullptr;
+        return std::make_unique<juce::LAMEEncoderAudioFormat>(lameExecutable);
     case BounceFormat::Aiff:
         return std::make_unique<juce::AiffAudioFormat>();
     case BounceFormat::Flac:
@@ -30,6 +40,39 @@ std::unique_ptr<juce::AudioFormat> createAudioFormatFor(BounceFormat format) {
     return std::make_unique<juce::WavAudioFormat>();
 }
 
+// -1 for a bitrate that is not offered. The CBR entries of getQualityOptions() follow the ten VBR ones.
+int lameQualityIndexForBitrate(int kbps) {
+    const bool offered =
+        std::find(std::begin(kMp3BitratesKbps), std::end(kMp3BitratesKbps), kbps) != std::end(kMp3BitratesKbps);
+    if (!offered)
+        return -1;
+    // Look the bitrate up in JUCE's own list rather than hard-coding an offset into it.
+    const auto wanted = juce::String(kbps) + " Kb/s CBR";
+    juce::LAMEEncoderAudioFormat format{juce::File()};
+    return format.getQualityOptions().indexOf(wanted);
+}
+
+// The one place the options map to juce::AudioFormat::createWriterFor's arguments. The stream is
+// only taken over on success.
+std::unique_ptr<juce::AudioFormatWriter> createBounceWriter(const BounceOptions& options, juce::OutputStream* stream,
+                                                            unsigned int numChannels) {
+    const auto audioFormat = createAudioFormatFor(options.format, options.lameExecutable);
+    if (audioFormat == nullptr)
+        return nullptr;
+    const bool isMp3 = options.format == BounceFormat::Mp3;
+    const int qualityIndex = isMp3 ? lameQualityIndexForBitrate(options.mp3BitrateKbps) : 0;
+    if (qualityIndex < 0)
+        return nullptr;
+    return std::unique_ptr<juce::AudioFormatWriter>(audioFormat->createWriterFor(
+        stream, options.sampleRate, numChannels, isMp3 ? 16 : options.bitDepth, {}, qualityIndex));
+}
+
+// MP3 is produced when the writer closes (lame runs then), and a failed run leaves the file empty
+// without any error from JUCE.
+bool encodedOutputIsMissing(const BounceOptions& options, const juce::File& file) {
+    return options.format == BounceFormat::Mp3 && (!file.existsAsFile() || file.getSize() <= 0);
+}
+
 juce::String validateBounceOptions(const BounceOptions& options) {
     if (!(options.sampleRate > 0.0) || !std::isfinite(options.sampleRate))
         return "Sample rate must be a positive number.";
@@ -37,8 +80,15 @@ juce::String validateBounceOptions(const BounceOptions& options) {
         return "Block size must be at least 1 sample.";
     if (options.numChannels <= 0)
         return "A bounce needs at least one channel.";
-    if (options.bitDepth != 16 && options.bitDepth != 24 && options.bitDepth != 32)
+    if (options.format == BounceFormat::Mp3) {
+        if (!options.lameExecutable.existsAsFile())
+            return "MP3 export needs the lame encoder, which was not found. Install it (e.g. brew install lame) or "
+                   "export another format.";
+        if (lameQualityIndexForBitrate(options.mp3BitrateKbps) < 0)
+            return "MP3 bitrate must be 128, 192, 256 or 320 kbps.";
+    } else if (options.bitDepth != 16 && options.bitDepth != 24 && options.bitDepth != 32) {
         return "Bit depth must be 16, 24 or 32.";
+    }
     if (options.format == BounceFormat::Aiff && options.bitDepth == 32)
         return "AIFF has no 32-bit float variant - choose 16 or 24 bit, or export WAV instead.";
     if (options.format == BounceFormat::Flac && options.bitDepth == 32)

@@ -16,12 +16,15 @@ namespace synth {
 // renders through; the transport is the app's own transport, driven through its normal
 // stop/locate/play commands; the modules are the live nodes. What differs from playback is only
 // that nobody is waiting for a device: blocks are produced as fast as the CPU can produce them.
-enum class BounceFormat { Wav, Aiff, Flac };
+enum class BounceFormat { Wav, Aiff, Flac, Mp3 };
 
 // The file extension (no dot) and a fresh juce::AudioFormat for `format`. The one place the format
 // enum maps to JUCE, shared by BounceSession, StemSession and the export dialog.
 juce::String fileExtensionFor(BounceFormat format);
-std::unique_ptr<juce::AudioFormat> createAudioFormatFor(BounceFormat format);
+std::unique_ptr<juce::AudioFormat> createAudioFormatFor(BounceFormat format, const juce::File& lameExecutable = {});
+
+inline constexpr int kMp3BitratesKbps[] = {128, 192, 256, 320};
+int lameQualityIndexForBitrate(int kbps);
 
 struct BounceOptions {
     // The range to render, in beats, at the transport's current tempo. Half-open in intent but
@@ -46,7 +49,16 @@ struct BounceOptions {
     // AIFF and FLAC have no IEEE-float variant in JUCE, so bitDepth 32 is valid only when format is
     // Wav - validate() rejects the combination rather than silently downgrading it.
     BounceFormat format = BounceFormat::Wav;
+    int mp3BitrateKbps = 192;  // Mp3 only (CBR, one of kMp3BitratesKbps); bitDepth is ignored for Mp3
+    juce::File lameExecutable; // Mp3 only
 };
+
+std::unique_ptr<juce::AudioFormatWriter> createBounceWriter(const BounceOptions& options, juce::OutputStream* stream,
+                                                            unsigned int numChannels);
+
+bool encodedOutputIsMissing(const BounceOptions& options, const juce::File& file);
+inline const char* const kMp3EncodeFailedMessage =
+    "MP3 encoding failed - lame produced no output. Check that lame runs from a terminal.";
 
 // Everything about `options` that can be rejected before a single sample is rendered or a single
 // file touched. Empty string means valid. Shared by BounceSession and StemSession (Source/Transport/
