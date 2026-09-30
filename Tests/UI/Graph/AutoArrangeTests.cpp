@@ -51,6 +51,30 @@ protected:
         return rig;
     }
 
+    // One audio track and a loose LFO modulating the Gate inside its channel macro.
+    Rig buildLoneTrackWithLfo(bool collapsed) {
+        Rig rig;
+        rig.mc = std::make_unique<MainComponent>(std::make_unique<MockProviderCFT>());
+        rig.mc->setSize(1600, 900);
+        rig.mc->getAudioEngine().suspendDeviceCallback();
+        addAudioTrack(*rig.mc);
+        auto& editor = rig.mc->getGraphEditor();
+        auto& graph = rig.mc->getAudioEngine().getGraph();
+        for (const auto& track : rig.mc->getTimelineDoc().getTracks())
+            for (const auto& macro : editor.getMacros().getAll())
+                if (macro.name == track.name)
+                    rig.channelMacroIds.push_back(macro.id);
+        auto node = graph.addNode(synth::AIStateMapper::createModule("LFO"));
+        node->properties.set("x", 1500);
+        node->properties.set("y", 700);
+        node->properties.set("uuid", juce::Uuid().toDashedString());
+        rig.lfo = node->nodeID;
+        editor.updateComponents();
+        routeLfoTo(*rig.mc, rig.lfo, rig.channelMacroIds[0]);
+        editor.getMacroController().setMacroCollapsed(rig.channelMacroIds[0], collapsed);
+        return rig;
+    }
+
     // LFO -> the Gate inside `macroId`, on the first channel the engine accepts as a modulation target.
     static void routeLfoTo(MainComponent& mc, juce::AudioProcessorGraph::NodeID lfo, const juce::String& macroId) {
         auto& graph = mc.getAudioEngine().getGraph();
@@ -207,4 +231,29 @@ TEST_F(AutoArrangeTrackTest, TrackOrderFollowsTheTimelineNotNodeCreationOrder) {
     const auto bottom = cardOf(*rig.mc, movedChannel);
     for (size_t i = 1; i < rig.channelMacroIds.size(); ++i)
         EXPECT_LT(cardOf(*rig.mc, rig.channelMacroIds[i]).getY(), bottom.getY());
+}
+
+// A loose LFO that only modulates a stage inside the track's channel macro belongs right before that macro, in the
+// track's row, whether the macro is open or collapsed.
+TEST_F(AutoArrangeTrackTest, ALooseLfoFeedingOnlyTheChannelMacroSitsRightBeforeItCollapsed) {
+    auto rig = buildLoneTrackWithLfo(/*collapsed=*/true);
+    rig.mc->getGraphEditor().autoArrange();
+    autoarrange_test::expectBeforeInRow(rectOfNode(*rig.mc, rig.lfo), cardOf(*rig.mc, rig.channelMacroIds[0]),
+                                        "track collapsed");
+}
+
+TEST_F(AutoArrangeTrackTest, ALooseLfoFeedingOnlyTheChannelMacroSitsRightBeforeItOpen) {
+    auto rig = buildLoneTrackWithLfo(/*collapsed=*/false);
+    rig.mc->getGraphEditor().autoArrange();
+    autoarrange_test::expectBeforeInRow(rectOfNode(*rig.mc, rig.lfo), cardOf(*rig.mc, rig.channelMacroIds[0]),
+                                        "track open");
+}
+
+TEST_F(AutoArrangeTrackTest, TheLfoPlacementIsIdempotent) {
+    auto rig = buildLoneTrackWithLfo(/*collapsed=*/false);
+    auto& editor = rig.mc->getGraphEditor();
+    editor.autoArrange();
+    const auto first = autoarrange_test::snapshot(editor, rig.mc->getAudioEngine().getGraph());
+    editor.autoArrange();
+    EXPECT_TRUE(first == autoarrange_test::snapshot(editor, rig.mc->getAudioEngine().getGraph()));
 }

@@ -185,6 +185,7 @@ struct Rows {
     std::vector<int> key;
     std::vector<int> stackOrder; // shared-row blocks: their place in the consumer-count order
     std::vector<int> finalRank;  // row -> position, top to bottom
+    std::vector<int> anchor;     // row -> the block the row starts at (a track's start, a component's leftmost source)
 };
 
 // Every unassigned block adjacent to an assigned one joins the earliest assigned neighbour's row, to a fixed point.
@@ -231,6 +232,7 @@ void assignComponentRows(Rows& rows, const Graph& g, const std::vector<std::vect
         const int row = static_cast<int>(rows.category.size());
         rows.category.push_back(2);
         rows.key.push_back(leftmost);
+        rows.anchor.push_back(leftmost);
         for (int v : comp)
             rows.rowOf[v] = row;
     }
@@ -251,6 +253,7 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
         const int row = static_cast<int>(rows.category.size());
         rows.category.push_back(1);
         rows.key.push_back(trackNo++);
+        rows.anchor.push_back(a);
         rows.rowOf[a] = row;
         std::vector<int> stack{a};
         while (!stack.empty()) {
@@ -288,6 +291,7 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
         const int row = static_cast<int>(rows.category.size());
         rows.category.push_back(0);
         rows.key.push_back(0);
+        rows.anchor.push_back(-1);
         for (size_t k = 0; k < shared.size(); ++k) {
             rows.rowOf[shared[k].second] = row;
             rows.stackOrder[shared[k].second] = static_cast<int>(k);
@@ -347,6 +351,58 @@ std::vector<int> computeDepths(const Graph& g, const std::vector<int>& rowOf) {
     return depth;
 }
 
+// A source block (nothing feeding it inside its row) that is not its row's anchor is pulled right up to its nearest
+// consumer: depth = (smallest consumer depth) - 1. Without this every such block sits over column 0, far from what it
+// feeds. A consumer has an incoming edge, so it is never a source itself and its depth never changes here.
+// `consumerOf[i]` is the consumer a moved block follows (-1 for every block that stayed put).
+std::vector<int> placeSourcesAsLateAsPossible(const Graph& g, const Rows& rows, std::vector<int>& depth) {
+    std::vector<bool> hasInput(g.n, false);
+    std::vector<int> consumerOf(g.n, -1);
+    for (const auto& e : g.edges)
+        if (rows.rowOf[e.a] == rows.rowOf[e.b])
+            hasInput[e.b] = true;
+    for (const auto& e : g.edges)
+        if (rows.rowOf[e.a] == rows.rowOf[e.b] &&
+            (consumerOf[e.a] < 0 || std::tie(depth[e.b], e.b) < std::tie(depth[consumerOf[e.a]], consumerOf[e.a])))
+            consumerOf[e.a] = e.b;
+    for (int i = 0; i < g.n; ++i) {
+        if (hasInput[i] || rows.anchor[rows.rowOf[i]] == i || consumerOf[i] < 0) {
+            consumerOf[i] = -1;
+            continue;
+        }
+        depth[i] = std::max(0, depth[consumerOf[i]] - 1);
+    }
+    return consumerOf;
+}
+
+// Stack order of a row (sorted by column): a moved source takes the slot its consumer has in the next column, so it
+// lands beside what it feeds instead of under everything else in its column.
+void seatMovedSources(std::vector<int>& members, const std::vector<int>& depth, const std::vector<int>& consumerOf) {
+    auto slotInColumn = [&](int block) {
+        int slot = 0;
+        for (int m : members) {
+            if (m == block)
+                return slot;
+            slot += depth[m] == depth[block] ? 1 : 0;
+        }
+        return slot;
+    };
+    std::vector<int> moved;
+    for (int m : members)
+        if (consumerOf[m] >= 0)
+            moved.push_back(m);
+    for (int m : moved) {
+        const int slot = slotInColumn(consumerOf[m]);
+        members.erase(std::find(members.begin(), members.end(), m));
+        auto at = members.begin();
+        int seen = 0;
+        for (; at != members.end() && depth[*at] <= depth[m]; ++at)
+            if (depth[*at] == depth[m] && seen++ == slot)
+                break;
+        members.insert(at, m);
+    }
+}
+
 Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const std::vector<juce::String>& starts) {
     Frame frame;
     if (blocks.empty())
@@ -374,7 +430,8 @@ Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const s
 
     const Graph g = buildGraph(ctx, levelIndex, n);
     const Rows rows = assignRows(ctx, g, levelIndex, starts);
-    const auto depth = computeDepths(g, rows.rowOf);
+    auto depth = computeDepths(g, rows.rowOf);
+    const auto consumerOf = placeSourcesAsLateAsPossible(g, rows, depth);
 
     int maxDepth = 0;
     for (int d : depth)
@@ -405,6 +462,7 @@ Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const s
                 return rows.stackOrder[a] < rows.stackOrder[b];
             return std::make_tuple(blocks[a]->roleRank, a) < std::make_tuple(blocks[b]->roleRank, b);
         });
+        seatMovedSources(members, depth, consumerOf);
         std::vector<int> stackY(maxDepth + 1, 0);
         int rowHeight = 0;
         for (int i : members) {

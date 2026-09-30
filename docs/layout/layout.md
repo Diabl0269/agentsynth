@@ -192,6 +192,12 @@ component types); `GraphEditorAutoArrange.cpp` flattens the live canvas into tha
 Cables between rows are still drawn but never influence placement. Row gap is `kIntraLayerGapY`; a row is as tall as
 its tallest column stack.
 
+**Columns.** A block's column is its longest-path depth from the row's sources, over the edges inside the row (signal
+and modulation alike). A source block (nothing feeding it inside its row) that is not the row's anchor (the track's
+start, or a component's leftmost source) is then placed as late as possible: one column before its nearest consumer in
+the row, and in the stack slot that consumer has, so a loose LFO sits right before the macro it modulates instead of
+over column 0. The pass runs per level, so it also applies inside open macros.
+
 **Columns are aligned across rows.** Inside a row a block's column is its longest-path depth from that row's sources
 (signal cables and modulation routings both count; a cycle is broken by ignoring back-edges). Column k has ONE x for
 every row and is as wide as the widest block at depth k in any row, so matching stages (Gate, EQ, Compressor, channel

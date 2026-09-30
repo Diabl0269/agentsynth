@@ -11,6 +11,7 @@
 
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
+#include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Layout/HierarchicalArrange.h"
 #include <gtest/gtest.h>
@@ -30,6 +31,14 @@ struct Canvas {
     MacroGroupController& ctl() { return editor.getMacroController(); }
     NodeID osc(int x, int y) { return addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), x, y); }
     NodeID filter(int x, int y) { return addModuleAt(editor, engine, std::make_unique<FilterModule>(), x, y); }
+    NodeID lfo(int x, int y) { return addModuleAt(editor, engine, std::make_unique<LFOModule>(), x, y); }
+    // A modulation routing from `source` into the first channel `dest` accepts.
+    void modulate(NodeID source, NodeID dest) {
+        for (int channel = 1; channel < 8; ++channel)
+            if (engine.addModRouting(source, 0, dest, channel) != NodeID{})
+                return;
+        FAIL() << "no modulation channel accepted";
+    }
     juce::Rectangle<int> rect(NodeID id) { return findComponent(editor, id)->getBounds(); }
     juce::String uuid(NodeID id) { return uuidOf(engine, id); }
     void connect(NodeID a, NodeID b) { engine.getGraph().addConnection({{a, 0}, {b, 0}}); }
@@ -228,4 +237,80 @@ TEST(AutoArrangeMacros, AnEmptyCanvasArrangesToNothingAndPushesNoUndoStep) {
     c.editor.autoArrange();
 
     EXPECT_FALSE(c.undo.canUndo());
+}
+
+// A loose modulator that only feeds a macro sits right before it in the macro's row.
+TEST(AutoArrangeMacros, AModulatorFeedingOnlyAnOpenMacroSitsRightBeforeIt) {
+    Canvas c;
+    const auto a = c.osc(700, 300);
+    const auto b = c.filter(1100, 300);
+    const auto far = c.lfo(1900, 1400);
+    c.connect(a, b);
+    const auto macroId = c.group({a, b});
+    ASSERT_FALSE(macroId.isEmpty());
+    c.ctl().setMacroCollapsed(macroId, false);
+    c.modulate(far, b);
+
+    c.editor.autoArrange();
+
+    autoarrange_test::expectBeforeInRow(c.rect(far), c.ctl().macroHullBounds(macroId), "plain open macro");
+}
+
+TEST(AutoArrangeMacros, AModulatorFeedingOnlyACollapsedMacroSitsRightBeforeIt) {
+    Canvas c;
+    const auto a = c.osc(700, 300);
+    const auto b = c.filter(1100, 300);
+    const auto far = c.lfo(1900, 1400);
+    c.connect(a, b);
+    const auto macroId = c.group({a, b});
+    ASSERT_FALSE(macroId.isEmpty());
+    c.modulate(far, b);
+
+    c.editor.autoArrange();
+
+    autoarrange_test::expectBeforeInRow(
+        c.rect(far), c.ctl().macroCableAnchorBounds(*c.editor.getMacros().find(macroId)), "plain collapsed macro");
+}
+
+// The same, when the cable into the macro goes through an auto-created port.
+TEST(AutoArrangeMacros, AModulatorCabledIntoAMacroPortSitsRightBeforeTheMacro) {
+    Canvas c;
+    const auto a = c.osc(700, 300);
+    const auto b = c.filter(1100, 300);
+    const auto far = c.lfo(1900, 1400);
+    c.connect(a, b);
+    const auto macroId = c.group({a, b});
+    ASSERT_FALSE(macroId.isEmpty());
+    c.ctl().setMacroCollapsed(macroId, false);
+    ASSERT_TRUE(c.ctl().applyProgrammaticConnectionChange(
+        true, [&] { return c.engine.getGraph().addConnection({{far, 0}, {b, 1}}); }));
+    c.editor.updateComponents();
+
+    c.editor.autoArrange();
+
+    autoarrange_test::expectBeforeInRow(c.rect(far), c.ctl().macroHullBounds(macroId), "port cable, open macro");
+}
+
+// A macro fed by a two-stage chain outside it is at column 2: its modulator joins column 1, right before it, not
+// column 0.
+TEST(AutoArrangeMacros, AModulatorJoinsTheColumnBeforeADeepMacroNotColumnZero) {
+    Canvas c;
+    const auto source = c.osc(300, 300);
+    const auto pre = c.filter(700, 300);
+    const auto a = c.filter(1100, 300);
+    const auto b = c.filter(1500, 300);
+    const auto far = c.lfo(1900, 1400);
+    c.connect(source, pre);
+    c.connect(pre, a);
+    c.connect(a, b);
+    const auto macroId = c.group({a, b});
+    ASSERT_FALSE(macroId.isEmpty());
+    c.ctl().setMacroCollapsed(macroId, false);
+    c.modulate(far, b);
+
+    c.editor.autoArrange();
+
+    autoarrange_test::expectBeforeInRow(c.rect(far), c.ctl().macroHullBounds(macroId), "deep open macro");
+    EXPECT_EQ(c.rect(far).getX(), c.rect(pre).getX()) << "the column right before the macro";
+    EXPECT_GT(c.rect(far).getX(), c.rect(source).getX());
 }

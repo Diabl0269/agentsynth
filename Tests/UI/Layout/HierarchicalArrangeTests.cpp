@@ -351,3 +351,39 @@ TEST(HierarchicalArrange, OpenMacroHullMatchesTheDrawnGeometry) {
     EXPECT_EQ(tall.getBottom(),
               tall.getY() + kHullChipRow + kHullPortRowsBelowChip + 10 * kHullPortRowHeight + kHullPortFooter);
 }
+
+// A source block that only feeds one row is placed as late as possible: one column before its nearest consumer, not
+// at column 0 over the row start.
+TEST(HierarchicalArrange, AModulatorFeedingOnlyOneConsumerSitsInTheColumnBeforeIt) {
+    ArrangeInput in;
+    in.blocks = {module("in", 280, 200, 1), module("a", 280, 300, 2, 1), module("b", 280, 300, 3, 1),
+                 module("c", 280, 300, 4, 2), module("lfo", 280, 300, 100, 3)};
+    in.edges = {flow("in", "a"), flow("a", "b"), flow("b", "c"), mod("lfo", "c")};
+    in.trackStarts = {"in"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    EXPECT_EQ(out.positions.at("lfo").x, out.positions.at("b").x) << "the column right before its consumer";
+    EXPECT_LT(out.positions.at("lfo").x, out.positions.at("c").x);
+    EXPECT_GT(out.positions.at("lfo").x, out.positions.at("in").x);
+    EXPECT_EQ(out.positions.at("lfo").y, out.positions.at("c").y)
+        << "level with its consumer, not at the column's bottom";
+    expectTopLevelClear(in, out);
+
+    const auto again = computeHierarchicalArrange(in);
+    EXPECT_EQ(again.positions, out.positions);
+}
+
+// With several consumers the nearest one decides; the row start itself never moves.
+TEST(HierarchicalArrange, TheNearestConsumerDecidesAndTheRowStartStaysPut) {
+    ArrangeInput in;
+    in.blocks = {module("in", 280, 200, 1), module("a", 280, 300, 2, 1), module("b", 280, 300, 3, 1),
+                 module("c", 280, 300, 4, 2), module("lfo", 280, 300, 100, 3)};
+    in.edges = {flow("in", "a"), flow("a", "b"), flow("b", "c"), mod("lfo", "b"), mod("lfo", "c")};
+    in.trackStarts = {"in"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    EXPECT_EQ(out.positions.at("lfo").x, out.positions.at("a").x);
+    EXPECT_EQ(out.positions.at("in").x, kArrangeOriginX);
+}

@@ -54,4 +54,12 @@ inline void expectNoOverlaps(GraphEditor& editor) {
     }
 }
 
+// A source block that only feeds `target` is in the target's row (overlapping it vertically) and left of it.
+inline void expectBeforeInRow(const juce::Rectangle<int>& source, const juce::Rectangle<int>& target,
+                              const char* what) {
+    EXPECT_LT(source.getRight(), target.getX()) << what << ": source is not left of the target";
+    EXPECT_TRUE(source.getY() < target.getBottom() && source.getBottom() > target.getY())
+        << what << ": source is not in the target's row";
+}
+
 } // namespace autoarrange_test
