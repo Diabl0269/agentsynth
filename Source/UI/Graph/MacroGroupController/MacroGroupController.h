@@ -410,6 +410,8 @@ private:
     // Right after a collapse seeded the card: undoes the expand's canvas nudge (card and hidden members, rigidly) when
     // the members are still where the nudge left them and the original spot is clear. Clears the expand record.
     void restoreCardAfterCollapse(const juce::String& macroId);
+    // The light refresh after units moved without any node appearing or vanishing (no component reconcile).
+    void refreshAfterMove();
     juce::String macroHullAtExcluding(juce::Point<int> canvasPos, const juce::String& excludedMacroId) const;
     std::vector<juce::AudioProcessorGraph::NodeID> resolvedMacroMemberModuleNodes(const juce::String& macroId) const;
     static juce::String macroPortNodeTypeName(bool isInput, synth::MacroPortKind kind);

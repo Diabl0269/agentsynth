@@ -411,3 +411,29 @@ TEST(MacroHullDisplacement, CollapsingReturnsAWholePushedChain) {
     EXPECT_EQ(c.rect(b), homeB);
     EXPECT_EQ(c.rect(d), homeD);
 }
+
+// Undo and redo restore snapshots: they never run the collapse-time return, so a neighbour ends exactly where the
+// snapshot had it and no displacement record survives the restore.
+TEST(MacroHullDisplacement, UndoAndRedoNeverRunTheReturnAndLeaveNoRecord) {
+    Canvas c;
+    const auto m1 = c.osc(400, 300);
+    const auto m2 = c.osc(700, 300);
+    const auto neighbour = c.osc(c.rect(m2).getRight() + 20, 300);
+    const auto home = c.rect(neighbour);
+    const auto macroId = c.group({m1, m2});
+    c.ctl().setMacroCollapsed(macroId, false);
+    const auto pushed = c.rect(neighbour);
+    ASSERT_FALSE(c.editor.getMacros().find(macroId)->displaced.empty()) << "premise: the expand recorded its push";
+    c.undo.clearUndoHistory();
+
+    c.ctl().setMacroCollapsed(macroId, true);
+    ASSERT_EQ(c.rect(neighbour), home);
+
+    ASSERT_TRUE(c.undo.undo());
+    EXPECT_EQ(c.rect(neighbour), pushed);
+    EXPECT_TRUE(c.editor.getMacros().find(macroId)->displaced.empty());
+
+    ASSERT_TRUE(c.undo.redo());
+    EXPECT_EQ(c.rect(neighbour), home);
+    EXPECT_TRUE(c.editor.getMacros().find(macroId)->displaced.empty());
+}

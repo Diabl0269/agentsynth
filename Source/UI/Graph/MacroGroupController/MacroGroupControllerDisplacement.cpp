@@ -152,14 +152,17 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey) {
         key = macroKey(container);
     }
 
-    if (movedAny) {
-        // Only geometry changed (no node appeared or vanished), so refresh what depends on it rather than
-        // running a full component reconcile: re-sync the macro cards, re-dock the port widgets, and
-        // repaintCanvas() drops the cable memo before repainting.
-        host_.syncMacroCards();
-        dockMacroPortWidgets();
-        host_.repaintCanvas();
-    }
+    if (movedAny)
+        refreshAfterMove();
+}
+
+// Only geometry changed (no node appeared or vanished), so refresh what depends on it rather than running a full
+// component reconcile: re-sync the macro cards, re-dock the port widgets, and repaintCanvas() drops the cable memo
+// before repainting.
+void MacroGroupController::refreshAfterMove() {
+    host_.syncMacroCards();
+    dockMacroPortWidgets();
+    host_.repaintCanvas();
 }
 
 // The card is seeded at the member union's top-left, which an expand's canvas nudge shifted; if nothing has moved the
@@ -183,7 +186,7 @@ void MacroGroupController::restoreCardAfterCollapse(const juce::String& macroId)
     if (blocked)
         return;
     moveUnitBy(self, {-nudge.x, -nudge.y});
-    host_.updateComponents();
+    refreshAfterMove();
 }
 
 // A neighbour comes home only if the user has not touched it (still exactly where the push left it) and its old spot
@@ -226,7 +229,7 @@ void MacroGroupController::returnDisplacedNeighbours(const juce::String& macroId
             }
             moveUnitBy(rec.unitKey, {-rec.delta.x, -rec.delta.y});
             movedThisPass = movedAny = true;
-            host_.updateComponents(); // the next record's units must see this geometry
+            refreshAfterMove(); // the next record's units must see this geometry
         }
         kept = std::move(stillBlocked);
         if (!movedThisPass)
