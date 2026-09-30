@@ -71,6 +71,8 @@ struct BottomDockActiveTabResetGuardMDT {
             // default (the pane changes how much width the mixer columns get).
             s->removeValue("sidePaneOpen.mixer");
             s->removeValue("sidePaneWidth.mixer");
+            s->removeValue("sidePaneOpen.timeline");
+            s->removeValue("sidePaneWidth.timeline");
             s->saveIfNeeded();
         }
     }

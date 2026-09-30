@@ -118,6 +118,8 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     for (int i = 0; i < timelinePanel.getTrackHeaderCount(); ++i)
         if (auto* header = timelinePanel.getTrackHeaderAt(i))
             header->refreshFromDoc();
+    // The side pane's routing rows read the graph too (node names, MIDI destinations, the channel): same trigger.
+    timelinePanel.refreshRoutingPane();
 
     // The mixer's own column set (strips/inserts/links) can change from ANY graph
     // edit that reaches here -- undo/redo, a canvas delete, a macro regroup, not just the mixer's

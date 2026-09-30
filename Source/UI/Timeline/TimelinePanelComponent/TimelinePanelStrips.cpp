@@ -255,4 +255,25 @@ void TimelinePanelComponent::applyAutomationRecordModeChoice(int selectedId) {
         mutate();
 }
 
+// The snap selector's items and change handler. Split out of the constructor, which sits at its function-size ratchet.
+void TimelinePanelComponent::initSnapCombo() {
+    addAndMakeVisible(snapCombo_);
+    snapCombo_.setComponentID("timelineSnapCombo");
+    snapCombo_.addItem("Off", 1);
+    snapCombo_.addItem("Bar", 2);
+    snapCombo_.addItem("1", 3);
+    snapCombo_.addItem("1/2", 4);
+    snapCombo_.addItem("1/4", 5);
+    snapCombo_.addItem("1/8", 6);
+    snapCombo_.addItem("1/16", 7);
+    snapCombo_.addItem("1/32", 8);
+    snapCombo_.addItem("1/64", 9);
+    snapCombo_.addItem("1/128", 10);
+    snapCombo_.setSelectedId((int)viewState_.snap + 1, juce::dontSendNotification);
+    // A pick from the combo is just setSnapValue() with the id decoded — the shortcut layer, the
+    // grid cycle and this menu therefore share ONE writer (which is also the one place the choice
+    // is persisted and the grid painters are repainted).
+    snapCombo_.onChange = [this] { setSnapValue((TimelineViewState::Snap)(snapCombo_.getSelectedId() - 1)); };
+}
+
 } // namespace synth::ui

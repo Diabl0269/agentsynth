@@ -1,6 +1,7 @@
 #include "TimelineTrackHeaderComponent.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "TrackColour.h"
+#include "TrackRoutingMenus.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
@@ -334,32 +335,9 @@ std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::crea
 }
 
 std::unique_ptr<synth::ui::MidiDestinationPicker> TimelineTrackHeaderComponent::buildMidiDestinationPicker() {
-    if (host_ == nullptr)
-        return nullptr;
-
     juce::Component::SafePointer<TimelineTrackHeaderComponent> safeThis(this);
-    return std::make_unique<synth::ui::MidiDestinationPicker>(
-        [safeThis]() -> std::vector<synth::ui::MidiDestinationPicker::Option> {
-            auto* self = safeThis.getComponent();
-            if (self == nullptr || self->host_ == nullptr)
-                return {};
-            // TrackHeaderHost::MidiDestinationOption and MidiDestinationPicker::Option carry the
-            // same fields by design (the header stays graph-free, so it can't hand the picker
-            // anything richer) — converted here rather than sharing one type, so the picker's
-            // header has no dependency on TimelineDoc/TrackHeaderHost at all.
-            using PickerGroup = synth::ui::MidiDestinationPicker::Option::Group;
-            std::vector<synth::ui::MidiDestinationPicker::Option> options;
-            for (const auto& option : self->host_->getMidiDestinationOptions(self->trackId_))
-                options.push_back({option.displayName, option.nodeUid, option.connected,
-                                   option.isInstrument ? PickerGroup::Instruments : PickerGroup::Other});
-            return options;
-        },
-        [safeThis](juce::uint32 nodeUid, bool connect) {
-            auto* self = safeThis.getComponent();
-            if (self == nullptr || self->host_ == nullptr)
-                return;
-            self->host_->setMidiDestinationConnected(self->trackId_, nodeUid, connect);
-        });
+    return buildTrackMidiDestinationPicker(
+        [safeThis]() -> TrackHeaderHost* { return safeThis != nullptr ? safeThis->host_ : nullptr; }, trackId_);
 }
 
 std::unique_ptr<synth::ui::MidiDestinationPicker> TimelineTrackHeaderComponent::createMidiDestinationPickerForTest() {
@@ -692,22 +670,13 @@ void TimelineTrackHeaderComponent::applyBindingMenuChoice(int menuId) {
     if (host_ == nullptr)
         return;
 
-    if (menuId == kNewTrackInNodeMenuId) {
-        host_->createAndBindTrackInNode(trackId_);
-        return;
-    }
-
     if (menuId == kMidiDestinationsMenuId) {
         if (openMidiDestinationsPickerHook_)
             openMidiDestinationsPickerHook_();
         return;
     }
 
-    const auto options = collectBindingOptions();
-    if (menuId < 1 || menuId > (int)options.size())
-        return;
-    // An explicit user choice — the ONLY way a binding ever changes. Never matched by name.
-    host_->bindTrackTo(trackId_, options[(size_t)menuId - 1].uuid);
+    applyTrackBindingChoice(*host_, trackId_, collectBindingOptions(), menuId);
 }
 
 bool TimelineTrackHeaderComponent::offersMidiDestinationsMenuEntryForTest() const {
@@ -727,25 +696,9 @@ void TimelineTrackHeaderComponent::handleChipClick(bool showMenu) {
 void TimelineTrackHeaderComponent::showBindingMenu() {
     const auto options = collectBindingOptions();
 
-    juce::PopupMenu menu;
     const auto* t = track();
     const juce::String currentUuid = t != nullptr ? t->bindingUuid : juce::String();
-
-    for (int i = 0; i < (int)options.size(); ++i) {
-        const auto& option = options[(size_t)i];
-        menu.addItem(i + 1, option.displayName, true, option.uuid == currentUuid);
-    }
-    if (!options.empty())
-        menu.addSeparator();
-    menu.addItem(kNewTrackInNodeMenuId, "New Track In node");
-
-    // MIDI destinations only make sense for a MIDI-kind track — an Audio or Automation track's
-    // binding feeds no MIDI-consuming node, so offering the entry there would open a picker with
-    // nothing it could ever wire.
-    if (t != nullptr && t->kind == synth::TrackKind::Midi) {
-        menu.addSeparator();
-        menu.addItem(kMidiDestinationsMenuId, "MIDI destinations...");
-    }
+    auto menu = buildTrackBindingMenu(options, currentUuid, t != nullptr && t->kind == synth::TrackKind::Midi);
 
     juce::Component::SafePointer<TimelineTrackHeaderComponent> safeThis(this);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&bindingChip_), [safeThis](int result) {

@@ -41,8 +41,9 @@ public:
     bool hasContent() const noexcept { return content_ != nullptr; }
 
     /** Loads (and from now on saves) open state and width under `tabKey` in `settings` (nullable, must
-     *  outlive the pane). A tab with nothing stored opens at kDefaultWidth. */
-    void setPersistence(juce::PropertiesFile* settings, const juce::String& tabKey);
+     *  outlive the pane). A tab with nothing stored opens at kDefaultWidth, open when `defaultOpen` (the
+     *  Mixer) and closed otherwise (the Timeline's routing pane, which is opt-in). */
+    void setPersistence(juce::PropertiesFile* settings, const juce::String& tabKey, bool defaultOpen = true);
 
     bool isOpen() const noexcept { return open_; }
     /** Opens or closes with the width tween (immediately when the pane is not on screen). */

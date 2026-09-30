@@ -64,7 +64,7 @@ TEST(SidePaneShortcutTests, ItShowsAHiddenBottomPanelFirstAndLeavesTheOpenPaneOp
 
 TEST(SidePaneShortcutTests, ItIsANoOpWhenTheActiveTabHasNoPane) {
     MixerZonesRig r(1);
-    r.mc.getBottomDock().setActiveTab(Tab::Timeline);
+    r.mc.getBottomDock().setActiveTab(Tab::MidiRemote);
     auto& dock = r.mc.getBottomDock();
     EXPECT_FALSE(dock.hasActiveSidePane());
     EXPECT_FALSE(dock.toggleActiveSidePane());

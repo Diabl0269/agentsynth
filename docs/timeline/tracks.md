@@ -364,6 +364,48 @@ write is not a document change, nothing notifies the header afterwards — the t
 row itself, and `MainComponent::reconcileTimelineAfterGraphChange` refreshes every row after an
 undo or redo restore.
 
+## Routing from the side pane
+
+The Timeline tab has a left [side pane](../layout/side-pane.md) that shows the **selected** track's
+routing, like an inspector. The selected track is the row last clicked ([click to
+select](#click-to-select)) or moved to with Up/Down; the pane follows it, so a click on another row
+swaps the pane at once. It is **closed** the first time (unlike the Mixer's pane) and opened by the
+button at the left of the transport strip or Cmd+Shift+B; its open state and width are remembered
+under the `timeline` tab key.
+
+`TimelineRoutingPane` (`Source/UI/Timeline/TimelineRoutingPane/`) is a view: it reads the
+`TimelineDoc` and the same `TrackHeaderHost` the header uses, owns no document state and starts no
+timer. `TimelinePanelComponent::refreshRoutingPane()` re-reads it on a selection change, on every
+document change (rename, colour, binding) and, through `reconcileTimelineAfterGraphChange`, on every
+graph change (a node rename or delete, a MIDI wire, a channel appearing). A shut pane skips the work
+and re-reads when it opens. Rows, top to bottom:
+
+- **Header line:** the track's colour swatch, its name and a small `MIDI` / `Audio` badge.
+- **Plays into:** a combo-style button showing the bound Track In (MIDI track) or Track Audio (audio
+  track) node's name. Clicking it opens the same re-bind menu as the [binding chip](#binding-chips) —
+  kind-aware candidates not claimed by another track, plus "New Track In node" — built by
+  `buildTrackBindingMenu` / applied by `applyTrackBindingChoice` (`Source/UI/Timeline/TrackRoutingMenus.h`),
+  which the header calls too, so the two never drift. A pick is `bindTrackTo` /
+  `createAndBindTrackInNode` on the host: one undo step, never automatic. The chip's "MIDI
+  destinations..." entry is left out here because the next row is that. **Unbound** shows "Not
+  connected" in the `warning` colour. **Missing** (the node is gone) shows "Track In (missing)" or
+  "Track Audio (missing)" in `warning` — the document keeps only the gone node's uuid, so the name is
+  the node kind — with the line "Its notes are kept. Pick a new Track In to hear them again." Below a
+  live binding, a **Show on canvas** link selects the node with `selectNodeInGraph`, the
+  chip's highlight-only path (the canvas is not scrolled).
+- **Notes go to** (MIDI tracks only): the connected MIDI destinations' names, comma-joined, or "None".
+  Clicking it opens the [MIDI destination picker](#midi-destinations) in a `CallOutBox`, built by
+  `buildTrackMidiDestinationPicker` over `getMidiDestinationOptions` / `setMidiDestinationConnected`
+  exactly as the header builds it. An unbound track shows "None" and the picker asks for a binding first.
+- **Sound goes to:** read-only. "Channel · <name>" with the [channel chip](#the-channel-chip)'s
+  gated level meter (ticked by the panel's existing 15 Hz timer), or "No mixer channel" (muted). A
+  **Show in mixer** link calls `TrackChannelLinkSurface::revealChannelForTrack`, which opens the Mixer
+  tab on that column. The channel comes from the graph's cables; nothing here chooses it.
+
+An automation track, or no selection, shows one muted line instead: "Nothing to route on an
+automation track." / "Select a MIDI or audio track to see its routing." Every control opts out of
+keyboard focus so a click never moves it off the panel.
+
 ## The automation button
 
 The `A` button toggles this track's automation lane in the single, doc-wide automation strip
@@ -416,7 +458,13 @@ menu: `collectBindingOptions()` / `applyBindingMenuChoice(id)` and `applyContext
 `mouseDown()` builds, and `handleChipClick(showMenu=false)` exercises the selection affordance on
 its own.
 
-Tests: `Tests/UI/Timeline/TimelineTrackHeaderTests.cpp`,
+The routing pane has the same seams: `setShowBindingMenuHookForTest()` receives the menu a real
+click on "Plays into" builds (a test then feeds an item id to `applyBindingMenuChoice()`),
+`setOpenMidiDestinationsHookForTest()` replaces the picker's `CallOutBox`, and
+`createMidiDestinationPickerForTest()` builds the picker unlaunched.
+
+Tests: `Tests/UI/Timeline/TimelineRoutingPaneTests.cpp` (the side pane),
+`Tests/UI/Timeline/TimelineTrackHeaderTests.cpp`,
 `Tests/UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp` (the real-child-dispatch right-click
 coverage), `Tests/UI/Timeline/TimelineTrackFocusTests.cpp`, and
 `Tests/UI/Timeline/TimelinePanel/TimelinePanelTrackHeaderTests.cpp` for the panel-side column.

@@ -1,10 +1,11 @@
 # Side pane
 
 A bottom-panel tab can have its own **left side pane**: a column at the left of the tab's body that
-holds context for that tab. Today only the Mixer has one (its Zones and visibility list, see
-[the Mixer's side pane](../mixer/panel.md#side-pane-zones-and-visibility)); the Timeline's routing
-pane will be the second. The container is reusable, so a new pane is a content class and a few
-lines of wiring, never a second implementation of the open/close, width or persistence logic.
+holds context for that tab. Two tabs have one: the Mixer (its Zones and visibility list, see
+[the Mixer's side pane](../mixer/panel.md#side-pane-zones-and-visibility)) and the Timeline (the
+selected track's routing, see [Routing from the side pane](../timeline/tracks.md#routing-from-the-side-pane)).
+The container is reusable, so a new pane is a content class and a few lines of wiring, never a second
+implementation of the open/close, width or persistence logic.
 
 The pieces live in `Source/UI/Layout/SidePane/`:
 
@@ -22,7 +23,10 @@ The pieces live in `Source/UI/Layout/SidePane/`:
 2. The panel calls `setPersistence(settings, "<tab>")` once its settings store is known. Open
    state and width are then remembered **per tab, app-wide in the user settings** (like the dock
    height), under `sidePaneOpen.<tab>` and `sidePaneWidth.<tab>`. A tab with nothing stored opens
-   at 200 px, so the pane is open the first time a tab is opened.
+   at 200 px, and whether it starts open is that tab's choice, the third argument `defaultOpen`
+   (default `true`): the **Mixer** (`"mixer"`) is open the first time the tab is opened, the
+   **Timeline** (`"timeline"`, `defaultOpen = false`) starts closed and is opt-in. A closed pane
+   is also what a panel has before its settings are known, so a bare panel occupies no width.
 3. In `resized()` the panel gives the pane `getOccupiedWidth()` pixels at the left of its body and
    the rest to its own content. `onOccupiedWidthChanged` fires whenever that number changes, so the
    panel re-lays out (the panel is the layout owner; the pane never resizes its parent).
@@ -45,6 +49,18 @@ equal to the distance left. The pane stays visible for the whole tween (a hidden
 VBlank callbacks) and hides only once it has closed. A pane whose panel is not on screen gets no frames,
 so it lands at its target at once (this is also what keeps headless tests deterministic). Nothing
 repaints once it has settled.
+
+## The two panes
+
+| Tab | Key | Content | First time |
+|---|---|---|---|
+| Mixer | `mixer` | `MixerZonesPane`: zones, show/hide | open |
+| Timeline | `timeline` | `TimelineRoutingPane`: the selected track's Plays into / Notes go to / Sound goes to | closed |
+
+The Timeline panel owns its pane like the Mixer panel does: the pane sits at the left of the body under
+the transport strip, the toggle button at the left end of that strip, and the header column, ruler and
+lanes take the rest. The routing pane owns no state; it follows the selected track and is re-read on
+selection, document and graph changes, with no timer of its own.
 
 ## The shortcut
 

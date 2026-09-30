@@ -70,6 +70,8 @@ constexpr int kFollowPlayheadButtonWidth = 30;
 // reloadPianoRollAppearancePrefs() once, below.
 void TimelinePanelComponent::setApplicationProperties(juce::ApplicationProperties* props) {
     appProperties_ = props;
+    // Closed until first opened (unlike the Mixer's pane): the routing view is opt-in.
+    sidePane_.setPersistence(props != nullptr ? props->getUserSettings() : nullptr, "timeline", /*defaultOpen=*/false);
     // Forwarded even when there is no user-settings file: both of these degrade to "in-memory
     // only" / "read the default" rather than needing one, and the early return below would
     // otherwise leave them holding a stale pointer.
@@ -441,6 +443,7 @@ void TimelinePanelComponent::resized() {
 
     auto bounds = getLocalBounds();
     transportBarBounds_ = bounds.removeFromTop(transportBarHeight);
+    layoutSidePane(bounds);
     trackHeaderBounds_ = bounds.removeFromLeft(trackHeaderWidth);
     lanesBounds_ = bounds; // remainder
 
@@ -542,6 +545,7 @@ void TimelinePanelComponent::resized() {
     // Snap selector: right-hand side of the transport bar. The transport controls (play/stop/
     // record/loop + BPM/time-sig + readout) fill the rest, left-aligned.
     auto transportBar = transportBarBounds_;
+    transportBar.removeFromLeft(SidePaneToggleButton::kWidth); // the side-pane button, laid out by layoutSidePane()
     snapCombo_.setBounds(transportBar.removeFromRight(kSnapComboWidth).reduced(2));
     snapToggleButton_.setBounds(transportBar.removeFromRight(kSnapToggleButtonWidth).reduced(2));
     // Follow-playhead sits immediately left of the snap toggle — see its member comment.

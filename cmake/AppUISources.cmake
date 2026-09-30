@@ -63,6 +63,15 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineTrackHeaderComponent.cpp
     Source/UI/Timeline/ChannelChipComponent.h
     Source/UI/Timeline/ChannelChipComponent.cpp
+    Source/UI/Timeline/TrackRoutingMenus.h
+    Source/UI/Timeline/TrackRoutingMenus.cpp
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.cpp
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneActions.cpp
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPanePaint.cpp
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.h
+    Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelSidePane.cpp
     Source/UI/Timeline/TrackChannelLinkSurface.h
     Source/UI/Timeline/TrackChannelLinkController.h
     Source/UI/Timeline/TrackChannelLinkController.cpp
