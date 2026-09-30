@@ -400,6 +400,7 @@ add_executable(Tests
     Macros/MacroContainer/MacroCrossingAnimationTests.cpp
     Macros/MacroContainer/MacroNestedGeometryTests.cpp
     Macros/MacroContainer/MacroNestedCableTests.cpp
+    Macros/MacroContainer/MacroNestedMembershipTests.cpp
     Macros/MacroSetTests.cpp
     Macros/MacroSetHierarchyTests.cpp
     Macros/MacroPortModuleTests.cpp

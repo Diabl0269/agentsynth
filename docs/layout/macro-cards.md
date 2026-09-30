@@ -290,8 +290,9 @@ call for the gesture.
 A macro can sit inside another (`Macro::parentId`, see
 [`docs/macros/macros.md`](../macros/macros.md)). The canvas draws, hides and hit-tests nested macros
 as described here; **no UI creates one yet** (grouping still refuses already-grouped nodes), so this
-only matters for saved patches and tests until creating and editing nested macros from the UI lands
-in a later step. A patch with no nesting behaves exactly as before.
+only matters for saved patches and tests until creating nested macros from the UI lands in a later step
+(ungroup, delete, collapse and drag in and out already handle them: see
+[menu and membership](../macros/menu-and-membership.md#nested-macros)). A patch with no nesting behaves exactly as before.
 
 - **A parent's hull wraps its children.** `computeMacroHullBounds` is recursive: the union is the
   parent's own non-port members plus, for each child, the child's full hull (child expanded) or its

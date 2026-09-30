@@ -311,6 +311,34 @@ A crossing drag reuses the incremental membership path wholesale
 the same auto-port creation and splice-out-when-interior behaviour as the menu-driven add and remove,
 with no new port logic of its own.
 
+## Nested macros
+
+A macro can sit inside another (`Macro::parentId`). The editing commands below already handle nesting;
+the UI to create a nested macro lands in a later step, so today it only arises from saved patches and
+tests. A patch with no nesting behaves exactly as before.
+
+- **Ungroup on a parent** splices out only the parent's own port nodes, then promotes its direct
+  members and its child macros one level up (to the grandparent, or top level). The child keeps its own
+  ports and members. Selecting a whole parent (every nested module) ungroups only the parent; selecting
+  just a child's module ungroups the child, whose members then move into the parent. Everything the
+  ungrouped macro held is re-selected.
+- **Delete Macro and Members** on a parent deletes every descendant macro and every nested module, as
+  one undo step.
+- **Collapse toggle** (Cmd+G and the menu): a selected module hidden inside a collapsed macro resolves to
+  the outermost collapsed macro above it, so the toggle expands the card the user sees, not an inner
+  macro they cannot.
+- **Remove from Macro** moves a module up ONE level, into its macro's parent; from a top-level macro it
+  leaves entirely, as before. A macro left with no direct members and no children dissolves.
+- **Cmd drag** (see [the hull border section](#cmd-drag-across-a-hull-border)): the join candidate is the
+  deepest expanded hull under the dragged module's centre, skipping the macro being left; each ancestor
+  of that macro is tested through `macroHullBoundsExcluding`, so a parent's hull no longer follows the
+  module (its live union would otherwise contain it forever) and the painted hull of every ancestor
+  shrinks away from it. Dragging a child's member into the parent's own space is a transfer (leave the
+  child, join the parent); dragging it out of the parent as well leaves every level in one gesture;
+  dragging a parent's member into a child's hull joins the child. The finalize walks the module up one
+  level at a time, each step planning its own port splices, all in one undo step.
+- **Auto-deleting a one-sided port** dissolves its macro only when it has no direct members and no children.
+
 ## Cable crawl and module flash (FRO41)
 
 **A drag that actually crosses a hull (a real join, leave, or transfer — never a plain move) also
