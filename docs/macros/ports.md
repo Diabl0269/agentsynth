@@ -351,6 +351,13 @@ minting a fresh one; a jack whose direction or kind does not match the drag is r
 mismatched drop on an ordinary module jack. Missing that jack falls through to the whole-card
 shape-from-a-dropped-cable convenience above.
 
+## Nested macros
+
+A child macro's ports are direct members of the child, and a parent's are direct members of the parent
+(`nodeIsMacroPort` keeps reading the direct owner). A cable from outside the parent to a node inside the child is a
+chain: external -> parent inlet -> child inlet -> member, and the mirror for outlets. Each boundary carries its own
+port; the creation rules are in [`auto-ports`](auto-ports.md#nested-macros).
+
 ## Latency
 
 An inlet or outlet reports **zero latency** and does no buffering. The macro adds nothing to

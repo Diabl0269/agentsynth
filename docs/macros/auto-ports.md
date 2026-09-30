@@ -426,6 +426,29 @@ splice-out on auto-delete is the identical `spliceOutMacroPort` call direct dele
 resulting graph and macro state is indistinguishable from a port deleted that way — nothing in
 [`docs/macros/ports.md`](ports.md#cable-rendering-across-the-boundary)'s table changes.
 
+## Nested macros
+
+A macro can sit inside another (`Macro::parentId`; nothing in the UI creates one yet, so tests build them with
+`MacroSet::setParent`). A child's port nodes are direct members of the child and a parent's ports are direct members of
+the parent, so a cable that reaches a member of the child from outside the parent crosses **two** boundaries and is
+rebuilt as a chain: external -> parent inlet -> child inlet -> member (an outlet chain mirrors it).
+
+- **Cable drag.** `maybeAutoCreateMacroPortsForDrag` takes each endpoint's owner chain (its macro, then that macro's
+  ancestors) and drops every macro both endpoints share, down to their lowest common ancestor. Each macro left on a
+  side gets one new port, innermost first, wired port to port: inner -> outer on the source side, outer -> inner on the
+  destination side. A cable between a parent member and a child member therefore mints only the child's port. An
+  endpoint that is itself a port never crosses its own macro's boundary, only its ancestors'.
+- **Dropped on a collapsed card.** `createMacroPortFromDroppedCable` chains through the other end's own boundaries
+  first, then wires the last of them to the new port.
+- **Crossing plans.** Every plan's "inside" set is `MacroSet::descendantMembers` (minus the macro's own ports), so an
+  edge between a parent member and a child member is never read as crossing the parent. This covers grouping-time
+  plans, `macroPortsThatBecomeInteriorOnAdd` and `macroPortsThatBecomeObsoleteOnRemove`. A child's port counts as
+  inside the parent, which is what lets the parent mint its own port for a cable that lands on the child's inlet.
+- **Programmatic connections.** `routeFreshEdgesThroughMacroPorts` handles the innermost boundaries first; the parent
+  then sees the child's new inlet as the crossing and mints its own.
+- **Sweeping.** The one-sided-port sweep re-checks each neighbour of a removed port, so removing the outer cable
+  cascades along the whole port chain. A macro left with no modules but with children is not dissolved.
+
 ## Programmatic connections
 
 **FRO354: a connection made by code follows the same rule as a dragged cable.** With

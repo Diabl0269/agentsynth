@@ -11,6 +11,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
+#include "MacroNesting.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
 #include "Modules/MacroOutletModule.h"
@@ -65,9 +66,10 @@ void MacroGroupController::autoDeleteOrphanedMacroPort(juce::AudioProcessorGraph
         if (c.source.nodeID == nodeId || c.destination.nodeID == nodeId)
             return; // still has at least one cable — survives
 
+    const auto macroId = m->id;
     spliceOutMacroPort(*m, uuid);
-    if (m->members.empty())
-        host_.getMacros().remove(m->id); // MacroSet::removeMemberEverywhere's own "zero members" rule
+    if (macro_nesting::isEmptyMacro(host_.getMacros(), macroId))
+        host_.getMacros().remove(macroId); // MacroSet::removeMemberEverywhere's own "zero members" rule
 }
 
 // A bounded ONE-extra-hop special case. Almost
@@ -148,9 +150,10 @@ void MacroGroupController::autoDeleteOrphanedAttenuverter(juce::AudioProcessorGr
     if (hasExteriorConnection)
         return; // still feeding another fan-out leg (e.g. a second attenuverter) — keep the port
 
+    const auto macroId = m->id;
     spliceOutMacroPort(*m, portUuid);
-    if (m->members.empty())
-        host_.getMacros().remove(m->id); // matches autoDeleteOrphanedMacroPort's own zero-members rule
+    if (macro_nesting::isEmptyMacro(host_.getMacros(), macroId))
+        host_.getMacros().remove(macroId); // matches autoDeleteOrphanedMacroPort's own zero-members rule
 }
 
 std::vector<juce::AudioProcessorGraph::NodeID> MacroGroupController::macroPortDeletionNeighbors(
@@ -263,7 +266,7 @@ void MacroGroupController::deleteMacroPortNode(const juce::String& macroId, cons
         if (m == nullptr)
             return; // defensive: shouldn't happen mid-transaction
         spliceOutMacroPort(*m, nodeUuid);
-        if (m->members.empty())
+        if (macro_nesting::isEmptyMacro(host_.getMacros(), macroId))
             host_.getMacros().remove(macroId); // matches MacroSet::removeMemberEverywhere's own zero-members rule
         host_.updateComponents();
     };
@@ -663,10 +666,18 @@ void MacroGroupController::createMacroPortFromDroppedCable(const juce::String& m
     const juce::String name = defaultMacroPortName(newPortIsInput, kind);
     const int order = nextMacroPortOrder(*macro, newPortIsInput);
 
+    // The new port's outward side lives in this macro's parent, so a cable to a node nested in some OTHER macro
+    // crosses that node's own boundaries first: one port per boundary, innermost first, chained to the new port.
+    // Every macro in this macro's own chain is shared ground, not a crossing.
+    const auto& macros = host_.getMacros();
+    auto sharedChain = macros.ancestorChain(macroId);
+    sharedChain.insert(sharedChain.begin(), macroId);
+    const auto otherCrossings = macro_nesting::boundariesCrossed(macros, nodeUuidFor(otherNodeId), sharedChain);
+
     auto& graph = host_.graph();
     auto proc = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(newProcessor));
     auto doCreate = [this, macroId, proc, placed, newPortIsInput, kind, name, order, isMidi, otherNodeId,
-                     otherVisibleJack] {
+                     otherVisibleJack, otherCrossings] {
         auto& g = host_.graph();
         if (!*proc)
             return;
@@ -693,10 +704,26 @@ void MacroGroupController::createMacroPortFromDroppedCable(const juce::String& m
         // recordUndo=false: already inside this method's own recordGraphAndMacroChange
         // transaction. Deliberately does NOT also wire anything on the INTERIOR side.
         if (g.getNodeForId(otherNodeId) != nullptr) {
+            auto effectiveOther = otherNodeId;
+            int effectiveJack = otherVisibleJack;
+            for (const auto& crossedId : otherCrossings) {
+                // The other end exits its macro through an outlet when it feeds the new port, enters through an
+                // inlet when the new port feeds it.
+                const auto chainPort =
+                    mintMacroPortForAutoCreate(crossedId, !newPortIsInput, isMidi, otherNodeId, otherVisibleJack);
+                if (chainPort.uid == 0)
+                    continue;
+                if (newPortIsInput)
+                    host_.connectPorts(effectiveOther, effectiveJack, chainPort, 0, isMidi, /*recordUndo=*/false);
+                else
+                    host_.connectPorts(chainPort, 0, effectiveOther, effectiveJack, isMidi, /*recordUndo=*/false);
+                effectiveOther = chainPort;
+                effectiveJack = 0;
+            }
             if (newPortIsInput)
-                host_.connectPorts(otherNodeId, otherVisibleJack, node->nodeID, 0, isMidi, /*recordUndo=*/false);
+                host_.connectPorts(effectiveOther, effectiveJack, node->nodeID, 0, isMidi, /*recordUndo=*/false);
             else
-                host_.connectPorts(node->nodeID, 0, otherNodeId, otherVisibleJack, isMidi, /*recordUndo=*/false);
+                host_.connectPorts(node->nodeID, 0, effectiveOther, effectiveJack, isMidi, /*recordUndo=*/false);
         }
 
         host_.updateComponents();

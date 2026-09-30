@@ -8,6 +8,7 @@
 
 #include "MacroGroupController.h"
 
+#include "MacroNesting.h"
 #include "Modules/ModuleBase.h"
 #include <algorithm>
 #include <set>
@@ -121,9 +122,14 @@ bool MacroGroupController::applyProgrammaticConnectionChange(bool autoCreatePort
 // on the source's macro and then an inlet on the target's, wired port to port, in either order.
 void MacroGroupController::routeFreshEdgesThroughMacroPorts(std::set<Connection> fresh) {
     auto& graph = host_.graph();
+    // Innermost boundaries first: a cable into a child macro from outside its parent gets the child's port, then
+    // the parent sees that port as the crossing and mints its own (a chain, external -> parent -> child -> member).
     std::vector<juce::String> macroIds;
     for (const auto& m : host_.getMacros().getAll())
         macroIds.push_back(m.id);
+    std::stable_sort(macroIds.begin(), macroIds.end(), [&](const juce::String& a, const juce::String& b) {
+        return host_.getMacros().depth(a) > host_.getMacros().depth(b);
+    });
 
     for (const auto& macroId : macroIds) {
         const auto* macro = host_.getMacros().find(macroId);
@@ -132,7 +138,10 @@ void MacroGroupController::routeFreshEdgesThroughMacroPorts(std::set<Connection>
 
         std::vector<Group> plan;
         std::vector<Connection> dropped; // fresh edges onto a hidden channel -- carry nothing
-        for (auto group : buildMacroPortCrossingPlan(macro->members)) {
+        // Inside = the macro's own members plus every child macro's, so an edge between a parent member and a
+        // child member is interior, not a crossing.
+        const auto inside = host_.getMacros().descendantMembers(macroId);
+        for (auto group : buildMacroPortCrossingPlan(std::vector<juce::String>(inside.begin(), inside.end()))) {
             if (macro->memberIsPort(group.internalUuid))
                 continue;
             std::vector<MacroPortCrossingEdge> kept;

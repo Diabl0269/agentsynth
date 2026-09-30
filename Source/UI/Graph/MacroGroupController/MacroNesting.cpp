@@ -64,4 +64,31 @@ std::vector<juce::String> collapsedMacrosCarriedBy(const synth::MacroSet& macros
     return out;
 }
 
+std::vector<juce::String> ownerChain(const synth::MacroSet& macros, const juce::String& uuid) {
+    const auto* owner = macros.findByMember(uuid);
+    if (owner == nullptr)
+        return {};
+    auto chain = macros.ancestorChain(owner->id);
+    chain.insert(chain.begin(), owner->id);
+    return chain;
+}
+
+std::vector<juce::String> boundariesCrossed(const synth::MacroSet& macros, const juce::String& uuid,
+                                            const std::vector<juce::String>& otherChain) {
+    auto chain = ownerChain(macros, uuid);
+    if (const auto* owner = macros.findByMember(uuid); owner != nullptr && owner->memberIsPort(uuid))
+        chain.erase(chain.begin());
+    chain.erase(std::remove_if(chain.begin(), chain.end(),
+                               [&](const juce::String& id) {
+                                   return std::find(otherChain.begin(), otherChain.end(), id) != otherChain.end();
+                               }),
+                chain.end());
+    return chain;
+}
+
+bool isEmptyMacro(const synth::MacroSet& macros, const juce::String& macroId) {
+    const auto* macro = macros.find(macroId);
+    return macro != nullptr && macro->members.empty() && macros.childrenOf(macroId).empty();
+}
+
 } // namespace macro_nesting
