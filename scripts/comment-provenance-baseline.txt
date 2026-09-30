@@ -3,19 +3,3 @@
 # its entry; when it shrinks, run `bash scripts/check-comment-provenance.sh --update` so
 # the entry tightens; once it reaches zero the entry must be removed (--update does that).
 # Never add a NEW file here -- rewrite its comments instead. Format: <count> <path>.
-14 Source/MainComponent/MainComponentSetupTimeline.cpp
-9 Source/MainComponent/MainComponentTimeline.cpp
-5 Source/MainComponent/MainComponentTrackHeaderHost.cpp
-5 Source/Mixer/ChannelFlows/ChannelFlowsInternal.h
-5 Source/Mixer/ChannelFlows/ChannelFlowsMakeChannel.cpp
-2 Source/Mixer/ChannelFlows/ChannelFlowsTrackChannelLink.cpp
-1 Source/Timeline/TimelineDoc/TimelineDoc.h
-1 Source/Timeline/TimelineDoc/TimelineDocAutomation.cpp
-1 Source/UI/PianoRoll/PianoRollComponent/PianoRollMouse.cpp
-3 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
-19 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
-1 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
-16 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
-20 Source/UI/Timeline/TimelineTrackHeaderComponent.cpp
-32 Source/UI/Timeline/TimelineTrackHeaderComponent.h
-2 Tests/UI/Timeline/TimelineTrackHeaderTests.cpp

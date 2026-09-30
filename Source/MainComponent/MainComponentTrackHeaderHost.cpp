@@ -63,12 +63,12 @@ void collectHostedPluginLaneOptions(juce::AudioProcessorGraph& graph, const synt
     }
 }
 
-// FRO292: the same "Add lane..." surface, for every ACTIVE, not-yet-automated send slot on every
+// The same "Add lane..." surface, for every ACTIVE, not-yet-automated send slot on every
 // ChannelStripModule in the graph — a send level has no ModuleComponent knob either (Channel Strip
 // is internal-only/hidden, docs/modules/modules.md#channel-strip-module-mixer-channel-hidden), so
 // this is its only lane-creation entry point, same reasoning as the hosted-plugin case above.
 // Inactive slots are never offered (docs/mixer/sends-and-buses.md#the-send-and-bus-ui). The label
-// mirrors the send knob's own FRO301 accessible title (synth::describeSendSlotLabel), so the picker
+// mirrors the send knob's own accessible title (synth::describeSendSlotLabel), so the picker
 // entry and the knob it automates always read the same "Send to <target>" / "Send N (no target)".
 void collectChannelStripSendLaneOptions(juce::AudioProcessorGraph& graph, const synth::MacroSet& macros,
                                         const synth::TimelineDoc& timelineDoc,
@@ -87,7 +87,7 @@ void collectChannelStripSendLaneOptions(juce::AudioProcessorGraph& graph, const 
         for (int slot = 0; slot < ChannelStripModule::kMaxSends; ++slot) {
             if (!strip->isSendActive(slot))
                 continue;
-            // FRO294: a send's pan is automatable the same way its level is.
+            // A send's pan is automatable the same way its level is.
             const juce::String slotLabel = synth::describeSendSlotLabel(graph, &macros, node->nodeID, slot);
             const std::pair<juce::String, juce::String> params[] = {
                 {ChannelStripModule::getSendLevelParameterId(slot), slotLabel},
@@ -211,7 +211,7 @@ void MainComponent::selectNodeInGraph(const juce::String& uuid) {
         graphEditor.selectModule(node->nodeID, /*additive=*/false);
 }
 
-// FRO292: combines two sources, each split into its own free function above so neither grows past
+// Combines two sources, each split into its own free function above so neither grows past
 // a screen -- a hosted plugin's not-yet-automated instance parameters, and every ACTIVE,
 // not-yet-automated ChannelStripModule send slot (inactive slots are never offered, see
 // docs/mixer/sends-and-buses.md#the-send-and-bus-ui).
@@ -234,7 +234,7 @@ synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeade
 
     // resolveLaneParameter branches internally on whether `processor` is a live HostedPluginModule
     // instance (normalised 0..1, index-hint rescue) or one of our own modules (an exact paramID
-    // match against a real RangedAudioParameter, e.g. ChannelStripModule's sendNLevel, FRO292) — see
+    // match against a real RangedAudioParameter, e.g. ChannelStripModule's sendNLevel) — see
     // AutomationBinding.h's class comment. laneValueBoundsFor/laneDefaultValueFor below read off
     // whichever branch resolved, so this call needs no case split of its own.
     const auto resolved = synth::resolveLaneParameter(processor, option.paramId, option.paramIndex);

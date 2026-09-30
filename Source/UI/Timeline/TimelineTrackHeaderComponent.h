@@ -87,22 +87,22 @@ struct TrackHeaderHost {
      *  addMidiTrack(). */
     virtual void addAudioTrack() = 0;
 
-    /** The "+ Track" button's Instrument submenu (T183/P9-3b): `instrumentModuleType` ("Oscillator",
+    /** The "+ Track" button's Instrument submenu: `instrumentModuleType` ("Oscillator",
      *  "Wavetable" or "Sampler") wired as Track In -> instrument -> default chain (EQ/Compressor
      *  bypassed -> Channel Strip Stereo) -> Master, plus a Midi-kind track bound to the Track In, as
-     *  ONE compound undo step — the exact mirror of addAudioTrack(). `poly` (FRO48; Oscillator/
+     *  ONE compound undo step — the exact mirror of addAudioTrack(). `poly` (Oscillator/
      *  Wavetable only, ignored for Sampler which has no "poly" parameter) turns the new instrument's
-     *  poly mode on before the rest of the wiring runs, so the poly-envelope auto-wire (P9-3j) picks
+     *  poly mode on before the rest of the wiring runs, so the poly-envelope auto-wire picks
      *  it up. */
     virtual void addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) = 0;
 
-    /** FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): true when at least one track's
+    /** docs/mixer/mixer.md#creating-channels-in-an-existing-project: true when at least one track's
      * chain still reaches the output without passing through a ChannelStripModule — the "+ Track" menu's "Create
      * Channels" entry is enabled exactly when this is true. Non-pure with an inert `false` default so every existing
      * TrackHeaderHost implementer (test stubs included) keeps compiling. */
     virtual bool hasTracksNeedingChannels() const { return false; }
 
-    /** FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): the "+ Track" menu's "Create
+    /** docs/mixer/mixer.md#creating-channels-in-an-existing-project: the "+ Track" menu's "Create
      * Channels" entry — wraps every channel-less track's chain into a mixer channel (docs/mixer/mixer.md's factory
      * default: EQ -> Compressor, both bypassed -> Channel Strip -> Master), as ONE undo step covering every track it
      * touches. A track that already has a channel is left untouched; a no-op (nothing pushed to the undo stack) when
@@ -110,7 +110,7 @@ struct TrackHeaderHost {
      * TrackHeaderHost implementer keeps compiling. */
     virtual void createChannelsForExistingTracks() {}
 
-    /** FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): true when the header menu's "Make Channel"
+    /** docs/mixer/mixer.md#make-channel-and-shared-modules: true when the header menu's "Make Channel"
      * would build something for `track` — its bound node's chain has no Channel Strip of its own yet (or merges into a
      * shared module that has none). Non-pure with an inert `false` default, for the same reason
      * `hasTracksNeedingChannels()` above uses one. */
@@ -119,13 +119,13 @@ struct TrackHeaderHost {
         return false;
     }
 
-    /** FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): the header menu's "Make Channel" — gathers
+    /** docs/mixer/mixer.md#make-channel-and-shared-modules: the header menu's "Make Channel" — gathers
      * the track's exclusive chain into a channel macro with the default Gate -> EQ -> Compressor -> Channel Strip
      * -> Master chain as ONE undo step (a merge point becomes its own bus channel). A no-op when
      * canMakeChannelForTrack() is false. Non-pure with an inert no-op default. */
     virtual void makeChannelForTrack(synth::TrackId track) { juce::ignoreUnused(track); }
 
-    /** FRO42 (P9-3h): instrument-capable hosted plugins for the "+ Track -> Instrument -> Plugin"
+    /** Instrument-capable hosted plugins for the "+ Track -> Instrument -> Plugin"
      *  submenu — every scanned plugin whose juce::PluginDescription::isInstrument is true, sorted by
      *  name like the library sidebar's own list (effects are never offered here, and neither is this
      *  app's own VST3/AU build — see MainComponent::getInstrumentPluginOptions). A pure read of
@@ -150,7 +150,7 @@ struct TrackHeaderHost {
      *  sidebar's manual "Scan for plugins..." row both already honour. Non-pure no-op default. */
     virtual void ensureInstrumentPluginsScanned() {}
 
-    /** FRO42 (P9-3h): "+ Track -> Instrument -> Plugin -> <name>" — builds the same
+    /** "+ Track -> Instrument -> Plugin -> <name>" — builds the same
      *  Track In -> instrument -> default chain (EQ bypassed -> Compressor bypassed -> Channel
      *  Strip) -> Master flow addInstrumentTrack() builds for a factory instrument, boxed into one
      *  collapsed macro, as ONE undo step — except the instrument is a hosted plugin instance loaded
@@ -162,7 +162,7 @@ struct TrackHeaderHost {
     virtual void addInstrumentPluginTrack(const synth::PluginIdentity& identity) { juce::ignoreUnused(identity); }
 
     /** One parameter with no automation lane yet — the automation strip's lane picker "Add lane..."
-     *  entries. Despite the name, also covers a ChannelStripModule send slot (FRO292); `paramId`/
+     *  entries. Despite the name, also covers a ChannelStripModule send slot; `paramId`/
      *  `paramIndex` mean what HostedPluginModule::InstanceParameterInfo documents for a hosted
      *  parameter, and `paramIndex` is unused (-1) for a send slot's plain RangedAudioParameter. */
     struct PluginLaneOption {
@@ -173,7 +173,7 @@ struct TrackHeaderHost {
     };
 
     /** Every not-yet-automated hosted-plugin instance parameter across the live graph, plus every
-     *  ACTIVE, not-yet-automated ChannelStripModule send slot (FRO292). Empty when there is nothing
+     *  ACTIVE, not-yet-automated ChannelStripModule send slot. Empty when there is nothing
      *  to offer. */
     virtual std::vector<PluginLaneOption> getAvailablePluginLaneOptions() const = 0;
 
@@ -224,7 +224,7 @@ struct TrackHeaderHost {
      *  every test stub — keeps compiling. */
     virtual void auditionTrackNote(synth::TrackId, int /*pitch*/, int /*velocity*/, bool /*noteOn*/) {}
 
-    /** FRO13 (P9-7, docs/mixer/track-presets.md): true when `track`'s bound node has a channel of its own
+    /** docs/mixer/track-presets.md: true when `track`'s bound node has a channel of its own
      *  (its macro boxes a Channel Strip) — gates the header menu's "Save track as preset.../Set as
      *  default" pair, same disabled-not-hidden precedent canMakeChannelForTrack states. Non-pure
      *  with an inert `false` default. */
@@ -254,10 +254,10 @@ struct TrackHeaderHost {
      *  default. */
     virtual void addTrackFromPresetFile() {}
 
-    /** FRO297: "+ Track" -> Bus submenu click. Non-pure no-op default. */
+    /** "+ Track" -> Bus submenu click. Non-pure no-op default. */
     virtual void addBusFromPreset(const juce::String& presetName) { juce::ignoreUnused(presetName); }
 
-    /** FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): everything the header needs about the
+    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks: everything the header needs about the
      * CHANNEL its track plays into -- the channel chip, and the linked-track name/colour/mute/solo fan-out. ONE
      *  accessor rather than a method per feature, so this interface (and MainComponent, which
      *  implements it) does not grow one line per channel behaviour; the real surface is
@@ -288,9 +288,9 @@ public:
     // with either.
     static constexpr int kMidiDestinationsMenuId = 1001;
     static constexpr int kDeleteTrackMenuId = 2000;
-    // FRO25 (P9-3d): the header context menu's "Make Channel", same id space as kDeleteTrackMenuId.
+    // The header context menu's "Make Channel", same id space as kDeleteTrackMenuId.
     static constexpr int kMakeChannelMenuId = 2001;
-    // FRO13 (P9-7): "Save track as preset.../Set as default", same id space.
+    // "Save track as preset.../Set as default", same id space.
     static constexpr int kSaveTrackPresetMenuId = 2002;
     static constexpr int kSetTrackPresetDefaultMenuId = 2003;
 
@@ -303,7 +303,7 @@ public:
     void refreshFromDoc();
 
     void paint(juce::Graphics& g) override;
-    // T161: the per-row keyboard-focus outline (see setWantsKeyboardFocus below) — painted OVER
+    // The per-row keyboard-focus outline (see setWantsKeyboardFocus below) — painted OVER
     // children for the same reason TimelinePanelComponent's own region-outline override is: the
     // colour swatch and the M/S/R/A toggles sit flush against this row's left/right edges, so an
     // outline drawn in paint() would be hidden under them.
@@ -311,7 +311,7 @@ public:
     void setLift(float lift);
     void resized() override;
     void mouseDown(const juce::MouseEvent& e) override;
-    // T166: whole-row drag-to-reorder (see onRowDragStarted below for why this row only ever
+    // Whole-row drag-to-reorder (see onRowDragStarted below for why this row only ever
     // reports raw screen positions rather than trying to reorder anything itself).
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
@@ -321,11 +321,11 @@ public:
     // active at the last refreshFromDoc() call.
     void lookAndFeelChanged() override;
 
-    // ---- T161: keyboard focus + M/S/R shortcuts -------------------------------
+    // ---- keyboard focus + M/S/R shortcuts -------------------------------
     //
     // A row is a real focusable leaf (setWantsKeyboardFocus(true) in the constructor, matching
     // TimelineClipLaneArea/PianoRollComponent's own pattern) rather than a virtual row painted by
-    // one big component (contrast ModuleLibraryComponent's T160 row nav) — TimelineTrackHeaderComponent
+    // one big component (contrast ModuleLibraryComponent's row nav) — TimelineTrackHeaderComponent
     // already IS one-component-per-track. Up/Down and M/S/R only ever reach keyPressed() below while
     // THIS row genuinely holds real OS keyboard focus, by JUCE's own key-dispatch rule — no extra
     // "am I the focused one" guard is needed or wanted (see docs/timeline/tracks.md#keyboard-focus-and-msr).
@@ -389,7 +389,7 @@ public:
     // strip that's already showing it".
     std::function<void(synth::TrackId)> onAutomationToggleRequested;
 
-    // ---- T166: whole-row drag-to-reorder -----------------------------------------
+    // ---- whole-row drag-to-reorder -----------------------------------------
     //
     // "Whole row" on purpose: a small dedicated handle is too fiddly a target for dragging a track
     // (see the ticket) — everything except the interactive children (name label, swatch, M/S/R/A
@@ -442,7 +442,7 @@ public:
      *  affordance without opening an async menu. `showMenu` false does the highlight only. */
     void handleChipClick(bool showMenu);
 
-    /** FRO14: one meter tick for the channel chip, driven by TimelinePanelComponent's single 15 Hz
+    /** One meter tick for the channel chip, driven by TimelinePanelComponent's single 15 Hz
      *  timer rather than a per-row one (see ChannelChipComponent's header). Returns true only when
      *  the chip actually repainted -- the gate that keeps this off the "unconditional per-tick
      *  repaint" list. A no-op (false) for a row with no channel chip showing. */
@@ -452,7 +452,7 @@ public:
      *  applyBindingMenuChoice. */
     void applyContextMenuChoice(int menuId);
 
-    /** FRO25: the header context menu (Make Channel, Delete Track) as showContextMenu() builds it —
+    /** The header context menu (Make Channel, Delete Track) as showContextMenu() builds it —
      *  item ids are the k*MenuId constants above, fed back through applyContextMenuChoice(). */
     juce::PopupMenu buildContextMenu() const;
 
@@ -514,12 +514,12 @@ private:
         TimelineTrackHeaderComponent& owner_;
     };
 
-    // FRO60: JUCE hands a click to whichever child component is directly under the cursor and never
+    // JUCE hands a click to whichever child component is directly under the cursor and never
     // bubbles it up to an ancestor on its own — mouseDown() below only ever sees a right-click that
     // lands on this row's own background pixels. nameLabel_ and the M/S/R/A toggles cover almost
     // every OTHER pixel of the row and have no popup menu of their own, so a right-click there used
-    // to be swallowed silently instead of ever reaching showContextMenu() (found live in FRO25's
-    // check: 4 real right-click spots that a direct `header.mouseDown(...)` test can't catch, since
+    // to be swallowed silently instead of ever reaching showContextMenu() (4 real right-click spots that a direct
+    // `header.mouseDown(...)` test can't catch, since
     // that bypasses the child entirely). This subclass is the fix for the label: a right-click goes
     // straight to the SAME showContextMenu() a right-click on the background uses; anything else is
     // untouched juce::Label behaviour. The binding chip and the colour swatch are deliberately left
@@ -579,7 +579,7 @@ private:
     // Routes a doc mutation through the host (one undo step). Falls back to running it directly
     // when there is no host, so a header built for a test is still functional.
     void performEdit(const std::function<void()>& mutation);
-    // T161: read-flip-write for M/S/R, shared by the toggle buttons' own onClick and keyPressed()'s
+    // Read-flip-write for M/S/R, shared by the toggle buttons' own onClick and keyPressed()'s
     // bare m/s/r — one path so a button click and a keystroke can never disagree about what
     // "toggle" means. No-op when the track is gone (mid-delete race).
     void toggleMuted();
@@ -592,12 +592,12 @@ private:
     void showBindingMenu();
     void showContextMenu();
 
-    // FRO14: the app's channel surface, or null (no host, or a host that wires none -- a test
+    // The app's channel surface, or null (no host, or a host that wires none -- a test
     // stub). Every caller re-asks rather than caching: one cable drag can form or break the link.
     synth::ui::TrackChannelLinkSurface* linkSurface() const {
         return host_ != nullptr ? host_->getChannelLinkSurface() : nullptr;
     }
-    // FRO14: the channel state refreshFromDoc() last read, so paint/resized and the M/S toggles
+    // The channel state refreshFromDoc() last read, so paint/resized and the M/S toggles
     // agree with what is on screen without each re-walking the graph.
     TrackChannelLinkSurface::ChannelInfo channelInfo_;
 
@@ -623,7 +623,7 @@ private:
     // having been called with a LookAndFeel already installed).
     void applyThemeDerivedColours();
 
-    // T161: bare m/s/r resolution — the same "unset binding has no key at all, once a manager is
+    // Bare m/s/r resolution — the same "unset binding has no key at all, once a manager is
     // installed" contract every other surface action in this app follows. See matchesAction().
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
 
@@ -639,10 +639,10 @@ private:
     // setOpenMidiDestinationsPickerHookForTest() so applyBindingMenuChoice(kMidiDestinationsMenuId)
     // is exercisable without a live juce::CallOutBox.
     std::function<void()> openMidiDestinationsPickerHook_;
-    // FRO25: see setShowContextMenuHookForTest. Null = show the real async menu.
+    // See setShowContextMenuHookForTest. Null = show the real async menu.
     std::function<void(juce::PopupMenu&)> showContextMenuHook_;
 
-    // FRO60: see ContextMenuForwardingLabel/ContextMenuForwardingButton above — these four are the
+    // See ContextMenuForwardingLabel/ContextMenuForwardingButton above — these four are the
     // children with NO popup menu of their own, so a right-click on them forwards to
     // showContextMenu(). bindingChip_ keeps its own Track In menu and colourSwatch_ (SwatchButton)
     // keeps its own colour picker — neither changes here.
@@ -653,13 +653,13 @@ private:
     ContextMenuForwardingButton armButton_{*this, "R"};
     ContextMenuForwardingButton automationButton_{*this, "A"};
     juce::TextButton bindingChip_;
-    // FRO14: the CHANNEL chip -- what this track's audio ends up in, as opposed to bindingChip_'s
+    // The CHANNEL chip -- what this track's audio ends up in, as opposed to bindingChip_'s
     // "which node feeds it". Hidden whenever the track reaches no channel yet.
     ChannelChipComponent channelChip_;
 
     juce::Colour resolvedColour_{juce::Colours::grey};
     bool chipWarning_ = false;
-    // T166: true from the moment a background mouseDrag crosses the reorder threshold (see
+    // True from the moment a background mouseDrag crosses the reorder threshold (see
     // onRowDragStarted) until the matching mouseUp. Reset to false BEFORE onRowDragEnded fires —
     // see that callback's own ordering-hazard comment.
     bool draggingRow_ = false;

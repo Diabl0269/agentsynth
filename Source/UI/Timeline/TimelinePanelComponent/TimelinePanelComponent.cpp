@@ -27,7 +27,7 @@ constexpr int kEditToolRadioGroupId = 4300;
 
 //==============================================================================
 TimelinePanelComponent::TimelinePanelComponent() {
-    // T159: makes grabKeyboardFocus() on THIS component (the "timeline" focus region's root)
+    // Makes grabKeyboardFocus() on THIS component (the "timeline" focus region's root)
     // succeed deterministically, rather than depending on JUCE's position-ordered descent into
     // children finding a focus-wanting one. This is deliberately separate from the clip-lane-area
     // and piano-roll's OWN grabKeyboardFocus() calls on mouseDown (docs/control/shortcuts.md's edit-surface
@@ -289,11 +289,11 @@ TimelinePanelComponent::TimelinePanelComponent() {
 // operation (tooltips, keyPressed) still trusts that contract.
 //
 // This DESTRUCTOR is different: it runs unconditionally, including in tests that forgot the
-// explicit detach (FRO97 found this pattern in five test files — a locally-scoped ShortcutManager
+// explicit detach (a locally-scoped ShortcutManager
 // declared AFTER a locally-scoped component, so the manager destructs FIRST at scope exit).
 // `shortcuts_` alone can't tell a live manager from a dangling one, so the destructor resolves
-// through `shortcutsWeak_` instead — a genuine guard against exactly the bug class this ticket
-// fixed, rather than one more call site relying on every future test remembering the idiom.
+// through `shortcutsWeak_` instead — a genuine guard against exactly that bug class,
+// rather than one more call site relying on every future test remembering the idiom.
 // `shortcutsWeak_` goes null automatically the moment the referenced manager destructs, making
 // removeChangeListener safe to skip instead of a use-after-free.
 TimelinePanelComponent::~TimelinePanelComponent() {
@@ -323,7 +323,7 @@ void TimelinePanelComponent::setShortcutManager(ShortcutManager* manager) {
     if (shortcuts_ != nullptr)
         shortcuts_->addChangeListener(this);
     refreshShortcutTooltips();
-    // T161: every existing track header row resolves its own bare m/s/r through this SAME manager —
+    // Every existing track header row resolves its own bare m/s/r through this SAME manager —
     // a freshly built header (syncTrackHeaders()'s rebuild branch) gets it there instead, since it
     // isn't a constructor parameter.
     for (auto* header : trackHeaderList_.headers)

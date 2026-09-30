@@ -721,7 +721,7 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
     }
 }
 
-// T159: focus-region outline (Source/UI/Layout/FocusRegion.h), drawn OVER children -- the ruler,
+// Focus-region outline (Source/UI/Layout/FocusRegion.h), drawn OVER children -- the ruler,
 // track header viewport, transport bar and clip lane area all tile wall-to-wall against this
 // panel's own edge, so an outline painted at the end of paint() above would sit UNDER them and
 // never show.

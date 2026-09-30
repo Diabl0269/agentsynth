@@ -1,4 +1,4 @@
-// Concern: FRO25 (P9-3d) "Make channel" -- planMakeChannel/buildMakeChannel/resolveChannelSource
+// Concern: "Make channel" -- planMakeChannel/buildMakeChannel/resolveChannelSource
 // and the internal helpers that classify a chain's own region, shared merge heads and side inputs.
 #include "ChannelFlows.h"
 
@@ -14,9 +14,9 @@
 
 namespace synth {
 
-// ---- FRO25 (P9-3d): "Make channel" --------------------------------------------------------------
+// ---- "Make channel" --------------------------------------------------------------
 
-// FRO13 (P9-7): lifted out of the anonymous namespace below (was: private to this file) so
+// Lifted out of the anonymous namespace below so
 // ChannelFlowsTrackPreset.cpp's outside-modulator walk can reuse them too — see
 // ChannelFlowsInternal.h's extern declarations for why this is the one definition.
 juce::AudioProcessor* processorFor(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id) {
@@ -46,7 +46,7 @@ bool isMacroPortNode(const juce::AudioProcessor* p) {
 // both the ModCV check below and crossingIsRight's L/R read must use the module behind it -- a
 // Cutoff CV cable into a bus through its port is still a CV cable.
 //
-// FRO11 (P9-5): promoted out of this file's anonymous namespace to synth-namespace/external
+// Promoted out of this file's anonymous namespace to synth-namespace/external
 // linkage (declared in ChannelFlows.h) so MixerModelInserts.cpp's insert-list walk can reuse the
 // exact same rule instead of re-deriving it -- the whole point being that "what counts as signal"
 // answers identically for "what would Make Channel do" and "what does the mixer column show".
@@ -227,7 +227,8 @@ bool crossingIsRight(juce::AudioProcessorGraph& graph, const std::vector<Connect
 
 // True when `channel` is on one of a poly-mode module's multi-voice jacks (span > 1, read off the
 // jack's head raw channel the same way GraphEditor::buildMacroPortCrossingPlan does). A poly VCA's
-// output is a span-1 head (it self-sums), so it never qualifies — consistent with P9-3j.
+// output is a span-1 head (it self-sums), so it never qualifies —
+// consistent with the poly-envelope auto-wire.
 bool isPolyFeed(juce::AudioProcessor* processor, int channel) {
     if (!isProcessorPoly(processor))
         return false;
@@ -601,7 +602,7 @@ MadeChannel buildMakeChannel(juce::AudioProcessorGraph& graph, const MakeChannel
         members.push_back(built.channel.eqUuid);
         members.push_back(built.channel.compressorUuid);
         members.push_back(built.channel.stripUuid);
-        // FRO15 (docs/mixer/sends-and-buses.md): a merge-point bus IS a bus — mark it so its mixer column
+        // docs/mixer/sends-and-buses.md: a merge-point bus IS a bus — mark it so its mixer column
         // gets the BUS badge and a feeding-strips source line instead of a track chip.
         if (built.channel.strip != nullptr)
             if (auto* busStrip = dynamic_cast<ChannelStripModule*>(built.channel.strip->getProcessor()))

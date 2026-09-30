@@ -5,8 +5,8 @@
 // Channel Strip to every track source that feeds it. Both are pure graph reads -- no mutation, no undo, no TimelineDoc
 // -- so they live in Core next to the rest of ChannelFlows.
 //
-// findTrackSourcesFeedingStrip() is StemSession.cpp's former private upstreamTrackSources() (FRO55,
-// stem file naming) promoted verbatim to a shared Core query: "which track feeds this strip" is the
+// findTrackSourcesFeedingStrip() is StemSession.cpp's former private upstreamTrackSources()
+// (stem file naming) promoted verbatim to a shared Core query: "which track feeds this strip" is the
 // same question the stem namer and the link rule both ask, so there is one BFS for both rather than
 // two copies that could drift.
 
@@ -34,7 +34,7 @@ namespace {
 // auto-ported Mono jack is a rare enough patch shape that treating it as signal here is an
 // acceptable simplification for a display/naming decision, not a routing one.
 //
-// Moved here from StemSession.cpp's isStemNamingSignalEdge (FRO55) - see the file comment - and
+// Moved here from StemSession.cpp's isStemNamingSignalEdge - see the file comment - and
 // expressed through ChannelFlowsInternal.h's shared node predicates rather than its own casts.
 bool isLinkSignalEdge(juce::AudioProcessorGraph& graph, const juce::AudioProcessorGraph::Connection& conn) {
     auto* srcProcessor = processorFor(graph, conn.source.nodeID);
