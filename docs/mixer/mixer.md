@@ -136,6 +136,13 @@ instrument. Linked means:
   solo. A redirect, not a mirror: the track's own `muted`/`soloed` stay false, so there is only one
   copy.
 
+**A channel macro can contain child macros.** Anywhere the mixer asks "which channel is this node in"
+(column and send names, a column's colour, Edit on canvas, the track-to-channel link) it resolves to
+the nearest macro in the node's owner chain that directly holds a Channel Strip
+(`synth::nearestChannelMacro`, `Source/Mixer/ChannelMacroLookup.h`), never the innermost child; a
+node in no channel macro falls back to its innermost owner, so a flat set behaves as before. Track
+presets and Make Channel treat a child macro's modules as inside the channel.
+
 A channel fed by **more than one** track (Kick, Snare and Hats into one sampler) is **not** linked: it
 keeps its own independently chosen name and colour, lists every track that feeds it, and each of
 those tracks' M and S controls keep plain note-gating behaviour rather than touching the strip. The

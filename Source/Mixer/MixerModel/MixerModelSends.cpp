@@ -4,6 +4,7 @@
 // one-concern-per-unit rule).
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "Mixer/TrackChannelLink.h"
 #include "MixerModelInternal.h"
@@ -22,7 +23,7 @@ juce::String stripColumnName(juce::AudioProcessorGraph& graph, const TimelineDoc
     if (node == nullptr)
         return {};
     const juce::String uuid = node->properties["uuid"].toString();
-    if (const auto* macro = macros.findByMember(uuid))
+    if (const auto* macro = nearestChannelMacro(graph, macros, uuid))
         return macro->name;
     // A strip's own persisted name comes right after the macro (a boxed strip's name IS its
     // macro's -- see the mixer header's inline-rename comment on why there are never two competing

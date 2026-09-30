@@ -3,6 +3,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "Modules/AudioInputModule.h"
 #include "UserSettings.h"
+#include <algorithm>
 #include <limits>
 #include <map>
 #include <set>
@@ -66,6 +67,51 @@ const juce::Array<juce::var>* arrayProperty(const juce::DynamicObject* obj, cons
     return obj->getProperty(key).getArray();
 }
 
+// A snippet macro's "parent" is the index of its parent's entry in the same "macros" array, or -1
+// (absent) for a top-level macro. Clears an out-of-range, self-referencing or cyclic link (a
+// hand-edited file could carry one, and a cycle would make the whole MacroSet unloadable later).
+void sanitiseMacroParents(std::vector<int>& parents) {
+    const int n = (int)parents.size();
+    for (int i = 0; i < n; ++i) {
+        if (parents[(size_t)i] < 0 || parents[(size_t)i] >= n || parents[(size_t)i] == i) {
+            parents[(size_t)i] = -1;
+            continue;
+        }
+        int cur = parents[(size_t)i];
+        for (int step = 0; cur >= 0 && cur != i && step <= n; ++step)
+            cur = parents[(size_t)cur];
+        if (cur >= 0)
+            parents[(size_t)i] = -1;
+    }
+}
+
+// Which macros survive an insert, given each one's surviving direct-member count (-1 = unusable
+// entry) and its sanitised parent link -- MacroSet::fromVar's rule: valid with any direct member,
+// or, for a container with none, while a surviving child sits inside it.
+std::vector<bool> macrosToKeep(const std::vector<int>& memberCounts, const std::vector<int>& parents) {
+    const size_t n = memberCounts.size();
+    std::vector<bool> keep(n, false);
+    for (size_t i = 0; i < n; ++i)
+        keep[i] = memberCounts[i] >= 1;
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (size_t i = 0; i < n; ++i)
+            if (keep[i] && parents[i] >= 0 && !keep[(size_t)parents[i]] && memberCounts[(size_t)parents[i]] == 0) {
+                keep[(size_t)parents[i]] = true;
+                changed = true;
+            }
+    }
+    return keep;
+}
+
+std::vector<int> readMacroParents(const juce::Array<juce::var>& macrosList) {
+    std::vector<int> parents;
+    for (const auto& macroVar : macrosList)
+        parents.push_back(intProperty(macroVar.getDynamicObject(), "parent", -1));
+    sanitiseMacroParents(parents);
+    return parents;
+}
+
 struct SnippetNameComparator {
     static int compareElements(const SnippetInfo& a, const SnippetInfo& b) { return a.name.compareIgnoreCase(b.name); }
 };
@@ -110,6 +156,177 @@ juce::Point<int> SnippetManager::selectionOrigin(juce::AudioProcessorGraph& grap
     if (minX == std::numeric_limits<int>::max())
         return {};
     return {minX, minY};
+}
+
+// Macros: capture only a macro whose FULL membership (its own members plus every nested child
+// macro's, MacroSet::descendantMembers) is inside `keep` -- the same self-contained rule
+// connections/modulations already follow. Membership is emitted using this snippet's own node ids
+// (matching "nodes"), not uuids: those ids get renumbered on insert, uuids don't exist yet for a
+// macro captured into a still-unsaved snippet var. A nested macro carries "parent": the index of
+// its parent's entry in the same "macros" array, only when that parent was captured too (a child
+// whose parent is only partly selected arrives top-level). A parent with no direct members of its
+// own (only children) is captured with an empty "members".
+static void captureMacros(juce::DynamicObject& root, juce::AudioProcessorGraph& graph, const std::set<int>& keep,
+                          const MacroSet& macros, juce::Point<int> origin) {
+    if (macros.empty())
+        return;
+
+    // uuid -> original node id, so a macro's uuid-keyed membership can be tested against `keep`.
+    std::map<juce::String, int> idForUuid;
+    for (auto* node : graph.getNodes()) {
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isNotEmpty() && keep.count((int)node->nodeID.uid) > 0)
+            idForUuid[uuid] = (int)node->nodeID.uid;
+    }
+
+    std::vector<const Macro*> captured;
+    std::map<juce::String, int> indexForMacroId;
+    for (const auto& macro : macros.getAll()) {
+        const auto everyone = macros.descendantMembers(macro.id);
+        const bool fullyContained =
+            !everyone.empty() &&
+            std::all_of(everyone.begin(), everyone.end(), [&](const auto& u) { return idForUuid.count(u) > 0; });
+        if (!fullyContained)
+            continue;
+        indexForMacroId[macro.id] = (int)captured.size();
+        captured.push_back(&macro);
+    }
+
+    juce::Array<juce::var> macrosArr;
+    for (const Macro* macroPtr : captured) {
+        const Macro& macro = *macroPtr;
+        juce::DynamicObject::Ptr m = new juce::DynamicObject();
+        m->setProperty("name", macro.name);
+        m->setProperty("colour", macro.colour.toString());
+        m->setProperty("collapsed", macro.collapsed);
+        if (auto it = indexForMacroId.find(macro.parentId); it != indexForMacroId.end())
+            m->setProperty("parent", it->second);
+        const auto relPos = macro.bounds.getPosition() - origin;
+        juce::DynamicObject::Ptr boundsObj = new juce::DynamicObject();
+        boundsObj->setProperty("x", relPos.x);
+        boundsObj->setProperty("y", relPos.y);
+        boundsObj->setProperty("w", macro.bounds.getWidth());
+        boundsObj->setProperty("h", macro.bounds.getHeight());
+        m->setProperty("bounds", juce::var(boundsObj.get()));
+        juce::Array<juce::var> memberArr;
+        for (const auto& uuid : macro.members)
+            memberArr.add(idForUuid[uuid]);
+        m->setProperty("members", memberArr);
+
+        // Ports (Macro I/O): keyed by this snippet's own node id, same as members above
+        // -- a port's nodeUuid is resolved through idForUuid, the same map membership just used,
+        // so it can never name a node outside `keep` (Macro::ports' own invariant guarantees
+        // every port's nodeUuid is already one of `macro.members`).
+        juce::Array<juce::var> portArr;
+        for (const auto& port : macro.ports) {
+            auto it = idForUuid.find(port.nodeUuid);
+            if (it == idForUuid.end())
+                continue; // defensive only -- cannot happen for a fully-contained macro
+            juce::DynamicObject::Ptr p = new juce::DynamicObject();
+            p->setProperty("node", it->second);
+            p->setProperty("isInput", port.isInput);
+            p->setProperty("name", port.name);
+            p->setProperty("order", port.order);
+            p->setProperty("kind", port.kind == MacroPortKind::Midi ? "midi" : "audioCV");
+            if (port.colour.has_value())
+                p->setProperty("colour", port.colour->toString());
+            portArr.add(juce::var(p.get()));
+        }
+        m->setProperty("ports", portArr);
+
+        macrosArr.add(juce::var(m.get()));
+    }
+    if (!macrosArr.isEmpty())
+        root.setProperty("macros", macrosArr);
+}
+
+// Macros: remap membership through the same idMap node ids were just renumbered through. A member
+// id this snippet doesn't carry (shouldn't happen -- extractSnippet only ever captures a
+// fully-contained macro -- but a hand-edited .agsnip could claim one) drops that member; a flat
+// macro left with no members this way is dropped outright (macrosToKeep spells out the rule). "parent" is re-pointed at
+// the parent's new position in the surviving array.
+static void remapMacros(juce::DynamicObject& root, const juce::DynamicObject* src, const std::map<int, int>& idMap,
+                        juce::Point<int> dropPos) {
+    auto* macrosList = arrayProperty(src, "macros");
+    if (macrosList == nullptr)
+        return;
+
+    const size_t n = (size_t)macrosList->size();
+    const auto parents = readMacroParents(*macrosList);
+    std::vector<juce::Array<juce::var>> newMembers(n);
+    std::vector<int> counts(n, -1);
+    for (size_t i = 0; i < n; ++i) {
+        auto* macroObj = (*macrosList)[(int)i].getDynamicObject();
+        auto* memberList = arrayProperty(macroObj, "members");
+        if (memberList == nullptr)
+            continue;
+        for (const auto& memberVar : *memberList) {
+            auto it = idMap.find((int)memberVar);
+            if (it != idMap.end())
+                newMembers[i].add(it->second);
+        }
+        counts[i] = newMembers[i].size();
+    }
+
+    const auto keep = macrosToKeep(counts, parents);
+    std::vector<int> newIndex(n, -1);
+    int next = 0;
+    for (size_t i = 0; i < n; ++i)
+        if (keep[i])
+            newIndex[i] = next++;
+
+    juce::Array<juce::var> macrosArr;
+    for (size_t i = 0; i < n; ++i) {
+        if (!keep[i])
+            continue;
+        auto* macroObj = (*macrosList)[(int)i].getDynamicObject();
+
+        juce::DynamicObject::Ptr m = new juce::DynamicObject();
+        m->setProperty("name", macroObj->getProperty("name"));
+        m->setProperty("colour", macroObj->getProperty("colour"));
+        m->setProperty("collapsed", macroObj->getProperty("collapsed"));
+        if (parents[i] >= 0 && newIndex[(size_t)parents[i]] >= 0)
+            m->setProperty("parent", newIndex[(size_t)parents[i]]);
+        if (auto* boundsObj = macroObj->getProperty("bounds").getDynamicObject()) {
+            juce::DynamicObject::Ptr newBounds = new juce::DynamicObject();
+            newBounds->setProperty("x", intProperty(boundsObj, "x") + dropPos.x);
+            newBounds->setProperty("y", intProperty(boundsObj, "y") + dropPos.y);
+            newBounds->setProperty("w", boundsObj->getProperty("w"));
+            newBounds->setProperty("h", boundsObj->getProperty("h"));
+            m->setProperty("bounds", juce::var(newBounds.get()));
+        }
+        m->setProperty("members", newMembers[i]);
+
+        // Ports: remap each port's "node" through the same idMap membership was just renumbered
+        // through, and drop a port whose node this snippet doesn't carry -- the same "member id
+        // missing -> drop it" rule the members loop above already follows, since a port whose node
+        // vanished is exactly as unrepresentable as a member that vanished.
+        juce::Array<juce::var> newPorts;
+        if (auto* portList = arrayProperty(macroObj, "ports")) {
+            for (const auto& portVar : *portList) {
+                auto* portObj = portVar.getDynamicObject();
+                if (portObj == nullptr)
+                    continue;
+                auto it = idMap.find(intProperty(portObj, "node", -1));
+                if (it == idMap.end())
+                    continue;
+                juce::DynamicObject::Ptr p = new juce::DynamicObject();
+                p->setProperty("node", it->second);
+                p->setProperty("isInput", portObj->getProperty("isInput"));
+                p->setProperty("name", portObj->getProperty("name"));
+                p->setProperty("order", portObj->getProperty("order"));
+                p->setProperty("kind", portObj->getProperty("kind"));
+                if (portObj->hasProperty("colour"))
+                    p->setProperty("colour", portObj->getProperty("colour"));
+                newPorts.add(juce::var(p.get()));
+            }
+        }
+        m->setProperty("ports", newPorts);
+
+        macrosArr.add(juce::var(m.get()));
+    }
+    if (!macrosArr.isEmpty())
+        root.setProperty("macros", macrosArr);
 }
 
 juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const std::vector<NodeID>& selection,
@@ -204,76 +421,7 @@ juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const
     }
     root->setProperty("modulations", modulations);
 
-    // Macros: capture only a macro whose FULL membership is inside `keep` — the same
-    // self-contained rule connections/modulations already follow. Membership is emitted using
-    // this snippet's own node ids (matching "nodes" above), not uuids: those ids get renumbered
-    // on insert, uuids don't exist yet for a macro captured into a still-unsaved snippet var.
-    if (!macros.empty()) {
-        // uuid -> original node id, so a macro's uuid-keyed membership can be tested against `keep`.
-        std::map<juce::String, int> idForUuid;
-        for (auto* node : graph.getNodes()) {
-            const juce::String uuid = node->properties["uuid"].toString();
-            if (uuid.isNotEmpty() && keep.count((int)node->nodeID.uid) > 0)
-                idForUuid[uuid] = (int)node->nodeID.uid;
-        }
-
-        juce::Array<juce::var> macrosArr;
-        for (const auto& macro : macros.getAll()) {
-            std::vector<int> memberIds;
-            bool fullyContained = true;
-            for (const auto& uuid : macro.members) {
-                auto it = idForUuid.find(uuid);
-                if (it == idForUuid.end()) {
-                    fullyContained = false;
-                    break;
-                }
-                memberIds.push_back(it->second);
-            }
-            if (!fullyContained || memberIds.empty())
-                continue;
-
-            juce::DynamicObject::Ptr m = new juce::DynamicObject();
-            m->setProperty("name", macro.name);
-            m->setProperty("colour", macro.colour.toString());
-            m->setProperty("collapsed", macro.collapsed);
-            const auto relPos = macro.bounds.getPosition() - origin;
-            juce::DynamicObject::Ptr boundsObj = new juce::DynamicObject();
-            boundsObj->setProperty("x", relPos.x);
-            boundsObj->setProperty("y", relPos.y);
-            boundsObj->setProperty("w", macro.bounds.getWidth());
-            boundsObj->setProperty("h", macro.bounds.getHeight());
-            m->setProperty("bounds", juce::var(boundsObj.get()));
-            juce::Array<juce::var> memberArr;
-            for (int id : memberIds)
-                memberArr.add(id);
-            m->setProperty("members", memberArr);
-
-            // Ports (Macro I/O): keyed by this snippet's own node id, same as members above
-            // — a port's nodeUuid is resolved through idForUuid, the same map membership just used,
-            // so it can never name a node outside `keep` (Macro::ports' own invariant guarantees
-            // every port's nodeUuid is already one of `macro.members`).
-            juce::Array<juce::var> portArr;
-            for (const auto& port : macro.ports) {
-                auto it = idForUuid.find(port.nodeUuid);
-                if (it == idForUuid.end())
-                    continue; // defensive only — cannot happen for a fully-contained macro
-                juce::DynamicObject::Ptr p = new juce::DynamicObject();
-                p->setProperty("node", it->second);
-                p->setProperty("isInput", port.isInput);
-                p->setProperty("name", port.name);
-                p->setProperty("order", port.order);
-                p->setProperty("kind", port.kind == MacroPortKind::Midi ? "midi" : "audioCV");
-                if (port.colour.has_value())
-                    p->setProperty("colour", port.colour->toString());
-                portArr.add(juce::var(p.get()));
-            }
-            m->setProperty("ports", portArr);
-
-            macrosArr.add(juce::var(m.get()));
-        }
-        if (!macrosArr.isEmpty())
-            root->setProperty("macros", macrosArr);
-    }
+    captureMacros(*root, graph, keep, macros, origin);
 
     return juce::var(root.get());
 }
@@ -375,76 +523,7 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
     }
     root->setProperty("modulations", modulations);
 
-    // Macros: remap membership through the same idMap node ids were just renumbered
-    // through. A member id this snippet doesn't carry (shouldn't happen — extractSnippet only
-    // ever captures a fully-contained macro — but a hand-edited .agsnip could claim one) drops
-    // that member; a macro left with fewer than two members this way is dropped outright, since
-    // a stray single-member "group" is meaningless.
-    if (auto* macrosList = arrayProperty(src, "macros")) {
-        juce::Array<juce::var> macrosArr;
-        for (const auto& macroVar : *macrosList) {
-            auto* macroObj = macroVar.getDynamicObject();
-            if (macroObj == nullptr)
-                continue;
-
-            auto* memberList = arrayProperty(macroObj, "members");
-            if (memberList == nullptr)
-                continue;
-
-            juce::Array<juce::var> newMembers;
-            for (const auto& memberVar : *memberList) {
-                auto it = idMap.find((int)memberVar);
-                if (it != idMap.end())
-                    newMembers.add(it->second);
-            }
-            if (newMembers.size() < 2)
-                continue;
-
-            juce::DynamicObject::Ptr m = new juce::DynamicObject();
-            m->setProperty("name", macroObj->getProperty("name"));
-            m->setProperty("colour", macroObj->getProperty("colour"));
-            m->setProperty("collapsed", macroObj->getProperty("collapsed"));
-            if (auto* boundsObj = macroObj->getProperty("bounds").getDynamicObject()) {
-                juce::DynamicObject::Ptr newBounds = new juce::DynamicObject();
-                newBounds->setProperty("x", intProperty(boundsObj, "x") + dropPos.x);
-                newBounds->setProperty("y", intProperty(boundsObj, "y") + dropPos.y);
-                newBounds->setProperty("w", boundsObj->getProperty("w"));
-                newBounds->setProperty("h", boundsObj->getProperty("h"));
-                m->setProperty("bounds", juce::var(newBounds.get()));
-            }
-            m->setProperty("members", newMembers);
-
-            // Ports: remap each port's "node" through the same idMap membership was just
-            // renumbered through, and drop a port whose node this snippet doesn't carry — the same
-            // "member id missing -> drop it" rule the members loop above already follows, since a
-            // port whose node vanished is exactly as unrepresentable as a member that vanished.
-            juce::Array<juce::var> newPorts;
-            if (auto* portList = arrayProperty(macroObj, "ports")) {
-                for (const auto& portVar : *portList) {
-                    auto* portObj = portVar.getDynamicObject();
-                    if (portObj == nullptr)
-                        continue;
-                    auto it = idMap.find(intProperty(portObj, "node", -1));
-                    if (it == idMap.end())
-                        continue;
-                    juce::DynamicObject::Ptr p = new juce::DynamicObject();
-                    p->setProperty("node", it->second);
-                    p->setProperty("isInput", portObj->getProperty("isInput"));
-                    p->setProperty("name", portObj->getProperty("name"));
-                    p->setProperty("order", portObj->getProperty("order"));
-                    p->setProperty("kind", portObj->getProperty("kind"));
-                    if (portObj->hasProperty("colour"))
-                        p->setProperty("colour", portObj->getProperty("colour"));
-                    newPorts.add(juce::var(p.get()));
-                }
-            }
-            m->setProperty("ports", newPorts);
-
-            macrosArr.add(juce::var(m.get()));
-        }
-        if (!macrosArr.isEmpty())
-            root->setProperty("macros", macrosArr);
-    }
+    remapMacros(*root, src, idMap, dropPos);
 
     return juce::var(root.get());
 }
@@ -452,6 +531,105 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
 // ---------------------------------------------------------------------------------------
 // Insertion
 // ---------------------------------------------------------------------------------------
+
+// Turns the prepared snippet's "macros" entries into live synth::Macro values with freshly
+// resolved node uuids. Every entry gets a fresh macro id up front so a child's parentId can name
+// its parent whichever of the two is listed first (MacroSet::add keeps an id that is already set).
+static void restoreMacros(std::vector<Macro>& out, const juce::Array<juce::var>* macrosList,
+                          const std::map<int, juce::AudioProcessorGraph::NodeID>& idMap,
+                          juce::AudioProcessorGraph& graph) {
+    if (macrosList == nullptr)
+        return;
+
+    const size_t n = (size_t)macrosList->size();
+    const auto parents = readMacroParents(*macrosList);
+    std::vector<Macro> macros(n);
+    std::vector<int> counts(n, -1);
+    for (size_t i = 0; i < n; ++i) {
+        auto* macroObj = (*macrosList)[(int)i].getDynamicObject();
+        if (macroObj == nullptr)
+            continue;
+        auto* memberList = arrayProperty(macroObj, "members");
+        if (memberList == nullptr)
+            continue;
+
+        Macro& macro = macros[i];
+        macro.id = juce::Uuid().toDashedString();
+        macro.name = macroObj->getProperty("name").toString();
+        macro.colour = juce::Colour::fromString(macroObj->getProperty("colour").toString());
+        macro.collapsed = (bool)macroObj->getProperty("collapsed");
+        if (auto* boundsObj = macroObj->getProperty("bounds").getDynamicObject()) {
+            macro.bounds = {intProperty(boundsObj, "x"), intProperty(boundsObj, "y"), intProperty(boundsObj, "w"),
+                            intProperty(boundsObj, "h")};
+        }
+        // Snippet node id -> the uuid just resolved/assigned for it, so the ports loop below can
+        // look a port's node up by the same id its "node" field names, without re-walking the
+        // graph or re-generating a second uuid for a node this loop already touched.
+        std::map<int, juce::String> uuidForSnippetId;
+        for (const auto& memberVar : *memberList) {
+            const int snippetId = (int)memberVar;
+            auto it = idMap.find(snippetId);
+            if (it == idMap.end())
+                continue;
+            auto* node = graph.getNodeForId(it->second);
+            if (node == nullptr)
+                continue;
+            // A freshly pasted node has no "uuid" yet -- applyJSONToGraph only adopts one from the
+            // incoming JSON when trusted AND the JSON carried one (it never does for a snippet
+            // node, see extractSnippet), so generate it here rather than reading an empty
+            // property. ensureNodeUuid is the same lazy-generation graphToJSON itself uses.
+            const juce::String uuid = AIStateMapper::ensureNodeUuid(node);
+            if (uuid.isNotEmpty()) {
+                macro.members.push_back(uuid);
+                uuidForSnippetId[snippetId] = uuid;
+            }
+        }
+        counts[i] = (int)macro.members.size();
+
+        // Ports: resolve each port's snippet node id through the map just built. Built FROM the
+        // resolved member map, not independently -- a port whose member failed to resolve (node
+        // vanished, uuid generation failed) must drop with it, or MacroSet::fromVar's "every
+        // port's nodeUuid must be one of this macro's own members" invariant (MacroSet.h) would
+        // reject the WHOLE macro set the next time this project round-trips through save/load.
+        if (auto* portList = arrayProperty(macroObj, "ports")) {
+            for (const auto& portVar : *portList) {
+                auto* portObj = portVar.getDynamicObject();
+                if (portObj == nullptr)
+                    continue;
+                auto uuidIt = uuidForSnippetId.find(intProperty(portObj, "node", -1));
+                if (uuidIt == uuidForSnippetId.end())
+                    continue;
+
+                MacroPort port;
+                port.nodeUuid = uuidIt->second;
+                port.isInput = (bool)portObj->getProperty("isInput");
+                port.name = portObj->getProperty("name").toString();
+                port.order = intProperty(portObj, "order");
+
+                const juce::String kindStr = portObj->getProperty("kind").toString();
+                if (kindStr == "midi")
+                    port.kind = MacroPortKind::Midi;
+                else if (kindStr == "audioCV")
+                    port.kind = MacroPortKind::AudioCV;
+                else
+                    continue; // matches MacroPort::fromVar's strictness on "kind"
+
+                if (portObj->hasProperty("colour"))
+                    port.colour = juce::Colour::fromString(portObj->getProperty("colour").toString());
+                macro.ports.push_back(std::move(port));
+            }
+        }
+    }
+
+    const auto keep = macrosToKeep(counts, parents);
+    // Resolve every parentId before moving anything out: a moved-from parent would have lost its id.
+    for (size_t i = 0; i < n; ++i)
+        if (keep[i] && parents[i] >= 0 && keep[(size_t)parents[i]])
+            macros[i].parentId = macros[(size_t)parents[i]].id;
+    for (size_t i = 0; i < n; ++i)
+        if (keep[i])
+            out.push_back(std::move(macros[i]));
+}
 
 std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::var& snippet,
                                                                   juce::AudioProcessorGraph& graph,
@@ -534,91 +712,8 @@ std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::va
         added.push_back(node->nodeID);
     }
 
-    if (outMacros != nullptr) {
-        if (auto* macrosList = arrayProperty(preparedObj, "macros")) {
-            for (const auto& macroVar : *macrosList) {
-                auto* macroObj = macroVar.getDynamicObject();
-                if (macroObj == nullptr)
-                    continue;
-                auto* memberList = arrayProperty(macroObj, "members");
-                if (memberList == nullptr)
-                    continue;
-
-                Macro macro;
-                macro.name = macroObj->getProperty("name").toString();
-                macro.colour = juce::Colour::fromString(macroObj->getProperty("colour").toString());
-                macro.collapsed = (bool)macroObj->getProperty("collapsed");
-                if (auto* boundsObj = macroObj->getProperty("bounds").getDynamicObject()) {
-                    macro.bounds = {intProperty(boundsObj, "x"), intProperty(boundsObj, "y"),
-                                    intProperty(boundsObj, "w"), intProperty(boundsObj, "h")};
-                }
-                // Snippet node id -> the uuid just resolved/assigned for it, so the ports loop
-                // below can look a port's node up by the same id its "node" field names, without
-                // re-walking the graph or re-generating a second uuid for a node this loop already
-                // touched.
-                std::map<int, juce::String> uuidForSnippetId;
-                for (const auto& memberVar : *memberList) {
-                    const int snippetId = (int)memberVar;
-                    auto it = idMap.find(snippetId);
-                    if (it == idMap.end())
-                        continue;
-                    auto* node = graph.getNodeForId(it->second);
-                    if (node == nullptr)
-                        continue;
-                    // A freshly pasted node has no "uuid" yet — applyJSONToGraph only adopts one
-                    // from the incoming JSON when trusted AND the JSON carried one (it never does
-                    // for a snippet node, see extractSnippet), so generate it here rather than
-                    // reading an empty property. ensureNodeUuid is the same lazy-generation
-                    // graphToJSON itself uses, exposed for exactly this "just created it" case.
-                    const juce::String uuid = AIStateMapper::ensureNodeUuid(node);
-                    if (uuid.isNotEmpty()) {
-                        macro.members.push_back(uuid);
-                        uuidForSnippetId[snippetId] = uuid;
-                    }
-                }
-
-                // Ports: resolve each port's snippet node id through the map just built.
-                // Built FROM the resolved member map, not independently — a port whose member
-                // failed to resolve (node vanished, uuid generation failed) must drop with it, or
-                // MacroSet::fromVar's "every port's nodeUuid must be one of this macro's own
-                // members" invariant (MacroSet.h) would reject the WHOLE macro set the next time
-                // this project round-trips through save/load.
-                if (auto* portList = arrayProperty(macroObj, "ports")) {
-                    for (const auto& portVar : *portList) {
-                        auto* portObj = portVar.getDynamicObject();
-                        if (portObj == nullptr)
-                            continue;
-                        auto uuidIt = uuidForSnippetId.find(intProperty(portObj, "node", -1));
-                        if (uuidIt == uuidForSnippetId.end())
-                            continue;
-
-                        MacroPort port;
-                        port.nodeUuid = uuidIt->second;
-                        port.isInput = (bool)portObj->getProperty("isInput");
-                        port.name = portObj->getProperty("name").toString();
-                        port.order = intProperty(portObj, "order");
-
-                        const juce::String kindStr = portObj->getProperty("kind").toString();
-                        if (kindStr == "midi")
-                            port.kind = MacroPortKind::Midi;
-                        else if (kindStr == "audioCV")
-                            port.kind = MacroPortKind::AudioCV;
-                        else
-                            continue; // matches MacroPort::fromVar's strictness on "kind"
-
-                        if (portObj->hasProperty("colour")) {
-                            auto parsedColour = juce::Colour::fromString(portObj->getProperty("colour").toString());
-                            port.colour = parsedColour;
-                        }
-                        macro.ports.push_back(std::move(port));
-                    }
-                }
-
-                if (macro.members.size() >= 2)
-                    outMacros->push_back(std::move(macro));
-            }
-        }
-    }
+    if (outMacros != nullptr)
+        restoreMacros(*outMacros, arrayProperty(preparedObj, "macros"), idMap, graph);
 
     return added;
 }

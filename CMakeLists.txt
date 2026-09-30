@@ -287,6 +287,8 @@ add_library(Core STATIC
     Source/Mixer/ChannelFlows/ChannelFlowsMakeChannel.cpp
     Source/Mixer/ChannelFlows/ChannelFlowsTrackChannelLink.cpp
     Source/Mixer/ChannelFlows/ChannelFlowsTrackPreset.cpp
+    Source/Mixer/ChannelMacroLookup.cpp
+    Source/Mixer/ChannelMacroLookup.h
     Source/Mixer/MasterSplice.cpp
     Source/Mixer/MasterSplice.h
     Source/Mixer/TrackChannelLink.cpp

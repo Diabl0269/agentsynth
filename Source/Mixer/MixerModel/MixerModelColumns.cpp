@@ -5,6 +5,7 @@
 #include "MixerModel.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/MasterSplice.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "Mixer/TrackChannelLink.h"
@@ -89,7 +90,7 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
         column.uuid = node->properties["uuid"].toString();
         column.feedingTracks = entry.feedingTracks;
 
-        if (const auto* macro = macros.findByMember(column.uuid))
+        if (const auto* macro = nearestChannelMacro(graph, macros, column.uuid))
             column.colour = macro->colour;
         column.name = stripColumnName(graph, doc, macros, entry.stripId);
 
