@@ -169,6 +169,7 @@ const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() 
     if (!cablesCacheValid) {
         cablesCache = rebuildVisibleCables();
         macroCrossingAnim_.applyTo(cablesCache); // cable-slide overlay, see MacroCrossingAnimator.h
+        cardGlide_.applyTo(cablesCache);         // endpoints follow gliding cards, see CardGlideAnimator.h
         cablesCacheValid = true;
         ++cableRebuildCount;
     }
@@ -700,6 +701,9 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
 void GraphEditor::GraphContentComponent::resized() {}
 
 void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
+    // Gliding card snapshots first, so the dots and the drag ghost stay on top of them.
+    editor.cardGlide_.paint(g);
+
     // ---- Knob-landing dots -------------
     // Cables are drawn in paint(), which runs BEFORE children -- an AttenuverterChain cable
     // re-anchored onto a knob (reanchorCablesToKnobTargets) therefore has its final stretch drawn

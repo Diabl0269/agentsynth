@@ -6,6 +6,7 @@
 #include "Modules/MacroPortShape.h"
 #include "PatchDocument.h"
 #include "UI/Graph/CableColour.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphCanvasHost.h"
 #include "UI/Graph/GraphDragDropController/GraphDragDropController.h"
 #include "UI/Graph/GraphEditor/GraphEditorTypes.h"
@@ -585,6 +586,13 @@ public:
     void advanceMacroCrossingAnimForTest(float t);
     /** Lands the tween at its final state, same as the real driver's onComplete. */
     void finishMacroCrossingAnimForTest();
+
+    // ---- Card-glide test seams (CardGlideAnimator.h) ----
+    CardGlideAnimator& getCardGlideForTest() noexcept { return cardGlide_; }
+    /** Advances the glide to `t` (0..1) with no VBlank. */
+    void advanceCardGlideForTest(float t);
+    /** Lands the glide, restoring every hidden card. */
+    void finishCardGlideForTest();
     void mouseMove(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
 
@@ -643,6 +651,7 @@ private:
     AppUndoManager* undo() override { return undoManager; }
     // Only the GraphCanvasHost pure virtuals no public method already satisfies are declared here.
     juce::OwnedArray<MacroCardComponent>& macroCards() override { return content.getMacroCards(); }
+    CardGlideAnimator& cardGlide() override { return cardGlide_; }
     void reportStatusMessage(const juce::String& message) override;
     void clearModMatrixRows() override { modMatrix.clearRows(); }
     void requestRepaint() override { repaint(); }
@@ -755,6 +764,9 @@ private:
     MacroCrossingAnimator macroCrossingAnim_;
     synth::ui::AnimationDriver macroCrossingDriverAnim_;
 
+    // Paint-only slide of cards a make-room / return / auto-arrange moved (CardGlideAnimator.h).
+    CardGlideAnimator cardGlide_;
+
     // ---- Alignment guides (drag-preview feedback) ----
     using AlignmentGuide = graph_editor_types::AlignmentGuide;
     std::vector<AlignmentGuide> alignmentGuides;
@@ -772,6 +784,7 @@ private:
     std::map<juce::String, bool> dualIOPerModuleOverrides;
     void updateTransform();
     void applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor);
+    void configureCardGlide();
     void animateDropLanding(ModuleComponent* module, juce::Point<int> fromPos, juce::Point<int> toPos);
 
     // Arms macroCrossingAnim_ from a pre-splice cable snapshot the caller takes (see its definition).

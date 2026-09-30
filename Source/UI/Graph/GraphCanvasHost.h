@@ -19,6 +19,7 @@ class AudioEngine;
 class AppUndoManager;
 class ModuleComponent;
 class MacroCardComponent;
+class CardGlideAnimator;
 namespace synth {
 class MacroSet;
 struct PluginIdentity;
@@ -42,6 +43,9 @@ public:
     virtual juce::OwnedArray<ModuleComponent>& modules() = 0;
 
     virtual void repaintCanvas() = 0;
+
+    /** The glide overlay for cards a mutation moves; open a CardGlideAnimator::Scope around the mutation. */
+    virtual CardGlideAnimator& cardGlide() = 0;
 
     /** Re-derives the output dock (Master / Rec Tap / Audio Output) after a layout change that can move content
      *  (GraphEditor::reflowOutputDock). makeRoomFor calls it last, so a grown macro pushes the dock along. */

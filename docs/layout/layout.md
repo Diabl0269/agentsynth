@@ -121,9 +121,18 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   has not "grown": its saved position is authoritative and no neighbour moves for it. Only a card
   already on the canvas that changes size makes room. `updateComponents()` is not re-entrant, so
   anything that runs while it builds cards must not call it back.
-- **No glide yet.** Neighbours land in their new place at once; there is no animated slide (auto-arrange lands at
-  once too). A card cannot paint outside its own bounds, and hulls, cables and hit-testing read live bounds, so a
-  paint-only slide would need a canvas-level overlay of cached card images rather than an offset on the card.
+- **Cards glide, geometry does not.** When a make-room push, a neighbour return (collapse, port or member delete)
+  or an auto-arrange moves cards, each moved card slides from its old spot to its new one over 160 ms
+  (`easeOutCubic`). Geometry stays synchronous: component bounds, node x/y, hulls, the cables' base geometry and
+  hit-tests all hold the FINAL positions at once, so a click or drag during the slide acts on the card's final spot.
+  The slide is a canvas-level overlay (`CardGlideAnimator`, `Source/UI/Graph/CardGlideAnimator/`): the real card is
+  hidden (alpha 0; JUCE paints nothing for it but still routes the mouse to it) and a snapshot of it is drawn
+  interpolating between the two rects over the canvas. Cables touching a gliding card follow it (the endpoint is
+  offset by the card's drawn-minus-final position). Open-macro hulls and port strips land at once. Only cards visible
+  both before and after glide; a card that just appeared or is being dragged does not. A second move mid-glide
+  retargets from the drawn position. One `CardGlideAnimator::Scope` around the whole action (expand, collapse,
+  `makeRoomFor`, `returnDisplacedNeighbours`, auto-arrange) arms once. Loading a project, undo/redo and paste never
+  glide: they land at once.
 
 ## Output dock
 
