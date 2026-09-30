@@ -27,9 +27,11 @@ juce::String listPaths(const juce::String& heading, const juce::StringArray& pat
 }
 
 juce::String describeCollect(const synth::CollectResult& result) {
-    juce::String text = result.filesCopied == 0
-                            ? juce::String("Everything the project uses was already inside it.")
-                            : "Collected " + juce::String(result.filesCopied) + " file(s) into the project.";
+    const bool hadProblems = !result.missing.isEmpty() || !result.failures.isEmpty();
+    juce::String text = result.filesCopied > 0
+                            ? "Collected " + juce::String(result.filesCopied) + " file(s) into the project."
+                        : hadProblems ? juce::String("No files were copied.")
+                                      : juce::String("Everything the project uses was already inside it.");
     text << listPaths("Not found (left as they were)", result.missing);
     text << listPaths("Could not copy (left as they were)", result.failures);
     return text;
