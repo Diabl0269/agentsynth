@@ -271,3 +271,18 @@ TEST_F(MidiDestinationMacroRoutingTest, OneUndoRestoresTheGraphAndTheMacrosBefor
     ASSERT_NE(editor().getMacros().find(macroId), nullptr);
     EXPECT_EQ(editor().getMacros().find(macroId)->members.size(), membersBefore);
 }
+
+// The picker and the routing pane list a destination under the title its card shows.
+TEST_F(MidiDestinationMacroRoutingTest, ADestinationIsListedUnderItsCardTitle) {
+    const auto osc = addOscillator(400);
+    editor().setModuleDisplayName(osc, "Lead");
+
+    bool found = false;
+    for (const auto& option : mc->getMidiDestinationOptionsForTest(track)) {
+        if (option.nodeUid == osc.uid) {
+            EXPECT_EQ(option.displayName, "Lead");
+            found = true;
+        }
+    }
+    EXPECT_TRUE(found);
+}

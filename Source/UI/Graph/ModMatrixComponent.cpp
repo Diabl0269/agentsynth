@@ -1,5 +1,6 @@
 #include "ModMatrixComponent.h"
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/ModuleTitle.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -108,6 +109,19 @@ void slideAttenuverterPastInlets(juce::AudioProcessorGraph& graph, NodeID atten)
         graph.addConnection({{atten, 0}, next.destination});
     }
 }
+
+/** A hash of every module title the combos list. Cheap enough for the 10 Hz tick, and it changes when a
+ *  card is renamed or the auto-numbering shifts, neither of which changes the node count. */
+size_t moduleTitlesSignature(juce::AudioProcessorGraph& graph) {
+    juce::uint64 hash = 1469598103934665603ull;
+    for (auto* node : graph.getNodes()) {
+        if (dynamic_cast<ModuleBase*>(node->getProcessor()) == nullptr)
+            continue;
+        hash = (hash ^ node->nodeID.uid) * 1099511628211ull;
+        hash = (hash ^ (juce::uint64)synth::moduleTitle(*node).hashCode64()) * 1099511628211ull;
+    }
+    return (size_t)hash;
+}
 } // namespace
 
 struct ModMatrixComponent::ModRow
@@ -160,6 +174,8 @@ struct ModMatrixComponent::ModRow
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
 
     std::map<int, float> gestureStartValues;
+
+    bool isPopupOpen() const { return sourceCombo.isPopupActive() || destCombo.isPopupActive(); }
 
     void detach();
     void refresh(const ModRoutingInfo& info);
@@ -370,16 +386,22 @@ void ModMatrixComponent::updateRowsFromGraph() {
         }
     }
 
-    // Refresh combo items if the number of nodes in graph changed. This must happen BEFORE the
-    // refresh pass below: populateCombos() clears the combo boxes (deselecting them), so a
-    // selection applied first would be wiped and every row's label would go blank until the
-    // next update call.
-    int currentNodeCount = audioEngine.getGraph().getNumNodes();
-    if (currentNodeCount != lastNodeCount) {
+    // Refresh combo items if the number of nodes in graph changed, or a module was renamed. This must
+    // happen BEFORE the refresh pass below: populateCombos() clears the combo boxes (deselecting them),
+    // so a selection applied first would be wiped and every row's label would go blank until the next
+    // update call. A popup a person has open is left alone (clearing under it would pull its items
+    // away); the change is picked up on the first tick after it closes, since nothing is recorded as
+    // seen until then.
+    const int currentNodeCount = audioEngine.getGraph().getNumNodes();
+    const bool countChanged = currentNodeCount != lastNodeCount;
+    if (countChanged)
         audioEngine.updateModuleNames();
+    const auto namesSignature = moduleTitlesSignature(audioEngine.getGraph());
+    if ((countChanged || namesSignature != lastNamesSignature) && !anyPopupOpen()) {
         for (auto& row : rows)
             row->populateCombos();
         lastNodeCount = currentNodeCount;
+        lastNamesSignature = namesSignature;
     }
 
     // Assign indices for display
@@ -399,6 +421,10 @@ void ModMatrixComponent::updateRowsFromGraph() {
         resized();
         repaint();
     }
+}
+
+bool ModMatrixComponent::anyPopupOpen() const {
+    return std::any_of(rows.begin(), rows.end(), [](const auto& row) { return row->isPopupOpen(); });
 }
 
 void ModMatrixComponent::addModulation() {
@@ -652,7 +678,7 @@ void ModMatrixComponent::ModRow::populateCombos() {
         for (auto const& [cat, modules] : modulesByCategory) {
             for (auto* node : modules) {
                 auto* module = static_cast<ModuleBase*>(node->getProcessor());
-                juce::String displayName = module->getName();
+                juce::String displayName = synth::moduleTitle(*node);
 
                 for (int i = 0; i < module->getTotalNumOutputChannels(); ++i) {
                     int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)i);
@@ -682,7 +708,7 @@ void ModMatrixComponent::ModRow::populateCombos() {
 
             for (auto* node : modules) {
                 auto* module = static_cast<ModuleBase*>(node->getProcessor());
-                juce::String displayName = module->getName();
+                juce::String displayName = synth::moduleTitle(*node);
 
                 if (module->getTotalNumOutputChannels() > 0) {
                     if (module->getTotalNumOutputChannels() == 1) {

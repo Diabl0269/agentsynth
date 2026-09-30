@@ -606,8 +606,12 @@ The three surfaces that expose a routing's depth, and what each one does:
   between two equally-wide poly jacks creates all N per-voice connections directly, so no preset JSON
   has to hand-author each voice.
 - **Mod matrix panel.** Lists every active CV connection as a labelled row with a bipolar slider. The
-  sliders and the smart-cable knobs are **bidirectionally synced in real time** off a 30 Hz timer.
-  The panel's own geometry, striping and row widgets are in
+  sliders and the smart-cable knobs are **bidirectionally synced in real time**: both are bound to the
+  attenuverter's own amount parameter, so neither polls. The panel's 10 Hz timer
+  (`startTimerHz(10)`) only keeps the row list, the combo contents and the selections in step with the
+  graph. Source and destination labels follow the **card title**: a module the user renamed on the
+  canvas reads under that name here too (`synth::moduleTitle`), and a rename refreshes the labels on the
+  next tick. The panel's own geometry, striping and row widgets are in
   [`layout/chrome.md`](../layout/chrome.md#mod-matrix-panel); the toolbar toggle that shows and hides
   it is in the same doc.
 

@@ -261,6 +261,7 @@ add_executable(Tests
     AI/AIUndoTests.cpp
     UI/Graph/ModMatrixTests.cpp
     UI/Graph/ModMatrixMacroRoutingTests.cpp
+    UI/Graph/ModMatrixTitleTests.cpp
     FX/FXModule/FXModuleAttenuverterTests.cpp
     FX/FXModule/FXModuleBitcrusherTests.cpp
     FX/FXModule/FXModuleChorusTests.cpp

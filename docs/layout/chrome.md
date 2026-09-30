@@ -306,6 +306,15 @@ Its rows paint under these rules:
   / `"<Module> · <target>"`, not a bare `"Out 2"`. `updateRowsFromGraph()` re-populates every row's
   combos (`populateCombos()`) BEFORE re-applying its selection (`refresh()`), because
   `populateCombos()` clears the combo box as a side effect of rebuilding it.
+- **Labels follow the card title.** Every module in the source and destination combos is listed under
+  `synth::moduleTitle` (`Source/AudioEngine/ModuleTitle.h`): the custom title the user gave the card,
+  else the auto-numbered name ("LFO 3"). The 10 Hz tick compares a hash of every module title
+  (`moduleTitlesSignature`) as well as the node count, so a rename (which changes no node count)
+  re-populates the combos; a combo popup or picker that is open is never repopulated underneath the
+  user, the change lands on the first tick after it closes.
+- **Re-pointing a row goes through macro ports**, exactly like a dragged mod cable, as one undo step
+  (the row's "Add Modulation" and delete buttons are undo steps too). See
+  [`macros/auto-ports.md`](../macros/auto-ports.md#the-mod-matrix-re-points-like-a-drag).
 - **Bypass and delete are `DrawableButton`s** (`Icon::ModuleBypass` / `Icon::ModuleDelete`,
   `ImageFitted`), not `TextButton`s — retinted via `ModRow::applyButtonIcons()`, called from the
   constructor and from `ModRow::lookAndFeelChanged()`, mirroring

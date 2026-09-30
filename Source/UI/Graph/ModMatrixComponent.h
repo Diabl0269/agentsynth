@@ -96,6 +96,7 @@ private:
     juce::Component contentContainer;
 
     void addModulation();
+    bool anyPopupOpen() const;
 
 public:
     void updateRowsFromGraph();
