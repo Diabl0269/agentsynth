@@ -11,6 +11,7 @@
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -237,6 +238,7 @@ void GraphEditor::autoArrange() {
         repaintCanvas();
     };
 
+    CardGlideAnimator::Scope glide(cardGlide_); // the moved cards slide; the undo record lands inside the scope
     if (undoManager)
         undoManager->recordGraphAndMacroChange(graph, macros, apply);
     else

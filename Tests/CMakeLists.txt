@@ -19,6 +19,7 @@ add_executable(Tests
     UI/Layout/HierarchicalArrangeTests.cpp
     UI/Graph/AutoArrangeTests.cpp
     UI/Graph/AutoArrangeMacroTests.cpp
+    UI/Graph/CardGlide/CardGlideTests.cpp
     UI/Graph/OutputDockTests.cpp
     Modules/OscillatorTests.cpp
     Modules/CardLayoutTests.cpp

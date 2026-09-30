@@ -11,6 +11,7 @@
 
 #include "Mixer/MasterSplice.h"
 
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
@@ -135,6 +136,7 @@ static juce::String containerOfKey(const MacroGroupController& controller, const
 // When the grower is a macro, every push (at every level) is recorded on it so that collapsing it, or removing a
 // port, can offer the neighbours their way back (returnDisplacedNeighbours).
 void MacroGroupController::makeRoomFor(const juce::String& growerKey) {
+    CardGlideAnimator::Scope glide(host_.cardGlide());
     auto& macros = host_.getMacros();
     const auto growerMacroId =
         growerKey.startsWith("m:") ? growerKey.fromFirstOccurrenceOf("m:", false, false) : juce::String();
@@ -178,6 +180,7 @@ void MacroGroupController::refreshAfterMove() {
 // The card is seeded at the member union's top-left, which an expand's canvas nudge shifted; if nothing has moved the
 // members since, translating everything back by the nudge puts the card exactly where it was before expanding.
 void MacroGroupController::restoreCardAfterCollapse(const juce::String& macroId) {
+    CardGlideAnimator::Scope glide(host_.cardGlide());
     auto* macro = host_.getMacros().find(macroId);
     if (macro == nullptr || !macro->hasExpandRecord)
         return;
@@ -205,6 +208,7 @@ void MacroGroupController::restoreCardAfterCollapse(const juce::String& macroId)
 // `keepBlocked` (the macro stays open, e.g. a port was deleted) keeps the records that only lacked room, so a later
 // shrink can still return them; a collapse clears everything.
 void MacroGroupController::returnDisplacedNeighbours(const juce::String& macroId, bool keepBlocked) {
+    CardGlideAnimator::Scope glide(host_.cardGlide());
     auto* macro = host_.getMacros().find(macroId);
     if (macro == nullptr || macro->displaced.empty())
         return;

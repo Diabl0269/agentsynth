@@ -34,3 +34,13 @@ void GraphEditor::finishMacroCrossingAnimForTest() {
     macroCrossingAnim_.finish();
     repaintCanvas();
 }
+
+void GraphEditor::advanceCardGlideForTest(float t) {
+    cardGlide_.applyTweenAt(t);
+    repaintCanvas();
+}
+
+void GraphEditor::finishCardGlideForTest() {
+    cardGlide_.finish();
+    repaintCanvas();
+}

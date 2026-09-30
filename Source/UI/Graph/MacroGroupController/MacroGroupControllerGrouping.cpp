@@ -12,6 +12,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Mixer/MasterSplice.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
@@ -638,6 +639,7 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
     }
     const auto preExpandOrigin = m->bounds.getTopLeft();
     m->collapsed = collapsed;
+    CardGlideAnimator::Scope glide(host_.cardGlide()); // one glide for the whole expand/collapse
     host_.updateComponents();
     if (!collapsed) {
         const auto nudge = nudgeHullIntoCanvas(macroId);

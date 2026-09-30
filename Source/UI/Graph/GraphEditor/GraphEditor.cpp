@@ -39,10 +39,34 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     // Needed for the canvas-scoped Delete/Escape keys (see keyPressed).
     setWantsKeyboardFocus(true);
 
+    configureCardGlide();
     startTimerHz(30);
 }
 
 GraphEditor::~GraphEditor() { stopTimer(); }
+
+// Lends the glide animator the canvas' cards, the snapshot scale (zoom x display scale, so a glide stays sharp), a
+// repaint that also drops the cable memo, and the VBlank updater that drives it.
+void GraphEditor::configureCardGlide() {
+    CardGlideAnimator::Hooks hooks;
+    hooks.cards = [this] {
+        std::vector<CardGlideAnimator::Entry> out;
+        for (auto* m : content.getModules())
+            if (m != nullptr)
+                out.push_back({m, m->getNodeId().uid});
+        for (auto* card : content.getMacroCards())
+            if (card != nullptr)
+                out.push_back({card, 0});
+        return out;
+    };
+    hooks.snapshotScale = [this] {
+        const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(getScreenBounds());
+        return zoomLevel * (display != nullptr ? static_cast<float>(display->scale) : 1.0f);
+    };
+    hooks.repaint = [this] { repaintCanvas(); };
+    hooks.updater = &vblankUpdater;
+    cardGlide_.setHooks(std::move(hooks));
+}
 
 GraphEditor::GraphContentComponent::GraphContentComponent(GraphEditor& ed)
     : editor(ed) {
