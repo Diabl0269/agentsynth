@@ -605,7 +605,9 @@ void BottomDockComponent::cancelTabDrag() {
 }
 
 bool BottomDockComponent::toggleActiveSidePane(bool forceOpen) {
-    return activeTab_ == Tab::Mixer && mixer_.toggleSidePane(forceOpen);
+    if (activeTab_ == Tab::Mixer)
+        return mixer_.toggleSidePane(forceOpen);
+    return activeTab_ == Tab::Timeline && timelinePanel_.toggleSidePane(forceOpen);
 }
 
 bool BottomDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID stripId) {

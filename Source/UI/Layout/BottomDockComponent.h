@@ -76,8 +76,8 @@ public:
      *  track column is dropped in a new place. */
     void setOnMoveTrack(std::function<void(synth::TrackId, int newIndex)> callback);
 
-    /** Whether the active tab has a side pane (today only the Mixer does). */
-    bool hasActiveSidePane() const noexcept { return activeTab_ == Tab::Mixer; }
+    /** Whether the active tab has a side pane (the Mixer's zones list and the Timeline's routing view do). */
+    bool hasActiveSidePane() const noexcept { return activeTab_ == Tab::Mixer || activeTab_ == Tab::Timeline; }
     /** Shows or hides the active tab's side pane; `forceOpen` only ever opens it. False, and nothing
      *  changes, when the active tab has none. */
     bool toggleActiveSidePane(bool forceOpen = false);

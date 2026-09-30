@@ -85,12 +85,12 @@ void SidePane::setContent(SidePaneContent* content) {
     sendSynchronousChangeMessage();
 }
 
-void SidePane::setPersistence(juce::PropertiesFile* settings, const juce::String& tabKey) {
+void SidePane::setPersistence(juce::PropertiesFile* settings, const juce::String& tabKey, bool defaultOpen) {
     settings_ = settings;
     tabKey_ = tabKey;
     if (settings_ == nullptr)
         return;
-    open_ = settings_->getBoolValue(openKeyFor(tabKey_), true);
+    open_ = settings_->getBoolValue(openKeyFor(tabKey_), defaultOpen);
     width_ = juce::jlimit(kMinWidth, kMaxWidth, settings_->getIntValue(widthKeyFor(tabKey_), kDefaultWidth));
     driver_.stop(updater_);
     animating_ = false;

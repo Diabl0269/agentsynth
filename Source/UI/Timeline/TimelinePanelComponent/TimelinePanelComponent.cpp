@@ -62,23 +62,8 @@ TimelinePanelComponent::TimelinePanelComponent() {
     addAndMakeVisible(transportBar_);
     transportBar_.setComponentID("timelineTransportBar");
 
-    addAndMakeVisible(snapCombo_);
-    snapCombo_.setComponentID("timelineSnapCombo");
-    snapCombo_.addItem("Off", 1);
-    snapCombo_.addItem("Bar", 2);
-    snapCombo_.addItem("1", 3);
-    snapCombo_.addItem("1/2", 4);
-    snapCombo_.addItem("1/4", 5);
-    snapCombo_.addItem("1/8", 6);
-    snapCombo_.addItem("1/16", 7);
-    snapCombo_.addItem("1/32", 8);
-    snapCombo_.addItem("1/64", 9);
-    snapCombo_.addItem("1/128", 10);
-    snapCombo_.setSelectedId((int)viewState_.snap + 1, juce::dontSendNotification);
-    // A pick from the combo is just setSnapValue() with the id decoded — the shortcut layer, the
-    // grid cycle and this menu therefore share ONE writer (which is also the one place the choice
-    // is persisted and the grid painters are repainted).
-    snapCombo_.onChange = [this] { setSnapValue((TimelineViewState::Snap)(snapCombo_.getSelectedId() - 1)); };
+    initSnapCombo();
+    initSidePane();
 
     // The edit-tool strip, left of the snap controls in the transport bar (see resized()). Radio
     // buttons rather than a combo: which tool is active has to be readable at a glance mid-edit,
@@ -301,6 +286,7 @@ TimelinePanelComponent::~TimelinePanelComponent() {
         doc_->removeListener(this);
     if (shortcutsWeak_ != nullptr)
         shortcutsWeak_->removeChangeListener(this);
+    sidePane_.removeChangeListener(this);
 }
 
 // Resolution is strict once a manager IS installed, exactly as on PianoRollComponent: an action
@@ -330,7 +316,14 @@ void TimelinePanelComponent::setShortcutManager(ShortcutManager* manager) {
         header->setShortcutManager(shortcuts_);
 }
 
-void TimelinePanelComponent::changeListenerCallback(juce::ChangeBroadcaster*) { refreshShortcutTooltips(); }
+// Two broadcasters: the side pane (opened or closed -- a pane that was shut has not been following the selection) and
+// the shortcut manager (a binding changed).
+void TimelinePanelComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
+    if (source == &sidePane_)
+        refreshRoutingPane();
+    else
+        refreshShortcutTooltips();
+}
 
 // Rebuilds every dynamic shortcut-hint tooltip this panel owns (see synth::shortcutHintFor): the
 // seven tool-strip buttons, the snap toggle, and the follow-playhead toggle. Called from the
@@ -459,7 +452,9 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     doc_ = doc;
     if (doc_ != nullptr)
         doc_->addListener(this);
+    routingPane_.setDoc(doc_);
     syncTrackHeaders();
+    refreshRoutingPane();
     clipLaneArea_.setTimelineDoc(doc_);
     pianoRoll_.setTimelineDoc(doc_);
     automationEditor_.setTimelineDoc(doc_);

@@ -6,12 +6,15 @@
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include "UI/Layout/ScrollTween.h"
+#include "UI/Layout/SidePane/SidePane.h"
+#include "UI/Layout/SidePane/SidePaneToggleButton.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
+#include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h"
 #include "UI/Timeline/TimelineRulerComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"
@@ -320,6 +323,20 @@ public:
      *  10 Hz poll never reaches a hidden panel. */
     int getTransportUpdateCountForTest() const noexcept { return transportUpdateCount_; }
 
+    // ---- Side pane: the selected track's routing (docs/timeline/tracks.md#routing-from-the-side-pane) ----
+    // A child of this panel, so it travels with the panel into a detached window; closed until the user opens
+    // it, then remembered per tab ("timeline") -- see TimelinePanelSidePane.cpp.
+    SidePane& getSidePane() noexcept { return sidePane_; }
+    SidePaneToggleButton& getSidePaneButton() noexcept { return sidePaneButton_; }
+    TimelineRoutingPane& getRoutingPane() noexcept { return routingPane_; }
+    /** Shows or hides the side pane; `forceOpen` only ever opens it. */
+    bool toggleSidePane(bool forceOpen = false);
+    /** Points the routing pane at the selected track (the focused header row) and re-reads it -- called on a
+     *  selection, document or graph change. */
+    void refreshRoutingPane();
+    /** The selected track: the header row that was last clicked or moved to with the arrow keys; invalid when none. */
+    synth::TrackId getSelectedTrackId() const;
+
     // ---- Track headers ----
     // Menu ids for the "+ Track" button's menu. Numbered from 1 because juce::PopupMenu reserves 0
     // for "dismissed".
@@ -443,6 +460,15 @@ private:
     // before the app wires one up) and defined in TimelinePanelTrackHeaders.cpp.
     void timerCallback() override;
     void layoutTrackHeaders();
+
+    // ---- Side pane (TimelinePanelSidePane.cpp) ----
+    void initSidePane();
+    // Carves the pane's current width off the left of `body` (the area under the transport strip).
+    void layoutSidePane(juce::Rectangle<int>& body);
+    // The routing pane's meter, on this panel's existing 15 Hz tick.
+    void tickRoutingPane();
+    // Fills the snap selector (part of the constructor, split out to keep it under its size ratchet).
+    void initSnapCombo();
 
     // ---- focused track index -------------------------------------------
     // The index a track header row's onSelectRequested (click) reports lands here directly —
@@ -710,6 +736,12 @@ private:
     };
     HeaderViewport trackHeaderViewport_;
     TrackHeaderList trackHeaderList_{*this};
+
+    // Declared in this order so the button unbinds from the pane, and the pane lets go of its content, before either
+    // is destroyed.
+    TimelineRoutingPane routingPane_;
+    SidePane sidePane_;
+    SidePaneToggleButton sidePaneButton_;
 
     // The strip's own copy of the undo manager (record-mode/lane-picker edits made directly
     // by this panel, as opposed to automationEditor_'s edits, which it holds its own copy for).

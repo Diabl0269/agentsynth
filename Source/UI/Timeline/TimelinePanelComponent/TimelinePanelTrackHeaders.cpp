@@ -31,10 +31,12 @@ juce::String shortPluginFormatLabel(const juce::String& format) {
 // whole conversation with the app goes through one seam.
 void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     trackHeaderHost_ = host;
+    routingPane_.setHost(host);
     // Headers are constructed with the host, so any that already exist have to be rebuilt against
     // the new one rather than refreshed.
     trackHeaderList_.headers.clear();
     syncTrackHeaders();
+    refreshRoutingPane();
     // The channel-chip meter tick. Started here rather than in the constructor -- there is
     // nothing to meter until an app host exists, and the constructor is already at its size cap.
     if (host != nullptr)
@@ -58,6 +60,7 @@ void TimelinePanelComponent::timerCallback() {
     for (auto* header : trackHeaderList_.headers)
         if (header != nullptr)
             header->tickChannelMeter();
+    tickRoutingPane();
 }
 
 // The headless test seam for a menu that never runs in a test process -- the same split
@@ -287,6 +290,7 @@ void TimelinePanelComponent::openAddTrackMenu() {
 
 void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     syncTrackHeaders();
+    refreshRoutingPane(); // a binding, name or colour change shows in the routing pane too
     clipLaneArea_.refreshFromDoc();
     // The ruler's marker flags come straight off the doc, so a mutation is the ONLY thing that can
     // move them — this is the repaint that replaces polling them (see TimelineRulerComponent). The
@@ -430,10 +434,12 @@ void TimelinePanelComponent::setFocusedTrack(synth::TrackId id) {
     for (int i = 0; i < trackHeaderList_.headers.size(); ++i) {
         if (trackHeaderList_.headers.getUnchecked(i)->getTrackId() == id) {
             focusedTrackIndex_ = i;
+            refreshRoutingPane();
             return;
         }
     }
     focusedTrackIndex_ = -1; // id no longer resolves (deleted between the click and this call)
+    refreshRoutingPane();
 }
 
 // Nothing focused yet starts at row 0 either direction (there is no "current position" for a
@@ -448,6 +454,7 @@ void TimelinePanelComponent::moveFocusedTrack(int direction) {
     // other grabKeyboardFocus() call in this codebase (see TimelineClipLaneArea's own mouseDown).
     trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();
     ensureTrackVisible(focusedTrackIndex_);
+    refreshRoutingPane();
 }
 
 // Moves track-header focus one row `direction` (-1 up, +1 down) -- the same step the header's
