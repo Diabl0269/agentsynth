@@ -8,6 +8,7 @@
 
 #include "AppUndoManager.h"
 #include "PianoRollInternal.h"
+#include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/ToolCursors.h"
 #include <algorithm>
@@ -505,6 +506,12 @@ juce::MouseCursor PianoRollComponent::cursorForActiveTool() {
 void PianoRollComponent::applyToolCursor() {
     showingResizeCursor_ = false;
     setMouseCursor(cursorForActiveTool());
+    // A child does not inherit the roll's cursor, and the strip acts as a pen under the Draw tool;
+    // under every other tool it keeps the plain arrow. (The constructor needs nothing: the default
+    // tool is Select, and a fresh lane already shows the arrow.)
+    if (velocityLane_ != nullptr)
+        velocityLane_->setMouseCursor(
+            activeTool_ == EditTool::Draw ? cursorForActiveTool() : juce::MouseCursor(juce::MouseCursor::NormalCursor));
 }
 
 void PianoRollComponent::updateHoverCursor(juce::Point<int> pos) {

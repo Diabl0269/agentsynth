@@ -102,6 +102,10 @@ void PianoRollVelocityLane::updateGesture(juce::Point<float> pos) {
         return;
     }
     lastPos_ = pos;
+    if (readout_.isValid() && readoutOpacity_ < 1.0f) {
+        fade_.stop(vblank_); // while editing, the value must be readable at once
+        setReadoutOpacity(1.0f);
+    }
     publishPreview();
 }
 
@@ -109,7 +113,7 @@ void PianoRollVelocityLane::updateGesture(juce::Point<float> pos) {
 // whole selection by one shared delta (the pointer's travel in velocity units since the press, so
 // nothing jumps on the press itself), each note clamped to [1, 127] on its own.
 void PianoRollVelocityLane::applyStickDrag(juce::Point<float> pos) {
-    readout_ = grabbed_;
+    setReadout(grabbed_);
     preview_.clear();
     if (!grabbedRelative_) {
         preview_[grabbed_] = velocityForY(pos.y);
@@ -135,7 +139,7 @@ void PianoRollVelocityLane::applyLine(juce::Point<float> from, juce::Point<float
             const int dx = std::abs(s.x - (int)std::lround(to.x));
             if (s.id == id && dx < bestDx) {
                 bestDx = dx;
-                readout_ = id;
+                setReadout(id);
             }
         }
     }
@@ -163,7 +167,7 @@ void PianoRollVelocityLane::finishGesture(bool commit) {
     origins_.clear();
     eligible_.clear();
     grabbed_ = {};
-    readout_ = hovered_;
+    setReadout(hovered_);
     if (!changes.empty()) {
         if (host_.onCommit)
             host_.onCommit(changes);
@@ -187,7 +191,7 @@ void PianoRollVelocityLane::mouseMove(const juce::MouseEvent& e) {
         return;
     hovered_ = id;
     if (gesture_ == Gesture::None)
-        readout_ = id;
+        setReadout(id);
     repaint();
 }
 
@@ -196,7 +200,7 @@ void PianoRollVelocityLane::mouseExit(const juce::MouseEvent&) {
         return;
     hovered_ = {};
     if (gesture_ == Gesture::None)
-        readout_ = {};
+        setReadout({});
     repaint();
 }
 

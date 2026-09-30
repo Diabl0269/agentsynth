@@ -11,6 +11,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include "UI/PianoRoll/VelocityLane/VelocityLaneMath.h"
+#include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
@@ -29,6 +30,7 @@ constexpr int kValueBoxWidth = 40;
 // up in both at once. The sticks' colour comes from resolveNoteColourFor for the same reason.
 void PianoRollComponent::initVelocityControls() {
     velocityLane_ = std::make_unique<PianoRollVelocityLane>();
+    velocityLaneHeight_ = PianoRollVelocityLane::kDefaultHeight;
     addAndMakeVisible(*velocityLane_);
 
     PianoRollVelocityLane::Host host;
@@ -63,6 +65,8 @@ void PianoRollComponent::initVelocityControls() {
         velocityPreview_.clear();
         repaint();
     };
+    host.onResizeRequest = [this](int desired) { onVelocityLaneResized(desired); };
+    host.onResizeCommitted = [this](int desired) { onVelocityLaneResizeCommitted(desired); };
     velocityLane_->setHost(std::move(host));
 
     addAndMakeVisible(velocityBox_);
@@ -95,11 +99,45 @@ void PianoRollComponent::initVelocityControls() {
     syncVelocityValueBox();
 }
 
-// Fixed height while shown, never more than the canvas band has room for (a tiny test roll).
+// The remembered height while shown, re-clamped to [kMinHeight, half the canvas band] at every
+// layout (so a roll that got shorter never keeps a strip that swallows the grid), and never more
+// than the band has room for at all (a tiny test roll).
 int PianoRollComponent::velocityLaneHeightPx() const noexcept {
     if (!velocityLaneVisible_)
         return 0;
-    return juce::jlimit(0, PianoRollVelocityLane::kDefaultHeight, getHeight() - canvasTop());
+    const int band = getHeight() - canvasTop();
+    const int clamped = velocitylane::clampLaneHeight(velocityLaneHeight_, band, PianoRollVelocityLane::kMinHeight);
+    return juce::jlimit(0, clamped, band);
+}
+
+int PianoRollComponent::getVelocityLaneHeight() const noexcept { return velocityLaneHeight_; }
+
+// Stores `height` (floored at kMinHeight; the upper bound is layout's, since the roll may not have
+// its size yet when the properties file is restored) and re-lays out; a no-op when unchanged.
+void PianoRollComponent::setVelocityLaneHeight(int height) {
+    height = std::max(PianoRollVelocityLane::kMinHeight, height);
+    if (height == velocityLaneHeight_)
+        return;
+    velocityLaneHeight_ = height;
+    resized();
+    repaint();
+}
+
+int PianoRollComponent::clampedVelocityLaneHeight(int desiredHeight) const noexcept {
+    return velocitylane::clampLaneHeight(desiredHeight, getHeight() - canvasTop(), PianoRollVelocityLane::kMinHeight);
+}
+
+void PianoRollComponent::onVelocityLaneResized(int desiredHeight) {
+    setVelocityLaneHeight(clampedVelocityLaneHeight(desiredHeight));
+}
+
+// Release of the top-edge drag: remember the height it settled on (and only when the gesture moved).
+void PianoRollComponent::onVelocityLaneResizeCommitted(int desiredHeight) {
+    setVelocityLaneHeight(clampedVelocityLaneHeight(desiredHeight));
+    if (propertiesFile_ == nullptr)
+        return;
+    propertiesFile_->setValue(velocityLaneHeightKey(), velocityLaneHeight_);
+    propertiesFile_->saveIfNeeded();
 }
 
 // Called from resized() right after the Scale-filter chip is carved: the Velocity toggle and the

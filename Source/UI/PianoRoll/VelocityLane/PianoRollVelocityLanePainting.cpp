@@ -75,9 +75,9 @@ void PianoRollVelocityLane::paintScale(juce::Graphics& g, int gutter) {
 void PianoRollVelocityLane::paintSticks(juce::Graphics& g, int gutter) {
     const auto palette = paletteFor(*this);
     const float bottom = (float)getHeight();
-    const Stick* readoutStick = nullptr;
-    int readoutValue = 0;
     const auto sticks = currentSticks();
+    if (readout_.isValid())
+        shown_.reset(); // re-found below; a readout whose stick is off-screen must not linger
     for (const auto& s : sticks) {
         if (s.x < gutter || s.x > getWidth())
             continue;
@@ -87,33 +87,38 @@ void PianoRollVelocityLane::paintSticks(juce::Graphics& g, int gutter) {
         g.setColour(s.selected ? palette.selected : s.colour);
         g.fillRect((float)s.x - 1.0f, headY, 2.0f, bottom - headY);
         g.fillEllipse((float)s.x - 3.0f, headY - 3.0f, 6.0f, 6.0f);
-        if (s.id == readout_) {
-            readoutStick = &s;
-            readoutValue = velocity;
-        }
+        if (s.id == readout_)
+            shown_ = ShownReadout{s, velocity};
     }
-    if (readoutStick != nullptr)
-        paintReadout(g, *readoutStick, readoutValue);
+    // While fading out readout_ is already clear, so the LAST painted readout keeps drawing.
+    if (shown_ && readoutOpacity_ > 0.0f)
+        paintReadout(g, shown_->stick, shown_->velocity);
 }
 
-// The value beside its head, flipped to the stick's left when it would run off the right edge and
-// kept inside the strip vertically.
-void PianoRollVelocityLane::paintReadout(juce::Graphics& g, const Stick& stick, int velocity) {
+// The box at fade position `t`: beside the head, flipped to the stick's left when it would run off
+// the right edge, kept inside the strip vertically. Mid-fade it also sits velocitylane::
+// readoutSlidePx(t) nearer the stick, so it emerges from the head as it fades.
+juce::Rectangle<int> PianoRollVelocityLane::readoutBox(const Stick& stick, int velocity, float t) {
     const auto palette = paletteFor(*this);
     const auto font = monoFont(palette.readoutFontPx);
-    const juce::String text(velocity);
-    const int w = (int)std::ceil(juce::GlyphArrangement::getStringWidth(font, text)) + 6;
+    const int w = (int)std::ceil(juce::GlyphArrangement::getStringWidth(font, juce::String(velocity))) + 6;
     const int h = (int)std::ceil(palette.readoutFontPx) + 4;
-    int x = stick.x + 5;
-    if (x + w > getWidth())
-        x = stick.x - 5 - w;
+    const bool flipped = stick.x + 5 + w > getWidth();
+    const int rest = flipped ? stick.x - 5 - w : stick.x + 5;
+    const int slide = (int)std::lround(velocitylane::readoutSlidePx(t));
     const int y = juce::jlimit(1, std::max(1, getHeight() - h), (int)std::lround(yForVelocity(velocity)) - h / 2);
-    const juce::Rectangle<int> box(x, y, w, h);
-    g.setColour(palette.plot.withAlpha(0.85f));
+    return {rest + (flipped ? slide : -slide), y, w, h};
+}
+
+void PianoRollVelocityLane::paintReadout(juce::Graphics& g, const Stick& stick, int velocity) {
+    const auto palette = paletteFor(*this);
+    const float t = readoutOpacity_;
+    const auto box = readoutBox(stick, velocity, t);
+    g.setColour(palette.plot.withAlpha(0.85f * t));
     g.fillRect(box);
-    g.setColour(palette.text.brighter(0.4f));
-    g.setFont(font);
-    g.drawText(text, box, juce::Justification::centred, false);
+    g.setColour(palette.text.brighter(0.4f).withMultipliedAlpha(t));
+    g.setFont(monoFont(palette.readoutFontPx));
+    g.drawText(juce::String(velocity), box, juce::Justification::centred, false);
 }
 
 } // namespace synth::ui

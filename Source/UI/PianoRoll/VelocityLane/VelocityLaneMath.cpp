@@ -4,10 +4,18 @@
 
 #include "VelocityLaneMath.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
 namespace synth::ui::velocitylane {
+
+int clampLaneHeight(int desired, int available, int minHeight) noexcept {
+    const int maxHeight = std::max(minHeight, available / 2);
+    return juce::jlimit(minHeight, maxHeight, desired);
+}
+
+float readoutSlidePx(float t) noexcept { return kReadoutSlidePx * (1.0f - juce::jlimit(0.0f, 1.0f, t)); }
 
 int clampVelocity(int velocity) noexcept { return juce::jlimit(kMinVelocity, kMaxVelocity, velocity); }
 
