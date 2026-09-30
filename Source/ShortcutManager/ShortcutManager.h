@@ -20,7 +20,7 @@
  *  MainComponent::resolveEditSurface() (copy/paste/cut/duplicate/repeat/select-all, and both zoom
  *  pairs) is General because it means something on EVERY surface — one key, whichever editor has
  *  focus. Graph holds only the verbs that have no meaning anywhere else. */
-enum class ShortcutCategory { General, Graph, Timeline, PianoRoll };
+enum class ShortcutCategory { General, Graph, Timeline, PianoRoll, Mixer };
 
 // Public juce::ChangeBroadcaster so MULTIPLE surfaces can each react to a rebind independently —
 // TimelinePanelComponent's tool-strip/snap/follow tooltips and (in a future cached-tooltip surface)
@@ -564,6 +564,21 @@ public:
         // under PianoRoll (a scoped category) rather than General: EveryDefaultBindingIsUnique only
         // checks within a category, by design.
         bindings["pianoRollToggleScalePanel"] = juce::KeyPress('s', juce::ModifierKeys::ctrlModifier, 0);
+
+        // Show / hide the mixer's Inserts, Sends and EQ rows while the mixer has focus -- the keyboard
+        // twins of its toolbar toggles. On macOS a REAL Ctrl+letter, like "pianoRollToggleScalePanel":
+        // Cmd+S is Save and Cmd+I/E are taken, while Ctrl is a distinct physical key there. On
+        // Windows/Linux Cmd IS Ctrl, so Ctrl+S would shadow Save whenever the mixer is focused; those
+        // platforms take Ctrl+Alt+letter instead.
+#if JUCE_MAC
+        const auto mixerSectionMods = juce::ModifierKeys(juce::ModifierKeys::ctrlModifier);
+#else
+        const auto mixerSectionMods =
+            juce::ModifierKeys(juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier);
+#endif
+        bindings["mixerToggleInserts"] = juce::KeyPress('i', mixerSectionMods, 0);
+        bindings["mixerToggleSends"] = juce::KeyPress('s', mixerSectionMods, 0);
+        bindings["mixerToggleEq"] = juce::KeyPress('e', mixerSectionMods, 0);
     }
 
     static juce::String keyPressToDisplayString(const juce::KeyPress& key) {
@@ -651,6 +666,8 @@ public:
             return "Timeline";
         case ShortcutCategory::PianoRoll:
             return "Piano Roll";
+        case ShortcutCategory::Mixer:
+            return "Mixer";
         case ShortcutCategory::General:
             break;
         }
@@ -661,7 +678,8 @@ public:
      *  getActionTable(). */
     static const std::vector<ShortcutCategory>& getCategoryOrder() {
         static const std::vector<ShortcutCategory> order{ShortcutCategory::General, ShortcutCategory::Graph,
-                                                         ShortcutCategory::Timeline, ShortcutCategory::PianoRoll};
+                                                         ShortcutCategory::Timeline, ShortcutCategory::PianoRoll,
+                                                         ShortcutCategory::Mixer};
         return order;
     }
 
@@ -827,6 +845,10 @@ private:
             {"pianoRollQuantisePitches", ShortcutCategory::PianoRoll},
             {"pianoRollToggleScalePanel", ShortcutCategory::PianoRoll},
             {"pianoRollToggleScaleFilter", ShortcutCategory::PianoRoll},
+            // Mixer -- consulted by MixerPanelComponent::keyPressed only.
+            {"mixerToggleInserts", ShortcutCategory::Mixer},
+            {"mixerToggleSends", ShortcutCategory::Mixer},
+            {"mixerToggleEq", ShortcutCategory::Mixer},
         };
         return table;
     }

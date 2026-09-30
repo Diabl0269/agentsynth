@@ -90,6 +90,8 @@ public:
 
     /** Each of these is one undo step and rebuilds the mixer. `channelId` is a MixerViewDoc id. */
     void pinChannel(const juce::String& channelId, synth::MixerZone zone);
+    /** Moves `channelId` to the place `targetId` holds: tracks via onMoveTrack, buses in the saved bus order. */
+    void moveChannelWithinZone(const juce::String& channelId, const juce::String& targetId);
     void setChannelHidden(const juce::String& channelId, bool hidden);
     void showAllChannels();
     /** Shows only this channel, or restores the previous hidden set when it already is the only one. */
@@ -164,7 +166,12 @@ public:
      *  letters, same "no manager installed" contract every other surface action in this app
      *  follows. Safe to call before or after columns exist -- keyPressed() always reads the
      *  member, never a value captured at bind time. */
-    void setShortcutManager(ShortcutManager* manager) { shortcuts_ = manager; }
+    void setShortcutManager(ShortcutManager* manager) {
+        shortcuts_ = manager;
+        toolbar_.refresh();
+    }
+    /** Re-reads the section toggles' shortcut hints after a rebind. */
+    void refreshShortcutHints() { toolbar_.refresh(); }
 
     /** Re-runs buildMixerSnapshot() and rebuilds the column set. Cheap enough to call on every
      *  graph/timeline/macro change (a handful of strips, never per-frame) -- see MixerModel.h.
@@ -309,6 +316,9 @@ private:
 
     // ---- Keyboard dispatch -- implemented in MixerPanelKeyboard.cpp ----------------------------
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
+    static juce::String sectionToggleActionId(MixerSection section);
+    static juce::KeyPress defaultSectionToggleKey(MixerSection section);
+    juce::String sectionToggleShortcutText(MixerSection section) const;
     bool moveFocus(int direction);
     bool nudgeFocusedFader(float deltaDb);
     bool selectFocusedOnCanvas();

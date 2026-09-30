@@ -13,7 +13,8 @@
 // MixerZonesPane.h (docs/mixer/panel.md#side-pane-zones-and-visibility): the Mixer's side-pane content. One list of the
 // mixer's channels in three groups (Left zone, Scrolling, Right zone) with an eye toggle on every row, a filter box and
 // All / Tracks / Buses chips that narrow the LIST (never the mixer), and an "N hidden - Show all" line. It edits
-// nothing itself: every change goes out through the callbacks and comes back as a fresh setChannels().
+// nothing itself: every change goes out through the callbacks and comes back as a fresh setChannels(). The list is
+// keyboard-driven too: Up/Down move a row cursor, Space shows or hides, Alt+Up/Down move a channel between groups.
 namespace synth::ui {
 
 class MixerZonesPane
@@ -27,6 +28,8 @@ public:
     void setChannels(std::vector<MixerZoneChannel> channels);
 
     std::function<void(const juce::String& channelId, synth::MixerZone zone)> onSetZone;
+    /** A row dropped elsewhere in its own group: move `channelId` to the place `targetId` held. */
+    std::function<void(const juce::String& channelId, const juce::String& targetId)> onMoveWithinZone;
     std::function<void(const juce::String& channelId, bool hidden)> onSetHidden;
     /** Alt-click on an eye: show only that channel, or restore the previous set when it already is. */
     std::function<void(const juce::String& channelId)> onSoloShow;
@@ -36,6 +39,12 @@ public:
 
     juce::Component& getPaneComponent() override { return *this; }
     juce::String getPaneTitle() const override { return "Zones and visibility"; }
+
+    /** Takes keyboard focus for the channel list and puts the cursor on a row (the first one if none). */
+    void focusList();
+    bool keyPressed(const juce::KeyPress& key) override;
+    void focusGained(FocusChangeType cause) override;
+    void focusLost(FocusChangeType cause) override;
 
     // ---- Test seams ----
     enum class Chip { All, Tracks, Buses };
@@ -52,6 +61,7 @@ public:
         return *headers_[static_cast<size_t>(zone)];
     }
     bool isDragActiveForTest() const noexcept { return reorder_.isReordering(); }
+    const juce::String& getCursorIdForTest() const noexcept { return cursorId_; }
     bool sendEscapeToDragForTest() { return cancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), this); }
 
     void resized() override;
@@ -92,6 +102,15 @@ private:
     void placeItems();
     float pointerYInList(const juce::MouseEvent& e);
     synth::MixerZone zoneForDrop(const std::vector<int>& newOrder) const;
+    juce::String targetWithinZone(const std::vector<int>& newOrder, synth::MixerZone zone) const;
+
+    // ---- Keyboard -- MixerZonesPaneKeyboard.cpp ----
+    std::vector<juce::String> listedRowIds() const;
+    bool moveCursor(int step);
+    void setCursor(const juce::String& id, bool announce);
+    bool toggleCursorHidden();
+    bool moveCursorZone(int step);
+    void syncCursorVisuals();
 
     std::vector<MixerZoneChannel> channels_;
     std::vector<Item> items_;
@@ -111,6 +130,8 @@ private:
     ReorderCancelKey cancelKey_;
     std::vector<juce::String> dragIdentities_; // animator key -> item identity, captured at press
     juce::String draggedId_;
+    juce::String cursorId_;   // the keyboard cursor's channel, kept across rebuilds by id
+    float minPointer_ = 0.0f; // list y the pointer is floored at, so the row never lands above the first heading
     unsigned generationSeen_ = 0;
     bool dragCancelled_ = false;
     bool committing_ = false;

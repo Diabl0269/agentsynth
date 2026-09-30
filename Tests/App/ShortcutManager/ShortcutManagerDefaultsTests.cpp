@@ -31,6 +31,10 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "pianoRollTransposeUp",
         "pianoRollTransposeDown",
         "pianoRollToggleScalePanel",
+        // MixerPanelComponent::keyPressed
+        "mixerToggleInserts",
+        "mixerToggleSends",
+        "mixerToggleEq",
         // TimelinePanelComponent::keyPressed (also consults timelineSnapToggle, shared with the roll)
         "timelineSnapToggle",
         "timelineToggleLoop",

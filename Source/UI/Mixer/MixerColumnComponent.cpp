@@ -200,6 +200,9 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     fader_.setChannelName(column.name);
     panSlider_.setTitle(column.name + " pan");
     meter_.setTitle(column.name + " meter");
+    meterReadout_.setTitle(column.name + " peak");
+    eqThumbnail_.setTitle(column.name + " EQ curve");
+    eqThumbnail_.setDescription("Selects this channel's EQ on the canvas");
 
     rebindControls();
     // Must run AFTER rebindControls() -- it clears midiLearnableEntries_ and would wipe out

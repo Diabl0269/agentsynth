@@ -1,9 +1,9 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **94 actions** across four categories —
-**General** (49, app-wide or routed per focused editor), **Graph** (6), **Timeline** (26) and
-**Piano Roll** (13) — every one of them rebindable, including keys that used to be hardcoded:
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **97 actions** across five categories —
+**General** (49, app-wide or routed per focused editor), **Graph** (6), **Timeline** (26),
+**Piano Roll** (13) and **Mixer** (3) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
 any key except Escape commits it, swapping with whatever action in the **same category** already
@@ -662,6 +662,27 @@ purpose** — `editToolForKeyChar` (`Source/UI/Timeline/EditTool.h`) returns `nu
 those two digits are simply never consumed rather than remapping the shipped tools onto 1–7.
 Shipping one later costs no rebind: the digit is already reserved — which is exactly how the Range
 tool (`timelineToolRange`, bare **2**) arrived without moving any other key.
+
+## Mixer
+
+The three Mixer actions are surface-resolved like the piano roll's: `MixerPanelComponent::keyPressed()`
+reads them only while the mixer (the panel, a column control, or its side pane's list) has focus. They
+are the keyboard twins of the toolbar's Inserts / Sends / EQ toggles and call the same
+`MixerSectionLayout::toggleHidden`, so a key and a click can never disagree; the toggles' tooltips
+name the current binding ("Hide Sends  (Ctrl+S)") and follow a rebind.
+
+| Shortcut (macOS) | Windows / Linux | Action |
+|------------------|-----------------|--------|
+| Ctrl+I | Ctrl+Alt+I | Show or Hide Mixer Inserts (`mixerToggleInserts`) |
+| Ctrl+S | Ctrl+Alt+S | Show or Hide Mixer Sends (`mixerToggleSends`) |
+| Ctrl+E | Ctrl+Alt+E | Show or Hide Mixer EQ (`mixerToggleEq`) |
+
+**Real Control on macOS, Ctrl+Alt elsewhere.** Cmd+S is Save and Cmd+I / Cmd+E are taken, so macOS uses
+the physical Control key, as `pianoRollToggleScalePanel` does. On Windows and Linux JUCE's Cmd *is* Ctrl,
+so a bare Ctrl+S would shadow Save whenever the mixer has focus; those platforms add Alt instead.
+
+The side pane's own list keys (Up/Down, Space, Alt+Up/Down, Esc) are fixed, like the Library list's
+arrows: see [`mixer/panel.md`](../mixer/panel.md#side-pane-zones-and-visibility).
 
 ## Command vs surface actions
 

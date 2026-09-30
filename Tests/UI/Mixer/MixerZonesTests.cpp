@@ -141,6 +141,71 @@ TEST(MixerZonesTests, DraggingARowToAnotherGroupPinsTheChannel) {
     EXPECT_EQ(r.panel->getViewDoc().getZone(id), MixerZone::Left);
 }
 
+// Regression test for FRO394: dragging above the list pushed the Left zone heading down under the row,
+// offering a place no drop could use.
+TEST(MixerZonesTests, ARowDraggedAboveTheListStopsUnderTheLeftZoneHeading) {
+    MixerZonesRig r(2);
+    const auto id = r.stripId(1);
+    auto& pane = r.panel->getZonesPaneForTest();
+    auto& leftHeading = pane.getGroupHeaderForTest(MixerZone::Left);
+    auto drag = dragOf(r, id);
+
+    drag.down();
+    drag.dragTo(-300.0f);
+    ASSERT_TRUE(pane.isDragActiveForTest());
+    EXPECT_EQ(leftHeading.getY(), 0) << "the heading never makes room above itself";
+    EXPECT_GT(r.row(id)->getY(), leftHeading.getY()) << "the row never lands above the heading";
+    drag.up(-300.0f);
+    EXPECT_EQ(r.panel->getViewDoc().getZone(id), MixerZone::Left);
+}
+
+// Regression test for FRO393: a row dropped elsewhere in its own group glided back and nothing moved.
+TEST(MixerZonesTests, DroppingATrackRowWithinItsGroupReordersTheTracks) {
+    MixerZonesRig r(3);
+    const auto before = r.trackOrder();
+    const auto first = r.stripId(0);
+    const auto last = r.stripId(2);
+    auto drag = dragOf(r, last);
+    const float firstTop = static_cast<float>(r.row(first)->getY());
+
+    drag.down();
+    drag.dragTo(firstTop + 6.0f); // over the top half of the group's first row
+    drag.up(firstTop + 6.0f);
+
+    const auto after = r.trackOrder();
+    ASSERT_EQ(after.size(), before.size());
+    EXPECT_EQ(after.front(), before.back()) << "the last track now leads the timeline";
+    EXPECT_EQ(after[1], before[0]);
+    EXPECT_EQ(r.stripId(0), last) << "the pane lists it first too";
+    EXPECT_EQ(r.panel->getViewDoc().getZone(last), MixerZone::Scrolling) << "it stays in its group";
+    EXPECT_FALSE(r.panel->getZonesPaneForTest().isDragActiveForTest());
+}
+
+TEST(MixerZonesTests, DroppingABusRowWithinItsGroupSavesTheBusOrder) {
+    MixerZonesRig r(0);
+    r.panel->createBus();
+    r.panel->createBus();
+    r.panel->rebuild();
+    std::vector<juce::String> buses;
+    for (int i = 0; i < r.panel->getZonesPaneForTest().getRowCountForTest(); ++i)
+        if (const auto& c = r.panel->getZonesPaneForTest().getRowForTest(i)->getChannel();
+            c.kind == synth::ui::MixerZoneChannelKind::Bus)
+            buses.push_back(c.id);
+    ASSERT_EQ(buses.size(), 2u);
+    const auto serial = r.mc.getUndoManager().getEditSerial();
+    auto drag = dragOf(r, buses[1]);
+    const float firstTop = static_cast<float>(r.row(buses[0])->getY());
+    drag.down();
+    drag.dragTo(firstTop + 6.0f);
+    drag.up(firstTop + 6.0f);
+
+    const auto& order = r.panel->getViewDoc().getBusOrder();
+    ASSERT_GE(order.size(), 2u);
+    EXPECT_EQ(order[0], buses[1]) << "the second bus now comes first";
+    EXPECT_EQ(order[1], buses[0]);
+    EXPECT_GT(r.mc.getUndoManager().getEditSerial(), serial) << "one undo step";
+}
+
 TEST(MixerZonesTests, EscapeDuringARowDragCommitsNothing) {
     MixerZonesRig r(2);
     const auto id = r.stripId(0);

@@ -40,7 +40,39 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
     if (matchesAction(key, "timelineArmFocusedTrack", juce::KeyPress('r', juce::ModifierKeys::noModifiers, 0)))
         return armFocusedTrack();
 
+    // Rebindable, Mixer category: the toolbar's Inserts / Sends / EQ toggles, through the same
+    // MixerSectionLayout::toggleHidden a click calls, so a key and a click can never diverge.
+    for (const auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq})
+        if (matchesAction(key, sectionToggleActionId(section), defaultSectionToggleKey(section))) {
+            sectionLayout_.toggleHidden(section);
+            return true;
+        }
+
     return false;
+}
+
+juce::String MixerPanelComponent::sectionToggleActionId(MixerSection section) {
+    switch (section) {
+    case MixerSection::Inserts:
+        return "mixerToggleInserts";
+    case MixerSection::Sends:
+        return "mixerToggleSends";
+    case MixerSection::Eq:
+        break;
+    }
+    return "mixerToggleEq";
+}
+
+// Only used without a ShortcutManager (tests): the macOS default, see ShortcutManager's table.
+juce::KeyPress MixerPanelComponent::defaultSectionToggleKey(MixerSection section) {
+    const juce::juce_wchar letter = section == MixerSection::Inserts ? 'i' : section == MixerSection::Sends ? 's' : 'e';
+    return juce::KeyPress(letter, juce::ModifierKeys::ctrlModifier, 0);
+}
+
+juce::String MixerPanelComponent::sectionToggleShortcutText(MixerSection section) const {
+    if (shortcuts_ == nullptr)
+        return {};
+    return ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding(sectionToggleActionId(section)));
 }
 
 bool MixerPanelComponent::moveFocus(int direction) {

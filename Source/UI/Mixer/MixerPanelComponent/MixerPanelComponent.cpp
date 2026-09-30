@@ -52,10 +52,14 @@ MixerPanelComponent::MixerPanelComponent() {
     sidePane_.setContent(&zonesPane_);
     sidePane_.onOccupiedWidthChanged = [this] { resized(); };
     zonesPane_.onSetZone = [this](const juce::String& id, synth::MixerZone zone) { pinChannel(id, zone); };
+    zonesPane_.onMoveWithinZone = [this](const juce::String& id, const juce::String& target) {
+        moveChannelWithinZone(id, target);
+    };
     zonesPane_.onSetHidden = [this](const juce::String& id, bool hidden) { setChannelHidden(id, hidden); };
     zonesPane_.onSoloShow = [this](const juce::String& id) { soloShowChannel(id); };
     zonesPane_.onShowAll = [this] { showAllChannels(); };
     zonesPane_.onFocusReleased = [this] { grabKeyboardFocus(); };
+    toolbar_.shortcutTextFor = [this](MixerSection section) { return sectionToggleShortcutText(section); };
     toolbar_.setLayout(sectionLayout_);
     toolbar_.onAddBus = [this] {
         createBus();
@@ -73,6 +77,7 @@ MixerPanelComponent::MixerPanelComponent() {
     emptyHint_.setJustificationType(juce::Justification::centred);
     emptyHint_.setText(kEmptyHintText, juce::dontSendNotification);
     emptyHint_.setTitle(kEmptyHintText); // accessibility: name equals the visible text
+    setTitle("Mixer");
 }
 
 MixerPanelComponent::~MixerPanelComponent() = default;
