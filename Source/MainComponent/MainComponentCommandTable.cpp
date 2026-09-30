@@ -549,8 +549,8 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          }},
         // Mirrors the canvas context menu item's setEnabled -- same predicate, so the two
         // discoverable surfaces can never disagree about whether there's anything to find.
-        {AppCommands::locateMaster, "Locate Master", "Select Master (or Audio Output) and pan it into view", "View",
-         "locateMaster", [](const MainComponent& m) { return m.graphEditor.hasLocatableMasterOrOutput(); },
+        {AppCommands::locateMaster, "Go to Output", "Select Master (or Audio Output) and frame the whole output dock",
+         "View", "locateMaster", [](const MainComponent& m) { return m.graphEditor.hasLocatableMasterOrOutput(); },
          [](MainComponent& m) { return m.performLocateMaster(); }},
         {AppCommands::toggleLibrary,
          "Toggle Module Library",

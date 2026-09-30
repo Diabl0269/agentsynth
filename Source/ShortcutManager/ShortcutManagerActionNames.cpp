@@ -93,7 +93,7 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
     if (actionId == "collapseMacro")
         return "Collapse / Expand Macro";
     if (actionId == "locateMaster")
-        return "Locate Master";
+        return "Go to Output";
     if (actionId == "toggleLibrary")
         return "Toggle Module Library";
     // Kept as "selectAllModules" (both the actionId string and the AppCommands name) so a

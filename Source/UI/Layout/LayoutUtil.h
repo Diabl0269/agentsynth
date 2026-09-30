@@ -13,10 +13,11 @@ inline constexpr int kSpiralStep = 8;       // spiral ring step (== kGridSize so
 inline constexpr int kSpiralMaxRings = 256; // hard cap; 256*8 = 2048px search radius before giving up
 inline constexpr int kCanvasMax = 10000;
 // ---- Auto-arrange spacing ----
-inline constexpr int kLayerGapX = 80;      // horizontal gap between adjacent layer columns
-inline constexpr int kIntraLayerGapY = 40; // vertical gap between stacked modules in the same layer
-inline constexpr int kArrangeOriginX = 40; // left margin where layer 0 starts
-inline constexpr int kArrangeOriginY = 40; // top margin where each layer column starts
+inline constexpr int kLayerGapX = 80;          // horizontal gap between adjacent layer columns
+inline constexpr int kIntraLayerGapY = 40;     // vertical gap between stacked modules in the same layer
+inline constexpr int kArrangeOriginX = 40;     // left margin where layer 0 starts
+inline constexpr int kArrangeOriginY = 40;     // top margin where each layer column starts
+inline constexpr int kOutputDockCardGapX = 40; // gap between neighbouring output-dock cards (Master, Rec Tap, Output)
 // Horizontal reach of an OPEN macro's hull past its member union, on each side: the hull margin (14) plus the
 // fixed port strip (96). Anything that must sit clear of an open hull (a track head's x floor, Master right of a
 // channel's Strip) budgets this. MacroGroupControllerGeometry.cpp static_asserts it equals margin + strip width.
@@ -116,6 +117,13 @@ inline constexpr int kDisplacementMaxRounds = 64;
 // every side (canvas wall, pinned neighbours) is left where it is. Deltas are multiples of kGridSize.
 std::vector<UnitMove> resolveDisplacement(const juce::String& growerKey, const std::vector<LayoutUnit>& units,
                                           int gap = kCollisionGap);
+
+// The output dock (Master, Rec Tap, Audio Output -- always the rightmost cards). Pure: `content` is every layout
+// unit that is NOT a dock card, `dockSizes` the dock cards' (w,h) in chain order, `dockTopY` the shared top y.
+// Returns one snapped top-left per dock card, in the same order: left edge = snapUp(rightmost content edge) +
+// kLayerGapX (kArrangeOriginX when there is no content), cards kOutputDockCardGapX apart, all on snap(dockTopY).
+std::vector<juce::Point<int>> computeOutputDock(const std::vector<LayoutUnit>& content,
+                                                const std::vector<juce::Point<int>>& dockSizes, int dockTopY);
 
 // Topological signal-flow layout. sizeOf returns (w,h) footprint for a node id. extraEdges carries
 // modulation routing edges (src->dst) so envelope->VCA etc. influence layering depth.

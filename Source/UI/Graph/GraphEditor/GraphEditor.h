@@ -142,6 +142,22 @@ public:
     void finalizeModuleDrag(ModuleComponent* module);
     void autoArrange();
 
+    // ---- Output dock: Master, Rec Tap and Audio Output, always the rightmost cards (GraphEditorOutputDock.cpp,
+    // docs/layout/layout.md#output-dock). Their x is derived, never user-set; their shared y is Audio Output's own.
+    /** Re-derives the dock's positions (node x/y and live bounds, synchronously). No undo step, no dirtiness. */
+    void reflowOutputDock() override;
+    bool isOutputDockNode(juce::AudioProcessorGraph::NodeID nodeId) const;
+    /** Live vertical drag of a dock card: every other dock card follows `initiator`'s y. */
+    void carryOutputDockWith(ModuleComponent* initiator);
+    /** Drag release of a dock card: snaps y for the whole dock and re-derives x. */
+    void finalizeOutputDockDrag(ModuleComponent* module);
+    /** Empty when `nodeId` may be deleted, else why not (Audio Output never; Master while channels exist). */
+    juce::String outputDockDeleteRefusal(juce::AudioProcessorGraph::NodeID nodeId) const;
+    /** Erases from `ids` every node outputDockDeleteRefusal() refuses (status message says why). */
+    void removeUndeletableOutputNodes(std::vector<juce::AudioProcessorGraph::NodeID>& ids);
+    /** Frames the whole dock in view ("Go to Output"). */
+    void frameOutputDock();
+
     // ---- Multi-select (gesture contract: GraphEditorSelection.cpp) ----
     const synth::ui::SelectionModel& getSelection() const override { return selection; }
 
@@ -169,7 +185,8 @@ public:
     juce::Rectangle<int> getMarqueeRect() const { return marqueeRect; }
 
     // ---- Group drag: a module in a multi-selection reports its delta here, the rest follow ----
-    void beginSelectionDrag();
+    /** `initiator` (the grabbed card, when known): a dock card drags alone, never as a group. */
+    void beginSelectionDrag(juce::AudioProcessorGraph::NodeID initiator = {});
     void dragSelectionBy(juce::Point<int> delta, ModuleComponent* initiator);
     void finalizeSelectionDrag();
     /** Discards the recorded drag origins without re-resolving any position. */

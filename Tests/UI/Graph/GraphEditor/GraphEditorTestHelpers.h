@@ -87,11 +87,14 @@ inline juce::AudioProcessorGraph::NodeID findNodeIdByName(juce::AudioProcessorGr
     return {};
 }
 
-/** Sink at (760,100) fed on both legs by a collapsed Reverb at (40,100) — the factory-preset shape.
- *  Leaves room for a 280px-wide ghost at x=440 to sit just left of the sink. */
+/** Sink fed on both legs by a collapsed Reverb — the factory-preset shape. The sink is in the output dock, so its x is
+ *  DERIVED (right of the Reverb), never the 760 a test would pick: the Reverb is parked below the sink's row so a
+ *  280px-wide ghost fits just left of the sink, and `ghostTopLeft` is that spot, computed from the sink's real place.
+ */
 struct WiredSinkFixture {
     juce::AudioProcessorGraph::Node::Ptr outNode, reverbNode;
     juce::AudioProcessorGraph::NodeID outId, reverbId;
+    juce::Point<int> ghostTopLeft;
 };
 inline WiredSinkFixture makeWiredSink(AudioEngine& engine, GraphEditor& editor) {
     WiredSinkFixture f;
@@ -99,12 +102,14 @@ inline WiredSinkFixture makeWiredSink(AudioEngine& engine, GraphEditor& editor) 
     f.outNode = addAudioOutputNode(graph, 760, 100);
     f.reverbNode = graph.addNode(std::make_unique<ReverbModule>());
     f.reverbNode->properties.set("x", 40);
-    f.reverbNode->properties.set("y", 100);
+    f.reverbNode->properties.set("y", 1100);
     editor.updateComponents();
     sizeModuleComponents(editor);
+    editor.reflowOutputDock(); // the dock follows the resized cards
     f.outId = f.outNode->nodeID;
     f.reverbId = f.reverbNode->nodeID;
     editor.connectPorts(f.reverbId, 0, f.outId, 0, false, false);
+    f.ghostTopLeft = {static_cast<int>(f.outNode->properties["x"]) - 280 - 40, 100};
     return f;
 }
 

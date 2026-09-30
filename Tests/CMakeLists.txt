@@ -15,6 +15,8 @@ add_executable(Tests
     TestMain.cpp
     UI/Layout/LayoutUtilTests.cpp
     UI/Layout/LayoutUtilDisplacementTests.cpp
+    UI/Layout/LayoutUtilOutputDockTests.cpp
+    UI/Graph/OutputDockTests.cpp
     Modules/OscillatorTests.cpp
     Modules/CardLayoutTests.cpp
     Modules/FilterTests.cpp

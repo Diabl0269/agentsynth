@@ -9,6 +9,8 @@
 #include "MacroGroupController.h"
 #include "MacroNesting.h"
 
+#include "Mixer/MasterSplice.h"
+
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
@@ -42,7 +44,10 @@ MacroGroupController::buildLayoutUnits(const juce::String& containerId) const {
             continue;
         if (owner != nullptr && (owner->memberIsPort(uuid) || macros.outermostCollapsedAncestorOf(uuid).isNotEmpty()))
             continue;
-        units.push_back({nodeKey(comp->getNodeId()), comp->getBounds(), false});
+        // The output dock (Master / Rec Tap / Audio Output) is pinned: makeRoomFor never pushes it, the dock is
+        // re-derived to the right of whatever grew instead (GraphEditor::reflowOutputDock).
+        units.push_back(
+            {nodeKey(comp->getNodeId()), comp->getBounds(), synth::isOutputDockProcessor(comp->getModule())});
     }
     for (const auto& macro : macros.getAll()) {
         if (macro.parentId != containerId)
@@ -154,6 +159,9 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey) {
 
     if (movedAny)
         refreshAfterMove();
+    // Last, and even when nothing moved: a grown hull that now overlaps or passes the pinned output dock moves the
+    // DOCK (right of everything), never the other way round.
+    host_.reflowOutputDock();
 }
 
 // Only geometry changed (no node appeared or vanished), so refresh what depends on it rather than running a full
@@ -162,6 +170,8 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey) {
 void MacroGroupController::refreshAfterMove() {
     host_.syncMacroCards();
     dockMacroPortWidgets();
+    host_.reflowOutputDock(); // a moved/returned unit changes what the dock must clear; dock cards are pinned, never
+                              // moved here
     host_.repaintCanvas();
 }
 

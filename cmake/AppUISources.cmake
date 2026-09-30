@@ -242,6 +242,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroGroupController/MacroSelectionUnits.h
     Source/UI/Graph/MacroGroupController/MacroSelectionUnits.cpp
     Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorOutputDock.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
     Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp
     Source/UI/Graph/GraphDragDropController/GraphDragDropController.h

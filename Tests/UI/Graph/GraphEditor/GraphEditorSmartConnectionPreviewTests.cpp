@@ -33,7 +33,7 @@ TEST_F(GraphEditorTest, SmartConnectionParallelAddPreviewCoversBothOutputLegs) {
 
     DummyDragSource dummySource;
     juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
-                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
+                                                   libraryCursorForGhostTopLeft("Chorus", f.ghostTopLeft));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
@@ -74,7 +74,7 @@ TEST_F(GraphEditorTest, SmartConnectionProbeHonoursTheDualIODefault) {
 
     DummyDragSource dummySource;
     juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
-                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
+                                                   libraryCursorForGhostTopLeft("Chorus", f.ghostTopLeft));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);

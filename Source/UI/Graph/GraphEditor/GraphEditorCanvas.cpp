@@ -147,6 +147,7 @@ void GraphEditor::updateComponents() {
     }
     syncMacroCards();
     macroController_.dockMacroPortWidgets();
+    reflowOutputDock(); // load, module add/remove, undo/redo: the dock always sits right of everything
 
     // Refresh mod matrix to pick up any new/removed attenuverter routings
     // Use callAsync to avoid re-entrancy during graph modification
@@ -583,12 +584,7 @@ GraphEditor::LocateMasterResult GraphEditor::locateMasterOrOutput() {
     // timeline binding chip, rather than duplicating it.
     selectModule(node->nodeID, /*additive=*/false);
 
-    for (auto* comp : content.getModules()) {
-        if (comp != nullptr && comp->getNodeId() == node->nodeID) {
-            centreViewOn(comp->getBounds().toFloat().getCentre());
-            break;
-        }
-    }
+    frameOutputDock(); // "Go to Output": the whole dock, not just the one selected card
 
     // The minimap highlight is free (buildMinimapModel() derives Node::selected from the selection
     // set above) — pushed immediately rather than waiting for the next 30 Hz tick, the same as

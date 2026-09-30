@@ -504,7 +504,14 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         m.addSeparator();
     }
 
-    m.addItem("Delete Module", [this] { owner.deleteModule(this); });
+    // Greyed out, with the reason in the label (PopupMenu items have no tooltip), for the output dock's protected
+    // cards.
+    const auto deleteRefusal = owner.outputDockDeleteRefusal(nodeId);
+    juce::PopupMenu::Item deleteItem(deleteRefusal.isEmpty() ? juce::String("Delete Module")
+                                                             : "Delete Module (" + deleteRefusal + ")");
+    deleteItem.setEnabled(deleteRefusal.isEmpty());
+    deleteItem.action = [this] { owner.deleteModule(this); };
+    m.addItem(deleteItem);
 
     // This module's own menu also offers the macro it belongs to, as an appended submenu — never folded into the items
     // above, and never built when this module is in no macro (a module in no macro sees no change at all).
@@ -712,7 +719,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                 undoManager->captureBeforeState(owner.getAudioEngine().getGraph());
             dragger.startDraggingComponent(this, e);
             // Record every selected module's origin so they can all follow this one.
-            owner.beginSelectionDrag();
+            owner.beginSelectionDrag(nodeId);
             // Show grid + ghost for this module-body drag.
             owner.getDragDropController().beginDragPreview(getWidth(), getHeight(), getNodeId());
         }
@@ -786,6 +793,8 @@ void ModuleComponent::moved() {
 //    group's drag state armed and the other members unresolved. Cmd cannot hit this, because a
 //    Cmd press collapses the selection onto the module first.
 bool ModuleComponent::computeReparentArmed(const juce::ModifierKeys& mods) const {
+    if (owner.isOutputDockNode(nodeId))
+        return false; // the output dock never joins or leaves a macro
     if (mods.isCommandDown())
         return true;
     return owner.getMacroDragWithoutCmdEnabled() && !mods.isCtrlDown() && owner.getSelectionCount() <= 1;
@@ -799,6 +808,11 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
             return; // modifier-click toggled selection; the dragger was never armed
 
         dragger.dragComponent(this, e, nullptr);
+        // An output-dock card only moves vertically (its x is derived); the rest of the dock follows its y.
+        if (owner.isOutputDockNode(nodeId)) {
+            setTopLeftPosition(dragStartPosition.x, getY());
+            owner.carryOutputDockWith(this);
+        }
         if (getPosition() != dragStartPosition)
             synth::ui::showDragCursor(*this); // the move has really started
         // Carry every other selected module by the same delta from its own recorded origin.
