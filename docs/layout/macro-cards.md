@@ -190,6 +190,9 @@ zoom or with the names. Zoom only fades the port names, the '-' glyph and each s
 (`macroPortNameAlphaAtZoom`: `easeInOutCubic` over zoom 0.5 to 0.7, a pure function of zoom with no timer), while the strip
 fill recedes from 0.55 to 0.25 opacity; at or below 50 percent zoom the strip shows only jack dots and the '+'.
 The title, preview and count keep the column between the strips (`getContentArea()`).
+Expanding a macro whose hull would extend past canvas x or y < 0 (the strips make the hull 96 px wider on each side, and
+that area is clipped and unclickable) first translates its members and any carried collapsed cards rigidly into the
+canvas (`MacroGroupController::nudgeHullIntoCanvas`), persisted as an ordinary node move inside the expand's undo step.
 `MacroCardComponent` also implements `juce::TooltipClient`: a newline-separated, capped list of member
 names, shown by `MainComponent`'s `juce::TooltipWindow` — except while a jack is hovered and its name is
 faded or ellipsised, when the tooltip is that port's full name.

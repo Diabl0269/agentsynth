@@ -2,6 +2,7 @@
 // width never depends on ports, names or zoom, the name alpha is a pure function of zoom, and the '-' button is
 // clickable only once it is at least half faded in.
 
+#include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
@@ -139,4 +140,75 @@ TEST(MacroPortStripFade, MacroPortWidgetsAreNotRasterFrozenWhileZooming) {
     }
     EXPECT_EQ(widgets, 1);
     EXPECT_GT(cards, 0);
+}
+
+namespace {
+juce::Point<int> nodePosition(AudioEngine& engine, NodeID id) {
+    auto* node = engine.getGraph().getNodeForId(id);
+    return {(int)node->properties["x"], (int)node->properties["y"]};
+}
+} // namespace
+
+TEST(MacroExpandNudge, HullNearTheCanvasOriginIsShiftedIntoIt) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 0, 0);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 400, 0);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
+    EXPECT_GE(hull.getX(), 0);
+    EXPECT_GE(hull.getY(), 0);
+    const auto posA = nodePosition(engine, a), posB = nodePosition(engine, b);
+    EXPECT_EQ(posB - posA, juce::Point<int>(400, 0)) << "members move rigidly";
+    EXPECT_EQ(findComponent(editor, a)->getPosition(), posA) << "component follows the persisted position";
+}
+
+TEST(MacroExpandNudge, UndoOfTheExpandRestoresTheMemberPositions) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 0, 0);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 400, 0);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    const auto uuidA = engine.getGraph().getNodeForId(a)->properties["uuid"].toString();
+    const auto uuidB = engine.getGraph().getNodeForId(b)->properties["uuid"].toString();
+    const auto beforeA = nodePosition(engine, a), beforeB = nodePosition(engine, b);
+
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    ASSERT_NE(nodePosition(engine, a), beforeA) << "the expand nudged the members";
+    undo.undo();
+
+    // Undo may rebuild the graph, so look the nodes up by uuid.
+    EXPECT_EQ(nodePosition(engine, nodeIdForUuid(engine, uuidA)), beforeA);
+    EXPECT_EQ(nodePosition(engine, nodeIdForUuid(engine, uuidB)), beforeB);
+    EXPECT_TRUE(editor.getMacros().find(macroId)->collapsed);
+}
+
+TEST(MacroExpandNudge, HullFarFromTheEdgeExpandsWithMembersUnmoved) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 300, 300);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 700, 300);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    const auto uuids = editor.getMacros().find(macroId)->members;
+    std::vector<juce::Point<int>> before;
+    for (const auto& u : uuids)
+        before.push_back(nodePosition(engine, nodeIdForUuid(engine, u)));
+
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    ASSERT_GE(editor.getMacroController().macroHullBounds(macroId).getX(), 0);
+    for (size_t i = 0; i < uuids.size(); ++i)
+        EXPECT_EQ(nodePosition(engine, nodeIdForUuid(engine, uuids[i])), before[i]);
 }
