@@ -412,6 +412,7 @@ The piano-roll editor's suite is split by topic under `Tests/UI/PianoRoll/`, all
 | `PianoRollHeaderChipsTests.cpp` | Header button chip affordance (six chips — hover wash plus resting/active fill); GENERATE — add-to-existing vs replace, plus the six chips' distinct/non-overlapping bounds |
 | `PianoRollAuditionTests.cpp` | NOTE AUDITION (`onAuditionNote`) — "clicking a note plays it" — through the roll's own callback and through the real `TimelinePanelComponent` → `TrackHeaderHost` wiring; KEYS-COLUMN audition (the virtual keyboard down the left gutter) |
 | `PianoRollMouseTests.cpp` | MARQUEE multi-select from empty grid; BEAT-ANCHORED drag math / EDGE AUTO-SCROLL / FOLLOW PLAYHEAD; MULTI-NOTE RESIZE (incl. the Cmd unquantized resize and the clip-overrun prompt); CMD+DRAG unsnapped MOVE plus the velocity scrub's move to Option |
+| `PianoRollCopyDragTests.cpp` | OPTION+DRAG note copy (one/two notes, live Option toggle both ways, zero-delta, right edge, Esc cancel, ghost pixels) and the velocity-scrub chord (Ctrl+Alt everywhere, plain Ctrl on macOS, Option no longer scrubs) |
 
 ## State management
 

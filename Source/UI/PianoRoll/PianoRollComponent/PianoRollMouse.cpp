@@ -30,9 +30,13 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
     moveUnquantized_ = false;
     cmdToggleNote_ = {};
     cmdToggleWasSelected_ = false;
+    setCopyDrag(false);
+    clearGhostSettle();
 
     if (doc_ == nullptr || !clipId_.isValid() || doc_->getClip(clipId_) == nullptr)
         return;
+    // A macOS Ctrl+left-click still arrives as the LEFT button with ctrlModifier set (JUCE only maps
+    // buttonNumber 1 to the right button), so the velocity-scrub chord below is not filtered here.
     if (!e.mods.isLeftButtonDown())
         return; // no right-click menu in v1
 
@@ -109,10 +113,21 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
             startAudition(note->pitch, note->velocity);
     }
 
+    // Velocity scrub is tested BEFORE the Cmd and Option branches: on Windows/Linux Cmd IS Ctrl, so
+    // the Ctrl+Alt chord must win over both, and on macOS Ctrl alone is free of either. Still
+    // ADDITIVE, never a toggle: the drag scrubs the whole selection's velocity, so yanking the
+    // grabbed note out of it mid-gesture is never what was wanted.
+    if (hit && isVelocityScrubChord(e.mods) && !e.mods.isShiftDown()) {
+        selection_.add(hit->id);
+        beginVelocityScrub(pos);
+        repaint();
+        return;
+    }
+
     // CMD now means ONE thing on a note, whichever part of it you grab: "do this without the grid".
     // Right edge -> unsnapped resize, body -> unsnapped move. That consistency is why velocity scrub
-    // moved off Cmd and onto Option below; a single modifier meaning "smooth" on one half of a note
-    // and "change the volume" on the other half was the thing worth fixing.
+    // lives on the Ctrl chord above; a single modifier meaning "smooth" on one half of a note and
+    // "change the volume" on the other half was the thing worth fixing.
     if (hit && e.mods.isCommandDown() && !e.mods.isShiftDown()) {
         if (hit->onRightEdge) {
             if (!selection_.contains(hit->id))
@@ -135,15 +150,13 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
         return;
     }
 
-    if (hit && e.mods.isAltDown() && !e.mods.isShiftDown()) {
-        // Velocity scrub, moved here from Cmd (see above). Option is free for a mouse drag on this
-        // surface: the only other Option bindings the roll owns are KEY chords (Alt+arrows navigate
-        // notes, Option+S toggles the row filter), and a modifier can mean one thing for the keyboard
-        // and another for the mouse without either being ambiguous. Still ADDITIVE, never a toggle —
-        // the drag scrubs the whole selection's velocity, so yanking the grabbed note out of it
-        // mid-gesture is never what was wanted.
-        selection_.add(hit->id);
-        beginVelocityScrub(pos);
+    if (hit && !hit->onRightEdge && e.mods.isAltDown() && !e.mods.isShiftDown()) {
+        // Option+drag on a note body is a copy drag (see PianoRollCopyDrag.cpp). The grabbed note
+        // becomes the selection first, exactly like a plain move.
+        if (!selection_.contains(hit->id))
+            selection_.setSelection({hit->id});
+        setCopyDrag(true);
+        beginMoveOrResize(*hit, pos);
         repaint();
         return;
     }
@@ -210,6 +223,10 @@ void PianoRollComponent::mouseDrag(const juce::MouseEvent& e) {
         return;
     }
 
+    // Option is re-read on every drag event so pressing or releasing it mid-drag switches copy <-> move
+    // in place.
+    if (dragMode_ == DragMode::Move)
+        setCopyDrag(e.mods.isAltDown());
     lastDragPointer_ = e.getPosition();
     updateDragPreviewFromLastPointer();
     updateAutoScrollArming();
@@ -477,11 +494,14 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
         dragMode_ = DragMode::None;
         dragNotes_.clear();
         moveUnquantized_ = false;
+        setCopyDrag(false);
         repaint();
         return;
     }
 
-    if (dragMode_ == DragMode::Move && (std::abs(previewDeltaBeats_) > 1e-9 || previewDeltaPitch_ != 0)) {
+    if (dragMode_ == DragMode::Move && copyDrag_) {
+        commitCopyDrag();
+    } else if (dragMode_ == DragMode::Move && (std::abs(previewDeltaBeats_) > 1e-9 || previewDeltaPitch_ != 0)) {
         const auto notes = dragNotes_;
         const double delta = previewDeltaBeats_;
         // A ROW delta (see previewDeltaPitch_) — resolved through the SAME rowShiftedPitch the
@@ -552,6 +572,7 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
     previewDeltaPitch_ = 0;
     previewDeltaVelocity_ = 0;
     previewLengthDelta_ = 0.0;
+    setCopyDrag(false);
     repaint();
 }
 

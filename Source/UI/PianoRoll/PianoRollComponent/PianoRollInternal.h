@@ -11,6 +11,13 @@
 
 namespace synth::ui::detail {
 
+// The velocity-scrub chord: Ctrl on macOS (where Cmd is a separate flag), Ctrl+Alt elsewhere (where
+// isCommandDown() IS isCtrlDown(), so plain Ctrl is the unsnapped-move chord). One expression, no
+// platform #ifdef.
+inline bool isVelocityScrubChord(const juce::ModifierKeys& mods) noexcept {
+    return (mods.isCtrlDown() && !mods.isCommandDown()) || (mods.isCtrlDown() && mods.isAltDown());
+}
+
 // Wheel tuning. kZoomWheelSensitivity mirrors TimelinePanelComponent::mouseWheelMove's own constant
 // (exponential in deltaY, so equal-and-opposite gestures cancel exactly) and
 // kScrollPixelsPerWheelUnit mirrors its scroll constant — both duplicated rather than shared

@@ -184,6 +184,57 @@ TEST(TimelineClipToolTest, AltDragAcrossRowsPutsOnlyTheGhostOnTheDestinationRow)
         << "the ghost is the only thing on the destination row";
 }
 
+// Alt is re-read on every drag event, so releasing it mid-drag turns the gesture into a plain move
+// and pressing it mid-drag turns a plain drag into a copy, without restarting the drag.
+TEST(TimelineClipToolTest, ReleasingAltMidDragTurnsTheCopyIntoAMove) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = f.doc.addClip(track, 0.0, 4.0, "c");
+    ASSERT_TRUE(clip.isValid());
+    f.selection.setSelection({clip});
+
+    const auto anchor = clipCentre(f.lane, clip);
+    const juce::Point<float> dragged(anchor.x + 80.0f, anchor.y); // +2.0 beats at 40 px/beat
+    const int alt = juce::ModifierKeys::altModifier;
+
+    f.lane.mouseDown(toolClick(f.lane, anchor, alt));
+    f.lane.mouseDrag(toolDrag(f.lane, dragged, anchor, alt));
+    ASSERT_TRUE(f.lane.isCopyDragForTest());
+
+    f.lane.mouseDrag(toolDrag(f.lane, dragged, anchor)); // Alt released
+    EXPECT_FALSE(f.lane.isCopyDragForTest());
+    f.lane.mouseUp(toolDrag(f.lane, dragged, anchor));
+
+    const auto& clips = f.doc.getTrack(track)->clips;
+    ASSERT_EQ(clips.size(), 1u) << "no copy was made";
+    EXPECT_DOUBLE_EQ(clips[0].startBeat, 2.0) << "the original moved instead";
+}
+
+TEST(TimelineClipToolTest, PressingAltMidDragTurnsThePlainMoveIntoACopy) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = f.doc.addClip(track, 0.0, 4.0, "c");
+    ASSERT_TRUE(clip.isValid());
+    f.selection.setSelection({clip});
+
+    const auto anchor = clipCentre(f.lane, clip);
+    const juce::Point<float> dragged(anchor.x + 80.0f, anchor.y);
+    const int alt = juce::ModifierKeys::altModifier;
+
+    f.lane.mouseDown(toolClick(f.lane, anchor));
+    f.lane.mouseDrag(toolDrag(f.lane, dragged, anchor));
+    ASSERT_FALSE(f.lane.isCopyDragForTest());
+
+    f.lane.mouseDrag(toolDrag(f.lane, dragged, anchor, alt)); // Alt pressed
+    EXPECT_TRUE(f.lane.isCopyDragForTest());
+    f.lane.mouseUp(toolDrag(f.lane, dragged, anchor, alt));
+
+    const auto& clips = f.doc.getTrack(track)->clips;
+    ASSERT_EQ(clips.size(), 2u);
+    EXPECT_DOUBLE_EQ(clips[0].startBeat, 0.0) << "the original stayed put";
+    EXPECT_DOUBLE_EQ(clips[1].startBeat, 2.0);
+}
+
 // The other side of the same guard: a PLAIN move-drag still previews on the original, which is
 // what makes a normal drag look like the clip following the pointer.
 TEST(TimelineClipToolTest, PlainMoveDragStillPreviewsTheDeltaOnTheOriginal) {

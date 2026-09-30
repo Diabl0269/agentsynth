@@ -2,7 +2,7 @@
 // selection, additive modifiers, the deferred plain click that must still just deselect),
 // BEAT-ANCHORED drag math / EDGE AUTO-SCROLL / FOLLOW PLAYHEAD, MULTI-NOTE RESIZE (incl. the Cmd
 // unquantized resize and the clip-overrun prompt), and CMD+DRAG unsnapped MOVE + the velocity
-// scrub's move to Option. Shared PianoRollFixture and mouse-gesture helpers live in
+// scrub's Ctrl / Ctrl+Alt chord. Shared PianoRollFixture and mouse-gesture helpers live in
 // PianoRollTestHelpers.h.
 
 #include "PianoRollTestHelpers.h"
@@ -22,6 +22,10 @@
 // settled by the time pointAt() is asked where a row is.
 
 namespace {
+
+// Ctrl+Alt is the velocity-scrub chord on every platform (plain Ctrl is macOS-only, see
+// PianoRollCopyDragTests.cpp).
+constexpr int kScrubChord = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier;
 
 // The three-note bed sections 7's marquee tests sweep: two notes close together near the start
 // (the marquee's targets) and one far to the right that a sweep must never touch — which is what
@@ -621,10 +625,10 @@ TEST(PianoRollResizeTest, CmdOnTheNoteBodyStillScrubsVelocityRatherThanResizing)
 
     const auto anchor = centreOf(f.roll.getNoteRect(id));
     const juce::Point<float> up(anchor.x, anchor.y - 10.0f);
-    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::altModifier));
+    f.roll.mouseDown(leftClick(f.roll, anchor, kScrubChord));
     EXPECT_EQ(f.roll.getResizeNoteCountForTest(), 0) << "this is a velocity scrub, not a resize";
-    f.roll.mouseDrag(leftDrag(f.roll, up, anchor, juce::ModifierKeys::altModifier));
-    f.roll.mouseUp(leftDrag(f.roll, up, anchor, juce::ModifierKeys::altModifier));
+    f.roll.mouseDrag(leftDrag(f.roll, up, anchor, kScrubChord));
+    f.roll.mouseUp(leftDrag(f.roll, up, anchor, kScrubChord));
 
     EXPECT_DOUBLE_EQ(f.doc.getNote(id)->lengthBeats, 2.0) << "the length is untouched";
     EXPECT_EQ(f.doc.getNote(id)->velocity, 90);
@@ -799,7 +803,7 @@ TEST(PianoRollResizeTest, OverrunNotesAreTruncatedByTheSnapshotSoKeepingThemIsIn
 }
 
 // ============================================================================
-// 26. CMD+DRAG = unsnapped MOVE, and the velocity scrub's move to Option (3.4).
+// 26. CMD+DRAG = unsnapped MOVE, and the velocity scrub's Ctrl / Ctrl+Alt chord.
 // ============================================================================
 
 TEST(PianoRollCmdMoveTest, CmdDragOnANoteBodyMovesItWithoutSnapping) {
@@ -880,7 +884,7 @@ TEST(PianoRollCmdMoveTest, CmdDragOnASelectedNoteKeepsItSelected) {
     EXPECT_NEAR(f.doc.getNote(id)->startBeat, 3.0, 1.0e-9);
 }
 
-TEST(PianoRollCmdMoveTest, OptionDragScrubsVelocityAndCmdDragNoLongerDoes) {
+TEST(PianoRollCmdMoveTest, CtrlAltDragScrubsVelocityAndCmdDragNoLongerDoes) {
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
@@ -894,10 +898,10 @@ TEST(PianoRollCmdMoveTest, OptionDragScrubsVelocityAndCmdDragNoLongerDoes) {
     const auto anchor = centreOf(f.roll.getNoteRect(id));
     const juce::Point<float> up(anchor.x, anchor.y - 10.0f);
 
-    // Option = velocity, and it changes no geometry.
-    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::altModifier));
-    f.roll.mouseDrag(leftDrag(f.roll, up, anchor, juce::ModifierKeys::altModifier));
-    f.roll.mouseUp(leftDrag(f.roll, up, anchor, juce::ModifierKeys::altModifier));
+    // Ctrl+Alt = velocity (on every platform), and it changes no geometry.
+    f.roll.mouseDown(leftClick(f.roll, anchor, kScrubChord));
+    f.roll.mouseDrag(leftDrag(f.roll, up, anchor, kScrubChord));
+    f.roll.mouseUp(leftDrag(f.roll, up, anchor, kScrubChord));
     EXPECT_EQ(f.doc.getNote(id)->velocity, 90);
     EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 2.0);
     EXPECT_EQ(f.doc.getNote(id)->pitch, 60);

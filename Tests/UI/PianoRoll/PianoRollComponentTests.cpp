@@ -264,9 +264,11 @@ TEST(PianoRollEditingTest, MoveAndResize) {
     ASSERT_TRUE(f.undo.canUndo());
 }
 
-// ---- Velocity scrub: Cmd+drag, ~1/px, clamped, one step ----
+// ---- Velocity scrub: Ctrl+Alt+drag (Ctrl on macOS), ~1/px, clamped, one step ----
 
 TEST(PianoRollEditingTest, VelocityScrub) {
+    // Ctrl+Alt scrubs on every platform (plain Ctrl is the macOS-only alternative).
+    const int scrubChord = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier;
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
@@ -282,9 +284,9 @@ TEST(PianoRollEditingTest, VelocityScrub) {
     const juce::Point<float> anchor((float)rect.getCentreX(), (float)rect.getCentreY());
     const juce::Point<float> dragged(anchor.x, anchor.y - 15.0f); // up 15 px -> +15 velocity
 
-    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::altModifier));
-    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor, juce::ModifierKeys::altModifier));
-    f.roll.mouseUp(leftDrag(f.roll, dragged, anchor, juce::ModifierKeys::altModifier));
+    f.roll.mouseDown(leftClick(f.roll, anchor, scrubChord));
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor, scrubChord));
+    f.roll.mouseUp(leftDrag(f.roll, dragged, anchor, scrubChord));
 
     const auto* updated = f.doc.getNote(id);
     ASSERT_NE(updated, nullptr);
@@ -298,9 +300,9 @@ TEST(PianoRollEditingTest, VelocityScrub) {
     // Clamped at 127.
     f.roll.getSelectionForTest().setSelection({id});
     const juce::Point<float> draggedFar(anchor.x, anchor.y - 400.0f);
-    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::altModifier));
-    f.roll.mouseDrag(leftDrag(f.roll, draggedFar, anchor, juce::ModifierKeys::altModifier));
-    f.roll.mouseUp(leftDrag(f.roll, draggedFar, anchor, juce::ModifierKeys::altModifier));
+    f.roll.mouseDown(leftClick(f.roll, anchor, scrubChord));
+    f.roll.mouseDrag(leftDrag(f.roll, draggedFar, anchor, scrubChord));
+    f.roll.mouseUp(leftDrag(f.roll, draggedFar, anchor, scrubChord));
     EXPECT_EQ(f.doc.getNote(id)->velocity, 127);
 }
 

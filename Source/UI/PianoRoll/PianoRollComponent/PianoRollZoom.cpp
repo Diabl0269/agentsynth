@@ -181,6 +181,8 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
     // selection" are platform conventions every surface in the app answers identically, not app
     // shortcuts a user would expect to find in a rebinding list.
     if (key == juce::KeyPress::escapeKey) {
+        if (cancelNoteDrag())
+            return true; // abandons an in-flight move/copy drag; nothing is committed
         if (!selection_.isEmpty()) {
             selection_.clear();
             repaint();

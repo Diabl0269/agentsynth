@@ -126,7 +126,9 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
         // Alt turns the whole gesture into a copy-drag: the originals stay exactly where they are
         // (in the doc AND on screen) and the release commits duplicates at the destination. There
         // is deliberately no Alt-click action — a copy of a clip on top of itself is not something
-        // anyone asks for by clicking.
+        // anyone asks for by clicking. Alt is re-read on every drag event (and on a bare modifier
+        // change, see modifierKeysChanged), so pressing or releasing it mid-drag flips copy <-> move
+        // in place; the value read here only covers a press that never becomes a drag.
         dragMode_ = DragMode::Move;
         copyDrag_ = e.mods.isAltDown();
         dragClips_.clear();
@@ -178,10 +180,20 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
     if (dragMode_ == DragMode::None || doc_ == nullptr)
         return;
 
+    if (dragMode_ == DragMode::Move)
+        copyDrag_ = e.mods.isAltDown();
     lastDragPointer_ = e.getPosition();
     updateDragPreviewFromLastPointer();
     updateAutoScrollArming();
     repaint();
+}
+
+void TimelineClipLaneArea::modifierKeysChanged(const juce::ModifierKeys& mods) {
+    if (dragMode_ == DragMode::Move && copyDrag_ != mods.isAltDown()) {
+        copyDrag_ = mods.isAltDown();
+        repaint();
+    }
+    juce::Component::modifierKeysChanged(mods); // keep the default bubbling to the parent
 }
 
 // Runs against the (possibly just-scrolled) view state, factored out of mouseDrag() so a real

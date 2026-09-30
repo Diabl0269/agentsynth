@@ -125,8 +125,10 @@ PianoRollComponent::~PianoRollComponent() {
     // The AnimationDriver's callbacks capture 'this' indirectly (see setScalePanelVisible); an
     // animation still running when this object goes away would call back into a destroyed
     // component, exactly the hazard ModuleLibraryComponent's own destructor guards against.
-    if (scalePanelVblankUpdater_.has_value())
+    if (scalePanelVblankUpdater_.has_value()) {
         scalePanelAnim_.stop(*scalePanelVblankUpdater_);
+        ghostAnim_.stop(*scalePanelVblankUpdater_);
+    }
 }
 
 //==============================================================================
@@ -138,6 +140,7 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     resizeNotes_.clear();
     resizeUnquantized_ = false;
     moveUnquantized_ = false;
+    copyDrag_ = false;
     cmdToggleNote_ = {};
     // A note auditioned in the OLD clip has no mouse-up coming — this IS the end of that gesture.
     stopAudition();
@@ -212,6 +215,7 @@ void PianoRollComponent::closeRoll() {
     resizeNotes_.clear();
     resizeUnquantized_ = false;
     moveUnquantized_ = false;
+    copyDrag_ = false;
     cmdToggleNote_ = {};
     autoScrollTimer_.stopTimer(); // no clip left for a drag to be scrolling
 

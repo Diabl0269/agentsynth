@@ -34,6 +34,7 @@ void PianoRollComponent::paint(juce::Graphics& g) {
     // Over the notes (both are about a note that is there or about to be), still under the keys
     // column and the header so everything is clipped by the same gutter.
     paintDrawPreview(g);
+    paintCopyGhosts(g);
     paintSplitPreview(g);
     // Before the keys column and the header, so both clip the line the same way they clip a note
     // that has scrolled off to the left.

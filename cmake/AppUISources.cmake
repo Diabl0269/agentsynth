@@ -141,6 +141,7 @@ set(APPUI_SOURCES
     Source/UI/PianoRoll/PianoRollComponent/PianoRollClipboardAndKeys.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollMouse.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollZoom.cpp
+    Source/UI/PianoRoll/PianoRollComponent/PianoRollCopyDrag.cpp
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
     Source/UI/Library/ModuleLibraryComponent/ModuleLibrarySearch.cpp

@@ -149,6 +149,8 @@ public:
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
+    // Pressing/releasing Alt mid-drag toggles copy <-> move.
+    void modifierKeysChanged(const juce::ModifierKeys& mods) override;
     void mouseMove(const juce::MouseEvent& e) override;
     // mouseEnter re-applies the active tool's cursor; mouseExit clears the Split tool's hover
     // preview. See TimelineClipLaneMouse.cpp for why each needs its own hook.
@@ -670,7 +672,7 @@ private:
     // accepts its payload — see updateDragPreviewFromLastPointer (TimelineClipLaneMouse.cpp) for
     // why the group clamps together rather than dropping only the clips that would fit.
     int previewRowDelta_ = 0;
-    // Alt held at mouseDown — see mouseDown (TimelineClipLaneMouse.cpp) for the copy-drag contract.
+    // Alt held NOW (re-read every drag event) — see mouseDown (TimelineClipLaneMouse.cpp) for the copy-drag contract.
     bool copyDrag_ = false;
 
     // ---- Edit tool ----
