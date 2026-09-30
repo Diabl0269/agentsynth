@@ -62,17 +62,18 @@ void GraphEditor::syncMacroCards() {
         for (const auto& p : macro.ports)
             (p.isInput ? inputs : outputs)++;
         card->setBounds(macro.bounds.withHeight(detail::macroCardHeightFor(juce::jmax(inputs, outputs))));
-        card->setVisible(macro.collapsed);
+        // A nested macro inside a collapsed ancestor shows no card: the ancestor's card stands in for
+        // it. Its own collapsed flag is kept, so it comes back as a card when the ancestor expands.
+        card->setVisible(macro.collapsed && macros.isVisible(macro.id));
     }
 
-    // 3. A member's own ModuleComponent is hidden exactly while its macro is collapsed — kept
-    //    alive (not removed), so its position keeps tracking a card drag underneath.
+    // 3. A member's own ModuleComponent is hidden exactly while any macro in its owner chain is
+    //    collapsed — kept alive (not removed), so its position keeps tracking a card drag underneath.
     for (auto* comp : content.getModules()) {
         if (comp == nullptr)
             continue;
         const juce::String uuid = macroController_.nodeUuidFor(comp->getNodeId());
-        const auto* macro = uuid.isEmpty() ? nullptr : macros.findByMember(uuid);
-        comp->setVisible(macro == nullptr || !macro->collapsed);
+        comp->setVisible(uuid.isEmpty() || macros.outermostCollapsedAncestorOf(uuid).isEmpty());
     }
 }
 

@@ -183,6 +183,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorMacroApi.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroCards.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroHullStrips.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorMacroCableAnchors.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
     Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.h
     Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.cpp
@@ -193,6 +194,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroGroupController/MacroGroupControllerPortSplice.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerProgrammaticRouting.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerPorts.cpp
+    Source/UI/Graph/MacroGroupController/MacroNesting.h
+    Source/UI/Graph/MacroGroupController/MacroNesting.cpp
     Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
     Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp

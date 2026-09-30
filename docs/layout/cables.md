@@ -39,7 +39,23 @@ or a graph edit** — any of those can invalidate and rebuild the backing vector
 A collapsed macro re-anchors the cables crossing its boundary in a post-process pass at the end of
 `rebuildVisibleCables()` — see [macro-cards](macro-cards.md#cables-re-anchor-around-a-collapsed-macro).
 That pass runs AFTER the knob-landing pass below, so a cable that is both knob-bound and crosses a
-collapsed macro's boundary ends up re-anchored to the macro card.
+collapsed macro's boundary ends up re-anchored to the macro card. The pass lives in
+`GraphEditorMacroCableAnchors.cpp`.
+
+### Nested macros
+
+With nested macros (see [macro-cards](macro-cards.md#nested-macros); no UI creates them yet, that
+lands in a later step), every hidden node maps to its **outermost collapsed ancestor**: the collapsed
+macro with no collapsed ancestor of its own, whose card is the only one on screen for it. The usual
+rules then apply to that card:
+
+- both ends under the same card (however deep each sits) → the cable is dropped;
+- ends under two different cards → both ends anchor, each on its own card;
+- one hidden end → it anchors on that card.
+
+A port jack anchor is used only when the hidden end is a port of that outermost macro itself; a
+nested child's port hidden under the card takes the card's directional edge anchor, like any other
+interior member.
 
 `buildVisibleCables()` itself, one step further out than `rebuildVisibleCables()`'s own post-passes,
 overlays `MacroCrossingAnimator::applyTo()` on the freshly-rebuilt vector — the FRO41 cable-slide

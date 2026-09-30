@@ -97,36 +97,67 @@ int macroPortRowCountIn(GraphCanvasHost& host, const juce::String& portUuid) {
     return 1;
 }
 
+using CompByNodeUid = std::unordered_map<uint32_t, ModuleComponent*>;
+
+juce::Rectangle<int> hullBoundsIn(GraphCanvasHost& host, const CompByNodeUid& compByNodeUid, const synth::Macro& macro,
+                                  const juce::String& extraExcludedUuid);
+
+// A nested child's footprint inside its parent's hull: its own full hull while expanded, its live
+// card while collapsed (the card a drag is moving, falling back to the persisted bounds like
+// macroCableAnchorBounds does).
+juce::Rectangle<int> childFootprintIn(GraphCanvasHost& host, const CompByNodeUid& compByNodeUid,
+                                      const synth::Macro& child, const juce::String& extraExcludedUuid) {
+    if (!child.collapsed)
+        return hullBoundsIn(host, compByNodeUid, child, extraExcludedUuid);
+    for (auto* card : host.macroCards())
+        if (card != nullptr && card->getMacroId() == child.id)
+            return card->getBounds();
+    return child.bounds;
+}
+
+// The union the hull is built around: the macro's direct non-port members plus every child's
+// footprint (childFootprintIn). Port members are EXCLUDED: they dock to this hull's own edge
+// (dockMacroPortWidgets), and if they also counted toward the bounds that DEFINE the hull, docking
+// one would grow the hull, which would push it out again, forever. A child's ports are its own
+// members, not this macro's, so they only count through the child's footprint.
+juce::Rectangle<int> memberUnionIn(GraphCanvasHost& host, const CompByNodeUid& compByNodeUid, const synth::Macro& macro,
+                                   const juce::String& extraExcludedUuid) {
+    juce::Rectangle<int> hull;
+    auto add = [&hull](juce::Rectangle<int> r) {
+        if (!r.isEmpty())
+            hull = hull.isEmpty() ? r : hull.getUnion(r);
+    };
+    for (const auto& uuid : macro.members) {
+        if (macro.memberIsPort(uuid) || uuid == extraExcludedUuid)
+            continue; // a port's own fronting node, or the LEAVE test's own dragged member
+        auto it = compByNodeUid.find(resolveMemberNodeIdIn(host, uuid).uid);
+        if (it != compByNodeUid.end())
+            add(it->second->getBounds());
+    }
+    const auto& macros = host.getMacros();
+    for (const auto& childId : macros.childrenOf(macro.id))
+        if (const auto* child = macros.find(childId))
+            add(childFootprintIn(host, compByNodeUid, *child, extraExcludedUuid));
+    return hull;
+}
+
 // Shared by macroHullBounds and macroHullBoundsExcluding — the latter is the former with
 // one extra uuid left out of the union, needed because the plain hull is a LIVE union of member
 // bounds: the member being dragged OUT of it keeps inflating its own hull, so it could never test
-// as "outside" without excluding itself first (see macroDragJoinOrLeaveTarget's own comment).
+// as "outside" without excluding itself first (see macroDragJoinOrLeaveTarget's own comment). The
+// exclusion is passed down into nested children, so a member of a child is excluded too.
 juce::Rectangle<int> computeMacroHullBounds(GraphCanvasHost& host, const synth::Macro& macro,
                                             const juce::String& extraExcludedUuid) {
-    // Port members are EXCLUDED from the union: they dock to this hull's own edge
-    // (dockMacroPortWidgets), and if they also counted toward the bounds that
-    // DEFINE the hull, docking one would grow the hull, which would push it out again, forever.
-    std::set<juce::String> excludedUuids;
-    for (const auto& p : macro.ports)
-        excludedUuids.insert(p.nodeUuid);
-    if (extraExcludedUuid.isNotEmpty())
-        excludedUuids.insert(extraExcludedUuid);
-
-    std::unordered_map<uint32_t, ModuleComponent*> compByNodeUid;
+    CompByNodeUid compByNodeUid;
     for (auto* comp : host.modules())
         if (comp != nullptr)
             compByNodeUid[comp->getNodeId().uid] = comp;
+    return hullBoundsIn(host, compByNodeUid, macro, extraExcludedUuid);
+}
 
-    juce::Rectangle<int> hull;
-    for (const auto& uuid : macro.members) {
-        if (excludedUuids.count(uuid) > 0)
-            continue; // a port's own fronting node, or the LEAVE test's own dragged member
-        auto nodeId = resolveMemberNodeIdIn(host, uuid);
-        auto it = compByNodeUid.find(nodeId.uid);
-        if (it == compByNodeUid.end())
-            continue;
-        hull = hull.isEmpty() ? it->second->getBounds() : hull.getUnion(it->second->getBounds());
-    }
+juce::Rectangle<int> hullBoundsIn(GraphCanvasHost& host, const CompByNodeUid& compByNodeUid, const synth::Macro& macro,
+                                  const juce::String& extraExcludedUuid) {
+    auto hull = memberUnionIn(host, compByNodeUid, macro, extraExcludedUuid);
     if (hull.isEmpty()) {
         // A macro made ENTIRELY of ports (no ordinary member) has nothing left to union. Fall
         // back to the macro's own persisted `bounds` — the same footprint its collapsed card uses
@@ -161,8 +192,9 @@ juce::Rectangle<int> computeMacroHullBounds(GraphCanvasHost& host, const synth::
 } // namespace
 
 juce::Rectangle<int> MacroGroupController::macroHullBounds(const juce::String& macroId) const {
+    // Effective collapse: a macro inside a collapsed ancestor has no hull either, whatever its own flag says.
     const auto* macro = host_.getMacros().find(macroId);
-    if (macro == nullptr || macro->collapsed)
+    if (macro == nullptr || host_.getMacros().isEffectivelyCollapsed(macroId))
         return {};
     return computeMacroHullBounds(host_, *macro, {});
 }
@@ -170,7 +202,7 @@ juce::Rectangle<int> MacroGroupController::macroHullBounds(const juce::String& m
 juce::Rectangle<int> MacroGroupController::macroHullBoundsExcluding(const juce::String& macroId,
                                                                     const juce::String& excludedMemberUuid) const {
     const auto* macro = host_.getMacros().find(macroId);
-    if (macro == nullptr || macro->collapsed)
+    if (macro == nullptr || host_.getMacros().isEffectivelyCollapsed(macroId))
         return {};
     return computeMacroHullBounds(host_, *macro, excludedMemberUuid);
 }
@@ -206,6 +238,33 @@ MacroGroupController::macroDragJoinOrLeaveTarget(juce::AudioProcessorGraph::Node
     return {currentMacro->id, macroHullAtExcluding(canvasCentre, currentMacro->id)};
 }
 
+namespace {
+// The shared body of macroHullAt / macroChipAt / macroCollapseButtonAt: of the macros whose
+// `boundsOf` rect contains the point, the DEEPEST wins (a nested child's rect always lies inside its
+// parent's, and the innermost is what the press aimed at), then the smallest area — the more specific
+// macro — when two unrelated macros at the same depth overlap. `boundsOf` returns an empty rect for a
+// macro that is not hittable (collapsed, or hidden by a collapsed ancestor).
+template <typename BoundsOf>
+juce::String deepestMacroAt(const synth::MacroSet& macros, juce::Point<int> canvasPos, BoundsOf&& boundsOf) {
+    juce::String best;
+    int bestDepth = -1;
+    int bestArea = std::numeric_limits<int>::max();
+    for (const auto& macro : macros.getAll()) {
+        const auto bounds = boundsOf(macro);
+        if (bounds.isEmpty() || !bounds.contains(canvasPos))
+            continue;
+        const int depth = macros.depth(macro.id);
+        const int area = bounds.getWidth() * bounds.getHeight();
+        if (depth > bestDepth || (depth == bestDepth && area < bestArea)) {
+            bestDepth = depth;
+            bestArea = area;
+            best = macro.id;
+        }
+    }
+    return best;
+}
+} // namespace
+
 juce::String MacroGroupController::macroHullAt(juce::Point<int> canvasPos) const {
     return macroHullAtExcluding(canvasPos, {});
 }
@@ -214,23 +273,11 @@ juce::String MacroGroupController::macroHullAt(juce::Point<int> canvasPos) const
 // itself stays the plain hit-test click/right-click use; only the drag query needs the exclusion.
 juce::String MacroGroupController::macroHullAtExcluding(juce::Point<int> canvasPos,
                                                         const juce::String& excludedMacroId) const {
-    juce::String best;
-    int bestArea = std::numeric_limits<int>::max();
-    for (const auto& macro : host_.getMacros().getAll()) {
-        if (macro.collapsed || (excludedMacroId.isNotEmpty() && macro.id == excludedMacroId))
-            continue;
-        const auto bounds = macroHullBounds(macro.id);
-        if (bounds.isEmpty() || !bounds.contains(canvasPos))
-            continue;
-        // Smallest hull wins when hulls overlap — the more specific (smaller) macro is the one
-        // the click most plausibly aimed at.
-        const int area = bounds.getWidth() * bounds.getHeight();
-        if (area < bestArea) {
-            bestArea = area;
-            best = macro.id;
-        }
-    }
-    return best;
+    return deepestMacroAt(host_.getMacros(), canvasPos, [&](const synth::Macro& macro) {
+        if (excludedMacroId.isNotEmpty() && macro.id == excludedMacroId)
+            return juce::Rectangle<int>();
+        return macroHullBounds(macro.id);
+    });
 }
 
 juce::Rectangle<int> MacroGroupController::macroChipBounds(const juce::String& macroId) const {
@@ -251,21 +298,8 @@ juce::Rectangle<int> MacroGroupController::macroChipBounds(const juce::String& m
 }
 
 juce::String MacroGroupController::macroChipAt(juce::Point<int> canvasPos) const {
-    juce::String best;
-    int bestArea = std::numeric_limits<int>::max();
-    for (const auto& macro : host_.getMacros().getAll()) {
-        if (macro.collapsed)
-            continue;
-        const auto bounds = macroChipBounds(macro.id);
-        if (bounds.isEmpty() || !bounds.contains(canvasPos))
-            continue;
-        const int area = bounds.getWidth() * bounds.getHeight();
-        if (area < bestArea) {
-            bestArea = area;
-            best = macro.id;
-        }
-    }
-    return best;
+    return deepestMacroAt(host_.getMacros(), canvasPos,
+                          [this](const synth::Macro& macro) { return macroChipBounds(macro.id); });
 }
 
 namespace {
@@ -288,21 +322,8 @@ juce::Rectangle<int> MacroGroupController::macroCollapseButtonBounds(const juce:
 }
 
 juce::String MacroGroupController::macroCollapseButtonAt(juce::Point<int> canvasPos) const {
-    juce::String best;
-    int bestArea = std::numeric_limits<int>::max();
-    for (const auto& macro : host_.getMacros().getAll()) {
-        if (macro.collapsed)
-            continue;
-        const auto bounds = macroCollapseButtonBounds(macro.id);
-        if (bounds.isEmpty() || !bounds.contains(canvasPos))
-            continue;
-        const int area = bounds.getWidth() * bounds.getHeight();
-        if (area < bestArea) {
-            bestArea = area;
-            best = macro.id;
-        }
-    }
-    return best;
+    return deepestMacroAt(host_.getMacros(), canvasPos,
+                          [this](const synth::Macro& macro) { return macroCollapseButtonBounds(macro.id); });
 }
 
 juce::Rectangle<int> MacroGroupController::macroCableAnchorBounds(const synth::Macro& macro) const {
@@ -429,7 +450,7 @@ juce::Rectangle<int> MacroGroupController::macroHullRemoveButtonBounds(const juc
 std::optional<MacroGroupController::HullPortButtonHit>
 MacroGroupController::macroHullPortButtonAt(juce::Point<int> canvasPos, float zoom) const {
     for (const auto& macro : host_.getMacros().getAll()) {
-        if (macro.collapsed)
+        if (host_.getMacros().isEffectivelyCollapsed(macro.id))
             continue;
         for (const bool isInput : {true, false}) {
             if (macroHullAddButtonBounds(macro.id, isInput).contains(canvasPos))
@@ -493,7 +514,7 @@ void MacroGroupController::dockMacroPortWidgets() {
 
     auto& graph = host_.graph();
     for (const auto& macro : host_.getMacros().getAll()) {
-        if (macro.collapsed || macro.ports.empty())
+        if (macro.ports.empty() || host_.getMacros().isEffectivelyCollapsed(macro.id))
             continue; // hidden with the rest of its members; the collapsed CARD draws its jacks
 
         for (const auto& entry : macroHullPortLayout(macro.id)) {

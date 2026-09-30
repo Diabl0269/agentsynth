@@ -7,6 +7,7 @@
 // for why (juce::Component::SafePointer<GraphEditor> needs a genuine GraphEditor&).
 
 #include "MacroGroupController.h"
+#include "MacroNesting.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
@@ -377,13 +378,14 @@ const synth::Macro* MacroGroupController::macroForNode(juce::AudioProcessorGraph
     return host_.getMacros().findByMember(uuid);
 }
 
+// Selects the macro's members TRANSITIVELY (a nested child's members too), so a chip or card drag of
+// a parent carries everything drawn inside it.
 void MacroGroupController::selectMacro(const juce::String& macroId, bool additive) {
-    auto* m = host_.getMacros().find(macroId);
-    if (m == nullptr)
+    if (host_.getMacros().find(macroId) == nullptr)
         return;
 
     std::vector<juce::AudioProcessorGraph::NodeID> memberIds;
-    for (const auto& uuid : m->members) {
+    for (const auto& uuid : macro_nesting::orderedDescendantMembers(host_.getMacros(), macroId)) {
         auto nodeId = resolveMemberNodeId(uuid);
         if (nodeId.uid != 0)
             memberIds.push_back(nodeId);
@@ -393,12 +395,15 @@ void MacroGroupController::selectMacro(const juce::String& macroId, bool additiv
                                         : memberIds);
 }
 
+// True when the selection is exactly the set selectMacro(macroId) would make.
 bool MacroGroupController::isMacroSelected(const juce::String& macroId) const {
-    const auto* m = host_.getMacros().find(macroId);
-    if (m == nullptr || m->members.empty() || host_.getSelection().size() != (int)m->members.size())
+    if (host_.getMacros().find(macroId) == nullptr)
+        return false;
+    const auto members = host_.getMacros().descendantMembers(macroId);
+    if (members.empty() || host_.getSelection().size() != (int)members.size())
         return false;
 
-    for (const auto& uuid : m->members) {
+    for (const auto& uuid : members) {
         auto nodeId = resolveMemberNodeId(uuid);
         if (nodeId.uid == 0 || !host_.getSelection().contains(nodeId))
             return false;
@@ -420,17 +425,26 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
             portNodeUuids.insert(p.nodeUuid);
 
         juce::Rectangle<int> groupBounds;
+        auto addBounds = [&groupBounds](juce::Rectangle<int> r) {
+            if (!r.isEmpty())
+                groupBounds = groupBounds.isEmpty() ? r : groupBounds.getUnion(r);
+        };
         for (const auto& uuid : m->members) {
             if (portNodeUuids.count(uuid) > 0)
                 continue;
             auto nodeId = resolveMemberNodeId(uuid);
             for (auto* comp : host_.modules()) {
                 if (comp != nullptr && comp->getNodeId() == nodeId) {
-                    groupBounds = groupBounds.isEmpty() ? comp->getBounds() : groupBounds.getUnion(comp->getBounds());
+                    addBounds(comp->getBounds());
                     break;
                 }
             }
         }
+        // A nested child counts by its footprint (hull if open, card if collapsed), so a parent
+        // whose only content is a child still seeds its card where that child is drawn.
+        for (const auto& childId : host_.getMacros().childrenOf(macroId))
+            if (const auto* child = host_.getMacros().find(childId))
+                addBounds(child->collapsed ? macroCableAnchorBounds(*child) : macroHullBounds(childId));
         const auto origin = groupBounds.isEmpty() ? m->bounds.getTopLeft() : groupBounds.getTopLeft();
         m->bounds = juce::Rectangle<int>(origin.x, origin.y, synth::LayoutUtil::kSingleWidth, kMacroCardHeight);
     }
@@ -486,19 +500,26 @@ void MacroGroupController::setMacroColour(const juce::String& macroId, juce::Col
     host_.requestRepaint();
 }
 
+namespace {
+// Every module a macro's card lists: its transitive members in stable order, minus port nodes.
+std::vector<juce::String> previewableMembers(const synth::MacroSet& macros, const juce::String& macroId) {
+    std::vector<juce::String> out;
+    for (const auto& uuid : macro_nesting::orderedDescendantMembers(macros, macroId)) {
+        const auto* owner = macros.findByMember(uuid);
+        if (owner == nullptr || !owner->memberIsPort(uuid))
+            out.push_back(uuid);
+    }
+    return out;
+}
+} // namespace
+
+// Transitive: a parent's card previews its nested children's modules too. A member that fronts a
+// port of whichever macro directly owns it is a boundary jack, not a module, and is skipped.
 std::vector<MacroGroupController::MacroMemberPreview>
 MacroGroupController::macroMemberPreviews(const juce::String& macroId) const {
     std::vector<MacroMemberPreview> result;
-    const auto* macro = host_.getMacros().find(macroId);
-    if (macro == nullptr)
-        return result;
-
     auto& graph = host_.graph();
-    for (const auto& uuid : macro->members) {
-        // A port node is a boundary jack, not a module to preview.
-        if (macro->memberIsPort(uuid))
-            continue;
-
+    for (const auto& uuid : previewableMembers(host_.getMacros(), macroId)) {
         auto nodeId = resolveMemberNodeId(uuid);
         if (nodeId.uid == 0)
             continue;
@@ -523,16 +544,9 @@ MacroGroupController::macroMemberPreviews(const juce::String& macroId) const {
 
 juce::StringArray MacroGroupController::macroMemberNames(const juce::String& macroId) const {
     juce::StringArray names;
-    const auto* macro = host_.getMacros().find(macroId);
-    if (macro == nullptr)
-        return names;
-
     auto& graph = host_.graph();
-    for (const auto& uuid : macro->members) {
-        // Same exclusion as macroMemberPreviews above.
-        if (macro->memberIsPort(uuid))
-            continue;
-
+    // Same transitive list and port exclusion as macroMemberPreviews above.
+    for (const auto& uuid : previewableMembers(host_.getMacros(), macroId)) {
         auto nodeId = resolveMemberNodeId(uuid);
         if (nodeId.uid == 0)
             continue;

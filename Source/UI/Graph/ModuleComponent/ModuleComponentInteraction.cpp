@@ -902,13 +902,22 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     //
     // A group drag resolves as one rigid body (finalizeSelectionDrag); resolving each member
     // independently would spiral them apart and destroy the arrangement.
-    if (owner.isSelectionDragActive())
-        owner.finalizeSelectionDrag();
-    else
+    //
+    // The group finalize records graph AND macros as one step, because the drop can shift a carried
+    // nested collapsed macro's `bounds`; its "before" is the mouseDown capture, for the reason
+    // finalizeMacroMembershipDrag documents.
+    if (owner.isSelectionDragActive()) {
+        auto doFinalize = [this] { owner.finalizeSelectionDrag(); };
+        if (undoManager)
+            undoManager->recordGraphAndMacroChange(owner.getAudioEngine().getGraph(), owner.getMacros(), doFinalize,
+                                                   undoManager->takeCapturedGraphBeforeState());
+        else
+            doFinalize();
+    } else {
         owner.finalizeModuleDrag(this);
-
-    if (undoManager)
-        undoManager->pushSnapshotFromCapture(owner.getAudioEngine().getGraph());
+        if (undoManager)
+            undoManager->pushSnapshotFromCapture(owner.getAudioEngine().getGraph());
+    }
     owner.clearMacroDragCandidate();
     owner.getDragDropController().endDragPreview();
 }
