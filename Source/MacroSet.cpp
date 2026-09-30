@@ -387,7 +387,7 @@ bool MacroSet::fromVar(const juce::var& state) {
         for (const auto& memberVar : *memberArr) {
             const juce::String uuid = memberVar.toString();
             if (uuid.isEmpty() || !seenMembers.insert(uuid).second)
-                return false; // empty uuid, or claimed by more than one macro (flat model)
+                return false; // empty uuid, or claimed by more than one macro (one direct owner each)
             m.members.push_back(uuid);
         }
 

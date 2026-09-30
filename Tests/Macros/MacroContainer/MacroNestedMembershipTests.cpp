@@ -2,8 +2,8 @@
 // Editing nested macros (docs/macros/menu-and-membership.md#nested-macros): ungroup a parent promotes its
 // children, delete a parent deletes the whole subtree, the collapse toggle resolves a hidden module to its
 // outermost collapsed macro, remove-from-macro moves up one level, and a reparent drag transfers between
-// levels or leaves every level in one gesture, all through real handlers with undo and redo. Nothing in the UI
-// creates a nested macro yet, so MacroNestedTestFixture.h links two flat macros with MacroSet::setParent.
+// levels or leaves every level in one gesture, all through real handlers with undo and redo. MacroNestedTestFixture.h
+// builds the nesting through groupSelectionIntoMacro.
 
 #include "MacroDragTestHelpers.h"
 #include "MacroNestedTestFixture.h"

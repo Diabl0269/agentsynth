@@ -39,9 +39,10 @@ visible set. This is a **rendering** rule — the underlying graph edges are unt
 
 ## The macro model
 
-**The canvas is still flat.** A node in one macro cannot be grouped into a second one; `Cmd+G` refuses
-that with a status message rather than doing something ad hoc. A macro inside a macro is refused the
-same way.
+**Macros nest.** Create Macro and `Cmd+G` group whole macros, or modules inside an open macro, into a
+macro inside a macro; a selection spread across different macros is refused with a status message
+rather than doing something ad hoc. The rules are in
+[menu and membership](menu-and-membership.md#grouping-rules).
 
 **The data model already supports nesting.** `Macro::parentId` (empty = top level) links a macro to
 the one that contains it; `members` stays the *direct* members only, and every node uuid is a direct
@@ -53,9 +54,14 @@ Removing a macro re-parents its children to its own parent. `MacroSet` carries t
 `outermostCollapsedAncestorOf`, `isEffectivelyCollapsed`, `isVisible`) and `setParent`, which rejects
 cycles and unknown parents. The optional `"parent"` key is written only when set, so flat saves are
 byte-identical and older files load as top level; `fromVar` rejects a dangling or cyclic parent.
-The canvas already draws, hides, hit-tests and re-anchors cables around nested macros
+The canvas draws, hides, hit-tests and re-anchors cables around nested macros
 ([macro-cards](../layout/macro-cards.md#nested-macros)), and cables into or out of a nested member are routed through a port
-at each boundary ([auto-ports](auto-ports.md#nested-macros)); only the UI that creates them is still to come.
+at each boundary ([auto-ports](auto-ports.md#nested-macros)).
+
+**Older builds and nested saves.** An older build ignores `"parent"` and loads nested macros as flat
+ones, with one exception: a parent with children but no direct members (made by grouping two whole
+macros) saves an empty `"members"` list, which an older build rejects, and its `fromVar` is
+all-or-nothing, so it drops that file's whole macro set (the modules and cables still load).
 
 **Nodes are addressed by uuid, everywhere.** Timeline bindings, automation lanes
 (`synth::resolveLaneParameter`), the AI patch format and the undo system all address a node by its
@@ -149,8 +155,6 @@ macro from a validated node set — never a `"macros"` key the model writes dire
 
 ## Deliberate limits
 
-- **Nested macros from the UI.** Grouping still refuses already-grouped nodes with a status message, so
-  nothing in the UI creates a nested macro yet; the model and the canvas already handle one.
 - **A macro is not a saveable library item.** Snippets already cover "save this group and paste it
   again" (`SnippetManager`); a macro-as-preset is a different feature.
 - **No per-voice macro instancing.** One macro instantiated per voice is the case that would justify

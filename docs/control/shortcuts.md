@@ -377,15 +377,12 @@ save-selection-as-snippet, grouping/ungrouping/collapsing a macro, and locating 
 everything that means the same thing everywhere (copy/paste/cut/duplicate/repeat/select-all, both
 zoom pairs) is General instead, so it can route through `resolveEditSurface()`.
 
-**Cmd+G is smart (`GraphEditor::groupOrToggleSelectionMacros`)**: if the selection touches
-any macro, Cmd+G toggles those macros collapsed/expanded instead of grouping; only a selection that
-touches no macro at all gets grouped into a new one. "Group" is honoured exactly when it's a
-meaningful verb for the selection (the flat model refuses nested macros anyway), and once the
-selection is already in a macro, the key is free to carry the toggle the user reaches for instead.
-A **mixed selection** (some selected modules already in a macro, some not) toggles the touched
-macro(s) and leaves the loose modules alone — it does not fold them into the macro, and it does not
-refuse; the status bar reports how many macros were toggled and that modules outside a macro were
-left alone. Because Cmd+G now covers two verbs depending on selection state, its label/description
+**Cmd+G is smart (`MacroGroupController::groupOrToggleSelectionMacros`)**: a selection of only whole
+macros toggles them collapsed/expanded; two or more modules or whole macros at the same level (top
+level, or directly inside one open macro) are grouped into a new macro there, nesting included; any
+other selection that touches a macro toggles the touched macros and leaves modules outside a macro
+alone, reporting that in the status bar. The matrix is in
+[menu and membership](../macros/menu-and-membership.md#cmdg). Because Cmd+G now covers two verbs depending on selection state, its label/description
 is the single static string "Group / Toggle Macro", same reasoning as Cmd+Alt+G below.
 
 Cmd+Alt+G stays a separate, **always-toggle** binding

@@ -15,10 +15,10 @@ persisted selection layered on top of the multi-select system in [selection](sel
 the processor, never by `NodeID` — a `NodeID` is valid only for one loaded graph and is meaningless
 once serialised.
 
-**The model is flat.** A node already in a macro cannot be grouped into a second one, and a macro
-cannot contain another macro. `GraphEditor::groupSelectionIntoMacro()` enforces both halves by
-refusing outright via `onStatusMessage`, rather than doing something ad hoc: fewer than two selected
-nodes, or any selected node already belonging to a macro.
+**Macros nest.** `MacroGroupController::groupSelectionIntoMacro()` groups whole macros and loose
+modules that share one container into a new macro inside that container, and refuses via
+`onStatusMessage` otherwise (fewer than two units, or units in different macros) rather than doing
+something ad hoc; see [grouping rules](../macros/menu-and-membership.md#grouping-rules).
 
 The right-click "Create Macro from N Modules" item — on `ModuleComponent`'s menu and
 `GraphEditor::showCanvasContextMenu` — calls `GraphEditor::requestGroupSelectionIntoMacro()`, which
@@ -32,17 +32,12 @@ member nodes as one step — the right-click "Delete" on a collapsed card, or De
 macro's members as the whole selection.
 
 **Cmd+G does not call `groupSelectionIntoMacro()` directly.** It goes through
-`GraphEditor::groupOrToggleSelectionMacros()`, the single dispatch point shared by the command
-handler: it groups the selection into a new macro only when the selection touches no macro at all
-(via `requestGroupSelectionIntoMacro()`, same as the context-menu items); otherwise it toggles the
-touched macro or macros collapsed/expanded (`toggleSelectionMacrosCollapsed()`, the same behaviour
-as the standalone Cmd+Alt+G binding) and leaves any loose, ungrouped modules in the selection
-untouched. A mixed selection — some selected nodes already in a macro, some not — takes the toggle
-branch: the touched macros toggle, the loose modules are silently excluded from the gesture (not
-folded into the macro, not refused), and a status message names how many macros toggled and that
-modules outside a macro were left alone. That is why the nested-macro refusal above is reachable
-only via a direct `groupSelectionIntoMacro()` call — the context-menu items, or Cmd+G on a selection
-with no macro members yet.
+`MacroGroupController::groupOrToggleSelectionMacros()`, the single dispatch point shared by the command
+handler: a selection of only whole macros toggles them collapsed/expanded
+(`toggleSelectionMacrosCollapsed()`, the same behaviour as the standalone Cmd+Alt+G binding); two or
+more units under one container are grouped (via `requestGroupSelectionIntoMacro()`, same as the
+context-menu items); anything else keeps the toggle, leaving modules outside a macro alone with a
+status message. The full matrix is in [menu and membership](../macros/menu-and-membership.md#cmdg).
 
 ## Collapse and expand
 
@@ -288,10 +283,9 @@ call for the gesture.
 ## Nested macros
 
 A macro can sit inside another (`Macro::parentId`, see
-[`docs/macros/macros.md`](../macros/macros.md)). The canvas draws, hides and hit-tests nested macros
-as described here; **no UI creates one yet** (grouping still refuses already-grouped nodes), so this
-only matters for saved patches and tests until creating nested macros from the UI lands in a later step
-(ungroup, delete, collapse and drag in and out already handle them: see
+[`docs/macros/macros.md`](../macros/macros.md)). Create Macro and Cmd+G make them
+([grouping rules](../macros/menu-and-membership.md#grouping-rules)); the canvas draws, hides and
+hit-tests them as described here, and ungroup, delete, collapse and drag in and out handle them (see
 [menu and membership](../macros/menu-and-membership.md#nested-macros)). A patch with no nesting behaves exactly as before.
 
 - **A parent's hull wraps its children.** `computeMacroHullBounds` is recursive: the union is the

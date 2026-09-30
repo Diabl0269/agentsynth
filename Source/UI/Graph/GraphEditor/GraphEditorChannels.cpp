@@ -16,6 +16,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "Mixer/ChannelMacroLookup.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/ChannelStripModule.h"
@@ -122,7 +123,9 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
 
     // Boxing: only when EVERY exit source is an ORDINARY (non-port) member of the SAME macro —
     // never insert between an inner node and its outlet (a MacroOutlet source refuses), and never
-    // guess when sources span more than one macro or none at all.
+    // guess when sources span more than one macro or none at all. "The same macro" is each source's
+    // DIRECT owner on purpose (findByMember, not nearestChannelMacro): the new chain nodes join the
+    // innermost group the sources sit in, as direct members beside them.
     juce::String commonMacroId;
     bool boxable = true;
     for (const auto& sourceId : sourceNodeIds) {
@@ -365,15 +368,7 @@ std::vector<juce::String> GraphEditor::duplicateIntoChannelTargets(juce::AudioPr
         return {};
     const juce::String uuid = macroController_.nodeUuidFor(nodeId);
     if (uuid.isNotEmpty() && macros.findByMember(uuid) != nullptr)
-        return {}; // already inside a macro — not "shared from outside"
-
-    auto isChannelMacro = [&](const synth::Macro& macro) {
-        for (const auto& member : macro.members)
-            if (auto* memberNode = graph.getNodeForId(macroController_.resolveMemberNodeId(member)))
-                if (dynamic_cast<ChannelStripModule*>(memberNode->getProcessor()) != nullptr)
-                    return true;
-        return false;
-    };
+        return {}; // inside any macro, at any depth — not "shared from outside"
 
     // Every consumer, looking through a modulation attenuverter to what it modulates.
     const auto connections = graph.getConnections();
@@ -398,8 +393,9 @@ std::vector<juce::String> GraphEditor::duplicateIntoChannelTargets(juce::AudioPr
     bool feedsElsewhere = false;
     for (const auto id : consumers) {
         const juce::String consumerUuid = macroController_.nodeUuidFor(id);
-        const auto* macro = consumerUuid.isNotEmpty() ? macros.findByMember(consumerUuid) : nullptr;
-        if (macro != nullptr && isChannelMacro(*macro)) {
+        // The CHANNEL the consumer is in, which may be an ancestor of a plain group around it.
+        const auto* macro = synth::nearestChannelMacro(graph, macros, consumerUuid);
+        if (macro != nullptr && synth::isChannelMacro(*macro, graph)) {
             if (std::find(targets.begin(), targets.end(), macro->id) == targets.end())
                 targets.push_back(macro->id);
         } else {
@@ -439,14 +435,19 @@ bool GraphEditor::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId,
     const int step = synth::ui::ModuleClipboard::kOffsetStep;
     const juce::Point<int> position(static_cast<int>(original->properties.getWithDefault("x", 0)) + step,
                                     static_cast<int>(original->properties.getWithDefault("y", 0)) + step);
-    const auto added = synth::SnippetManager::insertSnippet(payload, graph, position, /*includeExtraState=*/true);
+    // The original sits in no macro (duplicateIntoChannelTargets refuses one that does) and extractSnippet only
+    // captures a macro whose every member was extracted, so this one-node payload never carries a macro.
+    std::vector<synth::Macro> payloadMacros;
+    const auto added =
+        synth::SnippetManager::insertSnippet(payload, graph, position, /*includeExtraState=*/true, &payloadMacros);
+    jassert(payloadMacros.empty());
     if (added.empty())
         return false;
     const auto copyId = added.front();
 
-    auto inThisChannel = [this, &macroId](juce::AudioProcessorGraph::NodeID id) {
-        const juce::String uuid = macroController_.nodeUuidFor(id);
-        const auto* macro = uuid.isNotEmpty() ? macros.findByMember(uuid) : nullptr;
+    // A node anywhere inside the channel, a nested group's member or port included.
+    auto inThisChannel = [this, &graph, &macroId](juce::AudioProcessorGraph::NodeID id) {
+        const auto* macro = synth::nearestChannelMacro(graph, macros, macroController_.nodeUuidFor(id));
         return macro != nullptr && macro->id == macroId;
     };
     const auto connections = graph.getConnections(); // before any rewiring below

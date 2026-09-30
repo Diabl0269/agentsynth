@@ -190,7 +190,7 @@ TEST(ChannelFlowMakeChannelCore, AlreadyChanneledOrGroupedTargetIsANoOp) {
     EXPECT_EQ(juce::JSON::toString(synth::AIStateMapper::graphToJSON(graph)), graphBefore);
     EXPECT_EQ(juce::JSON::toString(editor.getMacros().toVar()), macrosBefore);
 
-    // A node that would move but is already in a macro refuses the whole action (flat model).
+    // A node that would move but is already in a macro refuses the whole action (a channel never nests).
     synth::Macro handMade;
     handMade.name = "Hand";
     handMade.members = {nodeUuid(rig.oscB)};

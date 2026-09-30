@@ -311,11 +311,69 @@ A crossing drag reuses the incremental membership path wholesale
 the same auto-port creation and splice-out-when-interior behaviour as the menu-driven add and remove,
 with no new port logic of its own.
 
+## Grouping rules
+
+Right-click "Create Macro from N Modules" (the canvas menu and a module's own menu), Cmd+G and "Add
+Selection to Macro" all read the selection the same way, through `macro_units::resolveUnits`
+(`Source/UI/Graph/MacroGroupController/MacroSelectionUnits.h`). The selection resolves into **units**:
+
+- a **whole macro**: every module in it, nested ones included, is selected. The outermost such macro
+  is the unit, so selecting a parent's card is one unit, not one per level. Port nodes never decide
+  wholeness (they are jacks on the hull, not modules a marquee picks up); `selectMacro` does select
+  them, and they travel with their macro;
+- a **loose node**: anything else, tagged with the macro that directly contains it, or top level.
+
+Each unit has a **container**: the macro that directly contains it (for a whole macro, its parent).
+`MacroGroupController::groupSelectionIntoMacro` groups when there are **at least two units that share
+one container**, and the new macro's `parentId` is that container. So one rule covers every case:
+
+- two loose modules at top level: a top-level macro, as always;
+- two whole macros, or a whole macro and a loose module beside it: a parent macro around them (the
+  macros become its children, the loose modules its direct members);
+- two loose modules inside an open macro: a macro nested in that macro.
+
+A selected port node whose macro is not whole is dropped, never grouped. Loose nodes leave their
+container's `members` as they join the new macro, because a uuid is a direct member of exactly one
+macro (`MacroSet::fromVar` rejects a save where one is claimed twice). The auto-port crossing plan runs
+over the new macro's whole inside set (each child's modules and ports too), so a cable leaving a
+child's outlet port gets a port on the new macro as well. The whole change is one undo step, and the
+new macro is selected, collapsed, with its card at the units' top-left.
+
+**Refusals** show a status message and change nothing: fewer than two units ("Select at least two
+modules or macros to group into a macro."), or units in different containers ("Can't group: the
+selection spans different macros. ..."). A selection that reaches into a closed card can only select
+the whole card, so a refusal never depends on what is hidden.
+
+**Add Selection to Macro** uses the same units against the target macro: a loose module beside the
+macro (in the macro's own container) joins it directly, a whole macro beside it nests under it, and
+anything already inside the target is skipped. A module in no macro is accepted at any depth, because
+the Cmd-drag finalize and a library drop hand over a module they have just taken out of (or never put
+in) a macro. Anything at another level refuses the whole add.
+
+"Make Channel" does **not** nest: a chain with a module already in a macro still refuses. A channel's
+strip feeds Master directly and that edge must never be a port, so a channel macro inside another
+macro would force exactly that port on the outer one.
+
+### Cmd+G
+
+Cmd+G (`MacroGroupController::groupOrToggleSelectionMacros`) picks one verb from the units:
+
+| Selection | Cmd+G |
+|---|---|
+| Only whole macros (one or several) | Toggles them collapsed/expanded, as always |
+| Two or more units under one container | Groups them (the rules above) |
+| A single module in no macro | Grouping refuses with its status message |
+| Anything else (a single module inside an open macro, or units spread across containers) | Toggles the touched macros; modules outside a macro are left alone, with a status message |
+
+Two changes from the flat model: two loose modules inside an open macro now **group** (they used to
+collapse the macro), and a whole macro plus a loose module beside it now **nests** (it used to toggle
+the macro). To collapse an open macro with Cmd+G, select it whole (its chip, or every module in it);
+Cmd+Alt+G still always toggles.
+
 ## Nested macros
 
-A macro can sit inside another (`Macro::parentId`). The editing commands below already handle nesting;
-the UI to create a nested macro lands in a later step, so today it only arises from saved patches and
-tests. A patch with no nesting behaves exactly as before.
+A macro can sit inside another (`Macro::parentId`); [grouping](#grouping-rules) creates one. The
+editing commands below handle nesting. A patch with no nesting behaves exactly as before.
 
 - **Ungroup on a parent** splices out only the parent's own port nodes, then promotes its direct
   members and its child macros one level up (to the grandparent, or top level). The child keeps its own

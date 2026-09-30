@@ -24,6 +24,7 @@
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
+#include "UI/Graph/MacroGroupController/MacroSelectionUnits.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 // True when memberUuid's macro is a mixer channel (synth::isChannelMacro) — a
@@ -37,12 +38,13 @@ bool GraphEditor::isChannelMacroForTrack(const juce::String& memberUuid) const {
     return macro != nullptr && synth::isChannelMacro(*macro, audioEngine.getGraph());
 }
 
-// Cmd+G / right-click "Create Macro" / drag-group-into-macro's real entry point. Stays on
+// Cmd+G / right-click "Create Macro" / drag-group-into-macro's real entry point. The grouping rule
+// itself (units under one container, nesting included) and its refusal messages live in
+// MacroGroupController::groupSelectionIntoMacro. Stays on
 // GraphEditor — it shows a juce::Component::SafePointer<GraphEditor>-based async
 // modal, which needs a genuine GraphEditor&; see MacroGroupController.h's class comment. Also
 // GraphCanvasHost::requestGroupSelectionIntoMacro() — MacroGroupController::
-// groupOrToggleSelectionMacros() calls back into this through the host for a selection that
-// touches no macro yet.
+// groupOrToggleSelectionMacros() calls back into this through the host for a selection it groups.
 //
 // MacroAutoPortPreference (GraphEditor.h) rationale:
 // Tri-state, not a bool: "ask, then remember" needs a third value beyond on/off. Unset (the
@@ -93,10 +95,13 @@ void GraphEditor::requestGroupSelectionIntoMacro() {
 // user picks. Only reached from requestGroupSelectionIntoMacro() when
 // macroAutoPortModalForTest is unset — see that member's comment.
 void GraphEditor::showMacroAutoPortModal(std::function<void(bool createPorts, bool remember)> respond) {
-    // buildMacroPortCrossingPlan moved into MacroGroupController with no private forwarder (this
-    // is its only caller outside the macro files) — the one genuine host-access rewrite in this
-    // file; see the file header comment.
-    const int crossingCount = (int)macroController_.buildMacroPortCrossingPlan(selection.getSelected()).size();
+    // Counted over the would-be macro's whole inside set (a nested child's modules and ports too), the
+    // same set groupSelectionIntoMacro plans its ports from — not the raw selection, which can miss a
+    // whole child's port nodes.
+    const auto units = macro_units::unitsFor(macroController_, macros, selection.getSelected());
+    const int crossingCount =
+        (int)macroController_.buildMacroPortCrossingPlan(macro_units::insideNodeIdsFor(macroController_, macros, units))
+            .size();
 
     auto* dialog = new synth::ui::MacroAutoPortPromptDialog(crossingCount);
 

@@ -116,7 +116,7 @@ TEST(MacroWrap, RefusesFewerThanTwoSelected) {
     EXPECT_FALSE(lastMessage.isEmpty());
 }
 
-TEST(MacroWrap, RefusesNestingAnAlreadyGroupedModule) {
+TEST(MacroWrap, RefusesGroupingModulesFromDifferentContainers) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -132,11 +132,11 @@ TEST(MacroWrap, RefusesNestingAnAlreadyGroupedModule) {
     juce::String lastMessage;
     editor.onStatusMessage = [&](const juce::String& msg) { lastMessage = msg; };
 
-    editor.setSelectedNodes({b, c}); // b is already in a macro
+    editor.setSelectedNodes({b, c}); // b is one module of a macro, c is top level
     EXPECT_TRUE(editor.getMacroController().groupSelectionIntoMacro().isEmpty());
     EXPECT_FALSE(lastMessage.isEmpty());
 
-    ASSERT_EQ(editor.getMacros().size(), 1) << "nesting must be refused, not silently create a second macro";
+    ASSERT_EQ(editor.getMacros().size(), 1) << "a cross-container group must be refused, not silently made";
     auto* macro = editor.getMacros().find(firstMacroId);
     ASSERT_NE(macro, nullptr);
     EXPECT_EQ(macro->members.size(), 2u) << "the original macro must be untouched";

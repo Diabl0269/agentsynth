@@ -235,9 +235,9 @@ TEST(MacroGroupOrToggle, SelectionWhollyInsideExpandedMacroCollapsesAndCreatesNo
 }
 
 TEST(MacroGroupOrToggle, MixedSelectionTogglesTheMacroAndLeavesLooseModulesAlone) {
-    // The mixed-selection rule: one node already in a macro plus one loose node must toggle the
-    // touched macro and ignore the loose module — NOT group (the flat model has no nested
-    // macros), and NOT refuse (a no-op here reads as broken).
+    // The mixed-selection rule: one node of a macro (not the whole macro) plus one loose node must toggle
+    // the touched macro and ignore the loose module — NOT group (the two sit in different
+    // containers), and NOT refuse (a no-op here reads as broken).
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
