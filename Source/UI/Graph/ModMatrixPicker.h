@@ -35,6 +35,8 @@ public:
     void paintOverChildren(juce::Graphics& g) override;
     void lookAndFeelChanged() override;
     void parentHierarchyChanged() override;
+    // Repaints the focus outline: a call-out is its own window, so nothing else will when focus moves.
+    void focusOfChildComponentChanged(FocusChangeType) override { repaint(); }
 
     /** Closes the launching CallOutBox, if any. Called on a pick and on Escape. */
     void dismiss();

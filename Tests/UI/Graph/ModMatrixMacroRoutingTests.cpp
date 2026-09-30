@@ -40,6 +40,7 @@ TEST(ModMatrixMacroRouting, PointingARowAtAMemberEntersTheMacroThroughAnInletAnd
     ASSERT_EQ(c.macro().ports.size(), 1u);
     EXPECT_TRUE(c.macro().memberIsPort(c.macro().ports.front().nodeUuid));
 
+    EXPECT_FALSE(c.matrix().getRowSourceComboTextForTest(0).isEmpty()) << "the row's source is the inlet, still listed";
     const auto destText = c.matrix().getRowDestComboTextForTest(0);
     EXPECT_TRUE(destText.contains(c.nameOf(c.filterIn))) << destText;
     EXPECT_TRUE(destText.contains("Cutoff")) << destText;

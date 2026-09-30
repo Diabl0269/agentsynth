@@ -65,8 +65,8 @@ void edgesAround(juce::AudioProcessorGraph& graph, NodeID node, std::vector<Conn
 
 /** The real module at one end of the attenuverter's routing: the far end of its edge, looking through
  *  every macro port that routing alone uses (one edge in, one out). Invalid when the edge is absent. */
-Endpoint resolveThroughPorts(juce::AudioProcessorGraph& graph, NodeID atten, bool incoming,
-                             const std::function<bool(NodeID)>& isPort) {
+Endpoint realEndpointBehindPorts(juce::AudioProcessorGraph& graph, NodeID atten, bool incoming,
+                                 const std::function<bool(NodeID)>& isPort) {
     auto edge = attenuverterEdge(graph, atten, incoming);
     if (!edge)
         return {};
@@ -855,7 +855,7 @@ void ModMatrixComponent::ModRow::reroute(bool sourceChanged, Endpoint source, En
         // combo shows that port. Re-point from the real module behind it, so the old port goes when it
         // is no longer needed and a fresh one is minted where the new path needs it.
         const auto isPort = [editor](NodeID id) { return editor->getMacroController().nodeIsMacroPort(id); };
-        const auto kept = resolveThroughPorts(graph, attenuverterId, /*incoming=*/!sourceChanged, isPort);
+        const auto kept = realEndpointBehindPorts(graph, attenuverterId, /*incoming=*/!sourceChanged, isPort);
         if (kept.valid())
             (sourceChanged ? dest : source) = kept;
     }
