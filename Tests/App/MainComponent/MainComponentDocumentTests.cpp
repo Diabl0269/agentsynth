@@ -3,6 +3,9 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "ProjectBundle.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include <set>
 
 TEST_F(MainComponentTest, PatchNameIsDefaultOnStartup) {
     MainComponent mc(std::make_unique<MockProvider>());
@@ -170,4 +173,96 @@ TEST_F(MainComponentTest, PatchDialogStartsInTheCustomFolderWhenChosen) {
     EXPECT_EQ(mc.patchDialogDirectoryForTest(), mine);
     settings->removeValue("patchSaveMode");
     settings->removeValue("patchSaveCustomDir");
+}
+
+// An LFO inside a macro used to crash (or scramble the layout) when its project was reopened: the card's
+// constructor asked for "room" while the canvas was still being built. Saved, reopened, everything must
+// be exactly where it was.
+TEST_F(MainComponentTest, SavedProjectWithAnLfoInsideAMacroReopensAsSaved) {
+    struct Placed {
+        juce::String uuid;
+        juce::Point<int> pos;
+    };
+    const auto snapshot = [](MainComponent& c) {
+        std::vector<Placed> out;
+        for (auto* node : c.getAudioEngine().getGraph().getNodes())
+            out.push_back(
+                {node->properties["uuid"].toString(),
+                 {(int)node->properties.getWithDefault("x", -1), (int)node->properties.getWithDefault("y", -1)}});
+        return out;
+    };
+
+    const auto bundleDir = tempRoot.getChildFile("LfoInMacro.agsproj");
+    std::vector<Placed> saved;
+    juce::String macroId;
+    size_t nodeCount = 0;
+    int cardCount = 0;
+    {
+        MainComponent mc(std::make_unique<MockProvider>());
+        mc.setSize(1600, 900);
+        mc.getAudioEngine().suspendDeviceCallback();
+        auto& editor = mc.getGraphEditor();
+        auto& graph = mc.getAudioEngine().getGraph();
+
+        std::set<juce::AudioProcessorGraph::NodeID> before;
+        for (auto* n : graph.getNodes())
+            before.insert(n->nodeID);
+        // The LFO goes in last: nodes load in creation order, so its card is built after its siblings' exist.
+        editor.addModuleAtCanvasPosition("Oscillator", {1440, 1040}, {});
+        editor.addModuleAtCanvasPosition("Oscillator", {1700, 1000}, {});
+        editor.addModuleAtCanvasPosition("LFO", {1400, 1000}, {});
+        std::vector<juce::AudioProcessorGraph::NodeID> added;
+        for (auto* n : graph.getNodes())
+            if (before.count(n->nodeID) == 0)
+                added.push_back(n->nodeID);
+        ASSERT_EQ(added.size(), 3u);
+
+        editor.setSelectedNodes({added[0], added[2]}); // first oscillator + the LFO
+        macroId = editor.getMacroController().groupSelectionIntoMacro();
+        ASSERT_FALSE(macroId.isEmpty());
+        editor.getMacroController().setMacroCollapsed(macroId, false);
+
+        // Park the loose oscillator on the hull's edge (a saved layout can hold such an overlap), so a stray
+        // "make room" pass during the reload has something to push.
+        const auto hull = editor.getMacroController().macroHullBounds(macroId);
+        for (auto* comp : editor.getModuleComponents())
+            if (comp != nullptr && comp->getNodeId() == added[1]) {
+                comp->setTopLeftPosition(hull.getRight() - 20, hull.getY() + 8);
+                graph.getNodeForId(added[1])->properties.set("x", comp->getX());
+                graph.getNodeForId(added[1])->properties.set("y", comp->getY());
+            }
+
+        saved = snapshot(mc);
+        nodeCount = saved.size();
+        cardCount = editor.getModuleComponents().size();
+        mc.saveProjectForTest(bundleDir);
+        ASSERT_TRUE(synth::ProjectBundle::isBundle(bundleDir));
+        editor.detachAllModuleComponents();
+    }
+
+    MainComponent reloaded(std::make_unique<MockProvider>());
+    reloaded.setSize(1600, 900);
+    reloaded.getAudioEngine().suspendDeviceCallback();
+    ASSERT_TRUE(reloaded.openProjectForTest(bundleDir));
+
+    auto& editor = reloaded.getGraphEditor();
+    const auto* macro = editor.getMacros().getAll().empty() ? nullptr : &editor.getMacros().getAll().front();
+    ASSERT_NE(macro, nullptr);
+    EXPECT_EQ(macro->members.size(), 2u);
+    EXPECT_EQ(reloaded.getAudioEngine().getGraph().getNodes().size(), (int)nodeCount);
+
+    for (auto* node : reloaded.getAudioEngine().getGraph().getNodes()) {
+        int cards = 0;
+        for (auto* comp : editor.getModuleComponents())
+            if (comp != nullptr && comp->getNodeId() == node->nodeID) {
+                ++cards;
+                const auto uuid = node->properties["uuid"].toString();
+                for (const auto& p : saved)
+                    if (p.uuid == uuid)
+                        EXPECT_EQ(comp->getPosition(), p.pos) << "card moved by the reload: " << uuid;
+            }
+        EXPECT_LE(cards, 1);
+    }
+    EXPECT_EQ(editor.getModuleComponents().size(), cardCount);
+    editor.detachAllModuleComponents();
 }

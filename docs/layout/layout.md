@@ -102,6 +102,10 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   neighbours back with the macro. Positions are written at once, so hulls, port strips and cables
   are correct immediately.
 - **Shrinking.** Collapsing a macro or removing a port never pulls neighbours back.
+- **Loading never pushes.** A card that is still being constructed (opening a project, undo, paste)
+  has not "grown": its saved position is authoritative and no neighbour moves for it. Only a card
+  already on the canvas that changes size makes room. `updateComponents()` is not re-entrant, so
+  anything that runs while it builds cards must not call it back.
 - **No glide yet.** Neighbours land in their new place at once; there is no animated slide.
 
 ## Auto-arrange

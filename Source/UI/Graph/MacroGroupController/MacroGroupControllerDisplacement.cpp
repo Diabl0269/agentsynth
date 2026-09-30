@@ -140,7 +140,11 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey) {
     }
 
     if (movedAny) {
-        host_.updateComponents(); // re-docks port widgets, re-syncs cards, drops the cable memo
-        host_.requestRepaint();
+        // Only geometry changed (no node appeared or vanished), so refresh what depends on it rather than
+        // running a full component reconcile: re-sync the macro cards, re-dock the port widgets, and
+        // repaintCanvas() drops the cable memo before repainting.
+        host_.syncMacroCards();
+        dockMacroPortWidgets();
+        host_.repaintCanvas();
     }
 }

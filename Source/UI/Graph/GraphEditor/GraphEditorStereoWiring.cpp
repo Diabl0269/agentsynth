@@ -511,6 +511,18 @@ void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
     if (moduleComp == nullptr || moduleComp->getModule() == nullptr)
         return;
 
+    // A card that is still being constructed (updateComponents() adds it to the canvas only after its
+    // constructor returns) has not "grown", and its saved position must survive a load or undo: making room
+    // for it would push neighbours around on geometry that is not final yet.
+    bool onCanvas = false;
+    for (auto* comp : content.getModules())
+        if (comp == moduleComp) {
+            onCanvas = true;
+            break;
+        }
+    if (!onCanvas)
+        return;
+
     auto& graph = audioEngine.getGraph();
     const auto nodeId = moduleComp->getNodeId();
     if (graph.getNodeForId(nodeId) == nullptr)

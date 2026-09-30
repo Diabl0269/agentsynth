@@ -42,6 +42,15 @@ void GraphEditor::detachAllModuleComponents() {
 }
 
 void GraphEditor::updateComponents() {
+    // Not re-entrant: a card constructed below is not in `modules` until this pass adds it, so a nested pass
+    // would not see it and would build a second card for the same node, and so on without end. Nothing may
+    // call back into here while cards are being built.
+    if (updatingComponents) {
+        jassertfalse;
+        return;
+    }
+    const juce::ScopedValueSetter<bool> reentrancyGuard(updatingComponents, true);
+
     auto& graph = audioEngine.getGraph();
     auto& modules = content.getModules();
 

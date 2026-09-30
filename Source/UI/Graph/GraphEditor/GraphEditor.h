@@ -758,7 +758,8 @@ private:
     std::vector<VisibleCable> rebuildVisibleCables();
     std::vector<VisibleCable> cablesCache;
     bool cablesCacheValid = false;
-    int cableRebuildCount = 0; // test seam, see docs/layout/animation.md#the-paint-count-pattern
+    bool updatingComponents = false; // guards updateComponents() against re-entry
+    int cableRebuildCount = 0;       // test seam, see docs/layout/animation.md#the-paint-count-pattern
     void repaintCanvas() override;
 
     // ---- Knob-anchored cables + hover correlation (GraphEditorModHover.cpp) ----
