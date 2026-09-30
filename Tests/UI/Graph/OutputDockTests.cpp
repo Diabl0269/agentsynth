@@ -11,12 +11,15 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Mixer/MasterSplice.h"
+#include "Modules/AttenuverterModule.h"
 #include "Modules/OscillatorModule.h"
+#include "OutputDockTestHelpers.h"
 #include "ProjectBundle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
+#include <set>
 
 using NodeID = juce::AudioProcessorGraph::NodeID;
 namespace LU = synth::LayoutUtil;
@@ -301,5 +304,61 @@ TEST_F(OutputDockMainTest, LoadingAProjectDerivesTheDockWithoutAnUndoStep) {
     EXPECT_EQ(mc.getUndoManager().getEditSerial(), serialBefore);
     EXPECT_FALSE(mc.getUndoManager().canUndo());
     EXPECT_FALSE(mc.isProjectDirty());
+    root.deleteRecursively();
+}
+
+// An LFO inside a macro plus the dock: reopening rebuilds every card exactly once (updateComponents is not
+// re-entrant, and the load-time reflow must not trigger a nested rebuild), and the dock sits where the pure rule says.
+TEST_F(OutputDockMainTest, ReopeningAProjectWithAnLfoInAMacroAndADockBuildsOneCardPerNode) {
+    const auto root = synth::userSettingsRootDirectory().getChildFile("agentsynth-outputdock-lfo-tests");
+    root.deleteRecursively();
+    root.createDirectory();
+    const auto bundleDir = root.getChildFile("LfoDock" + juce::String(synth::ProjectBundle::kBundleExtension));
+    {
+        MainComponent mc(std::make_unique<MockProviderCFT>());
+        mc.setSize(1600, 900);
+        mc.getAudioEngine().suspendDeviceCallback();
+        auto& editor = mc.getGraphEditor();
+        auto& graph = mc.getAudioEngine().getGraph();
+        std::set<NodeID> before;
+        for (auto* n : graph.getNodes())
+            before.insert(n->nodeID);
+        editor.addModuleAtCanvasPosition("Oscillator", {1440, 1040}, {});
+        editor.addModuleAtCanvasPosition("LFO", {1400, 1000}, {});
+        std::vector<NodeID> added;
+        for (auto* n : graph.getNodes())
+            if (before.count(n->nodeID) == 0)
+                added.push_back(n->nodeID);
+        ASSERT_EQ(added.size(), 2u);
+        editor.setSelectedNodes(added);
+        const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
+        ASSERT_FALSE(macroId.isEmpty());
+        editor.getMacroController().setMacroCollapsed(macroId, false);
+        ASSERT_FALSE(synth::outputDockNodes(graph).empty());
+        mc.saveProjectForTest(bundleDir);
+        ASSERT_TRUE(synth::ProjectBundle::isBundle(bundleDir));
+        editor.detachAllModuleComponents();
+    }
+
+    MainComponent reloaded(std::make_unique<MockProviderCFT>());
+    reloaded.setSize(1600, 900);
+    reloaded.getAudioEngine().suspendDeviceCallback();
+    ASSERT_TRUE(reloaded.openProjectForTest(bundleDir));
+
+    auto& editor = reloaded.getGraphEditor();
+    auto& graph = reloaded.getAudioEngine().getGraph();
+    for (auto* node : graph.getNodes()) {
+        int cards = 0;
+        for (auto* comp : editor.getModuleComponents())
+            if (comp != nullptr && comp->getNodeId() == node->nodeID)
+                ++cards;
+        // A hidden modulation Attenuverter never gets a card.
+        EXPECT_EQ(cards, dynamic_cast<AttenuverterModule*>(node->getProcessor()) != nullptr ? 0 : 1)
+            << node->getProcessor()->getName();
+    }
+
+    // The dock sits where computeOutputDock puts it for everything else on the canvas.
+    for (const auto& [uid, expected] : outputdock_test::expectedDockPositions(editor, graph))
+        EXPECT_EQ(compFor(editor, NodeID(uid))->getPosition(), expected);
     root.deleteRecursively();
 }
