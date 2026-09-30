@@ -712,6 +712,17 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
              m.showBottomDockTab(synth::ui::BottomDockComponent::Tab::MidiRemote);
              return true;
          }},
+        // A no-op (that still consumes the key) when the active tab has no side pane.
+        {AppCommands::toggleSidePane,
+         "Show/Hide Side Pane",
+         "Show or hide the side pane of the active bottom-panel tab",
+         "View",
+         "toggleSidePane",
+         {},
+         [](MainComponent& m) {
+             m.toggleActiveSidePane();
+             return true;
+         }},
     };
 }
 

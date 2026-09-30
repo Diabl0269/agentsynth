@@ -9,6 +9,7 @@ namespace synth {
 class TimelineDoc;          // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
 class MacroSet;             // Forward declaration (Source/MacroSet.h)
 class MidiRemoteProjectDoc; // Forward declaration (Source/MidiRemote/RemoteModel.h)
+class MixerViewDoc;         // Forward declaration (Source/Mixer/MixerViewDoc.h)
 } // namespace synth
 
 /**
@@ -149,6 +150,10 @@ public:
      */
     bool recordMidiRemoteChange(synth::MidiRemoteProjectDoc& doc, const juce::var& beforeJson,
                                 const juce::var& afterJson, std::function<void()> postRestore = {});
+
+    /** One undo step for a mixer pin/hide edit, from before/after `toVar()` snapshots; `doc` must outlive the step. */
+    bool recordMixerViewChange(synth::MixerViewDoc& doc, const juce::var& beforeJson, const juce::var& afterJson,
+                               std::function<void()> postRestore = {});
 
     /** Records a mixer-pan-law change as an undoable step, same firstPerform convention as
      *  recordParameterChange -- see the .cpp definition and docs/mixer/mixer.md#pan-law. */

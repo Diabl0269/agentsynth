@@ -99,6 +99,8 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     // mixer_.refreshLiveMixerVisuals(). Safe unconditionally: refreshLiveVisualsIfOpen() is a no-op
     // while the mirror is closed.
     mixer_.onLiveMixerStateChanged = [this] { mixerMirror_.refreshLiveVisualsIfOpen(); };
+    // A pin / hide edit (or its undo) rebuilds the docked mixer and, if open, the mirror.
+    mixer_.onMixerViewChanged = [this] { rebuildMixer(); };
 
     // Last, so the top few pixels always belong to the resize gesture whatever tab is showing. The
     // dock is the handle's owner, so the desired height it reports is already the TOTAL dock height.
@@ -600,6 +602,10 @@ void BottomDockComponent::cancelTabDrag() {
     reorder_.abort();
     startReorderFramesIfNeeded();
     onReorderFrame();
+}
+
+bool BottomDockComponent::toggleActiveSidePane(bool forceOpen) {
+    return activeTab_ == Tab::Mixer && mixer_.toggleSidePane(forceOpen);
 }
 
 bool BottomDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID stripId) {

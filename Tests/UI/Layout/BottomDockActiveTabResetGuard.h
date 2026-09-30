@@ -67,6 +67,10 @@ struct BottomDockActiveTabResetGuardMDT {
             // A drag-reorder test's own tab order must not leak into a later test's
             // "default order" assumption, same reasoning as bottomDockActiveTab above.
             s->removeValue("bottomDockTabOrder");
+            // A side-pane test's open state / width must not leak into a later test's "open at 200 px"
+            // default (the pane changes how much width the mixer columns get).
+            s->removeValue("sidePaneOpen.mixer");
+            s->removeValue("sidePaneWidth.mixer");
             s->saveIfNeeded();
         }
     }

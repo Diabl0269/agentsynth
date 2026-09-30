@@ -37,6 +37,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/layout/smart-connections.md`](layout/smart-connections.md) — cables suggested while dragging, Ctrl to insert in series, double-click a port to disconnect
 - [`docs/layout/minimap.md`](layout/minimap.md) — the graph overview overlay
 - [`docs/layout/rendering.md`](layout/rendering.md) — repaint discipline: the zoom-frozen card cache, the one canvas invalidation seam, gated timers
+- [`docs/layout/side-pane.md`](layout/side-pane.md) — the reusable left side pane of a bottom-panel tab: `SidePane`, its toggle button, per-tab persisted width and open state, the 160/110 ms tween and the Cmd+Shift+B shortcut
 - [`docs/layout/animation.md`](layout/animation.md) — `AnimationDriver`, `PanelSlide`, what moves, and the time-bounded animation rule with its two exceptions
 - [`docs/layout/visualizers.md`](layout/visualizers.md) — in-card signal displays and editors (frequency response, EQ curve, scope, threshold meter, wavetable, curve editor)
 - [`docs/layout/theming.md`](layout/theming.md) — the token reference (colours, metrics, typography, treatment), the font limitation, reload, themed widgets

@@ -54,6 +54,7 @@ enum class PatchValidationError {
     MidiRemoteNotAllowed,
     InternalModuleNotAllowed,
     MixerPanLawNotAllowed,
+    MixerViewNotAllowed,
 };
 
 /**

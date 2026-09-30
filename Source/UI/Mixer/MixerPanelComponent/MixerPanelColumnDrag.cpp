@@ -43,8 +43,9 @@ float MixerPanelComponent::pointerXInContent(const juce::MouseEvent& e) {
     return e.getEventRelativeTo(&content_).position.x;
 }
 
-// Slots are the static column positions (index times pitch), not the columns' current bounds, so a
-// press during an earlier drop's settle still starts from the true layout.
+// Slots are the static column positions (index within the scrolling group times pitch), not the columns'
+// current bounds, so a press during an earlier drop's settle still starts from the true layout. Only
+// track-fed strips in the scrolling group take part; a pinned column is not reorderable.
 void MixerPanelComponent::beginColumnDrag(const juce::String& uuid, const juce::MouseEvent& e) {
     columnFrames_.stop();
     columnCancelKey_.disarm();
@@ -55,16 +56,15 @@ void MixerPanelComponent::beginColumnDrag(const juce::String& uuid, const juce::
     reorderFirstTracks_.clear();
     std::vector<ReorderDragAnimator::Slot> slots;
     int pressedKey = -1;
-    for (size_t i = 0; i < stripColumns_.size() && i < columnEntries_.size(); ++i) {
-        const auto& entry = columnEntries_[i];
-        if (entry.feedingTracks.empty())
+    for (const auto& entry : columnEntries_) {
+        if (entry.kind != ColumnEntry::Kind::Strip || entry.zone != synth::MixerZone::Scrolling ||
+            entry.feedingTracks.empty())
             continue;
         if (entry.uuid == uuid)
             pressedKey = static_cast<int>(reorderUuids_.size());
         reorderUuids_.push_back(entry.uuid);
         reorderFirstTracks_.push_back(entry.feedingTracks.front());
-        slots.push_back(
-            {static_cast<float>(static_cast<int>(i) * kColumnPitch), static_cast<float>(kMixerColumnWidth)});
+        slots.push_back({static_cast<float>(entry.zoneIndex * kColumnPitch), static_cast<float>(kMixerColumnWidth)});
     }
     if (pressedKey < 0)
         return;
@@ -159,23 +159,24 @@ void MixerPanelComponent::commitColumnDrag() {
             onMoveTrack(reorderFirstTracks_[static_cast<size_t>(dragged)], static_cast<int>(anchor - tracks.begin()));
     }
 
-    bool inNewOrder = newOrder.size() <= columnEntries_.size();
-    for (size_t i = 0; inNewOrder && i < newOrder.size(); ++i)
-        inNewOrder = columnEntries_[i].uuid == newOrder[i];
-    if (!inNewOrder)
+    std::vector<juce::String> laidOut;
+    for (const auto& entry : columnEntries_)
+        if (entry.kind == ColumnEntry::Kind::Strip && entry.zone == synth::MixerZone::Scrolling &&
+            !entry.feedingTracks.empty())
+            laidOut.push_back(entry.uuid);
+    if (laidOut != newOrder)
         rebuild();
 
     std::vector<float> finalStarts;
     for (const auto& uuid : reorderUuids_) {
-        int index = -1;
-        for (size_t i = 0; i < stripColumns_.size() && i < columnEntries_.size(); ++i)
-            if (columnEntries_[i].uuid == uuid)
-                index = static_cast<int>(i);
-        if (index < 0) { // the strip vanished under the drop
+        const auto entry = std::find_if(columnEntries_.begin(), columnEntries_.end(), [&](const ColumnEntry& e) {
+            return e.kind == ColumnEntry::Kind::Strip && e.zone == synth::MixerZone::Scrolling && e.uuid == uuid;
+        });
+        if (entry == columnEntries_.end()) { // the strip vanished under the drop
             columnReorder_.cancel();
             break;
         }
-        finalStarts.push_back(static_cast<float>(index * kColumnPitch));
+        finalStarts.push_back(static_cast<float>(entry->zoneIndex * kColumnPitch));
     }
     if (finalStarts.size() == reorderUuids_.size())
         columnReorder_.release(finalStarts);
@@ -227,9 +228,9 @@ void MixerPanelComponent::discardColumnDrag() {
     columnDragCancelled_ = false;
 }
 
-// Track strips take their x from the animator while a reorder is in flight (the dragged one from
-// its lifted position); everything else sits at its static slot. Strips are matched to animator keys
-// by uuid, so this stays right across the rebuild a drop causes.
+// Track strips in the scrolling group take their x from the animator while a reorder is in flight (the
+// dragged one from its lifted position); everything else sits at its static slot in its zone. Strips are
+// matched to animator keys by uuid, so this stays right across the rebuild a drop causes.
 void MixerPanelComponent::placeColumns(int columnHeight, bool relayout) {
     const bool reordering = columnReorder_.isReordering();
     auto placeAt = [columnHeight, relayout](juce::Component& column, int x) {
@@ -240,27 +241,29 @@ void MixerPanelComponent::placeColumns(int columnHeight, bool relayout) {
             column.resized();
     };
 
-    int index = 0;
-    for (size_t i = 0; i < stripColumns_.size(); ++i, ++index) {
-        int x = index * kColumnPitch;
+    for (const auto& entry : columnEntries_) {
+        if (entry.component == nullptr)
+            continue;
+        int x = entry.zoneIndex * kColumnPitch;
         float lift = 0.0f;
         const int key =
-            reordering && i < columnEntries_.size() ? indexOfUuid(reorderUuids_, columnEntries_[i].uuid) : -1;
+            reordering && entry.kind == ColumnEntry::Kind::Strip && entry.zone == synth::MixerZone::Scrolling
+                ? indexOfUuid(reorderUuids_, entry.uuid)
+                : -1;
         if (key >= 0) {
             const bool isDragged = key == columnReorder_.getDraggedKey();
             x = static_cast<int>(
                 std::lround(isDragged ? columnReorder_.getDraggedStart() : columnReorder_.getLayoutStart(key)));
             lift = isDragged ? columnReorder_.getLift() : 0.0f;
         }
-        placeAt(*stripColumns_[i], x);
-        stripColumns_[i]->setLift(lift);
-        if (lift > 0.0f)
-            stripColumns_[i]->toFront(false);
+        placeAt(*entry.component, x);
+        if (entry.kind == ColumnEntry::Kind::Strip) {
+            auto& strip = *static_cast<MixerColumnComponent*>(entry.component);
+            strip.setLift(lift);
+            if (lift > 0.0f)
+                strip.toFront(false);
+        }
     }
-    if (directColumn_ != nullptr && directColumn_->isVisible())
-        placeAt(*directColumn_, index++ * kColumnPitch);
-    if (masterColumn_ != nullptr && masterColumn_->isVisible())
-        placeAt(*masterColumn_, index++ * kColumnPitch);
 }
 
 // Drawn under the columns (content_'s own paint): the dashed marker of the gap the dragged column
@@ -285,10 +288,10 @@ void MixerPanelComponent::paintColumnDragChrome(juce::Graphics& g) {
     g.fillPath(dashed);
 
     const float lift = columnReorder_.getLift();
-    for (size_t i = 0; i < stripColumns_.size() && i < columnEntries_.size(); ++i) {
-        if (columnEntries_[i].uuid != liftedUuid_)
+    for (const auto& entry : columnEntries_) {
+        if (entry.kind != ColumnEntry::Kind::Strip || entry.uuid != liftedUuid_)
             continue;
-        const auto bounds = stripColumns_[i]->getBounds().toFloat();
+        const auto bounds = entry.component->getBounds().toFloat();
         for (int layer = kShadowLayers; layer >= 1; --layer) {
             g.setColour(
                 juce::Colours::black.withAlpha(0.05f * juce::jlimit(0.0f, 1.0f, theme.treatment.shadow) * lift));

@@ -83,6 +83,34 @@ TEST_F(ShortcutHintMainWindowTest, OpenDockLabelsTheToolbarAndEveryDockTab) {
     EXPECT_FALSE(overlay->areHintsShowing());
 }
 
+TEST_F(ShortcutHintMainWindowTest, TheMixerTabLabelsItsSidePaneButtonWithTheToggleShortcut) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.newPatchForTest();
+    setDockOpen(mc, true);
+    mc.getBottomDock().setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer);
+
+    auto* overlay = findOverlay(mc);
+    ASSERT_NE(overlay, nullptr);
+    double now = 0.0;
+    overlay->setClockForTest([&] { return now; });
+    holdCmd(*overlay, now);
+    ASSERT_TRUE(overlay->areHintsShowing());
+
+    auto& button = mc.getBottomDock().getMixerPanel().getSidePaneButton();
+    ASSERT_TRUE(button.isVisible());
+    const auto buttonBounds = overlay->getLocalArea(&button, button.getLocalBounds());
+    // A toolbar-style bubble sits beside its button rather than inside it: the one carrying the toggle's
+    // key and centred over the button is the button's own.
+    bool labelled = false;
+    for (const auto& e : overlay->getEntries())
+        if (!e.isPill && e.keyText == keyText(mc, "toggleSidePane") &&
+            std::abs(e.bounds.getCentreX() - buttonBounds.getCentreX()) <= buttonBounds.getWidth())
+            labelled = true;
+    EXPECT_TRUE(labelled);
+    overlay->modifierKeysChanged(juce::ModifierKeys());
+}
+
 TEST_F(ShortcutHintMainWindowTest, HiddenDockShowsTheTabsAsPillsAndOmitsADetachedTab) {
     MainComponent mc(std::make_unique<MockProvider>());
     mc.setSize(1600, 900);

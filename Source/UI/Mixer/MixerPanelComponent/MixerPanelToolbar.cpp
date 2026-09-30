@@ -32,6 +32,7 @@ MixerPanelToolbar::MixerPanelToolbar() {
         };
         addAndMakeVisible(toggle);
     }
+    addAndMakeVisible(paneButton_);
     for (auto* button : {&resetMetersButton_, &addBusButton_}) {
         button->setClickingTogglesState(false);
         button->setWantsKeyboardFocus(false);
@@ -52,6 +53,11 @@ void MixerPanelToolbar::setLayout(MixerSectionLayout& layout) {
     refresh();
 }
 
+void MixerPanelToolbar::bindSidePane(SidePane& pane) {
+    paneButton_.bind(&pane);
+    resized();
+}
+
 void MixerPanelToolbar::refresh() {
     for (size_t i = 0; i < toggles_.size(); ++i) {
         const bool hidden = layout_ != nullptr && layout_->isHidden(sectionAt(i));
@@ -62,6 +68,10 @@ void MixerPanelToolbar::refresh() {
 
 void MixerPanelToolbar::resized() {
     auto area = getLocalBounds().withTrimmedBottom(1).reduced(kSideInset, 0);
+    if (paneButton_.isVisible()) {
+        paneButton_.setBounds(area.removeFromLeft(SidePaneToggleButton::kWidth));
+        area.removeFromLeft(kToggleGap * 2);
+    }
     for (size_t i = 0; i < toggles_.size(); ++i) {
         toggles_[i].setBounds(area.removeFromLeft(kToggleWidths[i]));
         area.removeFromLeft(kToggleGap);

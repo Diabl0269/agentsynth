@@ -225,6 +225,7 @@ add_library(Core STATIC
     Source/AudioEngine/SidechainConnections.h
     Source/AppUndoManager.cpp
     Source/AppUndoManager.h
+    Source/AppUndoManagerMixerView.cpp
     Source/AutomationLaunch.cpp
     Source/AutomationLaunch.h
     Source/Branding.h
@@ -298,6 +299,8 @@ add_library(Core STATIC
     Source/Mixer/SoloAudibleSet.h
     Source/Mixer/SoloAudibleSet.cpp
     Source/Mixer/PeakMeterLatch.h
+    Source/Mixer/MixerViewDoc.h
+    Source/Mixer/MixerViewDoc.cpp
     Source/Mixer/MixerModel/MixerModel.h
     Source/Mixer/MixerModel/MixerModelInternal.h
     Source/Mixer/MixerModel/MixerModelColumns.cpp

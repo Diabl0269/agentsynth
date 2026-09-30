@@ -67,6 +67,8 @@ public:
 
     MixerInsertList& getInsertListForTest() noexcept { return insertList_; }
     MixerColumnHeader& getHeaderForTest() noexcept { return header_; }
+    /** Sets the callback for a right-click on the header (the pin menu). */
+    void setHeaderContextMenu(std::function<void(const juce::MouseEvent&)> callback);
     MixerSectionViewport& getInsertViewportForTest() noexcept { return insertViewport_; }
 
     /** The panel's shared section layout; must outlive this column. Unset, the column uses its own. */

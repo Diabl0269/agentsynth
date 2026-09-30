@@ -386,6 +386,10 @@ public:
         // migrateBottomPanelToggleKeys()), since only that one collides with the new
         // toggleBottomPanel default.
         bindings["toggleMidiRemotePanel"] = juce::KeyPress('3', juce::ModifierKeys::commandModifier, 0);
+        // Cmd+Shift+B -- show or hide the active bottom-panel tab's side pane. Plain Cmd+B is the library
+        // sidebar; the Shift chord is free on every platform.
+        bindings["toggleSidePane"] =
+            juce::KeyPress('b', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     }
 
     void addGraphDefaultBindings() {
@@ -730,6 +734,7 @@ private:
             {"toggleTimelinePanel", ShortcutCategory::General},
             {"toggleMixerPanel", ShortcutCategory::General},
             {"toggleMidiRemotePanel", ShortcutCategory::General},
+            {"toggleSidePane", ShortcutCategory::General},
             {"selectAllModules", ShortcutCategory::General},
             {"copySelection", ShortcutCategory::General},
             {"pasteSelection", ShortcutCategory::General},

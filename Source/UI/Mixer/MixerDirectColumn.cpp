@@ -8,6 +8,10 @@
 
 namespace synth::ui {
 
+void MixerDirectColumn::setHeaderContextMenu(std::function<void(const juce::MouseEvent&)> callback) {
+    header_.onContextMenu = std::move(callback);
+}
+
 MixerDirectColumn::MixerDirectColumn() {
     // grabAccessibilityFocus() grabs focus on `this` (Direct has no fader to
     // target) -- without a title, its default unspecified-role AccessibilityHandler reads nothing.

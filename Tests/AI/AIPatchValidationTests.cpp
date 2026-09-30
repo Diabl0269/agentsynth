@@ -224,6 +224,9 @@ std::vector<Case> makeCases() {
 
         {PatchValidationError::MixerPanLawNotAllowed, "patch carries a root 'mixerPanLaw' key",
          [] { return juce::JSON::parse(R"({"nodes":[],"connections":[],"mixerPanLaw":"compensated"})"); }},
+
+        {PatchValidationError::MixerViewNotAllowed, "patch carries a root 'mixerView' key",
+         [] { return juce::JSON::parse(R"({"nodes":[],"connections":[],"mixerView":{"zones":{},"hidden":[]}})"); }},
     };
 }
 

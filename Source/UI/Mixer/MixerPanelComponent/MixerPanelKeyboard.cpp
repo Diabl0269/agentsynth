@@ -198,8 +198,7 @@ void MixerPanelComponent::revealFocusedColumn() {
     if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size())
         return;
     // Same viewport math revealColumn() uses for the channel-chip reveal.
-    if (auto* comp = columnEntries_[(size_t)focusedColumnIndex_].component)
-        viewport_.setViewPosition(comp->getX(), 0);
+    scrollToColumn(columnEntries_[(size_t)focusedColumnIndex_]);
 }
 
 void MixerPanelComponent::paintOverChildren(juce::Graphics& g) {

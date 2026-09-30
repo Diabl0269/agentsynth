@@ -81,6 +81,12 @@ PatchValidationResult checkReservedKeysNotAllowed(const juce::DynamicObject* roo
                 "app-authored per-project setting, not accepted from a patch suggestion. Remove it and resend "
                 "only nodes, connections and modulations."};
 
+    if (rootObj->hasProperty("mixerView"))
+        return {false, PatchValidationError::MixerViewNotAllowed,
+                "Patch suggestions must not contain a \"mixerView\" property - which mixer channels are pinned or "
+                "hidden is app-authored project data, not accepted from a patch suggestion. Remove it and resend "
+                "only nodes, connections and modulations."};
+
     return {};
 }
 
@@ -162,6 +168,8 @@ juce::String patchValidationErrorName(PatchValidationError error) {
         return "InternalModuleNotAllowed";
     case PatchValidationError::MixerPanLawNotAllowed:
         return "MixerPanLawNotAllowed";
+    case PatchValidationError::MixerViewNotAllowed:
+        return "MixerViewNotAllowed";
     }
     return "Unknown";
 }

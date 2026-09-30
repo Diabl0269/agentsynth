@@ -436,6 +436,10 @@ void MixerColumnComponent::setReorderHooks(MixerColumnHeader::ReorderHooks hooks
     header_.reorderHooks = std::move(hooks);
 }
 
+void MixerColumnComponent::setHeaderContextMenu(std::function<void(const juce::MouseEvent&)> callback) {
+    header_.onContextMenu = std::move(callback);
+}
+
 // A no-op when the strength is unchanged, so the panel can call it every layout without repainting
 // the column's controls.
 void MixerColumnComponent::setLift(float lift) {
