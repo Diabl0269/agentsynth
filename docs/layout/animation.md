@@ -210,7 +210,9 @@ consistently, through one header-only helper: `Source/UI/Layout/DragCursor.h`
   track header background, mixer column header, mixer zones row, list drag handles, MIDI-remote
   controller surface cell, module library row, timeline ruler marker flag) show
   `juce::MouseCursor::DraggingHandCursor` on hover AND during the drag. A mixer column header
-  shows it only while it has reorder hooks set (Direct, Master and pinned columns stay normal).
+  shows it only while it has reorder hooks set (Direct, Master and pinned columns stay normal); its name
+  label and the column's source line delegate their cursor to the header (`CursorDelegatingLabel`), so
+  the whole top area reads as the handle.
 - **Tool-driven canvases** (timeline clips, piano roll notes, module cards, macro cards) keep the
   tool cursor on hover (`ToolCursors.h` / `applyToolCursor` stay in charge). The grab cursor shows
   only once a move drag has actually started (past its threshold), the copy cursor shows while an

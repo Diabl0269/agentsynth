@@ -11,7 +11,8 @@ void TimelineRoutingPane::openBindingMenu() {
     if (host_ == nullptr || track == nullptr)
         return;
 
-    // The same menu the header's binding chip opens; the "MIDI destinations..." entry is left to the "Notes go to" row.
+    // The same menu the header's binding chip opens; the "MIDI destinations..." entry is left to the "MIDI
+    // destinations" row.
     auto menu = buildTrackBindingMenu(host_->getAvailableTrackInNodes(track_), track->bindingUuid,
                                       /*includeMidiDestinations=*/false);
     if (showBindingMenuHook_) {
@@ -19,7 +20,7 @@ void TimelineRoutingPane::openBindingMenu() {
         return;
     }
     juce::Component::SafePointer<TimelineRoutingPane> safeThis(this);
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&playsInto_), [safeThis](int result) {
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&canvasNode_), [safeThis](int result) {
         if (auto* self = safeThis.getComponent())
             self->applyBindingMenuChoice(result);
     });
@@ -47,7 +48,7 @@ void TimelineRoutingPane::openMidiDestinationsPicker() {
     auto picker = buildPicker();
     if (picker == nullptr)
         return; // no host: nothing to build a picker against
-    juce::CallOutBox::launchAsynchronously(std::move(picker), notesGoTo_.getScreenBounds(), nullptr);
+    juce::CallOutBox::launchAsynchronously(std::move(picker), midiDestinations_.getScreenBounds(), nullptr);
 }
 
 // The existing select path (a highlight of the node in the graph editor's selection, no canvas scroll), the same one

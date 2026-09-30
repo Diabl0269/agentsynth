@@ -39,9 +39,9 @@ public:
      *  header's channel chip); false when no channel is showing. */
     bool tickMeter();
 
-    /** Applies a "Plays into" menu choice (ids as buildTrackBindingMenu documents). Anything else is ignored. */
+    /** Applies a "Canvas node" menu choice (ids as buildTrackBindingMenu documents). Anything else is ignored. */
     void applyBindingMenuChoice(int menuId);
-    /** Opens the MIDI-destination picker in a CallOutBox anchored on the "Notes go to" button. */
+    /** Opens the MIDI-destination picker in a CallOutBox anchored on the "MIDI destinations" button. */
     void openMidiDestinationsPicker();
 
     /** The side pane shows the pane inside a vertical scroller, so a short bottom panel never clips a section. */
@@ -54,17 +54,17 @@ public:
     void resized() override;
 
     // ---- Test seams ----
-    /** A real click on "Plays into" builds the menu and hands it here instead of showing it (the header's
+    /** A real click on "Canvas node" builds the menu and hands it here instead of showing it (the header's
      *  setShowContextMenuHookForTest shape); the test then feeds a chosen id to applyBindingMenuChoice(). */
     void setShowBindingMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
         showBindingMenuHook_ = std::move(hook);
     }
-    /** Replaces launching the picker's CallOutBox when "Notes go to" is clicked. */
+    /** Replaces launching the picker's CallOutBox when "MIDI destinations" is clicked. */
     void setOpenMidiDestinationsHookForTest(std::function<void()> hook) { openDestinationsHook_ = std::move(hook); }
-    /** The picker "Notes go to" opens, wired exactly like the real one but never launched. */
+    /** The picker "MIDI destinations" opens, wired exactly like the real one but never launched. */
     std::unique_ptr<MidiDestinationPicker> createMidiDestinationPickerForTest() { return buildPicker(); }
-    juce::Button& getPlaysIntoButtonForTest() noexcept { return playsInto_; }
-    juce::Button& getNotesGoToButtonForTest() noexcept { return notesGoTo_; }
+    juce::Button& getCanvasNodeButtonForTest() noexcept { return canvasNode_; }
+    juce::Button& getMidiDestinationsButtonForTest() noexcept { return midiDestinations_; }
     juce::Button& getShowOnCanvasLinkForTest() noexcept { return showOnCanvas_; }
     juce::Button& getShowInMixerLinkForTest() noexcept { return showInMixer_; }
     ChannelChipComponent& getChannelChipForTest() noexcept { return channelChip_; }
@@ -72,12 +72,14 @@ public:
     juce::String getEmptyLineForTest() const { return view_.emptyLine; }
     juce::String getHeaderNameForTest() const { return view_.name; }
     juce::String getKindBadgeForTest() const { return view_.kindBadge; }
-    juce::String getPlaysIntoTextForTest() const { return playsInto_.isVisible() ? playsInto_.getButtonText() : ""; }
-    bool isPlaysIntoWarningForTest() const noexcept { return playsInto_.isWarning(); }
+    juce::String getCanvasNodeTextForTest() const { return canvasNode_.isVisible() ? canvasNode_.getButtonText() : ""; }
+    bool isCanvasNodeWarningForTest() const noexcept { return canvasNode_.isWarning(); }
     juce::String getMissingNoteForTest() const { return view_.missingNote; }
-    bool isNotesGoToShownForTest() const noexcept { return notesGoTo_.isVisible(); }
-    juce::String getNotesGoToTextForTest() const { return notesGoTo_.isVisible() ? notesGoTo_.getButtonText() : ""; }
-    /** "Channel · <name>", or "No mixer channel" (muted); empty when the Sound-goes-to section is not showing. */
+    bool isMidiDestinationsShownForTest() const noexcept { return midiDestinations_.isVisible(); }
+    juce::String getMidiDestinationsTextForTest() const {
+        return midiDestinations_.isVisible() ? midiDestinations_.getButtonText() : "";
+    }
+    /** "Channel · <name>", or "No mixer channel" (muted); empty when the Mixer-channel section is not showing. */
     juce::String getChannelTextForTest() const { return view_.channelText; }
 
 private:
@@ -89,11 +91,11 @@ private:
         juce::String kindBadge;
         juce::Colour colour;
         bool isMidi = false;
-        juce::String playsIntoText; // the bound node's name, "Not connected" or "<kind> (missing)"
-        bool playsIntoWarning = false;
-        bool bound = false;       // the binding resolves to a live node (the canvas link is offered)
-        juce::String missingNote; // the orphaned-binding explanation, or empty
-        juce::String notesText;   // the connected MIDI destinations, comma-joined, or "None"
+        juce::String canvasNodeText; // the bound node's name, "Not connected" or "<kind> (missing)"
+        bool canvasNodeWarning = false;
+        bool bound = false;                // the binding resolves to a live node (the canvas link is offered)
+        juce::String missingNote;          // the orphaned-binding explanation, or empty
+        juce::String midiDestinationsText; // the connected MIDI destinations, comma-joined, or "None"
         bool hasChannel = false;
         juce::String channelText;
     };
@@ -106,16 +108,16 @@ private:
     void showOnCanvas();
     void showInMixer();
     std::unique_ptr<MidiDestinationPicker> buildPicker();
-    void computePlaysInto(const synth::Track& track);
+    void computeCanvasNode(const synth::Track& track);
     void computeNotesAndChannel();
 
     // Rows and dividers as laid out by layoutSections(), for paint().
     struct Layout {
         juce::Rectangle<int> header;
-        juce::Rectangle<int> playsIntoHeading;
+        juce::Rectangle<int> canvasNodeHeading;
         juce::Rectangle<int> missingNote;
-        juce::Rectangle<int> notesHeading;
-        juce::Rectangle<int> soundHeading;
+        juce::Rectangle<int> midiDestinationsHeading;
+        juce::Rectangle<int> mixerChannelHeading;
         juce::Rectangle<int> noChannel;
         juce::Rectangle<int> emptyLine;
         std::vector<int> dividers; // y of each 1 px section border
@@ -142,9 +144,9 @@ private:
     int contentHeight_ = 0;
     bool fitting_ = false;
 
-    RoutingComboButton playsInto_{"Plays into"};
+    RoutingComboButton canvasNode_{"Canvas node"};
     RoutingTextLink showOnCanvas_;
-    RoutingComboButton notesGoTo_{"Notes go to"};
+    RoutingComboButton midiDestinations_{"MIDI destinations"};
     ChannelChipComponent channelChip_;
     RoutingTextLink showInMixer_;
 

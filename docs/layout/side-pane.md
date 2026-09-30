@@ -55,7 +55,7 @@ repaints once it has settled.
 | Tab | Key | Content | First time |
 |---|---|---|---|
 | Mixer | `mixer` | `MixerZonesPane`: zones, show/hide | open |
-| Timeline | `timeline` | `TimelineRoutingPane`: the selected track's Plays into / Notes go to / Sound goes to | closed |
+| Timeline | `timeline` | `TimelineRoutingPane`: the selected track's Canvas node / MIDI destinations / Mixer channel | closed |
 
 The Timeline panel owns its pane like the Mixer panel does: the pane sits at the left of the body under
 the transport strip, the toggle button at the left end of that strip, and the header column, ruler and

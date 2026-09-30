@@ -92,8 +92,8 @@ TEST(TimelineRoutingPaneTest, NothingSelectedShowsTheSelectATrackLine) {
     BarePanel f;
     f.doc.addTrack(TrackKind::Midi, "Lead");
     EXPECT_EQ(f.pane().getEmptyLineForTest(), "Select a MIDI or audio track to see its routing.");
-    EXPECT_FALSE(f.pane().getPlaysIntoButtonForTest().isVisible());
-    EXPECT_FALSE(f.pane().isNotesGoToShownForTest());
+    EXPECT_FALSE(f.pane().getCanvasNodeButtonForTest().isVisible());
+    EXPECT_FALSE(f.pane().isMidiDestinationsShownForTest());
 }
 
 TEST(TimelineRoutingPaneTest, AnAutomationTrackShowsTheNothingToRouteLine) {
@@ -101,7 +101,7 @@ TEST(TimelineRoutingPaneTest, AnAutomationTrackShowsTheNothingToRouteLine) {
     f.doc.addTrack(TrackKind::Automation, "Filter");
     clickRow(f.panel, 0);
     EXPECT_EQ(f.pane().getEmptyLineForTest(), "Nothing to route on an automation track.");
-    EXPECT_FALSE(f.pane().getPlaysIntoButtonForTest().isVisible());
+    EXPECT_FALSE(f.pane().getCanvasNodeButtonForTest().isVisible());
     EXPECT_FALSE(f.pane().getShowInMixerLinkForTest().isVisible());
 }
 
@@ -111,11 +111,11 @@ TEST(TimelineRoutingPaneTest, AnUnboundTrackSaysNotConnectedInTheWarningState) {
     clickRow(f.panel, 0);
     EXPECT_EQ(f.pane().getHeaderNameForTest(), "Lead");
     EXPECT_EQ(f.pane().getKindBadgeForTest(), "MIDI");
-    EXPECT_EQ(f.pane().getPlaysIntoTextForTest(), "Not connected");
-    EXPECT_TRUE(f.pane().isPlaysIntoWarningForTest());
+    EXPECT_EQ(f.pane().getCanvasNodeTextForTest(), "Not connected");
+    EXPECT_TRUE(f.pane().isCanvasNodeWarningForTest());
     EXPECT_TRUE(f.pane().getMissingNoteForTest().isEmpty());
     EXPECT_FALSE(f.pane().getShowOnCanvasLinkForTest().isVisible()) << "nothing to show";
-    EXPECT_EQ(f.pane().getNotesGoToTextForTest(), "None");
+    EXPECT_EQ(f.pane().getMidiDestinationsTextForTest(), "None");
     EXPECT_EQ(f.pane().getChannelTextForTest(), "No mixer channel");
 }
 
@@ -134,7 +134,7 @@ TEST(TimelineRoutingPaneTest, AShortPaneScrollsToTheLowerSectionsInsteadOfClippi
     EXPECT_EQ(f.pane().getHeight(), f.pane().getContentHeight()) << "the pane is as tall as its sections";
     EXPECT_TRUE(viewport->canScrollVertically());
     viewport->setViewPosition(0, f.pane().getHeight());
-    EXPECT_GT(viewport->getViewPositionY(), 0) << "Sound goes to is reachable";
+    EXPECT_GT(viewport->getViewPositionY(), 0) << "Mixer channel is reachable";
 }
 
 TEST(TimelineRoutingPaneTest, AMissingBindingIsNamedAsMissingAndKeepsItsNotes) {
@@ -143,19 +143,19 @@ TEST(TimelineRoutingPaneTest, AMissingBindingIsNamedAsMissingAndKeepsItsNotes) {
     f.doc.setTrackBinding(id, "uuid-gone");
     f.doc.reconcileBindings([](const juce::String&) { return false; });
     clickRow(f.panel, 0);
-    EXPECT_EQ(f.pane().getPlaysIntoTextForTest(), "Track In (missing)");
-    EXPECT_TRUE(f.pane().isPlaysIntoWarningForTest());
+    EXPECT_EQ(f.pane().getCanvasNodeTextForTest(), "Track In (missing)");
+    EXPECT_TRUE(f.pane().isCanvasNodeWarningForTest());
     EXPECT_EQ(f.pane().getMissingNoteForTest(), "Its notes are kept. Pick a new Track In to hear them again.");
     EXPECT_FALSE(f.pane().getShowOnCanvasLinkForTest().isVisible()) << "the node is gone";
 }
 
-TEST(TimelineRoutingPaneTest, AnAudioTrackHidesNotesGoTo) {
+TEST(TimelineRoutingPaneTest, AnAudioTrackHidesMidiDestinations) {
     BarePanel f;
     f.doc.addTrack(TrackKind::Audio, "Vox");
     clickRow(f.panel, 0);
     EXPECT_EQ(f.pane().getKindBadgeForTest(), "Audio");
-    EXPECT_TRUE(f.pane().getPlaysIntoButtonForTest().isVisible());
-    EXPECT_FALSE(f.pane().isNotesGoToShownForTest());
+    EXPECT_TRUE(f.pane().getCanvasNodeButtonForTest().isVisible());
+    EXPECT_FALSE(f.pane().isMidiDestinationsShownForTest());
 }
 
 TEST(TimelineRoutingPaneTest, ThePaneFollowsTheSelectionAndTheDocument) {
@@ -195,37 +195,37 @@ TEST_F(RoutingPaneAppTest, AMidiTrackShowsItsTrackInItsDestinationsAndItsChannel
 
     auto& p = pane();
     EXPECT_EQ(p.getKindBadgeForTest(), "MIDI");
-    EXPECT_EQ(p.getPlaysIntoTextForTest(), panel().getTrackHeaderAt(0)->getBindingChipText());
-    EXPECT_FALSE(p.isPlaysIntoWarningForTest());
-    EXPECT_TRUE(p.getPlaysIntoTextForTest().startsWith("Track In"));
+    EXPECT_EQ(p.getCanvasNodeTextForTest(), panel().getTrackHeaderAt(0)->getBindingChipText());
+    EXPECT_FALSE(p.isCanvasNodeWarningForTest());
+    EXPECT_TRUE(p.getCanvasNodeTextForTest().startsWith("Track In"));
     EXPECT_TRUE(p.getShowOnCanvasLinkForTest().isVisible());
 
-    ASSERT_TRUE(p.isNotesGoToShownForTest());
-    EXPECT_TRUE(p.getNotesGoToTextForTest().contains("Oscillator")) << p.getNotesGoToTextForTest();
+    ASSERT_TRUE(p.isMidiDestinationsShownForTest());
+    EXPECT_TRUE(p.getMidiDestinationsTextForTest().contains("Oscillator")) << p.getMidiDestinationsTextForTest();
 
     EXPECT_TRUE(p.getChannelTextForTest().startsWith("Channel")) << p.getChannelTextForTest();
     EXPECT_TRUE(pane().getChannelChipForTest().isVisible());
     EXPECT_TRUE(pane().getShowInMixerLinkForTest().isVisible());
 }
 
-TEST_F(RoutingPaneAppTest, AnAudioTrackHasNoNotesGoToRow) {
+TEST_F(RoutingPaneAppTest, AnAudioTrackHasNoMidiDestinationsRow) {
     mc->simulateAddAudioTrackClick();
     ASSERT_EQ(panel().getTrackHeaderCount(), 1);
     clickRow(panel(), 0);
     EXPECT_EQ(pane().getKindBadgeForTest(), "Audio");
-    EXPECT_FALSE(pane().isNotesGoToShownForTest());
-    EXPECT_FALSE(pane().getPlaysIntoTextForTest().isEmpty());
-    EXPECT_FALSE(pane().isPlaysIntoWarningForTest());
+    EXPECT_FALSE(pane().isMidiDestinationsShownForTest());
+    EXPECT_FALSE(pane().getCanvasNodeTextForTest().isEmpty());
+    EXPECT_FALSE(pane().isCanvasNodeWarningForTest());
 }
 
-TEST_F(RoutingPaneAppTest, TheNotesGoToButtonOpensThePickerAndTheRowFollowsTheGraph) {
+TEST_F(RoutingPaneAppTest, TheMidiDestinationsButtonOpensThePickerAndTheRowFollowsTheGraph) {
     mc->simulateAddInstrumentTrackClick(TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
     clickRow(panel(), 0);
-    ASSERT_TRUE(pane().getNotesGoToTextForTest().contains("Oscillator"));
+    ASSERT_TRUE(pane().getMidiDestinationsTextForTest().contains("Oscillator"));
 
     int opened = 0;
     pane().setOpenMidiDestinationsHookForTest([&opened] { ++opened; });
-    pane().getNotesGoToButtonForTest().onClick();
+    pane().getMidiDestinationsButtonForTest().onClick();
     EXPECT_EQ(opened, 1);
 
     // The picker is the header's own: switching the Oscillator off in it changes the graph, and the row follows (the
@@ -237,10 +237,11 @@ TEST_F(RoutingPaneAppTest, TheNotesGoToButtonOpensThePickerAndTheRowFollowsTheGr
     for (int i = 0; i < static_cast<int>(rows.size()); ++i)
         if (rows[static_cast<size_t>(i)].contains("Oscillator"))
             picker->toggleRowForTest(i);
-    EXPECT_FALSE(pane().getNotesGoToTextForTest().contains("Oscillator")) << pane().getNotesGoToTextForTest();
+    EXPECT_FALSE(pane().getMidiDestinationsTextForTest().contains("Oscillator"))
+        << pane().getMidiDestinationsTextForTest();
 }
 
-TEST_F(RoutingPaneAppTest, RebindingFromThePlaysIntoMenuChangesTheBindingInOneUndoStep) {
+TEST_F(RoutingPaneAppTest, RebindingFromTheCanvasNodeMenuChangesTheBindingInOneUndoStep) {
     mc->simulateAddMidiTrackClick();
     clickRow(panel(), 0);
     auto& doc = mc->getTimelineDoc();
@@ -257,15 +258,15 @@ TEST_F(RoutingPaneAppTest, RebindingFromThePlaysIntoMenuChangesTheBindingInOneUn
         while (it.next())
             seenItems += it.getItem().text + "|";
     });
-    pane().getPlaysIntoButtonForTest().onClick();
+    pane().getCanvasNodeButtonForTest().onClick();
     ASSERT_NE(newNodeId, 0) << seenItems;
-    EXPECT_FALSE(seenItems.contains("MIDI destinations")) << "the Notes go to row owns that";
+    EXPECT_FALSE(seenItems.contains("MIDI destinations")) << "the MIDI destinations row owns that";
 
     pane().applyBindingMenuChoice(newNodeId);
     const auto rebound = doc.getTracks()[0].bindingUuid;
     EXPECT_NE(rebound, original);
     EXPECT_FALSE(doc.getTracks()[0].orphaned);
-    EXPECT_FALSE(pane().isPlaysIntoWarningForTest());
+    EXPECT_FALSE(pane().isCanvasNodeWarningForTest());
 
     ASSERT_TRUE(mc->getUndoManager().canUndo());
     mc->getUndoManager().undo();
@@ -273,7 +274,7 @@ TEST_F(RoutingPaneAppTest, RebindingFromThePlaysIntoMenuChangesTheBindingInOneUn
     EXPECT_FALSE(mc->getUndoManager().canUndo()) << "the rebind was exactly one undo step";
 }
 
-TEST_F(RoutingPaneAppTest, ThePlaysIntoMenuTicksTheCurrentNodeAndOffersOnlyThisKindOfNode) {
+TEST_F(RoutingPaneAppTest, TheCanvasNodeMenuTicksTheCurrentNodeAndOffersOnlyThisKindOfNode) {
     mc->simulateAddMidiTrackClick();
     clickRow(panel(), 0);
     const auto expected = panel().getTrackHeaderAt(0)->collectBindingOptions();
@@ -290,7 +291,7 @@ TEST_F(RoutingPaneAppTest, ThePlaysIntoMenuTicksTheCurrentNodeAndOffersOnlyThisK
             }
         }
     });
-    pane().getPlaysIntoButtonForTest().onClick();
+    pane().getCanvasNodeButtonForTest().onClick();
     EXPECT_EQ(nodeItems, 1);
     EXPECT_EQ(tickedItems, 1);
 }
@@ -334,6 +335,6 @@ TEST_F(RoutingPaneAppTest, DeletingTheBoundNodeShowsMissingWithoutAnyPaneSpecifi
         if (node != nullptr && node->properties["uuid"].toString() == uuid)
             mc->getGraphEditor().requestDeleteModule(node->nodeID);
 
-    EXPECT_EQ(pane().getPlaysIntoTextForTest(), "Track In (missing)");
-    EXPECT_TRUE(pane().isPlaysIntoWarningForTest());
+    EXPECT_EQ(pane().getCanvasNodeTextForTest(), "Track In (missing)");
+    EXPECT_TRUE(pane().isCanvasNodeWarningForTest());
 }

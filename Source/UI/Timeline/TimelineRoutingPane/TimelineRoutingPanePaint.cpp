@@ -74,15 +74,15 @@ void TimelineRoutingPane::paint(juce::Graphics& g) {
     g.setColour(colours.border);
     g.fillRect(0, layout_.header.getBottom() - 1, getWidth(), 1);
 
-    drawHeading(g, layout_.playsIntoHeading, "Plays into", colours);
+    drawHeading(g, layout_.canvasNodeHeading, "Canvas node", colours);
     if (view_.missingNote.isNotEmpty()) {
         g.setColour(colours.warning);
         g.setFont(juce::Font(juce::FontOptions(11.0f)));
         g.drawFittedText(view_.missingNote, layout_.missingNote, juce::Justification::topLeft, 3);
     }
     if (view_.isMidi)
-        drawHeading(g, layout_.notesHeading, "Notes go to", colours);
-    drawHeading(g, layout_.soundHeading, "Sound goes to", colours);
+        drawHeading(g, layout_.midiDestinationsHeading, "MIDI destinations", colours);
+    drawHeading(g, layout_.mixerChannelHeading, "Mixer channel", colours);
     if (!layout_.noChannel.isEmpty()) {
         g.setColour(colours.muted);
         g.setFont(juce::Font(juce::FontOptions(12.0f)));

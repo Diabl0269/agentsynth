@@ -17,7 +17,6 @@ namespace synth {
 extern juce::AudioProcessor* processorFor(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id);
 extern bool isAttenuverter(const juce::AudioProcessor* p);
 extern bool isStrip(const juce::AudioProcessor* p);
-extern bool isMacroPortNode(const juce::AudioProcessor* p);
 
 // Shared internals behind ChannelFlows.cpp's several concern units (ChannelFlowsDefaultChannel.cpp,
 // ChannelFlowsAutoChannel.cpp, ChannelFlowsMakeChannel.cpp): the one node-creation helper and the one

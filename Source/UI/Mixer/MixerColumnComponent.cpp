@@ -58,6 +58,7 @@ MixerColumnComponent::MixerColumnComponent() {
     };
     header_.onNameEdited = [this](const juce::String& newName) { commitHeaderRename(newName); };
     addAndMakeVisible(sourceLineLabel_);
+    header_.adoptHandleLabel(sourceLineLabel_); // the source line is part of the drag handle
     sourceLineLabel_.setFont(juce::Font(juce::FontOptions(10.0f)));
     sourceLineLabel_.setJustificationType(juce::Justification::centredLeft);
     sourceLineLabel_.setColour(juce::Label::textColourId, juce::Colour(0xff8A93A0));

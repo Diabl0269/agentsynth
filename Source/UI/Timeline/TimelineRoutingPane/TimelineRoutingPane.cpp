@@ -28,12 +28,12 @@ TimelineRoutingPane::TimelineRoutingPane()
     setWantsKeyboardFocus(false);
     setMouseClickGrabsKeyboardFocus(false);
 
-    playsInto_.setTitle("Plays into");
-    playsInto_.setDescription("The node that plays this track. Opens a menu to choose a different one.");
-    playsInto_.onClick = [this] { openBindingMenu(); };
-    notesGoTo_.setTitle("Notes go to");
-    notesGoTo_.setDescription("The instruments this track's notes are sent to. Opens a picker to change them.");
-    notesGoTo_.onClick = [this] { openMidiDestinationsPicker(); };
+    canvasNode_.setTitle("Canvas node");
+    canvasNode_.setDescription("The node that plays this track. Opens a menu to choose a different one.");
+    canvasNode_.onClick = [this] { openBindingMenu(); };
+    midiDestinations_.setTitle("MIDI destinations");
+    midiDestinations_.setDescription("The instruments this track's notes are sent to. Opens a picker to change them.");
+    midiDestinations_.onClick = [this] { openMidiDestinationsPicker(); };
     showOnCanvas_.setDescription("Selects the node that plays this track in the graph");
     showOnCanvas_.onClick = [this] { showOnCanvas(); };
     showInMixer_.setDescription("Finds this track's channel in the mixer");
@@ -41,8 +41,8 @@ TimelineRoutingPane::TimelineRoutingPane()
     // The channel row is read-only: the chip is only a name and a meter here, the link beside it does the finding.
     channelChip_.setInterceptsMouseClicks(false, false);
 
-    for (auto* child : std::initializer_list<juce::Component*>{&playsInto_, &showOnCanvas_, &notesGoTo_, &channelChip_,
-                                                               &showInMixer_})
+    for (auto* child : std::initializer_list<juce::Component*>{&canvasNode_, &showOnCanvas_, &midiDestinations_,
+                                                               &channelChip_, &showInMixer_})
         addChildComponent(*child);
     refresh();
 }
@@ -97,25 +97,25 @@ void TimelineRoutingPane::computeView() {
         ++index;
     }
     view_.colour = resolveTrackColour(track->colourArgb, index, false);
-    computePlaysInto(*track);
+    computeCanvasNode(*track);
     computeNotesAndChannel();
 }
 
 // Three states, like the header's binding chip: bound to a live node, never bound, or orphaned. The gone node's own
 // name is not knowable (the document keeps only its uuid), so the orphaned case names the kind of node instead.
-void TimelineRoutingPane::computePlaysInto(const synth::Track& track) {
+void TimelineRoutingPane::computeCanvasNode(const synth::Track& track) {
     const juce::String kindNode = view_.isMidi ? "Track In" : "Track Audio";
     if (track.bindingUuid.isEmpty()) {
-        view_.playsIntoText = "Not connected";
-        view_.playsIntoWarning = true;
+        view_.canvasNodeText = "Not connected";
+        view_.canvasNodeWarning = true;
     } else if (track.orphaned) {
-        view_.playsIntoText = kindNode + " (missing)";
-        view_.playsIntoWarning = true;
+        view_.canvasNodeText = kindNode + " (missing)";
+        view_.canvasNodeWarning = true;
         view_.missingNote = juce::String(view_.isMidi ? "Its notes" : "Its clips") + " are kept. Pick a new " +
                             kindNode + " to hear them again.";
     } else {
         const auto name = host_ != nullptr ? host_->getNodeDisplayName(track.bindingUuid) : juce::String();
-        view_.playsIntoText = name.isNotEmpty() ? name : kindNode;
+        view_.canvasNodeText = name.isNotEmpty() ? name : kindNode;
         view_.bound = true;
     }
 }
@@ -127,7 +127,7 @@ void TimelineRoutingPane::computeNotesAndChannel() {
             for (const auto& option : host_->getMidiDestinationOptions(track_))
                 if (option.connected)
                     connected.add(option.displayName);
-        view_.notesText = connected.isEmpty() ? juce::String("None") : connected.joinIntoString(", ");
+        view_.midiDestinationsText = connected.isEmpty() ? juce::String("None") : connected.joinIntoString(", ");
     }
 
     auto* link = host_ != nullptr ? host_->getChannelLinkSurface() : nullptr;
@@ -139,21 +139,21 @@ void TimelineRoutingPane::computeNotesAndChannel() {
 
 void TimelineRoutingPane::applyViewToChildren() {
     const bool routable = view_.hasTrack;
-    playsInto_.setVisible(routable);
-    notesGoTo_.setVisible(routable && view_.isMidi);
+    canvasNode_.setVisible(routable);
+    midiDestinations_.setVisible(routable && view_.isMidi);
     showOnCanvas_.setVisible(routable && view_.bound);
     channelChip_.setVisible(routable && view_.hasChannel);
     showInMixer_.setVisible(routable && view_.hasChannel);
     if (!routable)
         return;
 
-    playsInto_.setButtonText(view_.playsIntoText);
-    playsInto_.setWarning(view_.playsIntoWarning);
-    playsInto_.setTooltip(view_.playsIntoWarning ? "This track plays nowhere yet. Click to choose a node."
-                                                 : "This track plays through '" + view_.playsIntoText +
-                                                       "'. Click to choose a different node.");
-    notesGoTo_.setButtonText(view_.notesText);
-    notesGoTo_.setTooltip("Notes go to: " + view_.notesText + ". Click to change.");
+    canvasNode_.setButtonText(view_.canvasNodeText);
+    canvasNode_.setWarning(view_.canvasNodeWarning);
+    canvasNode_.setTooltip(view_.canvasNodeWarning ? "This track plays nowhere yet. Click to choose a node."
+                                                   : "This track plays through '" + view_.canvasNodeText +
+                                                         "'. Click to choose a different node.");
+    midiDestinations_.setButtonText(view_.midiDestinationsText);
+    midiDestinations_.setTooltip("MIDI destinations: " + view_.midiDestinationsText + ". Click to change.");
     channelChip_.setChannelName(view_.channelText);
     setTitle("Routing for " + view_.name);
 }
@@ -184,8 +184,8 @@ void TimelineRoutingPane::layoutSections() {
         y += 1 + kPad;
     };
 
-    layout_.playsIntoHeading = row(kHeadingHeight);
-    playsInto_.setBounds(row(kButtonHeight));
+    layout_.canvasNodeHeading = row(kHeadingHeight);
+    canvasNode_.setBounds(row(kButtonHeight));
     y += kRowGap;
     if (view_.missingNote.isNotEmpty()) {
         layout_.missingNote = row(kNoteHeight);
@@ -196,12 +196,12 @@ void TimelineRoutingPane::layoutSections() {
     endSection();
 
     if (view_.isMidi) {
-        layout_.notesHeading = row(kHeadingHeight);
-        notesGoTo_.setBounds(row(kButtonHeight));
+        layout_.midiDestinationsHeading = row(kHeadingHeight);
+        midiDestinations_.setBounds(row(kButtonHeight));
         endSection();
     }
 
-    layout_.soundHeading = row(kHeadingHeight);
+    layout_.mixerChannelHeading = row(kHeadingHeight);
     if (view_.hasChannel) {
         channelChip_.setBounds(row(kChipHeight));
         y += kRowGap;

@@ -22,6 +22,18 @@
 
 namespace synth::ui {
 
+/** A label that shows another component's cursor, so a child covering part of a drag handle still reads as one. */
+class CursorDelegatingLabel : public juce::Label {
+public:
+    void setCursorSource(juce::Component* source) noexcept { cursorSource_ = source; }
+    juce::MouseCursor getMouseCursor() override {
+        return cursorSource_ != nullptr ? cursorSource_->getMouseCursor() : juce::Label::getMouseCursor();
+    }
+
+private:
+    juce::Component::SafePointer<juce::Component> cursorSource_;
+};
+
 class MixerColumnHeader
     : public juce::Component
     , public juce::SettableTooltipClient {
@@ -38,6 +50,7 @@ public:
         // The name label swallows the mouse, but the whole header is the drag handle of a reorderable
         // column -- so the header listens to the label's events too (see mouseDown() below).
         nameLabel_.addMouseListener(this, false);
+        nameLabel_.setCursorSource(this);
         nameLabel_.onTextChange = [this] {
             // name_ deliberately NOT updated here -- it stays the last value an external
             // setDisplayName() committed until either a rebuild calls setDisplayName() again with
@@ -117,6 +130,13 @@ public:
             return;
         receivesFrom_ = sources;
         badgesChanged();
+    }
+
+    /** Makes `label` (a sibling of the header, e.g. the source line) part of the drag handle: it shows the
+     *  header's cursor and forwards its mouse events here. */
+    void adoptHandleLabel(CursorDelegatingLabel& label) {
+        label.setCursorSource(this);
+        label.addMouseListener(this, false);
     }
 
     /** Whether double-click-to-rename is armed at all. Direct and Master have no
@@ -296,7 +316,7 @@ private:
 
     juce::Colour colour_; // alpha 0 by default -- see setColour()
     juce::String name_;
-    juce::Label nameLabel_; // The name itself -- see the class comment's rename design
+    CursorDelegatingLabel nameLabel_; // The name itself -- see the class comment's rename design
     bool linkedBadgeVisible_ = false;
     juce::String linkedTrackName_;
     bool busBadgeVisible_ = false;
