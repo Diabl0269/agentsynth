@@ -31,6 +31,7 @@
 #include "Modules/MacroPortShape.h"
 #include "UI/Graph/CableColour.h"
 #include "UI/Graph/GraphCanvasHost.h"
+#include "UI/Layout/LayoutUtil.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -189,6 +190,17 @@ public:
     // -----------------------
 
     juce::Rectangle<int> macroHullBounds(const juce::String& macroId) const;
+
+    // ---- Making room when something grows (docs/layout/layout.md#making-room-when-something-grows) ----
+
+    /** The sibling layout units at ONE nesting level (`containerMacroId` empty = the top level). Keys are
+     *  "n:<nodeUid>" / "m:<macroId>". Hidden members of a collapsed macro are never units. */
+    std::vector<synth::LayoutUtil::LayoutUnit> buildLayoutUnits(const juce::String& containerMacroId) const;
+    /** Translates one unit rigidly, geometry final on return. Does not refresh the canvas. */
+    void moveUnitBy(const juce::String& key, juce::Point<int> delta);
+    /** Pushes every neighbour clear of `growerKey`, then repeats one level up. Call it INSIDE the undo record of
+     *  whatever grew the unit; it opens none of its own. */
+    void makeRoomFor(const juce::String& growerKey);
     /** `macroHullBounds` above, but with `excludedMemberUuid` left out of the union too —
      *  the LEAVE half of a Cmd-drag needs this because the plain hull is a LIVE union of
      *  member bounds, so the member being dragged OUT keeps inflating its own hull and could never

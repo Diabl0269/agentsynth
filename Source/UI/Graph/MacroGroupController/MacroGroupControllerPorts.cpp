@@ -230,6 +230,7 @@ juce::String MacroGroupController::addMacroPort(const juce::String& macroId, boo
         m->ports.push_back(port);
 
         host_.updateComponents();
+        makeRoomFor("m:" + macroId);
     };
 
     if (host_.undo())
@@ -727,6 +728,7 @@ void MacroGroupController::createMacroPortFromDroppedCable(const juce::String& m
         }
 
         host_.updateComponents();
+        makeRoomFor("m:" + macroId);
     };
 
     if (host_.undo())
