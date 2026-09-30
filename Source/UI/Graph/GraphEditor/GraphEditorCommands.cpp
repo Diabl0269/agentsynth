@@ -212,7 +212,7 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
     // Discoverable regardless of where auto-arrange or a drag left Master/Audio Output.
     // Disabled (mirroring the Paste item's setEnabled idiom above) rather than hidden, so the row
     // stays in a stable place whether or not the patch has a channel yet.
-    juce::PopupMenu::Item locateMaster("Locate Master");
+    juce::PopupMenu::Item locateMaster("Go to Output");
     locateMaster.setEnabled(hasLocatableMasterOrOutput());
     locateMaster.action = [safeThis] {
         if (safeThis != nullptr)
@@ -345,6 +345,11 @@ void GraphEditor::deleteModule(ModuleComponent* module) {
 void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) {
     if (nodeId.uid == 0)
         return;
+    if (const auto refusal = outputDockDeleteRefusal(nodeId); refusal.isNotEmpty()) {
+        if (onStatusMessage)
+            onStatusMessage(refusal);
+        return;
+    }
 
     auto& graph = audioEngine.getGraph();
 

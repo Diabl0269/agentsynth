@@ -371,7 +371,7 @@ pad.
 | Cmd+G | Group / Toggle Macro |
 | Cmd+Shift+G | Ungroup Macro |
 | Cmd+Alt+G | Collapse / Expand Macro (toggle) |
-| Cmd+Shift+M | Locate Master — selects Master (falling back to Audio Output when there is no Master yet) and pans it into view; a graceful no-op with neither. Also on the canvas's right-click menu. See [**Locate Master**](#locate-master) below |
+| Cmd+Shift+M | Go to Output (was "Locate Master") — selects Master (falling back to Audio Output when there is no Master yet) and centres the view on the whole output dock (Master, Rec Tap, Audio Output); a graceful no-op with neither. Also on the canvas's right-click menu. See [**Locate Master**](#locate-master) below |
 
 Graph holds only the six verbs that mean nothing on any other surface — auto-arrange,
 save-selection-as-snippet, grouping/ungrouping/collapsing a macro, and locating Master —
@@ -398,6 +398,11 @@ Ungroup above stays its own command because dissolving a macro is a different pr
 genuinely different verb from either grouping or toggling.
 
 ### Locate Master
+
+*Now labelled **Go to Output** everywhere (menu row, command, Preferences); the command id and this anchor
+are unchanged. It centres on the whole output dock, not the one card
+([`docs/layout/layout.md#output-dock`](../layout/layout.md#output-dock)). The rest of this section describes
+the original behaviour.*
 
 Founder feedback on a live check: once Master and Audio Output exist (an Audio Output is seeded
 on New Patch, [`docs/mixer/mixer.md`](../mixer/mixer.md)), auto-arrange or an ordinary drag can leave either node
@@ -847,7 +852,7 @@ habit changes. See [`layout/selection.md`](../layout/selection.md) for the full 
 | Drag a module across an expanded macro's outline | Join, leave, or move it between macros (a plain drag by default; **Cmd** + drag when "Drag modules into and out of macros without Cmd" is off in `Settings → Preferences`; single module only, never a group). See [macro membership](../macros/menu-and-membership.md#cmd-drag-across-a-hull-border) |
 | Click empty canvas | Clear the selection |
 | Right-click a module | Copy / Duplicate / Paste / Save as Snippet / Delete for the whole selection |
-| Right-click empty canvas | Paste Here (at the click point) / Select All Modules / Locate Master (see [Locate Master](#locate-master); greyed out with neither Master nor Audio Output) |
+| Right-click empty canvas | Paste Here (at the click point) / Select All Modules / Go to Output (see [Locate Master](#locate-master); greyed out with neither Master nor Audio Output) |
 | Double-click a connected jack | Disconnect every cable on that port (on by default; `Settings → Preferences`) |
 
 Right-clicking empty canvas keeps the selection rather than clearing it, so the menu can still act

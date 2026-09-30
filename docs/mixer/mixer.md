@@ -65,6 +65,12 @@ every audio connection that fed the output re-routed through it. The ordering be
 
 The bracketed part is empty until the user adds something to it — see [Master inserts](#master-inserts).
 
+**Placement and protection.** Master, the Rec Tap and Audio Output are the canvas's *output dock*: always the
+rightmost cards, x derived and y shared with Audio Output
+([`docs/layout/layout.md#output-dock`](../layout/layout.md#output-dock)), so Master takes Audio Output's row the
+moment it is spliced in. Audio Output can never be deleted, and Master can't while any channel exists (the card's
+Delete item is disabled, with the reason in its label; the AI patch "remove" list honours the same rule).
+
 `Master` exposes a **Direct** input block that receives whatever cables previously went straight to
 the output — the same re-routing `ensureMasterRecordTap()` already does for the record tap, one level
 upstream of it.

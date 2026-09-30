@@ -403,6 +403,7 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             finalizeNewDrop(newNodeId);
             if (uuid.isNotEmpty())
                 macroController_.addSelectionToMacro(joinMacroId, {uuid}, /*recordUndo=*/false);
+            reflowOutputDock(); // the drop may sit right of the dock: the dock moves, inside this undo step
         };
 
         if (undoManager && joinMacroId.isNotEmpty())
@@ -508,6 +509,10 @@ juce::Point<int> GraphEditor::computeDropFinalPosition(juce::Point<int> dropPoin
 void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     if (module == nullptr)
         return;
+    if (isOutputDockNode(module->getNodeId())) {
+        finalizeOutputDockDrag(module); // vertical only; x stays derived
+        return;
+    }
     auto clear = resolvePlacement(module->getPosition(), module->getWidth(), module->getHeight(), module->getNodeId());
     module->setTopLeftPosition(clear);
     // Persist the snapped/cleared position to graph node properties so it survives reload.
@@ -533,6 +538,7 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     // under the bottom dock, or past the edge while zoomed in) without any pan/zoom of its own.
     detail::applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
 
+    reflowOutputDock(); // the released module may now be the rightmost thing on the canvas
     repaintCanvas();
 }
 

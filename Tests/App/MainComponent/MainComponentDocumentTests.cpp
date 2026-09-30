@@ -1,5 +1,6 @@
 // Concern: patch-name/dirty-state tracking and the save/load/export round trip (project bundle,
 // factory presets, legacy .json patches).
+#include "../../UI/Graph/OutputDockTestHelpers.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "ProjectBundle.h"
@@ -251,6 +252,7 @@ TEST_F(MainComponentTest, SavedProjectWithAnLfoInsideAMacroReopensAsSaved) {
     EXPECT_EQ(macro->members.size(), 2u);
     EXPECT_EQ(reloaded.getAudioEngine().getGraph().getNodes().size(), (int)nodeCount);
 
+    const auto dockPositions = outputdock_test::expectedDockPositions(editor, reloaded.getAudioEngine().getGraph());
     for (auto* node : reloaded.getAudioEngine().getGraph().getNodes()) {
         int cards = 0;
         for (auto* comp : editor.getModuleComponents())
@@ -258,8 +260,13 @@ TEST_F(MainComponentTest, SavedProjectWithAnLfoInsideAMacroReopensAsSaved) {
                 ++cards;
                 const auto uuid = node->properties["uuid"].toString();
                 for (const auto& p : saved)
-                    if (p.uuid == uuid)
-                        EXPECT_EQ(comp->getPosition(), p.pos) << "card moved by the reload: " << uuid;
+                    if (p.uuid == uuid) {
+                        // The output dock is the one thing a load moves by design: computeOutputDock's position.
+                        if (dockPositions.count(node->nodeID.uid) > 0)
+                            EXPECT_EQ(comp->getPosition(), dockPositions.at(node->nodeID.uid)) << "dock card " << uuid;
+                        else
+                            EXPECT_EQ(comp->getPosition(), p.pos) << "card moved by the reload: " << uuid;
+                    }
             }
         EXPECT_LE(cards, 1);
     }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <vector>
 
 class AppUndoManager;
 
@@ -11,6 +12,17 @@ class TimelineDoc;
 /** The graph's Master node (docs/mixer/mixer.md#node-types), or nullptr. Master is a singleton by
  *  construction — ensureMasterNode() is the only thing that creates one — so the first found is it. */
 juce::AudioProcessorGraph::Node* findMasterNode(juce::AudioProcessorGraph& graph);
+
+/** True for the three cards that make up the canvas's "output dock" (docs/layout/layout.md#output-dock): Master,
+ *  Rec Tap and Audio Output. Identified by type (dynamic_cast / IO node type), never by name. */
+bool isOutputDockProcessor(const juce::AudioProcessor* processor);
+
+/** The dock's nodes in chain order (Master, then Rec Tap, then Audio Output) — whichever exist. */
+std::vector<juce::AudioProcessorGraph::Node*> outputDockNodes(juce::AudioProcessorGraph& graph);
+
+/** Why `nodeId` may not be deleted, or an empty string when it may. Audio Output never can; Master cannot while
+ *  any mixer channel (Channel Strip) exists. Every removal path (canvas delete, AI "remove") asks this. */
+juce::String outputDockDeleteRefusal(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId);
 
 /**
  * Splices Master into the graph (docs/mixer/mixer.md#node-types), doing everything ensureMasterNode() does

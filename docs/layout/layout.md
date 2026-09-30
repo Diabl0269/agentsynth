@@ -123,6 +123,38 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   anything that runs while it builds cards must not call it back.
 - **No glide yet.** Neighbours land in their new place at once; there is no animated slide.
 
+## Output dock
+
+Master (once any mixer channel exists), the Rec Tap (if the project has one) and Audio Output form the
+**output dock**: the chain tail, always the rightmost cards on the canvas, left to right in signal order
+(`Master -> Rec Tap -> Audio Output`, [`docs/mixer/mixer.md`](../mixer/mixer.md#node-types)). The pure rule is
+`LayoutUtil::computeOutputDock`; the canvas glue is `GraphEditor::reflowOutputDock()`
+(`GraphEditorOutputDock.cpp`).
+
+- **x is derived, never user-set.** The dock's left edge is the rightmost edge of every other layout unit
+  (`MacroGroupController::buildLayoutUnits("")` minus the dock: loose modules, whole macros as their hull or
+  card), rounded up to the grid, plus `kLayerGapX`. On an empty canvas it is `kArrangeOriginX`. Dock cards follow
+  each other `kOutputDockCardGapX` (40 px) apart. Nothing stores the x: it is recomputed, so it can never drift.
+- **y is Audio Output's own stored `"y"`** (no extra persisted field), snapped. A new patch seeds it at
+  `kArrangeOriginY`; when Master first appears it joins the dock on that same y.
+- **Dragging** a dock card moves it, and the whole dock with it, vertically only: x is held while dragging and
+  is not snapped back afterwards because it was never moved. Dock cards never travel with a multi-selection
+  drag (they stay put), and never join or leave a macro.
+- **Pinned.** Dock cards are `pinned` layout units, so make-room never pushes them; a grown macro pushes the
+  dock (re-derived to its right) instead.
+- **When it is re-derived**, all inside the causing undo step where there is one: every `updateComponents()` (which
+  covers project/preset load, module add/remove, undo/redo, track creation and the Master splice, and
+  auto-arrange), module and selection drag release, a collapsed-macro card drop, a library drop, and the end of
+  `makeRoomFor`. It writes node x/y and the live component bounds together, never opens an undo record of its own
+  and never marks the project dirty (dirtiness follows the undo edit serial), so opening an older project just
+  shows the dock in its derived place.
+- **Delete protection.** Audio Output can never be deleted; Master can't while any mixer channel exists
+  (`synth::outputDockDeleteRefusal`, used by canvas delete, multi-delete, the card's Delete item, which is
+  disabled with the reason in its label, and the AI patch "remove" list). Undoing the track deletion that
+  removes the last channel still removes Master, as before.
+- **Go to Output** (Cmd+Shift+M, canvas menu; command id `locateMaster`) selects Master (else Audio Output) and
+  centres the view on the whole dock.
+
 ## Auto-arrange
 
 `GraphEditor::autoArrange()` (Cmd+L, or the toolbar button) rearranges every visible module into a

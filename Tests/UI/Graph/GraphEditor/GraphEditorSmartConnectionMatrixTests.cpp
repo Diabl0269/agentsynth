@@ -813,6 +813,14 @@ TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
         }
     }
 
+    // A free sink is the whole canvas otherwise, and the output dock would then sit at the far-left origin with no
+    // room for the clear-left aim below: park an unwired card far away so the dock lands to its right.
+    if (c.row.dest == DestKind::FreeAudioOutput) {
+        auto anchor = graph.addNode(std::make_unique<ReverbModule>());
+        anchor->properties.set("x", 40);
+        anchor->properties.set("y", 1100);
+    }
+
     juce::AudioProcessorGraph::NodeID ghostId{};
     if (!c.libraryDrop) {
         auto g = graph.addNode(std::make_unique<ChorusModule>());
@@ -828,8 +836,14 @@ TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
     else if (destOccupied)
         editor.connectPorts(upstreamId, 0, destId, 0, false, false);
 
-    // Clear-left aim: the ghost's top-left one card-width plus a small gap before the destination.
-    const juce::Point<int> ghostTopLeft{kDestX - 280 - 40, kLaneY};
+    // Clear-left aim: the ghost's top-left one card-width plus a small gap before the destination. The audio sink lives
+    // in the output dock, so ITS x is derived (right of everything else), never kDestX.
+    int destX = kDestX;
+    if (destIsSink)
+        for (auto* mc : editor.getModuleComponents())
+            if (mc->getNodeId() == destId)
+                destX = mc->getX();
+    const juce::Point<int> ghostTopLeft{destX - 280 - 40, kLaneY};
 
     const bool startsWithCtrl =
         c.row.modifier == ModifierGesture::CtrlHeldBefore || c.row.modifier == ModifierGesture::CtrlReleasedMidDrag;

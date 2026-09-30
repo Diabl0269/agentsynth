@@ -612,4 +612,27 @@ std::vector<ArrangeResult> computeAutoArrange(juce::AudioProcessorGraph& graph,
     return results;
 }
 
+std::vector<juce::Point<int>> computeOutputDock(const std::vector<LayoutUnit>& content,
+                                                const std::vector<juce::Point<int>>& dockSizes, int dockTopY) {
+    // Round UP to the grid, negative-safe (floor division on the shifted value).
+    const auto up = [](int v) { return static_cast<int>(std::ceil(static_cast<double>(v) / kGridSize)) * kGridSize; };
+    int left = kArrangeOriginX;
+    if (!content.empty()) {
+        int right = content.front().rect.getRight();
+        for (const auto& unit : content)
+            right = std::max(right, unit.rect.getRight());
+        left = up(right) + kLayerGapX;
+    }
+
+    const int y = snap(dockTopY);
+    std::vector<juce::Point<int>> positions;
+    positions.reserve(dockSizes.size());
+    int x = left;
+    for (const auto& size : dockSizes) {
+        positions.push_back({x, y});
+        x = up(x + size.x + kOutputDockCardGapX);
+    }
+    return positions;
+}
+
 } // namespace synth::LayoutUtil

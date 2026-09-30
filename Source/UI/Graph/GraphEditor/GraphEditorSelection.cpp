@@ -149,6 +149,7 @@ void GraphEditor::pruneSelection() {
 // removeMacroPort select the nodes to remove, then call this through the host.
 void GraphEditor::deleteSelection() {
     auto ids = selection.getSelected();
+    removeUndeletableOutputNodes(ids); // Audio Output never; Master while the mixer has channels
     if (ids.empty())
         return;
 
@@ -289,13 +290,14 @@ void shiftCarriedMacroCards(synth::MacroSet& macros, juce::OwnedArray<MacroCardC
 }
 } // namespace
 
-void GraphEditor::beginSelectionDrag() {
+void GraphEditor::beginSelectionDrag(juce::AudioProcessorGraph::NodeID initiator) {
     selectionDragStartPositions.clear();
     for (auto* comp : content.getModules()) {
-        if (comp != nullptr && selection.contains(comp->getNodeId()))
+        // Dock cards (Master / Rec Tap / Audio Output) never travel with a selection: they stay put.
+        if (comp != nullptr && selection.contains(comp->getNodeId()) && !isOutputDockNode(comp->getNodeId()))
             selectionDragStartPositions.emplace_back(comp->getNodeId(), comp->getPosition());
     }
-    selectionDragActive = selectionDragStartPositions.size() > 1;
+    selectionDragActive = selectionDragStartPositions.size() > 1 && !isOutputDockNode(initiator);
 }
 
 void GraphEditor::dragSelectionBy(juce::Point<int> delta, ModuleComponent* initiator) {
@@ -383,6 +385,7 @@ void GraphEditor::finalizeSelectionDrag() {
 
     selectionDragActive = false;
     selectionDragStartPositions.clear();
+    reflowOutputDock(); // the group may now be the rightmost thing on the canvas
     repaintCanvas();
 }
 
@@ -454,6 +457,7 @@ void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point
         finalizeSelectionDrag();
         if (auto* m = macros.find(macroId))
             m->bounds.setPosition(synth::LayoutUtil::snap(newCardTopLeft));
+        reflowOutputDock(); // a collapsed card dropped right of the dock pushes the dock along
     };
 
     if (undoManager)

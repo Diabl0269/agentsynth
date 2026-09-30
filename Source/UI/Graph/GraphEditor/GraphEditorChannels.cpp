@@ -95,10 +95,6 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
         /*master=*/{masterX, originPos.y},
     };
 
-    // Known BEFORE the build below, the same reason the Audio Output relocation check needs it: whether
-    // this call is the one that splices Master for the first time.
-    const bool masterExistedBefore = synth::findMasterNode(graph) != nullptr;
-
     // Every exit's distinct source node, gathered before buildChannelForFeeds removes the exit
     // edges — used for the macro-boxing decision below.
     std::vector<juce::AudioProcessorGraph::NodeID> sourceNodeIds;
@@ -110,18 +106,7 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
     if (channel.stripUuid.isEmpty())
         return; // a factory/addNode failure partway — same contract as buildDefaultAudioChannel
 
-    // Mirrors MainComponent::addAudioTrack: on the very first channel, relocate
-    // a bare Audio Output to terminate the row instead of leaving the finished chain cabling back
-    // across the whole canvas to reach wherever it already sat.
-    if (!masterExistedBefore && channel.master != nullptr) {
-        const int outputX = masterX + estimateModuleSize("Master").x + kAutoChannelCardGapX;
-        for (auto* node : graph.getNodes())
-            if (node != nullptr && node->getProcessor() != nullptr &&
-                node->getProcessor()->getName() == "Audio Output") {
-                node->properties.set("x", outputX);
-                node->properties.set("y", originPos.y);
-            }
-    }
+    // Master joins the output dock, which reflowOutputDock derives right of everything (updateComponents below).
 
     // Boxing: only when EVERY exit source is an ORDINARY (non-port) member of the SAME macro —
     // never insert between an inner node and its outlet (a MacroOutlet source refuses), and never
@@ -230,26 +215,12 @@ bool GraphEditor::makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, 
         return false;
     }
 
-    const bool masterExistedBefore = synth::findMasterNode(graph) != nullptr;
     const auto made = synth::buildMakeChannel(
         graph, plan, [](juce::AudioProcessorGraph::Node& node) { return channelLayoutRightOf(node); });
     if (made.memberUuids.empty() && made.buses.empty())
         return false;
 
-    // As in maybeAutoCreateChannelAfterConnect: the first-ever Master pulls a
-    // bare Audio Output in to terminate the row.
-    if (!masterExistedBefore)
-        if (auto* master = synth::findMasterNode(graph)) {
-            const int outputX = static_cast<int>(master->properties.getWithDefault("x", 0)) +
-                                estimateModuleSize("Master").x + kAutoChannelCardGapX;
-            const int outputY = static_cast<int>(master->properties.getWithDefault("y", 0));
-            for (auto* node : graph.getNodes())
-                if (node != nullptr && node->getProcessor() != nullptr &&
-                    node->getProcessor()->getName() == "Audio Output") {
-                    node->properties.set("x", outputX);
-                    node->properties.set("y", outputY);
-                }
-        }
+    // A first-ever Master joins the output dock; reflowOutputDock derives its place (updateComponents below).
 
     // One collapsed macro per channel, ports from the group-time crossing plan (computed before the
     // macro exists, exactly as groupSelectionIntoMacro does) minus the strip's own outlets.

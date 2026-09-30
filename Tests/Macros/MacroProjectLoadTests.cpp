@@ -6,6 +6,7 @@
 // updateComponents() and recursed until the stack overflowed. The matrix test runs every module type the
 // app can create through the same load so the next constructor that triggers layout is caught here.
 
+#include "../UI/Graph/OutputDockTestHelpers.h"
 #include "MacroContainer/MacroContainerTestHelpers.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -66,10 +67,16 @@ struct LoadCanvas {
     }
 
     void expectLoadedAsSaved(const std::vector<LoadedNode>& nodes, bool expectComponents = true) {
+        const auto dockPositions = outputdock_test::expectedDockPositions(editor, engine.getGraph());
         for (const auto& n : nodes) {
             EXPECT_EQ(componentCount(n.id), expectComponents ? 1 : 0);
-            if (auto* comp = findComponent(editor, n.id))
-                EXPECT_EQ(comp->getPosition(), n.saved) << "node " << (int)n.id.uid << " was moved by the load";
+            if (auto* comp = findComponent(editor, n.id)) {
+                // The output dock is the one thing a load moves by design: it sits at computeOutputDock's position.
+                if (outputdock_test::isDockNode(engine.getGraph(), n.id))
+                    EXPECT_EQ(comp->getPosition(), dockPositions.at(n.id.uid)) << "dock card " << (int)n.id.uid;
+                else
+                    EXPECT_EQ(comp->getPosition(), n.saved) << "node " << (int)n.id.uid << " was moved by the load";
+            }
         }
     }
 };

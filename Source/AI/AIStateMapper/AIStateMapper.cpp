@@ -8,6 +8,7 @@
 #include "AIStateMapper.h"
 
 #include "AIStateMapperInternal.h"
+#include "Mixer/MasterSplice.h"
 
 #include <map>
 #include <optional>
@@ -16,6 +17,15 @@
 namespace synth {
 
 namespace {
+// A patch's "remove" entry. False (nothing removed, the id keeps its mapping) for a node the output dock protects:
+// Audio Output never leaves the patch, nor Master while a mixer channel exists.
+bool removePatchNode(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id) {
+    if (outputDockDeleteRefusal(graph, id).isNotEmpty())
+        return false;
+    if (graph.getNodeForId(id) != nullptr)
+        graph.removeNode(id);
+    return true;
+}
 
 // Adopts a patch node's "uuid" onto the live node — trusted callers only. Untrusted input never
 // dictates identity: a model could otherwise hand two nodes the same uuid, or claim the uuid of a
@@ -553,10 +563,8 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
             for (const auto& idVar : *removeList) {
                 int nodeIdToRemove = (int)idVar;
                 auto juceNodeId = juce::AudioProcessorGraph::NodeID((juce::uint32)nodeIdToRemove);
-                if (graph.getNodeForId(juceNodeId) != nullptr) {
-                    graph.removeNode(juceNodeId);
-                }
-                idMap.erase(nodeIdToRemove);
+                if (removePatchNode(graph, juceNodeId))
+                    idMap.erase(nodeIdToRemove);
             }
         }
     }
