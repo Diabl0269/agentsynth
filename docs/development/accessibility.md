@@ -7,8 +7,11 @@ a screen reader. The coverage test (below) keeps the gaps from growing.
 
 Every new or changed control:
 
-1. **Is keyboard-reachable** - it takes focus on Tab (`setWantsKeyboardFocus(true)`) and acts on
-   Space/Enter or the arrow keys the way a native control would.
+1. **Is keyboard-reachable** - either it is its own Tab stop (`setWantsKeyboardFocus(true)`), or it
+   sits inside a focus region that moves between its items with the arrow keys (the mixer panel is
+   one focusable leaf; its columns and faders are reached with Left/Right/Up/Down). It acts on
+   Space/Enter or the arrow keys the way a native control would, and every new key is a rebindable
+   action (below).
 2. **Shows the accent focus ring** when it holds keyboard focus.
 3. **Has a screen-reader name** - `setTitle("...")` on the component (a button's text counts), plus a
    value or role where it applies (a slider's `textFromValueFunction`, a meter's accessibility value).
