@@ -291,6 +291,44 @@ TEST(MacroPortSidebar, HullStripsPaintUnderThePortWidgets) {
     EXPECT_EQ(underWidget, strip) << "the widget does not cover the strip on its own row";
 }
 
+// The strip fill spans from the hull top: beside the name pill, in the chip row, the strip is the same colour
+// as further down, not the bare canvas. Only the port ROWS start below the chip row.
+TEST(MacroPortSidebar, HullStripFillReachesTheHullTop) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto uuid = addInlet(editor, macroId, "In A");
+    auto& content = contentOf(editor, engine, uuid);
+
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
+    const auto [inW, outW] = editor.getMacroController().macroHullStripWidths(macroId);
+    ASSERT_GT(outW, 30) << "the fixture's right strip must clear the 14px collapse button (6px from the edge)";
+    // Right strip, inner side (clear of the collapse button and the rounded outer corner), inside the chip row.
+    const int x = hull.getRight() - outW + 4;
+    const int chipRowY = hull.getY() + 12;
+    const int belowChipRowY = hull.getY() + detail::kMacroChipRowHeight + 6;
+    const juce::Point<int> outsideHull{hull.getX() - 30, chipRowY};
+    ASSERT_GT(inW, 0);
+
+    constexpr int kShift = 60;
+    juce::Image img(juce::Image::ARGB, hull.getRight() + 40 + kShift, hull.getBottom() + 40, true,
+                    juce::SoftwareImageType());
+    {
+        juce::Graphics g(img);
+        g.addTransform(juce::AffineTransform::translation((float)kShift, 0.0f));
+        content.paintEntireComponent(g, false);
+    }
+    const auto canvas = img.getPixelAt(outsideHull.x + kShift, outsideHull.y);
+    const auto stripBelow = img.getPixelAt(x + kShift, belowChipRowY);
+    const auto stripAtTop = img.getPixelAt(x + kShift, chipRowY);
+    ASSERT_NE(stripBelow, canvas) << "sanity: the strip is drawn below the chip row";
+    EXPECT_NE(stripAtTop, canvas) << "the strip fill also covers the chip row, up to the hull top";
+    EXPECT_EQ(stripAtTop, stripBelow) << "one continuous fill from the hull top down";
+}
+
 // Strip widths are fixed: they never depend on the port names, so a very long name is ellipsised in its column and
 // the collapsed card's title column keeps its room.
 TEST(MacroPortSidebar, CardStripsAreFixedSoTheCardTitleKeepsItsRoom) {

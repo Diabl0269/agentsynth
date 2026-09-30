@@ -27,9 +27,19 @@ records carrying geometry, signal kind, source category, activity and bypass sta
 
 This is load-bearing: computing the drawn curve and the clickable curve separately means they drift
 apart the first time either is tweaked, and clicks silently miss the wire. For the same reason the
-bezier lives in exactly one place, `GraphEditor::buildCablePath()`, which must stay identical to
-`AppLookAndFeel::drawConnectionWire`'s default curve. Cable geometry is canvas-space, so zoom and
+bezier lives in exactly one place, `synth::ui::makeCablePath()` (`Source/UI/Layout/CableCurve.h`),
+which `GraphEditor::buildCablePath()` (paint and hit-testing) and `AppLookAndFeel::drawConnectionWire`'s
+fallback curve both call. Cable geometry is canvas-space, so zoom and
 pan alone can never move a cable — only a graph edit invalidates it.
+
+**Direction rule.** `p1` is always the output (source) end and `p2` the input (destination) end, fixed
+by the caller (the in-progress drag wire swaps its endpoints when the drag started on an input). The
+cable leaves `p1` heading right and enters `p2` heading right, from the left. Forward cables use a
+handle of half the run, at least 50 px (`kCableMinHandle`) but never more than half the vertical gap, so
+anything 100 px or more apart is the plain half-run curve, a near-vertical cable still bulges out
+sideways, and a short hop (a macro's interior jack to a member) doesn't overshoot into a kink. Backward
+cables use a handle of the full backward run clamped to 50 to 300 px (`kCableMaxBackHandle`), which keeps
+the loop out of the output visibly to the right of its card, so a cable never leaves over its own card or arrives from below.
 
 `buildVisibleCables()` returns a **memoized `const&`**: it is rebuilt only when
 `GraphEditor::repaintCanvas()` invalidates the memo (see [rendering](rendering.md)), not on every

@@ -484,6 +484,7 @@ add_library(Core STATIC
     Source/Auth/DeviceIdStore.h
     Source/Auth/DeviceIdStore.cpp
     # UI utilities
+    Source/UI/Layout/CableCurve.h
     Source/UI/Layout/LayoutUtil.h
     Source/UI/Layout/LayoutUtil.cpp
     Source/UI/Graph/ModuleStepOrder.h

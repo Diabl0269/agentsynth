@@ -10,6 +10,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
+#include "UI/Layout/CableCurve.h"
 
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -26,14 +27,11 @@ using namespace detail;
 // first time either was tweaked, and clicks would silently miss the wire.
 // ============================================================================
 
-// The cubic bezier a cable is drawn along. Must stay identical to
-// AppLookAndFeel::drawConnectionWire's default curve or hit-testing drifts off the wire.
+// The cubic bezier a cable is drawn along, hit-tested against and previewed with: one shared
+// function (UI/Layout/CableCurve.h), also used by AppLookAndFeel::drawConnectionWire's fallback.
+// p1 is the source (output) end, p2 the destination (input) end.
 juce::Path GraphEditor::buildCablePath(juce::Point<float> p1, juce::Point<float> p2) {
-    juce::Path wp;
-    const float dx = p2.x - p1.x;
-    wp.startNewSubPath(p1);
-    wp.cubicTo(p1.x + dx * 0.5f, p1.y, p2.x - dx * 0.5f, p2.y, p2.x, p2.y);
-    return wp;
+    return synth::ui::makeCablePath(p1, p2);
 }
 
 // Perpendicular distance from a canvas point to a cable's curve, in pixels.
@@ -164,7 +162,8 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
 // Enumerates every cable currently drawn on the canvas, in paint order.
 // Memoized: the list is rebuilt when the canvas is asked to repaint (repaintCanvas()) and on
 // every 30 Hz tick, never per-paint. Cable geometry is CANVAS-space, so zoom and pan cannot
-// move a cable — a zoom gesture reuses the same list. Do not store the returned reference
+// move a cable — except an open macro's port interior jack, which slides with the zoom, so updateTransform()
+// drops the memo whenever a macro exists. Do not store the returned reference
 // across a repaintCanvas(), a timerCallback() or any graph edit.
 const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() {
     if (!cablesCacheValid) {
@@ -687,7 +686,11 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             preview.signal = editor.dragSourceIsMidi ? synth::ui::CableSignal::Midi : synth::ui::CableSignal::Audio;
             if (auto* mb = dynamic_cast<ModuleBase*>(editor.dragSourceModule->getModule()))
                 preview.sourceCategory = synth::ui::categoryFor(mb->getModuleType());
-            strokeWire(posInContent.toFloat(), mouseLocal.toFloat(), editor.colourForCable(preview),
+            // Cables run source -> destination: dragging from an input, the jack is the destination.
+            const auto jackPt = posInContent.toFloat();
+            const auto mousePt = mouseLocal.toFloat();
+            strokeWire(editor.dragSourceIsInput ? mousePt : jackPt, editor.dragSourceIsInput ? jackPt : mousePt,
+                       editor.colourForCable(preview),
                        /*isModulation*/ false,
                        /*activity*/ 0.0f, /*fallbackWidth*/ 3.0f, /*hovered*/ false);
         }

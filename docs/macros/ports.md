@@ -208,12 +208,19 @@ several ports and pushed the '+' under a jack; a strip gives every port its own 
   full name. Adding a port, renaming one or zooming never moves a strip or the hull, so paint,
   hit-testing and cable anchoring agree without measuring anything.
 - **Zoom fades what is painted.** `macroPortNameAlphaAtZoom` is `easeInOutCubic` over zoom 0.5 to 0.7
-  (0 at or below 0.5, 1 at or above 0.7): the port names, the '-' glyph and each strip's inner divider
-  are painted at that alpha, and the strip fill recedes from 0.55 to 0.25. The '-' is clickable only
-  at alpha >= 0.5. Jacks and '+' never fade, so cable ends never move. While a name is faded a hovered
-  jack shows it in the tooltip. The alpha is a pure function of the zoom read at paint time from the
-  parent component's transform, with no timer; docked port widgets are exempt from the zoom raster
-  freeze so their names repaint live.
+  (0 at or below 0.5, 1 at or above 0.7): the port names, the '-' and '+' glyphs and each strip's inner
+  divider are painted at that alpha, and the strip fill recedes from 0.55 to 0.25. The '-' and '+' are
+  clickable only at alpha >= 0.5. While a name is faded a hovered jack shows it in the tooltip. The alpha is
+  a pure function of the zoom read at paint time from the parent component's transform, with no timer;
+  docked port widgets are exempt from the zoom raster freeze so their names repaint live.
+- **Zoomed out, the two jacks merge.** The same alpha `t` also slides an OPEN macro's interior jack onto
+  its boundary jack (`macroPortInteriorJackX`, in `ModuleComponent::macroPortJackX`, which
+  `getPortCenter`, the MIDI jack and the hit-test all read) and narrows each strip's painted width from
+  its full width to the `kMacroStripRailWidth` rail along the outline (`macroStripPaintedWidth`), so the
+  port reads as ONE dot on the outline. The interior dot fades with `t`. A cable anchored on the interior
+  jack follows it, so `updateTransform` drops the memoized visible-cable list on every zoom while a macro
+  exists. A press on the merged dot picks the boundary jack. The hull, the widget bounds and the strip
+  widths above never change: only what is painted and where the interior jack answers moves.
 - **Collapsed card.** `MacroGroupController::macroCardPortLayout` puts jack `i` of a side at
   `y = 30 + 16 i + 8`, x = 10 (inputs) / width - 10 (outputs). The card grows to
   `30 + rows * 16 + 22` px when that exceeds its 90 px floor (`macroCardHeightFor`); the height is
@@ -228,7 +235,8 @@ several ports and pushed the '+' under a jack; a strip gives every port its own 
   outside land) and its **inner jack** (5 px inside the strip's inner edge, where cables to members
   start). `dockMacroPortWidgets` sets each widget to those bounds. A widget is a bare
   `ModuleComponent` that draws only its jacks (10 px on the boundary side, 7 px on the interior side)
-  and its name; the strips are painted under it by `paintMacroPortStrips` from
+  and its name; the strips (fill and divider from the hull's top edge, under the name chip; the rows still
+start below the chip row) are painted under it by `paintMacroPortStrips` from
   `GraphContentComponent::paint`, before the dashed outline. There is no hover cross on the open
   macro, because a widget's jacks are where cable drags start; removal is the strip's '-' or the
   port's right-click Delete Port.
