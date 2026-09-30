@@ -14,6 +14,7 @@ FetchContent_MakeAvailable(googletest)
 add_executable(Tests
     TestMain.cpp
     UI/Layout/LayoutUtilTests.cpp
+    UI/Layout/LayoutUtilDisplacementTests.cpp
     Modules/OscillatorTests.cpp
     Modules/CardLayoutTests.cpp
     Modules/FilterTests.cpp
@@ -424,6 +425,7 @@ add_executable(Tests
     Macros/MacroAutoPort/MacroAutoPortNameTests.cpp
     Macros/MacroAutoPort/MacroAutoPortNestedTests.cpp
     Macros/MacroCardJackTests.cpp
+    Macros/MacroHullDisplacementTests.cpp
     Macros/MacroCardPortButtonsTests.cpp
     Macros/MacroPortWidgetTests.cpp
     Macros/MacroPortWidgetColourTests.cpp

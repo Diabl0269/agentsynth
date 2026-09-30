@@ -131,6 +131,7 @@ juce::String MacroGroupController::groupSelectionIntoMacro(bool autoCreatePorts)
         if (!portPlan.empty())
             spliceMacroPorts(newId, portPlan);
         host_.updateComponents();
+        makeRoomFor("m:" + newId);
     };
 
     if (host_.undo())
@@ -246,6 +247,7 @@ void MacroGroupController::addSelectionToMacro(const juce::String& macroId,
                 spliceOutMacroPort(*liveMacro, portUuid);
         }
         host_.updateComponents();
+        makeRoomFor("m:" + macroId);
     };
 
     // recordUndo=false runs doAdd() directly — an outer caller (GraphEditor's Cmd/Ctrl-drag
@@ -615,8 +617,10 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
     }
     m->collapsed = collapsed;
     host_.updateComponents();
-    if (!collapsed)
+    if (!collapsed) {
         nudgeHullIntoCanvas(macroId);
+        makeRoomFor("m:" + macroId);
+    }
 }
 
 // The canvas content is (0,0,10000,10000) and anything left of or above the origin is clipped and unclickable, while
@@ -631,28 +635,7 @@ void MacroGroupController::nudgeHullIntoCanvas(const juce::String& macroId) {
     if (hull.isEmpty() || (dx == 0 && dy == 0))
         return;
 
-    auto& macros = host_.getMacros();
-    std::set<juce::String> moved;
-    for (const auto& uuid : macro_nesting::orderedDescendantMembers(macros, macroId)) {
-        const auto* owner = macros.findByMember(uuid);
-        if (owner != nullptr && owner->memberIsPort(uuid))
-            continue;
-        auto* node = host_.graph().getNodeForId(resolveMemberNodeId(uuid));
-        if (node == nullptr)
-            continue;
-        moved.insert(uuid);
-        // One new position, written once to both the node property and the live component.
-        juce::Point<int> pos{(int)node->properties["x"], (int)node->properties["y"]};
-        pos += juce::Point<int>(dx, dy);
-        node->properties.set("x", pos.x);
-        node->properties.set("y", pos.y);
-        for (auto* comp : host_.modules())
-            if (comp != nullptr && comp->getNodeId() == node->nodeID)
-                comp->setTopLeftPosition(pos);
-    }
-    for (const auto& id : macro_nesting::collapsedMacrosCarriedBy(macros, moved))
-        if (auto* child = macros.find(id))
-            child->bounds.setPosition(child->bounds.getPosition() + juce::Point<int>(dx, dy));
+    moveUnitBy("m:" + macroId, {dx, dy});
     host_.updateComponents();
 }
 

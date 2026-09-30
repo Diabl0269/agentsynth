@@ -561,7 +561,16 @@ void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
             graph.removeConnection(c);
     }
 
-    // 2. Nudge neighbours clear of the new footprint. The resized module stays put.
+    // 2. A macro member growing widens its macro's hull: push the neighbours (siblings, then whatever
+    //    surrounds the macro) as whole units, inside the same undo step as the gesture.
+    if (const auto uuid = macroController_.nodeUuidFor(nodeId);
+        uuid.isNotEmpty() && macros.findByMember(uuid) != nullptr) {
+        macroController_.makeRoomFor("n:" + juce::String((juce::int64)nodeId.uid));
+        repaintCanvas();
+        return;
+    }
+
+    // 3. Nudge neighbours clear of the new footprint. The resized module stays put.
     std::vector<synth::LayoutUtil::Box> boxes;
     for (auto* comp : content.getModules())
         if (comp != nullptr)

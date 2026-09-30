@@ -210,6 +210,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.h
     Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupController.h
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerDisplacement.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerGeometry.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerGrouping.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerBypassMute.cpp

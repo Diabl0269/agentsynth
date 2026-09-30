@@ -379,3 +379,10 @@ which is trusted-path only (root `CLAUDE.md`). `includeExtraState=false` (Save a
 to Mono on reload, the same way a Sampler's loaded file or a Wavetable's custom table is dropped
 from a saved snippet. Copy, paste and duplicate pass `includeExtraState=true`, the payload never
 leaving the process, and keep the shape, the same as they keep a Sampler's sample.
+
+## Neighbours make room
+
+Whatever makes a macro's hull or card bigger (grouping, nesting, adding modules, expanding, adding a
+port) pushes the units beside it out of the way, as whole rigid units, inside the same undo step.
+Collapsing never pulls anything back. See
+[Making room when something grows](layout.md#making-room-when-something-grows).

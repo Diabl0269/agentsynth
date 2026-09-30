@@ -71,6 +71,39 @@ equivalent to requiring at least `g` px of clear space on all sides between the 
 parameter excludes a module's own box from the occupied set — used during a drag so a module does
 not collide with its own pre-drag position.
 
+## Making room when something grows
+
+When a macro's hull or card gets bigger, or a macro member card does, the things beside it move
+aside instead of being covered. The pure geometry is `LayoutUtil::resolveDisplacement`; the canvas
+glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupControllerDisplacement.cpp`.
+
+- **Units.** Neighbours are compared one nesting level at a time. At the top level a unit is a loose
+  module, or a whole macro as ONE rectangle (its hull when open, its card when collapsed); inside a
+  macro the units are its direct members and its child macros. A module hidden inside a collapsed
+  macro is never a unit, and macro port widgets never are either (they live inside their hull).
+  Moving a macro moves everything drawn inside it rigidly, hidden members and nested collapsed
+  cards included, so their offsets to the card never change.
+- **Direction.** Only units the grower overlaps (with the usual 12 px clearance) move. Each goes the
+  way that needs the least travel (left, right, up or down; a tie goes down, then right), rounded up
+  to the 8 px grid. The grower itself never moves.
+- **Cascade.** A pushed unit pushes what it now overlaps in the same direction, so a row of
+  neighbours shifts together. A unit reached twice ends up as far as the further push needs.
+  Nothing ever moves back, so the cascade always settles.
+- **Canvas edge and pinned units.** The top-left of the canvas is a wall: a move that would leave
+  it is not taken, and the unit instead goes the smaller of right or down. The same rule applies
+  to a move that would land on a pinned unit (which never moves). A unit that is blocked both
+  ways is left where it is.
+- **Inside out.** After the grower's own level is settled, its enclosing macro may have a bigger
+  hull, so that macro is treated as the grower one level up, all the way to the top level.
+- **When.** Only on discrete events, never while dragging: grouping (including nesting), adding
+  modules to a macro (menu, Cmd-drag, library drop into a hull), expanding a macro, adding a port
+  (which lengthens the hull), and a macro member card changing size.
+- **Undo.** It runs inside the undo step of whatever caused the growth, so one undo puts the
+  neighbours back with the macro. Positions are written at once, so hulls, port strips and cables
+  are correct immediately.
+- **Shrinking.** Collapsing a macro or removing a port never pulls neighbours back.
+- **No glide yet.** Neighbours land in their new place at once; there is no animated slide.
+
 ## Auto-arrange
 
 `GraphEditor::autoArrange()` (Cmd+L, or the toolbar button) rearranges every visible module into a

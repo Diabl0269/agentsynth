@@ -93,6 +93,30 @@ inline constexpr int kResolveMaxRounds = 4;
 std::vector<ArrangeResult> resolveOverlapsAfterResize(NodeID resizedId, const std::vector<Box>& boxes,
                                                       int gap = kCollisionGap);
 
+// ---- Making room when something grows (docs/layout/layout.md#making-room-when-something-grows) ----
+//
+// One sibling on the canvas (a loose module, or a whole macro as ONE rigid unit) has grown; every
+// unit it now overlaps is pushed clear, and pushed units push what they land on in the same direction.
+struct LayoutUnit {
+    juce::String key;
+    juce::Rectangle<int> rect;
+    bool pinned = false; // never moves, and pushed units are redirected around it
+};
+
+struct UnitMove {
+    juce::String key;
+    juce::Point<int> delta;
+};
+
+// Backstop on cascade rounds (kResolveMaxRounds above belongs to the older single-resize sweep). Displacements
+// only ever grow, so the cascade settles well before this.
+inline constexpr int kDisplacementMaxRounds = 64;
+
+// Pure and deterministic. The grower never moves. Returns only units whose delta is non-zero; a unit blocked on
+// every side (canvas wall, pinned neighbours) is left where it is. Deltas are multiples of kGridSize.
+std::vector<UnitMove> resolveDisplacement(const juce::String& growerKey, const std::vector<LayoutUnit>& units,
+                                          int gap = kCollisionGap);
+
 // Topological signal-flow layout. sizeOf returns (w,h) footprint for a node id. extraEdges carries
 // modulation routing edges (src->dst) so envelope->VCA etc. influence layering depth.
 std::vector<ArrangeResult> computeAutoArrange(juce::AudioProcessorGraph& graph,
