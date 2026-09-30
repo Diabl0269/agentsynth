@@ -39,7 +39,7 @@ knobs and sliders, so a stock control needs nothing. A custom-painted control ca
 
 `Tests/UI/Accessibility/AccessibilityCoverageTests.cpp` audits every visible, accessible interactive
 control (buttons, sliders, combo boxes, text editors, anything that wants keyboard focus) on a
-headless `MainComponent`, each Settings tab and the Export Audio dialog, and counts two gaps per
+headless `MainComponent` (panel state pinned: library open, bottom dock open on the Timeline tab, AI chat and mod matrix closed, so the count does not depend on saved settings), one card for every built-in module type (`ModuleCards`, one aggregate entry; types needing a plugin binary, a timeline track or mixer/macro plumbing are skipped, the list is in the test), each Settings tab and the Export Audio dialog, and counts two gaps per
 surface: **missingName** (empty `setTitle`, and for a button empty text; a custom accessibility handler is not consulted because it does not exist without a native window) and **missingTooltip**. The counts must equal the
 entry in `Tests/UI/Accessibility/AccessibilityBaseline.h`:
 

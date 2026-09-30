@@ -5,9 +5,12 @@
 //    tab, the Export Audio dialog) and compares the name/tooltip gap counts with
 //    AccessibilityBaseline.h: more gaps fails (a new control lacks a name or tooltip), fewer gaps
 //    fails too, so the baseline is lowered in the same change that fixed them.
+#include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "../../TestSettingsHelpers.h"
+#include "../Graph/GraphEditor/GraphEditorTestHelpers.h"
 #include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIProvider.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AccessibilityAudit.h"
 #include "AccessibilityBaseline.h"
 #include "AudioEngine/AudioEngine.h"
@@ -17,6 +20,7 @@
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Settings/SettingsWindow.h"
 #include "UI/Theme/ThemeManager.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 
@@ -166,10 +170,34 @@ TEST(AccessibilityAuditTest, TextEditorNeedsNoTooltipAndIsNamedByItsDescription)
 // The real surfaces against the baseline.
 // ============================================================================
 
-TEST(AccessibilityCoverageTest, MainComponentDefaultProject) {
-    MainComponent mc(std::make_unique<MockProviderACT>());
+// The persisted panel keys are reset by MainComponentTest; the dock and the mod matrix are not
+// persisted (or not reset), so the panel state is pinned here: library open, bottom dock open on
+// the Timeline tab, AI chat closed, mod matrix closed, minimap shown.
+namespace {
+void pinPanelState(MainComponent& mc) {
+    if (!mc.isLibraryConfiguredVisible())
+        mc.simulateToggleLibraryClick();
+    if (mc.isAiPanelConfiguredVisible())
+        mc.simulateToggleAiPanelClick();
+    if (!mc.isBottomDockConfiguredVisible())
+        mc.simulateToggleBottomPanelClick();
+    if (mc.getGraphEditor().isModMatrixVisible())
+        mc.simulateToggleModMatrixClick();
+    if (!mc.getGraphEditor().isMinimapVisible())
+        mc.simulateToggleMinimapClick();
+    mc.getBottomDock().setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
+    mc.setPanelOpenProgressForTest(MainComponent::SlidingPanel::Library, 1.0f);
+    mc.setPanelOpenProgressForTest(MainComponent::SlidingPanel::AiChat, 0.0f);
+    mc.resized();
+}
+} // namespace
+
+TEST_F(MainComponentTest, AccessibilityCoverageMainComponentDefaultProject) {
+    synth::test::PersistedKeysGuard guard({"bottomDockVisible", "bottomDockActiveTab", "bottomDockTabOrder"});
+    MainComponent mc(std::make_unique<MockProvider>());
     mc.setSize(1400, 900);
     mc.newPatchForTest();
+    pinPanelState(mc);
     EXPECT_TRUE(matchesBaseline("MainComponent", auditAccessibility(mc)));
 }
 
@@ -218,4 +246,58 @@ TEST_F(AccessibilitySettingsTest, EveryTabOfTheSettingsWindow) {
         ASSERT_NE(content, nullptr);
         EXPECT_TRUE(matchesBaseline("Settings/" + window.getTabName(i), auditAccessibility(*content)));
     }
+}
+
+// ============================================================================
+// Every built-in module card.
+// ============================================================================
+
+// One card per type in the module factory (the list the patch loader and the AI schema use). Left
+// out: "Hosted Plugin" (needs a plugin binary), "Track In", "Track Audio" and "Rec Tap" (bound to
+// timeline tracks or files), the "Macro In/Out" and "Macro MIDI In/Out" jacks and "Channel Strip"
+// and "Master" (mixer/macro plumbing with no canvas card of their own), and the alias keys "Amp
+// Env", "Filter Env" and "Mod Slot" (the same cards as "ADSR" and "Attenuverter").
+TEST(AccessibilityCoverageTest, EveryModuleCard) {
+    static const juce::StringArray skipped{
+        "Hosted Plugin",  "Track In",      "Track Audio", "Rec Tap", "Macro In",   "Macro Out", "Macro MIDI In",
+        "Macro MIDI Out", "Channel Strip", "Master",      "Amp Env", "Filter Env", "Mod Slot"};
+    std::vector<juce::String> types;
+    for (const auto& type : synth::AIStateMapper::moduleFactoryTypeNames())
+        if (!skipped.contains(type))
+            types.push_back(type);
+    std::sort(types.begin(), types.end());
+
+    AudioEngine audioEngine;
+    GraphEditor editor(audioEngine);
+    editor.setSize(2400, 2400);
+    auto& graph = audioEngine.getGraph();
+    std::vector<std::pair<juce::String, juce::AudioProcessorGraph::NodeID>> nodes;
+    int slot = 0;
+    for (const auto& type : types) {
+        auto node = graph.addNode(synth::AIStateMapper::createModule(type));
+        if (node == nullptr)
+            continue;
+        node->properties.set("x", 40 + (slot % 8) * 290);
+        node->properties.set("y", 40 + (slot / 8) * 310);
+        nodes.emplace_back(type, node->nodeID);
+        ++slot;
+    }
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    std::vector<Gap> gaps;
+    int cards = 0;
+    for (const auto& [type, id] : nodes) {
+        for (auto* card : editor.getModuleComponents()) {
+            if (card == nullptr || card->getNodeId() != id)
+                continue;
+            ++cards;
+            for (auto gap : auditAccessibility(*card)) {
+                gap.path = "[" + type + "] " + gap.path;
+                gaps.push_back(gap);
+            }
+        }
+    }
+    ASSERT_GT(cards, 30) << "the audit must reach the built-in cards";
+    EXPECT_TRUE(matchesBaseline("ModuleCards", gaps));
 }
