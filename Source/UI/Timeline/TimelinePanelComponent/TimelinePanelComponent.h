@@ -2,6 +2,7 @@
 
 #include "Mixer/TrackPresetManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/ScrollTween.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/ClipSelectionModel.h"
@@ -637,6 +638,10 @@ private:
     int currentRowHeight() const;
     double maxTrackScrollPx() const;
     void scrollTrackRows(double deltaPx);
+    // Mouse-wheel notch easing (axis 0 = beats, 1 = px); see UI/Layout/ScrollTween.h.
+    void scrollByWheel(int axis, double amount, bool eased);
+    void applyWheelScroll(int axis, double amount);
+    synth::ui::ScrollTweenRunner wheelTween_;
     void zoomTrackRows(double factor, double anchorLaneY);
     // anchorX is in the ruler's coordinate space (== TimelineViewState's x origin) -- see its
     // definition in TimelinePanelLayout.cpp for why this is the ONE horizontal-zoom writer.

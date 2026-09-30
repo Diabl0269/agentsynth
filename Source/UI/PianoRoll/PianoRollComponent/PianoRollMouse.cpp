@@ -21,6 +21,7 @@ using namespace synth::ui::detail;
 // ---- Mouse ----
 
 void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
+    wheelTween_.stop();
     grabKeyboardFocus();
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
@@ -657,6 +658,7 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         // wheel.deltaY: macOS folds a Shift-held wheel gesture into deltaX, so reading deltaY here
         // meant this branch received exactly 0.0 and the vertical zoom was dead on the platform it
         // was written on.
+        wheelTween_.stop();
         zoomVerticalAroundY(wheelZoomFactor(wheel), (double)pos.y);
         return;
     }
@@ -669,10 +671,14 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         // (wheelZoomFactor) — a modifier-decided branch must never depend on which axis the OS
         // parked the gesture on, and the two zoom branches must never disagree about which way is
         // "in".
+        wheelTween_.stop();
         zoomHorizontalAroundX(wheelZoomFactor(wheel), std::max(0.0, (double)pos.x - (double)leftGutterWidth()));
         return;
     }
 
+    // A plain mouse-wheel notch (neither smooth nor inertial) eases over ~120 ms; a trackpad keeps
+    // the direct path, where every event is already a small step.
+    const bool eased = !wheel.isSmooth && !wheel.isInertial;
     // Shift+wheel is horizontal scroll; so is a trackpad's own horizontal delta.
     const bool horizontal = shift || std::abs(wheel.deltaX) > std::abs(wheel.deltaY);
     if (horizontal) {
@@ -688,12 +694,9 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         const double amountPx = (double)scrollAmount(delta, scrollInverted_) * kScrollPixelsPerWheelUnit;
         if (amountPx != 0.0) {
             // The user is deliberately looking elsewhere -- follow must not undo it on the next
-            // playhead tick. See followSuspended_'s comment.
+            // playhead tick (see followSuspended_'s comment); applyWheelScroll sets it per step.
             followSuspended_ = true;
-            rollView_.scrollBeats(amountPx / rollView_.pixelsPerBeat);
-            repaint();
-            if (onHorizontalViewChanged)
-                onHorizontalViewChanged();
+            scrollByWheel(0, amountPx / rollView_.pixelsPerBeat, eased);
         }
         return;
     }
@@ -721,9 +724,35 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         const double deltaRows = -amountY * kPitchScrollSemitonesPerWheelUnit;
         // Gated on whether the CLAMPED result actually moved, not on the delta being non-zero: a
         // wheel that keeps pushing past the top/bottom row must cost zero repaints.
-        if (deltaRows != 0.0 && setTopRowPosition(topRowPosition_ + deltaRows))
-            repaint();
+        if (deltaRows != 0.0)
+            scrollByWheel(1, deltaRows, eased);
     }
+}
+
+// Not showing (headless tests) or a direct event: apply now, and end any tween first so it can't
+// fight this move. Otherwise ScrollTweenRunner eases the amount in, retargeting mid-flight.
+void PianoRollComponent::scrollByWheel(int axis, double amount, bool eased) {
+    const auto read = [this](int a) { return a == 0 ? rollView_.firstVisibleBeat : topRowPosition_; };
+    const auto scroll = [this](int a, double d) { applyWheelScroll(a, d); };
+    if (eased && wheelTween_.push(*this, axis, amount, read, scroll))
+        return;
+    wheelTween_.stop();
+    applyWheelScroll(axis, amount);
+}
+
+// The pitch axis is gated on the CLAMPED result moving (a wheel pushing past the top/bottom row
+// must cost zero repaints); the horizontal one repaints and notifies per applied step.
+void PianoRollComponent::applyWheelScroll(int axis, double amount) {
+    if (axis == 1) {
+        if (setTopRowPosition(topRowPosition_ + amount))
+            repaint();
+        return;
+    }
+    followSuspended_ = true;
+    rollView_.scrollBeats(amount);
+    repaint();
+    if (onHorizontalViewChanged)
+        onHorizontalViewChanged();
 }
 
 //==============================================================================

@@ -3,6 +3,7 @@
 #include "PianoRollTypes.h"
 #include "Timeline/MusicalScale.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/PianoRoll/NoteSelectionModel.h"
@@ -812,6 +813,10 @@ private:
     // vblankUpdater, which is `this` (a juce::Component) and must therefore not exist before the
     // component does.
     std::optional<juce::VBlankAnimatorUpdater> scalePanelVblankUpdater_;
+    // Eases a mouse-wheel NOTCH (axis 0 = beats, 1 = rows). Stopped before any other view move.
+    synth::ui::ScrollTweenRunner wheelTween_;
+    void scrollByWheel(int axis, double amount, bool eased);
+    void applyWheelScroll(int axis, double amount);
     // Within the house 160-220 ms spec (docs/layout/animation.md), matching MainComponent's own
     // kPanelSlideMs (~190 ms) feel for the app's other show/hide sidebars.
     static constexpr double kScalePanelAnimMs = 200.0;

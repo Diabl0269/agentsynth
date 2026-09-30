@@ -618,6 +618,14 @@ reason the panel's own Cmd+Shift+wheel branch does
 `deltaX`, so a branch chosen by its modifiers must never assume the OS parked the gesture on
 `deltaY`.
 
+Both scroll rows ease a notched mouse wheel (neither `isSmooth` nor `isInertial`) over ~120 ms through
+`synth::ui::ScrollTweenRunner` (`Source/UI/Layout/ScrollTween.h`) instead of jumping; a notch mid-ease
+retargets from the current position and keeps the remaining distance. Each applied step still
+suspends follow and fires `onHorizontalViewChanged`. Trackpad/inertial events, zoom, a mouse press,
+`openClip`/`closeRoll` and any other view move end the ease, and a non-showing roll (tests) scrolls
+immediately. The roll is `setOpaque(true)` (its `paint()` starts with a full-bounds fill), so scrolling
+repaints it without the parent repainting behind it.
+
 Cmd+= / Cmd+- and Cmd+Shift+= / Cmd+Shift+- reach the same `zoomHorizontal` / `zoomVertical` entry
 points (anchored at the grid's visible centre rather than the cursor) when the roll is the focused
 surface — see [`shortcuts.md`](../control/shortcuts.md#zoom). Zoom is not persisted across opens:
