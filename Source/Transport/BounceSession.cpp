@@ -85,9 +85,7 @@ BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, con
         return;
     }
 
-    const auto audioFormat = createAudioFormatFor(options_.format);
-    writer_.reset(audioFormat->createWriterFor(stream.get(), options_.sampleRate, (unsigned int)options_.numChannels,
-                                               options_.bitDepth, {}, 0));
+    writer_ = createBounceWriter(options_, stream.get(), (unsigned int)options_.numChannels);
     if (writer_ == nullptr) {
         restoreTransportAndEngine();
         setupFailed_ = true;
@@ -293,6 +291,13 @@ BounceResult BounceSession::finish() {
 
     if (writeFailed_) {
         result.message = "Failed while writing to \"" + outFile_.getFullPathName() + "\".";
+        finishedResult_ = result;
+        return finishedResult_;
+    }
+
+    // Closing the writer is when an MP3 is actually encoded; it fails silently, so look.
+    if (encodedOutputIsMissing(options_, temporary_->getFile())) {
+        result.message = kMp3EncodeFailedMessage;
         finishedResult_ = result;
         return finishedResult_;
     }

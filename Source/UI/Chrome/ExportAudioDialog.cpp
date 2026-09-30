@@ -1,5 +1,7 @@
 #include "ExportAudioDialog.h"
 
+#include "Transport/LameLocator.h"
+
 namespace synth::ui {
 
 namespace {
@@ -30,6 +32,8 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     optionsPage_.addAndMakeVisible(sampleRateBox_);
     optionsPage_.addAndMakeVisible(bitDepthLabel_);
     optionsPage_.addAndMakeVisible(bitDepthBox_);
+    optionsPage_.addAndMakeVisible(bitrateLabel_);
+    optionsPage_.addAndMakeVisible(bitrateBox_);
     optionsPage_.addAndMakeVisible(tailLabel_);
     optionsPage_.addAndMakeVisible(tailSlider_);
     optionsPage_.addAndMakeVisible(tailUnitBox_);
@@ -48,9 +52,19 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     formatBox_.addItem("WAV", 1);
     formatBox_.addItem("AIFF", 2);
     formatBox_.addItem("FLAC", 3);
+    formatBox_.addItem("MP3", 4);
     formatBox_.setSelectedId(1, juce::dontSendNotification);
+    for (const int kbps : kMp3BitratesKbps)
+        bitrateBox_.addItem(juce::String(kbps) + " kbps", kbps);
+    bitrateBox_.setSelectedId(192, juce::dontSendNotification);
     formatBox_.onChange = [this] {
+        // A disabled item cannot be clicked, but a programmatic selection could still land on it.
+        if (selectedFormat() == BounceFormat::Mp3 && !lameExecutable_.existsAsFile()) {
+            formatBox_.setSelectedId(1, juce::sendNotificationSync);
+            return;
+        }
         updateBitDepthChoicesForFormat();
+        updateFormatDependentRows();
         // Keep the destination's extension in step with the chosen format so the file that lands
         // on disk matches what the format picker says, without the user having to retype it. Stems
         // mode's destination is a FOLDER (each stem file gets its own extension at export time), so
@@ -66,6 +80,8 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     sampleRateBox_.setSelectedId(2, juce::dontSendNotification); // 48 kHz default
 
     updateBitDepthChoicesForFormat(); // populates bitDepthBox_ for WAV, selects 24-bit
+    setLameExecutable(findLameExecutable());
+    updateFormatDependentRows();
 
     tailSlider_.setSliderStyle(juce::Slider::LinearHorizontal);
     tailSlider_.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
@@ -164,9 +180,31 @@ BounceFormat ExportAudioDialog::selectedFormat() const {
         return BounceFormat::Aiff;
     case 3:
         return BounceFormat::Flac;
+    case 4:
+        return BounceFormat::Mp3;
     default:
         return BounceFormat::Wav;
     }
+}
+
+void ExportAudioDialog::setLameExecutable(const juce::File& lameExecutable) {
+    lameExecutable_ = lameExecutable;
+    const bool available = lameExecutable_.existsAsFile();
+    // Visible but disabled with the reason beside it, never a silent absence or a failure at Export.
+    formatBox_.setItemEnabled(4, available);
+    formatBox_.changeItemText(4, available ? "MP3" : "MP3 (needs lame)");
+    formatBox_.setTooltip(available ? juce::String() : lameInstallHint());
+    if (!available && formatBox_.getSelectedId() == 4)
+        formatBox_.setSelectedId(1, juce::sendNotificationSync);
+}
+
+// MP3 has a bitrate but no bit depth; every other format is the other way round.
+void ExportAudioDialog::updateFormatDependentRows() {
+    const bool mp3 = selectedFormat() == BounceFormat::Mp3;
+    bitDepthLabel_.setVisible(!mp3);
+    bitDepthBox_.setVisible(!mp3);
+    bitrateLabel_.setVisible(mp3);
+    bitrateBox_.setVisible(mp3);
 }
 
 void ExportAudioDialog::updateBitDepthChoicesForFormat() {
@@ -241,6 +279,8 @@ BounceOptions ExportAudioDialog::getOptionsForTest() const {
     options.format = selectedFormat();
     options.sampleRate = kSampleRates[juce::jlimit(1, 3, sampleRateBox_.getSelectedId()) - 1];
     options.bitDepth = kBitDepths[juce::jlimit(1, 3, bitDepthBox_.getSelectedId()) - 1];
+    options.mp3BitrateKbps = bitrateBox_.getSelectedId();
+    options.lameExecutable = lameExecutable_;
     // BounceOptions only ever speaks seconds - Bars is purely a display convenience for the slider.
     options.tailSeconds = wasBarsUnit_ ? tailSlider_.getValue() * (60.0 / bpm_) * kBeatsPerBar : tailSlider_.getValue();
     // Fixed, not a control: with AudioEngine::setAutomationSlicingEnabled() off (the shipped
@@ -256,11 +296,14 @@ BounceOptions ExportAudioDialog::getOptionsForTest() const {
 }
 
 void ExportAudioDialog::setFormatForTest(BounceFormat format) {
-    formatBox_.setSelectedId(format == BounceFormat::Flac   ? 3
+    formatBox_.setSelectedId(format == BounceFormat::Mp3    ? 4
+                             : format == BounceFormat::Flac ? 3
                              : format == BounceFormat::Aiff ? 2
                                                             : 1,
                              juce::sendNotificationSync);
 }
+
+void ExportAudioDialog::setMp3BitrateForTest(int kbps) { bitrateBox_.setSelectedId(kbps, juce::dontSendNotification); }
 
 void ExportAudioDialog::setBitDepthForTest(int bitDepth) {
     const int id = bitDepth == 16 ? 1 : bitDepth == 32 ? 3 : 2;
@@ -394,7 +437,13 @@ void ExportAudioDialog::resized() {
         };
         row(formatLabel_, formatBox_);
         row(sampleRateLabel_, sampleRateBox_);
+        // Same slot for both: only one of the two rows is visible at a time (updateFormatDependentRows).
+        const auto sharedSlot = area;
         row(bitDepthLabel_, bitDepthBox_);
+        const auto below = area;
+        area = sharedSlot;
+        row(bitrateLabel_, bitrateBox_);
+        area = below;
 
         auto tailRow = area.removeFromTop(28);
         tailLabel_.setBounds(tailRow.removeFromLeft(110));
