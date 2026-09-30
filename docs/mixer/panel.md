@@ -76,9 +76,13 @@ too**: `MixerPanelComponent::onMoveTrack` moves the dragged strip's *first* feed
 timeline index of the first track of the strip it takes the place of. `MainComponent` wires it to
 `performTrackEdit(moveTrack)` (one undo step; undo puts both the timeline and the mixer back) and
 rebuilds the mixer. Esc cancels with nothing committed. Buses and orphan strips are **not
-draggable**: their order is by `NodeID` uid, which is reassigned on every load, and the project has
-no persisted mixer-order list to hold a stable one. Direct and Master never move, and a dragged
-column is held inside the track strips.
+draggable among the track strips: a **bus** or orphan strip (a strip no track feeds) is dragged the
+same way but **only among the other buses**, and a track strip never passes a bus. A bus drop saves the
+new order in the view document (`MixerViewDoc::setBusOrder`, the `"mixerView"` key's `"busOrder"` list
+of uuids) as one undo step, and `rebuild()` applies it to the snapshot before the columns and the
+side pane read it, so both agree; a bus the saved order has not seen yet sorts after the listed ones,
+and a hidden bus keeps its place in the list. Without a saved order the buses fall back to `NodeID`
+order. Direct and Master never move, and a dragged column is held inside its own group.
 
 ### Renaming a channel
 
@@ -542,7 +546,8 @@ keeps `viewport_`, so the horizontal scrollbar covers only the middle. Zones tak
 columns' width** between them; when both need more than their share the cap is split evenly (a zone
 that needs less gives the rest to the other) and a capped zone scrolls inside itself. The three
 viewports scroll vertically as one. Column drag-to-reorder ([above](#reordering-columns)) keeps working
-inside the scrolling group only; a pinned column has no reorder hooks. A new project starts with Master
+inside the scrolling group only (tracks among tracks, buses among buses); a pinned column has no reorder
+hooks. A new project starts with Master
 pinned right.
 
 **Show/hide.** Every row has an eye toggle. A hidden channel gets no column at all
@@ -555,10 +560,10 @@ All / Tracks / Buses chips narrow the **list**, never the mixer. Keyboard column
 (Left/Right) walks only the columns that exist, so it skips hidden ones; `revealColumn` for a hidden
 channel returns false and the caller falls back to the canvas.
 
-**Where it is saved.** The state is per project, in the project file's `"mixerView"` key
+**Where it is saved.** The state (zones, hidden channels, and the bus order `"busOrder"`) is per project, in the project file's `"mixerView"` key
 ([project bundle](../architecture/project-bundle.md)), keyed by a stable channel id: a strip's or
 bus's node `uuid` (a `NodeID` is not stable across a load), or the fixed `"master"` / `"direct"`. A
-pin or hide edit is one **undo step** (`AppUndoManager::recordMixerViewChange`), following the pan law
+pin, hide or bus-order edit is one **undo step** (`AppUndoManager::recordMixerViewChange`), following the pan law
 and macro collapse: it is project-saved state, and the undo manager's edit serial is the one thing that
 marks a document unsaved, so an edit that skipped it would be lost on quit without a prompt. The
 docked panel and the "both places" mirror share one `MixerViewDoc` and rebuild together through

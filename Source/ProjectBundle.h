@@ -29,7 +29,7 @@ struct ProjectLoadResult {
  * a `"timeline"` key holding `TimelineDoc::toVar()`, a `"macros"` key and a `"midiRemote"` key
  * holding `MidiRemoteProjectDoc::toVar()`, a `"mixerPanLaw"` string
  * ("balance"/"compensated", docs/mixer/mixer.md#pan-law) -- absent means "balance" -- and a `"mixerView"`
- * object (`MixerViewDoc::toVar()`, which mixer channels are pinned or hidden,
+ * object (`MixerViewDoc::toVar()`, which mixer channels are pinned or hidden and the order of the buses,
  * docs/mixer/panel.md#side-pane-zones-and-visibility) -- absent means every column scrolling and shown.
  * `Audio/`/`Peaks/` hold recorded takes and their waveform-peak sidecars.
  *

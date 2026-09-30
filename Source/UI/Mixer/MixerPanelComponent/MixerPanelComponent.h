@@ -352,7 +352,14 @@ private:
     void applyViewEdit(const std::function<void(synth::MixerViewDoc&)>& edit, bool keepSoloRestore = false);
     void refreshAfterViewChange();
 
-    // ---- Column drag-reorder (track strips only) -- implemented in MixerPanelColumnDrag.cpp -----
+    // ---- Column drag-reorder (track strips among themselves, buses among themselves) --------------
+    // ---- implemented in MixerPanelColumnDrag.cpp -------------------------------------------------
+    /** Reorders the snapshot's track-less columns by the view document's saved bus order. */
+    void applySavedBusOrder(synth::MixerSnapshot& snapshot);
+    /** True for a scrolling-zone strip/bus column of the group the active drag moves. */
+    bool inActiveReorderGroup(const ColumnEntry& entry) const;
+    std::vector<juce::String> mergeBusOrder(const std::vector<juce::String>& visibleBefore,
+                                            const std::vector<juce::String>& visibleAfter) const;
     void wireColumnReorder(MixerColumnComponent& column, const juce::String& uuid);
     void beginColumnDrag(const juce::String& uuid, const juce::MouseEvent& e);
     void dragColumn(const juce::MouseEvent& e);
@@ -442,6 +449,8 @@ private:
     ReorderFramePump columnFrames_{*this};
     ReorderCancelKey columnCancelKey_;
     std::vector<juce::String> reorderUuids_;         // animator keys -> strip uuids, at press time
+    std::vector<juce::String> busUuidsInOrder_;      // every track-less strip/bus uuid (hidden too), in shown order
+    bool reorderingBuses_ = false;                   // the active drag moves track-less columns
     std::vector<synth::TrackId> reorderFirstTracks_; // animator keys -> first feeding track
     juce::String liftedUuid_;                        // the column drawn lifted (dragged, then settling)
     unsigned columnGenerationSeen_ = 0;
