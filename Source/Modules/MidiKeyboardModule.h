@@ -28,7 +28,7 @@ public:
         keyboardState.reset();
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         if (isBypassed()) {
             buffer.clear();
             return;

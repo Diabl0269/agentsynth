@@ -42,7 +42,7 @@ void RecordTapModule::prepareToPlay(double sampleRate, int samplesPerBlock) {
         captureHalted_.store(true, std::memory_order_release);
 }
 
-void RecordTapModule::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+void RecordTapModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     juce::ignoreUnused(midiMessages);
 
     const int numSamples = buffer.getNumSamples();

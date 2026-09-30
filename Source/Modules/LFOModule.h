@@ -79,7 +79,7 @@ public:
 
     void releaseResources() override {}
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         // Two separate branches, per docs/architecture/module-base.md#bypassmute-contract. A pure
         // source has no dry audio path to pass through, so bypass clears here rather than
         // returning early — but it stays its own branch so the two cases can never be conflated.

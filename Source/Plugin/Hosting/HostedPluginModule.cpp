@@ -360,7 +360,7 @@ void HostedPluginModule::releaseResources() {
     reapRetired();
 }
 
-void HostedPluginModule::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+void HostedPluginModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     const int numSamples = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
 

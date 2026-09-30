@@ -223,6 +223,8 @@ add_library(Core STATIC
     Source/AudioEngine/AudioEngineTimelinePublish.cpp
     Source/AudioEngine/SidechainConnections.cpp
     Source/AudioEngine/SidechainConnections.h
+    Source/AudioEngine/StereoDownMix.cpp
+    Source/AudioEngine/StereoDownMix.h
     Source/AppUndoManager.cpp
     Source/AppUndoManager.h
     Source/AppUndoManagerMixerView.cpp

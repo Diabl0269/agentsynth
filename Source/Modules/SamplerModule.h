@@ -227,7 +227,7 @@ public:
         resetPlayback();
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         const int numSamples = buffer.getNumSamples();
         const int numCh = buffer.getNumChannels();
         if (numCh == 0 || numSamples <= 0)

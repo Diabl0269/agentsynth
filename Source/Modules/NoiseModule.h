@@ -32,7 +32,7 @@ public:
         smoothedLevel.setCurrentAndTargetValue(levelParam->get());
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& /*midiMessages*/) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& /*midiMessages*/) override {
         if (buffer.getNumChannels() == 0)
             return;
 

@@ -137,12 +137,11 @@ The two sides get there by different means, and the distinction matters:
   destination at the same level, so the mix cannot move. (It is the same mono→pair fan
   `resolvePolyLink` already performs for an adjacent pair, applied here to a non-adjacent
   `kRightBase` block.)
-- Feeding one *peer* channel from two of our legs **sums** them. While both legs still carry the
-  identical signal — the usual state right after a split — that sum is **+6 dB**. It is a transient
-  jump, lasting only until the legs differ, which is the point of splitting; and it is exactly what
-  dragging both legs onto that jack by hand produces, since `connectPorts` has always allowed summed
-  inputs and stereo-into-mono summing is the standard convention. Wiring both jacks won out over
-  avoiding the jump.
+- Feeding one *peer* channel from two of our legs would **sum** them at unity in the graph, +6 dB
+  while both legs carry the same signal (the usual state right after a split). Since FRO326 the
+  peer **averages** a whole stereo pair landing on one input instead
+  ([stereo down-mix](../architecture/audio-engine.md#stereo-down-mix-fro326)), so the split keeps
+  the level where it was — the same as dragging both legs onto that jack by hand.
 
 **The hidden block is still off limits.** The other candidate for the mono-only output case — wiring
 onto the peer's hidden `kRightBase` — remains forbidden: the cable would be audible and impossible to

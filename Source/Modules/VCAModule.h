@@ -49,7 +49,7 @@ public:
         smoothedGain.setCurrentAndTargetValue(*gainParam);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         // Borrow each voice's Left into its matching Right (kRightBase + voice), sample-
         // exact, while Dual I/O is split and only Left is patched. Before the bypass/mute branches
         // below so both see a filled Right leg exactly as if the user had cabled it.

@@ -80,6 +80,13 @@ This matters because preset load — and any undo that has to fall back to a ful
 
 `virtual juce::String getInputPortLabel(int channelIndex) const` / `getOutputPortLabel(int channelIndex)` — overridden per-module to provide descriptive jack names (e.g. "CV In", "Audio L") shown in the UI.
 
+### `processBlock` is final
+
+`ModuleBase::processBlock` is `final`. It applies the [stereo down-mix](audio-engine.md#stereo-down-mix-fro326)
+(`applyInputDownMix`: halve every raw input channel `AudioEngine::refreshNormalling` marked as fed only by
+whole L/R pairs) and then calls the module's own `processModuleBlock`, which every module overrides. Doing it
+in the base means no module can forget it. "`processBlock`" in the contracts below means that override.
+
 ### Bypass/Mute Contract
 
 Every `processBlock` override **must** honour both flags using **two separate branches**:

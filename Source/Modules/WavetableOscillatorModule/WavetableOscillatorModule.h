@@ -153,7 +153,7 @@ public:
         return (ImportMode)juce::jlimit(0, (int)ImportMode::Count - 1, importModeParam->getIndex());
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
 
     // -------------------------------------------------------------------------
     // Ports / modulation

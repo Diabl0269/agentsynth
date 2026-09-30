@@ -79,7 +79,7 @@ public:
         prepareOutputLevel(sampleRate);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         juce::ignoreUnused(midiMessages);
         int numSamples = buffer.getNumSamples();
         int numChannels = buffer.getNumChannels();

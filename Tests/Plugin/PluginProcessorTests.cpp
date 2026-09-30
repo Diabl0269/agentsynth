@@ -133,7 +133,7 @@ public:
 
     void prepareToPlay(double, int) override {}
 
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {
         insidePass.store(true, std::memory_order_release);
         // Bounded, so a test that never releases fails rather than wedging the audio thread.
         const auto deadline = juce::Time::getMillisecondCounter() + 5000u;

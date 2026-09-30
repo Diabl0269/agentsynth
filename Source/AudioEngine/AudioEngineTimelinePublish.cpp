@@ -3,6 +3,7 @@
 
 #include "AudioEngine.h"
 #include "AudioEngine/SidechainConnections.h"
+#include "AudioEngine/StereoDownMix.h"
 #include "Mixer/SoloAudibleSet.h"
 #include "Modules/ChannelStripModule.h"
 #include "Timeline/AutomationBinding.h"
@@ -237,6 +238,11 @@ void AudioEngine::refreshNormalling() {
         const int right = mb->rightAudioLegChannel();
         mb->setNormalLeftToRight(right > 0 && leftPatchedRightNot(mainProcessorGraph, node->nodeID, right));
     }
+
+    // Stereo pair into a mono input averages at -6 dB (docs/architecture/audio-engine.md#stereo-down-mix-fro326).
+    // Rides this function so it gets the same three triggers; it runs before the module's own
+    // processBlock body, so a Dual I/O Left fed by a pair is halved before Right borrows it.
+    synth::publishStereoDownMix(mainProcessorGraph);
 }
 
 // The one call a UI should make: it flips the strip's own flag and recounts, ordered so no render

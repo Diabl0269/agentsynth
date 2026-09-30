@@ -89,7 +89,7 @@ public:
 
     void prepareToPlay(double sampleRate, int) override { prepareOutputLevel(sampleRate); }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override {
         if (isBypassed())
             return;
         if (isMuted()) {

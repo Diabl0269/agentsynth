@@ -47,7 +47,7 @@ public:
         effectiveThreshold.store(thresholdParam->get(), std::memory_order_relaxed);
     }
 
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
+    void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
         juce::ignoreUnused(midiMessages);
 
         const int numSamples = buffer.getNumSamples();

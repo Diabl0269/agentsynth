@@ -20,7 +20,7 @@ public:
     TestStereoCollapsedModule()
         : ModuleBase("TestStereoCollapsed", 2, 2) {}
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Math; }
     int getVisibleInputPortCount() const override { return 1; }
     int getVisibleOutputPortCount() const override { return 1; }
@@ -47,7 +47,7 @@ public:
     TestPolyCVModule()
         : ModuleBase("TestPolyCV", 8, 8) {}
     void prepareToPlay(double, int) override {}
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
     ModuleType getModuleType() const override { return ModuleType::Math; }
     int getVisibleInputPortCount() const override { return 1; }
     int getVisibleOutputPortCount() const override { return 1; }

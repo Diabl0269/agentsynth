@@ -21,7 +21,7 @@ class MyNewModule : public ModuleBase {
 public:
     MyNewModule();
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
-    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processModuleBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     // ... other overrides for parameters, state, etc.
 private:
     // Declare any internal state or DSP objects here
@@ -48,7 +48,7 @@ void MyNewModule::prepareToPlay(double sampleRate, int samplesPerBlock) {
     // Initialize or reset any sample-rate dependent DSP objects
 }
 
-void MyNewModule::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+void MyNewModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     juce::ignoreUnused(midiMessages); // Use MIDI if relevant
 
     // Bypass: dry pass-through — return early WITHOUT clearing audio channels.
@@ -97,7 +97,11 @@ JSON.
 - Use it to reset stateful DSP algorithms, recompute sample-rate-dependent coefficients, and
   allocate resources. Allocation belongs here, never in `processBlock`.
 
-### processBlock
+### processModuleBlock
+
+`ModuleBase::processBlock` is `final`: it averages any input fed by a whole stereo pair
+([stereo down-mix](../architecture/audio-engine.md#stereo-down-mix-fro326)) and then calls your
+`processModuleBlock`. Override that one; everything below ("`processBlock`") means it.
 
 - `buffer` carries the audio input and must be filled with this module's output.
 - `midiMessages` can be processed if the module is MIDI-aware (an instrument or a MIDI effect).
