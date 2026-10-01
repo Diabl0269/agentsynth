@@ -3,6 +3,7 @@
 
 #include "AppUndoManager.h"
 #include "Timeline/AutomationKernel.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
 #include <cmath>
@@ -36,14 +37,41 @@ bool setLaneRecordModeUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, sy
 
 // The Automation track exists only to hold lanes no single track owns, so the step that takes its
 // last lane away also takes the track; undo brings both back together.
-bool moveLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane, synth::TrackId dest) {
+bool moveLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane, synth::TrackId dest,
+                      const std::vector<synth::LaneId>& companions) {
     synth::TimelineDoc* target = &doc;
-    return applyEdit(doc, undo, [target, lane, dest] {
+    return applyEdit(doc, undo, [target, lane, dest, companions] {
         if (!target->moveLaneToTrack(lane, dest))
             return false;
+        for (const auto companion : companions)
+            target->moveLaneToTrack(companion, dest);
         target->removeEmptyAutomationTracks();
         return true;
     });
+}
+
+std::vector<synth::LaneId> sectionsLanesTravellingWith(const synth::TimelineDoc& doc, TrackHeaderHost* host,
+                                                       synth::LaneId lane) {
+    std::vector<synth::LaneId> travelling;
+    const auto* moving = doc.getLane(lane);
+    const auto* owner = doc.getTrackForLane(lane);
+    if (host == nullptr || moving == nullptr || owner == nullptr)
+        return travelling;
+    for (const auto& info : host->getModulators(moving->nodeUuid, moving->paramId)) {
+        const auto* level = info.isLfo ? sectionsLaneFor(doc, info.sourceUuid) : nullptr;
+        if (level == nullptr || doc.getTrackForLane(level->id) != owner)
+            continue;
+        bool sharedWithOtherLane = false;
+        for (const auto& other : owner->lanes) {
+            if (other.id == lane)
+                continue;
+            for (const auto& modulator : host->getModulators(other.nodeUuid, other.paramId))
+                sharedWithOtherLane = sharedWithOtherLane || modulator.sourceUuid == info.sourceUuid;
+        }
+        if (!sharedWithOtherLane)
+            travelling.push_back(level->id);
+    }
+    return travelling;
 }
 
 bool deleteLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane) {

@@ -108,8 +108,10 @@ TEST(AutomationLanesModulatorRowTest, ModulatorRowsSitUnderTheirLaneAndCountInTh
 
     // A click at Lead's y still hits Lead's row, below the modulator rows.
     const int x = f.panel.getClipLaneArea().getX() + 200;
-    // The band takes no click and the clip lanes refuse the extra area, so nothing under it does.
-    EXPECT_EQ(f.componentAt({x, firstMod.getCentreY()}), &f.panel);
+    // An LFO's band takes the click (it draws sections), and only inside its own row: the clip lanes refuse the
+    // extra area, and a y just outside the band falls through to the panel as before.
+    EXPECT_EQ(f.componentAt({x, firstMod.getCentreY()}), band);
+    EXPECT_NE(f.componentAt({x, secondMod.getBottom() + 1}), band);
     const int leadY = lanesTop + layout.trackTop(1) + layout.trackRowHeight(1) / 2;
     EXPECT_EQ(f.componentAt({x, leadY}), &f.panel.getClipLaneArea());
     auto& clips = f.panel.getClipLaneArea();

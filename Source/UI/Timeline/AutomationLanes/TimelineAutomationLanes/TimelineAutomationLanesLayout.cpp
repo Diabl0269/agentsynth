@@ -28,7 +28,10 @@ int TimelineAutomationLanes::addRowHeight() const {
 // A lane's block is its own row plus its modulator rows directly under it. Every geometry function
 // below walks lanes through this one helper, so the header column, the lanes region and the layout's
 // extra height can never disagree about where a row is.
+// A lane that is only a modulator's sections has no block of its own: it is the band of that modulator's row.
 int TimelineAutomationLanes::laneBlockHeight(const synth::AutomationLane& lane) const {
+    if (isSectionsLane(lane.id))
+        return 0;
     return laneRowHeight() + modulatorCount(lane.id) * modulatorRowHeight();
 }
 
@@ -92,7 +95,8 @@ juce::Rectangle<int> TimelineAutomationLanes::laneRowContentBounds(synth::LaneId
         int y = layout.trackTop(i) + layout.trackRowHeight(i);
         for (const auto& candidate : track.lanes) {
             if (candidate.id == lane)
-                return {0, y, bodies_->getWidth(), rowHeight};
+                return isSectionsLane(lane) ? juce::Rectangle<int>()
+                                            : juce::Rectangle<int>(0, y, bodies_->getWidth(), rowHeight);
             y += laneBlockHeight(candidate);
         }
     }

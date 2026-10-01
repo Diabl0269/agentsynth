@@ -1,5 +1,5 @@
-// Concern: the modulator row's construction, names, layout and paint, and the band drawn behind it in
-// the lanes region. The edits, the live-value refresh and the menu live in ModulatorRowEdits.cpp.
+// Concern: the modulator row's construction, names, layout and paint. The edits, the live-value refresh and
+// the menu live in ModulatorRowEdits.cpp; the band in the lanes region is ModulatorBand.
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
 #include "UI/Layout/FocusRing.h"
@@ -225,23 +225,5 @@ void ModulatorRow::MenuButton::paintButton(juce::Graphics& g, bool highlighted, 
         g.fillEllipse(
             juce::Rectangle<float>(dot, dot).withCentre(bounds.getCentre().translated((float)i * 4.0f, 0.0f)));
 }
-
-ModulatorBand::ModulatorBand(juce::Colour colour)
-    : colour_(colour) {
-    setComponentID("modulatorBand");
-    setInterceptsMouseClicks(false, false);
-    setAccessible(false); // decoration: the row in the header column carries the names
-}
-
-void ModulatorBand::setColour(juce::Colour colour) {
-    if (colour == colour_)
-        return;
-    colour_ = colour;
-    repaint();
-}
-
-// Sections (where the modulator is on and off along the timeline) will be drawn here; until then the
-// whole row is one band, meaning the modulator runs everywhere.
-void ModulatorBand::paint(juce::Graphics& g) { g.fillAll(colour_.withAlpha(kBandAlpha)); }
 
 } // namespace synth::ui

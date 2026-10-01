@@ -85,19 +85,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModulatorRow)
 };
 
-// The lanes-region half of a modulator row: for now a faint band in the mod-wire colour across the
-// whole row, meaning "on everywhere". Takes no clicks, so the clip lanes underneath still decide.
-class ModulatorBand : public juce::Component {
-public:
-    static constexpr float kBandAlpha = 0.28f;
-
-    explicit ModulatorBand(juce::Colour colour);
-    void setColour(juce::Colour colour);
-    juce::Colour getBandColour() const noexcept { return colour_; }
-    void paint(juce::Graphics& g) override;
-
-private:
-    juce::Colour colour_;
-};
-
 } // namespace synth::ui

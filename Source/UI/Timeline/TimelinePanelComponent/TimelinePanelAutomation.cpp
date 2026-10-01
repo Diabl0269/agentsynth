@@ -41,8 +41,10 @@ void TimelinePanelComponent::pushAutomationGeometry() {
 // Folding a long track shrinks the content, so the scroll is clamped back into range here rather
 // than leaving the view parked past the end.
 void TimelinePanelComponent::layoutAutomationRows() {
-    for (auto* header : trackHeaderList_.headers)
+    for (auto* header : trackHeaderList_.headers) {
+        header->setHiddenLaneCount(automationLanes_.hiddenLaneCount(header->getTrackId()));
         header->setAutomationExpanded(automationLanes_.isExpanded(header->getTrackId()));
+    }
     layoutTrackHeaders();
     viewState_.scrollTracksPx(0.0, maxTrackScrollPx());
     syncTrackScroll();
@@ -68,6 +70,8 @@ void TimelinePanelComponent::showAutomationLane(synth::LaneId id) {
     selectedAutomationLane_ = id;
     automationLanes_.setExpanded(track->id, true);
     syncAutomationLanes();
+    if (automationLanes_.isSectionsLane(id))
+        return; // shown as its modulator's sections: the track is open, and there is no lane row to scroll to
 
     const auto row = automationLanes_.laneRowContentBounds(id, rowLayout());
     const int viewTop = (int)std::llround(viewState_.trackScrollY);
@@ -91,6 +95,8 @@ std::vector<TimelinePanelComponent::AutomationLaneOption> TimelinePanelComponent
 
     for (const auto& track : doc_->getTracks()) {
         for (const auto& lane : track.lanes) {
+            if (automationLanes_.isSectionsLane(lane.id))
+                continue; // a modulator's sections are not a lane row to pick
             const auto labels = laneLabelsFor(lane, trackHeaderHost_);
             options.push_back(
                 {lane.id, labels.module + juce::String::fromUTF8(" \xC2\xB7 ") + labels.parameter, false, {}});

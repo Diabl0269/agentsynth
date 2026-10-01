@@ -607,6 +607,18 @@ TEST(AccessibilityCoverageTest, AutomationLanes) {
             gap.path = "[modulator row] " + gap.path;
             gaps.push_back(gap);
         }
+        // The band over the lanes region is a leaf of its own (an LFO's sections), so it is checked
+        // directly: the audit only looks at what is under the component it is given.
+        auto* band = panel.modulatorBandForTest(lane, i);
+        ASSERT_NE(band, nullptr);
+        EXPECT_EQ(band->isAccessible(), band->isEditable()) << "only an LFO's band is a control";
+        if (band->isAccessible()) {
+            EXPECT_TRUE(band->getWantsKeyboardFocus()) << "a Tab stop";
+            if (!synth::test::audit_detail::hasName(*band))
+                gaps.push_back({synth::test::Gap::Kind::MissingName, "[modulator band]"});
+            if (synth::test::audit_detail::missingTooltip(*band))
+                gaps.push_back({synth::test::Gap::Kind::MissingTooltip, "[modulator band]"});
+        }
     }
     panel.setTrackHeaderHost(nullptr);
     EXPECT_TRUE(matchesBaseline("AutomationLanes", gaps));

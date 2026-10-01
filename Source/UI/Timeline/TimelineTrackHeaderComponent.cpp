@@ -390,7 +390,7 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
 
     foldArrow_.setVisible(!t->lanes.empty());
     foldArrow_.setState(automationExpanded_, isSectionHeader() ? juce::String("Unassigned") : t->name,
-                        (int)t->lanes.size());
+                        shownLaneCount());
 
     // The Automation track is the "Unassigned automation" section header: it hosts lanes no single
     // track owns, so a node binding, a colour, M/S/R and a rename all mean nothing for it.
@@ -434,6 +434,18 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
 bool TimelineTrackHeaderComponent::isSectionHeader() const {
     const auto* t = track();
     return t != nullptr && t->kind == synth::TrackKind::Automation;
+}
+
+int TimelineTrackHeaderComponent::shownLaneCount() const {
+    const auto* t = track();
+    return t != nullptr ? std::max(0, (int)t->lanes.size() - hiddenLaneCount_) : 0;
+}
+
+void TimelineTrackHeaderComponent::setHiddenLaneCount(int count) {
+    if (hiddenLaneCount_ == count)
+        return;
+    hiddenLaneCount_ = count;
+    refreshFromDoc();
 }
 
 void TimelineTrackHeaderComponent::setAutomationExpanded(bool expanded) {
@@ -508,7 +520,7 @@ void TimelineTrackHeaderComponent::resized() {
 // beside the name, so a folded track's arrow says the count in its name and tooltip instead.
 void TimelineTrackHeaderComponent::layoutFoldArrowAndBadges(juce::Rectangle<int>& row) {
     const auto* t = track();
-    const int laneCount = t != nullptr ? (int)t->lanes.size() : 0;
+    const int laneCount = t != nullptr ? shownLaneCount() : 0;
     if (foldArrow_.isVisible())
         foldArrow_.setBounds(row.removeFromLeft(TrackFoldArrow::kSize)
                                  .withSizeKeepingCentre(TrackFoldArrow::kSize, TrackFoldArrow::kSize));
@@ -528,7 +540,7 @@ void TimelineTrackHeaderComponent::paint(juce::Graphics& g) {
         g.setColour(colours.border);
         g.drawHorizontalLine(getHeight() - 1, 0.0f, (float)getWidth());
         if (const auto* t = track())
-            paintLaneCountBadge(g, laneBadgeBounds_, (int)t->lanes.size(), *this);
+            paintLaneCountBadge(g, laneBadgeBounds_, shownLaneCount(), *this);
         return;
     }
 
@@ -571,7 +583,7 @@ void TimelineTrackHeaderComponent::paint(juce::Graphics& g) {
             g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), microSize, juce::Font::plain));
             g.drawText(kindBadgeText(t->kind), kindBadgeBounds_, juce::Justification::centred, false);
         }
-        paintLaneCountBadge(g, laneBadgeBounds_, (int)t->lanes.size(), *this);
+        paintLaneCountBadge(g, laneBadgeBounds_, shownLaneCount(), *this);
     }
 }
 

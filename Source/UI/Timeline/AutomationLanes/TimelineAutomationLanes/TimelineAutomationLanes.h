@@ -4,6 +4,7 @@
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorBand.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelineRowLayout.h"
@@ -97,6 +98,15 @@ public:
     /** The lane's `index`th modulator row in content coordinates; empty when it is not visible. */
     juce::Rectangle<int> modulatorRowContentBounds(synth::LaneId lane, int index,
                                                    const TimelineRowLayout& layout) const;
+    /**
+     * True when `lane` is only the backing store of an LFO modulator's sections (ModulatorSections.h): the
+     * lane drives the `level` of an LFO that modulates another lane on the same track, so it is drawn as
+     * that modulator row's band instead of as a lane row. It is a lane again the moment the LFO stops
+     * being a modulator there.
+     */
+    bool isSectionsLane(synth::LaneId lane) const;
+    /** How many of `track`'s lanes are shown as sections rather than as lane rows. */
+    int hiddenLaneCount(synth::TrackId track) const;
 
     /** Fired after a fold toggle or a change in which lanes are visible, so the panel relayouts. */
     std::function<void()> onLayoutChanged;
@@ -119,8 +129,11 @@ private:
     };
 
     bool isVisibleLane(const synth::Track& track) const;
+    bool deriveRoutings();
     bool syncModulators();
-    void rebuildModulators(LaneModulators& entry, std::vector<ModulatorInfo> infos, const juce::String& parameterName);
+    void rebuildModulators(LaneModulators& entry, synth::LaneId lane, std::vector<ModulatorInfo> infos,
+                           const juce::String& parameterName);
+    void wireBand(ModulatorBand& band) const;
     int laneBlockHeight(const synth::AutomationLane& lane) const;
     void syncPools();
     void syncAddRows();
@@ -142,6 +155,8 @@ private:
     std::map<synth::LaneId, std::unique_ptr<AutomationLaneHeaderComponent>> headers_;
     std::map<synth::TrackId, std::unique_ptr<AddAutomationRow>> addRows_; // one per track with open lanes
     std::map<synth::LaneId, LaneModulators> modulators_;                  // one per visible lane
+    std::map<synth::LaneId, std::vector<ModulatorInfo>> routings_;        // what the graph routes into each open lane
+    std::set<synth::LaneId> sectionsLanes_;                               // lanes drawn as a modulator's sections
     double lastReadoutBeat_ = -1.0;
 };
 

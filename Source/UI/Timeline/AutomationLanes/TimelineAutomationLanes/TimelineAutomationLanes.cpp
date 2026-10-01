@@ -33,6 +33,8 @@ juce::Component& TimelineAutomationLanes::getBodies() noexcept { return *bodies_
 // A new doc invalidates every lane id and track id the pools and fold sets were keyed by.
 void TimelineAutomationLanes::setTimelineDoc(synth::TimelineDoc* doc) {
     modulators_.clear();
+    routings_.clear();
+    sectionsLanes_.clear();
     addRows_.clear();
     headers_.clear();
     editors_.clear();
@@ -55,6 +57,9 @@ void TimelineAutomationLanes::setUndoManager(AppUndoManager* undo) {
     headers_.clear();
     for (auto& [id, editor] : editors_)
         editor->setUndoManager(undo);
+    for (auto& [id, entry] : modulators_)
+        for (auto& band : entry.bands)
+            band->setUndoManager(undo);
     sync();
 }
 
@@ -62,12 +67,18 @@ void TimelineAutomationLanes::setTransport(synth::TransportService* transport) {
     transport_ = transport;
     for (auto& [id, editor] : editors_)
         editor->setTransport(transport);
+    for (auto& [id, entry] : modulators_)
+        for (auto& band : entry.bands)
+            band->setTransport(transport);
 }
 
 void TimelineAutomationLanes::setEditTool(EditTool tool) {
     editTool_ = tool;
     for (auto& [id, editor] : editors_)
         editor->setEditTool(tool);
+    for (auto& [id, entry] : modulators_)
+        for (auto& band : entry.bands)
+            band->setEditTool(tool);
 }
 
 // An ordinary track starts folded; the Automation track (lanes no single track owns) starts open,
@@ -109,6 +120,8 @@ bool TimelineAutomationLanes::isVisibleLane(const synth::Track& track) const {
 void TimelineAutomationLanes::sync() {
     if (doc_ == nullptr) {
         modulators_.clear();
+        routings_.clear();
+        sectionsLanes_.clear();
         addRows_.clear();
         headers_.clear();
         editors_.clear();
@@ -120,6 +133,7 @@ void TimelineAutomationLanes::sync() {
     };
     prune(expanded_);
     prune(collapsedUnassigned_);
+    deriveRoutings();
     syncPools();
     syncModulators();
     refreshPooled();
@@ -127,13 +141,15 @@ void TimelineAutomationLanes::sync() {
 
 // Keyed by LaneId so an edit that keeps a lane (a point drag, a record-mode change, a rename) keeps
 // its editor and header: an in-flight gesture or keyboard focus survives the doc notification.
-// Only a lane that leaves the screen (folded, moved under a folded track, deleted) loses them.
+// Only a lane that leaves the screen (folded, moved under a folded track, deleted, or turned into a
+// modulator's sections) loses them.
 void TimelineAutomationLanes::syncPools() {
     std::set<synth::LaneId> wanted;
     for (const auto& track : doc_->getTracks())
         if (isVisibleLane(track))
             for (const auto& lane : track.lanes)
-                wanted.insert(lane.id);
+                if (!isSectionsLane(lane.id))
+                    wanted.insert(lane.id);
 
     for (auto it = editors_.begin(); it != editors_.end();)
         it = wanted.count(it->first) == 0 ? editors_.erase(it) : std::next(it);

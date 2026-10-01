@@ -104,10 +104,16 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesLayout.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulators.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBand.h
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBand.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBandGestures.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBandKeys.cpp
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRow.cpp
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRowEdits.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorSections.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneInternal.h
@@ -241,6 +247,7 @@ set(APPUI_SOURCES
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryAccessibility.cpp
     Source/UI/Library/ModuleLibraryAccessibilityText.h
     Source/UI/PianoRoll/NoteSelectionModel.h
+    Source/UI/Timeline/TimelineBeatsPerBar.h
     Source/UI/Timeline/AutomationLaneEditor.h
     Source/UI/Timeline/AutomationLaneEditor.cpp
     Source/UI/Timeline/TrackColour.h
