@@ -262,8 +262,14 @@ same text as its tooltip. Test hooks: `refreshModulators`, `modulatorRowForTest`
 ## The curve canvas
 
 `Source/UI/Timeline/AutomationLaneEditor.h/.cpp` (`synth::ui::AutomationLaneEditor`) edits ONE
-`synth::AutomationLane`: one editor per open lane row. Its curve is drawn in the owning track's colour
-(`setCurveColour`; text-muted on the Unassigned section).
+`synth::AutomationLane`: one editor per open lane row. Its curve **and its points** are drawn in the owning
+track's colour (`laneColourFor` -> `setCurveColour`, refreshed on every doc change, so recolouring or muting
+the track recolours its lanes at once; text-muted on the Unassigned section). The colour is drawn through
+`readableOn(colour, laneBackground)` (`TrackColour.h`): a palette colour too pale for the light theme's lane
+background (amber, green) is darkened toward black, and on a dark theme lightened, until it reaches a 3:1
+contrast ratio, keeping its hue. A point being dragged is accent, one the eraser has touched is error, and
+every point has a 1 px outline in the lane background so it stays distinct where it sits on the line. Under
+the Draw tool the lane shows the pen cursor ([edit-tools](edit-tools.md#tool-cursors)).
 
 X is the SAME shared `TimelineViewState` the clip lanes use, so it lines up with the playhead
 pixel-for-pixel; the piano roll is the one surface that maps beats through its own zoom and scroll

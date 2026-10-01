@@ -5,6 +5,8 @@
 #include "UI/Chrome/ShortcutHint/ShortcutHintOverlay.h"
 #include "UI/Chrome/ShortcutHint/ShortcutHintText.h"
 #include "UI/Layout/BottomDockComponent.h"
+#include "UI/Timeline/EditTool.h"
+#include <algorithm>
 
 namespace {
 
@@ -82,6 +84,94 @@ TEST_F(ShortcutHintMainWindowTest, OpenDockLabelsTheToolbarAndEveryDockTab) {
     overlay->keyPressed(juce::KeyPress('s', juce::ModifierKeys::commandModifier, 0), &mc);
     EXPECT_FALSE(overlay->areHintsShowing());
 }
+
+namespace {
+
+// True when a bubble with `text` sits over (or right beside) `button`: centred on it within its width.
+bool bubbleOver(ShortcutHintOverlay& overlay, juce::Component& button, const juce::String& text) {
+    const auto bounds = overlay.getLocalArea(&button, button.getLocalBounds());
+    for (const auto& e : overlay.getEntries())
+        if (!e.isPill && e.keyText == text &&
+            std::abs(e.bounds.getCentreX() - bounds.getCentreX()) <= bounds.getWidth())
+            return true;
+    return false;
+}
+
+} // namespace
+
+TEST_F(ShortcutHintMainWindowTest, TheTimelineListsEveryShortcutButtonItOwnsAsAHintTarget) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    auto& panel = mc.getTimelinePanel();
+    const auto targets = panel.getShortcutHintTargets();
+
+    std::vector<juce::String> ids;
+    for (const auto& [component, actionId] : targets) {
+        EXPECT_NE(component, nullptr) << actionId;
+        EXPECT_TRUE(mc.getShortcutManager().getBinding(actionId).isValid()) << actionId << " has no default key";
+        ids.push_back(actionId);
+    }
+    for (const char* expected :
+         {"timelineToolSelect", "timelineToolRange", "timelineToolSplit", "timelineToolGlue", "timelineToolErase",
+          "timelineToolMute", "timelineToolDraw", "timelineSnapToggle", "timelineFollowPlayheadToggle"})
+        EXPECT_NE(std::find(ids.begin(), ids.end(), juce::String(expected)), ids.end()) << expected;
+    EXPECT_EQ(ids.size(), 9u);
+    for (auto tool : synth::ui::kAllEditTools)
+        EXPECT_NE(std::find_if(targets.begin(), targets.end(),
+                               [&](const auto& t) { return t.first == panel.getToolButton(tool); }),
+                  targets.end());
+}
+
+TEST_F(ShortcutHintMainWindowTest, HoldingCmdLabelsTheTimelineEditToolsSnapFollowPlayheadAndLoop) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.newPatchForTest();
+    setDockOpen(mc, true);
+    mc.getBottomDock().setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
+
+    auto* overlay = findOverlay(mc);
+    ASSERT_NE(overlay, nullptr);
+    double now = 0.0;
+    overlay->setClockForTest([&] { return now; });
+    holdCmd(*overlay, now);
+    ASSERT_TRUE(overlay->areHintsShowing());
+
+    auto& panel = mc.getTimelinePanel();
+    for (const auto& [component, actionId] : panel.getShortcutHintTargets()) {
+        ASSERT_TRUE(component->isVisible()) << actionId;
+        EXPECT_TRUE(bubbleOver(*overlay, *component, keyText(mc, actionId.toRawUTF8()))) << actionId;
+    }
+    // The loop button's key is the timeline's bare L while the transport action is unbound.
+    EXPECT_TRUE(bubbleOver(*overlay, panel.getTransportBar().getLoopButton(), keyText(mc, "timelineToggleLoop")));
+    overlay->modifierKeysChanged(juce::ModifierKeys());
+}
+
+#if JUCE_MAC
+TEST_F(ShortcutHintMainWindowTest, HoldingCtrlLabelsRecordAndMetronomeOnTheTransportBar) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.newPatchForTest();
+    setDockOpen(mc, true);
+    mc.getBottomDock().setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
+
+    auto* overlay = findOverlay(mc);
+    ASSERT_NE(overlay, nullptr);
+    double now = 0.0;
+    overlay->setClockForTest([&] { return now; });
+    const juce::ModifierKeys ctrl(juce::ModifierKeys::ctrlModifier);
+    overlay->modifierKeysChanged(ctrl);
+    now += ShortcutHintOverlay::kShowDelayMs;
+    overlay->modifierKeysChanged(ctrl);
+    ASSERT_TRUE(overlay->areHintsShowing());
+
+    auto& bar = mc.getTimelinePanel().getTransportBar();
+    EXPECT_TRUE(bubbleOver(*overlay, bar.getRecordButton(), keyText(mc, "transportRecord")));
+    EXPECT_TRUE(bubbleOver(*overlay, bar.getMetronomeButton(), keyText(mc, "transportToggleMetronome")));
+    // Bare-key buttons (the tools) are not Ctrl shortcuts, so Ctrl does not label them.
+    EXPECT_FALSE(bubbleOver(*overlay, *mc.getTimelinePanel().getToolButton(synth::ui::EditTool::Draw),
+                            keyText(mc, "timelineToolDraw")));
+    overlay->modifierKeysChanged(juce::ModifierKeys());
+}
+#endif
 
 TEST_F(ShortcutHintMainWindowTest, TheMixerTabLabelsItsSidePaneButtonWithTheToggleShortcut) {
     MainComponent mc(std::make_unique<MockProvider>());

@@ -63,9 +63,11 @@ struct AddTrackFixture {
         panel.getAddTrackButton().onClick = [this] { ++clicks; };
     }
 
-    // Down on the panel root seeds row 0; each further Down from a header steps one row.
+    // Down on the panel root lands on "+ Track", Down again seeds row 0; each further Down from a header
+    // steps one row.
     void focusRow(int index) {
         ASSERT_TRUE(panel.handleRootFocusKey(downKey()));
+        ASSERT_TRUE(panel.keyPressed(downKey()));
         for (int i = 0; i < index; ++i)
             ASSERT_TRUE(panel.getTrackHeaderAt(i)->keyPressed(downKey()));
     }
@@ -98,6 +100,43 @@ TEST(TimelineAddTrackKeyboard, UpFromAddTrackReturnsToTheLastRow) {
 
     EXPECT_TRUE(f.panel.keyPressed(upKey()));
     EXPECT_FALSE(f.panel.isAddTrackButtonFocused());
+    EXPECT_EQ(f.panel.getFocusedTrackIndexForTest(), 2);
+}
+
+TEST(TimelineAddTrackKeyboard, DownFromTheRootLandsOnAddTrackFirstThenTheFirstTrack) {
+    AddTrackFixture f(3);
+    EXPECT_TRUE(f.panel.handleRootFocusKey(downKey()));
+    EXPECT_TRUE(f.panel.isAddTrackButtonFocused());
+    EXPECT_EQ(f.panel.getFocusedTrackIndexForTest(), -1);
+
+    EXPECT_TRUE(f.panel.keyPressed(downKey()));
+    EXPECT_FALSE(f.panel.isAddTrackButtonFocused());
+    EXPECT_EQ(f.panel.getFocusedTrackIndexForTest(), 0);
+}
+
+TEST(TimelineAddTrackKeyboard, FromTheTopUpReturnsToTheRootAndFromTheFirstRowUpReachesAddTrack) {
+    AddTrackFixture f(3);
+    ASSERT_TRUE(f.panel.handleRootFocusKey(downKey()));
+    ASSERT_TRUE(f.panel.isAddTrackButtonFocused());
+    EXPECT_TRUE(f.panel.keyPressed(upKey())) << "entered from the top, Up goes back to the panel root";
+    EXPECT_FALSE(f.panel.isAddTrackButtonFocused());
+
+    f.focusRow(0);
+    ASSERT_EQ(f.panel.getFocusedTrackIndexForTest(), 0);
+    ASSERT_TRUE(f.panel.getTrackHeaderAt(0)->keyPressed(upKey()));
+    EXPECT_TRUE(f.panel.isAddTrackButtonFocused()) << "Up off the first row lands on + Track";
+    EXPECT_TRUE(f.panel.keyPressed(downKey()));
+    EXPECT_EQ(f.panel.getFocusedTrackIndexForTest(), 0) << "and Down from it is the first row again";
+}
+
+TEST(TimelineAddTrackKeyboard, AddTrackStaysReachableFromTheBottomAndUpThereReturnsToTheLastRow) {
+    AddTrackFixture f(3);
+    f.focusRow(2);
+    ASSERT_TRUE(f.panel.getTrackHeaderAt(2)->keyPressed(downKey()));
+    ASSERT_TRUE(f.panel.isAddTrackButtonFocused());
+    EXPECT_TRUE(f.panel.keyPressed(downKey())) << "entered from the bottom, Down stays on the last stop";
+    EXPECT_TRUE(f.panel.isAddTrackButtonFocused());
+    EXPECT_TRUE(f.panel.keyPressed(upKey()));
     EXPECT_EQ(f.panel.getFocusedTrackIndexForTest(), 2);
 }
 

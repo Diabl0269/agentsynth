@@ -279,7 +279,8 @@ void TimelinePanelComponent::changeListenerCallback(juce::ChangeBroadcaster* sou
 }
 
 // Rebuilds every dynamic shortcut-hint tooltip this panel owns (see synth::shortcutHintFor): the
-// seven tool-strip buttons, the snap toggle, and the follow-playhead toggle. Called from the
+// seven tool-strip buttons, the snap toggle, the follow-playhead toggle and the transport bar's play/stop,
+// record, loop and metronome buttons. Called from the
 // constructor (after those buttons exist), setShortcutManager (both install and clear), and
 // changeListenerCallback.
 void TimelinePanelComponent::refreshShortcutTooltips() {
@@ -320,6 +321,21 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
     followPlayheadButton_.setTooltip(synth::ui::formatShortcutHint(
         "Follow playhead", shortcutHintFor(shortcuts_, "timelineFollowPlayheadToggle",
                                            juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0))));
+
+    // The transport bar's own buttons name their keys too. Record and Metronome have no hardcoded default
+    // (no manager: no hint); Loop answers to the timeline's bare L, or to the transport action's binding
+    // while L is cleared.
+    auto loopKey = shortcutHintFor(shortcuts_, "timelineToggleLoop", juce::KeyPress('l', juce::ModifierKeys(), 0));
+    if (loopKey.isEmpty() && shortcuts_ != nullptr)
+        loopKey = shortcutHintFor(shortcuts_, "transportToggleLoop", {});
+    transportBar_.getLoopButton().setTooltip(synth::ui::formatShortcutHint("Loop", loopKey));
+    transportBar_.getPlayStopButton().setTooltip(synth::ui::formatShortcutHint(
+        "Play / Stop", shortcutHintFor(shortcuts_, "togglePlayback", juce::KeyPress(juce::KeyPress::spaceKey))));
+    transportBar_.getRecordButton().setTooltip(synth::ui::formatShortcutHint(
+        "Record (arms the first armed track; implies Play)", shortcutHintFor(shortcuts_, "transportRecord", {})));
+    transportBar_.getMetronomeButton().setTooltip(
+        synth::ui::formatShortcutHint("Metronome click (summed after the graph - never recorded or bounced)",
+                                      shortcutHintFor(shortcuts_, "transportToggleMetronome", {})));
 }
 
 //==============================================================================

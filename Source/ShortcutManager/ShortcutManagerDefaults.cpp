@@ -128,7 +128,7 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // The platform-standard "show the context menu" chord; nothing else binds F10.
     bindings["openContextMenu"] = juce::KeyPress(juce::KeyPress::F10Key, juce::ModifierKeys::shiftModifier, 0);
 
-    // The transport family ships UNBOUND -- an explicit invalid juce::KeyPress(), not
+    // The transport family ships UNBOUND (bar Record and Metronome, below) -- an explicit invalid juce::KeyPress(), not
     // an absent map entry. saveToProperties() below indexes `bindings` with `.at()` for every
     // id in `actionIds`, so a genuinely absent entry throws (std::map::at) the moment anyone
     // ever persists; a present-but-invalid KeyPress is indistinguishable from "absent" to
@@ -138,8 +138,18 @@ void ShortcutManager::addGeneralDefaultBindings() {
     bindings["transportPlay"] = juce::KeyPress();
     bindings["transportStop"] = juce::KeyPress();
     bindings["transportToggleLoop"] = juce::KeyPress();
+    // Record and Metronome are the two exceptions. On macOS they take a REAL Ctrl+R / Ctrl+M:
+    // Cmd+R is Repeat and Cmd+M is the mod-matrix toggle, but Ctrl is a distinct physical
+    // modifier there, so the chords are free. On Windows/Linux juce's commandModifier IS the Ctrl
+    // key, so Ctrl+R / Ctrl+M would be the SAME chord as those two (and trip
+    // EveryDefaultBindingIsUnique); those platforms keep both unbound, rebindable like any other.
+#if JUCE_MAC
+    bindings["transportRecord"] = juce::KeyPress('r', juce::ModifierKeys::ctrlModifier, 0);
+    bindings["transportToggleMetronome"] = juce::KeyPress('m', juce::ModifierKeys::ctrlModifier, 0);
+#else
     bindings["transportRecord"] = juce::KeyPress();
     bindings["transportToggleMetronome"] = juce::KeyPress();
+#endif
     bindings["transportReturnToStart"] = juce::KeyPress();
     // Cursor moves and loop jumps -- same unbound-by-default reasoning as above.
     bindings["transportNudgeBackBeat"] = juce::KeyPress();

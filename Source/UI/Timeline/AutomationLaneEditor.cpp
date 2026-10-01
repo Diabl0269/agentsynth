@@ -6,6 +6,8 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/AutomationToolMapping.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
+#include "UI/Timeline/ToolCursors.h"
+#include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <cmath>
 
@@ -33,6 +35,44 @@ void AutomationLaneEditor::setCurveColour(juce::Colour colour) {
     if (curveColour_ == colour)
         return;
     curveColour_ = colour;
+    repaint();
+}
+
+// The lane background paintGridBackdrop() fills, which the curve colour has to read against.
+static juce::Colour laneBackground(const juce::Component& c) {
+    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&c.getLookAndFeel()))
+        return lf->getTheme().colors.bg1;
+    return juce::Colours::darkgrey.darker(0.6f);
+}
+
+juce::Colour AutomationLaneEditor::getResolvedCurveColour() const {
+    juce::Colour colour = juce::Colours::cyan;
+    if (curveColour_.has_value())
+        colour = *curveColour_;
+    else if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        colour = lf->getTheme().colors.modWire;
+    return readableOn(colour, laneBackground(*this));
+}
+
+// The draw tool is the pen whether it is followed from the timeline (Shift swaps the stroke for a
+// line only at mouse-down) or picked directly as Pencil/Line. Built lazily from the themed Draw icon,
+// the same cursor the clip lanes and the piano roll show under that tool.
+juce::MouseCursor AutomationLaneEditor::getMouseCursor() {
+    const bool drawing =
+        editTool_.has_value() ? *editTool_ == EditTool::Draw : (tool_ == Tool::Pencil || tool_ == Tool::Line);
+    if (!drawing)
+        return juce::MouseCursor(juce::MouseCursor::NormalCursor);
+    if (!penCursorBuilt_) {
+        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+        std::unique_ptr<juce::Drawable> icon = lf != nullptr ? lf->getIcon(synth::theme::Icon::ToolDraw) : nullptr;
+        penCursor_ = makeToolCursor(EditTool::Draw, icon.get());
+        penCursorBuilt_ = true;
+    }
+    return penCursor_;
+}
+
+void AutomationLaneEditor::lookAndFeelChanged() {
+    penCursorBuilt_ = false; // re-tinted icon -> different cursor image
     repaint();
 }
 
@@ -207,11 +247,7 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
         }
     }
 
-    juce::Colour curveColour = juce::Colours::cyan;
-    if (curveColour_.has_value())
-        curveColour = *curveColour_;
-    else if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        curveColour = lf->getTheme().colors.modWire;
+    const juce::Colour curveColour = getResolvedCurveColour();
 
     juce::Path path;
     AutomationCursor cursor{};
@@ -262,14 +298,16 @@ void AutomationLaneEditor::paintToolPreview(juce::Graphics& g) {
 
 void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::AutomationLane& lane) {
     using namespace synth::theme;
-    juce::Colour normal, accent, erase;
+    // Points are the curve's own colour (the owning track's), outlined in the lane background so they
+    // stay distinct where they sit on the line.
+    const juce::Colour normal = getResolvedCurveColour();
+    const juce::Colour outline = laneBackground(*this);
+    juce::Colour accent, erase;
     if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& c = lf->getTheme().colors;
-        normal = c.textPrimary;
         accent = c.accent;
         erase = c.error;
     } else {
-        normal = juce::Colours::white;
         accent = juce::Colours::yellow;
         erase = juce::Colours::red;
     }
@@ -291,6 +329,8 @@ void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::Automati
         const float y = (float)valueToY(value);
         g.setColour(erased ? erase : (active ? accent : normal));
         g.fillEllipse(x - kHandleRadiusPx, y - kHandleRadiusPx, kHandleRadiusPx * 2.0f, kHandleRadiusPx * 2.0f);
+        g.setColour(outline);
+        g.drawEllipse(x - kHandleRadiusPx, y - kHandleRadiusPx, kHandleRadiusPx * 2.0f, kHandleRadiusPx * 2.0f, 1.0f);
     }
 }
 

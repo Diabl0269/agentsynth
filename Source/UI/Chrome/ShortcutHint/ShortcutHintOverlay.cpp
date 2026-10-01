@@ -38,8 +38,9 @@ ShortcutHintOverlay::~ShortcutHintOverlay() {
     host_.removeKeyListener(this);
 }
 
-void ShortcutHintOverlay::addTarget(juce::Component& component, const juce::String& actionId) {
-    targets_.push_back({juce::Component::SafePointer<juce::Component>(&component), actionId});
+void ShortcutHintOverlay::addTarget(juce::Component& component, const juce::String& actionId,
+                                    const juce::String& fallbackActionId) {
+    targets_.push_back({juce::Component::SafePointer<juce::Component>(&component), actionId, {}, {}, fallbackActionId});
 }
 
 void ShortcutHintOverlay::addFixedKeyTarget(juce::Component& component, const juce::KeyPress& key) {

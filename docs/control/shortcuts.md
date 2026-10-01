@@ -53,7 +53,9 @@ when reasoning about a key that "does nothing."
 | Cmd+X | Cut — Copy then delete, as ONE undo step (Selected Modules, or the timeline's selected clips/notes; see "Surface routing" below) |
 | Cmd+R | Repeat — prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
 | Space | Play / Stop (toggle the timeline transport) |
-| *(unbound)* | Play / Stop / Record / Toggle Looping / Toggle Metronome / Return to Start / Move Cursor Back or Forward (Beat, Bar) / Jump to Loop Start or End / Jump to Next or Previous Marker — see [**Transport family**](#transport-family) below |
+| Ctrl+M (macOS) | Toggle Metronome (`transportToggleMetronome`) — a REAL Control, since Cmd+M stays Toggle Mod Matrix. Unbound on Windows/Linux, where Cmd IS Ctrl and Ctrl+M would be Mod Matrix — see [**Transport family**](#transport-family) |
+| Ctrl+R (macOS) | Record (`transportRecord`) — a REAL Control, since Cmd+R stays Repeat. Unbound on Windows/Linux for the same reason — see [**Transport family**](#transport-family) |
+| *(unbound)* | Play / Stop / Toggle Looping / Return to Start / Move Cursor Back or Forward (Beat, Bar) / Jump to Loop Start or End / Jump to Next or Previous Marker — see [**Transport family**](#transport-family) below |
 | *(unbound)* | Select Next / Previous Module, Select Next / Previous Track — see [**Selection stepping**](#selection-stepping) below |
 | Cmd+= | Zoom In (routed per focused surface — see [**Zoom**](#zoom) below) |
 | Cmd+- | Zoom Out |
@@ -270,7 +272,13 @@ Every transport verb is promoted to a command-dispatched `AppCommands` action �
 [`midi-remote.md`](midi-remote.md#action-targets) prerequisite for a controller hardware button to trigger
 one via `ApplicationCommandManager::invokeDirectly`. All of them are **General**, and ship **unbound**
 by default (no default keypress) — they exist first as command/MIDI-Remote targets, and a user may
-still bind one from Settings like any other action:
+still bind one from Settings like any other action. The two exceptions are **Record** and **Toggle
+Metronome**: on macOS they default to a real **Ctrl+R** and **Ctrl+M** (Control is a distinct physical key
+there, so Cmd+R Repeat and Cmd+M Toggle Mod Matrix are untouched); on Windows/Linux, where Cmd is Ctrl, the
+same chords would collide with those two and the pair stays unbound. An install that saved its settings
+before the chords existed holds both as unbound, so a one-shot migration
+(`ShortcutManager::migrateTransportCtrlChords`) gives them the new chords once and leaves any key the user
+chose alone:
 
 | Action id | Display name | Behaviour |
 |---|---|---|
@@ -442,11 +450,11 @@ plumbing the mouse wheel and vertical zoom already use, via `ensureTrackVisible(
 
 | Shortcut | Action |
 |----------|--------|
-| ↑ / ↓ | Move focus to the previous/next track header row; ↓ on the last row moves on to the **+ Track** button and ↑ there comes back (not rebindable — arrow-key row navigation isn't a `ShortcutManager` action anywhere else in this app either, see the Library navigation's `ModuleLibraryComponent` precedent) |
+| ↑ / ↓ | Move focus to the previous/next track header row; ↓ on the Timeline region root lands on the **+ Track** button first and ↓ again on the first row; ↑ off the first row comes back to **+ Track**, and ↑ there returns to the root. ↓ on the last row also moves on to **+ Track**, and ↑ from it entered that way returns to the last row (not rebindable — arrow-key row navigation isn't a `ShortcutManager` action anywhere else in this app either, see the Library navigation's `ModuleLibraryComponent` precedent) |
 | M | Mute Focused Track (`timelineMuteFocusedTrack`) — flips `Track::muted` on whichever row holds focus, through the exact same `performTrackEdit` one-undo-step path the M **button** already used |
 | S | Solo Focused Track (`timelineSoloFocusedTrack`) — `Track::soloed`, same path |
 | R | Arm Focused Track (`timelineArmFocusedTrack`) — `Track::armed`, same path |
-| Return / Space on **+ Track** | Opens the add-track menu, exactly like a click. On a timeline with no tracks, ↓ on the Timeline region root lands straight on the button. Space is claimed by the panel so it does not toggle playback while the button has focus. Closing a menu opened this way (a pick or Esc) puts focus back on **+ Track** |
+| Return / Space on **+ Track** | Opens the add-track menu, exactly like a click. ↓ on the Timeline region root lands on the button first, with or without tracks. Space is claimed by the panel so it does not toggle playback while the button has focus. Closing a menu opened this way (a pick or Esc) puts focus back on **+ Track** |
 | Option+= / Option+- / Option+0 | Increase / Decrease / Reset Track Height (`timelineIncreaseTrackHeight`, `timelineDecreaseTrackHeight`, `timelineResetTrackHeight`) — sizes the focused row only, ×1.25 a step, one undo step each ([tracks](../timeline/tracks.md#one-tracks-height)); no Option+=/-/0 is bound anywhere else |
 | A | Show/Hide Track Automation (`timelineToggleTrackAutomation`) — folds the focused row's automation lanes open or closed, like its fold arrow ([automation](../timeline/automation.md#lane-rows)); bare A is free in every category (every other `a` binding carries a modifier) |
 
@@ -927,7 +935,10 @@ overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-wind
 
 Covered today: the toolbar's Library, New, Save, Load, Settings, Undo, Redo, Auto-arrange, Minimap,
 Mod Matrix, AI Panel and Show/Hide Panel buttons; the dock tabs; the timeline transport bar's
-play/stop, record, loop and metronome buttons; the status bar's play/stop; the mixer toolbar's
+play/stop, record, loop and metronome buttons (loop shows the bare L of `timelineToggleLoop`, or the
+`transportToggleLoop` binding while L is unbound); the timeline's seven edit-tool buttons, Snap and Follow
+playhead (`TimelinePanelComponent::getShortcutHintTargets()` is the one list, so a new shortcut button there is
+labelled by adding it to it; the per-row M/S/R buttons act on the focused row and are not labelled); the status bar's play/stop; the mixer toolbar's
 Inserts, Sends and EQ toggles; and, while a clip is open, the piano roll's Quantise, Quantise length,
 Quantise pitches, Scale, Scale filter and Velocity chips.
 

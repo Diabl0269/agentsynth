@@ -54,8 +54,9 @@ public:
     static constexpr double kFadeOutMs = 110.0;
 
     /** Registers a button that triggers `actionId`; the key shown is always read from the
-     *  ShortcutManager. A registered component that is hidden, clipped or covered gets no hint. */
-    void addTarget(juce::Component& component, const juce::String& actionId);
+     *  ShortcutManager. A registered component that is hidden, clipped or covered gets no hint.
+     *  `fallbackActionId` is shown instead while `actionId` is unbound (one button, two actions). */
+    void addTarget(juce::Component& component, const juce::String& actionId, const juce::String& fallbackActionId = {});
     /** Registers a button that a fixed, positional key opens (the Settings tabs' Cmd+1..9): the bubble shows
      *  `key` as given, not a ShortcutManager binding, so a rebind cannot change it. */
     void addFixedKeyTarget(juce::Component& component, const juce::KeyPress& key);
@@ -103,6 +104,7 @@ private:
         juce::String actionId;
         std::function<juce::Rectangle<int>()> area; // empty: the whole component
         juce::KeyPress fixedKey;                    // valid: shown instead of actionId's binding
+        juce::String fallbackActionId;              // shown while actionId is unbound
     };
     // The one modifier whose hold drives the hints; None = no hint modifier, or more than one.
     enum class HintModifier { None, Cmd, Ctrl, Alt };

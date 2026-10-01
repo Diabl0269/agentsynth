@@ -51,6 +51,7 @@ public:
         }
         migrateSaveAsChordSwap(*settings);
         migrateBottomPanelToggleKeys(*settings);
+        migrateTransportCtrlChords(*settings);
     }
 
     /** One-shot: Save Project As and Save Snippet swapped chords (Save As took the standard
@@ -93,6 +94,24 @@ public:
             bindings["toggleBottomPanel"] = cmdT;
             bindings["toggleTimelinePanel"] = juce::KeyPress('1', juce::ModifierKeys::commandModifier, 0);
         }
+    }
+
+    /** One-shot, macOS only: Record and Metronome gained default chords (Ctrl+R / Ctrl+M), but
+     *  saveToProperties() persists every action's key, so an install that ever saved its settings
+     *  holds them as UNBOUND and would never see the new defaults. Adopt the default only where the
+     *  stored key is still unbound -- a user who bound their own chord keeps it -- and the flag stops
+     *  it re-firing if they later unbind on purpose. */
+    void migrateTransportCtrlChords([[maybe_unused]] juce::PropertiesFile& settings) {
+#if JUCE_MAC
+        constexpr auto flag = "shortcutMigration_transportCtrlChords";
+        if (settings.getBoolValue(flag, false))
+            return;
+        settings.setValue(flag, true);
+        if (!bindings["transportRecord"].isValid())
+            bindings["transportRecord"] = juce::KeyPress('r', juce::ModifierKeys::ctrlModifier, 0);
+        if (!bindings["transportToggleMetronome"].isValid())
+            bindings["transportToggleMetronome"] = juce::KeyPress('m', juce::ModifierKeys::ctrlModifier, 0);
+#endif
     }
 
     void saveToProperties() {

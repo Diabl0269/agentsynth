@@ -23,7 +23,8 @@ std::unique_ptr<juce::Component> makeMainWindowShortcutHints(juce::Component& ho
     if (parts.transport != nullptr) {
         overlay->addTarget(parts.transport->getPlayStopButton(), "togglePlayback");
         overlay->addTarget(parts.transport->getRecordButton(), "transportRecord");
-        overlay->addTarget(parts.transport->getLoopButton(), "transportToggleLoop");
+        // Bare L is the timeline's loop key; the command-dispatched action is the MIDI-Remote/rebind twin.
+        overlay->addTarget(parts.transport->getLoopButton(), "timelineToggleLoop", "transportToggleLoop");
         overlay->addTarget(parts.transport->getMetronomeButton(), "transportToggleMetronome");
     }
 
