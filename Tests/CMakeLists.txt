@@ -577,6 +577,7 @@ add_executable(Tests
     UI/Layout/DetachablePanelHost/DetachRedockStateTests.cpp
     UI/Mixer/MixerPanelKeyboardFocusTests.cpp
     UI/Mixer/MixerAccessibilityTests.cpp
+    UI/Accessibility/AccessibilityCoverageTests.cpp
     UI/Mixer/MixerFocusRegionTests.cpp
     UI/Graph/MinimapComponentTests.cpp
     Plugin/PluginProcessorTests.cpp
