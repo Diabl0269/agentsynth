@@ -16,4 +16,22 @@ void NonModalLabel::editorShown(juce::TextEditor*) {
     });
 }
 
+// juce::Label::textEditorEscapeKeyPressed restores the label's text into the editor and calls hideEditor(true),
+// which deletes the editor. JUCE dispatches Escape from TextEditor::handleCommandMessage while holding that
+// editor's listener-list lock, so deleting it there makes the unlock write into freed memory. Restoring the
+// text stays synchronous, which also makes a focus-loss commit arriving before the deferred hide a no-op
+// (the text is already the original); only the deletion is deferred, until the dispatch has returned.
+void NonModalLabel::textEditorEscapeKeyPressed(juce::TextEditor& editor) {
+    if (getCurrentTextEditor() != &editor)
+        return;
+    editor.setText(getTextValue().toString(), false);
+    juce::Component::SafePointer<NonModalLabel> safeThis(this);
+    juce::Component::SafePointer<juce::TextEditor> safeEditor(&editor);
+    juce::MessageManager::callAsync([safeThis, safeEditor] {
+        if (safeThis != nullptr && safeEditor != nullptr &&
+            safeThis->getCurrentTextEditor() == safeEditor.getComponent())
+            safeThis->hideEditor(true);
+    });
+}
+
 } // namespace synth::ui
