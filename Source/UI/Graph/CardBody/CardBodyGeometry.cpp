@@ -60,18 +60,38 @@ int layoutToggleRun(const std::vector<juce::Component*>& toggles, int y, const B
 }
 
 int layoutKnobRun(const std::vector<CaptionedWidget>& knobs, int columns, int y, const BodyGeometry& g, bool apply) {
-    const int knobColumns = g.isDoubleWidth() ? columns * 2 : columns;
-    const int knobWidth = g.contentW / knobColumns;
-    const int count = (int)knobs.size();
+    return layoutGridRun(knobs, columns, kKnobHeight, 0, y, g, apply);
+}
+
+int layoutGridRun(const std::vector<CaptionedWidget>& cells, int columns, int cellHeight, int widgetWidth, int y,
+                  const BodyGeometry& g, bool apply) {
+    const int gridColumns = g.isDoubleWidth() ? columns * 2 : columns;
+    const int cellWidth = g.contentW / gridColumns;
+    const int width = widgetWidth > 0 ? std::min(widgetWidth, cellWidth) : cellWidth;
+    const int count = (int)cells.size();
     for (int i = 0; i < count; ++i) {
-        const int x = g.contentX + (i % knobColumns) * knobWidth;
-        const int rowY = y + (i / knobColumns) * (kLabelHeight + kKnobHeight);
+        const int x = g.contentX + (i % gridColumns) * cellWidth;
+        const int rowY = y + (i / gridColumns) * (kLabelHeight + cellHeight);
         if (apply) {
-            knobs[(size_t)i].second->setBounds(x, rowY, knobWidth, kLabelHeight);
-            knobs[(size_t)i].first->setBounds(x, rowY + kLabelHeight, knobWidth, kKnobHeight);
+            cells[(size_t)i].second->setBounds(x, rowY, cellWidth, kLabelHeight);
+            cells[(size_t)i].first->setBounds(x + (cellWidth - width) / 2, rowY + kLabelHeight, width, cellHeight);
         }
     }
-    return y + ((count + knobColumns - 1) / knobColumns) * (kLabelHeight + kKnobHeight);
+    return y + ((count + gridColumns - 1) / gridColumns) * (kLabelHeight + cellHeight);
+}
+
+int layoutCaptionedRows(const std::vector<CaptionedWidget>& rows, int rowHeight, bool wide, int y,
+                        const BodyGeometry& g, bool apply) {
+    const int x = wide ? g.contentX : g.narrowX;
+    const int w = wide ? g.contentW : g.narrowW;
+    for (const auto& [widget, label] : rows) {
+        if (apply) {
+            label->setBounds(x, y, w, kLabelHeight);
+            widget->setBounds(x, y + kLabelHeight, w, rowHeight);
+        }
+        y += kLabelHeight + rowHeight + 6;
+    }
+    return y;
 }
 
 int layoutViewRow(juce::Component* view, int height, int y, const BodyGeometry& g, bool apply) {

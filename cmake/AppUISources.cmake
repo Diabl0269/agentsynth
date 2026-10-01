@@ -491,4 +491,14 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardBody/CardBodyPlan.h
     Source/UI/Graph/CardBody/CardBodyViews.cpp
     Source/UI/Graph/CardBody/CardBodyViews.h
+    Source/UI/Graph/CardBody/CardLayoutQuickEdit.cpp
+    Source/UI/Graph/CardBody/CardLayoutQuickEdit.h
+    Source/UI/Graph/CardWidgets/CardControlGestures.h
+    Source/UI/Graph/CardWidgets/CardFader.cpp
+    Source/UI/Graph/CardWidgets/CardFader.h
+    Source/UI/Graph/CardWidgets/CardSegmentedSwitch.cpp
+    Source/UI/Graph/CardWidgets/CardSegmentedSwitch.h
+    Source/UI/Graph/CardWidgets/CardStepper.cpp
+    Source/UI/Graph/CardWidgets/CardStepper.h
+    Source/UI/Graph/ModuleComponent/ModuleComponentModRings.cpp
 )

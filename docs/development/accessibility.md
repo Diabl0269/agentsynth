@@ -43,7 +43,14 @@ after its parameter and gets a tooltip naming it, by one pass that runs after th
 tooltip from the base one). A knob's spoken value is the parameter's own text through the slider's text
 function, so a frequency parameter that formats itself (`Source/Modules/FrequencyText.h`, the Filter cutoff)
 reads "Cutoff, 1.2 kHz". Card knobs are `CardKnobSlider`s: they take focus and each key step is one change
-gesture (one undo step). The painted jacks get invisible, click-through, unfocusable stand-ins named
+gesture (one undo step). A card fader (`CardFader`) is a slider too, with the same keys (arrows, Shift for a
+fine step, Page Up/Down, Home/End) and its focus ring drawn round the cap by the fader painter. A
+segmented switch (`CardSegmentedSwitch`) is ONE Tab stop that Left/Right/Home/End move; to a screen reader it
+is a `group` named after the parameter holding one titled radio button per value, the selected one checked.
+A stepper (`CardStepper`) is two buttons, each a Tab stop titled after the parameter ("Octave down",
+"Octave up"), and the arrows step while either has focus. A composite control (the stepper) is registered for
+MIDI Learn as a whole: a right click on any part of it resolves to the registered ancestor
+(`ModuleComponent::mouseDown`). None of these keys is global, so none is a `ShortcutManager` action. The painted jacks get invisible, click-through, unfocusable stand-ins named
 "Audio L input" and so on, for the accessibility tree only; there is no keyboard cable creation.
 
 ## Which focus helper

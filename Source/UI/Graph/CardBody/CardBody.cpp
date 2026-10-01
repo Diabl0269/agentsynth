@@ -1,6 +1,7 @@
 // CardBody.cpp -- building a card body's widgets and keeping their bindings: one widget per plan item,
 // created exactly as the generic card always created it (same widget class, componentID, style,
-// attachment, MIDI Learn registration and modulation-amount gesture), plus the views and teardown.
+// attachment, MIDI Learn registration and modulation-amount gesture), the faders, segmented switches
+// and steppers a layout may ask for, plus the views and teardown.
 // Layout is CardBodyLayout.cpp; the More row is CardBodyMoreRow.cpp.
 #include "CardBody.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -9,6 +10,9 @@
 #include "CardLayoutOverride.h"
 #include "ModuleCardLayoutResolver.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/CardWidgets/CardFader.h"
+#include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
+#include "UI/Graph/CardWidgets/CardStepper.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
@@ -72,7 +76,8 @@ void fillWaveformItems(juce::ComboBox& combo, const juce::StringArray& choices, 
 CardBody::CardBody(ModuleComponent& card, juce::AudioProcessor& module, const std::optional<CardLayout>& layout)
     : card_(card)
     , module_(module)
-    , plan_(CardBodyPlan::forModule(module, layout)) {}
+    , plan_(CardBodyPlan::forModule(module, layout))
+    , layout_(layout) {}
 
 CardBody::~CardBody() = default;
 
@@ -89,10 +94,12 @@ std::unique_ptr<CardBody> CardBody::createFor(ModuleComponent& card, juce::Audio
     for (auto* param : module.getParameters())
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param))
             paramIds.add(ranged->paramID);
-    const auto resolved =
-        resolveModuleCardLayout(AIStateMapper::getFactoryTypeName(&module), getCardLayoutOverride(graph, nodeId),
-                                nullptr, DefaultCardLayouts::builtIn(), &paramIds);
-    return std::make_unique<CardBody>(card, module, resolved.layout);
+    const auto stored = getCardLayoutOverride(graph, nodeId);
+    const auto resolved = resolveModuleCardLayout(AIStateMapper::getFactoryTypeName(&module), stored, nullptr,
+                                                  DefaultCardLayouts::builtIn(), &paramIds);
+    auto body = std::make_unique<CardBody>(card, module, resolved.layout);
+    body->builtFromOverride_ = stored.isVoid() ? juce::String() : juce::JSON::toString(stored, true);
+    return body;
 }
 
 void CardBody::createViews() {
@@ -114,10 +121,16 @@ void CardBody::createParameterWidgets() {
     for (auto& item : plan_.items) {
         if (item.kind == CardBodyItem::Kind::Choice)
             createChoice(item, *static_cast<juce::AudioParameterChoice*>(item.param));
-        else if (item.kind == CardBodyItem::Kind::Knob)
+        else if (item.kind == CardBodyItem::Kind::Knob || item.kind == CardBodyItem::Kind::KnobLarge)
             createKnob(item, *item.param);
         else if (item.kind == CardBodyItem::Kind::Toggle)
             createToggle(item, *static_cast<juce::AudioParameterBool*>(item.param));
+        else if (item.kind == CardBodyItem::Kind::FaderV || item.kind == CardBodyItem::Kind::FaderH)
+            createFader(item, *item.param);
+        else if (item.kind == CardBodyItem::Kind::Segmented)
+            createSegmented(item, *static_cast<juce::AudioParameterChoice*>(item.param));
+        else if (item.kind == CardBodyItem::Kind::Stepper)
+            createStepper(item, *static_cast<juce::AudioParameterInt*>(item.param));
     }
     if (hasMoreRow())
         createMoreButton();
@@ -166,7 +179,7 @@ void CardBody::createKnob(CardBodyItem& item, juce::RangedAudioParameter& param)
     card_.addAndMakeVisible(knob);
     knob->addMouseListener(&card_, false);
     card_.registerMidiLearnable(*knob, &param);
-    card_.wireCardKnobModAmountGesture(*knob, &param);
+    card_.wireCardControlGestures(*knob, *knob, &param);
     sliderAttachments_.add(new juce::SliderParameterAttachment(param, *knob));
     if (isFloat)
         applyAdsrTimeSkew(*knob, param);
@@ -192,6 +205,83 @@ void CardBody::createToggle(CardBodyItem& item, juce::AudioParameterBool& param)
     card_.registerMidiLearnable(*toggle, &param);
     buttonAttachments_.add(new juce::ButtonParameterAttachment(param, *toggle));
     item.widget = toggle;
+}
+
+// The caption above a fader, switch or stepper: the parameter's display name, as a knob's.
+juce::Label* CardBody::addCaption(CardBodyItem& item, juce::RangedAudioParameter& param,
+                                  juce::Justification justification) {
+    auto* label = new juce::Label(param.getName(100), param.getName(100));
+    widgets_.add(label);
+    label->setJustificationType(justification);
+    card_.addAndMakeVisible(label);
+    item.label = label;
+    return label;
+}
+
+// Everything a knob has -- the sliders/sliderParams entry (Automate, value reflection, modulation-target
+// lookup), MIDI Learn, the card gestures, the attachment and the ADSR display skew -- plus the default
+// a Cmd-click or double-click returns to. The painter picks the look from the fader's size.
+void CardBody::createFader(CardBodyItem& item, juce::RangedAudioParameter& param) {
+    const bool vertical = item.kind == CardBodyItem::Kind::FaderV;
+    auto* fader = new synth::ui::CardFader(vertical ? synth::ui::CardFader::Orientation::Vertical
+                                                    : synth::ui::CardFader::Orientation::Horizontal);
+    widgets_.add(fader);
+    card_.sliders.add(fader);
+    fader->setComponentID(param.getName(100));
+    card_.addAndMakeVisible(fader);
+    fader->addMouseListener(&card_, false);
+    card_.registerMidiLearnable(*fader, &param);
+    card_.wireCardControlGestures(*fader, *fader, &param);
+    sliderAttachments_.add(new juce::SliderParameterAttachment(param, *fader));
+    if (dynamic_cast<juce::AudioParameterFloat*>(&param) != nullptr)
+        applyAdsrTimeSkew(*fader, param);
+    fader->setDoubleClickReturnValue(true, param.convertFrom0to1(param.getDefaultValue()));
+    card_.sliderParams.add(&param);
+    card_.sliderLabels.add(
+        addCaption(item, param, vertical ? juce::Justification::centred : juce::Justification::centredLeft));
+    item.widget = fader;
+}
+
+// Bound through a plain ParameterAttachment: a pick is one complete gesture (one undo step), and a
+// value from automation or undo moves the selection without notifying back.
+void CardBody::createSegmented(CardBodyItem& item, juce::AudioParameterChoice& param) {
+    auto* segmented = new synth::ui::CardSegmentedSwitch(param.getName(100), param.choices);
+    widgets_.add(segmented);
+    segmented->setComponentID(param.getName(100));
+    segmented->setTooltip(param.getName(100));
+    card_.addAndMakeVisible(segmented);
+    segmented->addMouseListener(&card_, false);
+    card_.registerMidiLearnable(*segmented, &param);
+    auto* attachment = paramAttachments_.add(new juce::ParameterAttachment(param, [segmented](float value) {
+        segmented->setSelectedIndex(juce::roundToInt(value), juce::dontSendNotification);
+    }));
+    segmented->onChange = [attachment](int index) { attachment->setValueAsCompleteGesture((float)index); };
+    attachment->sendInitialUpdate();
+    addCaption(item, param, juce::Justification::centredLeft);
+    item.widget = segmented;
+}
+
+// The card listens to the stepper and its buttons (a right click on either button opens the control
+// menu: ModuleComponent::mouseDown resolves a registered ancestor).
+void CardBody::createStepper(CardBodyItem& item, juce::AudioParameterInt& param) {
+    auto* stepper = new synth::ui::CardStepper(param.getName(100));
+    widgets_.add(stepper);
+    stepper->setComponentID(param.getName(100));
+    stepper->setTooltip(param.getName(100));
+    card_.addAndMakeVisible(stepper);
+    stepper->addMouseListener(&card_, true);
+    card_.registerMidiLearnable(*stepper, &param);
+    auto* attachment = paramAttachments_.add(new juce::ParameterAttachment(
+        param, [stepper, &param](float) { stepper->setValueText(param.getCurrentValueAsText()); }));
+    stepper->onStep = [attachment, &param](int delta) {
+        const auto range = param.getRange();
+        const int next = juce::jlimit(range.getStart(), range.getEnd(), param.get() + delta);
+        if (next != param.get())
+            attachment->setValueAsCompleteGesture((float)next);
+    };
+    attachment->sendInitialUpdate();
+    addCaption(item, param, juce::Justification::centredLeft);
+    item.widget = stepper;
 }
 
 juce::Component* CardBody::findWidget(const juce::String& paramId) const {
@@ -220,6 +310,7 @@ void CardBody::releaseBindings(bool processorAlive) {
         sliderAttachments_.clear();
         comboAttachments_.clear();
         buttonAttachments_.clear();
+        paramAttachments_.clear();
         return;
     }
     while (sliderAttachments_.size() > 0)
@@ -228,6 +319,8 @@ void CardBody::releaseBindings(bool processorAlive) {
         (void)comboAttachments_.removeAndReturn(comboAttachments_.size() - 1);
     while (buttonAttachments_.size() > 0)
         (void)buttonAttachments_.removeAndReturn(buttonAttachments_.size() - 1);
+    while (paramAttachments_.size() > 0)
+        (void)paramAttachments_.removeAndReturn(paramAttachments_.size() - 1);
 }
 
 } // namespace synth

@@ -14,6 +14,7 @@
 #include "Modules/SequencerModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
@@ -641,7 +642,7 @@ void ModuleComponent::createControls() {
 // a modulation target at all, or it is but nothing is currently routed to it through an
 // attenuverter (a DirectCV/PolyBus routing has none to adjust).
 // Shared by firstAttenuverterForParam and the knob-hover -> cable-hover wiring in
-// wireCardKnobModAmountGesture, so the two can never resolve a different channel for the same
+// wireCardControlGestures, so the two can never resolve a different channel for the same
 // param.
 int ModuleComponent::destChannelForBoundParam(juce::RangedAudioParameter* param) const {
     auto* mod = dynamic_cast<ModuleBase*>(module);
@@ -665,16 +666,19 @@ juce::AudioProcessorGraph::NodeID ModuleComponent::firstAttenuverterForParam(juc
     return {};
 }
 
-// CardKnobSlider::wantsModAmountGesture: claim the gesture when this knob drives an attenuverter
-// AND the click is either Alt-modified or lands within +-5px of the ring's own radius (the same
-// geometry paintModulationRings draws it at -- see modRingCentreFor/modRingRadiusFor). `knob` is
-// the knob itself (its local bounds and layout give the ring centre).
+// CardControlGestures::wantsModAmountGesture: claim the gesture when this control drives an
+// attenuverter AND the click is either Alt-modified or lands within +-5px of the ring's own radius (the
+// same geometry paintModulationRings draws it at -- see modRingCentreFor/modRingRadiusFor), or, on a
+// fader, on its modulation bar's strip. `knob` is the control itself (its local bounds and layout give
+// the ring centre).
 bool ModuleComponent::wantsModAmountGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,
                                                const juce::MouseEvent& e) const {
     if (firstAttenuverterForParam(param).uid == 0)
         return false;
     if (e.mods.isAltDown())
         return true;
+    if (const auto* fader = dynamic_cast<const synth::ui::CardFader*>(&knob))
+        return fader->hitsModBar(e.position);
 
     const auto bounds = knob.getLocalBounds().toFloat();
     const float radius = modRingRadiusFor(bounds);
@@ -722,6 +726,10 @@ bool ModuleComponent::wantsCablePickupGestureFor(juce::RangedAudioParameter* par
                                                  const juce::MouseEvent& e) const {
     if (destChannelForBoundParam(param) < 0)
         return false;
+    constexpr float kPickupHitPad = 4.0f; // the dot is only 7px across; a pixel-perfect target is unfriendly
+    if (const auto* fader = dynamic_cast<const synth::ui::CardFader*>(&knob))
+        return fader->landingPoint(kKnobLandingDotDiameter).getDistanceFrom(e.position) <=
+               kKnobLandingDotDiameter * 0.5f + kPickupHitPad;
     const auto bounds = knob.getLocalBounds().toFloat();
     const float ringRadius = modRingRadiusFor(bounds);
     if (ringRadius <= 0.0f)
@@ -730,11 +738,8 @@ bool ModuleComponent::wantsCablePickupGestureFor(juce::RangedAudioParameter* par
     const float landingRadius = ringRadius + knobLandingRadiusOffset();
     const auto anchor = modRingPointForNorm(centre, landingRadius, 0.0f);
 
-    // A generous pad around the small dot -- it is only 7px across, and a precise pixel-perfect
-    // hit target is unfriendly. Still comfortably clear of the ring annulus (see
-    // knobLandingRadiusOffset's push-out math): the dot sits well beyond the ring, so this pad
-    // never reaches back into the ring's own +-5px zone.
-    constexpr float kPickupHitPad = 4.0f;
+    // The pad stays comfortably clear of the ring annulus (see knobLandingRadiusOffset's push-out
+    // math): the dot sits well beyond the ring, so it never reaches back into the ring's +-5px zone.
     return anchor.getDistanceFrom(e.position) <= (kKnobLandingDotDiameter * 0.5f + kPickupHitPad);
 }
 
@@ -764,18 +769,21 @@ void ModuleComponent::handleCablePickupGesture(juce::RangedAudioParameter* param
     owner.endConnectionDrag(e.getScreenPosition()); // phase 2
 }
 
-void ModuleComponent::wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& knob, juce::RangedAudioParameter* param) {
-    knob.wantsModAmountGesture = [this, param, &knob](const juce::MouseEvent& e) {
+// The one wiring for every continuous card control (knob, large knob, fader): the gestures live in
+// CardControlGestures, the hit zones in wantsModAmountGestureFor/wantsCablePickupGestureFor above.
+void ModuleComponent::wireCardControlGestures(juce::Slider& knob, synth::ui::CardControlGestures& gestures,
+                                              juce::RangedAudioParameter* param) {
+    gestures.wantsModAmountGesture = [this, param, &knob](const juce::MouseEvent& e) {
         return wantsModAmountGestureFor(param, knob, e);
     };
-    knob.onModAmountGesture = [this, param](const juce::MouseEvent& e, int phase) {
+    gestures.onModAmountGesture = [this, param](const juce::MouseEvent& e, int phase) {
         handleModAmountGesture(param, e, phase);
     };
     // Knob-hover -> cable-hover, the reverse direction of the cable-hover -> ring-highlight
     // wiring in GraphEditorCanvas.cpp's mouseMove. Only correlates while a live AttenuverterChain
     // routing actually lands here (same gate wantsModAmountGestureFor uses) -- a DirectCV/PolyBus
     // target has no cable re-anchored onto it to highlight.
-    knob.onHoverChanged = [this, param](bool entered) {
+    gestures.onHoverChanged = [this, param](bool entered) {
         if (!entered || firstAttenuverterForParam(param).uid == 0) {
             owner.setHoveredModTarget(std::nullopt);
             return;
@@ -791,10 +799,10 @@ void ModuleComponent::wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& kn
     // outside the ring, never inside its annulus, so this never fights wantsModAmountGestureFor
     // above) is the only way left to pick the cable back up. `&knob` is safe the same way it is
     // above: the lambda only ever runs while `knob` is alive, from `knob`'s own mouseDown.
-    knob.wantsCablePickupGesture = [this, param, &knob](const juce::MouseEvent& e) {
+    gestures.wantsCablePickupGesture = [this, param, &knob](const juce::MouseEvent& e) {
         return wantsCablePickupGestureFor(param, knob, e);
     };
-    knob.onCablePickupGesture = [this, param](const juce::MouseEvent& e, int phase) {
+    gestures.onCablePickupGesture = [this, param](const juce::MouseEvent& e, int phase) {
         handleCablePickupGesture(param, e, phase);
     };
 }

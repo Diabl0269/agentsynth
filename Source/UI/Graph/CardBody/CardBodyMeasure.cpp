@@ -26,7 +26,7 @@ using namespace cardbody;
 bool targetHasShownKnob(const CardBodyPlan& plan, ModuleBase& module, const ModulationTarget& target) {
     const auto* bound = module.parameterForModTarget(target);
     for (const auto& item : plan.items) {
-        if (item.kind != CardBodyItem::Kind::Knob)
+        if (!isContinuousKind(item.kind))
             continue;
         if (bound != nullptr ? item.param == bound : item.param->getName(100) == target.name)
             return true;

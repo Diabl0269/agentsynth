@@ -10,6 +10,8 @@
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/LayoutUtil.h"
@@ -82,6 +84,7 @@ void ModuleComponent::showAutomateMenuForSlider(juce::RangedAudioParameter* para
             safeThis->owner.onAutomateParameterRequested(nodeIdCopy, paramId);
     });
     appendMidiLearnMenuItems(menu, param);
+    synth::appendCardLayoutMenuItems(menu, owner, undoManager, nodeId, cardBody_.get(), paramId);
     // Routed through showContextMenuHook_ (rather than a direct showMenuAsync) so a test can
     // capture the built menu headlessly, the same seam buildModuleContextMenu()/
     // buildMacroPortContextMenu() already use.
@@ -427,6 +430,10 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
     // than getType(module) == ModuleType::HostedPlugin to match the bypass-toggle check just above,
     // which already establishes the "is this really a ModuleBase" pattern this menu builds against
     // (see docs/control/plugin-card-layout.md#choosing-knobs).
+    if (cardBody_ != nullptr && cardBody_->drawsFromLayout()) {
+        synth::appendEditLayoutMenuItem(m);
+        m.addSeparator();
+    }
     if (dynamic_cast<synth::HostedPluginModule*>(module) != nullptr) {
         m.addItem("Choose knobs...", [this] {
             if (onChooseKnobsRequested)
@@ -563,7 +570,11 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
         // No "Automate" item here: that has only ever existed for sliders (built-in or hosted knob,
         // both handled above).
         if (e.mods.isPopupMenu()) {
-            if (const auto* entry = midiLearnableRegistry_.find(e.eventComponent)) {
+            // A part of a composite control (a stepper's buttons) resolves to the registered control.
+            const MidiLearnableRegistry::Entry* found = nullptr;
+            for (auto* c = e.eventComponent; found == nullptr && c != nullptr && c != this; c = c->getParentComponent())
+                found = midiLearnableRegistry_.find(c);
+            if (const auto* entry = found) {
                 if (entry->hosted) {
                     if (entry->param != nullptr)
                         showMidiLearnOnlyMenu(entry->paramId, entry->param->getName(100));

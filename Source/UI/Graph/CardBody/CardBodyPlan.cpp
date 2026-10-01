@@ -45,6 +45,27 @@ bool isEditedElsewhere(juce::AudioProcessor& module, const juce::RangedAudioPara
     return false;
 }
 
+// A segmented switch shows every value at once, so it only suits a few short ones; longer lists stay
+// a combo.
+constexpr int kMaxSegments = 6;
+constexpr int kMaxSegmentChars = 10;
+// A stepper walks one value at a time, so it only suits a small integer range.
+constexpr int kMaxStepperSpan = 24;
+
+bool suitsSegmented(const juce::AudioParameterChoice& choice) {
+    if (choice.choices.size() < 2 || choice.choices.size() > kMaxSegments)
+        return false;
+    for (const auto& value : choice.choices)
+        if (value.length() > kMaxSegmentChars)
+            return false;
+    return true;
+}
+
+bool suitsStepper(const juce::AudioParameterInt& param) {
+    const auto range = param.getRange();
+    return range.getLength() > 0 && range.getLength() <= kMaxStepperSpan;
+}
+
 // A widget kind per JUCE parameter type, exactly as the generic card always chose: a choice is a combo,
 // a float or int a knob, a bool a toggle. Anything else gets no widget.
 std::optional<CardBodyItem::Kind> kindFor(const juce::RangedAudioParameter& param) {
@@ -113,8 +134,15 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
         for (const auto& item : source.items) {
             if (const auto* p = std::get_if<CardParamItem>(&item)) {
                 const int index = plan.findParam(p->paramId);
-                if (index < 0 || layout.hidden.contains(p->paramId) || !placed.insert(index).second)
+                if (index < 0 || !placed.insert(index).second)
                     continue;
+                // The widget applies to a hidden parameter too: it shows that way in the More row.
+                auto& planned = plan.items[(size_t)index];
+                planned.kind = cardBodyKindFor(*planned.param, p->widget).value_or(planned.kind);
+                if (layout.hidden.contains(p->paramId)) {
+                    placed.erase(index);
+                    continue;
+                }
                 section.items.push_back(index);
             } else if (const auto* v = std::get_if<CardViewItem>(&item)) {
                 if (const int view = addViewItem(module, v->view, plan); view >= 0)
@@ -138,6 +166,38 @@ CardBodyPlan CardBodyPlan::forModule(juce::AudioProcessor& module, const std::op
     else
         placeAutomatically(module, plan);
     return plan;
+}
+
+bool isContinuousKind(CardBodyItem::Kind kind) {
+    using Kind = CardBodyItem::Kind;
+    return kind == Kind::Knob || kind == Kind::KnobLarge || kind == Kind::FaderV || kind == Kind::FaderH;
+}
+
+std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParameter& param, CardWidget widget) {
+    using Kind = CardBodyItem::Kind;
+    const auto automatic = kindFor(param);
+    const bool continuous = automatic == Kind::Knob;
+    const auto* choice = dynamic_cast<const juce::AudioParameterChoice*>(&param);
+    const auto* integer = dynamic_cast<const juce::AudioParameterInt*>(&param);
+    switch (widget) {
+    case CardWidget::Knob:
+        return continuous ? Kind::Knob : automatic;
+    case CardWidget::KnobLarge:
+        return continuous ? Kind::KnobLarge : automatic;
+    case CardWidget::FaderV:
+        return continuous ? Kind::FaderV : automatic;
+    case CardWidget::FaderH:
+        return continuous ? Kind::FaderH : automatic;
+    case CardWidget::Segmented:
+        return choice != nullptr && suitsSegmented(*choice) ? Kind::Segmented : automatic;
+    case CardWidget::Stepper:
+        return integer != nullptr && suitsStepper(*integer) ? Kind::Stepper : automatic;
+    case CardWidget::Auto:
+    case CardWidget::Toggle:
+    case CardWidget::Choice:
+        return automatic;
+    }
+    return automatic;
 }
 
 int CardBodyPlan::findParam(const juce::String& paramId) const {

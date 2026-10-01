@@ -47,6 +47,13 @@ public:
     /** The Threshold view, or null. */
     ThresholdControlComponent* getThresholdView() const;
     const CardBodyPlan& getPlan() const { return plan_; }
+    /** The layout this body draws as explicit items: the resolved layout, or the automatic one
+     *  written out (the same card when built from it). */
+    CardLayout explicitLayout() const;
+    /** False for the bespoke cards, which always build from the automatic plan. */
+    bool drawsFromLayout() const;
+    /** The node's "cardLayout" JSON this body was built from; empty for none. */
+    const juce::String& builtFromOverride() const noexcept { return builtFromOverride_; }
 
     // ---- The More row ----------------------------------------------------------------------------
     bool hasMoreRow() const { return !plan_.more.empty(); }
@@ -68,6 +75,10 @@ private:
     void createChoice(CardBodyItem& item, juce::AudioParameterChoice& param);
     void createKnob(CardBodyItem& item, juce::RangedAudioParameter& param);
     void createToggle(CardBodyItem& item, juce::AudioParameterBool& param);
+    void createFader(CardBodyItem& item, juce::RangedAudioParameter& param);
+    void createSegmented(CardBodyItem& item, juce::AudioParameterChoice& param);
+    void createStepper(CardBodyItem& item, juce::AudioParameterInt& param);
+    juce::Label* addCaption(CardBodyItem& item, juce::RangedAudioParameter& param, juce::Justification justification);
     void createMoreButton();
     void applyMoreVisibility();
     int layoutItems(const std::vector<int>& indices, int columns, int y, const cardbody::BodyGeometry& g, bool apply,
@@ -76,6 +87,8 @@ private:
     ModuleComponent& card_;
     juce::AudioProcessor& module_;
     CardBodyPlan plan_;
+    std::optional<CardLayout> layout_;
+    juce::String builtFromOverride_;
     bool moreUnfolded_ = false;
 
     // Widgets before attachments: members unwind in reverse, so an attachment never outlives its widget.
@@ -85,6 +98,7 @@ private:
     juce::OwnedArray<juce::SliderParameterAttachment> sliderAttachments_;
     juce::OwnedArray<juce::ComboBoxParameterAttachment> comboAttachments_;
     juce::OwnedArray<juce::ButtonParameterAttachment> buttonAttachments_;
+    juce::OwnedArray<juce::ParameterAttachment> paramAttachments_; ///< Segmented switches and steppers.
 
     JUCE_DECLARE_NON_COPYABLE(CardBody)
 };

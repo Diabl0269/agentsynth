@@ -5,6 +5,7 @@
 #include "CardBody.h"
 #include "CardBodyLayoutWalk.h"
 #include "CardBodyViews.h"
+#include "UI/Graph/CardWidgets/CardFader.h"
 
 namespace synth {
 
@@ -40,6 +41,18 @@ int layoutRun(const CardBodyPlan& plan, juce::AudioProcessor& module, const std:
         return cardbody::layoutToggleRun(plain, y, g, apply);
     case Kind::Knob:
         return tabbed ? y : cardbody::layoutKnobRun(captioned, columns, y, g, apply);
+    case Kind::KnobLarge:
+        return tabbed ? y : cardbody::layoutGridRun(captioned, columns, cardbody::kKnobLargeHeight, 0, y, g, apply);
+    case Kind::FaderV:
+        return tabbed ? y
+                      : cardbody::layoutGridRun(captioned, columns, cardbody::kFaderVHeight,
+                                                synth::ui::CardFader::kVerticalWidth, y, g, apply);
+    case Kind::FaderH:
+        return tabbed ? y : cardbody::layoutCaptionedRows(captioned, cardbody::kFaderHHeight, true, y, g, apply);
+    case Kind::Segmented:
+        return tabbed ? y : cardbody::layoutCaptionedRows(captioned, cardbody::kRowHeight, true, y, g, apply);
+    case Kind::Stepper:
+        return tabbed ? y : cardbody::layoutCaptionedRows(captioned, cardbody::kRowHeight, false, y, g, apply);
     case Kind::View: {
         const auto* factory = findCardViewFactory(first.view);
         if (factory == nullptr || (apply && first.widget == nullptr))

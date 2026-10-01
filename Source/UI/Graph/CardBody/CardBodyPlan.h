@@ -10,7 +10,8 @@ namespace synth {
 
 /** One thing a card body shows: a parameter's widget or a view. */
 struct CardBodyItem {
-    enum class Kind { Choice, Knob, Toggle, View };
+    /** The widget drawn; each kind lays out as its own run (CardBodyLayout.cpp). */
+    enum class Kind { Choice, Knob, Toggle, View, KnobLarge, FaderV, FaderH, Segmented, Stepper };
 
     Kind kind = Kind::Knob;
     juce::RangedAudioParameter* param = nullptr; ///< Null for a view.
@@ -40,6 +41,13 @@ struct CardBodyPlan {
     /** The parameter item for `paramId`, or -1. */
     int findParam(const juce::String& paramId) const;
 };
+
+/** True for the slider kinds (knob, large knob, faders): a modulation target lands on these. */
+bool isContinuousKind(CardBodyItem::Kind kind);
+
+/** The kind `widget` draws `param` as, or the parameter's automatic kind when the widget does not
+ *  suit it (a fader on a choice, a segmented switch with too many values); nullopt = no widget. */
+std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParameter& param, CardWidget widget);
 
 /** True when the card builds its parameter widgets through a CardBody (every built-in module). */
 bool cardBodyBuildsWidgetsFor(juce::AudioProcessor& module);

@@ -5,16 +5,27 @@
 // implementation lives in the sibling ModuleComponent*.cpp units next to this one.
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
-#include "ModuleComponentModBand.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/SequencerModule.h"
+#include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace detail;
+
+namespace {
+
+// The controls a modulation target lands on: every rotary knob and a card fader. Any other linear
+// slider (a sequencer gate, the Threshold view's) is not addressed this way.
+bool showsModulation(const juce::Slider& slider) {
+    return slider.getSliderStyle() == juce::Slider::RotaryHorizontalVerticalDrag ||
+           dynamic_cast<const synth::ui::CardFader*>(&slider) != nullptr;
+}
+
+} // namespace
 
 void ModuleComponent::layoutSequencerStepColumn(int step, int colX, int startY) {
     // Gate slider (row 0)
@@ -240,97 +251,6 @@ void ModuleComponent::paint(juce::Graphics& g) {
     paintMidiLearnOverlays(g);
 }
 
-// The pending-drop-target ring (a released cable would land on this knob) and the live Serum-style
-// modulation rings, both driven by ModuleBase::getModulationTargets(). `mod`/`jackAccentColour` are
-// paint()'s own locals, computed once there. Split out of paint() (which was at the function-size
-// ratchet's ceiling) rather than grown further.
-void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, juce::Colour jackAccentColour) {
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-
-    if (mod != nullptr && modDropTargetChannel >= 0) {
-        for (const auto& t : mod->getModulationTargets()) {
-            if (t.channelIndex != modDropTargetChannel)
-                continue;
-            const int si = sliderIndexForModTarget(t);
-            // si now resolves even when the knob is hidden behind a swapped-in BPM *Div
-            // combo (so a jack still lands there) -- but there is no ring to draw on a combo, so
-            // skip painting one rather than drawing a circle over it.
-            if (si < 0 || !sliders[si]->isVisible())
-                break;
-            const auto b = sliders[si]->getBounds().toFloat();
-            const float radius = std::min(b.getWidth(), b.getHeight()) / 2.0f - 6.0f;
-            g.setColour(jackAccentColour);
-            const auto c = modRingCentreFor(*sliders[si], b);
-            g.drawEllipse(c.x - radius, c.y - radius, radius * 2.0f, radius * 2.0f, 2.0f);
-            break;
-        }
-    }
-
-    if (mod == nullptr)
-        return;
-
-    auto targets = mod->getModulationTargets();
-    const auto& modInfo = owner.getCachedModDisplayInfo();
-
-    for (const auto& info : modInfo) {
-        if (info.destNodeID != nodeId || info.isBypassed)
-            continue;
-
-        // The ring belongs on the knob of the parameter the routed jack DRIVES — resolved through
-        // the target's bound parameter, not its jack label. "Rate" is the Flanger's jack label
-        // and "Rate (Hz)" its knob; matching the label against the knob's name silently drew no
-        // ring on every module whose labels carry no unit (FRO-modulation-ux).
-        const ModulationTarget* target = nullptr;
-        for (const auto& t : targets) {
-            if (t.channelIndex == info.destChannelIndex) {
-                target = &t;
-                break;
-            }
-        }
-        if (target == nullptr)
-            continue;
-
-        const int si = sliderIndexForModTarget(*target);
-        // Same reasoning as the drop-target ring above -- a swapped-in BPM combo still
-        // resolves an si (real jack anchor), but has no ring to paint over it.
-        if (si < 0 || !sliders[si]->isVisible())
-            continue;
-
-        auto sliderBounds = sliders[si]->getBounds().toFloat();
-        const auto centre = modRingCentreFor(*sliders[si], sliderBounds);
-        const float radius = modRingRadiusFor(sliderBounds);
-
-        float baseNorm = 0.5f;
-        if (const auto* param = mod->parameterForModTarget(*target))
-            baseNorm = param->getValue();
-
-        float modNorm = juce::jlimit(0.0f, 1.0f, baseNorm + info.modSignalValue);
-
-        // Serum-style mod ring drawn by the themed LnF (270 degree sweep + theme tokens). Guarded:
-        // headless tests without our LnF simply skip the ring.
-        if (lf == nullptr)
-            continue;
-
-        // The reachable-range band goes UNDER the live ring, one per routing (two
-        // routings on one knob -> two bands, never summed) -- visible even at rest, since it
-        // answers "how far could this move", not "where is it now".
-        const auto band = synth::ui::modDepthBandRange(baseNorm, info.amount, info.sourceBipolar);
-        const bool bandNegative = synth::ui::modDepthBandUsesNegativeColour(info.amount, info.sourceBipolar);
-        const auto bandColour =
-            bandNegative ? lf->getTheme().colors.modRingNegative : lf->getTheme().colors.modRingPositive;
-        lf->drawModulationDepthBand(g, centre, radius, band.startNorm, band.endNorm, bandColour);
-
-        // This ring's routing is correlated with a hover (either a cable hovered on the
-        // canvas that lands here, or this very knob's ring being hovered) -- widen/brighten it.
-        // docs/modules/modulation.md#modulation-rings-on-knobs.
-        const auto& hovered = owner.getHoveredModTarget();
-        const bool isHovered =
-            hovered.has_value() && hovered->nodeId == nodeId && hovered->channel == info.destChannelIndex;
-
-        lf->drawModulationRing(g, centre, radius, baseNorm, modNorm, info.modSignalValue >= 0.0f, isHovered);
-    }
-}
-
 // Compact docked port widget (docs/macros/ports.md#how-a-port-is-drawn): a small
 // row tinted with the owning macro's colour, showing the port's own NAME (resolved live through
 // GraphEditor — the name lives on synth::MacroPort, not this node, so a rename in the Configure
@@ -462,7 +382,7 @@ std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(j
 
     // Resolve each target to ITS knob (bound parameter first, jack label as the fallback) rather
     // than scanning knobs for a label match: only the bound lookup finds "Rate (Hz)" for "Rate".
-    // Only rotaries are modulation targets; the ADSR's vertical sliders are not addressed this way
+    // Only knobs and card faders are modulation targets (showsModulation); other sliders are not addressed this way
     // and neither is anything without a matching CV jack. A knob on an inactive tab page keeps its
     // last bounds, so a hidden one (sliderIndexForModTarget says -1) must not swallow a drop.
     for (const auto& t : targets) {
@@ -541,6 +461,8 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
             return std::nullopt;
         // CARD-local: sliders[si]->getBounds() is relative to this card (its parent), matching
         // this method's own CARD-local contract (see the declaration's comment).
+        if (auto* fader = dynamic_cast<synth::ui::CardFader*>(sliders[si]))
+            return fader->getPosition().toFloat() + fader->landingPoint(kKnobLandingDotDiameter);
         const auto sliderBounds = sliders[si]->getBounds().toFloat();
         const auto centre = modRingCentreFor(*sliders[si], sliderBounds);
         const float landingRadius = modRingRadiusFor(sliderBounds) + knobLandingRadiusOffset();
@@ -602,8 +524,7 @@ bool ModuleComponent::setModDropTargetChannel(int channelIndex) {
 
 int ModuleComponent::getModRingSliderIndex(const juce::String& paramName) const {
     for (int si = 0; si < sliders.size(); ++si)
-        if (sliders[si]->getComponentID() == paramName &&
-            sliders[si]->getSliderStyle() == juce::Slider::RotaryHorizontalVerticalDrag)
+        if (sliders[si]->getComponentID() == paramName && showsModulation(*sliders[si]))
             return shownRingSliderIndex(si);
     return -1;
 }
@@ -613,7 +534,7 @@ int ModuleComponent::getModRingSliderIndex(const juce::String& paramName) const 
 // own *Div combo swapped in over it (BPM mode), which keeps the SAME cell a jack still legitimately
 // lands on; see isEnvelopeDivSwappedForSlider's own comment (ModuleComponentEnvelopeCard.cpp).
 int ModuleComponent::shownRingSliderIndex(int si) const {
-    if (sliders[si]->getSliderStyle() != juce::Slider::RotaryHorizontalVerticalDrag)
+    if (!showsModulation(*sliders[si]))
         return -1;
     return (!sliders[si]->isVisible() && !isEnvelopeDivSwappedForSlider(si)) ? -1 : si;
 }
