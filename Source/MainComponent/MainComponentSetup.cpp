@@ -776,7 +776,7 @@ void MainComponent::rebuildFocusRegions() {
     // Registered unconditionally (app AND plugin path — the plugin has every one of these panels
     // too, just no welcomeScreen_) after every region root above is fully constructed and wired.
     // Order matches the Tab-cycle order docs/control/shortcuts.md documents: Toolbar, Library, Canvas,
-    // Timeline, AI Panel, Mod Matrix. Wraps the getters/toggles that already exist rather than
+    // Dock tabs, Timeline, AI Panel, Mod Matrix. Wraps the getters/toggles that already exist rather than
     // migrating them to a new unified visibility enum — see Source/UI/Layout/FocusRegion.h's own header
     // comment.
     //
@@ -794,6 +794,11 @@ void MainComponent::rebuildFocusRegions() {
         {"library", &moduleLibrary, [this] { return isLibraryVisible; }, [this] { setLibraryVisible(true); }});
     // The canvas has no closed state at all -- null isOpen/open, so it is always in the open list.
     focusRegions_.addRegion({"canvas", &graphEditor, nullptr, nullptr});
+    // The dock's tab strip is one stop of its own, ahead of the panel it selects. It is open whenever the
+    // dock is showing with at least one docked tab, and has no `open` callback: no direct-focus shortcut
+    // targets it.
+    focusRegions_.addRegion({"dockTabs", &bottomDock.getTabStripFocus(),
+                             [this] { return isBottomDockVisible && bottomDock.hasAnyVisibleTab(); }, nullptr});
     // "timeline" and "mixer" share the SAME dock, one tab visible at a time -- isBottomDockVisible
     // alone (the dock's own open/closed state) is no longer enough to say the Timeline region is
     // open, since the dock can be open on the MIXER tab instead. Both regions' `open` re-select

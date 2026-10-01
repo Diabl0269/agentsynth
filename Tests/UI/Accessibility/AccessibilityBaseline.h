@@ -19,7 +19,7 @@ struct AccessibilityBaselineEntry {
 
 // clang-format off
 inline constexpr AccessibilityBaselineEntry kAccessibilityBaseline[] = {
-    {"MainComponent", 11, 6},
+    {"MainComponent", 9, 6},
     {"PianoRoll", 0, 0},
     {"ModuleCards", 202, 248},
     {"ExportAudioDialog", 0, 0},

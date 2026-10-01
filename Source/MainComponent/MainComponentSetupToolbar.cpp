@@ -237,6 +237,35 @@ void MainComponent::addToolbarToggleButtons() {
     feedbackButton.onClick = [this]() { launchSettingsWindow("Feedback"); };
 }
 
+// The visible text of a toggle says what a press does ("Hide Library" / "Show Library"), so that same
+// string is its screen-reader name in every width: narrow mode only drops the visible text, and the
+// toggles are not click-toggling buttons, so a screen reader gets no checked state to carry it.
+void MainComponent::applyToolbarLabels(bool iconOnly) {
+    const bool darkTheme = themeManager != nullptr && themeManager->getActiveTheme().isDark;
+    const std::pair<juce::DrawableButton*, juce::String> labels[] = {
+        {&toggleLibraryButton, isLibraryVisible ? "Hide Library" : "Show Library"},
+        {&newButton, "New"},
+        {&saveButton, "Save"},
+        {&loadButton, "Load"},
+        {&settingsButton, "Settings"},
+        {&feedbackButton, "Feedback"},
+        {&undoButton, "Undo"},
+        {&redoButton, "Redo"},
+        {&autoArrangeButton, "Auto Arrange"},
+        {&toggleMinimapButton, graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"},
+        {&toggleModMatrixButton, graphEditor.isModMatrixVisible() ? "Hide Matrix" : "Show Matrix"},
+        {&toggleAiPanelButton, isAiPanelVisible ? "Hide AI" : "Show AI"},
+        {&toggleBottomPanelButton, isBottomDockVisible ? "Hide Panel" : "Show Panel"},
+        {&themeToggleButton, darkTheme ? "Light Mode" : "Dark Mode"},
+    };
+    for (const auto& [button, label] : labels) {
+        button->setTitle(label);
+        // The feedback button stays icon-only at every width, so it keeps the text it was built with.
+        if (button != &feedbackButton)
+            button->setButtonText(iconOnly ? juce::String() : label);
+    }
+}
+
 // One place for both entry points (the gear and the feedback button), which differ only in the tab
 // they open on. The Audio tab's caption names the profiled MIDI controllers; a Host MIDI
 // profile has no device of its own, so it is left out.

@@ -63,7 +63,29 @@ public:
     // for consistency with the other five focus-region roots.
     void paintOverChildren(juce::Graphics& g) override;
 
+    // Roving keyboard focus (docs/layout/chrome.md#toolbar): the toolbar is one Tab stop; while it holds
+    // focus, Left/Right/Home/End move a ring across the visible, enabled buttons (no wrap) and
+    // Space/Return press the ringed one. Plain keys only; modified chords bubble up unhandled.
+    bool keyPressed(const juce::KeyPress& key) override;
+    void focusGained(FocusChangeType cause) override;
+    void focusLost(FocusChangeType cause) override;
+
+    // The slot the ring sits on: the last one used, or the first button until one is. -1 when no
+    // button is both visible and enabled.
+    int getFocusedSlot() const;
+    // The spoken name of that button; empty when there is none.
+    juce::String getFocusedButtonName() const;
+
+protected:
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
 private:
+    bool isNavigable(int slot) const;
+    // The next navigable slot strictly past `from` in direction `step` (+1/-1); -1 when none.
+    int navigableSlotFrom(int from, int step) const;
+    void setFocusedSlot(int slot);
+
+    int focusedSlot_{-1};
     std::array<juce::DrawableButton*, NumSlots> buttons_{};
     int narrowThreshold_{480};
     bool narrowMode_{false};

@@ -655,6 +655,10 @@ add_executable(Tests
     UI/PianoRoll/NoteAccessibilityTextTests.cpp
     UI/PianoRoll/PianoRollFocusedNoteTests.cpp
     UI/PianoRoll/PianoRollKeyboardReachTests.cpp
+    UI/Chrome/ToolbarKeyboardTests.cpp
+    UI/Chrome/ToolbarTitlesTests.cpp
+    UI/Chrome/StatusBarAccessibilityTests.cpp
+    UI/Layout/BottomDockTabStripTests.cpp
 )
 
 # MainComponent.h (AppUI) pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h)

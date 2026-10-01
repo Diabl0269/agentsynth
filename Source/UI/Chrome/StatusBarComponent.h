@@ -85,6 +85,11 @@ public:
     // while a transient message covers the row).
     juce::String getTooltipForPosition(juce::Point<int> localPosition) const;
 
+    // The bar as a screen reader reads it: the items currently drawn, in order, e.g. "Project clips,
+    // CPU 13%, RT 12.5 ms, position 001.1.000, 120 BPM, 0 voices". While a transient or sticky message
+    // covers the bar, that message alone. Exposed as the bar's accessibility value.
+    juce::String getAccessibilityText() const;
+
     juce::DrawableButton& getMasterMuteButton() noexcept { return masterMuteButton_; }
 
     // The play/stop button. "The transport is the truth": its toggle state is set ONLY by
@@ -126,6 +131,9 @@ public:
     // formatRoundTrip: (12.34, true) -> "RT 12.3 ms";  (anything, false) -> "RT —".
     // Negative input is clamped to 0 rather than printed.
     static juce::String formatRoundTrip(double milliseconds, bool available);
+
+protected:
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
 private:
     // juce::Timer override — fires once after ~2.5 s to clear the transient message.
@@ -173,6 +181,8 @@ private:
     // Transport cluster state, written by updateTransport(), read by paint()/resized().
     bool transportPlaying_{false};
     juce::String transportDisplayText_;
+    juce::String transportPositionText_;
+    double transportBpm_{0.0};
     int transportRepaintCount_{0};
     bool transportClusterFits_{true};
 

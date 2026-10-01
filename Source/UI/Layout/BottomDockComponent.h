@@ -286,6 +286,24 @@ public:
     juce::Component& getResizeHandle() noexcept { return resizeHandle_; }
     bool isResizeHandleHovered() const noexcept { return resizeHandle_.isHovered(); }
 
+    // ---- Tab strip keyboard + screen-reader access
+    // (docs/layout/chrome.md#tab-strip-keyboard-and-screen-reader-access) ----
+    /** The strip's single Tab stop and focus-region root: Left/Right/Home/End switch the active tab,
+     *  Return moves focus into its panel. Plain keys only. */
+    juce::Component& getTabStripFocus() noexcept { return stripFocus_; }
+    /** Panel Return moves focus to; null while no tab is offered. */
+    juce::Component* getActivePanelRoot() noexcept;
+    /** What a screen reader is told about one tab. JUCE has no tab role; a radio button, the
+     *  mutually exclusive selectable item, is the closest one it can expose. */
+    struct TabAccessibility {
+        juce::String title;
+        juce::AccessibilityRole role;
+        bool selected;
+    };
+    static TabAccessibility describeTab(Tab tab, Tab activeTab);
+    /** Replaces the panel focus grab, which needs a native window a headless test lacks. */
+    void setPanelFocusHookForTest(std::function<void(juce::Component&)> hook) { panelFocusHook_ = std::move(hook); }
+
     /** Test seam: this dock's own detach/redock button. */
     juce::DrawableButton& getDetachButtonForTest() noexcept { return detachButton_; }
     /** Test seam: the left edge (dock coordinates) the lifted tab is drawn at. */
@@ -314,8 +332,11 @@ private:
             , owner_(owner)
             , tab_(tab) {
             setMouseCursor(dragGrabCursor()); // a tab is a grab handle: the hand on hover and while dragging
+            setTitle(text);
+            setWantsKeyboardFocus(false); // the strip's one Tab stop is stripFocus_
         }
         void paint(juce::Graphics& g) override;
+        std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
         void mouseDown(const juce::MouseEvent& e) override {
             owner_.beginTabDrag(tab_, e);
             juce::TextButton::mouseDown(e);
@@ -335,6 +356,25 @@ private:
         BottomDockComponent& owner_;
         Tab tab_;
     };
+
+    // The strip's focusable leaf: transparent, behind the tab buttons, never hit by the mouse.
+    class TabStripFocus : public juce::Component {
+    public:
+        explicit TabStripFocus(BottomDockComponent& owner);
+        bool keyPressed(const juce::KeyPress& key) override { return owner_.handleTabStripKey(key); }
+        void focusGained(FocusChangeType) override { owner_.repaintTabStrip(); }
+        void focusLost(FocusChangeType) override { owner_.repaintTabStrip(); }
+        std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
+    private:
+        BottomDockComponent& owner_;
+    };
+
+    bool handleTabStripKey(const juce::KeyPress& key);
+    void selectTabAt(int offeredIndex);
+    void repaintTabStrip() { repaint(0, 0, getWidth(), kTabStripHeight); }
+    void paintTabFocusRing(juce::Graphics& g);
+    static const char* nameForTab(Tab tab) noexcept;
 
     // `allowMixerRebuild` is false ONLY from the detach/redock callback
     // (onEitherHostDetachStateChanged) -- reparenting into/out of a DetachedPanelWindow doesn't
@@ -412,6 +452,9 @@ private:
     // undoManager/graphEditor/audioEngine references mixer_.configure() below already used), opened
     // lazily on the first "both places" detach.
     synth::ui::MixerMirrorController mixerMirror_;
+    // Declared before the tab buttons so it sits behind them.
+    TabStripFocus stripFocus_{*this};
+    std::function<void(juce::Component&)> panelFocusHook_;
     DockTabButton timelineTabButton_;
     DockTabButton mixerTabButton_;
     DockTabButton midiRemoteTabButton_;
