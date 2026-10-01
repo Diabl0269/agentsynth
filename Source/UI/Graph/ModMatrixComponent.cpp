@@ -12,6 +12,7 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <utility>
 
 namespace {
 // MacroInletModule deliberately declares NO getModulationTargets() — GraphEditor::connectPorts()
@@ -240,7 +241,13 @@ ModMatrixComponent::ModMatrixComponent(AudioEngine& engine, AppUndoManager* undo
 
 ModMatrixComponent::~ModMatrixComponent() { stopTimer(); }
 
+// A routing change a row is running can splice out a port, and that path clears the panel; freeing the row
+// there would free the code still running. The clear waits for the next refresh instead.
 void ModMatrixComponent::clearRows() {
+    if (routingChangeDepth > 0) {
+        clearPending = true;
+        return;
+    }
     rows.clear();
     repaint();
 }
@@ -367,6 +374,10 @@ void ModMatrixComponent::resized() {
 void ModMatrixComponent::timerCallback() { updateRowsFromGraph(); }
 
 void ModMatrixComponent::updateRowsFromGraph() {
+    if (routingChangeDepth > 0)
+        return; // the next tick picks the change up, once the row that made it has returned
+    if (std::exchange(clearPending, false))
+        clearRows();
     auto activeRoutings = audioEngine.getActiveModRoutings();
 
     // Stable sort by NodeID so row numbers are consistent
@@ -507,8 +518,8 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     destCombo.setTooltip("Modulation destination. Click to search the parameters this routing can drive.");
     deleteButton->onClick = [this] {
         // Through the seam so the ports only this routing used go with it.
-        applyRoutingChange({[this] {
-                               owner.audioEngine.removeModRouting(attenuverterId);
+        applyRoutingChange({[&engine = owner.audioEngine, atten = attenuverterId] {
+                               engine.removeModRouting(atten);
                                return true;
                            }},
                            /*slideAttenuverter=*/false);
@@ -873,18 +884,20 @@ void ModMatrixComponent::ModRow::reroute(bool sourceChanged, Endpoint source, En
     // Two steps, because the seam only routes edges that are NEW across the call: tearing the old
     // edges down first lets it sweep the ports they leave idle, and re-adding both ends afterwards
     // makes the untouched end a fresh edge too, so it gets a port if the new path needs one.
-    const auto removeEdges = [this, &graph] {
-        if (auto edge = attenuverterEdge(graph, attenuverterId, true))
+    // By value, never `this`: nothing here may reach back into the row once the change has started.
+    const auto atten = attenuverterId;
+    const auto removeEdges = [atten, &graph] {
+        if (auto edge = attenuverterEdge(graph, atten, true))
             graph.removeConnection(*edge);
-        if (auto edge = attenuverterEdge(graph, attenuverterId, false))
+        if (auto edge = attenuverterEdge(graph, atten, false))
             graph.removeConnection(*edge);
         return true;
     };
-    const auto addEdges = [this, &graph, source, dest] {
+    const auto addEdges = [atten, &graph, source, dest] {
         if (source.valid())
-            graph.addConnection({{source.node, source.channel}, {attenuverterId, 0}});
+            graph.addConnection({{source.node, source.channel}, {atten, 0}});
         if (dest.valid())
-            graph.addConnection({{attenuverterId, 0}, {dest.node, dest.channel}});
+            graph.addConnection({{atten, 0}, {dest.node, dest.channel}});
         return true;
     };
     applyRoutingChange({removeEdges, addEdges}, /*slideAttenuverter=*/throughPorts);
@@ -911,6 +924,11 @@ void ModMatrixComponent::ModRow::applyRoutingChange(const std::vector<std::funct
 
     const bool autoPorts = editor->getAutoCreateMacroPortsOnDragEnabled();
     const auto id = attenuverterId;
+    // The panel outlives its rows; this row may not (a port splice clears the panel), so the depth guard
+    // lives on the panel and only locals are touched from here on.
+    auto& panel = owner;
+    ++panel.routingChangeDepth;
+    const juce::ScopeGuard leave{[&panel] { --panel.routingChangeDepth; }};
     auto step = [&] {
         for (const auto& mutation : mutations)
             editor->getMacroController().applyProgrammaticConnectionChange(autoPorts, mutation);

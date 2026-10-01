@@ -103,6 +103,8 @@ public:
 
 private:
     int lastNodeCount = 0;
+    int routingChangeDepth = 0; // > 0 while a row's routing change runs: rows are not rebuilt or freed under it
+    bool clearPending = false;
     size_t lastNamesSignature = 0; // hash of every module title the combos list; a rename changes it
     PickerLauncher pickerLauncher;
     int hoveredRow_ = -1;
