@@ -380,6 +380,8 @@ add_library(Core STATIC
     Source/Timeline/TimelineSnapshot.cpp
     Source/Timeline/TimelineSnapshot.h
     Source/Timeline/TimelineSnapshotExchange.h
+    Source/Timeline/TrackOwnership.cpp
+    Source/Timeline/TrackOwnership.h
     Source/Timeline/TimelineValidator.cpp
     Source/Timeline/TimelineValidator.h
     # Modules

@@ -578,3 +578,147 @@ TEST_F(AutomationEditorMainComponentTest, AutomateFromMixerTabSwitchesDockToTime
     ASSERT_NE(lane, nullptr);
     EXPECT_EQ(mc.getTimelinePanel().getSelectedAutomationLane(), lane->id);
 }
+
+// ============================================================================
+// 4. Which track a lane lands on (docs/timeline/automation.md#which-track-a-lane-lands-on).
+// ============================================================================
+
+namespace {
+
+// Track 1 (Track In -> Oscillator -> Filter) built the way the app's own gestures leave it; the filter's
+// node is returned so a test can automate it.
+struct OwnedChain {
+    juce::AudioProcessorGraph::Node::Ptr filter;
+    juce::String filterUuid;
+};
+
+OwnedChain buildTrackChain(MainComponent& mc) {
+    mc.simulateAddMidiTrackClick();
+    auto& graph = mc.getAudioEngine().getGraph();
+    OwnedChain chain;
+    const juce::String trackInUuid = mc.getTimelineDoc().getTracks().front().bindingUuid;
+    juce::AudioProcessorGraph::Node::Ptr trackIn;
+    for (auto* node : graph.getNodes())
+        if (node->properties["uuid"].toString() == trackInUuid)
+            trackIn = node;
+    auto osc = graph.addNode(synth::AIStateMapper::createModule("Oscillator"));
+    chain.filter = graph.addNode(synth::AIStateMapper::createModule("Filter"));
+    EXPECT_TRUE(trackIn != nullptr && osc != nullptr && chain.filter != nullptr);
+    EXPECT_TRUE(graph.addConnection({{trackIn->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                                     {osc->nodeID, juce::AudioProcessorGraph::midiChannelIndex}}));
+    EXPECT_TRUE(graph.addConnection({{osc->nodeID, 0}, {chain.filter->nodeID, 0}}));
+    chain.filterUuid = juce::Uuid().toDashedString();
+    chain.filter->properties.set("uuid", chain.filterUuid);
+    if (auto* module = dynamic_cast<ModuleBase*>(chain.filter->getProcessor()))
+        module->setNodeUuid(chain.filterUuid);
+    return chain;
+}
+
+int automationTrackCountOf(const synth::TimelineDoc& doc) {
+    int n = 0;
+    for (const auto& track : doc.getTracks())
+        n += track.kind == synth::TrackKind::Automation ? 1 : 0;
+    return n;
+}
+
+} // namespace
+
+TEST_F(AutomationEditorMainComponentTest, KnobAutomateOnAModuleInATrackChainPutsTheLaneOnThatTrack) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    const auto chain = buildTrackChain(mc);
+    auto& doc = mc.getTimelineDoc();
+    const synth::TrackId track1 = doc.getTracks().front().id;
+
+    mc.automateParameter(chain.filter->nodeID, "cutoff");
+
+    const auto* lane = doc.getLaneForParam(chain.filterUuid, "cutoff");
+    ASSERT_NE(lane, nullptr);
+    ASSERT_NE(doc.getTrackForLane(lane->id), nullptr);
+    EXPECT_EQ(doc.getTrackForLane(lane->id)->id, track1);
+    EXPECT_EQ(automationTrackCountOf(doc), 0) << "no shared Automation track is created for an owned module";
+    EXPECT_EQ(mc.getTimelinePanel().getSelectedAutomationLane(), lane->id);
+}
+
+TEST_F(AutomationEditorMainComponentTest, KnobAutomateOnAModuleNoTrackPlaysFallsBackToTheAutomationTrack) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    buildTrackChain(mc);
+    auto loose = mc.getAudioEngine().getGraph().addNode(synth::AIStateMapper::createModule("Filter"));
+    ASSERT_NE(loose, nullptr);
+
+    mc.automateParameter(loose->nodeID, "cutoff");
+
+    auto& doc = mc.getTimelineDoc();
+    ASSERT_EQ(automationTrackCountOf(doc), 1);
+    const auto* lane = doc.getLaneForParam(loose->properties["uuid"].toString(), "cutoff");
+    ASSERT_NE(lane, nullptr);
+    EXPECT_EQ(doc.getTrackForLane(lane->id)->kind, synth::TrackKind::Automation);
+}
+
+// A project saved before the rule has its lanes on the Automation track: opening it moves the owned ones
+// onto their track and drops the Automation track once nothing is left on it.
+TEST_F(AutomationEditorMainComponentTest, OpeningAProjectMovesAutomationTrackLanesToTheirOwningTrack) {
+    const juce::File scratch = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                                   .getChildFile("agentsynth-fro436-" + juce::Uuid().toString());
+    ASSERT_TRUE(scratch.createDirectory());
+    const juce::File bundle = scratch.getChildFile("Project.agsproj");
+    {
+        MainComponent mc(std::make_unique<MockProviderTL>());
+        const auto chain = buildTrackChain(mc);
+        auto& doc = mc.getTimelineDoc();
+        auto loose = mc.getAudioEngine().getGraph().addNode(synth::AIStateMapper::createModule("Filter"));
+        ASSERT_NE(loose, nullptr);
+        mc.automateParameter(loose->nodeID, "cutoff"); // lands on a new Automation track (unowned)
+        const juce::String looseUuid = loose->properties["uuid"].toString();
+
+        // The legacy layout: the owned module's lane sits on the Automation track too.
+        const synth::TrackId autoTrack = [&] {
+            for (const auto& t : doc.getTracks())
+                if (t.kind == synth::TrackKind::Automation)
+                    return t.id;
+            return synth::TrackId{};
+        }();
+        ASSERT_TRUE(autoTrack.isValid());
+        const auto legacy = doc.addLane(autoTrack, chain.filterUuid, "resonance", {0.0f, 1.0f, 0.5f});
+        ASSERT_TRUE(legacy.isValid());
+        ASSERT_TRUE(doc.addBreakpoint(legacy, 1.0, 0.25));
+        ASSERT_TRUE(doc.setLaneRecordMode(legacy, static_cast<int>(synth::LaneRecordMode::Touch)));
+        ASSERT_TRUE(mc.saveProjectForTest(bundle));
+
+        ASSERT_TRUE(mc.openProjectForTest(bundle));
+
+        const synth::TrackId track1 = doc.getTracks().front().id;
+        const auto* moved = doc.getLaneForParam(chain.filterUuid, "resonance");
+        ASSERT_NE(moved, nullptr);
+        EXPECT_EQ(doc.getTrackForLane(moved->id)->id, track1);
+        ASSERT_EQ(moved->points.size(), 1u);
+        EXPECT_EQ(moved->recordMode, static_cast<int>(synth::LaneRecordMode::Touch));
+        // The unowned module's lane stays, so the Automation track stays with it.
+        const auto* stayed = doc.getLaneForParam(looseUuid, "cutoff");
+        ASSERT_NE(stayed, nullptr);
+        EXPECT_EQ(doc.getTrackForLane(stayed->id)->kind, synth::TrackKind::Automation);
+        EXPECT_EQ(automationTrackCountOf(doc), 1);
+    }
+    scratch.deleteRecursively();
+}
+
+TEST_F(AutomationEditorMainComponentTest, OpeningAProjectRemovesAnAutomationTrackItsMoveEmptied) {
+    const juce::File scratch = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                                   .getChildFile("agentsynth-fro436-" + juce::Uuid().toString());
+    ASSERT_TRUE(scratch.createDirectory());
+    const juce::File bundle = scratch.getChildFile("Project.agsproj");
+    {
+        MainComponent mc(std::make_unique<MockProviderTL>());
+        const auto chain = buildTrackChain(mc);
+        auto& doc = mc.getTimelineDoc();
+        const auto autoTrack = doc.addTrack(synth::TrackKind::Automation, "Automation");
+        ASSERT_TRUE(doc.addLane(autoTrack, chain.filterUuid, "cutoff", {20.0f, 20000.0f, 1000.0f}).isValid());
+        ASSERT_TRUE(mc.saveProjectForTest(bundle));
+        ASSERT_TRUE(mc.openProjectForTest(bundle));
+
+        EXPECT_EQ(automationTrackCountOf(doc), 0);
+        const auto* lane = doc.getLaneForParam(chain.filterUuid, "cutoff");
+        ASSERT_NE(lane, nullptr);
+        EXPECT_EQ(doc.getTrackForLane(lane->id)->id, doc.getTracks().front().id);
+    }
+    scratch.deleteRecursively();
+}

@@ -647,10 +647,11 @@ TimelineOpsResult runWriteLane(const juce::String& where, juce::DynamicObject& o
         points.push_back(point);
     }
 
-    // find-or-create, the rule MainComponent::automateParameter implements for the user's own
-    // "Automate this parameter" gesture: the lane if one already exists for this parameter
-    // (anywhere in the doc — lane identity is doc-wide), otherwise a new lane on the document's ONE
-    // Automation track, creating that track too when there is none yet.
+    // The lane if one already exists for this parameter (anywhere in the doc — lane identity is
+    // doc-wide), otherwise a new lane on the document's ONE Automation track, creating that track too
+    // when there is none yet. This pure op has no graph, so unlike the user's own "Automate this
+    // parameter" gesture (MainComponent::automateParameter) it cannot place the lane on the track that
+    // plays the module; the next project open moves it there (MainComponent::moveLanesToOwningTracks).
     LaneId laneId;
     if (existing != nullptr) {
         laneId = existing->id;

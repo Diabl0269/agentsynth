@@ -88,6 +88,7 @@ add_executable(Tests
     Timeline/TimelineClipEditing/TimelineClipEditingGridHierarchyTests.cpp
     Timeline/TimelineSnapshotTests.cpp
     Timeline/AutomationKernelTests.cpp
+    Timeline/TrackOwnershipTests.cpp
     Timeline/AutomationApplierTests.cpp
     Timeline/AutomationRecordTests.cpp
     Timeline/AutomationSlicingTests.cpp

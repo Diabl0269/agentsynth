@@ -707,11 +707,11 @@ int MainComponent::cleanUnusedAssets() {
 
 // Right-click-any-knob's headless hook, and the production entry point
 // GraphEditor::onAutomateParameterRequested is wired to. Resolves `nodeId`'s uuid (assigning
-// one if it has none yet — the same ensure-uuid idiom createTrackInNode() uses), finds-or-
-// creates the doc's Automation-kind track, binds a lane for `paramId` with the parameter's real
-// NormalisableRange, and opens the timeline panel's automation strip on it. A no-op (with a
-// status-bar message) if `nodeId` doesn't resolve to a live ModuleBase or `paramId` doesn't
-// resolve to a real parameter on it.
+// one if it has none yet — the same ensure-uuid idiom createTrackInNode() uses), binds a lane
+// for `paramId` with the parameter's real NormalisableRange on the track that plays that module (else the
+// doc's find-or-create Automation-kind track; docs/timeline/automation.md#which-track-a-lane-lands-on), and opens the
+// timeline panel's automation strip on it. A no-op (with a status-bar message) if `nodeId` doesn't resolve to a live
+// ModuleBase or `paramId` doesn't resolve to a real parameter on it.
 void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
     auto* node = audioEngine.getGraph().getNodeForId(nodeId);
     auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
@@ -754,22 +754,14 @@ void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, 
         return;
     }
 
-    // find-or-create the doc's ONE Automation-kind track, then bind the lane — both in the SAME
-    // mutation lambda, so creating the track (when this is the first automated parameter in the
-    // whole patch) and binding the lane is ONE undo step, not two. addLane dedupes doc-wide, so a
-    // repeat call for a parameter that already has a lane mutates nothing and this is a no-op.
+    // Pick the lane's track (the one that plays this module, else the shared Automation track, created if
+    // need be), then bind the lane — both in the SAME mutation lambda, so a created track and its lane are ONE
+    // undo step, not two. addLane dedupes doc-wide, so a repeat call for a parameter that already has a lane
+    // mutates nothing and this is a no-op.
     synth::LaneId laneId;
     const juce::String uuidCopy = uuid;
     auto mutate = [this, &laneId, uuidCopy, paramId, param] {
-        synth::TrackId trackId;
-        for (const auto& track : timelineDoc.getTracks()) {
-            if (track.kind == synth::TrackKind::Automation) {
-                trackId = track.id;
-                break;
-            }
-        }
-        if (!trackId.isValid())
-            trackId = timelineDoc.addTrack(synth::TrackKind::Automation, "Automation");
+        const synth::TrackId trackId = trackForNewLane(uuidCopy);
         if (!trackId.isValid())
             return; // kMaxTracks reached — nothing to bind onto
 
