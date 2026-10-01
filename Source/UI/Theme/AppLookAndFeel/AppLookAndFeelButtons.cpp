@@ -18,7 +18,8 @@ void AppLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& butto
     else if (shouldDrawButtonAsHighlighted)
         fill = fill.brighter(0.12f);
 
-    g.setColour(fill);
+    const float dim = paintsDimmed(button) ? kDisabledControlAlpha : 1.0f;
+    g.setColour(fill.withMultipliedAlpha(dim));
     g.fillRoundedRectangle(bounds, m.pillRadius);
 
     // A juce::TextButton needs its own keyboard-focus indicator: LookAndFeel_V4's default draws
@@ -26,7 +27,7 @@ void AppLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& butto
     // (juce_Button.cpp), never focus state. Reuses drawTextEditorOutline/drawComboBox's own
     // "accent outline when focused, same border weight" convention rather than inventing a new
     // style, so every plain TextButton in the app shows focus.
-    g.setColour(button.hasKeyboardFocus(true) ? c.accent : c.border);
+    g.setColour(button.hasKeyboardFocus(true) ? c.accent : c.border.withMultipliedAlpha(dim));
     g.drawRoundedRectangle(bounds, m.pillRadius, m.borderWidth);
 }
 
@@ -39,7 +40,8 @@ void AppLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button,
     g.setFont(getTextButtonFont(button, button.getHeight()));
     const auto colourId =
         button.getToggleState() ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId;
-    g.setColour(button.findColour(colourId).withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.5f));
+    const float alpha = !button.isEnabled() ? 0.5f : (paintsDimmed(button) ? kDisabledControlAlpha : 1.0f);
+    g.setColour(button.findColour(colourId).withMultipliedAlpha(alpha));
 
     g.drawFittedText(button.getButtonText(), button.getLocalBounds().reduced(4, 0), juce::Justification::centred, 1);
 }
@@ -131,6 +133,68 @@ void AppLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& but
 
 void AppLookAndFeel::paintToggleButton(juce::Graphics& g, juce::ToggleButton& button,
                                        bool shouldDrawButtonAsHighlighted, bool keyboardFocused) {
+    if (button.getProperties()[kTogglePillProperty]) {
+        paintTogglePill(g, button, shouldDrawButtonAsHighlighted, keyboardFocused);
+        return;
+    }
+    // A disabled or dimmed toggle paints whole at reduced alpha; a dimmed one (still focusable) keeps
+    // its focus ring at full strength, outside the layer.
+    const bool dimmed = paintsDimmed(button);
+    if (dimmed)
+        g.beginTransparencyLayer(kDisabledControlAlpha);
+    paintTickToggle(g, button, shouldDrawButtonAsHighlighted, keyboardFocused && !dimmed);
+    if (dimmed) {
+        g.endTransparencyLayer();
+        if (keyboardFocused)
+            paintTickToggle(g, button, false, true, /*focusRingOnly*/ true);
+    }
+}
+
+bool AppLookAndFeel::paintsDimmed(const juce::Component& component) {
+    if (!component.isEnabled() || (bool)component.getProperties()[kDimmedProperty])
+        return true;
+    const auto* parent = component.getParentComponent();
+    return parent != nullptr && (bool)parent->getProperties()[kDimmedProperty];
+}
+
+int AppLookAndFeel::togglePillWidth(const juce::String& text) {
+    constexpr int kSidePadding = 10;
+    return juce::GlyphArrangement::getStringWidthInt(juce::Font(juce::FontOptions(kTogglePillFontHeight)), text) +
+           2 * kSidePadding;
+}
+
+// The footer row's small toggle: a rounded pill, filled with the tick colour when on (text in the
+// background colour), an outlined surface when off; the accent focus ring hugs the pill.
+void AppLookAndFeel::paintTogglePill(juce::Graphics& g, juce::ToggleButton& button, bool shouldDrawButtonAsHighlighted,
+                                     bool keyboardFocused) {
+    const auto& c = theme.colors;
+    const bool disabled = paintsDimmed(button);
+    if (disabled)
+        g.beginTransparencyLayer(kDisabledControlAlpha);
+
+    const auto bounds = button.getLocalBounds().toFloat().reduced(1.0f);
+    const float radius = bounds.getHeight() * 0.5f;
+    const bool on = button.getToggleState();
+    const auto tick = button.findColour(juce::ToggleButton::tickColourId);
+    g.setColour(on ? tick : c.surface);
+    g.fillRoundedRectangle(bounds, radius);
+    g.setColour(on ? tick : button.findColour(juce::ToggleButton::tickDisabledColourId));
+    g.drawRoundedRectangle(bounds, radius, theme.metrics.borderWidth);
+
+    const auto text = on ? c.bg0 : button.findColour(juce::ToggleButton::textColourId);
+    g.setColour(text.withMultipliedAlpha(shouldDrawButtonAsHighlighted || on ? 1.0f : 0.9f));
+    g.setFont(juce::Font(juce::FontOptions(kTogglePillFontHeight)));
+    g.drawFittedText(button.getButtonText(), button.getLocalBounds(), juce::Justification::centred, 1);
+
+    if (disabled)
+        g.endTransparencyLayer();
+    if (keyboardFocused)
+        synth::ui::paintFocusRingAlways(g, bounds, button, radius);
+}
+
+// `focusRingOnly` paints just the ring, over a box a dimmed toggle already painted inside its layer.
+void AppLookAndFeel::paintTickToggle(juce::Graphics& g, juce::ToggleButton& button, bool shouldDrawButtonAsHighlighted,
+                                     bool keyboardFocused, bool focusRingOnly) {
     const auto& c = theme.colors;
 
     // The focus ring stands off the box by a gap (a ticked box is filled with the same accent, so a
@@ -140,6 +204,11 @@ void AppLookAndFeel::paintToggleButton(juce::Graphics& g, juce::ToggleButton& bu
     const float ringExtent = kRingGap + theme.metrics.borderWidth * 1.5f;
     const float boxSize = juce::jmin(18.0f, (float)button.getHeight() - 2.0f * ringExtent);
     juce::Rectangle<float> box(4.0f, ((float)button.getHeight() - boxSize) * 0.5f, boxSize, boxSize);
+    if (focusRingOnly) {
+        if (keyboardFocused)
+            synth::ui::paintFocusRingAlways(g, box.expanded(ringExtent), button, 4.0f + ringExtent);
+        return;
+    }
 
     g.setColour(button.getToggleState() ? button.findColour(juce::ToggleButton::tickColourId) : c.surface);
     g.fillRoundedRectangle(box, 4.0f);

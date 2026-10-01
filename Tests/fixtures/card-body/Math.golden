@@ -1,0 +1,22 @@
+type Math size 280x239
+  child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
+  child 1 toggle id="" at 12,201 256x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 5 combo id="" at 40,171 200x24 visible=1 title="Clip" tip="Clip" focusOrder=0 wantsFocus=1
+  child 6 label id="" at 40,153 200x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 7 component id="" at 4,52 12x12 visible=1 title="A input" tip="" focusOrder=0 wantsFocus=0
+  child 8 component id="" at 4,72 12x12 visible=1 title="B input" tip="" focusOrder=0 wantsFocus=0
+  child 9 component id="" at 264,52 12x12 visible=1 title="Sum output" tip="" focusOrder=0 wantsFocus=0
+  child 10 component id="" at 264,72 12x12 visible=1 title="Diff output" tip="" focusOrder=0 wantsFocus=0
+  child 11 component id="" at 264,92 12x12 visible=1 title="Min output" tip="" focusOrder=0 wantsFocus=0
+  child 12 component id="" at 264,112 12x12 visible=1 title="Max output" tip="" focusOrder=0 wantsFocus=0
+  child 13 component id="" at 264,132 12x12 visible=1 title="Mult output" tip="" focusOrder=0 wantsFocus=0
+  in 0 10, 58
+  in 1 10, 78
+  out 0 270, 58
+  out 1 270, 78
+  out 2 270, 98
+  out 3 270, 118
+  out 4 270, 138

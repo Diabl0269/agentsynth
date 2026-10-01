@@ -1,0 +1,34 @@
+type Sample & Hold size 280x451
+  child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
+  child 1 toggle id="" at 12,413 256x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 2 component id="" at 12,237 256x18 visible=1 title="Trigger meter" tip="Input level against the trigger threshold; the marker is the effective threshold" focusOrder=0 wantsFocus=0
+  child 3 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 5 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 6 combo id="" at 40,111 200x24 visible=1 title="Source" tip="Source" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 40,93 200x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 combo id="" at 40,159 200x24 visible=1 title="Mode" tip="Mode" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 40,141 200x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 combo id="" at 40,207 200x24 visible=1 title="Clock" tip="Clock" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 40,189 200x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Threshold" at 12,279 85x58 visible=1 title="Threshold" tip="Threshold" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 12,261 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Rate (Hz)" at 97,279 85x58 visible=1 title="Rate (Hz)" tip="Rate (Hz)" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 97,261 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Slew" at 182,279 85x58 visible=1 title="Slew" tip="Slew" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 182,261 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Level" at 12,355 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 12,337 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="Offset" at 97,355 85x58 visible=1 title="Offset" tip="Offset" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 97,337 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 component id="" at 4,52 12x12 visible=1 title="Signal input" tip="" focusOrder=0 wantsFocus=0
+  child 23 component id="" at 4,72 12x12 visible=1 title="Trigger input" tip="" focusOrder=0 wantsFocus=0
+  child 24 component id="" at 264,52 12x12 visible=1 title="CV output" tip="" focusOrder=0 wantsFocus=0
+  in 0 10, 58
+  in 1 10, 78
+  in 2 122, 316
+  in 3 207, 316
+  in 4 37, 392
+  in 5 122, 392
+  in 6 37, 316
+  out 0 270, 58

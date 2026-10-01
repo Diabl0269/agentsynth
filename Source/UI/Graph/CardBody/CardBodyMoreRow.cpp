@@ -64,27 +64,13 @@ void CardBody::createMoreButton() {
 
 juce::Button* CardBody::getMoreButton() const { return moreButton_.get(); }
 
-// A folded parameter's widget is hidden, not destroyed: it keeps its attachment, MIDI Learn entry and
-// value, and its knob-bound CV jack shows in the gutter again while the knob is out of view.
-void CardBody::applyMoreVisibility() {
-    for (int index : plan_.more) {
-        auto& item = plan_.items[(size_t)index];
-        if (item.widget != nullptr)
-            item.widget->setVisible(moreUnfolded_);
-        if (item.label != nullptr)
-            item.label->setVisible(moreUnfolded_);
-    }
-    if (moreButton_ != nullptr)
-        moreButton_->setUnfolded(moreUnfolded_);
-}
-
 // A discrete event, never per value change: the card re-measures and the canvas pushes neighbours
 // clear (or returns them) the same way any other card growth does.
 void CardBody::setMoreUnfolded(bool unfolded) {
     if (!hasMoreRow() || unfolded == moreUnfolded_)
         return;
     moreUnfolded_ = unfolded;
-    applyMoreVisibility();
+    applyVisibility();
     card_.updateLayout();
     card_.owner.handleModuleResized(&card_);
     card_.repaint();

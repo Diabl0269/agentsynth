@@ -48,6 +48,11 @@ ResolvedModuleCardLayout resolveModuleCardLayout(const juce::String& moduleType,
         resolved.layout = entry->layout;
         resolved.defaultRevision = entry->defaultRevision;
     }
+    // A dim rule states what the module does (Detune does nothing at one voice), not where a control
+    // sits, so it applies to whichever layout the card draws; the card binds only the rules whose
+    // parameter it shows.
+    if (const auto* entry = defaults.find(moduleType))
+        resolved.dimRules = entry->dimRules;
     return resolved;
 }
 

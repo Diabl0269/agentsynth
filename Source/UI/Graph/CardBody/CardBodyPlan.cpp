@@ -1,8 +1,10 @@
 // CardBodyPlan.cpp -- what a card body shows and where: the parameter widgets a module gets (with the
 // skip rules for parameters edited somewhere else on the card), and their placement from the resolved
-// layout or, without one, the automatic layout that reproduces the generic card.
+// layout or, without one, the automatic layout that reproduces the generic card: sections (the footer
+// last), swap groups and code dim rules. Conditions are read in CardBodyConditions.cpp.
 // docs/layout/module-card-layout.md#rendering.
 #include "CardBodyPlan.h"
+#include "CardBodyGeometry.h"
 #include "CardBodyViews.h"
 #include "Modules/ExternalMidiModule.h"
 #include "Modules/MacroControlModule.h"
@@ -121,53 +123,179 @@ void placeAutomatically(juce::AudioProcessor& module, CardBodyPlan& plan) {
     for (int i = 0; i < paramCount; ++i)
         if (plan.items[(size_t)i].kind == CardBodyItem::Kind::Knob)
             section.items.push_back(i);
+    for (int index : section.items)
+        plan.items[(size_t)index].section = 0;
     plan.sections.push_back(std::move(section));
 }
 
-// A parameter listed in `hidden`, named nowhere, or named a second time goes to the More row; an id
-// the module does not have (or that is edited elsewhere) is ignored.
-void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, CardBodyPlan& plan) {
-    std::set<int> placed;
-    for (const auto& source : layout.sections) {
-        CardBodyPlan::Section section;
-        section.columns = juce::jlimit(1, 6, source.columns);
-        section.title = source.title;
-        for (const auto& item : source.items) {
-            if (const auto* p = std::get_if<CardParamItem>(&item)) {
-                const int index = plan.findParam(p->paramId);
-                if (index < 0 || !placed.insert(index).second)
-                    continue;
-                // The widget applies to a hidden parameter too: it shows that way in the More row.
-                auto& planned = plan.items[(size_t)index];
-                planned.kind = cardBodyKindFor(*planned.param, p->widget).value_or(planned.kind);
-                if (p->label.has_value() && p->label->trim().isNotEmpty())
-                    planned.caption = p->label->trim();
-                if (layout.hidden.contains(p->paramId)) {
-                    placed.erase(index);
-                    continue;
-                }
-                section.items.push_back(index);
-            } else if (const auto* v = std::get_if<CardViewItem>(&item)) {
-                if (const int view = addViewItem(module, v->view, plan); view >= 0)
-                    section.items.push_back(view);
-            }
-        }
-        plan.sections.push_back(std::move(section));
+// The height a kind's cell takes in its run (caption included): a swap group takes its tallest
+// member's run, so every member fits the one cell whichever is shown.
+int cellHeight(CardBodyItem::Kind kind) {
+    using Kind = CardBodyItem::Kind;
+    switch (kind) {
+    case Kind::FaderV:
+        return cardbody::kLabelHeight + cardbody::kFaderVHeight;
+    case Kind::KnobLarge:
+        return cardbody::kLabelHeight + cardbody::kKnobLargeHeight;
+    case Kind::Knob:
+        return cardbody::kLabelHeight + cardbody::kKnobHeight;
+    case Kind::FaderH:
+        return cardbody::kLabelHeight + cardbody::kFaderHHeight;
+    case Kind::Choice:
+    case Kind::Segmented:
+    case Kind::Stepper:
+        return cardbody::kLabelHeight + cardbody::kRowHeight;
+    case Kind::Toggle:
+        return cardbody::kRowHeight;
+    case Kind::View:
+        return 0;
     }
+    return 0;
+}
+
+// A footer is one compact row: a toggle is a pill, anything continuous a horizontal fader.
+void applyFooterKind(CardBodyItem& item) {
+    if (item.kind == CardBodyItem::Kind::Toggle)
+        item.pill = true;
+    else if (isContinuousKind(item.kind))
+        item.kind = CardBodyItem::Kind::FaderH;
+}
+
+// Placement state while one section is read: consecutive `show` items testing the same parameter join
+// one swap group.
+struct SectionPlacer {
+    CardBodyPlan& plan;
+    CardBodyPlan::Section& section;
+    int sectionIndex;
+    juce::String openGroupParam; // the condition parameter of the group still open, or empty
+
+    void place(int index, const CardParamItem& source) {
+        auto& planned = plan.items[(size_t)index];
+        planned.section = sectionIndex;
+        planned.when = source.when;
+        if (section.footer)
+            applyFooterKind(planned);
+        section.items.push_back(index);
+        if (!source.when.has_value() || source.when->effect != CardConditionEffect::Show) {
+            openGroupParam.clear();
+            return;
+        }
+        if (openGroupParam.isEmpty() || openGroupParam != source.when->param) {
+            plan.swapGroups.push_back({});
+            openGroupParam = source.when->param;
+        }
+        auto& group = plan.swapGroups.back();
+        group.members.push_back(index);
+        group.span = std::max(group.span, juce::jlimit(1, 6, source.span));
+        if (group.members.size() == 1 || cellHeight(planned.kind) > cellHeight(group.cellKind))
+            group.cellKind = planned.kind;
+        planned.swapGroup = (int)plan.swapGroups.size() - 1;
+    }
+};
+
+// One layout item: a parameter (its widget, caption, and place unless hidden) or a view. An id the
+// module does not have, or one named a second time, is ignored.
+void placeItem(juce::AudioProcessor& module, const CardLayout& layout, const CardItem& item, SectionPlacer& placer,
+               std::set<int>& named) {
+    auto& plan = placer.plan;
+    if (const auto* p = std::get_if<CardParamItem>(&item)) {
+        const int index = plan.findParam(p->paramId);
+        if (index < 0 || !named.insert(index).second)
+            return;
+        // The widget applies to a hidden parameter too: it shows that way in the More row.
+        auto& planned = plan.items[(size_t)index];
+        planned.kind = cardBodyKindFor(*planned.param, p->widget).value_or(planned.kind);
+        if (p->label.has_value() && p->label->trim().isNotEmpty())
+            planned.caption = p->label->trim();
+        if (!layout.hidden.contains(p->paramId))
+            placer.place(index, *p);
+        else
+            named.erase(index);
+    } else if (const auto* v = std::get_if<CardViewItem>(&item)) {
+        placer.openGroupParam.clear();
+        if (const int view = addViewItem(module, v->view, plan); view >= 0) {
+            plan.items[(size_t)view].section = placer.sectionIndex;
+            placer.section.items.push_back(view);
+        }
+    }
+}
+
+// The Poly toggle is card chrome on a card with a footer: unless the layout places or hides it, it
+// joins the footer row (as Show Scope does) instead of the More row.
+void placePolyInFooter(const CardLayout& layout, CardBodyPlan& plan, const std::set<int>& named) {
+    const int poly = plan.findParam("poly");
+    if (poly < 0 || named.count(poly) > 0 || layout.hidden.contains("poly"))
+        return;
+    for (int s = 0; s < (int)plan.sections.size(); ++s) {
+        auto& section = plan.sections[(size_t)s];
+        if (!section.footer)
+            continue;
+        SectionPlacer placer{plan, section, s, {}};
+        placer.place(poly, CardParamItem{});
+        return;
+    }
+}
+
+// Sections in layout order, except that a footer section (CardSection::kFooterId) always comes last,
+// wherever the layout lists it. A parameter listed in `hidden`, named nowhere, or named a second time
+// goes to the More row.
+void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, CardBodyPlan& plan) {
+    std::vector<const CardSection*> order;
+    for (const auto& source : layout.sections)
+        if (source.id != CardSection::kFooterId)
+            order.push_back(&source);
+    for (const auto& source : layout.sections)
+        if (source.id == CardSection::kFooterId)
+            order.push_back(&source);
+
+    std::set<int> named;
+    for (const auto* source : order) {
+        CardBodyPlan::Section section;
+        section.columns = juce::jlimit(1, 6, source->columns);
+        section.title = source->title;
+        section.visibleWhen = source->visibleWhen;
+        section.footer = source->id == CardSection::kFooterId;
+        plan.sections.push_back(std::move(section));
+        const int sectionIndex = (int)plan.sections.size() - 1;
+        SectionPlacer placer{plan, plan.sections.back(), sectionIndex, {}};
+        for (const auto& item : source->items)
+            placeItem(module, layout, item, placer, named);
+    }
+    placePolyInFooter(layout, plan, named);
     for (int i = 0; i < (int)plan.items.size(); ++i)
-        if (plan.items[(size_t)i].kind != CardBodyItem::Kind::View && placed.count(i) == 0)
+        if (plan.items[(size_t)i].kind != CardBodyItem::Kind::View && named.count(i) == 0 &&
+            plan.items[(size_t)i].section < 0)
             plan.more.push_back(i);
+}
+
+void bindDimRules(juce::AudioProcessor& module, const std::vector<CardDimRule>& rules, CardBodyPlan& plan) {
+    for (const auto& rule : rules) {
+        const int index = plan.findParam(rule.paramId);
+        if (index < 0 || !rule.dims)
+            continue;
+        CardBodyPlan::DimRule bound;
+        bound.item = index;
+        bound.dims = rule.dims;
+        for (const auto& id : rule.watched)
+            if (auto* param = findParameterByID(&module, id))
+                bound.watched.push_back(param);
+        plan.dimRules.push_back(std::move(bound));
+    }
 }
 
 } // namespace
 
-CardBodyPlan CardBodyPlan::forModule(juce::AudioProcessor& module, const std::optional<CardLayout>& layout) {
+CardBodyPlan CardBodyPlan::forModule(juce::AudioProcessor& module, const std::optional<CardLayout>& layout,
+                                     const std::vector<CardDimRule>& dimRules) {
     CardBodyPlan plan;
     addParameterItems(module, plan);
-    if (layout.has_value() && !layout->sections.empty() && cardBodyLayoutIsDataDriven(module))
+    if (layout.has_value() && !layout->sections.empty() && cardBodyLayoutIsDataDriven(module)) {
         placeFromLayout(module, *layout, plan);
-    else
+        bindDimRules(module, dimRules, plan);
+        plan.evaluateConditions(module);
+    } else {
         placeAutomatically(module, plan);
+    }
     return plan;
 }
 

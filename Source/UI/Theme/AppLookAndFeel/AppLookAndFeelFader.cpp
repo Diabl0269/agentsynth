@@ -9,8 +9,7 @@ namespace fader {
 
 namespace {
 
-constexpr float kSlotOverhang = 2.0f;   // the slot runs this far past each end of the travel
-constexpr float kDisabledAlpha = 0.45f; // whole control when the slider is disabled
+constexpr float kSlotOverhang = 2.0f; // the slot runs this far past each end of the travel
 constexpr float kFocusRingGap = 3.0f;
 constexpr float kFocusRingWidth = 2.0f;
 
@@ -103,11 +102,12 @@ void paint(juce::Graphics& g, const Theme& theme, juce::Rectangle<int> travelBou
     const auto m = metricsFor(vertical, sliderSize.x, sliderSize.y);
     const auto cap = capBounds(travel, sliderPos, vertical, m);
 
-    if (!state.enabled)
-        g.beginTransparencyLayer(kDisabledAlpha);
+    const bool greyed = !state.enabled || state.dimmed;
+    if (greyed)
+        g.beginTransparencyLayer(AppLookAndFeel::kDisabledControlAlpha);
     drawSlotAndFill(g, theme, travel, sliderPos, vertical, m, state.enabled);
     drawCap(g, theme, cap, vertical, m, state);
-    if (!state.enabled)
+    if (greyed)
         g.endTransparencyLayer();
 
     if (state.focused && state.enabled)
@@ -128,6 +128,7 @@ void AppLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width
     const bool vertical = (style == juce::Slider::LinearVertical || style == juce::Slider::LinearBarVertical);
     fader::State state;
     state.enabled = slider.isEnabled();
+    state.dimmed = paintsDimmed(slider);
     state.dragging = slider.isMouseButtonDown();
     state.hover = slider.isMouseOverOrDragging() && !state.dragging;
     state.focused = slider.hasKeyboardFocus(true);

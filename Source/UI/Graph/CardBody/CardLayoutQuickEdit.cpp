@@ -23,16 +23,21 @@ CardParamItem* findPlaced(CardLayout& layout, const juce::String& paramId) {
 }
 
 // A parameter the layout never placed (a v1 layout's unnamed ones, one a later release added) goes
-// at the end of the last section when shown: the layout has no place of its own for it.
+// at the end of the last section when shown: the layout has no place of its own for it. The footer row
+// is never that section (it is drawn last wherever the layout lists it); a layout with only a footer
+// gets a main section first.
 CardParamItem& placeAtEnd(CardLayout& layout, const juce::String& paramId) {
-    if (layout.sections.empty()) {
+    auto target = std::find_if(layout.sections.rbegin(), layout.sections.rend(),
+                               [](const CardSection& section) { return section.id != CardSection::kFooterId; });
+    if (target == layout.sections.rend()) {
         CardSection section;
         section.id = "main";
-        layout.sections.push_back(section);
+        layout.sections.insert(layout.sections.begin(), section);
+        target = std::prev(layout.sections.rend());
     }
     CardParamItem item;
     item.paramId = paramId;
-    auto& items = layout.sections.back().items;
+    auto& items = target->items;
     items.emplace_back(item);
     return std::get<CardParamItem>(items.back());
 }

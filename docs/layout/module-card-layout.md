@@ -12,8 +12,10 @@ its undo, the pure resolver with an empty code-default registry, `CardBody`, whi
 every built-in card's body from the resolved layout, with the folded More row, section header rows,
 label overrides and the Threshold view in its view registry, the `knobLarge`, `faderV`, `faderH`,
 `segmented` and `stepper` widgets, Hide from card / Show on card / Show as fader / Show as knob on every
-control's right-click menu, and the **Edit Layout...** editor shared with the hosted plugin's picker
-([What exists](#what-exists)). Everything else (conditions, spans, default layouts) is designed and
+control's right-click menu, the **Edit Layout...** editor shared with the hosted plugin's picker,
+conditions read live (dim, swap groups, conditional sections, code dim rules), the footer row with the
+small toggle pill, and the code-default registry split into one unit per module family
+([What exists](#what-exists)). Everything else (spans, the default layouts themselves) is designed and
 decided (see [Decisions](#decisions-2026-10-01)), not built. Nothing here describes
 current behaviour unless it says "today" or "built".
 Where the card is drawn today is [module-card.md](module-card.md); the hosted-plugin half of the
@@ -30,7 +32,7 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
   declaration order, pixel for pixel the card that existed before `CardBody`. A stored layout (the
   node's `cardLayout` override, else the type's stored default) is honoured for order, grid columns,
   hiding, widget choice (where the widget suits the parameter), section titles (a header row) and
-  label overrides (the caption); spans and conditions are not drawn yet. The user changes it from a
+  label overrides (the caption), conditions and the footer row; spans are not drawn yet. The user changes it from a
   control's right-click menu or the layout editor ([Editing a layout](#editing-a-layout)).
 - Exceptions are hard-coded: skip rules for the ADSR curves/divisions/tempo-sync and the threshold
   parameter (`CardBodyPlan.cpp`'s `isEditedElsewhere`), the LFO custom-wave editor, the Sampler/Wavetable chrome, the Wavetable tab strip
@@ -55,6 +57,9 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 | `CardBody`: builds, binds and lays out a card's body; the folded More row | `Source/UI/Graph/CardBody/CardBody.*`, `CardBodyLayout.cpp`, `CardBodyMoreRow.cpp`, `CardBodyMoreButton.h` |
 | The plan (which widget per parameter, the skip rules, placement, More) and the run layouts | `CardBodyPlan.*`, `CardBodyGeometry.*`, `CardBodyLayoutWalk.h` |
 | The view registry (only `threshold` is registered) | `CardBodyViews.*` |
+| Conditions read live: `when` (dim, swap groups), `visibleWhen`, code dim rules, the parameter listener | `CardBodyConditions.cpp` |
+| The footer row (`CardSection::kFooterId`) and the small toggle pill | `CardBodyFooter.cpp`; `Source/UI/Graph/CardWidgets/CardTogglePill.h`, `AppLookAndFeel::paintTogglePill` |
+| One registration unit per module family, and the `cardlayout::` builders | `Source/UI/Graph/CardBody/DefaultLayouts/` |
 | The size estimate for a card before it exists, measured from the plan | `CardBodyMeasure.*` (`GraphEditor::estimateModuleSize`) |
 | The widgets: `CardFader`, `CardSegmentedSwitch`, `CardStepper`, and `CardControlGestures` (the gestures a knob and a fader share) | `Source/UI/Graph/CardWidgets/` |
 | The right-click quick path (the explicit layout, the edits, the undoable write and rebuild, the menu items) | `CardLayoutQuickEdit.*`; the stale-card rebuild in `GraphEditorCanvas.cpp` (`CardBody::isStaleFor`) |
@@ -70,8 +75,9 @@ and listens to it: a default written or cleared bumps the store's in-memory revi
 `updateComponents` rebuilds every card built from an older revision (`CardBody::isStaleFor`, which never
 reads the disk), each rebuilt card then making room for its new height. A card on an editor with no
 binding (most tests) skips the per-type step. The size estimate for a card before it exists
-(`CardBodyMeasure`) still measures the automatic layout, so a type with a stored default is placed at
-its automatic height and re-flows once built. A stored layout is honoured only for the cards drawn from layout data; the bespoke ones (Sequencer, Poly
+(`CardBodyMeasure`) measures the type's code default (or the automatic layout) with its conditions read
+at the fresh module's values, so it never sees a stored default: a type with one is placed at its
+code-default height and re-flows once built. A stored layout is honoured only for the cards drawn from layout data; the bespoke ones (Sequencer, Poly
 Sequencer, Macros, Parametric EQ, Attenuverter, Wavetable, macro ports) always build from the
 automatic plan. The fold state of the More row is per card and not saved; a card opens folded.
 A card builds its body once; when its node's `cardLayout` changes (a quick-path click, its undo or
@@ -214,6 +220,31 @@ envelope, LFO curve and threshold components plug in unchanged.
 - **Heights are measured.** `GraphEditor::estimateModuleSize()` asks `CardBody` to measure the
   resolved layout instead of its hard-coded table, and
   `ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` keeps pinning the two together.
+- **Conditions (built).** A card listens only to the parameters its conditions read (a
+  `juce::AudioProcessorParameter::Listener` per watched parameter; the callback, which may run on the
+  audio thread, only triggers an `AsyncUpdater`), re-reads them on the message thread, and re-lays out
+  only when a result changed. A `dim` keeps the cell and marks the control dimmed (painted greyed by the
+  look-and-feel, still enabled, focusable and operable, with an "Inactive in this mode" description and
+  tooltip hint); consecutive `show` items testing one parameter are one **swap group** in one cell,
+  laid out in the run of its tallest member, every member fitted to that cell at its own height, so a
+  swap never moves anything and a swapped-out knob keeps its knob-bound jack (`CardBody::isSwappedOut`);
+  a lone `show` item is a group of one whose cell stays empty while it is off. A swapped-out item is
+  not hidden and never joins More. A section's `visibleWhen` may change the card's height, which then
+  goes through `GraphEditor::handleModuleResized` (make room, give it back). Choice conditions match
+  value strings, bool ones "true"/"false"; a condition on a parameter the module lacks, or on a number,
+  never applies its effect. Inside the More row conditions are ignored, except dim.
+- **Code dim rules (built).** A `DefaultCardLayouts` entry may carry `CardDimRule`s (`paramId`, the
+  watched parameter ids, a predicate on the module) for numeric tests the JSON cannot express. A rule
+  describes the module, not the layout, so it applies to every layout the card resolves (instance
+  override, stored type default or code default; `ResolvedModuleCardLayout::dimRules`) whenever its
+  parameter is on the card: a card the user has edited keeps them.
+- **Footer row (built).** A section with the reserved id `footer` is laid out last, under the card's
+  chrome panels and above More, as one compact row (wrapping when full): toggles as the small pill,
+  anything continuous as `faderH`, the rest as their own widget with an inline caption. On such a card
+  the chrome toggles (Show Response, Show Spectrum, Show Scope) join the row as pills, and `poly`
+  joins it unless the layout places or hides it; a card without a footer keeps its chrome rows.
+  Show on card never puts a control into the footer. Details in
+  [module-card.md](module-card.md#the-footer-row).
 - **Bespoke cards.** Sequencer, Poly Sequencer, MIDI Keyboard, Macros, Attenuverter, Parametric EQ
   and External MIDI keep their own bodies; their editable surface is at most hide/reorder of a plain
   knob row they expose. The Wavetable tab strip becomes `presentation: tab` sections, so its page
@@ -246,8 +277,8 @@ segmented switch over more than 6 values or a value over 10 characters, a steppe
 more than 24 steps) falls back to the automatic one. The knob and the fader share their gestures through
 `CardControlGestures` and one wiring call (`ModuleComponent::wireCardControlGestures`); the fader's own
 drag, sizes, bar and the switch's and stepper's behaviour are in
-[module-card.md](module-card.md#faders-switches-and-steppers). Footer rows and the small toggle pill are
-not built.
+[module-card.md](module-card.md#faders-switches-and-steppers). The footer row and the small toggle pill
+are built ([module-card.md](module-card.md#the-footer-row)).
 
 Every card has the same **footer** row: Poly (where the module has it), the Scope / Spectrum
 toggles, and an effect's output Level as a small horizontal fader. The **More** row sits under it.
@@ -263,7 +294,7 @@ added.
 | Module | Sections, top to bottom | Contextual rules |
 |---|---|---|
 | Oscillator | waveform `segmented`; Pitch: Octave, Coarse, Fine, (new Glide); Unison: Voices, Detune, (new Pulse Width); Output: Level, Pan; footer | Detune dims at 1 voice; Pulse Width dims unless Square |
-| Filter | `response` view open; Type `choice`; Cutoff `knobLarge`, Resonance, Drive; Modulation: (new Key Track), Level; footer with Spectrum | Key Track dims while nothing is plugged into the (new) Pitch input |
+| Filter | `response` view open; Type `choice`; Cutoff `knobLarge`, Resonance, Drive; Modulation: (new Key Track), Level; footer with Spectrum | Key Track does not dim on an unplugged Pitch input yet: CardBody has no cable knowledge; Key Track is inert when unplugged |
 | VCA | Gain `faderH`; footer | — |
 | ADSR | `envelope` view open; Time/Tempo `segmented`; A H D S R `faderV`; (new Velocity) and the `threshold` view; footer | Tempo mode swaps each stage's time for its division in place |
 | LFO | `lfoShape` view; Shape `segmented` (incl. Draw → `lfoCurve` view); Free/Sync `segmented`; Rate `knobLarge`, (new Phase, new Fade in); Level, Glide; footer: Bipolar, Restart on note | Rate swaps Hz ↔ division; Glide dims unless S&H |
@@ -290,6 +321,20 @@ added.
 
 Adding a parameter to a built-in module needs no change in `synth-platform/packages/contracts`: a
 patch node's `params` is an open record there, and per-module ranges come from the client.
+
+As built: `DefaultCardLayouts::builtIn()` calls one registration function per module family, each in
+its own unit under `Source/UI/Graph/CardBody/DefaultLayouts/` (`DefaultCardLayoutsSources.cpp`:
+Oscillator, Noise, Sampler, LFO, Wavetable; `DefaultCardLayoutsEnvelopes.cpp`: ADSR, Amp Env, Filter
+Env, VCA, Envelope Follower, Sample & Hold, Math, Voice Mixer, Poly MIDI, MIDI Keyboard;
+`DefaultCardLayoutsFilterDynamics.cpp`: Filter, Compressor, Limiter, Gate; `DefaultCardLayoutsEffects.cpp`:
+Delay, Reverb, Chorus, Phaser, Flanger, Distortion, Bitcrusher, Ring Modulator, Pitch Shifter), all
+empty so far. An entry is `defaults.add(type, layout, revision, dimRules)`, written with the
+`cardlayout::` builders in `DefaultCardLayoutsFamilies.h` (`param`, `showWhen`, `dimUnless`, `view`,
+`section`, `footer`). A family's goldens (`Tests/fixtures/card-body/<Type>.golden`) are recaptured with
+`CARDBODY_WRITE_GOLDEN=<Type>,<Type>`, and its heights live in its own table in
+[module-card.md](module-card.md#body-layout), so no two families edit the same file. The MIDI Keyboard
+and the Wavetable build no data-driven body today, so an entry for them has no effect until their cards
+do.
 
 ### Decisions (2026-10-01)
 
@@ -431,8 +476,19 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   `hidden` plus unplaced parameters both land in More; a hosted layout without v2 features still
   writes v1.
 - `Tests/UI/Graph/CardBody/CardBodyGoldenTests.cpp` (built): every card's size, every child's kind,
-  bounds, visibility, title, tooltip and focus order, and every jack centre, against
-  `Tests/fixtures/card-body/card-geometry.golden`, captured from the card before `CardBody`.
+  bounds, visibility, title, tooltip and focus order, and every jack centre, against one file per type,
+  `Tests/fixtures/card-body/<Type>.golden` (the type name with every run of other characters made one
+  "-"), captured from the card before `CardBody`. `CARDBODY_WRITE_GOLDEN=1` rewrites them all, a
+  comma-separated list of types only those; every type has its file and no file is stray.
+- `Tests/UI/Graph/CardBody/CardBodyConditionsTests.cpp` (built): a dim greys the control and its caption
+  and keeps its bounds; an LFO Rate (Hz) / Sync Rate swap on the Sync switch keeps the card's and a
+  neighbour's bounds; swapped-out items are never in More; a `visibleWhen` section grows the card,
+  pushes a neighbour and gives it back; a code dim rule follows its predicate and comes only with the
+  code default; choice and bool conditions match value strings and "true"/"false".
+- `Tests/UI/Graph/CardBody/CardBodyFooterTests.cpp` (built): the footer row places a Poly pill, a
+  horizontal Level fader and the Show Scope pill in one row under the body and above More; a card
+  without a footer keeps its chrome rows; the Filter footer with Show Response and Spectrum; and the
+  size estimate equals the real card for layouts with a swap, conditional sections, More and a footer.
 - `Tests/UI/Graph/CardBody/CardBodyLayoutTests.cpp` (built: order, measure == apply, estimate, More
   row, no height change on a knob drag): automatic layout reproduces today's order and
   heights for every type without a code default; each code default builds with no missing

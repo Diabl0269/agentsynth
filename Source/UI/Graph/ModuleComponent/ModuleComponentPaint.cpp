@@ -8,6 +8,7 @@
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/SequencerModule.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
@@ -531,12 +532,16 @@ int ModuleComponent::getModRingSliderIndex(const juce::String& paramName) const 
 
 // A knob hidden on an inactive tab page (or in a folded More row) keeps the bounds it had when last
 // laid out, so drawing from them paints a ring over empty card -- UNLESS it is hidden only because its
-// own *Div combo swapped in over it (BPM mode), which keeps the SAME cell a jack still legitimately
-// lands on; see isEnvelopeDivSwappedForSlider's own comment (ModuleComponentEnvelopeCard.cpp).
+// own *Div combo swapped in over it (BPM mode), or a layout's swap group shows a sibling in its cell
+// (CardBody::isSwappedOut); either keeps the SAME cell a jack still legitimately lands on, so the jack
+// never falls back to the gutter and the card never grows on a swap; see isEnvelopeDivSwappedForSlider's
+// own comment (ModuleComponentEnvelopeCard.cpp).
 int ModuleComponent::shownRingSliderIndex(int si) const {
     if (!showsModulation(*sliders[si]))
         return -1;
-    return (!sliders[si]->isVisible() && !isEnvelopeDivSwappedForSlider(si)) ? -1 : si;
+    if (sliders[si]->isVisible() || isEnvelopeDivSwappedForSlider(si))
+        return si;
+    return cardBody_ != nullptr && cardBody_->isSwappedOut(*sliders[si]) ? si : -1;
 }
 
 juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {

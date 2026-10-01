@@ -1,0 +1,92 @@
+type Wavetable size 560x565
+  child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
+  child 1 toggle id="" at 12,527 536x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 510,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 486,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 534,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 5 drawableButton id="" at 462,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
+  child 6 component id="" at 100,60 360x72 visible=1 title="Wavetable display" tip="Wavetable display: the frame under the scan position" focusOrder=0 wantsFocus=0
+  child 7 textButton id="" at 100,188 144x24 visible=1 title="Load Wavetable..." tip="Load an audio file as a wavetable, or drop one straight onto this card. The Import combo below decides how it is cut into frames." focusOrder=0 wantsFocus=1
+  child 8 textButton id="" at 248,188 148x24 visible=1 title="Folder..." tip="Pick a wavetable folder, then step through it with < and >" focusOrder=0 wantsFocus=1
+  child 9 textButton id="" at 400,188 28x24 visible=1 title="<" tip="Previous wavetable in the folder" focusOrder=0 wantsFocus=1
+  child 10 textButton id="" at 432,188 28x24 visible=1 title=">" tip="Next wavetable in the folder" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 100,216 360x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 combo id="" at 100,158 360x24 visible=1 title="Table" tip="Table" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 100,140 360x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Position" at 12,271 178x58 visible=1 title="Position" tip="Position" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 12,253 178x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Octave" at 102,389 89x58 visible=1 title="Octave" tip="Octave" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 102,371 89x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Coarse" at 191,389 89x58 visible=1 title="Coarse" tip="Coarse" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 191,371 89x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="Fine" at 280,389 89x58 visible=1 title="Fine" tip="Fine" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 280,371 89x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 knob id="Level" at 369,389 89x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 23 label id="" at 369,371 89x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 toggle id="Poly" at 12,501 536x24 visible=1 title="Poly" tip="Poly" focusOrder=0 wantsFocus=1
+  child 25 knob id="Unison" at 457,430 89x58 visible=0 title="Unison" tip="Unison" focusOrder=0 wantsFocus=1
+  child 26 label id="" at 457,412 89x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 27 knob id="Detune" at 12,506 89x58 visible=0 title="Detune" tip="Detune" focusOrder=0 wantsFocus=1
+  child 28 label id="" at 12,488 89x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 29 combo id="" at 196,288 166x24 visible=1 title="Warp" tip="Warp" focusOrder=0 wantsFocus=1
+  child 30 label id="" at 196,253 166x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 31 knob id="Warp Amt" at 368,271 178x58 visible=1 title="Warp Amt" tip="Warp Amt" focusOrder=0 wantsFocus=1
+  child 32 label id="" at 368,253 178x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 33 knob id="Phase" at 190,506 89x58 visible=0 title="Phase" tip="Phase" focusOrder=0 wantsFocus=1
+  child 34 label id="" at 190,488 89x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 35 knob id="Rand Phase" at 279,506 89x58 visible=0 title="Rand Phase" tip="Rand Phase" focusOrder=0 wantsFocus=1
+  child 36 label id="" at 279,488 89x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 37 knob id="Spread" at 368,506 89x58 visible=0 title="Spread" tip="Spread" focusOrder=0 wantsFocus=1
+  child 38 label id="" at 368,488 89x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 39 knob id="Width" at 457,506 89x58 visible=0 title="Width" tip="Width" focusOrder=0 wantsFocus=1
+  child 40 label id="" at 457,488 89x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 41 knob id="Blend" at 12,582 89x58 visible=0 title="Blend" tip="Blend" focusOrder=0 wantsFocus=1
+  child 42 label id="" at 12,564 89x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 43 combo id="" at 12,260 260x24 visible=0 title="Stack" tip="Stack" focusOrder=0 wantsFocus=1
+  child 44 label id="" at 12,242 260x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 45 knob id="Sub" at 101,582 89x58 visible=0 title="Sub" tip="Sub" focusOrder=0 wantsFocus=1
+  child 46 label id="" at 101,564 89x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 47 combo id="" at 280,260 260x24 visible=0 title="Sub Oct" tip="Sub Oct" focusOrder=0 wantsFocus=1
+  child 48 label id="" at 280,242 260x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 49 combo id="" at 12,308 260x24 visible=0 title="Sub Wave" tip="Sub Wave" focusOrder=0 wantsFocus=1
+  child 50 label id="" at 12,290 260x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 51 knob id="Pan" at 190,582 89x58 visible=0 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
+  child 52 label id="" at 190,564 89x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 53 combo id="" at 280,308 260x24 visible=0 title="Sync In" tip="Sync In" focusOrder=0 wantsFocus=1
+  child 54 label id="" at 280,290 260x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 55 combo id="" at 12,356 260x24 visible=0 title="Import" tip="Import" focusOrder=0 wantsFocus=1
+  child 56 label id="" at 12,338 260x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 57 combo id="" at 280,356 260x24 visible=0 title="Interp" tip="Interp" focusOrder=0 wantsFocus=1
+  child 58 label id="" at 280,338 260x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 59 component id="" at 12,339 536x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 60 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
+  child 61 component id="" at 4,52 12x12 visible=1 title="Pitch input" tip="" focusOrder=0 wantsFocus=0
+  child 62 component id="" at 4,72 12x12 visible=1 title="Phase input" tip="" focusOrder=0 wantsFocus=0
+  child 63 component id="" at 4,92 12x12 visible=1 title="Rand input" tip="" focusOrder=0 wantsFocus=0
+  child 64 component id="" at 4,112 12x12 visible=1 title="Detune input" tip="" focusOrder=0 wantsFocus=0
+  child 65 component id="" at 4,132 12x12 visible=1 title="Spread input" tip="" focusOrder=0 wantsFocus=0
+  child 66 component id="" at 4,152 12x12 visible=1 title="Width input" tip="" focusOrder=0 wantsFocus=0
+  child 67 component id="" at 4,172 12x12 visible=1 title="Blend input" tip="" focusOrder=0 wantsFocus=0
+  child 68 component id="" at 4,192 12x12 visible=1 title="Sub input" tip="" focusOrder=0 wantsFocus=0
+  child 69 component id="" at 4,212 12x12 visible=1 title="Pan input" tip="" focusOrder=0 wantsFocus=0
+  child 70 component id="" at 4,232 12x12 visible=1 title="Sync input" tip="" focusOrder=0 wantsFocus=0
+  child 71 component id="" at 544,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
+  child 72 component id="" at 544,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
+  in 0 10, 58
+  in 1 83, 308
+  in 2 129, 426
+  in 3 218, 426
+  in 4 307, 426
+  in 5 396, 426
+  in 6 439, 308
+  in 7 10, 78
+  in 8 10, 98
+  in 9 10, 118
+  in 10 10, 138
+  in 11 10, 158
+  in 12 10, 178
+  in 13 10, 198
+  in 14 10, 218
+  in 15 10, 238
+  out 0 550, 58
+  out 1 550, 78

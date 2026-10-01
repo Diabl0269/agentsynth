@@ -18,6 +18,12 @@ void AppLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width
     const float bodyRadius = size * 0.52f * 0.5f; // ~0.52 * size diameter
     const float arcRadius = size * 0.5f - m.knobTrackWidth;
 
+    // A disabled or dimmed (greyed out) knob paints whole at reduced alpha, as a fader does; the focus
+    // ring stays outside the layer at full strength.
+    const bool disabled = paintsDimmed(slider);
+    if (disabled)
+        g.beginTransparencyLayer(kDisabledControlAlpha);
+
     const float startAngle = kRotaryStart;
     const float endAngle = kRotaryEnd;
     const float valueAngle = startAngle + sliderPosProportional * (endAngle - startAngle);
@@ -77,6 +83,9 @@ void AppLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width
             g.drawEllipse(juce::Rectangle<float>(r * 2.0f, r * 2.0f).withCentre(centre), 0.6f);
         }
     }
+
+    if (disabled)
+        g.endTransparencyLayer();
 
     // 6. Keyboard focus ring around the whole knob.
     synth::ui::paintFocusRing(g, juce::Rectangle<float>(size, size).withCentre(centre), slider, size * 0.5f);

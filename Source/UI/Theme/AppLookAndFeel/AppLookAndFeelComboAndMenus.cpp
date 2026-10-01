@@ -8,7 +8,7 @@ void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool
                                   int /*buttonY*/, int /*buttonW*/, int /*buttonH*/, juce::ComboBox& box) {
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
-    const bool enabled = box.isEnabled();
+    const bool enabled = box.isEnabled() && !paintsDimmed(box); // a dimmed combo stays operable, painted greyed
 
     auto bounds = juce::Rectangle<float>(0, 0, (float)width, (float)height).reduced(0.5f);
 

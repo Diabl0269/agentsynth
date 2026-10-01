@@ -1,0 +1,55 @@
+type Macros size 280x458
+  child 0 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 1 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 3 knob id="Knobs" at 20,48 80x40 visible=1 title="Knobs" tip="Knobs" focusOrder=0 wantsFocus=1
+  child 4 label id="" at 20,30 80x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 5 toggle id="Bipolar" at 116,56 100x24 visible=1 title="Bipolar" tip="Bipolar" focusOrder=0 wantsFocus=1
+  child 6 knob id="M1" at 20,98 140x36 visible=1 title="M1" tip="M1" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 knob id="M2" at 20,142 140x36 visible=1 title="M2" tip="M2" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 knob id="M3" at 20,186 140x36 visible=1 title="M3" tip="M3" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="M4" at 20,230 140x36 visible=1 title="M4" tip="M4" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="M5" at 20,274 140x36 visible=1 title="M5" tip="M5" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="M6" at 20,318 140x36 visible=1 title="M6" tip="M6" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="M7" at 20,362 140x36 visible=1 title="M7" tip="M7" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="M8" at 20,406 140x36 visible=1 title="M8" tip="M8" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 knob id="M9" at 0,0 0x0 visible=0 title="M9" tip="M9" focusOrder=0 wantsFocus=1
+  child 23 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 knob id="M10" at 0,0 0x0 visible=0 title="M10" tip="M10" focusOrder=0 wantsFocus=1
+  child 25 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 knob id="M11" at 0,0 0x0 visible=0 title="M11" tip="M11" focusOrder=0 wantsFocus=1
+  child 27 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 knob id="M12" at 0,0 0x0 visible=0 title="M12" tip="M12" focusOrder=0 wantsFocus=1
+  child 29 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 30 knob id="M13" at 0,0 0x0 visible=0 title="M13" tip="M13" focusOrder=0 wantsFocus=1
+  child 31 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 32 knob id="M14" at 0,0 0x0 visible=0 title="M14" tip="M14" focusOrder=0 wantsFocus=1
+  child 33 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 34 knob id="M15" at 0,0 0x0 visible=0 title="M15" tip="M15" focusOrder=0 wantsFocus=1
+  child 35 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 36 knob id="M16" at 0,0 0x0 visible=0 title="M16" tip="M16" focusOrder=0 wantsFocus=1
+  child 37 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 38 component id="" at 264,110 12x12 visible=1 title="M1 output" tip="" focusOrder=0 wantsFocus=0
+  child 39 component id="" at 264,154 12x12 visible=1 title="M2 output" tip="" focusOrder=0 wantsFocus=0
+  child 40 component id="" at 264,198 12x12 visible=1 title="M3 output" tip="" focusOrder=0 wantsFocus=0
+  child 41 component id="" at 264,242 12x12 visible=1 title="M4 output" tip="" focusOrder=0 wantsFocus=0
+  child 42 component id="" at 264,286 12x12 visible=1 title="M5 output" tip="" focusOrder=0 wantsFocus=0
+  child 43 component id="" at 264,330 12x12 visible=1 title="M6 output" tip="" focusOrder=0 wantsFocus=0
+  child 44 component id="" at 264,374 12x12 visible=1 title="M7 output" tip="" focusOrder=0 wantsFocus=0
+  child 45 component id="" at 264,418 12x12 visible=1 title="M8 output" tip="" focusOrder=0 wantsFocus=0
+  out 0 270, 116
+  out 1 270, 160
+  out 2 270, 204
+  out 3 270, 248
+  out 4 270, 292
+  out 5 270, 336
+  out 6 270, 380
+  out 7 270, 424

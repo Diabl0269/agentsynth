@@ -16,6 +16,7 @@
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
+#include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
@@ -62,7 +63,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
                 scopeComponent = std::make_unique<ScopeComponent>(*vb);
                 addAndMakeVisible(scopeComponent.get());
 
-                scopeToggle = std::make_unique<juce::ToggleButton>("Show Scope");
+                scopeToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowScopeText);
                 scopeToggle->setToggleState(false, juce::dontSendNotification);
                 scopeComponent->setVisible(false);
                 scopeToggle->onClick = [this] { setScopeShown(scopeToggle->getToggleState()); };
@@ -86,13 +87,13 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
         // Same pattern as the scope: hidden by default so a Filter card does not pay for a
         // 30 Hz response/spectrum timer until the user asks for it.
-        freqResponseToggle = std::make_unique<juce::ToggleButton>("Show Response");
+        freqResponseToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowResponseText);
         freqResponseToggle->setToggleState(false, juce::dontSendNotification);
         freqResponseComponent->setVisible(false);
         freqResponseToggle->onClick = [this] { setResponseShown(freqResponseToggle->getToggleState()); };
         addAndMakeVisible(freqResponseToggle.get());
 
-        spectrumToggle = std::make_unique<juce::ToggleButton>("Show Spectrum");
+        spectrumToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowSpectrumText);
         spectrumToggle->setToggleState(false, juce::dontSendNotification);
         spectrumToggle->onClick = [this] { setSpectrumShown(spectrumToggle->getToggleState()); };
         addChildComponent(spectrumToggle.get()); // hidden until the response view is shown
@@ -105,7 +106,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
         // The spectrum is this curve's backdrop, so it starts on (the analyser gates itself on
         // actual signal, so an idle patch still costs no repaints).
-        spectrumToggle = std::make_unique<juce::ToggleButton>("Show Spectrum");
+        spectrumToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowSpectrumText);
         spectrumToggle->setToggleState(eqCurveComponent->getShowSpectrum(), juce::dontSendNotification);
         spectrumToggle->onClick = [this] { setSpectrumShown(spectrumToggle->getToggleState()); };
         addAndMakeVisible(spectrumToggle.get());
@@ -116,6 +117,11 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         eqPopOutButton->onClick = [this] { openEqWindow(); };
         addAndMakeVisible(eqPopOutButton.get());
     }
+
+    // On a card whose layout has a footer row, the chrome toggles are pills in that row.
+    if (cardBody_ != nullptr && cardBody_->hasFooter())
+        for (auto* toggle : footerChromeToggles())
+            synth::ui::setTogglePillStyle(*toggle, true);
 
     // Attenuverter has no header at all; a macro-port widget has no header CHROME —
     // "no module header chrome and no body" — so neither gets bypass/mute/delete/Dual I/O buttons.
@@ -177,7 +183,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     applyHeaderButtonIcons();
     restoreCardView();           // after every panel exists and has had its first layout
     applyControlAccessibility(); // last: names every control the steps above built
-    startTimerHz(15);            // 15 FPS is plenty for activity glow / step indicator; lower CPU than 30
+    if (cardBody_ != nullptr)
+        cardBody_->applyDimHints(); // after the names: a dimmed control's tooltip gains its hint
+    startTimerHz(15);               // 15 FPS is plenty for activity glow / step indicator; lower CPU than 30
 }
 
 ModuleComponent::~ModuleComponent() { detachFromProcessor(); }

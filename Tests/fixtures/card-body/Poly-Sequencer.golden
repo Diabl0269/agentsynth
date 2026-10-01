@@ -1,0 +1,57 @@
+type Poly Sequencer size 560x406
+  child 0 drawableButton id="" at 510,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 1 drawableButton id="" at 486,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 534,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 3 toggle id="Run" at 40,30 60x24 visible=1 title="Run" tip="Run" focusOrder=0 wantsFocus=1
+  child 4 knob id="BPM" at 100,50 60x50 visible=1 title="BPM" tip="BPM" focusOrder=0 wantsFocus=1
+  child 5 label id="" at 100,30 60x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 6 knob id="Gate 1" at 10,130 55x50 visible=1 title="Gate 1" tip="Gate 1" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 10,110 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 knob id="Gate 2" at 70,130 55x50 visible=1 title="Gate 2" tip="Gate 2" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 70,110 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 knob id="Gate 3" at 130,130 55x50 visible=1 title="Gate 3" tip="Gate 3" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 130,110 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Gate 4" at 190,130 55x50 visible=1 title="Gate 4" tip="Gate 4" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 190,110 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Gate 5" at 250,130 55x50 visible=1 title="Gate 5" tip="Gate 5" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 250,110 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Gate 6" at 310,130 55x50 visible=1 title="Gate 6" tip="Gate 6" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 310,110 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Gate 7" at 370,130 55x50 visible=1 title="Gate 7" tip="Gate 7" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 370,110 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="Gate 8" at 430,130 55x50 visible=1 title="Gate 8" tip="Gate 8" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 430,110 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 knob id="Step 1 Root" at 10,210 55x50 visible=1 title="Step 1 Root" tip="Step 1 Root" focusOrder=0 wantsFocus=1
+  child 23 label id="" at 10,190 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 combo id="" at 0,0 0x0 visible=1 title="Step 1 Chord" tip="Step 1 Chord" focusOrder=0 wantsFocus=1
+  child 25 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 knob id="Step 2 Root" at 70,210 55x50 visible=1 title="Step 2 Root" tip="Step 2 Root" focusOrder=0 wantsFocus=1
+  child 27 label id="" at 70,190 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 combo id="" at 0,0 0x0 visible=1 title="Step 2 Chord" tip="Step 2 Chord" focusOrder=0 wantsFocus=1
+  child 29 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 30 knob id="Step 3 Root" at 130,210 55x50 visible=1 title="Step 3 Root" tip="Step 3 Root" focusOrder=0 wantsFocus=1
+  child 31 label id="" at 130,190 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 32 combo id="" at 0,0 0x0 visible=1 title="Step 3 Chord" tip="Step 3 Chord" focusOrder=0 wantsFocus=1
+  child 33 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 34 knob id="Step 4 Root" at 190,210 55x50 visible=1 title="Step 4 Root" tip="Step 4 Root" focusOrder=0 wantsFocus=1
+  child 35 label id="" at 190,190 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 36 combo id="" at 0,0 0x0 visible=1 title="Step 4 Chord" tip="Step 4 Chord" focusOrder=0 wantsFocus=1
+  child 37 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 38 knob id="Step 5 Root" at 250,210 55x50 visible=1 title="Step 5 Root" tip="Step 5 Root" focusOrder=0 wantsFocus=1
+  child 39 label id="" at 250,190 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 40 combo id="" at 0,0 0x0 visible=1 title="Step 5 Chord" tip="Step 5 Chord" focusOrder=0 wantsFocus=1
+  child 41 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 42 knob id="Step 6 Root" at 310,210 55x50 visible=1 title="Step 6 Root" tip="Step 6 Root" focusOrder=0 wantsFocus=1
+  child 43 label id="" at 310,190 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 44 combo id="" at 0,0 0x0 visible=1 title="Step 6 Chord" tip="Step 6 Chord" focusOrder=0 wantsFocus=1
+  child 45 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 46 knob id="Step 7 Root" at 370,210 55x50 visible=1 title="Step 7 Root" tip="Step 7 Root" focusOrder=0 wantsFocus=1
+  child 47 label id="" at 370,190 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 48 combo id="" at 0,0 0x0 visible=1 title="Step 7 Chord" tip="Step 7 Chord" focusOrder=0 wantsFocus=1
+  child 49 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 50 knob id="Step 8 Root" at 430,210 55x50 visible=1 title="Step 8 Root" tip="Step 8 Root" focusOrder=0 wantsFocus=1
+  child 51 label id="" at 430,190 55x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 52 combo id="" at 0,0 0x0 visible=1 title="Step 8 Chord" tip="Step 8 Chord" focusOrder=0 wantsFocus=1
+  child 53 label id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 54 toggle id="Sync to Transport" at 10,380 200x24 visible=1 title="Sync to Transport" tip="Sync to Transport" focusOrder=0 wantsFocus=1
+  child 55 component id="" at 544,32 12x12 visible=1 title="Midi output" tip="" focusOrder=0 wantsFocus=0

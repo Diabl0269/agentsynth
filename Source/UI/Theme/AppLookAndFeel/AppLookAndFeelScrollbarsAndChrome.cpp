@@ -86,7 +86,7 @@ void AppLookAndFeel::drawLabel(juce::Graphics& g, juce::Label& label) {
     g.fillAll(label.findColour(juce::Label::backgroundColourId));
 
     if (!label.isBeingEdited()) {
-        const auto alpha = label.isEnabled() ? 1.0f : 0.5f;
+        const auto alpha = !label.isEnabled() ? 0.5f : (paintsDimmed(label) ? kDisabledControlAlpha : 1.0f);
         g.setColour(label.findColour(juce::Label::textColourId).withMultipliedAlpha(alpha));
         g.setFont(label.getFont());
 

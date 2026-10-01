@@ -25,6 +25,7 @@ struct State {
     bool dragging = false; // mouse button down on the slider
     bool focused = false;  // keyboard focus
     bool enabled = true;
+    bool dimmed = false; // greyed out but operable (a layout's dim)
 };
 
 // Size choice from the slider's real bounds. A vertical slider at least kLargeMinWidth wide and

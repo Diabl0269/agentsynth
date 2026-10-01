@@ -1,0 +1,6 @@
+type Audio Input size 280x100
+  child 0 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 1 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 3 component id="" at 264,52 12x12 visible=1 title="Left output" tip="" focusOrder=0 wantsFocus=0
+  out 0 270, 58

@@ -1,0 +1,32 @@
+type Channel Strip size 280x409
+  child 0 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 1 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 3 knob id="Gain" at 12,111 85x58 visible=1 title="Gain" tip="Gain" focusOrder=0 wantsFocus=1
+  child 4 label id="" at 12,93 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 5 knob id="Pan" at 97,111 85x58 visible=1 title="Pan" tip="Pan" focusOrder=0 wantsFocus=1
+  child 6 label id="" at 97,93 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 7 knob id="Send 1 Level" at 182,111 85x58 visible=1 title="Send 1 Level" tip="Send 1 Level" focusOrder=0 wantsFocus=1
+  child 8 label id="" at 182,93 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 9 knob id="Send 2 Level" at 12,187 85x58 visible=1 title="Send 2 Level" tip="Send 2 Level" focusOrder=0 wantsFocus=1
+  child 10 label id="" at 12,169 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 11 knob id="Send 3 Level" at 97,187 85x58 visible=1 title="Send 3 Level" tip="Send 3 Level" focusOrder=0 wantsFocus=1
+  child 12 label id="" at 97,169 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 13 knob id="Send 4 Level" at 182,187 85x58 visible=1 title="Send 4 Level" tip="Send 4 Level" focusOrder=0 wantsFocus=1
+  child 14 label id="" at 182,169 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 15 knob id="Send 1 Pan" at 12,263 85x58 visible=1 title="Send 1 Pan" tip="Send 1 Pan" focusOrder=0 wantsFocus=1
+  child 16 label id="" at 12,245 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 17 knob id="Send 2 Pan" at 97,263 85x58 visible=1 title="Send 2 Pan" tip="Send 2 Pan" focusOrder=0 wantsFocus=1
+  child 18 label id="" at 97,245 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 19 knob id="Send 3 Pan" at 182,263 85x58 visible=1 title="Send 3 Pan" tip="Send 3 Pan" focusOrder=0 wantsFocus=1
+  child 20 label id="" at 182,245 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 21 knob id="Send 4 Pan" at 12,339 85x58 visible=1 title="Send 4 Pan" tip="Send 4 Pan" focusOrder=0 wantsFocus=1
+  child 22 label id="" at 12,321 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 23 component id="" at 4,52 12x12 visible=1 title="Left input" tip="" focusOrder=0 wantsFocus=0
+  child 24 component id="" at 4,72 12x12 visible=1 title="Right input" tip="" focusOrder=0 wantsFocus=0
+  child 25 component id="" at 264,52 12x12 visible=1 title="Left output" tip="" focusOrder=0 wantsFocus=0
+  child 26 component id="" at 264,72 12x12 visible=1 title="Right output" tip="" focusOrder=0 wantsFocus=0
+  in 0 10, 58
+  in 1 10, 78
+  out 0 270, 58
+  out 1 270, 78

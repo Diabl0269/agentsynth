@@ -11,8 +11,9 @@ struct ResolvedModuleCardLayout {
     enum class Source { Instance, TypeDefault, CodeDefault, Automatic };
 
     Source source = Source::Automatic;
-    std::optional<CardLayout> layout; ///< Nullopt for Automatic: draw today's automatic layout.
-    int defaultRevision = 0;          ///< The code default's revision; 0 unless source is CodeDefault.
+    std::optional<CardLayout> layout;  ///< Nullopt for Automatic: draw today's automatic layout.
+    int defaultRevision = 0;           ///< The code default's revision; 0 unless source is CodeDefault.
+    std::vector<CardDimRule> dimRules; ///< The type's code dim rules, whatever the source.
 };
 
 /**

@@ -452,6 +452,11 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardBody/CardLayoutOverride.h
     Source/UI/Graph/CardBody/DefaultCardLayouts.cpp
     Source/UI/Graph/CardBody/DefaultCardLayouts.h
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsEffects.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsEnvelopes.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFilterDynamics.cpp
+    Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsSources.cpp
     Source/UI/Graph/CardBody/ModuleCardLayoutResolver.cpp
     Source/UI/Graph/CardBody/ModuleCardLayoutResolver.h
     Source/UI/Graph/CardBody/ModuleCardLayoutStore.cpp
@@ -487,6 +492,8 @@ set(APPUI_SOURCES
     Source/Update/UpdateManager.h
     Source/UI/Graph/CardBody/CardBody.cpp
     Source/UI/Graph/CardBody/CardBody.h
+    Source/UI/Graph/CardBody/CardBodyConditions.cpp
+    Source/UI/Graph/CardBody/CardBodyFooter.cpp
     Source/UI/Graph/CardBody/CardBodyGeometry.cpp
     Source/UI/Graph/CardBody/CardBodyGeometry.h
     Source/UI/Graph/CardBody/CardBodyLayout.cpp
@@ -508,6 +515,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardWidgets/CardSegmentedSwitch.h
     Source/UI/Graph/CardWidgets/CardStepper.cpp
     Source/UI/Graph/CardWidgets/CardStepper.h
+    Source/UI/Graph/CardWidgets/CardTogglePill.h
     Source/UI/Graph/ModuleComponent/ModuleComponentModRings.cpp
     Source/UI/Graph/CardBody/ModuleCardLayoutBinding.cpp
     Source/UI/Graph/CardBody/ModuleCardLayoutBinding.h
