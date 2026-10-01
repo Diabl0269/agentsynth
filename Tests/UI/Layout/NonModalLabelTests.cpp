@@ -78,20 +78,23 @@ TEST(NonModalLabelTest, CommittingStillAppliesTheEditedText) {
     EXPECT_EQ(changes, 1);
 }
 
-// Discarding (what Escape asks for) leaves the text alone and no modal state behind. Not driven by a real Escape
-// key press: JUCE 8.0.3's TextEditor::handleCommandMessage lets Label::hideEditor delete the editor while its
-// listener list is still locked, and valgrind shows the unlock then writing into freed memory (it poisons a
-// glibc tcache bin and crashes a later allocation on Linux).
-TEST(NonModalLabelTest, DiscardingTheEditWithoutALingeringModalState) {
+// Escape discards the edit and leaves the text alone, with no modal state behind. The editor is closed one
+// message-loop turn after the key press, never inside JUCE's listener dispatch for it.
+// Regression test for FRO445: Escape freed the editor while TextEditor::handleCommandMessage still held its
+// listener-list lock, and the unlock wrote into freed memory.
+TEST(NonModalLabelTest, EscapeDiscardsTheEditWithoutALingeringModalState) {
     Host host;
     host.label.setEditable(false, true, false);
     host.label.showEditor();
     pump();
-    host.label.getCurrentTextEditor()->setText("nonsense", false);
-    host.label.hideEditor(true); // true = discard
+    auto* editor = host.label.getCurrentTextEditor();
+    ASSERT_NE(editor, nullptr);
+    editor->setText("nonsense", false);
+    EXPECT_TRUE(editor->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
     pump();
     EXPECT_EQ(host.label.getText(), "120.0");
     EXPECT_EQ(host.label.getCurrentTextEditor(), nullptr);
+    EXPECT_FALSE(host.label.isCurrentlyModal(false));
     EXPECT_FALSE(windowIsBlockedByAnEditor(host.bystander));
 }
 
