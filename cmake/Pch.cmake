@@ -6,11 +6,11 @@
 # Included right after the ccache launcher block in the root CMakeLists.txt, BEFORE any target
 # exists, because a target copies CMAKE_<LANG>_COMPILER_LAUNCHER when it is created.
 #
-# OFF by default. The macOS CI job turns it on. It stays off for local builds because clang writes
-# the build directory's absolute path into the header, so the file is only valid at the path that
-# built it, and the local ccache is shared between checkouts (docs/development/local-ci.md). The
-# Linux job (gcc with coverage instrumentation) and the Windows job (MSVC /Yu through ccache) have
-# not been measured.
+# OFF by default. The macOS and Linux CI jobs turn it on. It stays off for local builds because
+# clang writes the build directory's absolute path into the header, so the file is only valid at
+# the path that built it, and the local ccache is shared between checkouts
+# (docs/development/local-ci.md). It stays off for the Windows job because files that use the
+# header never hit ccache there (measured; see docs/development/ci-pipeline.md).
 option(AGENTSYNTH_PCH "Precompile the JUCE module headers for Core, AppUI and Tests" OFF)
 
 # A ccache base_dir makes two checkouts hash the header's compile identically, so the second one
@@ -48,7 +48,10 @@ if(AGENTSYNTH_PCH AND CCACHE_PROGRAM)
     endif()
 endif()
 
-# The same module list the sources include by name (cmake/JuceModules.cmake links them).
+# The modules the sources include by name (cmake/JuceModules.cmake links them), except juce_dsp:
+# its jmin/jmax overloads for SIMDRegister turn `juce::jmin<juce::int64> (a, b)` into a hard error
+# on Linux, where int64 is `long long` and SIMDNativeOps has no specialisation for it. Only the
+# files that use juce_dsp include it, as before.
 set(SYNTH_PCH_JUCE_HEADERS
     juce_core/juce_core.h
     juce_events/juce_events.h
@@ -62,7 +65,6 @@ set(SYNTH_PCH_JUCE_HEADERS
     juce_gui_basics/juce_gui_basics.h
     juce_gui_extra/juce_gui_extra.h
     juce_animation/juce_animation.h
-    juce_dsp/juce_dsp.h
 )
 
 # synth_enable_pch(<target> [extra angle-bracket headers...])
