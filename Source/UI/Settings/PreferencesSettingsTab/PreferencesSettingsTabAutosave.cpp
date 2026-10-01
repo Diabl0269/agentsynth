@@ -50,7 +50,7 @@ void PreferencesSettingsTab::persistAutosaveBackupCount(int count) {
 void PreferencesSettingsTab::layoutAutosaveGroup(int& y, int contentWidth, bool& pendingDivider,
                                                  const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible,
                                                  const BeginGroupFn& beginGroup) {
-    layoutCategory = Category::Files;
+    enterCategory(Category::Files, y);
     // Group 8: autosave.
     {
         const std::initializer_list<juce::Component*> autosaveComps = {

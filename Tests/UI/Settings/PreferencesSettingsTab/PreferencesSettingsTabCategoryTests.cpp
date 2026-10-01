@@ -36,7 +36,7 @@ TEST_F(PreferencesSettingsTabTest, PickerListsEveryCategoryAndOpensOnGraph) {
     PreferencesSettingsTab tab(appProperties);
     tab.setSize(500, 700);
     auto& combo = tab.getCategoryComboForTest();
-    EXPECT_EQ(combo.getNumItems(), 6);
+    EXPECT_EQ(combo.getNumItems(), 7); // the six categories plus All
     EXPECT_EQ(tab.getSelectedCategory(), Category::Graph);
     EXPECT_EQ(combo.getText(), PreferencesSettingsTab::categoryName(Category::Graph));
     for (const auto& probe : kProbes)

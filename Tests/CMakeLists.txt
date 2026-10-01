@@ -350,6 +350,7 @@ add_executable(Tests
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviourTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosaveTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPatchSaveLocationTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabSectionTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycleTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerPlacementTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabPanelDetachModeTests.cpp

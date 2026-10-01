@@ -9,6 +9,8 @@ constexpr PreferencesSettingsTab::Category kCategoriesInOrder[] = {
     PreferencesSettingsTab::Category::Graph,  PreferencesSettingsTab::Category::Timeline,
     PreferencesSettingsTab::Category::Files,  PreferencesSettingsTab::Category::Mixer,
     PreferencesSettingsTab::Category::Panels, PreferencesSettingsTab::Category::MidiRemote};
+// "All" leads the drop-down even though it is the last enumerator.
+constexpr PreferencesSettingsTab::Category kAllCategory = PreferencesSettingsTab::Category::All;
 
 int comboIdFromCategory(PreferencesSettingsTab::Category category) { return static_cast<int>(category) + 1; }
 } // namespace
@@ -27,6 +29,8 @@ juce::String PreferencesSettingsTab::categoryName(Category category) {
         return "Panels & Windows";
     case Category::MidiRemote:
         return "MIDI Remote";
+    case Category::All:
+        return "All";
     }
     return {};
 }
@@ -36,9 +40,11 @@ juce::String PreferencesSettingsTab::categoryName(Category category) {
 // to the top, so a category never opens half-way down the previous one's scroll offset.
 void PreferencesSettingsTab::setupCategorySelector() {
     addAndMakeVisible(categoryCombo);
+    categoryCombo.addItem(categoryName(kAllCategory), comboIdFromCategory(kAllCategory));
     for (auto category : kCategoriesInOrder)
         categoryCombo.addItem(categoryName(category), comboIdFromCategory(category));
-    categoryCombo.setTooltip("Choose which group of preferences to show. Typing in the filter searches all groups.");
+    categoryCombo.setTooltip("Choose which group of preferences to show, or All for every group with collapsible "
+                             "sections. Typing in the filter searches all groups.");
     categoryCombo.setSelectedId(comboIdFromCategory(selectedCategory), juce::dontSendNotification);
     categoryCombo.onChange = [this] {
         selectedCategory = static_cast<Category>(categoryCombo.getSelectedId() - 1);
@@ -46,6 +52,7 @@ void PreferencesSettingsTab::setupCategorySelector() {
         resized();
         repaint();
     };
+    setupSectionControls();
     resized();
 }
 

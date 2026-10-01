@@ -11,6 +11,10 @@ the Settings window is.
   above the scrolled region.
 - The rows of the selected category, top to bottom, in a viewport with a vertical scrollbar. Picking
   another category scrolls back to the top.
+- **All** (first entry in the drop-down) shows every category on one page, each under a clickable
+  header with a chevron. Click a header (or Tab to it and press Space) to fold or unfold that
+  category; **Expand all** / **Collapse all** next to the drop-down do every header at once. Folds
+  are remembered only while the Settings window is open (a new window starts fully expanded).
 - Typing in the filter searches **every** category (a row matches on its label, button text or tooltip)
   and disables the drop-down until the filter is cleared. Esc clears it.
 - The tab opens on Graph.
@@ -37,6 +41,14 @@ the Settings window is.
   per-category functions in order. With an empty filter `groupMatches` is true only for groups whose
   `layoutCategory` equals `selectedCategory`; with a filter it is the text match, across all categories.
   Hidden groups are never given bounds, so they cost no height and leave no divider behind.
+- **All view** (`PreferencesSettingsTabSections.cpp`): `Category::All` is the last enumerator but the
+  first drop-down entry, and is never a `layoutCategory`. `groupMatches` calls `categoryShown`, which is
+  true for every category that is not folded. Each `layout*Groups` unit calls `enterCategory(category, y)`
+  (instead of assigning `layoutCategory`), which records where the category's rows begin; once
+  `layoutContent` is done, `placeSectionHeaders` walks those bands in order, puts a `SectionHeader` above
+  each, drops the divider that would sit under it and shifts the band down. A filter turns the headers
+  and fold buttons off and ignores folds, so a match can never be trapped inside one. A new category
+  also needs a `kSections` entry in that unit.
 - Persistence is untouched: each row's getter/setter/`persist*` code and settings key is exactly what it
   was, so closing and reopening Settings (a new tab constructed from the same properties) reloads every
   value regardless of category.
@@ -64,5 +76,5 @@ Worked example: the patch save location row (`PreferencesSettingsTabPatchSaveLoc
 "Choose..." button and a hint; its group is laid out from the tail of `layoutAutosaveGroup`, its controls are
 chained from `setupMidiRemoteControls()`, and the folder logic lives in `synth::PatchSaveLocation`, not in the tab.
 
-A new **category** needs a `Category` enumerator, a `categoryName` case, an entry in `kCategoriesInOrder`
+A new **category** needs a `Category` enumerator (before `All`; bump `kNumSections`), a `categoryName` case, an entry in `kCategoriesInOrder`
 (`...Categories.cpp`) and its own `layout*Groups` that sets `layoutCategory`, called from `layoutContent`.

@@ -97,7 +97,7 @@ void PreferencesSettingsTab::styleMutedHintLabel(juce::Label& hint) {
 void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool& pendingDivider,
                                                   const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible,
                                                   const BeginGroupFn& beginGroup) {
-    layoutCategory = Category::Timeline;
+    enterCategory(Category::Timeline, y);
     // Group 5: the two loop-locator toggles (no divider between them).
     {
         const bool visible = groupMatches({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle});

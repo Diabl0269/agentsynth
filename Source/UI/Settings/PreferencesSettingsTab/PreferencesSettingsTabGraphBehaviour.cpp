@@ -520,7 +520,7 @@ bool PreferencesSettingsTab::layoutMacroToggleGroup(
 void PreferencesSettingsTab::layoutGraphGroups(int& y, int contentWidth, bool& pendingDivider,
                                                const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible,
                                                const BeginGroupFn& beginGroup) {
-    layoutCategory = Category::Graph;
+    enterCategory(Category::Graph, y);
     // Group 1: smart connections
     {
         const bool visible = groupMatches({&smartConnectionLabel, &smartConnectionCombo});

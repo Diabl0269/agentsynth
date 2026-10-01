@@ -224,7 +224,7 @@ void PreferencesSettingsTab::layoutMixerPlacementGroup(
 void PreferencesSettingsTab::layoutMixerGroups(int& y, int contentWidth, bool& pendingDivider,
                                                const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible,
                                                const BeginGroupFn& beginGroup) {
-    layoutCategory = Category::Mixer;
+    enterCategory(Category::Mixer, y);
     // Group 4d: mixer auto-create-channel-on-connect toggle.
     {
         const bool visible = groupMatches({&mixerAutoCreateChannelOnConnectToggle});
