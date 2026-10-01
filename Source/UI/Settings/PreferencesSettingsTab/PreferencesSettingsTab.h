@@ -5,6 +5,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/FoldAllButton.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
@@ -208,10 +209,11 @@ public:
     bool isSectionCollapsed(Category category) const;
     void setSectionCollapsed(Category category, bool collapsed);
     void setAllSectionsCollapsed(bool collapsed);
-    // Test seams: a section's header, and the Expand all / Collapse all buttons.
+    // True when every section is folded: the fold-all button then reads "Expand all".
+    bool areAllSectionsCollapsed() const;
+    // Test seams: a section's header, and the single Collapse all / Expand all button.
     juce::Button& getSectionHeaderForTest(Category category);
-    juce::Button& getExpandAllButtonForTest() { return expandAllButton; }
-    juce::Button& getCollapseAllButtonForTest() { return collapseAllButton; }
+    synth::ui::FoldAllButton& getFoldAllButtonForTest() { return foldAllButton; }
 
     // Test seam: is the scrolled content taller than the visible viewport (i.e. is a
     // vertical scrollbar active)? Answers "does this tab clip its bottom groups" without reaching
@@ -391,9 +393,10 @@ private:
     juce::TextEditor searchField;
     // Category picker, left of the search field; one entry per Category, id = enum value + 1.
     juce::ComboBox categoryCombo;
-    Category selectedCategory{Category::Graph};
+    // Opens on the remembered category (setupCategorySelector); All when none is saved.
+    Category selectedCategory{Category::All};
     // The category whose groups the layout pass is currently walking (set by each layout*Groups).
-    Category layoutCategory{Category::Graph};
+    Category layoutCategory{Category::All};
     // "All" view state: per-section fold, where each section's rows began in the last layout pass
     // (-1 = not laid out), and the header buttons. Fold state is per tab instance, not persisted.
     bool sectionCollapsed[kNumSections] = {};
@@ -412,8 +415,8 @@ private:
         Category category;
     };
     std::unique_ptr<SectionHeader> sectionHeaders[kNumSections];
-    juce::TextButton expandAllButton{"Expand all"};
-    juce::TextButton collapseAllButton{"Collapse all"};
+    // The one Collapse all / Expand all strip button, pinned top-right of the rows in the All view.
+    synth::ui::FoldAllButton foldAllButton;
     juce::String searchQuery; // trimmed, case-insensitive-compared in applySearchFilter/resized()
 
     juce::Label titleLabel;

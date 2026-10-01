@@ -6,7 +6,7 @@
 
 namespace {
 
-// The transport family and the selection-stepping actions, split out of getActionDescription to keep
+// The transport family, the selection-stepping and tab-stepping actions, split out of getActionDescription to keep
 // that function under the function-size cap. Empty when `actionId` is not one of them.
 juce::String transportAndSelectionActionName(const juce::String& actionId) {
     // The transport family (docs/control/midi-remote.md#action-targets). "Play"/"Stop" name the direction
@@ -54,6 +54,11 @@ juce::String transportAndSelectionActionName(const juce::String& actionId) {
         return "Select Next Track";
     if (actionId == "selectPreviousTrack")
         return "Select Previous Track";
+    // Tab stepping.
+    if (actionId == "tabPrevious")
+        return "Previous Tab";
+    if (actionId == "tabNext")
+        return "Next Tab";
     return {};
 }
 

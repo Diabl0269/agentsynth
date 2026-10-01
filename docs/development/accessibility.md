@@ -12,7 +12,8 @@ Every new or changed control:
    one focusable leaf; its columns and faders are reached with Left/Right/Up/Down, and Tab moves from a
    column into its send and insert rows). It acts on
    Space/Enter or the arrow keys the way a native control would, and every new key is a rebindable
-   action (below). The exception is a key inside a focused editor that a native control would also
+   action (below). The exceptions are the arrow keys of a list of controls (below), the Settings window's
+   Cmd+1..9 (a fixed positional key; see Switching tabs), and a key inside a focused editor that a native control would also
    own (the arrows, Return and their modifiers in the EQ curve and the curve editor): that is the
    control's own behaviour, not a global shortcut, and is documented with the view
    ([`visualizers.md`](../layout/visualizers.md)).
@@ -73,6 +74,8 @@ knobs and sliders, so a stock control needs nothing. A custom-painted control ca
 3. Add its `getActionDescription` text in `Source/ShortcutManager/ShortcutManagerActionNames.cpp`.
 4. Update the row-order pin in `Tests/UI/Settings/ShortcutsSettingsTabTests.cpp`.
 5. Add it to [`docs/control/shortcuts.md`](../control/shortcuts.md).
+6. A command action also needs its `AppCommands.h` enumerator and `getCommandForAction` mapping, and a row
+   in `MainComponentCommandTable.cpp` (the row-order pin is `MainComponentCommandTableTests.cpp`).
 
 ## The coverage test and its baseline
 
@@ -122,6 +125,32 @@ through the area you changed and watch the ring, then dump the macOS accessibili
 process with pyobjc (`AXUIElementCreateApplication(pid)`, walk `AXChildren`, print `AXRole`,
 `AXTitle`, `AXValue`, `AXDescription`) and check the new names appear.
 
+## Switching tabs
+
+**Cmd+Option+Left / Right switches tabs in every tabbed surface, and every new tab strip must answer it.**
+The keys are the rebindable General actions `tabPrevious` / `tabNext`
+([`shortcuts.md`](../control/shortcuts.md#switching-tabs)); a surface does not hard-code the chord, it asks
+`ShortcutManager::keyPressMatches(shortcutManager.getBinding("tabNext"), key)` (the Settings window), or
+registers the action's command (the bottom dock). Both cycle with wrap-around.
+
+- **A text field may swallow the key.** A key press walks up from the focused control and each
+  component's key listeners run before its own `keyPressed`, but a `juce::TextEditor` is at the bottom of
+  that walk and answers first: where the platform delivers a text character with Ctrl+digit it types the
+  digit of Cmd+1 and consumes the key before the window's handler is reached. (On macOS the peer drops the
+  text character while Command is held, and a stock `TextEditor` does not consume Cmd+Option+arrow, which
+  counts as two modifiers, so there the keys already bubble.) `synth::ui::TabSwitchKeys`
+  (`Source/UI/Layout/TabSwitchKeys.h`) is the one shared guard: attach it to every text field of the surface
+  (`attachToTextEditorsIn`) with the surface's tab handler. Combo boxes, sliders, toggles and buttons let
+  both keys bubble up untouched.
+- **Cmd+1..9 is the second fixed key.** The Settings window opens its Nth tab on Cmd+N (a number past the
+  last tab does nothing). The key names a position, so there is nothing to rebind, and the tab button
+  tooltips say "(Cmd+N)". It is the second exception to "every new key is a rebindable action", beside the
+  list arrow keys below. The bottom dock's Cmd+1/2/3 are ordinary rebindable actions.
+- The Settings window remembers its open tab by name (`settingsTabName`), not by position, because the Audio
+  tab exists in the app and not in the plugin.
+- **Tests** deliver the key through the listener-then-`keyPressed` walk with a text field as the starting
+  point (`Tests/UI/Settings/SettingsWindowTabKeysTests.cpp`).
+
 ## Arrow keys in lists of controls
 
 A Settings tab or a dialog is a list of controls, so the arrow keys walk it the way they walk the module
@@ -152,7 +181,8 @@ control into view is the owner's `ScrollIntoViewOnFocus`.
   of the viewport's own handler.
 - **Not rebindable**, same as the module library and the track header rows
   ([`shortcuts.md`](../control/shortcuts.md#settings-and-dialog-arrow-keys)): list navigation is native
-  control behaviour, not an action. This is the one exception to "every new key is a rebindable action".
+  control behaviour, not an action. This is one of two exceptions to "every new key is a rebindable
+  action"; the other is the Settings window's Cmd+1..9 ([Switching tabs](#switching-tabs)).
 - **Headless tests** cannot hold real keyboard focus, so `ArrowKeyNavigationTests.cpp` supplies the
   "focused" component and the focus landing through the helper's test hooks and delivers keys the way the
   native window does (each ancestor's key listeners, then its `keyPressed`).

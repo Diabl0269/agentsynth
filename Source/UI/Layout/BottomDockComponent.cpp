@@ -848,6 +848,21 @@ bool BottomDockComponent::handleTabStripKey(const juce::KeyPress& key) {
     return true;
 }
 
+std::optional<BottomDockComponent::Tab> BottomDockComponent::adjacentOfferedTab(int direction) const {
+    std::vector<Tab> offered;
+    for (Tab t : tabOrder_)
+        if (isTabOfferedInStrip(t))
+            offered.push_back(t);
+    if (offered.empty())
+        return std::nullopt;
+    const auto count = static_cast<int>(offered.size());
+    const auto it = std::find(offered.begin(), offered.end(), activeTab_);
+    if (it == offered.end())
+        return direction < 0 ? offered.back() : offered.front();
+    const int index = static_cast<int>(it - offered.begin());
+    return offered[static_cast<size_t>(((index + (direction < 0 ? -1 : 1)) % count + count) % count)];
+}
+
 void BottomDockComponent::selectTabAt(int offeredIndex) {
     int index = 0;
     for (Tab t : tabOrder_) {

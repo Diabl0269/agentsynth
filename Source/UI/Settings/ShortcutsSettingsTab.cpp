@@ -12,7 +12,6 @@ constexpr float kDividerAlpha = 0.10f;
 // gets on hover so it reads as clickable.
 constexpr float kHeaderTextAlpha = 0.70f;
 constexpr float kHeaderHoverTextAlpha = 1.0f;
-constexpr float kTopStripTextAlpha = 0.65f;
 
 constexpr int kChevronSize = 8;
 constexpr int kHeaderTextIndent = 22; // leaves room for the chevron at x = 6
@@ -53,9 +52,8 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm)
     };
     synth::ui::removeHiddenTabStops(searchEditor);
 
-    collapseAllButton.setTooltip("Fold or unfold every section of the list");
-    collapseAllButton.onClick = [this] { toggleAllSections(); };
-    addAndMakeVisible(collapseAllButton);
+    foldAllButton.onClick = [this] { toggleAllSections(); };
+    addAndMakeVisible(foldAllButton);
 
     // The rows live inside a Viewport: the table is well over forty rows now, and a settings dialog
     // is a few hundred pixels tall. The title, the search field, the collapse-all strip and the
@@ -196,7 +194,7 @@ void ShortcutsSettingsTab::resized() {
 
     searchEditor.setBounds(bounds.removeFromTop(kSearchHeight));
     topStripBounds = bounds.removeFromTop(kTopStripHeight);
-    collapseAllButton.setBounds(topStripBounds);
+    foldAllButton.setBounds(topStripBounds);
 
     // Pinned action row at the bottom, carved before the rows get the remainder.
     auto buttonRow = bounds.removeFromBottom(28);
@@ -224,18 +222,19 @@ void ShortcutsSettingsTab::rebuildLayout() {
     // time a section folded.
     const int contentWidth = juce::jmax(0, rowsViewport.getWidth() - rowsViewport.getScrollBarThickness());
 
-    // Every row starts hidden; the pass below shows the ones it lays out. A row left invisible is
-    // one the fold or the filter dropped — invisible children neither paint nor hit-test, which is
-    // what stops a collapsed section's buttons from still being clickable.
-    for (size_t i = 0; i < descLabels.size(); ++i) {
-        descLabels[i]->setVisible(false);
-        bindButtons[i]->setVisible(false);
-    }
-    for (auto& header : headerButtons)
-        header->setVisible(false);
+    // The pass records what it lays out; visibility is applied once at the end, only where it
+    // changes. Hiding a header and showing it again within one pass would drop the keyboard focus it
+    // holds (focus then falls to the first Tab stop, the search field), so a header that stays on
+    // screen is never touched. A row left invisible is one the fold or the filter dropped: invisible
+    // children neither paint nor hit-test, which is what stops a collapsed section's buttons from
+    // still being clickable.
+    std::vector<bool> rowShown(descLabels.size(), false);
+    std::vector<bool> headerShown(headerButtons.size(), false);
 
     int y = 0;
-    for (auto category : ShortcutManager::getCategoryOrder()) {
+    const auto& categoryOrder = ShortcutManager::getCategoryOrder();
+    for (size_t categoryIndex = 0; categoryIndex < categoryOrder.size(); ++categoryIndex) {
+        const auto category = categoryOrder[categoryIndex];
         // The ids of this category, and which of them survive the filter. Header text counts as a
         // match too, so typing "piano" reveals the whole Piano Roll block rather than nothing.
         const bool headerMatches = filtering && ShortcutManager::getCategoryName(category).containsIgnoreCase(query);
@@ -253,10 +252,10 @@ void ShortcutsSettingsTab::rebuildLayout() {
             continue;
 
         layout.push_back({-1, category, {0, y, contentWidth, kSectionHeaderHeight}, true});
-        auto& header = headerButtonFor(category);
+        auto& header = *headerButtons[categoryIndex];
         header.setBounds(layout.back().bounds);
         header.setCollapsed(!filtering && isSectionCollapsed(category));
-        header.setVisible(true);
+        headerShown[categoryIndex] = true;
         y += kSectionHeaderHeight;
         // The divider sits in the gap below the header; paintRows draws it at the header's bottom
         // edge, so no layout height is reserved for the 1 px rule itself.
@@ -270,8 +269,7 @@ void ShortcutsSettingsTab::rebuildLayout() {
                 auto rowArea = row;
                 descLabels[(size_t)index]->setBounds(rowArea.removeFromLeft(kDescriptionWidth));
                 bindButtons[(size_t)index]->setBounds(rowArea);
-                descLabels[(size_t)index]->setVisible(true);
-                bindButtons[(size_t)index]->setVisible(true);
+                rowShown[(size_t)index] = true;
 
                 y += kRowHeight + kRowGap;
             }
@@ -280,17 +278,16 @@ void ShortcutsSettingsTab::rebuildLayout() {
         y += kSectionGap;
     }
 
+    for (size_t i = 0; i < headerButtons.size(); ++i)
+        headerButtons[i]->setVisible(headerShown[i]);
+    for (size_t i = 0; i < descLabels.size(); ++i) {
+        descLabels[i]->setVisible(rowShown[i]);
+        bindButtons[i]->setVisible(rowShown[i]);
+    }
+
     rowsHost.setBounds(0, 0, juce::jmax(contentWidth, rowsViewport.getWidth()), juce::jmax(y, 1));
     rowsHost.repaint();
-    collapseAllButton.setButtonText(areAllSectionsCollapsed() ? "Expand all" : "Collapse all");
-}
-
-ShortcutsSettingsTab::HeaderButton& ShortcutsSettingsTab::headerButtonFor(ShortcutCategory category) {
-    const auto order = ShortcutManager::getCategoryOrder();
-    for (size_t i = 0; i < headerButtons.size(); ++i)
-        if (order[i] == category)
-            return *headerButtons[i];
-    return *headerButtons.front();
+    foldAllButton.setAllFolded(areAllSectionsCollapsed());
 }
 
 //==============================================================================
@@ -302,7 +299,7 @@ void ShortcutsSettingsTab::paint(juce::Graphics& g) {
 }
 
 //==============================================================================
-// Section header and collapse-all buttons
+// Section header buttons
 //==============================================================================
 
 ShortcutsSettingsTab::HeaderButton::HeaderButton(ShortcutCategory c)
@@ -345,16 +342,6 @@ void ShortcutsSettingsTab::HeaderButton::paintButton(juce::Graphics& g, bool hig
     // without boxing them in — see kDividerAlpha.
     g.setColour(findColour(juce::Label::textColourId).withAlpha(kDividerAlpha));
     g.fillRect(0, getHeight() - 1, getWidth(), 1);
-    synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);
-}
-
-void ShortcutsSettingsTab::StripButton::paintButton(juce::Graphics& g, bool highlighted, bool /*down*/) {
-    // Right-aligned and drawn small, exactly as the library sidebar's is — it is chrome, not a
-    // button, and should not compete with the section headers.
-    g.setColour(
-        findColour(juce::Label::textColourId).withAlpha(highlighted ? kHeaderHoverTextAlpha : kTopStripTextAlpha));
-    g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText(getButtonText(), getLocalBounds(), juce::Justification::centredRight);
     synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);
 }
 

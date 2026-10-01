@@ -1,7 +1,9 @@
 #include "PreferencesSettingsTabTestFixture.h"
+#include "UI/Layout/ArrowKeyNavigation.h"
+#include <type_traits>
 
 // Topic: the "All" category view: every category under a collapsible header, fold state, the
-// Expand all / Collapse all buttons, and that a filter ignores folds.
+// the single fold-all button (shared with the Keyboard Shortcuts tab), and that a filter ignores folds.
 
 namespace {
 using Category = PreferencesSettingsTab::Category;
@@ -51,8 +53,7 @@ TEST_F(PreferencesSettingsTabTest, AllShowsEveryCategorysRowsUnderOrderedHeaders
     // The first row of a section sits below its own header, never under it.
     EXPECT_GT(guides->getY(), tab.getSectionHeaderForTest(Category::Graph).getBottom() - 1);
     EXPECT_GT(midi->getY(), tab.getSectionHeaderForTest(Category::MidiRemote).getBottom() - 1);
-    EXPECT_TRUE(tab.getExpandAllButtonForTest().isVisible());
-    EXPECT_TRUE(tab.getCollapseAllButtonForTest().isVisible());
+    EXPECT_TRUE(tab.getFoldAllButtonForTest().isVisible());
 }
 
 TEST_F(PreferencesSettingsTabTest, FoldingASectionHidesItsRowsAndShrinksTheContent) {
@@ -76,21 +77,61 @@ TEST_F(PreferencesSettingsTabTest, FoldingASectionHidesItsRowsAndShrinksTheConte
     EXPECT_EQ(tab.getSectionHeaderForTest(Category::MidiRemote).getY(), midiBefore);
 }
 
-TEST_F(PreferencesSettingsTabTest, ExpandAllAndCollapseAllActOnEverySection) {
+// One button does both jobs: it folds every section while any is open, then reads "Expand all" and
+// unfolds them once every section is folded.
+TEST_F(PreferencesSettingsTabTest, TheFoldAllButtonFoldsEverySectionThenUnfoldsThemAndFlipsItsLabel) {
     PreferencesSettingsTab tab(appProperties);
     tab.setSize(520, 900);
     pickAll(tab);
-    tab.getCollapseAllButtonForTest().onClick();
+    auto& button = tab.getFoldAllButtonForTest();
+    EXPECT_EQ(button.getButtonText(), "Collapse all");
+    EXPECT_EQ(button.getTooltip(), "Fold every section");
+
+    button.onClick();
     for (auto category : kSections)
         EXPECT_TRUE(tab.isSectionCollapsed(category));
     EXPECT_FALSE(findToggleByText(tab, "Show Alignment Guides")->isVisible());
     EXPECT_FALSE(findToggleByText(tab, "MIDI badges")->isVisible());
     EXPECT_FALSE(tab.contentOverflowsViewportForTest());
+    EXPECT_EQ(button.getButtonText(), "Expand all");
+    EXPECT_EQ(button.getTooltip(), "Unfold every section");
 
-    tab.getExpandAllButtonForTest().onClick();
+    button.onClick();
     for (auto category : kSections)
         EXPECT_FALSE(tab.isSectionCollapsed(category));
     EXPECT_TRUE(findToggleByText(tab, "MIDI badges")->isVisible());
+    EXPECT_EQ(button.getButtonText(), "Collapse all");
+}
+
+// With one section folded and the rest open the button still says "Collapse all"; folding the last
+// open section by hand flips it, and unfolding one flips it back.
+TEST_F(PreferencesSettingsTabTest, TheFoldAllLabelFollowsFoldsMadeByHand) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(520, 900);
+    pickAll(tab);
+    auto& button = tab.getFoldAllButtonForTest();
+    tab.setSectionCollapsed(Category::Graph, true);
+    EXPECT_EQ(button.getButtonText(), "Collapse all");
+    for (auto category : kSections)
+        tab.setSectionCollapsed(category, true);
+    EXPECT_EQ(button.getButtonText(), "Expand all");
+    tab.setSectionCollapsed(Category::Mixer, false);
+    EXPECT_EQ(button.getButtonText(), "Collapse all");
+}
+
+// The Preferences strip is the very class the Keyboard Shortcuts tab uses, pinned at the right edge of
+// the rows area.
+TEST_F(PreferencesSettingsTabTest, TheFoldAllButtonIsTheSharedClassPinnedAboveTheRows) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(520, 900);
+    pickAll(tab);
+    auto& button = tab.getFoldAllButtonForTest();
+    static_assert(std::is_same_v<std::remove_reference_t<decltype(button)>, synth::ui::FoldAllButton>);
+    EXPECT_EQ(button.getHeight(), synth::ui::FoldAllButton::kStripHeight);
+    EXPECT_LE(button.getBottom(), tab.getContentViewportForTest().getY());
+    EXPECT_GT(button.getY(), tab.getCategoryComboForTest().getBottom() - 1);
+    EXPECT_EQ(button.getX(), tab.getContentViewportForTest().getX());
+    EXPECT_EQ(button.getWidth(), tab.getContentViewportForTest().getWidth()) << "spans the rows area";
 }
 
 TEST_F(PreferencesSettingsTabTest, ASingleCategoryHasNoHeadersOrFoldButtons) {
@@ -99,8 +140,7 @@ TEST_F(PreferencesSettingsTabTest, ASingleCategoryHasNoHeadersOrFoldButtons) {
     tab.setSelectedCategory(Category::Timeline);
     for (auto category : kSections)
         EXPECT_FALSE(tab.getSectionHeaderForTest(category).isVisible());
-    EXPECT_FALSE(tab.getExpandAllButtonForTest().isVisible());
-    EXPECT_FALSE(tab.getCollapseAllButtonForTest().isVisible());
+    EXPECT_FALSE(tab.getFoldAllButtonForTest().isVisible());
 }
 
 TEST_F(PreferencesSettingsTabTest, AFilterSeesThroughFoldsAndHidesTheHeaders) {
@@ -112,7 +152,7 @@ TEST_F(PreferencesSettingsTabTest, AFilterSeesThroughFoldsAndHidesTheHeaders) {
     EXPECT_TRUE(findToggleByText(tab, "MIDI badges")->isVisible());
     for (auto category : kSections)
         EXPECT_FALSE(tab.getSectionHeaderForTest(category).isVisible());
-    EXPECT_FALSE(tab.getExpandAllButtonForTest().isVisible());
+    EXPECT_FALSE(tab.getFoldAllButtonForTest().isVisible());
     tab.setSearchFilterForTest({});
     EXPECT_FALSE(findToggleByText(tab, "MIDI badges")->isVisible()) << "folds return once the filter clears";
     EXPECT_TRUE(tab.getSectionHeaderForTest(Category::MidiRemote).isVisible());
@@ -131,9 +171,8 @@ TEST_F(PreferencesSettingsTabTest, SectionControlsAreKeyboardReachableAndNamedWi
     EXPECT_EQ(header.getTitle(), "Mixer, collapsed");
     tab.setAllSectionsCollapsed(false);
     EXPECT_EQ(header.getTitle(), "Mixer, expanded");
-    EXPECT_FALSE(tab.getExpandAllButtonForTest().getTooltip().isEmpty());
-    EXPECT_FALSE(tab.getCollapseAllButtonForTest().getTooltip().isEmpty());
-    EXPECT_TRUE(tab.getExpandAllButtonForTest().getWantsKeyboardFocus());
+    EXPECT_FALSE(tab.getFoldAllButtonForTest().getTooltip().isEmpty());
+    EXPECT_TRUE(tab.getFoldAllButtonForTest().getWantsKeyboardFocus());
 }
 
 // Keyboard: pressing Tab repeatedly from the filter field has to reach a control inside the rows

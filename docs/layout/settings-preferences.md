@@ -13,20 +13,26 @@ the Settings window is.
   another category scrolls back to the top.
 - **All** (first entry in the drop-down) shows every category on one page, each under a clickable
   header with a chevron. Click a header (or Tab to it and press Space) to fold or unfold that
-  category; **Expand all** / **Collapse all** next to the drop-down do every header at once. Folds
-  are remembered only while the Settings window is open (a new window starts fully expanded).
+  category; the one **Collapse all** / **Expand all** button in the strip above the rows (the same
+  button, and the same place, as in Keyboard Shortcuts) does every header at once: it reads "Collapse
+  all" while any section is open and "Expand all" once every section is folded. Folds are remembered
+  only while the Settings window is open (a new window starts fully expanded).
 - Section headers and column heads are in normal case ("Graph", "Files & Autosave"), never all caps.
 - The picker row is sized by its content, not fixed: the drop-down is as wide as its longest entry (measured
-  with the drop-down's own font plus the look-and-feel's text insets, `AppLookAndFeel::comboBoxWidthToFitItems`)
-  and the fold buttons are as wide as their text, so the filter field gets the rest. The Settings window cannot
-  be dragged narrower than `SettingsWindow::kMinWidth`, where the field still shows its whole hint.
+  with the drop-down's own font plus the look-and-feel's text insets, `AppLookAndFeel::comboBoxWidthToFitItems`),
+  so the filter field gets the rest. The Settings window cannot be dragged narrower than
+  `SettingsWindow::kMinWidth`, where the field still shows its whole hint.
 - **Keyboard**: Tab reaches every control; Up / Down also walk them (clamped at the ends), Right / Left tick
   or untick a focused check box, and Left / Right fold or unfold a focused section header in the All view.
   Down onto a drop-down, then Down again changes its selection (Tab moves on). The keys are fixed, not
   rebindable. → [`accessibility.md`](../development/accessibility.md#arrow-keys-in-lists-of-controls)
 - Typing in the filter searches **every** category (a row matches on its label, button text or tooltip)
   and disables the drop-down until the filter is cleared. Esc clears it.
-- The tab opens on Graph.
+- The tab opens on the category you last picked and remembers it across Settings windows and launches
+  (user setting `preferencesCategory`, saved as the name "All", "Graph", "Timeline", "Files", "Mixer",
+  "Panels" or "MidiRemote"). With nothing saved, or a value that names none of them, it opens on All.
+- **Tab keys**: Cmd+Option+Left / Right (and Cmd+1..9) switch the Settings window's tabs, also from the filter
+  field. → [`shortcuts.md`](../control/shortcuts.md#switching-tabs)
 
 | Category | Rows |
 | --- | --- |
@@ -41,7 +47,8 @@ the Settings window is.
 
 - `PreferencesSettingsTab::Category` is the enum; `categoryCombo` lists it (combo id = enum value + 1).
   Its `onChange` (in `PreferencesSettingsTabCategories.cpp`) is the only place the selection changes; it
-  re-lays the rows and resets the scroll position.
+  saves the choice under `preferencesCategory`, re-lays the rows and resets the scroll position. The
+  constructor restores the saved choice (`setupCategorySelector`) before the first layout.
 - Each category has one `layout*Groups` function in the unit named for its concern
   (`layoutGraphGroups` in `...GraphBehaviour.cpp`, `layoutTimelineGroups`, `layoutAutosaveGroup`,
   `layoutMixerGroups`; the Panels and MIDI Remote groups are `layoutPanelDetachModeGroup` and
@@ -56,7 +63,10 @@ the Settings window is.
   (instead of assigning `layoutCategory`), which records where the category's rows begin; once
   `layoutContent` is done, `placeSectionHeaders` walks those bands in order, puts a `SectionHeader` above
   each, drops the divider that would sit under it and shifts the band down. A filter turns the headers
-  and fold buttons off and ignores folds, so a match can never be trapped inside one. A new category
+  and the fold-all button off and ignores folds, so a match can never be trapped inside one. The fold-all
+  button is `synth::ui::FoldAllButton` (`Source/UI/Layout/FoldAllButton.h`), the class the Keyboard Shortcuts
+  tab uses too; `resized()` gives it a strip between the picker row and the rows only in the All view.
+  A header is never hidden and re-shown during a fold: that would drop the keyboard focus it holds. A new category
   also needs a `kSections` entry in that unit.
 - Persistence is untouched: each row's getter/setter/`persist*` code and settings key is exactly what it
   was, so closing and reopening Settings (a new tab constructed from the same properties) reloads every

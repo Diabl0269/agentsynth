@@ -149,6 +149,8 @@ public:
     synth::HostedPluginWindowManager& getPluginWindowManager() { return pluginWindowManager; }
     /** Opens the dock if hidden (never closes it) and switches to `tab`; a detached tab's window is raised instead. */
     void showBottomDockTab(synth::ui::BottomDockComponent::Tab tab);
+    /** Shows the previous (-1) or next (+1) offered dock tab, wrapping; false when no tab is offered. */
+    bool stepBottomDockTab(int direction);
     /** The open half of showBottomDockTab(), for sites that open without switching tabs. */
     void ensureBottomDockOpen();
     /** Shows or hides the active dock tab's side pane. A hidden dock is opened first and the pane is then

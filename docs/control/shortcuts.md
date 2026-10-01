@@ -45,6 +45,7 @@ when reasoning about a key that "does nothing."
 | Cmd+T | Toggle Bottom Panel (`toggleBottomPanel`) — the ONE show/hide toggle for the whole bottom-docked panel; reopens on whichever tab was last active. See [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) |
 | Cmd+1 / Cmd+2 / Cmd+3 | Show Timeline / Mixer / Controllers Tab (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) — opens the dock if it's hidden and switches to that tab; a second press is a no-op (only Cmd+T closes the dock). The three numbers follow the dock's own tab order, which the tab strip's drag-to-reorder changes — see [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows) |
 | Cmd+Shift+B | Show/Hide Side Pane (`toggleSidePane`) — toggles the ACTIVE bottom-panel tab's left side pane (the Mixer and the Timeline have one). With the bottom panel hidden it opens the panel and makes sure the pane is open; a no-op when the active tab has no pane. View menu item "Show/Hide Side Pane"; each pane's toggle button shows the key in its Cmd-hold hint and tooltip. See [`layout/side-pane.md`](../layout/side-pane.md) |
+| Cmd+Opt+Left / Cmd+Opt+Right | Previous / Next Tab (`tabPrevious` / `tabNext`) — cycle the tabs of the surface in front, wrapping: the Settings window's tabs, or the bottom dock's. See [**Switching tabs**](#switching-tabs) below |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Opt+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
@@ -400,6 +401,12 @@ and Zoom. A controller has no notion of "where the last click was", and moving t
 changes which surface `resolveEditSurface()` reports (a track header is neither the clip lane nor
 the piano roll), so a routed pair would flip from tracks to modules between two presses of the same
 pad.
+
+### Switching tabs
+
+`tabPrevious` / `tabNext` (General, Cmd+Option+Left / Right, rebindable) step to the previous / next tab and
+wrap, in the Settings window and the bottom dock (a hidden dock opens). Cmd+1..9 also opens the Settings
+window's Nth tab: a fixed key, not an action. Every new tab strip must answer both ([why](../development/accessibility.md#switching-tabs)).
 
 ## Graph
 

@@ -172,6 +172,10 @@ set(APPUI_SOURCES
     Source/UI/Layout/BottomDockComponent.cpp
     Source/UI/Layout/ArrowKeyNavigation.h
     Source/UI/Layout/ArrowKeyNavigation.cpp
+    Source/UI/Layout/FoldAllButton.h
+    Source/UI/Layout/FoldAllButton.cpp
+    Source/UI/Layout/TabSwitchKeys.h
+    Source/UI/Layout/TabSwitchKeys.cpp
     Source/UI/Mixer/MixerPlacementController.h
     Source/UI/Mixer/MixerPlacementController.cpp
     Source/UI/Mixer/MixerMirrorController.h

@@ -20,14 +20,21 @@ protected:
         options.filenameSuffix = "test";
         options.storageFormat = juce::PropertiesFile::storeAsXML;
         appProperties.setStorageParameters(options);
-        if (auto* s = appProperties.getUserSettings())
+        if (auto* s = appProperties.getUserSettings()) {
             s->clear();
+            // The tab opens on the remembered category (All when none is saved). Most tests here probe
+            // the Graph rows, so each starts from a remembered Graph; the tests of the default and of
+            // the remembering itself clear or set the key on their own.
+            s->setValue(kRememberedCategoryKey, "Graph");
+        }
     }
 
     void TearDown() override {
         if (auto* s = appProperties.getUserSettings())
             s->clear();
     }
+
+    static constexpr const char* kRememberedCategoryKey = "preferencesCategory";
 
     juce::ApplicationProperties appProperties;
 };
