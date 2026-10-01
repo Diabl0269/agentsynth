@@ -457,6 +457,16 @@ private:
             {"ungroupSelection", ShortcutCategory::Graph},
             {"collapseMacro", ShortcutCategory::Graph},
             {"locateMaster", ShortcutCategory::Graph},
+            // The canvas's card keys -- consulted by CanvasCardKeyboard::keyPressed only.
+            {"canvasSelectCardLeft", ShortcutCategory::Graph},
+            {"canvasSelectCardRight", ShortcutCategory::Graph},
+            {"canvasSelectCardUp", ShortcutCategory::Graph},
+            {"canvasSelectCardDown", ShortcutCategory::Graph},
+            {"canvasMoveCardLeft", ShortcutCategory::Graph},
+            {"canvasMoveCardRight", ShortcutCategory::Graph},
+            {"canvasMoveCardUp", ShortcutCategory::Graph},
+            {"canvasMoveCardDown", ShortcutCategory::Graph},
+            {"canvasEnterCard", ShortcutCategory::Graph},
             // Timeline — the panel's own keys (consulted by TimelinePanelComponent /
             // TimelineClipLaneArea) plus the grid commands, which act on the shared snap value.
             {"timelineSnapToggle", ShortcutCategory::Timeline},

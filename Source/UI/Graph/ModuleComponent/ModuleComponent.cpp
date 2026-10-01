@@ -246,8 +246,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         createLfoCardControls();
     createWavetableTabs(); // after createControls(): it groups the sliders/combos that call made
     applyHeaderButtonIcons();
-    restoreCardView(); // after every panel exists and has had its first layout
-    startTimerHz(15);  // 15 FPS is plenty for activity glow / step indicator; lower CPU than 30
+    restoreCardView();           // after every panel exists and has had its first layout
+    applyControlAccessibility(); // last: names every control the steps above built
+    startTimerHz(15);            // 15 FPS is plenty for activity glow / step indicator; lower CPU than 30
 }
 
 ModuleComponent::~ModuleComponent() { detachFromProcessor(); }

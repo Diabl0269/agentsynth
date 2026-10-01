@@ -6,6 +6,7 @@
 // at the function-size ratchet ceiling. See docs/control/plugin-card-layout.md#card-rendering-as-built-fro128.
 #include "ModuleComponentHostedPluginCard.h"
 #include "AudioEngine/AudioEngine.h"
+#include "CardKnobSlider.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/CardLayout.h"
@@ -134,7 +135,7 @@ void ModuleComponent::HostedCardBinding::addControl(const synth::ResolvedCardSlo
 }
 
 void ModuleComponent::HostedCardBinding::addKnob(const synth::ResolvedCardSlot& resolved, const juce::String& text) {
-    auto* slider = card_.sliders.add(new juce::Slider());
+    auto* slider = card_.sliders.add(new synth::ui::CardKnobSlider()); // keyboard steps with gestures
     slider->setComponentID("hostedKnob:" + resolved.slot.paramId);
     styleHostedKnob(*slider);
     card_.addAndMakeVisible(slider);
@@ -144,6 +145,8 @@ void ModuleComponent::HostedCardBinding::addKnob(const synth::ResolvedCardSlot& 
     // "Not yet wired" note).
     slider->addMouseListener(&card_, false);
     card_.sliderParams.add(nullptr); // a hosted parameter is not a RangedAudioParameter
+    slider->setTitle(text);          // named before registering: the MIDI Learn tooltip builds on this one
+    slider->setTooltip(text);
     card_.registerHostedMidiLearnable(*slider, *resolved.param, resolved.slot.paramId);
 
     auto* label = card_.sliderLabels.add(new juce::Label(text, text));
@@ -159,6 +162,7 @@ void ModuleComponent::HostedCardBinding::addToggle(const synth::ResolvedCardSlot
     toggle->setComponentID("hostedToggle:" + resolved.slot.paramId);
     card_.addAndMakeVisible(toggle);
     toggle->addMouseListener(&card_, false); // See addKnob()'s own comment
+    toggle->setTooltip(text);
     card_.registerHostedMidiLearnable(*toggle, *resolved.param, resolved.slot.paramId);
 
     wireGestures(*card_.hostedAttachments_.add(new HostedParameterAttachment(*resolved.param, *toggle)),
@@ -171,6 +175,8 @@ void ModuleComponent::HostedCardBinding::addChoice(const synth::ResolvedCardSlot
     card_.addAndMakeVisible(combo);
     combo->addMouseListener(&card_, false); // See addKnob()'s own comment
     card_.comboParams.add(nullptr);         // a hosted parameter is not a RangedAudioParameter
+    combo->setTitle(text);
+    combo->setTooltip(text);
     card_.registerHostedMidiLearnable(*combo, *resolved.param, resolved.slot.paramId);
 
     card_.addAndMakeVisible(card_.comboLabels.add(new juce::Label(text, text)));

@@ -1,9 +1,9 @@
 #pragma once
 
-// A module card's rotary knob, subclassed only so a click/drag that lands on its
-// modulation-ring annulus (or is Alt-modified) can be redirected to a "adjust this routing's
-// attenuverter amount" gesture instead of moving the knob itself. Every other click behaves as a
-// plain juce::Slider -- this class owns no drag state beyond "is the gesture currently active".
+// A module card's rotary knob. It takes keyboard focus and turns from the keys (keyPressed below),
+// and a click/drag that lands on its modulation-ring annulus (or is Alt-modified) can be redirected
+// to a "adjust this routing's attenuverter amount" gesture instead of moving the knob itself. Every other click behaves
+// as a plain juce::Slider -- this class owns no drag state beyond "is the gesture currently active".
 //
 // A second, independent gesture pair (wantsCablePickupGesture/onCablePickupGesture) claims
 // a click landing on the knob's cable-landing DOT instead -- the jack that gesture used to start
@@ -14,13 +14,71 @@
 // docs/layout/module-card.md and docs/modules/modulation.md#drag-to-knob-modulation describe the
 // gesture from the user's side.
 
+#include <cmath>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 
 namespace synth::ui {
 
 class CardKnobSlider : public juce::Slider {
 public:
-    using juce::Slider::Slider;
+    CardKnobSlider() { setWantsKeyboardFocus(true); }
+
+    /** Keyboard steps for a focused knob: Up/Right and Down/Left one step (Shift a fine step), Page
+     *  Up/Down a coarse step, Home/End the minimum/maximum. Each press is one change gesture, the
+     *  same begin/set/end a mouse drag makes, so it is one undo step and one automation touch.
+     *  Every other key (Tab, Escape, Return) is left for the card. */
+    bool keyPressed(const juce::KeyPress& key) override {
+        const auto target = valueForKey(key);
+        if (!target.has_value())
+            return false;
+        if (*target != getValue()) {
+            ScopedDragNotification gesture(*this);
+            setValue(*target, juce::sendNotificationSync);
+        }
+        return true;
+    }
+
+    /** The value `key` would set, or nullopt when it is not a knob key. */
+    std::optional<double> valueForKey(const juce::KeyPress& key) {
+        const auto mods = key.getModifiers();
+        if (mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown())
+            return std::nullopt;
+        const bool shift = mods.isShiftDown();
+        const int code = key.getKeyCode();
+        if (!shift && code == juce::KeyPress::homeKey)
+            return getMinimum();
+        if (!shift && code == juce::KeyPress::endKey)
+            return getMaximum();
+
+        double fraction = 0.0;
+        if (code == juce::KeyPress::upKey || code == juce::KeyPress::rightKey)
+            fraction = shift ? kFineStep : kStep;
+        else if (code == juce::KeyPress::downKey || code == juce::KeyPress::leftKey)
+            fraction = shift ? -kFineStep : -kStep;
+        else if (!shift && code == juce::KeyPress::pageUpKey)
+            fraction = kCoarseStep;
+        else if (!shift && code == juce::KeyPress::pageDownKey)
+            fraction = -kCoarseStep;
+        else
+            return std::nullopt;
+
+        // Steps are fractions of the knob's travel, so a skewed knob (cutoff, envelope times) moves
+        // as evenly as it turns under the mouse. A stepped parameter moves at least one notch.
+        const double current = getValue();
+        const double proportion = juce::jlimit(0.0, 1.0, valueToProportionOfLength(current) + fraction);
+        double next = proportionOfLengthToValue(proportion);
+        if (const double interval = getInterval(); interval > 0.0) {
+            next = getMinimum() + interval * std::round((next - getMinimum()) / interval);
+            if (next == current)
+                next = current + (fraction > 0.0 ? interval : -interval);
+        }
+        return juce::jlimit(getMinimum(), getMaximum(), next);
+    }
+
+    static constexpr double kStep = 0.01;      // of the knob's travel
+    static constexpr double kFineStep = 0.001; // Shift
+    static constexpr double kCoarseStep = 0.1; // Page Up / Page Down
 
     /** Asked on every mouseDown before JUCE's own handling runs. Returning true claims the whole
      *  gesture (down through up); ModuleComponent decides based on whether this knob has a live

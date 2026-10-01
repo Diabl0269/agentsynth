@@ -5,6 +5,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <algorithm>
 
@@ -125,6 +126,8 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // installed" contract every other surface action in this app follows, rather than requiring
     // every id it consults to be pre-registered.
     bottomDock.getMixerPanel().setShortcutManager(&shortcutManager);
+    // The canvas's card keys (arrows select, Alt+arrows move, Return enters) -- the same contract.
+    graphEditor.getCardKeyboard().setShortcutManager(&shortcutManager);
     // Arm reaches the focused strip's linked track through the SAME performTrackEdit
     // one-undo-step path the Timeline header row's own R key uses -- never a direct TimelineDoc
     // write (that would skip the undo bracket every other track edit goes through). Routed through

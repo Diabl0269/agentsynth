@@ -185,8 +185,9 @@ below for the Mixer region's own keyboard behaviour.
   Return moves focus into the selected panel. Modified keys fall through, so Cmd+1/2/3 and Tab behave as
   before. Details: [`layout/chrome.md`](../layout/chrome.md#toolbar-keyboard-access) and
   [`layout/chrome.md`](../layout/chrome.md#tab-strip-keyboard-and-screen-reader-access).
-- **Out of scope here** — no arrow-key navigation WITHIN the Canvas, and no
-  canvas/graph module-to-module navigation (deferred indefinitely, not part of this epic).
+- **Arrow keys on the Canvas** — the canvas region moves between module cards with the arrows, moves the
+  selected cards with Alt+arrows and steps into a card with Return. Unlike the Toolbar and the dock tabs these
+  are rebindable Graph actions; see [**Canvas card keys**](#canvas-card-keys) below.
 - **The track-header row outline is a second, per-row instance of the SAME visual language, not a variant** —
   `TimelineTrackHeaderComponent::paintOverChildren` calls `paintFocusRegionOutline` on itself exactly
   the way each region root's own override does, just one nesting level deeper (a row is not a region
@@ -411,7 +412,11 @@ pad.
 | Cmd+Alt+G | Collapse / Expand Macro (toggle) |
 | Cmd+Shift+M | Go to Output (was "Locate Master") — selects Master (falling back to Audio Output when there is no Master yet) and centres the view on the whole output dock (Master, Rec Tap, Audio Output); a graceful no-op with neither. Also on the canvas's right-click menu. See [**Locate Master**](#locate-master) below |
 
-Graph holds only the six verbs that mean nothing on any other surface — auto-arrange,
+| ← / → / ↑ / ↓ | Select the nearest card in that direction (`canvasSelectCardLeft` / `Right` / `Up` / `Down`). See [**Canvas card keys**](#canvas-card-keys) |
+| Alt+← / → / ↑ / ↓ | Move the selected cards one grid step (`canvasMoveCardLeft` / `Right` / `Up` / `Down`), one undo step |
+| Return | Enter the selected card: focus goes to its first control (`canvasEnterCard`) |
+
+Besides the card keys, Graph holds only the six command verbs that mean nothing on any other surface — auto-arrange,
 save-selection-as-snippet, grouping/ungrouping/collapsing a macro, and locating Master —
 everything that means the same thing everywhere (copy/paste/cut/duplicate/repeat/select-all, both
 zoom pairs) is General instead, so it can route through `resolveEditSurface()`.
@@ -434,6 +439,26 @@ always wins). One command works because the menu/Settings-list label is a single
 "Collapse / Expand Macro", that reads right regardless of which way the toggle is about to go —
 Ungroup above stays its own command because dissolving a macro is a different precondition and a
 genuinely different verb from either grouping or toggling.
+
+### Canvas card keys
+
+With the canvas focused (Tab to the Canvas region, or click empty canvas), the keyboard drives the same
+selection the mouse does; the selected card's accent border is its focus ring. All nine are Graph-category
+surface actions resolved by `CanvasCardKeyboard::keyPressed` (`Source/UI/Graph/CanvasCardKeyboard/`), not
+commands, so they appear in Settings > Keyboard Shortcuts and a rebind takes effect at once.
+
+| Default | Action id | Behaviour |
+|---|---|---|
+| ← → ↑ ↓ | `canvasSelectCard{Left,Right,Up,Down}` | Selects the nearest visible card whose centre lies on that side, centre to centre, scoring distance along the arrow plus twice the distance across it (`Source/UI/Graph/CardNavigation.h`). Nothing selected picks the first card in [selection-stepping](#selection-stepping) order. No card that way: consumed, nothing changes. Pans the view only when the card is off-screen. A multi-selection moves from its last-added card. Falls through on an empty canvas |
+| Alt+← → ↑ ↓ | `canvasMoveCard{Left,Right,Up,Down}` | Moves the selected cards one 8 px grid step through the same commit a mouse drag makes (`finalizeModuleDrag`, or the group's rigid-body `finalizeSelectionDrag`), one undo step. A spot taken by another card resolves to the nearest free slot, as a drop there would. Falls through with nothing selected, and does nothing for a selected collapsed macro (the arrows only ever land on module cards) |
+| Return | `canvasEnterCard` | Moves keyboard focus to the selected card's first control. Falls through with nothing selected |
+
+Inside a card: Tab and Shift+Tab walk its controls in reading order (body first, then the header buttons) and
+wrap inside the card; Escape returns focus to the canvas with the card still selected. A focused knob turns with Up/Right and Down/Left (one
+percent of its travel; Shift a tenth of that), Page Up/Down (ten percent) and Home/End (minimum/maximum). Those
+keys are the knob's own (`CardKnobSlider::keyPressed`), not actions, and each press is one change gesture, so
+one undo step and one automation touch. Shift+F10 still opens the selected card's menu. A key that bubbles up
+from a control inside a card or from the Mod Matrix never moves the canvas selection.
 
 ### Locate Master
 
@@ -801,16 +826,17 @@ arrows: see [`mixer/panel.md`](../mixer/panel.md#side-pane-zones-and-visibility)
 
 ## Command vs surface actions
 
-The 111 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 120 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
 - **Command-dispatched** (69 actions) — every General action (including the transport family
-  above), all six Graph actions, and the Timeline category's eight grid-set + two grid-cycle
+  above), the six Graph command actions, and the Timeline category's eight grid-set + two grid-cycle
   commands. `AppCommands::getCommandForAction(actionId)`
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
   their enabled/disabled state is whatever `getCommandInfo` reports.
-- **Surface-resolved** (42 actions) — the timeline panel's own keys (`timelineSnapToggle`,
+- **Surface-resolved** (51 actions) — the canvas's nine card keys (`canvasSelectCard*`, `canvasMoveCard*`,
+  `canvasEnterCard`, resolved by `CanvasCardKeyboard::keyPressed`), the timeline panel's own keys (`timelineSnapToggle`,
   `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, the six
   `timelineTool*` digits, and the two `timelineJumpToLocator*` keys), the three track-header
   keys (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`), the seven

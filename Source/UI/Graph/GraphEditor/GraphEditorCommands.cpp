@@ -12,6 +12,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/AttenuverterModule.h"
 #include "SnippetManager.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
 using namespace detail;
@@ -270,8 +271,12 @@ bool GraphEditor::showContextMenuForKeyboardFocus() {
 
 // Canvas-scoped keys: Delete/Backspace removes the selection, Escape clears it. Deliberately
 // NOT routed through ShortcutManager — an unmodified Delete binding registered app-wide would
-// fire from any panel that doesn't consume the key first.
+// fire from any panel that doesn't consume the key first. The card keys (arrows, Alt+arrows,
+// Return) are rebindable and live on CanvasCardKeyboard.
 bool GraphEditor::keyPressed(const juce::KeyPress& key) {
+    if (cardKeyboard_->keyPressed(key))
+        return true;
+
     if (key == juce::KeyPress::escapeKey) {
         if (selection.isEmpty())
             return false;

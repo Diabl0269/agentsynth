@@ -63,6 +63,7 @@ The visual patching interface. Lives in the `AgentSynth` app target.
 - **Library drops** — `resolvePlacement` + `finalizeModuleDrag` run on the real component after `updateComponents()` so the final position anti-overlaps using true pixel dimensions.
 - **Auto-arrange** — `autoArrange()` (triggered by Cmd+L or the toolbar button) lays the canvas out in rows (shared modulators, then one per track, then one per remaining component) and aligned signal-flow columns, macros as blocks, in a single undo step. See [`docs/layout/layout.md`](../layout/layout.md) for the full layout model.
 - **Delete** — `requestDeleteModule(NodeID)` is the canonical deletion entry point; `ModuleComponent::deleteButton.onClick` delegates here.
+- **Card keys** — `CanvasCardKeyboard` (reached through `getCardKeyboard()`, where `MainComponent` installs the `ShortcutManager`) gets every canvas key press first: arrows select the nearest card in that direction, Alt+arrows move the selection one grid step as one undo step, Return steps into the selected card. A fourth collaborator under the same thin-owner rule below. See [`docs/layout/selection.md`](../layout/selection.md#keyboard).
 
 See [`docs/layout/layout.md`](../layout/layout.md) for the grid model, anti-overlap algorithm, and `autoArrange` constants.
 

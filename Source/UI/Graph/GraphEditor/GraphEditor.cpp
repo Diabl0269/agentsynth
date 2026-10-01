@@ -7,6 +7,7 @@
 
 #include "GraphEditor.h"
 #include "AudioEngine/AudioEngine.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 // ~GraphEditor()/~GraphContentComponent() are defined here, so the OwnedArrays of these types
 // (declared in GraphEditor.h with only a forward declaration) need their full definitions
 // wherever the implicit member destructors are instantiated.
@@ -17,7 +18,8 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     : audioEngine(engine)
     , content(*this)
     , modMatrix(engine, undoMgr, this)
-    , undoManager(undoMgr) {
+    , undoManager(undoMgr)
+    , cardKeyboard_(std::make_unique<CanvasCardKeyboard>(*this, undoMgr)) {
     addAndMakeVisible(content);
     addAndMakeVisible(modMatrix);
     content.setInterceptsMouseClicks(false, true); // Fallback clicks to parent

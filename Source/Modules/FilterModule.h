@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FrequencyText.h"
 #include "ModuleBase.h"
 #include <atomic>
 #include <juce_dsp/juce_dsp.h>
@@ -41,7 +42,9 @@ public:
         // StereoAudio::Declared: 19 outputs, so the Auto shape test cannot see this module's stereo
         // pair — its right leg is the kRightBase block, and it ships SPLIT.
         : ModuleBase("Filter", kNumChannels, kNumChannels, StereoAudio::Declared) {
-        addParameter(cutoffParam = new juce::AudioParameterFloat("cutoff", "Cutoff", 20.0f, 20000.0f, 440.0f));
+        addParameter(cutoffParam = new juce::AudioParameterFloat("cutoff", "Cutoff",
+                                                                 juce::NormalisableRange<float>(20.0f, 20000.0f, 0.01f),
+                                                                 440.0f, synth::frequencyAttributes()));
         addParameter(resonanceParam = new juce::AudioParameterFloat("resonance", "Resonance", 0.0f, 1.0f, 0.1f));
         addParameter(driveParam = new juce::AudioParameterFloat("drive", "Drive", 1.0f, 10.0f, 1.0f));
         addParameter(filterTypeParam = new juce::AudioParameterChoice(

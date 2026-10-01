@@ -276,6 +276,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp
     Source/UI/Graph/GraphDragDropController/GraphDragDropController.h
     Source/UI/Graph/GraphDragDropController/GraphDragDropController.cpp
+    Source/UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h
+    Source/UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.cpp
     Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp
     Source/UI/Graph/GraphEditor/GraphEditorPersistence.cpp
     Source/UI/Graph/GraphEditor/GraphEditorTestSeams.cpp
@@ -298,6 +300,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentKeyboard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentAccessibility.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.h
     Source/UI/Graph/ModuleComponent/HostedParameterAttachment.cpp

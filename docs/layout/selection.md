@@ -36,6 +36,18 @@ Two details that are easy to get wrong:
   reparent) each arm a DEFERRED click-versus-drag classification instead, resolved at `mouseUp` by
   whether the press moved.
 
+## Keyboard
+
+The canvas selection is also the keyboard's card focus: there is no separate "focused card".
+`CanvasCardKeyboard` (`Source/UI/Graph/CanvasCardKeyboard/`, owned by `GraphEditor`, which hands it every key
+first) maps the arrows to `selectModule` on the nearest card in that direction (`nearestCardInDirection`,
+`Source/UI/Graph/CardNavigation.h`), Alt+arrows to a one-grid-step move committed exactly like a drag
+(`captureBeforeState` → `finalizeModuleDrag` → `pushSnapshotFromCapture` for one card;
+`beginSelectionDrag` → `dragSelectionBy` → `finalizeSelectionDrag` inside `recordGraphAndMacroChange` for a
+group), and Return to `ModuleComponent::enterFromKeyboard`. Inside the card, `ModuleComponent::keyPressed`
+(`ModuleComponentKeyboard.cpp`) cycles Tab within the card and hands focus back to the canvas on Escape. Keys
+and defaults: [shortcuts](../control/shortcuts.md#canvas-card-keys).
+
 ## SelectionModel
 
 `Source/UI/Graph/SelectionModel.h` is header-only with no `Component` or graph dependency, so the

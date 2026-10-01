@@ -24,6 +24,7 @@
 #include <vector>
 
 class AudioEngine;
+class CanvasCardKeyboard;
 class ModuleComponent;
 class MacroCardComponent;
 namespace synth {
@@ -255,6 +256,8 @@ public:
     const SmartConnectionEngine& getSmartConnections() const noexcept { return smartConnections_; }
     GraphDragDropController& getDragDropController() noexcept { return dragDropController_; }
     const GraphDragDropController& getDragDropController() const noexcept { return dragDropController_; }
+    /** The canvas's card keys (arrows, Alt+arrows, Return); install the ShortcutManager here. */
+    CanvasCardKeyboard& getCardKeyboard() noexcept { return *cardKeyboard_; }
 
     /** Async rename prompt for a macro with no card (e.g. the expanded hull menu). */
     void promptRenameMacro(const juce::String& macroId);
@@ -739,6 +742,7 @@ private:
     // replaceModule()'s undo-recording step (graph-only, or combined with the MIDI Remote doc).
     void recordReplaceModuleUndo(juce::AudioProcessorGraph& graph, const std::function<void()>& doReplace);
     AppUndoManager* undoManager = nullptr;
+    std::unique_ptr<CanvasCardKeyboard> cardKeyboard_; // never null
     synth::PluginCardLayoutStore* pluginCardLayoutStore_ = nullptr;
     synth::MidiRemoteProjectDoc* midiRemoteDocForUndo_ = nullptr; // see setMidiRemoteProjectDocForUndo
 
