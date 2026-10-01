@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Envelope/EnvelopeTempoSync.h"
 #include "../ModuleBase.h"
 
 class DelayModule : public ModuleBase {
@@ -9,6 +10,14 @@ public:
         addParameter(timeParam = new juce::AudioParameterFloat("time", "Time (ms)", 1.0f, 1000.0f, 250.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, 0.95f, 0.5f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.3f));
+        // Tempo sync: with `tempoSync` on, the delay time is a note division of the transport tempo
+        // (the same division list as the LFO and ADSR) instead of the Time knob. Off (default) is the
+        // plain ms delay; Time and its CV are ignored while synced. `pingPong` off (default) is the
+        // plain stereo delay.
+        addParameter(tempoSyncParam = new juce::AudioParameterBool("tempoSync", "Tempo Sync", false));
+        addParameter(timeDivParam =
+                         new juce::AudioParameterChoice("timeDiv", "Time Div", synth::envelopeNoteDivisions(), 2));
+        addParameter(pingPongParam = new juce::AudioParameterBool("pingPong", "Ping-Pong", false));
         addOutputLevelParameter();
         addMuteParameter();
     }
@@ -54,40 +63,15 @@ public:
         // modulated delay time from zipping, so the CV rides that ramp like a knob move does.
         // These jacks were declared as targets long before the module had the channels — the
         // ModulationTargetBinding sweep is what caught it (channelIndex >= declared inputs).
-        smoothedTime.setTargetValue(modulateNormalised(*timeParam, *timeParam, blockCV(buffer, 2)));
+        smoothedTime.setTargetValue(targetTimeMs(buffer));
         smoothedFeedback.setTargetValue(modulateNormalised(*feedbackParam, *feedbackParam, blockCV(buffer, 3)));
         smoothedMix.setTargetValue(modulateNormalised(*mixParam, *mixParam, blockCV(buffer, 4)));
 
-        int bufferSize = buffer.getNumSamples();
-        int delayBufferSize = delayBuffer.getNumSamples();
-
-        // Only the audio pair runs through the delay line; the CV block behind it is not audio.
-        int numChannels = juce::jmin(juce::jmin(buffer.getNumChannels(), delayBuffer.getNumChannels()), 2);
-        int localWritePos = writePos;
-
-        for (int i = 0; i < bufferSize; ++i) {
-            float delayTimeMs = smoothedTime.getNextValue();
-            float feedback = smoothedFeedback.getNextValue();
-            float mix = smoothedMix.getNextValue();
-            float delaySamplesF = delayTimeMs * 0.001f * static_cast<float>(sampleRate);
-
-            for (int ch = 0; ch < numChannels; ++ch) {
-                auto* data = buffer.getWritePointer(ch);
-                auto* delayData = delayBuffer.getWritePointer(ch);
-
-                float input = data[i];
-                float readPosF =
-                    static_cast<float>(localWritePos) - delaySamplesF + static_cast<float>(delayBufferSize);
-                float delayedSample = linearInterpolate(delayData, delayBufferSize, readPosF);
-
-                delayData[localWritePos] = input + (delayedSample * feedback);
-                data[i] = (delayedSample * mix) + (input * (1.0f - mix));
-            }
-
-            localWritePos = (localWritePos + 1) % delayBufferSize;
-        }
-
-        writePos = localWritePos;
+        const int bufferSize = buffer.getNumSamples();
+        if (pingPongParam->get())
+            runPingPong(buffer);
+        else
+            runStereo(buffer);
 
         // Output stage, deliberately outside the feedback path above — the delay line
         // stores the pre-level signal, so lowering Level does not starve the repeats.
@@ -123,6 +107,92 @@ public:
     ModuleType getModuleType() const override { return ModuleType::Delay; }
 
 private:
+    /** Delay time target in ms for this block: the Time knob (plus its CV), or, with tempo sync on,
+        the chosen division at the transport tempo (120 BPM with no host tempo, as the LFO and ADSR
+        do). Both are held to the knob's own 1..1000 ms range -- the delay line is 1 s long. */
+    float targetTimeMs(const juce::AudioBuffer<float>& buffer) const {
+        if (!tempoSyncParam->get())
+            return modulateNormalised(*timeParam, *timeParam, blockCV(buffer, 2));
+        double bpm = 120.0;
+        if (auto* ph = getPlayHead())
+            if (auto pos = ph->getPosition())
+                if (pos->getBpm().hasValue())
+                    bpm = *pos->getBpm();
+        const float ms = synth::envelopeNoteDivisionSeconds(timeDivParam->getIndex(), bpm) * 1000.0f;
+        return juce::jlimit(timeParam->range.start, timeParam->range.end, ms);
+    }
+
+    /** The plain stereo delay: each leg feeds back into itself. */
+    void runStereo(juce::AudioBuffer<float>& buffer) {
+        const int bufferSize = buffer.getNumSamples();
+        const int delayBufferSize = delayBuffer.getNumSamples();
+        // Only the audio pair runs through the delay line; the CV block behind it is not audio.
+        const int numChannels = juce::jmin(juce::jmin(buffer.getNumChannels(), delayBuffer.getNumChannels()), 2);
+        int localWritePos = writePos;
+
+        for (int i = 0; i < bufferSize; ++i) {
+            float delayTimeMs = smoothedTime.getNextValue();
+            float feedback = smoothedFeedback.getNextValue();
+            float mix = smoothedMix.getNextValue();
+            float delaySamplesF = delayTimeMs * 0.001f * static_cast<float>(sampleRate);
+
+            for (int ch = 0; ch < numChannels; ++ch) {
+                auto* data = buffer.getWritePointer(ch);
+                auto* delayData = delayBuffer.getWritePointer(ch);
+
+                float input = data[i];
+                float readPosF =
+                    static_cast<float>(localWritePos) - delaySamplesF + static_cast<float>(delayBufferSize);
+                float delayedSample = linearInterpolate(delayData, delayBufferSize, readPosF);
+
+                delayData[localWritePos] = input + (delayedSample * feedback);
+                data[i] = (delayedSample * mix) + (input * (1.0f - mix));
+            }
+
+            localWritePos = (localWritePos + 1) % delayBufferSize;
+        }
+
+        writePos = localWritePos;
+    }
+
+    /** Ping-pong: the mono sum of the input enters the Left line only, and each line feeds the OTHER
+        one, so the first echo lands on Left, the second on Right, the third on Left again. The dry
+        signal keeps its own stereo image; only the echoes bounce. A mono buffer has no other side
+        to bounce to and runs the plain delay. */
+    void runPingPong(juce::AudioBuffer<float>& buffer) {
+        if (buffer.getNumChannels() < 2 || delayBuffer.getNumChannels() < 2) {
+            runStereo(buffer);
+            return;
+        }
+        const int bufferSize = buffer.getNumSamples();
+        const int delayBufferSize = delayBuffer.getNumSamples();
+        float* left = buffer.getWritePointer(0);
+        float* right = buffer.getWritePointer(1);
+        float* lineL = delayBuffer.getWritePointer(0);
+        float* lineR = delayBuffer.getWritePointer(1);
+        int localWritePos = writePos;
+
+        for (int i = 0; i < bufferSize; ++i) {
+            const float delaySamplesF = smoothedTime.getNextValue() * 0.001f * static_cast<float>(sampleRate);
+            const float feedback = smoothedFeedback.getNextValue();
+            const float mix = smoothedMix.getNextValue();
+            const float readPosF =
+                static_cast<float>(localWritePos) - delaySamplesF + static_cast<float>(delayBufferSize);
+            const float delayedL = linearInterpolate(lineL, delayBufferSize, readPosF);
+            const float delayedR = linearInterpolate(lineR, delayBufferSize, readPosF);
+            const float inL = left[i];
+            const float inR = right[i];
+
+            lineL[localWritePos] = 0.5f * (inL + inR) + delayedR * feedback;
+            lineR[localWritePos] = delayedL * feedback;
+            left[i] = (delayedL * mix) + (inL * (1.0f - mix));
+            right[i] = (delayedR * mix) + (inR * (1.0f - mix));
+
+            localWritePos = (localWritePos + 1) % delayBufferSize;
+        }
+        writePos = localWritePos;
+    }
+
     static float linearInterpolate(const float* buffer, int bufferSize, float fractionalPos) {
         while (fractionalPos < 0.0f)
             fractionalPos += static_cast<float>(bufferSize);
@@ -145,4 +215,7 @@ private:
     juce::AudioParameterFloat* timeParam;
     juce::AudioParameterFloat* feedbackParam;
     juce::AudioParameterFloat* mixParam;
+    juce::AudioParameterBool* tempoSyncParam;
+    juce::AudioParameterChoice* timeDivParam;
+    juce::AudioParameterBool* pingPongParam;
 };

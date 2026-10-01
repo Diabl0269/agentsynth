@@ -25,6 +25,7 @@ add_executable(Tests
     Modules/OscillatorPulseWidthGlideTests.cpp
     Modules/CardLayoutTests.cpp
     Modules/FilterTests.cpp
+    Modules/FilterKeyTrackTests.cpp
     Modules/CardViewStateTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModulePanLawTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModuleOscillatorTests.cpp

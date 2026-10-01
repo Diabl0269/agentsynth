@@ -154,7 +154,7 @@ TEST(PortLabelTests, ReverbPortLabels) {
     ReverbModule reverb;
     EXPECT_EQ(reverb.getOutputPortLabel(0), "Audio");
     // Same history as Delay: five targets on ch2-6 and only two declared inputs, until now.
-    expectStereoCvJacks(reverb, {"Size", "Damping", "Wet", "Dry", "Width"});
+    expectStereoCvJacks(reverb, {"Size", "Damping", "Wet", "Dry", "Width", "Pre-Delay"});
     EXPECT_EQ(reverb.getOutputPortLabel(0), "Left");
     EXPECT_EQ(reverb.getOutputPortLabel(1), "Right");
 }

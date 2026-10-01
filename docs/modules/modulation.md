@@ -548,8 +548,9 @@ Also covered, appended after each module's existing channels so saved patches ke
 LFO (Rate ch0, Level ch1, Glide ch2, Phase ch3, Fade In ch4; Rate CV applies in Hz mode only), the
 ADSR (Attack ch9, Hold ch10, Decay ch11, Sustain ch12, Release ch13, Velocity ch14, after Threshold
 ch8; a tempo-synced stage ignores its time CV), the Oscillator's Pulse Width ch16 and Glide ch17
-(after Unison/Detune) and every remaining Parametric EQ parameter (B1/B4 Freq+Gain, each band's Q, Output on
-ch6-14) — see [`lfo.md`](lfo.md),
+(after Unison/Detune), every remaining Parametric EQ parameter (B1/B4 Freq+Gain, each band's Q, Output on
+ch6-14), the Filter's Key Track ch27 (after its Pitch block, ch19-26) and the Reverb's Pre-Delay ch7 (the
+Delay's tempo sync and ping-pong are switches and have no jack) — see [`lfo.md`](lfo.md),
 [`modules.md#adsr-envelope-module`](modules.md#adsr-envelope-module) and
 [`fx-modules.md#parametric-eq-module`](fx-modules.md#parametric-eq-module). Not yet covered: the
 mixer modules (Channel Strip, Voice Mixer, Master), whose gain is driven by the mixer panel rather
