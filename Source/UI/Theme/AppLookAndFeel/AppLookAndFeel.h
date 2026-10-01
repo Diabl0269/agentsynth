@@ -71,6 +71,9 @@ public:
                       int buttonH, juce::ComboBox&) override;
     void drawComboBoxTextWhenNothingSelected(juce::Graphics&, juce::ComboBox&, juce::Label&) override;
     void positionComboBoxText(juce::ComboBox&, juce::Label&) override;
+    juce::Font getComboBoxFont(juce::ComboBox&) override;
+    // Narrowest width at which every item's text shows unclipped, for any look-and-feel.
+    static int comboBoxWidthToFitItems(juce::ComboBox&);
     void drawPopupMenuBackground(juce::Graphics&, int width, int height) override;
     void drawPopupMenuItem(juce::Graphics&, const juce::Rectangle<int>& area, bool isSeparator, bool isActive,
                            bool isHighlighted, bool isTicked, bool hasSubMenu, const juce::String& text,
@@ -86,6 +89,9 @@ public:
     void drawLabel(juce::Graphics&, juce::Label&) override;
     void drawToggleButton(juce::Graphics&, juce::ToggleButton&, bool shouldDrawButtonAsHighlighted,
                           bool shouldDrawButtonAsDown) override;
+    // drawToggleButton with the focus state given, so a headless test can paint the focused look.
+    void paintToggleButton(juce::Graphics&, juce::ToggleButton&, bool shouldDrawButtonAsHighlighted,
+                           bool keyboardFocused);
     // Hugs the pointer (centred, 14 px below, flipping above at the parent's edge) instead of the
     // stock 24-px sideways offset — sized with drawTooltip()'s own font so fitted text never clips.
     juce::Rectangle<int> getTooltipBounds(const juce::String& tipText, juce::Point<int> screenPos,
@@ -178,9 +184,11 @@ private:
     void recomputeMeterColourStops(); // override if set, else MeterColourStops::fromTheme(theme.colors)
 
     // Themed-widget geometry constants (section 5).
-    static constexpr int kScrollbarWidth = 6;      // slim scrollbar (was JUCE default 14)
-    static constexpr int kTabBarDepth = 30;        // tab bar strip height
-    static constexpr float kComboArrowSize = 5.0f; // combo chevron half-width
+    static constexpr int kScrollbarWidth = 6;       // slim scrollbar (was JUCE default 14)
+    static constexpr int kTabBarDepth = 30;         // tab bar strip height
+    static constexpr float kComboArrowSize = 5.0f;  // combo chevron half-width
+    static constexpr int kComboTextLeftInset = 8;   // closed combo: text label's left edge
+    static constexpr int kComboTextRightInset = 22; // closed combo: room kept for the chevron
 
     Theme theme{}; // active theme copy
 

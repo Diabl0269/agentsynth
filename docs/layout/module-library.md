@@ -44,7 +44,7 @@ strings via `ModuleLibraryComponent::subsectionKey(section, subHeader)`, a publi
 They are kept separate from the section's own `Header` key, so folding a format group never touches
 (or is touched by) the section header's fold. A `SubHeader`'s fold rides the same single
 `AnimationDriver` as header folds and persists through the same opaque `collapsedSections`
-`StringArray` — no schema change. `setAllSectionsCollapsed()` (COLLAPSE ALL / EXPAND ALL) starts
+`StringArray` — no schema change. `setAllSectionsCollapsed()` (Collapse all / Expand all) starts
 from the current `collapsedSections` set and only adds or removes top-level `Header` keys, so a
 subsection fold survives a Collapse All or Expand All untouched.
 
@@ -106,7 +106,7 @@ always has one. The wording is pure (`ModuleLibraryAccessibilityText.h`) and tes
 ## Collapsible sections
 
 With a Snippets section on top of eight module categories the sidebar overflows its height. Every
-section header is a disclosure toggle, plus a **COLLAPSE ALL / EXPAND ALL** strip in the top 24 px
+section header is a disclosure toggle, plus a **Collapse all / Expand all** strip in the top 24 px
 (`kTopStripHeight`).
 
 Collapsing and expanding tween over `kCollapseAnimMs` (150 ms, `easeInOutCubic`) via
@@ -116,7 +116,7 @@ Collapsing and expanding tween over `kCollapseAnimMs` (150 ms, `easeInOutCubic`)
 - **`sectionProgress` is purely visual** (0 = open, 1 = shut). The logical state stays in
   `collapsedSections` and flips *instantly*, so `isSectionCollapsed()`, `areAllSectionsCollapsed()`,
   persistence and `onCollapseStateChanged` never lag a frame behind what the user clicked.
-- **One driver for all sections**, so COLLAPSE ALL folds them together instead of racing nine
+- **One driver for all sections**, so Collapse all folds them together instead of racing nine
   animators. Retargeting mid-flight eases on from the current value rather than snapping back.
 - **Rows are truncated, not squashed.** `buildRows()` gives each section a band of
   `naturalHeight x (1 - progress)`; rows keep their natural spacing inside it and are clipped at the
@@ -143,7 +143,7 @@ With every section expanded the rows exceed any realistic panel height, so the s
   `findParentDragContainerFor()` walks to the *nearest* container ancestor, an inner component would
   bind drags to the sidebar instead of `MainComponent`, breaking drops onto the canvas. Instead a
   `juce::ScrollBar` drives a `scrollOffset` that `paint()` and hit-testing both apply.
-- **The COLLAPSE ALL strip stays pinned** in the top `kTopStripHeight` px — the one control that
+- **The Collapse all strip stays pinned** in the top `kTopStripHeight` px — the one control that
   shortens an overflowing list must never scroll out of reach. `paint()` therefore clips the rows to
   below the strip and `setOrigin(0, -scrollOffset)`s them, then draws the strip last over its own
   background fill.
@@ -160,7 +160,7 @@ With every section expanded the rows exceed any realistic panel height, so the s
 
 ## Help popover
 
-A small themed "?" button sits on the collapse-all strip, left of the COLLAPSE ALL / EXPAND ALL
+A small themed "?" button sits on the collapse-all strip, left of the Collapse all / Expand all
 label. `ModuleLibraryComponent::getHelpButtonBounds()` is the one rect `paint()` and the mouse
 handlers (`mouseMove` / `mouseDown` / `mouseExit`) all read, so the drawn button and the clickable
 one can never drift apart — the same "one enumeration" rule `buildRows()` follows for the rows. Its
@@ -275,7 +275,7 @@ lookalike, mirroring `PreferencesSettingsTab::createDualIOPerModuleDefaultsPopup
 `Source/UI/Settings/ShortcutsSettingsTab.h/.cpp` — the Settings "Keyboard Shortcuts" tab — grew the
 same collapsible-section idiom once its row count passed 49 (see [shortcuts](../control/shortcuts.md)): one
 collapsible section per `ShortcutCategory`, a search field above them, and a top strip whose label
-flips between "COLLAPSE ALL" and "EXPAND ALL", lifted from `ModuleLibraryComponent` so the app's two
+flips between "Collapse all" and "Expand all", lifted from `ModuleLibraryComponent` so the app's two
 collapsible lists behave identically — clickable header rows with a chevron, a collapsed set keyed
 by the header's identity, the same strip idiom.
 

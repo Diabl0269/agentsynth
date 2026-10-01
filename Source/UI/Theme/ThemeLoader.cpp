@@ -23,7 +23,7 @@ std::optional<juce::Colour> ThemeLoader::parseHexColour(const juce::String& s) {
         return std::nullopt;
 
     // Strip the '#'
-    juce::String hex = s.substring(1).toUpperCase();
+    juce::String hex = s.substring(1).toUpperCase(); // not-ui-text: hex colour code
     const int len = hex.length();
 
     // Validate: must be all hex digits
@@ -96,7 +96,7 @@ static juce::String colourToHex(juce::Colour c) {
     // Emit as #AARRGGBB (8 hex digits, uppercase, with '#').
     // Use individual channel accessors to avoid signed/unsigned issues with toHexString.
     const auto toHex2 = [](uint8_t v) -> juce::String {
-        static const char digits[] = "0123456789ABCDEF";
+        static const char digits[] = "0123456789ABCDEF"; // not-ui-text: hex digit table
         char buf[3] = {digits[(v >> 4) & 0xF], digits[v & 0xF], '\0'};
         return juce::String(buf);
     };

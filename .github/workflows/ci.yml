@@ -148,6 +148,11 @@ jobs:
       # ("Rename…" rendered "Renameâ€¦"). A compiler cannot catch it and no test asserted on it.
       # Same deal as the two above: ~1s, no compiler.
       run: bash scripts/tests/check-nonascii-literals.test.sh
+    - name: Check UI text is not all caps
+      # UI text is never written in ALL CAPS: no toUpperCase() and no capitals-only word in a string
+      # literal under Source/UI (abbreviations such as MIDI excepted; `// not-ui-text: <reason>` opts a
+      # line out). The test's last case runs the check on the real tree. ~1s, no compiler.
+      run: bash scripts/tests/check-ui-caps.test.sh
     - name: Test AI eval ratchet
       # Guards the nightly/manual AIPatchHarness ratchet (P1-11), which never runs here itself
       # (needs a live model) but is cheap and deterministic to unit test. ~1s, no model, no network.

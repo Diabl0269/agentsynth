@@ -3,6 +3,7 @@
 #include "MacroSet.h"
 #include "Modules/MacroPortShape.h"
 #include "UI/Chrome/ColourPickerPopup.h" // juce::PropertiesFile (juce_data_structures) + ColourPickerPopup itself
+#include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/ReorderDrag/ReorderDragSession.h"
 #include <functional>
@@ -300,8 +301,8 @@ private:
     juce::Viewport rowsViewport_;
     synth::ui::ScrollIntoViewOnFocus rowsFollowFocus_{rowsViewport_};
     juce::Component rowsContent_;
-    juce::Label inputsHeader_{"inputsHeader", "INPUTS"};
-    juce::Label outputsHeader_{"outputsHeader", "OUTPUTS"};
+    juce::Label inputsHeader_{"inputsHeader", "Inputs"};
+    juce::Label outputsHeader_{"outputsHeader", "Outputs"};
     juce::Label inputsEmptyHint_{"inputsEmptyHint", "No inputs yet"};
     juce::Label outputsEmptyHint_{"outputsEmptyHint", "No outputs yet"};
 
@@ -330,6 +331,10 @@ private:
     ReorderDragSession rowDrag_{*this, [this] { placeDragRows(); }};
     std::vector<juce::String> dragGroupUuids_;
     std::vector<float> dragSlotStarts_;
+
+    // Last, so it is destroyed before the controls it listens on. The swatch and Delete buttons keep
+    // their own arrows (they consume the key first).
+    synth::ui::ArrowKeyNavigation arrowKeys_{*this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroPortConfigDialog)
 };

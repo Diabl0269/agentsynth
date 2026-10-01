@@ -941,10 +941,10 @@ juce::Rectangle<float> ModuleComponent::outputCardIconBoundsForTest(const synth:
 
     // JUCE exposes no direct cap-height accessor. 0.72x ascent is the standard sans-serif
     // approximation (Inter — embedded for every UI face here, see docs/layout/theming.md — sits close
-    // this) and tracks the visible glyph ink far more closely than the full ascent+descent box
-    // drawText centres text within: an all-caps, all-punctuation-free title (the title is upper-
-    // cased + letter-spaced in drawModulePanel) never touches the descender clearance that box
-    // reserves, so centring on THAT box reads slightly low against the glyphs actually on screen.
+    // this) and tracks the visible capital/x-height glyph ink far more closely than the full
+    // ascent+descent box drawText centres text within: most of a title sits above the descender
+    // clearance that box reserves, so centring on THAT box reads slightly low against the glyphs
+    // actually on screen.
     const float capHeight = titleFont.getAscent() * 0.72f;
 
     // Header band geometry, copied from AppLookAndFeel::drawModulePanel (body = bounds.reduced(2);

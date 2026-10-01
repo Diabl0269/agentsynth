@@ -174,7 +174,7 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
         g.setColour(bgColour);
         g.fillRect(0, kSearchHeight, getWidth(), kTopStripHeight);
 
-        // "?" help button, left of the COLLAPSE ALL / EXPAND ALL label — paint() and the mouse
+        // "?" help button, left of the Collapse all / Expand all label — paint() and the mouse
         // handlers share getHelpButtonBounds() so the drawn button and the clickable button can
         // never drift apart (the same reason cable paint/hit-test share one enumeration
         // elsewhere in this app — see GraphEditor::buildVisibleCables).
@@ -191,7 +191,7 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
 
         g.setColour(topStripHovered ? accentColour : mutedColour);
         g.setFont(juce::Font(juce::FontOptions(11.0f)));
-        g.drawText(allCollapsed ? "EXPAND ALL" : "COLLAPSE ALL", 10 + kHelpButtonSize + kHelpButtonMargin,
+        g.drawText(allCollapsed ? "Expand all" : "Collapse all", 10 + kHelpButtonSize + kHelpButtonMargin,
                    kSearchHeight + 2, contentWidth - 20 - kHelpButtonSize - kHelpButtonMargin, kTopStripHeight - 4,
                    juce::Justification::centredRight);
     }

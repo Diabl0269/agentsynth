@@ -90,7 +90,7 @@ public:
         if (kind_ == Kind::Header) {
             g.setColour(palette_.muted);
             g.setFont(juce::Font(juce::FontOptions(kHeaderFontSize, juce::Font::bold)));
-            g.drawText(text_.toUpperCase(), bounds.reduced(6, 0), juce::Justification::centredLeft, true);
+            g.drawText(text_, bounds.reduced(6, 0), juce::Justification::centredLeft, true);
             return;
         }
         if (highlighted_) {

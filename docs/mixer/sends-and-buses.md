@@ -257,7 +257,7 @@ accessible description spell every badge out in words (see [`mixer.md`](mixer.md
 
 On a source column a compact `MixerSendList` sits under the insert list: one row per active slot — a
 target-bus button, a rotary level knob attached straight onto `sendNLevel`, a rotary **pan knob**
-(FRO294) attached straight onto `sendNPan`, an **"M" mute toggle** (FRO295), a `PRE`/`POST` toggle and
+(FRO294) attached straight onto `sendNPan`, an **"M" mute toggle** (FRO295), a `Pre`/`Post` toggle and
 an `x` — plus a `+ Send` row while a slot is free. **FRO301: a screen reader names each level knob by
 its target** — "Send to Bus 1", or "Send 2 (no target)" once its cable is cut — and speaks its value
 the same "-6.0 dB" format as the fader and pan knob
@@ -274,11 +274,11 @@ it is a ticked "Mono" item at the top of the row's existing target menu (`showTa
 through `synth::setSendMono` inside the same one-`recordGraphAndMacroChange` shape every other row
 mutation uses. A mono row shows a small filled dot painted (not a component) at the left edge of
 the target-name area — a dot, not a letter, because an "M" there read as a second mute button — and
-its pan knob's accessible title gains "(mono)"; the same "painted, not a child" idiom `PRE`/`POST` already use, so the row's
-component budget stays exactly level knob + pan knob + M mute button + real-click PRE/POST/remove
+its pan knob's accessible title gains "(mono)"; the same "painted, not a child" idiom `Pre`/`Post` already use, so the row's
+component budget stays exactly level knob + pan knob + M mute button + real-click Pre/Post/remove
 hit areas.
 
-**FRO295: the M button is a real `juce::TextButton`, not painted text like PRE/POST** — it reuses the
+**FRO295: the M button is a real `juce::TextButton`, not painted text like Pre/Post** — it reuses the
 exact button type/convention `MixerColumnComponent`'s own strip-level mute button uses
 (`setClickingTogglesState(false)` plus a manual `setToggleState` kept in step by `rebuildKnobs()`),
 so its on/off colouring comes from `AppLookAndFeel`'s `TextButton::buttonOnColourId` (the theme's
@@ -304,7 +304,7 @@ just before committing, the list reports `{final row, y it was drawn at}` (`onSe
 `columnReorder_` does for columns); at the end of `rebuild()` it calls `startSettleFrom()` on the new
 column of that strip, and the dropped row glides from the drop y into its slot (140 ms `easeOutCubic`,
 `ReorderDragSession::settleInto`; its neighbours already sit in their final places). The pending settle
-is cleared whether or not a column is found, and by a refused move. Not showing, it lands at once. The knobs, M button, PRE/POST and `x` all keep working exactly as before: only a press that
+is cleared whether or not a column is found, and by a refused move. Not showing, it lands at once. The knobs, M button, Pre/Post and `x` all keep working exactly as before: only a press that
 lands on the name area itself, past the menu-vs-drag threshold, is claimed by the drag.
 
 **FRO292: an active send's level can carry its own automation lane.** Right-click the send knob

@@ -112,17 +112,14 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
         g.setColour(c.border);
         g.drawHorizontalLine((int)header.getBottom(), header.getX(), header.getRight());
 
-        // Title: uppercase, tracked.
+        // Title: plain text in the module's own case.
         g.setColour(selected ? c.accent : (bypassed ? c.textDisabled : c.textPrimary));
         g.setFont(juce::Font(juce::FontOptions(theme.type.h2, juce::Font::bold)));
-        juce::String tracked;
-        for (auto ch : title.toUpperCase())
-            tracked << juce::String::charToString(ch) << " ";
         // Asymmetric inset: 22px on the left clears the activity LED (fillEllipse(6,8,8,8) in
         // ModuleComponent::paint(), right edge 14) plus an 8px grid-aligned gap, regardless of
         // whether the LED is currently lit — so the title never shifts when RMS crosses the
         // lit/unlit threshold.
-        g.drawText(tracked.trimEnd(), header.withTrimmedLeft(22.0f).withTrimmedRight(10.0f).toNearestInt(),
+        g.drawText(title, header.withTrimmedLeft(22.0f).withTrimmedRight(10.0f).toNearestInt(),
                    juce::Justification::centredLeft, true);
     }
 

@@ -231,7 +231,7 @@ void MixerSendList::paintRow(juce::Graphics& g, int rowIndex, float lift) {
 
     auto toggle = row.removeFromRight(kToggleWidth);
     g.setColour(entry.preFader ? accent : muted);
-    g.drawText(entry.preFader ? "PRE" : "POST", toggle, juce::Justification::centred, false);
+    g.drawText(entry.preFader ? "Pre" : "Post", toggle, juce::Justification::centred, false);
 
     row.removeFromRight(kMuteWidth);    // the M button is a real child component -- see placeRows()
     row.removeFromRight(kKnobWidth);    // the level knob is a real child component -- see placeRows()

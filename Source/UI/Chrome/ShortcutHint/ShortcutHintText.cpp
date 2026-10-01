@@ -45,7 +45,8 @@ juce::String keyName(const juce::KeyPress& key, bool macGlyphs) {
     if (code >= juce::KeyPress::F1Key && code <= juce::KeyPress::F35Key)
         return "F" + juce::String(code - juce::KeyPress::F1Key + 1);
     if (code >= 33 && code < 127)
-        return juce::String::charToString(static_cast<juce::juce_wchar>(std::toupper(code)));
+        return juce::String::charToString(
+            static_cast<juce::juce_wchar>(std::toupper(code))); // not-ui-text: single-character key cap legend
     return key.getTextDescription();
 }
 

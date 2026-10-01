@@ -68,7 +68,8 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm)
 
     for (auto category : ShortcutManager::getCategoryOrder()) {
         auto header = std::make_unique<HeaderButton>(category);
-        header->setTooltip("Show or hide the " + ShortcutManager::getCategoryName(category) + " shortcuts");
+        header->setTooltip("Show or hide the " + ShortcutManager::getCategoryName(category) +
+                           " shortcuts (Left/Right)");
         header->onClick = [this, category] { toggleSection(category); };
         rowsHost.addChildComponent(*header);
         headerButtons.push_back(std::move(header));
@@ -310,6 +311,13 @@ ShortcutsSettingsTab::HeaderButton::HeaderButton(ShortcutCategory c)
     setToggleState(true, juce::dontSendNotification);
 }
 
+// Folding goes through the click callback, so the tab's own fold state, layout and screen-reader name
+// follow exactly as for a click.
+void ShortcutsSettingsTab::HeaderButton::setFolded(bool folded) {
+    if (folded != collapsed_ && onClick)
+        onClick();
+}
+
 void ShortcutsSettingsTab::HeaderButton::setCollapsed(bool isCollapsed) {
     if (collapsed_ == isCollapsed)
         return;
@@ -331,8 +339,7 @@ void ShortcutsSettingsTab::HeaderButton::paintButton(juce::Graphics& g, bool hig
 
     g.setColour(textColour);
     g.setFont(juce::Font(juce::FontOptions(11.5f, juce::Font::bold)));
-    g.drawText(getButtonText().toUpperCase(), getLocalBounds().withTrimmedLeft(kHeaderTextIndent),
-               juce::Justification::centredLeft);
+    g.drawText(getButtonText(), getLocalBounds().withTrimmedLeft(kHeaderTextIndent), juce::Justification::centredLeft);
 
     // The gentle rule: one hairline under the header, at low alpha. It separates the sections
     // without boxing them in — see kDividerAlpha.
@@ -347,7 +354,7 @@ void ShortcutsSettingsTab::StripButton::paintButton(juce::Graphics& g, bool high
     g.setColour(
         findColour(juce::Label::textColourId).withAlpha(highlighted ? kHeaderHoverTextAlpha : kTopStripTextAlpha));
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText(getButtonText().toUpperCase(), getLocalBounds(), juce::Justification::centredRight);
+    g.drawText(getButtonText(), getLocalBounds(), juce::Justification::centredRight);
     synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -23,7 +24,7 @@
 // them. The idioms are lifted from ModuleLibraryComponent (docs/layout/module-library.md) on purpose, so the
 // two collapsible lists in the app behave identically: header rows with a chevron, a
 // collapsed-set keyed by the header's name, and a top strip whose label flips between
-// "COLLAPSE ALL" and "EXPAND ALL". Headers, the strip and every rebind button are real buttons,
+// "Collapse all" and "Expand all". Headers, the strip and every rebind button are real buttons,
 // so Tab visits them top to bottom and Space/Return act on them; while a row listens for its new
 // key, that row's button keeps focus and takes every key, Escape cancelling.
 //
@@ -174,17 +175,21 @@ private:
     };
 
     /** A section header: a real button, so Tab reaches it and Space/Return fold the section. */
-    class HeaderButton : public juce::Button {
+    class HeaderButton
+        : public juce::Button
+        , public synth::ui::FoldableHeader {
     public:
         explicit HeaderButton(ShortcutCategory c);
         void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
         void setCollapsed(bool isCollapsed);
+        bool isFolded() const override { return collapsed_; }
+        void setFolded(bool folded) override;
 
     private:
         bool collapsed_ = false;
     };
 
-    /** The pinned "COLLAPSE ALL" / "EXPAND ALL" strip above the rows. */
+    /** The pinned "Collapse all" / "Expand all" strip above the rows. */
     class StripButton : public juce::Button {
     public:
         StripButton()

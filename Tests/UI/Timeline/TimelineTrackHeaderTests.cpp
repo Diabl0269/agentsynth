@@ -642,7 +642,7 @@ TEST(TimelineTrackHeaderTest, KindBadgeTextPerTrackKind) {
     EXPECT_EQ(audio.header->getKindBadgeTextForTest(), "AUD");
 
     HeaderFixture automation(TrackKind::Automation);
-    EXPECT_EQ(automation.header->getKindBadgeTextForTest(), "AUTO");
+    EXPECT_EQ(automation.header->getKindBadgeTextForTest(), "Auto");
 }
 
 TEST(TimelineTrackHeaderTest, KindBadgeTextEmptyWhenTrackIsGone) {

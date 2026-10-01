@@ -149,7 +149,7 @@ void ActionPickerComponent::paintListBoxItem(int row, juce::Graphics& g, int wid
     if (r.isHeader) {
         g.setColour(mutedColour);
         g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
-        g.drawText(r.label.toUpperCase(), 8, 0, width - 16, height, juce::Justification::centredLeft);
+        g.drawText(r.label, 8, 0, width - 16, height, juce::Justification::centredLeft);
         return;
     }
     if (selected) {

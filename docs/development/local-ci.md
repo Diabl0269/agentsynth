@@ -38,6 +38,8 @@ Fast checks first, so a lint failure does not wait on a full build.
    editing this script. `check-nonascii-literals.test.sh`'s last case scans the real `Source/` tree
    itself, so this also covers the Lint job's
    [ASCII-literal gate](ascii-literal-guard.md) on live code, not just the checker's fixtures.
+   `check-ui-caps.test.sh` likewise scans `Source/UI/` for all-caps UI text
+   ([rule](accessibility.md#no-all-caps-ui-text)).
 8. Configure `build-ci-local/` with `-DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON
    -DENABLE_AI_HARNESS=ON` and build with a plain
    `cmake --build` — every target those jobs build (`Core`, `AppUI`, `AgentSynth`,

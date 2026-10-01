@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AI/AccountService.h"
+#include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -57,6 +58,9 @@ private:
     juce::TextButton openBrowserButton;
     juce::Label statusLabel;
     juce::TextButton cancelButton;
+
+    // Last, so it is destroyed before the controls it listens on.
+    synth::ui::ArrowKeyNavigation arrowKeys_{*this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SignInDialog)
 };

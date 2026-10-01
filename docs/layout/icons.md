@@ -60,7 +60,7 @@ Notes on individual entries:
   enum's index order here has no relationship to `EditTool`'s enumerator order; the UI layer looks
   up through a small tool-to-`Icon` mapping, never by casting one enum to the other.
 - **`TrackMidi`, `TrackAudio`, `TrackAutomation`** (37-39) are the timeline track header's
-  kind-badge glyphs, one per `synth::TrackKind`, drawn in place of the `"MIDI"` / `"AUD"` / `"AUTO"`
+  kind-badge glyphs, one per `synth::TrackKind`, drawn in place of the `"MIDI"` / `"AUD"` / `"Auto"`
   text pill when a themed `AppLookAndFeel` and the asset library are both present
   (`TimelineTrackHeaderComponent::kindBadgeIcon`; see
   [tracks](../timeline/tracks.md#kind-badge)). The text pill remains the fallback in a headless

@@ -290,7 +290,7 @@ public:
     // The library is one painted component rather than a Viewport + inner content: rows are drawn
     // from a single buildRows() pass, and a Viewport would mean splitting that (plus the tooltip
     // client and the drag source) across two components. Instead the rows are drawn through a
-    // scrollOffset and a juce::ScrollBar drives it. The search field and COLLAPSE ALL strip stay
+    // scrollOffset and a juce::ScrollBar drives it. The search field and Collapse all strip stay
     // pinned, so the two controls that change which rows are on screen never scroll out of reach.
     // -------------------------------------------------------------------------
 
@@ -496,7 +496,7 @@ public:
     int getEntryIndexAtComponentY(int y) const;
 
     /** Bounds (component space) of the small "?" help button on the collapse-all strip, left of
-     *  the COLLAPSE ALL / EXPAND ALL label. paint() and the mouse handlers share this one rect so
+     *  the Collapse all / Expand all label. paint() and the mouse handlers share this one rect so
      *  the drawn button and the clickable button can never drift apart. */
     static juce::Rectangle<int> getHelpButtonBounds() noexcept;
 

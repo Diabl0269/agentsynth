@@ -158,6 +158,8 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerPanelComponent/MixerFocusRegion.h
     Source/UI/Layout/BottomDockComponent.h
     Source/UI/Layout/BottomDockComponent.cpp
+    Source/UI/Layout/ArrowKeyNavigation.h
+    Source/UI/Layout/ArrowKeyNavigation.cpp
     Source/UI/Mixer/MixerPlacementController.h
     Source/UI/Mixer/MixerPlacementController.cpp
     Source/UI/Mixer/MixerMirrorController.h
