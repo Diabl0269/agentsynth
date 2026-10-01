@@ -32,15 +32,66 @@ const CategoryProbe kProbes[] = {{Category::Graph, graphProbe},   {Category::Tim
                                  {Category::Panels, panelsProbe}, {Category::MidiRemote, midiProbe}};
 } // namespace
 
-TEST_F(PreferencesSettingsTabTest, PickerListsEveryCategoryAndOpensOnGraph) {
+TEST_F(PreferencesSettingsTabTest, PickerListsEveryCategoryAndOpensOnTheRememberedOne) {
     PreferencesSettingsTab tab(appProperties);
     tab.setSize(500, 700);
     auto& combo = tab.getCategoryComboForTest();
     EXPECT_EQ(combo.getNumItems(), 7); // the six categories plus All
-    EXPECT_EQ(tab.getSelectedCategory(), Category::Graph);
+    EXPECT_EQ(tab.getSelectedCategory(), Category::Graph) << "the fixture remembers Graph";
     EXPECT_EQ(combo.getText(), PreferencesSettingsTab::categoryName(Category::Graph));
     for (const auto& probe : kProbes)
         EXPECT_TRUE(combo.indexOfItemId(static_cast<int>(probe.category) + 1) >= 0);
+}
+
+// The picked category is saved under its stable name and the next tab (the next time Settings opens)
+// starts on it, whichever category it was.
+TEST_F(PreferencesSettingsTabTest, SelectedCategoryIsRememberedByNameAcrossTabs) {
+    const struct {
+        Category category;
+        const char* name;
+    } names[] = {{Category::All, "All"},
+                 {Category::Graph, "Graph"},
+                 {Category::Timeline, "Timeline"},
+                 {Category::Files, "Files"},
+                 {Category::Mixer, "Mixer"},
+                 {Category::Panels, "Panels"},
+                 {Category::MidiRemote, "MidiRemote"}};
+    for (const auto& entry : names) {
+        {
+            PreferencesSettingsTab tab(appProperties);
+            tab.setSize(500, 700);
+            tab.setSelectedCategory(entry.category);
+        }
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("preferencesCategory"), juce::String(entry.name));
+        PreferencesSettingsTab reopened(appProperties);
+        reopened.setSize(500, 700);
+        EXPECT_EQ(reopened.getSelectedCategory(), entry.category) << entry.name;
+        EXPECT_EQ(reopened.getCategoryComboForTest().getSelectedId(), static_cast<int>(entry.category) + 1);
+    }
+}
+
+// Nothing saved, or a value that names no category, opens on All.
+TEST_F(PreferencesSettingsTabTest, MissingOrUnknownRememberedCategoryOpensOnAll) {
+    appProperties.getUserSettings()->removeValue("preferencesCategory");
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_EQ(tab.getSelectedCategory(), Category::All);
+    }
+    for (const juce::String garbage : {"", "Nonsense", "3", "all", "Files & Autosave"}) {
+        appProperties.getUserSettings()->setValue("preferencesCategory", garbage);
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_EQ(tab.getSelectedCategory(), Category::All) << "saved value \"" << garbage << "\"";
+    }
+}
+
+// The remembered category is the first one laid out: its rows are on screen straight after
+// construction, without the combo having been touched.
+TEST_F(PreferencesSettingsTabTest, RememberedCategoryIsLaidOutBeforeTheFirstPaint) {
+    appProperties.getUserSettings()->setValue("preferencesCategory", "Timeline");
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 900);
+    EXPECT_TRUE(findToggleByText(tab, "Label every key")->isVisible());
+    EXPECT_FALSE(findToggleByText(tab, "Show Alignment Guides")->isVisible());
 }
 
 // Each category shows only its own panel: selecting it through the real combo's change path shows

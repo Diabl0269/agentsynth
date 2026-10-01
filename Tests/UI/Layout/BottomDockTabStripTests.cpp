@@ -161,3 +161,90 @@ TEST_F(BottomDockTabStripTest, TheStripIsAFocusRegionBetweenTheCanvasAndTheTimel
     EXPECT_EQ(regions.nextOpenRegionId("canvas", true), "dockTabs");
     EXPECT_EQ(regions.nextOpenRegionId("dockTabs", true), "timeline");
 }
+
+// ---- Cmd+Option+Left/Right: the tabPrevious / tabNext actions --------------------------------------------
+
+namespace {
+// MainComponent::keyPressed hands a matched command to the command manager asynchronously, so the
+// message queue is drained before the caller looks at the result.
+bool pressKey(MainComponent& mc, const juce::KeyPress& key) {
+    const bool used = mc.keyPressed(key);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    return used;
+}
+
+bool pressTabKey(MainComponent& mc, int keyCode) {
+    const auto mods = juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier;
+    return pressKey(mc, juce::KeyPress(keyCode, juce::ModifierKeys(mods), 0));
+}
+} // namespace
+
+TEST_F(BottomDockTabStripTest, AdjacentOfferedTabWrapsAtBothEnds) {
+    ASSERT_EQ(dock().getActiveTab(), Tab::Timeline);
+    EXPECT_EQ(dock().adjacentOfferedTab(1), Tab::Mixer);
+    EXPECT_EQ(dock().adjacentOfferedTab(-1), Tab::MidiRemote) << "previous from the first tab wraps to the last";
+    dock().setActiveTab(Tab::MidiRemote);
+    EXPECT_EQ(dock().adjacentOfferedTab(1), Tab::Timeline) << "next from the last tab wraps to the first";
+    EXPECT_EQ(dock().adjacentOfferedTab(-1), Tab::Mixer);
+}
+
+TEST_F(BottomDockTabStripTest, AdjacentOfferedTabFollowsStripOrderAndSkipsTabsNotOffered) {
+    dock().reorderTabsForTest(Tab::Timeline, Tab::MidiRemote); // strip is now Controllers, Mixer, Timeline
+    dock().setActiveTab(Tab::MidiRemote);
+    EXPECT_EQ(dock().adjacentOfferedTab(1), Tab::Mixer);
+    EXPECT_EQ(dock().adjacentOfferedTab(-1), Tab::Timeline) << "wraps over the strip order, not the enum order";
+
+    dock().setMixerTabEnabled(false);
+    EXPECT_EQ(dock().adjacentOfferedTab(1), Tab::Timeline) << "steps over a tab that is not offered";
+
+    dock().getTimelineHost().setDetached(true); // a detached tab is not in the strip either
+    ASSERT_EQ(dock().getActiveTab(), Tab::MidiRemote);
+    EXPECT_EQ(dock().adjacentOfferedTab(1), Tab::MidiRemote) << "the only offered tab is its own neighbour";
+    EXPECT_EQ(dock().adjacentOfferedTab(-1), Tab::MidiRemote);
+
+    dock().getMidiRemoteHost().setDetached(true);
+    EXPECT_FALSE(dock().adjacentOfferedTab(1).has_value());
+    EXPECT_FALSE(dock().adjacentOfferedTab(-1).has_value());
+
+    dock().getTimelineHost().setDetached(false);
+    dock().getMidiRemoteHost().setDetached(false);
+    dock().setMixerTabEnabled(true);
+    dock().reorderTabsForTest(Tab::Timeline, Tab::MidiRemote);
+}
+
+// A real key event through MainComponent::keyPressed (what the window delivers when no focused control
+// claimed it), through the default chords.
+TEST_F(BottomDockTabStripTest, CommandOptionRightAndLeftStepTheDockTabsAndWrap) {
+    mc().showBottomDockTab(Tab::Timeline);
+    EXPECT_TRUE(pressTabKey(mc(), juce::KeyPress::rightKey));
+    EXPECT_EQ(dock().getActiveTab(), Tab::Mixer);
+    EXPECT_TRUE(pressTabKey(mc(), juce::KeyPress::rightKey));
+    EXPECT_EQ(dock().getActiveTab(), Tab::MidiRemote);
+    EXPECT_TRUE(pressTabKey(mc(), juce::KeyPress::rightKey));
+    EXPECT_EQ(dock().getActiveTab(), Tab::Timeline) << "wraps";
+    EXPECT_TRUE(pressTabKey(mc(), juce::KeyPress::leftKey));
+    EXPECT_EQ(dock().getActiveTab(), Tab::MidiRemote) << "wraps backwards";
+    EXPECT_TRUE(pressTabKey(mc(), juce::KeyPress::leftKey));
+    EXPECT_EQ(dock().getActiveTab(), Tab::Mixer);
+}
+
+TEST_F(BottomDockTabStripTest, TheTabKeysOpenAClosedDockOnTheNeighbouringTab) {
+    mc().showBottomDockTab(Tab::Timeline);
+    mc().getBottomDock().setActiveTab(Tab::Timeline);
+    mc().simulateToggleBottomPanelClick(); // close the dock
+    ASSERT_FALSE(mc().isBottomDockConfiguredVisible());
+
+    EXPECT_TRUE(pressTabKey(mc(), juce::KeyPress::rightKey));
+    EXPECT_TRUE(mc().isBottomDockConfiguredVisible()) << "shown through showBottomDockTab, so the dock opens";
+    EXPECT_EQ(dock().getActiveTab(), Tab::Mixer);
+}
+
+TEST_F(BottomDockTabStripTest, RebindingTheActionMovesTheDockKeyToo) {
+    mc().getShortcutManager().setBinding("tabNext", juce::KeyPress('j', juce::ModifierKeys::commandModifier, 0));
+    ASSERT_EQ(dock().getActiveTab(), Tab::Timeline);
+    EXPECT_FALSE(pressTabKey(mc(), juce::KeyPress::rightKey)) << "the old chord is unbound";
+    EXPECT_EQ(dock().getActiveTab(), Tab::Timeline);
+    EXPECT_TRUE(pressKey(mc(), juce::KeyPress('j', juce::ModifierKeys::commandModifier, 0)));
+    EXPECT_EQ(dock().getActiveTab(), Tab::Mixer);
+    mc().getShortcutManager().resetToDefaults();
+}

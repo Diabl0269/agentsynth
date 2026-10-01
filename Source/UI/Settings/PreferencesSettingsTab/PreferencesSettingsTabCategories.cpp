@@ -2,7 +2,7 @@
 #include "PreferencesSettingsTabInternal.h"
 
 // Concern: the category picker under the title (which category's rows are laid out) and its
-// change path.
+// change path, which also remembers the choice.
 
 namespace {
 constexpr PreferencesSettingsTab::Category kCategoriesInOrder[] = {
@@ -13,6 +13,40 @@ constexpr PreferencesSettingsTab::Category kCategoriesInOrder[] = {
 constexpr PreferencesSettingsTab::Category kAllCategory = PreferencesSettingsTab::Category::All;
 
 int comboIdFromCategory(PreferencesSettingsTab::Category category) { return static_cast<int>(category) + 1; }
+
+// The selected category is remembered across Settings windows and launches under this key, as the
+// stable name below (never the enum's integer, never the display text, so a reordered enum or a
+// reworded entry cannot repoint a saved choice).
+constexpr const char* kCategoryKey = "preferencesCategory";
+
+juce::String persistedCategoryName(PreferencesSettingsTab::Category category) {
+    using Category = PreferencesSettingsTab::Category;
+    switch (category) {
+    case Category::Graph:
+        return "Graph";
+    case Category::Timeline:
+        return "Timeline";
+    case Category::Files:
+        return "Files";
+    case Category::Mixer:
+        return "Mixer";
+    case Category::Panels:
+        return "Panels";
+    case Category::MidiRemote:
+        return "MidiRemote";
+    case Category::All:
+        break;
+    }
+    return "All";
+}
+
+// A missing or unrecognised value is All, the view that shows every category.
+PreferencesSettingsTab::Category categoryFromPersistedName(const juce::String& name) {
+    for (auto category : kCategoriesInOrder)
+        if (persistedCategoryName(category) == name)
+            return category;
+    return kAllCategory;
+}
 } // namespace
 
 juce::String PreferencesSettingsTab::categoryName(Category category) {
@@ -39,6 +73,7 @@ juce::String PreferencesSettingsTab::categoryName(Category category) {
 // uses). Its onChange is the ONE place the selection changes: it re-lays the rows and scrolls back
 // to the top, so a category never opens half-way down the previous one's scroll offset.
 void PreferencesSettingsTab::setupCategorySelector() {
+    selectedCategory = categoryFromPersistedName(appProperties.getUserSettings()->getValue(kCategoryKey));
     addAndMakeVisible(categoryCombo);
     categoryCombo.addItem(categoryName(kAllCategory), comboIdFromCategory(kAllCategory));
     for (auto category : kCategoriesInOrder)
@@ -49,6 +84,8 @@ void PreferencesSettingsTab::setupCategorySelector() {
     categoryCombo.setSelectedId(comboIdFromCategory(selectedCategory), juce::dontSendNotification);
     categoryCombo.onChange = [this] {
         selectedCategory = static_cast<Category>(categoryCombo.getSelectedId() - 1);
+        appProperties.getUserSettings()->setValue(kCategoryKey, persistedCategoryName(selectedCategory));
+        appProperties.saveIfNeeded();
         contentViewport.setViewPosition(0, 0);
         resized();
         repaint();

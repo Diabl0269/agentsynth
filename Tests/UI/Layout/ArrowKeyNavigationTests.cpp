@@ -474,3 +474,124 @@ TEST(ShortcutsArrowKeysTest, LeftFoldsAndRightUnfoldsASectionHeader) {
     EXPECT_TRUE(keys.right());
     EXPECT_FALSE(header->isFolded());
 }
+
+// ---------------------------------------------------------------------------------------------
+// Folding a focused section header keeps keyboard focus on it.
+//
+// Hiding a component that holds keyboard focus drops the focus to the first Tab stop (the search field),
+// so a fold must never hide and re-show its own header. A headless component cannot hold real focus, so
+// the test watches the one thing that would drop it: any visibility change of a header that stays on
+// screen.
+// ---------------------------------------------------------------------------------------------
+
+namespace {
+struct VisibilityWatcher : juce::ComponentListener {
+    void componentVisibilityChanged(juce::Component&) override { ++changes; }
+    int changes = 0;
+};
+
+std::vector<juce::Component*> foldableHeadersUnder(juce::Component& root) {
+    std::vector<juce::Component*> out;
+    std::vector<juce::Component*> stack{&root};
+    while (!stack.empty()) {
+        auto* c = stack.back();
+        stack.pop_back();
+        if (dynamic_cast<FoldableHeader*>(c) != nullptr)
+            out.push_back(c);
+        for (auto* child : c->getChildren())
+            stack.push_back(child);
+    }
+    return out;
+}
+} // namespace
+
+TEST(ShortcutsArrowKeysTest, FoldingAFocusedHeaderNeverHidesItSoFocusStaysOnIt) {
+    ShortcutManager manager;
+    ShortcutsSettingsTab tab(manager);
+    tab.setSize(600, 500);
+    ArrowKeyNavigation nav(tab);
+    nav.watchViewportsInScope();
+    Keys keys(nav);
+
+    const auto headers = foldableHeadersUnder(tab);
+    ASSERT_GE(headers.size(), 2u);
+    std::vector<VisibilityWatcher> watchers(headers.size());
+    for (size_t i = 0; i < headers.size(); ++i)
+        headers[i]->addComponentListener(&watchers[i]);
+
+    keys.focus = headers[1];
+    EXPECT_TRUE(keys.left());
+    EXPECT_TRUE(dynamic_cast<FoldableHeader*>(headers[1])->isFolded());
+    EXPECT_EQ(keys.focus, headers[1]) << "focus is still on the header that was folded";
+    EXPECT_TRUE(keys.right());
+    EXPECT_FALSE(dynamic_cast<FoldableHeader*>(headers[1])->isFolded());
+    EXPECT_TRUE(keys.left());
+
+    for (size_t i = 0; i < headers.size(); ++i) {
+        EXPECT_TRUE(headers[i]->isVisible()) << "header " << i;
+        EXPECT_EQ(watchers[i].changes, 0) << "header " << i << " was hidden or shown during a fold";
+    }
+    for (size_t i = 0; i < headers.size(); ++i)
+        headers[i]->removeComponentListener(&watchers[i]);
+}
+
+// The same holds when the strip folds everything and when a filter re-lays the list: a header that is
+// still on screen is never toggled; one the filter drops is hidden once.
+TEST(ShortcutsArrowKeysTest, FoldAllAndFilteringOnlyChangeTheVisibilityOfHeadersThatReallyAppearOrGo) {
+    ShortcutManager manager;
+    ShortcutsSettingsTab tab(manager);
+    tab.setSize(600, 500);
+
+    const auto headers = foldableHeadersUnder(tab);
+    std::vector<VisibilityWatcher> watchers(headers.size());
+    for (size_t i = 0; i < headers.size(); ++i)
+        headers[i]->addComponentListener(&watchers[i]);
+
+    tab.setAllSectionsCollapsed(true);
+    tab.setAllSectionsCollapsed(false);
+    for (size_t i = 0; i < headers.size(); ++i)
+        EXPECT_EQ(watchers[i].changes, 0) << "fold all, header " << i;
+
+    tab.setSearchText("piano"); // only the Piano Roll section survives
+    int hidden = 0;
+    int shown = 0;
+    for (size_t i = 0; i < headers.size(); ++i) {
+        (headers[i]->isVisible() ? shown : hidden) += 1;
+        EXPECT_LE(watchers[i].changes, 1) << "header " << i << " toggled more than once by one filter";
+    }
+    EXPECT_EQ(shown, 1);
+    EXPECT_EQ(hidden, static_cast<int>(headers.size()) - 1);
+    for (size_t i = 0; i < headers.size(); ++i)
+        headers[i]->removeComponentListener(&watchers[i]);
+}
+
+TEST_F(SettingsArrowKeysTest, FoldingAFocusedPreferencesHeaderInTheAllViewNeverHidesIt) {
+    openWindow();
+    ASSERT_NE(prefs, nullptr);
+    using Category = PreferencesSettingsTab::Category;
+    prefs->setSelectedCategory(Category::All);
+
+    const auto headers = foldableHeadersUnder(*prefs);
+    ASSERT_EQ(headers.size(), static_cast<size_t>(PreferencesSettingsTab::kNumSections));
+    std::vector<VisibilityWatcher> watchers(headers.size());
+    for (size_t i = 0; i < headers.size(); ++i)
+        headers[i]->addComponentListener(&watchers[i]);
+
+    auto& timelineHeader = prefs->getSectionHeaderForTest(Category::Timeline);
+    Keys keys(allNavigations(*window));
+    keys.focus = &timelineHeader;
+    EXPECT_TRUE(keys.left());
+    EXPECT_TRUE(prefs->isSectionCollapsed(Category::Timeline));
+    EXPECT_EQ(keys.focus, &timelineHeader);
+    EXPECT_TRUE(keys.right());
+    EXPECT_FALSE(prefs->isSectionCollapsed(Category::Timeline));
+    prefs->setAllSectionsCollapsed(true);
+    prefs->setAllSectionsCollapsed(false);
+
+    for (size_t i = 0; i < headers.size(); ++i) {
+        EXPECT_TRUE(headers[i]->isVisible()) << "header " << i;
+        EXPECT_EQ(watchers[i].changes, 0) << "header " << i << " was hidden or shown during a fold";
+    }
+    for (size_t i = 0; i < headers.size(); ++i)
+        headers[i]->removeComponentListener(&watchers[i]);
+}

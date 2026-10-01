@@ -187,7 +187,11 @@ enum CommandIDs {
     // Copies every external sample/wavetable into the project, saves, and optionally zips it
     // (MainComponentCollectArchive.cpp). Menu-only like exportMidi -- no ShortcutManager
     // actionId/binding. Appended last so no existing enumerator's value moves.
-    collectAndArchive
+    collectAndArchive,
+    // Previous/next tab of the bottom dock (wrapping). The Settings window answers the same two
+    // actions itself, by action id, for its own tab strip.
+    tabPrevious,
+    tabNext
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears
@@ -339,6 +343,10 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return selectNextTrack;
     if (actionId == "selectPreviousTrack")
         return selectPreviousTrack;
+    if (actionId == "tabPrevious")
+        return tabPrevious;
+    if (actionId == "tabNext")
+        return tabNext;
     // Every SURFACE action lands here — see kNoCommand.
     return kNoCommand;
 }

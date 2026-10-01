@@ -784,8 +784,8 @@ TEST_F(SettingsWindowTest, AppearanceTabPianoRollNoteColoursSectionHasRealBounds
     EXPECT_LE(resetButtonBounds.getBottom(), contentHeight);
 }
 
-// The Preferences picker row (category drop-down, Expand all / Collapse all in the "All" view, then
-// the filter field) at the window's least width: the filter field must show its whole hint, and the
+// The Preferences picker row (category drop-down, then the filter field; the All view's fold-all strip sits
+// below it) at the window's least width: the filter field must show its whole hint, and the
 // drop-down must show its longest entry. The drop-down used to be a fixed 200 px and the hint was cut.
 TEST_F(SettingsWindowTest, PreferencesPickerRowFitsItsContentsAtTheMinimumWidth) {
     synth::theme::AppLookAndFeel lookAndFeel;
@@ -798,8 +798,11 @@ TEST_F(SettingsWindowTest, PreferencesPickerRowFitsItsContentsAtTheMinimumWidth)
     auto* tab = dynamic_cast<PreferencesSettingsTab*>(settingsWindow.getTabs().getTabContentComponent(3));
     ASSERT_NE(tab, nullptr);
     ASSERT_LE(tab->getWidth(), SettingsWindow::kMinWidth) << "the tab is the window's width less its outline";
-    tab->setSelectedCategory(PreferencesSettingsTab::Category::All);
-    ASSERT_TRUE(tab->getExpandAllButtonForTest().isVisible()) << "All mode shows the fold buttons";
+    tab->setSelectedCategory(PreferencesSettingsTab::Category::All); // already the default: no layout of its own
+    // The tab is not the open one, so it sits outside the window's component tree: lay it out again now
+    // that the first layout (done while the drop-down still had no height) is behind it.
+    tab->resized();
+    ASSERT_TRUE(tab->getFoldAllButtonForTest().isVisible()) << "All mode shows the fold-all strip";
 
     auto& search = tab->getSearchFieldForTest();
     const int hintWidth = juce::GlyphArrangement::getStringWidthInt(search.getFont(), search.getTextToShowWhenEmpty());

@@ -168,6 +168,12 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // sidebar; the Shift chord is free on every platform.
     bindings["toggleSidePane"] =
         juce::KeyPress('b', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    // Cmd+Option+Left/Right -- previous/next tab. The Option-only arrows (card and clip moves, piano
+    // roll note navigation) are different exact-modifier bindings, so nothing collides.
+    bindings["tabPrevious"] = juce::KeyPress(juce::KeyPress::leftKey,
+                                             juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
+    bindings["tabNext"] = juce::KeyPress(juce::KeyPress::rightKey,
+                                         juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
 }
 
 void ShortcutManager::addGraphDefaultBindings() {

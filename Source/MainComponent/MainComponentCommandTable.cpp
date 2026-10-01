@@ -723,6 +723,21 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
              m.toggleActiveSidePane();
              return true;
          }},
+        // Walk the offered tabs of the dock in strip order, wrapping, opening the dock if it is closed.
+        {AppCommands::tabPrevious,
+         "Previous Tab",
+         "Show the previous tab of the bottom-docked panel",
+         "View",
+         "tabPrevious",
+         {},
+         [](MainComponent& m) { return m.stepBottomDockTab(-1); }},
+        {AppCommands::tabNext,
+         "Next Tab",
+         "Show the next tab of the bottom-docked panel",
+         "View",
+         "tabNext",
+         {},
+         [](MainComponent& m) { return m.stepBottomDockTab(1); }},
     };
 }
 

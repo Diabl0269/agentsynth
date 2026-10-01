@@ -389,12 +389,28 @@ private:
 //==============================================================================
 // SettingsWindow - Consolidated tabbed settings interface
 //==============================================================================
+namespace {
+// The remembered tab is saved by name: the Audio tab exists in the app and not in the plugin, so a
+// saved index would open a different tab in the other build. The older index key is read only when no
+// name was ever saved.
+constexpr const char* kSettingsTabNameKey = "settingsTabName";
+constexpr const char* kSettingsTabIndexKey = "settingsTab";
+
+int rememberedTabIndex(juce::PropertiesFile& settings, const juce::StringArray& tabNames) {
+    const auto name = settings.getValue(kSettingsTabNameKey);
+    if (name.isNotEmpty())
+        return juce::jmax(0, tabNames.indexOf(name)); // a tab this build lacks opens the first one
+    return settings.getIntValue(kSettingsTabIndexKey, 0);
+}
+} // namespace
+
 SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
                                synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                                ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
                                GraphEditor* graphEditor, synth::AccountService* accountService, bool showAudioTab,
                                juce::String initialTabName, std::vector<juce::String> midiRemoteDeviceNames)
     : appProperties(appProperties)
+    , shortcutManager(shortcutManager)
     , themeManager(themeManager) {
     if (showAudioTab) {
         tabs.addTab("Audio", juce::Colours::transparentBlack,
@@ -432,10 +448,15 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
             // Up/Down walk the tab's controls, Left/Right tick a check box or fold a section.
             arrowKeys.push_back(std::make_unique<synth::ui::ArrowKeyNavigation>(*content));
             arrowKeys.back()->watchViewportsInScope();
+            // A text field types Cmd+1 before the window's own keyPressed runs, so each one offers the
+            // tab keys to the window first.
+            tabSwitchKeys.attachToTextEditorsIn(*content);
         }
         if (auto* tabButton = tabs.getTabbedButtonBar().getTabButton(i)) {
             tabButton->setWantsKeyboardFocus(true); // Tab reaches the tab strip; Space or Return opens a tab
-            tabButton->setTooltip("Show the " + tabs.getTabNames()[i] + " settings");
+            tabButton->setTooltip(
+                "Show the " + tabs.getTabNames()[i] + " settings" +
+                (i < 9 ? " (" + platformCommandKeyName() + "+" + juce::String(i + 1) + ")" : juce::String()));
         }
     }
 
@@ -450,7 +471,7 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
                 break;
             }
     if (initialIndex < 0)
-        initialIndex = appProperties.getUserSettings()->getIntValue("settingsTab", 0);
+        initialIndex = rememberedTabIndex(*appProperties.getUserSettings(), tabs.getTabNames());
     tabs.setCurrentTabIndex(initialIndex, false);
 
     themeManager.addChangeListener(this);
@@ -460,13 +481,35 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
 SettingsWindow::~SettingsWindow() {
     juce::Desktop::getInstance().removeFocusChangeListener(this);
     themeManager.removeChangeListener(this);
-    appProperties.getUserSettings()->setValue("settingsTab", tabs.getCurrentTabIndex());
+    appProperties.getUserSettings()->setValue(kSettingsTabNameKey, tabs.getTabNames()[tabs.getCurrentTabIndex()]);
     appProperties.saveIfNeeded();
 }
 
 void SettingsWindow::resized() { tabs.setBounds(getLocalBounds()); }
 
+bool SettingsWindow::handleTabKey(const juce::KeyPress& key) {
+    const int count = tabs.getNumTabs();
+    if (count == 0)
+        return false;
+    // Cmd+<digit> is positional and fixed. A digit past the last tab is consumed too, so a text field
+    // does not type it.
+    const int position = synth::ui::TabSwitchKeys::positionalTabIndex(key);
+    if (position >= 0) {
+        if (position < count)
+            tabs.setCurrentTabIndex(position);
+        return true;
+    }
+    const bool previous = ShortcutManager::keyPressMatches(shortcutManager.getBinding("tabPrevious"), key);
+    const bool next = ShortcutManager::keyPressMatches(shortcutManager.getBinding("tabNext"), key);
+    if (!previous && !next)
+        return false;
+    tabs.setCurrentTabIndex((tabs.getCurrentTabIndex() + (next ? 1 : -1) + count) % count);
+    return true;
+}
+
 bool SettingsWindow::keyPressed(const juce::KeyPress& key) {
+    if (handleTabKey(key))
+        return true;
     if (key != juce::KeyPress::escapeKey)
         return false;
     if (onRequestClose)
