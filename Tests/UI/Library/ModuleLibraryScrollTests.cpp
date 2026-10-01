@@ -4,7 +4,7 @@
 //   • visibility     — the bar appears only when the rows outgrow the panel, and hides again
 //   • clamping       — the offset never leaves [0, overflow], including after resize/collapse
 //   • hit-testing    — component-space y maps through the offset to the right row
-//   • pinned chrome  — the search field and COLLAPSE ALL strip are never a row hit, however far
+//   • pinned chrome  — the search field and Collapse all strip are never a row hit, however far
 //                      the rows scrolled
 //   • paint          — drawing a scrolled panel does not crash
 

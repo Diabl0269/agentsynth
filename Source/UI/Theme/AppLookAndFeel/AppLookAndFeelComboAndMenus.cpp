@@ -75,7 +75,7 @@ void AppLookAndFeel::drawComboBoxTextWhenNothingSelected(juce::Graphics& g, juce
 void AppLookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Label& label) {
     // If the selected item carries a Drawable icon, shift the text label right to leave room
     // for the ~14 px icon (painted in drawComboBox) plus a 4 px gap.
-    int leftOffset = 8;
+    int leftOffset = kComboTextLeftInset;
     const int selectedId = box.getSelectedId();
     if (selectedId > 0) {
         const juce::PopupMenu* rootMenu = box.getRootMenu();
@@ -91,8 +91,31 @@ void AppLookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Label& labe
             }
         }
     }
-    label.setBounds(leftOffset, 1, box.getWidth() - leftOffset - 22, box.getHeight() - 2);
-    label.setFont(juce::Font(juce::FontOptions(theme.type.label + 2.0f)));
+    label.setBounds(leftOffset, 1, box.getWidth() - leftOffset - kComboTextRightInset, box.getHeight() - 2);
+    label.setFont(getComboBoxFont(box));
+}
+
+juce::Font AppLookAndFeel::getComboBoxFont(juce::ComboBox&) {
+    return juce::Font(juce::FontOptions(theme.type.label + 2.0f));
+}
+
+// Width = widest item text + the label's insets, which are whatever the active look-and-feel's
+// positionComboBoxText applies (probed on a scratch combo so a stock look-and-feel works too).
+int AppLookAndFeel::comboBoxWidthToFitItems(juce::ComboBox& box) {
+    auto& lf = box.getLookAndFeel();
+    const auto font = lf.getComboBoxFont(box);
+    int textWidth = 0;
+    for (int i = 0; i < box.getNumItems(); ++i)
+        textWidth = juce::jmax(textWidth, juce::GlyphArrangement::getStringWidthInt(font, box.getItemText(i)));
+
+    constexpr int kProbeWidth = 400;
+    juce::Label probe;
+    probe.setBounds(0, 0, kProbeWidth, 20);
+    juce::ComboBox scratch;
+    scratch.setBounds(0, 0, kProbeWidth, 20);
+    lf.positionComboBoxText(scratch, probe);
+    const int insets = scratch.getWidth() - probe.getWidth() + probe.getBorderSize().getLeftAndRight();
+    return textWidth + insets;
 }
 
 void AppLookAndFeel::drawPopupMenuBackground(juce::Graphics& g, int width, int height) {

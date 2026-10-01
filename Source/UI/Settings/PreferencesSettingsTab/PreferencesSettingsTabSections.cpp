@@ -35,6 +35,10 @@ PreferencesSettingsTab::SectionHeader::SectionHeader(PreferencesSettingsTab& o, 
     onClick = [this] { owner.setSectionCollapsed(category, !owner.isSectionCollapsed(category)); };
 }
 
+bool PreferencesSettingsTab::SectionHeader::isFolded() const { return owner.isSectionCollapsed(category); }
+
+void PreferencesSettingsTab::SectionHeader::setFolded(bool folded) { owner.setSectionCollapsed(category, folded); }
+
 // The accessible name carries the state ("Graph, expanded"), so a screen reader hears it change.
 void PreferencesSettingsTab::SectionHeader::refreshTitle() {
     setTitle(categoryName(category) + (owner.isSectionCollapsed(category) ? ", collapsed" : ", expanded"));
@@ -50,7 +54,7 @@ void PreferencesSettingsTab::SectionHeader::paintButton(juce::Graphics& g, bool 
                                       owner.isSectionCollapsed(category), colour);
     g.setColour(colour);
     g.setFont(juce::Font(juce::FontOptions(12.5f, juce::Font::bold)));
-    g.drawText(categoryName(category).toUpperCase(), bounds.withTrimmedLeft(22), juce::Justification::centredLeft);
+    g.drawText(categoryName(category), bounds.withTrimmedLeft(22), juce::Justification::centredLeft);
     g.setColour(textColour.withAlpha(kHeaderRuleAlpha));
     g.fillRect(0, bounds.getBottom() - 1, bounds.getWidth(), 1);
     synth::ui::paintFocusRing(g, bounds.toFloat().reduced(1.0f), *this);
@@ -60,7 +64,7 @@ void PreferencesSettingsTab::setupSectionControls() {
     for (auto category : kSections) {
         auto& header = sectionHeaders[indexOf(category)];
         header = std::make_unique<SectionHeader>(*this, category);
-        header->setTooltip("Fold or unfold " + categoryName(category));
+        header->setTooltip("Fold or unfold " + categoryName(category) + " (Left/Right)");
         contentHost.addChildComponent(*header);
     }
     addChildComponent(expandAllButton);

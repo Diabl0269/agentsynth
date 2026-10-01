@@ -308,7 +308,7 @@ void ModMatrixComponent::paint(juce::Graphics& g) {
 
     g.setColour(textPrimaryColour);
     g.setFont(juce::Font(18.0f, juce::Font::bold));
-    g.drawText("MODULATION MATRIX", titleArea.reduced(10, 0), juce::Justification::centredLeft, true);
+    g.drawText("Modulation Matrix", titleArea.reduced(10, 0), juce::Justification::centredLeft, true);
 
     // Column Headers
     auto headerArea = area.removeFromTop(30);
@@ -322,14 +322,14 @@ void ModMatrixComponent::paint(juce::Graphics& g) {
     const float w = (float)area.getWidth();
     const float sourceColW = (w - rowNumColW) * kSourceColFrac;
     const float destColW = (w - rowNumColW) * kDestColFrac;
-    // Headers offset by kRowNumColW for the row numbers; the AMOUNT column deliberately stops
+    // Headers offset by kRowNumColW for the row numbers; the Amount column deliberately stops
     // short of the row's bypass/delete icon columns, leaving that header cell blank.
-    g.drawText("SOURCE", juce::Rectangle<float>(rowNumColW, (float)headerArea.getY(), sourceColW, 30.0f),
+    g.drawText("Source", juce::Rectangle<float>(rowNumColW, (float)headerArea.getY(), sourceColW, 30.0f),
                juce::Justification::centred, true);
-    g.drawText("DESTINATION",
+    g.drawText("Destination",
                juce::Rectangle<float>(rowNumColW + sourceColW, (float)headerArea.getY(), destColW, 30.0f),
                juce::Justification::centred, true);
-    g.drawText("AMOUNT",
+    g.drawText("Amount",
                juce::Rectangle<float>(rowNumColW + sourceColW + destColW, (float)headerArea.getY(),
                                       (w - rowNumColW) * 0.25f, 30.0f),
                juce::Justification::centred, true);

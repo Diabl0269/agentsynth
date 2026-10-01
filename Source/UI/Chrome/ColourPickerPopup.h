@@ -42,7 +42,9 @@ inline const char* favouriteColoursKey() noexcept { return "favouriteColoursArgb
 inline juce::String serializeFavouriteColours(const std::vector<juce::Colour>& colours) {
     juce::StringArray tokens;
     for (const auto& c : colours)
-        tokens.add(juce::String::toHexString((juce::int64)c.getARGB()).paddedLeft('0', 8).toUpperCase());
+        tokens.add(juce::String::toHexString((juce::int64)c.getARGB())
+                       .paddedLeft('0', 8)
+                       .toUpperCase()); // not-ui-text: hex colour code
     return tokens.joinIntoString(",");
 }
 
@@ -237,7 +239,9 @@ private:
     void nameSelectorSliders() {
         for (auto* child : selector_.getChildren()) {
             if (auto* slider = dynamic_cast<juce::Slider*>(child)) {
-                const auto channel = slider->getName().substring(0, 1).toUpperCase() + slider->getName().substring(1);
+                const auto name = slider->getName();
+                const auto initial = name.substring(0, 1).toUpperCase(); // not-ui-text: first letter only
+                const auto channel = initial + name.substring(1);
                 slider->setTitle(channel);
                 slider->setTooltip(channel + " amount of the colour, 0 to 255");
                 for (auto* part : slider->getChildren())

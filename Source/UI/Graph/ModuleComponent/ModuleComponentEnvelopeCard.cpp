@@ -30,7 +30,7 @@ const char* envelopeKnobShortLabel(const juce::String& paramName) {
     if (paramName == "Attack")
         return "ATK";
     if (paramName == "Hold")
-        return "HOLD";
+        return "Hold";
     if (paramName == "Decay")
         return "DEC";
     if (paramName == "Sustain")

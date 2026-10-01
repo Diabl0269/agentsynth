@@ -106,3 +106,56 @@ The test proves names exist, not that they read well or that Tab reaches them. R
 through the area you changed and watch the ring, then dump the macOS accessibility tree of the running
 process with pyobjc (`AXUIElementCreateApplication(pid)`, walk `AXChildren`, print `AXRole`,
 `AXTitle`, `AXValue`, `AXDescription`) and check the new names appear.
+
+## Arrow keys in lists of controls
+
+A Settings tab or a dialog is a list of controls, so the arrow keys walk it the way they walk the module
+library's rows (`ModuleLibraryInput.cpp`). One helper, `ArrowKeyNavigation`
+(`Source/UI/Layout/ArrowKeyNavigation.h`), gives a "scope" component these keys; it is a
+`juce::KeyListener`, so it only sees keys the focused control did not consume:
+
+| Key (no modifiers) | Focus on | Does |
+| --- | --- | --- |
+| Up / Down | any control in the scope | moves focus to the previous / next control in the order Tab walks (`juce::KeyboardFocusTraverser`), skipping controls that are hidden, disabled or have no bounds; clamped at the ends (the key is consumed, nothing wraps) |
+| Right / Left | a `juce::ToggleButton` | ticks / unticks it through `setToggleState(..., sendNotification)`, the call a click makes, so the setting is saved and undo steps are recorded as on a click; idempotent; Left does nothing on a radio button |
+| Left / Right | a `synth::ui::FoldableHeader` (a Preferences section header, a Keyboard Shortcuts section header) | folds / unfolds the section |
+
+Every other key and every arrow with a modifier passes through untouched. Scrolling the newly focused
+control into view is the owner's `ScrollIntoViewOnFocus`.
+
+- **Attached to**: every Settings tab (`SettingsWindow` creates one per tab content), the Export Audio
+  dialog, the Sign in dialog and the Configure I/O (macro port) dialog. The mixer, timeline, piano roll,
+  module library and canvas have their own arrow handling and do not use it.
+- **Native controls keep their arrows.** A `ComboBox`, `Slider` or `TextEditor` consumes the arrows before
+  they bubble, so a list can walk onto one but not through it: Down lands on a combo box, the next Down
+  changes the combo's selection, and Tab is what moves on. The macro port rows' swatch and Delete buttons
+  likewise keep their own arrows, and the Keyboard Shortcuts rebind button, while it listens, takes every
+  key (arrows included) as the new binding.
+- **A `juce::Viewport` is watched too.** `Viewport::keyPressed` consumes Up/Down for scrolling when its
+  scrollbar shows, so the helper also listens on each plain viewport inside the scope
+  (`watchViewportsInScope()`, or `watchViewport()` for a dialog that builds its viewport itself), ahead
+  of the viewport's own handler.
+- **Not rebindable**, same as the module library and the track header rows
+  ([`shortcuts.md`](../control/shortcuts.md#settings-and-dialog-arrow-keys)): list navigation is native
+  control behaviour, not an action. This is the one exception to "every new key is a rebindable action".
+- **Headless tests** cannot hold real keyboard focus, so `ArrowKeyNavigationTests.cpp` supplies the
+  "focused" component and the focus landing through the helper's test hooks and delivers keys the way the
+  native window does (each ancestor's key listeners, then its `keyPressed`).
+
+### The focus ring on a ticked check box
+
+A ticked check box is filled with the accent colour, so a ring drawn against its edge merged into it.
+While a toggle has keyboard focus `AppLookAndFeel::paintToggleButton` (behind `drawToggleButton`) strokes a
+1 px separator in the page colour just outside the box and the accent ring beyond that, ticked or not.
+The box gives up size only when the row is too short for the ring to fit inside the component (under
+about 23 px). `FocusRing.h` is unchanged: every other ring in the app keeps its geometry.
+
+## No all-caps UI text
+
+UI text is never written in ALL CAPS: not by typing it that way and not with `toUpperCase()`. Headers and
+column heads use Title Case ("Modulation Matrix", "Source"), buttons and strips sentence case ("Collapse
+all"). Abbreviations that are capitals everywhere (MIDI, ADSR, JSON, NRPN) are fine. `scripts/check-ui-caps.sh`
+enforces it in the Lint job (`scripts/tests/check-ui-caps.test.sh`): under `Source/UI/` it rejects any
+`toUpperCase()` call and any string literal with a 4+ letter capitals word that is not in its
+abbreviation list. A line that is not UI text (a hex colour code) ends with `// not-ui-text: <reason>`.
+Comments are not checked.

@@ -170,7 +170,7 @@ struct Typography {
     juce::String uiFamily{"Inter"};
     juce::String monoFamily{"JetBrains Mono"};
     float h1{18.0f};    // window / large headings
-    float h2{13.0f};    // card titles (rendered uppercase + tracked at call sites)
+    float h2{13.0f};    // card titles (drawn in the module's own case)
     float label{10.5f}; // knob names, port labels, section heads
     float value{10.0f}; // mono value readouts
     float micro{8.5f};  // smallest captions

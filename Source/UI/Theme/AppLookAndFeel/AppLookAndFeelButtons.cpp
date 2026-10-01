@@ -126,9 +126,19 @@ void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton&
 
 void AppLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& button, bool shouldDrawButtonAsHighlighted,
                                       bool /*shouldDrawButtonAsDown*/) {
+    paintToggleButton(g, button, shouldDrawButtonAsHighlighted, button.hasKeyboardFocus(false));
+}
+
+void AppLookAndFeel::paintToggleButton(juce::Graphics& g, juce::ToggleButton& button,
+                                       bool shouldDrawButtonAsHighlighted, bool keyboardFocused) {
     const auto& c = theme.colors;
 
-    const float boxSize = juce::jmin(18.0f, (float)button.getHeight() - 2.0f);
+    // The focus ring stands off the box by a gap (a ticked box is filled with the same accent, so a
+    // ring touching it would merge into it). The box shrinks only when the row is too short for the
+    // ring to fit inside the component.
+    constexpr float kRingGap = 1.0f;
+    const float ringExtent = kRingGap + theme.metrics.borderWidth * 1.5f;
+    const float boxSize = juce::jmin(18.0f, (float)button.getHeight() - 2.0f * ringExtent);
     juce::Rectangle<float> box(4.0f, ((float)button.getHeight() - boxSize) * 0.5f, boxSize, boxSize);
 
     g.setColour(button.getToggleState() ? button.findColour(juce::ToggleButton::tickColourId) : c.surface);
@@ -155,7 +165,11 @@ void AppLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& but
                          juce::Justification::centredLeft, 1);
     }
 
-    synth::ui::paintFocusRing(g, box.expanded(1.0f), button, 5.0f);
+    if (keyboardFocused) {
+        g.setColour(c.bg0);
+        g.drawRoundedRectangle(box.expanded(kRingGap * 0.5f), 4.0f + kRingGap * 0.5f, kRingGap);
+        synth::ui::paintFocusRingAlways(g, box.expanded(ringExtent), button, 4.0f + ringExtent);
+    }
 }
 
 } // namespace synth::theme

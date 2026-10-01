@@ -118,7 +118,9 @@ juce::String serializeMeterColourStops(const MeterColourStops& stops) {
     juce::StringArray tokens;
     for (const auto& stop : stops.getStops())
         tokens.add(juce::String(stop.dbFrom, 1) + ":" +
-                   juce::String::toHexString((juce::int64)stop.colour.getARGB()).paddedLeft('0', 8).toUpperCase());
+                   juce::String::toHexString((juce::int64)stop.colour.getARGB())
+                       .paddedLeft('0', 8)
+                       .toUpperCase()); // not-ui-text: hex colour code
     return tokens.joinIntoString(",");
 }
 

@@ -36,7 +36,7 @@
 #      link targets, docs/... path mentions, section (§) references, and the docs/ filename
 #      convention, run directly (not just its unit test). See that script's own doc comment.
 #   7. Every scripts/tests/*.test.sh -- ci-cache-check, ci-install-linux-deps,
-#      check-nonascii-literals, ai-eval-ratchet, utf8-literal-check, check-file-sizes,
+#      check-nonascii-literals, check-ui-caps, ai-eval-ratchet, utf8-literal-check, check-file-sizes,
 #      check-function-sizes, check-header-comments, check-comment-provenance, check-docs as of this writing, globbed so a
 #      newly added one is picked up automatically. check-nonascii-literals.test.sh's own last case
 #      scans the real Source/ tree, so this also covers the Lint job's ASCII-literal gate.

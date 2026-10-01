@@ -427,8 +427,12 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     for (int i = 0; i < tabs.getNumTabs(); ++i) {
         // A tab's content is not a Tab stop of its own: its controls are, and an unnamed stop between
         // the tab button and the first control is one key press nobody can explain.
-        if (auto* content = tabs.getTabContentComponent(i))
+        if (auto* content = tabs.getTabContentComponent(i)) {
             content->setWantsKeyboardFocus(false);
+            // Up/Down walk the tab's controls, Left/Right tick a check box or fold a section.
+            arrowKeys.push_back(std::make_unique<synth::ui::ArrowKeyNavigation>(*content));
+            arrowKeys.back()->watchViewportsInScope();
+        }
         if (auto* tabButton = tabs.getTabbedButtonBar().getTabButton(i)) {
             tabButton->setWantsKeyboardFocus(true); // Tab reaches the tab strip; Space or Return opens a tab
             tabButton->setTooltip("Show the " + tabs.getTabNames()[i] + " settings");

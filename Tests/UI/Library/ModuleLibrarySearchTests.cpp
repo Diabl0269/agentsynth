@@ -3,7 +3,7 @@
 //   • filter        — non-matching module/snippet rows disappear; empty sections drop out
 //   • sections      — matching categories stay visible and open even when they were collapsed
 //   • highlight     — highlightSpansFor reports each case-insensitive hit used when painting
-//   • chrome        — the search editor is pinned above COLLAPSE ALL; filtering does not persist
+//   • chrome        — the search editor is pinned above Collapse all; filtering does not persist
 //                     a collapse the user never asked for
 //   • theme         — the searchEditor's cached colours must not go stale between construction
 //                     (against whatever theme was active then) and being parented (which is

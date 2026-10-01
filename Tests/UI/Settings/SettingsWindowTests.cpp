@@ -12,6 +12,7 @@
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SettingsWindow.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include <chrono>
 #include <gtest/gtest.h>
@@ -781,6 +782,43 @@ TEST_F(SettingsWindowTest, AppearanceTabPianoRollNoteColoursSectionHasRealBounds
     EXPECT_LE(titleBounds.getBottom(), contentHeight);
     EXPECT_LE(swatchBounds.getBottom(), contentHeight);
     EXPECT_LE(resetButtonBounds.getBottom(), contentHeight);
+}
+
+// The Preferences picker row (category drop-down, Expand all / Collapse all in the "All" view, then
+// the filter field) at the window's least width: the filter field must show its whole hint, and the
+// drop-down must show its longest entry. The drop-down used to be a fixed 200 px and the hint was cut.
+TEST_F(SettingsWindowTest, PreferencesPickerRowFitsItsContentsAtTheMinimumWidth) {
+    synth::theme::AppLookAndFeel lookAndFeel;
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setLookAndFeel(&lookAndFeel);
+    settingsWindow.setSize(SettingsWindow::kMinWidth, SettingsWindow::kDefaultHeight);
+    settingsWindow.resized();
+
+    auto* tab = dynamic_cast<PreferencesSettingsTab*>(settingsWindow.getTabs().getTabContentComponent(3));
+    ASSERT_NE(tab, nullptr);
+    ASSERT_LE(tab->getWidth(), SettingsWindow::kMinWidth) << "the tab is the window's width less its outline";
+    tab->setSelectedCategory(PreferencesSettingsTab::Category::All);
+    ASSERT_TRUE(tab->getExpandAllButtonForTest().isVisible()) << "All mode shows the fold buttons";
+
+    auto& search = tab->getSearchFieldForTest();
+    const int hintWidth = juce::GlyphArrangement::getStringWidthInt(search.getFont(), search.getTextToShowWhenEmpty());
+    EXPECT_GE(search.getWidth(), hintWidth + search.getLeftIndent() + search.getBorder().getLeftAndRight())
+        << "the filter field is cut: it is " << search.getWidth() << " px for a " << hintWidth << " px hint";
+
+    auto& combo = tab->getCategoryComboForTest();
+    juce::Label* comboLabel = nullptr;
+    for (auto* child : combo.getChildren())
+        if (comboLabel == nullptr)
+            comboLabel = dynamic_cast<juce::Label*>(child);
+    ASSERT_NE(comboLabel, nullptr);
+    for (int i = 0; i < combo.getNumItems(); ++i) {
+        combo.setSelectedItemIndex(i, juce::dontSendNotification);
+        const int textWidth = juce::GlyphArrangement::getStringWidthInt(comboLabel->getFont(), combo.getItemText(i));
+        EXPECT_GE(comboLabel->getWidth(), textWidth + comboLabel->getBorderSize().getLeftAndRight())
+            << "\"" << combo.getItemText(i).toStdString() << "\" is cut in the category drop-down";
+    }
+    settingsWindow.setLookAndFeel(nullptr);
 }
 
 // ============================================================================

@@ -38,6 +38,7 @@ bash scripts/tests/ci-cache-budget.test.sh         # one-generation cache budget
 bash scripts/ci-cache-budget.sh                    # cache budget itself, also runs directly in the Lint job
 bash scripts/tests/ci-install-linux-deps.test.sh   # Linux apt install + mirror failover
 bash scripts/tests/check-nonascii-literals.test.sh # no raw/escaped non-ASCII in string literals (fromUTF8/CharPointer_UTF8 exempt)
+bash scripts/tests/check-ui-caps.test.sh           # no toUpperCase() / all-caps words in UI string literals (// not-ui-text: <reason> opts out)
 bash scripts/tests/utf8-literal-check.test.sh      # non-ASCII \x escape wrapping (also runs directly in the Lint job)
 bash scripts/check-file-sizes.sh            # 1000-line cap, strict ratchet baseline (--list / --update)
 bash scripts/check-function-sizes.sh        # 200-line-per-function cap, strict ratchet baseline (--list / --update)

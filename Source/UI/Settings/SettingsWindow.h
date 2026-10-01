@@ -4,11 +4,13 @@
 #include "AI/AccountService.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Settings/SettingsTabs.h"
 #include "UI/Theme/ThemeManager.h"
 #include <functional>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <vector>
 
 class ShortcutManager;
@@ -18,6 +20,13 @@ class SettingsWindow
     , private juce::ChangeListener
     , private juce::FocusChangeListener {
 public:
+    // Size the window opens at, and the least it can be dragged down to: the tabs' pinned rows (the
+    // Preferences picker row above all) are laid out to fit at this width.
+    static constexpr int kDefaultWidth = 500;
+    static constexpr int kDefaultHeight = 450;
+    static constexpr int kMinWidth = kDefaultWidth;
+    static constexpr int kMinHeight = 300;
+
     // showAudioTab=false omits the audio-device selector. Used by the plugin build: the host owns
     // the audio device, so an AudioDeviceSelectorComponent there would be inert at best and, if the
     // user touched it, would try to open hardware out from under the host.
@@ -48,6 +57,10 @@ public:
     juce::String getTabName(int index) const { return tabs.getTabNames()[index]; }
     int getCurrentTabIndex() const { return tabs.getCurrentTabIndex(); }
     juce::TabbedComponent& getTabs() { return tabs; }
+    // The list-style arrow keys attached to a tab's content (one per tab, in tab order).
+    synth::ui::ArrowKeyNavigation& getArrowKeysForTest(int tabIndex) {
+        return *arrowKeys[static_cast<size_t>(tabIndex)];
+    }
 
     // Puts keyboard focus on the open tab's button, where Tab, Space and Return act on the tab strip.
     // Happens by itself whenever the window it sits in takes keyboard focus (on opening, and each time
@@ -67,6 +80,8 @@ private:
     juce::ApplicationProperties& appProperties;
     synth::theme::ThemeManager& themeManager;
     SettingsTabs tabs{juce::TabbedButtonBar::TabsAtTop};
+    // Declared after `tabs` so each is destroyed before the content it listens on.
+    std::vector<std::unique_ptr<synth::ui::ArrowKeyNavigation>> arrowKeys;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SettingsWindow)
 };

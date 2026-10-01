@@ -124,6 +124,7 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     rowsViewport_.setViewedComponent(&rowsContent_, false);
     rowsViewport_.setScrollBarsShown(true, false);
     rowsViewport_.setWantsKeyboardFocus(false);
+    arrowKeys_.watchViewport(rowsViewport_); // ahead of the viewport's own Up/Down scrolling
 
     inputsHeader_.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
     outputsHeader_.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));

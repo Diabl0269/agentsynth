@@ -15,6 +15,15 @@ the Settings window is.
   header with a chevron. Click a header (or Tab to it and press Space) to fold or unfold that
   category; **Expand all** / **Collapse all** next to the drop-down do every header at once. Folds
   are remembered only while the Settings window is open (a new window starts fully expanded).
+- Section headers and column heads are in normal case ("Graph", "Files & Autosave"), never all caps.
+- The picker row is sized by its content, not fixed: the drop-down is as wide as its longest entry (measured
+  with the drop-down's own font plus the look-and-feel's text insets, `AppLookAndFeel::comboBoxWidthToFitItems`)
+  and the fold buttons are as wide as their text, so the filter field gets the rest. The Settings window cannot
+  be dragged narrower than `SettingsWindow::kMinWidth`, where the field still shows its whole hint.
+- **Keyboard**: Tab reaches every control; Up / Down also walk them (clamped at the ends), Right / Left tick
+  or untick a focused check box, and Left / Right fold or unfold a focused section header in the All view.
+  Down onto a drop-down, then Down again changes its selection (Tab moves on). The keys are fixed, not
+  rebindable. → [`accessibility.md`](../development/accessibility.md#arrow-keys-in-lists-of-controls)
 - Typing in the filter searches **every** category (a row matches on its label, button text or tooltip)
   and disables the drop-down until the filter is cleared. Esc clears it.
 - The tab opens on Graph.

@@ -3,6 +3,7 @@
 #include "MidiRemote/RemoteModel.h"
 #include "PatchSaveLocation.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -399,9 +400,13 @@ private:
     int sectionStartY[kNumSections] = {};
     // A fold header of the "All" view (defined in ...Sections.cpp). A juce::Button so it is
     // keyboard-reachable and named for screen readers.
-    struct SectionHeader : juce::Button {
+    struct SectionHeader
+        : juce::Button
+        , synth::ui::FoldableHeader {
         SectionHeader(PreferencesSettingsTab& o, Category c);
         void refreshTitle();
+        bool isFolded() const override;
+        void setFolded(bool folded) override;
         void paintButton(juce::Graphics& g, bool hot, bool down) override;
         PreferencesSettingsTab& owner;
         Category category;

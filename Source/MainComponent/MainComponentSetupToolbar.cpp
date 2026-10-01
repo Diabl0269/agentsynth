@@ -279,7 +279,7 @@ void MainComponent::launchSettingsWindow(const juce::String& initialTabName) {
         new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent, shortcutManager,
                            *themeManager, &graphEditor, &accountService,
                            /*showAudioTab=*/!audioEngine.isHosted(), initialTabName, std::move(profiledDevices));
-    settingsComp->setSize(500, 450);
+    settingsComp->setSize(SettingsWindow::kDefaultWidth, SettingsWindow::kDefaultHeight);
 
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(settingsComp);
@@ -287,7 +287,8 @@ void MainComponent::launchSettingsWindow(const juce::String& initialTabName) {
     options.componentToCentreAround = this;
     options.useNativeTitleBar = true;
     options.resizable = true;
-    options.launchAsync();
+    if (auto* window = options.launchAsync())
+        window->setResizeLimits(SettingsWindow::kMinWidth, SettingsWindow::kMinHeight, 4096, 4096);
 }
 
 void MainComponent::assembleToolbar() {

@@ -166,7 +166,7 @@ All optional:
 | `uiFamily` | `"Inter"` | Sans-serif family name for UI labels and text |
 | `monoFamily` | `"JetBrains Mono"` | Monospace family for value readouts |
 | `h1` | `18.0` | Large heading / window title font size (pt) |
-| `h2` | `13.0` | Card title font size (rendered uppercase and tracked) |
+| `h2` | `13.0` | Card title font size (drawn in the module's own case) |
 | `label` | `10.5` | Knob name / port label / section heading font size |
 | `value` | `10.0` | Mono value readout font size |
 | `micro` | `8.5` | Smallest caption font size |

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Transport/BounceExporter.h"
+#include "UI/Layout/ArrowKeyNavigation.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -207,6 +208,9 @@ private:
     double progressValue_ = 0.0;
     juce::ProgressBar progressBar_{progressValue_};
     juce::TextButton progressCancelButton_{"Cancel"};
+
+    // Last, so it is destroyed before the controls it listens on.
+    synth::ui::ArrowKeyNavigation arrowKeys_{*this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ExportAudioDialog)
 };

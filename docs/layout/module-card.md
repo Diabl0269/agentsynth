@@ -299,14 +299,15 @@ geometry `paint()` draws, rather than by a fixed box:
   for the title's own font (`theme.type.h2`, bold). JUCE has no direct cap-height query, and 0.72x
   ascent is the standard sans-serif approximation, close to Inter's real ratio. This keeps the glyph
   proportional to the title — roughly cap-height, about 9-10 px at the default 13 pt title size —
-  instead of the header's full 24 px band, which read a touch large and heavy next to the
-  letter-spaced caps.
+  instead of the header's full 24 px band, which read a touch large and heavy next to the title.
 - **Vertical position** — centred on the title's cap-height optical centre, derived from the SAME
   centred-text-box math `drawText` uses to place the title (`textBoxTop = headerTop + (headerHeight
   - titleFont.getHeight()) / 2`, `baseline = textBoxTop + titleFont.getAscent()`, `capCentreY =
   baseline - capHeight / 2`) rather than the header band's raw geometric middle. Centring on the
-  full ascent-plus-descent box the title is drawn in reads slightly low against cap-height-only
-  glyphs, because an all-caps title never touches the descender clearance that box reserves.
+  full ascent-plus-descent box the title is drawn in reads slightly low against the capital and
+  x-height glyphs, which sit above the descender clearance that box reserves (a title is in normal
+  case, so its g, p and y do use that clearance: it fits inside the 24 px header with room to spare,
+  pinned by `ModuleCardTitleTests`).
 - **Horizontal position** — the right edge is pinned to `x = 14`, the activity LED's own right edge
   (`fillEllipse(6, 8, 8, 8)`), so the gap to the title's left inset at `x = 22` stays the
   established 8 px rhythm regardless of the glyph's resulting width.

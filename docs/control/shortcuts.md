@@ -497,6 +497,15 @@ plumbing the mouse wheel and vertical zoom already use, via `ensureTrackVisible(
 | S | Solo Focused Track (`timelineSoloFocusedTrack`) — `Track::soloed`, same path |
 | R | Arm Focused Track (`timelineArmFocusedTrack`) — `Track::armed`, same path |
 
+#### Settings and dialog arrow keys
+
+The Settings tabs and the Export Audio, Sign in and Configure I/O dialogs also use hard-coded arrow keys,
+not `ShortcutManager` actions (same precedent as the Library and track-header rows above): **Up / Down**
+move focus to the previous / next control (clamped at the ends), **Right / Left** tick / untick a focused
+check box or unfold / fold a focused section header. A combo box, slider or text field keeps its own
+arrows, and a Keyboard Shortcuts row that is listening for a new key captures them as the binding. →
+[`accessibility.md`](../development/accessibility.md#arrow-keys-in-lists-of-controls)
+
 M/S/R are rebindable, Timeline category, bare-letter defaults matching the J/L/P/F convention — free
 on all three (no other binding in this table is a BARE, unmodified m/s/r; every existing use of those
 letters carries a modifier). **Naming, deliberately not "Mute"/"Solo"/"Arm":** `timelineToolMute`

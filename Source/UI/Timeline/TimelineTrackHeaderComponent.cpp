@@ -47,7 +47,7 @@ juce::String kindBadgeText(synth::TrackKind kind) {
     case synth::TrackKind::Audio:
         return "AUD";
     case synth::TrackKind::Automation:
-        return "AUTO";
+        return "Auto";
     }
     return {};
 }

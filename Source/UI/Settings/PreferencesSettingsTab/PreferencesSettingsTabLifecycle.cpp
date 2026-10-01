@@ -13,6 +13,15 @@ namespace {
 // the Keyboard Shortcuts tab's section headers (see its kDividerAlpha — keep the two in step).
 constexpr float kDividerAlpha = 0.12f;
 
+// A fold button is as wide as its text plus this much air on each side (the look-and-feel already
+// keeps 4 px of that clear of the edge, see AppLookAndFeel::drawButtonText).
+constexpr int kFoldButtonSidePad = 8;
+
+int widthToFitText(juce::TextButton& button, int height) {
+    const auto font = button.getLookAndFeel().getTextButtonFont(button, height);
+    return juce::GlyphArrangement::getStringWidthInt(font, button.getButtonText()) + 2 * kFoldButtonSidePad;
+}
+
 } // namespace
 
 int comboIdFromMode(GraphEditor::SmartConnectionMode mode) {
@@ -225,7 +234,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         appProperties.getUserSettings()->getBoolValue(kTimelineDoubleClickSpansLocatorsKey, true),
         juce::dontSendNotification);
     doubleClickSpansLocatorsToggle.setTooltip(
-        "When on (the default), double-clicking empty lane space INSIDE the loop locators creates a clip spanning "
+        "When on (the default), double-clicking empty lane space inside the loop locators creates a clip spanning "
         "them. Outside the locators - or with no locators set - you still get a one-bar clip. Turn it off to always "
         "get one bar.");
     doubleClickSpansLocatorsToggle.onClick = [this] {
@@ -381,15 +390,18 @@ void PreferencesSettingsTab::resized() {
     titleLabel.setBounds(bounds.removeFromTop(28));
     bounds.removeFromTop(8);
     auto pickerRow = bounds.removeFromTop(26);
-    categoryCombo.setBounds(pickerRow.removeFromLeft(200));
+    // Picker row: the drop-down and the fold buttons take exactly the width their text needs, so the
+    // filter field gets the rest and can show its whole hint at the Settings window's minimum width.
+    categoryCombo.setBounds(
+        pickerRow.removeFromLeft(synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(categoryCombo)));
     pickerRow.removeFromLeft(8);
     const bool showFoldButtons = sectionHeadersActive();
     expandAllButton.setVisible(showFoldButtons);
     collapseAllButton.setVisible(showFoldButtons);
     if (showFoldButtons) {
-        expandAllButton.setBounds(pickerRow.removeFromLeft(76));
+        expandAllButton.setBounds(pickerRow.removeFromLeft(widthToFitText(expandAllButton, pickerRow.getHeight())));
         pickerRow.removeFromLeft(4);
-        collapseAllButton.setBounds(pickerRow.removeFromLeft(86));
+        collapseAllButton.setBounds(pickerRow.removeFromLeft(widthToFitText(collapseAllButton, pickerRow.getHeight())));
         pickerRow.removeFromLeft(8);
     }
     searchField.setBounds(pickerRow);

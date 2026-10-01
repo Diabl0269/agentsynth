@@ -780,7 +780,7 @@ void AIChatComponent::updateChatDisplay() {
                         auto reason = error.isNotEmpty() ? error : self->aiService.getLastPatchError();
                         if (reason.isEmpty())
                             reason = "The patch could not be applied.";
-                        juce::Logger::writeToLog("--- Patch REJECTED: " + reason + " ---");
+                        juce::Logger::writeToLog("--- Patch rejected: " + reason + " ---");
                         self->messages.push_back({"assistant",
                                                   "Could not apply this patch after " +
                                                       juce::String(AIIntegrationService::kMaxPatchRetries + 1) +
