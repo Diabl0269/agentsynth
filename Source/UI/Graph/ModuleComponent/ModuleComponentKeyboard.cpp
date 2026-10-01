@@ -1,0 +1,101 @@
+// ModuleComponentKeyboard.cpp
+//
+// Stepping into a card from the keyboard (docs/layout/selection.md#keyboard). Return on the canvas
+// (CanvasCardKeyboard) calls enterFromKeyboard(); from then on the card's controls hold focus,
+// Tab/Shift+Tab walk them and wrap inside the card, and Escape hands focus back to the canvas with
+// the card still selected. The knobs turn themselves (CardKnobSlider::keyPressed); a key a control
+// leaves alone bubbles up to keyPressed() here before it can reach the canvas.
+
+#include "ModuleComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include <algorithm>
+#include <tuple>
+
+namespace {
+
+bool isKeyboardStop(const juce::Component& c) {
+    return dynamic_cast<const juce::Slider*>(&c) != nullptr || dynamic_cast<const juce::ComboBox*>(&c) != nullptr ||
+           dynamic_cast<const juce::Button*>(&c) != nullptr || c.getWantsKeyboardFocus();
+}
+
+// A stock control is one stop: its own parts (a slider's value box, a combo's label) are not.
+void collectStops(juce::Component& parent, std::vector<juce::Component*>& out) {
+    for (auto* child : parent.getChildren()) {
+        if (!child->isVisible() || !child->isEnabled() || child->getBounds().isEmpty())
+            continue;
+        if (isKeyboardStop(*child))
+            out.push_back(child);
+        else
+            collectStops(*child, out);
+    }
+}
+
+} // namespace
+
+// Body controls first, top to bottom then left to right, so Return lands on the first knob, toggle
+// or combo rather than on Bypass; the header buttons (Bypass, Mute, Delete, ...) close the cycle.
+std::vector<juce::Component*> ModuleComponent::getKeyboardControls() {
+    std::vector<juce::Component*> stops;
+    collectStops(*this, stops);
+    if (titleEditor != nullptr)
+        stops.erase(std::remove(stops.begin(), stops.end(), titleEditor.get()), stops.end());
+
+    auto key = [this](juce::Component* c) {
+        const auto area = getLocalArea(c->getParentComponent(), c->getBounds());
+        return std::make_tuple(area.getY() < kHeaderHeight ? 1 : 0, area.getY(), area.getX());
+    };
+    std::stable_sort(stops.begin(), stops.end(),
+                     [&key](juce::Component* a, juce::Component* b) { return key(a) < key(b); });
+    return stops;
+}
+
+void ModuleComponent::focusForKeyboard(juce::Component* target) {
+    if (target == nullptr)
+        return;
+    if (recordFocusForTest_)
+        recordedFocus_ = target;
+    else
+        target->grabKeyboardFocus();
+}
+
+juce::Component* ModuleComponent::currentKeyboardFocus() const {
+    return recordFocusForTest_ ? recordedFocus_.getComponent() : juce::Component::getCurrentlyFocusedComponent();
+}
+
+bool ModuleComponent::enterFromKeyboard() {
+    const auto stops = getKeyboardControls();
+    if (stops.empty())
+        return false;
+    focusForKeyboard(stops.front());
+    return true;
+}
+
+// Only keys that arrive while focus is inside this card are acted on; everything else (Delete
+// included) keeps bubbling to the canvas as before.
+bool ModuleComponent::keyPressed(const juce::KeyPress& key) {
+    auto* focused = currentKeyboardFocus();
+    if (focused == nullptr || focused == this || !isParentOf(focused))
+        return false;
+
+    if (key == juce::KeyPress::escapeKey) {
+        focusForKeyboard(&owner);
+        return true;
+    }
+
+    const bool tab = key.getKeyCode() == juce::KeyPress::tabKey;
+    const auto mods = key.getModifiers();
+    if (!tab || mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown())
+        return false;
+
+    const auto stops = getKeyboardControls();
+    if (stops.empty())
+        return false;
+    int index = -1;
+    for (int i = 0; i < (int)stops.size(); ++i)
+        if (stops[(size_t)i] == focused || stops[(size_t)i]->isParentOf(focused))
+            index = i;
+    const int count = (int)stops.size();
+    const int next = index < 0 ? 0 : (index + (mods.isShiftDown() ? count - 1 : 1)) % count;
+    focusForKeyboard(stops[(size_t)next]);
+    return true;
+}

@@ -397,6 +397,7 @@ add_library(Core STATIC
     Source/Modules/OscillatorModule.h
     Source/Modules/ADSRModule.h
     Source/Modules/FilterModule.h
+    Source/Modules/FrequencyText.h
     Source/Modules/VCAModule.h
     Source/Modules/VoiceMixerModule.h
     Source/Modules/NoiseModule.h
@@ -503,6 +504,7 @@ add_library(Core STATIC
     Source/UI/Layout/HierarchicalArrange.h
     Source/UI/Layout/HierarchicalArrange.cpp
     Source/UI/Graph/ModuleStepOrder.h
+    Source/UI/Graph/CardNavigation.h
     Source/UI/Graph/SelectionModel.h
     Source/UI/Chrome/StatusBarComponent.h
     Source/UI/Chrome/StatusBarComponent.cpp

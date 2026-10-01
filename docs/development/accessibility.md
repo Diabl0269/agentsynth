@@ -30,6 +30,21 @@ that text changes; the wording lives in a pure header with a unit test
 components (the AI chat's messages) is a `list`-role container whose children are `listItem`-role
 components titled with their text ([`docs/ai/chat-component.md`](../ai/chat-component.md#screen-reader)).
 
+## Module cards
+
+The canvas is one focus region; inside it the arrows move between cards, Return steps into the selected card,
+Tab/Shift+Tab walk that card's controls and wrap, and Escape goes back out with the card still selected
+([shortcuts](../control/shortcuts.md#canvas-card-keys)). The selected card's accent border is its ring;
+each control inside draws its own (`AppLookAndFeel`). A card is a `group` named after its title
+(`ModuleComponentAccessibility.cpp`, through `TooltipHelpHandler`). Every knob, combo and toggle on it is named
+after its parameter and gets a tooltip naming it, by one pass that runs after the card has built its controls
+(`applyControlAccessibility`; it also tells the MIDI Learn registry, which composes a mapped control's
+tooltip from the base one). A knob's spoken value is the parameter's own text through the slider's text
+function, so a frequency parameter that formats itself (`Source/Modules/FrequencyText.h`, the Filter cutoff)
+reads "Cutoff, 1.2 kHz". Card knobs are `CardKnobSlider`s: they take focus and each key step is one change
+gesture (one undo step). The painted jacks get invisible, click-through, unfocusable stand-ins named
+"Audio L input" and so on, for the accessibility tree only; there is no keyboard cable creation.
+
 ## Which focus helper
 
 | Thing that takes focus | Helper |

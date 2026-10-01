@@ -73,6 +73,29 @@ juce::String mixerActionName(const juce::String& actionId) {
     return {};
 }
 
+// The canvas's card keys (CanvasCardKeyboard). Empty when `actionId` is not one of them.
+juce::String canvasCardActionName(const juce::String& actionId) {
+    if (actionId == "canvasSelectCardLeft")
+        return "Select Card to the Left";
+    if (actionId == "canvasSelectCardRight")
+        return "Select Card to the Right";
+    if (actionId == "canvasSelectCardUp")
+        return "Select Card Above";
+    if (actionId == "canvasSelectCardDown")
+        return "Select Card Below";
+    if (actionId == "canvasMoveCardLeft")
+        return "Move Selected Cards Left";
+    if (actionId == "canvasMoveCardRight")
+        return "Move Selected Cards Right";
+    if (actionId == "canvasMoveCardUp")
+        return "Move Selected Cards Up";
+    if (actionId == "canvasMoveCardDown")
+        return "Move Selected Cards Down";
+    if (actionId == "canvasEnterCard")
+        return "Enter Selected Card";
+    return {};
+}
+
 } // namespace
 
 juce::String ShortcutManager::getActionDescription(const juce::String& actionId) {
@@ -161,6 +184,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Focus Library Search";
     if (actionId == "openContextMenu")
         return "Open Context Menu";
+    if (const auto name = canvasCardActionName(actionId); name.isNotEmpty())
+        return name;
     if (const auto name = transportAndSelectionActionName(actionId); name.isNotEmpty())
         return name;
     if (actionId == "timelineSnapToggle")

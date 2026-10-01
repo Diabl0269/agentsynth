@@ -6,8 +6,9 @@ namespace {
 
 // Every action id a COMPONENT resolves for itself, written out literally rather than derived from
 // the manager. That is the whole point: this list is a transcription of what
-// PianoRollComponent::keyPressed, TimelinePanelComponent::keyPressed and
-// TimelineClipLaneArea::keyPressed actually ask for, so if one of them is missing from
+// PianoRollComponent::keyPressed, TimelinePanelComponent::keyPressed,
+// TimelineClipLaneArea::keyPressed, MixerPanelComponent::keyPressed and CanvasCardKeyboard::keyPressed
+// actually ask for, so if one of them is missing from
 // ShortcutManager::resetToDefaults() the test fails instead of the KEY silently going dead.
 //
 // The failure mode it guards is specific and invisible: with a manager installed, resolution is
@@ -38,6 +39,16 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "mixerToggleEq",
         "mixerEnterRows",
         "mixerOpenEq",
+        // CanvasCardKeyboard::keyPressed
+        "canvasSelectCardLeft",
+        "canvasSelectCardRight",
+        "canvasSelectCardUp",
+        "canvasSelectCardDown",
+        "canvasMoveCardLeft",
+        "canvasMoveCardRight",
+        "canvasMoveCardUp",
+        "canvasMoveCardDown",
+        "canvasEnterCard",
         // TimelinePanelComponent::keyPressed (also consults timelineSnapToggle, shared with the roll)
         "timelineSnapToggle",
         "timelineToggleLoop",

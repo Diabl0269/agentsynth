@@ -358,7 +358,30 @@ public:
     int getMidiLearnArmedRepaintCountForTest() const noexcept { return midiLearnArmedRepaintCount_; }
     void collectPickCandidates(std::vector<synth::ui::PickCandidate>& out) const;
 
+    // ---- Keyboard (ModuleComponentKeyboard.cpp) ----
+    /** Moves keyboard focus to the card's first control. False when the card has none. */
+    bool enterFromKeyboard();
+    /** The card's controls in the order Tab visits them; header buttons come last. */
+    std::vector<juce::Component*> getKeyboardControls();
+    bool keyPressed(const juce::KeyPress& key) override;
+    /** Headless tests: record focus moves here instead of grabbing real focus (needs a peer). */
+    void setRecordFocusForTest(bool record) noexcept { recordFocusForTest_ = record; }
+    juce::Component* getRecordedFocusForTest() const noexcept { return recordedFocus_.getComponent(); }
+
+    // ---- Accessibility (ModuleComponentAccessibility.cpp) ----
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+    /** The accessible stand-ins for the card's jacks, in jack order. */
+    const juce::OwnedArray<juce::Component>& getPortAccessiblesForTest() const noexcept { return portAccessibles_; }
+
 private:
+    void focusForKeyboard(juce::Component* target);
+    juce::Component* currentKeyboardFocus() const;
+    void applyControlAccessibility();
+    void syncPortAccessibility();
+    bool recordFocusForTest_ = false;
+    juce::Component::SafePointer<juce::Component> recordedFocus_;
+    juce::OwnedArray<juce::Component> portAccessibles_;
+
     // Non-owning: the juce::Component base owns this via setCachedComponentImage(). See
     // ZoomFrozenCachedImage.h — installed instead of setBufferedToImage(true) so a canvas zoom
     // gesture can pin the raster scale. Never call setBufferedToImage() on a ModuleComponent again:
@@ -435,6 +458,8 @@ private:
         /** Drops every hosted entry; call before a hosted card rebuild destroys its widgets. */
         void clearHosted();
         const Entry* find(const juce::Component* component) const;
+        /** A tooltip given to `component` after it registered; no-op for an unregistered one. */
+        void setBaseTooltip(const juce::Component& component, const juce::String& tooltip);
         const std::vector<Entry>& entries() const { return entries_; }
 
         /** Mapped display label for `paramId` ("Knob 1 on Launchkey Mini"), or empty if unmapped.

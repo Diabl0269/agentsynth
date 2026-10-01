@@ -21,7 +21,7 @@ struct AccessibilityBaselineEntry {
 inline constexpr AccessibilityBaselineEntry kAccessibilityBaseline[] = {
     {"MainComponent", 6, 6},
     {"PianoRoll", 0, 0},
-    {"ModuleCards", 200, 246},
+    {"ModuleCards", 0, 0},
     {"ExportAudioDialog", 0, 0},
     {"Settings/Audio", 0, 0}, // Windows adds the audio driver-type drop-down; it is named from its caption too
     {"Settings/AI", 0, 0},

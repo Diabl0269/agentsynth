@@ -793,6 +793,7 @@ void ModuleComponent::resized() {
     // positioning.
     if (isMacroPortType(getType(module)))
         return;
+    syncPortAccessibility();
 
     // Header icon buttons: delete (rightmost) → bypass → mute → Dual I/O (when present).
     // Attenuverter path: all four are null → no-op.

@@ -243,6 +243,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/EnvelopeCardTempoSyncTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLfoCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentKeyboardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModTargetTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentKnobCoverageTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLifecycleTests.cpp
@@ -418,6 +419,7 @@ add_executable(Tests
     Project/SnippetManager/SnippetManagerCardLayoutTests.cpp
     UI/Graph/MultiSelectTests.cpp
     UI/Graph/ModuleStepOrderTests.cpp
+    UI/Graph/CardNavigationTests.cpp
     Macros/MacroGroupController/MacroGroupControllerTests.cpp
     Macros/MacroContainer/MacroContainerTests.cpp
     Macros/MacroContainer/MacroContainerGeometryTests.cpp

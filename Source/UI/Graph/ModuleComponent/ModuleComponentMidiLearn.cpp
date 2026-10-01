@@ -50,6 +50,20 @@ void ModuleComponent::MidiLearnableRegistry::add(juce::Component& component, juc
     entries_.push_back(std::move(e));
 }
 
+// The control keeps showing its mapping on top of the new tooltip, the way it would have had the
+// tooltip been set before registration.
+void ModuleComponent::MidiLearnableRegistry::setBaseTooltip(const juce::Component& component,
+                                                            const juce::String& tooltip) {
+    for (auto& e : entries_) {
+        if (e.component != &component)
+            continue;
+        e.baseTooltip = tooltip;
+        if (e.mapped)
+            if (auto* tooltipClient = dynamic_cast<juce::SettableTooltipClient*>(e.component))
+                tooltipClient->setTooltip(tooltip + " - " + e.tooltip);
+    }
+}
+
 // A hosted-plugin card's knob/toggle/choice control. `param` is the live instance
 // parameter (a juce::HostedAudioProcessorParameter in practice, never a RangedAudioParameter with
 // a real paramID) and `paramId` is the slot's own stable id -- see CardLayout.h.

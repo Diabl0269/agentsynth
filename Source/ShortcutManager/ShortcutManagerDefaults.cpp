@@ -195,6 +195,20 @@ void ShortcutManager::addGraphDefaultBindings() {
     // hardcodes it either.
     bindings["locateMaster"] =
         juce::KeyPress('m', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    // The canvas's card keys, exactly the defaults CanvasCardKeyboard falls back to with no manager.
+    // No other Graph action uses an arrow or Return; the timeline's and the piano roll's bare arrows
+    // are other categories, and those surfaces never hold focus together with the canvas.
+    const auto none = juce::ModifierKeys::noModifiers;
+    const auto alt = juce::ModifierKeys::altModifier;
+    bindings["canvasSelectCardLeft"] = juce::KeyPress(juce::KeyPress::leftKey, none, 0);
+    bindings["canvasSelectCardRight"] = juce::KeyPress(juce::KeyPress::rightKey, none, 0);
+    bindings["canvasSelectCardUp"] = juce::KeyPress(juce::KeyPress::upKey, none, 0);
+    bindings["canvasSelectCardDown"] = juce::KeyPress(juce::KeyPress::downKey, none, 0);
+    bindings["canvasMoveCardLeft"] = juce::KeyPress(juce::KeyPress::leftKey, alt, 0);
+    bindings["canvasMoveCardRight"] = juce::KeyPress(juce::KeyPress::rightKey, alt, 0);
+    bindings["canvasMoveCardUp"] = juce::KeyPress(juce::KeyPress::upKey, alt, 0);
+    bindings["canvasMoveCardDown"] = juce::KeyPress(juce::KeyPress::downKey, alt, 0);
+    bindings["canvasEnterCard"] = juce::KeyPress(juce::KeyPress::returnKey, none, 0);
 }
 
 void ShortcutManager::addTimelineDefaultBindings() {
