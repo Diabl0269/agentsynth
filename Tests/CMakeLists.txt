@@ -155,6 +155,7 @@ add_executable(Tests
     Plugin/PluginScan/PluginScanChildProcessTests.cpp
     Plugin/PluginScan/PluginScanLibraryTests.cpp
     Plugin/PluginScan/PluginScanPersistenceTests.cpp
+    Plugin/PluginScan/PluginScanChildEnvironmentTests.cpp
     Plugin/HostedPluginEditorWindowTests.cpp
     Plugin/HostedPluginLaneTests.cpp
     Plugin/HostedPluginLatencyTests.cpp
