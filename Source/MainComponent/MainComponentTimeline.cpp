@@ -120,6 +120,8 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
             header->refreshFromDoc();
     // The side pane's routing rows read the graph too (node names, MIDI destinations, the channel): same trigger.
     timelinePanel.refreshRoutingPane();
+    // A lane's modulator rows are derived from the graph's routings, never stored in the doc: same trigger.
+    timelinePanel.refreshModulators();
 
     // The mixer's own column set (strips/inserts/links) can change from ANY graph
     // edit that reaches here -- undo/redo, a canvas delete, a macro regroup, not just the mixer's

@@ -352,6 +352,8 @@ void TimelinePanelComponent::updateFromTransport(const synth::TransportService::
     const int visibleTop = (int)std::llround(viewState_.trackScrollY);
     automationLanes_.tickReadouts(snapshot.ppq, visibleTop,
                                   visibleTop + trackHeaderViewport_.getMaximumVisibleHeight());
+    // The modulator rows' live values (an edit on the canvas card shows there) ride it too.
+    automationLanes_.tickModulatorValues(visibleTop, visibleTop + trackHeaderViewport_.getMaximumVisibleHeight());
 
     // Follow playhead: page-flip the view so the (latency-compensated) playhead stays on screen —
     // gated on all four of playing/enabled/roll-closed/no-drag-in-flight, so a stopped transport,

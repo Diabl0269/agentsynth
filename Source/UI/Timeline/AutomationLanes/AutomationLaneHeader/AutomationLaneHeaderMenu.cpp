@@ -1,8 +1,10 @@
 // Concern: the automation lane header's edits -- the record-mode selector and the "..." menu
-// (Move to track, Delete lane). Every edit goes through AutomationLaneActions as one undo step.
+// (Add LFO modulator, Move to track, Delete lane). Every edit is one undo step: the lane edits go
+// through AutomationLaneActions, the modulator through the host, which owns the graph.
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
 
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent.h"
 
 namespace synth::ui {
 
@@ -21,10 +23,22 @@ juce::PopupMenu AutomationLaneHeaderComponent::buildMenu() {
             moveMenu.addItem(kMoveToTrackMenuIdBase + i, track->name);
 
     juce::PopupMenu menu;
+    addModulatorItem(menu);
+    menu.addSeparator();
     menu.addSubMenu("Move to track", moveMenu, !moveTargets_.empty());
     menu.addSeparator();
     menu.addItem(kDeleteLaneMenuId, "Delete lane");
     return menu;
+}
+
+// A parameter with no CV jack cannot be modulated; the item stays in the menu, disabled, and says why
+// in its own text (a menu item has no tooltip, and the reason must reach a screen reader too).
+void AutomationLaneHeaderComponent::addModulatorItem(juce::PopupMenu& menu) const {
+    const auto* lane = doc_.getLane(laneId_);
+    const bool canModulate = lane != nullptr && host_ != nullptr && host_->canModulate(lane->nodeUuid, lane->paramId);
+    menu.addItem(kAddLfoModulatorMenuId,
+                 canModulate ? juce::String("Add LFO modulator") : juce::String("Add LFO modulator (no CV input)"),
+                 canModulate);
 }
 
 // Both edits can remove this lane (and with it this component) from inside the call, so the doc,
@@ -35,6 +49,12 @@ void AutomationLaneHeaderComponent::applyMenuChoice(int menuId) {
     const auto lane = laneId_;
     if (menuId == kDeleteLaneMenuId) {
         deleteLaneUndoable(doc, undo, lane);
+        return;
+    }
+    if (menuId == kAddLfoModulatorMenuId) {
+        const auto* target = doc.getLane(lane);
+        if (target != nullptr && host_ != nullptr)
+            host_->addLfoModulator(target->nodeUuid, target->paramId);
         return;
     }
     const int index = menuId - kMoveToTrackMenuIdBase;

@@ -222,6 +222,13 @@ public:
     /** The lane's editor / header while its row is shown, else nullptr. */
     AutomationLaneEditor* laneEditorForTest(synth::LaneId lane) const;
     AutomationLaneHeaderComponent* laneHeaderForTest(synth::LaneId lane) const;
+    /** Re-derives the modulator rows under every open lane from the graph. Call after any graph change. */
+    void refreshModulators();
+    /** The lane's `index`th modulator row / band while shown, else nullptr. */
+    ModulatorRow* modulatorRowForTest(synth::LaneId lane, int index) const;
+    ModulatorBand* modulatorBandForTest(synth::LaneId lane, int index) const;
+    /** That row over the lanes region, in this panel's coordinates; empty when not shown. */
+    juce::Rectangle<int> modulatorRowBoundsForTest(synth::LaneId lane, int index) const;
 
     // ---- Adding a lane from the timeline (TimelinePanelAddAutomation.cpp) ----
     /** Opens the picker of `track`'s automatable parameters (the "+ Add automation..." row's and the header

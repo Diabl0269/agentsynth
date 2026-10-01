@@ -516,12 +516,25 @@ TEST(AccessibilityCoverageTest, EveryModuleCard) {
 
 // ============================================================================
 // Timeline automation lanes: a lane row's header, the track header's fold arrow, the "+ Add automation..."
-// row and the picker it opens.
+// row and the picker it opens, and a lane's modulator rows (an LFO's full row, another source's read-only one).
 // ============================================================================
 
 namespace {
-// Offers one parameter so the "+ Add automation..." picker has a row to audit.
+// Offers one parameter so the "+ Add automation..." picker has a row to audit, and two modulators on every lane.
 struct OneParameterHost : synth::ui::TrackHeaderHost {
+    std::vector<synth::ui::ModulatorInfo> getModulators(const juce::String&, const juce::String&) override {
+        synth::ui::ModulatorInfo lfo;
+        lfo.sourceUuid = "lfo";
+        lfo.sourceTitle = "LFO 1";
+        lfo.isLfo = true;
+        lfo.attenuverterUuid = "atten";
+        auto env = lfo;
+        env.sourceUuid = "env";
+        env.sourceTitle = "Filter Env";
+        env.isLfo = false;
+        env.attenuverterUuid = "atten-env";
+        return {lfo, env};
+    }
     std::vector<AutomatableParameter> getAutomatableParameters(synth::TrackId) override {
         AutomatableParameter p;
         p.moduleTitle = "Filter 1";
@@ -585,6 +598,16 @@ TEST(AccessibilityCoverageTest, AutomationLanes) {
         }
     }
     panel.setAddAutomationPickerHookForTest(nullptr);
+    for (int i = 0; i < 2; ++i) {
+        auto* modulator = panel.modulatorRowForTest(lane, i);
+        EXPECT_NE(modulator, nullptr) << "modulator row " << i;
+        if (modulator == nullptr)
+            continue;
+        for (auto gap : auditAccessibility(*modulator)) {
+            gap.path = "[modulator row] " + gap.path;
+            gaps.push_back(gap);
+        }
+    }
     panel.setTrackHeaderHost(nullptr);
     EXPECT_TRUE(matchesBaseline("AutomationLanes", gaps));
 }

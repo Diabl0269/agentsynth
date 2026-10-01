@@ -435,6 +435,16 @@ private:
     getAutomatableParameters(synth::TrackId track) override;
     synth::LaneId addAutomationLane(synth::TrackId track,
                                     const synth::ui::TrackHeaderHost::AutomatableParameter& parameter) override;
+    // Modulators under an automation lane (MainComponentModulators.cpp).
+    std::vector<synth::ui::ModulatorInfo> getModulators(const juce::String& nodeUuid,
+                                                        const juce::String& paramId) override;
+    bool canModulate(const juce::String& nodeUuid, const juce::String& paramId) override;
+    juce::String addLfoModulator(const juce::String& nodeUuid, const juce::String& paramId) override;
+    void removeModulator(const synth::ui::ModulatorInfo& modulator) override;
+    float getNodeParameter(const juce::String& uuid, const juce::String& paramId) override;
+    void setNodeParameter(const juce::String& uuid, const juce::String& paramId, float value,
+                          synth::ui::ParameterEditPhase phase) override;
+    void showNodeOnCanvas(const juce::String& uuid) override;
     juce::ApplicationProperties* getAppProperties() override;
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
     getMidiDestinationOptions(synth::TrackId forTrack) override;

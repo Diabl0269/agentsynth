@@ -9,6 +9,7 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/NonModalLabel.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
 #include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -221,6 +222,30 @@ struct TrackHeaderHost {
     virtual synth::LaneId addAutomationLane(synth::TrackId /*track*/, const AutomatableParameter& /*parameter*/) {
         return {};
     }
+
+    // ---- Modulators under an automation lane (docs/timeline/automation.md#modulators) ----
+    // Every default answers "nothing", so a stub host needs none of them.
+
+    /** Every routing into the CV jack of `paramId` on `nodeUuid`, in graph order. */
+    virtual std::vector<ModulatorInfo> getModulators(const juce::String& /*nodeUuid*/,
+                                                     const juce::String& /*paramId*/) {
+        return {};
+    }
+    /** True when the parameter has a CV jack an LFO can be cabled into. */
+    virtual bool canModulate(const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/) { return false; }
+    /** Adds an LFO cabled into the parameter as ONE undo step; returns its uuid, empty when it could not. */
+    virtual juce::String addLfoModulator(const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/) {
+        return {};
+    }
+    /** Removes the routing (and an LFO source left with no other cable) as ONE undo step. */
+    virtual void removeModulator(const ModulatorInfo& /*modulator*/) {}
+    /** A live parameter's value in its own units (a choice's index, a bool's 0/1); 0 when it doesn't resolve. */
+    virtual float getNodeParameter(const juce::String& /*uuid*/, const juce::String& /*paramId*/) { return 0.0f; }
+    /** Writes a live parameter through the canvas knobs' undo path; see ParameterEditPhase. */
+    virtual void setNodeParameter(const juce::String& /*uuid*/, const juce::String& /*paramId*/, float /*value*/,
+                                  ParameterEditPhase /*phase*/) {}
+    /** Selects the node on the canvas and brings it into view. */
+    virtual void showNodeOnCanvas(const juce::String& uuid) { selectNodeInGraph(uuid); }
 
     /** The properties file the colour picker's favourites shelf persists to, or nullptr for an
      *  in-memory-only picker (a header built for a test, or a host that hasn't wired one up yet).

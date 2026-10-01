@@ -25,14 +25,27 @@ int TimelineAutomationLanes::addRowHeight() const {
                     (int)std::llround((double)AddAutomationRow::kBaseHeight * viewState_.rowHeightScale));
 }
 
+// A lane's block is its own row plus its modulator rows directly under it. Every geometry function
+// below walks lanes through this one helper, so the header column, the lanes region and the layout's
+// extra height can never disagree about where a row is.
+int TimelineAutomationLanes::laneBlockHeight(const synth::AutomationLane& lane) const {
+    return laneRowHeight() + modulatorCount(lane.id) * modulatorRowHeight();
+}
+
 std::vector<int> TimelineAutomationLanes::extraHeights() const {
     std::vector<int> extras;
     if (doc_ == nullptr)
         return extras;
-    const int rowHeight = laneRowHeight();
     const int addHeight = addRowHeight();
-    for (const auto& track : doc_->getTracks())
-        extras.push_back(isVisibleLane(track) ? (int)track.lanes.size() * rowHeight + addHeight : 0);
+    for (const auto& track : doc_->getTracks()) {
+        int extra = 0;
+        if (isVisibleLane(track)) {
+            extra = addHeight;
+            for (const auto& lane : track.lanes)
+                extra += laneBlockHeight(lane);
+        }
+        extras.push_back(extra);
+    }
     return extras;
 }
 
@@ -53,11 +66,14 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
     if (t == nullptr || !isVisibleLane(*t))
         return;
     const int rowHeight = laneRowHeight();
+    const int modHeight = modulatorRowHeight();
     int y = firstRowY;
     for (const auto& lane : t->lanes) {
         if (auto* header = headerFor(lane.id))
             header->setBounds(0, y, width, rowHeight);
-        y += rowHeight;
+        for (int i = 0; i < modulatorCount(lane.id); ++i)
+            modulatorRowFor(lane.id, i)->setBounds(0, y + rowHeight + i * modHeight, width, modHeight);
+        y += laneBlockHeight(lane);
     }
     if (auto* row = addRowFor(track))
         row->setBounds(0, y, width, addRowHeight());
@@ -77,10 +93,21 @@ juce::Rectangle<int> TimelineAutomationLanes::laneRowContentBounds(synth::LaneId
         for (const auto& candidate : track.lanes) {
             if (candidate.id == lane)
                 return {0, y, bodies_->getWidth(), rowHeight};
-            y += rowHeight;
+            y += laneBlockHeight(candidate);
         }
     }
     return {};
+}
+
+juce::Rectangle<int> TimelineAutomationLanes::modulatorRowContentBounds(synth::LaneId lane, int index,
+                                                                        const TimelineRowLayout& layout) const {
+    if (index < 0 || index >= modulatorCount(lane))
+        return {};
+    const auto row = laneRowContentBounds(lane, layout);
+    if (row.isEmpty())
+        return {};
+    const int height = modulatorRowHeight();
+    return {0, row.getBottom() + index * height, row.getWidth(), height};
 }
 
 juce::Rectangle<int> TimelineAutomationLanes::addRowContentBounds(synth::TrackId track,
@@ -90,9 +117,12 @@ juce::Rectangle<int> TimelineAutomationLanes::addRowContentBounds(synth::TrackId
     const auto& tracks = doc_->getTracks();
     for (int i = 0; i < (int)tracks.size(); ++i) {
         const auto& candidate = tracks[(size_t)i];
-        if (candidate.id == track && isVisibleLane(candidate))
-            return {0, layout.trackTop(i) + layout.trackRowHeight(i) + (int)candidate.lanes.size() * laneRowHeight(),
-                    bodies_->getWidth(), addRowHeight()};
+        if (candidate.id != track || !isVisibleLane(candidate))
+            continue;
+        int y = layout.trackTop(i) + layout.trackRowHeight(i);
+        for (const auto& lane : candidate.lanes)
+            y += laneBlockHeight(lane);
+        return {0, y, bodies_->getWidth(), addRowHeight()};
     }
     return {};
 }
@@ -107,6 +137,9 @@ void TimelineAutomationLanes::placeBodies(const TimelineRowLayout& layout) {
         const auto row = laneRowContentBounds(id, layout);
         editor->setBounds(row.translated(0, -scroll));
     }
+    for (auto& [id, entry] : modulators_)
+        for (int i = 0; i < (int)entry.bands.size(); ++i)
+            entry.bands[(size_t)i]->setBounds(modulatorRowContentBounds(id, i, layout).translated(0, -scroll));
 }
 
 // Rides the panel's existing transport poll: nothing happens while the beat stands still, and only

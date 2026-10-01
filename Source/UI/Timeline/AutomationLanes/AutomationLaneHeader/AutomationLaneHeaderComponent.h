@@ -12,7 +12,7 @@ struct TrackHeaderHost;
 
 // The header-column half of one automation lane row, under the track that owns the lane: a stripe
 // in the track's colour, the parameter and module names, the curve's value at the playhead, the
-// lane's record mode and a menu (move to another track, delete). Holds no lane state of its own;
+// lane's record mode and a menu (add an LFO modulator, move to another track, delete). Holds no lane state of its own;
 // every value is re-read from the doc by refreshFromDoc() / setReadoutBeat().
 // Message thread only. A Delete or Move from the menu destroys this component before the call
 // returns (the owning panel prunes it on the doc notification).
@@ -22,6 +22,7 @@ public:
     static constexpr int kStripeWidth = 4;   // px of track colour at the row's left edge
     static constexpr int kReadoutWidth = 44; // px for the value at the playhead
     static constexpr int kDeleteLaneMenuId = 1;
+    static constexpr int kAddLfoModulatorMenuId = 2;
     static constexpr int kMoveToTrackMenuIdBase = 100; // + index into the menu's move targets
 
     /** `doc` must outlive this component; `host` and `undo` may be null. */
@@ -59,6 +60,7 @@ private:
     };
 
     void showMenu();
+    void addModulatorItem(juce::PopupMenu& menu) const;
     void applyRecordModeColour();
 
     synth::TimelineDoc& doc_;

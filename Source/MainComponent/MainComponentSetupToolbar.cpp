@@ -42,6 +42,9 @@ void MainComponent::addCanvasAndPanels() {
         // exactly the cases that need it — a binding can only start or stop resolving when a node
         // appears or disappears, which is also the only way an orphan flag moves.
         reconcileTimelineBindingsOnly();
+        // A cable patched or deleted on the canvas adds or drops a lane's modulator row; the rows are derived
+        // from the graph, so they are re-derived on every structural change (cheap: a few lanes on screen).
+        timelinePanel.refreshModulators();
         // A canvas delete orphans MIDI Remote assignments; the open panel shows "(missing module)"
         // only once it rebuilds. Deferred and coalesced, so a burst of structural changes is one rebuild.
         bottomDock.getMidiRemotePanel().scheduleLiveRefresh();
