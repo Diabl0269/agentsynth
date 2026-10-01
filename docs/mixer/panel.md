@@ -64,7 +64,7 @@ dock-wide toggle/show split, the tab order and detach behaviour.
 
 ### Reordering columns
 
-A **track strip** column (a strip some track feeds) is dragged by its header (the whole drawn header and the source line under it; the cursor stays the arrow until the press becomes a drag, then the grab hand until release; a plain click on either selects the column), the same shared
+A **track strip** column (a strip some track feeds) is dragged by its header, exactly as drawn (name included; the source line under it is plain text, not part of the handle, and blank when it would only repeat the channel name). The cursor stays the arrow until the press becomes a drag, then the grab hand until release; a plain click on the header or the source line selects the column, the same shared
 [reorder drag](../layout/animation.md#reorder-drag) the dock tabs use: the column follows the pointer
 at the spot it was grabbed, lifted (raised wash, 1 px `accent` border, soft shadow), the other track
 columns glide aside, and the columns viewport autoscrolls when the pointer nears its left or right
