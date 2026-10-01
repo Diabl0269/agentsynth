@@ -135,16 +135,16 @@ Stateless grid-layout helpers (`snap`, `intersectsAny`, `findFreeSlot`, and, in 
 translation units, none over 1,000 lines, plus a private `ModuleComponentInternal.h` for
 constants/helpers shared by two or more of them. Source layout:
 
-- `ModuleComponent.cpp` — construction/teardown, header/theme helpers, the auto-UI control builder (`createControls`)
+- `ModuleComponent.cpp` — construction/teardown, header/theme helpers, `createControls` (which hands a built-in module's parameter widgets to its `CardBody`)
 - `ModuleComponentEQCard.cpp` — the Parametric EQ card's layout geometry, knob placement, pop-out window, undo-gesture wiring
 - `ModuleComponentAudioDrop.cpp` — Sampler control creation and audio-file drag-and-drop for the Sampler and Wavetable
 - `ModuleComponentWavetable.cpp` — the Wavetable oscillator's control creation, the hookup of its `WavetableTabStrip`, and the wavetable load/browse flow
 - `WavetableTabStrip.h/.cpp` — the Wavetable card's tabbed page strip as its own component (tab buttons, page table, page visibility and layout)
-- `ModuleComponentLayout.cpp` — the generic auto-layout pass (`updateLayout`, `layoutDefaultContent`, macro-port widget sizing)
+- `ModuleComponentLayout.cpp` — the generic auto-layout pass (`updateLayout`, `layoutDefaultContent`, macro-port widget sizing); the body's controls are laid out by the card's `CardBody`
 - `ModuleComponentPaint.cpp` — `paint()`, port geometry/hit-testing, `resized()`'s per-module-type dispatch
 - `ModuleComponentInteraction.cpp` — parameter callback reflection, macro/poly/dual-IO state, context menus, mouse handling, title rename
 
-Auto-generates parameter UI from `ModuleBase` metadata using type-safe `ModuleType` switching. Modulation rings read `AudioEngine::getModulationRoutings()`. Uses `setBufferedToImage(true)` and gates its 15 Hz timer repaint so the `GraphEditor`'s 30 Hz connection animation composites cached module images without re-running JUCE text layout every frame.
+A built-in module's parameter widgets, captions, attachments and Threshold view are owned and laid out by a `CardBody` collaborator (`Source/UI/Graph/CardBody/`, [module-card-layout.md](../layout/module-card-layout.md#rendering)); `ModuleComponent` keeps non-owning `sliders`/`comboBoxes`/`toggles` arrays over them for the units that read them. The bespoke cards (Sequencer, Macros, Parametric EQ, Attenuverter, the Wavetable pages) build through the same `CardBody` but place the widgets themselves; External MIDI and a hosted plugin build their own widgets. Modulation rings read `AudioEngine::getModulationRoutings()`. Uses `setBufferedToImage(true)` and gates its 15 Hz timer repaint so the `GraphEditor`'s 30 Hz connection animation composites cached module images without re-running JUCE text layout every frame.
 
 ## AttenuverterModule
 

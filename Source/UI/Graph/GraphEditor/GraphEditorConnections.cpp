@@ -177,11 +177,13 @@ void GraphEditor::dragConnection(juce::Point<int> screenPos) {
     dragCurrentPos = screenPos;
 
     // Ring whichever knob the cable would land on, so a Serum-style mod drop is aimed rather
-    // than guessed at. Only a cable dragged FROM an output can land on a knob.
+    // than guessed at. Only a cable dragged FROM an output can land on a knob. A folded More row
+    // under the cable opens first, so a hidden parameter's knob can take it too.
     for (auto* comp : content.getModules()) {
         int target = -1;
         if (!dragSourceIsInput && !dragSourceIsMidi && comp != dragSourceModule) {
             const auto localPos = comp->getLocalPoint(nullptr, screenPos);
+            comp->unfoldMoreRowForCableDrag(localPos);
             if (!comp->getPortForPoint(localPos))
                 if (auto port = comp->getModTargetPortForPoint(localPos))
                     target = port->index;

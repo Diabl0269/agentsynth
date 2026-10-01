@@ -38,6 +38,7 @@ class AppLookAndFeel; // Forward declaration — see Theme/AppLookAndFeel.h
 namespace synth {
 struct MacroPort;         // Forward declaration — see ../MacroSet.h
 class HostedPluginModule; // Forward declaration — see Plugin/Hosting/HostedPluginModule.h
+class CardBody;           // Forward declaration — see UI/Graph/CardBody/CardBody.h
 } // namespace synth
 
 class ModuleComponent
@@ -213,6 +214,11 @@ public:
     /** Highlights a knob as the pending modulation drop target, or clears it with -1.
      *  Returns true when the highlight changed, so the caller can repaint only on a change. */
     bool setModDropTargetChannel(int channelIndex);
+
+    /** A cable dragged over the card at `localPoint`: unfolds a folded More row under it. */
+    bool unfoldMoreRowForCableDrag(juce::Point<int> localPoint);
+    /** Null for a card whose widgets are not built by a card body. */
+    synth::CardBody* getCardBody() const noexcept { return cardBody_.get(); }
     int getModDropTargetChannel() const noexcept { return modDropTargetChannel; }
 
     // --- Audio-file drag and drop (Sampler only) ---
@@ -236,6 +242,8 @@ public:
 
     /** getModRingSliderIndex for a ModulationTarget, via its bound parameter; -1 if no visible knob. */
     int sliderIndexForModTarget(const ModulationTarget& target) const;
+    /** `si` when that slider is a rotary a ring may be drawn on right now, else -1. */
+    int shownRingSliderIndex(int si) const;
 
     /** Card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
     std::optional<juce::Point<float>> getModTargetKnobAnchor(int destChannel) const;
@@ -419,12 +427,22 @@ private:
     std::optional<juce::Rectangle<int>> menuAnchor_;
     void showRealContextMenu(juce::PopupMenu& menu);
 
-    // Auto-UI
-    juce::OwnedArray<juce::Slider> sliders;
-    juce::OwnedArray<juce::Label> sliderLabels;
-    juce::OwnedArray<juce::ComboBox> comboBoxes;
-    juce::OwnedArray<juce::Label> comboLabels;
-    juce::OwnedArray<juce::ToggleButton> toggles;
+    // Auto-UI. Non-owning views over every widget on the card, in build order: a built-in module's
+    // are owned by cardBody_, External MIDI's and a hosted plugin's by ownedBespokeWidgets_. Both are
+    // declared here, before every member that points at these widgets, so those unwind first.
+    friend class synth::CardBody;
+    juce::Array<juce::Slider*> sliders;
+    juce::Array<juce::Label*> sliderLabels;
+    juce::Array<juce::ComboBox*> comboBoxes;
+    juce::Array<juce::Label*> comboLabels;
+    juce::Array<juce::ToggleButton*> toggles;
+    std::unique_ptr<synth::CardBody> cardBody_; // null for MIDI Keyboard, External MIDI, Hosted Plugin
+    juce::OwnedArray<juce::Component> ownedBespokeWidgets_;
+    template <typename Widget>
+    Widget* adoptBespokeWidget(Widget* widget) {
+        ownedBespokeWidgets_.add(widget);
+        return widget;
+    }
 
     // Param -> control mapping for reflectParameterValue(), index-parallel to `sliders` /
     // `comboBoxes` respectively. Populated only in createControls()'s generic auto-UI branch (the
@@ -476,12 +494,6 @@ private:
     // Backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
     int midiLearnArmedRepaintCount_ = 0;
 
-    // Attachments need to be kept alive.
-    // We are using raw pointers for parameters currently.
-    juce::OwnedArray<juce::SliderParameterAttachment> sliderAttachments;
-    juce::OwnedArray<juce::ComboBoxParameterAttachment> comboAttachments;
-    juce::OwnedArray<juce::ButtonParameterAttachment> buttonAttachments;
-
     std::unique_ptr<ScopeComponent> scopeComponent;
     std::unique_ptr<juce::ToggleButton> scopeToggle;
     std::unique_ptr<FrequencyResponseComponent> freqResponseComponent;
@@ -504,7 +516,7 @@ private:
     class HostedCardBinding;
     std::unique_ptr<HostedCardBinding> hostedCard_;
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
-    std::unique_ptr<ThresholdControlComponent> thresholdControl;
+    ThresholdControlComponent* thresholdControl = nullptr; // owned by cardBody_ (its Threshold view)
 
     // --- Envelope (ADSR) card: knob-and-graph panel ---
     // The breakpoint curve editor, collapsed by default (not persisted — matches the scope/
@@ -762,10 +774,8 @@ private:
     // Returns the total height the body needs, including bottom padding.
     int layoutDefaultContent(bool apply);
 
-    // The generic auto-UI knob grid (kKnobColumns across, wrapping; doubled on a double-width
-    // card). Extracted out of layoutDefaultContent (which is at its own ratchet ceiling) so a
-    // new block — the envelope graph section — has room to be inserted right after it.
-    int layoutKnobGrid(int y, int contentX, int contentW, int width, bool apply);
+    // The body's controls: the card body's sections, or (no card body) the widget arrays as runs.
+    int layoutBodyControls(int y, int width, bool apply, bool tabbed);
 
     // Builds the Sampler's waveform view / load button / file-name label. No-op for other modules.
     void createSamplerControls();
@@ -859,7 +869,7 @@ private:
     void ensureEnvelopeDivCombosCreated();
     // BPM mode shows the four *Div combos and hides ATK/HOLD/DEC/REL (SUS stays a knob).
     void applyEnvelopeSyncModeToControls(bool bpmMode);
-    // Positions each *Div combo over its slider's bounds; called after layoutKnobGrid.
+    // Positions each *Div combo over its slider's bounds; called after the body controls are laid out.
     void applyEnvelopeDivComboBounds();
     // True when the slider is hidden only because its *Div combo swapped in over it.
     bool isEnvelopeDivSwappedForSlider(int sliderIndex) const;

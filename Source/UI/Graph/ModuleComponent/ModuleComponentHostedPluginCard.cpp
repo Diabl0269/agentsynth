@@ -135,7 +135,8 @@ void ModuleComponent::HostedCardBinding::addControl(const synth::ResolvedCardSlo
 }
 
 void ModuleComponent::HostedCardBinding::addKnob(const synth::ResolvedCardSlot& resolved, const juce::String& text) {
-    auto* slider = card_.sliders.add(new synth::ui::CardKnobSlider()); // keyboard steps with gestures
+    auto* slider = card_.adoptBespokeWidget(new synth::ui::CardKnobSlider()); // keyboard steps with gestures
+    card_.sliders.add(slider);
     slider->setComponentID("hostedKnob:" + resolved.slot.paramId);
     styleHostedKnob(*slider);
     card_.addAndMakeVisible(slider);
@@ -149,7 +150,8 @@ void ModuleComponent::HostedCardBinding::addKnob(const synth::ResolvedCardSlot& 
     slider->setTooltip(text);
     card_.registerHostedMidiLearnable(*slider, *resolved.param, resolved.slot.paramId);
 
-    auto* label = card_.sliderLabels.add(new juce::Label(text, text));
+    auto* label = card_.adoptBespokeWidget(new juce::Label(text, text));
+    card_.sliderLabels.add(label);
     label->setJustificationType(juce::Justification::centred);
     card_.addAndMakeVisible(label);
 
@@ -158,7 +160,8 @@ void ModuleComponent::HostedCardBinding::addKnob(const synth::ResolvedCardSlot& 
 }
 
 void ModuleComponent::HostedCardBinding::addToggle(const synth::ResolvedCardSlot& resolved, const juce::String& text) {
-    auto* toggle = card_.toggles.add(new detail::MidiLearnableToggleButton(text));
+    auto* toggle = card_.adoptBespokeWidget(new detail::MidiLearnableToggleButton(text));
+    card_.toggles.add(toggle);
     toggle->setComponentID("hostedToggle:" + resolved.slot.paramId);
     card_.addAndMakeVisible(toggle);
     toggle->addMouseListener(&card_, false); // See addKnob()'s own comment
@@ -170,7 +173,8 @@ void ModuleComponent::HostedCardBinding::addToggle(const synth::ResolvedCardSlot
 }
 
 void ModuleComponent::HostedCardBinding::addChoice(const synth::ResolvedCardSlot& resolved, const juce::String& text) {
-    auto* combo = card_.comboBoxes.add(new juce::ComboBox());
+    auto* combo = card_.adoptBespokeWidget(new juce::ComboBox());
+    card_.comboBoxes.add(combo);
     combo->setComponentID("hostedChoice:" + resolved.slot.paramId);
     card_.addAndMakeVisible(combo);
     combo->addMouseListener(&card_, false); // See addKnob()'s own comment
@@ -179,7 +183,9 @@ void ModuleComponent::HostedCardBinding::addChoice(const synth::ResolvedCardSlot
     combo->setTooltip(text);
     card_.registerHostedMidiLearnable(*combo, *resolved.param, resolved.slot.paramId);
 
-    card_.addAndMakeVisible(card_.comboLabels.add(new juce::Label(text, text)));
+    auto* label = card_.adoptBespokeWidget(new juce::Label(text, text));
+    card_.comboLabels.add(label);
+    card_.addAndMakeVisible(label);
 
     wireGestures(*card_.hostedAttachments_.add(new HostedParameterAttachment(*resolved.param, *combo)),
                  *resolved.param);
@@ -281,7 +287,7 @@ void ModuleComponent::rebuildHostedPluginCard() {
 // Attachments first, then the widgets they point at. `paramsAlive` false abandons each attachment instead of
 // detaching it, so a parameter that may already be freed is never touched. Every slider/combo/toggle on a
 // hosted card is a hosted control (the branch builds no generic ones), so the member arrays are emptied
-// whole.
+// whole and the widgets they point at destroyed.
 void ModuleComponent::unbindHostedPluginCard(bool paramsAlive) {
     for (auto* attachment : hostedAttachments_) {
         attachment->onGestureChanged = nullptr;
@@ -302,6 +308,7 @@ void ModuleComponent::unbindHostedPluginCard(bool paramsAlive) {
     comboBoxes.clear();
     comboParams.clear();
     toggles.clear();
+    ownedBespokeWidgets_.clear(); // a hosted card's widgets are the only bespoke ones it has
 
     if (hostedCard_ != nullptr) {
         hostedCard_->boundInstance = nullptr;

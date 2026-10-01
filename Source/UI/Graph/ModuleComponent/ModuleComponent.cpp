@@ -12,8 +12,8 @@
 #include "Modules/ModuleBase.h"
 #include "Modules/PolySequencerModule.h"
 #include "Modules/SequencerModule.h"
-#include "Modules/ThresholdMeterSource.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
@@ -21,77 +21,6 @@
 #include <cmath>
 
 using namespace detail;
-
-namespace {
-
-// Every module's float-param sliders are rotary knobs. ADSR's five (attack/hold/decay/sustain/
-// release — its three curve params are edited on the envelope graph's bend handles instead,
-// see createControls()) put their text box ABOVE the dial rather than below, so the numeric
-// readout reads as a value sitting over its knob rather than a caption under it; every other
-// module keeps the readout below, matching the label above.
-void setAdsrAwareSliderStyle(juce::Slider& slider, ModuleType type) {
-    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(type == ModuleType::ADSR ? juce::Slider::TextBoxAbove : juce::Slider::TextBoxBelow, false,
-                           50, 20);
-}
-
-// attack/hold/decay/release: the four ADSR TIME params. Their AudioParameterFloat range is
-// deliberately linear (see docs/modules/modules.md#adsr-envelope-module) -- a skewed NormalisableRange there would
-// badly worsen AIStateMapper's untrusted in-[0,1] rescale heuristic for AI-authored patches. Sustain and the three
-// curve params are excluded on purpose and stay linear on the slider too.
-bool isAdsrTimeParamId(const juce::String& paramID) {
-    return paramID == "attack" || paramID == "hold" || paramID == "decay" || paramID == "release";
-}
-
-// Gives an ADSR time slider the 0.3 skew that keeps it usable at the new 1 ms attack default,
-// without touching the parameter's own (linear) range. MUST run AFTER the slider's
-// SliderParameterAttachment is constructed: that constructor installs a NormalisableRange<double>
-// built from lambda convertFrom0to1/convertTo0to1 functions, and NormalisableRange::convertFrom0to1
-// returns via that function early whenever one is set -- its own `skew` field is never consulted
-// once a lambda is installed, so a plain Slider::setSkewFactor() call before or after the
-// attachment is a silent no-op. Replacing the slider's range with a plain (function-free),
-// already-skewed NormalisableRange<double> here restores a real pixel<->value skew curve while
-// leaving slider.getValue()/setValue() -- what the attachment reads and writes -- exchanging real
-// units exactly as before.
-void applyAdsrTimeSliderSkew(juce::Slider& slider, const juce::AudioParameterFloat& param) {
-    if (!isAdsrTimeParamId(param.paramID))
-        return;
-    const auto& r = param.getNormalisableRange();
-    slider.setNormalisableRange(
-        juce::NormalisableRange<double>((double)r.start, (double)r.end, (double)r.interval, 0.3));
-}
-
-// True for a float param createControls()'s generic auto-slider loop must NOT build a knob for:
-// the threshold slider (it lives inside ThresholdControlComponent instead), or -- ADSR only --
-// the three curve amounts (edited only via the envelope graph's bend handles).
-bool shouldSkipGenericFloatSlider(juce::AudioProcessor* module, const juce::AudioParameterFloat& floatParam) {
-    if (auto* src = dynamic_cast<ThresholdMeterSource*>(module))
-        if (getType(module) != ModuleType::SampleHold && floatParam.paramID == src->getThresholdParamID())
-            return true;
-    return getType(module) == ModuleType::ADSR &&
-           (floatParam.paramID == "attackCurve" || floatParam.paramID == "decayCurve" ||
-            floatParam.paramID == "releaseCurve");
-}
-
-// True for a bool param createControls()'s generic auto-toggle loop must NOT build a toggle for,
-// beyond the fixed bypassed/muted/dualIO trio: ADSR's tempoSync, which the envelope
-// card's own MS|BPM segmented buttons already expose and drive.
-bool shouldSkipGenericBoolToggle(juce::AudioProcessor* module, const juce::AudioParameterBool& boolParam) {
-    return getType(module) == ModuleType::ADSR && boolParam.paramID == "tempoSync";
-}
-
-// True for a choice param createControls()'s generic auto-combo loop must NOT build a combo for:
-// ADSR's four note-division params (attackDiv/holdDiv/decayDiv/releaseDiv). The envelope
-// card builds its own picker for each of these (ModuleComponentEnvelopeCard.cpp's
-// ensureEnvelopeDivCombosCreated), swapped in over the matching knob's own grid cell in BPM mode
-// -- excluded here so they never ALSO render as an extra combo+label row in the generic grid.
-bool shouldSkipGenericChoiceCombo(juce::AudioProcessor* module, const juce::AudioParameterChoice& choiceParam) {
-    return getType(module) == ModuleType::ADSR &&
-           (choiceParam.paramID == "attackDiv" || choiceParam.paramID == "holdDiv" ||
-            choiceParam.paramID == "decayDiv" || choiceParam.paramID == "releaseDiv");
-}
-
-} // namespace
 
 juce::Point<int> ModuleComponent::getMidiPortCenter(bool isOutput) const {
     if (isMacroPortType(getType(module)))
@@ -140,15 +69,12 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         }
     }
 
-    if (auto* src = dynamic_cast<ThresholdMeterSource*>(module)) {
-        juce::AudioParameterFloat* thresholdParam = nullptr;
-        // Sample & Hold keeps its rotary Threshold; the control is meter-only there. ADSR and
-        // Comparator embed the slider in the control so the slice sits on the live level bar.
-        if (getType(module) != ModuleType::SampleHold)
-            thresholdParam =
-                dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module, src->getThresholdParamID()));
-        thresholdControl = std::make_unique<ThresholdControlComponent>(*src, thresholdParam);
-        addAndMakeVisible(thresholdControl.get());
+    // The card body's views (the Threshold control) are built here, where the card always built them,
+    // so the child order is unchanged; its parameter widgets follow in createControls().
+    cardBody_ = synth::CardBody::createFor(*this, *module, owner.getAudioEngine().getGraph(), nodeId);
+    if (cardBody_ != nullptr) {
+        cardBody_->createViews();
+        thresholdControl = cardBody_->getThresholdView();
     }
 
     if (auto* filterMod = dynamic_cast<FilterModule*>(module)) {
@@ -286,7 +212,9 @@ void ModuleComponent::detachFromProcessor() {
     openPluginEditorButton.reset();
     keyboardComponent.reset();
     // Same reasoning: the threshold control times itself and holds a reference to the module.
-    thresholdControl.reset();
+    thresholdControl = nullptr;
+    if (cardBody_ != nullptr)
+        cardBody_->releaseViews();
 
     // Same reason: the waveform view times against the SamplerModule, so it must go before the
     // processor pointer is dropped.
@@ -334,14 +262,13 @@ void ModuleComponent::detachFromProcessor() {
             }
         }
     }
+    if (cardBody_ != nullptr)
+        cardBody_->releaseBindings(processorAlive);
     if (processorAlive) {
         bypassAttachment.reset();
         muteAttachment.reset();
         dualIOAttachment.reset();
-        sliderAttachments.clear();
-        comboAttachments.clear();
-        buttonAttachments.clear();
-        envelopeDivAttachments_.clear(); // same live-processor-pointer contract as comboAttachments
+        envelopeDivAttachments_.clear(); // same live-processor-pointer contract as the card body's attachments
         for (auto* param : module->getParameters())
             param->removeListener(this);
     } else {
@@ -351,12 +278,6 @@ void ModuleComponent::detachFromProcessor() {
         (void)bypassAttachment.release();
         (void)muteAttachment.release();
         (void)dualIOAttachment.release();
-        while (sliderAttachments.size() > 0)
-            (void)sliderAttachments.removeAndReturn(sliderAttachments.size() - 1);
-        while (comboAttachments.size() > 0)
-            (void)comboAttachments.removeAndReturn(comboAttachments.size() - 1);
-        while (buttonAttachments.size() > 0)
-            (void)buttonAttachments.removeAndReturn(buttonAttachments.size() - 1);
         while (envelopeDivAttachments_.size() > 0)
             (void)envelopeDivAttachments_.removeAndReturn(envelopeDivAttachments_.size() - 1);
     }
@@ -598,7 +519,8 @@ void ModuleComponent::timerCallback() {
 // function under its own line-count ratchet. Neither combo is ComboBoxParameterAttachment-driven
 // (the device name and channel index are plain module state, not AudioParameters).
 void ModuleComponent::createExternalMidiControls(ExternalMidiModule* extMidi) {
-    auto* deviceCombo = comboBoxes.add(new juce::ComboBox("Device"));
+    auto* deviceCombo = adoptBespokeWidget(new juce::ComboBox("Device"));
+    comboBoxes.add(deviceCombo);
     deviceCombo->addItem("None", 1);
     int i = 2;
     auto devices = juce::MidiInput::getAvailableDevices();
@@ -620,10 +542,11 @@ void ModuleComponent::createExternalMidiControls(ExternalMidiModule* extMidi) {
     };
 
     addAndMakeVisible(deviceCombo);
-    comboLabels.add(new juce::Label("Device", "Device"));
+    comboLabels.add(adoptBespokeWidget(new juce::Label("Device", "Device")));
     addAndMakeVisible(comboLabels.getLast());
 
-    auto* channelCombo = comboBoxes.add(new juce::ComboBox("Channel"));
+    auto* channelCombo = adoptBespokeWidget(new juce::ComboBox("Channel"));
+    comboBoxes.add(channelCombo);
     channelCombo->addItem("All", 1);
     for (int c = 1; c <= 16; ++c) {
         channelCombo->addItem("Channel " + juce::String(c), c + 1);
@@ -645,7 +568,7 @@ void ModuleComponent::createExternalMidiControls(ExternalMidiModule* extMidi) {
     };
 
     addAndMakeVisible(channelCombo);
-    comboLabels.add(new juce::Label("Channel", "Channel"));
+    comboLabels.add(adoptBespokeWidget(new juce::Label("Channel", "Channel")));
     addAndMakeVisible(comboLabels.getLast());
 }
 
@@ -662,107 +585,8 @@ void ModuleComponent::createControls() {
         createExternalMidiControls(extMidi);
     } else if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(module)) {
         createHostedPluginControls(*hostedPlugin);
-    } else {
-        const auto& params = module->getParameters();
-
-        for (auto* param : params) {
-            if (auto* choiceParam = dynamic_cast<juce::AudioParameterChoice*>(param)) {
-                if (shouldSkipGenericChoiceCombo(module, *choiceParam))
-                    continue;
-                auto* combo = comboBoxes.add(new juce::ComboBox());
-
-                // Oscillator waveform selector: the exact choice set {"Sine", "Square", "Saw",
-                // "Triangle"} (in that order) gets per-item waveform glyph icons attached via
-                // PopupMenu::addItem(..., std::unique_ptr<Drawable> iconToUse).
-                // All other choice params keep the plain addItemList path.
-                const juce::StringArray& choices = choiceParam->choices;
-                const bool isOscWaveform = (choices.size() == 4 && choices[0] == "Sine" && choices[1] == "Square" &&
-                                            choices[2] == "Saw" && choices[3] == "Triangle");
-
-                if (isOscWaveform) {
-                    using synth::theme::Icon;
-                    const Icon kIcons[4] = {Icon::WaveformSine, Icon::WaveformSquare, Icon::WaveformSaw,
-                                            Icon::WaveformTriangle};
-                    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-                    for (int i = 0; i < 4; ++i) {
-                        std::unique_ptr<juce::Drawable> icon;
-                        if (lf != nullptr)
-                            icon = lf->getIcon(kIcons[i]); // may be nullptr in headless
-                        combo->getRootMenu()->addItem(i + 1, choices[i], true, false, std::move(icon));
-                    }
-                } else {
-                    combo->addItemList(choiceParam->choices, 1);
-                }
-                addAndMakeVisible(combo);
-                // Right-click MIDI Learn. juce::ComboBox::mouseDown already refuses to
-                // open its popup on a right click (checks e.mods.isPopupMenu() itself), so no
-                // subclass is needed here the way the toggle/header buttons below need one.
-                combo->addMouseListener(this, false);
-                registerMidiLearnable(*combo, choiceParam);
-
-                auto* attach = comboAttachments.add(new juce::ComboBoxParameterAttachment(*choiceParam, *combo));
-                comboParams.add(choiceParam); // param -> control mapping for reflection
-
-                auto* label = comboLabels.add(new juce::Label(param->getName(100), param->getName(100)));
-                addAndMakeVisible(label);
-            } else if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param)) {
-                if (shouldSkipGenericFloatSlider(module, *floatParam))
-                    continue;
-                auto* knob = new synth::ui::CardKnobSlider();
-                auto* slider = sliders.add(knob);
-                slider->setComponentID(param->getName(100)); // ID for lookup
-                setAdsrAwareSliderStyle(*slider, getType(module));
-                addAndMakeVisible(slider);
-                // Right-click-any-knob. `this` outlives every child slider (sliders is a member
-                // OwnedArray, destroyed as part of this component's own teardown before the outer
-                // object finishes destructing), so attaching `this` as the listener rather than a
-                // separately-owned object has no dangling-pointer window to reason about.
-                slider->addMouseListener(this, false);
-                registerMidiLearnable(*slider, floatParam); // right-click MIDI Learn
-                wireCardKnobModAmountGesture(*knob, floatParam);
-
-                auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*floatParam, *slider));
-                applyAdsrTimeSliderSkew(*slider, *floatParam);
-                sliderParams.add(floatParam); // param -> control mapping for reflection
-
-                auto* label = sliderLabels.add(new juce::Label(param->getName(100), param->getName(100)));
-                label->setJustificationType(juce::Justification::centred);
-                addAndMakeVisible(label);
-            } else if (auto* intParam = dynamic_cast<juce::AudioParameterInt*>(param)) {
-                auto* knob = new synth::ui::CardKnobSlider();
-                auto* slider = sliders.add(knob);
-                slider->setComponentID(param->getName(100)); // ID for lookup
-                slider->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-                slider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
-                // slider->setRange(intParam->getRange().start,
-                // intParam->getRange().end, 1.0); // Attachment handles range
-                addAndMakeVisible(slider);
-                slider->addMouseListener(this, false);    // right-click-any-knob, see above
-                registerMidiLearnable(*slider, intParam); // right-click MIDI Learn
-                wireCardKnobModAmountGesture(*knob, intParam);
-
-                auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*intParam, *slider));
-                sliderParams.add(intParam); // param -> control mapping for reflection
-
-                auto* label = sliderLabels.add(new juce::Label(param->getName(100), param->getName(100)));
-                label->setJustificationType(juce::Justification::centred);
-                addAndMakeVisible(label);
-            } else if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param)) {
-                if (boolParam->paramID == "bypassed" || boolParam->paramID == "muted" || boolParam->paramID == "dualIO")
-                    continue;
-                if (shouldSkipGenericBoolToggle(module, *boolParam))
-                    continue;
-
-                auto* toggle = toggles.add(new detail::MidiLearnableToggleButton(boolParam->getName(100)));
-                toggle->setComponentID(boolParam->getName(100)); // ID for Lookup
-                addAndMakeVisible(toggle);
-                // Right-click MIDI Learn -- same idiom as the generic slider loop above.
-                toggle->addMouseListener(this, false);
-                registerMidiLearnable(*toggle, boolParam);
-
-                auto* attach = buttonAttachments.add(new juce::ButtonParameterAttachment(*boolParam, *toggle));
-            }
-        }
+    } else if (cardBody_ != nullptr) {
+        cardBody_->createParameterWidgets();
     }
 
     if (bypassButton) {

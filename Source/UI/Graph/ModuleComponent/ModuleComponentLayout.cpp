@@ -7,6 +7,7 @@
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Layout/LayoutUtil.h"
 
@@ -231,57 +232,13 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         y = besidePorts ? std::max(y, chromeY) : chromeY;
     }
 
-    // A tabbed card (the Wavetable) replaces the two flat grids below with a pinned row, a tab
-    // strip and one page of controls. Everything after the grids — toggles, scope — is shared.
+    // A tabbed card (the Wavetable) replaces the combos and knobs with a pinned row, a tab strip and
+    // one page of controls. Everything else in the body — toggles, the Threshold view — is shared.
     const bool tabbed = wavetableTabs != nullptr;
     if (tabbed)
         y = wavetableTabs->layoutBody(y, contentX, contentW, apply);
 
-    // Combos stack one per row on a standard card. A double-width card pairs them up instead —
-    // otherwise a high parameter count alone would add ~180px of dead single-column height.
-    const int comboColumns = (width >= synth::LayoutUtil::kDoubleWidth) ? 2 : 1;
-    if (tabbed) {
-        // handled per page above
-    } else if (comboColumns == 1) {
-        for (int i = 0; i < comboBoxes.size(); ++i) {
-            if (apply) {
-                comboLabels[i]->setBounds(narrowX, y, narrowW, kLabelHeight);
-                comboBoxes[i]->setBounds(narrowX, y + kLabelHeight, narrowW, kRowHeight);
-            }
-            y += kLabelHeight + kRowHeight + 6;
-        }
-    } else {
-        const int cellW = contentW / comboColumns;
-        for (int i = 0; i < comboBoxes.size(); ++i) {
-            const int row = i / comboColumns;
-            const int col = i % comboColumns;
-            const int cellX = contentX + col * cellW;
-            const int rowY = y + row * (kLabelHeight + kRowHeight + 6);
-            if (apply) {
-                comboLabels[i]->setBounds(cellX, rowY, cellW - 8, kLabelHeight);
-                comboBoxes[i]->setBounds(cellX, rowY + kLabelHeight, cellW - 8, kRowHeight);
-            }
-        }
-        const int comboRows = (comboBoxes.size() + comboColumns - 1) / comboColumns;
-        y += comboRows * (kLabelHeight + kRowHeight + 6);
-    }
-
-    for (int i = 0; i < toggles.size(); ++i) {
-        if (apply)
-            toggles[i]->setBounds(contentX, y, contentW, kRowHeight);
-        y += kRowHeight + 2;
-    }
-
-    // --- Threshold control: Sample & Hold is meter-only above its rotary; ADSR / Comparator
-    // embed the Threshold slider here so the slice sits on the live level bar.
-    if (thresholdControl) {
-        if (apply)
-            thresholdControl->setBounds(contentX, y, contentW, thresholdControl->getPreferredHeight());
-        y += thresholdControl->getPreferredHeight() + 6;
-    }
-
-    if (!tabbed)
-        y = layoutKnobGrid(y, contentX, contentW, width, apply);
+    y = layoutBodyControls(y, width, apply, tabbed);
 
     // Envelope (ADSR) graph section: a disclosure toggle sharing its row with the BPM|MS
     // segmented control, then the curve editor itself when expanded — see
@@ -323,23 +280,34 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         y += 100;
     }
 
+    // The folded More row sits at the very bottom, under the footer rows.
+    if (cardBody_ != nullptr)
+        y = cardBody_->layoutMoreRow(y, synth::cardbody::BodyGeometry::forCardWidth(width), apply);
+
     return y + kBottomPadding;
 }
 
-int ModuleComponent::layoutKnobGrid(int y, int contentX, int contentW, int width, bool apply) {
-    const int knobColumns = (width >= synth::LayoutUtil::kDoubleWidth) ? (kKnobColumns * 2) : kKnobColumns;
-    const int knobWidth = contentW / knobColumns;
-    for (int i = 0; i < sliders.size(); ++i) {
-        const int row = i / knobColumns;
-        const int col = i % knobColumns;
-        const int x = contentX + col * knobWidth;
-        const int rowY = y + row * (kLabelHeight + kKnobHeight);
+// The folded More row opens under a modulation cable, so a hidden parameter's knob can still take it.
+bool ModuleComponent::unfoldMoreRowForCableDrag(juce::Point<int> localPoint) {
+    return cardBody_ != nullptr && cardBody_->unfoldForCableDragAt(localPoint);
+}
 
-        if (apply) {
-            sliderLabels[i]->setBounds(x, rowY, knobWidth, kLabelHeight);
-            sliders[i]->setBounds(x, rowY + kLabelHeight, knobWidth, kKnobHeight);
-        }
-    }
-    const int knobRows = (sliders.size() + knobColumns - 1) / knobColumns;
-    return y + knobRows * (kLabelHeight + kKnobHeight);
+// A card body lays out its own sections. A card without one (External MIDI's combos, a hosted plugin's
+// slots) stacks its widget arrays in the generic order -- combos, toggles, knobs -- with the same runs.
+int ModuleComponent::layoutBodyControls(int y, int width, bool apply, bool tabbed) {
+    using namespace synth::cardbody;
+    const auto g = BodyGeometry::forCardWidth(width);
+    if (cardBody_ != nullptr)
+        return cardBody_->layout(y, g, apply, tabbed);
+
+    std::vector<CaptionedWidget> combos, knobs;
+    for (int i = 0; i < comboBoxes.size(); ++i)
+        combos.emplace_back(comboBoxes[i], comboLabels[i]);
+    for (int i = 0; i < sliders.size(); ++i)
+        knobs.emplace_back(sliders[i], sliderLabels[i]);
+    std::vector<juce::Component*> toggleRow(toggles.begin(), toggles.end());
+    if (!tabbed)
+        y = layoutChoiceRun(combos, y, g, apply);
+    y = layoutToggleRun(toggleRow, y, g, apply);
+    return tabbed ? y : layoutKnobRun(knobs, kKnobColumns, y, g, apply);
 }

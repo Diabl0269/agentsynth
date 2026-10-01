@@ -217,7 +217,7 @@ void ModuleComponent::createEnvelopeCardControls() {
     // BPM|MS segmented control, wired to the `tempoSync` bool param. Its four
     // *Div note-division params get their own pickers, swapped in over the matching
     // knobs by applyEnvelopeSyncModeToControls below rather than the generic per-param grid
-    // (shouldSkipGenericChoiceCombo in ModuleComponent.cpp still excludes them from that grid).
+    // (CardBodyPlan.cpp's isEditedElsewhere still excludes them from that grid).
     envelopeMsButton = std::make_unique<juce::TextButton>("MS");
     envelopeBpmButton = std::make_unique<juce::TextButton>("BPM");
     // setRadioGroupId gives the pair JUCE's own mutual-exclusion for free: Button::setToggleState
@@ -450,7 +450,7 @@ int ModuleComponent::layoutEnvelopeGraphSection(int y, int contentX, int content
         return y;
 
     if (apply) {
-        // Sliders (and their final bounds) come from layoutKnobGrid, called before this
+        // Sliders (and their final bounds) come from the card body's layout, called before this
         // function in layoutDefaultContent -- safe to read them here on the apply pass.
         applyEnvelopeDivComboBounds();
         constexpr int kBpmMsWidth = 90;

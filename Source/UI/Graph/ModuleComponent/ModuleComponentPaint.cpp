@@ -492,10 +492,17 @@ juce::String ModuleComponent::knobNameForModTarget(const ModuleBase* mod, const 
     return target.name;
 }
 
-// Resolves the knob through the target's BOUND parameter (ModuleBase::parameterForModTarget), so a
-// jack labelled "Rate" finds the "Rate (Hz)" knob; the visibility rule stays getModRingSliderIndex's.
+// Resolves the knob by the target's BOUND parameter (ModuleBase::parameterForModTarget) -- the widget
+// bound to that paramId, never a display-name match -- so a jack labelled "Rate" finds the "Rate (Hz)"
+// knob. A target with no bound parameter falls back to the knob named like the jack. The visibility rule
+// is getModRingSliderIndex's either way.
 int ModuleComponent::sliderIndexForModTarget(const ModulationTarget& target) const {
-    return getModRingSliderIndex(knobNameForModTarget(dynamic_cast<const ModuleBase*>(module), target));
+    const auto* mb = dynamic_cast<const ModuleBase*>(module);
+    if (const auto* param = mb != nullptr ? mb->parameterForModTarget(target) : nullptr) {
+        const int si = sliderParams.indexOf(const_cast<juce::RangedAudioParameter*>(param));
+        return si >= 0 ? shownRingSliderIndex(si) : -1;
+    }
+    return getModRingSliderIndex(target.name);
 }
 
 // See the doc comment on the declaration (ModuleComponent.h) -- this is the ONE place a
@@ -594,21 +601,21 @@ bool ModuleComponent::setModDropTargetChannel(int channelIndex) {
 }
 
 int ModuleComponent::getModRingSliderIndex(const juce::String& paramName) const {
-    for (int si = 0; si < sliders.size(); ++si) {
-        if (sliders[si]->getComponentID() != paramName)
-            continue;
-        if (sliders[si]->getSliderStyle() != juce::Slider::RotaryHorizontalVerticalDrag)
-            continue;
-        // A knob on an inactive tab page keeps the bounds it had when its page was last laid
-        // out, so drawing from them paints a ring over empty card --
-        // UNLESS it's hidden only because its own *Div combo has swapped in over it (BPM
-        // mode), which keeps the SAME cell a jack still legitimately lands on; see
-        // isEnvelopeDivSwappedForSlider's own comment (ModuleComponentEnvelopeCard.cpp).
-        if (!sliders[si]->isVisible() && !isEnvelopeDivSwappedForSlider(si))
-            return -1;
-        return si;
-    }
+    for (int si = 0; si < sliders.size(); ++si)
+        if (sliders[si]->getComponentID() == paramName &&
+            sliders[si]->getSliderStyle() == juce::Slider::RotaryHorizontalVerticalDrag)
+            return shownRingSliderIndex(si);
     return -1;
+}
+
+// A knob hidden on an inactive tab page (or in a folded More row) keeps the bounds it had when last
+// laid out, so drawing from them paints a ring over empty card -- UNLESS it is hidden only because its
+// own *Div combo swapped in over it (BPM mode), which keeps the SAME cell a jack still legitimately
+// lands on; see isEnvelopeDivSwappedForSlider's own comment (ModuleComponentEnvelopeCard.cpp).
+int ModuleComponent::shownRingSliderIndex(int si) const {
+    if (sliders[si]->getSliderStyle() != juce::Slider::RotaryHorizontalVerticalDrag)
+        return -1;
+    return (!sliders[si]->isVisible() && !isEnvelopeDivSwappedForSlider(si)) ? -1 : si;
 }
 
 juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {

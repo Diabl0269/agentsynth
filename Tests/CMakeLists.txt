@@ -701,6 +701,10 @@ add_executable(Tests
     UI/Chrome/ToolbarTitlesTests.cpp
     UI/Chrome/StatusBarAccessibilityTests.cpp
     UI/Layout/BottomDockTabStripTests.cpp
+    UI/Graph/CardBody/CardBodyGoldenTests.cpp
+    UI/Graph/CardBody/CardBodyLayoutTests.cpp
+    UI/Graph/CardBody/CardBodyBindingTests.cpp
+    UI/Graph/CardBody/CardBodyLoadTests.cpp
 )
 
 # MainComponent.h (AppUI) pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h)

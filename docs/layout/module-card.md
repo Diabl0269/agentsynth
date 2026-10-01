@@ -23,10 +23,21 @@ Attenuverter modules are excluded from the visible card grid entirely — they d
 
 ## Body layout
 
-Every module without a bespoke layout (the exceptions are Sequencer, PolySequencer, MidiKeyboard,
-ADSR and Attenuverter) is laid out by one function, `layoutDefaultContent(bool apply)`. It runs
-twice per size change: once with `apply = false` to measure the height, once with `apply = true`
-from `resized()` to position the children.
+A built-in module's parameter widgets are built, bound and laid out by its **card body**, `CardBody`
+(`Source/UI/Graph/CardBody/`), from a plan of the module's parameters and its resolved layout
+([module-card-layout.md](module-card-layout.md#rendering)). No module has a code default yet, so
+every card draws the **automatic layout**, which is the generic card exactly: all combos, then all
+toggles, then the Threshold view, then a 3-column knob grid, each group in parameter declaration
+order. Widgets are built in declaration order whatever the layout, so child, Tab and screen-reader
+order never depend on placement. The bespoke cards (Sequencer, Poly Sequencer, Macros, Parametric
+EQ, Attenuverter, and the Wavetable's tab pages) build their widgets through the same card body
+but place them themselves; MIDI Keyboard, External MIDI and a hosted plugin build their own.
+
+Around the body, `layoutDefaultContent(bool apply)` adds the card's chrome (Sampler and Wavetable
+rows above it; the envelope graph, LFO wave editor, Show Response / Spectrum / Scope rows below it;
+the More row last). It runs twice per size change: once with `apply = false` to measure the
+height, once with `apply = true` from `resized()` to position the children, and the card body's
+own `layout(apply)` follows the same rule.
 
 **Why one function runs twice instead of two functions.** The measured height and the real positions
 cannot drift apart when they come from the same code. They previously did: two hand-maintained
@@ -57,32 +68,57 @@ row fit inside the 280 px card.
 The header-to-first-port gap is 9 px (base header offset constant 38 in both `getContentTopY()` and
 `getPortCenter()`), giving the MIDI In/Out row breathing room under the header hairline.
 
-Measured heights. `GraphEditor::estimateModuleSize()` mirrors these for the library drag ghost, and
-`ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` constructs every library-offered
-type and fails if this table drifts from what `layoutDefaultContent()` actually produces:
+Measured heights. `GraphEditor::estimateModuleSize()` gives the library drag ghost and drop
+placement a card's size before the card exists. A card drawn from layout data is **measured** from
+its card-body plan (`CardBodyMeasure.cpp`: the same plan and layout walk, the knob-bound jack rule
+from the plan, and the chrome rows above); only the bespoke cards read a small table.
+`ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` builds every library type and fails
+if either path drifts from the real card, and `CardBodyGolden` pins every child's bounds of every
+card against `Tests/fixtures/card-body/card-geometry.golden`. Fresh cards, single width (280):
 
 | Module | Height (px) | Module | Height (px) |
 |---|---|---|---|
-| Oscillator | 553 | Sample & Hold | 571 |
-| Filter | 463 | Comparator | 205 |
-| LFO | 401 | Sampler | 665 |
-| VCA | 273 | Chorus / Phaser / Flanger | 297 |
-| ADSR | 489 | Bitcrusher | 343 |
-| Poly MIDI | 205 | Pitch Shifter | 487 |
-| Distortion | 343 | Compressor | 257 |
-| Ring Modulator | 411 | Limiter | 181 |
-| Delay | 257 | Voice Mixer | 321 |
-| Reverb | 257 | External MIDI | 146 |
-| Noise | 301 | Rec Tap / Track Audio / Hosted Plugin | 131 |
-| Envelope Follower | 315 | Math | 259 |
+| Oscillator | 433 | Sample & Hold | 451 |
+| Filter | 383 | Comparator | 185 |
+| LFO | 361 | Sampler | 545 |
+| VCA | 233 | Chorus / Phaser / Flanger | 237 |
+| ADSR (Amp Env, Filter Env) | 389 | Bitcrusher | 263 |
+| Poly MIDI | 185 | Pitch Shifter | 387 |
+| Distortion | 283 | Compressor / Gate | 257 |
+| Ring Modulator | 331 | Limiter | 161 |
+| Delay / Reverb | 237 | Voice Mixer | 301 |
+| Noise | 261 | Math | 239 |
+| Envelope Follower | 235 | Channel Strip | 409 |
+| Master | 221 | Rec Tap / Track Audio | 131 |
+| Track In | 100 | | |
 
-Outside that function: Sequencer and PolySequencer 406, MidiKeyboard 150, Macros (tracks its
-`Knobs` count), Attenuverter (square, `kNarrowWidth`), Wavetable 554, Parametric EQ 592, and
-AudioInput / AudioOutput on a 100 px floor.
+From the table (bespoke): Sequencer and Poly Sequencer 560x406, MIDI Keyboard 560x150, Macros (tracks
+its `Knobs` count, 458 at the default), Attenuverter (square, `kNarrowWidth`), Wavetable 560x565,
+Parametric EQ 560x592, External MIDI 146, Hosted Plugin 135, and Audio Input / Audio Output on a
+100 px floor.
+
+## The More row
+
+A layout lists what it hides; every parameter it hides or does not place renders in a folded **More**
+row at the very bottom of the card, under the Scope row. The row exists only when something is hidden,
+so no card shows one today (the automatic layout hides nothing); it appears through a stored layout
+(the node's `cardLayout` override, [module-card-layout.md](module-card-layout.md#where-a-layout-comes-from)).
+
+- **Folded** (the default, also after a load): one full-width button, "More controls (N)", a Tab stop
+  after the body's controls with the accent focus ring; a click, Return or Space toggles it. The
+  hidden parameters' widgets exist and stay bound (value, attachment, MIDI Learn, automation), but are
+  out of view, so a hidden knob's CV jack draws in the port gutter again.
+- **Unfolded**: the hidden controls lay out under the button in the body's runs (combos, toggles, a
+  3-column knob grid), and a knob-bound jack leaves the gutter as usual.
+- **Height.** Folding and unfolding change the card's height: the card re-measures and calls
+  `GraphEditor::handleModuleResized`, the same make-room path every growing card takes. A value drag
+  never changes a card's height (`CardBodyLayout.CardHeightNeverChangesWhileAKnobIsDragged`).
+- **Cables.** A modulation cable dragged over the folded row unfolds it, so a hidden parameter's knob
+  can still take a new cable (`GraphEditor::dragConnection` asks each card under the cable).
 
 ## Modules that resize at runtime
 
-Widths are static; one module's **height** is not. The LFO (FRO114) stays `Single` width even with
+Widths are static; a few modules' **heights** are not (the More row above also folds a card's height). The LFO (FRO114) stays `Single` width even with
 its Custom-waveform section open — the section adds `24 + 2` px (the Grid/Shapes/Tools toolbar
 row) `+ 150` px (the curve editor, `kLfoWaveGraphHeight`) `+ 8` px (bottom breathing room), a total
 of 184 px, inserted right after the envelope graph section in `layoutDefaultContent` — and ONLY
@@ -232,7 +268,7 @@ never overlaps the title regardless of whether the LED is lit.
 
 ## Knob modulation-amount gesture
 
-Every rotary knob built by `ModuleComponent::createControls()` (the float- and int-param cases) is
+Every rotary knob a card body builds (`CardBody::createKnob`, for the float and int parameters) is
 a `synth::ui::CardKnobSlider` (`CardKnobSlider.h`), not a plain `juce::Slider` — it can redirect its
 own mouseDown/drag/up to `ModuleComponent::handleModAmountGesture()` instead of moving the knob,
 when `wantsModAmountGestureFor()` says the click should adjust a routed AttenuverterChain's amount

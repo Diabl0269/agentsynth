@@ -135,7 +135,7 @@ void setPolyIfPresent(ModuleBase& mb, bool poly) {
 //     re-litigates.
 //   - The bound parameter is a `ThresholdMeterSource`'s own threshold id (ADSR "gateThreshold",
 //     Comparator/Sample & Hold "trigThreshold") EXCEPT Sample & Hold's, which alone keeps its
-//     generic slider -- ModuleComponent.cpp's shouldSkipGenericFloatSlider skips building one for
+//     generic slider -- CardBodyPlan.cpp's isEditedElsewhere skips building one for
 //     the rest, because the value lives inside ThresholdControlComponent instead; that widget's
 //     own drop anchor is what getModTargetPortForPoint special-cases already.
 //
@@ -144,7 +144,7 @@ void setPolyIfPresent(ModuleBase& mb, bool poly) {
 // no knob to land on is exactly the visible-truncated-gutter-jack shape knob-binding removes --
 // see docs/modules/modulation.md), and so are never declared as ModulationTargets in the first
 // place -- check (a) below never iterates them. Check (b) also can't false-positive on them:
-// shouldSkipGenericFloatSlider means they never get a rotary Slider component either, so
+// isEditedElsewhere (CardBodyPlan.cpp) means they never get a rotary Slider component either, so
 // continuousKnobParamNames() never picks them up.
 bool targetHasNoGenericKnobByDesign(const ModuleBase& mb, const ModulationTarget& target) {
     const auto* param = mb.parameterForModTarget(target);

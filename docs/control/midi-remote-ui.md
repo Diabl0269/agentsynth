@@ -24,7 +24,7 @@ design-only: the Inspector's **Relearn** button (rendered, disabled).
 ## Right-click MIDI Learn — coverage
 
 The requirement is *every* knob, slider and button on *any* module. The generic-card
-choke point (`slider->addMouseListener(this)` in `ModuleComponent::createControls`) covers
+choke point (the card as mouse listener on every knob, in `CardBody::createKnob`) covers
 generic float/int sliders only, so coverage is an explicit list with one acceptance line each.
 A surface is "covered" when right-clicking its control shows the MIDI item block of [The learn interaction](#the-learn-interaction) and a
 Learn from there binds the right parameter (or, for the mixer column's Solo, a [node command target](midi-remote.md#node-command-targets)).
