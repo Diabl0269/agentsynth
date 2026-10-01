@@ -120,6 +120,8 @@ void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton&
         g.setColour(textColour);
         g.drawFittedText(button.getButtonText(), textArea.toNearestInt(), juce::Justification::centred, 1);
     }
+
+    synth::ui::paintFocusRing(g, bounds, button, m.pillRadius);
 }
 
 void AppLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& button, bool shouldDrawButtonAsHighlighted,

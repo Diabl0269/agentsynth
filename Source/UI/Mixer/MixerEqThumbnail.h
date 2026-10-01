@@ -41,6 +41,7 @@ namespace synth::ui {
 
 class MixerEqThumbnail
     : public juce::Component
+    , public juce::SettableTooltipClient
     , private juce::AudioProcessorParameter::Listener
     , private juce::AsyncUpdater {
 public:

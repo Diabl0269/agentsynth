@@ -65,6 +65,8 @@ public:
      *  same contract as MixerColumnComponent::onLiveStateChanged (see that member's comment). */
     std::function<void()> onLiveStateChanged;
 
+    /** The row list the panel's keyboard row focus walks (MixerPanelRowKeyboard.cpp). */
+    MixerInsertList& getInsertList() noexcept { return insertList_; }
     MixerInsertList& getInsertListForTest() noexcept { return insertList_; }
     MixerColumnHeader& getHeaderForTest() noexcept { return header_; }
     /** Sets the callback for a right-click on the header (the pin menu). */

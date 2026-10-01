@@ -67,6 +67,7 @@ MixerPanelComponent::MixerPanelComponent() {
         rebuild(); // the new bus's own column, without waiting for the owner's reconcile
     };
     toolbar_.onResetMeters = [this] { resetAllMeterReadouts(); };
+    onOpenEqWindow = [this](juce::AudioProcessorGraph::NodeID nodeId) { openEqWindowOnCanvas(nodeId); };
     wireSectionLayout();
 
     // A direct child of THIS panel, not content_/viewport_ (which scroll and would clip or
@@ -378,9 +379,11 @@ void MixerPanelComponent::rebuild() {
     emptyHint_.setVisible(columnEntries_.empty());
 
     resolveFocusAfterRebuild(hadFocus, previousKind, previousUuid);
+    reconcileRowFocus();
     syncFocusVisuals();
 
     resized();
+    syncRowVisuals(); // again, now the columns have a height to scroll the focused row into
 
     // A dropped send row glides into its slot on the new column of the same strip; the pending
     // settle is cleared whether or not that column exists.

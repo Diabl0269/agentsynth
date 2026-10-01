@@ -104,6 +104,13 @@ public:
     juce::Button& getMuteButtonForTest() noexcept { return muteButton_; }
     juce::Button& getSoloButtonForTest() noexcept { return soloButton_; }
 
+    /** The row lists the panel's keyboard row focus walks (MixerPanelRowKeyboard.cpp). */
+    MixerInsertList& getInsertList() noexcept { return insertList_; }
+    MixerSendList& getSendList() noexcept { return sendList_; }
+    /** The node of the first Parametric EQ among the inserts (the one the thumbnail shows); invalid when none. */
+    juce::AudioProcessorGraph::NodeID getEqNodeId() const noexcept { return eqNodeId_; }
+    juce::String getEqNodeUuid() const { return eqNodeUuid_; }
+
     /** The strip's own leaf-level keyboard-focus outline, painted in paintOverChildren --
      *  distinct from setSelected()'s reveal highlight (they may co-paint). MixerPanelComponent
      *  sets this when focusedColumnIndex_ changes (real hasKeyboardFocus() is always false

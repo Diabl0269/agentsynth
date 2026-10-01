@@ -30,7 +30,9 @@ class GraphEditor;
 // parameters this list is still attached to.
 namespace synth::ui {
 
-class MixerSendList : public juce::Component {
+class MixerSendList
+    : public juce::Component
+    , public juce::TooltipClient {
 public:
     MixerSendList();
     ~MixerSendList() override;
@@ -77,6 +79,24 @@ public:
     void startSettleFrom(int rowIndex, float fromY);
 
     int getPreferredHeight() const noexcept;
+
+    // ---- Keyboard row focus (docs/mixer/panel.md#keyboard-navigation-and-accessibility) ----
+    // Row indices address the visible rows, like the test seams below. The panel owns which row is
+    // focused and draws its ring; this list only scrolls it into view and answers questions about it.
+    int getRowCount() const noexcept { return (int)entries_.size(); }
+    /** -1 clears; any other row is scrolled into the section's frame. */
+    void setFocusedRow(int rowIndex);
+    int getFocusedRow() const noexcept { return focusedRow_; }
+    /** Row `rowIndex`'s bounds in this list's coordinates; empty when out of range. */
+    juce::Rectangle<int> getRowBounds(int rowIndex) const;
+    /** What a screen reader says for the row: "Send to Reverb Bus, -6.0 dB". Empty when out of range. */
+    juce::String describeRow(int rowIndex) const;
+    /** Moves the row's level by `deltaDb` (clamped to the parameter's range) as ONE undo step, through
+     *  the same change-gesture bracket a knob drag uses. False when the row has no level parameter. */
+    bool nudgeLevel(int rowIndex, float deltaDb);
+
+    /** The tooltip for whatever part of a row the pointer is over. */
+    juce::String getTooltip() override;
 
     /** Drops every SliderParameterAttachment and this list's own graph pointers -- called
      *  from MixerColumnComponent::unbindFromGraph(), i.e. BEFORE a graph-replacing mutation frees
@@ -230,6 +250,7 @@ private:
     // press (drag or not); the animator's keys are the rows' indices at the press. The press only
     // becomes a drag past the animator's threshold, so a plain click still opens the target menu.
     int pressedRow_ = -1;
+    int focusedRow_ = -1;
     SettleForTest lastSettle_;
     ReorderDragSession rowDrag_{*this, [this] { placeRows(); }};
 

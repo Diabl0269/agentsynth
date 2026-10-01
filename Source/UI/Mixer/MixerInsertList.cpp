@@ -7,6 +7,7 @@
 #include "AppUndoManager.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Mixer/MixerSections/MixerSectionViewport.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -61,6 +62,42 @@ void MixerInsertList::rebuildRowAccessibilityProxies() {
         addAndMakeVisible(*proxy);
         rowProxies_.push_back(std::move(proxy));
     }
+}
+
+juce::Rectangle<int> MixerInsertList::getRowBounds(int rowIndex) const {
+    if (rowIndex < 0 || rowIndex >= (int)entries_.size())
+        return {};
+    return getLocalBounds().withY(rowIndex * kRowHeight).withHeight(kRowHeight);
+}
+
+void MixerInsertList::setFocusedRow(int rowIndex) {
+    focusedRow_ = rowIndex >= 0 && rowIndex < (int)entries_.size() ? rowIndex : -1;
+    if (focusedRow_ >= 0)
+        if (auto* viewport = findParentComponentOfClass<MixerSectionViewport>()) {
+            const auto row = getRowBounds(focusedRow_);
+            viewport->revealRange(row.getY(), row.getBottom());
+        }
+}
+
+juce::String MixerInsertList::describeRow(int rowIndex) const {
+    if (rowIndex < 0 || rowIndex >= (int)entries_.size())
+        return {};
+    const auto& entry = entries_[(size_t)rowIndex];
+    return "Insert " + juce::String(rowIndex + 1) + ", " + entry.name + (entry.bypassed ? ", bypassed" : "");
+}
+
+juce::String MixerInsertList::getRowUuid(int rowIndex) const {
+    return rowIndex >= 0 && rowIndex < (int)entries_.size() ? entries_[(size_t)rowIndex].uuid : juce::String();
+}
+
+juce::String MixerInsertList::getTooltip() {
+    const int row = rowIndexAt(getMouseXYRelative());
+    if (row >= 0)
+        return entries_[(size_t)row].name + (linear_ ? ": right-click to move, remove or add an insert"
+                                                     : ": a branching chain, edit it on the canvas");
+    if (!linear_)
+        return "Select this channel's insert chain on the canvas";
+    return "Insert chain: right-click to add an insert";
 }
 
 int MixerInsertList::getPreferredHeight() const noexcept {

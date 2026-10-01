@@ -200,9 +200,13 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     setTitle(column.name);
     fader_.setChannelName(column.name);
     panSlider_.setTitle(column.name + " pan");
+    panSlider_.setTooltip("Pan: drag to change");
     meter_.setTitle(column.name + " meter");
+    meter_.setTooltip("Output level meter");
     meterReadout_.setTitle(column.name + " peak");
+    meterReadout_.setTooltip("Peak level: click to reset it, Option-click to reset every channel");
     eqThumbnail_.setTitle(column.name + " EQ curve");
+    eqThumbnail_.setTooltip("EQ curve: click to select this channel's EQ on the canvas");
     eqThumbnail_.setDescription("Selects this channel's EQ on the canvas");
 
     rebindControls();
@@ -308,10 +312,12 @@ void MixerColumnComponent::refreshMuteSoloAccessibility(ModuleBase* module, Chan
     const bool muted = module != nullptr && module->isMuted();
     muteButton_.setToggleState(muted, juce::dontSendNotification);
     muteButton_.setTitle(name + " mute, " + (muted ? "on" : "off"));
+    muteButton_.setTooltip("Mute this channel");
     if (strip != nullptr) {
         const bool soloed = strip->isSoloed();
         soloButton_.setToggleState(soloed, juce::dontSendNotification);
         soloButton_.setTitle(name + " solo, " + (soloed ? "on" : "off"));
+        soloButton_.setTooltip("Solo this channel");
     }
 }
 

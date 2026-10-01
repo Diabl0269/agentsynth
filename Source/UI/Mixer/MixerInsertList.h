@@ -22,7 +22,9 @@ class GraphEditor;
 // selects editOnCanvasTargetUuid exactly like a column header click does.
 namespace synth::ui {
 
-class MixerInsertList : public juce::Component {
+class MixerInsertList
+    : public juce::Component
+    , public juce::TooltipClient {
 public:
     MixerInsertList();
 
@@ -51,6 +53,24 @@ public:
     std::function<void(juce::AudioProcessorGraph::NodeID)> onBeforeNodeRemoved;
 
     int getPreferredHeight() const noexcept;
+
+    // ---- Keyboard row focus (docs/mixer/panel.md#keyboard-navigation-and-accessibility) ----
+    // Same contract as MixerSendList's: the panel owns which row is focused and draws its ring.
+    int getRowCount() const noexcept { return (int)entries_.size(); }
+    /** -1 clears; any other row is scrolled into the section's frame. */
+    void setFocusedRow(int rowIndex);
+    int getFocusedRow() const noexcept { return focusedRow_; }
+    /** Row `rowIndex`'s bounds in this list's coordinates; empty when out of range. */
+    juce::Rectangle<int> getRowBounds(int rowIndex) const;
+    /** What a screen reader says for the row: "Insert 2, Compressor". Empty when out of range. */
+    juce::String describeRow(int rowIndex) const;
+    /** The row's module uuid (what "select on canvas" resolves), or empty when out of range. */
+    juce::String getRowUuid(int rowIndex) const;
+    /** A branching chain is read-only: its rows can be read and opened but not removed. */
+    bool isLinear() const noexcept { return linear_; }
+
+    /** The tooltip for whatever part of the list the pointer is over. */
+    juce::String getTooltip() override;
 
     /** The module type names the "Add..." menu offers (includes Limiter and Gate) -- exposed so a test can
      *  check every one resolves through AIStateMapper::createModule without a popup menu. */
@@ -109,6 +129,7 @@ private:
 
     std::vector<synth::MixerInsertEntry> entries_;
     bool linear_ = false;
+    int focusedRow_ = -1;
     juce::String editOnCanvasTargetUuid_;
     juce::AudioProcessorGraph::NodeID sourceNodeId_;
     juce::AudioProcessorGraph::NodeID stripNodeId_;

@@ -30,6 +30,16 @@ void MixerSectionViewport::setContentHeight(int contentHeight) {
 
 bool MixerSectionViewport::isScrollable() const noexcept { return contentHeight_ > getHeight(); }
 
+void MixerSectionViewport::revealRange(int top, int bottom) {
+    if (getHeight() <= 0)
+        return; // not laid out yet
+    const int viewTop = getViewPositionY();
+    if (top < viewTop)
+        setViewPosition(getViewPositionX(), top);
+    else if (bottom > viewTop + getHeight())
+        setViewPosition(getViewPositionX(), juce::jmax(0, bottom - getHeight()));
+}
+
 // The list is never shorter than the frame, so a click on the empty space below the last row still
 // lands on the list (the insert list's right-click "Add..." relies on that).
 void MixerSectionViewport::fitList() {

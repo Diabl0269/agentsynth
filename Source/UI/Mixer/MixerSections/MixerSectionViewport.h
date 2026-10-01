@@ -22,6 +22,8 @@ public:
 
     /** True when the list is taller than the frame, i.e. the wheel scrolls it. */
     bool isScrollable() const noexcept;
+    /** Scrolls the least that brings list rows `top` to `bottom` (list coordinates) into the frame. */
+    void revealRange(int top, int bottom);
 
     void resized() override;
     void visibleAreaChanged(const juce::Rectangle<int>& newVisibleArea) override;

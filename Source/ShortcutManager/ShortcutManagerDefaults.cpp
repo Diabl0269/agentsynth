@@ -375,4 +375,10 @@ void ShortcutManager::addPianoRollDefaultBindings() {
     bindings["mixerToggleInserts"] = juce::KeyPress('i', mixerSectionMods, 0);
     bindings["mixerToggleSends"] = juce::KeyPress('s', mixerSectionMods, 0);
     bindings["mixerToggleEq"] = juce::KeyPress('e', mixerSectionMods, 0);
+
+    // Tab moves from the focused column into its send / insert rows (it falls through to the
+    // app-wide region cycle when there is nothing to enter); bare E opens the focused column's EQ.
+    // Return is not free for the EQ: it already selects the focused column on the canvas.
+    bindings["mixerEnterRows"] = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0);
+    bindings["mixerOpenEq"] = juce::KeyPress('e', juce::ModifierKeys::noModifiers, 0);
 }

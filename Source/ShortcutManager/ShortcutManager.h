@@ -511,6 +511,8 @@ private:
             {"mixerToggleInserts", ShortcutCategory::Mixer},
             {"mixerToggleSends", ShortcutCategory::Mixer},
             {"mixerToggleEq", ShortcutCategory::Mixer},
+            {"mixerEnterRows", ShortcutCategory::Mixer},
+            {"mixerOpenEq", ShortcutCategory::Mixer},
         };
         return table;
     }

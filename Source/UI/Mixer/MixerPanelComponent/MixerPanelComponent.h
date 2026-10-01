@@ -12,6 +12,7 @@
 #include "UI/Mixer/MixerDirectColumn.h"
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelToolbar.h"
+#include "UI/Mixer/MixerRowFocus.h"
 #include "UI/Mixer/MixerSections/MixerSectionLayout.h"
 #include "UI/Mixer/MixerZonesPane/MixerZonesPane.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -33,7 +34,8 @@ struct MixerSnapshot;
 
 namespace synth::ui {
 class MixerColumnComponent;
-}
+class MixerSendList;
+} // namespace synth::ui
 
 // MixerPanelComponent.h (docs/mixer/panel.md#what-the-mixer-shows): the columns container -- a
 // horizontally scrolling row of columns built from synth::buildMixerSnapshot(), rebuilt on every
@@ -44,7 +46,8 @@ class MixerColumnComponent;
 // navigation") -- a region ROOT, not per-column leaves: MixerColumnComponent/MixerMasterColumn/
 // MixerDirectColumn's own controls all give up keyboard focus (setWantsKeyboardFocus(false)), so
 // this panel is the single focusable leaf and keyPressed() (MixerPanelKeyboard.cpp) owns Left/
-// Right column walk, Up/Down fader nudge, Enter select-on-canvas and the rebindable M/S/R actions.
+// Right column walk, Up/Down fader nudge, Enter select-on-canvas, the rebindable M/S/R actions, and
+// Tab into the focused column's send and insert rows (MixerPanelRowKeyboard.cpp).
 namespace synth::ui {
 
 class MixerPanelComponent
@@ -293,7 +296,21 @@ public:
 
     void refreshTrackColours(); // see the .cpp definition
 
+    /** Opens the Parametric EQ window of the EQ insert at `nodeId` (the "mixerOpenEq" key). The default
+     *  finds the node's card on the canvas and opens its pop-out editor; a test replaces it. */
+    std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenEqWindow;
+
+    /** The send or insert row the keyboard focus sits on, or none while it is on a column
+     *  ("mixerEnterRows" moves into the rows, Esc back out). See MixerPanelRowKeyboard.cpp. */
+    std::optional<MixerRowRef> getFocusedRowForTest() const noexcept { return rowFocus_; }
+    /** What a screen reader hears for the focused row ("Send to Reverb Bus, -6.0 dB"); empty in column mode. */
+    juce::String getFocusedRowDescriptionForTest() const { return getDescription(); }
+    /** The focused row's ring rectangle in this panel's coordinates; empty when none or scrolled out of view. */
+    juce::Rectangle<int> getFocusedRowBoundsForTest() const { return focusedRowBounds(); }
+
     bool keyPressed(const juce::KeyPress& key) override;
+    /** Leaving the panel (another control or region takes focus) ends row mode. */
+    void focusLost(FocusChangeType cause) override;
     /** Opens the focused column's header right-click menu, anchored at that column. False with no column focused. */
     bool showContextMenuForKeyboardFocus() override;
     void paintOverChildren(juce::Graphics& g) override;
@@ -341,6 +358,29 @@ private:
     bool toggleFocusedMuted();
     bool toggleFocusedSoloed();
     bool armFocusedTrack();
+
+    // ---- Row focus -- implemented in MixerPanelRowKeyboard.cpp ---------------------------------
+    /** The focused column's insert / send lists while their sections are shown; null otherwise. */
+    MixerInsertList* focusedInsertList() const;
+    MixerSendList* focusedSendList() const;
+    /** The focused column's rows in walk order: its inserts, then its sends. */
+    std::vector<MixerRowRef> focusedRows() const;
+    bool enterRows();
+    void exitRows();
+    bool handleRowKey(const juce::KeyPress& key);
+    bool stepRow(int direction);
+    bool nudgeFocusedSend(float deltaDb);
+    bool removeFocusedRow();
+    bool openFocusedRow();
+    bool openFocusedEq();
+    void openEqWindowOnCanvas(juce::AudioProcessorGraph::NodeID nodeId);
+    void setRowFocus(std::optional<MixerRowRef> row);
+    /** Keeps the row focus valid after the rows or the sections shown changed under it. */
+    void reconcileRowFocus();
+    void syncRowVisuals();
+    void refreshRowAccessibility();
+    juce::Rectangle<int> focusedRowBounds() const;
+    void paintRowFocusRing(juce::Graphics& g) const;
     /** Re-resolves focusedColumnIndex_ after a rebuild by IDENTITY, never by raw index -- a
      *  strip insert/removal elsewhere in the column order would otherwise silently reattach focus
      *  to the wrong column. `hadFocus` is false when nothing was focused before the rebuild (then
@@ -471,6 +511,7 @@ private:
 
     std::vector<ColumnEntry> columnEntries_;
     int focusedColumnIndex_ = -1;
+    std::optional<MixerRowRef> rowFocus_; // set only while the focused column's rows hold the keys
 
     ReorderDragAnimator columnReorder_;
     ReorderFramePump columnFrames_{*this};

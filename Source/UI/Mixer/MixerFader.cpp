@@ -127,6 +127,7 @@ bool MixerFader::nudge(float deltaDb) {
 
 void MixerFader::setChannelName(const juce::String& name) {
     slider_.setTitle(name.isEmpty() ? juce::String("Fader") : name + " fader");
+    slider_.setTooltip("Channel level: drag, or Up and Down on the focused channel (Shift for 0.1 dB)");
     readout_.setTitle(name.isEmpty() ? juce::String("Fader level") : name + " fader level");
 }
 

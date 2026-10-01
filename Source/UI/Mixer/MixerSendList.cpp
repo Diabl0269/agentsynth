@@ -79,6 +79,7 @@ void MixerSendList::rebuildKnobs() {
         row.muteButton->setTitle(entry.targetNodeId != juce::AudioProcessorGraph::NodeID{}
                                      ? "Mute send to " + entry.targetName
                                      : "Mute send " + juce::String(entry.slot + 1) + " (no target)");
+        row.muteButton->setTooltip("Mute or unmute this send");
         const int rowIndex = i;
         row.muteButton->onClick = [this, rowIndex] { toggleMuteForRow(rowIndex); };
         addAndMakeVisible(*row.muteButton);
@@ -92,6 +93,7 @@ void MixerSendList::rebuildKnobs() {
         row.knob->setTitle(entry.targetNodeId != juce::AudioProcessorGraph::NodeID{}
                                ? "Send to " + entry.targetName
                                : "Send " + juce::String(entry.slot + 1) + " (no target)");
+        row.knob->setTooltip("Send level: drag to change");
         addAndMakeVisible(*row.knob);
         if (auto* param = strip->getSendLevelParameter(entry.slot)) {
             const auto range = param->getNormalisableRange();
@@ -122,6 +124,7 @@ void MixerSendList::rebuildKnobs() {
                                    ? "Send pan to " + entry.targetName
                                    : "Send " + juce::String(entry.slot + 1) + " pan (no target)") +
                               (entry.mono ? " (mono)" : ""));
+        row.panKnob->setTooltip("Send pan: drag to change");
         addAndMakeVisible(*row.panKnob);
         if (auto* panParam = strip->getSendPanParameter(entry.slot)) {
             const auto range = panParam->getNormalisableRange();
