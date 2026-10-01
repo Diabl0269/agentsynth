@@ -42,10 +42,9 @@ when reasoning about a key that "does nothing."
 | Cmd+K | Toggle Minimap |
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
-| Cmd+T | Toggle Bottom Panel (`toggleBottomPanel`) — the ONE show/hide toggle for the whole bottom-docked panel; reopens on whichever tab was last active. See [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) |
-| Cmd+1 / Cmd+2 / Cmd+3 | Show Timeline / Mixer / Controllers Tab (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) — opens the dock if it's hidden and switches to that tab; a second press is a no-op (only Cmd+T closes the dock). The three numbers follow the dock's own tab order, which the tab strip's drag-to-reorder changes — see [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows) |
+| Cmd+T | Toggle Bottom Panel (`toggleBottomPanel`) — the ONE show/hide toggle for the whole bottom-docked panel; reopens on whichever tab was last active. A press that opens the pane leaves keyboard focus on its tab strip; one that closes it while focus was inside moves focus to the canvas. See [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) |
+| Cmd+1 / Cmd+2 / Cmd+3 | Show Timeline / Mixer / Controllers Tab (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) — opens the dock if it's hidden and switches to that tab; a second press is a no-op (only Cmd+T closes the dock), and for a docked tab keyboard focus lands on the tab strip (a detached tab raises its window instead). The three numbers follow the dock's own tab order, which the tab strip's drag-to-reorder changes — see [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows) |
 | Cmd+Shift+B | Show/Hide Side Pane (`toggleSidePane`) — toggles the ACTIVE bottom-panel tab's left side pane (the Mixer and the Timeline have one). With the bottom panel hidden it opens the panel and makes sure the pane is open; a no-op when the active tab has no pane. View menu item "Show/Hide Side Pane"; each pane's toggle button shows the key in its Cmd-hold hint and tooltip. See [`layout/side-pane.md`](../layout/side-pane.md) |
-| Cmd+Opt+Left / Cmd+Opt+Right | Previous / Next Tab (`tabPrevious` / `tabNext`) — cycle the tabs of the surface in front, wrapping: the Settings window's tabs, or the bottom dock's. See [**Switching tabs**](#switching-tabs) below |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Opt+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
@@ -314,9 +313,16 @@ pad.
 
 ### Switching tabs
 
-`tabPrevious` / `tabNext` (General, Cmd+Option+Left / Right, rebindable) step to the previous / next tab and
-wrap, in the Settings window and the bottom dock (a hidden dock opens). Cmd+1..9 also opens the Settings
-window's Nth tab: a fixed key, not an action. Every new tab strip must answer both ([why](../development/accessibility.md#switching-tabs)).
+Every tab strip is one Tab stop; with it focused, plain Left / Right step to the previous / next tab (stopping at
+the ends, no wrap) and Home / End jump to the first / last, switching at once. Return (and Space, in Settings) or Tab
+moves into the open tab and Shift+Tab comes back to the strip ([rule](../development/accessibility.md#tab-strips)). These
+keys belong to the focused strip and are not actions. The former Cmd+Opt+Left / Right `tabPrevious` / `tabNext`
+actions are gone; a saved shortcut or MIDI mapping that still names them is ignored on load.
+
+- **Bottom dock**: Cmd+1/2/3 show a tab and Cmd+T opens the pane, and both leave focus on the strip
+  ([details](../layout/chrome.md#tab-strip-keyboard-and-screen-reader-access)).
+- **Settings window**: Cmd+1..9 opens the Nth tab, a fixed key, not an action (a text field passes it up). Holding
+  Cmd over the window shows each tab's `Cmd+N` as a hint badge ([hints](#shortcut-hints)).
 
 ## Graph
 
@@ -370,8 +376,10 @@ commands, so they appear in Settings > Keyboard Shortcuts and a rebind takes eff
 | Alt+← → ↑ ↓ | `canvasMoveCard{Left,Right,Up,Down}` | Moves the selected cards one 8 px grid step through the same commit a mouse drag makes (`finalizeModuleDrag`, or the group's rigid-body `finalizeSelectionDrag`), one undo step. A spot taken by another card resolves to the nearest free slot, as a drop there would. Falls through with nothing selected, and does nothing for a selected collapsed macro (the arrows only ever land on module cards) |
 | Return | `canvasEnterCard` | Moves keyboard focus to the selected card's first control. Falls through with nothing selected |
 
-Inside a card: Tab and Shift+Tab walk its controls in reading order (body first, then the header buttons) and
-wrap inside the card; Escape returns focus to the canvas with the card still selected. A focused knob turns with Up/Right and Down/Left (one
+Inside a card: Tab and Shift+Tab walk its controls in reading order (body first, then the header buttons);
+Escape, Tab on the last control and Shift+Tab on the first all return focus to the canvas with the card still
+selected, so focus never gets stuck in a card (the arrows then move between cards, the next Tab moves to the
+next region). No control inside a card swallows Escape or a Cmd chord such as Cmd+Shift+T. A focused knob turns with Up/Right and Down/Left (one
 percent of its travel; Shift a tenth of that), Page Up/Down (ten percent) and Home/End (minimum/maximum). Those
 keys are the knob's own (`CardKnobSlider::keyPressed`), not actions, and each press is one change gesture, so
 one undo step and one automation touch. Shift+F10 still opens the selected card's menu. A key that bubbles up
@@ -434,10 +442,11 @@ plumbing the mouse wheel and vertical zoom already use, via `ensureTrackVisible(
 
 | Shortcut | Action |
 |----------|--------|
-| ↑ / ↓ | Move focus to the previous/next track header row (not rebindable — arrow-key row navigation isn't a `ShortcutManager` action anywhere else in this app either, see the Library navigation's `ModuleLibraryComponent` precedent) |
+| ↑ / ↓ | Move focus to the previous/next track header row; ↓ on the last row moves on to the **+ Track** button and ↑ there comes back (not rebindable — arrow-key row navigation isn't a `ShortcutManager` action anywhere else in this app either, see the Library navigation's `ModuleLibraryComponent` precedent) |
 | M | Mute Focused Track (`timelineMuteFocusedTrack`) — flips `Track::muted` on whichever row holds focus, through the exact same `performTrackEdit` one-undo-step path the M **button** already used |
 | S | Solo Focused Track (`timelineSoloFocusedTrack`) — `Track::soloed`, same path |
 | R | Arm Focused Track (`timelineArmFocusedTrack`) — `Track::armed`, same path |
+| Return / Space on **+ Track** | Opens the add-track menu, exactly like a click. On a timeline with no tracks, ↓ on the Timeline region root lands straight on the button. Space is claimed by the panel so it does not toggle playback while the button has focus. Closing a menu opened this way (a pick or Esc) puts focus back on **+ Track** |
 | A | Show/Hide Track Automation (`timelineToggleTrackAutomation`) — folds the focused row's automation lanes open or closed, like its fold arrow ([automation](../timeline/automation.md#lane-rows)); bare A is free in every category (every other `a` binding carries a modifier) |
 
 #### Settings and dialog arrow keys
@@ -852,6 +861,10 @@ overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-wind
   of the set and its bubble follows the new key. Switching from one hold key to another, or adding a
   second modifier, cancels like any chord; the latch, fade-out resume and delay all work per key. A
   different key pressed while the hints are fading out starts over from the 500 ms delay.
+- **Settings tabs.** The Settings window carries its own overlay: holding Cmd shows `⌘1`, `⌘2`, ... on its tab
+  buttons. The keys are positional and fixed (`addFixedKeyTarget` takes the key as given instead of an action
+  id, so a rebind never changes them), shown in the platform's key text like every other badge, and the window feeds
+  the overlay from its `modifierKeysChanged`.
 - **Area targets.** The piano roll's header chips are painted rectangles, not child components, so
   they register with `addAreaTarget(owner, areaInOwner, actionId)`: the same visibility check runs on
   the area's centre through the owner's parents (a closed roll gives no bubble) and the bubble

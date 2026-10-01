@@ -38,6 +38,7 @@ AudioSettingsTab::AudioSettingsTab(juce::AudioDeviceManager& deviceManager,
     );
     addAndMakeVisible(*deviceSelector_);
     nameSelectorControls();
+    listFocusRing_ = std::make_unique<synth::ui::ListBoxFocusRing>(*deviceSelector_);
     deviceManager_.addChangeListener(this);
 
     juce::StringArray names;

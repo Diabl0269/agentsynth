@@ -56,6 +56,9 @@ public:
     /** Registers a button that triggers `actionId`; the key shown is always read from the
      *  ShortcutManager. A registered component that is hidden, clipped or covered gets no hint. */
     void addTarget(juce::Component& component, const juce::String& actionId);
+    /** Registers a button that a fixed, positional key opens (the Settings tabs' Cmd+1..9): the bubble shows
+     *  `key` as given, not a ShortcutManager binding, so a rebind cannot change it. */
+    void addFixedKeyTarget(juce::Component& component, const juce::KeyPress& key);
     /** Like addTarget, for a painted region (a header chip) of `owner`; `areaInOwner` is read fresh each time. */
     void addAreaTarget(juce::Component& owner, std::function<juce::Rectangle<int>()> areaInOwner,
                        const juce::String& actionId);
@@ -99,6 +102,7 @@ private:
         juce::Component::SafePointer<juce::Component> component;
         juce::String actionId;
         std::function<juce::Rectangle<int>()> area; // empty: the whole component
+        juce::KeyPress fixedKey;                    // valid: shown instead of actionId's binding
     };
     // The one modifier whose hold drives the hints; None = no hint modifier, or more than one.
     enum class HintModifier { None, Cmd, Ctrl, Alt };
@@ -131,6 +135,8 @@ private:
     int textWidth(const juce::Font& font, const juce::String& text) const;
     int capWidth(const juce::String& text, bool compact = false) const;
     juce::String keyTextFor(const juce::String& actionId) const;
+    juce::String keyTextForBinding(const juce::KeyPress& binding) const;
+    juce::String keyTextForTarget(const Target& target) const;
     juce::Rectangle<int> boundsInOverlay(const juce::Component& c) const;
 
     juce::Component& host_;

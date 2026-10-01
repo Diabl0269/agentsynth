@@ -49,6 +49,9 @@ struct FocusRegion {
 class FocusRegionRegistry {
 public:
     void addRegion(FocusRegion region) { regions_.push_back(std::move(region)); }
+    // Test seam: told the id of every region focusRegionById moved focus to, since a headless window
+    // cannot hold keyboard focus to read back.
+    std::function<void(const juce::String&)> onRegionFocused;
     void clear() { regions_.clear(); }
     const std::vector<FocusRegion>& getRegions() const { return regions_; }
 
@@ -125,6 +128,8 @@ public:
             if (!r.isCurrentlyOpen() && r.open)
                 r.open();
             r.root->grabKeyboardFocus();
+            if (onRegionFocused)
+                onRegionFocused(r.id);
             return true;
         }
         return false;

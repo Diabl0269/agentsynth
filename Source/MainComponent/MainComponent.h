@@ -149,8 +149,12 @@ public:
     synth::HostedPluginWindowManager& getPluginWindowManager() { return pluginWindowManager; }
     /** Opens the dock if hidden (never closes it) and switches to `tab`; a detached tab's window is raised instead. */
     void showBottomDockTab(synth::ui::BottomDockComponent::Tab tab);
-    /** Shows the previous (-1) or next (+1) offered dock tab, wrapping; false when no tab is offered. */
-    bool stepBottomDockTab(int direction);
+    /** The Cmd+1/2/3 actions: showBottomDockTab(), then keyboard focus onto the dock's tab strip when the tab
+     *  is docked and showing (nothing moves for a detached tab or a Mixer shown outside the dock). */
+    void showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab tab);
+    /** The Cmd+T action: toggles the pane; an opened pane gets keyboard focus on its tab strip, and a pane that
+     *  closes around the focus hands it to the canvas. */
+    void toggleBottomPanelFromShortcut();
     /** The open half of showBottomDockTab(), for sites that open without switching tabs. */
     void ensureBottomDockOpen();
     /** Shows or hides the active dock tab's side pane. A hidden dock is opened first and the pane is then
@@ -690,6 +694,8 @@ private:
     std::optional<EditSurface> editSurfaceOverrideForTest_; // consulted first by resolveEditSurface()
     bool midiRemoteDevicesOpenedAfterEngineUp_ = false;     // set by openMidiRemoteDevices(); test-only read
 
+    // Focuses the "dockTabs" region when it is open (docked tabs showing); otherwise does nothing.
+    void focusDockTabStripIfShowing();
     synth::ui::FocusRegionRegistry focusRegions_; // a plain member, not a Desktop-global singleton
 
 #if JUCE_MAC || JUCE_WINDOWS

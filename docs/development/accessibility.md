@@ -13,7 +13,7 @@ Every new or changed control:
    column into its send and insert rows). It acts on
    Space/Enter or the arrow keys the way a native control would, and every new key is a rebindable
    action (below). The exceptions are the arrow keys of a list of controls (below), the Settings window's
-   Cmd+1..9 (a fixed positional key; see Switching tabs), and a key inside a focused editor that a native control would also
+   Cmd+1..9 (a fixed positional key; see Switching tabs and Tab strips), and a key inside a focused editor that a native control would also
    own (the arrows, Return and their modifiers in the EQ curve and the curve editor): that is the
    control's own behaviour, not a global shortcut, and is documented with the view
    ([`visualizers.md`](../layout/visualizers.md)).
@@ -31,10 +31,17 @@ that text changes; the wording lives in a pure header with a unit test
 components (the AI chat's messages) is a `list`-role container whose children are `listItem`-role
 components titled with their text ([`docs/ai/chat-component.md`](../ai/chat-component.md#screen-reader)).
 
+A stock JUCE list whose rows ignore the selection when they paint (the Settings Audio tab's channel and
+MIDI input lists inside `juce::AudioDeviceSelectorComponent`) gets `synth::ui::ListBoxFocusRing`
+(`Source/UI/Layout/ListBoxFocusRing.h`): while such a list has keyboard focus the accent ring is drawn
+around its selected row, and a list that takes focus with nothing selected selects row 0 (selecting never
+flips a tick; Return does). The selector rebuilds its lists when the device changes, so the helper re-scans on
+child changes and focus changes, and polls the selected row with a light timer only while a list has focus.
+
 ## Module cards
 
 The canvas is one focus region; inside it the arrows move between cards, Return steps into the selected card,
-Tab/Shift+Tab walk that card's controls and wrap, and Escape goes back out with the card still selected
+Tab/Shift+Tab walk that card's controls, and Escape (or Tab past the last control, Shift+Tab before the first) goes back out with the card still selected, so the next Tab moves to the next region
 ([shortcuts](../control/shortcuts.md#canvas-card-keys)). The selected card's accent border is its ring;
 each control inside draws its own (`AppLookAndFeel`). A card is a `group` named after its title
 (`ModuleComponentAccessibility.cpp`, through `TooltipHelpHandler`). Every knob, combo and toggle on it is named
@@ -115,10 +122,9 @@ and pinned by `Tests/UI/Accessibility/DialogKeyboardTests.cpp`:
   wants focus by default (`setWantsKeyboardFocus(false)`, and `ScrollIntoViewOnFocus` scrolls the
   focused control into view instead), and an editable slider text box is its own stop, which an
   `ExpandingRangeSlider`-style subclass names (`<title> value`). `TabbedButtonBar` is a keyboard focus
-  container whose buttons Tab never reaches; `SettingsWindow` makes it plain and the tab buttons stops.
-  A tab's content wrapper never wants focus, and `SettingsTabs` (`Source/UI/Settings/SettingsTabs.h`)
-  opens a tab on Space as well as Return and leaves focus on the tab button afterwards, so the next Tab
-  reaches the tab's first control. The window puts focus on the open tab's button when it first shows.
+  container whose buttons Tab never reaches, so the tab buttons are not stops at all: the strip is one stop
+  (see [Tab strips](#tab-strips)). A tab's content wrapper never wants focus, and the window puts focus on
+  the strip when it first shows.
 - **Escape closes with Cancel semantics.** The surface's own `keyPressed` handles Escape (an
   `onRequestClose` callback if the caller set one, else `closeHostingWindow()`, which presses the
   hosting `DialogWindow`'s close button or dismisses the `CallOutBox`). A `juce::TextEditor` swallows
@@ -132,27 +138,40 @@ through the area you changed and watch the ring, then dump the macOS accessibili
 process with pyobjc (`AXUIElementCreateApplication(pid)`, walk `AXChildren`, print `AXRole`,
 `AXTitle`, `AXValue`, `AXDescription`) and check the new names appear.
 
-## Switching tabs
+## Tab strips
 
-**Cmd+Option+Left / Right switches tabs in every tabbed surface, and every new tab strip must answer it.**
-The keys are the rebindable General actions `tabPrevious` / `tabNext`
-([`shortcuts.md`](../control/shortcuts.md#switching-tabs)); a surface does not hard-code the chord, it asks
-`ShortcutManager::keyPressMatches(shortcutManager.getBinding("tabNext"), key)` (the Settings window), or
-registers the action's command (the bottom dock). Both cycle with wrap-around.
+**Every tab strip is one Tab stop, and every new one follows this rule** (the bottom dock's strip and the
+Settings window's strip both do):
+
+- One focusable leaf lays over the strip (`BottomDockComponent::TabStripFocus`, `SettingsTabs::StripFocus`);
+  the tab buttons themselves do not want keyboard focus. The leaf has a screen-reader name and role and a
+  tooltip, and draws the accent ring (`paintFocusRingAlways`) around the open tab's button while it has focus.
+- With the leaf focused, plain Left / Right switch to the previous / next tab at once and stop at the ends
+  (no wrap), Home / End jump to the first / last. The decision is one pure function,
+  `synth::ui::tabStripKeyTarget` (`Source/UI/Layout/TabStripKeys.h`); a strip never re-implements it.
+- Return (and Space where the surface wants it) moves focus into the open tab's first control (the dock hands
+  it to the panel's region root); Tab goes into the content by normal traversal, so the leaf is ahead of the
+  content in the Tab order, and Shift+Tab from the content's first control returns to the leaf.
+- Keys with a modifier, Tab and Escape are not the strip's: they bubble up to the window.
+- There is no global "next tab" chord: the former rebindable `tabPrevious` / `tabNext` actions were removed
+  because the focused strip's arrows do the job. A saved binding that still names them is ignored on load.
+
+## Switching tabs
 
 - **A text field may swallow the key.** A key press walks up from the focused control and each
   component's key listeners run before its own `keyPressed`, but a `juce::TextEditor` is at the bottom of
   that walk and answers first: where the platform delivers a text character with Ctrl+digit it types the
   digit of Cmd+1 and consumes the key before the window's handler is reached. (On macOS the peer drops the
-  text character while Command is held, and a stock `TextEditor` does not consume Cmd+Option+arrow, which
-  counts as two modifiers, so there the keys already bubble.) `synth::ui::TabSwitchKeys`
+  text character while Command is held, so there the key already bubbles.) `synth::ui::TabSwitchKeys`
   (`Source/UI/Layout/TabSwitchKeys.h`) is the one shared guard: attach it to every text field of the surface
   (`attachToTextEditorsIn`) with the surface's tab handler. Combo boxes, sliders, toggles and buttons let
-  both keys bubble up untouched.
+  the key bubble up untouched.
 - **Cmd+1..9 is the second fixed key.** The Settings window opens its Nth tab on Cmd+N (a number past the
   last tab does nothing). The key names a position, so there is nothing to rebind, and the tab button
-  tooltips say "(Cmd+N)". It is the second exception to "every new key is a rebindable action", beside the
-  list arrow keys below. The bottom dock's Cmd+1/2/3 are ordinary rebindable actions.
+  tooltips say "(Cmd+N)"; holding Cmd over the window also shows each tab's Cmd+N as a hint badge
+  (`ShortcutHintOverlay::addFixedKeyTarget`). It is the second exception to "every new key is a rebindable
+  action", beside the list arrow keys below. The bottom dock's Cmd+1/2/3 are ordinary rebindable actions, and
+  they (like Cmd+T when it opens the pane) leave focus on the dock's strip.
 - The Settings window remembers its open tab by name (`settingsTabName`), not by position, because the Audio
   tab exists in the app and not in the plugin.
 - **Tests** deliver the key through the listener-then-`keyPressed` walk with a text field as the starting

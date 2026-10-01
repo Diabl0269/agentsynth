@@ -2,9 +2,10 @@
 //
 // Stepping into a card from the keyboard (docs/layout/selection.md#keyboard). Return on the canvas
 // (CanvasCardKeyboard) calls enterFromKeyboard(); from then on the card's controls hold focus,
-// Tab/Shift+Tab walk them and wrap inside the card, and Escape hands focus back to the canvas with
-// the card still selected. The knobs turn themselves (CardKnobSlider::keyPressed); a key a control
-// leaves alone bubbles up to keyPressed() here before it can reach the canvas.
+// Tab/Shift+Tab walk them, and Escape -- or Tab past the last control / Shift+Tab before the
+// first -- hands focus back to the canvas with the card still selected, so focus is never trapped
+// inside a card. The knobs turn themselves (CardKnobSlider::keyPressed); a key a control leaves
+// alone bubbles up to keyPressed() here before it can reach the canvas.
 
 #include "ModuleComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -95,7 +96,13 @@ bool ModuleComponent::keyPressed(const juce::KeyPress& key) {
         if (stops[(size_t)i] == focused || stops[(size_t)i]->isParentOf(focused))
             index = i;
     const int count = (int)stops.size();
-    const int next = index < 0 ? 0 : (index + (mods.isShiftDown() ? count - 1 : 1)) % count;
-    focusForKeyboard(stops[(size_t)next]);
+    const bool backward = mods.isShiftDown();
+    // Stepping off either end leaves the card exactly as Escape does; a stop the card cannot place
+    // (index < 0) enters at the first one.
+    if (index >= 0 && (backward ? index == 0 : index == count - 1)) {
+        focusForKeyboard(&owner);
+        return true;
+    }
+    focusForKeyboard(stops[(size_t)(index < 0 ? 0 : index + (backward ? -1 : 1))]);
     return true;
 }

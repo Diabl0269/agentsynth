@@ -258,11 +258,6 @@ public:
         return buttons;
     }
 
-    /** The offered tab one step before (-1) or after (+1) the active one in strip order, wrapping round.
-     *  Detached and disabled tabs are skipped. When the active tab is not itself offered, +1 gives the
-     *  first offered tab and -1 the last. Empty while no tab is offered. */
-    std::optional<Tab> adjacentOfferedTab(int direction) const;
-
     /** One tab currently offered in the strip, for the Cmd-hold shortcut hints. */
     struct StripTab {
         juce::TextButton* button{nullptr};

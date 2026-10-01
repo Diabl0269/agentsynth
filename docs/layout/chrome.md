@@ -309,10 +309,11 @@ Canvas, tab strip, then the panel.
 | Home / End | First / last tab |
 | Return | Move keyboard focus into the selected tab's panel (its region root) |
 
-Plain keys only: Cmd+1/2/3 and Tab are not touched, and Up/Down are left unhandled. From anywhere in the
-main window, the rebindable Cmd+Option+Left / Right (`tabPrevious` / `tabNext`) also step the offered tabs
-in strip order but wrap round at the ends, opening a hidden dock first
-([shortcuts](../control/shortcuts.md#switching-tabs)). The selected tab wears
+Plain keys only: Cmd+1/2/3 and Tab are not touched, and Up/Down are left unhandled. The shared key rule
+is `tabStripKeyTarget` (`Source/UI/Layout/TabStripKeys.h`), the same one the Settings window's tab strip
+uses ([accessibility](../development/accessibility.md#tab-strips)). Cmd+T (when it opens the pane) and
+Cmd+1/2/3 (for a docked tab) leave keyboard focus on the strip; Cmd+T closing the pane around the focus
+hands focus to the canvas ([shortcuts](../control/shortcuts.md#switching-tabs)). The selected tab wears
 `paintFocusRing` while the strip has focus (not during a reorder drag), drawn by the dock over the tab.
 Clicking a tab does not give the strip focus.
 

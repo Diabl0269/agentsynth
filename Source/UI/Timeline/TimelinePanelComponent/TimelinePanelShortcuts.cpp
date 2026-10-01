@@ -44,6 +44,9 @@ bool TimelinePanelComponent::matchesAction(const juce::KeyPress& key, const juce
 }
 
 bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
+    if (handleAddTrackButtonKey(key))
+        return true;
+
     // Cmd+Shift+T / Tab land on the panel ROOT, not on any row (docs/control/shortcuts.md's Focus
     // regions section), so the keys that carry a keyboard-only user into the track headers and clips
     // are claimed here. Scoped to REAL focus being on THIS exact component (never "focus is somewhere

@@ -571,6 +571,35 @@ TEST(MidiRemoteEngineApplyTest, ActionFiresOnPressOnlyForBothButtonModes) {
     }
 }
 
+// A mapping saved while the removed tabNext / tabPrevious actions existed still loads: through the real
+// lookup the action resolves to no command, so pressing the control fires nothing.
+TEST(MidiRemoteEngineApplyTest, AMappingToARemovedTabActionResolvesToNoCommandAndFiresNothing) {
+    for (const char* removed : {"tabNext", "tabPrevious"}) {
+        ApplyHarness h;
+        CountingActionInvoker invoker;
+        h.engine.setActionInvoker(&invoker);
+        h.engine.setActionCommandLookup(&AppCommands::getCommandForAction);
+
+        Assignment action;
+        action.id = "a1";
+        action.control.profileId = "profile";
+        action.control.controlId = "btn";
+        action.spec.type = MessageType::note;
+        action.spec.channel = 1;
+        action.spec.number = 30;
+        action.specEncoding = Encoding::abs7;
+        action.specButtonMode = ButtonMode::momentary;
+        action.target.kind = Target::Kind::action;
+        action.target.action.actionId = removed;
+
+        h.publish({makeProfile({makeControl("btn", MessageType::note, 1, 30, Encoding::abs7, ControlKind::button)})},
+                  {action});
+        h.send(juce::MidiMessage::noteOn(1, 30, (juce::uint8)100));
+        h.engine.drain();
+        EXPECT_TRUE(invoker.invoked.empty()) << removed;
+    }
+}
+
 // ============================================================================ Node command targets
 // fire on press only too (docs/control/midi-remote.md#node-command-targets), for both momentary and
 // toggle button modes -- mirrors ActionFiresOnPressOnlyForBothButtonModes above.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/ListBoxFocusRing.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -28,17 +29,24 @@ public:
     void lookAndFeelChanged() override;
 
     juce::AudioDeviceSelectorComponent& getDeviceSelector() { return *deviceSelector_; }
+    synth::ui::ListBoxFocusRing& getListFocusRingForTest() { return *listFocusRing_; }
     /** Empty when there is no caption. */
     juce::String getCaptionTextForTest() const { return caption_.isVisible() ? caption_.getText() : juce::String(); }
 
 private:
     static constexpr int kCaptionHeight = 44;
 
-    void changeListenerCallback(juce::ChangeBroadcaster*) override { nameSelectorControls(); }
+    void changeListenerCallback(juce::ChangeBroadcaster*) override {
+        nameSelectorControls();
+        listFocusRing_->rescan();
+    }
     void nameSelectorControls();
 
     juce::AudioDeviceManager& deviceManager_;
     std::unique_ptr<juce::AudioDeviceSelectorComponent> deviceSelector_;
+    // After the selector, so it is destroyed first; the stock channel and MIDI input lists paint no
+    // selection, so it draws the keyboard focus ring on their selected row.
+    std::unique_ptr<synth::ui::ListBoxFocusRing> listFocusRing_;
     juce::Label caption_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioSettingsTab)

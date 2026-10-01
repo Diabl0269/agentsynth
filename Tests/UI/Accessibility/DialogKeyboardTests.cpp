@@ -363,12 +363,16 @@ int tabIndex(SettingsWindow& window, const juce::String& name) {
 }
 } // namespace
 
-TEST_F(AccessibilitySettingsTest, SettingsTabStripIsReachableWithTheKeyboard) {
+TEST_F(AccessibilitySettingsTest, SettingsTabStripIsOneTabStopAheadOfTheTabsControls) {
     SettingsWindow window(deviceManager, appProperties, *aiService, *aiChat, shortcutManager, themeManager, nullptr);
     window.setSize(800, 600);
     const auto stops = walkTabOrder(window).names();
+    ASSERT_FALSE(stops.isEmpty());
+    EXPECT_EQ(stops[0], "Settings tabs") << "the strip comes first";
+    EXPECT_EQ(stops.indexOf("Settings tabs", false, 1), -1) << "and is a single stop";
     for (int i = 0; i < window.getNumTabs(); ++i)
-        EXPECT_TRUE(stops.contains(window.getTabName(i))) << window.getTabName(i) << " is not a Tab stop";
+        EXPECT_FALSE(window.getTabs().getTabbedButtonBar().getTabButton(i)->getWantsKeyboardFocus())
+            << window.getTabName(i) << " button is a stop of its own";
 }
 
 TEST_F(AccessibilitySettingsTest, AiTabTabOrder) {
@@ -511,15 +515,14 @@ TEST_F(AccessibilitySettingsTest, AudioTabControlsAreAllNamedTabStops) {
 // Settings window: opening focus, Space on a tab, no hidden stop after a switch
 // ============================================================================
 
-TEST_F(AccessibilitySettingsTest, OpeningTheSettingsWindowTargetsTheOpenTabsButtonForFocus) {
+TEST_F(AccessibilitySettingsTest, OpeningTheSettingsWindowTargetsTheTabStripForFocus) {
     SettingsWindow window(deviceManager, appProperties, *aiService, *aiChat, shortcutManager, themeManager, nullptr,
                           nullptr, true, "Appearance");
     window.setSize(800, 600);
-    auto* target = window.getCurrentTabButton();
-    ASSERT_NE(target, nullptr);
     EXPECT_EQ(window.getCurrentTabIndex(), tabIndex(window, "Appearance"));
-    EXPECT_EQ(target, window.getTabs().getTabbedButtonBar().getTabButton(tabIndex(window, "Appearance")));
-    EXPECT_TRUE(target->getWantsKeyboardFocus());
+    EXPECT_EQ(window.getCurrentTabButton(),
+              window.getTabs().getTabbedButtonBar().getTabButton(tabIndex(window, "Appearance")));
+    EXPECT_TRUE(window.getTabStripFocus().getWantsKeyboardFocus());
     EXPECT_NO_THROW(window.focusCurrentTab());
 }
 
@@ -530,41 +533,24 @@ TEST_F(AccessibilitySettingsTest, FocusLandingOnTheHostingWindowMovesToTheTabStr
     host.setContentNonOwned(&window, false);
     host.setVisible(true);
     EXPECT_TRUE(window.redirectWindowFocusToTabStrip(&host));
-    EXPECT_FALSE(window.redirectWindowFocusToTabStrip(window.getCurrentTabButton()));
+    EXPECT_FALSE(window.redirectWindowFocusToTabStrip(&window.getTabStripFocus()));
     EXPECT_FALSE(window.redirectWindowFocusToTabStrip(nullptr));
     host.clearContentComponent();
-}
-
-TEST_F(AccessibilitySettingsTest, SpaceAndReturnOnAFocusedTabButtonBothOpenItsTab) {
-    SettingsWindow window(deviceManager, appProperties, *aiService, *aiChat, shortcutManager, themeManager, nullptr);
-    window.setSize(800, 600);
-    const int ai = tabIndex(window, "AI");
-    const int feedback = tabIndex(window, "Feedback");
-    auto& bar = window.getTabs().getTabbedButtonBar();
-    for (const auto code : {juce::KeyPress::spaceKey, juce::KeyPress::returnKey}) {
-        window.getTabs().setCurrentTabIndex(ai);
-        auto* button = bar.getTabButton(feedback);
-        ASSERT_NE(button, nullptr);
-        EXPECT_TRUE(static_cast<juce::Component*>(button)->keyPressed(juce::KeyPress(code)));
-        EXPECT_EQ(window.getCurrentTabIndex(), feedback) << "key code " << code;
-    }
 }
 
 TEST_F(AccessibilitySettingsTest, AfterAKeyboardTabSwitchTabLandsOnTheNewTabsFirstControlNotAContentWrapper) {
     SettingsWindow window(deviceManager, appProperties, *aiService, *aiChat, shortcutManager, themeManager, nullptr);
     window.setSize(800, 600);
-    auto& bar = window.getTabs().getTabbedButtonBar();
-    auto* lastButton = bar.getTabButton(window.getNumTabs() - 1);
-    ASSERT_NE(lastButton, nullptr);
+    auto& strip = window.getTabStripFocus();
     for (int i = 0; i < window.getNumTabs(); ++i) {
         auto* content = window.getTabs().getTabContentComponent(i);
         ASSERT_NE(content, nullptr);
         EXPECT_FALSE(content->getWantsKeyboardFocus()) << window.getTabName(i) << " content is a Tab stop";
 
-        ASSERT_TRUE(sendReturn(*bar.getTabButton(i)));
+        ASSERT_TRUE(strip.keyPressed(juce::KeyPress(i == 0 ? juce::KeyPress::homeKey : juce::KeyPress::rightKey)));
         ASSERT_EQ(window.getCurrentTabIndex(), i);
         juce::KeyboardFocusTraverser traverser;
-        auto* next = traverser.getNextComponent(lastButton);
+        auto* next = traverser.getNextComponent(&strip);
         ASSERT_NE(next, nullptr) << window.getTabName(i);
         EXPECT_NE(next, content) << window.getTabName(i) << ": Tab from the tab strip stops on the content wrapper";
         EXPECT_TRUE(content->isParentOf(next)) << window.getTabName(i);

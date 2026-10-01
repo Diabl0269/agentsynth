@@ -6,12 +6,11 @@
 
 namespace synth::ui {
 
-// Keeps the tab-switching keys working while a text field has keyboard focus. A key press walks up
-// from the focused component and each component's key listeners run before its own keyPressed, but a
+// Keeps the tab-switching key (Cmd+<digit>) working while a text field has keyboard focus. A key press walks
+// up from the focused component and each component's key listeners run before its own keyPressed, but a
 // juce::TextEditor sits at the bottom of that walk and answers first: on a platform that delivers a text
-// character with Ctrl+digit it types the digit of Cmd+1, and it owns the arrow keys' caret movement,
-// so the window's own handler could miss the keys. (On macOS the peer drops the text character while
-// Command is held and a stock TextEditor leaves Cmd+Option+arrow alone, so there the keys already get
+// character with Ctrl+digit it types the digit of Cmd+1, so the window's own handler could miss the key.
+// (On macOS the peer drops the text character while Command is held, so there the key already gets
 // through.) This listener is attached to such a field and offers the key to the surface's tab handler
 // before the field's own handling; every key the handler declines goes on to the field untouched.
 class TabSwitchKeys : public juce::KeyListener {

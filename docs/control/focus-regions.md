@@ -48,7 +48,10 @@ below for the Mixer region's own keyboard behaviour.
   specifically. A bare **Down** on the panel root DOES seed keyboard focus into the track-header
   column (the track-header focus work, below) — the one direct keyboard path out of the region root
   this adds; reaching the clip lanes themselves by keyboard alone stays out of scope (the locked
-  "track headers only" decision).
+  "track headers only" decision). The **+ Track** button is the last stop of that column: Down on the last
+  row moves focus to it (with no tracks, Down on the region root lands on it directly), Up returns to the
+  last row, and Return/Space press it (`TimelinePanelComponent::handleAddTrackButtonKey`). It shows the
+  standard button focus ring.
 - **Mod Matrix nests inside Canvas** — `ModMatrixComponent` is a child component of `GraphEditor`,
   so the two focus regions nest rather than sit side by side. `FocusRegionRegistry::regionContaining`
   resolves this to the most specific match (Mod Matrix, not Canvas) whenever real focus sits inside
@@ -87,7 +90,9 @@ below for the Mixer region's own keyboard behaviour.
   no `ShortcutManager` actions): in the **Toolbar**, Left/Right move the ring across the visible, enabled
   buttons (no wrap), Home/End jump to the ends, Space/Return press the ringed button; in the **Dock tabs**
   region, Left/Right select the previous/next tab (which switches the panel), Home/End the first/last, and
-  Return moves focus into the selected panel. Modified keys fall through, so Cmd+1/2/3 and Tab behave as
+  Return moves focus into the selected panel (the key rule is shared with the Settings tabs, `tabStripKeyTarget`).
+  Cmd+T, when it opens the pane, and Cmd+1/2/3, for a docked tab, focus this region; Cmd+T closing the pane
+  around the focus focuses the Canvas region instead. Modified keys fall through, so Cmd+1/2/3 and Tab behave as
   before. Details: [`layout/chrome.md`](../layout/chrome.md#toolbar-keyboard-access) and
   [`layout/chrome.md`](../layout/chrome.md#tab-strip-keyboard-and-screen-reader-access).
 - **Arrow keys on the Canvas** — the canvas region moves between module cards with the arrows, moves the

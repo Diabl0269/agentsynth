@@ -21,11 +21,16 @@ void TimelinePanelComponent::wireClipLaneCallbacks() {
     clipLaneArea_.onReturnToTrackHeaderRequested = [this](synth::TrackId id) { returnToTrackHeader(id); };
 }
 
-// Keys for the panel root holding focus. Down seeds the track-header column; the Next Clip key
-// enters the clips of the focused track, else of the first track that has any.
+// Keys for the panel root holding focus. Down seeds the track-header column (or lands on "+ Track"
+// when there are no tracks); the Next Clip key enters the clips of the focused track, else of the
+// first track that has any.
 bool TimelinePanelComponent::handleRootFocusKey(const juce::KeyPress& key) {
     if (key.isKeyCode(juce::KeyPress::downKey)) {
-        moveFocusedTrack(1);
+        // No tracks: the only stop in the column is "+ Track".
+        if (trackHeaderList_.headers.isEmpty())
+            focusAddTrackButton();
+        else
+            moveFocusedTrack(1);
         return true;
     }
     if (doc_ == nullptr || !matchesAction(key, "timelineClipNext",

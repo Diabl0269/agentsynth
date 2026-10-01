@@ -3,6 +3,7 @@
 #include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AccountService.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
+#include "UI/Chrome/ShortcutHint/ShortcutHintOverlay.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/TabSwitchKeys.h"
@@ -19,7 +20,8 @@ class ShortcutManager;
 class SettingsWindow
     : public juce::Component
     , private juce::ChangeListener
-    , private juce::FocusChangeListener {
+    , private juce::FocusChangeListener
+    , private juce::Timer {
 public:
     // Size the window opens at, and the least it can be dragged down to: the tabs' pinned rows (the
     // Preferences picker row above all) are laid out to fit at this width.
@@ -51,10 +53,10 @@ public:
 
     // Escape closes the window, from any control inside it (a text field passes it up). Fires
     // onRequestClose when set; otherwise closes the juce::DialogWindow hosting this content.
-    // Cmd+1..9 opens the Nth tab (a number past the last tab does nothing), and the tabPrevious /
-    // tabNext shortcut actions step through the tabs, wrapping. Text fields in the tabs offer these
-    // keys to the window before they type or move their caret.
+    // Cmd+1..9 opens the Nth tab (a number past the last tab does nothing). Text fields in the tabs offer
+    // this key to the window before they type. Holding Cmd shows each tab's Cmd+N as a hint badge.
     bool keyPressed(const juce::KeyPress& key) override;
+    void modifierKeysChanged(const juce::ModifierKeys& modifiers) override;
     std::function<void()> onRequestClose;
 
     // Testing hooks
@@ -67,13 +69,17 @@ public:
         return *arrowKeys[static_cast<size_t>(tabIndex)];
     }
 
-    // Puts keyboard focus on the open tab's button, where Tab, Space and Return act on the tab strip.
-    // Happens by itself whenever the window it sits in takes keyboard focus (on opening, and each time
-    // the window is brought to the front again); call it to return to the tab strip.
-    void focusCurrentTab() { tabs.focusCurrentTabButton(); }
+    // Puts keyboard focus on the tab strip (its one Tab stop), where Left / Right / Home / End switch
+    // tab and Return or Tab go into the tab. Happens by itself whenever the window it sits in takes
+    // keyboard focus (on opening, and each time the window is brought to the front again); call it to
+    // return to the tab strip.
+    void focusCurrentTab() { tabs.focusTabStrip(); }
     // The reaction to focus landing somewhere: when `focused` is the window hosting this content, which
-    // has no control to type into, moves focus to the open tab's button and returns true.
+    // has no control to type into, moves focus to the tab strip and returns true.
     bool redirectWindowFocusToTabStrip(juce::Component* focused);
+    juce::Component& getTabStripFocus() noexcept { return tabs.getStripFocus(); }
+    SettingsTabs& getSettingsTabsForTest() noexcept { return tabs; }
+    synth::ui::ShortcutHintOverlay& getShortcutHintsForTest() noexcept { return *shortcutHints; }
     synth::ui::TabSwitchKeys& getTabSwitchKeysForTest() { return tabSwitchKeys; }
     juce::Component* getCurrentTabButton() const {
         return tabs.getTabbedButtonBar().getTabButton(tabs.getCurrentTabIndex());
@@ -83,6 +89,8 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     // The tab-switching keys; false for any other key.
     bool handleTabKey(const juce::KeyPress& key);
+    void attachShortcutHints();
+    void timerCallback() override;
     void globalFocusChanged(juce::Component* focused) override { redirectWindowFocusToTabStrip(focused); }
 
     juce::ApplicationProperties& appProperties;
@@ -93,6 +101,8 @@ private:
     synth::ui::TabSwitchKeys tabSwitchKeys{[this](const juce::KeyPress& key) { return handleTabKey(key); }};
     // Declared after `tabs` so each is destroyed before the content it listens on.
     std::vector<std::unique_ptr<synth::ui::ArrowKeyNavigation>> arrowKeys;
+    // Last, so it goes first: it is a child of this window and listens on it.
+    std::unique_ptr<synth::ui::ShortcutHintOverlay> shortcutHints;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SettingsWindow)
 };

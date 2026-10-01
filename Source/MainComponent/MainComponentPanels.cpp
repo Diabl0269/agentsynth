@@ -769,17 +769,6 @@ void MainComponent::showBottomDockTab(synth::ui::BottomDockComponent::Tab tab) {
     bottomDock.setActiveTab(tab);
 }
 
-// The tabPrevious / tabNext actions: one step along the strip's offered tabs, wrapping. Goes through
-// showBottomDockTab so a closed dock opens exactly as for the Cmd+digit shortcuts. False (the key is
-// left alone) when no tab is offered.
-bool MainComponent::stepBottomDockTab(int direction) {
-    const auto tab = bottomDock.adjacentOfferedTab(direction);
-    if (!tab.has_value())
-        return false;
-    showBottomDockTab(*tab);
-    return true;
-}
-
 // The Cmd+Shift+B action. With the dock hidden the press means "let me see the pane", so the dock opens and
 // the pane is forced open rather than toggled (a remembered-open pane would otherwise close as it appears).
 bool MainComponent::toggleActiveSidePane() {

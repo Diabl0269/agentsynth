@@ -1,5 +1,5 @@
-// SettingsWindowTabKeysTests.cpp -- the Settings window's tab keys: Cmd+1..9 (fixed, positional), the
-// rebindable tabPrevious / tabNext actions, and the remembered tab (saved by name).
+// SettingsWindowTabKeysTests.cpp -- the Settings window's tab keys: Cmd+1..9 (fixed, positional) and the
+// remembered tab (saved by name).
 //
 // Keys are delivered the way the native window delivers them: from the focused control up through its
 // ancestors, each one's key listeners before its own keyPressed. A headless window cannot hold real
@@ -34,8 +34,6 @@ bool deliver(SettingsWindow& window, juce::Component& focused, const juce::KeyPr
 }
 
 juce::KeyPress cmdDigit(int digit) { return juce::KeyPress('0' + digit, juce::ModifierKeys(kCmd), '0' + digit); }
-juce::KeyPress nextTab() { return juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kCmd | kAlt), 0); }
-juce::KeyPress previousTab() { return juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys(kCmd | kAlt), 0); }
 
 void collectDescendants(juce::Component& root, std::vector<juce::Component*>& out) {
     for (auto* child : root.getChildren()) {
@@ -58,8 +56,8 @@ protected:
         window->resized();
     }
 
-    // Presses `key` with the open tab's own button focused.
-    bool pressOnTabButton(const juce::KeyPress& key) { return deliver(*window, *window->getCurrentTabButton(), key); }
+    // Presses `key` with the tab strip focused.
+    bool pressOnTabButton(const juce::KeyPress& key) { return deliver(*window, window->getTabStripFocus(), key); }
 
     // Every control of `type` in tab `index`, with that tab opened first.
     template <class T>
@@ -125,21 +123,8 @@ TEST_F(SettingsWindowTabKeysTest, TheDigitNeedsExactlyTheCommandModifier) {
     }
 }
 
-TEST_F(SettingsWindowTabKeysTest, NextAndPreviousStepThroughTheTabsAndWrap) {
-    open();
-    window->getTabs().setCurrentTabIndex(0);
-    EXPECT_TRUE(pressOnTabButton(previousTab()));
-    EXPECT_EQ(window->getCurrentTabIndex(), 5) << "previous from the first tab wraps to the last";
-    EXPECT_TRUE(pressOnTabButton(nextTab()));
-    EXPECT_EQ(window->getCurrentTabIndex(), 0) << "next from the last tab wraps to the first";
-    for (int expected = 1; expected < 6; ++expected) {
-        EXPECT_TRUE(pressOnTabButton(nextTab()));
-        EXPECT_EQ(window->getCurrentTabIndex(), expected);
-    }
-}
-
-// A text field would otherwise type Cmd+digit and keep Cmd+Option+arrow for its caret, so the keys must
-// get through from every text field of every tab, leaving its text alone.
+// A text field would otherwise type Cmd+digit, so the key must get through from every text field of every
+// tab, leaving its text alone.
 TEST_F(SettingsWindowTabKeysTest, TheTabKeysWorkWhileATextFieldHasFocus) {
     open();
     int fieldsSeen = 0;
@@ -151,20 +136,13 @@ TEST_F(SettingsWindowTabKeysTest, TheTabKeysWorkWhileATextFieldHasFocus) {
             EXPECT_TRUE(deliver(*window, *editor, cmdDigit(2)));
             EXPECT_EQ(window->getCurrentTabIndex(), 1) << "Cmd+2 from a text field in tab " << tab;
             EXPECT_EQ(editor->getText(), before) << "the digit must not be typed";
-
-            window->getTabs().setCurrentTabIndex(tab);
-            EXPECT_TRUE(deliver(*window, *editor, nextTab()));
-            EXPECT_EQ(window->getCurrentTabIndex(), (tab + 1) % window->getNumTabs());
-            window->getTabs().setCurrentTabIndex(tab);
-            EXPECT_TRUE(deliver(*window, *editor, previousTab()));
-            EXPECT_EQ(window->getCurrentTabIndex(), (tab + window->getNumTabs() - 1) % window->getNumTabs());
         }
     }
     EXPECT_GE(fieldsSeen, 3) << "the AI host, the shortcuts search and the preferences filter, at least";
 }
 
 // The text fields are the only controls that need help; every other kind lets the keys bubble up.
-TEST_F(SettingsWindowTabKeysTest, ComboBoxesSlidersTogglesAndButtonsLetTheTabKeysBubbleToTheWindow) {
+TEST_F(SettingsWindowTabKeysTest, ComboBoxesSlidersTogglesAndButtonsLetTheTabKeyBubbleToTheWindow) {
     open();
     int controlsSeen = 0;
     for (int tab = 0; tab < window->getNumTabs(); ++tab) {
@@ -178,32 +156,21 @@ TEST_F(SettingsWindowTabKeysTest, ComboBoxesSlidersTogglesAndButtonsLetTheTabKey
         for (auto* control : controls) {
             ++controlsSeen;
             window->getTabs().setCurrentTabIndex(tab);
-            EXPECT_TRUE(deliver(*window, *control, nextTab())) << "tab " << tab;
-            EXPECT_EQ(window->getCurrentTabIndex(), (tab + 1) % window->getNumTabs()) << "tab " << tab;
-            window->getTabs().setCurrentTabIndex(tab);
-            EXPECT_TRUE(deliver(*window, *control, cmdDigit(1)));
-            EXPECT_EQ(window->getCurrentTabIndex(), 0);
+            EXPECT_TRUE(deliver(*window, *control, cmdDigit(1))) << "tab " << tab;
+            EXPECT_EQ(window->getCurrentTabIndex(), 0) << "tab " << tab;
         }
     }
     EXPECT_GT(controlsSeen, 10);
 }
 
-TEST_F(SettingsWindowTabKeysTest, RebindingTheActionsMovesTheKeys) {
+// Cmd+Option+arrow used to step the tabs; the strip's own arrows do that now, so the chord does nothing.
+TEST_F(SettingsWindowTabKeysTest, CommandOptionArrowsNoLongerStepTheTabs) {
     open();
-    shortcutManager.setBinding("tabNext", juce::KeyPress('j', juce::ModifierKeys(kCmd), 0));
-    shortcutManager.setBinding("tabPrevious", juce::KeyPress('k', juce::ModifierKeys(kCmd), 0));
     window->getTabs().setCurrentTabIndex(2);
-
-    EXPECT_FALSE(window->keyPressed(nextTab())) << "the old default no longer does anything";
-    EXPECT_EQ(window->getCurrentTabIndex(), 2);
-    EXPECT_TRUE(window->keyPressed(juce::KeyPress('j', juce::ModifierKeys(kCmd), 0)));
-    EXPECT_EQ(window->getCurrentTabIndex(), 3);
-    EXPECT_TRUE(window->keyPressed(juce::KeyPress('k', juce::ModifierKeys(kCmd), 0)));
-    EXPECT_EQ(window->getCurrentTabIndex(), 2);
-
-    // An unbound action leaves its key alone.
-    shortcutManager.setBinding("tabNext", juce::KeyPress());
-    EXPECT_FALSE(window->keyPressed(juce::KeyPress('j', juce::ModifierKeys(kCmd), 0)));
+    for (int arrow : {juce::KeyPress::leftKey, juce::KeyPress::rightKey}) {
+        EXPECT_FALSE(window->keyPressed(juce::KeyPress(arrow, juce::ModifierKeys(kCmd | kAlt), 0)));
+        EXPECT_EQ(window->getCurrentTabIndex(), 2);
+    }
 }
 
 TEST_F(SettingsWindowTabKeysTest, EveryTabButtonsTooltipNamesItsCommandDigit) {

@@ -676,7 +676,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
          "toggleBottomPanel",
          {},
          [](MainComponent& m) {
-             m.toggleBottomPanelButton.triggerClick();
+             m.toggleBottomPanelFromShortcut();
              return true;
          }},
         // No longer a toggle -- opens the dock if needed and switches to this tab; a second
@@ -689,7 +689,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
          "toggleTimelinePanel",
          {},
          [](MainComponent& m) {
-             m.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Timeline);
+             m.showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab::Timeline);
              return true;
          }},
         {AppCommands::toggleMixerPanel,
@@ -699,7 +699,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
          "toggleMixerPanel",
          {},
          [](MainComponent& m) {
-             m.showBottomDockTab(synth::ui::BottomDockComponent::Tab::Mixer);
+             m.showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab::Mixer);
              return true;
          }},
         {AppCommands::toggleMidiRemotePanel,
@@ -709,7 +709,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
          "toggleMidiRemotePanel",
          {},
          [](MainComponent& m) {
-             m.showBottomDockTab(synth::ui::BottomDockComponent::Tab::MidiRemote);
+             m.showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab::MidiRemote);
              return true;
          }},
         // A no-op (that still consumes the key) when the active tab has no side pane.
@@ -723,21 +723,6 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
              m.toggleActiveSidePane();
              return true;
          }},
-        // Walk the offered tabs of the dock in strip order, wrapping, opening the dock if it is closed.
-        {AppCommands::tabPrevious,
-         "Previous Tab",
-         "Show the previous tab of the bottom-docked panel",
-         "View",
-         "tabPrevious",
-         {},
-         [](MainComponent& m) { return m.stepBottomDockTab(-1); }},
-        {AppCommands::tabNext,
-         "Next Tab",
-         "Show the next tab of the bottom-docked panel",
-         "View",
-         "tabNext",
-         {},
-         [](MainComponent& m) { return m.stepBottomDockTab(1); }},
     };
 }
 

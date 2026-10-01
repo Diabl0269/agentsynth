@@ -42,6 +42,10 @@ void ShortcutHintOverlay::addTarget(juce::Component& component, const juce::Stri
     targets_.push_back({juce::Component::SafePointer<juce::Component>(&component), actionId});
 }
 
+void ShortcutHintOverlay::addFixedKeyTarget(juce::Component& component, const juce::KeyPress& key) {
+    targets_.push_back({juce::Component::SafePointer<juce::Component>(&component), {}, {}, key});
+}
+
 void ShortcutHintOverlay::addAreaTarget(juce::Component& owner, std::function<juce::Rectangle<int>()> areaInOwner,
                                         const juce::String& actionId) {
     targets_.push_back({juce::Component::SafePointer<juce::Component>(&owner), actionId, std::move(areaInOwner)});
@@ -185,8 +189,10 @@ void ShortcutHintOverlay::hideNow() {
 
 void ShortcutHintOverlay::showHints() {
     stopTimer();
-    // A modal dialog or menu is up: its own key handling owns the keyboard, so stay out of it.
-    if (juce::Component::getCurrentlyModalComponent() != nullptr) {
+    // A modal dialog or menu is up: its own key handling owns the keyboard, so stay out of it -- unless
+    // that modal is this overlay's own window (the Settings dialog is modal and hints its own tabs).
+    const auto* modal = juce::Component::getCurrentlyModalComponent();
+    if (modal != nullptr && modal != &host_ && !modal->isParentOf(&host_)) {
         hideNow();
         armed_ = false;
         return;
