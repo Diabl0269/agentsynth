@@ -159,7 +159,7 @@ TEST_F(PluginCardLayoutStoreTest, RefusesANewerVersionAndMalformedFilesVisiblyWi
     ASSERT_TRUE(dir.createDirectory());
 
     const auto file = dir.getChildFile("default.json");
-    ASSERT_TRUE(file.replaceWithText(R"({"version":2,"slots":[]})"));
+    ASSERT_TRUE(file.replaceWithText(R"({"version":3,"slots":[]})"));
     EXPECT_EQ(store.loadDefault(serum).status, PluginCardLayoutStore::LoadStatus::UnsupportedVersion);
 
     ASSERT_TRUE(file.replaceWithText("not json at all"));

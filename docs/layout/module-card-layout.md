@@ -4,7 +4,12 @@ Agent reference. The design for giving every built-in module a card drawn from l
 type-specific code: a hand-designed default per module type, a user override per instance or per
 type, knob/fader/switch widgets, and room for a future user-built "custom module".
 
-**Status:** designed and decided (see [Decisions](#decisions-2026-10-01)), not built. Nothing here describes current behaviour unless it says "today".
+**Status:** model, store and override built; cards not yet drawn from it. Built: `CardLayout` v2 and its
+reader/writer, the shared layout store with its `ModuleCardLayouts` root, the per-instance `cardLayout`
+node property with its undo, and the pure resolver with an empty code-default registry
+([What exists](#what-exists)). Everything else (`CardBody`, widgets, default layouts, the editor) is
+designed and decided (see [Decisions](#decisions-2026-10-01)), not built. Nothing here describes
+current behaviour unless it says "today" or "built".
 Where the card is drawn today is [module-card.md](module-card.md); the hosted-plugin half of the
 same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-layout.md).
 
@@ -25,7 +30,29 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 - Dual-mode modules show both modes' controls at once (LFO Hz and Sync Rate; Sample & Hold Rate with
   an external clock; Sampler grain knobs in Sample mode; Pitch Shifter semitones and Hz).
 - `CardLayout` (`Source/Modules/CardLayout.h`) exists but only hosted-plugin cards use it: a flat,
-  ordered list of slots, version 1.
+  ordered list of slots, version 1; the version 2 model is built ([What exists](#what-exists)) but no
+  card reads it yet.
+
+---
+
+## What exists
+
+Nothing on a card reads these yet; they are the data layer the card body will draw from.
+
+| Piece | Where |
+|---|---|
+| `CardLayout` v2 (sections, items, conditions, `hidden`, `basedOn`), `upgradeV1`, `usesV2Features` | `Source/Modules/CardLayout.{h,cpp}`, `CardLayoutJson.cpp` |
+| Store with two roots: `PluginCardLayouts/` and `ModuleCardLayouts/<ModuleType>/` | `Source/Plugin/Hosting/CardLayoutStore.*` (shared), `Source/UI/Graph/CardBody/ModuleCardLayoutStore.*` |
+| Instance override: node property `cardLayout`, get/set with one undo step | `Source/UI/Graph/CardBody/CardLayoutOverride.*` |
+| Resolver (instance, type default, code default, automatic) and the empty `DefaultCardLayouts` registry | `Source/UI/Graph/CardBody/ModuleCardLayoutResolver.*`, `DefaultCardLayouts.*` |
+
+Reader rules as built: a layout is either the flat v1 `slots` list or v2 `sections`, never both. Reading
+v1 fills `slots` (the flat form is the implicit single untitled grid section) and `upgradeV1(layout,
+allParamIds)` turns it into one section plus a `hidden` list of every parameter it did not name; call it
+once, where the parameter list is known (the resolver does when handed one). Unknown keys are ignored,
+a version above 2 is refused, and an out-of-range number (`columns`, `span`, `indexHint`) or an
+unrecognised widget, view, presentation or effect name refuses the whole layout rather than quietly
+changing it. `ParamItem` also carries the v1 `indexHint`, so a hosted plugin's rescue key survives.
 
 ---
 
@@ -89,7 +116,10 @@ knob turns would shove its neighbours around under the cursor.
 **Versioning.** Adding an optional key never bumps `version`; only a change of meaning does. The v2
 reader keeps reading v1 (a v1 layout is one untitled grid section plus the v1 "absent = hidden" rule,
 applied once on read and written back as v2). Hosted-plugin cards keep **writing** v1 unless a layout
-uses a v2-only feature, so a project opened in an older build keeps its plugin cards. Choice
+uses a v2-only feature, so a project opened in an older build keeps its plugin cards. The writer picks
+the version from `usesV2Features()`: one untitled grid section at the default width, holding only plain
+parameters with the Auto, Knob, Toggle or Choice widget, and no `hidden`, view, condition, span, `node`
+or `basedOn`, writes v1. Choice
 conditions match value strings, not indices, so appending a choice value never breaks a layout.
 
 **Section titles.** A code default's titles are plain English strings in code (the app has no string

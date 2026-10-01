@@ -3,6 +3,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/FoldAllButton.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <optional>
@@ -24,7 +25,8 @@
 // them. The idioms are lifted from ModuleLibraryComponent (docs/layout/module-library.md) on purpose, so the
 // two collapsible lists in the app behave identically: header rows with a chevron, a
 // collapsed-set keyed by the header's name, and a top strip whose label flips between
-// "Collapse all" and "Expand all". Headers, the strip and every rebind button are real buttons,
+// "Collapse all" and "Expand all" (the shared synth::ui::FoldAllButton, as in the Preferences All view).
+// Headers, the strip and every rebind button are real buttons,
 // so Tab visits them top to bottom and Space/Return act on them; while a row listens for its new
 // key, that row's button keeps focus and takes every key, Escape cancelling.
 //
@@ -135,7 +137,7 @@ public:
 
     // ---- Row geometry (pixels) ----
     static constexpr int kSearchHeight = 26;
-    static constexpr int kTopStripHeight = 20;
+    static constexpr int kTopStripHeight = synth::ui::FoldAllButton::kStripHeight;
     static constexpr int kSectionHeaderHeight = 22;
     static constexpr int kRowHeight = 26;
     static constexpr int kRowGap = 3;
@@ -189,14 +191,6 @@ private:
         bool collapsed_ = false;
     };
 
-    /** The pinned "Collapse all" / "Expand all" strip above the rows. */
-    class StripButton : public juce::Button {
-    public:
-        StripButton()
-            : juce::Button("Collapse all") {}
-        void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
-    };
-
     /** A rebind button. While its row is listening it hands every key to the tab, so any key
      *  (Space and Return included) becomes the new binding rather than pressing the button. */
     class RebindButton : public juce::TextButton {
@@ -214,7 +208,6 @@ private:
     };
 
     void paintRows(juce::Graphics& g);
-    HeaderButton& headerButtonFor(ShortcutCategory category);
 
     ShortcutManager& shortcutManager;
 
@@ -224,7 +217,7 @@ private:
     std::vector<std::unique_ptr<juce::Label>> descLabels;
     std::vector<std::unique_ptr<RebindButton>> bindButtons;
     std::vector<std::unique_ptr<HeaderButton>> headerButtons; // in ShortcutManager::getCategoryOrder() order
-    StripButton collapseAllButton;
+    synth::ui::FoldAllButton foldAllButton;                   // the pinned strip above the rows
     juce::TextButton resetButton;
     juce::TextButton exportButton;
     juce::TextButton importButton;

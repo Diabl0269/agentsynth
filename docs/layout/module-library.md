@@ -277,7 +277,10 @@ same collapsible-section idiom once its row count passed 49 (see [shortcuts](../
 collapsible section per `ShortcutCategory`, a search field above them, and a top strip whose label
 flips between "Collapse all" and "Expand all", lifted from `ModuleLibraryComponent` so the app's two
 collapsible lists behave identically — clickable header rows with a chevron, a collapsed set keyed
-by the header's identity, the same strip idiom.
+by the header's identity, the same strip idiom. The strip is the shared `synth::ui::FoldAllButton`
+(`Source/UI/Layout/FoldAllButton.h`), which the Preferences "All" view uses as well; the library paints
+the same wording itself. A fold re-lays the rows without ever hiding and re-showing a header that stays on
+screen, because hiding the header that holds keyboard focus would throw the focus to the search field.
 
 Two things it deliberately does NOT copy, both because the two components live in different
 contexts:

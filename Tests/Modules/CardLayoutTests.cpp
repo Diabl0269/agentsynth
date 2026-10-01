@@ -125,7 +125,7 @@ TEST(CardLayoutTest, RefusesMalformedInputAndNewerVersions) {
     EXPECT_EQ(CardLayout::fromVar(juce::JSON::parse(R"({"version":1,"slots":[{"paramId":"a","kind":"dial"}]})")).status,
               CardLayout::ParseStatus::Malformed)
         << "an unknown kind";
-    EXPECT_EQ(CardLayout::fromVar(juce::JSON::parse(R"({"version":2,"slots":[]})")).status,
+    EXPECT_EQ(CardLayout::fromVar(juce::JSON::parse(R"({"version":3,"slots":[]})")).status,
               CardLayout::ParseStatus::UnsupportedVersion);
 }
 
@@ -283,7 +283,7 @@ TEST_F(CardLayoutPrecedenceTest, AnUnreadableSourceFallsThroughToTheNextOne) {
     PluginCardLayoutStore store(root);
     ASSERT_TRUE(store.setDefault(loaded.module.getIdentity(), layoutOf({slot("id2", 2)})));
 
-    loaded.module.setCardLayoutOverride(juce::JSON::parse(R"({"version":2,"slots":[]})"));
+    loaded.module.setCardLayoutOverride(juce::JSON::parse(R"({"version":3,"slots":[]})"));
 
     EXPECT_EQ(synth::resolveHostedCardLayout(loaded.module, &store).source, ResolvedCardLayout::Source::PluginDefault)
         << "a layout from a newer version is skipped, not applied and not fatal";
@@ -339,4 +339,214 @@ TEST(CardLayoutUndoTest, AnUnchangedExtraStatePushesNothing) {
     undo.recordNodeExtraStateChange(graph, nodeId, patch, patch);
 
     EXPECT_FALSE(undo.canUndo());
+}
+
+// ---------------------------------------------------------------------------------------------
+// Version 2: sections, items, conditions, hidden, and the "write v1 unless a v2 feature is used" rule.
+// ---------------------------------------------------------------------------------------------
+
+namespace {
+
+using synth::CardCondition;
+using synth::CardConditionEffect;
+using synth::CardParamItem;
+using synth::CardPresentation;
+using synth::CardSection;
+using synth::CardView;
+using synth::CardViewItem;
+using synth::CardWidget;
+
+CardParamItem paramItem(const juce::String& id, CardWidget widget = CardWidget::Auto) {
+    CardParamItem item;
+    item.paramId = id;
+    item.widget = widget;
+    return item;
+}
+
+CardSection plainSection(std::initializer_list<const char*> ids) {
+    CardSection section;
+    section.id = "main";
+    for (const char* id : ids)
+        section.items.emplace_back(paramItem(id));
+    return section;
+}
+
+CardLayout richLayout() {
+    CardCondition dim;
+    dim.param = "voices";
+    dim.is = juce::StringArray{"2", "3"};
+    dim.effect = CardConditionEffect::Dim;
+
+    CardCondition show;
+    show.param = "mode";
+    show.is = juce::StringArray{"Granular", "Sample"};
+    show.effect = CardConditionEffect::Show;
+
+    CardParamItem detune = paramItem("detune", CardWidget::KnobLarge);
+    detune.label = "Spread";
+    detune.span = 2;
+    detune.indexHint = 4;
+    detune.when = dim;
+    CardParamItem member = paramItem("cutoff", CardWidget::FaderV);
+    member.node = "uuid-1";
+
+    CardSection pitch;
+    pitch.id = "pitch";
+    pitch.title = "Pitch";
+    pitch.columns = 4;
+    pitch.items = {detune, member, CardViewItem{CardView::Response, false}};
+
+    CardSection grain;
+    grain.id = "grain";
+    grain.presentation = CardPresentation::Tab;
+    grain.visibleWhen = show;
+    grain.items = {paramItem("size", CardWidget::Segmented)};
+
+    CardLayout layout;
+    layout.basedOn = "Oscillator@3";
+    layout.sections = {pitch, grain};
+    layout.hidden = juce::StringArray{"pan", "level"};
+    return layout;
+}
+
+juce::var reparsed(const CardLayout& layout) { return juce::JSON::parse(juce::JSON::toString(layout.toVar())); }
+
+int writtenVersion(const CardLayout& layout) {
+    return static_cast<int>(layout.toVar().getDynamicObject()->getProperty("version"));
+}
+
+} // namespace
+
+TEST(CardLayoutV2Test, FullLayoutRoundTripsThroughJson) {
+    const auto layout = richLayout();
+    EXPECT_EQ(writtenVersion(layout), 2);
+
+    const auto result = CardLayout::fromVar(reparsed(layout));
+    ASSERT_EQ(result.status, CardLayout::ParseStatus::Ok);
+    EXPECT_EQ(result.layout, layout);
+    EXPECT_TRUE(result.layout.slots.empty()) << "a v2 document fills sections, not slots";
+}
+
+TEST(CardLayoutV2Test, ConditionsKeepChoiceValueStringsNotIndices) {
+    const auto result = CardLayout::fromVar(reparsed(richLayout()));
+    ASSERT_EQ(result.status, CardLayout::ParseStatus::Ok);
+
+    const auto& grain = result.layout.sections[1];
+    ASSERT_TRUE(grain.visibleWhen.has_value());
+    EXPECT_EQ(grain.visibleWhen->is, juce::StringArray({"Granular", "Sample"}));
+    EXPECT_EQ(grain.visibleWhen->effect, CardConditionEffect::Show);
+
+    const auto* detune = std::get_if<CardParamItem>(&result.layout.sections[0].items[0]);
+    ASSERT_NE(detune, nullptr);
+    ASSERT_TRUE(detune->when.has_value());
+    EXPECT_EQ(detune->when->is, juce::StringArray({"2", "3"}));
+}
+
+TEST(CardLayoutV2Test, V1ReadsAsSlotsAndUpgradeFillsHiddenWithTheAbsentIds) {
+    const auto result = CardLayout::fromVar(
+        juce::JSON::parse(R"({"version":1,"slots":[{"paramId":"cutoff","indexHint":0,"label":null,"kind":"knob"},)"
+                          R"({"paramId":"mode","indexHint":2,"label":"Type","kind":"choice"}]})"));
+    ASSERT_EQ(result.status, CardLayout::ParseStatus::Ok);
+    ASSERT_EQ(result.layout.slots.size(), 2u);
+    EXPECT_TRUE(result.layout.sections.empty());
+
+    const auto upgraded = synth::upgradeV1(result.layout, juce::StringArray{"cutoff", "res", "mode", "drive"});
+
+    EXPECT_TRUE(upgraded.slots.empty());
+    ASSERT_EQ(upgraded.sections.size(), 1u);
+    EXPECT_FALSE(upgraded.sections[0].title.has_value());
+    EXPECT_EQ(upgraded.sections[0].presentation, CardPresentation::Grid);
+    ASSERT_EQ(upgraded.sections[0].items.size(), 2u);
+    const auto* mode = std::get_if<CardParamItem>(&upgraded.sections[0].items[1]);
+    ASSERT_NE(mode, nullptr);
+    EXPECT_EQ(mode->paramId, "mode");
+    EXPECT_EQ(mode->widget, CardWidget::Choice);
+    EXPECT_EQ(mode->label, std::optional<juce::String>("Type"));
+    EXPECT_EQ(mode->indexHint, 2);
+    EXPECT_EQ(upgraded.hidden, juce::StringArray({"res", "drive"})) << "absent from the layout means hidden";
+
+    EXPECT_EQ(synth::upgradeV1(upgraded, juce::StringArray{"other"}), upgraded) << "applied once: v2 is left alone";
+}
+
+TEST(CardLayoutV2Test, UnknownKeysAreIgnoredAtEveryLevel) {
+    const auto result = CardLayout::fromVar(juce::JSON::parse(R"({
+        "version":2,"future":1,"hidden":["a"],
+        "sections":[{"id":"s","extra":true,"items":[
+            {"paramId":"p","widget":"knob","span":2,"surprise":"x"},
+            {"view":"scope","open":true,"more":1}]}]})"));
+
+    ASSERT_EQ(result.status, CardLayout::ParseStatus::Ok);
+    ASSERT_EQ(result.layout.sections.size(), 1u);
+    EXPECT_EQ(result.layout.sections[0].items.size(), 2u);
+    EXPECT_EQ(result.layout.hidden, juce::StringArray({"a"}));
+}
+
+TEST(CardLayoutV2Test, ANewerVersionIsRefusedAndBadNumbersOrNamesAreMalformed) {
+    EXPECT_EQ(CardLayout::fromVar(juce::JSON::parse(R"({"version":3,"sections":[]})")).status,
+              CardLayout::ParseStatus::UnsupportedVersion);
+
+    const auto section = [](const juce::String& body) {
+        return CardLayout::fromVar(juce::JSON::parse(R"({"version":2,"sections":[{"id":"s",)" + body + "}]}")).status;
+    };
+    EXPECT_EQ(section(R"("items":[])"), CardLayout::ParseStatus::Ok);
+    EXPECT_EQ(section(R"("columns":7,"items":[])"), CardLayout::ParseStatus::Malformed) << "out of range is refused";
+    EXPECT_EQ(section(R"("columns":0,"items":[])"), CardLayout::ParseStatus::Malformed);
+    EXPECT_EQ(section(R"("items":[{"paramId":"a","span":0}])"), CardLayout::ParseStatus::Malformed);
+    EXPECT_EQ(section(R"("items":[{"paramId":"a","widget":"dial"}])"), CardLayout::ParseStatus::Malformed);
+    EXPECT_EQ(section(R"("items":[{"view":"hologram"}])"), CardLayout::ParseStatus::Malformed);
+    EXPECT_EQ(section(R"("items":[{"paramId":"a","when":{"param":"m","is":["x"],"effect":"explode"}}])"),
+              CardLayout::ParseStatus::Malformed);
+    EXPECT_EQ(section(R"("presentation":"carousel","items":[])"), CardLayout::ParseStatus::Malformed);
+    EXPECT_EQ(CardLayout::fromVar(juce::JSON::parse(R"({"version":2})")).status, CardLayout::ParseStatus::Malformed)
+        << "a v2 document needs its sections";
+}
+
+TEST(CardLayoutV2Test, ALayoutWithNoV2FeatureStillWritesVersionOne) {
+    CardLayout flat;
+    flat.slots = {slot("a", 0), slot("b", 1, juce::String("B"), CardSlotKind::Toggle)};
+    EXPECT_FALSE(flat.usesV2Features());
+    EXPECT_EQ(writtenVersion(flat), 1);
+
+    CardLayout sectioned;
+    sectioned.sections = {plainSection({"a", "b"})};
+    EXPECT_FALSE(sectioned.usesV2Features());
+    EXPECT_EQ(writtenVersion(sectioned), 1) << "one untitled grid section of plain params is expressible in v1";
+    const auto back = CardLayout::fromVar(reparsed(sectioned));
+    ASSERT_EQ(back.status, CardLayout::ParseStatus::Ok);
+    ASSERT_EQ(back.layout.slots.size(), 2u);
+    EXPECT_EQ(back.layout.slots[1].paramId, "b");
+
+    CardLayout upgradedWithNothingHidden = synth::upgradeV1(flat, juce::StringArray{"a", "b"});
+    EXPECT_EQ(writtenVersion(upgradedWithNothingHidden), 1) << "an upgrade that hides nothing writes v1 again";
+}
+
+TEST(CardLayoutV2Test, UsesV2FeaturesNamesEachFeature) {
+    const auto with = [](auto mutate) {
+        CardLayout layout;
+        layout.sections = {plainSection({"a"})};
+        mutate(layout);
+        return layout;
+    };
+    const auto firstItem = [](CardLayout& layout) -> CardParamItem& {
+        return std::get<CardParamItem>(layout.sections[0].items[0]);
+    };
+
+    EXPECT_FALSE(CardLayout{}.usesV2Features());
+    EXPECT_FALSE(with([](CardLayout&) {}).usesV2Features());
+    EXPECT_FALSE(with([&](CardLayout& l) { firstItem(l).widget = CardWidget::Choice; }).usesV2Features());
+
+    EXPECT_TRUE(with([](CardLayout& l) { l.hidden.add("x"); }).usesV2Features());
+    EXPECT_TRUE(with([](CardLayout& l) { l.basedOn = "Filter@1"; }).usesV2Features());
+    EXPECT_TRUE(with([](CardLayout& l) { l.sections.push_back(plainSection({"b"})); }).usesV2Features());
+    EXPECT_TRUE(with([](CardLayout& l) { l.sections[0].title = "T"; }).usesV2Features());
+    EXPECT_TRUE(with([](CardLayout& l) { l.sections[0].columns = 4; }).usesV2Features());
+    EXPECT_TRUE(with([](CardLayout& l) { l.sections[0].presentation = CardPresentation::Tab; }).usesV2Features());
+    EXPECT_TRUE(
+        with([](CardLayout& l) { l.sections[0].visibleWhen = CardCondition{"m", {"x"}, {}}; }).usesV2Features());
+    EXPECT_TRUE(with([](CardLayout& l) { l.sections[0].items.emplace_back(CardViewItem{}); }).usesV2Features());
+    EXPECT_TRUE(with([&](CardLayout& l) { firstItem(l).span = 2; }).usesV2Features());
+    EXPECT_TRUE(with([&](CardLayout& l) { firstItem(l).node = "u"; }).usesV2Features());
+    EXPECT_TRUE(with([&](CardLayout& l) { firstItem(l).when = CardCondition{"m", {"x"}, {}}; }).usesV2Features());
+    EXPECT_TRUE(with([&](CardLayout& l) { firstItem(l).widget = CardWidget::FaderH; }).usesV2Features());
+    EXPECT_TRUE(with([&](CardLayout& l) { firstItem(l).widget = CardWidget::KnobLarge; }).usesV2Features());
 }

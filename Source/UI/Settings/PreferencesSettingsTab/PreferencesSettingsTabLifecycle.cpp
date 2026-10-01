@@ -13,15 +13,6 @@ namespace {
 // the Keyboard Shortcuts tab's section headers (see its kDividerAlpha — keep the two in step).
 constexpr float kDividerAlpha = 0.12f;
 
-// A fold button is as wide as its text plus this much air on each side (the look-and-feel already
-// keeps 4 px of that clear of the edge, see AppLookAndFeel::drawButtonText).
-constexpr int kFoldButtonSidePad = 8;
-
-int widthToFitText(juce::TextButton& button, int height) {
-    const auto font = button.getLookAndFeel().getTextButtonFont(button, height);
-    return juce::GlyphArrangement::getStringWidthInt(font, button.getButtonText()) + 2 * kFoldButtonSidePad;
-}
-
 } // namespace
 
 int comboIdFromMode(GraphEditor::SmartConnectionMode mode) {
@@ -390,22 +381,22 @@ void PreferencesSettingsTab::resized() {
     titleLabel.setBounds(bounds.removeFromTop(28));
     bounds.removeFromTop(8);
     auto pickerRow = bounds.removeFromTop(26);
-    // Picker row: the drop-down and the fold buttons take exactly the width their text needs, so the
-    // filter field gets the rest and can show its whole hint at the Settings window's minimum width.
+    // Picker row: the drop-down takes exactly the width its longest entry needs, so the filter field
+    // gets the rest and can show its whole hint at the Settings window's minimum width.
     categoryCombo.setBounds(
         pickerRow.removeFromLeft(synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(categoryCombo)));
     pickerRow.removeFromLeft(8);
-    const bool showFoldButtons = sectionHeadersActive();
-    expandAllButton.setVisible(showFoldButtons);
-    collapseAllButton.setVisible(showFoldButtons);
-    if (showFoldButtons) {
-        expandAllButton.setBounds(pickerRow.removeFromLeft(widthToFitText(expandAllButton, pickerRow.getHeight())));
-        pickerRow.removeFromLeft(4);
-        collapseAllButton.setBounds(pickerRow.removeFromLeft(widthToFitText(collapseAllButton, pickerRow.getHeight())));
-        pickerRow.removeFromLeft(8);
-    }
     searchField.setBounds(pickerRow);
-    bounds.removeFromTop(12);
+    bounds.removeFromTop(8);
+    // The All view (with no filter) has one fold-all strip, pinned top-right of the rows; every other
+    // view gives that height back.
+    const bool showFoldAll = sectionHeadersActive();
+    foldAllButton.setVisible(showFoldAll);
+    if (showFoldAll) {
+        foldAllButton.setAllFolded(areAllSectionsCollapsed());
+        foldAllButton.setBounds(bounds.removeFromTop(synth::ui::FoldAllButton::kStripHeight));
+    }
+    bounds.removeFromTop(4);
 
     // Everything below is scrolled content: the viewport clips it and shows a vertical scrollbar
     // when it overflows. Rows are laid out to the viewport width minus its scrollbar

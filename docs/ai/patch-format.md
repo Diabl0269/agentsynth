@@ -95,6 +95,28 @@ graph change, so a custom title stored there is clobbered by the next node added
 Pinned by `ModuleTitleRoundTripsThroughGraphJSON` and
 `UntrustedPatchDisplayNameIsCappedAndDisplayOnly`.
 
+## Per-node `cardLayout`
+
+A node may carry a `"cardLayout"` object: the user's per-instance card layout for a built-in module (a
+`CardLayout` JSON document, see [`layout/module-card-layout.md`](../layout/module-card-layout.md)). It is
+emitted only when set, so every other node's JSON is byte-identical to a document from before the field
+existed. It is a node property like `displayName`, not part of the module's `"state"`; a hosted plugin's
+own layout is a separate `"cardLayout"` key *inside* its `"state"`.
+
+Unlike `displayName` it is applied on the **trusted path only**, like `uuid` and `state`: undo
+snapshots (including the node-preserving restore, which also removes it from a node whose snapshot has
+none), presets, projects and the in-app clipboard. The untrusted apply path ignores it, `getPatchSchema()`
+never mentions it, and the model-bound patch context strips it, so a provider is never invited to emit
+one. A `.agsnip` file on disk drops it (the same `includeExtraState` rule as `state`); the in-app
+clipboard and duplicate keep it. Layout is presentation only and never changes a parameter's value, id
+or range.
+
+**Why trusted-only though it is display-only.** A hostile layout could hide every control of an
+authorable module; accepting one untrusted needs a validator (known `paramId`s, bounded sizes) that does
+not exist yet.
+
+Pinned by `Tests/AI/CardLayoutTrustTests.cpp`.
+
 ## Reserved keys and forward compatibility
 
 Parameter values are a flat scalar map, permanently. Time-varying data lives under the reserved

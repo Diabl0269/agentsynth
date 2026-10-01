@@ -5,6 +5,7 @@
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
+#include "UI/Layout/TabSwitchKeys.h"
 #include "UI/Settings/SettingsTabs.h"
 #include "UI/Theme/ThemeManager.h"
 #include <functional>
@@ -36,8 +37,9 @@ public:
     // (including every SettingsWindowTests.cpp test) keeps compiling and gets the signed-out-only
     // AI tab (prompt-learning toggle disabled) rather than a required dependency.
     // initialTabName: when non-empty and it matches a tab's name (by exact TabbedComponent tab
-    // name), that tab is selected on construction instead of the persisted "settingsTab"
-    // preference. Empty (the default) keeps the existing persisted-tab behaviour.
+    // name), that tab is selected on construction instead of the remembered tab. Empty (the default)
+    // opens the remembered tab: its name is saved when the window closes, so it survives the Audio tab
+    // being present in the app and absent in the plugin.
     SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
                    synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                    ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager, GraphEditor* graphEditor,
@@ -49,6 +51,9 @@ public:
 
     // Escape closes the window, from any control inside it (a text field passes it up). Fires
     // onRequestClose when set; otherwise closes the juce::DialogWindow hosting this content.
+    // Cmd+1..9 opens the Nth tab (a number past the last tab does nothing), and the tabPrevious /
+    // tabNext shortcut actions step through the tabs, wrapping. Text fields in the tabs offer these
+    // keys to the window before they type or move their caret.
     bool keyPressed(const juce::KeyPress& key) override;
     std::function<void()> onRequestClose;
 
@@ -69,17 +74,23 @@ public:
     // The reaction to focus landing somewhere: when `focused` is the window hosting this content, which
     // has no control to type into, moves focus to the open tab's button and returns true.
     bool redirectWindowFocusToTabStrip(juce::Component* focused);
+    synth::ui::TabSwitchKeys& getTabSwitchKeysForTest() { return tabSwitchKeys; }
     juce::Component* getCurrentTabButton() const {
         return tabs.getTabbedButtonBar().getTabButton(tabs.getCurrentTabIndex());
     }
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+    // The tab-switching keys; false for any other key.
+    bool handleTabKey(const juce::KeyPress& key);
     void globalFocusChanged(juce::Component* focused) override { redirectWindowFocusToTabStrip(focused); }
 
     juce::ApplicationProperties& appProperties;
+    ShortcutManager& shortcutManager;
     synth::theme::ThemeManager& themeManager;
     SettingsTabs tabs{juce::TabbedButtonBar::TabsAtTop};
+    // Declared after `tabs` so it is destroyed (and detached from the text fields) before them.
+    synth::ui::TabSwitchKeys tabSwitchKeys{[this](const juce::KeyPress& key) { return handleTabKey(key); }};
     // Declared after `tabs` so each is destroyed before the content it listens on.
     std::vector<std::unique_ptr<synth::ui::ArrowKeyNavigation>> arrowKeys;
 

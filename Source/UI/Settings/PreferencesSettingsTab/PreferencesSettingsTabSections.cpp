@@ -3,7 +3,7 @@
 #include "UI/Settings/ShortcutsSettingsTab.h"
 
 // Concern: the "All" category view. Every category sits under a clickable header (chevron + name)
-// that folds its rows, and Expand all / Collapse all act on every header at once. The rows
+// that folds its rows, and the one fold-all button acts on every header at once. The rows
 // themselves are laid out by the usual layout*Groups units; this unit only decides which categories
 // contribute rows (categoryShown) and, once the pass is done, slots each header above its rows.
 
@@ -67,12 +67,8 @@ void PreferencesSettingsTab::setupSectionControls() {
         header->setTooltip("Fold or unfold " + categoryName(category) + " (Left/Right)");
         contentHost.addChildComponent(*header);
     }
-    addChildComponent(expandAllButton);
-    addChildComponent(collapseAllButton);
-    expandAllButton.setTooltip("Unfold every section");
-    collapseAllButton.setTooltip("Fold every section");
-    expandAllButton.onClick = [this] { setAllSectionsCollapsed(false); };
-    collapseAllButton.onClick = [this] { setAllSectionsCollapsed(true); };
+    addChildComponent(foldAllButton);
+    foldAllButton.onClick = [this] { setAllSectionsCollapsed(!areAllSectionsCollapsed()); };
 }
 
 void PreferencesSettingsTab::refreshSectionTitles() {
@@ -92,6 +88,13 @@ void PreferencesSettingsTab::setSectionCollapsed(Category category, bool collaps
     refreshSectionTitles();
     resized();
     repaint();
+}
+
+bool PreferencesSettingsTab::areAllSectionsCollapsed() const {
+    for (auto flag : sectionCollapsed)
+        if (!flag)
+            return false;
+    return true;
 }
 
 void PreferencesSettingsTab::setAllSectionsCollapsed(bool collapsed) {

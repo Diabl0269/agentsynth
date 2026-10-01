@@ -265,6 +265,13 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
             if (displayName.isNotEmpty())
                 n->setProperty("displayName", displayName);
 
+            // The user's per-instance card layout (a built-in module's own layout, not the hosted
+            // plugin's extra-state key of the same name). Emitted only when set, so every other node's
+            // JSON is byte-identical to before; trusted-apply only (see applyCardLayoutToNode).
+            const auto& cardLayout = node->properties[kCardLayoutNodeProperty];
+            if (cardLayout.isObject())
+                n->setProperty(kCardLayoutNodeProperty, cardLayout.clone());
+
             // Params — store denormalized values to match applyJSONToGraph expectations
             juce::DynamicObject::Ptr params = new juce::DynamicObject();
             for (auto* param : processor->getParameters()) {
@@ -669,7 +676,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                                 }
                                 applyExtraStateToProcessor(existingNode->getProcessor(), nObj, trusted);
                                 adoptUuidIfTrusted(existingNode, nObj, trusted);
-                                detail::applyDisplayNameToNode(existingNode, nObj);
+                                detail::applyNodePresentation(existingNode, nObj, trusted);
                                 // Update position if provided
                                 if (nObj->hasProperty("position")) {
                                     if (auto* posObj = nObj->getProperty("position").getDynamicObject()) {
@@ -707,7 +714,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                             idMap[oldId] = node->nodeID;
                             newlyCreatedNodes.insert(node->nodeID);
                             adoptUuidIfTrusted(node.get(), nObj, trusted);
-                            detail::applyDisplayNameToNode(node.get(), nObj);
+                            detail::applyNodePresentation(node.get(), nObj, trusted);
                             if (nObj->hasProperty("position")) {
                                 if (auto* posObj = nObj->getProperty("position").getDynamicObject()) {
                                     node->properties.set("x", posObj->getProperty("x"));
