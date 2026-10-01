@@ -733,6 +733,7 @@ target_link_libraries(Tests PRIVATE
     # what a change to a UI header (MainComponent.h, GraphEditor.h, ...) rebuilds (FRO307).
     AppUI
 )
+synth_enable_pch(Tests gtest/gtest.h)
 
 target_include_directories(Tests PRIVATE
     ${CMAKE_SOURCE_DIR}/Source

@@ -96,6 +96,25 @@ look momentarily misleading during that window.
 - **A separate lint job** — instant formatting feedback without waiting for a full build.
 - **`coverage.sh --report-only`** — in CI, skips redundant configure/build/test steps and only merges
   profdata and generates the report.
+- **Precompiled JUCE headers on the macOS job** (`-DAGENTSYNTH_PCH=ON`, `cmake/Pch.cmake`) — a
+  source file spends most of its compile time parsing the JUCE module headers (one heavy UI file
+  measured 3.5 s, 94% of it front end, about 1.6 s of that JUCE), so Core, AppUI and Tests each
+  parse them once instead of once per file. Off everywhere else:
+  - **Local builds**: clang writes the build directory's absolute path into the header, so it is
+    only valid at the path that built it. The local ccache is shared between checkouts through
+    `base_dir` ([local-ci.md](local-ci.md)), which hands a second checkout the first one's header
+    and fails every compile with "malformed or corrupted precompiled file". Neither
+    `-fmodule-file-home-is-cwd` nor `-relocatable-pch` removes the path. Configuring with the
+    option on while `base_dir` is set is refused.
+  - **Linux and Windows jobs**: not measured (gcc with coverage, MSVC `/Yu` through ccache). They
+    are also what catches a file that compiles only because the header supplied a missing include.
+
+  What makes it cacheable: C++ only (`$<COMPILE_LANGUAGE:CXX>`), so the `-fobjc-arc` `.mm` files
+  never see it; the app and plugin targets are left out; `-Xclang -fno-pch-timestamp`; and ccache
+  `sloppiness=pch_defines,time_macros`, set through the compiler launcher's environment. Measured
+  on macOS (Release, every target, empty ccache each time): the cache for one build grows from
+  156 MB to 238 MB, and a rebuild at the same path hits 100%. The earlier five-target attempt
+  measured the cold build at 367 s down to 234 s.
 
 ## Dependency install: the apt mirror is not reliable
 
@@ -151,20 +170,8 @@ CI and silently did nothing on macOS.
 
 - **Unity builds** (`CMAKE_UNITY_BUILD`) — incompatible with JUCE: Objective-C++ `.mm` files cannot
   be merged into C++ unity translation units.
-- **Precompiled headers** — rejected twice. The first reason given, that JUCE module `.cpp` files
-  refuse to be pre-included and `.mm` files need Objective-C++, turned out to be solvable. The second
-  attempt (FRO250, 2026-09-26) got past it: `SKIP_PRECOMPILE_HEADERS` on the JUCE unity files, a
-  PCH limited to C++ and Objective-C++ (`$<COMPILE_LANGUAGE:CXX,OBJCXX>`, since the plugin also
-  compiles C files), and `-Xclang -fno-pch-timestamp` plus ccache `sloppiness=pch_defines` so ccache
-  can cache it. It still needs work for `.mm` files built with `-fobjc-arc` (clang refuses a PCH
-  whose ARC setting differs). Measured locally on macOS (Release, every target, empty ccache
-  directory each time):
-  - The cold build was about 36% faster (367 s down to 234 s).
-  - A second build at the same path hit ccache 100% of the time, so the PCH is byte-stable.
-  - **The ccache grew from 124 MB to 295 MB**, 2.4 times as large, because each target's PCH is about
-    55 MB before compression.
-
-  That growth decides it: the macOS job's cache already holds about 461 MB under a `max_size` of
-  512 MB, and the repo's Actions cache budget leaves no room to raise it. The cache would evict
-  entries mid-build and every build would get slower. Worth revisiting only if the macOS cache
-  gets room of its own, or with a PCH small enough to add less than about 50 MB.
+- **Precompiled headers for local builds, and on by default** — see the precompiled-headers
+  entry under Optimizations for why they are limited to the macOS job. Two earlier attempts were
+  rejected outright: the first on the belief that JUCE's module `.cpp` and `.mm` files could not
+  be handled (they can be skipped), the second because the macOS ccache had no room for the
+  extra 171 MB that five per-target headers added, before the Actions cache kept one generation.

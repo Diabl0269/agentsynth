@@ -662,12 +662,11 @@ jobs:
 
     - name: Configure ccache
       run: |
-        # Right-sized, not the Linux job's 2G: a seeded macOS-ccache-main entry measured 117 MB on
-        # 2026-09-15 (this Release build has no coverage instrumentation and is the smallest of the
-        # three), so 2G was headroom this job will never use — and every byte configured here is a
-        # byte a single `Save ccache` run (main-only, see that step below) could write toward the
-        # repo's 10 GB cache budget. 512M leaves >4x headroom over the measured size.
-        ccache --set-config=max_size=512M
+        # Right-sized, not the Linux job's 2G: one build measured 238 MB with the precompiled
+        # headers this job turns on below (156 MB without), and the entry fills to its cap as
+        # merges add objects. Every byte configured here is a byte a `Save ccache` run (main-only,
+        # see that step below) could write toward the repo's 10 GB cache budget.
+        ccache --set-config=max_size=1G
         ccache --set-config=compiler_check=content
         ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
         ccache --zero-stats
@@ -684,9 +683,12 @@ jobs:
         # instruments that CI never runs (they gate no tests and need a live Ollama). One platform
         # is enough to catch a harness that stops compiling, and the Linux job builds them, so a
         # harness that stops compiling is still caught on every PR.
+        # AGENTSYNTH_PCH: precompiled JUCE headers (cmake/Pch.cmake), this job only. The other
+        # two jobs build without, which catches a file that needs the header for a missing include.
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
+          -DAGENTSYNTH_PCH=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache \

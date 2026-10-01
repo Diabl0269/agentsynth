@@ -208,6 +208,11 @@ to a relative one before hashing, so object code that only differs by which work
 still hits, while paths outside `base_dir` (a stray absolute include from a system header, say) are
 left alone.
 
+This sharing is also why precompiled headers (`-DAGENTSYNTH_PCH=ON`) stay off locally: a
+precompiled header carries its build directory's absolute path, so one served from another
+worktree's build fails every compile that uses it. `cmake/Pch.cmake` refuses to configure with
+the option on while `base_dir` is set. See [ci-pipeline.md](ci-pipeline.md#optimizations).
+
 ## Dev-signing
 
 `scripts/dev-sign-app.sh` re-signs the built bundle with a stable **Apple Development** identity
