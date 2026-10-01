@@ -20,6 +20,7 @@
 #include "MainComponent/MainComponent.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/FilterModule.h"
+#include "Modules/LFOModule.h"
 #include "Modules/SamplerModule.h"
 #include "Modules/VisualBuffer.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
@@ -30,6 +31,8 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
+#include "UI/Graph/ModMatrixComponent.h"
+#include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Library/ModuleLibraryHelpPopup.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
@@ -511,7 +514,8 @@ TEST(AccessibilityCoverageTest, EveryModuleCard) {
     EXPECT_TRUE(matchesBaseline("ModuleCards", gaps));
 }
 
-// ============================================================================
+// =====================================================================}
+
 // Timeline automation lanes: a lane row's header and the track header's fold arrow.
 // ============================================================================
 
@@ -532,4 +536,21 @@ TEST(AccessibilityCoverageTest, AutomationLanes) {
         gaps.push_back(gap);
     }
     EXPECT_TRUE(matchesBaseline("AutomationLanes", gaps));
+=======
+// The Mod Matrix open with two routings (one wired, one empty), and its searchable picker. The main
+// window audit closes the matrix, so its rows are only counted here.
+TEST(AccessibilityCoverageTest, ModMatrix) {
+    AudioEngine engine;
+    auto* lfo = engine.getGraph().addNode(std::make_unique<LFOModule>()).get();
+    auto* filter = engine.getGraph().addNode(std::make_unique<FilterModule>()).get();
+    engine.addModRouting(lfo->nodeID, 0, filter->nodeID, 1);
+    engine.addEmptyModRouting();
+    ModMatrixComponent matrix(engine);
+    matrix.setSize(600, 400);
+    matrix.updateRowsFromGraph();
+    ASSERT_EQ(matrix.getNumRowsForTest(), 2);
+    EXPECT_TRUE(matchesBaseline("ModMatrix", auditAccessibility(matrix)));
+
+    synth::ui::ModMatrixPicker picker("source", {{1, "LFOs", "LFO 1"}, {2, "Filters", "Filter 1"}}, 1, nullptr);
+    EXPECT_TRUE(matchesBaseline("ModMatrixPicker", auditAccessibility(picker)));
 }

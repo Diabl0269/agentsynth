@@ -151,6 +151,9 @@ below for the Mixer region's own keyboard behaviour.
   so the two focus regions nest rather than sit side by side. `FocusRegionRegistry::regionContaining`
   resolves this to the most specific match (Mod Matrix, not Canvas) whenever real focus sits inside
   it, so Tab-cycling and the outline both track the right one.
+  Inside it the arrow keys move between its controls (Left/Right in reading order, Up/Down by column;
+  the amount slider keeps Up/Down to nudge the amount), see
+  [`layout/chrome.md`](../layout/chrome.md#mod-matrix-panel).
 - **A detached window ([`docs/mixer/panel.md`](../mixer/panel.md)) cycles only its OWN regions** — the
   Timeline or Mixer panel, popped out into its own `DetachedPanelWindow`, owns a SEPARATE
   `FocusRegionRegistry` with exactly one region (its hosted panel); Tab/Shift+Tab there resolves via

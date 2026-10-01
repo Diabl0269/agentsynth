@@ -175,3 +175,83 @@ TEST(ModMatrixPicker, EveryControlIsKeyboardReachableAndNamedForScreenReaders) {
         EXPECT_TRUE(search.getTooltip().isNotEmpty());
     }
 }
+
+// The bug: juce::ComboBox::showPopupIfNotActive() raises its private "menu active" flag before
+// calling showPopup(), and only the stock menu lowers it again. The picker replaced that menu, so
+// the flag stayed up after the first open and every later click or Return was ignored. Driven
+// through the real key path (keyPressed -> showPopupIfNotActive -> async showPopup), not by calling
+// showPopup() directly, which never raises the flag and so passed before the fix.
+TEST(ModMatrixPicker, TheComboOpensItsPickerEveryTimeNotOnlyTheFirst) {
+    PickerFixture f;
+    f.source.reset();
+    f.dest.reset();
+    int launches = 0;
+    std::unique_ptr<juce::Component> open;
+    f.c.matrix().setPickerLauncherForTest([&](std::unique_ptr<juce::Component> p, juce::Rectangle<int>) {
+        ++launches;
+        open = std::move(p);
+    });
+
+    for (auto* combo : {f.c.matrix().getRowSourceComboForTest(0), f.c.matrix().getRowDestComboForTest(0)}) {
+        for (int attempt = 1; attempt <= 3; ++attempt) {
+            const int before = launches;
+            EXPECT_TRUE(combo->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+            EXPECT_EQ(launches, before + 1) << "attempt " << attempt;
+            EXPECT_FALSE(combo->isPopupActive()) << "the stock flag is lowered while the picker is up";
+            open.reset(); // the picker closes, as a pick or Escape would
+        }
+    }
+}
+
+TEST(ModMatrixPicker, AnOpenedAndClosedPickerLetsThePanelRefreshAgain) {
+    PickerFixture f;
+    f.source.reset();
+    f.dest.reset();
+    std::unique_ptr<juce::Component> open;
+    f.c.matrix().setPickerLauncherForTest(
+        [&](std::unique_ptr<juce::Component> p, juce::Rectangle<int>) { open = std::move(p); });
+    f.c.pickSource(f.c.lfo);
+    auto* combo = f.c.matrix().getRowSourceComboForTest(0);
+    combo->keyPressed(juce::KeyPress(juce::KeyPress::returnKey));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    open.reset();
+
+    f.c.editor.setModuleDisplayName(f.c.lfo, "Renamed");
+    f.c.matrix().updateRowsFromGraph();
+    EXPECT_TRUE(f.c.matrix().getRowSourceComboTextForTest(0).startsWith("Renamed"))
+        << "a closed picker no longer holds the list frozen";
+}
+
+TEST(ModMatrixPicker, SpaceOpensThePickerAndArrowsNeverRepointTheRouting) {
+    PickerFixture f;
+    f.source.reset();
+    f.dest.reset();
+    int launches = 0;
+    f.c.matrix().setPickerLauncherForTest([&](std::unique_ptr<juce::Component>, juce::Rectangle<int>) { ++launches; });
+    f.c.pickSource(f.c.lfo);
+    auto* combo = f.c.matrix().getRowSourceComboForTest(0);
+    const int selected = combo->getSelectedId();
+
+    for (auto key :
+         {juce::KeyPress::upKey, juce::KeyPress::downKey, juce::KeyPress::leftKey, juce::KeyPress::rightKey}) {
+        EXPECT_FALSE(combo->keyPressed(juce::KeyPress(key))) << "left to the matrix's grid navigation";
+        EXPECT_EQ(combo->getSelectedId(), selected);
+    }
+    EXPECT_TRUE(combo->keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    EXPECT_EQ(launches, 1);
+}
+
+TEST(ModMatrixPicker, SearchMatchesWordByWordInAnyOrder) {
+    EXPECT_TRUE(ModMatrixPicker::textMatchesQuery("Oscillator 8", "osc 8"));
+    EXPECT_TRUE(ModMatrixPicker::textMatchesQuery("Oscillator 8 - Cutoff", "cut  OSC"));
+    EXPECT_TRUE(ModMatrixPicker::textMatchesQuery("Anything", "   "));
+    EXPECT_FALSE(ModMatrixPicker::textMatchesQuery("Oscillator 7", "osc 8"));
+    EXPECT_FALSE(ModMatrixPicker::textMatchesQuery("Filter 1", "osc"));
+
+    PickerFixture f;
+    f.dest->setSearchTextForTest("cut filterin");
+    ASSERT_EQ(f.dest->getVisibleItemTextsForTest().size(), 1u);
+    EXPECT_EQ(f.dest->getVisibleItemTextsForTest().front(), "FilterIn - Cutoff");
+    EXPECT_EQ(f.dest->getHighlightedItemIndexForTest(), 0) << "the one match is ready for Return";
+}

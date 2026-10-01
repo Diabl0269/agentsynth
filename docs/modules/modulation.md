@@ -611,7 +611,8 @@ The three surfaces that expose a routing's depth, and what each one does:
   (`startTimerHz(10)`) only keeps the row list, the combo contents and the selections in step with the
   graph. Source and destination labels follow the **card title**: a module the user renamed on the
   canvas reads under that name here too (`synth::moduleTitle`), and a rename refreshes the labels on the
-  next tick. The panel's own geometry, striping and row widgets are in
+  next tick. Its source list offers the output jacks the card draws, one entry per jack (an LFO's
+  two silent pass-through channels are not sources). The panel's own geometry, striping and row widgets are in
   [`layout/chrome.md`](../layout/chrome.md#mod-matrix-panel); the toolbar toggle that shows and hides
   it is in the same doc.
 
