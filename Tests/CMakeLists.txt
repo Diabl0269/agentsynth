@@ -151,6 +151,7 @@ add_executable(Tests
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp
     Plugin/PluginCardLayoutStoreTests.cpp
+    Plugin/ModuleCardLayoutStoreTests.cpp
     Plugin/PluginScan/PluginScanLifecycleTests.cpp
     Plugin/PluginScan/PluginScanCrashTimeoutTests.cpp
     Plugin/PluginScan/PluginScanCrashGuardTests.cpp
@@ -163,6 +164,8 @@ add_executable(Tests
     Plugin/HostedPluginLaneTests.cpp
     Plugin/HostedPluginLatencyTests.cpp
     AI/AIStateMapper/AIStateMapperSnapshotsTests.cpp
+    AI/CardLayoutTrustTests.cpp
+    UI/Graph/CardBody/ModuleCardLayoutResolverTests.cpp
     AI/AIStateMapper/AIStateMapperSchemaTests.cpp
     AI/AIStateMapper/AIStateMapperValidationTests.cpp
     AI/AIStateMapper/AIStateMapperAutoConnectTests.cpp

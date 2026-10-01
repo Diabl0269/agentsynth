@@ -2,6 +2,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/AudioInputModule.h"
+#include "Modules/CardLayout.h"
 #include "UserSettings.h"
 #include <algorithm>
 #include <limits>
@@ -369,6 +370,10 @@ juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const
                 n->setProperty("params", nObj->getProperty("params"));
             if (includeExtraState && nObj->hasProperty("state"))
                 n->setProperty("state", nObj->getProperty("state"));
+            // The per-instance card layout rides the same rule as "state": kept by the in-app
+            // clipboard and duplicate, dropped from a snippet file on disk.
+            if (includeExtraState && nObj->getProperty(kCardLayoutNodeProperty).isObject())
+                n->setProperty(kCardLayoutNodeProperty, nObj->getProperty(kCardLayoutNodeProperty));
             auto pos = readPosition(nObj);
             n->setProperty("position", makePosition({pos.x - origin.x, pos.y - origin.y}));
             nodes.add(juce::var(n.get()));
@@ -469,6 +474,10 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
             // path, and a snippet read off disk must not be able to carry one.
             if (includeExtraState && nObj->hasProperty("state"))
                 n->setProperty("state", nObj->getProperty("state"));
+            // The per-instance card layout rides the same rule as "state": kept by the in-app
+            // clipboard and duplicate, dropped from a snippet file on disk.
+            if (includeExtraState && nObj->getProperty(kCardLayoutNodeProperty).isObject())
+                n->setProperty(kCardLayoutNodeProperty, nObj->getProperty(kCardLayoutNodeProperty));
             auto pos = readPosition(nObj);
             n->setProperty("position", makePosition({pos.x + dropPos.x, pos.y + dropPos.y}));
             nodes.add(juce::var(n.get()));

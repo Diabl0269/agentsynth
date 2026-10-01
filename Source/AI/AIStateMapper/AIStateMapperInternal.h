@@ -5,6 +5,7 @@
 // here is an implementation detail of the split, not part of the public AIStateMapper API — never
 // included from outside this directory. The class itself is declared in AIStateMapper.h.
 
+#include "../../Modules/CardLayout.h"
 #include "AIStateMapper.h"
 
 #include "../../Modules/ADSRModule.h"
@@ -265,6 +266,47 @@ inline void applyDisplayNameToNode(juce::AudioProcessorGraph::Node* node, const 
         return;
     }
     node->properties.set("displayName", name.substring(0, synth::kMaxModuleDisplayNameChars));
+}
+
+// Copies a patch node's per-instance card layout ("cardLayout", kCardLayoutNodeProperty) onto the
+// live node. TRUSTED PATH ONLY, like "uuid" and "state": a layout is display-only, but a hostile one
+// could hide every control of an authorable module, and accepting one from a provider needs a
+// validator (known paramIds, bounded sizes) that does not exist yet. Absent means "leave as is".
+// The value is stored as a deep copy so a later edit of the incoming JSON never aliases the node.
+inline void applyCardLayoutToNode(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj,
+                                  bool trusted) {
+    if (!trusted || node == nullptr || nObj == nullptr)
+        return;
+    const auto& layout = nObj->getProperty(kCardLayoutNodeProperty);
+    if (layout.isObject())
+        node->properties.set(kCardLayoutNodeProperty, layout.clone());
+}
+
+// The snapshot-restore form: the snapshot is the whole truth, so a node whose snapshot carries no
+// layout loses the one it has (undoing the first layout edit must clear it). Snapshots are the
+// app's own graphToJSON output, hence always trusted.
+inline void restoreCardLayoutOnNode(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj) {
+    if (node == nullptr || nObj == nullptr)
+        return;
+    const auto& layout = nObj->getProperty(kCardLayoutNodeProperty);
+    if (layout.isObject())
+        node->properties.set(kCardLayoutNodeProperty, layout.clone());
+    else
+        node->properties.remove(kCardLayoutNodeProperty);
+}
+
+// Display-only node presentation from a patch node: the title on every path, the card layout on the
+// trusted path only. One call so the apply sites stay short.
+inline void applyNodePresentation(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj,
+                                  bool trusted) {
+    applyDisplayNameToNode(node, nObj);
+    applyCardLayoutToNode(node, nObj, trusted);
+}
+
+// Snapshot-restore form of the above (snapshots are always trusted; see restoreCardLayoutOnNode).
+inline void restoreNodePresentation(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj) {
+    applyDisplayNameToNode(node, nObj);
+    restoreCardLayoutOnNode(node, nObj);
 }
 
 } // namespace detail

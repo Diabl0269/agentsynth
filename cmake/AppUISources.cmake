@@ -427,6 +427,16 @@ set(APPUI_SOURCES
     Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.h
     # Plugin card layout (FRO126) — the per-plugin-type store reads the settings folder, so it is
     # app layer, not Core; the resolver that consults it sits beside it.
+    Source/Plugin/Hosting/CardLayoutStore.cpp
+    Source/Plugin/Hosting/CardLayoutStore.h
+    Source/UI/Graph/CardBody/CardLayoutOverride.cpp
+    Source/UI/Graph/CardBody/CardLayoutOverride.h
+    Source/UI/Graph/CardBody/DefaultCardLayouts.cpp
+    Source/UI/Graph/CardBody/DefaultCardLayouts.h
+    Source/UI/Graph/CardBody/ModuleCardLayoutResolver.cpp
+    Source/UI/Graph/CardBody/ModuleCardLayoutResolver.h
+    Source/UI/Graph/CardBody/ModuleCardLayoutStore.cpp
+    Source/UI/Graph/CardBody/ModuleCardLayoutStore.h
     Source/Plugin/Hosting/PluginCardLayoutStore.cpp
     Source/Plugin/Hosting/PluginCardLayoutStore.h
     Source/Plugin/Hosting/HostedPluginCardLayout.cpp

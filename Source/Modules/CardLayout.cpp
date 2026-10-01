@@ -1,6 +1,8 @@
 // CardLayout.cpp -- JSON round-trip and the Auto-kind derivation for the plugin-agnostic card
 // layout value type (docs/control/plugin-card-layout.md#the-cardlayout-type-and-where-a-layout-comes-from).
 #include "CardLayout.h"
+#include "CardLayoutJson.h"
+#include <algorithm>
 
 namespace synth {
 
@@ -56,12 +58,15 @@ juce::var slotToVar(const CardSlot& slot) {
 } // namespace
 
 juce::var CardLayout::toVar() const {
+    if (usesV2Features())
+        return detail::layoutToVarV2(*this);
+
     juce::Array<juce::var> slotVars;
-    for (const auto& slot : slots)
+    for (const auto& slot : flatSlots())
         slotVars.add(slotToVar(slot));
 
     auto* object = new juce::DynamicObject();
-    object->setProperty("version", version);
+    object->setProperty("version", kLegacyVersion);
     object->setProperty("slots", slotVars);
     return juce::var(object);
 }
@@ -84,25 +89,94 @@ CardLayoutParseResult CardLayout::fromVar(const juce::var& json) {
         result.status = ParseStatus::UnsupportedVersion;
         return result;
     }
-    if (parsedVersion < 1)
-        return result;
-
-    const auto* slotArray = object->getProperty("slots").getArray();
-    if (slotArray == nullptr)
+    if (parsedVersion < kLegacyVersion)
         return result;
 
     CardLayout layout;
-    layout.version = parsedVersion;
-    for (const auto& slotVar : *slotArray) {
-        auto slot = slotFromVar(slotVar);
-        if (!slot)
+    if (parsedVersion >= kCurrentVersion) {
+        if (!detail::layoutFromObjectV2(*object, layout))
             return result;
-        layout.slots.push_back(std::move(*slot));
+    } else {
+        const auto* slotArray = object->getProperty("slots").getArray();
+        if (slotArray == nullptr)
+            return result;
+        layout.version = parsedVersion;
+        for (const auto& slotVar : *slotArray) {
+            auto slot = slotFromVar(slotVar);
+            if (!slot)
+                return result;
+            layout.slots.push_back(std::move(*slot));
+        }
     }
 
     result.status = ParseStatus::Ok;
     result.layout = std::move(layout);
     return result;
+}
+
+// What a flat v1 slot list can hold: one untitled default-width grid section of plain params.
+// Anything else (a title, a view, a span, a condition, a widget beyond the v1 kinds, hidden ids, a
+// basedOn) needs v2.
+bool CardLayout::usesV2Features() const {
+    if (!hidden.isEmpty() || basedOn)
+        return true;
+    if (sections.empty())
+        return false;
+    if (sections.size() > 1)
+        return true;
+
+    const auto& section = sections.front();
+    if (section.title || section.visibleWhen || section.presentation != CardPresentation::Grid ||
+        section.columns != CardSection::kDefaultColumns)
+        return true;
+    for (const auto& item : section.items) {
+        const auto* param = std::get_if<CardParamItem>(&item);
+        if (param == nullptr || param->node || param->when || param->span != 1)
+            return true;
+        if (param->widget != CardWidget::Auto && param->widget != CardWidget::Knob &&
+            param->widget != CardWidget::Toggle && param->widget != CardWidget::Choice)
+            return true;
+    }
+    return false;
+}
+
+std::vector<CardSlot> CardLayout::flatSlots() const {
+    if (sections.empty())
+        return slots;
+
+    std::vector<CardSlot> flat;
+    for (const auto& section : sections) {
+        for (const auto& item : section.items) {
+            const auto* param = std::get_if<CardParamItem>(&item);
+            if (param == nullptr)
+                continue;
+            CardSlot slot;
+            slot.paramId = param->paramId;
+            slot.indexHint = param->indexHint;
+            slot.label = param->label;
+            slot.kind = detail::slotKindFromWidget(param->widget);
+            flat.push_back(std::move(slot));
+        }
+    }
+    return flat;
+}
+
+CardLayout upgradeV1(const CardLayout& layout, const juce::StringArray& allParamIds) {
+    if (!layout.sections.empty())
+        return layout;
+
+    CardLayout upgraded;
+    upgraded.version = CardLayout::kCurrentVersion;
+    upgraded.basedOn = layout.basedOn;
+    upgraded.sections.push_back(detail::sectionFromSlots(layout.slots));
+    upgraded.hidden = layout.hidden;
+    for (const auto& id : allParamIds) {
+        const bool placed = std::any_of(layout.slots.begin(), layout.slots.end(),
+                                        [&id](const CardSlot& slot) { return slot.paramId == id; });
+        if (!placed && !upgraded.hidden.contains(id))
+            upgraded.hidden.add(id);
+    }
+    return upgraded;
 }
 
 CardSlotKind deriveSlotKind(const juce::AudioProcessorParameter& param) {

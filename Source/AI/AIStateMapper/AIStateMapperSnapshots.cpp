@@ -219,7 +219,7 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
             applyExtraStateIfChanged(live->getProcessor(), t.obj);
         if (auto* live = resolve(t)) {
             applyPositionToNode(live, t.obj);
-            detail::applyDisplayNameToNode(live, t.obj);
+            detail::restoreNodePresentation(live, t.obj);
         }
     }
 
@@ -279,7 +279,7 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
         node->properties.set("uuid", t.uuid);
         detail::mirrorUuidIntoProcessor(node.get(), t.uuid);
         applyPositionToNode(node.get(), t.obj);
-        detail::applyDisplayNameToNode(node.get(), t.obj);
+        detail::restoreNodePresentation(node.get(), t.obj);
     }
 
     // 4. Connections: apply the delta only. A restore that changed no wiring issues no graph

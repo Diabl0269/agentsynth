@@ -95,7 +95,8 @@ juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String
             for (auto& nodeVar : *nodeArr) {
                 if (auto* nodeObj = nodeVar.getDynamicObject()) {
                     nodeObj->removeProperty("state");
-                    nodeObj->removeProperty("cardView"); // which card panels are open: nothing a model can act on
+                    nodeObj->removeProperty("cardView");   // which card panels are open: nothing a model can act on
+                    nodeObj->removeProperty("cardLayout"); // trusted-only presentation, never advertised to a model
                 }
             }
             if (!nodeArr->isEmpty()) {
