@@ -42,7 +42,7 @@ A control the layout renames shows the new name as its caption (a toggle's text)
 parameter name as the caption's tooltip; its component ID stays the parameter's own name.
 
 Around the body, `layoutDefaultContent(bool apply)` adds the card's chrome (Sampler and Wavetable
-rows above it; the envelope graph, LFO wave editor, Show Response / Spectrum / Scope rows below it;
+rows above it; the LFO wave editor, Show Envelope Graph / Response / Spectrum / Scope rows below it;
 the More row last). It runs twice per size change: once with `apply = false` to measure the
 height, once with `apply = true` from `resized()` to position the children, and the card body's
 own `layout(apply)` follows the same rule.
@@ -100,13 +100,13 @@ own table:
 
 | Envelopes and utilities | Height (px) |
 |---|---|
-| ADSR (Amp Env, Filter Env) | 389 |
-| VCA | 233 |
-| Envelope Follower | 235 |
-| Sample & Hold | 451 |
-| Math | 239 |
-| Voice Mixer | 301 |
-| Poly MIDI | 185 |
+| ADSR (Amp Env, Filter Env) | 597 |
+| VCA | 193 |
+| Envelope Follower | 245 |
+| Sample & Hold | 427 (Clock External: the trigger meter opens above the knobs) |
+| Math | 249 |
+| Voice Mixer | 277 |
+| Poly MIDI | 169 |
 
 | Filter and dynamics | Height (px) |
 |---|---|
@@ -132,7 +132,7 @@ own table:
 | Rec Tap / Track Audio | 131 |
 | Track In | 100 |
 
-From the table (bespoke): Sequencer and Poly Sequencer 560x406, MIDI Keyboard 560x150, Macros (tracks
+From the table (bespoke): Sequencer and Poly Sequencer 560x406, MIDI Keyboard 560x160 (an Octave stepper row above the keys), Macros (tracks
 its `Knobs` count, 458 at the default), Attenuverter (square, `kNarrowWidth`), Wavetable 560x565,
 Parametric EQ 560x592, External MIDI 146, Hosted Plugin 135, and Audio Input / Audio Output on a
 100 px floor.
@@ -168,8 +168,9 @@ layout adds it.
   widget. A fader, combo, switch or stepper carries its caption inline on its left, in the pill's
   12 px text; the pills keep their width and the rest share what is left. Items that do not fit wrap
   onto another row, 28 px tall each.
-- **Chrome toggles join it.** On a card whose layout has a footer, Show Response, Show Spectrum (while
-  the response view is open) and Show Scope are pills at the end of the row instead of full-width
+- **Chrome toggles join it.** On a card whose layout has a footer, Show Envelope Graph (the ADSR),
+  Show Response, Show Spectrum (while the response view is open) and Show Scope are pills at the end
+  of the row instead of full-width
   rows; the panels they open sit above the row. **Poly** is card chrome too: a footer card puts the
   `poly` toggle in the footer unless the layout places it elsewhere or hides it, so a default layout
   never lists it. A card without a footer section keeps today's chrome rows exactly.
@@ -197,7 +198,8 @@ a preset) re-reads them on the message thread and re-lays out the card only when
   its Tab stop, its right-click menu and its bindings, and stays operable; its accessible description
   reads "Inactive in this mode" and its tooltip ends "(inactive in this mode)", both removed when the
   dim lifts. A genuinely disabled knob or toggle anywhere in the app paints at the same alpha.
-- **Swap.** Consecutive `effect: show` items testing the same parameter form a **swap group**: one
+- **Swap.** Consecutive `effect: show` items testing the same parameter form a **swap group** (an
+  item repeating a condition already in the group starts the next group): one
   cell, laid out in the run of its tallest member, showing the member whose condition holds (the cell
   stays, empty, when none does). Every member takes that cell at its own height, so a swap moves
   nothing; a swapped-out knob keeps its knob-bound jack in the cell (`CardBody::isSwappedOut`, the same
@@ -234,7 +236,9 @@ out as its own run, by the same measure-and-apply walk:
   the value never jumps), Cmd-click and double-click reset to the parameter's default, each one change
   gesture. Modulation shows as a 3 px bar beside the slot (right of a vertical cap, under a horizontal
   one) from the base value to base + CV; a cable lands on a dot just past the bar's zero end.
-- **Segmented switch.** Joined `TextButton` segments with the ADSR MS|BPM switch's look; the switch
+- **Segmented switch.** Joined `TextButton` segments (the look the ADSR's old MS|BPM switch had); a
+  bool parameter draws as two segments, its off and on texts (the ADSR's Tempo Sync reads "Time" and
+  "Tempo"); the switch
   is the one Tab stop and the segments take no clicks themselves (the switch hit-tests them), so a
   right click reaches the card as the switch's.
 - **Stepper.** "-" value "+": two buttons, each a Tab stop; the card listens to the stepper and its
@@ -301,10 +305,10 @@ Undo/redo, Auto Arrange, a project load and deleting the card drop the records. 
 | LFO shape set to Custom (Draw section) | `ModuleComponentLfoCard.cpp` |
 | Show Scope / Show Response toggles | `setScopeShown` / `setResponseShown` |
 | A layout section shown or hidden by its condition (`visibleWhen`) | `CardBody::refreshConditions` |
-| ADSR Show Envelope Graph | the toggle's `onClick` |
+| ADSR Show Envelope Graph (opens or closes the card body's `envelope` view) | the toggle's `onClick`, `CardBody::setViewOpen` |
 
 Not wired because the card height does not change: the Spectrum toggle (a backdrop only), a layout's swap group or dim,
-the ADSR BPM|MS switch (swaps knobs for combos in the same slots) and the Wavetable page tabs (the card is sized once at construction). A card that
+the ADSR's Time|Tempo switch (a swap group: each stage fader for its division in the same cell) and the Wavetable page tabs (the card is sized once at construction). A card that
 is still being constructed never makes room (it is not on the canvas yet).
 
 ## Header buttons

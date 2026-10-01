@@ -345,6 +345,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentKeyboard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentMidiKeyboardCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentAccessibility.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentHostedPluginCard.h

@@ -26,6 +26,7 @@ struct CardBodyItem {
     bool shown = true;                           ///< A `show` condition's current result.
     bool dimmed = false;                         ///< A `dim` condition or a code dim rule greys it out now.
     bool pill = false;                           ///< A footer toggle, drawn as the small pill.
+    bool open = true; ///< A view only: shown now (the layout's `open`, then the card's toggle).
 
     /** The text the card shows for this parameter: the override, else the parameter's name. */
     juce::String captionText() const;
@@ -96,6 +97,10 @@ struct CardBodyPlan {
 /** True when `condition` holds for `module` now: a choice's value string or a bool's "true"/"false"
  *  is in `is`. A parameter the module lacks, or of another type, never applies its effect (true). */
 bool cardConditionHolds(const CardCondition& condition, juce::AudioProcessor& module);
+
+/** The segments a switch for `param` shows, left to right: a choice's values, a bool's off and on
+ *  texts; empty for any other parameter. */
+juce::StringArray cardBodySegmentLabels(const juce::RangedAudioParameter& param);
 
 /** True for the slider kinds (knob, large knob, faders): a modulation target lands on these. */
 bool isContinuousKind(CardBodyItem::Kind kind);

@@ -118,76 +118,6 @@ TEST_F(ModuleComponentTest, AdsrPolyToggleIsLaidOutInsideTheModule) {
         << "Poly toggle must sit inside the module's bounds to be visible and clickable";
 }
 
-// The ADSR card no longer has its own bespoke slider-grid branch. Its six remaining
-// knobs (attack/hold/decay/sustain/release/velocity — attackCurve/decayCurve/releaseCurve moved onto the
-// envelope graph's bend handles, see ModuleComponentEnvelopeCardTests.cpp) flow through the
-// generic layout every other module uses: the "Poly" toggle and the Threshold control (both
-// generic auto-UI, laid out before the knob grid on every module that has them) sit ABOVE the
-// knobs, which then wrap into two rows (3, then 3) — the envelope graph's own disclosure row
-// comes last, below the knob grid.
-TEST_F(ModuleComponentTest, AdsrKnobsWrapIntoTheGenericThreePerRowGrid) {
-    AudioEngine engine;
-    GraphEditor editor(engine);
-    ADSRModule processor;
-    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
-
-    std::vector<juce::Slider*> adsrSliders;
-    for (auto* child : moduleComponent.getChildren())
-        if (auto* slider = dynamic_cast<juce::Slider*>(child))
-            adsrSliders.push_back(slider);
-
-    ASSERT_EQ(adsrSliders.size(), 6u) << "attack/hold/decay/sustain/release/velocity";
-
-    const auto moduleBounds = moduleComponent.getLocalBounds();
-    int maxSliderBottom = 0;
-    for (auto* slider : adsrSliders) {
-        EXPECT_EQ(slider->getSliderStyle(), juce::Slider::RotaryHorizontalVerticalDrag)
-            << "slider '" << slider->getComponentID() << "' must be a rotary knob, not the old vertical style";
-        EXPECT_EQ(slider->getTextBoxPosition(), juce::Slider::TextBoxAbove)
-            << "slider '" << slider->getComponentID() << "' readout must sit above the dial";
-        EXPECT_TRUE(moduleBounds.contains(slider->getBounds()))
-            << "slider '" << slider->getComponentID() << "' bounds " << slider->getBounds().toString()
-            << " must sit fully inside the module's own bounds " << moduleBounds.toString()
-            << " -- a slider running past the module's width is clipped and unreachable";
-        maxSliderBottom = juce::jmax(maxSliderBottom, slider->getBounds().getBottom());
-    }
-
-    // Row wrap: the first three share a row (added in parameter order: attack/hold/decay), the
-    // remaining three (sustain/release/velocity) start a new row back at the first column.
-    EXPECT_EQ(adsrSliders[0]->getY(), adsrSliders[1]->getY());
-    EXPECT_EQ(adsrSliders[1]->getY(), adsrSliders[2]->getY());
-    EXPECT_GT(adsrSliders[3]->getY(), adsrSliders[2]->getY());
-    EXPECT_EQ(adsrSliders[3]->getX(), adsrSliders[0]->getX());
-
-    // "Poly" is generic auto-UI too, but it (and the Threshold control) are laid out before the
-    // knob grid on every module that has them, not after — this asserts the real relationship
-    // rather than assuming knobs come first.
-    juce::ToggleButton* polyToggle = nullptr;
-    for (auto* child : moduleComponent.getChildren())
-        if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child))
-            if (toggle->getComponentID() == "Poly")
-                polyToggle = toggle;
-    ASSERT_NE(polyToggle, nullptr);
-    EXPECT_LE(polyToggle->getBounds().getBottom(), adsrSliders[0]->getBounds().getY())
-        << "Poly toggle must sit above the knob grid, not overlap it";
-    EXPECT_TRUE(moduleBounds.contains(polyToggle->getBounds()));
-
-    // The envelope graph's own disclosure toggle ("Show Envelope Graph") is the one generic
-    // toggle that DOES sit below the knob grid.
-    juce::ToggleButton* graphToggle = nullptr;
-    for (auto* child : moduleComponent.getChildren())
-        if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child))
-            if (toggle->getButtonText() == "Show Envelope Graph")
-                graphToggle = toggle;
-    ASSERT_NE(graphToggle, nullptr) << "ADSR must offer a way to open the envelope graph";
-    EXPECT_GE(graphToggle->getBounds().getY(), maxSliderBottom)
-        << "the graph disclosure toggle must sit below the knob rows";
-    EXPECT_TRUE(moduleBounds.contains(graphToggle->getBounds()));
-
-    EXPECT_GE(moduleComponent.getHeight(), maxSliderBottom)
-        << "module must be tall enough to contain the last knob row";
-}
-
 namespace {
 juce::Slider* findAdsrSlider(ModuleComponent& moduleComponent, const juce::String& componentId) {
     for (auto* child : moduleComponent.getChildren())
@@ -197,6 +127,55 @@ juce::Slider* findAdsrSlider(ModuleComponent& moduleComponent, const juce::Strin
     return nullptr;
 }
 } // namespace
+
+// The ADSR card has no bespoke slider-grid branch: its designed default layout draws Attack, Hold, Decay,
+// Sustain and Release as vertical faders in ONE row (attackCurve/decayCurve/releaseCurve live on the envelope
+// graph's bend handles, see ModuleComponentEnvelopeCardTests.cpp), then Velocity as a horizontal fader
+// under them. The Poly toggle is a pill in the footer row, below everything, with the envelope graph's own
+// toggle.
+TEST_F(ModuleComponentTest, AdsrStagesAreOneRowOfFadersAndTheFooterHoldsPoly) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ADSRModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    const juce::StringArray stageIds{"Attack", "Hold", "Decay", "Sustain", "Release"};
+    const auto moduleBounds = moduleComponent.getLocalBounds();
+    int maxStageBottom = 0;
+    juce::Slider* previous = nullptr;
+    for (const auto& id : stageIds) {
+        auto* fader = findAdsrSlider(moduleComponent, id);
+        ASSERT_NE(fader, nullptr) << id;
+        EXPECT_EQ(fader->getSliderStyle(), juce::Slider::LinearVertical) << id << " must be a vertical fader";
+        EXPECT_TRUE(moduleBounds.contains(fader->getBounds())) << id << " must sit inside the module";
+        if (previous != nullptr) {
+            EXPECT_EQ(fader->getY(), previous->getY()) << "A H D S R share one row";
+            EXPECT_GT(fader->getX(), previous->getX()) << "left to right in stage order";
+        }
+        previous = fader;
+        maxStageBottom = juce::jmax(maxStageBottom, fader->getBounds().getBottom());
+    }
+
+    auto* velocity = findAdsrSlider(moduleComponent, "Velocity");
+    ASSERT_NE(velocity, nullptr);
+    EXPECT_EQ(velocity->getSliderStyle(), juce::Slider::LinearHorizontal);
+    EXPECT_GE(velocity->getY(), maxStageBottom) << "Velocity sits under the stage row";
+
+    juce::ToggleButton *polyToggle = nullptr, *graphToggle = nullptr;
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child)) {
+            if (toggle->getComponentID() == "Poly")
+                polyToggle = toggle;
+            if (toggle->getButtonText() == "Show Envelope Graph")
+                graphToggle = toggle;
+        }
+    ASSERT_NE(polyToggle, nullptr);
+    ASSERT_NE(graphToggle, nullptr) << "ADSR must offer a way to close and reopen the envelope graph";
+    EXPECT_GE(polyToggle->getY(), velocity->getBottom()) << "the footer row is below the body";
+    EXPECT_TRUE(moduleBounds.contains(polyToggle->getBounds()));
+    EXPECT_TRUE(moduleBounds.contains(graphToggle->getBounds()));
+    EXPECT_GE(moduleComponent.getHeight(), maxStageBottom);
+}
 
 // Skew regression: attack/hold/decay/release keep a LINEAR parameter range (see
 // ADSRModule.h, docs/modules/modules.md#adsr-envelope-module) so AIStateMapper's untrusted rescale heuristic is

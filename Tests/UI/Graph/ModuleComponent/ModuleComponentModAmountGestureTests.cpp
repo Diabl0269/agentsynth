@@ -13,6 +13,7 @@
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/VCAModule.h"
+#include "UI/Graph/CardBody/CardLayoutOverride.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -36,6 +37,19 @@ juce::AudioParameterFloat* attenuverterAmountParam(juce::AudioProcessorGraph& gr
     return dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(node->getProcessor(), "amount"));
 }
 
+// The VCA's Gain as the rotary knob this gesture is about (its designed default draws a fader).
+void showGainAsKnob(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID vcaId) {
+    synth::CardParamItem gain;
+    gain.paramId = "gain";
+    gain.widget = synth::CardWidget::Knob;
+    synth::CardSection section;
+    section.id = "main";
+    section.items.emplace_back(gain);
+    synth::CardLayout layout;
+    layout.sections = {section};
+    synth::setCardLayoutOverride(graph, nullptr, vcaId, layout);
+}
+
 struct Fixture {
     AudioEngine engine;
     AppUndoManager undo;
@@ -55,6 +69,7 @@ struct Fixture {
         lfoId = lfoNode->nodeID;
         vcaId = vcaNode->nodeID;
         attenId = engine.addModRouting(lfoId, 0, vcaId, 1); // LFO CV -> atten -> VCA.gain (ch1)
+        showGainAsKnob(graph, vcaId);
 
         editor->updateComponents();
         sizeModuleComponents(*editor);

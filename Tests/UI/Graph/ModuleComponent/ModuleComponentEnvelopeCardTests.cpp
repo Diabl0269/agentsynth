@@ -1,6 +1,6 @@
-// ModuleComponentEnvelopeCard tests: readout formatting, the graph disclosure toggle,
-// the curve model built from ADSRModule's params, two-way sync between the graph and the
-// attack/hold/decay/sustain/release/*Curve parameters (driven through REAL synthesized mouse
+// ModuleComponentEnvelopeCard tests: readout formatting, the graph disclosure toggle (the card body's
+// Envelope view, open by default), the Time/Tempo switch, the curve model built from ADSRModule's params, two-way sync
+// between the graph and the attack/hold/decay/sustain/release/*Curve parameters (driven through REAL synthesized mouse
 // events, not the model's primitives directly -- see CurveEditorComponent's dragFrozenRange_
 // doc comment on why a direct dragNodeTo() call exercises different geometry than a real drag),
 // undo-gesture bracketing, and the playhead stage/segment mapping.
@@ -9,6 +9,8 @@
 #include "ModuleComponentTestFixture.h"
 
 #include "Modules/ADSRModule.h"
+#include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
@@ -67,7 +69,7 @@ int countChildrenOfType(ModuleComponent& comp, bool wantToggle) {
 
 } // namespace
 
-TEST_F(ModuleComponentTest, AdsrEnvelopeGraphIsCollapsedByDefaultAndGrowsTheCardWhenOpened) {
+TEST_F(ModuleComponentTest, AdsrEnvelopeGraphIsOpenByDefaultAndShrinksTheCardWhenClosed) {
     AudioEngine engine;
     GraphEditor editor(engine);
     ADSRModule processor;
@@ -75,45 +77,23 @@ TEST_F(ModuleComponentTest, AdsrEnvelopeGraphIsCollapsedByDefaultAndGrowsTheCard
 
     auto* curve = findEnvelopeCurveEditor(moduleComponent);
     ASSERT_NE(curve, nullptr);
-    EXPECT_FALSE(curve->isVisible()) << "the envelope graph must be collapsed by default";
+    EXPECT_TRUE(curve->isVisible()) << "the designed default layout opens the envelope view";
+    EXPECT_EQ(curve, moduleComponent.getCardBody()->findView(synth::CardView::Envelope))
+        << "the editor is the card body's view, not a second panel";
 
-    const int collapsedHeight = moduleComponent.getHeight();
+    const int openHeight = moduleComponent.getHeight();
     auto* toggle = findToggleByText(moduleComponent, "Show Envelope Graph");
     ASSERT_NE(toggle, nullptr);
-    toggle->setToggleState(true, juce::sendNotificationSync);
-
-    EXPECT_TRUE(curve->isVisible());
-    EXPECT_GT(moduleComponent.getHeight(), collapsedHeight) << "opening the graph must grow the card";
+    EXPECT_TRUE(toggle->getToggleState());
     EXPECT_TRUE(moduleComponent.getLocalBounds().contains(curve->getBounds()));
 
     toggle->setToggleState(false, juce::sendNotificationSync);
     EXPECT_FALSE(curve->isVisible());
-    EXPECT_EQ(moduleComponent.getHeight(), collapsedHeight) << "closing the graph must shrink the card back";
-}
+    EXPECT_LT(moduleComponent.getHeight(), openHeight) << "closing the graph must shrink the card";
 
-TEST_F(ModuleComponentTest, AdsrBpmMsToggleDefaultsToMsAndIsMutuallyExclusive) {
-    AudioEngine engine;
-    GraphEditor editor(engine);
-    ADSRModule processor;
-    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
-
-    juce::TextButton *msButton = nullptr, *bpmButton = nullptr;
-    for (auto* child : moduleComponent.getChildren()) {
-        if (auto* btn = dynamic_cast<juce::TextButton*>(child)) {
-            if (btn->getButtonText() == "MS")
-                msButton = btn;
-            else if (btn->getButtonText() == "BPM")
-                bpmButton = btn;
-        }
-    }
-    ASSERT_NE(msButton, nullptr);
-    ASSERT_NE(bpmButton, nullptr);
-    EXPECT_TRUE(msButton->getToggleState()) << "MS must be selected by default (today's ms-based params)";
-    EXPECT_FALSE(bpmButton->getToggleState());
-
-    bpmButton->setToggleState(true, juce::sendNotificationSync);
-    EXPECT_TRUE(bpmButton->getToggleState());
-    EXPECT_FALSE(msButton->getToggleState()) << "the pair must be a radio group";
+    toggle->setToggleState(true, juce::sendNotificationSync);
+    EXPECT_TRUE(curve->isVisible());
+    EXPECT_EQ(moduleComponent.getHeight(), openHeight) << "opening the graph must give the height back";
 }
 
 TEST_F(ModuleComponentTest, AdsrEnvelopeCurveModelMatchesDefaultParams) {
@@ -269,12 +249,14 @@ TEST_F(ModuleComponentTest, EnvelopePlayheadMapsStageToSegmentOnlyWhenGraphIsOpe
     midi.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 0);
     processor.processBlock(buf, midi);
 
-    // Collapsed: the timer-driven poll must not touch the playhead (no visible curve to show it on).
-    moduleComponent.timerCallback();
-    EXPECT_FALSE(curve->getPlayhead().has_value()) << "collapsed graph must not show a playhead";
-
+    // Closed: the timer-driven poll must not touch the playhead (no visible curve to show it on).
     auto* toggle = findToggleByText(moduleComponent, "Show Envelope Graph");
     ASSERT_NE(toggle, nullptr);
+    toggle->setToggleState(false, juce::sendNotificationSync);
+    ASSERT_FALSE(curve->isVisible());
+    moduleComponent.timerCallback();
+    EXPECT_FALSE(curve->getPlayhead().has_value()) << "a closed graph must not show a playhead";
+
     toggle->setToggleState(true, juce::sendNotificationSync);
     ASSERT_TRUE(curve->isVisible());
 
@@ -283,20 +265,23 @@ TEST_F(ModuleComponentTest, EnvelopePlayheadMapsStageToSegmentOnlyWhenGraphIsOpe
     EXPECT_EQ(curve->getPlayhead()->segment, 0) << "a freshly triggered note is in the Attack stage (segment 0)";
 }
 
-// the tempoSync/attackDiv/holdDiv/decayDiv/releaseDiv (now real params on ADSRModule) must
-// never leak into the generic per-param UI -- that's what blew up ModuleComponentTest.
-// EstimatedModuleSizesMatchTheRealComponents.
-TEST_F(ModuleComponentTest, AdsrTempoSyncAndDivParamsAreExcludedFromTheGenericGrid) {
+// tempoSync and the four divisions are ordinary items of the layout: the Time/Tempo switch is a segmented
+// switch (not a toggle), and each division is a combo that shares its stage's cell, so a fresh card has
+// exactly the four division combos and no generic toggle for tempoSync.
+TEST_F(ModuleComponentTest, AdsrTempoSyncIsASwitchAndTheFourDivisionsAreCombosInTheStageCells) {
     AudioEngine engine;
     GraphEditor editor(engine);
     ADSRModule processor;
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
-    EXPECT_EQ(countChildrenOfType(moduleComponent, /*wantToggle*/ false), 0)
-        << "attackDiv/holdDiv/decayDiv/releaseDiv must not add generic ComboBoxes";
+    EXPECT_EQ(countChildrenOfType(moduleComponent, /*wantToggle*/ false), 4)
+        << "attackDiv/holdDiv/decayDiv/releaseDiv, one per stage";
+    auto* body = moduleComponent.getCardBody();
+    ASSERT_NE(body, nullptr);
+    EXPECT_NE(dynamic_cast<synth::ui::CardSegmentedSwitch*>(body->findWidget("tempoSync")), nullptr);
 }
 
-TEST_F(ModuleComponentTest, AdsrBpmMsToggleWritesAndSyncsTheRealTempoSyncParam) {
+TEST_F(ModuleComponentTest, AdsrTimeTempoSwitchDefaultsToTimeAndWritesAndFollowsTheRealTempoSyncParam) {
     AudioEngine engine;
     GraphEditor editor(engine);
     ADSRModule processor;
@@ -304,28 +289,21 @@ TEST_F(ModuleComponentTest, AdsrBpmMsToggleWritesAndSyncsTheRealTempoSyncParam) 
 
     auto* tempoSyncParam = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&processor, "tempoSync"));
     ASSERT_NE(tempoSyncParam, nullptr);
-    ASSERT_FALSE(tempoSyncParam->get()) << "tempoSync defaults false, matching MS as the default UI state";
+    ASSERT_FALSE(tempoSyncParam->get()) << "tempoSync defaults false: Time";
 
-    juce::TextButton *msButton = nullptr, *bpmButton = nullptr;
-    for (auto* child : moduleComponent.getChildren()) {
-        if (auto* btn = dynamic_cast<juce::TextButton*>(child)) {
-            if (btn->getButtonText() == "MS")
-                msButton = btn;
-            else if (btn->getButtonText() == "BPM")
-                bpmButton = btn;
-        }
-    }
-    ASSERT_NE(msButton, nullptr);
-    ASSERT_NE(bpmButton, nullptr);
+    auto* sw = dynamic_cast<synth::ui::CardSegmentedSwitch*>(moduleComponent.getCardBody()->findWidget("tempoSync"));
+    ASSERT_NE(sw, nullptr);
+    ASSERT_EQ(sw->getNumSegments(), 2);
+    EXPECT_EQ(sw->getSegment(0)->getButtonText(), "Time");
+    EXPECT_EQ(sw->getSegment(1)->getButtonText(), "Tempo");
+    EXPECT_EQ(sw->getSelectedIndex(), 0);
 
-    bpmButton->setToggleState(true, juce::sendNotificationSync);
-    EXPECT_TRUE(tempoSyncParam->get()) << "clicking BPM must write tempoSync=true";
+    sw->setSelectedIndex(1, juce::sendNotificationSync);
+    EXPECT_TRUE(tempoSyncParam->get()) << "picking Tempo must write tempoSync=true";
+    sw->setSelectedIndex(0, juce::sendNotificationSync);
+    EXPECT_FALSE(tempoSyncParam->get()) << "picking Time must write tempoSync=false";
 
-    msButton->setToggleState(true, juce::sendNotificationSync);
-    EXPECT_FALSE(tempoSyncParam->get()) << "clicking MS must write tempoSync=false";
-
-    // Reverse sync: an external write (automation/undo/preset load) must move the toggle pair.
+    // Reverse sync: an external write (automation/undo/preset load) must move the switch.
     tempoSyncParam->setValueNotifyingHost(1.0f);
-    EXPECT_TRUE(bpmButton->getToggleState());
-    EXPECT_FALSE(msButton->getToggleState());
+    EXPECT_EQ(sw->getSelectedIndex(), 1);
 }

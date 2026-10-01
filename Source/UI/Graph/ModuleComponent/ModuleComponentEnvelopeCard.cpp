@@ -1,16 +1,18 @@
-// ModuleComponentEnvelopeCard.cpp -- the ADSR envelope card: the graph disclosure
-// toggle + curve editor + BPM|MS row, the five knobs' short captions, the two-way sync between
-// attack/hold/decay/sustain/release/*Curve and the curve editor's model, undo-gesture wiring, and
-// the playhead poll. It also has the BPM-mode note-division pickers (attackDiv/holdDiv/decayDiv/
-// releaseDiv): each swaps in over its matching knob's own grid cell while tempoSync is on, the
-// graph's stage durations come from the divisions at the module's last-seen tempo, and an x-drag
-// snaps to the nearest division in log-time. ModuleComponent is declared in ModuleComponent.h;
-// the rest of its implementation lives in the sibling ModuleComponent*.cpp units next to this one.
+// ModuleComponentEnvelopeCard.cpp -- the ADSR card's envelope graph: the curve editor the card body places
+// as its Envelope view (CardBodyViews.cpp), the "Show Envelope Graph" toggle that opens and closes it, the
+// two-way sync between attack/hold/decay/sustain/release/*Curve (or the *Div divisions while tempoSync is
+// on) and the curve editor's model, undo-gesture wiring, and the playhead poll. The Time/Tempo switch and
+// the stage controls (each division swapped in for its time) are the card body's own, laid out from the
+// layout; this unit never touches them. ModuleComponent is declared in ModuleComponent.h; the rest of its
+// implementation lives in the sibling ModuleComponent*.cpp units next to this one.
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/Envelope/EnvelopeTempoSync.h"
+#include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <cmath>
 #include <limits>
@@ -22,45 +24,6 @@ using synth::ui::CurveNode;
 using synth::ui::CurvePlayhead;
 
 namespace {
-
-// Short knob captions for the envelope card's five knobs (attack/hold/decay/sustain/release),
-// keyed by the parameter display name createControls() already uses as both the slider's
-// componentID and its label text.
-const char* envelopeKnobShortLabel(const juce::String& paramName) {
-    if (paramName == "Attack")
-        return "ATK";
-    if (paramName == "Hold")
-        return "Hold";
-    if (paramName == "Decay")
-        return "DEC";
-    if (paramName == "Sustain")
-        return "SUS";
-    if (paramName == "Release")
-        return "REL";
-    return nullptr;
-}
-
-// The four BPM-mode picker slots, in envelopeDivCombos_/envelopeDivAttachments_ index order.
-// `sliderCaption` matches the componentID createControls() gives the knob this combo swaps for
-// (param->getName(100) — see the generic float-slider loop in ModuleComponent.cpp).
-struct EnvelopeDivSlot {
-    const char* paramID;
-    const char* sliderCaption;
-};
-constexpr EnvelopeDivSlot kEnvelopeDivSlots[] = {
-    {"attackDiv", "Attack"},
-    {"holdDiv", "Hold"},
-    {"decayDiv", "Decay"},
-    {"releaseDiv", "Release"},
-};
-constexpr int kEnvelopeDivComboCount = (int)(sizeof(kEnvelopeDivSlots) / sizeof(kEnvelopeDivSlots[0]));
-
-int envelopeDivSlotForSliderCaption(const juce::String& caption) {
-    for (int i = 0; i < kEnvelopeDivComboCount; ++i)
-        if (caption == kEnvelopeDivSlots[i].sliderCaption)
-            return i;
-    return -1;
-}
 
 // Nearest note-division index to `seconds` at `bpm`, compared in log-time so e.g. a duration
 // halfway (on a musical, not linear, scale) between 1/4 and 1/8 rounds to whichever it is
@@ -180,73 +143,41 @@ std::optional<CurvePlayhead> envelopePlayheadFor(synth::EnvelopeStage stage, flo
 
 } // namespace
 
-void ModuleComponent::applyEnvelopeKnobShortLabels() {
-    for (int i = 0; i < sliders.size(); ++i) {
-        if (const char* shortLabel = envelopeKnobShortLabel(sliders[i]->getComponentID()))
-            sliderLabels[i]->setText(shortLabel, juce::dontSendNotification);
-    }
-}
-
 void ModuleComponent::createEnvelopeCardControls() {
-    envelopeCurveEditor = std::make_unique<synth::ui::CurveEditorComponent>();
-    envelopeCurveEditor->setTitle("Envelope curve");
-    envelopeCurveEditor->setDescription("Attack, hold, decay and release shape of the envelope");
-    envelopeCurveEditor->setVisible(false); // collapsed by default -- see envelopeGraphToggle
-    addChildComponent(envelopeCurveEditor.get());
+    // The curve editor is the card body's Envelope view, when the layout places one; a layout without it
+    // draws no graph, so there is nothing to wire and no toggle.
+    if (cardBody_ == nullptr)
+        return;
+    envelopeCurveEditor =
+        dynamic_cast<synth::ui::CurveEditorComponent*>(cardBody_->findView(synth::CardView::Envelope));
+    if (envelopeCurveEditor == nullptr)
+        return;
 
     wireEnvelopeGestureCallbacks();
-    // `this` outlives envelopeCurveEditor (a member unique_ptr, destroyed as part of this
-    // component's own teardown before the outer object finishes destructing) -- the same
-    // no-dangling-pointer reasoning createControls()'s addMouseListener(this, ...) comment gives
-    // for the generic auto-UI sliders.
+    // `this` outlives envelopeCurveEditor (owned by cardBody_, a member unique_ptr destroyed as part of this
+    // component's own teardown before the outer object finishes destructing).
     envelopeCurveEditor->onNodeChanged = [this](int) { writeEnvelopeParamsFromCurve(); };
     envelopeCurveEditor->onBendChanged = [this](int) { writeEnvelopeParamsFromCurve(); };
 
-    // Same pattern as the scope/frequency-response toggles: hidden by default, NOT persisted --
-    // resets to collapsed on every construction (matches those two, not Macro Group's persisted
-    // collapse; see docs/modules/modules.md#adsr-envelope-module for the decision).
-    envelopeGraphToggle = std::make_unique<juce::ToggleButton>("Show Envelope Graph");
-    envelopeGraphToggle->setToggleState(false, juce::dontSendNotification);
+    // Same pattern as the scope/frequency-response toggles: opens and closes the view, NOT persisted --
+    // every construction starts with the layout's own `open` (docs/modules/modules.md#adsr-envelope-module).
+    // On a card with a footer it is a pill in that row, like Show Scope.
+    envelopeGraphToggle = std::make_unique<juce::ToggleButton>(synth::cardbody::kShowEnvelopeText);
+    envelopeGraphToggle->setToggleState(cardBody_->isViewOpen(synth::CardView::Envelope), juce::dontSendNotification);
     envelopeGraphToggle->onClick = [this] {
-        envelopeCurveEditor->setVisible(envelopeGraphToggle->getToggleState());
+        cardBody_->setViewOpen(synth::CardView::Envelope, envelopeGraphToggle->getToggleState());
         updateLayout();
         owner.handleModuleResized(this);
     };
     addAndMakeVisible(envelopeGraphToggle.get());
+    if (cardBody_->hasFooter())
+        synth::ui::setTogglePillStyle(*envelopeGraphToggle, true);
 
-    // BPM|MS segmented control, wired to the `tempoSync` bool param. Its four
-    // *Div note-division params get their own pickers, swapped in over the matching
-    // knobs by applyEnvelopeSyncModeToControls below rather than the generic per-param grid
-    // (CardBodyPlan.cpp's isEditedElsewhere still excludes them from that grid).
-    envelopeMsButton = std::make_unique<juce::TextButton>("MS");
-    envelopeBpmButton = std::make_unique<juce::TextButton>("BPM");
-    // setRadioGroupId gives the pair JUCE's own mutual-exclusion for free: Button::setToggleState
-    // calls turnOffOtherButtonsInGroup() (a sibling search under the shared parent) SYNCHRONOUSLY
-    // before dispatching the click, whichever path reaches it -- a real mouse click via
-    // triggerClick(), or a direct setToggleState(true, sendNotificationSync) call (the pattern a
-    // headless test uses, since triggerClick() only posts an async command message).
-    constexpr int kEnvelopeSyncRadioGroup = 0x454e5631; // 'ENV1', arbitrary but unique to this pair
-    envelopeMsButton->setClickingTogglesState(true);
-    envelopeBpmButton->setClickingTogglesState(true);
-    envelopeMsButton->setRadioGroupId(kEnvelopeSyncRadioGroup);
-    envelopeBpmButton->setRadioGroupId(kEnvelopeSyncRadioGroup);
-    envelopeMsButton->setToggleState(true, juce::dontSendNotification);
-    envelopeMsButton->setConnectedEdges(juce::TextButton::ConnectedOnRight);
-    envelopeBpmButton->setConnectedEdges(juce::TextButton::ConnectedOnLeft);
-    envelopeMsButton->onClick = [this] { writeEnvelopeTempoSync(false); };
-    envelopeBpmButton->onClick = [this] { writeEnvelopeTempoSync(true); };
-    addAndMakeVisible(envelopeMsButton.get());
-    addAndMakeVisible(envelopeBpmButton.get());
+    // Builds the curve's initial model (MS- or tempo-shaped) and time-label formatter, since the editor has
+    // no model yet at this point.
+    syncEnvelopeCurveFromParams();
 
-    // Reflect a real starting `tempoSync` value (e.g. loaded from a preset) rather than always
-    // defaulting the buttons to MS; also builds the curve's initial model (BPM- or MS-shaped) and
-    // time-label formatter via its own trailing syncEnvelopeCurveFromParams() call, since
-    // envelopeCurveEditor has no model yet at this point.
-    syncEnvelopeSyncToggleFromParam();
-
-    // createControls()'s own tail already ran updateLayout() once, before these children
-    // existed -- mirrors createWavetableTabs()'s identical need to re-lay the card after adding
-    // controls of its own post-createControls().
+    // createControls()'s own tail already ran updateLayout() once, before these children existed.
     updateLayout();
 }
 
@@ -328,92 +259,6 @@ void ModuleComponent::writeEnvelopeParamsFromCurve() {
     writeParam("releaseCurve", model.getBend(3));
 }
 
-void ModuleComponent::writeEnvelopeTempoSync(bool bpmMode) {
-    if (module == nullptr)
-        return;
-    auto* p = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(module, "tempoSync"));
-    if (p == nullptr)
-        return;
-    if (p->get() == bpmMode)
-        return;
-    p->setValueNotifyingHost(bpmMode ? 1.0f : 0.0f);
-}
-
-void ModuleComponent::syncEnvelopeSyncToggleFromParam() {
-    if (envelopeMsButton == nullptr || envelopeBpmButton == nullptr || module == nullptr)
-        return;
-    auto* p = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(module, "tempoSync"));
-    if (p == nullptr)
-        return;
-    const bool bpmMode = p->get();
-    // dontSendNotification: this reflects the param, it must never re-fire writeEnvelopeTempoSync.
-    if (envelopeBpmButton->getToggleState() != bpmMode)
-        envelopeBpmButton->setToggleState(bpmMode, juce::dontSendNotification);
-    if (envelopeMsButton->getToggleState() == bpmMode)
-        envelopeMsButton->setToggleState(!bpmMode, juce::dontSendNotification);
-    applyEnvelopeSyncModeToControls(bpmMode);
-    // tempoSync flipping changes what buildEnvelopeCurveModel computes (ms params vs. *Div
-    // seconds) even though no attack/hold/decay/release/*Div value itself changed -- rebuild here
-    // rather than waiting for one of those to also fire its own reverse sync.
-    syncEnvelopeCurveFromParams();
-}
-
-void ModuleComponent::ensureEnvelopeDivCombosCreated() {
-    if (module == nullptr || envelopeDivCombos_.size() > 0)
-        return;
-    for (int i = 0; i < kEnvelopeDivComboCount; ++i) {
-        auto* choiceParam =
-            dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module, kEnvelopeDivSlots[i].paramID));
-        if (choiceParam == nullptr) {
-            envelopeDivCombos_.add(nullptr);
-            envelopeDivAttachments_.add(nullptr);
-            continue;
-        }
-        auto* combo = envelopeDivCombos_.add(new juce::ComboBox());
-        combo->addItemList(choiceParam->choices, 1);
-        addChildComponent(combo); // hidden until applyEnvelopeSyncModeToControls shows it
-        envelopeDivAttachments_.add(new juce::ComboBoxParameterAttachment(*choiceParam, *combo));
-    }
-}
-
-void ModuleComponent::applyEnvelopeSyncModeToControls(bool bpmMode) {
-    if (bpmMode)
-        ensureEnvelopeDivCombosCreated();
-
-    for (int i = 0; i < sliders.size(); ++i) {
-        const int slot = envelopeDivSlotForSliderCaption(sliders[i]->getComponentID());
-        if (slot < 0)
-            continue; // Sustain (and every non-ADSR slider) stays a knob regardless of mode
-        sliders[i]->setVisible(!bpmMode);
-        if (slot < envelopeDivCombos_.size() && envelopeDivCombos_[slot] != nullptr)
-            envelopeDivCombos_[slot]->setVisible(bpmMode);
-    }
-    updateLayout();
-}
-
-void ModuleComponent::applyEnvelopeDivComboBounds() {
-    for (int i = 0; i < sliders.size(); ++i) {
-        const int slot = envelopeDivSlotForSliderCaption(sliders[i]->getComponentID());
-        if (slot < 0 || slot >= envelopeDivCombos_.size() || envelopeDivCombos_[slot] == nullptr)
-            continue;
-        envelopeDivCombos_[slot]->setBounds(sliders[i]->getBounds());
-    }
-}
-
-// A hidden knob whose own *Div combo has swapped in over it (BPM mode) keeps the
-// exact same cell a cable/jack already lands on -- unlike a Wavetable inactive-tab knob (whose
-// bounds are stale, from whichever page was last laid out), it must still count as knob-bound so
-// getModRingSliderIndex/drawnInputJackIndices don't fall back to an ordinary gutter jack and grow
-// the card the moment BPM mode is entered.
-bool ModuleComponent::isEnvelopeDivSwappedForSlider(int sliderIndex) const {
-    if (sliderIndex < 0 || sliderIndex >= sliders.size())
-        return false;
-    const int slot = envelopeDivSlotForSliderCaption(sliders[sliderIndex]->getComponentID());
-    if (slot < 0 || slot >= envelopeDivCombos_.size() || envelopeDivCombos_[slot] == nullptr)
-        return false;
-    return envelopeDivCombos_[slot]->isVisible();
-}
-
 void ModuleComponent::syncEnvelopeCurveFromParams() {
     // Message-thread only -- callers (parameterValueChanged, which can fire off the audio
     // thread) are responsible for marshalling, exactly like every other reverse-sync path in
@@ -440,35 +285,4 @@ void ModuleComponent::updateEnvelopePlayhead() {
     if (adsr == nullptr)
         return;
     envelopeCurveEditor->setPlayhead(envelopePlayheadFor(adsr->getPlayheadStage(), adsr->getPlayheadProgress()));
-}
-
-// Extracted out of the shared layoutDefaultContent (ModuleComponentLayout.cpp) to keep that
-// function under its own line-count ratchet — a no-op for every non-ADSR module, where
-// envelopeGraphToggle is null.
-int ModuleComponent::layoutEnvelopeGraphSection(int y, int contentX, int contentW, bool apply) {
-    if (envelopeGraphToggle == nullptr)
-        return y;
-
-    if (apply) {
-        // Sliders (and their final bounds) come from the card body's layout, called before this
-        // function in layoutDefaultContent -- safe to read them here on the apply pass.
-        applyEnvelopeDivComboBounds();
-        constexpr int kBpmMsWidth = 90;
-        envelopeGraphToggle->setBounds(contentX, y, contentW - kBpmMsWidth - 8, kRowHeight);
-        if (envelopeMsButton && envelopeBpmButton) {
-            const int segW = kBpmMsWidth / 2;
-            envelopeMsButton->setBounds(contentX + contentW - kBpmMsWidth, y, segW, kRowHeight);
-            envelopeBpmButton->setBounds(contentX + contentW - kBpmMsWidth + segW, y, kBpmMsWidth - segW, kRowHeight);
-        }
-    }
-    y += kRowHeight + 2;
-
-    if (envelopeCurveEditor && envelopeCurveEditor->isVisible()) {
-        constexpr int kEnvelopeGraphHeight = 150;
-        if (apply)
-            envelopeCurveEditor->setBounds(contentX, y, contentW, kEnvelopeGraphHeight);
-        y += kEnvelopeGraphHeight + 8;
-    }
-
-    return y;
 }

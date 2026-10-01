@@ -208,14 +208,14 @@ TEST(CardLayoutQuickEdit, BespokeCardsOfferNoLayoutItems) {
 // the ones edited elsewhere); the quick path must not carry those into the next layout it writes.
 TEST(CardLayoutQuickEdit, ALayoutReadBackFromV1CarriesNoHiddenIdsTheCardDoesNotShow) {
     CardCanvas canvas;
-    const auto id = canvas.add(synth::AIStateMapper::createModule("ADSR"), 0, 0);
+    const auto id = canvas.add(synth::AIStateMapper::createModule("Envelope Follower"), 0, 0);
     canvas.editor.updateComponents();
     pickFromControlMenu(canvas, id, "attack", "Show as fader");
     pickFromControlMenu(canvas, id, "attack", "Show as knob"); // back to a plain, v1-storable layout
     const auto layout = canvas.card(id)->getCardBody()->explicitLayout();
     EXPECT_TRUE(layout.hidden.isEmpty()) << layout.hidden.joinIntoString(", ");
-    pickFromControlMenu(canvas, id, "decay", "Hide from card");
+    pickFromControlMenu(canvas, id, "release", "Hide from card");
     const auto stored = storedLayout(canvas, id);
     ASSERT_TRUE(stored.has_value());
-    EXPECT_EQ(stored->hidden, juce::StringArray("decay"));
+    EXPECT_EQ(stored->hidden, juce::StringArray("release"));
 }

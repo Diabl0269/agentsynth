@@ -32,6 +32,7 @@ inline constexpr int kFooterMinStretch = 72; // the narrowest a footer fader or 
 
 // The card chrome toggles' text; the size estimate measures the footer pills from the same strings.
 inline constexpr const char* kShowScopeText = "Show Scope";
+inline constexpr const char* kShowEnvelopeText = "Show Envelope Graph";
 inline constexpr const char* kShowResponseText = "Show Response";
 inline constexpr const char* kShowSpectrumText = "Show Spectrum";
 

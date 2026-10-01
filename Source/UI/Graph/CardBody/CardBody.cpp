@@ -123,6 +123,7 @@ void CardBody::createViews() {
         if (const auto* factory = findCardViewFactory(item.view)) {
             if (auto view = factory->create(module_)) {
                 card_.addAndMakeVisible(view.get());
+                view->setVisible(item.open);
                 item.widget = views_.add(view.release());
             }
         }
@@ -142,7 +143,7 @@ void CardBody::createParameterWidgets() {
         else if (item.kind == CardBodyItem::Kind::FaderV || item.kind == CardBodyItem::Kind::FaderH)
             createFader(item, *item.param);
         else if (item.kind == CardBodyItem::Kind::Segmented)
-            createSegmented(item, *static_cast<juce::AudioParameterChoice*>(item.param));
+            createSegmented(item, *item.param);
         else if (item.kind == CardBodyItem::Kind::Stepper)
             createStepper(item, *static_cast<juce::AudioParameterInt*>(item.param));
     }
@@ -306,8 +307,8 @@ void CardBody::createFader(CardBodyItem& item, juce::RangedAudioParameter& param
 
 // Bound through a plain ParameterAttachment: a pick is one complete gesture (one undo step), and a
 // value from automation or undo moves the selection without notifying back.
-void CardBody::createSegmented(CardBodyItem& item, juce::AudioParameterChoice& param) {
-    auto* segmented = new synth::ui::CardSegmentedSwitch(param.getName(100), param.choices);
+void CardBody::createSegmented(CardBodyItem& item, juce::RangedAudioParameter& param) {
+    auto* segmented = new synth::ui::CardSegmentedSwitch(param.getName(100), cardBodySegmentLabels(param));
     widgets_.add(segmented);
     segmented->setComponentID(param.getName(100));
     segmented->setTooltip(param.getName(100));
@@ -349,6 +350,29 @@ void CardBody::createStepper(CardBodyItem& item, juce::AudioParameterInt& param)
 juce::Component* CardBody::findWidget(const juce::String& paramId) const {
     const int index = plan_.findParam(paramId);
     return index >= 0 ? plan_.items[(size_t)index].widget : nullptr;
+}
+
+juce::Component* CardBody::findView(CardView view) const {
+    for (const auto& item : plan_.items)
+        if (item.kind == CardBodyItem::Kind::View && item.view == view)
+            return item.widget;
+    return nullptr;
+}
+
+void CardBody::setViewOpen(CardView view, bool open) {
+    for (auto& item : plan_.items)
+        if (item.kind == CardBodyItem::Kind::View && item.view == view) {
+            item.open = open;
+            if (item.widget != nullptr)
+                item.widget->setVisible(open);
+        }
+}
+
+bool CardBody::isViewOpen(CardView view) const {
+    for (const auto& item : plan_.items)
+        if (item.kind == CardBodyItem::Kind::View && item.view == view)
+            return item.open;
+    return false;
 }
 
 ThresholdControlComponent* CardBody::getThresholdView() const {

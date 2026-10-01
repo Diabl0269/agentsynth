@@ -66,6 +66,11 @@ public:
     // ---- Lookup ----------------------------------------------------------------------------------
     /** The widget bound to `paramId`, or null. */
     juce::Component* findWidget(const juce::String& paramId) const;
+    /** The view `view` placed in this body, or null. */
+    juce::Component* findView(CardView view) const;
+    /** Opens or closes a placed view: a closed view takes no height (the card re-measures). */
+    void setViewOpen(CardView view, bool open);
+    bool isViewOpen(CardView view) const;
     /** The Threshold view, or null. */
     ThresholdControlComponent* getThresholdView() const;
     const CardBodyPlan& getPlan() const { return plan_; }
@@ -100,7 +105,7 @@ private:
     void createKnob(CardBodyItem& item, juce::RangedAudioParameter& param);
     void createToggle(CardBodyItem& item, juce::AudioParameterBool& param);
     void createFader(CardBodyItem& item, juce::RangedAudioParameter& param);
-    void createSegmented(CardBodyItem& item, juce::AudioParameterChoice& param);
+    void createSegmented(CardBodyItem& item, juce::RangedAudioParameter& param);
     void createStepper(CardBodyItem& item, juce::AudioParameterInt& param);
     juce::Label* addCaption(CardBodyItem& item, juce::RangedAudioParameter& param, juce::Justification justification);
     void createSectionHeaders();

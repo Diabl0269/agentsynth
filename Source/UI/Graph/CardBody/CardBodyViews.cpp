@@ -1,11 +1,14 @@
 // CardBodyViews.cpp -- the view registry a card body builds its view items from. Each entry wraps an
-// existing component from Source/UI/ModuleViews unchanged. Only the Threshold view is registered: it is
-// the one view the automatic layout places (between the toggles and the knobs). The scope, response,
-// spectrum, envelope and LFO curve views are still built by ModuleComponent's own chrome and join this
-// registry when a layout first places them.
+// existing component from Source/UI/ModuleViews unchanged. The Threshold view is the one the automatic
+// layout places (between the toggles and the knobs); the Envelope view is the ADSR's curve editor, which
+// the card wires to the parameters (ModuleComponent's createEnvelopeCardControls) and whose card toggle
+// opens and closes it. The scope, response, spectrum and LFO curve views are still built by
+// ModuleComponent's own chrome and join this registry when a layout first places them.
 #include "CardBodyViews.h"
+#include "Modules/ADSRModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/ThresholdMeterSource.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/ThresholdControlComponent.h"
 
 namespace synth {
@@ -41,12 +44,32 @@ juce::String thresholdOwnedParam(juce::AudioProcessor& module) {
 
 const CardViewFactory kThreshold{createThreshold, thresholdHeight, thresholdOwnedParam};
 
+// The ADSR's breakpoint editor: the same component, name and description the card's chrome built before.
+std::unique_ptr<juce::Component> createEnvelope(juce::AudioProcessor& module) {
+    if (dynamic_cast<ADSRModule*>(&module) == nullptr)
+        return nullptr;
+    auto editor = std::make_unique<synth::ui::CurveEditorComponent>();
+    editor->setTitle("Envelope curve");
+    editor->setDescription("Attack, hold, decay and release shape of the envelope");
+    return editor;
+}
+
+constexpr int kEnvelopeViewHeight = 150;
+
+int envelopeHeight(juce::AudioProcessor&) { return kEnvelopeViewHeight; }
+
+juce::String noOwnedParam(juce::AudioProcessor&) { return {}; }
+
+const CardViewFactory kEnvelope{createEnvelope, envelopeHeight, noOwnedParam};
+
 } // namespace
 
 const CardViewFactory* findCardViewFactory(CardView view) {
     switch (view) {
     case CardView::Threshold:
         return &kThreshold;
+    case CardView::Envelope:
+        return &kEnvelope;
     default:
         return nullptr;
     }
@@ -58,6 +81,8 @@ bool cardViewAvailableFor(CardView view, juce::AudioProcessor& module) {
     switch (view) {
     case CardView::Threshold:
         return dynamic_cast<ThresholdMeterSource*>(&module) != nullptr;
+    case CardView::Envelope:
+        return dynamic_cast<ADSRModule*>(&module) != nullptr;
     default:
         return false;
     }

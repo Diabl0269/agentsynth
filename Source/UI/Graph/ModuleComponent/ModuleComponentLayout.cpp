@@ -49,12 +49,8 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
-    // ADSR does not measure itself — its five knobs (attack/hold/decay/sustain/release; the three
-    // curve params live on the envelope graph's bend handles) flow through the generic 3-per-row
-    // knob grid below exactly like every other module's, wrapping into two rows (3+2) at the shared
-    // 280px width. The envelope graph section and its BPM|MS row are generic-layout blocks too (see
-    // layoutDefaultContent, mirroring the scope/frequency-response toggle+component pattern) rather
-    // than a bespoke branch here.
+    // ADSR does not measure itself: its envelope graph is a view of the card body, its stage faders
+    // and Time/Tempo switch items of the body's layout, so it takes the generic path below.
 
     // Parametric EQ is double-width with a bespoke band grid, so it measures itself.
     if (getType(module) == ModuleType::ParametricEQ) {
@@ -240,11 +236,6 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
 
     y = layoutBodyControls(y, width, apply, tabbed);
 
-    // Envelope (ADSR) graph section: a disclosure toggle sharing its row with the BPM|MS
-    // segmented control, then the curve editor itself when expanded — see
-    // ModuleComponentEnvelopeCard.cpp. A no-op (returns `y` unchanged) for every other module.
-    y = layoutEnvelopeGraphSection(y, contentX, contentW, apply);
-
     // LFO custom-waveform section: the Grid/Shapes/Tools toolbar, then the curve editor
     // itself while shape == Custom -- see ModuleComponentLfoCard.cpp. A no-op for every other
     // module (and for an LFO not currently on the Custom shape).
@@ -263,6 +254,12 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
 // row, the toggles are pills in that row instead, under the open panels.
 int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool apply) {
     const bool footer = cardBody_ != nullptr && cardBody_->hasFooter();
+    if (envelopeGraphToggle && !footer) {
+        if (apply)
+            envelopeGraphToggle->setBounds(contentX, y, contentW, kRowHeight);
+        y += kRowHeight + 2;
+    }
+
     if (freqResponseToggle && !footer) {
         if (apply)
             freqResponseToggle->setBounds(contentX, y, contentW, kRowHeight);
@@ -301,7 +298,7 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
 
 std::vector<juce::ToggleButton*> ModuleComponent::footerChromeToggles(bool visibleOnly) const {
     std::vector<juce::ToggleButton*> toggles;
-    for (auto* toggle : {freqResponseToggle.get(), spectrumToggle.get(), scopeToggle.get()})
+    for (auto* toggle : {envelopeGraphToggle.get(), freqResponseToggle.get(), spectrumToggle.get(), scopeToggle.get()})
         if (toggle != nullptr && (!visibleOnly || toggle->isVisible()))
             toggles.push_back(toggle);
     return toggles;

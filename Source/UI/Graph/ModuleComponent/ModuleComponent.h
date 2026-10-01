@@ -29,6 +29,7 @@ class ExternalMidiModule; // Forward declaration — see Modules/ExternalMidiMod
 namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
 class CardControlGestures;   // Forward declaration — see UI/Graph/CardWidgets/CardControlGestures.h
+class CardStepper;           // Forward declaration — see UI/Graph/CardWidgets/CardStepper.h
 } // namespace synth::ui
 
 namespace synth::theme {
@@ -526,22 +527,15 @@ private:
     ThresholdControlComponent* thresholdControl = nullptr; // owned by cardBody_ (its Threshold view)
 
     // --- Envelope (ADSR) card: knob-and-graph panel ---
-    // The breakpoint curve editor, collapsed by default (not persisted — matches the scope/
+    // The breakpoint curve editor: the card body's Envelope view (owned by cardBody_; null when the layout
+    // places none), and the toggle that opens and closes it (not persisted — matches the scope/
     // frequency-response toggles, not Macro Group's collapse; docs/modules/modules.md#adsr-envelope-module).
-    std::unique_ptr<synth::ui::CurveEditorComponent> envelopeCurveEditor;
+    synth::ui::CurveEditorComponent* envelopeCurveEditor = nullptr;
     std::unique_ptr<juce::ToggleButton> envelopeGraphToggle;
-    // BPM|MS segmented control, wired to the ADSR `tempoSync` bool param.
-    std::unique_ptr<juce::TextButton> envelopeMsButton;
-    std::unique_ptr<juce::TextButton> envelopeBpmButton;
     // True between the curve editor's onGestureStart/onGestureEnd (a live node/bend drag): the
     // graph is the gesture's source of truth for that span, so parameterValueChanged's reverse
     // sync (params -> graph) skips rebuilding the model out from under the drag.
     bool envelopeCurveGestureActive = false;
-    // attackDiv/holdDiv/decayDiv/releaseDiv pickers, created lazily on first entry to BPM
-    // mode (never for a card that stays in MS) — see ensureEnvelopeDivCombosCreated().
-    juce::OwnedArray<juce::ComboBox> envelopeDivCombos_;
-    // Destroyed before envelopeDivCombos_ (declared after, so members unwind in reverse).
-    juce::OwnedArray<juce::ComboBoxParameterAttachment> envelopeDivAttachments_;
 
     // --- LFO custom-waveform card -- see ModuleComponentLfoCard.cpp ---
     std::unique_ptr<synth::ui::CurveEditorComponent> lfoCurveEditor; // shown only for shape == Custom
@@ -586,6 +580,10 @@ private:
     std::unique_ptr<juce::DrawableButton> deleteButton;
     std::unique_ptr<juce::DrawableButton> dualIOButton;
     std::unique_ptr<juce::ButtonParameterAttachment> dualIOAttachment;
+    // MIDI Keyboard's Octave row: widgets owned by ownedBespokeWidgets_, the attachment declared after them.
+    juce::Label* octaveCaption_ = nullptr;
+    synth::ui::CardStepper* octaveStepper_ = nullptr;
+    std::unique_ptr<juce::ParameterAttachment> octaveAttachment_;
 
     AppUndoManager* undoManager = nullptr;
     std::map<int, float> gestureStartValues;
@@ -649,6 +647,10 @@ private:
     // that function under its own line-count ratchet. Neither combo is
     // ComboBoxParameterAttachment-driven (plain module state, not AudioParameters).
     void createExternalMidiControls(ExternalMidiModule* extMidi);
+    // MIDI Keyboard's Octave stepper row and its card geometry (ModuleComponentMidiKeyboardCard.cpp); the
+    // card builds no CardBody, so these are card code.
+    void createMidiKeyboardOctaveRow();
+    void layoutMidiKeyboardCard();
     void updateLayout();
 
     // The optional panels (Show Scope / Show Response / Show Spectrum) -- ModuleComponentCardView.cpp.
@@ -839,14 +841,10 @@ private:
     void layoutNamedKnob(const juce::String& name, int x, int y, int w, int h);
 
     // --- Envelope (ADSR) card ---
-    // Builds the graph disclosure toggle, the curve editor (fixed 5-node topology) and the
-    // BPM|MS row; called from createControls() for ADSR only. Must run AFTER the generic
-    // float-param loop above (it needs `sliders`/`sliderLabels` already built, to shorten their
-    // captions and read attack/hold/decay/sustain/release's current values).
+    // Wires the body's Envelope view (the curve editor, fixed 5-node topology) to the parameters and builds
+    // the Show Envelope Graph toggle; called from the constructor for ADSR only, after createControls()
+    // and the body's views. A no-op when the layout places no Envelope view.
     void createEnvelopeCardControls();
-    // Renames the five knob labels ("Attack" -> "ATK", ...) for ADSR only — componentIDs (used
-    // for lookup/automation) are untouched, this is a display-only caption swap.
-    void applyEnvelopeKnobShortLabels();
     // Brackets a whole curve drag in one undo step (mirrors wireEqGestureCallbacks) and toggles
     // envelopeCurveGestureActive around it.
     void wireEnvelopeGestureCallbacks();
@@ -858,31 +856,9 @@ private:
     // hands it to envelopeCurveEditor->setModel(). No-op while envelopeCurveGestureActive (the
     // graph is already the source of truth mid-drag) or outside ADSR/without a curve editor.
     void syncEnvelopeCurveFromParams();
-    // MS|BPM click handler: writes `tempoSync` (true for BPM, false for MS) via
-    // setValueNotifyingHost, no-op if already at that value or the param isn't present.
-    void writeEnvelopeTempoSync(bool bpmMode);
-    // Reverse sync for the MS|BPM toggle pair: reads `tempoSync` and sets the two buttons'
-    // toggle states (dontSendNotification, so this never re-triggers writeEnvelopeTempoSync).
-    // Called once at construction (to reflect a preset/undo-restored value) and from
-    // parameterValueChanged.
-    void syncEnvelopeSyncToggleFromParam();
     // Polls ADSRModule's lock-free playhead accessors and maps EnvelopeStage -> the curve's
     // segment/progress, called from the existing gated 15 Hz timerCallback (no new Timer).
     void updateEnvelopePlayhead();
-    // The disclosure-toggle+BPM|MS row, then the curve editor itself when expanded — extracted
-    // out of layoutDefaultContent (shared by every module) to keep that function under its own
-    // ratchet. A no-op returning `y` unchanged when envelopeGraphToggle is null (every non-ADSR
-    // module). Mirrors the freqResponseToggle/scopeToggle blocks it sits beside.
-    int layoutEnvelopeGraphSection(int y, int contentX, int contentW, bool apply);
-    // Lazily builds the four *Div combos + attachments on first entry to BPM mode; a
-    // later no-op, and never called for a card that stays in MS. See ModuleComponentEnvelopeCard.cpp.
-    void ensureEnvelopeDivCombosCreated();
-    // BPM mode shows the four *Div combos and hides ATK/HOLD/DEC/REL (SUS stays a knob).
-    void applyEnvelopeSyncModeToControls(bool bpmMode);
-    // Positions each *Div combo over its slider's bounds; called after the body controls are laid out.
-    void applyEnvelopeDivComboBounds();
-    // True when the slider is hidden only because its *Div combo swapped in over it.
-    bool isEnvelopeDivSwappedForSlider(int sliderIndex) const;
 
     // --- LFO custom-waveform card (ModuleComponentLfoCard.cpp) ---
     void createLfoCardControls();          // toolbar + Free-mode curve editor; LFO only
