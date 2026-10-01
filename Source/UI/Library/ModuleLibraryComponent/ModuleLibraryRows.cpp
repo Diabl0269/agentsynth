@@ -338,12 +338,14 @@ void ModuleLibraryComponent::clampKeyboardFocusToVisibleRow() {
     // keyboardFocusedIndex silently pointing at it.
     if (!isKeyboardNavigableEntry(keyboardFocusedIndex)) {
         keyboardFocusedIndex = -1;
+        refreshAccessibilityValue();
         return;
     }
     for (const auto& row : buildRows())
         if (row.entryIndex == keyboardFocusedIndex)
             return;
     keyboardFocusedIndex = -1;
+    refreshAccessibilityValue();
 }
 
 void ModuleLibraryComponent::rebuildEntries() {

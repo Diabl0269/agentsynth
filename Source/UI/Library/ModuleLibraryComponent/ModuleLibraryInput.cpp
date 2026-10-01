@@ -37,7 +37,7 @@ void ModuleLibraryComponent::mouseMove(const juce::MouseEvent& e) {
         } else if (hoveredIndex >= 0) {
             setTooltip(tooltipForEntry(hoveredIndex));
         } else {
-            setTooltip({});
+            setTooltip(kDefaultTooltip);
         }
 
         repaint();
@@ -59,7 +59,7 @@ void ModuleLibraryComponent::mouseExit(const juce::MouseEvent&) {
         hoveredIndex = -1;
         topStripHovered = false;
         helpButtonHovered = false;
-        setTooltip({});
+        setTooltip(kDefaultTooltip);
         setMouseCursor(juce::MouseCursor::NormalCursor);
         repaint();
     }
@@ -236,6 +236,7 @@ bool ModuleLibraryComponent::moveKeyboardFocus(int delta) {
     const int next = (pos < 0) ? (delta > 0 ? 0 : (int)navigable.size() - 1)
                                : juce::jlimit(0, (int)navigable.size() - 1, pos + delta);
     keyboardFocusedIndex = navigable[(size_t)next];
+    refreshAccessibilityValue();
     scrollKeyboardFocusIntoView();
     repaint();
     return true;
@@ -247,10 +248,12 @@ bool ModuleLibraryComponent::handleFoldKey(bool collapse) {
     const auto& entry = entries[(size_t)keyboardFocusedIndex];
     if (entry.kind == RowKind::Header) {
         setSectionCollapsed(entry.text, collapse);
+        refreshAccessibilityValue();
         return true;
     }
     if (entry.kind == RowKind::SubHeader) {
         setSectionCollapsed(subsectionKey(entry.section, entry.text), collapse);
+        refreshAccessibilityValue();
         return true;
     }
     return false;
@@ -284,6 +287,7 @@ void ModuleLibraryComponent::scrollKeyboardFocusIntoView() {
 void ModuleLibraryComponent::setKeyboardFocusedIndexForTest(int index) {
     keyboardFocusedIndex = isKeyboardNavigableEntry(index) ? index : -1;
     clampKeyboardFocusToVisibleRow();
+    refreshAccessibilityValue();
     repaint();
 }
 

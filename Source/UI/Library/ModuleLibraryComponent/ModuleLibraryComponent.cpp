@@ -23,6 +23,8 @@ ModuleLibraryComponent::ModuleLibraryComponent() {
     // above — that flag is checked first and separately, so mouse clicks on the panel's own
     // custom-painted rows still never steal focus from the search box.
     setWantsKeyboardFocus(true);
+    setTitle("Module library");
+    setTooltip(kDefaultTooltip);
 
     // addChildComponent, not addAndMakeVisible: updateScrollBar() owns the visibility, so the bar
     // only appears once the rows actually outgrow the panel.
@@ -38,6 +40,7 @@ ModuleLibraryComponent::ModuleLibraryComponent() {
     searchEditor.setBorder(juce::BorderSize<int>(0));
     searchEditor.setIndents(6, 0);
     searchEditor.setFont(juce::Font(juce::FontOptions(13.0f)));
+    searchEditor.setTitle("Search library");
     searchEditor.setTooltip("Filter the library by module, snippet, or category name.");
     synth::ui::removeHiddenTabStops(searchEditor);
     searchEditor.onTextChange = [this] { applySearchQuery(searchEditor.getText()); };

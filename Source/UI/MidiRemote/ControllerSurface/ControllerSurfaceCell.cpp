@@ -34,6 +34,9 @@ void ControllerSurfaceCell::configure(const synth::Control& control, const juce:
     mapped_ = isMapped;
     lastValue_ = juce::jlimit(0.0f, 1.0f, initialValue);
     lastPressed_ = false;
+    // The inert widget inside is what a screen reader meets, so it carries the control's name and what
+    // it drives; hovering the cell shows the same.
+    setTooltip(control.name + ": " + (assignmentLabel.isNotEmpty() ? assignmentLabel : juce::String("not assigned")));
     buildWidgetForKind(); // rebuilds slider_/button_ at rest (0 / not pressed) -- seed from lastValue_ below
     if (slider_ != nullptr)
         slider_->setValue((double)lastValue_, juce::dontSendNotification);
@@ -72,12 +75,16 @@ void ControllerSurfaceCell::buildWidgetForKind() {
     }
 
     if (slider_ != nullptr) {
+        slider_->setTitle(control_.name);
+        slider_->setDescription(assignmentLabel_);
         slider_->setRange(0.0, 1.0, 0.0);
         slider_->setValue(0.0, juce::dontSendNotification);
         slider_->setInterceptsMouseClicks(false, false);
         addAndMakeVisible(*slider_);
     }
     if (button_ != nullptr) {
+        button_->setTitle(control_.name);
+        button_->setDescription(assignmentLabel_);
         button_->setClickingTogglesState(false); // mouse-inert: this cell drives the toggle state, not clicks
         button_->setToggleState(false, juce::dontSendNotification);
         button_->setInterceptsMouseClicks(false, false);

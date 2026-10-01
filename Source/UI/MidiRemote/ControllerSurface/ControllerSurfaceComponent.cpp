@@ -30,6 +30,8 @@ ControllerSurfaceComponent::ControllerSurfaceComponent()
     // Delete/Backspace/Esc must reach THIS component's keyPressed(), not go looking for a focused
     // cell -- cells are mouse-inert display widgets and never take focus themselves.
     setWantsKeyboardFocus(true);
+    setTitle("Controller surface");
+    setDescription("The controls of the selected controller");
 
     // content_ never handles a click itself -- an empty-space press must reach THIS
     // component's mouseDown (pan/marquee/deselect), exactly the "fallback clicks to parent" wiring

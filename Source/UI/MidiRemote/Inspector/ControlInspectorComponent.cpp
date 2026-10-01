@@ -416,6 +416,8 @@ private:
 
 ControlInspectorComponent::ControlInspectorComponent() {
     nameLabel_.setComponentID("controlNameLabel");
+    nameLabel_.setTitle("Control name");
+    nameLabel_.setTooltip("Double-click to rename this control");
     nameLabel_.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
     nameLabel_.setEditable(false, true, false); // double-click to rename
     nameLabel_.onTextChange = [this] {
@@ -431,6 +433,8 @@ ControlInspectorComponent::ControlInspectorComponent() {
 
     populateKindCombo(kindCombo_);
     kindCombo_.setComponentID("controlKindCombo");
+    kindCombo_.setTitle("Control kind");
+    kindCombo_.setTooltip("What kind of control this is: knob, fader, pad and so on");
     kindCombo_.onChange = [this] {
         if (!model_.hasControl)
             return;
@@ -453,6 +457,8 @@ ControlInspectorComponent::ControlInspectorComponent() {
 
     populateEncodingCombo(encodingCombo_, model_.control);
     encodingCombo_.setComponentID("encodingCombo");
+    encodingCombo_.setTitle("Encoding");
+    encodingCombo_.setTooltip("How the controller sends this control's value");
     encodingCombo_.onChange = [this] {
         if (!model_.hasControl)
             return;

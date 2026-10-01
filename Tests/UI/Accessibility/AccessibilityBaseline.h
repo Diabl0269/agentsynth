@@ -38,6 +38,9 @@ inline constexpr AccessibilityBaselineEntry kAccessibilityBaseline[] = {
     {"WelcomeScreen", 0, 0},
     {"ColourPickerPopup", 0, 0},
     {"ModuleLibraryHelpPopup", 0, 0},
+    {"ModuleLibrary", 0, 0},
+    {"AIChat", 0, 0},
+    {"MidiRemote", 0, 0},
 };
 // clang-format on
 

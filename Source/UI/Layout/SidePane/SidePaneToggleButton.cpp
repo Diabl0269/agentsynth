@@ -1,6 +1,7 @@
 // Concern: SidePaneToggleButton's state mirroring, tooltip and sidebar glyph.
 #include "SidePaneToggleButton.h"
 
+#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -8,7 +9,7 @@ namespace synth::ui {
 SidePaneToggleButton::SidePaneToggleButton()
     : juce::Button("Side pane") {
     setClickingTogglesState(false); // the pane is the source of truth, see refresh()
-    setWantsKeyboardFocus(false);
+    setWantsKeyboardFocus(true);
     setTitle("Side pane");
     setDescription("Shows or hides this tab's side pane");
     onClick = [this] {
@@ -70,6 +71,8 @@ void SidePaneToggleButton::paintButton(juce::Graphics& g, bool highlighted, bool
         g.fillRect(strip.reduced(0.6f));
     else
         g.fillRect(strip.getRight() - 0.6f, glyph.getY() + 1.0f, 1.2f, glyph.getHeight() - 2.0f);
+
+    paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);
 }
 
 } // namespace synth::ui

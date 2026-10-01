@@ -229,6 +229,17 @@ With 2+ controls selected the inspector shows *"N controls selected"* and disabl
 per-control field (name, kind, encoding, button mode, learn target, Forget) — there is no one
 control's own fields left to show.
 
+### Screen reader
+
+The Controllers list is a **list** titled "Controllers" whose value follows the selected controller
+("Launchpad, 1 of 2"; "Keystep (not on this machine), 2 of 2"), updated through the same
+only-when-the-text-changes value event the module library uses. On the surface, each cell's inert
+knob, fader or pad carries the control's name and what it drives (its description), and hovering a cell
+shows "Name: assignment" (or "not assigned"); the surface itself is titled "Controller surface". The
+inspector's name, kind and encoding fields each have a name and a tooltip. The `MidiRemote` surface of
+the accessibility coverage test ([`docs/development/accessibility.md`](../development/accessibility.md))
+holds all of this at zero gaps.
+
 ### Pages
 
 A row of page buttons ("1", "2", …, one per the selected controller's effective page count — see
@@ -241,7 +252,7 @@ is nothing to delete) for "Delete page", which removes that page's project assig
 every higher page down by one, both undoable (the project half on the project history, the profile's
 own page-count shrink on the controller edit history — the same two-histories split
 [Orphan controllers](#orphan-controllers)' Recreate already uses for its own project+profile pair).
-Both buttons carry an accessible title ("Page 2", "Add page") for a screen reader. Clicking an
+Both buttons carry an accessible title ("Page 2", "Add page") for a screen reader, and a tooltip. Clicking an
 inactive page switches `RemoteEngine`'s active page for the selected profile, which republishes the
 surface's cell labels (only the newly active page's project assignments show) and posts a status-bar
 line ("Page 2 of 3"). Implemented in `Source/UI/MidiRemote/ControllerSurface/ControllerSurfacePageStrip.{h,cpp}`,

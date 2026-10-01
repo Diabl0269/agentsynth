@@ -28,10 +28,12 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     debugConsole.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black);
     debugConsole.setColour(juce::TextEditor::textColourId, juce::Colours::lime);
     debugConsole.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::plain));
+    debugConsole.setTitle("Debug log");
     debugConsole.setVisible(false);
     addChildComponent(debugConsole);
 
     toggleDebugButton.setButtonText("Debug");
+    toggleDebugButton.setTooltip("Show or hide the debug log");
     toggleDebugButton.onClick = [this]() {
         debugConsoleVisible = !debugConsoleVisible;
         debugConsole.setVisible(debugConsoleVisible);
@@ -69,6 +71,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     };
     inputField.addListener(this);
     inputField.setTextToShowWhenEmpty("Ask AI to create or modify a patch...", juce::Colours::grey);
+    inputField.setTitle("Message to the AI assistant");
     inputField.setTooltip("Type a message and press Enter or Send");
 
     addAndMakeVisible(sendButton);
@@ -116,6 +119,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     historyButton.onClick = [this]() { historyButtonClicked(); };
 
     addAndMakeVisible(modelPicker);
+    modelPicker.setTitle("AI model");
     modelPicker.setTooltip("Select the AI model to use");
     modelPicker.onChange = [this]() {
         juce::String model = modelPicker.getText();
@@ -134,6 +138,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     modeSelector.addItem("Patch", kModeSelectorPatchId);
     modeSelector.addItem("Arrange", kModeSelectorArrangeId);
     modeSelector.setSelectedId(kModeSelectorPatchId, juce::dontSendNotification);
+    modeSelector.setTitle("Request mode");
     modeSelector.setTooltip("Patch: create or modify the synth patch. "
                             "Arrange: add tracks, notes and automation on the timeline.");
 
@@ -158,6 +163,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     // available at this point (none, at construction).
     addChildComponent(upsellButton);
     upsellButton.setButtonText("Upgrade to Pro");
+    upsellButton.setTooltip("See the Pro plan: cloud history backup and a higher request quota");
     upsellButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF6B4FBB));
     upsellButton.onClick = [this] { urlOpener(juce::URL(synth::branding::kUpgradeUrl)); };
 

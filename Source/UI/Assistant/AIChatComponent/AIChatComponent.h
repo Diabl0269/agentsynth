@@ -6,6 +6,7 @@
 #include "AI/LocalHistoryStore.h"
 #include "AI/PatchDiff.h"
 #include "AI/PatchFeedbackStore.h"
+#include "ChatMessageViewport.h"
 #include "UI/Assistant/AccountRow.h"
 #include "UI/Assistant/PlanBadge.h"
 #include "UI/Layout/UIAnimation.h"
@@ -340,7 +341,7 @@ private:
     // response handler before teardown so a completed request is never "cancelled".
     AIProvider::RequestId activeRequestId{};
 
-    juce::Viewport viewport;
+    ChatMessageViewport viewport;
     juce::Component messageList;
     juce::TextEditor inputField;
     juce::TextButton sendButton;

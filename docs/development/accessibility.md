@@ -20,6 +20,15 @@ Every new or changed control:
    value or role where it applies (a slider's `textFromValueFunction`, a meter's accessibility value).
 4. **Has a tooltip** that names its shortcut when it has one (`Play (Space)`).
 
+## Lists with painted rows or messages
+
+A list whose rows are painted (the module library) is one element with a `list` handler whose
+read-only value text follows the keyboard-focused row, and it posts a value-changed event only when
+that text changes; the wording lives in a pure header with a unit test
+([`docs/layout/module-library.md`](../layout/module-library.md#screen-reader)). A list of real
+components (the AI chat's messages) is a `list`-role container whose children are `listItem`-role
+components titled with their text ([`docs/ai/chat-component.md`](../ai/chat-component.md#screen-reader)).
+
 ## Which focus helper
 
 | Thing that takes focus | Helper |
@@ -53,7 +62,7 @@ knobs and sliders, so a stock control needs nothing. A custom-painted control ca
 
 `Tests/UI/Accessibility/AccessibilityCoverageTests.cpp` audits every visible, accessible interactive
 control (buttons, sliders, combo boxes, text editors, anything that wants keyboard focus) on a
-headless `MainComponent` (panel state pinned: library open, bottom dock open on the Timeline tab, AI chat and mod matrix closed, so the count does not depend on saved settings), one card for every built-in module type (`ModuleCards`, one aggregate entry; types needing a plugin binary, a timeline track or mixer/macro plumbing are skipped, the list is in the test), each Settings tab, the piano roll (a clip loaded, the velocity strip shown, the scale-assist panel open on its custom-scale editor), and every dialog and popup that can be built without a window (Export Audio, Sign in, Configure I/O for a macro, the macro auto-port prompt, the per-module Dual I/O popup, the EQ window, the module views built on their own (`ModuleViews`: the EQ curve, the curve editor and the threshold control, the three that take focus, with the read-only visualizers beside them), the welcome screen, the colour picker, the module library help popover), and counts two gaps per
+headless `MainComponent` (panel state pinned: library open, bottom dock open on the Timeline tab, AI chat and mod matrix closed, so the count does not depend on saved settings), one card for every built-in module type (`ModuleCards`, one aggregate entry; types needing a plugin binary, a timeline track or mixer/macro plumbing are skipped, the list is in the test), each Settings tab, the module library, the AI chat (one message in the list), the MIDI Remote panel (a controller from a template with one control selected), the piano roll (a clip loaded, the velocity strip shown, the scale-assist panel open on its custom-scale editor), and every dialog and popup that can be built without a window (Export Audio, Sign in, Configure I/O for a macro, the macro auto-port prompt, the per-module Dual I/O popup, the EQ window, the module views built on their own (`ModuleViews`: the EQ curve, the curve editor and the threshold control, the three that take focus, with the read-only visualizers beside them), the welcome screen, the colour picker, the module library help popover), and counts two gaps per
 surface: **missingName** (empty `setTitle`, and for a button empty text; a custom accessibility handler is not consulted because it does not exist without a native window) and **missingTooltip**. The counts must equal the
 entry in `Tests/UI/Accessibility/AccessibilityBaseline.h`:
 
