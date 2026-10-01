@@ -402,6 +402,7 @@ add_library(Core STATIC
     Source/Modules/ADSRModule.h
     Source/Modules/FilterModule.h
     Source/Modules/FrequencyText.h
+    Source/Modules/ParameterText.h
     Source/Modules/VCAModule.h
     Source/Modules/VoiceMixerModule.h
     Source/Modules/NoiseModule.h

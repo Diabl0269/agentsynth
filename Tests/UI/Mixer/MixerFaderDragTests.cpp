@@ -22,7 +22,9 @@ namespace {
 
 // Builds a real ChannelStripModule + bound MixerFader, sized so the slider's own track is exactly
 // 184 px tall (fader.setSize(24, 200) minus the 16 px readout MixerFader::resized() reserves).
-struct MixerFaderDragFixture {
+struct MixerFaderDragFixture : private juce::AudioProcessorParameter::Listener {
+    /** Begun-minus-ended change gestures on the gain parameter: 0 means none is left open. */
+    int gestureDepth = 0;
     AudioEngine engine;
     AppUndoManager undoManager;
     juce::AudioProcessorGraph::Node::Ptr node;
@@ -39,7 +41,13 @@ struct MixerFaderDragFixture {
                 gainParam = f;
         fader.setSize(24, 200);
         fader.bind(engine.getGraph(), undoManager, *gainParam);
+        gainParam->addListener(this);
     }
+
+    ~MixerFaderDragFixture() override { gainParam->removeListener(this); }
+
+    void parameterValueChanged(int, float) override {}
+    void parameterGestureChanged(int, bool starting) override { gestureDepth += starting ? 1 : -1; }
 
     /** Directly sets the param's dB value with NO gesture bracket -- so it never creates undo
      *  history, letting a test start a fader gesture from a known, undo-stack-clean dB value. */
@@ -62,10 +70,10 @@ struct MixerFaderDragFixture {
 };
 
 juce::MouseEvent faderMouseEvent(juce::Component& comp, juce::Point<float> pos, juce::Point<float> mouseDownPos,
-                                 juce::ModifierKeys mods, bool wasDragged) {
+                                 juce::ModifierKeys mods, bool wasDragged, int clickCount = 1) {
     return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-                            &comp, &comp, juce::Time::getCurrentTime(), mouseDownPos, juce::Time::getCurrentTime(), 1,
-                            wasDragged);
+                            &comp, &comp, juce::Time::getCurrentTime(), mouseDownPos, juce::Time::getCurrentTime(),
+                            clickCount, wasDragged);
 }
 
 constexpr int kNoModifiers = juce::ModifierKeys::noModifiers;
@@ -222,6 +230,29 @@ TEST(MixerFaderDragTest, DoubleClickResetsToZero) {
     ASSERT_TRUE(f.undoManager.undo());
     EXPECT_NEAR(f.gainParam->get(), 7.5f, 1.0e-2f);
     EXPECT_FALSE(f.undoManager.canUndo()) << "double-click reset must be exactly ONE undo step";
+}
+
+TEST(MixerFaderDragTest, RealDoubleClickIsOneUndoStepAndLeavesNoGestureOpen) {
+    MixerFaderDragFixture f;
+    f.setGainDbDirectly(-12.0f);
+    ASSERT_FALSE(f.undoManager.canUndo());
+
+    // The five events a real double-click delivers: down, up, down (second click), up, with
+    // mouseDoubleClick between the second press and its release.
+    const juce::Point<float> pos(12.0f, 100.0f);
+    const juce::ModifierKeys none(kNoModifiers);
+    f.slider().mouseDown(faderMouseEvent(f.slider(), pos, pos, none, false, 1));
+    f.slider().mouseUp(faderMouseEvent(f.slider(), pos, pos, none, false, 1));
+    f.slider().mouseDown(faderMouseEvent(f.slider(), pos, pos, none, false, 2));
+    f.slider().mouseDoubleClick(faderMouseEvent(f.slider(), pos, pos, none, false, 2));
+    f.slider().mouseUp(faderMouseEvent(f.slider(), pos, pos, none, false, 2));
+
+    EXPECT_NEAR(f.gainParam->get(), 0.0f, 1.0e-3f);
+    ASSERT_TRUE(f.undoManager.canUndo());
+    ASSERT_TRUE(f.undoManager.undo());
+    EXPECT_NEAR(f.gainParam->get(), -12.0f, 1.0e-2f);
+    EXPECT_FALSE(f.undoManager.canUndo()) << "a double-click must be exactly ONE undo step";
+    EXPECT_EQ(f.gestureDepth, 0) << "every begun change gesture must be ended";
 }
 
 TEST(MixerFaderDragTest, ShiftWheelMovesLessThanPlainWheel) {

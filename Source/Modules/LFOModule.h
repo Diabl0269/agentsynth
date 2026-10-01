@@ -2,6 +2,7 @@
 
 #include "Lfo/LfoCustomWave.h"
 #include "ModuleBase.h"
+#include "ParameterText.h"
 #include <atomic>
 #include <juce_core/juce_core.h>
 #include <random>
@@ -71,11 +72,11 @@ public:
         // Phase: where in its cycle the wave sits, in degrees. 0 is the unshifted wave.
         addParameter(phaseParam =
                          new juce::AudioParameterFloat("phase", "Phase", juce::NormalisableRange<float>(0.0f, 360.0f),
-                                                       0.0f, juce::AudioParameterFloatAttributes().withLabel("deg")));
+                                                       0.0f, synth::degreesAttributes()));
         // Fade In: ramp from silence to full output after a restart. 0 is off.
-        addParameter(fadeInParam = new juce::AudioParameterFloat(
-                         "fadeIn", "Fade In", juce::NormalisableRange<float>(0.0f, 10000.0f), 0.0f,
-                         juce::AudioParameterFloatAttributes().withLabel("ms")));
+        addParameter(fadeInParam = new juce::AudioParameterFloat("fadeIn", "Fade In",
+                                                                 juce::NormalisableRange<float>(0.0f, 10000.0f), 0.0f,
+                                                                 synth::millisecondsAttributes()));
         addMuteParameter();
     }
 
