@@ -1,6 +1,7 @@
 #include "AppearanceSettingsTab.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/FocusRing.h"
 
 namespace {
 // Pitch-class labels, C first — matches synth::ui::NoteColourOverrides' pitch % 12 indexing.
@@ -90,9 +91,87 @@ public:
 
     void listBoxItemClicked(int row, const juce::MouseEvent&) override { owner.selectThemeRow(row); }
 
+    // Up/Down move the highlight; Return applies the highlighted theme, like a click.
+    void returnKeyPressed(int row) override { owner.selectThemeRow(row); }
+
 private:
     ThemeManager& themeManager;
     AppearanceSettingsTab& owner;
+};
+
+//==============================================================================
+// SwatchStrip - the shared behaviour of the two swatch rows below: one Tab stop whose swatches are
+// reached with Left/Right, Return/Space opens the picker for the current swatch, Delete/Backspace
+// resets it, and the mouse does the same on click / right-click. Subclasses draw the swatches and
+// say what open and reset mean.
+//==============================================================================
+class AppearanceSettingsTab::SwatchStrip
+    : public juce::Component
+    , public juce::SettableTooltipClient {
+public:
+    SwatchStrip() { setWantsKeyboardFocus(true); }
+
+    void focusGained(FocusChangeType) override { repaint(); }
+    void focusLost(FocusChangeType) override { repaint(); }
+
+    bool keyPressed(const juce::KeyPress& key) override {
+        const int n = swatchCount();
+        if (n <= 0)
+            return false;
+        const int code = key.getKeyCode();
+        if (code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey) {
+            focusedIndex_ = juce::jlimit(0, n - 1, focusedIndex_ + (code == juce::KeyPress::rightKey ? 1 : -1));
+            repaint();
+            return true;
+        }
+        if (code == juce::KeyPress::returnKey || code == juce::KeyPress::spaceKey) {
+            openPicker(currentIndex(), localAreaToGlobal(cellBounds(currentIndex())));
+            return true;
+        }
+        if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey) {
+            resetSwatch(currentIndex());
+            return true;
+        }
+        return false;
+    }
+
+    void mouseDown(const juce::MouseEvent& e) override {
+        const int n = swatchCount();
+        if (n <= 0)
+            return;
+        focusedIndex_ = juce::jlimit(0, n - 1, (int)((float)e.x / ((float)getWidth() / (float)n)));
+        if (e.mods.isPopupMenu())
+            resetSwatch(focusedIndex_);
+        else
+            openPicker(focusedIndex_, localAreaToGlobal(cellBounds(focusedIndex_)));
+    }
+
+protected:
+    virtual int swatchCount() const = 0;
+    virtual void resetSwatch(int index) = 0;
+    virtual void openPicker(int index, juce::Rectangle<int> screenArea) = 0;
+
+    // The swatch chip of cell `index`, in strip coordinates (the rows paint 16px chips).
+    juce::Rectangle<float> chipBounds(int index) const {
+        const float w = (float)getWidth() / (float)swatchCount();
+        auto cell = juce::Rectangle<float>((float)index * w, 0.0f, w, (float)getHeight()).reduced(3.0f);
+        return cell.removeFromTop(16.0f);
+    }
+
+    void paintFocus(juce::Graphics& g) const {
+        if (swatchCount() > 0)
+            synth::ui::paintFocusRing(g, chipBounds(currentIndex()).expanded(2.0f), *this, 4.0f);
+    }
+
+private:
+    int currentIndex() const { return juce::jlimit(0, juce::jmax(0, swatchCount() - 1), focusedIndex_); }
+
+    juce::Rectangle<int> cellBounds(int index) const {
+        const int cellW = getWidth() / juce::jmax(1, swatchCount());
+        return {index * cellW, 0, cellW, 24};
+    }
+
+    int focusedIndex_ = 0;
 };
 
 //==============================================================================
@@ -102,9 +181,7 @@ private:
 // marked with a brighter ring so "following the theme" and "user override" are distinguishable
 // at a glance — otherwise Reset looks like a no-op.
 //==============================================================================
-class AppearanceSettingsTab::CableSwatchRow
-    : public juce::Component
-    , public juce::SettableTooltipClient {
+class AppearanceSettingsTab::CableSwatchRow : public AppearanceSettingsTab::SwatchStrip {
 public:
     explicit CableSwatchRow(AppearanceSettingsTab& t)
         : owner(t) {}
@@ -137,24 +214,16 @@ public:
             g.drawFittedText(owner.getCableSwatchLabel(i), reducedCell.removeFromBottom(28.0f).toNearestInt(),
                              juce::Justification::centredTop, 2, 0.8f);
         }
-    }
-
-    void mouseDown(const juce::MouseEvent& e) override {
-        const int n = owner.getCableSwatchCount();
-        if (n <= 0)
-            return;
-        const int index = juce::jlimit(0, n - 1, (int)((float)e.x / ((float)getWidth() / (float)n)));
-
-        if (e.mods.isPopupMenu()) {
-            owner.resetCableSwatch(index);
-            return;
-        }
-
-        const int cellW = getWidth() / n;
-        owner.openCableColourPicker(index, localAreaToGlobal(juce::Rectangle<int>(index * cellW, 0, cellW, 24)));
+        paintFocus(g);
     }
 
 private:
+    int swatchCount() const override { return owner.getCableSwatchCount(); }
+    void resetSwatch(int index) override { owner.resetCableSwatch(index); }
+    void openPicker(int index, juce::Rectangle<int> screenArea) override {
+        owner.openCableColourPicker(index, screenArea);
+    }
+
     AppearanceSettingsTab& owner;
 };
 
@@ -168,9 +237,7 @@ private:
 // is the fix for a UX bug where the "not customized" swatch read as noticeably darker than the
 // roll's real notes. "Not set" vs. "pinned" is told apart by the ring alone now.
 //==============================================================================
-class AppearanceSettingsTab::NoteSwatchRow
-    : public juce::Component
-    , public juce::SettableTooltipClient {
+class AppearanceSettingsTab::NoteSwatchRow : public AppearanceSettingsTab::SwatchStrip {
 public:
     explicit NoteSwatchRow(AppearanceSettingsTab& t)
         : owner(t) {}
@@ -199,22 +266,16 @@ public:
             g.drawFittedText(owner.getNoteSwatchLabel(i), reducedCell.removeFromBottom(14.0f).toNearestInt(),
                              juce::Justification::centredTop, 1, 0.8f);
         }
-    }
-
-    void mouseDown(const juce::MouseEvent& e) override {
-        constexpr int n = AppearanceSettingsTab::kNoteSwatchCount;
-        const int index = juce::jlimit(0, n - 1, (int)((float)e.x / ((float)getWidth() / (float)n)));
-
-        if (e.mods.isPopupMenu()) {
-            owner.resetNoteSwatch(index);
-            return;
-        }
-
-        const int cellW = getWidth() / n;
-        owner.openNoteColourPicker(index, localAreaToGlobal(juce::Rectangle<int>(index * cellW, 0, cellW, 24)));
+        paintFocus(g);
     }
 
 private:
+    int swatchCount() const override { return AppearanceSettingsTab::kNoteSwatchCount; }
+    void resetSwatch(int index) override { owner.resetNoteSwatch(index); }
+    void openPicker(int index, juce::Rectangle<int> screenArea) override {
+        owner.openNoteColourPicker(index, screenArea);
+    }
+
     AppearanceSettingsTab& owner;
 };
 
@@ -232,6 +293,7 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     addAndMakeVisible(contentViewport);
     contentViewport.setViewedComponent(&contentHost, false);
     contentViewport.setScrollBarsShown(true, false);
+    contentViewport.setWantsKeyboardFocus(false);
 
     // Section headers. Same font for all three (13pt bold, matching modeLabel's existing weight)
     // so "Theme" / "Theme Gallery" / "Cables" read as one family of group titles.
@@ -364,7 +426,6 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
 
     cableSwatchRow = std::make_unique<CableSwatchRow>(*this);
     contentHost.addAndMakeVisible(*cableSwatchRow);
-    cableSwatchRow->setTooltip("Click a swatch to pick a colour; right-click to reset it to the theme.");
 
     contentHost.addAndMakeVisible(resetCableColoursButton);
     resetCableColoursButton.onClick = [this] { resetAllCableColours(); };
@@ -378,7 +439,6 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
 
     noteSwatchRow = std::make_unique<NoteSwatchRow>(*this);
     contentHost.addAndMakeVisible(*noteSwatchRow);
-    noteSwatchRow->setTooltip("Click a note to pick a colour; right-click to clear the override.");
 
     contentHost.addAndMakeVisible(resetNoteColoursButton);
     resetNoteColoursButton.onClick = [this] { resetAllNoteColours(); };
@@ -392,8 +452,6 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
 
     meterColourStopsEditor = std::make_unique<synth::ui::MeterColourStopsEditor>();
     contentHost.addAndMakeVisible(*meterColourStopsEditor);
-    meterColourStopsEditor->setTooltip("Drag a handle to move its level; click a swatch to recolour it; click "
-                                       "empty space to add a stop; Delete removes the selected one.");
     meterColourStopsEditor->setStops(meterColourStopsOverride.value_or(
         synth::ui::MeterColourStops::fromTheme(themeManager.getActiveTheme().colors)));
     meterColourStopsEditor->onChanged = [this](const synth::ui::MeterColourStops& stops, bool committed) {
@@ -418,7 +476,40 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     if (activeRow >= 0)
         themeList.selectRow(activeRow);
 
+    nameControlsForAccessibility();
+
     themeManager.addChangeListener(this);
+}
+
+// Screen-reader titles and tooltips for every control without visible text of its own (the combos, the
+// gallery, the swatch rows, the meter editor) and a tooltip for each button.
+void AppearanceSettingsTab::nameControlsForAccessibility() {
+    modeCombo.setTitle("Theme mode");
+    modeCombo.setTooltip("Dark, light, or follow the system setting");
+    defaultDarkCombo.setTitle("Default dark theme");
+    defaultDarkCombo.setTooltip("The theme used while the app is in dark mode");
+    defaultLightCombo.setTitle("Default light theme");
+    defaultLightCombo.setTooltip("The theme used while the app is in light mode");
+    themeList.setTitle("Theme gallery");
+    themeList.setTooltip("Up and Down choose a theme, Return applies it");
+    openFolderButton.setTooltip("Show the folder where your own theme files go");
+    reloadButton.setTooltip("Read the themes folder again");
+    cableModeCombo.setTitle("Colour cables by");
+    cableModeCombo.setTooltip("Colour each cable by its signal type or by the module it comes from");
+    cableSwatchRow->setTitle("Cable colours");
+    cableSwatchRow->setTooltip("Click a swatch to pick a colour; right-click to reset it to the theme. Keyboard: "
+                               "Left/Right choose a swatch, Return picks, Delete resets.");
+    resetCableColoursButton.setTooltip("Return every cable colour to the theme");
+    noteSwatchRow->setTitle("Piano roll note colours");
+    noteSwatchRow->setTooltip("Click a note to pick a colour; right-click to clear the override. Keyboard: "
+                              "Left/Right choose a note, Return picks, Delete clears.");
+    resetNoteColoursButton.setTooltip("Return every note colour to the theme");
+    meterColourStopsEditor->setTitle("Meter colour stops");
+    meterColourStopsEditor->setTooltip("Drag a handle to move its level; click a swatch to recolour it; click "
+                                       "empty space to add a stop; Delete removes the selected one. Keyboard: "
+                                       "Left/Right choose a handle, Up/Down move it, Return recolours, + adds.");
+    removeMeterStopButton.setTooltip("Remove the selected meter colour stop");
+    resetMeterColoursButton.setTooltip("Make the meters follow the theme again");
 }
 
 AppearanceSettingsTab::~AppearanceSettingsTab() { themeManager.removeChangeListener(this); }

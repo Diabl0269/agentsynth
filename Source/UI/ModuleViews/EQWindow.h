@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EQCurveComponent.h"
+#include "UI/Layout/DialogKeyboard.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 /** Dialog content for the pop-out Parametric EQ editor.
@@ -12,14 +13,19 @@
  *
  *  Follows the SettingsWindow pattern: this is just the content Component; the caller wraps it in
  *  a juce::DialogWindow via LaunchOptions::launchAsync().
+ *
+ *  Keyboard: Tab visits the curve (which edits with the keys listed on EQCurveComponent) and the
+ *  spectrum toggle; Escape closes the window.
  */
 class EQWindow : public juce::Component {
 public:
     explicit EQWindow(ParametricEQModule& eq) {
         curve = std::make_unique<EQCurveComponent>(eq);
+        curve->setKeyboardEditable(true);
         addAndMakeVisible(*curve);
 
         spectrumToggle.setButtonText("Show Spectrum");
+        spectrumToggle.setTooltip("Draw the live spectrum of the signal behind the curve");
         spectrumToggle.setToggleState(curve->getShowSpectrum(), juce::dontSendNotification);
         spectrumToggle.onClick = [this] { curve->setShowSpectrum(spectrumToggle.getToggleState()); };
         addAndMakeVisible(spectrumToggle);
@@ -41,6 +47,20 @@ public:
         spectrumToggle.setBounds(footer.removeFromLeft(130));
         hint.setBounds(footer);
         curve->setBounds(area);
+    }
+
+    /** Fires when Escape is pressed. Left unset, Escape closes the dialog window hosting this
+     *  content. */
+    std::function<void()> onRequestClose;
+
+    bool keyPressed(const juce::KeyPress& key) override {
+        if (key != juce::KeyPress::escapeKey)
+            return false;
+        if (onRequestClose)
+            onRequestClose();
+        else
+            synth::ui::closeHostingWindow(*this);
+        return true;
     }
 
     /** Forwards the undo bracketing hooks to the hosted curve. */

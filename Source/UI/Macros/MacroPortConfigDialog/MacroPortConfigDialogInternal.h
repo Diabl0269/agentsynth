@@ -8,7 +8,9 @@
 // widgets (GlyphButton, PortColourSwatch, DragHandle) and PortRowComponent itself.
 
 #include "MacroPortConfigDialog.h"
+#include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -59,16 +61,6 @@ constexpr int kGlyphButtonGap = 2;
 constexpr int kColourSwatchSize = 16;
 constexpr int kDragHandleWidth = 14;
 
-// Same live/fallback split as liveThemeColours, for the border-width metric the focus-ring paint
-// below needs — kept as a separate accessor rather than widening
-// liveThemeColours's return type, since every existing call site only ever wanted colours.
-inline const synth::theme::Metrics& liveThemeMetrics(const juce::Component& c) {
-    static const synth::theme::Metrics fallback{};
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&c.getLookAndFeel()))
-        return lf->getTheme().metrics;
-    return fallback;
-}
-
 // A compact icon-style Delete button — a small square button drawing an X as a couple of strokes,
 // the same "drawn Path/lines, not an SVG asset" idiom MacroCardComponent's own expand chevron
 // already uses. Cmd+Up/Cmd+Down on this button is the keyboard-accessible reorder (see
@@ -103,16 +95,9 @@ public:
         g.drawLine(inner.getX(), inner.getY(), inner.getRight(), inner.getBottom(), 1.6f);
         g.drawLine(inner.getX(), inner.getBottom(), inner.getRight(), inner.getY(), 1.6f);
 
-        // Keyboard-focus indicator. juce::Button::paint() only ever hands paintButton()
-        // isOver()/isDown() (juce_Button.cpp), never keyboard-focus state, so without this a
-        // Tab'd-to-but-not-hovered button would paint with no visible change at all. Reuses
-        // AppLookAndFeel::drawTextEditorOutline/drawComboBox's own "accent outline when focused"
-        // convention.
-        if (hasKeyboardFocus(true) || forceFocusRingForTest) {
-            const auto& m = liveThemeMetrics(*this);
-            g.setColour(c.accent);
-            g.drawRoundedRectangle(bounds.reduced(m.borderWidth * 0.5f), 4.0f, m.borderWidth);
-        }
+        // juce::Button::paint() hands paintButton() only isOver()/isDown(), never focus state, so
+        // the ring is drawn here; Button repaints on focus changes itself.
+        (forceFocusRingForTest ? paintFocusRingAlways : paintFocusRing)(g, bounds, *this, 4.0f);
     }
 
     // The Delete button is the keyboard-accessible delete fallback (it gets Tab/Return/Space for
@@ -160,13 +145,10 @@ public:
         g.setColour(colour);
         g.fillRoundedRectangle(bounds, 3.0f);
         const auto& c = liveThemeColours(*this);
-        // Same focus-state gap as GlyphButton (see its own comment) — accent replaces the normal
-        // border colour when focused, matching AppLookAndFeel's own "accent when focused"
-        // convention.
-        const bool focused = hasKeyboardFocus(true) || forceFocusRingForTest;
-        g.setColour(focused ? c.accent : c.border.withAlpha(highlighted || down ? 0.9f : 0.45f));
-        g.drawRoundedRectangle(bounds, 3.0f,
-                               focused ? liveThemeMetrics(*this).borderWidth : (highlighted || down ? 1.4f : 1.0f));
+        g.setColour(c.border.withAlpha(highlighted || down ? 0.9f : 0.45f));
+        g.drawRoundedRectangle(bounds, 3.0f, highlighted || down ? 1.4f : 1.0f);
+        // Same focus-state gap as GlyphButton (see its own comment): the accent ring goes around the chip.
+        (forceFocusRingForTest ? paintFocusRingAlways : paintFocusRing)(g, getLocalBounds().toFloat(), *this, 3.0f);
     }
 
     // Mirrors ColourPickerPopup::FavouriteSwatchButton's own override exactly (see its comment):
@@ -295,6 +277,9 @@ public:
         // MacroPortConfigDialog::keyPressed catches) because juce::TextEditor consumes Escape itself before it ever
         // bubbles.
         nameEditor.onEscapeKey = [this] { owner_.escapePressed(); };
+        nameEditor.setTitle("Port name");
+        nameEditor.setTooltip("Rename this port. Press Return to apply.");
+        removeHiddenTabStops(nameEditor);
         addAndMakeVisible(nameEditor);
 
         midiTag.setText("MIDI", juce::dontSendNotification);
@@ -305,7 +290,8 @@ public:
 
         populateShapeBox(shapeBox);
         shapeBox.setSelectedId(comboIndexFromShape(row.shape), juce::dontSendNotification);
-        shapeBox.setVisible(!isMidi);
+        shapeBox.setTitle("Port shape");
+        shapeBox.setTooltip("Mono, stereo or poly. Changing it replaces the port.");
         // The combo box IS the shape-commit gesture — selecting a new shape commits immediately
         // (still delete+re-add of the node as ONE undo step underneath, per
         // GraphEditor::changeMacroPortShape). maybeCommitShape guards against firing on a no-op
@@ -318,6 +304,7 @@ public:
             maybeCommitShape();
         };
         addAndMakeVisible(shapeBox);
+        shapeBox.setVisible(!isMidi); // a MIDI row has no shape: hidden, so Tab skips it too
 
         voicesLabel.setText("Voices", juce::dontSendNotification);
         voicesLabel.setJustificationType(juce::Justification::centredRight);
@@ -336,6 +323,9 @@ public:
         voicesEditor.onEscapeKey = [this] { // same reasoning as nameEditor's onEscapeKey above
             owner_.escapePressed();
         };
+        voicesEditor.setTitle("Voice count");
+        voicesEditor.setTooltip("Number of voices of this poly port. Press Return to apply.");
+        removeHiddenTabStops(voicesEditor);
         addAndMakeVisible(voicesEditor);
 
         // The per-port colour swatch — left-click opens a ColourPickerPopup, right-click
@@ -343,6 +333,7 @@ public:
         // (nullopt for every uncoloured port), never anything the dialog invents.
         customColour = row.colour;
         colourSwatch.colour = customColour.value_or(kindTintColour());
+        colourSwatch.setTitle("Port colour");
         colourSwatch.setTooltip("Port colour (right-click to reset)");
         colourSwatch.onClick = [this] { showColourPicker(); };
         colourSwatch.onRightClick = [this] { commitColour(std::nullopt); };
@@ -364,6 +355,8 @@ public:
         dragHandle.onDragEnd = [this] { owner_.endRowDrag(*this); };
         addAndMakeVisible(dragHandle);
 
+        deleteButton.setTitle("Delete port");
+        deleteButton.setDescription(row.name);
         deleteButton.setTooltip("Delete this port (Cmd+Up/Cmd+Down to reorder)");
         deleteButton.onClick = [this] {
             if (owner_.onDeletePort)
@@ -378,6 +371,14 @@ public:
                 owner_.onReorderPort(nodeUuid, /*moveUp=*/!moveDown);
         };
         addAndMakeVisible(deleteButton);
+
+        // The controls are centred in the row at different heights, which would sort them by pixel
+        // row rather than left to right: Tab visits them in the order they read.
+        colourSwatch.setExplicitFocusOrder(1);
+        nameEditor.setExplicitFocusOrder(2);
+        shapeBox.setExplicitFocusOrder(3);
+        voicesEditor.setExplicitFocusOrder(4);
+        deleteButton.setExplicitFocusOrder(5);
 
         updateVoicesVisibility();
     }

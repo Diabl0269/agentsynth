@@ -2,6 +2,7 @@
 #include "AI/AuthClient.h"
 #include "Auth/DeviceIdStore.h"
 #include "Branding.h"
+#include "UI/Layout/DialogKeyboard.h"
 #include <atomic>
 #include <thread>
 
@@ -28,17 +29,24 @@ FeedbackSettingsTab::FeedbackSettingsTab(synth::AccountService* accountServiceIn
     categoryCombo.addItem("Feature Request", kCategoryFeatureId);
     categoryCombo.addItem("Other", kCategoryOtherId);
     categoryCombo.setSelectedId(kCategoryOtherId, juce::dontSendNotification);
+    categoryCombo.setTitle("Feedback category");
+    categoryCombo.setTooltip("What kind of feedback this is");
 
     addAndMakeVisible(feedbackEditor);
     feedbackEditor.setMultiLine(true);
     feedbackEditor.setReturnKeyStartsNewLine(true);
     feedbackEditor.setTextToShowWhenEmpty("What's on your mind?",
                                           findColour(juce::TextEditor::textColourId).withAlpha(0.5f));
+    feedbackEditor.setTitle("Feedback message");
+    feedbackEditor.setTooltip("Your bug report, feature request or comment");
+    synth::ui::removeHiddenTabStops(feedbackEditor);
+    synth::ui::bubbleEscapeToParents(feedbackEditor);
     feedbackEditor.onTextChange = [this] {
         updateSendButtonEnablement();
         statusLabel.setText("", juce::dontSendNotification);
     };
 
+    sendButton.setTooltip("Save this feedback, and send it to us too if you are signed in");
     addAndMakeVisible(sendButton);
     sendButton.onClick = [this] { sendFeedback(); };
     updateSendButtonEnablement();

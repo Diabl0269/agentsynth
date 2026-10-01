@@ -1,6 +1,7 @@
 #include "ExportAudioDialog.h"
 
 #include "Transport/LameLocator.h"
+#include "UI/Layout/DialogKeyboard.h"
 
 namespace synth::ui {
 
@@ -116,6 +117,8 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     // juce::TextEditor consumes Escape itself before it would ever bubble to keyPressed()
     // below, so this field needs its own route to the exact same page-aware handler.
     fileNameEditor_.onEscapeKey = [this] { handleEscapeRequested(); };
+    fileNameEditor_.onReturnKey = [this] { handleReturnRequested(); };
+    removeHiddenTabStops(fileNameEditor_);
     destinationLabel_.setText(destination_.getParentDirectory().getFullPathName(), juce::dontSendNotification);
     chooseDestinationButton_.onClick = [this] { chooseDestinationFolder(); };
 
@@ -133,6 +136,7 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
         if (onRequestClose)
             onRequestClose();
     };
+    nameControlsForAccessibility();
 
     addAndMakeVisible(progressPage_);
     progressPage_.setVisible(false);
@@ -154,7 +158,41 @@ bool ExportAudioDialog::keyPressed(const juce::KeyPress& key) {
         handleEscapeRequested();
         return true;
     }
+    if (key == juce::KeyPress::returnKey) {
+        handleReturnRequested();
+        return true;
+    }
     return false;
+}
+
+void ExportAudioDialog::handleReturnRequested() {
+    // Export is the default button of the options page; the progress page has no default.
+    if (!progressPage_.isVisible() && exportButton_.isEnabled())
+        beginExport();
+}
+
+void ExportAudioDialog::nameControlsForAccessibility() {
+    formatBox_.setTitle("Format"); // its tooltip is set by setLameExecutable(), which knows if MP3 is usable
+    sampleRateBox_.setTitle("Sample rate");
+    sampleRateBox_.setTooltip("Sample rate of the exported file");
+    bitDepthBox_.setTitle("Bit depth");
+    bitDepthBox_.setTooltip("Bit depth of the exported file");
+    bitrateBox_.setTitle("Bitrate");
+    bitrateBox_.setTooltip("MP3 bitrate: higher sounds better and makes a bigger file");
+    tailSlider_.setTitle("Tail length");
+    tailSlider_.nameValueBox();
+    tailSlider_.setTooltip(tailLabel_.getTooltip());
+    tailUnitBox_.setTitle("Tail unit");
+    tailUnitBox_.setTooltip("Measure the tail in seconds or in bars");
+    wholeArrangementButton_.setTooltip("Bounce from the start to the end of the arrangement");
+    selectionButton_.setTooltip("Bounce only the loop range");
+    fileNameEditor_.setTitle(stemsMode_ ? "Folder name" : "File name");
+    fileNameEditor_.setTooltip(stemsMode_ ? "Name of the folder the stems are written into"
+                                          : "Name of the exported file, without its extension");
+    chooseDestinationButton_.setTooltip("Choose the folder the export is written into");
+    exportButton_.setTooltip("Start the export (Return)");
+    cancelButton_.setTooltip("Close without exporting (Esc)");
+    progressCancelButton_.setTooltip("Stop the export (Esc)");
 }
 
 void ExportAudioDialog::handleEscapeRequested() {
@@ -193,7 +231,7 @@ void ExportAudioDialog::setLameExecutable(const juce::File& lameExecutable) {
     // Visible but disabled with the reason beside it, never a silent absence or a failure at Export.
     formatBox_.setItemEnabled(4, available);
     formatBox_.changeItemText(4, available ? "MP3" : "MP3 (needs lame)");
-    formatBox_.setTooltip(available ? juce::String() : lameInstallHint());
+    formatBox_.setTooltip(available ? juce::String("File format of the exported audio") : lameInstallHint());
     if (!available && formatBox_.getSelectedId() == 4)
         formatBox_.setSelectedId(1, juce::sendNotificationSync);
 }

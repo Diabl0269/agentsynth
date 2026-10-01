@@ -3,6 +3,7 @@
 #include "FrequencyGrid.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/VisualBuffer.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
 #include <algorithm>
@@ -19,6 +20,11 @@
  *    - drag a point              → set its frequency (x) and gain (y)
  *    - scroll over a point       → widen / narrow it (Q)
  *
+ *  Keyboard (only after setKeyboardEditable(true), which makes the curve a Tab stop): 1-4 select
+ *  a band and switch it on if it was off, Left/Right move its frequency by a semitone-sized step,
+ *  Up/Down its gain by 1 dB (Shift: a quarter of that step), Page Up/Page Down narrow/widen it,
+ *  Delete/Backspace switch it off, Return adds a point at 1 kHz.
+ *
  *  The mouse handlers are deliberately thin wrappers over addPointAt / removeBand / dragBandTo /
  *  nudgeBandQ, which are public so the interaction can be unit-tested without synthesising
  *  juce::MouseEvents.
@@ -34,6 +40,7 @@
  */
 class EQCurveComponent
     : public juce::Component
+    , public juce::SettableTooltipClient
     , public juce::Timer {
 public:
     /** Symmetric dB window — an EQ cuts as much as it boosts, so 0 dB sits dead centre. */
@@ -51,6 +58,8 @@ public:
         lastOutputGainDb = eqModule.getOutputGainDb();
         recomputeMagnitudes();
         setWantsKeyboardFocus(false);
+        setTitle("EQ curve");
+        setTooltip("EQ curve: double-click to add or remove a point, drag to move it, scroll over it to change Q");
         startTimerHz(30);
     }
 
@@ -166,6 +175,84 @@ public:
         endGesture();
         refreshFromModule();
     }
+
+    // ---------- keyboard ----------
+
+    /** Makes the curve a Tab stop edited with the keys listed in the class comment. Off by default:
+     *  the small inline curve on a module card stays mouse-only. */
+    void setKeyboardEditable(bool editable) {
+        setWantsKeyboardFocus(editable);
+        if (editable)
+            setTooltip("EQ curve: keys 1-4 pick a band, arrows move it, Page Up/Down change Q, Delete removes it. "
+                       "Mouse: double-click to add or remove a point, drag to move, scroll for Q");
+    }
+
+    /** Moves the selected band by `octaves` in frequency and `dbDelta` in gain as one undo step,
+     *  selecting the first enabled band when none is selected. False when no band is enabled. */
+    bool nudgeSelectedBand(float octaves, float dbDelta) {
+        if (!ensureSelectedBand())
+            return false;
+        const auto band = lastBands[(size_t)selectedBand];
+        beginGesture();
+        eqModule.setBandFreq(selectedBand, band.freqHz * std::pow(2.0f, octaves));
+        eqModule.setBandGain(selectedBand, band.gainDb + dbDelta);
+        endGesture();
+        refreshFromModule();
+        return true;
+    }
+
+    /** Selects band `band`, switching it on first if it is off. */
+    void selectBand(int band) {
+        if (band < 0 || band >= ParametricEQModule::kNumBands)
+            return;
+        if (!eqModule.isBandEnabled(band)) {
+            beginGesture();
+            eqModule.setBandEnabled(band, true);
+            endGesture();
+        }
+        selectedBand = band;
+        refreshFromModule();
+    }
+
+    bool keyPressed(const juce::KeyPress& key) override {
+        const auto mods = key.getModifiers();
+        if (!getWantsKeyboardFocus() || mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown())
+            return false;
+        const bool fine = mods.isShiftDown();
+        const float semitone = (fine ? 0.25f : 1.0f) / 12.0f;
+        const float dbStep = fine ? 0.25f : 1.0f;
+        const int code = key.getKeyCode();
+        if (code >= '1' && code < '1' + ParametricEQModule::kNumBands) {
+            selectBand(code - '1');
+            return true;
+        }
+        if (code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey) {
+            nudgeSelectedBand(code == juce::KeyPress::leftKey ? -semitone : semitone, 0.0f);
+            return true;
+        }
+        if (code == juce::KeyPress::upKey || code == juce::KeyPress::downKey) {
+            nudgeSelectedBand(0.0f, code == juce::KeyPress::upKey ? dbStep : -dbStep);
+            return true;
+        }
+        if (code == juce::KeyPress::pageUpKey || code == juce::KeyPress::pageDownKey) {
+            if (ensureSelectedBand())
+                nudgeBandQ(selectedBand, code == juce::KeyPress::pageUpKey ? 0.25f : -0.25f);
+            return true;
+        }
+        if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey) {
+            removeBand(selectedBand);
+            return true;
+        }
+        if (code == juce::KeyPress::returnKey) {
+            addPointAt({freqToXStatic(1000.0f, static_cast<float>(getWidth())),
+                        dbToYStatic(0.0f, static_cast<float>(getHeight()))});
+            return true;
+        }
+        return false;
+    }
+
+    void focusGained(FocusChangeType) override { repaint(); }
+    void focusLost(FocusChangeType) override { repaint(); }
 
     // ---------- mouse handling ----------
 
@@ -385,6 +472,8 @@ public:
             g.setFont(juce::Font(10.0f));
             g.drawText(text, 0, (int)h - 15, (int)w - 6, 13, juce::Justification::right, false);
         }
+
+        synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this);
     }
 
 private:
@@ -398,6 +487,17 @@ private:
     static constexpr float kSpecMaxDb = 0.0f;
     /** Peak below this counts as silence, so an idle patch stops repainting the spectrum. */
     static constexpr float kSilenceThreshold = 1.0e-5f;
+
+    /** Selects the first enabled band when none is selected (or the selected one was switched off). */
+    bool ensureSelectedBand() {
+        if (selectedBand >= 0 && eqModule.isBandEnabled(selectedBand))
+            return true;
+        selectedBand = -1;
+        for (int b = 0; b < ParametricEQModule::kNumBands && selectedBand < 0; ++b)
+            if (eqModule.isBandEnabled(b))
+                selectedBand = b;
+        return selectedBand >= 0;
+    }
 
     void beginGesture() {
         if (onGestureStart)

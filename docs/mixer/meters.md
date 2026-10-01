@@ -114,7 +114,9 @@ stop's colour — its `dbFrom` is treated as -inf, never a hard edge a quieter v
 ## User editable meter colours
 
 Settings > Appearance carries a **"Meter Colours"** section
-(`Source/UI/Settings/MeterColourStopsEditor`) that adds, drags, recolours and removes stops. The
+(`Source/UI/Settings/MeterColourStopsEditor`) that adds, drags, recolours and removes stops, with the
+keyboard too (Tab in selects the floor handle, Left/Right choose a handle, Up/Down move it, Return
+recolours, + adds, Delete removes; the focus ring shows). The
 result is **ONE GLOBAL `meterColourStops` override cached on `synth::theme::AppLookAndFeel` and read
 by every meter painter** — `MixerMeter::paint` and `ChannelChipComponent::paintButton` both read the
 same `AppLookAndFeel::getMeterColourStops()` cache, so setting an override changes both and clearing

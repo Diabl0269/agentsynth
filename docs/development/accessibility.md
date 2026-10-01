@@ -50,7 +50,7 @@ knobs and sliders, so a stock control needs nothing. A custom-painted control ca
 
 `Tests/UI/Accessibility/AccessibilityCoverageTests.cpp` audits every visible, accessible interactive
 control (buttons, sliders, combo boxes, text editors, anything that wants keyboard focus) on a
-headless `MainComponent` (panel state pinned: library open, bottom dock open on the Timeline tab, AI chat and mod matrix closed, so the count does not depend on saved settings), one card for every built-in module type (`ModuleCards`, one aggregate entry; types needing a plugin binary, a timeline track or mixer/macro plumbing are skipped, the list is in the test), each Settings tab, the Export Audio dialog and the piano roll (a clip loaded, the velocity strip shown, the scale-assist panel open on its custom-scale editor), and counts two gaps per
+headless `MainComponent` (panel state pinned: library open, bottom dock open on the Timeline tab, AI chat and mod matrix closed, so the count does not depend on saved settings), one card for every built-in module type (`ModuleCards`, one aggregate entry; types needing a plugin binary, a timeline track or mixer/macro plumbing are skipped, the list is in the test), each Settings tab, the piano roll (a clip loaded, the velocity strip shown, the scale-assist panel open on its custom-scale editor), and every dialog and popup that can be built without a window (Export Audio, Sign in, Configure I/O for a macro, the macro auto-port prompt, the per-module Dual I/O popup, the EQ window, the welcome screen, the colour picker, the module library help popover), and counts two gaps per
 surface: **missingName** (empty `setTitle`, and for a button empty text; a custom accessibility handler is not consulted because it does not exist without a native window) and **missingTooltip**. The counts must equal the
 entry in `Tests/UI/Accessibility/AccessibilityBaseline.h`:
 
@@ -59,6 +59,30 @@ entry in `Tests/UI/Accessibility/AccessibilityBaseline.h`:
   that fixed the gap. (Equality would be stricter, but a few controls exist only on some machines, so
   it would fail on one CI platform or another.)
 - Never raise an entry. A new surface is added with its real counts.
+
+## Dialogs: Tab order, hidden stops, Escape
+
+Every dialog, tab and popup is held to three more things, all in `Source/UI/Layout/DialogKeyboard.h`
+and pinned by `Tests/UI/Accessibility/DialogKeyboardTests.cpp`:
+
+- **Tab and Shift+Tab visit every control once, in visual order, and wrap.** JUCE sorts the siblings of
+  one parent by their pixel `y` and then `x`, so controls centred at different heights in one visual
+  row come out in the wrong order (the macro port rows do): give them `setExplicitFocusOrder`. A
+  control that is visible but has no bounds (a hidden-by-layout combo that was never `setVisible(false)`)
+  is a Tab stop nobody can see. The tests walk `juce::KeyboardFocusTraverser` (what Tab asks) with
+  `walkTabOrder()` from `TabOrderHelpers.h` and assert the exact sequence of names.
+- **No invisible Tab stops.** `removeHiddenTabStops(editor)` takes every focus-wanting part out of a
+  `juce::TextEditor` (stock JUCE already keeps its viewport out, so this is the safety net; call it on
+  each text field). The stops that really do hide are elsewhere: a `juce::Viewport` hosting a tab's rows
+  wants focus by default (`setWantsKeyboardFocus(false)`, and `ScrollIntoViewOnFocus` scrolls the
+  focused control into view instead), and an editable slider text box is its own stop, which an
+  `ExpandingRangeSlider`-style subclass names (`<title> value`). `TabbedButtonBar` is a keyboard focus
+  container whose buttons Tab never reaches; `SettingsWindow` makes it plain and the tab buttons stops.
+- **Escape closes with Cancel semantics.** The surface's own `keyPressed` handles Escape (an
+  `onRequestClose` callback if the caller set one, else `closeHostingWindow()`, which presses the
+  hosting `DialogWindow`'s close button or dismisses the `CallOutBox`). A `juce::TextEditor` swallows
+  Escape, so each text field calls `bubbleEscapeToParents` and Escape travels up as it would from any
+  other control. Return presses the dialog's default button where it has one (Export, Open in Browser).
 
 ## Verifying for real
 

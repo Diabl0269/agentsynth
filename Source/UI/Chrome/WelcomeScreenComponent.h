@@ -15,6 +15,10 @@ namespace synth::ui {
 // this ONLY when it owns its own AudioEngine (ownedAudioEngine != nullptr) — a hosted plugin's
 // document is host-owned via getStateInformation, so the plugin path must never see this at all.
 //
+// Keyboard: Tab and Shift+Tab visit the three start buttons, the recent projects, Contribute and
+// What's New, top to bottom, and wrap inside the overlay (it is a keyboard focus container). There
+// is no Escape action: the screen has no cancel, only a choice of how to start.
+//
 // Pure UI: every action is reported through a callback and MainComponent decides what actually
 // happens (including running it through guardUnsavedChanges) — this class knows nothing about
 // AudioEngine/PresetManager/RecentProjects beyond the juce::File list it's handed.
@@ -35,6 +39,10 @@ public:
     // synth::whatsnew::kReleaseTag by the caller so there is one place that decides what version
     // string means "this build".
     void setLatestVersionLabel(const juce::String& text);
+
+    // Gives keyboard focus to the first start button (a no-op while the overlay is not on screen),
+    // so a keyboard user who reopens it can press Space or Tab straight away.
+    void focusFirstControl() { newProjectButton.grabKeyboardFocus(); }
 
     std::function<void()> onNewProject;
     std::function<void()> onOpenDefaultProject;

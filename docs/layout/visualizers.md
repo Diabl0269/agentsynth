@@ -111,7 +111,12 @@ rather than a dangling call.
 "Open EQ Window" button. It is a content-only `juce::Component`, the same pattern as
 `SettingsWindow`; the caller wraps it in a `juce::DialogWindow` via `LaunchOptions::launchAsync()`.
 It hosts a second `EQCurveComponent` over the same module at 720x420 (resizable), plus a spectrum
-toggle and a gesture hint.
+toggle and a gesture hint. Escape closes it. In this window only (`setKeyboardEditable(true)`; the
+small inline curve stays mouse-only) the curve is a Tab stop with the accent focus ring and edits with
+the keyboard: 1-4 select a band and switch it on, Left/Right move its frequency (a semitone; Shift a
+quarter of that), Up/Down its gain (1 dB; Shift 0.25 dB), Page Up/Page Down narrow/widen Q, Delete or
+Backspace switch it off, Return adds a point at 1 kHz. Each key is one undo step through the same
+gesture hooks as a drag.
 
 `ModuleComponent` holds the dialog as a `Component::SafePointer` and **deletes it in
 `detachFromProcessor()`** — the window references the module, so leaving it open across a graph

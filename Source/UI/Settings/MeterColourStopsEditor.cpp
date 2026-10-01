@@ -2,6 +2,7 @@
 // and accessibility. See the header for the interaction contract.
 #include "MeterColourStopsEditor.h"
 
+#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
 #include <algorithm>
@@ -260,14 +261,46 @@ void MeterColourStopsEditor::mouseUp(const juce::MouseEvent&) {
     dragIndex_ = -1;
 }
 
-bool MeterColourStopsEditor::keyPressed(const juce::KeyPress& key) {
-    if (selected_ < 0)
-        return false;
+void MeterColourStopsEditor::focusGained(FocusChangeType cause) {
+    // Tabbing in selects the floor, so the arrow keys have a handle to act on straight away.
+    if (cause == focusChangedByTabKey && selected_ < 0)
+        selectIndex(0);
+    repaint();
+}
 
+void MeterColourStopsEditor::focusLost(FocusChangeType) { repaint(); }
+
+bool MeterColourStopsEditor::keyPressed(const juce::KeyPress& key) {
     // Compare the KEY CODE alone, not the whole KeyPress (which also matches modifiers) -- Up/
     // Down must be recognised whether or not Shift is held; the modifier is read separately below
     // to pick the nudge size, not to gate which branch runs.
     const int keyCode = key.getKeyCode();
+    const int count = (int)stops_.getStops().size();
+
+    if (keyCode == juce::KeyPress::leftKey || keyCode == juce::KeyPress::rightKey) {
+        const int next = selected_ < 0 ? 0 : selected_ + (keyCode == juce::KeyPress::rightKey ? 1 : -1);
+        selectIndex(juce::jlimit(0, count - 1, next));
+        return true;
+    }
+
+    if (selected_ < 0)
+        return false;
+
+    if (keyCode == juce::KeyPress::returnKey || keyCode == juce::KeyPress::spaceKey) {
+        if (onColourPickerRequested)
+            onColourPickerRequested(selected_, localAreaToGlobal(swatchBounds(selected_)),
+                                    stops_.getStops()[(size_t)selected_].colour);
+        return true;
+    }
+
+    if (keyCode == '+' || keyCode == '=') {
+        // A new stop halfway up to the next stop (or to the top of the scale), the keyboard route
+        // to clicking empty space.
+        const float here = stops_.getStops()[(size_t)selected_].dbFrom;
+        const float above = selected_ + 1 < count ? stops_.getStops()[(size_t)selected_ + 1].dbFrom : kMeterMaxDb;
+        addStopAt((here + above) * 0.5f);
+        return true;
+    }
 
     if (keyCode == juce::KeyPress::deleteKey || keyCode == juce::KeyPress::backspaceKey) {
         removeSelectedStop();
@@ -348,6 +381,8 @@ void MeterColourStopsEditor::paint(juce::Graphics& g) {
             g.drawRoundedRectangle(hb.toFloat().reduced(1.0f), 3.0f, 1.2f);
         }
     }
+
+    paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);
 }
 
 } // namespace synth::ui

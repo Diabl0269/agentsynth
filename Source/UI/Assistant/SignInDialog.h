@@ -32,6 +32,10 @@ public:
     void resized() override;
     void paint(juce::Graphics& g) override;
 
+    // Escape cancels the sign-in and closes the dialog, exactly like the Cancel button; Return
+    // opens the verification page, like the "Open in Browser" button.
+    bool keyPressed(const juce::KeyPress& key) override;
+
     // Called by AccountRow whenever AccountService::onStateChanged fires, so the dialog reflects
     // the live snapshot (code arrives, polling succeeds/fails, sign-in completes) without owning
     // the callback slot itself.
@@ -40,6 +44,7 @@ public:
 private:
     void updateFromSnapshot(const AccountSnapshot& snapshot);
     void closeDialog();
+    void cancelAndClose();
 
     AccountService& accountService;
 

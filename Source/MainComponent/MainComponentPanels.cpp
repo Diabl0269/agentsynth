@@ -854,6 +854,7 @@ void MainComponent::showWelcomeScreen() {
     welcomeScreen_->setRecentProjects(recentProjects.getEntries());
     welcomeScreen_->toFront(false);
     welcomeScreen_->setVisible(true);
+    welcomeScreen_->focusFirstControl();
 }
 
 // A small, synchronous, no-network dialog listing recent commit subjects

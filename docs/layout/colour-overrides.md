@@ -37,7 +37,9 @@ partially applied**, so one corrupted slot can never take the other eleven down 
 
 **The UI** is the Appearance tab's "Piano Roll Notes" swatch row (`AppearanceSettingsTab`, one
 12-cell row keyed C to B): left-click opens a `synth::ui::ColourPickerPopup`, right-click resets that
-pitch class's override, and "Reset all" clears every pitch class in one action.
+pitch class's override, and "Reset all" clears every pitch class in one action. The row is one Tab
+stop: Left/Right choose a swatch, Return or Space opens its picker, Delete or Backspace resets it (the
+cable-colour row works the same way).
 
 Every swatch — overridden or not — previews the colour through
 `AppearanceSettingsTab::getNoteSwatchPreviewColour()`, which calls the exact same
@@ -105,6 +107,10 @@ caller-owned `juce::PropertiesFile*`. **`nullptr` is legal and means "in-memory 
 instance"**, which is what keeps the class usable from a headless test with no
 `ApplicationProperties` at all. A first run with no persisted favourites seeds the shelf from the
 existing track palette, so it is never empty on a fresh install.
+
+Keyboard: Tab visits the three channel value fields, the add-to-favourites star and each favourite
+swatch (Space or Return applies it). Escape is Cancel: the colour (and the live preview) goes back to
+what it was when the popup opened, and the callout closes.
 
 The popup exposes two callbacks: a **live-preview** one, fired on every drag or favourite click,
 writing straight into the caller's target with no undo step; and a **commit-once** one, fired when

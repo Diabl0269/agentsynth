@@ -1,4 +1,5 @@
 #include "SignInDialog.h"
+#include "UI/Layout/DialogKeyboard.h"
 
 namespace synth {
 
@@ -10,7 +11,7 @@ SignInDialog::SignInDialog(AccountService& service)
 
     addAndMakeVisible(openBrowserButton);
     openBrowserButton.setButtonText("Open in Browser");
-    openBrowserButton.setTooltip("Open the verification page in your default browser");
+    openBrowserButton.setTooltip("Open the verification page in your default browser (Return)");
     openBrowserButton.onClick = [this] {
         const auto snapshot = accountService.getSnapshot();
         if (snapshot.verificationUriComplete.isNotEmpty())
@@ -23,10 +24,8 @@ SignInDialog::SignInDialog(AccountService& service)
 
     addAndMakeVisible(cancelButton);
     cancelButton.setButtonText("Cancel");
-    cancelButton.onClick = [this] {
-        accountService.cancelSignIn();
-        closeDialog();
-    };
+    cancelButton.setTooltip("Stop signing in and close this window (Esc)");
+    cancelButton.onClick = [this] { cancelAndClose(); };
 
     updateFromSnapshot(accountService.getSnapshot());
 }
@@ -72,10 +71,25 @@ void SignInDialog::updateFromSnapshot(const AccountSnapshot& snapshot) {
     }
 }
 
-void SignInDialog::closeDialog() {
-    if (auto* dw = findParentComponentOfClass<juce::DialogWindow>())
-        dw->exitModalState(0);
+void SignInDialog::cancelAndClose() {
+    accountService.cancelSignIn();
+    closeDialog();
 }
+
+bool SignInDialog::keyPressed(const juce::KeyPress& key) {
+    if (key == juce::KeyPress::escapeKey) {
+        cancelAndClose();
+        return true;
+    }
+    if (key == juce::KeyPress::returnKey) {
+        if (openBrowserButton.onClick)
+            openBrowserButton.onClick();
+        return true;
+    }
+    return false;
+}
+
+void SignInDialog::closeDialog() { synth::ui::closeHostingWindow(*this); }
 
 void SignInDialog::paint(juce::Graphics& g) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());

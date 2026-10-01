@@ -11,6 +11,9 @@ constexpr int kContributeRowHeight = 36;
 
 WelcomeScreenComponent::WelcomeScreenComponent() {
     setOpaque(true);
+    // The overlay covers the whole window, so Tab and Shift+Tab cycle inside it rather than
+    // escaping to the toolbar and canvas hidden underneath.
+    setFocusContainerType(FocusContainerType::keyboardFocusContainer);
 
     titleLabel.setText(juce::String("Welcome to ") + synth::branding::kProductName, juce::dontSendNotification);
     titleLabel.setFont(juce::Font(juce::FontOptions(24.0f, juce::Font::bold)));
@@ -22,18 +25,21 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     subtitleLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.7f));
     addAndMakeVisible(subtitleLabel);
 
+    newProjectButton.setTooltip("Start with an empty project");
     addAndMakeVisible(newProjectButton);
     newProjectButton.onClick = [this] {
         if (onNewProject)
             onNewProject();
     };
 
+    openDefaultButton.setTooltip("Open the factory default project");
     addAndMakeVisible(openDefaultButton);
     openDefaultButton.onClick = [this] {
         if (onOpenDefaultProject)
             onOpenDefaultProject();
     };
 
+    openExistingButton.setTooltip("Choose a project from disk");
     addAndMakeVisible(openExistingButton);
     openExistingButton.onClick = [this] {
         if (onOpenExistingProject)
@@ -67,6 +73,7 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
             onContributeRequested();
     };
 
+    whatsNewButton.setTooltip("See what changed in this version");
     addAndMakeVisible(whatsNewButton);
     whatsNewButton.onClick = [this] {
         if (onWhatsNewRequested)

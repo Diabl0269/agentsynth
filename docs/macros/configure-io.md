@@ -224,11 +224,17 @@ Every real control gets Tab, Return and Space for free from `juce::Button`, `juc
   action.
 - **Keyboard focus is visible.** `juce::Button::paint()` hands `paintButton()` only `isOver()` and
   `isDown()`, never keyboard-focus state, so a custom `paintButton` override draws nothing different
-  when tabbed to. `GlyphButton` and `PortColourSwatch` both check `hasKeyboardFocus(true)` and draw
-  an accent outline, reusing `AppLookAndFeel::drawTextEditorOutline`/`drawComboBox`'s own
-  accent-when-focused convention. `AppLookAndFeel::drawButtonBackground` carries the same fix, so
-  every plain `juce::TextButton` app-wide shows focus too. Every repaint here is the one JUCE's own
+  when tabbed to. `GlyphButton` and `PortColourSwatch` call `synth::ui::paintFocusRing`
+  ([accessibility](../development/accessibility.md)), the same accent ring every stock control draws.
+  `AppLookAndFeel::drawButtonBackground` carries the same fix, so every plain `juce::TextButton`
+  app-wide shows focus too. Every repaint here is the one JUCE's own
   `Button::focusGained`/`focusLost` already trigger — no new timer (`Source/UI/CLAUDE.md`).
+
+- **Tab visits the controls in reading order.** Add-a-port block first (direction, kind, shape, voices,
+  name, Add), then each row (colour, name, shape, voice count, Delete) and Close last. The row's
+  controls are centred at different heights, so `PortRowComponent` gives them an explicit focus order;
+  a MIDI row's shape combo is hidden, so Tab skips it. Every control without visible text has a title
+  and a tooltip, and a row scrolled out of view scrolls in when focused.
 
 ## Deleting a port from the dialog
 

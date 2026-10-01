@@ -5,6 +5,7 @@
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Theme/ThemeManager.h"
+#include <functional>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
@@ -34,6 +35,11 @@ public:
     ~SettingsWindow() override;
 
     void resized() override;
+
+    // Escape closes the window, from any control inside it (a text field passes it up). Fires
+    // onRequestClose when set; otherwise closes the juce::DialogWindow hosting this content.
+    bool keyPressed(const juce::KeyPress& key) override;
+    std::function<void()> onRequestClose;
 
     // Testing hooks
     int getNumTabs() const { return tabs.getNumTabs(); }
