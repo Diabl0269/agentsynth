@@ -27,7 +27,8 @@ public:
         , page_(page) {
         setComponentID("pageButton" + juce::String(page));
         setTitle("Page " + juce::String(page)); // accessible name (Source/UI/CLAUDE.md's accessibility rule)
-        setClickingTogglesState(false);         // the strip drives the "on" state itself -- see setActive()
+        setTooltip("Show mapping page " + juce::String(page) + " (right-click to delete it)");
+        setClickingTogglesState(false); // the strip drives the "on" state itself -- see setActive()
     }
 
     int getPage() const noexcept { return page_; }

@@ -13,7 +13,7 @@ The pieces live in `Source/UI/Layout/SidePane/`:
 |---|---|
 | `SidePane` | The container: holds one `SidePaneContent`, tweens open and closed, owns the resize edge and persists open state and width per tab |
 | `SidePaneContent` | The interface a tab implements: the component to show and its accessible title |
-| `SidePaneToggleButton` | The button that shows and hides a pane; follows the pane's state and hides itself when the pane has no content |
+| `SidePaneToggleButton` | The button that shows and hides a pane; follows the pane's state and hides itself when the pane has no content; a Tab stop with the accent focus ring, titled "Side pane", tooltip "Show side pane" / "Hide side pane" plus its key |
 
 ## How a panel uses it
 

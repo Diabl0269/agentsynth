@@ -202,6 +202,8 @@ set(APPUI_SOURCES
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryPainting.cpp
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryInput.cpp
     Source/UI/Library/ModuleLibraryComponent/ModuleLibraryHelpPopover.cpp
+    Source/UI/Library/ModuleLibraryComponent/ModuleLibraryAccessibility.cpp
+    Source/UI/Library/ModuleLibraryAccessibilityText.h
     Source/UI/PianoRoll/NoteSelectionModel.h
     Source/UI/Timeline/AutomationLaneEditor.h
     Source/UI/Timeline/AutomationLaneEditor.cpp
@@ -212,6 +214,8 @@ set(APPUI_SOURCES
     Source/UI/Assistant/AIChatComponent/AIChatComponentSending.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentProvider.cpp
     Source/UI/Assistant/AIChatComponent/AIChatComponentHistory.cpp
+    Source/UI/Assistant/AIChatComponent/ChatMessageViewport.h
+    Source/UI/Assistant/ChatMessageAccessibilityText.h
     Source/UI/Assistant/AccountRow.cpp
     Source/UI/Assistant/AccountRow.h
     Source/UI/Assistant/PlanBadge.cpp

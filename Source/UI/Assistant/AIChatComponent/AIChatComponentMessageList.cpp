@@ -1,6 +1,7 @@
 #include "AI/PatchDiff.h"
 #include "AIChatComponent.h"
 #include "Branding.h"
+#include "UI/Assistant/ChatMessageAccessibilityText.h"
 #include <thread>
 
 namespace synth {
@@ -412,7 +413,12 @@ public:
         text = data.text;
         responseMs = data.responseMs;
 
+        // The bubble itself is the list item and speaks the whole message (see
+        // createAccessibilityHandler), so the label inside would only repeat it.
+        setTitle(synth::ui::describeChatMessageForAccessibility(role, text, data.jsonPatch.isNotEmpty(),
+                                                                data.timelineOpsPreview.isNotEmpty()));
         addAndMakeVisible(textLabel);
+        textLabel.setAccessible(false);
         textLabel.setText(text, juce::dontSendNotification);
         textLabel.setMinimumHorizontalScale(1.0f);
         textLabel.setJustificationType(juce::Justification::topLeft);
@@ -442,6 +448,10 @@ public:
             upgradeButton->onClick = [urlOpener] { urlOpener(juce::URL(synth::branding::kUpgradeUrl)); };
             addAndMakeVisible(*upgradeButton);
         }
+    }
+
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override {
+        return std::make_unique<juce::AccessibilityHandler>(*this, juce::AccessibilityRole::listItem);
     }
 
     // AIChatComponent::resized() reads this to decide which side of the message list gets the

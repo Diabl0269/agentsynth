@@ -18,7 +18,9 @@
 // LinearHorizontal juce::Slider is the honest fallback for ControlKind::wheel.
 namespace synth::ui {
 
-class ControllerSurfaceCell : public juce::Component {
+class ControllerSurfaceCell
+    : public juce::Component
+    , public juce::SettableTooltipClient {
 public:
     ControllerSurfaceCell();
     ~ControllerSurfaceCell() override;

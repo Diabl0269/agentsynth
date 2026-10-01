@@ -8,6 +8,9 @@
 #include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "../../TestSettingsHelpers.h"
 #include "../Graph/GraphEditor/GraphEditorTestHelpers.h"
+#include "../MidiRemote/MidiRemotePanelTestFixture.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
+#include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AI/AccountService.h"
 #include "AccessibilityAudit.h"
@@ -27,6 +30,7 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
+#include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Library/ModuleLibraryHelpPopup.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
@@ -258,6 +262,8 @@ TEST(AccessibilityCoverageTest, PianoRoll) {
 
 // ============================================================================
 // Dialogs and popups
+// =====================================================================}
+
 // ============================================================================
 
 TEST_F(AccessibilitySettingsTest, DualIOPerModulePopup) {
@@ -371,6 +377,50 @@ TEST(AccessibilityCoverageTest, ColourPickerPopup) {
 TEST(AccessibilityCoverageTest, ModuleLibraryHelpPopup) {
     synth::ui::ModuleLibraryHelpPopup popup;
     EXPECT_TRUE(matchesBaseline("ModuleLibraryHelpPopup", auditAccessibility(popup)));
+}
+
+// ============================================================================
+// The module library, the AI chat and the MIDI Remote panel.
+// ============================================================================
+
+TEST(AccessibilityCoverageTest, ModuleLibrary) {
+    ModuleLibraryComponent library;
+    library.setSize(260, 900);
+    EXPECT_TRUE(matchesBaseline("ModuleLibrary", auditAccessibility(library)));
+}
+
+// A conversation with one message in it, so a bubble is audited too.
+TEST_F(AccessibilitySettingsTest, AIChat) {
+    aiChat->setLocalHistoryDirectoryForTesting(
+        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("a11y-chat-" + juce::Uuid().toString()));
+    aiChat->setSize(400, 700);
+    for (auto* child : aiChat->getChildren())
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            if (editor->isVisible())
+                editor->setText("Create a fat bass");
+    aiChat->triggerSend();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    EXPECT_TRUE(matchesBaseline("AIChat", auditAccessibility(*aiChat)));
+}
+
+// A controller with a transport-strip template, one control selected: the Controllers list, the
+// surface, its toolbar and page strip, and the inspector with its assignment widgets.
+TEST_F(MidiRemotePanelLiveRefreshTest, MidiRemotePanel) {
+    synth::ui::AddControllerPopover::Choice choice;
+    choice.deviceIdentifier = synth::midi::hostSourceKey();
+    choice.deviceName = "Test device";
+    choice.profileName = "Test device";
+    choice.startWith = synth::ui::AddControllerPopover::StartWith::templateLayout;
+    choice.templateId = "template-transport-strip";
+    const auto profileId = panel_.createControllerFromChoice(choice);
+    ASSERT_FALSE(profileId.isEmpty());
+    const auto profiles = controller_->getProfiles();
+    ASSERT_FALSE(profiles.empty());
+    ASSERT_FALSE(profiles.front().controls.empty());
+    panel_.setSize(1200, 320);
+    panel_.selectForTest(profileId, profiles.front().controls.front().id);
+    panel_.resized();
+    EXPECT_TRUE(matchesBaseline("MidiRemote", auditAccessibility(panel_)));
 }
 
 // ============================================================================

@@ -217,7 +217,27 @@ void appendFeedbackOutputSubmenu(ControllersListComponent& self, juce::PopupMenu
 
 } // namespace
 
+namespace {
+
+class ControllersValueInterface : public juce::AccessibilityTextValueInterface {
+public:
+    explicit ControllersValueInterface(const ControllersListComponent& list)
+        : list_(list) {}
+
+    bool isReadOnly() const override { return true; }
+    juce::String getCurrentValueAsString() const override { return list_.getAccessibilityValueText(); }
+    void setValueAsString(const juce::String&) override {}
+
+private:
+    const ControllersListComponent& list_;
+};
+
+} // namespace
+
 ControllersListComponent::ControllersListComponent() {
+    setTitle("Controllers");
+    setDescription("The controller profiles of this project");
+    addControllerButton_.setTooltip("Add a controller: pick a device and start from detect, a template or empty");
     addControllerButton_.setComponentID("addControllerButton");
     addControllerButton_.onClick = [this] {
         if (onAddControllerRequested)
@@ -248,6 +268,7 @@ void ControllersListComponent::setRows(const std::vector<RowModel>& rows) {
     if (!selectionStillPresent)
         selectedProfileId_.clear();
 
+    refreshAccessibilityValue();
     repaint();
 }
 
@@ -268,7 +289,34 @@ void ControllersListComponent::setSelectedProfileId(const juce::String& profileI
     if (selectedProfileId_ == profileId)
         return;
     selectedProfileId_ = profileId;
+    refreshAccessibilityValue();
     repaint();
+}
+
+juce::String ControllersListComponent::getAccessibilityValueText() const {
+    const auto it =
+        std::find_if(rows_.begin(), rows_.end(), [&](const Row& r) { return r.profileId == selectedProfileId_; });
+    const auto count = static_cast<int>(rows_.size());
+    if (it == rows_.end())
+        return count == 1 ? juce::String("1 controller") : juce::String(count) + " controllers";
+    return rowDisplayName(*it) + ", " + juce::String(static_cast<int>(it - rows_.begin()) + 1) + " of " +
+           juce::String(count);
+}
+
+std::unique_ptr<juce::AccessibilityHandler> ControllersListComponent::createAccessibilityHandler() {
+    return std::make_unique<juce::AccessibilityHandler>(
+        *this, juce::AccessibilityRole::list, juce::AccessibilityActions{},
+        juce::AccessibilityHandler::Interfaces{std::make_unique<ControllersValueInterface>(*this)});
+}
+
+// A value-changed event is posted only when the text differs from the last one handed out.
+void ControllersListComponent::refreshAccessibilityValue() {
+    const auto text = getAccessibilityValueText();
+    if (text == announcedValueText_)
+        return;
+    announcedValueText_ = text;
+    if (auto* handler = getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(juce::AccessibilityEvent::valueChanged);
 }
 
 void ControllersListComponent::paint(juce::Graphics& g) {

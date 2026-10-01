@@ -250,6 +250,7 @@ add_executable(Tests
     UI/Assistant/AIChatComponent/AIChatComponentTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentArrangeTests.cpp
+    UI/Assistant/AIChatComponent/AIChatAccessibilityTests.cpp
     UI/Assistant/PlanBadgeTests.cpp
     Modules/PolyMidiModuleTests.cpp
     Modules/PolySequencerModuleTests.cpp
@@ -401,6 +402,7 @@ add_executable(Tests
     UI/Library/ModuleLibrarySearchTests.cpp
     UI/Library/ModuleLibraryHelpPopupTests.cpp
     UI/Library/ModuleLibraryKeyboardNavTests.cpp
+    UI/Library/ModuleLibraryAccessibilityTests.cpp
     UI/Graph/SelectionModelTests.cpp
     Project/SnippetManager/SnippetManagerExtractTests.cpp
     Project/SnippetManager/SnippetManagerPrepareInsertTests.cpp
@@ -546,6 +548,7 @@ add_executable(Tests
     UI/MidiRemote/MidiRemotePanelGroupDeleteTests.cpp
     UI/MidiRemote/AddControllerPopoverTests.cpp
     UI/MidiRemote/ControllersListTests.cpp
+    UI/MidiRemote/MidiRemoteAccessibilityTests.cpp
     UI/MidiRemote/ControllerSurfaceTests.cpp
     UI/MidiRemote/ControllerSurfacePageStripTests.cpp
     UI/MidiRemote/MidiRemotePanelPagesTests.cpp

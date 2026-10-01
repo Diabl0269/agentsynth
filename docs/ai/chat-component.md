@@ -96,6 +96,17 @@ Appends to the debug console are coalesced and the console is length-bounded. Ho
 > multi-second UI freeze; this is guarded by `AIStateMapperTest.PresetLoadDoesNotSpamLogger`. Keep
 > logging to errors and rare events only.
 
+## Screen reader
+
+The message list is a `ChatMessageViewport` (a `juce::Viewport`): a Tab stop with the accent focus
+ring that scrolls with the arrow, Page and Home/End keys, exposed as a **list** titled "Chat messages".
+Each `MessageBubble` is a **list item** whose title is the whole message, "You: ..." or "Assistant: ..."
+with a note when it carries a patch or timeline changes to apply (`ChatMessageAccessibilityText.h`);
+the label inside it is hidden from the screen reader so the text is not read twice, while a bubble's
+cards and buttons stay separate controls. The input box, Send, Cancel, New Chat, History, model and
+mode pickers all carry a screen-reader name and a tooltip, checked by the `AIChat` surface of the
+accessibility coverage test ([`docs/development/accessibility.md`](../development/accessibility.md)).
+
 ## Panel visibility persistence
 
 The AI panel's visibility persists via the `ApplicationProperties` key `"aiPanelVisible"`, default

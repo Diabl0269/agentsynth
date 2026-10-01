@@ -16,6 +16,8 @@ split across per-concern translation units, none over 1,000 lines:
   calls
 - `ModuleLibraryInput.cpp` — mouse events, keyboard navigation, starting a drag-and-drop session
 - `ModuleLibraryHelpPopover.cpp` — the "?" help popover's pin/float versus `CallOutBox` hosting
+- `ModuleLibraryAccessibility.cpp` — the screen-reader list handler and the spoken text of the
+  keyboard-focused row (wording in `Source/UI/Library/ModuleLibraryAccessibilityText.h`)
 
 ## One layout pass
 
@@ -88,6 +90,18 @@ Escape clears the field.
 theme was active before that, so without this the field showed stale colours until the next theme
 switch. `parentHierarchyChanged()` fires when `MainComponent::initialiseCommon()` calls
 `addAndMakeVisible(moduleLibrary)`, which always runs after that ctor-body `applyTheme()` call.
+
+## Screen reader
+
+The rows are painted, not components, so the library is one accessibility element: a **list** titled
+"Module library" whose value follows the keyboard-focused row. Arrowing onto a module is spoken as
+"Oscillator, 3 of 12, Sources" (its position among the visible rows of its section, then the section
+name); a section header reads "Sources, section, expanded, 12 items" and updates when Left/Right folds
+it; with no row focused the value is the visible row count. A value-changed event is posted only when
+the text changes (`refreshAccessibilityValue()`), so a repaint never re-reads it. The search field is
+titled "Search library". The component keeps a default tooltip while nothing is hovered, so the list
+always has one. The wording is pure (`ModuleLibraryAccessibilityText.h`) and tested in
+`Tests/UI/Library/ModuleLibraryAccessibilityTests.cpp`.
 
 ## Collapsible sections
 

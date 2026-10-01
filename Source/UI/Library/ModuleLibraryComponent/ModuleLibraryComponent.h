@@ -447,6 +447,13 @@ public:
     /** The entry index Up/Down keyboard navigation has landed on, or -1. */
     int getKeyboardFocusedIndex() const noexcept { return keyboardFocusedIndex; }
 
+    /** What a screen reader reads for the list: the keyboard-focused row as "Oscillator, 3 of 12,
+     *  Sources" (position among the visible rows of its section), a header as "Sources, section,
+     *  expanded, 12 items", or the visible row count when nothing is focused. */
+    juce::String getAccessibilityValueText() const;
+
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
     /** Test seam: drives the same state moveKeyboardFocus()/keyPressed() would, without a
      *  real native peer — see FocusRegion.h's own comment on why this test suite can never create
      *  one for grabKeyboardFocus() to require. Clamped exactly like a real navigation move so a test
@@ -687,6 +694,15 @@ private:
     // clamps hoveredIndex (clampHoverToVisibleRow's call sites) so a snippet save, plugin scan, or
     // collapse animation completing can never leave it pointing at a row that is no longer visible.
     int keyboardFocusedIndex = -1;
+    juce::String announcedValueText; // last getAccessibilityValueText() handed to the peer
+
+    /** Posts a value-changed event when the spoken text differs from the last one announced. */
+    void refreshAccessibilityValue();
+
+    /** Shown when no row or chrome control is hovered, so the list always has a tooltip. */
+    static constexpr const char* kDefaultTooltip =
+        "Module library. Arrow keys move between modules, Enter adds the focused one.";
+
     /** Builds and shows the right-click menu of snippet row `index`; `screenAnchor` (screen
      *  coordinates) places it at the row instead of at the mouse. */
     void showSnippetContextMenu(int index, std::optional<juce::Rectangle<int>> screenAnchor = {});

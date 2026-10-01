@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -80,6 +81,11 @@ public:
     /** The tooltip a hover over `profileId`'s row shows; empty for a row that needs none. */
     juce::String getTooltipForProfile(const juce::String& profileId) const;
     juce::String getTooltip() override;
+
+    /** What a screen reader reads for the list: the selected controller as "Name, 2 of 3" (with its
+     *  state in brackets when it is not simply present), or the controller count with none selected. */
+    juce::String getAccessibilityValueText() const;
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
     /** Row text as painted, for tests. */
     juce::String getRowDisplayNameForTest(const juce::String& profileId) const;
     /** "+ Add controller" clicked; `anchor` is the button, for the popover to point at. */
@@ -133,6 +139,9 @@ private:
     juce::String selectedProfileId_;
     bool hosted_ = false;
     juce::TextButton addControllerButton_{"+ Add controller"};
+    juce::String announcedValueText_; // last getAccessibilityValueText() handed to the peer
+
+    void refreshAccessibilityValue();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControllersListComponent)
 };
