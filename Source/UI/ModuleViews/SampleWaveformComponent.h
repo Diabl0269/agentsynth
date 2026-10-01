@@ -15,10 +15,14 @@
  */
 class SampleWaveformComponent
     : public juce::Component
+    , public juce::SettableTooltipClient
     , public juce::Timer {
 public:
     explicit SampleWaveformComponent(SamplerModule& samplerModule)
         : sampler(samplerModule) {
+        setTitle("Sample waveform");
+        setDescription("Waveform overview of the loaded sample with the playhead");
+        setTooltip("Sample waveform: the loaded sample and its playhead");
         startTimerHz(15);
     }
 

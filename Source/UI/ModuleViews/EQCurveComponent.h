@@ -20,10 +20,12 @@
  *    - drag a point              → set its frequency (x) and gain (y)
  *    - scroll over a point       → widen / narrow it (Q)
  *
- *  Keyboard (only after setKeyboardEditable(true), which makes the curve a Tab stop): 1-4 select
- *  a band and switch it on if it was off, Left/Right move its frequency by a semitone-sized step,
- *  Up/Down its gain by 1 dB (Shift: a quarter of that step), Page Up/Page Down narrow/widen it,
- *  Delete/Backspace switch it off, Return adds a point at 1 kHz.
+ *  Keyboard (the curve is a Tab stop): Left/Right select the previous/next band (all four, on or off,
+ *  clamped at the ends), 1-4 select a band and switch it on, Up/Down change the selected band's gain
+ *  by 1 dB, Alt+Left/Right its frequency by a semitone (Shift on any of these: a quarter of the step),
+ *  Page Up/Page Down narrow/widen Q, Return switches the selected band on or off, Delete/Backspace
+ *  switch it off. Every press is one undo step through onGestureStart/onGestureEnd. A screen reader
+ *  reads the selected band, e.g. "Band 2, 1.2 kHz, +3.0 dB, Q 0.7".
  *
  *  The mouse handlers are deliberately thin wrappers over addPointAt / removeBand / dragBandTo /
  *  nudgeBandQ, which are public so the interaction can be unit-tested without synthesising
@@ -57,9 +59,12 @@ public:
         lastBands = eqModule.getBandSnapshots();
         lastOutputGainDb = eqModule.getOutputGainDb();
         recomputeMagnitudes();
-        setWantsKeyboardFocus(false);
+        setWantsKeyboardFocus(true);
         setTitle("EQ curve");
-        setTooltip("EQ curve: double-click to add or remove a point, drag to move it, scroll over it to change Q");
+        setDescription("Parametric EQ response with up to four bands");
+        setTooltip("EQ curve: Left/Right pick a band, Up/Down change its gain, Alt+Left/Right its frequency, "
+                   "Page Up/Down its Q, Return switches it on or off. Mouse: double-click to add or remove a "
+                   "point, drag to move, scroll for Q");
         startTimerHz(30);
     }
 
@@ -138,7 +143,7 @@ public:
         eqModule.setBandEnabled(band, true);
         endGesture();
 
-        selectedBand = band;
+        setSelectedBand(band);
         refreshFromModule();
         return band;
     }
@@ -151,7 +156,7 @@ public:
         eqModule.setBandEnabled(band, false);
         endGesture();
         if (selectedBand == band)
-            selectedBand = -1;
+            setSelectedBand(-1);
         refreshFromModule();
     }
 
@@ -178,24 +183,22 @@ public:
 
     // ---------- keyboard ----------
 
-    /** Makes the curve a Tab stop edited with the keys listed in the class comment. Off by default:
-     *  the small inline curve on a module card stays mouse-only. */
-    void setKeyboardEditable(bool editable) {
-        setWantsKeyboardFocus(editable);
-        if (editable)
-            setTooltip("EQ curve: keys 1-4 pick a band, arrows move it, Page Up/Down change Q, Delete removes it. "
-                       "Mouse: double-click to add or remove a point, drag to move, scroll for Q");
-    }
-
     /** Moves the selected band by `octaves` in frequency and `dbDelta` in gain as one undo step,
-     *  selecting the first enabled band when none is selected. False when no band is enabled. */
+     *  selecting the first enabled band when none is selected. False when the selected band (or, with
+     *  none selected, every band) is off, or the move changes nothing. */
     bool nudgeSelectedBand(float octaves, float dbDelta) {
         if (!ensureSelectedBand())
             return false;
         const auto band = lastBands[(size_t)selectedBand];
+        const float newFreq = juce::jlimit(ParametricEQModule::kMinFreq, ParametricEQModule::kMaxFreq,
+                                           band.freqHz * std::pow(2.0f, octaves));
+        const float newGain =
+            juce::jlimit(-ParametricEQModule::kMaxGainDb, ParametricEQModule::kMaxGainDb, band.gainDb + dbDelta);
+        if (newFreq == band.freqHz && newGain == band.gainDb)
+            return false; // already at the end of its range: no undo step for a press that changes nothing
         beginGesture();
-        eqModule.setBandFreq(selectedBand, band.freqHz * std::pow(2.0f, octaves));
-        eqModule.setBandGain(selectedBand, band.gainDb + dbDelta);
+        eqModule.setBandFreq(selectedBand, newFreq);
+        eqModule.setBandGain(selectedBand, newGain);
         endGesture();
         refreshFromModule();
         return true;
@@ -210,48 +213,24 @@ public:
             eqModule.setBandEnabled(band, true);
             endGesture();
         }
-        selectedBand = band;
+        setSelectedBand(band);
         refreshFromModule();
     }
 
-    bool keyPressed(const juce::KeyPress& key) override {
-        const auto mods = key.getModifiers();
-        if (!getWantsKeyboardFocus() || mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown())
-            return false;
-        const bool fine = mods.isShiftDown();
-        const float semitone = (fine ? 0.25f : 1.0f) / 12.0f;
-        const float dbStep = fine ? 0.25f : 1.0f;
-        const int code = key.getKeyCode();
-        if (code >= '1' && code < '1' + ParametricEQModule::kNumBands) {
-            selectBand(code - '1');
-            return true;
-        }
-        if (code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey) {
-            nudgeSelectedBand(code == juce::KeyPress::leftKey ? -semitone : semitone, 0.0f);
-            return true;
-        }
-        if (code == juce::KeyPress::upKey || code == juce::KeyPress::downKey) {
-            nudgeSelectedBand(0.0f, code == juce::KeyPress::upKey ? dbStep : -dbStep);
-            return true;
-        }
-        if (code == juce::KeyPress::pageUpKey || code == juce::KeyPress::pageDownKey) {
-            if (ensureSelectedBand())
-                nudgeBandQ(selectedBand, code == juce::KeyPress::pageUpKey ? 0.25f : -0.25f);
-            return true;
-        }
-        if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey) {
-            removeBand(selectedBand);
-            return true;
-        }
-        if (code == juce::KeyPress::returnKey) {
-            addPointAt({freqToXStatic(1000.0f, static_cast<float>(getWidth())),
-                        dbToYStatic(0.0f, static_cast<float>(getHeight()))});
-            return true;
-        }
-        return false;
-    }
+    /** Moves the selection `delta` bands (on or off), clamped to the four bands; the first band when
+     *  none was selected. */
+    void selectBandRelative(int delta);
 
-    void focusGained(FocusChangeType) override { repaint(); }
+    /** Switches the selected band on or off, keeping it selected. False when none is selected. */
+    bool toggleSelectedBand();
+
+    /** The selected band as spoken, e.g. "Band 2, 1.2 kHz, +3.0 dB, Q 0.7"; a summary when none is. */
+    juce::String getAccessibilityValueText() const;
+
+    bool keyPressed(const juce::KeyPress& key) override;
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
+    void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType) override { repaint(); }
 
     // ---------- mouse handling ----------
@@ -279,7 +258,7 @@ public:
         // would otherwise push an empty undo step. beginGesture happens on the first mouseDrag.
         dragBand = hitTestBand(e.position);
         if (dragBand >= 0) {
-            selectedBand = dragBand;
+            setSelectedBand(dragBand);
             repaint();
         }
     }
@@ -333,6 +312,7 @@ public:
             lastOutputGainDb = outputGainDb;
             recomputeMagnitudes();
             repaint();
+            refreshAccessibilityValue();
         }
 
         if (showSpectrum && eqModule.getVisualBuffer() != nullptr) {
@@ -488,16 +468,29 @@ private:
     /** Peak below this counts as silence, so an idle patch stops repainting the spectrum. */
     static constexpr float kSilenceThreshold = 1.0e-5f;
 
-    /** Selects the first enabled band when none is selected (or the selected one was switched off). */
+    /** True when an enabled band is selected; with none selected, selects the first enabled one. A
+     *  selected band that is switched off stays selected (and the call is false). */
     bool ensureSelectedBand() {
-        if (selectedBand >= 0 && eqModule.isBandEnabled(selectedBand))
-            return true;
-        selectedBand = -1;
-        for (int b = 0; b < ParametricEQModule::kNumBands && selectedBand < 0; ++b)
-            if (eqModule.isBandEnabled(b))
-                selectedBand = b;
-        return selectedBand >= 0;
+        if (selectedBand >= 0)
+            return eqModule.isBandEnabled(selectedBand);
+        for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
+            if (eqModule.isBandEnabled(b)) {
+                setSelectedBand(b);
+                return true;
+            }
+        }
+        return false;
     }
+
+    void setSelectedBand(int band) {
+        if (selectedBand == band)
+            return;
+        selectedBand = band;
+        refreshAccessibilityValue();
+    }
+
+    /** Posts a value-changed event when the spoken text differs from the last one handed out. */
+    void refreshAccessibilityValue();
 
     void beginGesture() {
         if (onGestureStart)
@@ -516,6 +509,7 @@ private:
         lastOutputGainDb = eqModule.getOutputGainDb();
         recomputeMagnitudes();
         repaint();
+        refreshAccessibilityValue();
     }
 
     static bool bandsDiffer(const std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands>& a,
@@ -621,6 +615,7 @@ private:
     float lastOutputGainDb = 0.0f;
 
     int selectedBand = -1;
+    juce::String announcedValueText;
     int hoveredBand = -1;
     int dragBand = -1;
     bool gestureActive = false;

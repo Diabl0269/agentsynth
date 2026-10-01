@@ -16,6 +16,11 @@
  *    eye. Used by ADSR and Comparator; Compressor / Limiter can adopt the Decibels
  *    scale later without a new widget.
  *
+ *  Keyboard and screen reader: the meter itself is read-only and not a Tab stop. In slider+meter mode
+ *  the attached slider is the Tab stop (Up/Down and Left/Right adjust it, Page Up/Down and Home/End jump,
+ *  and it speaks its own value); it is named after the parameter and carries a tooltip. The meter
+ *  carries a title, description and tooltip only.
+ *
  *  Repaint discipline: this owns its own timer and repaints *itself* only when a
  *  displayed value moves past a visible amount. It is deliberately a separate
  *  component rather than something ModuleComponent::paint draws, because
@@ -24,6 +29,7 @@
  */
 class ThresholdControlComponent
     : public juce::Component
+    , public juce::SettableTooltipClient
     , public juce::Timer {
 public:
     explicit ThresholdControlComponent(ThresholdMeterSource& sourceToWatch)
@@ -39,9 +45,16 @@ public:
             slider->setSliderStyle(juce::Slider::LinearHorizontal);
             slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 44, 16);
             slider->setName(thresholdParam->getName(100));
+            slider->setWantsKeyboardFocus(true);
+            slider->setTitle(thresholdParam->getName(100));
+            slider->setTooltip(thresholdParam->getName(100) +
+                               ": slide to set where the trigger fires; arrow keys adjust it");
             addAndMakeVisible(*slider);
             attachment = std::make_unique<juce::SliderParameterAttachment>(*thresholdParam, *slider);
         }
+        setTitle(slider != nullptr ? slider->getName() + " meter" : juce::String("Trigger meter"));
+        setDescription("Input level against the trigger threshold");
+        setTooltip("Input level against the trigger threshold; the marker is the effective threshold");
         startTimerHz(kRefreshHz);
     }
 

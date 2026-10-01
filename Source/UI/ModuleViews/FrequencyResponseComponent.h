@@ -11,6 +11,7 @@
 
 class FrequencyResponseComponent
     : public juce::Component
+    , public juce::SettableTooltipClient
     , public juce::Timer {
 public:
     FrequencyResponseComponent(FilterModule& filter)
@@ -18,6 +19,9 @@ public:
         magnitudes.resize(numPoints, 0.0f);
         fftData.resize(fftSize * 2, 0.0f);
         spectrumMagnitudes.resize(numPoints, -80.0f);
+        setTitle("Filter response");
+        setDescription("Frequency response curve of the filter");
+        setTooltip("Filter response: the filter's gain across 20 Hz to 20 kHz");
         // Timer starts only while showing — the Filter card hides this view by default, and a
         // free-running 30 Hz tick on every Filter instance would be wasted work (and a repaint
         // source) for a component the user has not opened.

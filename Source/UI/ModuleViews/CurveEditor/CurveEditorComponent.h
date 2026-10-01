@@ -5,6 +5,7 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <optional>
 
 namespace synth::ui {
@@ -22,11 +23,19 @@ namespace synth::ui {
  *  without synthesising `juce::MouseEvent`s (though the real mouse path is exercised too — see
  *  Tests/UI/ModuleViews/CurveEditor/CurveEditorInteractionTests.cpp).
  *
+ *  Keyboard (a Tab stop with the accent focus ring): Left/Right select the previous/next movable point
+ *  (clamped at the ends), Alt+Left/Right move it in time and Alt+Up/Down in level (one grid cell while
+ *  snap-to-grid is on, else a small step; Shift: a fifth of the step, unsnapped), Delete/Backspace remove
+ *  it in Free mode. Every press is one gesture bracket, so one undo step, and runs the same callbacks a
+ *  drag does. A screen reader reads the selected point, e.g. "Point 3 of 5, time 0.25, level 0.80".
+ *
  *  No `juce::Timer` — repaints only when state actually changes; the playhead is a plain setter
  *  (`setPlayhead`), not an animation. A later change adds a gated animation driving it during
  *  playback (see the "No unconditional per-tick repaint" rule in Source/UI/CLAUDE.md).
  */
-class CurveEditorComponent : public juce::Component {
+class CurveEditorComponent
+    : public juce::Component
+    , public juce::SettableTooltipClient {
 public:
     CurveEditorComponent();
     ~CurveEditorComponent() override = default;
@@ -111,6 +120,20 @@ public:
      *  outside Free mode. */
     bool removeNode(int index);
 
+    /** Moves the selected point by `dx` model units in time and `dy` in level as one gesture, through
+     *  the same path as a drag (snapping included unless `bypassSnap`). False when no point is selected
+     *  or the move changes nothing. */
+    bool nudgeSelectedNode(double dx, float dy, bool bypassSnap = false);
+
+    /** Selects the previous (-1) or next (+1) movable point; the first one when none is selected.
+     *  Returns the selected index, or -1 when no point can be selected. */
+    int selectNodeRelative(int delta);
+
+    int getSelectedIndex() const noexcept { return selectedIndex_; }
+
+    /** The selected point as spoken, e.g. "Point 3 of 5, time 0.25, level 0.80"; a summary when none is. */
+    juce::String getAccessibilityValueText() const;
+
     static constexpr float kBendSensitivityPx = 150.0f;
 
     // ---------- mouse ----------
@@ -125,10 +148,28 @@ public:
     void resized() override;
     void paint(juce::Graphics& g) override;
 
+    // ---------- keyboard and screen reader (CurveEditorKeyboard.cpp) ----------
+    bool keyPressed(const juce::KeyPress& key) override;
+    void focusGained(FocusChangeType cause) override;
+    void focusLost(FocusChangeType cause) override;
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
 private:
     CurveEditorGeometry currentGeometry() const;
     void beginGesture();
     void endGesture();
+    /** Writes the already-snapped target to node `index` honouring its movable flags, keeps the
+     *  selection on the node through a Free-mode reorder, and fires the change callbacks. Returns the
+     *  node's index afterwards. */
+    int applyNodeTarget(int index, juce::Point<double> target);
+    /** The model edit alone (movable flags honoured), returning the node's index afterwards. */
+    static int moveNodeInModel(CurveModel& model, int index, juce::Point<double> target);
+    void setSelectedIndex(int index);
+    /** Posts a value-changed event when the spoken text differs from the last one handed out. */
+    void refreshAccessibilityValue();
+    /** One keyboard step along each axis, in model units: a grid cell while snapping, else a fixed
+     *  fraction of the visible range / level range. */
+    juce::Point<double> keyboardStep() const;
     void updateHover(juce::Point<float> point);
     /** Rounds `point`, already converted to model units via `geometry`, to the grid -- a no-op
      *  (returns `point` unchanged) unless `snapToGrid_` is set and `bypassSnap` is false. */
@@ -176,6 +217,7 @@ private:
     CurveHitKind hoveredKind_ = CurveHitKind::None;
     int hoveredIndex_ = -1;
     int selectedIndex_ = -1;
+    juce::String announcedValueText_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CurveEditorComponent)
 };

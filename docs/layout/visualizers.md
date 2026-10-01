@@ -71,6 +71,28 @@ an EQ point" hint.
 | Scroll over a point | Widens or narrows it (Q), multiplicatively |
 | Hover | Halos the handle and shows a freq / gain / Q readout bottom-right |
 
+**Keyboard.** The curve is a Tab stop (card and pop-out alike) with the accent focus ring. Like a
+native control's own keys, these act only inside the focused curve and are not rebindable actions:
+
+| Key | Effect |
+|---|---|
+| Left / Right | Select the previous / next band (all four, on or off; stops at the ends). Tabbing in selects band 1 |
+| 1-4 | Select that band and switch it on |
+| Up / Down | Gain +1 / -1 dB on the selected band (Shift: 0.25 dB) |
+| Alt+Left / Alt+Right | Frequency down / up a semitone (Shift: a quarter of that) |
+| Page Up / Page Down | Narrow / widen Q (Shift: a quarter of the step) |
+| Return | Switch the selected band on or off; it stays selected |
+| Delete / Backspace | Switch the selected band off |
+
+A band that is off is selectable (Return switches it on) but is not moved by the arrows. A press
+that cannot change anything (gain already at its limit) opens no undo step. Every key that edits is
+one `onGestureStart` / `onGestureEnd` bracket, the same undo path as a drag.
+
+**Screen reader.** The curve is named "EQ curve" and its value is the selected band, e.g. "Band 2,
+1.2 kHz, +3.0 dB, Q 0.7" ("Band 2, off" while off; "No band selected, 2 of 4 bands on" before a
+band is picked). The wording lives in `ModuleViewAccessibility.h`; the keys and the handler in
+`EQCurveKeyboard.cpp`. A value-changed event is posted only when the text changes.
+
 The mouse handlers are deliberately thin wrappers over public `addPointAt` / `removeBand` /
 `dragBandTo` / `nudgeBandQ` / `hitTestBand`, so the interaction is unit-tested without synthesising
 `juce::MouseEvent`s (`EQCurveInteraction.*`).
@@ -105,18 +127,23 @@ rather than a dangling call.
   default-on spectrum still settles to **zero repaints on an idle patch**. That gate is what keeps
   this compliant with [rendering](rendering.md). Never make it unconditional.
 
+## Read-only views: names and tooltips
+
+`ScopeComponent`, `FrequencyResponseComponent`, `WavetableDisplayComponent`,
+`SampleWaveformComponent` and the meter half of `ThresholdControlComponent` only show a signal. Each
+has a `setTitle`, a one-line `setDescription` and a tooltip, and none of them is a Tab stop. The
+wavetable display ignores the mouse so a drag over it reaches the card, which means its tooltip is
+never shown on hover; the title and description still reach a screen reader.
+
 ## EQWindow
 
 `Source/UI/ModuleViews/EQWindow.h`. The pop-out editor for a Parametric EQ, opened from the card's
 "Open EQ Window" button. It is a content-only `juce::Component`, the same pattern as
 `SettingsWindow`; the caller wraps it in a `juce::DialogWindow` via `LaunchOptions::launchAsync()`.
 It hosts a second `EQCurveComponent` over the same module at 720x420 (resizable), plus a spectrum
-toggle and a gesture hint. Escape closes it. In this window only (`setKeyboardEditable(true)`; the
-small inline curve stays mouse-only) the curve is a Tab stop with the accent focus ring and edits with
-the keyboard: 1-4 select a band and switch it on, Left/Right move its frequency (a semitone; Shift a
-quarter of that), Up/Down its gain (1 dB; Shift 0.25 dB), Page Up/Page Down narrow/widen Q, Delete or
-Backspace switch it off, Return adds a point at 1 kHz. Each key is one undo step through the same
-gesture hooks as a drag.
+toggle and a gesture hint. Escape closes it. The curve in this window edits with the same keys as the
+card's curve (see the EQ curve's Keyboard table above); Tab visits the curve and then the spectrum
+toggle.
 
 `ModuleComponent` holds the dialog as a `Component::SafePointer` and **deletes it in
 `detachFromProcessor()`** — the window references the module, so leaving it open across a graph
@@ -168,6 +195,13 @@ image and re-run the module's text layout on every meter tick — exactly the re
 [rendering](rendering.md) prohibits. Instead this owns a 20 Hz timer and repaints *itself* only when
 a displayed value moves past a visible amount (see `needsRepaint`), leaving the parent's cached image
 untouched.
+
+**Keyboard and screen reader.** The meter is read-only and is not a Tab stop; it has a title, a
+description and a tooltip ("Trigger meter", or "<parameter> meter" in slider mode). In slider mode
+the attached slider is the Tab stop: Up/Down (and Left/Right) adjust the threshold, Page Up/Page
+Down and Home/End jump, it shows the accent focus ring, speaks its own value through the stock
+slider handler, and is named after the parameter. The container is deliberately not a second stop
+for the same value.
 
 **Public static helpers** (headless-testable):
 
@@ -228,6 +262,26 @@ entry, FRO114).
 `start + (end - start) * shape(progress, bend)`, using `synth::EnvelopeGenerator::shape` by default;
 the model accepts an alternative shape function. This is deliberate: the curve the editor draws is
 exactly what the envelope's DSP plays, never a separately re-derived approximation.
+
+**Keyboard.** The editor is a Tab stop with the accent focus ring; the keys act only inside it and
+are not rebindable actions.
+
+| Key | Effect |
+|---|---|
+| Left / Right | Select the previous / next point that can move (a pinned origin is skipped; stops at the ends). Tabbing in selects the first |
+| Alt+Left / Alt+Right | Move the selected point in time |
+| Alt+Up / Alt+Down | Move the selected point in level |
+| Shift added to those | A fifth of the step, and no snapping |
+| Delete / Backspace | Remove the selected point (Free mode only; a Fixed curve leaves the key to the app) |
+
+A step is one grid cell while snap-to-grid is on (the LFO card) and otherwise a fiftieth of the
+visible time range (a twentieth of the level range). A key move goes through the same
+`applyNodeTarget` a drag does: it honours `xMovable` / `yMovable`, runs `onNodeChanged` /
+`onPointsChanged`, and is wrapped in exactly one `onGestureStart` / `onGestureEnd`, so the envelope
+and LFO cards record one undo step per press. A press that changes nothing (a pinned axis, a limit)
+opens no gesture. A screen reader reads the selected point, e.g. "Point 3 of 5, time 0.25, level
+0.80" ("Curve with 5 points" before one is picked). The keys and handler live in
+`CurveEditorKeyboard.cpp`.
 
 Five display and interaction rules:
 

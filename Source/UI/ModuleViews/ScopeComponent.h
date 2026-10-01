@@ -6,11 +6,15 @@
 
 class ScopeComponent
     : public juce::Component
+    , public juce::SettableTooltipClient
     , public juce::Timer {
 public:
     ScopeComponent(VisualBuffer& buffer)
         : visualBuffer(buffer) {
         sampleData.resize(buffer.getSize(), 0.0f);
+        setTitle("Oscilloscope");
+        setDescription("Live waveform of this module's output");
+        setTooltip("Oscilloscope: the module's output waveform");
         startTimerHz(60); // higher refresh rate for scope
     }
 

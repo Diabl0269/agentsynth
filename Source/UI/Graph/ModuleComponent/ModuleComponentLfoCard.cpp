@@ -86,6 +86,8 @@ void ModuleComponent::createLfoCardControls() {
         return;
 
     lfoCurveEditor = std::make_unique<synth::ui::CurveEditorComponent>();
+    lfoCurveEditor->setTitle("LFO custom wave");
+    lfoCurveEditor->setDescription("Custom waveform of the LFO");
     lfoCurveEditor->setModel(buildLfoCurveModel(lfo->getCustomWave()));
     lfoCurveEditor->setVisibleRangeOverride(1.0);
     lfoCurveEditor->setZeroSegmentPx(0.0f);

@@ -11,7 +11,10 @@ Every new or changed control:
    sits inside a focus region that moves between its items with the arrow keys (the mixer panel is
    one focusable leaf; its columns and faders are reached with Left/Right/Up/Down). It acts on
    Space/Enter or the arrow keys the way a native control would, and every new key is a rebindable
-   action (below).
+   action (below). The exception is a key inside a focused editor that a native control would also
+   own (the arrows, Return and their modifiers in the EQ curve and the curve editor): that is the
+   control's own behaviour, not a global shortcut, and is documented with the view
+   ([`visualizers.md`](../layout/visualizers.md)).
 2. **Shows the accent focus ring** when it holds keyboard focus.
 3. **Has a screen-reader name** - `setTitle("...")` on the component (a button's text counts), plus a
    value or role where it applies (a slider's `textFromValueFunction`, a meter's accessibility value).
@@ -50,7 +53,7 @@ knobs and sliders, so a stock control needs nothing. A custom-painted control ca
 
 `Tests/UI/Accessibility/AccessibilityCoverageTests.cpp` audits every visible, accessible interactive
 control (buttons, sliders, combo boxes, text editors, anything that wants keyboard focus) on a
-headless `MainComponent` (panel state pinned: library open, bottom dock open on the Timeline tab, AI chat and mod matrix closed, so the count does not depend on saved settings), one card for every built-in module type (`ModuleCards`, one aggregate entry; types needing a plugin binary, a timeline track or mixer/macro plumbing are skipped, the list is in the test), each Settings tab, the piano roll (a clip loaded, the velocity strip shown, the scale-assist panel open on its custom-scale editor), and every dialog and popup that can be built without a window (Export Audio, Sign in, Configure I/O for a macro, the macro auto-port prompt, the per-module Dual I/O popup, the EQ window, the welcome screen, the colour picker, the module library help popover), and counts two gaps per
+headless `MainComponent` (panel state pinned: library open, bottom dock open on the Timeline tab, AI chat and mod matrix closed, so the count does not depend on saved settings), one card for every built-in module type (`ModuleCards`, one aggregate entry; types needing a plugin binary, a timeline track or mixer/macro plumbing are skipped, the list is in the test), each Settings tab, the piano roll (a clip loaded, the velocity strip shown, the scale-assist panel open on its custom-scale editor), and every dialog and popup that can be built without a window (Export Audio, Sign in, Configure I/O for a macro, the macro auto-port prompt, the per-module Dual I/O popup, the EQ window, the module views built on their own (`ModuleViews`: the EQ curve, the curve editor and the threshold control, the three that take focus, with the read-only visualizers beside them), the welcome screen, the colour picker, the module library help popover), and counts two gaps per
 surface: **missingName** (empty `setTitle`, and for a button empty text; a custom accessibility handler is not consulted because it does not exist without a native window) and **missingTooltip**. The counts must equal the
 entry in `Tests/UI/Accessibility/AccessibilityBaseline.h`:
 

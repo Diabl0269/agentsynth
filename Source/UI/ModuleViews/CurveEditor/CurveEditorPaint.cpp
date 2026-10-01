@@ -1,4 +1,5 @@
 #include "CurveEditorComponent.h"
+#include "UI/Layout/FocusRing.h"
 
 namespace synth::ui {
 
@@ -163,6 +164,7 @@ void CurveEditorComponent::paint(juce::Graphics& g) {
     paintCurve(g, geometry, colours);
     paintHandles(g, geometry, colours);
     paintPlayheadMarker(g, geometry, colours);
+    paintFocusRing(g, getLocalBounds().toFloat(), *this);
 }
 
 } // namespace synth::ui
