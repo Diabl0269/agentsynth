@@ -31,7 +31,7 @@ public:
         // whether the user asked for 0 ms explicitly or an automation lane swept down to it, so
         // "0 ms" reads as "as fast as is click-free", not as a literal single-sample cliff. The
         // knob feel at the new 1 ms attack default lives on the slider itself
-        // (ModuleComponent.cpp's ADSR special case, applyAdsrTimeSliderSkew), never on the
+        // (the card body's ADSR special case, CardBody.cpp's applyAdsrTimeSkew), never on the
         // parameter's own range -- a skewed NormalisableRange here would badly worsen
         // AIStateMapper's pre-existing untrusted in-[0,1] rescale misfire. See
         // docs/modules/modules.md#adsr-envelope-module for the full rationale and for why 5.0 stays the ceiling.

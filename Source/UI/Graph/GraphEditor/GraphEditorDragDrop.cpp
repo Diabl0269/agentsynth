@@ -24,83 +24,23 @@
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroControlModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/CardBody/CardBodyMeasure.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
-// Returns an estimated (w, h) footprint for a module type name.
-// Used when the component does not yet exist (e.g. on drag-drop before layout).
-// Heights match the real component sizes so the library-drag ghost preview is accurate.
-// The final drop placement uses the real component size via finalizeModuleDrag() — the
-// estimate is only used for the live ghost preview.
-// Heights are measured from the real components, not guessed — see
-// ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents, which constructs every type and
-// fails if this table drifts from what layoutDefaultContent() actually produces.
-// Estimated (w, h) footprint for a module type name, used for the library drag ghost before a
-// real component exists. Public so a test can hold it to the real component sizes — see
-// ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents.
-// Split out of GraphEditor::estimateModuleSize (see its own comment below for why) purely
-// so that method can carry the explanation beside its one-line body instead of above this
-// ~30-branch table.
-static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName) {
-    if (typeName == "Oscillator")
-        return {280, 433}; // +96: an Audio R output jack row and the Pan knob row
-                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Filter")
-        // +1 knob row: the Level knob took it from 3 sliders to 4.
-        // +20: the Audio L/R input pair adds a jack row to the port gutter.
-        // −128: frequency-response chart is opt-in via "Show Response" (was always reserved).
-        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        return {280, 383};
-    if (typeName == "LFO")
-        // +40 for the Rate/Level/Glide CV jacks (3 input jacks, one row shared per pair
-        // with the mono CV output already there — see ModuleComponentTest.
-        // EstimatedModuleSizesMatchTheRealComponents, which pins this to the real component).
-        // +76 for the Phase and Fade In knobs, which add a knob row (their CV jacks are knob-bound,
-        // so they draw no gutter row).
-        return {280, 437}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "VCA")
-        return {280, 233}; // +20: the Audio L/R input pair adds a jack row
-                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
-        // Five rotary knobs (attack/hold/decay/sustain/release) now flow through the
-        // generic 3-per-row knob grid (3+2, same shape as every other module), the three curve
-        // params moved onto the collapsed-by-default envelope graph's bend handles, and a
-        // collapsed graph adds one row (its disclosure toggle + BPM|MS). Below 2 jacks + Poly
-        // toggle + threshold control + knob grid (2 rows) + disclosure row, collapsed.
-        // +100 for the five Attack/Hold/Decay/Sustain/Release CV jacks appended after
-        // Threshold (see ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents).
-        // -100 -- those five jacks all resolve to a bound generic rotary knob now, so
-        // each draws no gutter row at all (isInputJackKnobBound). Threshold keeps its jack (it has
-        // no generic slider, see the comment on estimateModuleSize below), so it's still 1 row.
-        // (No Attack/Decay/Release Curve CV jacks here -- those three curve amounts have no knob
-        // to land on, so adding a jack for them would just be a knob-less gutter jack, the exact
-        // shape knob-bound jacks exist to remove; see docs/modules/modulation.md.)
-        return {280, 389};
-    if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
-        // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
-        return {synth::LayoutUtil::kDoubleWidth, 406};
-    if (typeName.containsIgnoreCase("Poly") && typeName.containsIgnoreCase("Sequencer"))
-        // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
+// Sizes of the cards whose body is NOT drawn from layout data (the bespoke cards, the I/O nodes, a
+// hosted plugin and the macro-port widgets), for estimateModuleSize below. Every other card is
+// measured from its card-body plan. Each entry is pinned to the real card by
+// ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents or the test its comment names.
+static juce::Point<int> bespokeCardSizeTable(const juce::String& typeName) {
+    if (typeName.containsIgnoreCase("Sequencer"))
+        // Sequencer and Poly Sequencer: the step grid, plus one toggle row for Sync to Transport.
         return {synth::LayoutUtil::kDoubleWidth, 406};
     if (typeName.containsIgnoreCase("MidiKeyboard") || typeName.containsIgnoreCase("Midi Keyboard") ||
         typeName.containsIgnoreCase("MIDI Keyboard"))
         return {synth::LayoutUtil::kDoubleWidth, 150};
-    if (typeName == "Poly MIDI" || typeName == "PolyMidi")
-        // +48 (one combo row) for the Voice Steal selector, then +26 (one toggle row)
-        // for the Vel → Gate switch. +8: header-to-first-port gap grew 1px -> 9px (base 30->38).
-        return {280, 185};
-    if (typeName == "Distortion")
-        return {280, 283}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Ring Modulator")
-        return {280, 331}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Delay")
-        return {280, 237}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
-                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-                           // +60: Time/Feedback/Mix CV jacks finally exist (4 port rows)
-    if (typeName == "Reverb")
-        return {280, 237}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
-                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-                           // +100: Size/Damping/Wet/Dry/Width CV jacks finally exist (6 port rows)
+    if (typeName == "PolyMidi")
+        return {280, 185}; // an alias with no factory entry, so not measurable; "Poly MIDI" is measured
     if (typeName == "AudioInput" || typeName == "Audio Input")
         // Height tracks the DEVICE's input channel count at runtime (one jack per channel, up to
         // AudioInputModule::kMaxChannels — eight jacks measure 217px, pinned by
@@ -113,91 +53,21 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         return {280, 100};
     if (typeName == "Attenuverter")
         return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
-    if (typeName == "Noise")
-        return {280, 261}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Envelope Follower")
-        // Noise's control count (3 floats + a choice) plus a taller port gutter for 4 input jacks.
-        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        return {280, 235};
-    if (typeName == "Math")
-        return {280, 239}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Sample & Hold")
-        return {280, 451}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Comparator")
-        return {280, 185}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Macros")
         // Height tracks the bank's "Knobs" count at runtime; the drop estimate uses the default.
         return {synth::LayoutUtil::kSingleWidth,
                 synth::LayoutUtil::macroBankHeight(MacroControlModule::kDefaultMacros)};
-    if (typeName == "Sampler")
-        return {280, 545}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Wavetable")
         // Double-width. The 16 CV jacks run in two left-hand columns and the 23
         // controls are paged behind a tab strip (only Position and Warp stay pinned), so neither
         // the gutter nor the control count sets the height on its own.
         return {synth::LayoutUtil::kDoubleWidth, 565};
-    if (typeName == "Chorus" || typeName == "Phaser" || typeName == "Flanger")
-        // +60: every continuous parameter has a CV jack now (Audio + 5 CV = 6 port rows), and
-        // the port gutter, not the 2-row knob grid, sets the height.
-        return {280, 237};
-    if (typeName == "Bitcrusher")
-        return {280, 263}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Pitch Shifter")
-        return {280, 387}; // Dual I/O off: one Audio jack + Level knob row
-                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-                           // +40: Fine and Window CV jacks (Audio + 6 CV = 7 port rows)
     if (typeName == "Parametric EQ")
         // Double-width card: a 150px response curve set between the port-label gutters, then a
         // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().
         return {synth::LayoutUtil::kDoubleWidth, 592};
-    if (typeName == "Compressor")
-        return {280, 257}; // Audio + 5 CV + Key = 7 port rows set it (+20 for the Key jack)
-    if (typeName == "Limiter")
-        return {280, 161}; // +60: a CV jack per parameter (Audio + 3 CV = 4 port rows) sets it
-    if (typeName == "Gate")
-        // 6 float sliders (Threshold/Attack/Hold/Release/Range/Level): same row count as
-        // Compressor's 5 (3+3 wraps to the same number of rows as 6 in a 3-per-row grid).
-        // Audio + 5 CV + Key = 7 port rows set it, as for Compressor (+20 for the Key jack).
-        return {280, 257};
-    if (typeName == "Voice Mixer")
-        return {280, 301}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "External MIDI")
-        return {280, 146}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-    if (typeName == "Track In")
-        // Param-less card (only the inherited bypass, which lives in the header), no jacks: the
-        // 100 px floor in updateLayout is what sets the height. Not in the library — the timeline's
-        // add-track flow places it — so this only ever feeds a programmatic size query.
-        return {280, 100};
-    if (typeName == "Rec Tap")
-        // Like Track In it has no body controls (only the inherited bypass, which lives in the
-        // header), but it has two jacks a side, so the port gutter — not the 100 px floor — sets
-        // the height. Also library-less: the record flow places it. Measured against the real card
-        // by RecordTapTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
-        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        return {280, 131};
-    if (typeName == "Track Audio")
-        // Same shape as Rec Tap — no body controls, jacks setting the height — but with outputs
-        // only. Library-less like the other two internal nodes: the add-track flow places it.
-        // Measured against the real card by
-        // AudioClipPlaybackTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
-        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        return {280, 131};
-    if (typeName == "Channel Strip")
-        // gain + pan + the four send levels + the four send pans, below up to 2 input jacks a side
-        // (Stereo shape, what MainComponent::addAudioTrack always builds — width doesn't move with
-        // shape, only the Mono/Stereo jack-row count would, and this card's height already covers
-        // both). Height: 181 for gain + pan alone, +76 for the send levels (sendNLevel exists
-        // unconditionally, so the card always shows all four), +152 for the send pans (sendNPan
-        // likewise — four more generic-knob-grid rows) = 409. The send OUTPUT jacks appear only for
-        // active slots and sit in the right-hand gutter, which the control rows already outgrow.
-        // Internal-only like Track Audio/Rec Tap: library-less, no replace-menu entry. Measured
-        // against the real card by ChannelFlowTest.ChannelStripAndMasterHaveAPinnedSizeEstimate.
-        return {280, 409};
-    if (typeName == "Master")
-        // gain slider only, 4 input jacks (Mix L/R, Direct L/R) a side setting the port gutter.
-        // Internal-only, singleton, library-less. Measured against the real card by
-        // ChannelFlowTest.ChannelStripAndMasterHaveAPinnedSizeEstimate.
-        return {280, 221};
+        return {280, 146};
     if (typeName == "Hosted Plugin")
         // Bypass and mute live in the header; a bare card's body is the Open Editor / Choose knobs
         // button row, one jack a side while empty. The card grows with the loaded plugin's real port count,
@@ -205,8 +75,6 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         // finalizeNewDrop re-resolves against the real component anyway. Library-less until the
         // scan list and load UX ship. Measured against the real card by
         // HostedPluginTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
-        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        // +4: the button row has a 6px gap below it.
         return {280, 135};
     if (typeName == "Macro In" || typeName == "Macro Out" || typeName == "Macro MIDI In" ||
         typeName == "Macro MIDI Out")
@@ -218,21 +86,15 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
     return {280, 360};
 }
 
+// A card whose body is drawn from layout data is measured from its card-body plan (the same plan and
+// layout walk the real card uses, including which parameters become rotary knobs and so which CV
+// jacks are knob-bound and draw no gutter row); only the bespoke cards read the table above.
+// ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents builds a REAL ModuleComponent per
+// library type and holds both paths to it.
 juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
-    // A jack whose target resolves to a bound, GENERIC ROTARY knob
-    // (ModuleComponent::isInputJackKnobBound's live rule) draws no gutter row at all, so a
-    // continuous parameter with a CV jack does not always cost the jack column a row. Replicating
-    // that rule exactly here (without a live ModuleComponent to ask) would need the SAME
-    // slider-style/exclusion knowledge only createControls() has (a choice/bool-bound target like
-    // Oscillator's "Waveform" gets a combo, never a rotary; ADSR's Threshold/curve targets have
-    // bound float parameters but no generic slider at all, see ModuleComponent.cpp's
-    // shouldSkipGenericFloatSlider) -- an approximation here would only trade one hand-kept table
-    // (this one) for a second, subtly different one.
-    // ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents (which builds a REAL
-    // ModuleComponent per library type and measures it) is what actually keeps this table honest;
-    // it catches any height change below when the table is updated by hand.
-    // it catches any height change below when the table is updated by hand.
-    return estimateModuleSizeBaseTable(typeName);
+    if (const auto measured = synth::measureDataDrivenCardSize(typeName))
+        return *measured;
+    return bespokeCardSizeTable(typeName);
 }
 
 // ---- DragAndDropTarget / FileDragAndDropTarget overrides ----------------------------------

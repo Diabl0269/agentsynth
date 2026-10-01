@@ -309,7 +309,7 @@ Loads an audio file from disk and plays it back one of two ways.
   displayed "0 ms", and the AI-authorable schema are all unchanged by it.
   The knob feel at the new 1 ms attack default lives on the **slider**, not the parameter: the
   0.3 skew that used to sit on these four `NormalisableRange`s now lives purely in the UI layer
-  (`ModuleComponent.cpp`'s ADSR special case, `applyAdsrTimeSliderSkew`, runs on the four time
+  (the card body's ADSR special case, `applyAdsrTimeSkew` in `CardBody.cpp`, runs on the four time
   sliders, identified by `paramID`). It has to run **after** the slider's
   `SliderParameterAttachment` is built, not before: that constructor always installs its own
   `NormalisableRange<double>` built from lambda `convertFrom0to1`/`convertTo0to1` functions, and
@@ -366,7 +366,7 @@ Loads an audio file from disk and plays it back one of two ways.
   mode. Declaring the output count to match (14, matching the highest CV channel read) keeps
   these silent per [`poly-channel-layout.md`](poly-channel-layout.md#rule-for-new-poly-modules).
   The three curve amounts (`attackCurve`/`decayCurve`/`releaseCurve`) deliberately get **no CV
-  jack**: they have no generic rotary knob (`ModuleComponent.cpp`'s `shouldSkipGenericFloatSlider`
+  jack**: they have no generic rotary knob (`CardBodyPlan.cpp`'s `isEditedElsewhere`
   skips them on purpose because they are edited only via the envelope graph's bend handles,
   FRO112), and a jack for a knob-less parameter is just a bare gutter row with nothing for a
   dropped cable to ring. A bend-handle drop anchor for them, matching how
@@ -454,8 +454,8 @@ Loads an audio file from disk and plays it back one of two ways.
     FRO113 also added one `AudioParameterChoice` note-division param per stage time
     (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`, sharing LFO's rateSync division list) and the
     tempo-following DSP behind them; both `tempoSync` and the four division params are excluded
-    from the generic per-param UI (`shouldSkipGenericBoolToggle`/`shouldSkipGenericChoiceCombo` in
-    `ModuleComponent.cpp`).
+    from the generic per-param UI (`isEditedElsewhere` in
+    `Source/UI/Graph/CardBody/CardBodyPlan.cpp`).
   - **BPM-mode pickers (FRO118)**: in BPM mode, each of the ATK/HOLD/DEC/REL knobs is replaced —
     in its own grid cell, short caption label kept — by a `juce::ComboBox` bound to its matching
     `*Div` param via a plain `juce::ComboBoxParameterAttachment` (the same binding/undo idiom the

@@ -477,4 +477,18 @@ set(APPUI_SOURCES
     Source/ShortcutManager/ShortcutManagerActionTable.cpp
     Source/ShortcutManager/ShortcutManagerDefaults.cpp
     Source/Update/UpdateManager.h
+    Source/UI/Graph/CardBody/CardBody.cpp
+    Source/UI/Graph/CardBody/CardBody.h
+    Source/UI/Graph/CardBody/CardBodyGeometry.cpp
+    Source/UI/Graph/CardBody/CardBodyGeometry.h
+    Source/UI/Graph/CardBody/CardBodyLayout.cpp
+    Source/UI/Graph/CardBody/CardBodyLayoutWalk.h
+    Source/UI/Graph/CardBody/CardBodyMeasure.cpp
+    Source/UI/Graph/CardBody/CardBodyMeasure.h
+    Source/UI/Graph/CardBody/CardBodyMoreButton.h
+    Source/UI/Graph/CardBody/CardBodyMoreRow.cpp
+    Source/UI/Graph/CardBody/CardBodyPlan.cpp
+    Source/UI/Graph/CardBody/CardBodyPlan.h
+    Source/UI/Graph/CardBody/CardBodyViews.cpp
+    Source/UI/Graph/CardBody/CardBodyViews.h
 )

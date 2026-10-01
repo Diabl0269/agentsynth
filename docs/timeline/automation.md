@@ -255,9 +255,9 @@ still call a plain single mutator, because those already cost exactly one bump o
 
 ## The knob entry point
 
-`ModuleComponent`'s generic auto-UI slider branches (`createControls()`'s float and int cases)
-attach `this` as a `MouseListener` on the slider (`addMouseListener(this, false)` — safe because
-`this` outlives every child slider, both being torn down together in `~ModuleComponent()`).
+A card's generic knobs (built by its card body, `CardBody::createKnob` in `Source/UI/Graph/CardBody/CardBody.cpp`)
+attach the `ModuleComponent` as a `MouseListener` on the slider (`addMouseListener(&card, false)` — safe because
+the card owns the card body and so outlives every child slider).
 
 `ModuleComponent::mouseDown` checks `e.eventComponent != this` FIRST — a hit on a child fires the
 SAME override, in the CHILD's local coordinate space, which the body-click geometry further down

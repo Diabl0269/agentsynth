@@ -96,7 +96,7 @@ listing them, and they are dropped from the layout the next time the user saves 
 that phrase now lives in the picker's missing-params line, not in a greyed knob on the card.
 
 A layout's slot count is uncapped in the model; the card shows them in the ordinary knob grid
-(`layoutKnobGrid`, width buckets from [`layout/module-card.md`](../layout/module-card.md#width-buckets)),
+(the card body's run layouts in `CardBodyGeometry.cpp`, width buckets from [`layout/module-card.md`](../layout/module-card.md#width-buckets)),
 growing the card's height like any module with many parameters. An empty layout shows the "Open Editor" button and a **Choose knobs…**
 button as the whole body.
 

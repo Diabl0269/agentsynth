@@ -4,11 +4,13 @@ Agent reference. The design for giving every built-in module a card drawn from l
 type-specific code: a hand-designed default per module type, a user override per instance or per
 type, knob/fader/switch widgets, and room for a future user-built "custom module".
 
-**Status:** model, store and override built; cards not yet drawn from it. Built: `CardLayout` v2 and its
-reader/writer, the shared layout store with its `ModuleCardLayouts` root, the per-instance `cardLayout`
-node property with its undo, and the pure resolver with an empty code-default registry
-([What exists](#what-exists)). Everything else (`CardBody`, widgets, default layouts, the editor) is
-designed and decided (see [Decisions](#decisions-2026-10-01)), not built. Nothing here describes
+**Status:** model, store, override and `CardBody` built; every card draws the automatic layout. Built:
+`CardLayout` v2 and its reader/writer, the shared layout store with its `ModuleCardLayouts` root, the
+per-instance `cardLayout` node property with its undo, the pure resolver with an empty code-default
+registry, and `CardBody`, which builds and lays out every built-in card's body from the resolved layout,
+with the folded More row and the Threshold view in its view registry ([What exists](#what-exists)).
+Everything else (new widgets, conditions, section headers, default layouts, the editor) is designed
+and decided (see [Decisions](#decisions-2026-10-01)), not built. Nothing here describes
 current behaviour unless it says "today" or "built".
 Where the card is drawn today is [module-card.md](module-card.md); the hosted-plugin half of the
 same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-layout.md).
@@ -17,27 +19,26 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 
 ## Today
 
-- `ModuleComponent::createControls()` (`Source/UI/Graph/ModuleComponent/ModuleComponent.cpp`) walks
-  `module->getParameters()` and builds one widget per parameter by JUCE type: choice → `ComboBox`,
-  float/int → `CardKnobSlider`, bool → toggle. `layoutDefaultContent()` then stacks **all combos,
-  then all toggles, then a 3-column knob grid**, each group in parameter declaration order. There is
-  no grouping, no widget choice, no label override and no mode-dependent visibility.
-- Exceptions are hard-coded: skip helpers for the ADSR curves/divisions/tempo-sync, the threshold
-  meter swap, the LFO custom-wave editor, the Sampler/Wavetable chrome, the Wavetable tab strip
+- Every built-in card's body is built by `CardBody` (`Source/UI/Graph/CardBody/`): one widget per
+  parameter by JUCE type (choice → `ComboBox`, float/int → `CardKnobSlider`, bool → toggle), in
+  declaration order. No module has a code default, so every card draws the **automatic layout**: all
+  combos, then all toggles, then the Threshold view, then a 3-column knob grid, each group in
+  declaration order, pixel for pixel the card that existed before `CardBody`. A stored layout (the
+  node's `cardLayout` override) is honoured for order, grid columns and hiding; widget choice, label
+  overrides, spans, conditions and section titles are not drawn yet.
+- Exceptions are hard-coded: skip rules for the ADSR curves/divisions/tempo-sync and the threshold
+  parameter (`CardBodyPlan.cpp`'s `isEditedElsewhere`), the LFO custom-wave editor, the Sampler/Wavetable chrome, the Wavetable tab strip
   (a name-keyed page table in `WavetableTabStrip.cpp`, the only grouping that exists), and fully
   bespoke bodies for Sequencer, Poly Sequencer, MIDI Keyboard, Macros, Attenuverter, Parametric EQ
   and External MIDI.
 - Dual-mode modules show both modes' controls at once (LFO Hz and Sync Rate; Sample & Hold Rate with
   an external clock; Sampler grain knobs in Sample mode; Pitch Shifter semitones and Hz).
-- `CardLayout` (`Source/Modules/CardLayout.h`) exists but only hosted-plugin cards use it: a flat,
-  ordered list of slots, version 1; the version 2 model is built ([What exists](#what-exists)) but no
-  card reads it yet.
+- `CardLayout` (`Source/Modules/CardLayout.h`): hosted-plugin cards use the flat version 1 slot list;
+  built-in cards resolve a version 2 layout through `CardBody` ([What exists](#what-exists)).
 
 ---
 
 ## What exists
-
-Nothing on a card reads these yet; they are the data layer the card body will draw from.
 
 | Piece | Where |
 |---|---|
@@ -45,6 +46,16 @@ Nothing on a card reads these yet; they are the data layer the card body will dr
 | Store with two roots: `PluginCardLayouts/` and `ModuleCardLayouts/<ModuleType>/` | `Source/Plugin/Hosting/CardLayoutStore.*` (shared), `Source/UI/Graph/CardBody/ModuleCardLayoutStore.*` |
 | Instance override: node property `cardLayout`, get/set with one undo step | `Source/UI/Graph/CardBody/CardLayoutOverride.*` |
 | Resolver (instance, type default, code default, automatic) and the empty `DefaultCardLayouts` registry | `Source/UI/Graph/CardBody/ModuleCardLayoutResolver.*`, `DefaultCardLayouts.*` |
+| `CardBody`: builds, binds and lays out a card's body; the folded More row | `Source/UI/Graph/CardBody/CardBody.*`, `CardBodyLayout.cpp`, `CardBodyMoreRow.cpp`, `CardBodyMoreButton.h` |
+| The plan (which widget per parameter, the skip rules, placement, More) and the run layouts | `CardBodyPlan.*`, `CardBodyGeometry.*`, `CardBodyLayoutWalk.h` |
+| The view registry (only `threshold` is registered) | `CardBodyViews.*` |
+| The size estimate for a card before it exists, measured from the plan | `CardBodyMeasure.*` (`GraphEditor::estimateModuleSize`) |
+
+As built: the card resolves its layout once, when it is built (instance override, then code default,
+then automatic; the app constructs no `ModuleCardLayoutStore` yet, so the per-type step is skipped). A
+stored layout is honoured only for the cards drawn from layout data; the bespoke ones (Sequencer, Poly
+Sequencer, Macros, Parametric EQ, Attenuverter, Wavetable, macro ports) always build from the
+automatic plan. The fold state of the More row is per card and not saved; a card opens folded.
 
 Reader rules as built: a layout is either the flat v1 `slots` list or v2 `sections`, never both. Reading
 v1 fills `slots` (the flat form is the implicit single untitled grid section) and `upgradeV1(layout,
@@ -170,7 +181,9 @@ envelope, LFO curve and threshold components plug in unchanged.
 
 - **Bindings do not change.** Every parameter keeps its attachment, MIDI Learn registration,
   modulation-amount gesture and knob-bound CV jack exactly as today; `CardBody` only decides which
-  widget and where. Widgets are looked up by `paramId`, not by display-name component ID.
+  widget and where. Widgets are looked up by `paramId` (`CardBody::findWidget`, and a modulation
+  target resolves its knob through its bound parameter), not by display-name component ID; the
+  component ID stays the display name for the bespoke cards and tests that read it.
 - **Hidden parameters stay whole.** They keep their value, stay in the patch `params` map, stay
   automatable, MIDI-learnable and model-authorable. A cable dragged over the folded More row opens
   it, so a hidden parameter can still take a new cable.
@@ -362,11 +375,16 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   applied once; unknown keys ignored; newer version refused; conditions match value strings;
   `hidden` plus unplaced parameters both land in More; a hosted layout without v2 features still
   writes v1.
-- `Tests/UI/Graph/CardBody/CardBodyLayoutTests.cpp`: automatic layout reproduces today's order and
+- `Tests/UI/Graph/CardBody/CardBodyGoldenTests.cpp` (built): every card's size, every child's kind,
+  bounds, visibility, title, tooltip and focus order, and every jack centre, against
+  `Tests/fixtures/card-body/card-geometry.golden`, captured from the card before `CardBody`.
+- `Tests/UI/Graph/CardBody/CardBodyLayoutTests.cpp` (built: order, measure == apply, estimate, More
+  row, no height change on a knob drag): automatic layout reproduces today's order and
   heights for every type without a code default; each code default builds with no missing
   `paramId`; measure and apply agree; a `show` swap and a `dim` rule change no height;
   `estimateModuleSize` matches every library type.
-- `Tests/UI/Graph/CardBody/CardBodyBindingTests.cpp`: every widget kind drives its parameter,
+- `Tests/UI/Graph/CardBody/CardBodyBindingTests.cpp` (built for knob, toggle and choice) and
+  `CardBodyLoadTests.cpp` (project load with stored layouts and LFO/ADSR macro members): every widget kind drives its parameter,
   registers for MIDI Learn and accepts the modulation-amount gesture; a hidden parameter keeps its
   value, stays in `graphToJSON`'s `params`, and takes a cable dropped on the More row (real
   synthesized drag).

@@ -7,6 +7,7 @@
 // declarations depend on).
 
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -24,7 +25,7 @@ namespace detail {
 // ModuleComponent::createControls), so a drag gesture's "am I on the ring" test can never drift
 // from what actually gets painted there.
 // The dial is not centred in the slider's bounds: the value text box takes a strip on one side
-// (below for most knobs, ABOVE for ADSR -- see setAdsrAwareSliderStyle), so the centre is shifted
+// (below for most knobs, ABOVE for ADSR -- see CardBody.cpp's setFloatKnobStyle), so the centre is shifted
 // by the slider's own layout (getSliderLayout().sliderBounds, the rect drawRotarySlider paints in)
 // relative to its local bounds. `boundsInCallerSpace` is the slider's bounds in whatever frame the
 // caller works in (card-local getBounds(), or the knob's own getLocalBounds()); only its size and
@@ -52,18 +53,17 @@ inline juce::Point<float> modRingPointForNorm(juce::Point<float> centre, float r
 }
 
 // ---- Default body-layout metrics (see layoutDefaultContent) ----------------------------------
-// Three knobs per row instead of two: the body sits below every jack, so it can use nearly the
-// full card width, and the extra column removes a whole row of height from most modules.
-inline constexpr int kKnobColumns = 3;
-inline constexpr int kContentMargin = 12;       // left/right gutter for body content
-inline constexpr int kNarrowContentWidth = 200; // combos/toggles/load row stay this narrow, centred
-inline constexpr int kLabelHeight = 18;
-inline constexpr int kRowHeight = 24;  // combo box / toggle / button
-inline constexpr int kKnobHeight = 58; // rotary + its text box
-inline constexpr int kWaveformHeight = 72;
-inline constexpr int kBottomPadding = 12;
-// A port label box spans its jack centre ± 10; clear it by a bit more before placing any content.
-inline constexpr int kPortLabelClearance = 15;
+// Defined once beside the card body's run layouts (UI/Graph/CardBody/CardBodyGeometry.h), which the
+// static size estimate measures with too.
+using synth::cardbody::kBottomPadding;
+using synth::cardbody::kContentMargin;
+using synth::cardbody::kKnobColumns;
+using synth::cardbody::kKnobHeight;
+using synth::cardbody::kLabelHeight;
+using synth::cardbody::kNarrowContentWidth;
+using synth::cardbody::kPortLabelClearance;
+using synth::cardbody::kRowHeight;
+using synth::cardbody::kWaveformHeight;
 // Horizontal step between input-jack columns on a multi-column gutter. A jack sits at x, its
 // label runs from x+10 for 60px, so 100 leaves a 30px gap before the next column's jack.
 inline constexpr int kPortColumnStride = 100;
