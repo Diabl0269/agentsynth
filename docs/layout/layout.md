@@ -116,7 +116,7 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   pre-collapse spots under and around the card, which is why a module set just below a card used to jump away).
   Left out are the placed module itself, every macro that contains it (its own hull and its ancestors'), the
   collapsed macros a group drag carries, and the macro the drop is about to join, whose hull is where the module is
-  meant to land. Used by single drags and drops (`resolvePlacement`), the group drag finalize and the add-track slot.
+  meant to land. Used by single drags and drops (`resolvePlacement`), the group drag finalize, a collapsed card's own drop (`finalizeMacroCardDrag`) and the add-track slot.
 - **Loading never pushes.** A card that is still being constructed (opening a project, undo, paste)
   has not "grown": its saved position is authoritative and no neighbour moves for it. Only a card
   already on the canvas that changes size makes room. `updateComponents()` is not re-entrant, so

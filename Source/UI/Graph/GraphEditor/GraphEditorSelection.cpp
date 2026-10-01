@@ -435,6 +435,9 @@ void GraphEditor::cancelLiveDragGestures() {
 
 void GraphEditor::beginMacroCardDrag(const juce::String& macroId) {
     macroController_.selectMacro(macroId, false);
+    // Every drag tick writes the members' live positions into the graph, so undo's "before" is taken here, not at drop.
+    if (undoManager)
+        undoManager->captureBeforeState(audioEngine.getGraph());
     beginSelectionDrag();
 }
 
@@ -450,18 +453,59 @@ void GraphEditor::dragMacroCardBy(const juce::String&, juce::Point<int> delta) {
     repaintCanvas();
 }
 
-// Resolves the members' rigid-body snap AND the card's own position as one undo step.
+// Resolves the card's own drop slot AND moves the hidden members with it as one undo step.
+//
+// The card is placed like any other drop: its rect goes through findFreeSlot against the placement blockers (visible
+// modules, other collapsed cards, open hulls; never the macro itself, its hidden members or its ancestors). The members
+// then take exactly the card's resolved delta from their recorded start positions, so card and members never drift
+// apart. They are NOT resolved as a group of their own the way finalizeSelectionDrag does: they are hidden under the
+// card, so a collision test on their own bounds would shove them away from a card that landed in free space.
 void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point<int> newCardTopLeft) {
     auto& graph = audioEngine.getGraph();
     auto doFinalize = [this, macroId, newCardTopLeft] {
-        finalizeSelectionDrag();
-        if (auto* m = macros.find(macroId))
-            m->bounds.setPosition(synth::LayoutUtil::snap(newCardTopLeft));
+        auto* m = macros.find(macroId);
+        if (m == nullptr || selectionDragStartPositions.empty()) {
+            finalizeSelectionDrag();
+            if (m != nullptr)
+                m->bounds.setPosition(synth::LayoutUtil::snap(newCardTopLeft));
+            reflowOutputDock();
+            return;
+        }
+
+        std::vector<juce::AudioProcessorGraph::NodeID> movingIds;
+        for (const auto& [nodeId, startPos] : selectionDragStartPositions) {
+            juce::ignoreUnused(startPos);
+            movingIds.push_back(nodeId);
+        }
+        const auto cardSize = macroController_.macroCableAnchorBounds(*m);
+        const auto resolved = synth::LayoutUtil::findFreeSlot(
+            synth::LayoutUtil::snap(newCardTopLeft), cardSize.getWidth(), cardSize.getHeight(),
+            macroController_.placementBlockers(movingIds), juce::AudioProcessorGraph::NodeID{});
+        const auto delta = resolved - m->bounds.getPosition();
+
+        for (const auto& [nodeId, startPos] : selectionDragStartPositions)
+            for (auto* comp : content.getModules())
+                if (comp != nullptr && comp->getNodeId() == nodeId) {
+                    comp->setTopLeftPosition(startPos + delta);
+                    updateModulePosition(comp);
+                    break;
+                }
+        shiftCarriedMacroCards(macros, content.getMacroCards(),
+                               movedUuidsForCarry(macros, macroController_, selectionDragStartPositions), delta, true);
+        m->bounds.setPosition(resolved);
+        for (auto* card : content.getMacroCards())
+            if (card != nullptr && card->getMacroId() == macroId)
+                card->setTopLeftPosition(resolved);
+
+        macroController_.dockMacroPortWidgets();
+        detail::applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
+        selectionDragActive = false;
+        selectionDragStartPositions.clear();
         reflowOutputDock(); // a collapsed card dropped right of the dock pushes the dock along
     };
 
     if (undoManager)
-        undoManager->recordGraphAndMacroChange(graph, macros, doFinalize);
+        undoManager->recordGraphAndMacroChange(graph, macros, doFinalize, undoManager->takeCapturedGraphBeforeState());
     else
         doFinalize();
 
@@ -469,4 +513,8 @@ void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point
 }
 
 // A press that never moved — mirrors cancelSelectionDrag, no re-resolve.
-void GraphEditor::cancelMacroCardDrag(const juce::String&) { cancelSelectionDrag(); }
+void GraphEditor::cancelMacroCardDrag(const juce::String&) {
+    if (undoManager)
+        undoManager->takeCapturedGraphBeforeState(); // discard the unused "before" capture
+    cancelSelectionDrag();
+}

@@ -11,6 +11,8 @@
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
+#include "UI/Layout/LayoutUtil.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -154,4 +156,72 @@ TEST(MacroHullDrag, OnStillPansOutsideAnyHull) {
     f.editor.mouseDrag(makeHullMouseEvent(f.editor, outside + juce::Point<int>(-50, -30)));
     f.editor.mouseUp(makeHullMouseEvent(f.editor, outside + juce::Point<int>(-50, -30)));
     EXPECT_NE(f.editor.getVisibleCanvasRect().getPosition(), viewBefore.getPosition());
+}
+
+// ---- Dropping a collapsed macro's card onto another module -------------------------------------
+// Real MacroCardComponent mouseDown/mouseDrag/mouseUp: the card lands in the nearest free slot like any other drop,
+// and the hidden members ride the same delta.
+
+namespace {
+
+juce::MouseEvent makeCardMouseEvent(juce::Component& card, juce::Point<int> position, juce::Point<int> downPosition,
+                                    bool dragged) {
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), position.toFloat(),
+                            juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                            &card, &card, juce::Time::getCurrentTime(), downPosition.toFloat(),
+                            juce::Time::getCurrentTime(), 1, dragged);
+}
+
+} // namespace
+
+TEST(MacroCardDrop, CollapsedCardDroppedOnAModuleLandsClearAndCarriesItsMembers) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    const auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    const auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    const auto loose = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 600);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // collapses by default
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_TRUE(editor.getMacros().find(macroId)->collapsed);
+
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    const auto looseRect = findComponent(editor, loose)->getBounds();
+    const auto cardStart = card->getPosition();
+    const auto posA = findComponent(editor, a)->getPosition();
+    const auto posB = findComponent(editor, b)->getPosition();
+    ASSERT_FALSE(card->getBounds().expanded(synth::LayoutUtil::kCollisionGap).intersects(looseRect));
+    undo.clearUndoHistory();
+
+    // Drag so the card's top-left lands 8 px inside the loose module.
+    const juce::Point<int> press(140, 60); // body, below the title row
+    const auto delta = looseRect.getPosition() + juce::Point<int>(8, 8) - cardStart;
+    card->mouseDown(makeCardMouseEvent(*card, press, press, false));
+    card->mouseDrag(makeCardMouseEvent(*card, press + delta, press, true));
+    card->mouseUp(makeCardMouseEvent(*card, press + delta, press, true));
+
+    card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    const auto cardRect = editor.getMacros().find(macroId)->bounds;
+    EXPECT_EQ(card->getPosition(), cardRect.getPosition());
+    EXPECT_FALSE(cardRect.expanded(synth::LayoutUtil::kCollisionGap).intersects(looseRect))
+        << "the dropped card must not overlap the module it was dropped on";
+
+    const auto moved = cardRect.getPosition() - cardStart;
+    EXPECT_NE(moved, juce::Point<int>()) << "the card moved";
+    EXPECT_EQ(findComponent(editor, a)->getPosition() - posA, moved) << "hidden members ride the card's delta";
+    EXPECT_EQ(findComponent(editor, b)->getPosition() - posB, moved);
+    EXPECT_EQ(findComponent(editor, loose)->getBounds(), looseRect) << "the other module stays put";
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+    EXPECT_EQ(editor.getMacros().find(macroId)->bounds.getPosition(), cardStart);
+    EXPECT_EQ(findComponent(editor, a)->getPosition(), posA);
+    EXPECT_EQ(findComponent(editor, b)->getPosition(), posB);
+    EXPECT_FALSE(undo.canUndo()) << "the whole drop was one undo step";
 }
