@@ -1,6 +1,6 @@
 #include "PreferencesSettingsTab.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
-#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 // Concern: the "All" category view. Every category sits under a clickable header (chevron + name)
 // that folds its rows, and Expand all / Collapse all act on every header at once. The rows
@@ -53,12 +53,7 @@ void PreferencesSettingsTab::SectionHeader::paintButton(juce::Graphics& g, bool 
     g.drawText(categoryName(category).toUpperCase(), bounds.withTrimmedLeft(22), juce::Justification::centredLeft);
     g.setColour(textColour.withAlpha(kHeaderRuleAlpha));
     g.fillRect(0, bounds.getBottom() - 1, bounds.getWidth(), 1);
-    // Keyboard focus ring: the theme accent, like the app's other focus indicators.
-    if (hasKeyboardFocus(false))
-        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
-            g.setColour(lf->getTheme().colors.accent);
-            g.drawRect(bounds.reduced(1), 1);
-        }
+    synth::ui::paintFocusRing(g, bounds.toFloat().reduced(1.0f), *this);
 }
 
 void PreferencesSettingsTab::setupSectionControls() {
