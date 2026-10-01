@@ -14,7 +14,7 @@
 
 #include "AppUndoManager.h"
 #include "ShortcutManager/ShortcutManager.h"
-#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Timeline/ClipAccessibilityText.h"
 #include "UI/Timeline/ClipKeyboardNav.h"
 #include <algorithm>
@@ -243,20 +243,16 @@ void TimelineClipLaneArea::moveKeyboardClipByStep(synth::ClipId id, int directio
 }
 
 //==============================================================================
-// TODO: use paintFocusRing
+// The keyboard clip's ring: the shared small-control focus ring, around the clip, drawn only while
+// the lane holds keyboard focus (paintFocusRing checks that itself).
 void TimelineClipLaneArea::paintKeyboardClipRing(juce::Graphics& g) {
     const auto id = getKeyboardClip();
-    if (!id.isValid() || !hasKeyboardFocus(false))
+    if (!id.isValid())
         return;
     const auto rect = getClipRect(id);
     if (rect.isEmpty())
         return;
-
-    juce::Colour accent(0xff00D1FF);
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
-    g.setColour(accent);
-    g.drawRoundedRectangle(rect.toFloat().expanded(1.0f), 4.0f, 2.0f);
+    synth::ui::paintFocusRing(g, rect.toFloat().expanded(1.5f), *this, 4.0f);
 }
 
 void TimelineClipLaneArea::focusGained(juce::Component::FocusChangeType) {
