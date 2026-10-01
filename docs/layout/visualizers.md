@@ -215,6 +215,21 @@ for the same value.
 | `needsRepaint` | `static bool needsRepaint(...) noexcept` | Mirrors the `timerCallback` repaint gate |
 | `getFlashFrames` | `static constexpr int getFlashFrames() noexcept` | Ticks the fired-flash stays lit |
 
+## Gain-reduction meter source (no card view yet)
+
+`Source/Modules/GainReductionMeterSource.h`. The data a Compressor / Limiter gain-reduction view
+will read; **there is no card view for it yet**, so nothing in the card draws it today. It is the
+dynamics counterpart of `ThresholdMeterSource`: `GainReductionMeterSource::getGainReductionDb()` is
+a lock-free atomic load (audio thread writes, any thread reads), in positive decibels, 0 meaning
+the module is not touching the signal. The module feeds it once per block through
+`synth::GainReductionMeter`, which takes a deeper reduction at once and lets a shallower one fall
+at 40 dB/s, so a view polling at its own timer rate sees transients. A later view binds with
+`dynamic_cast<GainReductionMeterSource*>(module)` exactly as `ModuleComponent` does for the
+threshold meter, and — like `ThresholdControlComponent` — owns its own timer and repaints only
+itself, so a card buffered to an image is not invalidated on every tick. See
+[`../modules/fx-modules.md#compressor-module`](../modules/fx-modules.md#compressor-module) and
+[`../modules/fx-modules.md#limiter-module`](../modules/fx-modules.md#limiter-module).
+
 ## WavetableDisplayComponent
 
 `Source/UI/ModuleViews/WavetableDisplayComponent.h`. The wavetable frame view on the `Wavetable`

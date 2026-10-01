@@ -38,6 +38,7 @@ add_executable(Tests
     Modules/MathModuleTests.cpp
     Modules/MacroControlModuleTests.cpp
     Modules/SamplerModuleTests.cpp
+    Modules/Sampler/SamplerRegionTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModulePortsTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleOutputTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleCVTests.cpp
@@ -288,11 +289,13 @@ add_executable(Tests
     FX/FXModule/FXModuleBitcrusherTests.cpp
     FX/FXModule/FXModuleChorusTests.cpp
     FX/FXModule/FXModuleCompressorTests.cpp
+    FX/FXModule/FXModuleCompressorKneeTests.cpp
     FX/FXModule/FXModuleSidechainKeyTests.cpp
     FX/FXModule/FXModuleDelayTests.cpp
     FX/FXModule/FXModuleDistortionTests.cpp
     FX/FXModule/FXModuleFlangerTests.cpp
     FX/FXModule/FXModuleLimiterTests.cpp
+    FX/FXModule/FXModuleLimiterCeilingTests.cpp
     FX/FXModule/FXModulePhaserTests.cpp
     FX/FXModule/FXModulePortLabelsTests.cpp
     FX/FXModule/FXModuleCVJackTests.cpp

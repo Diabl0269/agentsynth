@@ -76,7 +76,7 @@ TEST_F(ModuleComponentTest, TrackInEstimatedSizeMatchesTheRealComponent) {
 TEST_F(ModuleComponentTest, KnobsAreLaidOutThreePerRow) {
     AudioEngine engine;
     GraphEditor editor(engine);
-    SamplerModule processor; // 7 float/int params -> 3 rows of 3, 3, 1
+    SamplerModule processor; // 9 float/int params -> 3 rows of 3
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
     std::vector<juce::Slider*> knobs;
@@ -84,7 +84,7 @@ TEST_F(ModuleComponentTest, KnobsAreLaidOutThreePerRow) {
         if (auto* slider = dynamic_cast<juce::Slider*>(child))
             knobs.push_back(slider);
 
-    ASSERT_EQ(knobs.size(), 7u);
+    ASSERT_EQ(knobs.size(), 9u);
 
     // Children are added in parameter order, so the first three share a row.
     EXPECT_EQ(knobs[0]->getY(), knobs[1]->getY());

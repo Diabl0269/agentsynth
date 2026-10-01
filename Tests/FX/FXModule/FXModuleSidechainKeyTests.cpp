@@ -60,19 +60,26 @@ float lastBlockGain(Module& module, float ownLevel, float keyLevel, int blocks =
 // Jacks
 // ---------------------------------------------------------------------------
 
+// `trailingJack`: a CV jack appended after the key pair (the Compressor's Knee), empty for none.
 template <typename Module>
-void expectKeyJacks(const juce::String& firstCv, const juce::String& lastCv) {
+void expectKeyJacks(const juce::String& firstCv, const juce::String& lastCv, const juce::String& trailingJack = {}) {
+    const int extra = trailingJack.isEmpty() ? 0 : 1;
     Module module;
-    ASSERT_EQ(module.getTotalNumInputChannels(), 9);
+    ASSERT_EQ(module.getTotalNumInputChannels(), 9 + extra);
     ASSERT_EQ(module.getTotalNumOutputChannels(), 2) << "output shape stays a pair, so Dual I/O still inherits";
     ASSERT_TRUE(module.hasDualIOParameter());
 
     setDualIO(module, false);
-    EXPECT_EQ(module.getVisibleInputPortCount(), 7);
+    EXPECT_EQ(module.getVisibleInputPortCount(), 7 + extra);
     EXPECT_EQ(module.getInputPortLabel(0), "Audio");
     EXPECT_EQ(module.getInputPortLabel(1), firstCv) << "CV jacks keep their slots";
     EXPECT_EQ(module.getInputPortLabel(5), lastCv);
     EXPECT_EQ(module.getInputPortLabel(6), "Key");
+    if (extra != 0) {
+        EXPECT_EQ(module.getInputPortLabel(7), trailingJack) << "after the key, so the key keeps raw 7/8";
+        EXPECT_EQ(module.mapInputChannel(9).visibleJackIndex, 7);
+        EXPECT_EQ(module.mapInputChannel(9).role, PortRole::ModCV);
+    }
     for (int raw = 2; raw <= 6; ++raw) {
         EXPECT_EQ(module.mapInputChannel(raw).visibleJackIndex, raw - 1) << "raw " << raw;
         EXPECT_EQ(module.mapInputChannel(raw).role, PortRole::ModCV) << "raw " << raw;
@@ -86,9 +93,11 @@ void expectKeyJacks(const juce::String& firstCv, const juce::String& lastCv) {
     EXPECT_FALSE(module.mapInputChannel(8).isPolyGroupHead);
 
     setDualIO(module, true);
-    EXPECT_EQ(module.getVisibleInputPortCount(), 9);
+    EXPECT_EQ(module.getVisibleInputPortCount(), 9 + extra);
     EXPECT_EQ(module.getInputPortLabel(7), "Key L");
     EXPECT_EQ(module.getInputPortLabel(8), "Key R");
+    if (extra != 0)
+        EXPECT_EQ(module.getInputPortLabel(9), trailingJack);
     for (int raw = 7; raw <= 8; ++raw) {
         const auto port = module.mapInputChannel(raw);
         EXPECT_EQ(port.visibleJackIndex, raw);
@@ -108,7 +117,7 @@ void expectKeyJacks(const juce::String& firstCv, const juce::String& lastCv) {
     }
 }
 
-TEST(SidechainKey, CompressorAppendsAStereoKeyPair) { expectKeyJacks<CompressorModule>("Threshold", "Makeup"); }
+TEST(SidechainKey, CompressorAppendsAStereoKeyPair) { expectKeyJacks<CompressorModule>("Threshold", "Makeup", "Knee"); }
 
 TEST(SidechainKey, GateAppendsAStereoKeyPair) { expectKeyJacks<GateModule>("Threshold", "Range"); }
 

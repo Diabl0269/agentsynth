@@ -557,6 +557,16 @@ mixer modules (Channel Strip, Voice Mixer, Master), whose gain is driven by the 
 than by CV — deliberately out of scope for FRO314's sweep below, since Channel Strip's channel
 layout is frozen-once-set with fixed send legs (`Source/Modules/CLAUDE.md`).
 
+The dynamics and Sampler controls follow the same rule: Compressor Knee on ch9 (after the Key pair
+on ch7/ch8, which keep their channels, so the Knee jack is the last visible one), Limiter Ceiling
+on ch5 (after Input Gain) and Sampler End on ch8 and Fine on ch9 (after Root Note). Compressor
+Knee and Limiter Ceiling follow the [normalised convention](#cv-in-normalised-units) and are read
+once per block. The Sampler's two follow its own per-sample convention (End: the parameter's 0-1
+span; Fine: 100 cents per unit). The Sampler's Reverse switch is a toggle and has no jack — see
+[`fx-modules.md`](fx-modules.md#compressor-module),
+[`fx-modules.md`](fx-modules.md#limiter-module) and
+[`modules.md#sampler-module`](modules.md#sampler-module).
+
 **FRO314** closed a gap this rule had let through silently: Oscillator's targets had no
 `paramId` (falling back to fragile jack-label/knob-name string matching — harmless only because
 every label happened to already match its knob's name) and its Unison/Detune knobs had **no CV

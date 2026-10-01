@@ -44,7 +44,7 @@ TEST_F(ModuleComponentTest, SamplerHasLoadButtonWaveformAndKnownHeight) {
     // (100px, 5 rows * 20px), packing the input column. estimateModuleSize("Sampler") derives this
     // adjustment itself (GraphEditor::adjustEstimateForHiddenKnobJacks), so it stays in sync
     // automatically; ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents still pins it.
-    EXPECT_EQ(moduleComponent.getHeight(), 545)
+    EXPECT_EQ(moduleComponent.getHeight(), 571)
         << "keep estimateModuleSize(\"Sampler\") in GraphEditor.cpp in sync with this";
 
     EXPECT_NO_THROW(moduleComponent.timerCallback());

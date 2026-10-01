@@ -12,10 +12,13 @@
  *
  * Loads an audio file from disk and plays it back one of two ways, selected by `playMode`:
  *
- *   • **Sample**   — classic one-shot / looping playback. `pitch` (± 24 semitones) and MIDI note
- *                    number set the playback rate; `loop` wraps back to `start` at the end.
- *   • **Granular** — scatters short windowed grains read from around the `start` position.
- *                    `grainSize`, `density` and `spray` shape the cloud.
+ *   • **Sample**   — classic one-shot / looping playback of the region from `start` to `end`.
+ *                    `pitch` (± 24 semitones), `fine` (± 100 cents) and MIDI note number set the
+ *                    playback rate; `loop` wraps back to `start` at `end`; `reverse` plays the
+ *                    region backwards (from `end` down to `start`, looping backwards).
+ *   • **Granular** — scatters short windowed grains read from around the `start` position, never
+ *                    from or past `end`. `grainSize`, `density` and `spray` shape the cloud;
+ *                    `reverse` plays each grain backwards.
  *
  * Channel layout (mono module — there is no poly mode):
  *
@@ -29,13 +32,15 @@
  *   | 5      | Spray CV          | silent pass-through        |
  *   | 6      | Level CV          | silent pass-through        |
  *   | 7      | Root Note CV      | silent pass-through        |
+ *   | 8      | End CV            | silent pass-through        |
+ *   | 9      | Fine CV           | silent pass-through        |
  *
  * 8 outputs are declared even though only 0-1 carry audio: JUCE's AudioProcessorGraph only makes a
  * private copy of an input channel when `inputChan < numOutputs`, so declaring fewer outputs than
  * the highest CV channel we read would let our post-cache clear scribble on a buffer another node
- * still needs (see OscillatorModule for the same constraint). Root Note CV (ch7) was APPENDED
- * after every other channel rather than inserted earlier, so no existing saved-patch
- * routing shifts.
+ * still needs (see OscillatorModule for the same constraint). Root Note CV (ch7), End CV (ch8) and
+ * Fine CV (ch9) were APPENDED after every other channel rather than inserted earlier, so no
+ * existing saved-patch routing shifts.
  *
  * Thread safety: the sample is owned by a reference-counted SampleData. loadSampleFile() (message
  * thread) publishes a new one under a SpinLock; processBlock() takes the *try*-lock, so the audio
@@ -53,7 +58,9 @@ public:
     static constexpr int kSprayCVCh = 5;
     static constexpr int kLevelCVCh = 6;
     static constexpr int kRootNoteCVCh = 7; // Appended last, see the class comment above
-    static constexpr int kNumChannels = 8;
+    static constexpr int kEndCVCh = 8;
+    static constexpr int kFineCVCh = 9;
+    static constexpr int kNumChannels = 10;
 
     // ---- Limits --------------------------------------------------------------
     static constexpr int kMaxGrains = 24;
@@ -98,6 +105,11 @@ public:
                          new juce::AudioParameterFloat("density", "Density", kMinDensity, kMaxDensity, 20.0f));
         addParameter(sprayParam = new juce::AudioParameterFloat("spray", "Spray", 0.0f, 1.0f, 0.1f));
         addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 0.8f));
+        // End of the played region, as a fraction of the sample like `start`. 1 = to the end of the file.
+        addParameter(endParam = new juce::AudioParameterFloat("end", "End", 0.0f, 1.0f, 1.0f));
+        // Fine tune in cents on top of `pitch`; a playback-rate change, so it is not smoothed.
+        addParameter(fineParam = new juce::AudioParameterFloat("fine", "Fine", -100.0f, 100.0f, 0.0f));
+        addParameter(reverseParam = new juce::AudioParameterBool("reverse", "Reverse", false));
         // Dual I/O comes from the ctor's StereoAudio::Declared above, defaulting to split — this
         // module has always emitted a real stereo pair. Collapsing uses the FX helpers rather than
         // the split-block ones: one "Audio" jack that owns both raw legs.
@@ -259,6 +271,8 @@ public:
         const bool hasSprayCV = cacheChannel(buffer, kSprayCVCh, ns, numSamples, sprayCache);
         const bool hasLevelCV = cacheChannel(buffer, kLevelCVCh, ns, numSamples, levelCache);
         const bool hasRootNoteCV = cacheChannel(buffer, kRootNoteCVCh, ns, numSamples, rootNoteCVCache);
+        const bool hasEndCV = cacheChannel(buffer, kEndCVCh, ns, numSamples, endCache);
+        const bool hasFineCV = cacheChannel(buffer, kFineCVCh, ns, numSamples, fineCache);
 
         // ---- 2. Clear every declared output channel -----------------------------------------
         for (int ch = 0; ch < getTotalNumOutputChannels() && ch < numCh; ++ch)
@@ -289,11 +303,14 @@ public:
         // Mutable: a same-block Note-On (legato, or a loop-restart Note-Off+Note-On pair) updates
         // these mid-loop so the retriggered note plays at its own pitch, not the block's stale one.
         float midiSemis = midiEverReceived ? (midiNote - effectiveRootNote) : 0.0f;
-        // Pitch is a playback *rate* (the read head stays continuous through a change), and Start /
-        // Grain Size / Density / Spray are only consulted when a grain spawns or a loop wraps —
-        // discrete events. None of them can put a step in the rendered signal, so all five are
-        // deliberately read raw. Level is the one that scales every sample, and it is smoothed.
+        // Pitch and Fine are a playback *rate* (the read head stays continuous through a change), and
+        // Start / End / Grain Size / Density / Spray are only consulted when a grain spawns or a loop
+        // wraps — discrete events. None of them can put a step in the rendered signal, so all of them
+        // are deliberately read raw. Level is the one that scales every sample, and it is smoothed.
         const float basePitch = pitchParam->get();
+        const float baseFineSemis = fineParam->get() / 100.0f;
+        const float baseEnd = endParam->get();
+        const bool reverse = reverseParam->get();
         const float baseStart = startParam->get();
         const float baseGrainMs = grainSizeParam->get();
         const float baseDensity = densityParam->get();
@@ -309,7 +326,7 @@ public:
 
         // Pitch only varies per sample when pitch CV is patched, so the common case pays for one
         // std::pow per block instead of one per sample. Mutable for the same reason as midiSemis.
-        double baseIncrement = std::pow(2.0, (double)(basePitch + midiSemis) / 12.0) * rateRatio;
+        double baseIncrement = std::pow(2.0, (double)(basePitch + midiSemis + baseFineSemis) / 12.0) * rateRatio;
 
         float* outL = buffer.getWritePointer(0);
         float* outR = (numCh > 1) ? buffer.getWritePointer(1) : nullptr;
@@ -326,29 +343,39 @@ public:
                     continue;
                 if (applyHeldNoteMessage(metadata.getMessage())) {
                     midiSemis = midiNote - effectiveRootNote;
-                    baseIncrement = std::pow(2.0, (double)(basePitch + midiSemis) / 12.0) * rateRatio;
+                    baseIncrement = std::pow(2.0, (double)(basePitch + midiSemis + baseFineSemis) / 12.0) * rateRatio;
                     midiNoteOnThisSample = true;
                 }
             }
 
             // --- gate ---
+            const float endPosition = juce::jlimit(0.0f, 1.0f, baseEnd + (hasEndCV ? endCache[idx] : 0.0f));
             const bool gate = gateAt(idx);
             // The Note-On EVENT retriggers, not an edge in the gate -- see the comment above.
             if ((gate && !lastGate) || (midiNoteOnThisSample && !triggerEverConnected))
-                onGateRising(baseStart, hasPosCV ? positionCache[idx] : 0.0f, sampleFrames);
+                onGateRising(baseStart, hasPosCV ? positionCache[idx] : 0.0f, endPosition, reverse, sampleFrames);
             else if (!gate && lastGate)
                 envelopeTarget = 0.0f;
             lastGate = gate;
 
             // --- per-sample parameter values (base + CV over the parameter's own span) ---
             const double increment =
-                hasPitchCV ? std::pow(2.0, (double)(basePitch + midiSemis + pitchCache[idx] * 24.0f) / 12.0) * rateRatio
-                           : baseIncrement;
+                (hasPitchCV || hasFineCV)
+                    ? std::pow(2.0, (double)(basePitch + midiSemis + (hasPitchCV ? pitchCache[idx] * 24.0f : 0.0f) +
+                                             baseFineSemis + (hasFineCV ? fineCache[idx] : 0.0f)) /
+                                        12.0) *
+                          rateRatio
+                    : baseIncrement;
             const float position = juce::jlimit(0.0f, 1.0f, baseStart + (hasPosCV ? positionCache[idx] : 0.0f));
             const float level =
                 juce::jlimit(0.0f, 1.0f, smoothedLevel.getNextValue() + (hasLevelCV ? levelCache[idx] : 0.0f));
 
             float left = 0.0f, right = 0.0f;
+            // The played region. An empty one (start at or past end) is silent; end at 100 % keeps the
+            // plain file-length bound, so a patch from before End existed plays exactly as it did.
+            const double regionStart = (double)position * (double)(sampleFrames - 1);
+            const double regionEnd = (double)endPosition * (double)(sampleFrames - 1);
+            const bool emptyRegion = regionStart >= regionEnd && endPosition < 1.0f;
 
             if (granular) {
                 const float grainMs = juce::jlimit(
@@ -357,32 +384,26 @@ public:
                     kMinDensity, kMaxDensity, baseDensity + (hasDensityCV ? densityCache[idx] * kDensitySpan : 0.0f));
                 const float spray = juce::jlimit(0.0f, 1.0f, baseSpray + (hasSprayCV ? sprayCache[idx] : 0.0f));
 
-                if (envelopeTarget > 0.0f) {
+                if (envelopeTarget > 0.0f && !emptyRegion) {
                     grainClock -= 1.0;
                     if (grainClock <= 0.0) {
-                        spawnGrain(position, spray, grainMs, increment, sampleFrames);
+                        spawnGrain(position, spray, grainMs, reverse ? -increment : increment, regionEnd);
                         grainClock += juce::jmax(1.0, currentSampleRate / (double)density);
                     }
                 }
 
-                renderGrains(srcL, srcR, sampleFrames, left, right);
+                renderGrains(srcL, srcR, sampleFrames, regionEnd, left, right);
                 left *= grainNorm;
                 right *= grainNorm;
             } else {
-                if (playhead >= 0.0) {
+                if (playhead >= 0.0 && !emptyRegion) { // an empty region holds the head and stays silent
                     left = interpolate(srcL, sampleFrames, playhead);
                     right = interpolate(srcR, sampleFrames, playhead);
 
-                    playhead += increment;
-                    const double loopStart = (double)position * (double)(sampleFrames - 1);
-                    if (playhead >= (double)(sampleFrames - 1)) {
-                        if (looping)
-                            playhead = loopStart;
-                        else
-                            envelopeTarget = 0.0f; // ramp out, then stop below
-                    } else if (playhead < 0.0) {
-                        playhead = looping ? (double)(sampleFrames - 1) : 0.0;
-                    }
+                    if (reverse)
+                        advanceReverse(increment, regionStart, regionEnd, looping);
+                    else
+                        advanceForward(increment, regionStart, regionEnd, looping, sampleFrames);
                 }
             }
 
@@ -430,12 +451,14 @@ public:
                 {"Density", kDensityCVCh},
                 {"Spray", kSprayCVCh},
                 {"Level", kLevelCVCh},
-                {"Root Note", kRootNoteCVCh, "rootNote"}};
+                {"Root Note", kRootNoteCVCh, "rootNote"},
+                {"End", kEndCVCh, "end"},
+                {"Fine", kFineCVCh, "fine"}};
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Trig",    "Pitch", "Start", "Grain Size",
-                                       "Density", "Spray", "Level", "Root Note"};
+        const juce::String labels[] = {"Trig",  "Pitch", "Start",     "Grain Size", "Density",
+                                       "Spray", "Level", "Root Note", "End",        "Fine"};
         return (i >= 0 && i < kNumChannels) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
 
@@ -562,9 +585,10 @@ private:
         return false;
     }
 
-    void onGateRising(float baseStart, float positionCV, int sampleFrames) {
+    void onGateRising(float baseStart, float positionCV, float endPosition, bool reverse, int sampleFrames) {
         const float position = juce::jlimit(0.0f, 1.0f, baseStart + positionCV);
-        playhead = (double)position * (double)(sampleFrames - 1);
+        // A reversed note starts at the end of the region and runs down to `start`.
+        playhead = (double)(reverse ? endPosition : position) * (double)(sampleFrames - 1);
         grainClock = 0.0; // fire the first grain immediately
         envelopeTarget = 1.0f;
         // A new note starts at the Level knob's CURRENT value rather than ramping up to it from
@@ -573,6 +597,34 @@ private:
         // Level smoothing is there for changes DURING a held note (timeline automation), and this
         // snap does not weaken it.
         smoothedLevel.setCurrentAndTargetValue(levelParam->get());
+    }
+
+    void advanceForward(double increment, double regionStart, double regionEnd, bool looping, int sampleFrames) {
+        playhead += increment;
+        if (playhead >= regionEnd) {
+            if (looping) {
+                playhead = regionStart;
+            } else {
+                envelopeTarget = 0.0f; // ramp out, then stop below
+                // End pulled in: hold the head on it, so the ramp-out never reads past the region.
+                if (regionEnd < (double)(sampleFrames - 1))
+                    playhead = regionEnd;
+            }
+        } else if (playhead < 0.0) {
+            playhead = looping ? (double)(sampleFrames - 1) : 0.0;
+        }
+    }
+
+    void advanceReverse(double increment, double regionStart, double regionEnd, bool looping) {
+        playhead = std::min(playhead, regionEnd) - increment; // End moved down mid-note: join the region
+        if (playhead < regionStart) {
+            if (looping) {
+                playhead = regionEnd;
+            } else {
+                envelopeTarget = 0.0f; // ramp out on the first frame of the region
+                playhead = regionStart;
+            }
+        }
     }
 
     void advanceEnvelope() {
@@ -587,7 +639,8 @@ private:
     // Granular engine
     // =========================================================================
 
-    void spawnGrain(float position, float spray, float grainMs, double increment, int sampleFrames) {
+    /** `regionEnd` (in frames) is the upper bound of the source: grains start below it and wrap at it. */
+    void spawnGrain(float position, float spray, float grainMs, double increment, double regionEnd) {
         Grain* slot = nullptr;
         for (auto& g : grains) {
             if (!g.active) {
@@ -599,9 +652,9 @@ private:
             return; // pool exhausted — the cloud is already as dense as it gets
 
         const float jitter = spray * ((random.nextFloat() * 2.0f) - 1.0f);
-        double start = ((double)position + (double)jitter) * (double)(sampleFrames - 1);
+        const double span = regionEnd;
+        double start = ((double)position + (double)jitter) * span;
         // Wrap rather than clamp, so spray near either end keeps scattering instead of piling up.
-        const double span = (double)(sampleFrames - 1);
         start = std::fmod(start, span);
         if (start < 0.0)
             start += span;
@@ -613,10 +666,15 @@ private:
         slot->length = juce::jmax(8, (int)(grainMs * 0.001 * currentSampleRate));
     }
 
-    void renderGrains(const float* srcL, const float* srcR, int sampleFrames, float& left, float& right) {
+    void renderGrains(const float* srcL, const float* srcR, int sampleFrames, double regionEnd, float& left,
+                      float& right) {
         for (auto& g : grains) {
             if (!g.active)
                 continue;
+            if (regionEnd < 1.0) { // End pulled in to nothing: the cloud has no source left
+                g.active = false;
+                continue;
+            }
 
             // Hann window — zero at both ends, so grains fade in and out with no discontinuity.
             const float phase = (float)g.elapsed / (float)g.length;
@@ -626,9 +684,8 @@ private:
             right += interpolate(srcR, sampleFrames, g.position) * window;
 
             g.position += g.increment;
-            if (g.position >= (double)(sampleFrames - 1) || g.position < 0.0)
-                g.position = std::fmod(std::fmod(g.position, (double)(sampleFrames - 1)) + (double)(sampleFrames - 1),
-                                       (double)(sampleFrames - 1));
+            if (g.position >= regionEnd || g.position < 0.0)
+                g.position = std::fmod(std::fmod(g.position, regionEnd) + regionEnd, regionEnd);
 
             if (++g.elapsed >= g.length)
                 g.active = false;
@@ -726,6 +783,8 @@ private:
     std::array<float, kMaxBlock> sprayCache{};
     std::array<float, kMaxBlock> levelCache{};
     std::array<float, kMaxBlock> rootNoteCVCache{};
+    std::array<float, kMaxBlock> endCache{};
+    std::array<float, kMaxBlock> fineCache{};
 
     juce::AudioParameterChoice* playModeParam = nullptr;
     juce::AudioParameterFloat* pitchParam = nullptr;
@@ -736,6 +795,9 @@ private:
     juce::AudioParameterFloat* densityParam = nullptr;
     juce::AudioParameterFloat* sprayParam = nullptr;
     juce::AudioParameterFloat* levelParam = nullptr;
+    juce::AudioParameterFloat* endParam = nullptr;
+    juce::AudioParameterFloat* fineParam = nullptr;
+    juce::AudioParameterBool* reverseParam = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SamplerModule)
 };
