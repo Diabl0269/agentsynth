@@ -67,7 +67,7 @@ knobs and sliders, so a stock control needs nothing. A custom-painted control ca
 
 ## Adding a rebindable key
 
-1. Add a row to `ShortcutManager::getActionTable()` (`Source/ShortcutManager/ShortcutManager.h`),
+1. Add a row to `ShortcutManager::getActionTable()` (`Source/ShortcutManager/ShortcutManagerActionTable.cpp`),
    keeping each category's rows contiguous.
 2. Give it a default in its category's `add…DefaultBindings()` in
    `Source/ShortcutManager/ShortcutManagerDefaults.cpp`.
