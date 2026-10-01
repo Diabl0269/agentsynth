@@ -372,29 +372,38 @@ TEST(MixerPanelColumnDragTests, TheBusOrderSurvivesSavingAndReloadingTheProject)
         << "NodeIDs are reassigned on load, the saved uuids still order the buses";
 }
 
-// The header is a grab handle only while it has reorder hooks (track strips and buses); a Direct or
-// Master header is a plain click target and keeps the normal cursor.
-TEST(MixerPanelColumnDragTests, OnlyAHeaderWithReorderHooksShowsTheDraggingHandCursor) {
+// A column header keeps the normal arrow on hover and press; the dragging hand shows only once the
+// press becomes a real drag, and the arrow returns after Esc and on release. Direct and Master never
+// drag, so they never show it.
+TEST(MixerPanelColumnDragTests, TheDraggingHandShowsOnlyWhileAColumnIsReallyDragged) {
     ColumnDragRig r(2);
-    ASSERT_NE(r.panel->createBus(), juce::AudioProcessorGraph::NodeID{});
-    r.panel->rebuild();
-
     auto* strip = r.panel->getStripColumnForTest(0);
     ASSERT_NE(strip, nullptr);
     auto& stripHeader = strip->getHeaderForTest();
-    EXPECT_TRUE(stripHeader.getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "hover";
+    auto isHand = [&stripHeader] { return stripHeader.getMouseCursor() == juce::MouseCursor::DraggingHandCursor; };
+    EXPECT_FALSE(isHand()) << "hover";
 
     HeaderDrag drag{stripHeader, *strip->getParentComponent(), headerGrabX(*strip)};
     drag.down();
-    drag.dragTo(drag.pressX + kPitch);
-    EXPECT_TRUE(stripHeader.getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "during the drag";
-    drag.up(drag.pressX + kPitch);
-    strip = nullptr; // the drop rebuilds the columns
+    EXPECT_FALSE(isHand()) << "pressed";
+    drag.dragTo(drag.pressX + 2);
+    EXPECT_FALSE(isHand()) << "2 px is below the drag threshold";
+    drag.dragTo(drag.pressX + 40);
+    EXPECT_TRUE(isHand()) << "the press became a drag";
+    ASSERT_TRUE(r.panel->sendEscapeToColumnDragForTest());
+    drag.dragTo(drag.pressX + 42);
+    EXPECT_FALSE(isHand()) << "Esc cancelled the drag, though the button is still held";
+    drag.up(drag.pressX + 42);
+    EXPECT_FALSE(isHand());
 
-    auto* bus = r.panel->getStripColumnForTest(2);
-    ASSERT_NE(bus, nullptr);
-    EXPECT_TRUE(bus->getHeaderForTest().getMouseCursor() == juce::MouseCursor::DraggingHandCursor)
-        << "a bus reorders among the buses";
+    strip = r.panel->getStripColumnForTest(0);
+    HeaderDrag again{strip->getHeaderForTest(), *strip->getParentComponent(), headerGrabX(*strip)};
+    again.down();
+    again.dragTo(again.pressX + 40);
+    EXPECT_TRUE(strip->getHeaderForTest().getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+    again.up(again.pressX + 40);
+    EXPECT_TRUE(strip->getHeaderForTest().getMouseCursor() == juce::MouseCursor::NormalCursor) << "released";
+
     ASSERT_NE(r.panel->getMasterColumnForTest(), nullptr);
     EXPECT_TRUE(r.panel->getMasterColumnForTest()->getHeaderForTest().getMouseCursor() ==
                 juce::MouseCursor::NormalCursor);
@@ -403,25 +412,23 @@ TEST(MixerPanelColumnDragTests, OnlyAHeaderWithReorderHooksShowsTheDraggingHandC
                 juce::MouseCursor::NormalCursor);
 }
 
-// The name label and the source line under it are children of the handle, and JUCE asks the deepest
-// component for the cursor, so each delegates to the header.
-TEST(MixerPanelColumnDragTests, TheNameLabelAndSourceLineShowTheGrabHandOnlyWhileTheColumnCanBeDragged) {
+// The name label and the source line are part of the handle, and JUCE asks the deepest component for
+// the cursor, so each delegates to the header: the arrow at rest, the hand while the column is dragged.
+TEST(MixerPanelColumnDragTests, TheNameLabelAndSourceLineShowTheHeadersCursor) {
     ColumnDragRig r(2);
     auto* strip = r.panel->getStripColumnForTest(0);
     ASSERT_NE(strip, nullptr);
-    EXPECT_TRUE(strip->getHeaderForTest().getNameLabelForTest().getMouseCursor() ==
-                juce::MouseCursor::DraggingHandCursor);
-    EXPECT_TRUE(strip->getSourceLineLabelForTest().getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
-
-    ASSERT_NE(r.panel->getMasterColumnForTest(), nullptr);
-    EXPECT_TRUE(r.panel->getMasterColumnForTest()->getHeaderForTest().getNameLabelForTest().getMouseCursor() ==
-                juce::MouseCursor::NormalCursor);
-    ASSERT_NE(r.panel->getDirectColumnForTest(), nullptr);
-    EXPECT_TRUE(r.panel->getDirectColumnForTest()->getHeaderForTest().getNameLabelForTest().getMouseCursor() ==
-                juce::MouseCursor::NormalCursor);
-
-    strip->getHeaderForTest().reorderHooks = {};
+    auto& header = strip->getHeaderForTest();
+    EXPECT_TRUE(header.getNameLabelForTest().getMouseCursor() == juce::MouseCursor::NormalCursor);
     EXPECT_TRUE(strip->getSourceLineLabelForTest().getMouseCursor() == juce::MouseCursor::NormalCursor);
+
+    HeaderDrag drag{header, *strip->getParentComponent(), headerGrabX(*strip)};
+    drag.down();
+    drag.dragTo(drag.pressX + 40);
+    EXPECT_TRUE(header.getNameLabelForTest().getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+    EXPECT_TRUE(strip->getSourceLineLabelForTest().getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+    ASSERT_TRUE(r.panel->sendEscapeToColumnDragForTest());
+    drag.up(drag.pressX + 40);
 }
 
 TEST(MixerPanelColumnDragTests, PressingAndDraggingTheSourceLineGrabsAndMovesTheColumn) {
@@ -449,4 +456,38 @@ TEST(MixerPanelColumnDragTests, PressingAndDraggingTheSourceLineGrabsAndMovesThe
     header.reorderHooks = {};
     header.mouseUp(down);
     EXPECT_EQ(selected, 1) << "a plain click on the source line selects the column like the header background";
+}
+
+// The drag handle covers the header as drawn, from its top edge down through the source line: every
+// row of it resolves, top-down from the panel the way a real press does, to the header or to a label
+// that forwards its events to the header, and a press there followed by a drag lifts the column.
+TEST(MixerPanelColumnDragTests, ThePressAreaCoversTheWholeDrawnHeaderAndTheSourceLine) {
+    ColumnDragRig r(2);
+    r.mc.getBottomDock().setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer); // hit-testing skips a hidden panel
+    auto* strip = r.panel->getStripColumnForTest(0);
+    ASSERT_NE(strip, nullptr);
+    auto& header = strip->getHeaderForTest();
+    const auto handle = header.getBounds().getUnion(strip->getSourceLineLabelForTest().getBounds());
+    ASSERT_EQ(handle.getY(), header.getY()) << "the handle starts at the header's own top edge";
+
+    for (int y = handle.getY(); y < handle.getBottom(); y += 3) {
+        for (int x : {handle.getX() + 1, handle.getCentreX(), handle.getRight() - 2}) {
+            strip = r.panel->getStripColumnForTest(0);
+            auto& h = strip->getHeaderForTest();
+            auto* hit = r.panel->getComponentAt(r.panel->getLocalPoint(strip, juce::Point<int>(x, y)));
+            ASSERT_NE(hit, nullptr) << "(" << x << ", " << y << ") strip at " << strip->getBounds().toString();
+            const bool forwards =
+                hit == &h || hit == &h.getNameLabelForTest() || hit == &strip->getSourceLineLabelForTest();
+            EXPECT_TRUE(forwards) << "column point (" << x << ", " << y << ") lands outside the drag handle";
+            if (!forwards)
+                continue;
+            // The header gets a forwarded label's events through its mouse listener, with the label as source.
+            const auto local = hit->getLocalPoint(strip, juce::Point<float>((float)x, (float)y));
+            h.mouseDown(makeClickEvent(*hit, local));
+            h.mouseDrag(makeDragEvent(*hit, local.translated(40.0f, 0.0f), local));
+            EXPECT_TRUE(r.panel->isColumnReorderActiveForTest()) << "no drag from (" << x << ", " << y << ")";
+            ASSERT_TRUE(r.panel->sendEscapeToColumnDragForTest());
+            h.mouseUp(makeClickEvent(*hit, local.translated(40.0f, 0.0f)));
+        }
+    }
 }

@@ -34,6 +34,7 @@ void MixerPanelComponent::wireColumnReorder(MixerColumnComponent& column, const 
     hooks.onGrab = [this, uuid](const juce::MouseEvent& e) { beginColumnDrag(uuid, e); };
     hooks.onDrag = [this](const juce::MouseEvent& e) { dragColumn(e); };
     hooks.onRelease = [this](const juce::MouseEvent&) { return endColumnDrag(); };
+    hooks.isDragging = [this] { return columnReorder_.isDragging(); };
     column.setReorderHooks(std::move(hooks));
 }
 

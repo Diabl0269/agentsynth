@@ -401,18 +401,23 @@ TEST(TimelineTrackHeaderTest, NameEditWritesThroughToTheDoc) {
 }
 
 // =============================================================================
-// The row background is a dedicated grab handle: the dragging hand on hover and through the drag.
+// The row keeps the normal arrow on hover and press; the dragging hand only during a real drag.
 // =============================================================================
 
-TEST(TimelineTrackHeaderTest, RowBackgroundShowsTheDraggingHandCursorOnHoverAndDuringTheDrag) {
+TEST(TimelineTrackHeaderTest, RowShowsTheDraggingHandCursorOnlyOnceThePressBecomesADrag) {
     HeaderFixture f;
-    EXPECT_TRUE(f.header->getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "hover";
+    auto isNormal = [&] { return f.header->getMouseCursor() == juce::MouseCursor::NormalCursor; };
+    EXPECT_TRUE(isNormal()) << "hover";
 
     f.header->mouseDown(makeRowMouseEvent(*f.header, {80.0f, 20.0f}, {80.0f, 20.0f}));
+    f.header->mouseDrag(makeRowMouseEvent(*f.header, {80.0f, 22.0f}, {80.0f, 20.0f}));
+    EXPECT_TRUE(isNormal()) << "pressed, below the drag threshold";
     f.header->mouseDrag(makeRowMouseEvent(*f.header, {80.0f, 60.0f}, {80.0f, 20.0f}));
     EXPECT_TRUE(f.header->getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "during the drag";
+    EXPECT_TRUE(f.header->getNameLabel().getMouseCursor() == juce::MouseCursor::DraggingHandCursor)
+        << "the name label shows the row's cursor, since a drag can start on it";
     f.header->mouseUp(makeRowMouseEvent(*f.header, {80.0f, 60.0f}, {80.0f, 20.0f}));
-    EXPECT_TRUE(f.header->getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "after the drop";
+    EXPECT_TRUE(isNormal()) << "after the drop";
 }
 
 // =============================================================================

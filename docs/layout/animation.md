@@ -206,13 +206,17 @@ consistently, through one header-only helper: `Source/UI/Layout/DragCursor.h`
 (`synth::ui::dragGrabCursor()`, `dragCopyCursor()`, `showDragCursor(component, copying)`,
 `endDragCursor(component, rest)`). No site sets `DraggingHandCursor` or `CopyingCursor` by hand.
 
-- **Dedicated grab handles** (a thing whose only job is to be picked up: bottom-dock tab, timeline
-  track header background, mixer column header, mixer zones row, list drag handles, MIDI-remote
-  controller surface cell, module library row, timeline ruler marker flag) show
-  `juce::MouseCursor::DraggingHandCursor` on hover AND during the drag. A mixer column header
-  shows it only while it has reorder hooks set (Direct, Master and pinned columns stay normal); its name
-  label and the column's source line delegate their cursor to the header (`CursorDelegatingLabel`), so
-  the whole top area reads as the handle.
+- **Reorder handles** (a bottom-dock tab, a timeline track header row, a mixer column header) keep
+  the normal arrow on hover and press. Each calls `followDragCursor(handle, dragging)` on every
+  mouse drag, with whether its owner's `ReorderDragAnimator` is really dragging (past the 4 px
+  threshold, not cancelled by Esc), and `endDragCursor(handle)` on release before any hook that can
+  destroy it. So the dragging hand appears the moment the press becomes a drag, and the arrow
+  returns on release, or on the first pointer move after Esc. A child that can start the drag (a
+  track's name, a mixer column's name label and source line) is a `CursorDelegatingLabel` showing
+  its handle's cursor. Direct, Master and pinned mixer columns never drag, so never show the hand.
+- **Small grab handles** (a thing whose only job is to be picked up: mixer zones row, list drag
+  handles, MIDI-remote controller surface cell, module library row, timeline ruler marker flag)
+  show `juce::MouseCursor::DraggingHandCursor` on hover AND during the drag.
 - **Tool-driven canvases** (timeline clips, piano roll notes, module cards, macro cards) keep the
   tool cursor on hover (`ToolCursors.h` / `applyToolCursor` stay in charge). The grab cursor shows
   only once a move drag has actually started (past its threshold), the copy cursor shows while an
