@@ -415,15 +415,14 @@ void TimelinePanelComponent::toggleAutomationForTrack(synth::TrackId trackId) {
 }
 
 void TimelinePanelComponent::layoutTrackHeaders() {
-    // Themed with a literal fallback, same pattern as resized() above — and the SAME value
-    // (token x vertical-zoom scale) synth::ui::TimelineClipLaneArea reads for its own row height,
-    // so header rows and clip rows never drift apart.
-    const int rowHeight = currentRowHeight();
+    // Row geometry comes from rowLayout() — the SAME model synth::ui::TimelineClipLaneArea paints
+    // and hit-tests with, so header rows and clip rows never drift apart.
+    const auto layout = rowLayout();
 
     const int count = trackHeaderList_.headers.size();
     const int width = std::max(0, trackHeaderViewport_.getMaximumVisibleWidth());
 
-    trackHeaderList_.setSize(width, std::max(count * rowHeight, trackHeaderViewport_.getMaximumVisibleHeight()));
+    trackHeaderList_.setSize(width, std::max(layout.trackTop(count), trackHeaderViewport_.getMaximumVisibleHeight()));
     placeTrackHeaders();
 }
 
@@ -476,9 +475,9 @@ bool TimelinePanelComponent::selectAdjacentTrack(int direction) {
 void TimelinePanelComponent::ensureTrackVisible(int index) {
     if (!juce::isPositiveAndBelow(index, trackHeaderList_.headers.size()))
         return;
-    const int rowHeight = currentRowHeight();
-    const int rowTop = index * rowHeight;
-    const int rowBottom = rowTop + rowHeight;
+    const auto span = rowLayout().trackSpan(index);
+    const int rowTop = span.getStart();
+    const int rowBottom = span.getEnd();
     const int viewTop = (int)std::llround(viewState_.trackScrollY);
     const int viewHeight = trackHeaderViewport_.getMaximumVisibleHeight();
     if (rowTop < viewTop)

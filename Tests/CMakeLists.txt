@@ -512,6 +512,7 @@ add_executable(Tests
     UI/Timeline/AutomationEditorTests.cpp
     UI/Timeline/TimelineTransportBarTests.cpp
     UI/Timeline/TransportBarMidiLearnTests.cpp
+    UI/Timeline/TimelineRowLayoutTests.cpp
     UI/Timeline/TimelineViewStateTests.cpp
     UI/Mixer/MixerPanelComponentTests.cpp
     UI/Mixer/MixerPanelColumnDragTests.cpp

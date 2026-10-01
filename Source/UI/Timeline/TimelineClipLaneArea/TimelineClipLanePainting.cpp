@@ -48,19 +48,20 @@ using namespace detail;
 // The single geometry source shared by paintDragGhosts() and getDragGhostRectsForTest() —
 // computing them separately is how a drawn affordance drifts from the one a test pins (the same
 // reasoning GraphEditor::buildVisibleCables() states).
-juce::Rectangle<int> TimelineClipLaneArea::dragGhostRectFor(const DragOrigin& origin, int rowHeight) const {
-    return computeClipRect(viewState_, origin.trackIndex + previewRowDelta_, origin.originalStart + previewDeltaBeats_,
-                           origin.lengthBeats, rowHeight);
+juce::Rectangle<int> TimelineClipLaneArea::dragGhostRectFor(const TimelineRowLayout& layout,
+                                                            const DragOrigin& origin) const {
+    return computeClipRect(viewState_, layout, origin.trackIndex + previewRowDelta_,
+                           origin.originalStart + previewDeltaBeats_, origin.lengthBeats);
 }
 
 std::vector<juce::Rectangle<int>> TimelineClipLaneArea::getDragGhostRectsForTest() const {
     std::vector<juce::Rectangle<int>> rects;
     if (dragMode_ != DragMode::Move || !copyDrag_)
         return rects;
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
     rects.reserve(dragClips_.size());
     for (const auto& origin : dragClips_)
-        rects.push_back(dragGhostRectFor(origin, rowHeight));
+        rects.push_back(dragGhostRectFor(layout, origin));
     return rects;
 }
 
@@ -80,10 +81,10 @@ void TimelineClipLaneArea::paintDragGhosts(juce::Graphics& g) {
     if (dragMode_ != DragMode::Move || !copyDrag_ || doc_ == nullptr)
         return;
 
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
     const auto& tracks = doc_->getTracks();
     for (const auto& origin : dragClips_) {
-        const auto rect = dragGhostRectFor(origin, rowHeight);
+        const auto rect = dragGhostRectFor(layout, origin);
         if (rect.getRight() < 0 || rect.getX() > getWidth())
             continue; // same offscreen cull paintClip() uses
 
@@ -343,9 +344,8 @@ void TimelineClipLaneArea::updateLiveRecording(const LiveRecordingInfo& info) {
     liveRecording_ = info;
     livePeaks_ = std::move(peaks);
 
-    const int rowHeight = getRowHeight();
-    const auto newRect = computeClipRect(viewState_, trackIndex, info.punchBeat,
-                                         std::max(0.0, info.currentBeat - info.punchBeat), rowHeight);
+    const auto newRect = computeClipRect(viewState_, getRowLayout(), trackIndex, info.punchBeat,
+                                         std::max(0.0, info.currentBeat - info.punchBeat));
 
     // Repaint-on-arrival: only when new peak buckets actually landed (or this is the strip's very
     // first frame) is a repaint issued — the transport tick alone (which moves the rect's right

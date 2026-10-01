@@ -142,6 +142,18 @@ int TimelineClipLaneArea::getRowHeight() const {
     return std::max(8, (int)std::llround((double)base * viewState_.rowHeightScale));
 }
 
+TimelineRowLayout TimelineClipLaneArea::getRowLayout() const {
+    const int trackCount = doc_ != nullptr ? (int)doc_->getTracks().size() : 0;
+    return TimelineRowLayout(trackCount, getRowHeight(), trackExtraHeights_);
+}
+
+void TimelineClipLaneArea::setTrackExtraHeights(std::vector<int> extraHeights) {
+    if (extraHeights == trackExtraHeights_)
+        return;
+    trackExtraHeights_ = std::move(extraHeights);
+    repaint();
+}
+
 double TimelineClipLaneArea::currentBeatsPerBar() const {
     double beatsPerBar = 4.0;
     if (transport_ != nullptr) {
@@ -185,33 +197,36 @@ double TimelineClipLaneArea::minDrawLengthBeats() const {
 std::optional<int> TimelineClipLaneArea::trackIndexAt(juce::Point<int> pos) const {
     if (doc_ == nullptr || pos.y < 0)
         return std::nullopt;
-    const int rowHeight = getRowHeight();
-    if (rowHeight <= 0)
-        return std::nullopt;
     // Same vertical-scroll offset rowBounds() subtracts — a hit test and a painted row must never
     // disagree about which track a y lands in.
     const int contentY = pos.y + (int)std::llround(viewState_.trackScrollY);
-    if (contentY < 0)
-        return std::nullopt;
-    const int index = contentY / rowHeight;
-    if (index >= (int)doc_->getTracks().size())
+    // Only the clip row counts: a y in a track's extra (sub-lane) area belongs to no clip row.
+    const auto hit = getRowLayout().hitAtY(contentY);
+    if (hit.trackIndex < 0 || !hit.inClipRow)
         return std::nullopt; // below the last row: empty panel space, not a row
-    return index;
+    return hit.trackIndex;
 }
 
-juce::Rectangle<int> TimelineClipLaneArea::rowBounds(int trackIndex, int rowHeight) const {
-    return {0, trackIndex * rowHeight - (int)std::llround(viewState_.trackScrollY), getWidth(), rowHeight};
+juce::Rectangle<int> TimelineClipLaneArea::rowBounds(const TimelineRowLayout& layout, int trackIndex) const {
+    return {0, layout.trackTop(trackIndex) - (int)std::llround(viewState_.trackScrollY), getWidth(),
+            layout.trackRowHeight()};
 }
 
 //==============================================================================
-juce::Rectangle<int> TimelineClipLaneArea::computeClipRect(const TimelineViewState& viewState, int trackIndex,
-                                                           double startBeat, double lengthBeats, int rowHeight) {
+juce::Rectangle<int> TimelineClipLaneArea::computeClipRect(const TimelineViewState& viewState,
+                                                           const TimelineRowLayout& layout, int trackIndex,
+                                                           double startBeat, double lengthBeats) {
     const double x0 = viewState.beatToX(startBeat);
     const double x1 = viewState.beatToX(startBeat + lengthBeats);
     const int left = (int)std::llround(x0);
     const int right = (int)std::llround(x1);
-    return {left, trackIndex * rowHeight - (int)std::llround(viewState.trackScrollY), std::max(right - left, 1),
-            rowHeight};
+    return {left, layout.trackTop(trackIndex) - (int)std::llround(viewState.trackScrollY), std::max(right - left, 1),
+            layout.trackRowHeight()};
+}
+
+juce::Rectangle<int> TimelineClipLaneArea::computeClipRect(const TimelineViewState& viewState, int trackIndex,
+                                                           double startBeat, double lengthBeats, int rowHeight) {
+    return computeClipRect(viewState, TimelineRowLayout(trackIndex + 1, rowHeight), trackIndex, startBeat, lengthBeats);
 }
 
 // `sampleRate` is the ASSUMED source sample rate — the peaks file itself does not carry one (see
@@ -251,12 +266,12 @@ TimelineClipLaneArea::BucketRange TimelineClipLaneArea::bucketRangeForClip(const
 juce::Rectangle<int> TimelineClipLaneArea::getClipRect(synth::ClipId id) const {
     if (doc_ == nullptr)
         return {};
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
     const auto& tracks = doc_->getTracks();
     for (int trackIndex = 0; trackIndex < (int)tracks.size(); ++trackIndex)
         for (const auto& clip : tracks[(size_t)trackIndex].clips)
             if (clip.id == id)
-                return computeClipRect(viewState_, trackIndex, clip.startBeat, clip.lengthBeats, rowHeight);
+                return computeClipRect(viewState_, layout, trackIndex, clip.startBeat, clip.lengthBeats);
     return {};
 }
 
@@ -264,12 +279,12 @@ std::vector<std::pair<synth::ClipId, juce::Rectangle<int>>> TimelineClipLaneArea
     std::vector<std::pair<synth::ClipId, juce::Rectangle<int>>> rects;
     if (doc_ == nullptr)
         return rects;
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
     const auto& tracks = doc_->getTracks();
     for (int trackIndex = 0; trackIndex < (int)tracks.size(); ++trackIndex)
         for (const auto& clip : tracks[(size_t)trackIndex].clips)
             rects.emplace_back(clip.id,
-                               computeClipRect(viewState_, trackIndex, clip.startBeat, clip.lengthBeats, rowHeight));
+                               computeClipRect(viewState_, layout, trackIndex, clip.startBeat, clip.lengthBeats));
     return rects;
 }
 
@@ -277,11 +292,11 @@ std::optional<TimelineClipLaneArea::ClipHit> TimelineClipLaneArea::hitTestClip(j
     if (doc_ == nullptr)
         return std::nullopt;
 
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
     const auto& tracks = doc_->getTracks();
     for (int trackIndex = 0; trackIndex < (int)tracks.size(); ++trackIndex) {
         for (const auto& clip : tracks[(size_t)trackIndex].clips) {
-            const auto rect = computeClipRect(viewState_, trackIndex, clip.startBeat, clip.lengthBeats, rowHeight);
+            const auto rect = computeClipRect(viewState_, layout, trackIndex, clip.startBeat, clip.lengthBeats);
             if (!rect.contains(pos))
                 continue;
 
@@ -332,11 +347,11 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
     if (doc_ == nullptr)
         return;
 
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
     const auto& tracks = doc_->getTracks();
     for (int trackIndex = 0; trackIndex < (int)tracks.size(); ++trackIndex) {
         const auto& track = tracks[(size_t)trackIndex];
-        const auto bounds = rowBounds(trackIndex, rowHeight);
+        const auto bounds = rowBounds(layout, trackIndex);
         // Both of these paint UNDER the row's clips (a drop highlight is a backdrop, and a hint
         // only ever shows on a row that has none).
         if (trackIndex == fileDropRow_)
@@ -344,7 +359,7 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
         if (track.clips.empty())
             paintEmptyRowHint(g, track, bounds);
         for (const auto& clip : track.clips)
-            paintClip(g, clip, track, trackIndex, rowHeight);
+            paintClip(g, clip, track, trackIndex, layout);
     }
 
     paintKeyboardClipRing(g);
@@ -363,10 +378,11 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
 }
 
 void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip, const synth::Track& track,
-                                     int trackIndex, int rowHeight) {
+                                     int trackIndex, const TimelineRowLayout& layout) {
+    const int rowHeight = layout.trackRowHeight();
     const auto geometry = effectiveGeometryFor(clip);
     const auto rect =
-        computeClipRect(viewState_, effectiveRowFor(clip.id, trackIndex), geometry.start, geometry.length, rowHeight);
+        computeClipRect(viewState_, layout, effectiveRowFor(clip.id, trackIndex), geometry.start, geometry.length);
     if (rect.getRight() < 0 || rect.getX() > getWidth())
         return; // cheap offscreen cull — same reasoning as the panel's own bar-line loop
 

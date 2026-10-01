@@ -378,18 +378,13 @@ void TimelinePanelComponent::zoomTimelineVertical(double factor) {
     zoomTrackRows(factor, visibleCentreYInLanes());
 }
 
-// The SAME value TimelineClipLaneArea::getRowHeight computes, duplicated only because the two
-// components resolve their LookAndFeel independently.
-int TimelinePanelComponent::currentRowHeight() const {
-    int base = TimelineTrackHeaderComponent::kRowHeight;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        base = lf->getTheme().metrics.timelineTrackRowHeight;
-    return std::max(8, (int)std::llround((double)base * viewState_.rowHeightScale));
+void TimelinePanelComponent::setTrackExtraHeightsForTest(std::vector<int> extraHeights) {
+    clipLaneArea_.setTrackExtraHeights(std::move(extraHeights));
+    layoutTrackHeaders();
 }
 
 double TimelinePanelComponent::maxTrackScrollPx() const {
-    const int rows = doc_ != nullptr ? (int)doc_->getTracks().size() : 0;
-    return std::max(0.0, (double)(rows * currentRowHeight() - gridLanesBounds_.getHeight()));
+    return std::max(0.0, (double)(rowLayout().totalHeight() - gridLanesBounds_.getHeight()));
 }
 
 void TimelinePanelComponent::scrollTrackRows(double deltaPx) {

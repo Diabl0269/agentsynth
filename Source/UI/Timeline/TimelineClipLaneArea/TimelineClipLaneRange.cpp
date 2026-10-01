@@ -51,12 +51,15 @@ juce::Rectangle<int> unionOf(juce::Rectangle<int> a, juce::Rectangle<int> b) {
 std::optional<std::pair<synth::TrackId, double>> TimelineClipLaneArea::rangePointAt(juce::Point<int> pos) const {
     if (doc_ == nullptr || doc_->getTracks().empty())
         return std::nullopt;
-    const int rowHeight = getRowHeight();
-    if (rowHeight <= 0)
+    const auto layout = getRowLayout();
+    if (layout.trackRowHeight() <= 0)
         return std::nullopt;
     const int contentY = pos.y + (int)std::llround(viewState_.trackScrollY);
+    // A y below the last row (index -1 from the layout) clamps onto the last row; one in a track's
+    // sub-lane area counts as that track.
     const int lastRow = (int)doc_->getTracks().size() - 1;
-    const int row = contentY < 0 ? 0 : std::min(contentY / rowHeight, lastRow);
+    const int hitRow = layout.trackIndexAtY(contentY);
+    const int row = contentY < 0 ? 0 : (hitRow < 0 ? lastRow : hitRow);
     const double beat = std::max(0.0, snappedBeatAt(viewState_.xToBeat((double)pos.x)));
     return std::make_pair(doc_->getTracks()[(std::size_t)row].id, beat);
 }
@@ -67,9 +70,9 @@ juce::Rectangle<int> TimelineClipLaneArea::rangeRect() const {
     const auto rows = range_.coveredRows(*doc_);
     if (!rows)
         return {};
-    const int rowHeight = getRowHeight();
-    const int top = rowBounds(rows->first, rowHeight).getY();
-    const int bottom = rowBounds(rows->second, rowHeight).getBottom();
+    const auto layout = getRowLayout();
+    const int top = rowBounds(layout, rows->first).getY();
+    const int bottom = rowBounds(layout, rows->second).getBottom();
     const int left = (int)std::llround(viewState_.beatToX(range_.getStartBeat()));
     const int right = (int)std::llround(viewState_.beatToX(range_.getEndBeat()));
     return {left, top, std::max(1, right - left), bottom - top};

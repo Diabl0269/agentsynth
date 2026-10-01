@@ -241,9 +241,13 @@ void TimelineClipLaneArea::updateDragPreviewFromLastPointer() {
         // it could cross tracks — rather than dropping the clips that would have fitted.
         // Clamping the whole group rather than dropping just the clips that would fit is
         // deliberate: a partial drop would silently tear a selection apart.
-        const int rowHeight = getRowHeight();
-        int rowDelta =
-            rowHeight > 0 ? (int)std::llround((double)(lastDragPointer_.y - mouseDownPos_.y) / (double)rowHeight) : 0;
+        // How many rows the pointer has moved: the track whose top is nearest the press row's top
+        // plus the pointer's travel (-1 = dragged past either end, which is an illegal drop: no row move).
+        const auto layout = getRowLayout();
+        const int pressRow = layout.trackIndexAtY(mouseDownPos_.y + (int)std::llround(viewState_.trackScrollY));
+        const int destPressRow =
+            pressRow < 0 ? -1 : layout.trackIndexNearestTop(pressRow, lastDragPointer_.y - mouseDownPos_.y);
+        int rowDelta = (pressRow < 0 || destPressRow < 0) ? 0 : destPressRow - pressRow;
         if (rowDelta != 0) {
             const auto& tracks = doc_->getTracks();
             for (const auto& origin : dragClips_) {
@@ -619,13 +623,13 @@ int TimelineClipLaneArea::dropRowFor(const juce::StringArray& files, int x, int 
 void TimelineClipLaneArea::setFileDropRow(int row) {
     if (row == fileDropRow_)
         return; // repaint ONLY on a row change — a drag reports every pixel of movement
-    const int rowHeight = getRowHeight();
+    const auto layout = getRowLayout();
     const int previous = fileDropRow_;
     fileDropRow_ = row;
     if (previous >= 0)
-        repaint(rowBounds(previous, rowHeight));
+        repaint(rowBounds(layout, previous));
     if (fileDropRow_ >= 0)
-        repaint(rowBounds(fileDropRow_, rowHeight));
+        repaint(rowBounds(layout, fileDropRow_));
 }
 
 bool TimelineClipLaneArea::isInterestedInFileDrag(const juce::StringArray& files) {

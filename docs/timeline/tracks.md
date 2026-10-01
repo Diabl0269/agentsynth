@@ -159,7 +159,7 @@ threshold it is a plain click-to-select.
 [reorder behaviour](../layout/animation.md#reorder-drag) (`ReorderDragAnimator`, `ReorderFramePump`,
 `ReorderCancelKey`) on the vertical axis, in the header list's own coordinates:
 
-- At press it captures the rows' static slots (index times row height), the pointer and the grab
+- At press it captures the rows' static slots (their `TimelineRowLayout` spans), the pointer and the grab
   offset once (`trackPointerY()` converts screen Y with `trackHeaderList_.getLocalPoint(nullptr, ...)`
   on every event, so the offset survives the rows moving and the list scrolling).
 - Past 4 px the row lifts (light wash and accent border, `TimelineTrackHeaderComponent::setLift`),
@@ -198,6 +198,21 @@ that can trigger this, and nothing follows it — see the `ORDERING HAZARD` comm
 `TimelinePanelTrackReorderTests.cpp`) drive a real drag through this
 exact path with no host — the worst case, where the mutation runs with no extra indirection —
 specifically to pin it.
+
+## Row layout
+
+`synth::ui::TimelineRowLayout` (`Source/UI/Timeline/TimelineRowLayout.h`) is the one place row
+geometry comes from. Each track owns a clip row (the themed `Metrics::timelineTrackRowHeight` times
+the vertical-zoom scale) followed by an optional per-track extra area, zero today, where automation
+sub-rows will fold out. The model answers `trackTop(i)`, `trackSpan(i)`, `hitAtY(y)` (track plus
+whether `y` is in its clip row), `totalHeight()` and `trackIndexNearestTop(from, dy)`; every y is a
+content coordinate, before `trackScrollY`.
+
+`TimelineClipLaneArea::getRowLayout()` builds it; the panel reads the same object through
+`rowLayout()`, so the header column, clip painting, hit testing, edit tools, range selection, the
+track reorder slots, `ensureTrackVisible()` and the scroll limit cannot disagree. Nothing computes
+`index * rowHeight` any more: ask the layout. Extra heights enter through
+`TimelineClipLaneArea::setTrackExtraHeights()`; a header row is only the clip-row part of its slot.
 
 ## Focus outline
 
