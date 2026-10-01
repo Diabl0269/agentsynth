@@ -76,10 +76,18 @@ int layoutCardBodyItems(const CardBodyPlan& plan, juce::AudioProcessor& module, 
     return y;
 }
 
+// A titled section starts with its header row across the content width; an untitled one (every
+// automatic layout) has none, so those cards keep their exact geometry.
 int layoutCardBodySections(const CardBodyPlan& plan, juce::AudioProcessor& module, int y,
                            const cardbody::BodyGeometry& g, bool apply, bool tabbed) {
-    for (const auto& section : plan.sections)
+    for (const auto& section : plan.sections) {
+        if (section.hasHeader() && !tabbed) {
+            if (apply && section.header != nullptr)
+                section.header->setBounds(g.contentX, y, g.contentW, cardbody::kSectionHeaderHeight);
+            y += cardbody::kSectionHeaderHeight;
+        }
         y = layoutCardBodyItems(plan, module, section.items, section.columns, y, g, apply, tabbed);
+    }
     return y;
 }
 

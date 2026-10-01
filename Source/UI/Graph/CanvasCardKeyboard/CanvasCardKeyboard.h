@@ -16,6 +16,8 @@ public:
 
     /** Non-owning; null falls back to the default keys. Message thread. */
     void setShortcutManager(const ShortcutManager* manager) noexcept { shortcuts_ = manager; }
+    /** The installed manager, or null. */
+    const ShortcutManager* getShortcutManager() const noexcept { return shortcuts_; }
 
     /** True when `key` was one of the card actions and was consumed. Keys arriving from a control
      *  inside a card (or the Mod Matrix) are left alone. */

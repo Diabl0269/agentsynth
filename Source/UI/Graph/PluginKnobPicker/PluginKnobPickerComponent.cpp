@@ -1,180 +1,70 @@
-// PluginKnobPickerComponent.cpp -- construction, chrome, paint/resized. Row list management and
-// apply-to-scope live in the sibling units below (this class is split by concern, root CLAUDE.md's
-// "Code structure" rule): PluginKnobPickerComponentRows.cpp (search/tick/reorder/label/apply),
-// PluginKnobPickerComponentScope.cpp (Apply to / presets / touch-to-add wiring), and
-// PluginKnobPickerComponentTestSeams.cpp. See docs/control/plugin-card-layout.md#choosing-knobs.
+// PluginKnobPickerComponent.cpp -- the hosted plugin's card layout editor: the shared editor over the
+// instance's parameters, and touch-to-add. docs/control/plugin-card-layout.md#choosing-knobs.
 #include "PluginKnobPickerComponent.h"
-#include "Plugin/Hosting/HostedPluginCardLayout.h"
-#include "PluginKnobPickerRow.h"
 #include "PluginKnobPickerTouchCapture.h"
+#include "UI/Graph/CardLayoutEditor/HostedCardLayoutSource.h"
 #include <algorithm>
 
 namespace synth::ui {
 
-namespace {
-constexpr int kMargin = 10;
-constexpr int kRowGap = 6;
-constexpr int kControlHeight = 24;
-} // namespace
-
 PluginKnobPickerComponent::PluginKnobPickerComponent(HostedPluginModule& module, PluginCardLayoutStore* store,
                                                      juce::AudioProcessorGraph& graph,
                                                      juce::AudioProcessorGraph::NodeID nodeId,
-                                                     AppUndoManager* undoManager)
-    : module_(&module)
-    , store_(store)
-    , graph_(graph)
-    , nodeId_(nodeId)
-    , undoManager_(undoManager)
-    , identity_(module.getIdentity())
-    , titleLabel_("title", "Knobs for \"" + module.getPluginName() + "\"") {
-    for (const auto& info : module.getInstanceParameters())
-        allParams_.push_back({info.paramId, info.index, info.displayName});
-
-    const auto resolved = resolveHostedCardLayout(module, store_);
-    partitionSlots(resolved.layout.slots);
-
+                                                     AppUndoManager* undoManager, const ShortcutManager* shortcuts)
+    : CardLayoutEditorComponent(std::make_unique<HostedCardLayoutSource>(module, store, graph, nodeId, undoManager),
+                                shortcuts)
+    , nodeId_(nodeId) {
     touchCapture_ = std::make_unique<PluginKnobPickerTouchCapture>(module);
     touchCapture_->onParameterTouched = [this](int index) { handleParameterTouched(index); };
     touchCapture_->onRequestOpenEditor = [this] {
         if (onOpenPluginEditorRequested)
             onOpenPluginEditorRequested();
     };
-    // A value change on a parameter already checked is the picker's own tick (or the card's
-    // own knob attachment moving it), never a new touch -- see the header's isParameterAlreadyInLayout
-    // doc comment. Gestures need no such filter (a gesture start is a deliberate touch either way).
-    touchCapture_->isParameterAlreadyInLayout = [this](int parameterIndex) {
-        auto it = std::find_if(allParams_.begin(), allParams_.end(),
-                               [&](const ParamInfo& p) { return p.index == parameterIndex; });
-        if (it == allParams_.end())
-            return false;
-        return std::any_of(workingSlots_.begin(), workingSlots_.end(),
-                           [&](const CardSlot& s) { return s.paramId == it->paramId; });
-    };
-
-    buildChrome();
-    refreshPresetCombo();
-    rebuildRows();
-
-    setSize(kWidth, kHeight);
-}
-
-// touchCapture_'s destructor already disarms and unhooks from every instance parameter; nothing else
-// here owns a live listener.
-PluginKnobPickerComponent::~PluginKnobPickerComponent() = default;
-
-void PluginKnobPickerComponent::buildChrome() {
-    titleLabel_.setJustificationType(juce::Justification::centredLeft);
-    titleLabel_.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
-    addAndMakeVisible(titleLabel_);
-
-    addAndMakeVisible(applyToLabel_);
-    applyToCombo_.setComponentID("knobPickerApplyTo");
-    applyToCombo_.addItem("This instance", 1);
-    applyToCombo_.addItem("All " + module_.get()->getPluginName() + " instances", 2);
-    applyToCombo_.setSelectedId(1, juce::dontSendNotification);
-    applyToCombo_.onChange = [this] {
-        applyToAllInstances_ = applyToCombo_.getSelectedId() == 2;
-        applyCurrentLayout();
-    };
-    addAndMakeVisible(applyToCombo_);
-
-    addAndMakeVisible(presetLabel_);
-    presetCombo_.setComponentID("knobPickerPreset");
-    presetCombo_.setTextWhenNothingSelected("Presets...");
-    presetCombo_.onChange = [this] {
-        const auto name = presetCombo_.getText();
-        if (name.isNotEmpty())
-            loadPreset(name);
-    };
-    addAndMakeVisible(presetCombo_);
-
-    saveAsButton_.setComponentID("knobPickerSaveAs");
-    saveAsButton_.onClick = [this] { promptSaveAsPreset(); };
-    addAndMakeVisible(saveAsButton_);
-
-    deleteButton_.setComponentID("knobPickerDeletePreset");
-    deleteButton_.onClick = [this] { promptDeletePreset(); };
-    addAndMakeVisible(deleteButton_);
-
-    resetButton_.setComponentID("knobPickerResetToAutomatic");
-    resetButton_.onClick = [this] { resetToAutomatic(); };
-    addAndMakeVisible(resetButton_);
-
-    searchEditor_.setComponentID("knobPickerSearch");
-    searchEditor_.setTextToShowWhenEmpty("Search parameters...", juce::Colours::grey);
-    searchEditor_.onTextChange = [this] { rebuildRows(); };
-    addAndMakeVisible(searchEditor_);
+    // A value change on a parameter already ticked is the editor's own tick (or the card's own knob
+    // moving it), never a new touch. Gestures need no such filter: a gesture start is deliberate.
+    touchCapture_->isParameterAlreadyInLayout = [this](int index) { return isParameterIndexShown(index); };
 
     touchToAddToggle_.setComponentID("knobPickerTouchToAdd");
+    touchToAddToggle_.setTooltip("While ticked, a control you move in the plugin's own window is added");
     touchToAddToggle_.onClick = [this] { touchCapture_->setArmed(touchToAddToggle_.getToggleState()); };
     addAndMakeVisible(touchToAddToggle_);
-
-    missingLabel_.setJustificationType(juce::Justification::centredLeft);
-    missingLabel_.setColour(juce::Label::textColourId, juce::Colours::orange);
-    addAndMakeVisible(missingLabel_);
-    updateMissingLabel();
-
-    rowsContent_.setInterceptsMouseClicks(true, true);
-    rowsViewport_.setViewedComponent(&rowsContent_, false);
-    rowsViewport_.setScrollBarsShown(true, false);
-    addAndMakeVisible(rowsViewport_);
+    resized();
 }
 
-void PluginKnobPickerComponent::paint(juce::Graphics& g) {
-    g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
+// touchCapture_'s destructor disarms and unhooks from every instance parameter.
+PluginKnobPickerComponent::~PluginKnobPickerComponent() = default;
+
+int PluginKnobPickerComponent::layoutExtraControls(juce::Rectangle<int> area) {
+    touchToAddToggle_.setBounds(area);
+    return area.getHeight();
 }
 
-void PluginKnobPickerComponent::resized() {
-    auto area = getLocalBounds().reduced(kMargin);
-
-    titleLabel_.setBounds(area.removeFromTop(kControlHeight + 4));
-    area.removeFromTop(kRowGap);
-
-    auto scopeRow = area.removeFromTop(kControlHeight);
-    applyToLabel_.setBounds(scopeRow.removeFromLeft(60));
-    applyToCombo_.setBounds(scopeRow.removeFromLeft(220));
-    area.removeFromTop(kRowGap);
-
-    auto presetRow = area.removeFromTop(kControlHeight);
-    presetLabel_.setBounds(presetRow.removeFromLeft(46));
-    presetCombo_.setBounds(presetRow.removeFromLeft(120));
-    presetRow.removeFromLeft(4);
-    saveAsButton_.setBounds(presetRow.removeFromLeft(70));
-    presetRow.removeFromLeft(4);
-    deleteButton_.setBounds(presetRow.removeFromLeft(56));
-    presetRow.removeFromLeft(4);
-    resetButton_.setBounds(presetRow);
-    area.removeFromTop(kRowGap);
-
-    auto searchRow = area.removeFromTop(kControlHeight);
-    searchEditor_.setBounds(searchRow);
-    area.removeFromTop(kRowGap);
-
-    touchToAddToggle_.setBounds(area.removeFromTop(kControlHeight));
-    area.removeFromTop(kRowGap / 2);
-
-    if (!missingSlots_.empty()) {
-        missingLabel_.setBounds(area.removeFromTop(18));
-        area.removeFromTop(kRowGap / 2);
-    }
-
-    rowsViewport_.setBounds(area);
-    layOutRows();
+bool PluginKnobPickerComponent::isParameterIndexShown(int parameterIndex) const {
+    const auto& params = getParameters();
+    const auto it = std::find_if(params.begin(), params.end(),
+                                 [&](const CardLayoutEditorParam& p) { return p.index == parameterIndex; });
+    return it != params.end() && isParameterShown(it->paramId);
 }
 
-void PluginKnobPickerComponent::layOutRows() {
-    const int width = rowsViewport_.getWidth() - rowsViewport_.getScrollBarThickness();
-    const int height = rows_.size() * PluginKnobPickerRow::kRowHeight;
-    rowsContent_.setSize(juce::jmax(width, 1), juce::jmax(height, 1));
+// The capture reports a parameter touched twice twice; ticking an already ticked one changes nothing.
+void PluginKnobPickerComponent::handleParameterTouched(int parameterIndex) {
+    const auto& params = getParameters();
+    const auto it = std::find_if(params.begin(), params.end(),
+                                 [&](const CardLayoutEditorParam& p) { return p.index == parameterIndex; });
+    if (it != params.end() && !isParameterShown(it->paramId))
+        showParameter(it->paramId);
+}
 
-    int y = 0;
-    for (auto* row : rows_) {
-        row->setBounds(0, y, rowsContent_.getWidth(), PluginKnobPickerRow::kRowHeight);
-        y += PluginKnobPickerRow::kRowHeight;
-    }
-    if (rowDrag_.isReordering())
-        placeDragRows(); // a settle carrying on across the rebuild a commit causes
+// Sets the toggle's visible state and arms exactly as its onClick would.
+void PluginKnobPickerComponent::setTouchToAddArmedForTest(bool armed) {
+    touchToAddToggle_.setToggleState(armed, juce::dontSendNotification);
+    touchCapture_->setArmed(armed);
+}
+
+bool PluginKnobPickerComponent::isTouchToAddArmedForTest() const { return touchCapture_->isArmed(); }
+
+void PluginKnobPickerComponent::simulateTouchGestureForTest(int parameterIndex) {
+    touchCapture_->simulateGestureStartForTest(parameterIndex);
 }
 
 } // namespace synth::ui

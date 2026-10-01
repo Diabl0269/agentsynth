@@ -39,6 +39,11 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "mixerToggleEq",
         "mixerEnterRows",
         "mixerOpenEq",
+        // CardLayoutEditorComponent's row keys (CardLayoutEditorComponentKeyboard.cpp)
+        "layoutEditorToggleShown",
+        "layoutEditorMoveUp",
+        "layoutEditorMoveDown",
+        "layoutEditorRename",
         // CanvasCardKeyboard::keyPressed
         "canvasSelectCardLeft",
         "canvasSelectCardRight",

@@ -329,10 +329,16 @@ public:
 
     /** No-op unless this is a live Hosted Plugin card. See ModuleComponentHostedPluginCard.cpp. */
     void showPluginKnobPicker();
+    /** Opens the card layout editor beside this card; the hosted plugin's picker on a hosted card,
+     *  nothing on a bespoke card. See ModuleComponentLayoutEditor.cpp. */
+    void showCardLayoutEditor();
+    /** Test seam: while set (non-null), every card hands its layout editor here instead of opening a
+     *  window. Message thread only. */
+    static void setCardLayoutEditorLauncherForTest(std::function<void(std::unique_ptr<juce::Component>)> launcher);
 
 protected:
-    /** Virtual test seam; see ModuleComponentHostedPluginCard.cpp. */
-    virtual void launchPluginKnobPickerCallOutBox(std::unique_ptr<juce::Component> picker, juce::Rectangle<int> anchor);
+    /** Virtual test seam; see ModuleComponentLayoutEditor.cpp. */
+    virtual void launchCardLayoutEditorCallOutBox(std::unique_ptr<juce::Component> editor, juce::Rectangle<int> anchor);
 
 public:
     /** Test/inspection: the param a right-click on `component` would open MIDI Learn for, or null
@@ -637,7 +643,7 @@ private:
     // Re-measures the card and asks the canvas to accept its new size.
     void relayoutHostedPluginCard();
     void handleHostedGesture(const juce::AudioProcessorParameter& param, bool starting);
-    // The Open Editor + Choose knobs... row; returns the y below it, `y` unchanged for any other module.
+    // The Open Editor + Edit Layout... row; returns the y below it, `y` unchanged for any other module.
     int layoutHostedPluginChrome(int y, int narrowX, int narrowW, bool apply);
     // External MIDI's device + channel combos, extracted out of createControls to keep
     // that function under its own line-count ratchet. Neither combo is

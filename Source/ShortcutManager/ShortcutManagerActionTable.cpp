@@ -165,6 +165,12 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"mixerToggleEq", ShortcutCategory::Mixer},
         {"mixerEnterRows", ShortcutCategory::Mixer},
         {"mixerOpenEq", ShortcutCategory::Mixer},
+        // Layout Editor -- the card layout editor's list (CardLayoutEditorComponent), focused only
+        // while its panel is open.
+        {"layoutEditorToggleShown", ShortcutCategory::LayoutEditor},
+        {"layoutEditorMoveUp", ShortcutCategory::LayoutEditor},
+        {"layoutEditorMoveDown", ShortcutCategory::LayoutEditor},
+        {"layoutEditorRename", ShortcutCategory::LayoutEditor},
     };
     return table;
 }

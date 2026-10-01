@@ -47,7 +47,7 @@ bool ModuleCardLayoutStore::setDefault(const juce::String& moduleType, const Car
     const juce::var owner = ownerOf(moduleType);
     if (!writeDefault(directoryKey(moduleType), owner, layout))
         return false;
-    listeners_.call([&](Listener& listener) { listener.layoutChangedForModuleType(moduleType); });
+    defaultChanged(moduleType);
     return true;
 }
 
@@ -56,8 +56,20 @@ bool ModuleCardLayoutStore::clearDefault(const juce::String& moduleType) {
     if (!removeDefault(directoryKey(moduleType), removed))
         return false;
     if (removed)
-        listeners_.call([&](Listener& listener) { listener.layoutChangedForModuleType(moduleType); });
+        defaultChanged(moduleType);
     return true;
+}
+
+// The revision moves before the listeners run, so a card rebuilt from inside a listener records the
+// new one and is not seen as stale again.
+void ModuleCardLayoutStore::defaultChanged(const juce::String& moduleType) {
+    ++revisions_[moduleType];
+    listeners_.call([&](Listener& listener) { listener.layoutChangedForModuleType(moduleType); });
+}
+
+int ModuleCardLayoutStore::getRevision(const juce::String& moduleType) const {
+    const auto it = revisions_.find(moduleType);
+    return it == revisions_.end() ? 0 : it->second;
 }
 
 juce::StringArray ModuleCardLayoutStore::listPresets(const juce::String& moduleType) const {

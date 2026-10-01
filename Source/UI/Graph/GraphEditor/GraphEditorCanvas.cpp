@@ -24,15 +24,11 @@ using namespace detail;
 
 namespace {
 
-// A card's body is built once, from the node's "cardLayout" at that moment; when the property has
-// changed since (a quick-path layout edit, or its undo or redo), the card has to be rebuilt.
+// A card's body is built once; when the layout it was built from has changed since (a layout edit,
+// its undo or redo, or its type's stored default), the card has to be rebuilt.
 bool cardLayoutIsStale(const ModuleComponent& comp, const juce::AudioProcessorGraph::Node& node) {
     const auto* body = comp.getCardBody();
-    if (body == nullptr)
-        return false;
-    const auto& stored = node.properties[synth::kCardLayoutNodeProperty];
-    const juce::String current = stored.isObject() ? juce::JSON::toString(stored, true) : juce::String();
-    return current != body->builtFromOverride();
+    return body != nullptr && body->isStaleFor(node);
 }
 
 // Swaps `stale` for a fresh card at the same index (so canvas order is kept) and deletes it. The old

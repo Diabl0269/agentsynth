@@ -424,20 +424,20 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         m.addSeparator();
     }
 
-    // The card's own "Choose knobs..." button, offered here too for a Hosted Plugin node only -- both
-    // just call onChooseKnobsRequested, which showPluginKnobPicker()
-    // (ModuleComponentHostedPluginCard.cpp) wires up for exactly this module type. dynamic_cast rather
-    // than getType(module) == ModuleType::HostedPlugin to match the bypass-toggle check just above,
-    // which already establishes the "is this really a ModuleBase" pattern this menu builds against
-    // (see docs/control/plugin-card-layout.md#choosing-knobs).
+    // "Edit Layout..." opens the card layout editor: a built-in card's own (showCardLayoutEditor), or,
+    // for a hosted plugin, the card's "Edit Layout..." button's editor over the plugin's parameters
+    // (docs/layout/module-card-layout.md#editing-a-layout).
+    juce::Component::SafePointer<ModuleComponent> safeThis(this);
     if (cardBody_ != nullptr && cardBody_->drawsFromLayout()) {
-        synth::appendEditLayoutMenuItem(m);
+        synth::appendEditLayoutMenuItem(m, [safeThis] {
+            if (safeThis != nullptr)
+                safeThis->showCardLayoutEditor();
+        });
         m.addSeparator();
-    }
-    if (dynamic_cast<synth::HostedPluginModule*>(module) != nullptr) {
-        m.addItem("Choose knobs...", [this] {
-            if (onChooseKnobsRequested)
-                onChooseKnobsRequested();
+    } else if (dynamic_cast<synth::HostedPluginModule*>(module) != nullptr) {
+        synth::appendEditLayoutMenuItem(m, [safeThis] {
+            if (safeThis != nullptr && safeThis->onChooseKnobsRequested)
+                safeThis->onChooseKnobsRequested();
         });
         m.addSeparator();
     }

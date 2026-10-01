@@ -722,6 +722,20 @@ void AppUndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {
     capturedBeforeState = juce::var();
 }
 
+// For an edit session that applies live and records once when it ends (the card layout editor):
+// the shared captureBeforeState() slot cannot be held that long, since any gesture in between would
+// overwrite it, so the session keeps its own "before" and hands it in here.
+bool AppUndoManager::recordGraphChangeSince(juce::AudioProcessorGraph& graph, const juce::var& beforeState) {
+    if (beforeState.isVoid())
+        return false;
+    auto afterState = synth::AIStateMapper::graphToJSON(graph);
+    if (juce::JSON::toString(beforeState) == juce::JSON::toString(afterState))
+        return false;
+    undoManager.beginNewTransaction();
+    performAction(createGraphSnapshotAction(graph, beforeState, afterState));
+    return true;
+}
+
 // Consumes a captureBeforeState() capture for a DIFFERENT recording mechanism.
 //
 // For a gesture that captures "before" state expecting the plain snapshot path above, then

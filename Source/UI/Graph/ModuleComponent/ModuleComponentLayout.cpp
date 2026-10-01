@@ -151,7 +151,7 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
 
     int y = getContentTopY();
 
-    // --- Hosted Plugin chrome: the Open Editor / Choose knobs... row (no-op on every other module) ---
+    // --- Hosted Plugin chrome: the Open Editor / Edit Layout... row (no-op on every other module) ---
     y = layoutHostedPluginChrome(y, narrowX, narrowW, apply);
 
     // --- Sampler chrome: waveform overview, then the load button + file-name row ---

@@ -714,6 +714,10 @@ add_executable(Tests
     UI/Graph/CardWidgets/CardFaderTests.cpp
     UI/Graph/CardWidgets/CardSegmentedSwitchTests.cpp
     UI/Graph/CardWidgets/CardStepperTests.cpp
+    UI/Graph/CardLayoutEditor/CardLayoutEditorModelTests.cpp
+    UI/Graph/CardLayoutEditor/CardLayoutEditorBuiltInTests.cpp
+    UI/Graph/CardLayoutEditor/CardLayoutEditorKeyboardTests.cpp
+    UI/Graph/CardLayoutEditor/CardLayoutEditorE2ETests.cpp
 )
 
 # MainComponent.h (AppUI) pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h)

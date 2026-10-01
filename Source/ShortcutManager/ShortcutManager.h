@@ -20,7 +20,7 @@
  *  MainComponent::resolveEditSurface() (copy/paste/cut/duplicate/repeat/select-all, and both zoom
  *  pairs) is General because it means something on EVERY surface — one key, whichever editor has
  *  focus. Graph holds only the verbs that have no meaning anywhere else. */
-enum class ShortcutCategory { General, Graph, Timeline, PianoRoll, Mixer };
+enum class ShortcutCategory { General, Graph, Timeline, PianoRoll, Mixer, LayoutEditor };
 
 // Public juce::ChangeBroadcaster so MULTIPLE surfaces can each react to a rebind independently —
 // TimelinePanelComponent's tool-strip/snap/follow tooltips and (in a future cached-tooltip surface)
@@ -226,6 +226,7 @@ public:
         addGraphDefaultBindings();
         addTimelineDefaultBindings();
         addPianoRollDefaultBindings();
+        addLayoutEditorDefaultBindings();
     }
 
     // The per-category default bindings resetToDefaults() assembles (ShortcutManagerDefaults.cpp).
@@ -233,6 +234,7 @@ public:
     void addGraphDefaultBindings();
     void addTimelineDefaultBindings();
     void addPianoRollDefaultBindings();
+    void addLayoutEditorDefaultBindings();
 
     static juce::String keyPressToDisplayString(const juce::KeyPress& key) {
         juce::String result;
@@ -321,6 +323,8 @@ public:
             return "Piano Roll";
         case ShortcutCategory::Mixer:
             return "Mixer";
+        case ShortcutCategory::LayoutEditor:
+            return "Layout Editor";
         case ShortcutCategory::General:
             break;
         }
@@ -330,9 +334,9 @@ public:
     /** Sections are drawn in this order, and getActionIds() is grouped the same way — see
      *  getActionTable(). */
     static const std::vector<ShortcutCategory>& getCategoryOrder() {
-        static const std::vector<ShortcutCategory> order{ShortcutCategory::General, ShortcutCategory::Graph,
+        static const std::vector<ShortcutCategory> order{ShortcutCategory::General,  ShortcutCategory::Graph,
                                                          ShortcutCategory::Timeline, ShortcutCategory::PianoRoll,
-                                                         ShortcutCategory::Mixer};
+                                                         ShortcutCategory::Mixer,    ShortcutCategory::LayoutEditor};
         return order;
     }
 

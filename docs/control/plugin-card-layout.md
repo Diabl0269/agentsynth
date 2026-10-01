@@ -3,8 +3,9 @@
 A hosted VST3/AU plugin's module card today shows **no parameters** — only "Open Editor". This doc
 decides how a user picks the parameters a plugin card shows as knobs, how that choice is scoped
 (this instance vs. every instance of that plugin), how it is saved as presets, and why the
-data type it introduces — `CardLayout` — is the seed of the future "edit any module's layout"
-feature (see [Future: editing any module's layout](#future-editing-any-modules-layout-out-of-scope-here)), which is otherwise **out of scope** here.
+data type it introduces — `CardLayout` — is the seed of the "edit any module's layout" feature,
+now built on the same editor (see [Future: editing any module's layout](#future-editing-any-modules-layout-built)
+and [module-card-layout.md](../layout/module-card-layout.md#editing-a-layout)).
 
 **Status:** built. The data layer (FRO126): `CardLayout`, the precedence resolver, the automatic
 default, `PluginCardLayoutStore`, the per-instance `"cardLayout"` extra-state key and its undo seam.
@@ -68,7 +69,7 @@ Slot
 ```
 
 `CardLayout` is a plain value type in `Source/Modules/CardLayout.h` (Core), deliberately
-**not** plugin-specific — [Future: editing any module's layout](#future-editing-any-modules-layout-out-of-scope-here) reuses it for built-in modules. A hosted card's live layout is
+**not** plugin-specific — [Future: editing any module's layout](#future-editing-any-modules-layout-built) reuses it for built-in modules. A hosted card's live layout is
 resolved by precedence, first hit wins:
 
 1. **Per-instance override** — the node's extra state, key `"cardLayout"` (next to the plugin
@@ -86,7 +87,7 @@ resolved by precedence, first hit wins:
 
 The automatic default (rule 3) is **shown** on the card as knobs before the user chooses
 anything — there is no separate "unconfigured" state distinct from "showing the automatic set"
-(the automatic default is always shown, never a separate blank state). The "empty layout" case (Open Editor + **Choose knobs…** as the
+(the automatic default is always shown, never a separate blank state). The "empty layout" case (Open Editor + **Edit Layout…** as the
 whole card body) therefore only occurs when the plugin has no automatable parameters at all.
 
 A slot whose `paramId` no longer resolves on the live instance is **hidden from the card
@@ -97,7 +98,7 @@ that phrase now lives in the picker's missing-params line, not in a greyed knob 
 
 A layout's slot count is uncapped in the model; the card shows them in the ordinary knob grid
 (the card body's run layouts in `CardBodyGeometry.cpp`, width buckets from [`layout/module-card.md`](../layout/module-card.md#width-buckets)),
-growing the card's height like any module with many parameters. An empty layout shows the "Open Editor" button and a **Choose knobs…**
+growing the card's height like any module with many parameters. An empty layout shows the "Open Editor" button and a **Edit Layout…**
 button as the whole body.
 
 ---
@@ -163,8 +164,8 @@ with `label` or the parameter's name, and binds it with a **`HostedParameterAtta
   module; after a rebuild the card re-measures and asks the canvas to accept the new size
   (`refreshPortLayout`). Component ids are `hostedKnob:<paramId>` / `hostedToggle:` / `hostedChoice:`.
   A Choice slot with fewer than two entries is drawn as a knob.
-- **Chrome.** One row at the top of the body: **Open Editor** and **Choose knobs...** (id
-  `chooseKnobs`), each half of the narrow band. **Choose knobs...** only fires
+- **Chrome.** One row at the top of the body: **Open Editor** and **Edit Layout...** (id
+  `chooseKnobs`), each half of the narrow band. **Edit Layout...** only fires
   `ModuleComponent::onChooseKnobsRequested`, which the picker will set. With no automatable parameters
   the two buttons are the whole body.
 - **Rebuild triggers.** The instance going live (a card is built before an async load publishes, so it
@@ -214,7 +215,7 @@ than detached, so no freed parameter is ever touched. Which paths reach which ha
 
 ## Choosing knobs
 
-Entry points: **Choose knobs…** on the card body (next to Open Editor) and the same item in the
+Entry points: **Edit Layout…** on the card body (next to Open Editor) and **Edit Layout...** in the
 card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
 (`Source/UI/Graph/PluginKnobPicker/`), a popover anchored to the card:
 
@@ -262,25 +263,29 @@ card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
 
 ### Choosing knobs as built (FRO132)
 
-Three units under `Source/UI/Graph/PluginKnobPicker/`, matching the design above:
-`PluginKnobPickerComponent` (the popover itself, split by concern into
-`PluginKnobPickerComponent.cpp` (chrome/layout), `PluginKnobPickerComponentRows.cpp` (search,
-tick/untick, the reorder commit, label, the one `applyCurrentLayout()` write path), `PluginKnobPickerComponentDrag.cpp` (the reorder drag) and
-`PluginKnobPickerComponentScope.cpp` (Apply to / presets / Reset to automatic)),
-`PluginKnobPickerRow` (one row's checkbox/name/drag-handle/label controls) and
-`PluginKnobPickerTouchCapture` (touch-to-add's gesture listener + FRO241's value-change fallback).
+The picker is the shared card layout editor ([module-card-layout.md](../layout/module-card-layout.md#editing-a-layout)),
+`CardLayoutEditorComponent` (`Source/UI/Graph/CardLayoutEditor/`: chrome, rows, keys, the reorder drag,
+Apply to / presets / reset, one `applyCurrentLayout()` write path) over a `HostedCardLayoutSource`
+(the instance's parameters captured once, the extra-state override or the plugin's stored default,
+written as the flat v1 slot list). `PluginKnobPickerComponent` (`Source/UI/Graph/PluginKnobPicker/`) is
+that editor plus touch-to-add, and `PluginKnobPickerTouchCapture` beside it is touch-to-add's gesture
+listener + FRO241's value-change fallback. A built-in module's card opens the same editor over its own
+parameters; only the hosted source lists unticked rows after the ticked ones and has no groups or
+widget choice.
 
 - **Entry points.** `ModuleComponent::showPluginKnobPicker()` (`ModuleComponentHostedPluginCard.cpp`)
-  builds the picker and opens it via a `juce::CallOutBox` anchored to the **Choose knobs...** button
+  builds the picker and opens it via a `juce::CallOutBox` anchored to the **Edit Layout...** button
   (`createHostedPluginControls()` wires `onChooseKnobsRequested` to it) or the card's own right-click
-  menu item (`ModuleComponentInteraction.cpp::buildModuleContextMenu`, offered only when the node is a
-  `HostedPluginModule`). The actual `juce::CallOutBox::launchAsynchronously` call sits behind a
-  protected virtual, `launchPluginKnobPickerCallOutBox`, so a headless test can drive the real
+  menu item, **Edit Layout...** like every card's (`ModuleComponentInteraction.cpp::buildModuleContextMenu`,
+  which offers the picker when the node is a `HostedPluginModule`). The actual
+  `juce::CallOutBox::launchAsynchronously` call sits behind a protected virtual,
+  `launchCardLayoutEditorCallOutBox`, so a headless test can drive the real
   button-click / menu-click handler without constructing a real top-level window.
 - **The row list.** Checked rows (in the layout's own order) first, then the rest in the instance's
   parameter order, both filtered by the live search text against display name. A checked row shows a
-  drag handle (reordering is scoped to the checked group only) and a label field that commits on
-  focus-lost/Return; empty text means "the parameter's own name", matching the card's own fallback.
+  drag handle (reordering is scoped to the checked group only) and a name that a click (or Enter) edits,
+  committing on focus-lost/Return; empty text, or the parameter's own name, means no label override,
+  matching the card's own fallback.
   Reordering is the shared [reorder drag](../layout/animation.md#reorder-drag): the row under the
   pointer is lifted and follows it, the other checked rows glide aside, and the release commits ONCE
   (one undo step however many rows the row passed); Esc cancels with nothing committed. The handle
@@ -405,16 +410,17 @@ Nothing special — that is the point of binding real hosted parameters rather t
   `ModuleComponent::mouseDown` at all, which is why a hosted control was inert to right-click before
   this. A knob's right-click ("Automate '<Param>'" + the shared MIDI Learn block) and a
   toggle/choice's right-click (MIDI Learn only) both route through `showContextMenuHook_`, same as
-  a built-in control's menu. The card body's own right-click keeps FRO132's "Choose knobs..." item
-  unchanged.
+  a built-in control's menu. The card body's own right-click offers the picker as **Edit Layout...**.
 - **Badges and the armed outline** paint on hosted controls the same way as built-in ones — both
   read the same registry, keyed the same way.
 
 ---
 
-## Future: editing any module's layout (out of scope here)
+## Future: editing any module's layout (built)
 
-Right-click → **Edit layout…** on *any* module is parked as its
+Built since: right-click → **Edit Layout...** on any card drawn from layout data opens the same editor
+([module-card-layout.md](../layout/module-card-layout.md#editing-a-layout)). The rest of this section is
+the reasoning it started from. Right-click → **Edit layout…** on *any* module was parked as its
 own epic because a built-in card's controls are created by type-specific code, not from data,
 and turning that into a data-driven layout is a larger refactor of `ModuleComponent` than this
 feature needs. What carries over when that epic starts:

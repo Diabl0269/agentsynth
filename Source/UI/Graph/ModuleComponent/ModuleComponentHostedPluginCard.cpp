@@ -1,4 +1,4 @@
-// ModuleComponentHostedPluginCard.cpp -- the Hosted Plugin card body: the Open Editor / Choose knobs...
+// ModuleComponentHostedPluginCard.cpp -- the Hosted Plugin card body: the Open Editor / Edit Layout...
 // chrome, and the knobs, toggles and choice combos the resolved layout puts on the card, each bound live
 // to its hosted parameter through a HostedParameterAttachment. ModuleComponent is declared in
 // ModuleComponent.h; this is the per-type unit next to ModuleComponentEQCard.cpp and
@@ -10,6 +10,7 @@
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/CardLayout.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h"
 
@@ -219,7 +220,7 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
     };
     addAndMakeVisible(openPluginEditorButton.get());
 
-    chooseKnobsButton = std::make_unique<juce::TextButton>("Choose knobs...");
+    chooseKnobsButton = std::make_unique<juce::TextButton>("Edit Layout...");
     chooseKnobsButton->setComponentID("chooseKnobs");
     chooseKnobsButton->setTooltip("Choose which plugin parameters show on this card");
     chooseKnobsButton->onClick = [this] {
@@ -234,9 +235,9 @@ void ModuleComponent::createHostedPluginControls(synth::HostedPluginModule& host
         rebuildHostedPluginCard();
 }
 
-// Opens the picker as a juce::CallOutBox anchored to this card. Reached from the "Choose knobs..."
+// Opens the picker as a juce::CallOutBox anchored to this card. Reached from the "Edit Layout..."
 // button (createHostedPluginControls() above wires onChooseKnobsRequested to this very function)
-// and from buildModuleContextMenu()'s own "Choose knobs..." item (ModuleComponentInteraction.cpp),
+// and from buildModuleContextMenu()'s "Edit Layout..." item (ModuleComponentInteraction.cpp),
 // both of which just call onChooseKnobsRequested() -- so this is the ONE place that actually builds
 // the popover (see docs/control/plugin-card-layout.md#choosing-knobs).
 void ModuleComponent::showPluginKnobPicker() {
@@ -247,7 +248,8 @@ void ModuleComponent::showPluginKnobPicker() {
         return;
 
     auto picker = std::make_unique<synth::ui::PluginKnobPickerComponent>(
-        *hosted, owner.getPluginCardLayoutStore(), owner.getAudioEngine().getGraph(), nodeId, undoManager);
+        *hosted, owner.getPluginCardLayoutStore(), owner.getAudioEngine().getGraph(), nodeId, undoManager,
+        owner.getCardKeyboard().getShortcutManager());
     // Same callback the card's own "Open Editor" button uses (createHostedPluginControls() above) --
     // MainComponent wires owner.onOpenPluginEditorRequested to HostedPluginWindowManager::openEditorFor,
     // which is idempotent (brings an already-open window to front), so touch-to-add can call it freely.
@@ -257,13 +259,7 @@ void ModuleComponent::showPluginKnobPicker() {
     };
 
     const auto anchor = chooseKnobsButton != nullptr ? chooseKnobsButton->getScreenBounds() : getScreenBounds();
-    launchPluginKnobPickerCallOutBox(std::move(picker), anchor);
-}
-
-// Default: a real juce::CallOutBox. See the header's doc comment on this virtual for why it exists.
-void ModuleComponent::launchPluginKnobPickerCallOutBox(std::unique_ptr<juce::Component> picker,
-                                                       juce::Rectangle<int> anchor) {
-    juce::CallOutBox::launchAsynchronously(std::move(picker), anchor, nullptr);
+    launchCardLayoutEditorCallOutBox(std::move(picker), anchor);
 }
 
 // Only ever runs with the instance the resolver reads still live: from the live edge, from a layout change

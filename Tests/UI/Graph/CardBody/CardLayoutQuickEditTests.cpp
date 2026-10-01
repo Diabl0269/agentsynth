@@ -167,7 +167,7 @@ TEST(CardLayoutQuickEdit, ShowAsFaderThenShowAsKnobSwitchesTheWidgetAndMakesRoom
     EXPECT_NE(dynamic_cast<synth::ui::CardKnobSlider*>(canvas.card(id)->getCardBody()->findWidget("cutoff")), nullptr);
 }
 
-TEST(CardLayoutQuickEdit, EveryCardControlMenuOffersTheLayoutItemsAndADisabledEditLayout) {
+TEST(CardLayoutQuickEdit, EveryCardControlMenuOffersTheLayoutItemsAndEditLayout) {
     CardCanvas canvas;
     const auto id = canvas.add(std::make_unique<OscillatorModule>(), 0, 0);
     canvas.editor.updateComponents();
@@ -180,14 +180,14 @@ TEST(CardLayoutQuickEdit, EveryCardControlMenuOffersTheLayoutItemsAndADisabledEd
         EXPECT_NE(menuItem(menu, "Hide from card"), nullptr);
         const auto* edit = menuItem(menu, "Edit Layout...");
         ASSERT_NE(edit, nullptr);
-        EXPECT_FALSE(edit->isEnabled) << "the layout editor is not built yet";
+        EXPECT_TRUE(edit->isEnabled);
         EXPECT_EQ(menuItem(menu, "Show as fader") != nullptr, synth::isContinuousKind(item.kind));
     }
 
     const auto moduleMenu = card->buildModuleContextMenu();
     const auto* edit = menuItem(moduleMenu, "Edit Layout...");
     ASSERT_NE(edit, nullptr);
-    EXPECT_FALSE(edit->isEnabled);
+    EXPECT_TRUE(edit->isEnabled);
 }
 
 TEST(CardLayoutQuickEdit, BespokeCardsOfferNoLayoutItems) {

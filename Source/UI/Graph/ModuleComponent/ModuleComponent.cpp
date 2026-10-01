@@ -14,6 +14,7 @@
 #include "Modules/SequencerModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/LayoutUtil.h"
@@ -72,7 +73,8 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
     // The card body's views (the Threshold control) are built here, where the card always built them,
     // so the child order is unchanged; its parameter widgets follow in createControls().
-    cardBody_ = synth::CardBody::createFor(*this, *module, owner.getAudioEngine().getGraph(), nodeId);
+    cardBody_ = synth::CardBody::createFor(*this, *module, owner.getAudioEngine().getGraph(), nodeId,
+                                           synth::findModuleCardLayoutStore(owner));
     if (cardBody_ != nullptr) {
         cardBody_->createViews();
         thresholdControl = cardBody_->getThresholdView();

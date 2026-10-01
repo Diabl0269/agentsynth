@@ -281,9 +281,9 @@ TEST(HostedPluginCardTest, AnEmptyLayoutIsJustTheTwoButtons) {
     auto* chooseKnobs = childWithId<juce::TextButton>(*card, "chooseKnobs");
     ASSERT_NE(openEditor, nullptr);
     ASSERT_NE(chooseKnobs, nullptr);
-    EXPECT_EQ(chooseKnobs->getButtonText(), "Choose knobs...");
+    EXPECT_EQ(chooseKnobs->getButtonText(), "Edit Layout...");
     EXPECT_EQ(openEditor->getY(), chooseKnobs->getY()) << "both buttons share one row";
-    EXPECT_LT(openEditor->getRight(), chooseKnobs->getX()) << "Open Editor on the left, Choose knobs... on the right";
+    EXPECT_LT(openEditor->getRight(), chooseKnobs->getX()) << "Open Editor on the left, Edit Layout... on the right";
     EXPECT_TRUE(openEditor->isVisible());
     EXPECT_TRUE(chooseKnobs->isVisible());
 
