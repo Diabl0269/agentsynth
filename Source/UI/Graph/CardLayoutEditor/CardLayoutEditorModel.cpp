@@ -121,6 +121,14 @@ void CardLayoutEditorModel::load(const CardLayout& layout) {
             continue;
         CardParamItem item;
         item.paramId = param.paramId;
+        // Poly joins a footer card's footer on its own, so a layout never lists it: keep it there
+        // rather than hiding it into the More row the first time the layout is edited.
+        if (auto footer = std::find_if(sections_.begin(), sections_.end(),
+                                       [](const CardSection& s) { return s.id == CardSection::kFooterId; });
+            param.paramId == "poly" && footer != sections_.end()) {
+            footer->items.emplace_back(item);
+            continue;
+        }
         sections_.back().items.emplace_back(item);
         hidden_.addIfNotAlreadyThere(param.paramId);
     }

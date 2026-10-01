@@ -243,25 +243,34 @@ TEST(MacroDropPlacement, OneUndoOfTheCollapseRestoresTheExpandedState) {
 // the joiner is taller than the hull, so the hull grows downward into the card just under it.
 TEST(MacroDropPlacement, PlainDragJoinPushesANeighbourAndPlainDragOutReturnsIt) {
     DropCanvas c;
-    const auto m1 = c.osc(400, 300);
+    const auto m1 = c.osc(700, 300);
     const auto m2 = c.osc(1000, 300);
     const auto macroId = c.group({m1, m2});
     c.ctl().setMacroCollapsed(macroId, false);
     const auto hull = c.ctl().macroHullBounds(macroId);
-    const auto neighbour = c.osc(hull.getX() + 100, hull.getBottom() + 14);
-    const auto home = c.rect(neighbour);
-    const auto joiner = c.sampler(700, 1900);
+    // Neighbours on three sides: where the joiner settles (and so which way the hull grows) depends on the
+    // joiner's size, and every side must give way to a hull that grows toward it.
+    const std::vector<NodeID> neighbours{c.osc(hull.getRight() + 20, 300), c.osc(hull.getX() - 280 - 20, 300),
+                                         c.osc(700, hull.getBottom() + 20)};
+    std::vector<juce::Rectangle<int>> homes;
+    for (const auto n : neighbours)
+        homes.push_back(c.rect(n));
+    const auto joiner = c.filter(1000, 1300);
     ASSERT_FALSE(c.editor.getMacros().find(macroId)->hasMember(uuidOf(c.engine, joiner)));
 
     c.editor.setSelectedNodes({joiner});
     const auto into = c.ctl().macroHullBounds(macroId).getCentre() - c.rect(joiner).getCentre();
     dragBodyBy(c.comp(joiner), into, kPlainClick);
     ASSERT_TRUE(c.editor.getMacros().find(macroId)->hasMember(uuidOf(c.engine, joiner))) << "premise: it joined";
-    ASSERT_NE(c.rect(neighbour).getPosition(), home.getPosition()) << "premise: the grown hull pushed it";
+    bool pushed = false;
+    for (size_t i = 0; i < neighbours.size(); ++i)
+        pushed = pushed || c.rect(neighbours[i]).getPosition() != homes[i].getPosition();
+    ASSERT_TRUE(pushed) << "premise: the grown hull pushed a neighbour";
 
     c.editor.setSelectedNodes({joiner});
     dragBodyBy(c.comp(joiner), {0, 1500}, kPlainClick);
 
     EXPECT_FALSE(c.editor.getMacros().find(macroId)->hasMember(uuidOf(c.engine, joiner)));
-    EXPECT_EQ(c.rect(neighbour), home);
+    for (size_t i = 0; i < neighbours.size(); ++i)
+        EXPECT_EQ(c.rect(neighbours[i]), homes[i]) << "neighbour " << i;
 }

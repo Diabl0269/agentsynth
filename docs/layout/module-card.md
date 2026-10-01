@@ -110,9 +110,10 @@ own table:
 
 | Filter and dynamics | Height (px) |
 |---|---|
-| Filter | 403 |
-| Compressor / Gate | 257 |
-| Limiter | 237 |
+| Filter | 477 |
+| Compressor | 441 |
+| Gate | 293 |
+| Limiter | 423 |
 
 | Effects | Height (px) |
 |---|---|

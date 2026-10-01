@@ -88,9 +88,9 @@ TEST_F(ModuleCardLayoutResolverTest, AnUnreadableSourceFallsThroughToTheNextOne)
 }
 
 TEST_F(ModuleCardLayoutResolverTest, ANullStoreAndAnEmptyRegistryAreAutomatic) {
-    const auto resolved = resolveModuleCardLayout("Filter", juce::var(), nullptr, DefaultCardLayouts::builtIn());
+    const auto resolved = resolveModuleCardLayout("NoSuchType", juce::var(), nullptr, DefaultCardLayouts::builtIn());
     EXPECT_EQ(resolved.source, Source::Automatic);
-    EXPECT_EQ(DefaultCardLayouts::builtIn().find("Filter"), nullptr) << "no type has a code default yet";
+    EXPECT_EQ(DefaultCardLayouts::builtIn().find("NoSuchType"), nullptr) << "a type with no code default";
 }
 
 TEST_F(ModuleCardLayoutResolverTest, AV1LayoutIsUpgradedWhenTheParameterListIsKnown) {

@@ -296,7 +296,7 @@ added.
 | Module | Sections, top to bottom | Contextual rules |
 |---|---|---|
 | Oscillator | waveform `segmented`; Pitch: Octave, Coarse, Fine, Glide (one row of four); Unison: Voices, Detune, Pulse Width; Output: Level, Pan; footer (Poly, Show Scope) | Detune dims at 1 voice (a code dim rule); Pulse Width dims unless Square. As built: every parameter is placed, so no More row |
-| Filter | `response` view open; Type `choice`; Cutoff `knobLarge`, Resonance, Drive; Modulation: (new Key Track), Level; footer with Spectrum | Key Track does not dim on an unplugged Pitch input yet: CardBody has no cable knowledge; Key Track is inert when unplugged |
+| Filter | `response` view open; Type `choice`; Cutoff `knobLarge`, Resonance, Drive; Modulation: Key Track, Level; footer with Spectrum | Key Track does not dim on an unplugged Pitch input yet: CardBody has no cable knowledge; Key Track is inert when unplugged. As built: the response panel stays card chrome, closed until opened; Show Response and Show Spectrum are footer pills, so there is no `response` item in the layout |
 | VCA | Gain `faderH`; footer | — |
 | ADSR | `envelope` view open; Time/Tempo `segmented`; A H D S R `faderV`; (new Velocity) and the `threshold` view; footer | Tempo mode swaps each stage's time for its division in place. As built: Velocity is a `faderH` row; the Time/Tempo caption is "Stage times"; captions Atk, Hold, Dec, Sus, Rel; the footer holds Poly, Show Envelope Graph and Show Scope; the same entry is registered for Amp Env and Filter Env; the card is 597 px tall |
 | LFO | Shape; Sync switch; Rate `knobLarge` on its own row; Phase, Fade in, Level, Glide (one row of four); footer: Bipolar, Retrig | Rate swaps Hz and the division in one cell on Sync; Glide dims unless S&H. As built: Shape stays a combo (six values do not fit one switch) and Sync a toggle (`mode` is a bool, and `segmented` suits a choice); no `lfoShape` view (no component to wrap); the custom-wave editor stays card chrome and opens under the body on Custom, so Draw needs no `lfoCurve` view in the body |
@@ -311,8 +311,8 @@ added.
 | Ring Modulator | Drive, Character, Mix; footer: Quality, Level | — |
 | Pitch Shifter | Mode `segmented`; Pitch `knobLarge`, Fine, Mix; Window, Feedback; footer: Level | Frequency mode swaps Pitch+Fine for Shift (Hz) |
 | Compressor | (new `gainReduction` view), Threshold `faderV`; Ratio, Makeup, Attack, Release; footer: (new Knee) | — |
-| Limiter | Input `faderV`, (new `gainReduction`), (new Ceiling `faderV`), Release | — |
-| Gate | `threshold` view; Attack, Hold, Release; footer: Range, Level | — |
+| Limiter | Input `faderV`, `gainReduction`, Ceiling `faderV`, Release | As built: Threshold is also on the card, before Release, so its CV jack has a knob to land on |
+| Gate | `threshold` view; Attack, Hold, Release; footer: Range, Level | As built: Threshold is a knob, because the Gate publishes no live level for the `threshold` view yet |
 | Sample & Hold | Source, Mode `segmented` side by side; Clock `segmented`; Rate, Slew; Level, Offset | External clock swaps Rate for the `threshold` view. As built: Source, Mode and Clock stack (spans are not drawn); the first knob cell swaps Rate for the Threshold knob (Threshold keeps its CV jack in the cell) and the `threshold` meter opens above the knobs (a section's `visibleWhen`, since a view cannot join a swap group), so only the Clock switch changes the card's height; the knobs are two columns (Rate or Threshold, Slew; Level, Offset) |
 | Envelope Follower | Detection `segmented`; Attack, Release, Sensitivity; footer | — |
 | Voice Mixer | Level `faderH` | As built: no footer (the card has no Poly or Scope) |

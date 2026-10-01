@@ -1,4 +1,4 @@
-type Gate size 280x257
+type Gate size 280x293
   child 0 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 1 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
@@ -11,10 +11,10 @@ type Gate size 280x257
   child 9 label id="" at 182,93 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 10 knob id="Release (ms)" at 12,187 85x58 visible=1 title="Release (ms)" tip="Release (ms)" focusOrder=0 wantsFocus=1
   child 11 label id="" at 12,169 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 knob id="Range (dB)" at 97,187 85x58 visible=1 title="Range (dB)" tip="Range (dB)" focusOrder=0 wantsFocus=1
-  child 13 label id="" at 97,169 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Level" at 182,187 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 15 label id="" at 182,169 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 slider id="Range (dB)" at 71,249 79x28 visible=1 title="Range (dB)" tip="Range (dB)" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 12,249 59x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 slider id="Level" at 188,249 80x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 156,249 32x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
   child 17 component id="" at 4,72 12x12 visible=1 title="Key input" tip="" focusOrder=0 wantsFocus=0
   child 18 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
@@ -23,6 +23,6 @@ type Gate size 280x257
   in 2 122, 148
   in 3 207, 148
   in 4 37, 224
-  in 5 122, 224
+  in 5 78, 274
   in 6 10, 78
   out 0 270, 58

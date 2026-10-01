@@ -1,29 +1,30 @@
-type Compressor size 280x257
-  child 0 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
-  child 1 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
-  child 2 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
-  child 3 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
-  child 4 knob id="Threshold (dB)" at 12,111 85x58 visible=1 title="Threshold (dB)" tip="Threshold (dB)" focusOrder=0 wantsFocus=1
-  child 5 label id="" at 12,93 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 6 knob id="Ratio" at 97,111 85x58 visible=1 title="Ratio" tip="Ratio" focusOrder=0 wantsFocus=1
-  child 7 label id="" at 97,93 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 8 knob id="Attack (ms)" at 182,111 85x58 visible=1 title="Attack (ms)" tip="Attack (ms)" focusOrder=0 wantsFocus=1
-  child 9 label id="" at 182,93 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 10 knob id="Release (ms)" at 12,187 85x58 visible=1 title="Release (ms)" tip="Release (ms)" focusOrder=0 wantsFocus=1
-  child 11 label id="" at 12,169 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 knob id="Makeup Gain (dB)" at 97,187 85x58 visible=1 title="Makeup Gain (dB)" tip="Makeup Gain (dB)" focusOrder=0 wantsFocus=1
-  child 13 label id="" at 97,169 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Knee (dB)" at 182,187 85x58 visible=1 title="Knee (dB)" tip="Knee (dB)" focusOrder=0 wantsFocus=1
-  child 15 label id="" at 182,169 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 16 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
-  child 17 component id="" at 4,72 12x12 visible=1 title="Key input" tip="" focusOrder=0 wantsFocus=0
-  child 18 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
+type Compressor size 280x441
+  child 0 component id="" at 12,93 256x28 visible=1 title="Gain reduction meter" tip="Gain reduction: how far the level is being turned down right now" focusOrder=0 wantsFocus=0
+  child 1 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
+  child 5 slider id="Threshold (dB)" at 34,145 40x96 visible=1 title="Threshold (dB)" tip="Threshold (dB)" focusOrder=0 wantsFocus=1
+  child 6 label id="" at 12,127 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 7 knob id="Ratio" at 12,259 85x58 visible=1 title="Ratio" tip="Ratio" focusOrder=0 wantsFocus=1
+  child 8 label id="" at 12,241 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 9 knob id="Attack (ms)" at 182,259 85x58 visible=1 title="Attack (ms)" tip="Attack (ms)" focusOrder=0 wantsFocus=1
+  child 10 label id="" at 182,241 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 11 knob id="Release (ms)" at 12,335 85x58 visible=1 title="Release (ms)" tip="Release (ms)" focusOrder=0 wantsFocus=1
+  child 12 label id="" at 12,317 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 13 knob id="Makeup Gain (dB)" at 97,259 85x58 visible=1 title="Makeup Gain (dB)" tip="Makeup Gain (dB)" focusOrder=0 wantsFocus=1
+  child 14 label id="" at 97,241 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 15 slider id="Knee (dB)" at 65,397 203x28 visible=1 title="Knee (dB)" tip="Knee (dB)" focusOrder=0 wantsFocus=1
+  child 16 label id="" at 12,397 53x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 17 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
+  child 18 component id="" at 4,72 12x12 visible=1 title="Key input" tip="" focusOrder=0 wantsFocus=0
+  child 19 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
-  in 1 37, 148
-  in 2 122, 148
-  in 3 207, 148
-  in 4 37, 224
-  in 5 122, 224
+  in 1 66, 216
+  in 2 37, 296
+  in 3 207, 296
+  in 4 37, 372
+  in 5 122, 296
   in 6 10, 78
-  in 7 207, 224
+  in 7 72, 422
   out 0 270, 58

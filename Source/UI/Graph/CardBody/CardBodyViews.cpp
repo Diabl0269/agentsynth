@@ -2,13 +2,16 @@
 // existing component from Source/UI/ModuleViews unchanged. The Threshold view is the one the automatic
 // layout places (between the toggles and the knobs); the Envelope view is the ADSR's curve editor, which
 // the card wires to the parameters (ModuleComponent's createEnvelopeCardControls) and whose card toggle
-// opens and closes it. The scope, response, spectrum and LFO curve views are still built by
-// ModuleComponent's own chrome and join this registry when a layout first places them.
+// opens and closes it; the gain-reduction view is placed by the Compressor and Limiter defaults. The
+// scope, response, spectrum and LFO curve views are still built by ModuleComponent's own chrome and join
+// this registry when a layout first places them.
 #include "CardBodyViews.h"
 #include "Modules/ADSRModule.h"
+#include "Modules/GainReductionMeterSource.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/ThresholdMeterSource.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
+#include "UI/ModuleViews/GainReductionMeterComponent.h"
 #include "UI/ModuleViews/ThresholdControlComponent.h"
 
 namespace synth {
@@ -62,6 +65,17 @@ juce::String noOwnedParam(juce::AudioProcessor&) { return {}; }
 
 const CardViewFactory kEnvelope{createEnvelope, envelopeHeight, noOwnedParam};
 
+std::unique_ptr<juce::Component> createGainReduction(juce::AudioProcessor& module) {
+    auto* src = dynamic_cast<GainReductionMeterSource*>(&module);
+    if (src == nullptr)
+        return nullptr;
+    return std::make_unique<GainReductionMeterComponent>(*src);
+}
+
+int gainReductionHeight(juce::AudioProcessor&) { return GainReductionMeterComponent::getHeight(); }
+
+const CardViewFactory kGainReduction{createGainReduction, gainReductionHeight, noOwnedParam};
+
 } // namespace
 
 const CardViewFactory* findCardViewFactory(CardView view) {
@@ -70,6 +84,8 @@ const CardViewFactory* findCardViewFactory(CardView view) {
         return &kThreshold;
     case CardView::Envelope:
         return &kEnvelope;
+    case CardView::GainReduction:
+        return &kGainReduction;
     default:
         return nullptr;
     }
@@ -83,6 +99,8 @@ bool cardViewAvailableFor(CardView view, juce::AudioProcessor& module) {
         return dynamic_cast<ThresholdMeterSource*>(&module) != nullptr;
     case CardView::Envelope:
         return dynamic_cast<ADSRModule*>(&module) != nullptr;
+    case CardView::GainReduction:
+        return dynamic_cast<GainReductionMeterSource*>(&module) != nullptr;
     default:
         return false;
     }
