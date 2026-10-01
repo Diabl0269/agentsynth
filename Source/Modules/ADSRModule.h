@@ -3,6 +3,7 @@
 #include "Envelope/EnvelopeGenerator.h"
 #include "Envelope/EnvelopeTempoSync.h"
 #include "ModuleBase.h"
+#include "ParameterText.h"
 #include "SchmittTrigger.h"
 #include "ThresholdMeterSource.h"
 #include <algorithm>
@@ -87,9 +88,9 @@ public:
         addParameter(thresholdParam = new juce::AudioParameterFloat("gateThreshold", "Threshold", 0.0f, 1.0f, 0.5f));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         // Velocity: how far the note's velocity scales the output, in percent. 0 ignores velocity.
-        addParameter(velocityParam = new juce::AudioParameterFloat(
-                         "velocity", "Velocity", juce::NormalisableRange<float>(0.0f, 100.0f), 0.0f,
-                         juce::AudioParameterFloatAttributes().withLabel("%")));
+        addParameter(velocityParam = new juce::AudioParameterFloat("velocity", "Velocity",
+                                                                   juce::NormalisableRange<float>(0.0f, 100.0f), 0.0f,
+                                                                   synth::percentAttributes()));
         addMuteParameter();
         enableVisualBuffer(true);
     }

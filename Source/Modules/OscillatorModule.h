@@ -2,6 +2,7 @@
 
 #include "ModuleBase.h"
 #include "Oscillator/PitchGlide.h"
+#include "ParameterText.h"
 #include <array>
 #include <cmath>
 
@@ -77,12 +78,12 @@ public:
         addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
         // Pulse Width is the Square's duty cycle in percent (50 = today's square); Glide is the
         // portamento time in ms (0 = off, today's behaviour).
-        addParameter(pulseWidthParam = new juce::AudioParameterFloat(
-                         "pulseWidth", "Pulse Width", juce::NormalisableRange<float>(5.0f, 95.0f), 50.0f,
-                         juce::AudioParameterFloatAttributes().withLabel("%")));
+        addParameter(pulseWidthParam = new juce::AudioParameterFloat("pulseWidth", "Pulse Width",
+                                                                     juce::NormalisableRange<float>(5.0f, 95.0f), 50.0f,
+                                                                     synth::percentAttributes()));
         addParameter(glideParam =
                          new juce::AudioParameterFloat("glide", "Glide", juce::NormalisableRange<float>(0.0f, 2000.0f),
-                                                       0.0f, juce::AudioParameterFloatAttributes().withLabel("ms")));
+                                                       0.0f, synth::millisecondsAttributes()));
         // Dual I/O comes from the ctor's StereoAudio::Declared above, defaulting to split: this
         // module is stereo, so showing both legs is the honest out-of-the-box state. The Preferences
         // default overrides it for newly dropped modules.

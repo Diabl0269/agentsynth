@@ -251,6 +251,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentLfoCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentKeyboardTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentReadoutTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentModTargetTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentKnobCoverageTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLifecycleTests.cpp
