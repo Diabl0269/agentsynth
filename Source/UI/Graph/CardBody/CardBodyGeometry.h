@@ -5,9 +5,9 @@
 #include <vector>
 
 // Body-layout metrics and the run layouts a card body is built from: a stack of combos, rows of
-// toggles, a knob grid and a full-width view. Each run takes its widgets (null entries measure only)
-// and a y cursor and returns the y below it; it positions widgets only when `apply` is true, so one
-// function both measures and places (docs/layout/module-card.md#body-layout).
+// toggles, a knob grid and a full-width view. Each run takes its widgets (a null entry takes its space
+// unpainted: a plan never built, or an empty swap cell) and a y cursor and returns the y below it; it positions widgets
+// only when `apply` is true, so one function both measures and places (docs/layout/module-card.md#body-layout).
 namespace synth::cardbody {
 
 // Three knobs per row: the body sits below every jack, so it can use nearly the full card width.
@@ -25,6 +25,15 @@ inline constexpr int kSectionHeaderHeight = 18; // a titled section's header row
 inline constexpr int kBottomPadding = 12;
 // A port label box spans its jack centre +/- 10; clear it by a bit more before placing any content.
 inline constexpr int kPortLabelClearance = 15;
+inline constexpr int kFooterRowHeight = 28;  // one footer row: a horizontal fader's height
+inline constexpr int kFooterGap = 6;         // between footer items
+inline constexpr int kFooterRowGap = 4;      // between wrapped footer rows
+inline constexpr int kFooterMinStretch = 72; // the narrowest a footer fader or combo gets
+
+// The card chrome toggles' text; the size estimate measures the footer pills from the same strings.
+inline constexpr const char* kShowScopeText = "Show Scope";
+inline constexpr const char* kShowResponseText = "Show Response";
+inline constexpr const char* kShowSpectrumText = "Show Spectrum";
 
 /** Where body content may go on a card of `width`. */
 struct BodyGeometry {

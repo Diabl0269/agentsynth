@@ -1,0 +1,25 @@
+type Bitcrusher size 280x263
+  child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
+  child 1 toggle id="" at 12,225 256x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 5 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
+  child 6 knob id="Rate Reduction" at 12,91 85x58 visible=1 title="Rate Reduction" tip="Rate Reduction" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 12,73 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 knob id="Bit Depth" at 97,91 85x58 visible=1 title="Bit Depth" tip="Bit Depth" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 97,73 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 knob id="Mix" at 182,91 85x58 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 182,73 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Dither" at 12,167 85x58 visible=1 title="Dither" tip="Dither" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 12,149 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Level" at 97,167 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 97,149 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
+  child 17 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
+  in 0 10, 58
+  in 1 37, 128
+  in 2 122, 128
+  in 3 207, 128
+  in 4 37, 204
+  out 0 270, 58

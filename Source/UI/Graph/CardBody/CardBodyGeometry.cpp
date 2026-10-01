@@ -6,6 +6,16 @@
 
 namespace synth::cardbody {
 
+namespace {
+
+// A null entry is a cell kept empty (a swap group with no member shown): it takes its space, unpainted.
+void place(juce::Component* component, juce::Rectangle<int> bounds) {
+    if (component != nullptr)
+        component->setBounds(bounds);
+}
+
+} // namespace
+
 // Body content sits below every jack, so it gets nearly the full card width. Single-column widgets
 // (combos, the load row) look stretched at full width, so they stay centred in a narrower band.
 BodyGeometry BodyGeometry::forCardWidth(int width) {
@@ -29,8 +39,8 @@ int layoutChoiceRun(const std::vector<CaptionedWidget>& combos, int y, const Bod
     if (columns == 1) {
         for (const auto& [combo, label] : combos) {
             if (apply) {
-                label->setBounds(g.narrowX, y, g.narrowW, kLabelHeight);
-                combo->setBounds(g.narrowX, y + kLabelHeight, g.narrowW, kRowHeight);
+                place(label, {g.narrowX, y, g.narrowW, kLabelHeight});
+                place(combo, {g.narrowX, y + kLabelHeight, g.narrowW, kRowHeight});
             }
             y += kStep;
         }
@@ -41,8 +51,8 @@ int layoutChoiceRun(const std::vector<CaptionedWidget>& combos, int y, const Bod
         const int cellX = g.contentX + (i % columns) * cellW;
         const int rowY = y + (i / columns) * kStep;
         if (apply) {
-            combos[(size_t)i].second->setBounds(cellX, rowY, cellW - 8, kLabelHeight);
-            combos[(size_t)i].first->setBounds(cellX, rowY + kLabelHeight, cellW - 8, kRowHeight);
+            place(combos[(size_t)i].second, {cellX, rowY, cellW - 8, kLabelHeight});
+            place(combos[(size_t)i].first, {cellX, rowY + kLabelHeight, cellW - 8, kRowHeight});
         }
     }
     return y + ((count + columns - 1) / columns) * kStep;
@@ -53,7 +63,7 @@ int layoutChoiceRun(const std::vector<CaptionedWidget>& combos, int y, const Bod
 int layoutToggleRun(const std::vector<juce::Component*>& toggles, int y, const BodyGeometry& g, bool apply) {
     for (auto* toggle : toggles) {
         if (apply)
-            toggle->setBounds(g.contentX, y, g.contentW, kRowHeight);
+            place(toggle, {g.contentX, y, g.contentW, kRowHeight});
         y += kRowHeight + 2;
     }
     return y;
@@ -73,8 +83,8 @@ int layoutGridRun(const std::vector<CaptionedWidget>& cells, int columns, int ce
         const int x = g.contentX + (i % gridColumns) * cellWidth;
         const int rowY = y + (i / gridColumns) * (kLabelHeight + cellHeight);
         if (apply) {
-            cells[(size_t)i].second->setBounds(x, rowY, cellWidth, kLabelHeight);
-            cells[(size_t)i].first->setBounds(x + (cellWidth - width) / 2, rowY + kLabelHeight, width, cellHeight);
+            place(cells[(size_t)i].second, {x, rowY, cellWidth, kLabelHeight});
+            place(cells[(size_t)i].first, {x + (cellWidth - width) / 2, rowY + kLabelHeight, width, cellHeight});
         }
     }
     return y + ((count + gridColumns - 1) / gridColumns) * (kLabelHeight + cellHeight);
@@ -86,8 +96,8 @@ int layoutCaptionedRows(const std::vector<CaptionedWidget>& rows, int rowHeight,
     const int w = wide ? g.contentW : g.narrowW;
     for (const auto& [widget, label] : rows) {
         if (apply) {
-            label->setBounds(x, y, w, kLabelHeight);
-            widget->setBounds(x, y + kLabelHeight, w, rowHeight);
+            place(label, {x, y, w, kLabelHeight});
+            place(widget, {x, y + kLabelHeight, w, rowHeight});
         }
         y += kLabelHeight + rowHeight + 6;
     }
@@ -96,7 +106,7 @@ int layoutCaptionedRows(const std::vector<CaptionedWidget>& rows, int rowHeight,
 
 int layoutViewRow(juce::Component* view, int height, int y, const BodyGeometry& g, bool apply) {
     if (apply)
-        view->setBounds(g.contentX, y, g.contentW, height);
+        place(view, {g.contentX, y, g.contentW, height});
     return y + height + 6;
 }
 

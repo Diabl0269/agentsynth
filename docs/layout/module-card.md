@@ -82,27 +82,55 @@ The header-to-first-port gap is 9 px (base header offset constant 38 in both `ge
 
 Measured heights. `GraphEditor::estimateModuleSize()` gives the library drag ghost and drop
 placement a card's size before the card exists. A card drawn from layout data is **measured** from
-its card-body plan (`CardBodyMeasure.cpp`: the same plan and layout walk, the knob-bound jack rule
-from the plan, and the chrome rows above); only the bespoke cards read a small table.
-`ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` builds every library type and fails
-if either path drifts from the real card, and `CardBodyGolden` pins every child's bounds of every
-card against `Tests/fixtures/card-body/card-geometry.golden`. Fresh cards, single width (280):
+its card-body plan (`CardBodyMeasure.cpp`: the same plan and layout walk, built from the type's code
+default with its conditions read at the fresh module's values, the knob-bound jack rule from the plan,
+and the chrome rows, footer row and More row around the body); only the bespoke cards read a small
+table. `ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` builds every library type and
+fails if either path drifts from the real card, and `CardBodyGolden` pins every child's bounds of
+every card against one file per type, `Tests/fixtures/card-body/<Type>.golden`. Fresh cards, single
+width (280), one table per module family, so the work on one family's default layouts edits only its
+own table:
 
-| Module | Height (px) | Module | Height (px) |
-|---|---|---|---|
-| Oscillator | 433 | Sample & Hold | 451 |
-| Filter | 403 | Comparator | 185 |
-| LFO | 361 | Sampler | 571 |
-| VCA | 233 | Chorus / Phaser / Flanger | 237 |
-| ADSR (Amp Env, Filter Env) | 389 | Bitcrusher | 263 |
-| Poly MIDI | 185 | Pitch Shifter | 387 |
-| Distortion | 283 | Compressor / Gate | 257 |
-| Ring Modulator | 331 | Limiter | 237 |
-| Delay | 337 | Voice Mixer | 301 |
-| Noise | 261 | Math | 239 |
-| Envelope Follower | 235 | Channel Strip | 409 |
-| Master | 221 | Rec Tap / Track Audio | 131 |
-| Track In | 100 | Reverb | 313 |
+| Sources | Height (px) |
+|---|---|
+| Oscillator | 433 |
+| Noise | 261 |
+| Sampler | 571 |
+| LFO | 437 |
+
+| Envelopes and utilities | Height (px) |
+|---|---|
+| ADSR (Amp Env, Filter Env) | 389 |
+| VCA | 233 |
+| Envelope Follower | 235 |
+| Sample & Hold | 451 |
+| Math | 239 |
+| Voice Mixer | 301 |
+| Poly MIDI | 185 |
+
+| Filter and dynamics | Height (px) |
+|---|---|
+| Filter | 403 |
+| Compressor / Gate | 257 |
+| Limiter | 237 |
+
+| Effects | Height (px) |
+|---|---|
+| Delay | 337 |
+| Reverb | 313 |
+| Chorus / Phaser / Flanger | 237 |
+| Distortion | 283 |
+| Bitcrusher | 263 |
+| Ring Modulator | 331 |
+| Pitch Shifter | 387 |
+
+| Other | Height (px) |
+|---|---|
+| Comparator | 185 |
+| Channel Strip | 409 |
+| Master | 221 |
+| Rec Tap / Track Audio | 131 |
+| Track In | 100 |
 
 From the table (bespoke): Sequencer and Poly Sequencer 560x406, MIDI Keyboard 560x150, Macros (tracks
 its `Knobs` count, 458 at the default), Attenuverter (square, `kNarrowWidth`), Wavetable 560x565,
@@ -112,7 +140,7 @@ Parametric EQ 560x592, External MIDI 146, Hosted Plugin 135, and Audio Input / A
 ## The More row
 
 A layout lists what it hides; every parameter it hides or does not place renders in a folded **More**
-row at the very bottom of the card, under the Scope row. The row exists only when something is hidden,
+row at the very bottom of the card, under the Scope row (or the footer row). The row exists only when something is hidden,
 so no card shows one today (the automatic layout hides nothing); it appears through a stored layout
 (the node's `cardLayout` override, [module-card-layout.md](module-card-layout.md#where-a-layout-comes-from)).
 
@@ -127,6 +155,57 @@ so no card shows one today (the automatic layout hides nothing); it appears thro
   never changes a card's height (`CardBodyLayout.CardHeightNeverChangesWhileAKnobIsDragged`).
 - **Cables.** A modulation cable dragged over the folded row unfolds it, so a hidden parameter's knob
   can still take a new cable (`GraphEditor::dragConnection` asks each card under the cable).
+
+## The footer row
+
+A layout's section with the reserved id `footer` (`CardSection::kFooterId`) is drawn as one compact
+row at the bottom of the body, under the card's chrome panels and above the More row, wherever the
+layout lists it (`CardBodyFooter.cpp`). No card has one by default yet; a code default or a stored
+layout adds it.
+
+- **What goes in it.** A toggle is the **small toggle pill** (below); anything continuous is a
+  horizontal fader (`faderH`, whatever widget the item names); a choice, switch or stepper is its own
+  widget. A fader, combo, switch or stepper carries its caption inline on its left, in the pill's
+  12 px text; the pills keep their width and the rest share what is left. Items that do not fit wrap
+  onto another row, 28 px tall each.
+- **Chrome toggles join it.** On a card whose layout has a footer, Show Response, Show Spectrum (while
+  the response view is open) and Show Scope are pills at the end of the row instead of full-width
+  rows; the panels they open sit above the row. **Poly** is card chrome too: a footer card puts the
+  `poly` toggle in the footer unless the layout places it elsewhere or hides it, so a default layout
+  never lists it. A card without a footer section keeps today's chrome rows exactly.
+- **Bindings are the widgets' own.** A pill is the parameter's ordinary toggle (attachment, MIDI
+  Learn, Tab stop, title, tooltip), drawn differently; a footer fader is a `CardFader` with every knob
+  gesture, so a cable lands on it and a knob-bound jack stays off the gutter.
+- **The pill.** `synth::ui::setTogglePillStyle` (`CardWidgets/CardTogglePill.h`) marks a
+  `juce::ToggleButton`, and `AppLookAndFeel::paintTogglePill` draws it: a 20 px rounded pill, filled
+  with the tick colour and the text in the background colour when on, an outlined surface when off,
+  the accent focus ring round the pill. Width is the text plus 10 px each side
+  (`AppLookAndFeel::togglePillWidth`, which the size estimate uses too).
+
+## Conditions: swap and dim
+
+A layout item's `when` and a section's `visibleWhen` are read live (`CardBodyConditions.cpp`): the
+card listens to the parameters its conditions read, and a change (from a click, automation, undo or
+a preset) re-reads them on the message thread and re-lays out the card only when a result changed.
+
+- **Dim.** `effect: dim` greys the control out unless the condition holds; a code default may add
+  numeric dim rules a stored layout cannot express (Detune while Unison is 1). A dimmed control is not
+  disabled (that would take it out of Tab order and, through JUCE's focus traverser, out of the
+  accessibility tree): it and its caption carry `AppLookAndFeel::kDimmedProperty`, which every card
+  painter honours (knob, fader, toggle, pill, combo, segmented switch, stepper, caption) by painting at
+  `AppLookAndFeel::kDisabledControlAlpha`, the focus ring staying at full strength. It keeps its cell,
+  its Tab stop, its right-click menu and its bindings, and stays operable; its accessible description
+  reads "Inactive in this mode" and its tooltip ends "(inactive in this mode)", both removed when the
+  dim lifts. A genuinely disabled knob or toggle anywhere in the app paints at the same alpha.
+- **Swap.** Consecutive `effect: show` items testing the same parameter form a **swap group**: one
+  cell, laid out in the run of its tallest member, showing the member whose condition holds (the cell
+  stays, empty, when none does). Every member takes that cell at its own height, so a swap moves
+  nothing; a swapped-out knob keeps its knob-bound jack in the cell (`CardBody::isSwappedOut`, the same
+  rule as the ADSR's BPM swap), so the gutter never changes either. A swapped-out control is not
+  hidden: it never appears in the More row.
+- **Sections.** A section whose `visibleWhen` does not hold takes no space, with its header. Showing or
+  hiding it changes the card's height, through `GraphEditor::handleModuleResized` like any other growth:
+  neighbours are pushed clear and come back when it shrinks.
 
 ## Faders, switches and steppers
 
@@ -186,7 +265,7 @@ its Custom-waveform section open — the section adds `24 + 2` px (the Grid/Shap
 row) `+ 150` px (the curve editor, `kLfoWaveGraphHeight`) `+ 8` px (bottom breathing room), a total
 of 184 px, inserted right after the envelope graph section in `layoutDefaultContent` — and ONLY
 while `shape == Custom` (`LFOModule::kCustomShapeIndex`); every other shape measures exactly the
-401 px in the table above, unchanged. See `ModuleComponentLfoCard.cpp`'s
+437 px in the table above, unchanged. See `ModuleComponentLfoCard.cpp`'s
 `layoutLfoCustomWaveSection` and [lfo.md](../modules/lfo.md)'s "Card UI" entry.
 
 The Macro bank (`MacroControlModule`) grows and shrinks with its `Knobs` parameter. Its geometry lives in `LayoutUtil.h` so the component layout,
@@ -221,10 +300,11 @@ Undo/redo, Auto Arrange, a project load and deleting the card drop the records. 
 | Audio Input device channel count, Hosted Plugin port re-measure | `refreshPortLayout` |
 | LFO shape set to Custom (Draw section) | `ModuleComponentLfoCard.cpp` |
 | Show Scope / Show Response toggles | `setScopeShown` / `setResponseShown` |
+| A layout section shown or hidden by its condition (`visibleWhen`) | `CardBody::refreshConditions` |
 | ADSR Show Envelope Graph | the toggle's `onClick` |
 
-Not wired because the card height does not change: the Spectrum toggle (a backdrop only), the ADSR BPM|MS switch (swaps
-knobs for combos in the same slots) and the Wavetable page tabs (the card is sized once at construction). A card that
+Not wired because the card height does not change: the Spectrum toggle (a backdrop only), a layout's swap group or dim,
+the ADSR BPM|MS switch (swaps knobs for combos in the same slots) and the Wavetable page tabs (the card is sized once at construction). A card that
 is still being constructed never makes room (it is not on the canvas yet).
 
 ## Header buttons

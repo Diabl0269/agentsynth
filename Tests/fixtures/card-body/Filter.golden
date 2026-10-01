@@ -1,0 +1,37 @@
+type Filter size 280x403
+  child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
+  child 1 toggle id="" at 12,365 256x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 2 component id="" at 0,0 0x0 visible=0 title="Filter response" tip="Filter response: the filter's gain across 20 Hz to 20 kHz" focusOrder=0 wantsFocus=0
+  child 3 toggle id="" at 12,339 256x24 visible=1 title="Show Response" tip="Show Response" focusOrder=0 wantsFocus=1
+  child 4 toggle id="" at 0,0 0x0 visible=0 title="Show Spectrum" tip="Show Spectrum" focusOrder=0 wantsFocus=1
+  child 5 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 6 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 7 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 8 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
+  child 9 knob id="Cutoff" at 12,205 85x58 visible=1 title="Cutoff" tip="Cutoff" focusOrder=0 wantsFocus=1
+  child 10 label id="" at 12,187 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 11 knob id="Resonance" at 97,205 85x58 visible=1 title="Resonance" tip="Resonance" focusOrder=0 wantsFocus=1
+  child 12 label id="" at 97,187 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 13 knob id="Drive" at 182,205 85x58 visible=1 title="Drive" tip="Drive" focusOrder=0 wantsFocus=1
+  child 14 label id="" at 182,187 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 15 combo id="" at 40,131 200x24 visible=1 title="Filter Type" tip="Filter Type" focusOrder=0 wantsFocus=1
+  child 16 label id="" at 40,113 200x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 17 toggle id="Poly" at 12,161 256x24 visible=1 title="Poly" tip="Poly" focusOrder=0 wantsFocus=1
+  child 18 knob id="Key Track" at 12,281 85x58 visible=1 title="Key Track" tip="Key Track" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 12,263 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="Level" at 97,281 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 97,263 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 component id="" at 4,52 12x12 visible=1 title="Audio L input" tip="" focusOrder=0 wantsFocus=0
+  child 23 component id="" at 4,72 12x12 visible=1 title="Audio R input" tip="" focusOrder=0 wantsFocus=0
+  child 24 component id="" at 4,92 12x12 visible=1 title="Pitch input" tip="" focusOrder=0 wantsFocus=0
+  child 25 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
+  child 26 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
+  in 0 10, 58
+  in 1 10, 78
+  in 2 37, 242
+  in 3 122, 242
+  in 4 207, 242
+  in 5 10, 98
+  in 6 37, 318
+  out 0 270, 58
+  out 1 270, 78

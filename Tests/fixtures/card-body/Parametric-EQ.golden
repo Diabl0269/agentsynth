@@ -1,0 +1,55 @@
+type Parametric EQ size 560x592
+  child 0 component id="" at 88,60 384x150 visible=1 title="EQ curve" tip="EQ curve: Left/Right pick a band, Up/Down change its gain, Alt+Left/Right its frequency, Page Up/Down its Q, Return switches it on or off. Mouse: double-click to add or remove a point, drag to move, scroll for Q" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 12,244 140x28 visible=1 title="Show Spectrum" tip="Show Spectrum" focusOrder=0 wantsFocus=1
+  child 2 textButton id="eqPopOut" at 162,244 150x28 visible=1 title="Open EQ Window" tip="Edit this EQ in a larger resizable window" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 510,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 486,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 5 drawableButton id="" at 534,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 6 drawableButton id="" at 462,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
+  child 7 toggle id="1 Low Shelf" at 12,304 130x26 visible=1 title="1 Low Shelf" tip="1 Low Shelf" focusOrder=0 wantsFocus=1
+  child 8 knob id="B1 Freq" at 42,352 70x60 visible=1 title="B1 Freq" tip="B1 Freq" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 12,332 130x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 knob id="B1 Gain" at 42,432 70x60 visible=1 title="B1 Gain" tip="B1 Gain" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 12,412 130x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="B1 Q" at 42,512 70x60 visible=1 title="B1 Q" tip="B1 Q" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 12,492 130x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 toggle id="2 Peak" at 146,304 130x26 visible=1 title="2 Peak" tip="2 Peak" focusOrder=0 wantsFocus=1
+  child 15 knob id="B2 Freq" at 176,352 70x60 visible=1 title="B2 Freq" tip="B2 Freq" focusOrder=0 wantsFocus=1
+  child 16 label id="" at 146,332 130x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 17 knob id="B2 Gain" at 176,432 70x60 visible=1 title="B2 Gain" tip="B2 Gain" focusOrder=0 wantsFocus=1
+  child 18 label id="" at 146,412 130x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 19 knob id="B2 Q" at 176,512 70x60 visible=1 title="B2 Q" tip="B2 Q" focusOrder=0 wantsFocus=1
+  child 20 label id="" at 146,492 130x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 21 toggle id="3 Peak" at 280,304 130x26 visible=1 title="3 Peak" tip="3 Peak" focusOrder=0 wantsFocus=1
+  child 22 knob id="B3 Freq" at 310,352 70x60 visible=1 title="B3 Freq" tip="B3 Freq" focusOrder=0 wantsFocus=1
+  child 23 label id="" at 280,332 130x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 knob id="B3 Gain" at 310,432 70x60 visible=1 title="B3 Gain" tip="B3 Gain" focusOrder=0 wantsFocus=1
+  child 25 label id="" at 280,412 130x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 knob id="B3 Q" at 310,512 70x60 visible=1 title="B3 Q" tip="B3 Q" focusOrder=0 wantsFocus=1
+  child 27 label id="" at 280,492 130x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 toggle id="4 High Shelf" at 414,304 130x26 visible=1 title="4 High Shelf" tip="4 High Shelf" focusOrder=0 wantsFocus=1
+  child 29 knob id="B4 Freq" at 444,352 70x60 visible=1 title="B4 Freq" tip="B4 Freq" focusOrder=0 wantsFocus=1
+  child 30 label id="" at 414,332 130x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 31 knob id="B4 Gain" at 444,432 70x60 visible=1 title="B4 Gain" tip="B4 Gain" focusOrder=0 wantsFocus=1
+  child 32 label id="" at 414,412 130x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 33 knob id="B4 Q" at 444,512 70x60 visible=1 title="B4 Q" tip="B4 Q" focusOrder=0 wantsFocus=1
+  child 34 label id="" at 414,492 130x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 35 knob id="Output" at 478,238 70x60 visible=1 title="Output" tip="Output" focusOrder=0 wantsFocus=1
+  child 36 label id="" at 478,218 70x20 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 37 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
+  child 38 component id="" at 544,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
+  in 0 10, 58
+  in 1 192, 391
+  in 2 192, 471
+  in 3 326, 391
+  in 4 326, 471
+  in 5 58, 391
+  in 6 58, 471
+  in 7 460, 391
+  in 8 460, 471
+  in 9 58, 551
+  in 10 192, 551
+  in 11 326, 551
+  in 12 460, 551
+  in 13 494, 277
+  out 0 550, 58

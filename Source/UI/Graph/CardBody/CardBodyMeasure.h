@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Graph/CardBody/DefaultCardLayouts.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 
@@ -13,5 +14,9 @@ namespace synth {
  * falls back to its own table. Cached per type. Message thread only.
  */
 std::optional<juce::Point<int>> measureDataDrivenCardSize(const juce::String& typeName);
+
+/** measureDataDrivenCardSize against `defaults` instead of the built-in registry; not cached. */
+std::optional<juce::Point<int>> measureDataDrivenCardSizeWith(const juce::String& typeName,
+                                                              const DefaultCardLayouts& defaults);
 
 } // namespace synth

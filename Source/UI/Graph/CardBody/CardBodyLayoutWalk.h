@@ -12,8 +12,19 @@ namespace synth {
 int layoutCardBodyItems(const CardBodyPlan& plan, juce::AudioProcessor& module, const std::vector<int>& indices,
                         int columns, int y, const cardbody::BodyGeometry& g, bool apply, bool tabbed);
 
-/** Every section of `plan`, top to bottom; returns the y below them. */
+/** Every shown section of `plan` but the footer, top to bottom; returns the y below them. */
 int layoutCardBodySections(const CardBodyPlan& plan, juce::AudioProcessor& module, int y,
                            const cardbody::BodyGeometry& g, bool apply, bool tabbed);
+
+/** A card chrome toggle that joins the footer row: its button (null when measuring) and its text. */
+struct CardFooterExtra {
+    juce::Component* widget = nullptr;
+    juce::String text;
+};
+
+/** The footer row: the plan's footer items, then `extras`, left to right, wrapping when the card is
+ *  too narrow; returns the y below it (`y` itself when there is nothing to show). */
+int layoutCardBodyFooter(const CardBodyPlan& plan, const std::vector<CardFooterExtra>& extras, int y,
+                         const cardbody::BodyGeometry& g, bool apply);
 
 } // namespace synth

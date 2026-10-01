@@ -1,0 +1,35 @@
+type LFO size 280x437
+  child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
+  child 1 toggle id="" at 12,399 256x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 5 combo id="" at 40,91 200x24 visible=1 title="Shape" tip="Shape" focusOrder=0 wantsFocus=1
+  child 6 label id="" at 40,73 200x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 7 toggle id="Sync" at 12,169 256x24 visible=1 title="Sync" tip="Sync" focusOrder=0 wantsFocus=1
+  child 8 toggle id="Bipolar" at 12,195 256x24 visible=1 title="Bipolar" tip="Bipolar" focusOrder=0 wantsFocus=1
+  child 9 knob id="Rate (Hz)" at 12,265 85x58 visible=1 title="Rate (Hz)" tip="Rate (Hz)" focusOrder=0 wantsFocus=1
+  child 10 label id="" at 12,247 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 11 combo id="" at 40,139 200x24 visible=1 title="Sync Rate" tip="Sync Rate" focusOrder=0 wantsFocus=1
+  child 12 label id="" at 40,121 200x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 13 toggle id="Retrig" at 12,221 256x24 visible=1 title="Retrig" tip="Retrig" focusOrder=0 wantsFocus=1
+  child 14 knob id="Level" at 97,265 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 97,247 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Glide" at 182,265 85x58 visible=1 title="Glide" tip="Glide" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 182,247 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Phase" at 12,341 85x58 visible=1 title="Phase" tip="Phase" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 12,323 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="Fade In" at 97,341 85x58 visible=1 title="Fade In" tip="Fade In" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 97,323 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
+  child 23 component id="" at 264,52 12x12 visible=1 title="CV output" tip="" focusOrder=0 wantsFocus=0
+  child 24 component id="" at 0,0 0x0 visible=0 title="LFO custom wave" tip="Curve editor: Left/Right pick a point, Alt+arrows move it, Delete removes it. Mouse: drag points and bend handles, double-click to add or remove a point" focusOrder=0 wantsFocus=1
+  child 25 combo id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=1
+  child 26 textButton id="" at 0,0 0x0 visible=0 title="Shapes" tip="Shapes" focusOrder=0 wantsFocus=1
+  child 27 textButton id="" at 0,0 0x0 visible=0 title="Tools" tip="Tools" focusOrder=0 wantsFocus=1
+  in 0 37, 302
+  in 1 122, 302
+  in 2 207, 302
+  in 3 37, 378
+  in 4 122, 378
+  out 0 270, 58

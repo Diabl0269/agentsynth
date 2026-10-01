@@ -13,6 +13,7 @@
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Graph/CardWidgets/CardStepper.h"
+#include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
@@ -73,10 +74,11 @@ void fillWaveformItems(juce::ComboBox& combo, const juce::StringArray& choices, 
 
 } // namespace
 
-CardBody::CardBody(ModuleComponent& card, juce::AudioProcessor& module, const std::optional<CardLayout>& layout)
+CardBody::CardBody(ModuleComponent& card, juce::AudioProcessor& module, const std::optional<CardLayout>& layout,
+                   const std::vector<CardDimRule>& dimRules)
     : card_(card)
     , module_(module)
-    , plan_(CardBodyPlan::forModule(module, layout))
+    , plan_(CardBodyPlan::forModule(module, layout, dimRules))
     , layout_(layout) {}
 
 CardBody::~CardBody() = default;
@@ -98,7 +100,7 @@ std::unique_ptr<CardBody> CardBody::createFor(ModuleComponent& card, juce::Audio
     const auto type = AIStateMapper::getFactoryTypeName(&module);
     const auto stored = getCardLayoutOverride(graph, nodeId);
     const auto resolved = resolveModuleCardLayout(type, stored, store, DefaultCardLayouts::builtIn(), &paramIds);
-    auto body = std::make_unique<CardBody>(card, module, resolved.layout);
+    auto body = std::make_unique<CardBody>(card, module, resolved.layout, resolved.dimRules);
     body->builtFromOverride_ = stored.isVoid() ? juce::String() : juce::JSON::toString(stored, true);
     body->store_ = store;
     body->builtFromRevision_ = store != nullptr ? store->getRevision(type) : 0;
@@ -144,10 +146,26 @@ void CardBody::createParameterWidgets() {
         else if (item.kind == CardBodyItem::Kind::Stepper)
             createStepper(item, *static_cast<juce::AudioParameterInt*>(item.param));
     }
+    styleFooterItems();
     createSectionHeaders();
     if (hasMoreRow())
         createMoreButton();
-    applyMoreVisibility();
+    applyVisibility();
+    startWatchingConditions();
+}
+
+// A footer toggle is the small pill; a footer caption sits inline, in the pill's text size.
+void CardBody::styleFooterItems() {
+    for (auto& item : plan_.items) {
+        if (item.section < 0 || !plan_.sections[(size_t)item.section].footer)
+            continue;
+        if (auto* toggle = dynamic_cast<juce::ToggleButton*>(item.widget); toggle != nullptr && item.pill)
+            synth::ui::setTogglePillStyle(*toggle, true);
+        if (auto* label = dynamic_cast<juce::Label*>(item.label)) {
+            label->setFont(juce::Font(juce::FontOptions(synth::theme::AppLookAndFeel::kTogglePillFontHeight)));
+            label->setJustificationType(juce::Justification::centredLeft);
+        }
+    }
 }
 
 // A titled section's header row: a small caption-style label, in the title's own case (UI text is
@@ -350,6 +368,7 @@ void CardBody::releaseViews() {
 // During an undo the graph may already have freed the processor and its parameters; detaching an
 // attachment then touches freed memory, so they are released (leaked) instead.
 void CardBody::releaseBindings(bool processorAlive) {
+    stopWatchingConditions(processorAlive);
     if (processorAlive) {
         sliderAttachments_.clear();
         comboAttachments_.clear();

@@ -1,0 +1,37 @@
+type Filter Env size 280x389
+  child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
+  child 1 toggle id="" at 12,351 256x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 2 component id="" at 12,119 256x48 visible=1 title="Threshold meter" tip="Input level against the trigger threshold; the marker is the effective threshold" focusOrder=0 wantsFocus=0
+  child 3 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 5 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 6 knob id="Attack" at 12,191 85x58 visible=1 title="Attack" tip="Attack" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 12,173 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 knob id="Decay" at 97,191 85x58 visible=1 title="Decay" tip="Decay" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 97,173 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 knob id="Sustain" at 182,191 85x58 visible=1 title="Sustain" tip="Sustain" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 182,173 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Release" at 12,267 85x58 visible=1 title="Release" tip="Release" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 12,249 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Hold" at 97,267 85x58 visible=1 title="Hold" tip="Hold" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 97,249 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 toggle id="Poly" at 12,93 256x24 visible=1 title="Poly" tip="Poly" focusOrder=0 wantsFocus=1
+  child 17 knob id="Velocity" at 182,267 85x58 visible=1 title="Velocity" tip="Velocity" focusOrder=0 wantsFocus=1
+  child 18 label id="" at 182,249 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 19 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
+  child 20 component id="" at 4,52 12x12 visible=1 title="Gate input" tip="" focusOrder=0 wantsFocus=0
+  child 21 component id="" at 4,72 12x12 visible=1 title="Threshold input" tip="" focusOrder=0 wantsFocus=0
+  child 22 component id="" at 264,52 12x12 visible=1 title="Env output" tip="" focusOrder=0 wantsFocus=0
+  child 23 component id="" at 0,0 0x0 visible=0 title="Envelope curve" tip="Curve editor: Left/Right pick a point, Alt+arrows move it, Delete removes it. Mouse: drag points and bend handles, double-click to add or remove a point" focusOrder=0 wantsFocus=1
+  child 24 toggle id="" at 12,325 158x24 visible=1 title="Show Envelope Graph" tip="Show Envelope Graph" focusOrder=0 wantsFocus=1
+  child 25 textButton id="" at 178,325 45x24 visible=1 title="MS" tip="MS" focusOrder=0 wantsFocus=1
+  child 26 textButton id="" at 223,325 45x24 visible=1 title="BPM" tip="BPM" focusOrder=0 wantsFocus=1
+  in 0 10, 58
+  in 1 10, 78
+  in 2 37, 248
+  in 3 122, 324
+  in 4 122, 248
+  in 5 207, 248
+  in 6 37, 324
+  in 7 207, 324
+  out 0 270, 58

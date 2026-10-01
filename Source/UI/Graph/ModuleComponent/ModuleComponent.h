@@ -658,6 +658,8 @@ private:
     void setSpectrumShown(bool show);
     void restoreCardView();
     void rememberCardView(const std::function<void(synth::CardViewState&)>& edit);
+    // The toggles that join a footer row (Show Response, Show Spectrum, Show Scope), in that order.
+    std::vector<juce::ToggleButton*> footerChromeToggles(bool visibleOnly = false) const;
 
     // Compact docked widget for the four macro-port types
     // (docs/macros/ports.md#how-a-port-is-drawn) — no header chrome, no body. layoutMacroPortWidget sizes the
@@ -783,6 +785,7 @@ private:
 
     // The body's controls: the card body's sections, or (no card body) the widget arrays as runs.
     int layoutBodyControls(int y, int width, bool apply, bool tabbed);
+    int layoutChromeRows(int y, int contentX, int contentW, bool apply);
 
     // Builds the Sampler's waveform view / load button / file-name label. No-op for other modules.
     void createSamplerControls();

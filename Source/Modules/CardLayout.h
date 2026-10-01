@@ -82,6 +82,8 @@ using CardItem = std::variant<CardParamItem, CardViewItem>;
 /** A titled (or untitled) group of items; consecutive Tab sections render as one tab strip. */
 struct CardSection {
     static constexpr int kDefaultColumns = 3;
+    /** The reserved id of the footer section: one compact row at the bottom of a built-in card. */
+    static constexpr const char* kFooterId = "footer";
 
     juce::String id;
     std::optional<juce::String> title;

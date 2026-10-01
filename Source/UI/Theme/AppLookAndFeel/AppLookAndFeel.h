@@ -179,7 +179,26 @@ public:
     void drawShortcutKeyCap(juce::Graphics&, juce::Rectangle<int> bounds, const juce::String& text,
                             bool compact = false) const;
 
+    // ---------- toggle pill and disabled controls ----------
+    // A toggle whose properties hold kTogglePillProperty = true paints as a small pill (a card's
+    // footer row); the same toggle otherwise paints as the tick box. A disabled knob, fader or toggle
+    // paints at kDisabledControlAlpha, and so does a control marked kDimmedProperty (or a child of
+    // one: a switch's segments, a stepper's buttons, a combo's text), which stays enabled.
+    static constexpr const char* kTogglePillProperty = "togglePill";
+    static constexpr const char* kDimmedProperty = "dimmed";
+    // True when `component` paints greyed out: disabled, or it or its parent carries kDimmedProperty.
+    static bool paintsDimmed(const juce::Component& component);
+    static constexpr float kTogglePillFontHeight = 12.0f;
+    static constexpr int kTogglePillHeight = 20;
+    static constexpr float kDisabledControlAlpha = 0.45f;
+    // The width a pill needs for `text`; needs no theme, so a size estimate can ask it too.
+    static int togglePillWidth(const juce::String& text);
+    void paintTogglePill(juce::Graphics&, juce::ToggleButton&, bool shouldDrawButtonAsHighlighted,
+                         bool keyboardFocused);
+
 private:
+    void paintTickToggle(juce::Graphics&, juce::ToggleButton&, bool shouldDrawButtonAsHighlighted, bool keyboardFocused,
+                         bool focusRingOnly = false);
     void refreshTypefaces();          // (re)load cached typefaces for theme.type.uiFamily/monoFamily
     void recomputeMeterColourStops(); // override if set, else MeterColourStops::fromTheme(theme.colors)
 

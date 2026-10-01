@@ -250,7 +250,20 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
     // module (and for an LFO not currently on the Custom shape).
     y = layoutLfoCustomWaveSection(y, contentX, contentW, apply);
 
-    if (freqResponseToggle) {
+    y = layoutChromeRows(y, contentX, contentW, apply);
+
+    // The folded More row sits at the very bottom, under the footer rows.
+    if (cardBody_ != nullptr)
+        y = cardBody_->layoutMoreRow(y, synth::cardbody::BodyGeometry::forCardWidth(width), apply);
+
+    return y + kBottomPadding;
+}
+
+// The Show Response / Spectrum / Scope rows and the panels they open. On a card whose layout has a footer
+// row, the toggles are pills in that row instead, under the open panels.
+int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool apply) {
+    const bool footer = cardBody_ != nullptr && cardBody_->hasFooter();
+    if (freqResponseToggle && !footer) {
         if (apply)
             freqResponseToggle->setBounds(contentX, y, contentW, kRowHeight);
         y += kRowHeight + 2;
@@ -262,13 +275,13 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         y += 128;
     }
 
-    if (spectrumToggle && spectrumToggle->isVisible()) {
+    if (spectrumToggle && spectrumToggle->isVisible() && !footer) {
         if (apply)
             spectrumToggle->setBounds(contentX, y, contentW, kRowHeight);
         y += kRowHeight + 2;
     }
 
-    if (scopeToggle) {
+    if (scopeToggle && !footer) {
         if (apply)
             scopeToggle->setBounds(contentX, y, contentW, kRowHeight);
         y += kRowHeight + 2;
@@ -280,11 +293,18 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         y += 100;
     }
 
-    // The folded More row sits at the very bottom, under the footer rows.
-    if (cardBody_ != nullptr)
-        y = cardBody_->layoutMoreRow(y, synth::cardbody::BodyGeometry::forCardWidth(width), apply);
+    if (footer)
+        y = cardBody_->layoutFooter(y, synth::cardbody::BodyGeometry::forCardWidth(getWidth()), apply,
+                                    footerChromeToggles(/*visibleOnly*/ true));
+    return y;
+}
 
-    return y + kBottomPadding;
+std::vector<juce::ToggleButton*> ModuleComponent::footerChromeToggles(bool visibleOnly) const {
+    std::vector<juce::ToggleButton*> toggles;
+    for (auto* toggle : {freqResponseToggle.get(), spectrumToggle.get(), scopeToggle.get()})
+        if (toggle != nullptr && (!visibleOnly || toggle->isVisible()))
+            toggles.push_back(toggle);
+    return toggles;
 }
 
 // The folded More row opens under a modulation cable, so a hidden parameter's knob can still take it.

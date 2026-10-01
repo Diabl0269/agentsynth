@@ -716,6 +716,8 @@ add_executable(Tests
     UI/Layout/BottomDockTabStripTests.cpp
     UI/Graph/CardBody/CardBodyGoldenTests.cpp
     UI/Graph/CardBody/CardBodyLayoutTests.cpp
+    UI/Graph/CardBody/CardBodyConditionsTests.cpp
+    UI/Graph/CardBody/CardBodyFooterTests.cpp
     UI/Graph/CardBody/CardBodyBindingTests.cpp
     UI/Graph/CardBody/CardBodyLoadTests.cpp
     UI/Graph/CardBody/CardBodyWidgetKindTests.cpp

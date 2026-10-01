@@ -1,0 +1,33 @@
+type Pitch Shifter size 280x387
+  child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
+  child 1 toggle id="" at 12,349 256x24 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
+  child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
+  child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
+  child 5 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
+  child 6 combo id="" at 40,91 200x24 visible=1 title="Mode" tip="Mode" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 40,73 200x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 knob id="Pitch (semi)" at 12,139 85x58 visible=1 title="Pitch (semi)" tip="Pitch (semi)" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 12,121 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 knob id="Fine (cents)" at 97,139 85x58 visible=1 title="Fine (cents)" tip="Fine (cents)" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 97,121 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Shift (Hz)" at 182,139 85x58 visible=1 title="Shift (Hz)" tip="Shift (Hz)" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 182,121 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Window (ms)" at 12,215 85x58 visible=1 title="Window (ms)" tip="Window (ms)" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 12,197 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Feedback" at 97,215 85x58 visible=1 title="Feedback" tip="Feedback" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 97,197 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Mix" at 182,215 85x58 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 182,197 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 knob id="Level" at 12,291 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 12,273 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
+  child 23 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
+  in 0 10, 58
+  in 1 37, 176
+  in 2 207, 176
+  in 3 207, 252
+  in 4 122, 252
+  in 5 122, 176
+  in 6 37, 252
+  out 0 270, 58
