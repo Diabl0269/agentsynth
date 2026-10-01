@@ -1,5 +1,7 @@
 #include "ToolbarComponent.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/Layout/ReadOnlyTextValue.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 // ---------------------------------------------------------------------------
@@ -10,9 +12,18 @@ ToolbarComponent::ToolbarComponent() {
     // its own (the buttons are direct children of MainComponent), so there is nothing for descent to
     // find anyway; opting in here is what makes a grab land on the toolbar itself instead of failing.
     setWantsKeyboardFocus(true);
+    setTitle("Toolbar");
 }
 
-void ToolbarComponent::setButtons(std::array<juce::DrawableButton*, NumSlots> btns) { buttons_ = btns; }
+// The buttons give up keyboard focus of their own: the toolbar is the single Tab stop and its roving
+// ring is the only focus indicator, so a focused button could never double the ring or swallow the
+// arrow keys before they reach keyPressed().
+void ToolbarComponent::setButtons(std::array<juce::DrawableButton*, NumSlots> btns) {
+    buttons_ = btns;
+    for (auto* b : buttons_)
+        if (b != nullptr)
+            b->setWantsKeyboardFocus(false);
+}
 
 // ---------------------------------------------------------------------------
 // Sub-group membership per Slot, used both to space groups apart in layoutButtons() and to
@@ -172,4 +183,106 @@ void ToolbarComponent::paint(juce::Graphics& g) {
 // Focus-region outline (Source/UI/Layout/FocusRegion.h) -- see the paintOverChildren declaration's
 // comment in the header for why this component uses the same convention as the other five region
 // roots despite owning no children of its own.
-void ToolbarComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }
+void ToolbarComponent::paintOverChildren(juce::Graphics& g) {
+    synth::ui::paintFocusRegionOutline(*this, g);
+
+    // The ring goes in the margin around the button, not on top of it: the buttons are siblings that
+    // paint above this strip, so anything drawn inside their bounds would be covered.
+    const int slot = getFocusedSlot();
+    if (slot < 0)
+        return;
+    constexpr int kRingOutset = 2;
+    const auto area = buttons_[(size_t)slot]->getBounds().translated(-getX(), -getY()).expanded(kRingOutset);
+    synth::ui::paintFocusRing(g, area.toFloat(), *this, 4.0f);
+}
+
+// ---------------------------------------------------------------------------
+// Roving focus.
+bool ToolbarComponent::isNavigable(int slot) const {
+    if (slot < 0 || slot >= NumSlots)
+        return false;
+    const auto* b = buttons_[(size_t)slot];
+    return b != nullptr && b->isVisible() && b->isEnabled();
+}
+
+int ToolbarComponent::navigableSlotFrom(int from, int step) const {
+    for (int slot = from + step; slot >= 0 && slot < NumSlots; slot += step)
+        if (isNavigable(slot))
+            return slot;
+    return -1;
+}
+
+// A last-used button that has since been hidden or disabled (Undo right after it ran out of steps)
+// hands the ring to its nearest navigable neighbour, so it never jumps back to the far left.
+int ToolbarComponent::getFocusedSlot() const {
+    if (isNavigable(focusedSlot_))
+        return focusedSlot_;
+    if (focusedSlot_ < 0)
+        return navigableSlotFrom(-1, 1);
+    const int after = navigableSlotFrom(focusedSlot_, 1);
+    return after >= 0 ? after : navigableSlotFrom(focusedSlot_, -1);
+}
+
+juce::String ToolbarComponent::getFocusedButtonName() const {
+    const int slot = getFocusedSlot();
+    if (slot < 0)
+        return {};
+    const auto* b = buttons_[(size_t)slot];
+    return b->getTitle().isNotEmpty() ? b->getTitle() : b->getButtonText();
+}
+
+void ToolbarComponent::setFocusedSlot(int slot) {
+    if (slot < 0)
+        return;
+    const bool changed = slot != getFocusedSlot();
+    focusedSlot_ = slot;
+    if (!changed)
+        return;
+    repaint();
+    if (auto* handler = getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(juce::AccessibilityEvent::valueChanged);
+}
+
+bool ToolbarComponent::keyPressed(const juce::KeyPress& key) {
+    if (key.getModifiers().isAnyModifierKeyDown())
+        return false;
+    const int current = getFocusedSlot();
+    if (current < 0)
+        return false;
+
+    if (key.isKeyCode(juce::KeyPress::leftKey)) {
+        setFocusedSlot(navigableSlotFrom(current, -1));
+    } else if (key.isKeyCode(juce::KeyPress::rightKey)) {
+        setFocusedSlot(navigableSlotFrom(current, 1));
+    } else if (key.isKeyCode(juce::KeyPress::homeKey)) {
+        setFocusedSlot(navigableSlotFrom(-1, 1));
+    } else if (key.isKeyCode(juce::KeyPress::endKey)) {
+        setFocusedSlot(navigableSlotFrom(NumSlots, -1));
+    } else if (key.isKeyCode(juce::KeyPress::spaceKey) || key.isKeyCode(juce::KeyPress::returnKey)) {
+        // Pin the ring to the pressed button first: an action that disables it (Undo's last step)
+        // then hands the ring to a neighbour via getFocusedSlot().
+        focusedSlot_ = current;
+        auto* button = buttons_[(size_t)current];
+        if (button->onClick)
+            button->onClick();
+        repaint();
+    } else {
+        return false;
+    }
+    return true;
+}
+
+void ToolbarComponent::focusGained(FocusChangeType) {
+    repaint();
+    if (auto* handler = getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(juce::AccessibilityEvent::valueChanged);
+}
+
+void ToolbarComponent::focusLost(FocusChangeType) { repaint(); }
+
+std::unique_ptr<juce::AccessibilityHandler> ToolbarComponent::createAccessibilityHandler() {
+    return std::make_unique<juce::AccessibilityHandler>(
+        *this, juce::AccessibilityRole::group, juce::AccessibilityActions{},
+        juce::AccessibilityHandler::Interfaces{
+            std::make_unique<synth::ui::ReadOnlyTextValue>([this] { return getFocusedButtonName(); })});
+}

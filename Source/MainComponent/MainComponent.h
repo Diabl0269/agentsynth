@@ -498,6 +498,8 @@ private:
     void rebuildFocusRegions();
 
     void applyToolbarIcons();
+    // Sets every toolbar button's screen-reader name, and its visible text unless `iconOnly`.
+    void applyToolbarLabels(bool iconOnly);
     void applyStoredDualIOPreferenceToPatch();
     juce::String computeOutputDeviceInfoText() const;
     void setLibraryVisible(bool v);

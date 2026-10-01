@@ -59,7 +59,7 @@ when reasoning about a key that "does nothing."
 | Cmd+- | Zoom Out |
 | Cmd+Shift+= | Zoom In Vertically |
 | Cmd+Shift+- | Zoom Out Vertically |
-| Tab / Shift+Tab | Focus Next / Previous Region — cycles keyboard focus between whichever of the app's focus regions are currently OPEN (Toolbar, Library, Canvas, Timeline, AI Panel, Mod Matrix); wraps at both ends. See [**Focus regions**](#focus-regions) below |
+| Tab / Shift+Tab | Focus Next / Previous Region — cycles keyboard focus between whichever of the app's focus regions are currently OPEN (Toolbar, Library, Canvas, Dock tabs, Timeline, Mixer, Controllers, AI Panel, Mod Matrix); wraps at both ends. See [**Focus regions**](#focus-regions) below |
 | Cmd+Shift+T | Focus Timeline — opens the Timeline panel first if it's closed, then focuses it |
 | Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it (lands on the sidebar container, not the search field — see Cmd+F below) |
 | Shift+F10 | Open Context Menu (`openContextMenu`) — opens the right-click menu of whatever holds keyboard focus, anchored at that item. See [**Open Context Menu**](#open-context-menu) below. Rebindable |
@@ -106,9 +106,10 @@ base for arrow-key navigation within the module library and for Up/Down + M/S/R 
 track header rows (below); both build on top of it without changing the registry itself. A
 `synth::ui::FocusRegionRegistry` is a plain member of `MainComponent` (never a `Desktop`-global
 singleton — a host process can run multiple plugin instances, and a future separate-window
-mixer/timeline would need its own registry), populated with eight regions once every root component
+mixer/timeline would need its own registry), populated with nine regions once every root component
 exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisible`), **Canvas**
-(always open — the `graphEditor`), **Timeline** (`isBottomDockVisible && !bottomDock.isMixerTabActive() && !bottomDock.isMidiRemoteTabActive()`),
+(always open — the `graphEditor`), **Dock tabs** (`isBottomDockVisible` with at least one docked tab; the
+dock's tab strip, ahead of the panel it selects), **Timeline** (`isBottomDockVisible && !bottomDock.isMixerTabActive() && !bottomDock.isMidiRemoteTabActive()`),
 **Mixer** (`isBottomDockVisible && bottomDock.isMixerTabActive()`, no `open` callback — like Mod
 Matrix, no direct-focus shortcut targets it), **Controllers** (`isBottomDockVisible &&
 bottomDock.isMidiRemoteTabActive()`, FRO131 — same dock-tab shape as Mixer, but does take a direct
@@ -175,8 +176,16 @@ below for the Mixer region's own keyboard behaviour.
   Nothing repaints on its own when focus moves (`Component::focusGained`/`focusLost` are no-op
   virtuals for most widgets), so `MainComponent` is a `juce::FocusChangeListener` and repaints every
   region root on `globalFocusChanged` — event-driven, never a per-tick timer.
-- **Out of scope here** — no arrow-key navigation WITHIN a region (the Library/track-header
-  navigation's job), and no
+  The Dock tabs region draws no outline: its indicator is the focus ring on the selected tab.
+- **Arrow keys inside the Toolbar and the dock's tab strip** — both are plain focus-region stops with a
+  small roving selection inside, surface-local like the mixer's column navigation (their own `keyPressed`,
+  no `ShortcutManager` actions): in the **Toolbar**, Left/Right move the ring across the visible, enabled
+  buttons (no wrap), Home/End jump to the ends, Space/Return press the ringed button; in the **Dock tabs**
+  region, Left/Right select the previous/next tab (which switches the panel), Home/End the first/last, and
+  Return moves focus into the selected panel. Modified keys fall through, so Cmd+1/2/3 and Tab behave as
+  before. Details: [`layout/chrome.md`](../layout/chrome.md#toolbar-keyboard-access) and
+  [`layout/chrome.md`](../layout/chrome.md#tab-strip-keyboard-and-screen-reader-access).
+- **Out of scope here** — no arrow-key navigation WITHIN the Canvas, and no
   canvas/graph module-to-module navigation (deferred indefinitely, not part of this epic).
 - **The track-header row outline is a second, per-row instance of the SAME visual language, not a variant** —
   `TimelineTrackHeaderComponent::paintOverChildren` calls `paintFocusRegionOutline` on itself exactly

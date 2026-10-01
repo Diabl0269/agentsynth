@@ -89,6 +89,34 @@ A resize that does not cross the 480 px threshold skips the clone work entirely.
 `applyToolbarIcons()` is also called unconditionally once at the end of `initialiseCommon()` and
 after every theme switch via `changeListenerCallback`.
 
+### Toolbar keyboard access
+
+The toolbar is one Tab stop (the "toolbar" focus region) with a roving ring inside it. The buttons stay
+direct children of `MainComponent`, but `ToolbarComponent::setButtons` turns off their own keyboard focus,
+so the toolbar is the only thing that holds focus and the ring is the only focus indicator.
+
+| Key | Action |
+|---|---|
+| Left / Right | Move the ring to the previous / next button. Hidden and disabled buttons are skipped (Undo and Redo while there is nothing to undo); it stops at the ends and never wraps |
+| Home / End | First / last button |
+| Space / Return | Press the ringed button (its `onClick`) |
+
+Only plain keys are handled; any modified chord bubbles up to the app shortcuts. The ring starts on the
+first button and afterwards returns to the last one used when the region regains focus. If the ringed
+button stops being navigable (Undo after its last step), the ring passes to the nearest navigable
+neighbour rather than jumping back to the start.
+
+The focused button wears `paintFocusRing` (the solid accent ring), drawn by the toolbar in the margin
+around the button, since the buttons are siblings that paint above the strip. The region outline on the
+strip stays as before.
+
+**Names.** `MainComponent::applyToolbarLabels` gives every button a screen-reader title and, unless the
+toolbar is in narrow mode, the same visible text. A toggle's title is the action a press does ("Hide
+Library" / "Show Library", likewise Minimap, Matrix, AI and Panel; "Light Mode" / "Dark Mode"), in both
+widths, because these buttons expose no checked state to a screen reader. "Feedback" is icon-only at every
+width. The toolbar's accessibility value is the name of the ringed button, so Left/Right announce it.
+Tooltips name each button's shortcut where it has one.
+
 ## Minimum window size
 
 `Main.cpp`'s `MainWindow` constructor calls `setResizeLimits(480, 400, 8192, 8192)` — a hard
@@ -188,6 +216,14 @@ A transient message (`showMessage()`) suppresses every tooltip on the row —
 `getTooltipForPosition` returns `""` immediately — since it visually covers the segments it would
 otherwise explain.
 
+**Screen-reader text.** The painted segments have no components of their own, so the bar exposes one
+accessibility value, `getAccessibilityText()`: the items currently drawn, in drawn order, for example
+`Project clips, CPU 13%, RT 12.5 ms, position 001.1.000, 120 BPM, 0 voices`. It follows `paint()`'s own
+visibility rules: the round-trip and position/tempo items are left out when the bar is too narrow to draw
+them, an unavailable round trip reads "RT unavailable", and while a transient or sticky message covers the
+bar the message alone is read. The mute and play/stop buttons stay separate named children. The value is
+read when a screen reader reaches the bar; the 5 Hz updates do not announce themselves.
+
 ### The mod drop hint
 
 `GraphEditor::beginConnectionDrag()` shows one status-bar message, ONCE per install: the first time
@@ -241,6 +277,29 @@ The dock's tab strip is drag-reorderable through the shared reorder drag (the li
 grab point, the others glide aside, the order is applied and persisted on release, Esc cancels):
 [`docs/mixer/panel.md#the-tab-strip`](../mixer/panel.md#the-tab-strip) and
 [`docs/layout/animation.md#reorder-drag`](animation.md#reorder-drag).
+
+### Tab strip keyboard and screen-reader access
+
+The tab strip is one Tab stop of its own, the "dockTabs" focus region, registered between Canvas and the
+panel regions; it is open whenever the dock is showing with at least one docked tab. Its focus holder is
+`BottomDockComponent::getTabStripFocus()`, a transparent leaf behind the tab buttons that never takes the
+mouse; the tab buttons give up keyboard focus themselves. A panel's own region is separate, so Tab goes
+Canvas, tab strip, then the panel.
+
+| Key | Action |
+|---|---|
+| Left / Right | Select the previous / next tab in the strip's current order, which switches the panel as a click does. Tabs that are not offered (detached, or the Mixer in another placement) are skipped; it stops at the ends |
+| Home / End | First / last tab |
+| Return | Move keyboard focus into the selected tab's panel (its region root) |
+
+Plain keys only: Cmd+1/2/3 and Tab are not touched, and Up/Down are left unhandled. The selected tab wears
+`paintFocusRing` while the strip has focus (not during a reorder drag), drawn by the dock over the tab.
+Clicking a tab does not give the strip focus.
+
+**Screen reader.** JUCE has no tab role, so each tab is exposed as a radio button, its closest selectable
+and mutually exclusive item, named "Timeline", "Mixer" or "Controllers", with the selected state following
+the active tab and a press that selects it (`BottomDockComponent::describeTab` is the data both the handler
+and the tests use). The strip itself is a group named "Panel tabs" whose value is the selected tab.
 
 ## Welcome screen overlay
 

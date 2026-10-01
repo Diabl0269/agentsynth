@@ -6,7 +6,10 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/FocusRing.h"
+#include "UI/Layout/ReadOnlyTextValue.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <utility>
 
@@ -19,6 +22,28 @@ namespace {
 constexpr int kLiftedTabRise = 4;
 constexpr float kLiftedTabRadius = 4.0f;
 constexpr float kLiftedTabOpacity = 0.95f;
+
+// A tab as a screen reader meets it: the shared role/name/selected data, plus a press that selects it.
+// The state is read live, since the handler outlives every tab switch.
+class DockTabHandler : public juce::AccessibilityHandler {
+public:
+    DockTabHandler(juce::Button& button, std::function<BottomDockComponent::TabAccessibility()> describe)
+        : juce::AccessibilityHandler(button, describe().role,
+                                     juce::AccessibilityActions().addAction(juce::AccessibilityActionType::press,
+                                                                            [&button] {
+                                                                                if (button.onClick)
+                                                                                    button.onClick();
+                                                                            }))
+        , describe_(std::move(describe)) {}
+
+    juce::AccessibleState getCurrentState() const override {
+        const auto state = juce::AccessibilityHandler::getCurrentState().withSelectable().withCheckable();
+        return describe_().selected ? state.withSelected().withChecked() : state;
+    }
+
+private:
+    std::function<BottomDockComponent::TabAccessibility()> describe_;
+};
 } // namespace
 
 BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, AudioEngine& audioEngine,
@@ -39,10 +64,11 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
                        panel.configure(audioEngine.getGraph(), doc, graphEditor.getMacros(), undoManager, graphEditor,
                                        audioEngine, synth::MeterReader::MixerMirror);
                    })
-    , timelineTabButton_(*this, Tab::Timeline, "Timeline")
-    , mixerTabButton_(*this, Tab::Mixer, "Mixer")
-    , midiRemoteTabButton_(*this, Tab::MidiRemote, "Controllers")
+    , timelineTabButton_(*this, Tab::Timeline, nameForTab(Tab::Timeline))
+    , mixerTabButton_(*this, Tab::Mixer, nameForTab(Tab::Mixer))
+    , midiRemoteTabButton_(*this, Tab::MidiRemote, nameForTab(Tab::MidiRemote))
     , shortcutManager_(shortcutManager) {
+    addAndMakeVisible(stripFocus_);
     addAndMakeVisible(timelineTabButton_);
     addAndMakeVisible(mixerTabButton_);
     addAndMakeVisible(midiRemoteTabButton_);
@@ -358,6 +384,11 @@ void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     timelineTabButton_.setToggleState(timelineActive, juce::dontSendNotification);
     mixerTabButton_.setToggleState(mixerActive, juce::dontSendNotification);
     midiRemoteTabButton_.setToggleState(midiRemoteActive, juce::dontSendNotification);
+    const std::array<juce::Component*, 4> announced{&timelineTabButton_, &mixerTabButton_, &midiRemoteTabButton_,
+                                                    &stripFocus_};
+    for (auto* c : announced)
+        if (auto* handler = c->getAccessibilityHandler())
+            handler->notifyAccessibilityEvent(juce::AccessibilityEvent::valueChanged);
     if (mixerActive && allowMixerRebuild)
         mixer_.rebuild();
     // Catches up on any profile/assignment change that happened while this tab was hidden,
@@ -651,6 +682,7 @@ void BottomDockComponent::resized() {
     // (drag-to-reorder) order -- see layoutTabButtons(). A reorder in flight then shifts the
     // buttons to their animated places.
     tabButtonsArea_ = tabStrip;
+    stripFocus_.setBounds(tabButtonsArea_);
     layoutTabButtons();
     applyReorderOffsets();
 
@@ -697,6 +729,7 @@ void BottomDockComponent::paintTabSlot(juce::Graphics& g, juce::Rectangle<int> b
 // animator says the dragged item is: at the pointer minus the grab offset while dragging, gliding
 // into its slot after release. The raise and the shadow/border strength ease with getLift().
 void BottomDockComponent::paintOverChildren(juce::Graphics& g) {
+    paintTabFocusRing(g);
     if (!liftedTab_.has_value() || !reorder_.isReordering())
         return;
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
@@ -727,5 +760,110 @@ void BottomDockComponent::paintOverChildren(juce::Graphics& g) {
 }
 
 void BottomDockComponent::lookAndFeelChanged() { refreshDetachButton(); }
+
+// ---- Keyboard and screen-reader access to the tab strip ----
+
+const char* BottomDockComponent::nameForTab(Tab tab) noexcept {
+    switch (tab) {
+    case Tab::Mixer:
+        return "Mixer";
+    case Tab::MidiRemote:
+        return "Controllers";
+    case Tab::Timeline:
+        break;
+    }
+    return "Timeline";
+}
+
+BottomDockComponent::TabAccessibility BottomDockComponent::describeTab(Tab tab, Tab activeTab) {
+    return {nameForTab(tab), juce::AccessibilityRole::radioButton, tab == activeTab};
+}
+
+std::unique_ptr<juce::AccessibilityHandler> BottomDockComponent::DockTabButton::createAccessibilityHandler() {
+    return std::make_unique<DockTabHandler>(*this, [this] { return describeTab(tab_, owner_.activeTab_); });
+}
+
+BottomDockComponent::TabStripFocus::TabStripFocus(BottomDockComponent& owner)
+    : owner_(owner) {
+    setWantsKeyboardFocus(true);
+    setInterceptsMouseClicks(false, false);
+    setTitle("Panel tabs");
+}
+
+// Role group with the selected tab as its value, so focus landing on the strip reads "Panel tabs,
+// Mixer"; the tabs themselves are child elements.
+std::unique_ptr<juce::AccessibilityHandler> BottomDockComponent::TabStripFocus::createAccessibilityHandler() {
+    return std::make_unique<juce::AccessibilityHandler>(
+        *this, juce::AccessibilityRole::group, juce::AccessibilityActions{},
+        juce::AccessibilityHandler::Interfaces{std::make_unique<ReadOnlyTextValue>(
+            [this] { return juce::String(owner_.hasAnyVisibleTab() ? nameForTab(owner_.activeTab_) : ""); })});
+}
+
+juce::Component* BottomDockComponent::getActivePanelRoot() noexcept {
+    if (!isTabOfferedInStrip(activeTab_))
+        return nullptr;
+    switch (activeTab_) {
+    case Tab::Mixer:
+        return &mixer_;
+    case Tab::MidiRemote:
+        return &midiRemotePanel_;
+    case Tab::Timeline:
+        break;
+    }
+    return &timelinePanel_;
+}
+
+// Plain Left/Right/Home/End walk the tabs that are offered, in the user's tab order, and stop at the
+// ends; Return hands focus to the selected tab's panel root. Everything else (Cmd+1/2/3 included)
+// is left for the app-wide shortcuts.
+bool BottomDockComponent::handleTabStripKey(const juce::KeyPress& key) {
+    if (key.getModifiers().isAnyModifierKeyDown())
+        return false;
+    std::vector<Tab> offered;
+    for (Tab t : tabOrder_)
+        if (isTabOfferedInStrip(t))
+            offered.push_back(t);
+    if (offered.empty())
+        return false;
+    const int current = (int)(std::find(offered.begin(), offered.end(), activeTab_) - offered.begin());
+    const int last = (int)offered.size() - 1;
+
+    if (key.isKeyCode(juce::KeyPress::leftKey))
+        selectTabAt(std::max(0, current - 1));
+    else if (key.isKeyCode(juce::KeyPress::rightKey))
+        selectTabAt(std::min(last, current + 1));
+    else if (key.isKeyCode(juce::KeyPress::homeKey))
+        selectTabAt(0);
+    else if (key.isKeyCode(juce::KeyPress::endKey))
+        selectTabAt(last);
+    else if (key.isKeyCode(juce::KeyPress::returnKey)) {
+        if (auto* panel = getActivePanelRoot()) {
+            if (panelFocusHook_)
+                panelFocusHook_(*panel);
+            else
+                panel->grabKeyboardFocus();
+        }
+    } else
+        return false;
+    return true;
+}
+
+void BottomDockComponent::selectTabAt(int offeredIndex) {
+    int index = 0;
+    for (Tab t : tabOrder_) {
+        if (!isTabOfferedInStrip(t))
+            continue;
+        if (index++ == offeredIndex) {
+            setActiveTab(t);
+            return;
+        }
+    }
+}
+
+void BottomDockComponent::paintTabFocusRing(juce::Graphics& g) {
+    if (!isTabOfferedInStrip(activeTab_) || liftedTab_.has_value())
+        return;
+    synth::ui::paintFocusRing(g, buttonForTab(activeTab_).getBounds().toFloat(), stripFocus_, 3.0f);
+}
 
 } // namespace synth::ui

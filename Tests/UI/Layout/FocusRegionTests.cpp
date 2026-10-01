@@ -278,9 +278,9 @@ private:
     std::optional<PersistedKeysGuard> guard_;
 };
 
-// The registry MainComponent builds must be exactly the six regions, in the
-// documented Tab-cycle order (Toolbar, Library, Canvas, Timeline, AI Panel, Mod Matrix).
-TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheEightDocumentedRegionsInOrder) {
+// The registry MainComponent builds must be exactly the nine regions, in the documented Tab-cycle order
+// (Toolbar, Library, Canvas, Dock tabs, Timeline, Mixer, Controllers, AI Panel, Mod Matrix).
+TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheNineDocumentedRegionsInOrder) {
     // The mixer panel joined as a 7th region, registered right after "timeline" -- the two
     // share one dock (one tab visible at a time), so it belongs next to the region it splits from,
     // not appended at the end (see MixerFocusRegionTests.cpp for the two regions' open predicates).
@@ -291,13 +291,14 @@ TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheEightDocumentedRegionsIn
     juce::StringArray ids;
     for (const auto& region : mc.getFocusRegionsForTest().getRegions())
         ids.add(region.id);
-    EXPECT_EQ(ids, juce::StringArray(
-                       {"toolbar", "library", "canvas", "timeline", "mixer", "midiRemote", "aiPanel", "modMatrix"}));
+    EXPECT_EQ(ids, juce::StringArray({"toolbar", "library", "canvas", "dockTabs", "timeline", "mixer", "midiRemote",
+                                      "aiPanel", "modMatrix"}));
 
     // Every region's root must actually be the live component it claims to wrap.
     auto& regs = mc.getFocusRegionsForTest();
     EXPECT_EQ(regs.findById("toolbar")->root, &mc.getToolbar());
     EXPECT_EQ(regs.findById("canvas")->root, &mc.getGraphEditor());
+    EXPECT_EQ(regs.findById("dockTabs")->root, &mc.getBottomDock().getTabStripFocus());
     EXPECT_EQ(regs.findById("timeline")->root, &mc.getTimelinePanel());
     EXPECT_EQ(regs.findById("mixer")->root, &mc.getBottomDock().getMixerPanel());
     EXPECT_EQ(regs.findById("midiRemote")->root, &mc.getBottomDock().getMidiRemotePanel());
@@ -354,10 +355,12 @@ TEST_F(FocusRegionMainComponentTest, TabCycleOnlyVisitsOpenRegionsAndWraps) {
     EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "toolbar") << "wraps forward, skipping the three closed ones";
     EXPECT_EQ(regs.nextOpenRegionId("toolbar", false), "canvas") << "wraps backward too";
 
-    // Opening the timeline (via the real command, not a fake) adds it at its registered position.
+    // Opening the timeline (via the real command, not a fake) adds the dock's tab strip and then the
+    // timeline panel at their registered positions.
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusTimeline, false));
     ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
-    EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "timeline");
+    EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "dockTabs");
+    EXPECT_EQ(regs.nextOpenRegionId("dockTabs", true), "timeline");
     EXPECT_EQ(regs.nextOpenRegionId("timeline", true), "toolbar") << "wraps back to the top";
 }
 

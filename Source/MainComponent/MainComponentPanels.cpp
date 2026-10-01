@@ -556,24 +556,7 @@ void MainComponent::applyToolbarIcons() {
     toggleAiPanelButton.setToggleState(isAiPanelVisible, juce::dontSendNotification);
     toggleBottomPanelButton.setToggleState(isBottomDockVisible, juce::dontSendNotification);
 
-    // Text: cleared in narrow mode; stateful for the toggles in wide mode.
-    newButton.setButtonText(iconOnly ? "" : "New");
-    saveButton.setButtonText(iconOnly ? "" : "Save");
-    loadButton.setButtonText(iconOnly ? "" : "Load");
-    settingsButton.setButtonText(iconOnly ? "" : "Settings");
-    undoButton.setButtonText(iconOnly ? "" : "Undo");
-    redoButton.setButtonText(iconOnly ? "" : "Redo");
-    autoArrangeButton.setButtonText(iconOnly ? "" : "Auto Arrange");
-    toggleModMatrixButton.setButtonText(iconOnly ? ""
-                                                 : (graphEditor.isModMatrixVisible() ? "Hide Matrix" : "Show Matrix"));
-    toggleMinimapButton.setButtonText(iconOnly ? ""
-                                               : (graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"));
-    toggleAiPanelButton.setButtonText(iconOnly ? "" : (isAiPanelVisible ? "Hide AI" : "Show AI"));
-    toggleBottomPanelButton.setButtonText(iconOnly ? "" : (isBottomDockVisible ? "Hide Panel" : "Show Panel"));
-    toggleLibraryButton.setButtonText(iconOnly ? "" : (isLibraryVisible ? "Hide Library" : "Show Library"));
-    themeToggleButton.setButtonText(
-        iconOnly ? ""
-                 : (themeManager != nullptr && themeManager->getActiveTheme().isDark ? "Light Mode" : "Dark Mode"));
+    applyToolbarLabels(iconOnly);
 
     // Tooltips remain available even in icon-only mode; include shortcut hints where applicable.
     auto hint = [&](const juce::String& base, const juce::String& action) {
@@ -817,8 +800,7 @@ void MainComponent::setLibraryVisible(bool v) {
     appProperties.getUserSettings()->setValue("librarySidebarVisible", v ? "1" : "0");
     appProperties.getUserSettings()->saveIfNeeded();
     // Refresh the toggle button's wide-mode label, toggled-pill state and tooltip.
-    if (!toolbarNarrowMode_)
-        toggleLibraryButton.setButtonText(v ? "Hide Library" : "Show Library");
+    applyToolbarLabels(toolbarNarrowMode_);
     toggleLibraryButton.setToggleState(v, juce::dontSendNotification);
     toggleLibraryButton.setTooltip(synth::ui::formatShortcutHint(
         v ? "Hide Library" : "Show Library",

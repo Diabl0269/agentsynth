@@ -1,5 +1,7 @@
 #include "StatusBarComponent.h"
+#include "UI/Layout/ReadOnlyTextValue.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <cmath>
 
 namespace {
 // Mute-button slot (matches resized()'s `getWidth() - kMuteSlotWidth` and the `padH` every text
@@ -30,6 +32,7 @@ constexpr int kTransportClusterWidth = kTransportButtonSize + kTransportTextGap 
 
 // ---------------------------------------------------------------------------
 StatusBarComponent::StatusBarComponent() {
+    setTitle("Status bar");
     addAndMakeVisible(masterMuteButton_);
 
     addAndMakeVisible(transportButton_);
@@ -78,9 +81,39 @@ void StatusBarComponent::updateTransport(bool playing, const juce::String& posit
 
     transportPlaying_ = playing;
     transportDisplayText_ = text;
+    transportPositionText_ = positionText;
+    transportBpm_ = bpm;
     transportButton_.setToggleState(playing, juce::dontSendNotification);
     ++transportRepaintCount_;
     repaint();
+}
+
+// ---------------------------------------------------------------------------
+// The painted text has no components for a screen reader to walk, so the bar speaks as one value built
+// from the same visibility rules paint() uses.
+juce::String StatusBarComponent::getAccessibilityText() const {
+    if (transientMessage_.isNotEmpty())
+        return transientMessage_;
+
+    juce::StringArray items;
+    items.add(formatPatch(patchName_));
+    items.add("CPU " + juce::String(juce::roundToInt(cpuPct_)) + "%");
+    if (isRoundTripSegmentVisible())
+        items.add(roundTripText_.endsWith("ms") ? roundTripText_ : "RT unavailable");
+    if (transportClusterFits_ && transportDisplayText_.isNotEmpty()) {
+        items.add("position " + transportPositionText_);
+        const bool wholeBpm = std::abs(transportBpm_ - std::round(transportBpm_)) < 0.05;
+        items.add((wholeBpm ? juce::String(juce::roundToInt(transportBpm_)) : juce::String(transportBpm_, 1)) + " BPM");
+    }
+    items.add(formatVoices(voices_));
+    return items.joinIntoString(", ");
+}
+
+std::unique_ptr<juce::AccessibilityHandler> StatusBarComponent::createAccessibilityHandler() {
+    return std::make_unique<juce::AccessibilityHandler>(
+        *this, juce::AccessibilityRole::group, juce::AccessibilityActions{},
+        juce::AccessibilityHandler::Interfaces{
+            std::make_unique<synth::ui::ReadOnlyTextValue>([this] { return getAccessibilityText(); })});
 }
 
 // ---------------------------------------------------------------------------
