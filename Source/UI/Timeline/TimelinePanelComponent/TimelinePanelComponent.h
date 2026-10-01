@@ -15,6 +15,7 @@
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
 #include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h"
+#include "UI/Timeline/TimelineRowLayout.h"
 #include "UI/Timeline/TimelineRulerComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"
@@ -408,6 +409,8 @@ public:
     // The Viewport's content component — a pixel-level test seam for what a track-reorder drag
     // paints. See createComponentSnapshot() at the call site.
     juce::Component& getTrackHeaderListForTest() noexcept { return trackHeaderList_; }
+    // Stand-in for automation sub-lane heights (per track index) until they exist.
+    void setTrackExtraHeightsForTest(std::vector<int> extraHeights);
     /** True from the first drag step of a track reorder until its drop has finished settling. */
     bool isTrackReorderActiveForTest() const noexcept { return trackReorder_.isReordering(); }
     /** The Esc key press a real track drag would receive from the window. */
@@ -685,9 +688,9 @@ private:
     juce::uint32 defaultMarkerColourArgb() const;
 
     // ---- Vertical track scroll/zoom (shared TimelineViewState::trackScrollY/rowHeightScale) ----
-    // The themed row height with the shared vertical-zoom factor applied -- see its definition in
-    // TimelinePanelLayout.cpp for why it duplicates TimelineClipLaneArea::getRowHeight.
-    int currentRowHeight() const;
+    // The clip lane's layout: the one row-geometry model both surfaces share.
+    TimelineRowLayout rowLayout() const { return clipLaneArea_.getRowLayout(); }
+    int currentRowHeight() const { return rowLayout().trackRowHeight(); }
     double maxTrackScrollPx() const;
     void scrollTrackRows(double deltaPx);
     // Mouse-wheel notch easing (axis 0 = beats, 1 = px); see UI/Layout/ScrollTween.h.

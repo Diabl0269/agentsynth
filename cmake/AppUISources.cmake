@@ -81,6 +81,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineTransportBar.h
     Source/UI/Timeline/TimelineTransportBar.cpp
     Source/UI/Timeline/TimelineTransportBarMidiLearn.cpp
+    Source/UI/Timeline/TimelineRowLayout.h
+    Source/UI/Timeline/TimelineRowLayout.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneInternal.h

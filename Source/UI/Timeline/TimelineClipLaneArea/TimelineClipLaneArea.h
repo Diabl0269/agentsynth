@@ -7,6 +7,7 @@
 #include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/RangeSelectionModel.h"
+#include "UI/Timeline/TimelineRowLayout.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <array>
 #include <cmath>
@@ -419,8 +420,11 @@ public:
     // ---- Pure geometry (no doc, no component state) — what GeometryMapsBeatsAndRows tests ----
     // The clip rect for a known view state / track row / beat span. `rowHeight` is passed in
     // rather than read from a theme so this stays callable with no LookAndFeel installed at all.
+    // Uniform-rows convenience wrapper over the layout overload below.
     static juce::Rectangle<int> computeClipRect(const TimelineViewState& viewState, int trackIndex, double startBeat,
                                                 double lengthBeats, int rowHeight);
+    static juce::Rectangle<int> computeClipRect(const TimelineViewState& viewState, const TimelineRowLayout& layout,
+                                                int trackIndex, double startBeat, double lengthBeats);
 
     // ---- Waveform bucket geometry — pure, no doc/component/LookAndFeel state ----
     // A half-open [firstBucket, firstBucket + bucketCount) range into `peaks.buckets` (bucket
@@ -439,8 +443,14 @@ public:
     static BucketRange bucketRangeForClip(const synth::PeaksFile::Data& peaks, double lengthBeats,
                                           double sourceStartSeconds, double bpm, double sampleRate);
 
-    // The row height this instance currently lays out at (themed, with a headless fallback).
+    // The clip-row height this instance currently lays out at (themed, with a headless fallback).
     int getRowHeight() const;
+
+    // THE row geometry for the current doc, theme and zoom (the panel's header column reads it too).
+    TimelineRowLayout getRowLayout() const;
+
+    // Extra height under each track's clip row (by track index); empty = uniform rows.
+    void setTrackExtraHeights(std::vector<int> extraHeights);
 
     // The live rect for a clip id, using its CURRENT doc geometry (never a mid-drag preview) —
     // what tests use to compute where to synthesize a mouse event. Returns an empty rect if the id
@@ -552,7 +562,7 @@ private:
     // The track row `pos.y` falls on, or nullopt when there is no doc or it is below the last row.
     std::optional<int> trackIndexAt(juce::Point<int> pos) const;
     // The row's full-width rect (the same y/height computeClipRect gives that row).
-    juce::Rectangle<int> rowBounds(int trackIndex, int rowHeight) const;
+    juce::Rectangle<int> rowBounds(const TimelineRowLayout& layout, int trackIndex) const;
 
     // ---- Authoring (double-click on empty lane space) ----
     // A clip on `track` at `startBeat`, as ONE recordTimelineChange, selected, then
@@ -593,7 +603,7 @@ private:
     void paintDragGhosts(juce::Graphics& g);
     // ONE dragged clip's ghost rect — the single geometry source shared with
     // getDragGhostRectsForTest().
-    juce::Rectangle<int> dragGhostRectFor(const DragOrigin& origin, int rowHeight) const;
+    juce::Rectangle<int> dragGhostRectFor(const TimelineRowLayout& layout, const DragOrigin& origin) const;
     void paintDrawGhost(juce::Graphics& g);
 
     // ---- Range tool gesture + painting ----
@@ -633,7 +643,7 @@ private:
     void endMarquee();
 
     void paintClip(juce::Graphics& g, const synth::Clip& clip, const synth::Track& track, int trackIndex,
-                   int rowHeight);
+                   const TimelineRowLayout& layout);
     void paintMarquee(juce::Graphics& g);
 
     // ---- Waveform + live-recording-strip painting ----
@@ -670,6 +680,7 @@ private:
     std::optional<juce::Rectangle<int>> keyboardMenuAnchor_;
     ClipSelectionModel& selection_;
     synth::TimelineDoc* doc_ = nullptr;
+    std::vector<int> trackExtraHeights_; // see setTrackExtraHeights
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;
     // Non-owning, may stay null (see setApplicationProperties). Read at use time, never cached.

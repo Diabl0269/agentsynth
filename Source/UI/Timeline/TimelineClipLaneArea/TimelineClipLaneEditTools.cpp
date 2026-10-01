@@ -324,7 +324,7 @@ std::optional<TimelineClipLaneArea::SplitPreview> TimelineClipLaneArea::getSplit
 juce::Rectangle<int> TimelineClipLaneArea::getDrawGhostRectForTest() const {
     if (dragMode_ != DragMode::Draw || !drawDragged_ || drawRow_ < 0)
         return {};
-    return computeClipRect(viewState_, drawRow_, drawAnchorBeat_, drawEndBeat_ - drawAnchorBeat_, getRowHeight());
+    return computeClipRect(viewState_, getRowLayout(), drawRow_, drawAnchorBeat_, drawEndBeat_ - drawAnchorBeat_);
 }
 
 //---- Inline rename ------------------------------------------------------------

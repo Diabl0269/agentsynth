@@ -29,7 +29,7 @@ float TimelinePanelComponent::trackPointerY(int screenY) const {
     return static_cast<float>(trackHeaderList_.getLocalPoint(nullptr, juce::Point<int>(0, screenY)).y);
 }
 
-// Slots are the rows' static positions (index times row height), not their current bounds, so a
+// Slots are the rows' static positions (their TimelineRowLayout spans), not their current bounds, so a
 // press during an earlier drop's settle still starts from the true layout.
 void TimelinePanelComponent::beginTrackDrag(synth::TrackId trackId, int screenY) {
     trackFrames_.stop();
@@ -38,7 +38,7 @@ void TimelinePanelComponent::beginTrackDrag(synth::TrackId trackId, int screenY)
     trackReorder_.cancel();
     liftedTrackId_ = {};
     reorderTrackIds_.clear();
-    const int rowHeight = currentRowHeight();
+    const auto layout = rowLayout();
     std::vector<ReorderDragAnimator::Slot> slots;
     int pressedKey = -1;
     for (int i = 0; i < trackHeaderList_.headers.size(); ++i) {
@@ -46,7 +46,8 @@ void TimelinePanelComponent::beginTrackDrag(synth::TrackId trackId, int screenY)
         if (id == trackId)
             pressedKey = i;
         reorderTrackIds_.push_back(id);
-        slots.push_back({static_cast<float>(i * rowHeight), static_cast<float>(rowHeight)});
+        const auto span = layout.trackSpan(i);
+        slots.push_back({static_cast<float>(span.getStart()), static_cast<float>(span.getLength())});
     }
     if (pressedKey < 0)
         return;
@@ -140,7 +141,7 @@ void TimelinePanelComponent::commitTrackDrag() {
     }
 
     std::vector<float> finalStarts;
-    const float rowHeight = static_cast<float>(currentRowHeight());
+    const auto layout = rowLayout();
     for (auto id : reorderTrackIds_) {
         int index = -1;
         for (int i = 0; i < trackHeaderList_.headers.size(); ++i)
@@ -150,7 +151,7 @@ void TimelinePanelComponent::commitTrackDrag() {
             trackReorder_.cancel();
             break;
         }
-        finalStarts.push_back(static_cast<float>(index) * rowHeight);
+        finalStarts.push_back(static_cast<float>(layout.trackTop(index)));
     }
     if (finalStarts.size() == reorderTrackIds_.size())
         trackReorder_.release(finalStarts);
@@ -202,12 +203,12 @@ void TimelinePanelComponent::discardTrackDrag() {
 // position); everything else sits at its static slot. Rows are matched to animator keys by track
 // id, so this stays right across the rebuild a drop causes.
 void TimelinePanelComponent::placeTrackHeaders() {
-    const int rowHeight = currentRowHeight();
+    const auto layout = rowLayout();
     const int width = std::max(0, trackHeaderViewport_.getMaximumVisibleWidth());
     const bool reordering = trackReorder_.isReordering();
     for (int i = 0; i < trackHeaderList_.headers.size(); ++i) {
         auto* header = trackHeaderList_.headers.getUnchecked(i);
-        int y = i * rowHeight;
+        int y = layout.trackTop(i);
         float lift = 0.0f;
         const int key = reordering ? indexOfTrack(reorderTrackIds_, header->getTrackId()) : -1;
         if (key >= 0) {
@@ -216,7 +217,7 @@ void TimelinePanelComponent::placeTrackHeaders() {
                 std::lround(isDragged ? trackReorder_.getDraggedStart() : trackReorder_.getLayoutStart(key)));
             lift = isDragged ? trackReorder_.getLift() : 0.0f;
         }
-        header->setBounds(0, y, width, rowHeight);
+        header->setBounds(0, y, width, layout.trackRowHeight());
         header->setLift(lift);
         if (lift > 0.0f)
             header->toFront(false);
