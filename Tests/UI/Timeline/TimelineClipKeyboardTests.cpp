@@ -335,3 +335,28 @@ TEST(TimelineClipKeyboardTest, EveryClipVerbIsRebindable) {
     f.panel.setShortcutManager(nullptr);
     f.lane().setShortcutManager(nullptr);
 }
+
+// Cmd+Shift+T and Tab leave keyboard focus on the panel root, not on a header; Right has to work
+// from there too. Real focus needs a native peer, so this calls the handler the panel's
+// keyPressed() runs when it holds focus.
+TEST(TimelineClipKeyboardTest, RightOnThePanelRootEntersTheFirstTrackWithClips) {
+    ClipKeyboardFixture f;
+    EXPECT_TRUE(f.panel.handleRootFocusKey(rightKey()));
+    EXPECT_EQ(f.lane().getKeyboardClip(), f.bass0);
+}
+
+TEST(TimelineClipKeyboardTest, RightOnThePanelRootEntersTheFocusedTracksClips) {
+    ClipKeyboardFixture f;
+    EXPECT_TRUE(f.panel.handleRootFocusKey(downKey())); // seeds row 0
+    EXPECT_TRUE(f.panel.handleRootFocusKey(downKey())); // row 1 (Empty)
+    EXPECT_TRUE(f.panel.handleRootFocusKey(downKey())); // row 2 (Lead)
+    EXPECT_TRUE(f.panel.handleRootFocusKey(rightKey()));
+    EXPECT_EQ(f.lane().getKeyboardClip(), f.lead2);
+}
+
+TEST(TimelineClipKeyboardTest, RootFocusIgnoresOtherKeys) {
+    ClipKeyboardFixture f;
+    EXPECT_FALSE(f.panel.handleRootFocusKey(leftKey()));
+    EXPECT_FALSE(f.panel.handleRootFocusKey(returnKey()));
+    EXPECT_FALSE(f.lane().getKeyboardClip().isValid());
+}

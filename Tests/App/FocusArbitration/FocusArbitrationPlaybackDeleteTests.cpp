@@ -182,3 +182,22 @@ TEST_F(FocusArbitrationTest, BareArrowKeyFallsThroughTheGlobalHandlerUntouched) 
                            juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0)})
         EXPECT_FALSE(mc.keyPressed(kp)) << ShortcutManager::keyPressToDisplayString(kp).toStdString();
 }
+
+// The clip keyboard keys are surface actions too: the global handler must not swallow them, and in
+// the real app's key path (focus on the timeline region root after Cmd+Shift+T) they reach the
+// panel, which is what enters the clips.
+TEST_F(FocusArbitrationTest, ClipKeyboardKeysFallThroughTheGlobalHandlerAndReachThePanel) {
+    MainComponent mc(std::make_unique<FocusMockProvider>());
+    auto& doc = mc.getTimelineDoc();
+    const auto track = doc.addTrack(synth::TrackKind::Midi, "Lead 1");
+    const auto clip = doc.addClip(track, 28.0, 4.0, "Lead");
+    ASSERT_TRUE(clip.isValid());
+
+    const juce::KeyPress right(juce::KeyPress::rightKey, juce::ModifierKeys::noModifiers, 0);
+    ASSERT_TRUE(mc.getShortcutManager().getActionsForKeyPress(right).contains("timelineClipNext"));
+    EXPECT_FALSE(mc.keyPressed(right)) << "the global handler leaves the key to the surface";
+
+    auto& panel = mc.getTimelinePanel();
+    EXPECT_TRUE(panel.handleRootFocusKey(right));
+    EXPECT_EQ(panel.getClipLaneArea().getKeyboardClip(), clip);
+}

@@ -479,7 +479,7 @@ header's Right, `TimelineTrackHeaderComponent::keyPressed`). See
 
 | Shortcut | Action |
 |----------|--------|
-| → (on a track header) | Next Clip (`timelineClipNext`) — enters that track's clips: the first clip starting at or after the playhead, else the track's first. Does nothing on a track with no clips |
+| → (on a track header or the Timeline region root) | Next Clip (`timelineClipNext`) — enters that track's clips: the first clip starting at or after the playhead, else the track's first. Does nothing on a track with no clips |
 | ← / → (in clip mode) | Previous Clip / Next Clip (`timelineClipPrevious` / `timelineClipNext`) — the neighbour on the same track; the first/last clip stays put |
 | ↑ / ↓ | Clip on Track Above / Below (`timelineClipAbove` / `timelineClipBelow`) — the clip nearest in start time on the closest track above/below that has clips (empty tracks are skipped; an exact tie goes to the earlier clip) |
 | Return | Open Clip in Editor (`timelineClipOpen`) — the same hook a double-click on the clip fires (the piano roll for a MIDI clip) |

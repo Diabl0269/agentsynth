@@ -52,17 +52,13 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
 
-    // Bare Down on the PANEL ROOT itself seeds keyboard focus into the track-header column.
-    // Cmd+Shift+T / Tab land here (docs/control/shortcuts.md's Focus regions section — every region root
-    // wants its own focus, deterministically), not on any row, so without this a keyboard-only user
-    // could never reach a track header at all. Scoped to REAL focus being on THIS exact component
-    // (never "focus is somewhere in the panel") so it can't steal an arrow key the clip lane or piano
-    // roll haven't claimed for themselves — those two still own every other keystroke that reaches
-    // this method by bubbling up from wherever real focus actually is.
-    if (key.isKeyCode(juce::KeyPress::downKey) && juce::Component::getCurrentlyFocusedComponent() == this) {
-        moveFocusedTrack(1);
+    // Cmd+Shift+T / Tab land on the panel ROOT, not on any row (docs/control/shortcuts.md's Focus
+    // regions section), so the keys that carry a keyboard-only user into the track headers and clips
+    // are claimed here. Scoped to REAL focus being on THIS exact component (never "focus is somewhere
+    // in the panel") so it can't steal a key the clip lane or piano roll haven't claimed for
+    // themselves -- those two still own every other keystroke that reaches this method by bubbling.
+    if (juce::Component::getCurrentlyFocusedComponent() == this && handleRootFocusKey(key))
         return true;
-    }
 
     // Number keys pick a tool, BEFORE the letter keys below.
     //

@@ -144,7 +144,7 @@ either falls through rather than eating the key.
 
 ## Clip keyboard mode
 
-A keyboard-only user reaches a clip through the track header: **Right** on a focused header
+A keyboard-only user reaches a clip through the track header: **Right** on a focused header (or on the panel root, where Cmd+Shift+T and Tab leave focus: it enters the focused track, else the first track with clips; `handleRootFocusKey`)
 (`timelineClipNext`) calls `TimelinePanelComponent::enterTrackClips`, which picks the first clip
 starting at or after the playhead (else the track's first), makes it the lane area's **keyboard
 clip** and grabs lane focus. A track with no clips ignores the key. Keys, defaults and the verbs

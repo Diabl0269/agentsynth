@@ -427,6 +427,7 @@ public:
     // (-1 = none) -- see TimelinePanelTrackHeaders.cpp for the full focus-movement contract.
     int getFocusedTrackIndexForTest() const noexcept { return focusedTrackIndex_; }
     bool selectAdjacentTrack(int direction);
+    bool handleRootFocusKey(const juce::KeyPress& key);
 
     /** Builds the "+ Track" menu WITHOUT showing it — openAddTrackMenu() calls this then shows the
      *  result async. The headless test seam for inspecting menu CONTENTS (item text, enabled state,

@@ -21,6 +21,26 @@ void TimelinePanelComponent::wireClipLaneCallbacks() {
     clipLaneArea_.onReturnToTrackHeaderRequested = [this](synth::TrackId id) { returnToTrackHeader(id); };
 }
 
+// Keys for the panel root holding focus. Down seeds the track-header column; the Next Clip key
+// enters the clips of the focused track, else of the first track that has any.
+bool TimelinePanelComponent::handleRootFocusKey(const juce::KeyPress& key) {
+    if (key.isKeyCode(juce::KeyPress::downKey)) {
+        moveFocusedTrack(1);
+        return true;
+    }
+    if (doc_ == nullptr || !matchesAction(key, "timelineClipNext",
+                                          juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::noModifiers, 0)))
+        return false;
+    const auto& tracks = doc_->getTracks();
+    if (juce::isPositiveAndBelow(focusedTrackIndex_, (int)tracks.size()))
+        return enterTrackClips(tracks[(std::size_t)focusedTrackIndex_].id);
+    for (const auto& track : tracks) {
+        if (!track.clips.empty())
+            return enterTrackClips(track.id);
+    }
+    return false;
+}
+
 // Right on a track header. False, doing nothing, for a track with no clips.
 // The playhead is the anchor, so entering a track lands where the user is listening; with no
 // transport it is beat 0 and the track's first clip is chosen.
