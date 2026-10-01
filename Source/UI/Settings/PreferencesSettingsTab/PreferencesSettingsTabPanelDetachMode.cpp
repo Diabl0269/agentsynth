@@ -28,6 +28,9 @@ void PreferencesSettingsTab::setupPanelDetachModeControls() {
     panelDetachModeLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(panelDetachModeCombo);
+    panelDetachModeCombo.setTitle("When a panel opens in its own window");
+    panelDetachModeCombo.setTooltip(
+        "Whether a panel opened in its own window leaves the main window or stays in both places.");
     panelDetachModeCombo.addItem("Move it there", kPanelDetachModeMoveComboId);
     panelDetachModeCombo.addItem("Show it in both places", kPanelDetachModeBothComboId);
     // setPanelDetachMode also re-persists the value it just read, harmless (idempotent) and keeps

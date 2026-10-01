@@ -7,6 +7,7 @@
 #include "FeedbackSettingsTab.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "ShortcutsSettingsTab.h"
+#include "UI/Layout/DialogKeyboard.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 //==============================================================================
@@ -25,6 +26,7 @@ public:
         providerLabel.setText("AI Provider:", juce::dontSendNotification);
 
         addAndMakeVisible(providerCombo);
+        providerCombo.setTitle("AI provider");
         // Hosted mode sends the prompt and current patch off this machine to Agent Synth's
         // servers; local (Ollama) mode never leaves it. See also the same disclosure next to the
         // model picker in AIChatComponent, which most users see far more often than this dialog.
@@ -65,6 +67,10 @@ public:
 
         addAndMakeVisible(hostLabel);
         addAndMakeVisible(hostEditor);
+        hostEditor.setTitle("AI provider host");
+        hostEditor.setTooltip("Address of the AI provider's server. Press Return to apply.");
+        synth::ui::removeHiddenTabStops(hostEditor);
+        synth::ui::bubbleEscapeToParents(hostEditor);
         {
             const auto* initialDescriptor = selectedDescriptor();
             hostEditor.setText(appProperties.getUserSettings()->getValue(hostSettingsKeyFor(initialDescriptor),
@@ -84,6 +90,7 @@ public:
         historyRetentionLabel.setText("Local History:", juce::dontSendNotification);
 
         addAndMakeVisible(historyRetentionCombo);
+        historyRetentionCombo.setTitle("Local history retention");
         historyRetentionCombo.setTooltip("How long AI chat history stays on this device. Independent of "
                                          "cloud sync, which subscribers get automatically.");
         historyRetentionCombo.addItem("30 days", kRetention30Id);
@@ -110,6 +117,7 @@ public:
         requestTimeoutLabel.setText("Request Timeout:", juce::dontSendNotification);
 
         addAndMakeVisible(requestTimeoutCombo);
+        requestTimeoutCombo.setTitle("Request timeout");
         requestTimeoutCombo.setTooltip("How long to wait for an AI response before cancelling it. Local "
                                        "(Ollama) models on modest hardware can legitimately take several "
                                        "minutes.");
@@ -231,7 +239,10 @@ private:
         const bool signedIn =
             accountService != nullptr && accountService->getSnapshot().state == synth::AccountState::SignedIn;
         promptLearningToggle.setEnabled(signedIn);
-        promptLearningToggle.setTooltip(signedIn ? juce::String() : juce::String("Sign in required"));
+        promptLearningToggle.setTooltip(signedIn
+                                            ? juce::String("Share your hosted-mode prompts with us for product "
+                                                           "learning. Human review only; never used to train models.")
+                                            : juce::String("Sign in required"));
         promptLearningToggle.setToggleState(signedIn && accountService->getSnapshot().promptLearningOptIn,
                                             juce::dontSendNotification);
     }
@@ -410,6 +421,19 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     tabs.addTab("Feedback", juce::Colours::transparentBlack, feedbackSettingsTab, true);
 
     addAndMakeVisible(tabs);
+    // JUCE makes the tab strip a keyboard focus container its buttons never leave, and keeps them out
+    // of the Tab order: make it plain, so Tab visits the tabs and then the selected tab's controls.
+    tabs.getTabbedButtonBar().setFocusContainerType(juce::Component::FocusContainerType::none);
+    for (int i = 0; i < tabs.getNumTabs(); ++i) {
+        // A tab's content is not a Tab stop of its own: its controls are, and an unnamed stop between
+        // the tab button and the first control is one key press nobody can explain.
+        if (auto* content = tabs.getTabContentComponent(i))
+            content->setWantsKeyboardFocus(false);
+        if (auto* tabButton = tabs.getTabbedButtonBar().getTabButton(i)) {
+            tabButton->setWantsKeyboardFocus(true); // Tab reaches the tab strip; Space or Return opens a tab
+            tabButton->setTooltip("Show the " + tabs.getTabNames()[i] + " settings");
+        }
+    }
 
     // Restore last selected tab — unless the caller asked for a specific tab by name (e.g. the
     // toolbar's feedback button opening Settings pre-selected to "Feedback"), in which case that
@@ -426,15 +450,35 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     tabs.setCurrentTabIndex(initialIndex, false);
 
     themeManager.addChangeListener(this);
+    juce::Desktop::getInstance().addFocusChangeListener(this);
 }
 
 SettingsWindow::~SettingsWindow() {
+    juce::Desktop::getInstance().removeFocusChangeListener(this);
     themeManager.removeChangeListener(this);
     appProperties.getUserSettings()->setValue("settingsTab", tabs.getCurrentTabIndex());
     appProperties.saveIfNeeded();
 }
 
 void SettingsWindow::resized() { tabs.setBounds(getLocalBounds()); }
+
+bool SettingsWindow::keyPressed(const juce::KeyPress& key) {
+    if (key != juce::KeyPress::escapeKey)
+        return false;
+    if (onRequestClose)
+        onRequestClose();
+    else
+        synth::ui::closeHostingWindow(*this);
+    return true;
+}
+
+bool SettingsWindow::redirectWindowFocusToTabStrip(juce::Component* focused) {
+    auto* window = getTopLevelComponent();
+    if (focused == nullptr || focused != window || window == this || !window->isVisible())
+        return false;
+    focusCurrentTab();
+    return true;
+}
 
 void SettingsWindow::changeListenerCallback(juce::ChangeBroadcaster* /*source*/) {
     sendLookAndFeelChange();

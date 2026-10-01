@@ -76,22 +76,6 @@ GraphEditor::SmartConnectionMode modeFromComboId(int id) {
 
 PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& props)
     : appProperties(props) {
-    // Without this, searchField below — a juce::TextEditor, and the first
-    // focus-wanting descendant in this tab — auto-grabs keyboard focus the moment the Settings
-    // DialogWindow's peer first gains OS focus. ComponentPeer::handleFocusGain() calls
-    // grabKeyboardFocus() on the window's root component whenever a brand-new peer is shown with
-    // nothing previously focused; since PreferencesSettingsTab itself didn't want focus, that call
-    // fell through to KeyboardFocusTraverser::getDefaultComponent(), which returns the first
-    // wants-focus child it finds in traversal order — searchField, purely because it happens to be
-    // the first text field added. Declaring the TAB ITSELF as a focus target intercepts that
-    // traversal one level up: takeKeyboardFocus() short-circuits onto the first component that
-    // wants focus without descending further, so the tab (inert, no visible caret) absorbs the
-    // opening grab instead of the search field. Exact same fix, same reason, as
-    // ShortcutsSettingsTab's own setWantsKeyboardFocus(true) for its sibling search box — see that
-    // constructor. Does NOT affect clicking directly into the field: TextEditor's own
-    // wantsKeyboardFocus is untouched, so a click still focuses it normally.
-    setWantsKeyboardFocus(true);
-
     addAndMakeVisible(titleLabel);
     titleLabel.setText("Preferences", juce::dontSendNotification);
     titleLabel.setFont(juce::Font(juce::FontOptions(18.0f, juce::Font::bold)));
@@ -107,6 +91,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     searchField.setIndents(6, 0);
     searchField.setFont(juce::Font(juce::FontOptions(13.0f)));
     searchField.setTextToShowWhenEmpty("Filter preferences...", findColour(juce::Label::textColourId).withAlpha(0.5f));
+    searchField.setTitle("Filter preferences");
     searchField.setTooltip("Filters the rows below by name or description as you type.");
     searchField.onTextChange = [this] { applySearchFilter(searchField.getText()); };
     searchField.onEscapeKey = [this] {
@@ -125,12 +110,14 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     addAndMakeVisible(contentViewport);
     contentViewport.setViewedComponent(&contentHost, false);
     contentViewport.setScrollBarsShown(true, false);
+    contentViewport.setWantsKeyboardFocus(false);
 
     contentHost.addAndMakeVisible(smartConnectionLabel);
     smartConnectionLabel.setText("Smart connections:", juce::dontSendNotification);
     smartConnectionLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(smartConnectionCombo);
+    smartConnectionCombo.setTitle("Smart connections");
     smartConnectionCombo.addItem("Off", 1);
     smartConnectionCombo.addItem("New modules only", 2);
     smartConnectionCombo.addItem("When main I/O is free", 3);
@@ -189,6 +176,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     macroAutoPortLabel_.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(macroAutoPortCombo_);
+    macroAutoPortCombo_.setTitle("Macro auto-ports");
     macroAutoPortCombo_.addItem("Always ask", 1);
     macroAutoPortCombo_.addItem("Auto-create ports", 2);
     macroAutoPortCombo_.addItem("Leave cables as is", 3);
@@ -309,6 +297,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     autosaveIntervalLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(autosaveIntervalEditor);
+    autosaveIntervalEditor.setTitle("Autosave interval in minutes");
     autosaveIntervalEditor.setMultiLine(false);
     autosaveIntervalEditor.setReturnKeyStartsNewLine(false);
     autosaveIntervalEditor.setSelectAllWhenFocused(true);
@@ -341,6 +330,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     autosaveBackupCountLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(autosaveBackupCountEditor);
+    autosaveBackupCountEditor.setTitle("Autosave backups to keep");
     autosaveBackupCountEditor.setMultiLine(false);
     autosaveBackupCountEditor.setReturnKeyStartsNewLine(false);
     autosaveBackupCountEditor.setSelectAllWhenFocused(true);

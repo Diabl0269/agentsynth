@@ -12,20 +12,13 @@ TEST_F(PreferencesSettingsTabTest, PaintDoesNotCrash) {
     EXPECT_NO_THROW(tab.resized());
 }
 
-// ---- The search field must not auto-grab focus on open ----------------------------------------
+// ---- The tab is not a Tab stop of its own ------------------------------------------------------
 //
-// The actual bug (searchField stealing OS keyboard focus the instant the Settings DialogWindow's
-// peer is first shown) needs a real ComponentPeer — juce::Component::grabKeyboardFocus() is a
-// documented no-op without one (see TimelineClipLaneArea.cpp's identical caveat), and nothing in
-// this suite calls addToDesktop(). So this pins the code-level fix instead of the runtime
-// behaviour it prevents: the tab itself wants keyboard focus (matching
-// ShortcutsSettingsTab's identical fix for its own sibling search box), which is what makes it —
-// not the search field — the target the very first, unsolicited focus grab lands on.
-TEST_F(PreferencesSettingsTabTest, TabItselfWantsKeyboardFocusSoItInterceptsTheOpeningFocusGrab) {
+// The Settings window puts keyboard focus on its tab strip when it opens, so the tab itself must not
+// want focus: it would be an unnamed stop between the tab button and the first control.
+TEST_F(PreferencesSettingsTabTest, TabItselfIsNotAKeyboardFocusStop) {
     PreferencesSettingsTab tab(appProperties);
-    EXPECT_TRUE(tab.getWantsKeyboardFocus())
-        << "without this, the search field is the first focus-wanting descendant and silently "
-           "steals keyboard focus the moment the Settings window is first shown";
+    EXPECT_FALSE(tab.getWantsKeyboardFocus());
 }
 
 // An untouched filter shows exactly the selected category's rows (the Graph category on open) — the

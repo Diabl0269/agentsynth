@@ -10,8 +10,26 @@ namespace synth::ui {
 // A juce::Slider whose text box accepts a value past the drag range instead of silently clamping
 // it away: typing a tail longer than the slider currently spans grows the range to fit. Dragging
 // still tops out at whatever the last-grown maximum is - only the text box can extend it further.
+//
+// Keyboard: the slider itself is a Tab stop (arrow keys, Home and End move it), and so is its editable
+// value box, which keeps typing a value reachable; call nameValueBox() after setTitle() to name that box.
 class ExpandingRangeSlider : public juce::Slider {
 public:
+    ExpandingRangeSlider() { setWantsKeyboardFocus(true); }
+
+    // Titles the value box "<slider title> value". Re-applied whenever the look and feel changes,
+    // because the slider rebuilds its value box then.
+    void nameValueBox() {
+        for (auto* child : getChildren())
+            if (auto* box = dynamic_cast<juce::Label*>(child))
+                box->setTitle(getTitle() + " value");
+    }
+
+    void lookAndFeelChanged() override {
+        juce::Slider::lookAndFeelChanged();
+        nameValueBox();
+    }
+
     double getValueFromText(const juce::String& text) override {
         const double typed = text.retainCharacters("0123456789.-").getDoubleValue();
         if (typed > getMaximum())
@@ -65,6 +83,7 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    // Return presses Export on the options page and does nothing on the progress page.
     // Escape triggers whichever cancel/close action the
     // currently-visible page shows (onRequestClose on the options page, onCancelRender on the
     // progress page — NOT onRequestClose there, since that would just hide the window while a
@@ -129,6 +148,10 @@ private:
     // The one place Escape (from keyPressed() above, or fileNameEditor_'s own onEscapeKey) routes
     // to — page-aware, per the keyPressed() comment.
     void handleEscapeRequested();
+    // Return presses Export while the options page shows and Export is enabled.
+    void handleReturnRequested();
+    // Screen-reader names and tooltips for every control that has no visible text of its own.
+    void nameControlsForAccessibility();
     BounceFormat selectedFormat() const;
     void updateBitDepthChoicesForFormat();
     void updateFormatDependentRows();

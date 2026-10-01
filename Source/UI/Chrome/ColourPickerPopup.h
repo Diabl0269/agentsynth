@@ -1,5 +1,7 @@
 #pragma once
 
+#include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <functional>
@@ -16,6 +18,10 @@
 // (AppearanceSettingsTab). Modeled on AppearanceSettingsTab::openCableColourPicker's existing
 // CallOutBox pattern, generalised into its own component so both callers share one popup rather
 // than two near-identical ad hoc ColourSelectors.
+//
+// Keyboard: Tab visits the colour sliders, the hex field, the add-to-favourites star and each
+// favourite swatch (Space or Return applies it); Escape puts the colour back to what it was when
+// the popup opened and closes the popup.
 //
 // Favourites persist across sessions via a caller-owned juce::PropertiesFile (nullptr means
 // "in-memory only for this popup instance", which is what keeps this class usable from a headless
@@ -108,16 +114,19 @@ public:
         , favourites_(loadFavouriteColours(props))
         , onPreview_(std::move(onPreview))
         , onCommit_(std::move(onCommit))
-        , lastColour_(initial) {
+        , lastColour_(initial)
+        , initial_(initial) {
         setComponentID("colourPickerPopup");
 
         addAndMakeVisible(selector_);
         selector_.setCurrentColour(initial, juce::dontSendNotification);
         selector_.addChangeListener(this);
+        nameSelectorSliders();
 
         addAndMakeVisible(addFavouriteButton_);
         addFavouriteButton_.setComponentID("colourPickerAddFavourite");
         addFavouriteButton_.setButtonText(juce::CharPointer_UTF8("\xE2\x98\x85")); // filled star
+        addFavouriteButton_.setTitle("Add to favourites");
         addFavouriteButton_.setTooltip("Add the current colour to favourites");
         addFavouriteButton_.onClick = [this] {
             addFavourite(favourites_, lastColour_);
@@ -135,6 +144,16 @@ public:
                       // is the ONE close event — fire the deferred commit here if it never fired.
     }
 
+    // The sliders rebuild their value boxes when the look and feel changes (as it does on first
+    // being parented), after this runs, so the names are applied again once that has settled.
+    void lookAndFeelChanged() override {
+        juce::Component::SafePointer<ColourPickerPopup> safeThis(this);
+        juce::MessageManager::callAsync([safeThis] {
+            if (safeThis != nullptr)
+                safeThis->nameSelectorSliders();
+        });
+    }
+
     void resized() override {
         auto bounds = getLocalBounds();
         selector_.setBounds(bounds.removeFromTop(bounds.getHeight() - kFavouritesAreaHeight));
@@ -142,6 +161,17 @@ public:
         auto favArea = bounds;
         addFavouriteButton_.setBounds(favArea.removeFromLeft(kSwatchSize).reduced(2));
         layoutFavouriteButtons(favArea);
+    }
+
+    bool keyPressed(const juce::KeyPress& key) override {
+        if (key != juce::KeyPress::escapeKey)
+            return false;
+        // Cancel: put the colour back (the live preview and the commit both see the original),
+        // then close the callout.
+        selector_.setCurrentColour(initial_, juce::dontSendNotification);
+        previewNow(initial_);
+        synth::ui::closeHostingWindow(*this);
+        return true;
     }
 
     // ---- Test seams (no CallOutBox involved) -----------------------------------------------
@@ -201,6 +231,24 @@ private:
     static constexpr int kSwatchSize = 28;
     static constexpr int kFavouritesAreaHeight = 40;
 
+    // The selector's own sliders carry only a lower-case component name: give each a screen-reader
+    // title and a tooltip, and its editable value box (the Tab stop, since the slider itself takes no
+    // focus) a title too.
+    void nameSelectorSliders() {
+        for (auto* child : selector_.getChildren()) {
+            if (auto* slider = dynamic_cast<juce::Slider*>(child)) {
+                const auto channel = slider->getName().substring(0, 1).toUpperCase() + slider->getName().substring(1);
+                slider->setTitle(channel);
+                slider->setTooltip(channel + " amount of the colour, 0 to 255");
+                for (auto* part : slider->getChildren())
+                    if (auto* valueBox = dynamic_cast<juce::Label*>(part)) {
+                        valueBox->setTitle(channel + " value");
+                        valueBox->setTooltip(channel + " amount of the colour, 0 to 255");
+                    }
+            }
+        }
+    }
+
     void changeListenerCallback(juce::ChangeBroadcaster* source) override {
         if (source != &selector_)
             return;
@@ -244,6 +292,8 @@ private:
         for (int i = 0; i < (int)favourites_.size(); ++i) {
             const juce::Colour colour = favourites_[(size_t)i];
             auto button = std::make_unique<FavouriteSwatchButton>(colour);
+            button->setTitle("Favourite colour " + colour.toDisplayString(false));
+            button->setTooltip("Use this colour (right-click to remove it from favourites)");
             button->onClick = [this, colour] {
                 lastColour_ = colour;
                 selector_.setCurrentColour(colour, juce::dontSendNotification);
@@ -288,6 +338,7 @@ private:
             g.fillRoundedRectangle(bounds, 3.0f);
             g.setColour(juce::Colours::black.withAlpha(0.4f));
             g.drawRoundedRectangle(bounds, 3.0f, 1.0f);
+            synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);
         }
 
         void mouseDown(const juce::MouseEvent& e) override {
@@ -309,6 +360,7 @@ private:
     std::function<void(juce::Colour)> onPreview_;
     std::function<void(juce::Colour)> onCommit_;
     juce::Colour lastColour_;
+    juce::Colour initial_; // what the popup opened with: Escape restores it
     bool committed_ = false;
 
     juce::ColourSelector selector_{juce::ColourSelector::showColourAtTop | juce::ColourSelector::showSliders |

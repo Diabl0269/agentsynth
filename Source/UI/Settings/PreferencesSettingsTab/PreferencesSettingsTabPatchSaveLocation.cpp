@@ -82,6 +82,7 @@ void PreferencesSettingsTab::setupPatchSaveLocationControls() {
     patchSaveLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(patchSaveCombo);
+    patchSaveCombo.setTitle("Patch save location");
     patchSaveCombo.addItem("With each project", static_cast<int>(synth::PatchSaveMode::PerProject) + 1);
     patchSaveCombo.addItem("One shared patches folder", static_cast<int>(synth::PatchSaveMode::Global) + 1);
     patchSaveCombo.addItem("A folder I choose", static_cast<int>(synth::PatchSaveMode::Custom) + 1);

@@ -22,13 +22,21 @@ inline constexpr AccessibilityBaselineEntry kAccessibilityBaseline[] = {
     {"MainComponent", 11, 6},
     {"PianoRoll", 0, 0},
     {"ModuleCards", 202, 248},
-    {"ExportAudioDialog", 6, 10},
-    {"Settings/Audio", 5, 5}, // Windows adds the audio driver-type drop-down; macOS/Linux read 4/4
-    {"Settings/AI", 4, 0},
-    {"Settings/Keyboard Shortcuts", 20, 0},
-    {"Settings/Preferences", 5, 0},
-    {"Settings/Appearance", 7, 11},
-    {"Settings/Feedback", 2, 2},
+    {"ExportAudioDialog", 0, 0},
+    {"Settings/Audio", 0, 0}, // Windows adds the audio driver-type drop-down; it is named from its caption too
+    {"Settings/AI", 0, 0},
+    {"Settings/Keyboard Shortcuts", 0, 0},
+    {"Settings/Preferences", 0, 0},
+    {"Settings/Appearance", 0, 0},
+    {"Settings/Feedback", 0, 0},
+    {"DualIOPerModulePopup", 0, 0},
+    {"SignInDialog", 0, 0},
+    {"MacroPortConfigDialog", 0, 0},
+    {"MacroAutoPortPromptDialog", 0, 0},
+    {"EQWindow", 0, 0},
+    {"WelcomeScreen", 0, 0},
+    {"ColourPickerPopup", 0, 0},
+    {"ModuleLibraryHelpPopup", 0, 0},
 };
 // clang-format on
 

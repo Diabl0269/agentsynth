@@ -235,11 +235,13 @@ the sidebar reflows, since a window resize is the other way this class of bug re
 The header itself is structurally safe either way: `TopBar` is a plain sibling of `viewport_`, laid
 out first in `resized()`, so it can never be clipped into the scrollable area.
 
-The pin icon has a hover state (an accent-tinted highlight behind the glyph, mirroring the sidebar's
-own "?" button treatment) and a tooltip ("Pin - keep open while you work") via
-`juce::SettableTooltipClient`, resolved dynamically per hovered icon the same way
-`ModuleLibraryComponent::mouseMove` resolves its per-row tooltip. The close (X) gets the same hover
-treatment and a plain "Close" tooltip. The header's title reads simply "Help".
+The pin and close icons are real buttons (`TopBar::IconButton`), so Tab reaches them and Space or
+Return presses them; each draws the accent focus ring. The pin icon has a hover state (an
+accent-tinted highlight behind the glyph, mirroring the sidebar's own "?" button treatment) and a
+tooltip ("Pin - keep open while you work"); it is a toggle named "Pin help" / "Unpin help" for a screen
+reader. The close (X) gets the same hover treatment and a "Close (Esc)" tooltip. The three section
+headers are buttons too (toggle state = expanded), so the whole popover is Tab-reachable, and Escape
+closes it. The header's title reads simply "Help".
 
 **Opening the popover is split across two `protected virtual` leaves**, the same seam idiom
 [cables](cables.md) and `TimelineRulerComponent::openMarkerContextMenu` use for any real popup or

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/DialogKeyboard.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <optional>
@@ -20,9 +21,11 @@
 // the timeline and piano-roll surfaces became rebindable, and a flat list that long is unusable —
 // so rows are grouped into one collapsible section per ShortcutCategory, with a search field above
 // them. The idioms are lifted from ModuleLibraryComponent (docs/layout/module-library.md) on purpose, so the
-// two collapsible lists in the app behave identically: clickable header rows with a chevron, a
+// two collapsible lists in the app behave identically: header rows with a chevron, a
 // collapsed-set keyed by the header's name, and a top strip whose label flips between
-// "COLLAPSE ALL" and "EXPAND ALL".
+// "COLLAPSE ALL" and "EXPAND ALL". Headers, the strip and every rebind button are real buttons,
+// so Tab visits them top to bottom and Space/Return act on them; while a row listens for its new
+// key, that row's button keeps focus and takes every key, Escape cancelling.
 //
 // Two things it deliberately does NOT copy from the library sidebar:
 //   - No fold ANIMATION. The library's accordion is a VBlank-driven AnimationDriver over a
@@ -50,9 +53,6 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
     bool keyPressed(const juce::KeyPress& key) override;
-    void mouseDown(const juce::MouseEvent& e) override;
-    void mouseMove(const juce::MouseEvent& e) override;
-    void mouseExit(const juce::MouseEvent& e) override;
 
     // -------------------------------------------------------------------------
     // Pure decision helpers — no component state, callable headlessly
@@ -147,9 +147,9 @@ private:
     void refreshBindingLabels();
 
     /** Recomputes which rows/headers are on screen and where, then applies the bounds and the
-     *  visibility. THE single layout pass: painting (headers, dividers), hit-testing (header
-     *  clicks) and the child bounds all read `layout`, so they cannot disagree about where a row is
-     *  — the same "one enumeration" rule ModuleLibraryComponent::buildRows follows. */
+     *  visibility. THE single layout pass: the header buttons, the rows and the empty-state text
+     *  all read `layout`, so they cannot disagree about where a row is — the same "one
+     *  enumeration" rule ModuleLibraryComponent::buildRows follows. */
     void rebuildLayout();
 
     // One entry per thing on screen, top to bottom, in CONTENT (scrolled) coordinates.
@@ -161,31 +161,55 @@ private:
         bool isHeader = false;
     };
 
-    /** The scrolled content: a bare host whose paint/mouse handlers delegate straight back to the
-     *  tab, so the section chrome is drawn (and clicked) in the same coordinate space the rows are
-     *  laid out in. */
+    /** The scrolled content: a bare host whose paint delegates straight back to the tab, so the
+     *  rules and the empty-state text are drawn in the same coordinate space the rows are laid out
+     *  in. */
     struct RowsHost : juce::Component {
         explicit RowsHost(ShortcutsSettingsTab& o)
             : owner(o) {
             setMouseClickGrabsKeyboardFocus(false);
         }
         void paint(juce::Graphics& g) override { owner.paintRows(g); }
-        void mouseDown(const juce::MouseEvent& e) override { owner.rowsMouseDown(e); }
-        void mouseMove(const juce::MouseEvent& e) override { owner.rowsMouseMove(e); }
-        void mouseExit(const juce::MouseEvent&) override { owner.rowsMouseExit(); }
         ShortcutsSettingsTab& owner;
     };
 
+    /** A section header: a real button, so Tab reaches it and Space/Return fold the section. */
+    class HeaderButton : public juce::Button {
+    public:
+        explicit HeaderButton(ShortcutCategory c);
+        void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
+        void setCollapsed(bool isCollapsed);
+
+    private:
+        bool collapsed_ = false;
+    };
+
+    /** The pinned "COLLAPSE ALL" / "EXPAND ALL" strip above the rows. */
+    class StripButton : public juce::Button {
+    public:
+        StripButton()
+            : juce::Button("Collapse all") {}
+        void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
+    };
+
+    /** A rebind button. While its row is listening it hands every key to the tab, so any key
+     *  (Space and Return included) becomes the new binding rather than pressing the button. */
+    class RebindButton : public juce::TextButton {
+    public:
+        std::function<bool(const juce::KeyPress&)> onKey;
+        std::function<void()> onFocusLost;
+        bool keyPressed(const juce::KeyPress& key) override {
+            return (onKey && onKey(key)) || juce::TextButton::keyPressed(key);
+        }
+        void focusLost(FocusChangeType type) override {
+            juce::TextButton::focusLost(type);
+            if (onFocusLost)
+                onFocusLost();
+        }
+    };
+
     void paintRows(juce::Graphics& g);
-    void rowsMouseDown(const juce::MouseEvent& e);
-    void rowsMouseMove(const juce::MouseEvent& e);
-    void rowsMouseExit();
-
-    /** Header bounds of the section at content-space y, or nullopt — the header hit test. */
-    std::optional<ShortcutCategory> sectionHeaderAt(juce::Point<int> contentPos) const;
-
-    /** True when `tabPos` falls inside the pinned collapse-all strip (tab coordinates). */
-    bool isInTopStrip(juce::Point<int> tabPos) const { return topStripBounds.contains(tabPos); }
+    HeaderButton& headerButtonFor(ShortcutCategory category);
 
     ShortcutManager& shortcutManager;
 
@@ -193,7 +217,9 @@ private:
     juce::TextEditor searchEditor;
     juce::StringArray actionIds;
     std::vector<std::unique_ptr<juce::Label>> descLabels;
-    std::vector<std::unique_ptr<juce::TextButton>> bindButtons;
+    std::vector<std::unique_ptr<RebindButton>> bindButtons;
+    std::vector<std::unique_ptr<HeaderButton>> headerButtons; // in ShortcutManager::getCategoryOrder() order
+    StripButton collapseAllButton;
     juce::TextButton resetButton;
     juce::TextButton exportButton;
     juce::TextButton importButton;
@@ -203,15 +229,10 @@ private:
     juce::Viewport rowsViewport;
     RowsHost rowsHost{*this};
     std::vector<LayoutEntry> layout;
-    // Set by resized(); the collapse-all strip is painted and hit-tested from it, so the two can
-    // never drift apart.
+    // Set by resized(): where the collapse-all strip button sits.
     juce::Rectangle<int> topStripBounds;
+    synth::ui::ScrollIntoViewOnFocus followFocus_{rowsViewport};
     // Keyed by category, exactly as ModuleLibraryComponent keys its own set by header name.
     std::set<ShortcutCategory> collapsedSections;
-    // Hover feedback, repainted only on a change (never per mouse-move) — the header the pointer is
-    // over, and the collapse-all strip.
-    std::optional<ShortcutCategory> hoveredHeader;
-    bool topStripHovered = false;
-
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutsSettingsTab)
 };

@@ -1,5 +1,6 @@
 #include "MacroPortConfigDialog.h"
 #include "MacroPortConfigDialogInternal.h"
+#include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -62,6 +63,8 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     newDirectionBox_.addItem("Input", kDirectionInputId);
     newDirectionBox_.addItem("Output", kDirectionOutputId);
     newDirectionBox_.setSelectedId(kDirectionInputId, juce::dontSendNotification);
+    newDirectionBox_.setTitle("New port direction");
+    newDirectionBox_.setTooltip("Whether the new port is an input or an output");
     addAndMakeVisible(newDirectionBox_);
 
     newKindBox_.addItem("Audio / CV", kKindAudioCVId);
@@ -71,11 +74,15 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
         newShapeBox_.setVisible(newKindBox_.getSelectedId() != kKindMidiId);
         updateNewPortVoicesVisibility();
     };
+    newKindBox_.setTitle("New port kind");
+    newKindBox_.setTooltip("Audio / CV, or MIDI");
     addAndMakeVisible(newKindBox_);
 
     populateShapeBox(newShapeBox_);
     newShapeBox_.setSelectedId(kShapeMonoId, juce::dontSendNotification);
     newShapeBox_.onChange = [this] { updateNewPortVoicesVisibility(); };
+    newShapeBox_.setTitle("New port shape");
+    newShapeBox_.setTooltip("Mono, stereo or poly");
     addAndMakeVisible(newShapeBox_);
 
     newVoicesLabel_.setJustificationType(juce::Justification::centredRight);
@@ -87,6 +94,9 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     newVoicesEditor_.setJustification(juce::Justification::centred);
     newVoicesEditor_.onReturnKey = [this] { triggerAddPortForTest(); }; // same as newNameEditor_
     newVoicesEditor_.onEscapeKey = [this] { escapePressed(); };
+    newVoicesEditor_.setTitle("New port voice count");
+    newVoicesEditor_.setTooltip("Number of voices of the new poly port");
+    removeHiddenTabStops(newVoicesEditor_);
     addAndMakeVisible(newVoicesEditor_);
     updateNewPortVoicesVisibility(); // Mono is the default shape: starts hidden
 
@@ -97,17 +107,23 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     newNameEditor_.onEscapeKey = [this] { // same "Escape closes the whole modal" decision as elsewhere
         escapePressed();
     };
+    newNameEditor_.setTitle("New port name");
+    newNameEditor_.setTooltip("Name of the new port. Press Return to add it.");
+    removeHiddenTabStops(newNameEditor_);
     addAndMakeVisible(newNameEditor_);
 
+    addButton_.setTooltip("Add the port (Return in the name field)");
     addButton_.onClick = [this] { triggerAddPortForTest(); };
     addAndMakeVisible(addButton_);
 
+    closeButton_.setTooltip("Close this window and keep every change (Esc)");
     closeButton_.onClick = [this] { requestClose(); };
     addAndMakeVisible(closeButton_);
 
     addAndMakeVisible(rowsViewport_);
     rowsViewport_.setViewedComponent(&rowsContent_, false);
     rowsViewport_.setScrollBarsShown(true, false);
+    rowsViewport_.setWantsKeyboardFocus(false);
 
     inputsHeader_.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
     outputsHeader_.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));

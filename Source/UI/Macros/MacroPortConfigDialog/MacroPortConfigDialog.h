@@ -3,6 +3,7 @@
 #include "MacroSet.h"
 #include "Modules/MacroPortShape.h"
 #include "UI/Chrome/ColourPickerPopup.h" // juce::PropertiesFile (juce_data_structures) + ColourPickerPopup itself
+#include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/ReorderDrag/ReorderDragSession.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -55,11 +56,10 @@ namespace synth::ui {
  * this is wired.
  *
  * Focus indication: `juce::Button::paint()` passes `paintButton` only `isOver()`/`isDown()`,
- * never keyboard-focus state, so the custom `GlyphButton`/`PortColourSwatch` classes check
- * `hasKeyboardFocus(true)` themselves and draw an accent outline, reusing
- * `AppLookAndFeel::drawTextEditorOutline`/`drawComboBox`'s "accent when focused" convention.
- * The repaint is the free one JUCE's own `Button::focusGained`/`focusLost` already trigger — no
- * timer, per Source/UI/CLAUDE.md.
+ * never keyboard-focus state, so the custom `GlyphButton`/`PortColourSwatch` classes draw the
+ * shared accent ring (`paintFocusRing`, Source/UI/Layout/FocusRing.h) themselves; the repaint on
+ * focus changes is the free one JUCE's own `Button::focusGained`/`focusLost` already trigger. A
+ * focused control in a row scrolled out of view scrolls into view (`ScrollIntoViewOnFocus`).
  *
  * Closing commits a pending rename: real `juce::TextEditor::focusLost()` posts an ASYNC command
  * message rather than calling `onFocusLost` synchronously (juce_TextEditor.cpp), so a rename typed
@@ -298,6 +298,7 @@ private:
     juce::Rectangle<int> addBlockBounds_; // for paint()'s grouping panel behind the block above
 
     juce::Viewport rowsViewport_;
+    synth::ui::ScrollIntoViewOnFocus rowsFollowFocus_{rowsViewport_};
     juce::Component rowsContent_;
     juce::Label inputsHeader_{"inputsHeader", "INPUTS"};
     juce::Label outputsHeader_{"outputsHeader", "OUTPUTS"};

@@ -2,6 +2,7 @@
 // plus the shared row-activation entry point (activateRow) and the enable/availability gate
 // (isEntryEnabled) that both the mouse and keyboard paths call through.
 #include "ModuleLibraryComponent.h"
+#include "UI/Layout/DialogKeyboard.h"
 
 ModuleLibraryComponent::ModuleLibraryComponent() {
     // The flat entry list is rebuilt rather than assigned literally, because it now has to be
@@ -38,6 +39,7 @@ ModuleLibraryComponent::ModuleLibraryComponent() {
     searchEditor.setIndents(6, 0);
     searchEditor.setFont(juce::Font(juce::FontOptions(13.0f)));
     searchEditor.setTooltip("Filter the library by module, snippet, or category name.");
+    synth::ui::removeHiddenTabStops(searchEditor);
     searchEditor.onTextChange = [this] { applySearchQuery(searchEditor.getText()); };
     searchEditor.onEscapeKey = [this] {
         if (searchEditor.getText().isNotEmpty())

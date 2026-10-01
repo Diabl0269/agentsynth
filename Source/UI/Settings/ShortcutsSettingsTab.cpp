@@ -1,4 +1,5 @@
 #include "ShortcutsSettingsTab.h"
+#include "UI/Layout/FocusRing.h"
 
 namespace {
 // Divider alpha under a section header. GENTLE on purpose: the row list is already visually grouped
@@ -15,12 +16,16 @@ constexpr float kTopStripTextAlpha = 0.65f;
 
 constexpr int kChevronSize = 8;
 constexpr int kHeaderTextIndent = 22; // leaves room for the chevron at x = 6
+
+// What a screen reader adds after a rebind button's name: the key it currently holds.
+juce::String bindingHelpText(const juce::KeyPress& binding) {
+    return binding.isValid() ? "Currently " + ShortcutManager::keyPressToDisplayString(binding)
+                             : juce::String("Not set. Press to assign a key.");
+}
 } // namespace
 
 ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm)
     : shortcutManager(sm) {
-    setWantsKeyboardFocus(true);
-
     addAndMakeVisible(titleLabel);
     titleLabel.setText("Keyboard Shortcuts", juce::dontSendNotification);
     titleLabel.setFont(juce::FontOptions(18.0f, juce::Font::bold));
@@ -38,10 +43,19 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm)
     searchEditor.setTextToShowWhenEmpty("Search shortcuts...", findColour(juce::Label::textColourId).withAlpha(0.45f));
     searchEditor.setTooltip("Filter by action name or by the key it is bound to (e.g. \"Cmd\", \"Shift\", \"Left\").");
     searchEditor.onTextChange = [this] { rebuildLayout(); };
+    searchEditor.setTitle("Search shortcuts");
+    // Escape clears a query first; with nothing to clear it closes the window like anywhere else.
     searchEditor.onEscapeKey = [this] {
         if (searchEditor.getText().isNotEmpty())
             setSearchText({});
+        else
+            synth::ui::forwardEscapeToParents(searchEditor);
     };
+    synth::ui::removeHiddenTabStops(searchEditor);
+
+    collapseAllButton.setTooltip("Fold or unfold every section of the list");
+    collapseAllButton.onClick = [this] { toggleAllSections(); };
+    addAndMakeVisible(collapseAllButton);
 
     // The rows live inside a Viewport: the table is well over forty rows now, and a settings dialog
     // is a few hundred pixels tall. The title, the search field, the collapse-all strip and the
@@ -50,6 +64,15 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm)
     addAndMakeVisible(rowsViewport);
     rowsViewport.setViewedComponent(&rowsHost, false);
     rowsViewport.setScrollBarsShown(true, false);
+    rowsViewport.setWantsKeyboardFocus(false);
+
+    for (auto category : ShortcutManager::getCategoryOrder()) {
+        auto header = std::make_unique<HeaderButton>(category);
+        header->setTooltip("Show or hide the " + ShortcutManager::getCategoryName(category) + " shortcuts");
+        header->onClick = [this, category] { toggleSection(category); };
+        rowsHost.addChildComponent(*header);
+        headerButtons.push_back(std::move(header));
+    }
 
     for (auto& actionId : shortcutManager.getActionIds()) {
         actionIds.add(actionId);
@@ -62,11 +85,18 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm)
         rowsHost.addAndMakeVisible(*descLabel);
         descLabels.push_back(std::move(descLabel));
 
-        auto bindButton = std::make_unique<juce::TextButton>();
+        auto bindButton = std::make_unique<RebindButton>();
         bindButton->setButtonText(ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding(actionId)));
+        bindButton->setTitle(ShortcutManager::getActionDescription(actionId) + " shortcut");
+        bindButton->setDescription(bindingHelpText(shortcutManager.getBinding(actionId)));
         bindButton->setTooltip("Click, then press a key to rebind");
         int index = static_cast<int>(bindButtons.size());
         bindButton->onClick = [this, index] { startListening(index); };
+        bindButton->onKey = [this](const juce::KeyPress& key) { return listeningIndex >= 0 && keyPressed(key); };
+        bindButton->onFocusLost = [this, index] {
+            if (listeningIndex == index)
+                cancelListening();
+        };
         rowsHost.addAndMakeVisible(*bindButton);
         bindButtons.push_back(std::move(bindButton));
     }
@@ -165,6 +195,7 @@ void ShortcutsSettingsTab::resized() {
 
     searchEditor.setBounds(bounds.removeFromTop(kSearchHeight));
     topStripBounds = bounds.removeFromTop(kTopStripHeight);
+    collapseAllButton.setBounds(topStripBounds);
 
     // Pinned action row at the bottom, carved before the rows get the remainder.
     auto buttonRow = bounds.removeFromBottom(28);
@@ -199,6 +230,8 @@ void ShortcutsSettingsTab::rebuildLayout() {
         descLabels[i]->setVisible(false);
         bindButtons[i]->setVisible(false);
     }
+    for (auto& header : headerButtons)
+        header->setVisible(false);
 
     int y = 0;
     for (auto category : ShortcutManager::getCategoryOrder()) {
@@ -219,6 +252,10 @@ void ShortcutsSettingsTab::rebuildLayout() {
             continue;
 
         layout.push_back({-1, category, {0, y, contentWidth, kSectionHeaderHeight}, true});
+        auto& header = headerButtonFor(category);
+        header.setBounds(layout.back().bounds);
+        header.setCollapsed(!filtering && isSectionCollapsed(category));
+        header.setVisible(true);
         y += kSectionHeaderHeight;
         // The divider sits in the gap below the header; paintRows draws it at the header's bottom
         // edge, so no layout height is reserved for the 1 px rule itself.
@@ -244,7 +281,15 @@ void ShortcutsSettingsTab::rebuildLayout() {
 
     rowsHost.setBounds(0, 0, juce::jmax(contentWidth, rowsViewport.getWidth()), juce::jmax(y, 1));
     rowsHost.repaint();
-    repaint(topStripBounds);
+    collapseAllButton.setButtonText(areAllSectionsCollapsed() ? "Expand all" : "Collapse all");
+}
+
+ShortcutsSettingsTab::HeaderButton& ShortcutsSettingsTab::headerButtonFor(ShortcutCategory category) {
+    const auto order = ShortcutManager::getCategoryOrder();
+    for (size_t i = 0; i < headerButtons.size(); ++i)
+        if (order[i] == category)
+            return *headerButtons[i];
+    return *headerButtons.front();
 }
 
 //==============================================================================
@@ -253,45 +298,61 @@ void ShortcutsSettingsTab::rebuildLayout() {
 
 void ShortcutsSettingsTab::paint(juce::Graphics& g) {
     g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
+}
 
-    // The collapse-all strip. Right-aligned and drawn small, exactly as the library sidebar's is —
-    // it is chrome, not a button, and should not compete with the section headers.
-    const auto textColour = findColour(juce::Label::textColourId);
-    g.setColour(textColour.withAlpha(topStripHovered ? kHeaderHoverTextAlpha : kTopStripTextAlpha));
+//==============================================================================
+// Section header and collapse-all buttons
+//==============================================================================
+
+ShortcutsSettingsTab::HeaderButton::HeaderButton(ShortcutCategory c)
+    : juce::Button(ShortcutManager::getCategoryName(c)) {
+    setToggleable(true);
+    setToggleState(true, juce::dontSendNotification);
+}
+
+void ShortcutsSettingsTab::HeaderButton::setCollapsed(bool isCollapsed) {
+    if (collapsed_ == isCollapsed)
+        return;
+    collapsed_ = isCollapsed;
+    setToggleState(!isCollapsed, juce::dontSendNotification);
+    repaint();
+}
+
+void ShortcutsSettingsTab::HeaderButton::paintButton(juce::Graphics& g, bool highlighted, bool /*down*/) {
+    const auto textColour =
+        findColour(juce::Label::textColourId).withAlpha(highlighted ? kHeaderHoverTextAlpha : kHeaderTextAlpha);
+    // Chevron drawn as a path rather than a glyph — glyph coverage is not guaranteed across the
+    // embedded typefaces (see the theming font limitation), the same reason ModuleLibraryComponent
+    // draws its own.
+    drawChevron(g,
+                juce::Rectangle<float>(6.0f, (float)(getHeight() - kChevronSize) * 0.5f, (float)kChevronSize,
+                                       (float)kChevronSize),
+                collapsed_, textColour);
+
+    g.setColour(textColour);
+    g.setFont(juce::Font(juce::FontOptions(11.5f, juce::Font::bold)));
+    g.drawText(getButtonText().toUpperCase(), getLocalBounds().withTrimmedLeft(kHeaderTextIndent),
+               juce::Justification::centredLeft);
+
+    // The gentle rule: one hairline under the header, at low alpha. It separates the sections
+    // without boxing them in — see kDividerAlpha.
+    g.setColour(findColour(juce::Label::textColourId).withAlpha(kDividerAlpha));
+    g.fillRect(0, getHeight() - 1, getWidth(), 1);
+    synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);
+}
+
+void ShortcutsSettingsTab::StripButton::paintButton(juce::Graphics& g, bool highlighted, bool /*down*/) {
+    // Right-aligned and drawn small, exactly as the library sidebar's is — it is chrome, not a
+    // button, and should not compete with the section headers.
+    g.setColour(
+        findColour(juce::Label::textColourId).withAlpha(highlighted ? kHeaderHoverTextAlpha : kTopStripTextAlpha));
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText(areAllSectionsCollapsed() ? "EXPAND ALL" : "COLLAPSE ALL", topStripBounds,
-               juce::Justification::centredRight);
+    g.drawText(getButtonText().toUpperCase(), getLocalBounds(), juce::Justification::centredRight);
+    synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);
 }
 
 void ShortcutsSettingsTab::paintRows(juce::Graphics& g) {
     const auto textColour = findColour(juce::Label::textColourId);
-
-    for (const auto& entry : layout) {
-        if (!entry.isHeader)
-            continue;
-
-        const bool hot = hoveredHeader.has_value() && *hoveredHeader == entry.category;
-        const bool collapsed = !isSearchActive() && isSectionCollapsed(entry.category);
-
-        // Chevron drawn as a path rather than a ▾/▸ glyph — glyph coverage is not guaranteed across
-        // the embedded typefaces (see the theming font limitation), the same reason
-        // ModuleLibraryComponent draws its own.
-        drawChevron(g,
-                    juce::Rectangle<float>(
-                        6.0f, (float)entry.bounds.getY() + (float)(kSectionHeaderHeight - kChevronSize) * 0.5f,
-                        (float)kChevronSize, (float)kChevronSize),
-                    collapsed, textColour.withAlpha(hot ? kHeaderHoverTextAlpha : kHeaderTextAlpha));
-
-        g.setColour(textColour.withAlpha(hot ? kHeaderHoverTextAlpha : kHeaderTextAlpha));
-        g.setFont(juce::Font(juce::FontOptions(11.5f, juce::Font::bold)));
-        g.drawText(ShortcutManager::getCategoryName(entry.category).toUpperCase(),
-                   entry.bounds.withTrimmedLeft(kHeaderTextIndent), juce::Justification::centredLeft);
-
-        // The gentle rule: one hairline under the header, at low alpha. It separates the sections
-        // without boxing them in — see kDividerAlpha.
-        g.setColour(textColour.withAlpha(kDividerAlpha));
-        g.fillRect(entry.bounds.getX(), entry.bounds.getBottom(), entry.bounds.getWidth(), 1);
-    }
 
     if (layout.empty() && isSearchActive()) {
         g.setColour(textColour.withAlpha(0.6f));
@@ -312,62 +373,6 @@ void ShortcutsSettingsTab::drawChevron(juce::Graphics& g, juce::Rectangle<float>
             juce::AffineTransform::rotation(-juce::MathConstants<float>::halfPi, area.getCentreX(), area.getCentreY()));
     g.setColour(colour);
     g.fillPath(p);
-}
-
-//==============================================================================
-// Mouse
-//==============================================================================
-
-void ShortcutsSettingsTab::mouseDown(const juce::MouseEvent& e) {
-    if (isInTopStrip(e.getPosition()))
-        toggleAllSections();
-}
-
-void ShortcutsSettingsTab::mouseMove(const juce::MouseEvent& e) {
-    const bool nowHovered = isInTopStrip(e.getPosition());
-    if (nowHovered == topStripHovered)
-        return;
-    topStripHovered = nowHovered;
-    setMouseCursor(nowHovered ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
-    repaint(topStripBounds);
-}
-
-void ShortcutsSettingsTab::mouseExit(const juce::MouseEvent&) {
-    if (!topStripHovered)
-        return;
-    topStripHovered = false;
-    setMouseCursor(juce::MouseCursor::NormalCursor);
-    repaint(topStripBounds);
-}
-
-void ShortcutsSettingsTab::rowsMouseDown(const juce::MouseEvent& e) {
-    if (const auto category = sectionHeaderAt(e.getPosition()))
-        toggleSection(*category);
-}
-
-void ShortcutsSettingsTab::rowsMouseMove(const juce::MouseEvent& e) {
-    const auto category = sectionHeaderAt(e.getPosition());
-    if (category == hoveredHeader)
-        return; // repaint only on a real change, never per mouse-move
-    hoveredHeader = category;
-    rowsHost.setMouseCursor(category.has_value() ? juce::MouseCursor::PointingHandCursor
-                                                 : juce::MouseCursor::NormalCursor);
-    rowsHost.repaint();
-}
-
-void ShortcutsSettingsTab::rowsMouseExit() {
-    if (!hoveredHeader.has_value())
-        return;
-    hoveredHeader.reset();
-    rowsHost.setMouseCursor(juce::MouseCursor::NormalCursor);
-    rowsHost.repaint();
-}
-
-std::optional<ShortcutCategory> ShortcutsSettingsTab::sectionHeaderAt(juce::Point<int> contentPos) const {
-    for (const auto& entry : layout)
-        if (entry.isHeader && entry.bounds.contains(contentPos))
-            return entry.category;
-    return std::nullopt;
 }
 
 //==============================================================================
@@ -477,21 +482,28 @@ void ShortcutsSettingsTab::startListening(int index) {
         return;
     listeningIndex = index;
     bindButtons[static_cast<size_t>(index)]->setButtonText("Press a key...");
+    bindButtons[static_cast<size_t>(index)]->setDescription("Press the key to bind. Escape cancels.");
     bindButtons[static_cast<size_t>(index)]->setColour(juce::TextButton::buttonColourId, juce::Colours::orange);
-    grabKeyboardFocus();
+    // Focus stays on the button itself (it hands every key to keyPressed() below while listening),
+    // so the focus ring and Tab order do not jump.
+    bindButtons[static_cast<size_t>(index)]->grabKeyboardFocus();
 }
 
 void ShortcutsSettingsTab::cancelListening() {
     if (listeningIndex >= 0) {
-        refreshBindingLabels();
+        // Cleared first: refreshing re-lays-out the rows, which can drop focus from the listening
+        // button, and its focus-lost handler cancels listening.
         listeningIndex = -1;
+        refreshBindingLabels();
     }
 }
 
 void ShortcutsSettingsTab::refreshBindingLabels() {
     for (size_t i = 0; i < bindButtons.size(); ++i) {
         auto actionId = actionIds[static_cast<int>(i)];
-        bindButtons[i]->setButtonText(ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding(actionId)));
+        const auto binding = shortcutManager.getBinding(actionId);
+        bindButtons[i]->setButtonText(ShortcutManager::keyPressToDisplayString(binding));
+        bindButtons[i]->setDescription(bindingHelpText(binding));
         bindButtons[i]->removeColour(juce::TextButton::buttonColourId);
     }
     // A rebind changes the text the filter matches against, so a row can enter or leave the current

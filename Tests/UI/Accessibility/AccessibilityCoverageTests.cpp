@@ -2,24 +2,32 @@
 //
 // 1. AccessibilityAuditTest proves the auditor itself on a tiny synthetic tree.
 // 2. AccessibilityCoverageTest audits each real surface (a headless MainComponent, every Settings
-//    tab, the Export Audio dialog) and compares the name/tooltip gap counts with
+//    tab, the dialogs and popups) and compares the name/tooltip gap counts with
 //    AccessibilityBaseline.h: more gaps fails (a new control lacks a name or tooltip), fewer gaps
 //    fails too, so the baseline is lowered in the same change that fixed them.
 #include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "../../TestSettingsHelpers.h"
 #include "../Graph/GraphEditor/GraphEditorTestHelpers.h"
-#include "AI/AIIntegrationService/AIIntegrationService.h"
-#include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AI/AccountService.h"
 #include "AccessibilityAudit.h"
 #include "AccessibilityBaseline.h"
-#include "AudioEngine/AudioEngine.h"
+#include "AccessibilitySettingsFixture.h"
+#include "Auth/InMemoryTokenStore.h"
 #include "MainComponent/MainComponent.h"
+#include "Modules/FX/ParametricEQModule.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
+#include "UI/Assistant/SignInDialog.h"
+#include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Chrome/ExportAudioDialog.h"
+#include "UI/Chrome/WelcomeScreenComponent.h"
+#include "UI/Library/ModuleLibraryHelpPopup.h"
+#include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
+#include "UI/ModuleViews/EQWindow.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
+#include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SettingsWindow.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UI/Timeline/TimelineViewState.h"
@@ -33,31 +41,6 @@ namespace {
 using synth::test::auditAccessibility;
 using synth::test::countGaps;
 using synth::test::Gap;
-
-class MockProviderACT : public synth::AIProvider {
-public:
-    juce::String getProviderName() const override { return "MockACT"; }
-    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
-        callback({"MockModel"}, true);
-    }
-    RequestId sendPrompt(const std::vector<Message>&, CompletionCallback callback, const juce::var&,
-                         std::function<void(const juce::String&)> = {}) override {
-        AIResponse response;
-        response.success = true;
-        if (callback)
-            callback(response);
-        return {};
-    }
-    void cancel(RequestId) override {}
-    void setModel(const juce::String& name) override { model = name; }
-    juce::String getCurrentModel() const override { return model; }
-    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
-    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
-
-private:
-    juce::String model = "MockModel";
-    int requestTimeoutMs = 240000;
-};
 
 // Strict ratchet: equal to the baseline passes; more or fewer fails with every gap path listed.
 ::testing::AssertionResult matchesBaseline(const juce::String& surface, const std::vector<Gap>& gaps) {
@@ -211,34 +194,6 @@ TEST(AccessibilityCoverageTest, ExportAudioDialog) {
     EXPECT_TRUE(matchesBaseline("ExportAudioDialog", auditAccessibility(dialog)));
 }
 
-class AccessibilitySettingsTest : public ::testing::Test {
-protected:
-    void SetUp() override {
-        juce::PropertiesFile::Options options;
-        options.applicationName = "AccessibilityCoverageTest";
-        options.filenameSuffix = "test";
-        options.storageFormat = juce::PropertiesFile::storeAsXML;
-        appProperties.setStorageParameters(options);
-        engine = std::make_unique<AudioEngine>();
-        aiService = std::make_unique<synth::AIIntegrationService>(engine->getGraph());
-        aiService->setProvider(std::make_unique<MockProviderACT>());
-        aiChat = std::make_unique<synth::AIChatComponent>(*aiService, appProperties);
-    }
-
-    void TearDown() override {
-        if (auto* userSettings = appProperties.getUserSettings())
-            userSettings->clear();
-    }
-
-    std::unique_ptr<AudioEngine> engine;
-    std::unique_ptr<synth::AIIntegrationService> aiService;
-    std::unique_ptr<synth::AIChatComponent> aiChat;
-    juce::ApplicationProperties appProperties;
-    juce::AudioDeviceManager deviceManager;
-    ShortcutManager shortcutManager;
-    synth::theme::ThemeManager themeManager;
-};
-
 TEST_F(AccessibilitySettingsTest, EveryTabOfTheSettingsWindow) {
     SettingsWindow window(deviceManager, appProperties, *aiService, *aiChat, shortcutManager, themeManager, nullptr);
     window.setSize(800, 600);
@@ -278,6 +233,84 @@ TEST(AccessibilityCoverageTest, PianoRoll) {
     roll.getScaleAssistPanel().getScaleCombo().setSelectedId(9000, juce::sendNotificationSync);
     roll.resized();
     EXPECT_TRUE(matchesBaseline("PianoRoll", auditAccessibility(roll)));
+}
+
+// ============================================================================
+// Dialogs and popups
+// ============================================================================
+
+TEST_F(AccessibilitySettingsTest, DualIOPerModulePopup) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 460);
+    auto popup = tab.createDualIOPerModuleDefaultsPopupForTest();
+    ASSERT_NE(popup, nullptr);
+    EXPECT_TRUE(matchesBaseline("DualIOPerModulePopup", auditAccessibility(*popup)));
+}
+
+TEST(AccessibilityCoverageTest, SignInDialog) {
+    synth::AccountService service(
+        "http://mock-host:8787",
+        [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+           const std::atomic<bool>&) { return synth::AuthClient::HttpResult{}; },
+        std::make_unique<synth::InMemoryTokenStore>());
+    synth::SignInDialog dialog(service);
+    dialog.setSize(360, 220);
+    EXPECT_TRUE(matchesBaseline("SignInDialog", auditAccessibility(dialog)));
+}
+
+namespace {
+std::vector<synth::ui::MacroPortConfigDialog::PortRow> macroPortRows() {
+    using Row = synth::ui::MacroPortConfigDialog::PortRow;
+    Row mono;
+    mono.nodeUuid = "in-mono";
+    mono.isInput = true;
+    mono.name = "Pitch In";
+    Row poly;
+    poly.nodeUuid = "in-poly";
+    poly.isInput = true;
+    poly.name = "Voices In";
+    poly.shape = MacroPortShape::Poly;
+    poly.voiceCount = 4;
+    Row midi;
+    midi.nodeUuid = "out-midi";
+    midi.isInput = false;
+    midi.name = "Gate Out";
+    midi.kind = synth::MacroPortKind::Midi;
+    return {mono, poly, midi};
+}
+} // namespace
+
+TEST(AccessibilityCoverageTest, MacroPortConfigDialog) {
+    synth::ui::MacroPortConfigDialog dialog("My Macro", macroPortRows());
+    EXPECT_TRUE(matchesBaseline("MacroPortConfigDialog", auditAccessibility(dialog)));
+}
+
+TEST(AccessibilityCoverageTest, MacroAutoPortPromptDialog) {
+    synth::ui::MacroAutoPortPromptDialog dialog(2);
+    EXPECT_TRUE(matchesBaseline("MacroAutoPortPromptDialog", auditAccessibility(dialog)));
+}
+
+TEST(AccessibilityCoverageTest, EQWindow) {
+    ParametricEQModule eq;
+    EQWindow window(eq);
+    EXPECT_TRUE(matchesBaseline("EQWindow", auditAccessibility(window)));
+}
+
+TEST(AccessibilityCoverageTest, WelcomeScreen) {
+    synth::ui::WelcomeScreenComponent welcome;
+    welcome.setSize(900, 700);
+    welcome.setRecentProjects({juce::File("/tmp/Alpha.synthproj"), juce::File("/tmp/Beta.synthproj")});
+    EXPECT_TRUE(matchesBaseline("WelcomeScreen", auditAccessibility(welcome)));
+}
+
+TEST(AccessibilityCoverageTest, ColourPickerPopup) {
+    synth::ui::ColourPickerPopup popup(juce::Colours::red, nullptr, {}, {});
+    EXPECT_TRUE(matchesBaseline("ColourPickerPopup", auditAccessibility(popup)));
+}
+
+TEST(AccessibilityCoverageTest, ModuleLibraryHelpPopup) {
+    synth::ui::ModuleLibraryHelpPopup popup;
+    EXPECT_TRUE(matchesBaseline("ModuleLibraryHelpPopup", auditAccessibility(popup)));
 }
 
 // ============================================================================

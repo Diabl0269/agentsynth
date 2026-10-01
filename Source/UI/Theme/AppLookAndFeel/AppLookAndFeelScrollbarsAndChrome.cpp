@@ -1,4 +1,5 @@
 #include "AppLookAndFeel.h"
+#include "UI/Layout/FocusRing.h"
 
 namespace synth::theme {
 
@@ -193,6 +194,8 @@ void AppLookAndFeel::drawTabButton(juce::TabBarButton& button, juce::Graphics& g
                        : button.findColour(juce::TabbedButtonBar::tabTextColourId));
     g.setFont(juce::Font(juce::FontOptions(theme.type.label + 2.0f, active ? juce::Font::bold : juce::Font::plain)));
     g.drawFittedText(button.getButtonText(), button.getActiveArea().reduced(6, 0), juce::Justification::centred, 1);
+
+    synth::ui::paintFocusRing(g, button.getActiveArea().toFloat(), button, r);
 }
 
 void AppLookAndFeel::drawTabbedButtonBarBackground(juce::TabbedButtonBar& bar, juce::Graphics& g) {

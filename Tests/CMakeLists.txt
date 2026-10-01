@@ -585,6 +585,7 @@ add_executable(Tests
     UI/Mixer/MixerPanelKeyboardFocusTests.cpp
     UI/Mixer/MixerAccessibilityTests.cpp
     UI/Accessibility/AccessibilityCoverageTests.cpp
+    UI/Accessibility/DialogKeyboardTests.cpp
     UI/Mixer/MixerFocusRegionTests.cpp
     UI/Graph/MinimapComponentTests.cpp
     Plugin/PluginProcessorTests.cpp

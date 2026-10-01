@@ -264,6 +264,11 @@ Cancel answer from dismissing it. It always shows at launch in the standalone ap
 plugin) and there is no opt-out; a legacy `showWelcomeScreenAtLaunch` value in an old settings file
 is ignored. Help > Show Welcome Screen reopens it.
 
+Keyboard: the overlay is a keyboard focus container, so Tab and Shift+Tab cycle through its buttons
+(New, Open default, Open existing, the recents, Contribute, What's New) instead of escaping to the
+toolbar and canvas hidden underneath. Reopening it from the Help menu focuses the first button. It has
+no Escape action: there is no cancel, only a choice of how to start.
+
 Between the Recent Projects list and the footer the card carries a low-key contribute line and a
 "Contribute..." button. It fires `onContributeRequested`, which `MainComponent` wires to
 `openContributePage()` (the same `kContributeUrl` page as `AppCommands::contribute`) without hiding

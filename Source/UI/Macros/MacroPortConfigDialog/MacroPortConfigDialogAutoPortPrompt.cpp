@@ -23,11 +23,14 @@ MacroAutoPortPromptDialog::MacroAutoPortPromptDialog(int crossingPortCount) {
     // Opt-out, not opt-in: most users making this choice want it applied from now on, and "always
     // ask" stays one click away in Preferences for anyone who wants to reconsider every time.
     rememberToggle_.setToggleState(true, juce::dontSendNotification);
+    rememberToggle_.setTooltip("Apply this choice every time instead of asking again");
     addAndMakeVisible(rememberToggle_);
 
+    createPortsButton_.setTooltip("Add a macro port for each cable crossing the boundary");
     createPortsButton_.onClick = [this] { triggerCreatePortsForTest(); };
     addAndMakeVisible(createPortsButton_);
 
+    leaveAsIsButton_.setTooltip("Group without adding ports (Esc)");
     leaveAsIsButton_.onClick = [this] { triggerLeaveCablesAsIsForTest(); };
     addAndMakeVisible(leaveAsIsButton_);
 

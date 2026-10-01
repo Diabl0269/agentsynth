@@ -1,6 +1,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
+#include "UI/Layout/DialogKeyboard.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 
@@ -76,6 +77,8 @@ public:
             addAndMakeVisible(*label);
 
             auto combo = std::make_unique<juce::ComboBox>();
+            combo->setTitle(type);
+            combo->setTooltip("Dual I/O for new " + type + " modules: follow the global setting, or always on or off");
             combo->addItem("Follow global", kDualIOChoiceFollowGlobal);
             combo->addItem("Always on", kDualIOChoiceAlwaysOn);
             combo->addItem("Always off", kDualIOChoiceAlwaysOff);
@@ -101,6 +104,14 @@ public:
             rows.push_back({std::move(label), std::move(combo)});
         }
         setSize(kWidth, kPadding * 2 + kRowHeight * static_cast<int>(rows.size()));
+    }
+
+    // Escape closes the popup, like clicking outside it.
+    bool keyPressed(const juce::KeyPress& key) override {
+        if (key != juce::KeyPress::escapeKey)
+            return false;
+        synth::ui::closeHostingWindow(*this);
+        return true;
     }
 
     void resized() override {
