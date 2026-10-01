@@ -19,6 +19,7 @@ if(CCACHE_PROGRAM)
         set(CMAKE_OBJCXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
     endif()
 endif()
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/Pch.cmake)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 20)
@@ -548,6 +549,7 @@ add_library(Core STATIC
 # of the module code (cmake/JuceModules.cmake, FRO306).
 include(cmake/JuceModules.cmake)
 target_link_libraries(Core PUBLIC JuceModules)
+synth_enable_pch(Core)
 
 # TL7-1/TL7-2: host third-party plugins. JUCE's built-in hosting only — no new dependency pins, and
 # therefore no new licences to clear (the VST3 and AU host code ships inside juce_audio_processors,
@@ -676,6 +678,7 @@ endif()
 # PUBLIC so consumers (the app and the plugin) inherit Core's JUCE modules, include dirs,
 # the Assets binary-data lib and HAS_FONT_ASSETS.
 target_link_libraries(AppUI PUBLIC Core)
+synth_enable_pch(AppUI)
 
 # WhatsNewData.h (generated above, "What's New" block) — PRIVATE since only AppUI's
 # Source/MainComponent/ units (MainComponent.cpp, MainComponentPanels.cpp) include it.
