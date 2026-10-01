@@ -82,6 +82,7 @@ TEST(ModMatrixKeyboard, TheAmountSliderNudgesWithUpDownAndPassesLeftRightOn) {
     TwoRows t;
     auto* slider = dynamic_cast<juce::Slider*>(t.cell(0, ids::kAmount));
     ASSERT_NE(slider, nullptr);
+    EXPECT_TRUE(slider->getWantsKeyboardFocus()) << "juce::Slider is not focusable by default";
     EXPECT_FALSE(slider->keyPressed(kLeft));
     EXPECT_FALSE(slider->keyPressed(kRight));
     const double before = slider->getValue();

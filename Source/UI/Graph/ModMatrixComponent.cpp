@@ -518,6 +518,7 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     addAndMakeVisible(*deleteButton);
 
     amountSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    amountSlider.setWantsKeyboardFocus(true); // juce::Slider turns it off; the amount is a keyboard stop
     amountSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     amountSlider.setRange(-1.0, 1.0);
     amountSlider.onValueChange = [this] {

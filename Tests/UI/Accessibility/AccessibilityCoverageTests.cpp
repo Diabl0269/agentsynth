@@ -514,8 +514,7 @@ TEST(AccessibilityCoverageTest, EveryModuleCard) {
     EXPECT_TRUE(matchesBaseline("ModuleCards", gaps));
 }
 
-// =====================================================================}
-
+// ============================================================================
 // Timeline automation lanes: a lane row's header and the track header's fold arrow.
 // ============================================================================
 
@@ -536,7 +535,8 @@ TEST(AccessibilityCoverageTest, AutomationLanes) {
         gaps.push_back(gap);
     }
     EXPECT_TRUE(matchesBaseline("AutomationLanes", gaps));
-=======
+}
+
 // The Mod Matrix open with two routings (one wired, one empty), and its searchable picker. The main
 // window audit closes the matrix, so its rows are only counted here.
 TEST(AccessibilityCoverageTest, ModMatrix) {

@@ -8,7 +8,9 @@ namespace synth::ui {
 namespace {
 using Line = std::vector<juce::Component*>;
 
-bool isUsable(const juce::Component* c) { return c != nullptr && c->isVisible() && c->isEnabled(); }
+bool isUsable(const juce::Component* c) {
+    return c != nullptr && c->isVisible() && c->isEnabled() && c->getWantsKeyboardFocus();
+}
 
 // Every routing row is the parent of one source combo; its line lists its controls in column order.
 void collectRowLines(juce::Component& node, std::vector<Line>& lines) {
