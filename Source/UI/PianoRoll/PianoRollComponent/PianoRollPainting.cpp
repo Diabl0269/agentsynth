@@ -36,6 +36,7 @@ void PianoRollComponent::paint(juce::Graphics& g) {
     paintDrawPreview(g);
     paintCopyGhosts(g);
     paintSplitPreview(g);
+    paintFocusedNoteRing(g);
     // Before the keys column and the header, so both clip the line the same way they clip a note
     // that has scrolled off to the left.
     paintPlayhead(g);
@@ -697,23 +698,7 @@ juce::Rectangle<int> PianoRollComponent::headerButtonBoundsFor(HeaderButtonId wh
 }
 
 void PianoRollComponent::updateHeaderButtonHover(juce::Point<int> pos) {
-    HeaderButtonId next = HeaderButtonId::None;
-    if (backButtonBounds_.contains(pos))
-        next = HeaderButtonId::Back;
-    else if (quantiseButtonBounds_.contains(pos))
-        next = HeaderButtonId::Quantise;
-    else if (quantiseLengthButtonBounds_.contains(pos))
-        next = HeaderButtonId::QuantiseLength;
-    else if (quantisePitchButtonBounds_.contains(pos))
-        next = HeaderButtonId::QuantisePitches;
-    else if (scaleFilterButtonBounds_.contains(pos))
-        next = HeaderButtonId::ScaleFilter;
-    else if (scaleButtonBounds_.contains(pos))
-        next = HeaderButtonId::Scale;
-    else if (velocityChipBounds_.contains(pos))
-        next = HeaderButtonId::Velocity;
-    else if (humanizeChipBounds_.contains(pos))
-        next = HeaderButtonId::Humanize;
+    const HeaderButtonId next = headerButtonAt(pos);
 
     if (next == hoveredHeaderButton_)
         return; // state-change gate: hovering the SAME chip (or none) costs nothing
@@ -824,6 +809,7 @@ void PianoRollComponent::resized() {
 
     keysColumnBounds_ = bounds.removeFromLeft(kKeysColumnWidth);
     noteGridBounds_ = bounds; // a REAL gutter: beatToX(firstVisibleBeat) == this rect's left edge
+    layoutHeaderChips();
 }
 
 //==============================================================================

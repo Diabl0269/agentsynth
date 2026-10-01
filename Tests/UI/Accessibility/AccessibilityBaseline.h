@@ -20,6 +20,7 @@ struct AccessibilityBaselineEntry {
 // clang-format off
 inline constexpr AccessibilityBaselineEntry kAccessibilityBaseline[] = {
     {"MainComponent", 11, 6},
+    {"PianoRoll", 0, 0},
     {"ModuleCards", 202, 248},
     {"ExportAudioDialog", 6, 10},
     {"Settings/Audio", 5, 5}, // Windows adds the audio driver-type drop-down; macOS/Linux read 4/4

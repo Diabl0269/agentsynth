@@ -45,6 +45,7 @@ public:
         // controls squished off the bottom. See resized()/contentNaturalHeight().
         addAndMakeVisible(scrollViewport_);
         scrollViewport_.setComponentID("scaleAssistScrollViewport");
+        scrollViewport_.setTitle("Scale assist options");
         scrollViewport_.setViewedComponent(&scaleContent_, /*deleteComponentWhenNoLongerNeeded=*/false);
         scrollViewport_.setScrollBarsShown(/*vertical=*/true, /*horizontal=*/false);
         rebuildScaleCombo();
@@ -326,6 +327,8 @@ private:
 
         scaleContent_.addAndMakeVisible(rootCombo_);
         rootCombo_.setComponentID("scaleAssistRootCombo");
+        rootCombo_.setTitle("Scale root note");
+        rootCombo_.setTooltip("Root note of the scale");
         for (int pc = 0; pc < 12; ++pc)
             rootCombo_.addItem(pitchClassName(pc), pc + 1);
         rootCombo_.setSelectedId(1, juce::dontSendNotification);
@@ -340,6 +343,8 @@ private:
 
         scaleContent_.addAndMakeVisible(scaleCombo_);
         scaleCombo_.setComponentID("scaleAssistScaleCombo");
+        scaleCombo_.setTitle("Scale");
+        scaleCombo_.setTooltip("The scale the roll checks notes against, or No scale");
         scaleCombo_.onChange = [this] { handleScaleComboChanged(); };
     }
 
@@ -349,15 +354,19 @@ private:
             scaleContent_.addChildComponent(toggle);
             toggle.setComponentID("scaleAssistCustomToggle" + juce::String(pc));
             toggle.setButtonText(pitchClassName(pc));
+            toggle.setTitle("Custom scale note " + pitchClassName(pc));
+            toggle.setTooltip("Include " + pitchClassName(pc) + " in the custom scale");
             toggle.setBlackKey(isBlackPitchClass(pc));
         }
 
         scaleContent_.addChildComponent(customScaleNameEditor_);
         customScaleNameEditor_.setComponentID("scaleAssistCustomNameEditor");
         customScaleNameEditor_.setTextToShowWhenEmpty("Scale name", juce::Colours::grey);
+        customScaleNameEditor_.setTitle("Custom scale name");
 
         scaleContent_.addChildComponent(saveCustomScaleButton_);
         saveCustomScaleButton_.setComponentID("scaleAssistCustomSaveButton");
+        saveCustomScaleButton_.setTooltip("Save the custom scale under the name above");
         saveCustomScaleButton_.onClick = [this] { handleSaveCustomScale(); };
     }
 
@@ -368,6 +377,7 @@ private:
         // state (the roll's toggleScaleFilter is the single writer), and two names for one switch is
         // how a user ends up believing they are two switches.
         pitchVisibilityToggle_.setButtonText("Show only scale notes");
+        pitchVisibilityToggle_.setTooltip("Collapse the out-of-scale rows, and make Up/Down step by scale degree");
         pitchVisibilityToggle_.onClick = [this] {
             pitchVisibilityOn_ = pitchVisibilityToggle_.getToggleState();
             if (onPitchVisibilityChanged)
@@ -381,12 +391,16 @@ private:
         minNoteLabel_.setFont(juce::Font(juce::FontOptions(11.5f)));
         scaleContent_.addAndMakeVisible(minNoteCombo_);
         minNoteCombo_.setComponentID("scaleAssistMinNoteCombo");
+        minNoteCombo_.setTitle("Lowest note to generate");
+        minNoteCombo_.setTooltip("Lowest note Generate may use");
 
         scaleContent_.addAndMakeVisible(maxNoteLabel_);
         maxNoteLabel_.setText("Max", juce::dontSendNotification);
         maxNoteLabel_.setFont(juce::Font(juce::FontOptions(11.5f)));
         scaleContent_.addAndMakeVisible(maxNoteCombo_);
         maxNoteCombo_.setComponentID("scaleAssistMaxNoteCombo");
+        maxNoteCombo_.setTitle("Highest note to generate");
+        maxNoteCombo_.setTooltip("Highest note Generate may use");
 
         for (int pitch = 0; pitch <= 127; ++pitch) {
             const auto label = noteNameWithOctave(pitch);
@@ -398,6 +412,7 @@ private:
 
         scaleContent_.addAndMakeVisible(generateButton_);
         generateButton_.setComponentID("scaleAssistGenerateButton");
+        generateButton_.setTooltip("Fill the clip with random notes from the chosen scale and range");
         generateButton_.onClick = [this] {
             if (onGenerate)
                 onGenerate(getMinPitchSelection(), getMaxPitchSelection(), isAddToExistingSelected());

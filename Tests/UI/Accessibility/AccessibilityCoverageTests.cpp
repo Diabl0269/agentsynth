@@ -16,10 +16,13 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Chrome/ExportAudioDialog.h"
+#include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/Settings/SettingsWindow.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UI/Timeline/TimelineViewState.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <iostream>
@@ -246,6 +249,35 @@ TEST_F(AccessibilitySettingsTest, EveryTabOfTheSettingsWindow) {
         ASSERT_NE(content, nullptr);
         EXPECT_TRUE(matchesBaseline("Settings/" + window.getTabName(i), auditAccessibility(*content)));
     }
+}
+
+// ============================================================================
+// The piano roll.
+// ============================================================================
+
+// A clip with notes open, the velocity strip shown and the scale-assist panel open: the header
+// chips' keyboard buttons, the value box, the strip and every panel control. The custom-scale
+// editor is shown too (it is hidden until "Custom" is picked).
+TEST(AccessibilityCoverageTest, PianoRoll) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelineViewState state;
+    synth::ui::PianoRollComponent roll(state);
+    roll.setTimelineDoc(&doc);
+    const auto track = doc.addTrack(synth::TrackKind::Midi, "Track 1");
+    const auto clip = doc.addClip(track, 0.0, 8.0, "Clip");
+    synth::MidiNote note;
+    note.startBeat = 1.0;
+    note.pitch = 60;
+    note.lengthBeats = 1.0;
+    doc.addNote(clip, note);
+    roll.setSize(1000, 400);
+    roll.openClip(clip);
+    roll.setVelocityLaneVisible(true, false);
+    roll.toggleScalePanel();
+    // The "Edit custom scales..." row (id 9000, ScaleAssistPanel::kCustomRowId, private) shows the editor.
+    roll.getScaleAssistPanel().getScaleCombo().setSelectedId(9000, juce::sendNotificationSync);
+    roll.resized();
+    EXPECT_TRUE(matchesBaseline("PianoRoll", auditAccessibility(roll)));
 }
 
 // ============================================================================

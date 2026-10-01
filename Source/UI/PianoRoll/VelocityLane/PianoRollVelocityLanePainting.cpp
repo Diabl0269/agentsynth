@@ -5,6 +5,7 @@
 
 #include "PianoRollVelocityLane.h"
 
+#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "VelocityLaneMath.h"
 
@@ -52,6 +53,7 @@ void PianoRollVelocityLane::paint(juce::Graphics& g) {
 
     paintScale(g, gutter);
     paintSticks(g, gutter);
+    paintFocusRing(g, getLocalBounds().toFloat(), *this);
 }
 
 // "127 / 64 / 1" right-aligned against the gutter's edge, i.e. under the keys column, the same way

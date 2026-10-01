@@ -175,6 +175,7 @@ set(APPUI_SOURCES
     Source/UI/PianoRoll/PianoRollComponent/PianoRollScaleAssist.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollPainting.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollEditTools.cpp
+    Source/UI/PianoRoll/PianoRollComponent/PianoRollAccessibility.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollAudition.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollClipboardAndKeys.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollMouse.cpp

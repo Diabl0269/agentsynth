@@ -51,42 +51,9 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
     mouseDownBeat_ = xToBeat((double)pos.x);
     mouseDownPitch_ = pitchForY(pos.y);
     lastDragPointer_ = pos;
-    if (backButtonBounds_.contains(pos)) {
-        requestClose();
-        return;
-    }
-    // Each chip does exactly ONE thing on a plain click -- no modifier variants anywhere in the
-    // header, so there is no plain-vs-Shift ambiguity. There is no Snap chip here: it would duplicate
-    // the timeline toolbar's own Snap button on the same shared TimelineViewState::snapEnabled;
-    // toggleSnap() and the J key cover it.
-    if (quantiseButtonBounds_.contains(pos)) {
-        flashQuantiseButton(); // feedback even when the click is a no-op
-        performQuantise();
-        return;
-    }
-    if (quantiseLengthButtonBounds_.contains(pos)) {
-        flashQuantiseLengthButton(); // mirrors the Quantise chip above: same isQuantiseEnabled() gate
-        performQuantiseLength();
-        return;
-    }
-    if (quantisePitchButtonBounds_.contains(pos)) {
-        quantisePitchesToActiveScale(); // silently a no-op with no scale chosen, like the chip's dim
-        return;
-    }
-    if (scaleButtonBounds_.contains(pos)) {
-        toggleScalePanel();
-        return;
-    }
-    if (scaleFilterButtonBounds_.contains(pos)) {
-        toggleScaleFilter();
-        return;
-    }
-    if (velocityChipBounds_.contains(pos)) {
-        toggleVelocityLane();
-        return;
-    }
-    if (humanizeChipBounds_.contains(pos)) {
-        showHumanizeMenu();
+    // Each header chip does exactly ONE thing on a plain click; see activateHeaderButton.
+    if (const auto chip = headerButtonAt(pos); chip != HeaderButtonId::None) {
+        activateHeaderButton(chip);
         return;
     }
     if (pos.y < canvasTop())

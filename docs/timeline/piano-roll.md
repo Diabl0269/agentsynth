@@ -23,6 +23,7 @@ to absolute beats via `clip->startBeat` and back.
 | `PianoRollScaleAssist.cpp` | The scale-assist panel and its Generate action |
 | `PianoRollPainting.cpp` | `paint()`, header chip glyphs, the local playhead line |
 | `PianoRollEditTools.cpp` | Editing gestures, the edit-tool verbs, split-tool hover preview, tool cursors |
+| `PianoRollAccessibility.cpp` | The focused note and its ring, the grid's screen-reader value, the keyboard buttons over the header chips (`PianoRollHeaderChip.h`) |
 | `PianoRollAudition.cpp` | Keys-column audition, note audition, clip-overrun after resize, tooltips |
 | `PianoRollClipboardAndKeys.cpp` | The note clipboard and arrow-key editing (nudge/transpose/navigate) |
 | `PianoRollMouse.cpp` | Mouse handling and edge-auto-scroll |

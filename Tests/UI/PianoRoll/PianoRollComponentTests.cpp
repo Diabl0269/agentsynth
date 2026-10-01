@@ -551,7 +551,7 @@ TEST(PianoRollEditingTest, QuantiseButtonEnabledStateAndTooltip) {
     // hardcoded default: bare "q", lower-cased.
     const auto tooltip = f.roll.getTooltipFor(f.roll.getQuantiseButtonBounds().getCentre());
     EXPECT_TRUE(tooltip.startsWith("Quantize note starts to the grid (q)")) << tooltip;
-    EXPECT_TRUE(f.roll.getTooltipFor(f.roll.getBackButtonBounds().getCentre()).isEmpty());
+    EXPECT_TRUE(f.roll.getTooltipFor(f.roll.getBackButtonBounds().getCentre()).contains("(Esc)"));
 }
 
 // The QuantiseLength chip's twin of the test above: same isQuantiseEnabled() gate as the Quantise

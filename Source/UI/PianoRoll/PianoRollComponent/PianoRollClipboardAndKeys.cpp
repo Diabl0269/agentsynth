@@ -358,10 +358,9 @@ bool PianoRollComponent::selectAdjacentNote(bool forward) {
         if (!forward)
             break;
     }
-    if (anchor < 0)
-        return false; // nothing selected in this clip: the key falls through to the panel
-
-    const int target = anchor + (forward ? 1 : -1);
+    // Nothing selected yet: forward starts at the first note and back at the last, so a keyboard-only
+    // user can reach a note at all without the pointer.
+    const int target = anchor < 0 ? (forward ? 0 : count - 1) : anchor + (forward ? 1 : -1);
     if (target < 0 || target >= count)
         return true; // at the end of the run: selection kept, key still consumed
 
