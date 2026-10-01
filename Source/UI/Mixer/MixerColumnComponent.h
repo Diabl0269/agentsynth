@@ -348,7 +348,7 @@ private:
     juce::AudioProcessorGraph::NodeID eqNodeId_;
 
     MixerColumnHeader header_;
-    CursorDelegatingLabel sourceLineLabel_;
+    juce::Label sourceLineLabel_;
     MixerInsertList insertList_;
     MixerEqThumbnail eqThumbnail_;
     MixerSendList sendList_;

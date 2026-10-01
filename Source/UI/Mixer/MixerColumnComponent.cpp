@@ -58,7 +58,8 @@ MixerColumnComponent::MixerColumnComponent() {
     };
     header_.onNameEdited = [this](const juce::String& newName) { commitHeaderRename(newName); };
     addAndMakeVisible(sourceLineLabel_);
-    header_.adoptHandleLabel(sourceLineLabel_); // the source line is part of the drag handle
+    // Plain text under the header, not part of its drag handle: a press there reaches the column itself.
+    sourceLineLabel_.setInterceptsMouseClicks(false, false);
     sourceLineLabel_.setFont(juce::Font(juce::FontOptions(10.0f)));
     sourceLineLabel_.setJustificationType(juce::Justification::centredLeft);
     sourceLineLabel_.setColour(juce::Label::textColourId, juce::Colour(0xff8A93A0));
@@ -169,7 +170,9 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     // Doubles as docs/mixer/panel.md#what-the-mixer-shows's "the tracks that play into it" row -- `sourceLine` is the
     // caller-resolved (comma-joined) names of column.feedingTracks, the same tracks a "source line" names for a
     // single-source column.
-    sourceLineLabel_.setText(sourceLine_, juce::dontSendNotification);
+    // A linked channel's single track usually carries the channel's own name; repeating it under the header
+    // says nothing, so the row stays (sections line up across columns) but shows text only when it differs.
+    sourceLineLabel_.setText(sourceLine_ == column.name ? juce::String() : sourceLine_, juce::dontSendNotification);
     insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,
                            column.sourceNodeId, column.nodeId);
 

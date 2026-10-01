@@ -212,7 +212,7 @@ consistently, through one header-only helper: `Source/UI/Layout/DragCursor.h`
   threshold, not cancelled by Esc), and `endDragCursor(handle)` on release before any hook that can
   destroy it. So the dragging hand appears the moment the press becomes a drag, and the arrow
   returns on release, or on the first pointer move after Esc. A child that can start the drag (a
-  track's name, a mixer column's name label and source line) is a `CursorDelegatingLabel` showing
+  track's name, a mixer column's name label) is a `CursorDelegatingLabel` showing
   its handle's cursor. Direct, Master and pinned mixer columns never drag, so never show the hand.
 - **Small grab handles** (a thing whose only job is to be picked up: mixer zones row, list drag
   handles, MIDI-remote controller surface cell, module library row, timeline ruler marker flag)

@@ -120,13 +120,6 @@ public:
         badgesChanged();
     }
 
-    /** Makes `label` (a sibling of the header, e.g. the source line) part of the drag handle: it shows the
-     *  header's cursor and forwards its mouse events here. */
-    void adoptHandleLabel(CursorDelegatingLabel& label) {
-        label.setCursorSource(this);
-        label.addMouseListener(this, false);
-    }
-
     /** Whether double-click-to-rename is armed at all. Direct and Master have no
      *  ChannelStripModule name (Direct has no node; Master is a MasterModule) for a rename to write
      *  to, so MixerDirectColumn/MixerMasterColumn turn this off right after their fixed
