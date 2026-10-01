@@ -58,6 +58,7 @@
 // openClip so "copy in one clip, paste in another" works.
 
 #include "PianoRollComponent.h"
+#include "PianoRollHeaderChip.h"
 #include "PianoRollInternal.h"
 #include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include <algorithm>
@@ -85,8 +86,10 @@ int medianPitchOf(const std::vector<synth::MidiNote>& notes) {
 PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
     : viewState_(viewState) {
     setComponentID("pianoRollComponent");
+    setTitle("Piano roll");
     setInterceptsMouseClicks(true, false);
     setWantsKeyboardFocus(true);
+    initHeaderChips();
     setOpaque(true); // paint() starts with an opaque g.fillAll(bg0), so the parent need not repaint behind us
     // No scale context yet, so this just fills visiblePitches_ with every pitch — see the class
     // comment and rebuildVisiblePitches.
@@ -207,6 +210,8 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     const double gridWidth = std::max(1.0, (double)(getWidth() - leftGutterWidth()));
     const double fitted = clip->lengthBeats > 0.0 ? gridWidth / clip->lengthBeats : rollView_.pixelsPerBeat;
     setHorizontalView(fitted, clip->startBeat);
+    syncHeaderChipStates();
+    refreshAccessibilityValue();
     repaint();
 }
 
@@ -238,6 +243,7 @@ void PianoRollComponent::closeRoll() {
     // No animation across the roll closing — see openClip's identical guard.
     if (scalePanelAnim_.isRunning())
         finishScalePanelAnimation();
+    refreshAccessibilityValue();
     repaint();
 }
 
@@ -273,6 +279,7 @@ void PianoRollComponent::refreshFromDoc() {
     // A note add/remove can change which out-of-scale pitches pitch-visibility mode is keeping
     // visible on the note's account alone.
     rebuildVisiblePitches();
+    refreshAccessibilityValue(); // a nudge or velocity edit changes what the focused note reads as
     repaint();
 }
 
@@ -464,6 +471,7 @@ void PianoRollComponent::setScaleContext(std::function<bool(int)> isInScale, boo
     isInScale_ = std::move(isInScale);
     pitchVisibilityOn_ = pitchVisibilityOn;
     rebuildVisiblePitches();
+    syncHeaderChipStates();
     repaint();
 }
 

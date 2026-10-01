@@ -24,6 +24,8 @@ PianoRollVelocityLane::PianoRollVelocityLane() {
     // to the roll, so the roll's own shortcuts keep working after a click in the strip.
     setWantsKeyboardFocus(true);
     setTitle("Velocity strip");
+    setDescription(
+        "Drag a stick to set a note's velocity; the Set box in the header edits the selected notes from the keyboard");
     // Added last so it wins the hit test over the top of the plot it overlaps.
     addAndMakeVisible(resizeHandle_);
     resizeHandle_.onResize = [this](int desired) {

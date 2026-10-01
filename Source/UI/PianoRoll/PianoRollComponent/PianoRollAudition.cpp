@@ -204,22 +204,7 @@ void PianoRollComponent::promptExtendClipToFitNotes(synth::ClipId clipId, double
 // ---- Tooltips ----
 
 juce::String PianoRollComponent::getTooltipFor(juce::Point<int> pos) const {
-    if (quantiseButtonBounds_.contains(pos))
-        return quantiseTooltipText();
-    if (quantiseLengthButtonBounds_.contains(pos))
-        return quantiseLengthTooltipText();
-    if (quantisePitchButtonBounds_.contains(pos))
-        return quantisePitchTooltipText();
-    if (scaleButtonBounds_.contains(pos))
-        return scaleTooltipText();
-    if (scaleFilterButtonBounds_.contains(pos))
-        return scaleFilterTooltipText();
-    if (velocityChipBounds_.contains(pos))
-        return velocityTooltipText();
-    if (humanizeChipBounds_.contains(pos))
-        return juce::String::fromUTF8("Humanize velocities \xE2\x80\x94 adds a small random offset to the selected "
-                                      "notes, or to every note when none is selected");
-    return {};
+    return headerTooltipText(headerButtonAt(pos));
 }
 
 juce::String PianoRollComponent::getTooltip() { return getTooltipFor(getMouseXYRelative()); }

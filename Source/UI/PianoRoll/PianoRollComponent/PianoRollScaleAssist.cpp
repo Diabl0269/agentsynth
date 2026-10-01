@@ -45,6 +45,7 @@ void PianoRollComponent::setScalePanelVisible(bool visible, bool animate) {
     if (scalePanelVisible_ == visible)
         return; // restoring the same state (a fresh PropertiesFile's default, or a repeat toggle) costs nothing
     scalePanelVisible_ = visible;
+    syncHeaderChipStates();
     if (propertiesFile_ != nullptr) {
         propertiesFile_->setValue(kScalePanelVisiblePropertyKey, visible);
         propertiesFile_->saveIfNeeded();

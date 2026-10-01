@@ -691,6 +691,14 @@ equality is exact on modifiers, which is what keeps Left/Shift+Left/Alt+Left thr
 actions. Digit keys are deliberately absent here — tool switching belongs to the panel (see
 Timeline above), so the roll and the panel can never disagree about which tool is active.
 
+**The focused note.** The note Alt+Left/Right land on is the roll's *focused note*: the one note the
+selection holds (a multi-selection, or none, has no focused note). While the grid holds keyboard focus
+it is outlined with the accent focus ring, and a screen reader hears it as the grid's value, e.g.
+"C4, bar 2 beat 1, length 1/8, velocity 100" (see [`timeline/focus.md`](../timeline/focus.md#piano-roll-focus)).
+Alt+Left/Right still fall through when nothing is selected, so a first note is picked with the pointer.
+Each header chip has a keyboard button over it: Tab reaches it, **Return** runs its action (Space stays
+the global play/stop) and its tooltip names its shortcut.
+
 **One letter, one verb, on both surfaces.** Snap moved off Q to J for the *timeline* too, so bare Q
 is now unambiguously "quantise" (the roll's `pianoRollQuantise`) and bare J is unambiguously "snap"
 (the shared `timelineSnapToggle`) — the roll resolves the latter directly rather than owning a

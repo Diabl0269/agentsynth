@@ -24,6 +24,13 @@ Every new or changed control:
 | A whole panel or focus region | `paintFocusRegionOutline` (`Source/UI/Layout/FocusRegion.h`) - translucent, panel-weight outline |
 | A small control (button, toggle, knob, slider, custom widget) | `paintFocusRing` (`Source/UI/Layout/FocusRing.h`) - solid accent ring, 1.5x the theme border weight |
 
+A ring that follows a tracked item rather than the component's own focus (the piano roll's focused
+note) calls `paintFocusRingAlways`, which draws the same ring without the focus check.
+
+A control that is only painted (no child component), such as the piano roll's header chips, gets a
+transparent child button over it: it is the Tab stop and carries the name, role and tooltip, while
+the parent keeps handling the pointer (`PianoRollHeaderChip`).
+
 `AppLookAndFeel` already draws the ring for buttons, combo boxes, text editors, toggles, rotary
 knobs and sliders, so a stock control needs nothing. A custom-painted control calls
 `paintFocusRing(g, area, *this, cornerRadius)` at the end of its `paint()` and repaints in
@@ -43,7 +50,7 @@ knobs and sliders, so a stock control needs nothing. A custom-painted control ca
 
 `Tests/UI/Accessibility/AccessibilityCoverageTests.cpp` audits every visible, accessible interactive
 control (buttons, sliders, combo boxes, text editors, anything that wants keyboard focus) on a
-headless `MainComponent` (panel state pinned: library open, bottom dock open on the Timeline tab, AI chat and mod matrix closed, so the count does not depend on saved settings), one card for every built-in module type (`ModuleCards`, one aggregate entry; types needing a plugin binary, a timeline track or mixer/macro plumbing are skipped, the list is in the test), each Settings tab and the Export Audio dialog, and counts two gaps per
+headless `MainComponent` (panel state pinned: library open, bottom dock open on the Timeline tab, AI chat and mod matrix closed, so the count does not depend on saved settings), one card for every built-in module type (`ModuleCards`, one aggregate entry; types needing a plugin binary, a timeline track or mixer/macro plumbing are skipped, the list is in the test), each Settings tab, the Export Audio dialog and the piano roll (a clip loaded, the velocity strip shown, the scale-assist panel open on its custom-scale editor), and counts two gaps per
 surface: **missingName** (empty `setTitle`, and for a button empty text; a custom accessibility handler is not consulted because it does not exist without a native window) and **missingTooltip**. The counts must equal the
 entry in `Tests/UI/Accessibility/AccessibilityBaseline.h`:
 

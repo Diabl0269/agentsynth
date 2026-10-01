@@ -51,6 +51,7 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 namespace synth::ui {
 
 class PianoRollVelocityLane; // UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h
+class PianoRollHeaderChip;   // PianoRollHeaderChip.h
 
 class PianoRollComponent
     : public juce::Component
@@ -136,6 +137,19 @@ public:
     // Panel-scoped Delete/Escape. Returns false (key falls through) when there is nothing to act
     // on, the same TimelineClipLaneArea contract.
     bool keyPressed(const juce::KeyPress& key) override;
+
+    // ---- Focused note and screen reader (PianoRollAccessibility.cpp) ----
+
+    // The focused note is the one note the selection holds (what Alt+Left/Right land on); invalid
+    // when nothing, or more than one note, is selected. It is outlined with the accent focus ring
+    // while the roll holds keyboard focus.
+    synth::NoteId getFocusedNote() const noexcept;
+    // What a screen reader says for the grid: the focused note ("C4, bar 2 beat 1, length 1/8,
+    // velocity 100"), else the clip's name and note count. Empty while no clip is open.
+    juce::String getAccessibilityValueText() const;
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+    void focusGained(juce::Component::FocusChangeType) override;
+    void focusLost(juce::Component::FocusChangeType) override;
 
     // juce::TooltipClient — the "Q" button's tooltip (the header's buttons are drawn shapes, not
     // child juce::Buttons, so the tooltip is resolved by position).
@@ -423,6 +437,10 @@ public:
     /** A header chip's current bounds in this component's coordinates (empty before the first layout). */
     juce::Rectangle<int> getHeaderChipBounds(HeaderButtonId which) const noexcept;
     bool isHeaderButtonHoveredForTest(HeaderButtonId which) const noexcept;
+    /** The keyboard/screen-reader button over a header chip (null for None). */
+    juce::Button* getHeaderChipButtonForTest(HeaderButtonId which) noexcept;
+    /** Paints the focused-note ring as if the roll held keyboard focus (no native window headless). */
+    void setFocusRingForcedForTest(bool forced) noexcept;
 
 protected:
     // Paint-count seams for tests (the local playhead line, the Split-tool hover preview, and the
@@ -537,6 +555,17 @@ private:
     // PianoRollPainting.cpp for the full contract.
     juce::Rectangle<int> headerButtonBoundsFor(HeaderButtonId which) const noexcept;
     void updateHeaderButtonHover(juce::Point<int> pos);
+    HeaderButtonId headerButtonAt(juce::Point<int> pos) const noexcept;
+    // The one action a chip performs, shared by a click and by its keyboard button.
+    void activateHeaderButton(HeaderButtonId which);
+    juce::String headerTooltipText(HeaderButtonId which) const;
+    // The keyboard/screen-reader buttons over the painted chips (PianoRollAccessibility.cpp).
+    void initHeaderChips();
+    void layoutHeaderChips();
+    void syncHeaderChipStates();
+    // Announces the grid's value text when it changed since the last announcement.
+    void refreshAccessibilityValue();
+    void paintFocusedNoteRing(juce::Graphics& g);
 
     // ---- Clipboard plumbing ---- see PianoRollClipboardAndKeys.cpp for the full contract of each
     // (anchor-block rules, clip-window clamp, one-undo-step shape).
@@ -952,6 +981,9 @@ private:
 
     // Which header chip (if any) the pointer is currently over — see updateHeaderButtonHover.
     HeaderButtonId hoveredHeaderButton_ = HeaderButtonId::None;
+    std::array<std::unique_ptr<PianoRollHeaderChip>, 8> headerChips_; // indexed by HeaderButtonId - 1
+    juce::String announcedValueText_;
+    bool focusRingForced_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PianoRollComponent)
 };

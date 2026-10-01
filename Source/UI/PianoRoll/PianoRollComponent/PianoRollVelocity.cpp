@@ -102,7 +102,11 @@ void PianoRollComponent::initVelocityControls() {
 
     // Every selection change, from any path (a click, a marquee, an arrow key, a test reaching the
     // model directly), keeps the box showing the selection's common velocity.
-    selection_.onChange = [this] { syncVelocityValueBox(); };
+    selection_.onChange = [this] {
+        syncVelocityValueBox();
+        refreshAccessibilityValue();
+        repaint(); // the focused note's ring follows the selection
+    };
     syncVelocityValueBox();
 }
 
@@ -188,6 +192,7 @@ void PianoRollComponent::setVelocityLaneVisible(bool visible, bool animate) {
     if (!visible)
         clearVelocityPreview(); // hiding mid-gesture commits nothing
     velocityLaneVisible_ = visible;
+    syncHeaderChipStates();
     if (propertiesFile_ != nullptr) {
         propertiesFile_->setValue(velocityLaneVisibleKey(), visible);
         propertiesFile_->saveIfNeeded();

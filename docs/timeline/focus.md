@@ -182,6 +182,33 @@ focused header; `TimelineClipKeyboardNavTests.cpp` covers the pure helpers. Real
 native peer, so they assert the model the focus calls mirror (keyboard clip, selection,
 `focusedTrackIndex_`, open roll).
 
+## Piano roll focus
+
+Return in clip mode opens the roll and `TimelinePanelComponent::openPianoRoll` hands keyboard focus
+to its grid; **Escape** (nothing selected; with notes selected the first Escape clears the
+selection) closes it and `closePianoRoll` hands focus back to the lane, the clip still the keyboard
+clip. Tab and Shift+Tab inside the roll walk, in screen order, the header chips, the scale-assist
+panel's controls, the velocity Set box and the velocity strip. The header chips are painted shapes,
+so each has a transparent `PianoRollHeaderChip` button over it: the Tab stop, accent focus ring,
+screen-reader name and role (a toggle chip reports its on state), tooltip, and the **Return**
+target (it runs the chip's one action, the same function a click runs).
+
+- **Focused note.** The one note the selection holds (`PianoRollComponent::getFocusedNote`); the
+  Alt+Left/Right keys (`pianoRollNavNextNote`/`pianoRollNavPrevNote`) move the selection, so they
+  move it. It is outlined with the accent focus ring while the grid holds focus, repainted on
+  focus gained/lost and on every selection change.
+- **Screen reader.** The grid has title "Piano roll" and a group-role handler whose text value is
+  the focused note from `describeNoteForAccessibility` (`Source/UI/PianoRoll/NoteAccessibilityText.h`),
+  e.g. "C4, bar 2 beat 1, length 1/8, velocity 100" (bar and beat are 1-based timeline positions;
+  length is a fraction of a whole note when exact, else "0.3 beats"). With no single note focused it
+  reads the clip name and note count ("Lead, 12 notes", plus ", 3 selected" for a multi-selection). A
+  value-changed event is posted only when the text changes.
+
+Tests: `Tests/UI/PianoRoll/PianoRollFocusedNoteTests.cpp` (real Alt+Arrow `KeyPress`es, the spoken
+value, the ring rendered to a software image), `PianoRollKeyboardReachTests.cpp` (chips, tab order,
+Return-opens/Escape-returns through the panel) and `NoteAccessibilityTextTests.cpp`. Real OS focus
+needs a native peer, so the ring is forced with `setFocusRingForcedForTest`.
+
 ## Tests
 
 `Tests/App/FocusArbitration/` — one test per verb × surface, split by concern:

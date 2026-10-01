@@ -646,6 +646,10 @@ add_executable(Tests
     UI/Mixer/MixerMasterColumnInsertTests.cpp
     Engine/OutputMeterTapTests.cpp
     UI/Layout/KeyboardContextMenuTests.cpp
+    # Piano roll focused note, spoken value, names and keyboard reach
+    UI/PianoRoll/NoteAccessibilityTextTests.cpp
+    UI/PianoRoll/PianoRollFocusedNoteTests.cpp
+    UI/PianoRoll/PianoRollKeyboardReachTests.cpp
 )
 
 # MainComponent.h (AppUI) pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h)

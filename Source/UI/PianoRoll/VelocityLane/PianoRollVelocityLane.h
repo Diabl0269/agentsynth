@@ -85,6 +85,9 @@ public:
     void mouseExit(const juce::MouseEvent& e) override;
     // Escape cancels a gesture; every other key falls through to the parent.
     bool keyPressed(const juce::KeyPress& key) override;
+    // The accent focus ring is drawn round the whole strip while it holds keyboard focus.
+    void focusGained(juce::Component::FocusChangeType) override { repaint(); }
+    void focusLost(juce::Component::FocusChangeType) override { repaint(); }
 
 private:
     float plotTop() const noexcept;
