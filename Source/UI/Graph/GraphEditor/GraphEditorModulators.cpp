@@ -148,7 +148,9 @@ void GraphEditor::placeNewModulator(juce::AudioProcessorGraph::Node& node, NodeI
 // cable on the canvas does); a direct or poly cable loses its edges into the target. A macro port the
 // cable crossed is swept when nothing is left on it. The source goes too when asked and it drives
 // nothing else any more -- through the single-node removal path, so every pre-removal unbind runs.
-void GraphEditor::removeModulator(const ModulationRouting& routing, bool removeLonelySource) {
+// `recordUndo` false leaves the undo step to the caller (the timeline's Remove modulator, which takes the
+// LFO's sections lane in the same step).
+void GraphEditor::removeModulator(const ModulationRouting& routing, bool removeLonelySource, bool recordUndo) {
     auto& graph = audioEngine.getGraph();
     auto mutation = [this, &graph, routing, removeLonelySource] {
         if (routing.kind == AudioEngine::RoutingKind::AttenuverterChain) {
@@ -169,7 +171,7 @@ void GraphEditor::removeModulator(const ModulationRouting& routing, bool removeL
         else
             updateComponents();
     };
-    if (undoManager != nullptr)
+    if (recordUndo && undoManager != nullptr)
         undoManager->recordGraphAndMacroChange(graph, macros, mutation);
     else
         mutation();

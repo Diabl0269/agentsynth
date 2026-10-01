@@ -5,6 +5,7 @@
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/AutomationToolMapping.h"
+#include "UI/Timeline/TimelineBeatsPerBar.h"
 #include <algorithm>
 #include <cmath>
 
@@ -41,16 +42,7 @@ void AutomationLaneEditor::focusGained(juce::Component::FocusChangeType) {
 }
 
 //==============================================================================
-double AutomationLaneEditor::currentBeatsPerBar() const {
-    double beatsPerBar = 4.0;
-    if (transport_ != nullptr) {
-        const auto snap = transport_->getPositionSnapshot();
-        const double tsBeatsPerBar = (double)snap.timeSigNumerator * 4.0 / (double)std::max(1, snap.timeSigDenominator);
-        if (tsBeatsPerBar > 0.0)
-            beatsPerBar = tsBeatsPerBar;
-    }
-    return beatsPerBar;
-}
+double AutomationLaneEditor::currentBeatsPerBar() const { return beatsPerBarFor(transport_); }
 
 double AutomationLaneEditor::snappedBeatAt(double rawBeat) const {
     return viewState_.snapBeat(rawBeat, currentBeatsPerBar());

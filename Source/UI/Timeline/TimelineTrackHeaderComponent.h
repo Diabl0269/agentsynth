@@ -463,6 +463,9 @@ public:
     std::function<void(synth::TrackId)> onAddAutomationRequested;
     void setAutomationExpanded(bool expanded);
     bool isAutomationExpanded() const noexcept { return automationExpanded_; }
+    // How many of the track's lanes the panel draws as an LFO modulator's sections rather than as lane
+    // rows. They are not lanes to the user, so the fold arrow's count and the badge leave them out.
+    void setHiddenLaneCount(int count);
     /** True for the Automation track, drawn as the "Unassigned automation" section header. */
     bool isSectionHeader() const;
 
@@ -746,6 +749,8 @@ private:
     juce::Rectangle<int> kindBadgeBounds_;
     juce::Rectangle<int> laneBadgeBounds_; // the section header's "N lanes" badge; empty when not shown
     bool automationExpanded_ = false;
+    int hiddenLaneCount_ = 0;
+    int shownLaneCount() const;
     // Carves the fold arrow, the kind badge and the section header's "N lanes" badge off `row`.
     void layoutFoldArrowAndBadges(juce::Rectangle<int>& row);
 

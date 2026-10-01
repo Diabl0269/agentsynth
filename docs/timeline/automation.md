@@ -48,7 +48,8 @@ row, zoom-scaled like a lane row ([below](#adding-a-lane-from-the-timeline)).
   error colour) writing `TimelineDoc::setLaneRecordMode` as one undo step — a manual pick IS a user
   gesture, unlike `AutomationRecorder`'s own Write-drops-to-Touch-on-stop call;
 - a "..." menu: **Add LFO modulator** ([below](#modulators)), **Move to track** (every other MIDI/Audio
-  track, `TimelineDoc::moveLaneToTrack`) and **Delete lane** (`TimelineDoc::removeLane`), each one undo step.
+  track, `TimelineDoc::moveLaneToTrack`; the [sections](#sections) of the lane's LFOs move with it) and
+  **Delete lane** (`TimelineDoc::removeLane`), each one undo step.
 
 The edits live in `AutomationLaneActions` as free functions: a Delete or Move destroys the header
 that asked for it during the doc notification, so the header copies what it needs and makes the
@@ -180,15 +181,70 @@ poll, only for rows on screen, writing a control only when its value moved and n
 **Remove modulator** (`GraphEditor::removeModulator`) removes the routing (the attenuverter chain as a
 whole, or a direct cable's edges), sweeps a macro port the cable leaves empty, and removes the LFO too when
 no other cable leaves it, through `requestDeleteModule(..., recordUndo=false)` so every pre-removal unbind
-runs -- all one undo step. A row that triggers a removal is destroyed by the refresh before the host call
-returns, so it copies what it needs and makes the call its last statement.
+runs -- all one undo step. When the LFO goes, its [sections](#sections) lane goes in the same step
+(`MainComponent::removeModulator` wraps the graph edit and the lane removal in one
+`recordGraphTimelineAndMacroChange`; an LFO that still drives another jack stays, with its sections). A row
+that triggers a removal is destroyed by the refresh before the host call returns, so it copies what it
+needs and makes the call its last statement.
 
 **Layout**: a lane's block is its row plus its modulator rows (`TimelineAutomationLanes::laneBlockHeight`,
 the one helper every geometry function walks), so modulator rows count into the track's extra height and
 move with the track. A track's modulators show whenever its lanes are open. Over the lanes region each row
-is a `ModulatorBand`: for now a faint band in the mod-wire colour (28%) across the whole row, meaning the
-modulator runs everywhere; sections of the timeline where it is on or off will be drawn there. The band
-takes no clicks, so the clip lanes underneath decide (and refuse) as they do for a lane row's backdrop.
+is a `ModulatorBand` ([sections](#sections) for an LFO; for any other source a faint 28% band in the mod-wire
+colour that takes no clicks, so the clip lanes underneath decide (and refuse) as they do for a lane row's
+backdrop).
+
+### Sections
+
+An LFO modulator can be on only in chosen parts of the song. In the LFO row's band the user draws
+**sections**: blocks of bars where it is on; outside them it does nothing. With no sections the modulator is
+on everywhere, as it always was.
+
+**Storage** (`ModulatorSections.h/.cpp`): an ordinary automation lane on the LFO's own `level` parameter
+(0..1, `nodeUuid` = the LFO's uuid, Read mode) on the same track as the lane it modulates. Every point is
+Hold: `(beat 0, 0)`, then `(start, 1)` and `(end, 0)` per block (a block starting at beat 0 has no leading
+zero); overlapping and touching blocks merge. The existing `AutomationApplier` plays it, so there is no engine
+concept: the LFO's level is 0 outside the blocks and 1 inside, and the Depth control (the attenuverter) stays
+independent. The lane is found by `sectionsLaneFor(doc, lfoUuid)` wherever it sits (the doc-wide
+one-lane-per-parameter rule).
+
+**Hidden as a lane**: while the LFO is a modulator of another lane on the same track, that `level` lane is not
+drawn as a lane row; it is the modulator row's band (`TimelineAutomationLanes::deriveRoutings` computes the set
+once per sync and refresh, `isSectionsLane`). It also does not count in the track's fold-arrow or badge lane
+count (`TimelineTrackHeaderComponent::setHiddenLaneCount`), the lane choices the mixer's "Automate" entries
+use, or the track's row height. If the cable is removed by hand the LFO stops being a modulator there and the
+level lane shows as an ordinary lane again; nothing is lost. A level lane that something modulates itself also
+stays a lane row.
+
+**Gestures** (real mouse handling on the band, which takes clicks only inside its own row), following the
+timeline's edit tool the way the lane editors do (`sectionToolFor`):
+
+- **Draw**: drag paints an on block over the dragged span (snapped with the shared view-state snap), creating
+  the lane on first use. **Erase**: drag turns the span off; out of a band with no lane it leaves "everywhere
+  but here".
+- **Select** (and every other tool): drag a block's edge (6 px zone) to resize it, its middle to move it, click
+  to select; **Delete**/**Backspace** removes the selected block, **Escape** clears the selection.
+  **Double-click** on empty band adds a one-bar block at the snapped beat.
+- Each gesture is ONE undo step and one doc write: the preview is component-local (`preview_`) and
+  `ModulatorBand::commit` runs `applySections` inside `AppUndoManager::recordTimelineChange` on mouse-up, like
+  `AutomationLaneEditor`. Creating the lane is `addLane` plus `editBreakpoints` in that one step. **Erasing the
+  last block removes the lane in the same step**, so the modulator is back to "on everywhere" (an all-zero lane
+  meaning "off everywhere" would be confusing); the band's tooltip says so.
+
+**Painting**: blocks in the mod-wire colour at 28% fill with a 1 px outline and 3 px radius, the selected block
+outlined in the accent; with no lane the whole band is the faint full band and its tooltip reads "Draw
+sections to play this modulator only there". Blocks use the shared `TimelineViewState` x mapping exactly like
+clip lanes.
+
+**Keyboard and screen reader**: the band is a Tab stop with the focus ring, named "Cutoff LFO sections" with
+the blocks as its description ("bars 9-16, 25-32" or "on everywhere") and a tooltip naming the tools. Left/Right
+move the selection between blocks, Delete removes, **Return** adds a one-bar block at the playhead, Escape
+clears. All standard navigation keys, so none is a rebindable action.
+
+**With the rest of the timeline**: a moved lane takes its LFOs' sections with it
+(`sectionsLanesTravellingWith`, except those of an LFO another lane on the track also uses), and Remove
+modulator removes them with the LFO (above). Deleting the target lane leaves the modulators and their sections
+in the graph; the level lane then shows as an ordinary lane.
 
 Every control is a Tab stop that a click does not take focus to, shows the accent focus ring, and is named
 for what it controls ("Cutoff LFO shape", "Cutoff LFO depth", "Modulator menu for Cutoff LFO"), with the
@@ -345,3 +401,7 @@ pick lands, in `AutomationLanesAddMainTests.cpp`). Modulators: `AutomationLanesM
 hit testing, row controls and names against a stub host), `AutomationLanesModulatorMainTests.cpp` (add, macro
 join, no CV jack, a hand-patched cable, remove, undo) and `AutomationLanesModulatorEditTests.cpp` (row edits and
 their undo, the CV moving across a render and stopping at depth 0, a saved project reopening with its row).
+Sections: `AutomationLanesSectionsModelTests.cpp` (the blocks/breakpoints algebra), `AutomationLanesSectionsBandTests.cpp`
+(real mouse and key events on the band: each tool, one undo step and one doc write per gesture, names) and
+`AutomationLanesSectionsIntegrationTests.cpp` (hidden as a lane and back, Remove modulator, Move to track, a
+saved project reopening); the applier playing a section is in `AutomationApplierTests.cpp`.

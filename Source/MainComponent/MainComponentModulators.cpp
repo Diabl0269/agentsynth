@@ -9,6 +9,7 @@
 #include "Modules/LFOModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h"
 
 namespace {
 juce::String uuidOf(juce::AudioProcessorGraph::Node* node) {
@@ -72,6 +73,25 @@ void MainComponent::removeModulator(const synth::ui::ModulatorInfo& modulator) {
     if (target == nullptr)
         return;
     auto& graph = audioEngine.getGraph();
+    // An LFO that goes with its last cable takes its sections lane too, in the same undo step: one Cmd+Z
+    // brings back the LFO, the cable and the sections together. An LFO that still drives another jack stays,
+    // and so do its sections. A modulator with no sections lane keeps the plain graph-only step.
+    const bool hasSections =
+        modulator.isLfo && synth::ui::sectionsLaneFor(timelineDoc, modulator.sourceUuid) != nullptr;
+    const auto remove = [this, hasSections, &modulator](const AudioEngine::ModulationRouting& routing) {
+        if (!hasSections) {
+            graphEditor.removeModulator(routing, modulator.isLfo);
+            return;
+        }
+        undoManager.recordGraphTimelineAndMacroChange(
+            audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, &routing, &modulator] {
+                graphEditor.removeModulator(routing, true, /*recordUndo=*/false);
+                if (findNodeByUuid(modulator.sourceUuid) != nullptr)
+                    return;
+                if (const auto* lane = synth::ui::sectionsLaneFor(timelineDoc, modulator.sourceUuid))
+                    timelineDoc.removeLane(lane->id);
+            });
+    };
     for (const auto& r : audioEngine.getModulationRoutings()) {
         if (r.destNodeID != target->nodeID || r.destChannelIndex != modulator.targetChannel)
             continue;
@@ -83,7 +103,7 @@ void MainComponent::removeModulator(const synth::ui::ModulatorInfo& modulator) {
                                 r.sourceChannelIndex == modulator.sourceChannel &&
                                 uuidOf(graph.getNodeForId(r.sourceNodeID)) == modulator.sourceUuid;
         if (sameChain || sameDirect) {
-            graphEditor.removeModulator(r, modulator.isLfo);
+            remove(r);
             return;
         }
     }
