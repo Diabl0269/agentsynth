@@ -560,6 +560,7 @@ add_executable(Tests
     UI/Timeline/AutomationLanes/AutomationLanesModulatorRowTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesModulatorMainTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesModulatorEditTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesModulatorMacroRemovalTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesSectionsModelTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesSectionsBandTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesSectionsIntegrationTests.cpp

@@ -8,12 +8,23 @@
 #include "MainComponent.h"
 #include "Modules/LFOModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/MacroGroupController/MacroGroupController.h"
+#include "UI/Graph/ModMatrixEndpoints.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h"
 
 namespace {
 juce::String uuidOf(juce::AudioProcessorGraph::Node* node) {
     return node != nullptr ? synth::AIStateMapper::ensureNodeUuid(node) : juce::String();
+}
+
+// A routing with the macro ports between its modulator and its parameter looked through, so a row names the
+// real LFO and the real parameter however the cable crosses macro boundaries.
+synth::ui::ResolvedRouting resolveThroughPorts(AudioEngine& engine, GraphEditor& editor,
+                                               const AudioEngine::ModulationRouting& routing) {
+    return synth::ui::resolveRouting(engine.getGraph(), routing, [&editor](juce::AudioProcessorGraph::NodeID id) {
+        return editor.getMacroController().nodeIsMacroPort(id);
+    });
 }
 } // namespace
 
@@ -31,23 +42,25 @@ std::vector<synth::ui::ModulatorInfo> MainComponent::getModulators(const juce::S
         return result;
     auto& graph = audioEngine.getGraph();
     for (const auto& r : audioEngine.getModulationRoutings()) {
-        if (!r.hasSource || !r.hasDest || r.destNodeID != target->nodeID || r.destChannelIndex != raw ||
-            r.role != PortRole::ModCV)
+        if (!r.hasSource || !r.hasDest || r.role != PortRole::ModCV)
             continue;
-        auto* source = graph.getNodeForId(r.sourceNodeID);
+        const auto real = resolveThroughPorts(audioEngine, graphEditor, r);
+        if (real.dest.node != target->nodeID || real.dest.channel != raw)
+            continue;
+        auto* source = graph.getNodeForId(real.source.node);
         if (source == nullptr)
             continue;
         synth::ui::ModulatorInfo info;
         info.sourceUuid = uuidOf(source);
         info.sourceTitle = synth::moduleTitle(*source);
-        info.sourceChannel = r.sourceChannelIndex;
+        info.sourceChannel = real.source.channel;
         info.isLfo = dynamic_cast<LFOModule*>(source->getProcessor()) != nullptr;
         if (r.kind == AudioEngine::RoutingKind::AttenuverterChain)
             info.attenuverterUuid = uuidOf(graph.getNodeForId(r.attenuverterNodeID));
         info.targetUuid = nodeUuid;
         info.paramId = paramId;
         info.targetChannel = raw;
-        info.colour = graphEditor.modulationWireColour(r.sourceNodeID);
+        info.colour = graphEditor.modulationWireColour(real.source.node);
         result.push_back(std::move(info));
     }
     return result;
@@ -67,7 +80,8 @@ juce::String MainComponent::addLfoModulator(const juce::String& nodeUuid, const 
 }
 
 // The row names its routing by uuids (node ids do not survive an undo restore), so it is looked up
-// again in the live graph. Only an LFO row offers Remove, and only an LFO source is taken with it.
+// again in the live graph, by the real modulator and parameter (ports looked through). Only an LFO source is
+// taken with the routing.
 void MainComponent::removeModulator(const synth::ui::ModulatorInfo& modulator) {
     auto* target = findNodeByUuid(modulator.targetUuid);
     if (target == nullptr)
@@ -93,15 +107,16 @@ void MainComponent::removeModulator(const synth::ui::ModulatorInfo& modulator) {
             });
     };
     for (const auto& r : audioEngine.getModulationRoutings()) {
-        if (r.destNodeID != target->nodeID || r.destChannelIndex != modulator.targetChannel)
+        const auto real = resolveThroughPorts(audioEngine, graphEditor, r);
+        if (real.dest.node != target->nodeID || real.dest.channel != modulator.targetChannel)
             continue;
         const bool sameChain = modulator.attenuverterUuid.isNotEmpty() &&
                                r.kind == AudioEngine::RoutingKind::AttenuverterChain &&
                                uuidOf(graph.getNodeForId(r.attenuverterNodeID)) == modulator.attenuverterUuid;
         const bool sameDirect = modulator.attenuverterUuid.isEmpty() &&
                                 r.kind != AudioEngine::RoutingKind::AttenuverterChain &&
-                                r.sourceChannelIndex == modulator.sourceChannel &&
-                                uuidOf(graph.getNodeForId(r.sourceNodeID)) == modulator.sourceUuid;
+                                real.source.channel == modulator.sourceChannel &&
+                                uuidOf(graph.getNodeForId(real.source.node)) == modulator.sourceUuid;
         if (sameChain || sameDirect) {
             remove(r);
             return;

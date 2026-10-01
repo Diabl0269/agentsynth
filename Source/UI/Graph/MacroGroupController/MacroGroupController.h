@@ -379,6 +379,13 @@ public:
      *  GraphEditorCommands.cpp/Selection.cpp call this directly. */
     void autoDeleteOrphanedAttenuverter(juce::AudioProcessorGraph::NodeID nodeId);
 
+    /** Splices out every macro port in `candidates` (and any port a splice strands) that has nothing
+     *  left on one side, dissolving macros that end up empty. `ignorePreference` runs it with the
+     *  auto-delete-ports preference off too (an explicit removal the person asked for). Call inside
+     *  the caller's undo step, then updateComponents(). */
+    void sweepOneSidedMacroPorts(std::vector<juce::AudioProcessorGraph::NodeID> candidates,
+                                 bool ignorePreference = false);
+
     // ---- Programmatic connections (docs/macros/auto-ports.md#programmatic-connections) ----
 
     /** Runs `mutation` with auto-ports applied; no undo of its own, call updateComponents() after. */
@@ -409,7 +416,6 @@ public:
 
 private:
     void routeFreshEdgesThroughMacroPorts(std::set<juce::AudioProcessorGraph::Connection> fresh);
-    void sweepOneSidedMacroPorts(std::vector<juce::AudioProcessorGraph::NodeID> candidates);
     GraphCanvasHost& host_;
     JUCE_DECLARE_WEAK_REFERENCEABLE(MacroGroupController)
 
