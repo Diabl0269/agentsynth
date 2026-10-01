@@ -449,9 +449,11 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabSections.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
     Source/UI/Settings/ShortcutsSettingsTab.cpp
+    Source/ShortcutManager/AppCommands.cpp
     Source/ShortcutManager/AppCommands.h
     Source/ShortcutManager/ShortcutManager.h
     Source/ShortcutManager/ShortcutManagerActionNames.cpp
+    Source/ShortcutManager/ShortcutManagerActionTable.cpp
     Source/ShortcutManager/ShortcutManagerDefaults.cpp
     Source/Update/UpdateManager.h
 )
