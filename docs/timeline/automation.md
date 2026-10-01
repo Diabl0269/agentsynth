@@ -6,7 +6,7 @@ both at the same y. There is no separate automation strip.
 
 ## Lane rows
 
-A track with lanes shows a fold arrow in its header ([tracks](tracks.md#the-automation-fold-arrow));
+Every track shows a fold arrow in its header (the Unassigned section only while it holds lanes) ([tracks](tracks.md#the-automation-fold-arrow));
 pressing it (or Return/Space on it, or the rebindable "Show/Hide Track Automation" key on the
 focused header) folds the track's lanes open or closed. Fold state is runtime-only, per `TrackId`,
 owned by the panel and never saved: a track starts folded, except that `showAutomationLane()`
@@ -28,7 +28,7 @@ lanes and the piano roll, below the playhead), placed at their row's y minus the
 clipped by it; the container hides while the piano roll is open.
 
 Under the last lane of an open track (the Unassigned section too) sits a 24 px "+ Add automation..."
-row, zoom-scaled like a lane row ([below](#adding-a-lane-from-the-timeline)).
+row (an open track with no lanes shows only that row), zoom-scaled like a lane row ([below](#adding-a-lane-from-the-timeline)).
 
 ### The lane header
 
@@ -91,11 +91,11 @@ picker of **that track's** parameters:
   indented like the lane headers, in the header column. It is one more row of the track's extra area
   (`TimelineAutomationLanes::extraHeights()`), so it moves with the lanes in the one row layout and
   with the track in a reorder drag. The lanes region behind it is the clip lanes' backdrop and takes no
-  click. It exists exactly while the track's lane rows do: an open track **with** lanes, and the
-  Unassigned section.
-- the track header's right-click **"Add automation..."** ([tracks](tracks.md#row-context-menu)). A
-  track with no lane has no fold arrow and so no row; this is how it gets its first lane. Once the lane
-  lands the track opens and the row appears under it.
+  click. It exists exactly while the track is open: any open ordinary track, lanes or not (on an empty
+  track it is the whole fold-out, so its fold arrow is how the timeline starts automation), and the
+  Unassigned section while it holds lanes.
+- the track header's right-click **"Add automation..."** ([tracks](tracks.md#row-context-menu)).  Once the
+  lane lands the track opens and shows it above the row.
 
 The row is a Tab stop with the accent focus ring; Return and Space press it in the same event
 (`juce::Button` posts its own Return click to the message queue and has no Space handling), its name and

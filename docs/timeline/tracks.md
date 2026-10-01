@@ -454,7 +454,8 @@ keyboard focus so a click never moves it off the panel.
 
 ## The automation fold arrow
 
-`TrackFoldArrow` (`Source/UI/Timeline/AutomationLanes/`) sits at the left of the name row: pointing
+`TrackFoldArrow` (`Source/UI/Timeline/AutomationLanes/`) sits at the left of the name row of every
+track (the Unassigned section header only while it holds lanes): pointing
 right while the track's lanes are folded, down while they are open under the track
 ([automation](automation.md#lane-rows)). It is a Tab stop; Return or Space toggles it, and its
 name and tooltip say what the next press does ("Show Bass automation" / "Hide Bass automation").

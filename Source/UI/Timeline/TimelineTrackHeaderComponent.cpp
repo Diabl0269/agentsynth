@@ -174,7 +174,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     armButton_.setTooltip("Arm this track for recording");
 
     // The automation fold arrow only reports the press: the panel owns the fold state and answers
-    // with setAutomationExpanded(). Visibility (lanes or none) is set in refreshFromDoc().
+    // with setAutomationExpanded(). Visibility is set in refreshFromDoc().
     addChildComponent(foldArrow_);
     foldArrow_.onClick = [this] {
         if (onAutomationToggleRequested)
@@ -389,7 +389,9 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
                                           "' channel, shared with other tracks. Click to find it.");
     }
 
-    foldArrow_.setVisible(!t->lanes.empty());
+    // Every track has the arrow (open, an empty track shows just "+ Add automation..."); the Unassigned
+    // section only while it holds lanes.
+    foldArrow_.setVisible(!isSectionHeader() || !t->lanes.empty());
     foldArrow_.setState(automationExpanded_, isSectionHeader() ? juce::String("Unassigned") : t->name,
                         shownLaneCount());
 
@@ -714,7 +716,7 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
         toggleArmed();
         return true;
     }
-    // A folds THIS row's lanes, like the arrow (a row without lanes still claims the key, so it never
+    // A folds THIS row's lanes, like the arrow (a row without an arrow still claims the key, so it never
     // falls through to something else).
     if (matchesAction(key, "timelineToggleTrackAutomation", plainKey('a'))) {
         if (foldArrow_.isVisible() && onAutomationToggleRequested)

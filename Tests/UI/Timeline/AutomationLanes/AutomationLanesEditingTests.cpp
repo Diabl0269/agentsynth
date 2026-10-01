@@ -135,7 +135,8 @@ TEST(AutomationLanesEditingTest, LaneMenuDeletesTheLaneAndUndoRestoresIt) {
 
     EXPECT_EQ(f.doc.getLane(f.lane), nullptr);
     EXPECT_EQ(f.panel.laneEditorForTest(f.lane), nullptr);
-    EXPECT_FALSE(f.panel.getTrackHeaderAt(0)->getFoldArrow().isVisible()) << "no lanes left: no arrow";
+    EXPECT_TRUE(f.panel.getTrackHeaderAt(0)->getFoldArrow().isVisible()) << "no lanes left: the arrow stays";
+    EXPECT_NE(f.panel.addAutomationRowForTest(f.bass), nullptr) << "the open track keeps its add row";
     f.undo.undo();
     ASSERT_NE(f.doc.getLane(f.lane), nullptr);
     EXPECT_EQ(f.theLane().points.size(), 1u) << "the points come back with it";

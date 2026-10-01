@@ -456,8 +456,8 @@ public:
     int getKindBadgeIconForTest() const;
 
     // ---- Automation fold arrow ------------------------------------------------------
-    // Shown only when the track has lanes. The arrow and the A key only report a toggle request;
-    // the panel owns the fold state and answers with setAutomationExpanded().
+    // On every track (the Unassigned section only with lanes); the arrow and A only request a
+    // toggle, the panel owns the fold state and answers with setAutomationExpanded().
     std::function<void(synth::TrackId)> onAutomationToggleRequested;
     // "Add automation..." from the context menu: the panel opens the track's parameter picker.
     std::function<void(synth::TrackId)> onAddAutomationRequested;
