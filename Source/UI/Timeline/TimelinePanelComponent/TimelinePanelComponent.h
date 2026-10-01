@@ -2,6 +2,7 @@
 
 #include "Mixer/TrackPresetManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/EdgeResizeHandle.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
@@ -272,6 +273,19 @@ public:
     // The WHOLE left column, including the "+ MIDI Track" strip at its top — the three regions
     // still tile the panel exactly (see TimelinePanelComponentTest.PanelRegionsTile).
     juce::Rectangle<int> getTrackHeaderBounds() const noexcept { return trackHeaderBounds_; }
+
+    // ---- Track-header column width (drag the seam; remembered in the user settings) ----
+    static constexpr int kMinTrackHeaderWidth = 140;
+    static constexpr int kMaxTrackHeaderWidth = 420;
+    static constexpr int kTrackHeaderWidthKeyStep = 16;
+    /** Clamps, re-lays out; `persist` writes the user setting. */
+    void setTrackHeaderWidth(int width, bool persist);
+    int getTrackHeaderWidth() const;
+    /** +1 taller, -1 shorter, 0 default: one undo step through the host. */
+    void stepTrackHeight(synth::TrackId track, int direction);
+    static constexpr double kTrackHeightStepFactor = 1.25;
+    int defaultTrackHeaderWidth() const;
+    EdgeResizeHandle& getTrackHeaderWidthHandle() noexcept { return trackHeaderWidthHandle_; }
     juce::Rectangle<int> getLanesBounds() const noexcept { return lanesBounds_; }
 
     // ---- Snap / zoom / scroll: the view-state verbs the shortcut layer drives ----
@@ -718,6 +732,10 @@ private:
 
     // The button opens a MIDI/Audio menu rather than adding a MIDI track outright.
     juce::TextButton addTrackButton_{"+ Track"};
+    EdgeResizeHandle trackHeaderWidthHandle_{EdgeResizeHandle::Axis::Horizontal};
+    int trackHeaderWidth_ = 0; // 0 = the themed default
+    int trackHeaderWidthAtPress_ = 0;
+    void initTrackHeaderWidthHandle();
 
     // The theme's colour for a NEW marker (see addMarkerAtPlayhead). Falls back to the model's own
     // default with no themed LookAndFeel installed, like every other paint-time resolve here.
@@ -726,7 +744,16 @@ private:
     // ---- Vertical track scroll/zoom (shared TimelineViewState::trackScrollY/rowHeightScale) ----
     // The clip lane's layout: the one row-geometry model both surfaces share.
     TimelineRowLayout rowLayout() const { return clipLaneArea_.getRowLayout(); }
-    int currentRowHeight() const { return rowLayout().trackRowHeight(); }
+    int liftedTrackRowHeight() const;
+    // One track's row height (TimelinePanelTrackHeight.cpp).
+    void beginTrackHeightDrag(synth::TrackId track);
+    void dragTrackHeight(synth::TrackId track, int deltaPx);
+    void endTrackHeightDrag(synth::TrackId track);
+    void relayoutTrackRows();
+    int trackIndexOf(synth::TrackId track) const;
+    synth::TrackId heightDragTrack_;
+    int heightDragStartPx_ = 0;
+    double heightDragScale_ = 1.0;
     double maxTrackScrollPx() const;
     void scrollTrackRows(double deltaPx);
     // Mouse-wheel notch easing (axis 0 = beats, 1 = px); see UI/Layout/ScrollTween.h.

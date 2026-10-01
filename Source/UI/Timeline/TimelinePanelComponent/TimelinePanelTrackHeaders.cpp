@@ -409,6 +409,10 @@ void TimelinePanelComponent::syncTrackHeaders() {
         header->onRowDragged = [this](int screenY) { updateTrackDrag(screenY); };
         header->onRowDragEnded = [this](int) { endTrackDrag(); };
         header->isRowDragging = [this] { return trackReorder_.isDragging(); };
+        header->onHeightDragStarted = [this](synth::TrackId id) { beginTrackHeightDrag(id); };
+        header->onHeightDragged = [this](synth::TrackId id, int delta) { dragTrackHeight(id, delta); };
+        header->onHeightDragEnded = [this](synth::TrackId id) { endTrackHeightDrag(id); };
+        header->onHeightStepRequested = [this](synth::TrackId id, int direction) { stepTrackHeight(id, direction); };
         if (trackId == previouslyFocusedTrackId)
             focusedTrackIndex_ = trackHeaderList_.headers.size() - 1;
         trackHeaderList_.addAndMakeVisible(header);

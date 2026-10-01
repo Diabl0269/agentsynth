@@ -61,6 +61,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipKeyboard.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackDrag.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeight.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
     Source/UI/Timeline/TimelineRulerComponent.h
     Source/UI/Timeline/TimelineRulerComponent.cpp
@@ -216,6 +217,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/NonModalLabel.h
     Source/UI/Layout/PanelResizeHandle.h
     Source/UI/Layout/PanelResizeHandle.cpp
+    Source/UI/Layout/EdgeResizeHandle.h
+    Source/UI/Layout/EdgeResizeHandle.cpp
     Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
     Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.cpp
     Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.h

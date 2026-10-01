@@ -10,8 +10,8 @@ The row talks to the app exclusively through `synth::ui::TrackHeaderHost` (imple
 
 ## The track-header column
 
-Rows are `Metrics::timelineTrackRowHeight` (56 px) tall — shared with the clip-lane area, so header
-rows and clip rows always line up. The column is a fixed `"+ Track"` strip (22 px) at the top plus
+Rows are `Metrics::timelineTrackRowHeight` (56 px) tall by default — shared with the clip-lane area, so header
+rows and clip rows always line up — and each track can be resized on its own ([below](#one-tracks-height)). The column is a fixed `"+ Track"` strip (22 px) at the top plus
 a `juce::Viewport` below it, so a project with more tracks than fit **scrolls**; rows are never
 compressed. Both live inside `getTrackHeaderBounds()`, so the panel's three regions still tile
 exactly.
@@ -30,11 +30,19 @@ And it starts at `trackHeaderBounds_.getY()`, i.e. **below the transport strip**
 strip is one continuous row of chrome across the full width — cutting it in half would imply a
 column boundary its own controls do not respect.
 
-**Toggle sizing.** The `M`/`S`/`R`/`A` toggles are `kToggleWidth` (24 px) with an explicit
+**Resizing the column.** An `EdgeResizeHandle` (`Source/UI/Layout/EdgeResizeHandle.h`, 6 px) straddles
+the seam, added last so it wins the hit test over the header rows and the clips. Dragging it sets the
+column's width, clamped to `[kMinTrackHeaderWidth, kMaxTrackHeaderWidth]` = `[140, 420]` px; a
+double-click goes back to the themed `Metrics::timelineTrackHeaderWidth`. The width is remembered in the
+user settings under `timelineTrackHeaderWidth` (written on release, restored in
+`setApplicationProperties()`). The handle is one Tab stop with the accent focus ring: Left/Right nudge the
+width by 16 px and Return resets it; its screen-reader name is "Track column width" and its tooltip says
+all three. At the narrowest width the M/S/R block and the fold arrow still fit; the name label shrinks.
+
+**Toggle sizing.** The `M`/`S`/`R` toggles are `kToggleWidth` (24 px) with an explicit
 `kToggleGap` (4 px) between adjacent buttons; laid out edge-to-edge with no gap they read as one
-fused block. `Metrics::timelineTrackHeaderWidth` is 190 px so the wider, gapped toggle group does
-not crush the name label down to single-digit pixel widths when a track's `A` button is visible
-(4 toggles showing rather than 3).
+fused block. The default `Metrics::timelineTrackHeaderWidth` is 190 px so the gapped toggle group, the
+fold arrow and the kind badge do not crush the name label.
 
 ## The document is the truth
 
@@ -203,12 +211,31 @@ that can trigger this, and nothing follows it — see the `ORDERING HAZARD` comm
 exact path with no host — the worst case, where the mutation runs with no extra indirection —
 specifically to pin it.
 
+## One track's height
+
+Each track has its own `Track::heightScale` (default 1, clamped to `[0.5, 4]`), saved with the project
+(`heightScale` in the track's JSON, left out at the default) and applied on top of the shared vertical
+zoom: `TimelineClipLaneArea::getRowLayout()` makes it that track's row-height override, so the header,
+its clips, its lanes and the scroll all follow. A fixed override (the Unassigned section row) wins.
+
+- **Drag:** an `EdgeResizeHandle` along the bottom 5 px of each header row (`UpDownResizeCursor`). The
+  drag previews through `TimelineClipLaneArea::setTrackHeightPreview()` with no doc writes, and the
+  release commits `TimelineDoc::setTrackHeightScale()` once through `TrackHeaderHost::performTrackEdit`,
+  so one drag is one undo step. A double-click resets the track to the default height. The seam between
+  two rows belongs to the row above it.
+- **Keys and menu:** the rebindable Increase Track Height, Decrease Track Height and Reset Track Height
+  actions (`timelineIncreaseTrackHeight` Option+=, `timelineDecreaseTrackHeight` Option+-,
+  `timelineResetTrackHeight` Option+0) act on the focused header row, a step being ×1.25; the row's
+  context menu has the same three items, each naming its shortcut.
+- **Accessibility:** the edge handle is mouse-only, so a row stays one Tab stop; its name is
+  "Resize <track>" and its tooltip names the double-click and the three shortcuts.
+
 ## Row layout
 
 `synth::ui::TimelineRowLayout` (`Source/UI/Timeline/TimelineRowLayout.h`) is the one place row
 geometry comes from. Each track owns a clip row (the themed `Metrics::timelineTrackRowHeight` times
-the vertical-zoom scale, unless the track overrides it: the Automation track's section row is a fixed
-26 px) followed by an optional per-track extra area holding its open automation lanes
+the vertical-zoom scale and the track's own `heightScale`, unless the track overrides it: the Automation
+track's section row is a fixed 26 px) followed by an optional per-track extra area holding its open automation lanes
 ([automation](automation.md#lane-rows)). The model answers `trackTop(i)`, `trackSpan(i)`, `hitAtY(y)` (track plus
 whether `y` is in its clip row), `totalHeight()` and `trackIndexNearestTop(from, dy)`; every y is a
 content coordinate, before `trackScrollY`.

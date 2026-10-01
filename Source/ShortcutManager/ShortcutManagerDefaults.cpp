@@ -273,6 +273,11 @@ void ShortcutManager::addTimelineDefaultBindings() {
     // Bare A folds the focused row's automation lanes, the letter the header's automation button
     // used to carry. Free in every category: every other 'a' binding carries a modifier.
     bindings["timelineToggleTrackAutomation"] = juce::KeyPress('a', juce::ModifierKeys::noModifiers, 0);
+    // Option+= / Option+- / Option+0 size the focused row, the zoom keys' shape on the one free
+    // modifier: Option ignores the shifted-glyph problem, and no Option+=/-/0 is bound anywhere.
+    bindings["timelineIncreaseTrackHeight"] = juce::KeyPress('=', juce::ModifierKeys::altModifier, 0);
+    bindings["timelineDecreaseTrackHeight"] = juce::KeyPress('-', juce::ModifierKeys::altModifier, 0);
+    bindings["timelineResetTrackHeight"] = juce::KeyPress('0', juce::ModifierKeys::altModifier, 0);
     // Clip keyboard mode: bare arrows step between clips (Right on a track header enters its
     // clips), Return opens the clip in its editor, Alt+Left/Right move it one grid step.
     // Piano-roll and mixer arrow keys live in other categories, so nothing here conflicts.

@@ -1,6 +1,7 @@
 // Concern: tracks.
 #include "TimelineDoc.h"
 #include <algorithm>
+#include <cmath>
 
 namespace synth {
 
@@ -110,6 +111,19 @@ bool TimelineDoc::setTrackColour(TrackId id, juce::uint32 colourArgb) {
         return true;
     return applyMutation([&] {
         track->colourArgb = colourArgb;
+        return true;
+    });
+}
+
+bool TimelineDoc::setTrackHeightScale(TrackId id, double scale) {
+    auto* track = findTrack(id);
+    if (track == nullptr || !std::isfinite(scale))
+        return false;
+    const double clamped = std::clamp(scale, Track::kMinHeightScale, Track::kMaxHeightScale);
+    if (track->heightScale == clamped)
+        return true;
+    return applyMutation([&] {
+        track->heightScale = clamped;
         return true;
     });
 }

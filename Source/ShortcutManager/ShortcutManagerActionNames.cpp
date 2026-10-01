@@ -109,6 +109,29 @@ juce::String canvasCardActionName(const juce::String& actionId) {
     return {};
 }
 
+// The actions on the focused track header row, split out of getActionDescription to keep that
+// function under the function-size cap.
+juce::String focusedTrackActionName(const juce::String& actionId) {
+    // Deliberately NOT "Mute"/"Solo"/"Arm" — the Settings tab's search matches this text,
+    // and "timelineToolMute" is already "Mute Tool" (a bare-7 edit-tool mode, unrelated). Spelling
+    // out "Focused Track" keeps the two from reading as the same feature in a filtered list.
+    if (actionId == "timelineMuteFocusedTrack")
+        return "Mute Focused Track";
+    if (actionId == "timelineSoloFocusedTrack")
+        return "Solo Focused Track";
+    if (actionId == "timelineArmFocusedTrack")
+        return "Arm Focused Track";
+    if (actionId == "timelineToggleTrackAutomation")
+        return "Show/Hide Track Automation";
+    if (actionId == "timelineIncreaseTrackHeight")
+        return "Increase Track Height";
+    if (actionId == "timelineDecreaseTrackHeight")
+        return "Decrease Track Height";
+    if (actionId == "timelineResetTrackHeight")
+        return "Reset Track Height";
+    return {};
+}
+
 } // namespace
 
 juce::String ShortcutManager::getActionDescription(const juce::String& actionId) {
@@ -229,17 +252,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Jump to Locator 1";
     if (actionId == "timelineJumpToLocator2")
         return "Jump to Locator 2";
-    // Deliberately NOT "Mute"/"Solo"/"Arm" — the Settings tab's search matches this text,
-    // and "timelineToolMute" is already "Mute Tool" (a bare-7 edit-tool mode, unrelated). Spelling
-    // out "Focused Track" keeps the two from reading as the same feature in a filtered list.
-    if (actionId == "timelineMuteFocusedTrack")
-        return "Mute Focused Track";
-    if (actionId == "timelineSoloFocusedTrack")
-        return "Solo Focused Track";
-    if (actionId == "timelineArmFocusedTrack")
-        return "Arm Focused Track";
-    if (actionId == "timelineToggleTrackAutomation")
-        return "Show/Hide Track Automation";
+    if (const auto name = focusedTrackActionName(actionId); name.isNotEmpty())
+        return name;
     // Clip keyboard mode. "Next Clip" also carries a track header into that track's clips.
     if (actionId == "timelineClipPrevious")
         return "Previous Clip";

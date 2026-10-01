@@ -17,6 +17,9 @@ namespace {
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
 constexpr const char* kTimelineSnapEnabledPropertyKey = "timelineSnapEnabled";
 constexpr const char* kTimelineFollowPlayheadPropertyKey = "timelineFollowPlayhead";
+// The track-header column's width in px; absent = the themed default.
+constexpr const char* kTimelineTrackHeaderWidthPropertyKey = "timelineTrackHeaderWidth";
+constexpr int kTrackHeaderWidthHandleWidth = 6; // straddles the column seam
 // The roll's key-label density (PianoRollComponent::KeyLabelMode). "all" (default) labels every
 // key row; "c" labels only the Cs. Owned by PreferencesSettingsTab's persistX pattern; read here
 // by reloadPianoRollAppearancePrefs().
@@ -89,6 +92,9 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
 
     followPlayhead_ =
         appProperties_->getUserSettings()->getBoolValue(kTimelineFollowPlayheadPropertyKey, followPlayhead_);
+    if (const int width = appProperties_->getUserSettings()->getIntValue(kTimelineTrackHeaderWidthPropertyKey, 0);
+        width > 0)
+        setTrackHeaderWidth(width, false);
     followPlayheadButton_.setToggleState(followPlayhead_, juce::dontSendNotification);
     pianoRoll_.setFollowPlayhead(followPlayhead_);
 
@@ -414,20 +420,22 @@ void TimelinePanelComponent::resized() {
     // Themed metrics with literal fallbacks for the headless test path (same pattern as
     // MainComponent::resized()).
     int transportBarHeight = 34;
-    int trackHeaderWidth = 190;
     int rulerHeight = 30; // keep in step with Theme::Metrics::timelineRulerHeight
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& m = lf->getTheme().metrics;
         transportBarHeight = m.timelineTransportBarHeight;
-        trackHeaderWidth = m.timelineTrackHeaderWidth;
         rulerHeight = m.timelineRulerHeight;
     }
+    const int trackHeaderWidth = getTrackHeaderWidth();
 
     auto bounds = getLocalBounds();
     transportBarBounds_ = bounds.removeFromTop(transportBarHeight);
     layoutSidePane(bounds);
     trackHeaderBounds_ = bounds.removeFromLeft(trackHeaderWidth);
     lanesBounds_ = bounds; // remainder
+    trackHeaderWidthHandle_.setBounds(trackHeaderBounds_.getRight() - kTrackHeaderWidthHandleWidth / 2,
+                                      trackHeaderBounds_.getY(), kTrackHeaderWidthHandleWidth,
+                                      trackHeaderBounds_.getHeight());
 
     // The "+ MIDI Track" strip is pinned at the top of the header column, the scrolling header list
     // below it. Both live INSIDE trackHeaderBounds_, so the panel's three regions still tile.
@@ -512,6 +520,51 @@ void TimelinePanelComponent::resized() {
         if (auto* button = getToolButton(tool))
             button->setBounds(toolStrip.removeFromLeft(kEditToolButtonWidth).reduced(2));
     transportBar_.setBounds(transportBar);
+}
+
+//==============================================================================
+// The header column's width: the themed metric until the person drags the seam, then their width,
+// clamped so the M/S/R block and a few letters of the name always fit and the clips keep the room.
+int TimelinePanelComponent::defaultTrackHeaderWidth() const {
+    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        return lf->getTheme().metrics.timelineTrackHeaderWidth;
+    return synth::theme::Metrics{}.timelineTrackHeaderWidth;
+}
+
+int TimelinePanelComponent::getTrackHeaderWidth() const {
+    return trackHeaderWidth_ > 0 ? trackHeaderWidth_ : defaultTrackHeaderWidth();
+}
+
+void TimelinePanelComponent::setTrackHeaderWidth(int width, bool persist) {
+    const int clamped = juce::jlimit(kMinTrackHeaderWidth, kMaxTrackHeaderWidth, width);
+    if (clamped != getTrackHeaderWidth()) {
+        trackHeaderWidth_ = clamped;
+        resized();
+        repaint();
+    }
+    if (persist && appProperties_ != nullptr && appProperties_->getUserSettings() != nullptr) {
+        appProperties_->getUserSettings()->setValue(kTimelineTrackHeaderWidthPropertyKey, getTrackHeaderWidth());
+        appProperties_->saveIfNeeded();
+    }
+}
+
+// One Tab stop on the seam (Left/Right nudge, Return resets) rather than a rebindable action: the
+// column has one edge, and its arrows only mean something while it holds focus.
+void TimelinePanelComponent::initTrackHeaderWidthHandle() {
+    auto& handle = trackHeaderWidthHandle_;
+    handle.setComponentID("timelineTrackHeaderWidthHandle");
+    handle.setTitle("Track column width");
+    handle.setTooltip("Drag to resize the track column; double-click for the default width. "
+                      "When focused, Left/Right resize it and Return resets it.");
+    handle.setKeyboardFocusable(true);
+    handle.onDragStarted = [this] { trackHeaderWidthAtPress_ = getTrackHeaderWidth(); };
+    handle.onDragged = [this](int delta) { setTrackHeaderWidth(trackHeaderWidthAtPress_ + delta, false); };
+    handle.onDragEnded = [this] { setTrackHeaderWidth(getTrackHeaderWidth(), true); };
+    handle.onResetRequested = [this] { setTrackHeaderWidth(defaultTrackHeaderWidth(), true); };
+    handle.onKeyboardStep = [this](int direction) {
+        setTrackHeaderWidth(getTrackHeaderWidth() + direction * kTrackHeaderWidthKeyStep, true);
+    };
+    addAndMakeVisible(handle);
 }
 
 //==============================================================================
