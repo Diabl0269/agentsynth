@@ -6,7 +6,7 @@
 // COPY of an input buffer that also fans out to another downstream consumer, whenever the node's
 // own declared output-channel count is greater than that input's channel index (kNumOutputs = 22
 // here, comfortably above 14/15) -- see RenderSequenceBuilder / isBufferNeededLater. Oscillator's
-// own processBlock additionally caches ch14/15 (readUnisonDetuneCV) before it ever writes to those
+// own processBlock additionally caches ch14/15 (readGlobalParamCV) before it ever writes to those
 // channels itself.
 //
 // This is a REGRESSION LOCK for that combined guarantee, built the same way
@@ -108,10 +108,14 @@ AliasingResult runUnisonDetuneCVAliasingScenario(bool poly) {
     EXPECT_TRUE(graph.addConnection({{kbNode->nodeID, MIDI}, {adsrNode->nodeID, MIDI}}));
     EXPECT_TRUE(graph.addConnection({{kbNode->nodeID, MIDI}, {oscNode->nodeID, MIDI}}));
 
-    // THE ALIASING TOPOLOGY: ADSR ch0 fans out to Oscillator's Unison AND Detune CV (ch14/15,
-    // both aliasing the Audio R output block at kRightBase = 14) AND to a plain reference tap.
+    // THE ALIASING TOPOLOGY: ADSR ch0 fans out to Oscillator's Unison, Detune, Pulse Width and Glide CV
+    // (ch14-17, all aliasing the Audio R output block at kRightBase = 14) AND to a plain reference tap.
     EXPECT_TRUE(graph.addConnection({{adsrNode->nodeID, 0}, {oscNode->nodeID, OscillatorModule::kUnisonCVChannel}}));
     EXPECT_TRUE(graph.addConnection({{adsrNode->nodeID, 0}, {oscNode->nodeID, OscillatorModule::kDetuneCVChannel}}));
+    // Pulse Width and Glide CV (ch16/17) alias Audio R voices 2/3 in poly: same hazard, same fan-out.
+    EXPECT_TRUE(
+        graph.addConnection({{adsrNode->nodeID, 0}, {oscNode->nodeID, OscillatorModule::kPulseWidthCVChannel}}));
+    EXPECT_TRUE(graph.addConnection({{adsrNode->nodeID, 0}, {oscNode->nodeID, OscillatorModule::kGlideCVChannel}}));
     EXPECT_TRUE(graph.addConnection({{adsrNode->nodeID, 0}, {outNode->nodeID, 0}}));
 
     EXPECT_TRUE(graph.addConnection({{oscNode->nodeID, 0}, {outNode->nodeID, 1}}));
@@ -194,7 +198,7 @@ TEST(OscillatorUnisonDetuneCVAliasing, PolyModeReferenceTapAndAudioRSurviveTheSh
 // a CV of 1.0 to the top of each parameter's own range: unison -> 8 voices, detune -> 100 cents),
 // the rendered waveform should differ measurably from the same note with no CV connected at all
 // (unison stuck at its default of 1, detune at 0) -- otherwise the aliasing fix could be hiding a
-// SEPARATE bug where the CV reaches the channel but readUnisonDetuneCV silently no-ops.
+// SEPARATE bug where the CV reaches the channel but readGlobalParamCV silently no-ops.
 TEST(OscillatorUnisonDetuneCVAliasing, MaxCVProducesADifferentWaveformThanNoCV) {
     const auto withCV = runUnisonDetuneCVAliasingScenario(/*poly*/ false);
 

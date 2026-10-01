@@ -522,6 +522,7 @@ TEST(AutomationRecordTest, ForeignThreadCallbacksNeverCorruptTheTake) {
     constexpr int kValuesPerGesture = 16;
 
     std::atomic<bool> writerDone{false};
+    std::atomic<bool> firstGestureDone{false};
     std::atomic<int> gesturesFired{0};
 
     std::thread writer([&] {
@@ -533,17 +534,26 @@ TEST(AutomationRecordTest, ForeignThreadCallbacksNeverCorruptTheTake) {
                     param->convertTo0to1(static_cast<float>(1000.0 + 500.0 * ((g * kValuesPerGesture + i) % 20))));
             param->endChangeGesture();
             gesturesFired.fetch_add(1, std::memory_order_relaxed);
+            // The first gesture is the guaranteed one: the message thread does not touch the binding
+            // table until it has fully landed, so it is always delivered to a bound, playing lane.
+            // Everything after it races the republish loop, and a gesture that lands in the window
+            // between unbindAll() and bindLane() is legitimately lost (nothing is listening) —
+            // which, on a loaded machine where the message thread is descheduled inside that window
+            // and the writer runs to completion, used to leave the whole take empty.
+            if (g == 0)
+                firstGestureDone.store(true, std::memory_order_release);
         }
         writerDone.store(true, std::memory_order_release);
     });
 
     // The message thread does everything it normally would while that runs, republishing the binding
-    // table often enough that unbindAll()/bindLane() really do race the worker's callbacks.
+    // table (once the first gesture is safely in) often enough that unbindAll()/bindLane() really do
+    // race the worker's callbacks.
     int polls = 0;
     while (!writerDone.load(std::memory_order_acquire)) {
         h.recorder.update();
         h.advanceBeat(0.05);
-        if (++polls % 8 == 0) {
+        if (++polls % 8 == 0 && firstGestureDone.load(std::memory_order_acquire)) {
             h.recorder.unbindAll();
             h.recorder.bindLane(h.laneId, h.cutoff(), {});
         }

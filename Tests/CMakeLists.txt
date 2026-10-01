@@ -22,6 +22,7 @@ add_executable(Tests
     UI/Graph/CardGlide/CardGlideTests.cpp
     UI/Graph/OutputDockTests.cpp
     Modules/OscillatorTests.cpp
+    Modules/OscillatorPulseWidthGlideTests.cpp
     Modules/CardLayoutTests.cpp
     Modules/FilterTests.cpp
     Modules/CardViewStateTests.cpp
@@ -53,6 +54,7 @@ add_executable(Tests
     Modules/ADSR/ADSRReadoutFormattingTests.cpp
     Modules/ADSR/ADSRTempoSyncTests.cpp
     Modules/ADSR/ADSRCVTests.cpp
+    Modules/ADSR/ADSRVelocityTests.cpp
     Modules/Envelope/EnvelopeGeneratorTests.cpp
     Modules/EnvelopeFollowerModuleTests.cpp
     Modules/ModuleBaseTests.cpp
@@ -65,6 +67,7 @@ add_executable(Tests
     Modules/LFOModuleTests.cpp
     Modules/Lfo/LfoCustomWaveTests.cpp
     Modules/Lfo/LFOModuleCustomShapeTests.cpp
+    Modules/Lfo/LFOModulePhaseFadeInTests.cpp
     Modules/SampleHoldModuleTests.cpp
     Modules/SchmittTriggerTests.cpp
     Modules/ComparatorModuleTests.cpp
@@ -744,6 +747,7 @@ target_link_libraries(Tests PRIVATE
     # what a change to a UI header (MainComponent.h, GraphEditor.h, ...) rebuilds (FRO307).
     AppUI
 )
+synth_enable_pch(Tests gtest/gtest.h)
 
 target_include_directories(Tests PRIVATE
     ${CMAKE_SOURCE_DIR}/Source
