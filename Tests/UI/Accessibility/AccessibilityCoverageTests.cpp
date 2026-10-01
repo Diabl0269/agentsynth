@@ -377,100 +377,102 @@ TEST(AccessibilityCoverageTest, ColourPickerPopup) {
 TEST(AccessibilityCoverageTest, ModuleLibraryHelpPopup) {
     synth::ui::ModuleLibraryHelpPopup popup;
     EXPECT_TRUE(matchesBaseline("ModuleLibraryHelpPopup", auditAccessibility(popup)));
-=======
-    // The module library, the AI chat and the MIDI Remote panel.
-    // ============================================================================
+}
 
-    TEST(AccessibilityCoverageTest, ModuleLibrary) {
-        ModuleLibraryComponent library;
-        library.setSize(260, 900);
-        EXPECT_TRUE(matchesBaseline("ModuleLibrary", auditAccessibility(library)));
+// ============================================================================
+// The module library, the AI chat and the MIDI Remote panel.
+// ============================================================================
+
+TEST(AccessibilityCoverageTest, ModuleLibrary) {
+    ModuleLibraryComponent library;
+    library.setSize(260, 900);
+    EXPECT_TRUE(matchesBaseline("ModuleLibrary", auditAccessibility(library)));
+}
+
+// A conversation with one message in it, so a bubble is audited too.
+TEST_F(AccessibilitySettingsTest, AIChat) {
+    aiChat->setLocalHistoryDirectoryForTesting(
+        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("a11y-chat-" + juce::Uuid().toString()));
+    aiChat->setSize(400, 700);
+    for (auto* child : aiChat->getChildren())
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            if (editor->isVisible())
+                editor->setText("Create a fat bass");
+    aiChat->triggerSend();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    EXPECT_TRUE(matchesBaseline("AIChat", auditAccessibility(*aiChat)));
+}
+
+// A controller with a transport-strip template, one control selected: the Controllers list, the
+// surface, its toolbar and page strip, and the inspector with its assignment widgets.
+TEST_F(MidiRemotePanelLiveRefreshTest, MidiRemotePanel) {
+    synth::ui::AddControllerPopover::Choice choice;
+    choice.deviceIdentifier = synth::midi::hostSourceKey();
+    choice.deviceName = "Test device";
+    choice.profileName = "Test device";
+    choice.startWith = synth::ui::AddControllerPopover::StartWith::templateLayout;
+    choice.templateId = "template-transport-strip";
+    const auto profileId = panel_.createControllerFromChoice(choice);
+    ASSERT_FALSE(profileId.isEmpty());
+    const auto profiles = controller_->getProfiles();
+    ASSERT_FALSE(profiles.empty());
+    ASSERT_FALSE(profiles.front().controls.empty());
+    panel_.setSize(1200, 320);
+    panel_.selectForTest(profileId, profiles.front().controls.front().id);
+    panel_.resized();
+    EXPECT_TRUE(matchesBaseline("MidiRemote", auditAccessibility(panel_)));
+}
+
+// ============================================================================
+// Every built-in module card.
+// ============================================================================
+
+// One card per type in the module factory (the list the patch loader and the AI schema use). Left
+// out: "Hosted Plugin" (needs a plugin binary), "Track In", "Track Audio" and "Rec Tap" (bound to
+// timeline tracks or files), the "Macro In/Out" and "Macro MIDI In/Out" jacks and "Channel Strip"
+// and "Master" (mixer/macro plumbing with no canvas card of their own), and the alias keys "Amp
+// Env", "Filter Env" and "Mod Slot" (the same cards as "ADSR" and "Attenuverter").
+TEST(AccessibilityCoverageTest, EveryModuleCard) {
+    static const juce::StringArray skipped{
+        "Hosted Plugin",  "Track In",      "Track Audio", "Rec Tap", "Macro In",   "Macro Out", "Macro MIDI In",
+        "Macro MIDI Out", "Channel Strip", "Master",      "Amp Env", "Filter Env", "Mod Slot"};
+    std::vector<juce::String> types;
+    for (const auto& type : synth::AIStateMapper::moduleFactoryTypeNames())
+        if (!skipped.contains(type))
+            types.push_back(type);
+    std::sort(types.begin(), types.end());
+
+    AudioEngine audioEngine;
+    GraphEditor editor(audioEngine);
+    editor.setSize(2400, 2400);
+    auto& graph = audioEngine.getGraph();
+    std::vector<std::pair<juce::String, juce::AudioProcessorGraph::NodeID>> nodes;
+    int slot = 0;
+    for (const auto& type : types) {
+        auto node = graph.addNode(synth::AIStateMapper::createModule(type));
+        if (node == nullptr)
+            continue;
+        node->properties.set("x", 40 + (slot % 8) * 290);
+        node->properties.set("y", 40 + (slot / 8) * 310);
+        nodes.emplace_back(type, node->nodeID);
+        ++slot;
     }
+    editor.updateComponents();
+    sizeModuleComponents(editor);
 
-    // A conversation with one message in it, so a bubble is audited too.
-    TEST_F(AccessibilitySettingsTest, AIChat) {
-        aiChat->setLocalHistoryDirectoryForTesting(juce::File::getSpecialLocation(juce::File::tempDirectory)
-                                                       .getChildFile("a11y-chat-" + juce::Uuid().toString()));
-        aiChat->setSize(400, 700);
-        for (auto* child : aiChat->getChildren())
-            if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
-                if (editor->isVisible())
-                    editor->setText("Create a fat bass");
-        aiChat->triggerSend();
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
-        EXPECT_TRUE(matchesBaseline("AIChat", auditAccessibility(*aiChat)));
-    }
-
-    // A controller with a transport-strip template, one control selected: the Controllers list, the
-    // surface, its toolbar and page strip, and the inspector with its assignment widgets.
-    TEST_F(MidiRemotePanelLiveRefreshTest, MidiRemotePanel) {
-        synth::ui::AddControllerPopover::Choice choice;
-        choice.deviceIdentifier = synth::midi::hostSourceKey();
-        choice.deviceName = "Test device";
-        choice.profileName = "Test device";
-        choice.startWith = synth::ui::AddControllerPopover::StartWith::templateLayout;
-        choice.templateId = "template-transport-strip";
-        const auto profileId = panel_.createControllerFromChoice(choice);
-        ASSERT_FALSE(profileId.isEmpty());
-        const auto profiles = controller_->getProfiles();
-        ASSERT_FALSE(profiles.empty());
-        ASSERT_FALSE(profiles.front().controls.empty());
-        panel_.setSize(1200, 320);
-        panel_.selectForTest(profileId, profiles.front().controls.front().id);
-        panel_.resized();
-        EXPECT_TRUE(matchesBaseline("MidiRemote", auditAccessibility(panel_)));
-    }
-
-    // ============================================================================
-    // Every built-in module card.
-    // ============================================================================
-
-    // One card per type in the module factory (the list the patch loader and the AI schema use). Left
-    // out: "Hosted Plugin" (needs a plugin binary), "Track In", "Track Audio" and "Rec Tap" (bound to
-    // timeline tracks or files), the "Macro In/Out" and "Macro MIDI In/Out" jacks and "Channel Strip"
-    // and "Master" (mixer/macro plumbing with no canvas card of their own), and the alias keys "Amp
-    // Env", "Filter Env" and "Mod Slot" (the same cards as "ADSR" and "Attenuverter").
-    TEST(AccessibilityCoverageTest, EveryModuleCard) {
-        static const juce::StringArray skipped{
-            "Hosted Plugin",  "Track In",      "Track Audio", "Rec Tap", "Macro In",   "Macro Out", "Macro MIDI In",
-            "Macro MIDI Out", "Channel Strip", "Master",      "Amp Env", "Filter Env", "Mod Slot"};
-        std::vector<juce::String> types;
-        for (const auto& type : synth::AIStateMapper::moduleFactoryTypeNames())
-            if (!skipped.contains(type))
-                types.push_back(type);
-        std::sort(types.begin(), types.end());
-
-        AudioEngine audioEngine;
-        GraphEditor editor(audioEngine);
-        editor.setSize(2400, 2400);
-        auto& graph = audioEngine.getGraph();
-        std::vector<std::pair<juce::String, juce::AudioProcessorGraph::NodeID>> nodes;
-        int slot = 0;
-        for (const auto& type : types) {
-            auto node = graph.addNode(synth::AIStateMapper::createModule(type));
-            if (node == nullptr)
+    std::vector<Gap> gaps;
+    int cards = 0;
+    for (const auto& [type, id] : nodes) {
+        for (auto* card : editor.getModuleComponents()) {
+            if (card == nullptr || card->getNodeId() != id)
                 continue;
-            node->properties.set("x", 40 + (slot % 8) * 290);
-            node->properties.set("y", 40 + (slot / 8) * 310);
-            nodes.emplace_back(type, node->nodeID);
-            ++slot;
-        }
-        editor.updateComponents();
-        sizeModuleComponents(editor);
-
-        std::vector<Gap> gaps;
-        int cards = 0;
-        for (const auto& [type, id] : nodes) {
-            for (auto* card : editor.getModuleComponents()) {
-                if (card == nullptr || card->getNodeId() != id)
-                    continue;
-                ++cards;
-                for (auto gap : auditAccessibility(*card)) {
-                    gap.path = "[" + type + "] " + gap.path;
-                    gaps.push_back(gap);
-                }
+            ++cards;
+            for (auto gap : auditAccessibility(*card)) {
+                gap.path = "[" + type + "] " + gap.path;
+                gaps.push_back(gap);
             }
         }
-        ASSERT_GT(cards, 30) << "the audit must reach the built-in cards";
-        EXPECT_TRUE(matchesBaseline("ModuleCards", gaps));
     }
+    ASSERT_GT(cards, 30) << "the audit must reach the built-in cards";
+    EXPECT_TRUE(matchesBaseline("ModuleCards", gaps));
+}

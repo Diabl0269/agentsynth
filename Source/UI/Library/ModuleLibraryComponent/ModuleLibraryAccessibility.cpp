@@ -4,6 +4,7 @@
 // its focused note.
 #include "ModuleLibraryComponent.h"
 
+#include "UI/Layout/TooltipHelpHandler.h"
 #include "UI/Library/ModuleLibraryAccessibilityText.h"
 
 namespace {
@@ -58,7 +59,7 @@ juce::String ModuleLibraryComponent::getAccessibilityValueText() const {
 }
 
 std::unique_ptr<juce::AccessibilityHandler> ModuleLibraryComponent::createAccessibilityHandler() {
-    return std::make_unique<juce::AccessibilityHandler>(
+    return std::make_unique<synth::ui::TooltipHelpHandler>(
         *this, juce::AccessibilityRole::list, juce::AccessibilityActions{},
         juce::AccessibilityHandler::Interfaces{std::make_unique<LibraryValueInterface>(*this)});
 }

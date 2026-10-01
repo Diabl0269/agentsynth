@@ -47,6 +47,7 @@ TEST(ModuleLibraryAccessibilityTest, IsANamedListWithATooltip) {
     ASSERT_NE(handler, nullptr);
     EXPECT_EQ(handler->getRole(), juce::AccessibilityRole::list);
     ASSERT_NE(handler->getValueInterface(), nullptr);
+    EXPECT_EQ(handler->getHelp(), library.getTooltip()) << "a screen reader hears the tooltip as help";
 }
 
 TEST(ModuleLibraryAccessibilityTest, ValueFollowsTheKeyboardFocusedRow) {
