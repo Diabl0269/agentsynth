@@ -231,6 +231,10 @@ void MixerPanelComponent::refreshRowAccessibility() {
     setDescription(text);
     if (auto* handler = getAccessibilityHandler())
         handler->notifyAccessibilityEvent(juce::AccessibilityEvent::titleChanged);
+    // The screen reader's own focus sits on the column's fader (see grabAccessibilityFocus in the
+    // column walk), not on the panel, so a description change alone is never spoken: announce it.
+    if (text.isNotEmpty())
+        juce::AccessibilityHandler::postAnnouncement(text, juce::AccessibilityHandler::AnnouncementPriority::medium);
 }
 
 juce::Rectangle<int> MixerPanelComponent::focusedRowBounds() const {
