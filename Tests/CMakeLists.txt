@@ -464,6 +464,8 @@ add_executable(Tests
     UI/Timeline/TimelineTrackHeaderTests.cpp
     UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp
     UI/Timeline/TimelineTrackFocusTests.cpp
+    UI/Timeline/TimelineClipKeyboardTests.cpp
+    UI/Timeline/TimelineClipKeyboardNavTests.cpp
     UI/Timeline/TimelineClipLane/TimelineClipLaneAreaTests.cpp
     UI/Timeline/TimelineClipLane/TimelineClipLaneAuthoringTests.cpp
     UI/Timeline/TimelineClipLane/TimelineClipLaneEditToolsTests.cpp

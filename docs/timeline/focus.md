@@ -142,6 +142,46 @@ one, which is what makes an unmodified `Delete` binding surface-scoped for free.
 never touches the graph, a graph-focused Delete never touches the clips, and an empty selection on
 either falls through rather than eating the key.
 
+## Clip keyboard mode
+
+A keyboard-only user reaches a clip through the track header: **Right** on a focused header (or on the panel root, where Cmd+Shift+T and Tab leave focus: it enters the focused track, else the first track with clips; `handleRootFocusKey`)
+(`timelineClipNext`) calls `TimelinePanelComponent::enterTrackClips`, which picks the first clip
+starting at or after the playhead (else the track's first), makes it the lane area's **keyboard
+clip** and grabs lane focus. A track with no clips ignores the key. Keys, defaults and the verbs
+they run are in [`shortcuts.md`](../control/shortcuts.md#timeline); this section is the model.
+
+- **The keyboard clip is the selection.** `TimelineClipLaneArea::setKeyboardClip` replaces the clip
+  selection with that one clip and remembers its id; `getKeyboardClip()` only answers while that
+  id is still the sole selected clip. A marquee, a click elsewhere, Delete or an undo that removes
+  it ends keyboard mode without any extra bookkeeping, and every selection-based verb (copy, split,
+  mute, loop the selection) acts on it unchanged. A clip selected with the pointer is stepped from
+  by the same keys.
+- **Stepping** uses `Source/UI/Timeline/ClipKeyboardNav.h`: Left/Right follow the track's start
+  order; Up/Down pick the clip with the nearest start on the closest track above/below that has
+  clips (ties go to the earlier one). A step with nowhere to go is consumed and changes nothing.
+- **Enter** fires `onClipDoubleClicked`, the hook a double-click uses, so the piano roll opens on
+  the clip. Closing the roll returns focus to the lane with the clip still the keyboard clip.
+- **Alt+Left/Right** run `TimelineDoc::moveClip` inside one `recordTimelineChange` (one undo step)
+  by one grid division: `TimelineViewState::divisionBeatsRaw` (the chosen Snap division even with
+  the snap switch off), one beat when Snap is Off; the start clamps at beat 0.
+- **Escape** is a fixed key: the lane clears keyboard mode and fires `onReturnToTrackHeaderRequested`;
+  the panel moves focus back to that track's header. The clip stays selected.
+- **Staying visible.** Every change fires `onKeyboardClipChanged`; the lane scrolls
+  `firstVisibleBeat` until the clip is on screen (a little in from the edge it came from), and the
+  panel moves `focusedTrackIndex_` to the clip's row and runs `ensureTrackVisible`.
+- **Focus ring.** The keyboard clip is outlined with the theme accent while the lane holds focus.
+- **Screen reader.** The lane area has title "Clips" and a group-role accessibility handler whose
+  text value is the keyboard clip, from `describeClipForAccessibility`
+  (`Source/UI/Timeline/ClipAccessibilityText.h`), e.g. "MIDI clip Bassline, track Bass, bars 5 to
+  9" (bar numbers are 1-based; the end is the boundary where the next bar begins; a clip off the
+  bar lines reads "from bar 2 beat 3.5 to bar 3 beat 1.5"; audio clips say "Audio clip", muted
+  ones append ", muted"). A value-changed event is posted only when the description changes.
+
+Tests: `Tests/UI/Timeline/TimelineClipKeyboardTests.cpp` drives real `KeyPress` events from a
+focused header; `TimelineClipKeyboardNavTests.cpp` covers the pure helpers. Real OS focus needs a
+native peer, so they assert the model the focus calls mirror (keyboard clip, selection,
+`focusedTrackIndex_`, open roll).
+
 ## Tests
 
 `Tests/App/FocusArbitration/` — one test per verb × surface, split by concern:

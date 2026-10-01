@@ -51,6 +51,13 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineJumpToLocator1",
         "timelineJumpToLocator2",
         // TimelineClipLaneArea::keyPressed (its P shares timelineLoopSelection with the panel)
+        "timelineClipPrevious",
+        "timelineClipNext",
+        "timelineClipAbove",
+        "timelineClipBelow",
+        "timelineClipOpen",
+        "timelineClipMoveEarlier",
+        "timelineClipMoveLater",
         // TimelineTrackHeaderComponent::keyPressed
         "timelineMuteFocusedTrack",
         "timelineSoloFocusedTrack",

@@ -292,6 +292,20 @@ public:
     // click lands here rather than on whichever panel had focus before. Returns false when there
     // is nothing to act on so the key falls through.
     bool keyPressed(const juce::KeyPress& key) override;
+    void focusGained(juce::Component::FocusChangeType) override;
+    void focusLost(juce::Component::FocusChangeType) override;
+
+    // ---- Keyboard clip mode (TimelineClipLaneKeyboard.cpp) ----
+    // Makes `id` the single selected clip the arrow keys step from; an unresolved id ends the mode.
+    void setKeyboardClip(synth::ClipId id);
+    // Invalid unless the selection is still exactly the keyboard clip.
+    synth::ClipId getKeyboardClip() const;
+    // Empty when there is no keyboard clip.
+    juce::String getKeyboardClipAccessibilityText() const;
+    // Both non-owning; may be unset.
+    std::function<void(synth::ClipId)> onKeyboardClipChanged;
+    std::function<void(synth::TrackId)> onReturnToTrackHeaderRequested;
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     /** The user's binding for the one rebindable key this component owns: P, loop the selection
      *  ("timelineLoopSelection" — the SAME action id TimelinePanelComponent's own P fallback
@@ -596,6 +610,18 @@ private:
     // Tears the editor down and, when `commit`, pushes its text through renameClip().
     void finishRename(bool commit);
 
+    // ---- Keyboard clip mode ----
+    bool handleKeyboardClipKey(const juce::KeyPress& key);
+    bool matchesClipAction(const juce::KeyPress& key, const juce::String& actionId,
+                           const juce::KeyPress& fallback) const;
+    synth::ClipId keyboardVerbTarget() const;
+    void moveKeyboardClipByStep(synth::ClipId id, int direction);
+    double keyboardGridStepBeats() const;
+    void publishKeyboardClip();
+    void scrollClipIntoView(const synth::Clip& clip);
+    void paintKeyboardClipRing(juce::Graphics& g);
+    void refreshKeyboardClip();
+
     void beginMarquee(juce::Point<int> anchor, bool additive);
     void updateMarquee(juce::Point<int> current);
     void endMarquee();
@@ -697,6 +723,10 @@ private:
     double drawAnchorBeat_ = 0.0;
     double drawEndBeat_ = 0.0;
     bool drawDragged_ = false;
+
+    // ---- Keyboard clip mode ----
+    synth::ClipId keyboardClip_;
+    juce::String announcedKeyboardText_;
 
     // ---- Inline rename ----
     std::unique_ptr<juce::TextEditor> renameEditor_;

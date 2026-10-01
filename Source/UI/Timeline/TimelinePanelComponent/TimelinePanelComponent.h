@@ -427,6 +427,7 @@ public:
     // (-1 = none) -- see TimelinePanelTrackHeaders.cpp for the full focus-movement contract.
     int getFocusedTrackIndexForTest() const noexcept { return focusedTrackIndex_; }
     bool selectAdjacentTrack(int direction);
+    bool handleRootFocusKey(const juce::KeyPress& key);
 
     /** Builds the "+ Track" menu WITHOUT showing it — openAddTrackMenu() calls this then shows the
      *  result async. The headless test seam for inspecting menu CONTENTS (item text, enabled state,
@@ -483,6 +484,12 @@ private:
     // cached visible area.
     void ensureTrackVisible(int index);
     int focusedTrackIndex_ = -1;
+
+    // ---- Clip keyboard mode (TimelinePanelClipKeyboard.cpp) ----
+    bool enterTrackClips(synth::TrackId trackId);
+    void followKeyboardClip(synth::ClipId id);
+    void returnToTrackHeader(synth::TrackId trackId);
+    void wireClipLaneCallbacks();
 
     // ---- Instrument -> Plugin submenu click-resolution snapshot ----
     // The exact option list `buildAddTrackMenu()` used to populate the "Plugin" sub-submenu, so

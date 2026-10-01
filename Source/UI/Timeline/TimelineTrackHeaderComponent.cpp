@@ -633,6 +633,10 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
 
+    // The "Next Clip" key carries focus from the row into its track's clips.
+    if (onEnterClipsRequested && matchesAction(key, "timelineClipNext", plainKey(juce::KeyPress::rightKey)))
+        return onEnterClipsRequested();
+
     // M/S/R toggle THIS row's track — rebindable, bare-letter defaults matching the J/L/P/F
     // convention. With no ShortcutManager installed (headless embeddings, or a test that never
     // calls setShortcutManager) these fall back to the hardcoded bare letters.

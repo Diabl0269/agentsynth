@@ -23,6 +23,7 @@ two or more units in `TimelineClipLaneInternal.h`:
 | `TimelineClipLanePainting.cpp` | Tool affordances (drag/draw/split-preview ghosts), waveform painting, live-recording strip |
 | `TimelineClipLaneMouse.cpp` | Mouse handling, drag-preview/auto-scroll, double-click clip creation, file drag/drop |
 | `TimelineClipLaneSelection.cpp` | Selected-clip span query, panel-scoped `keyPressed`, marquee begin/update/end |
+| `TimelineClipLaneKeyboard.cpp` | Clip keyboard mode: stepping/opening/moving the keyboard clip, its accent ring, its screen-reader description |
 | `TimelineClipLaneEditTools.cpp` | Active tool/cursor/gestures and their previews, clip renaming, clip context menu |
 | `TimelineClipLaneRange.cpp` | The Range tool: the range drag and Shift-extension, range painting, the range verbs and menu |
 

@@ -71,6 +71,9 @@ Up/Down are NOT `ShortcutManager` actions (arrow-key row navigation is not rebin
 in this app either); the row reports a direction via `onFocusMoveRequested` instead, since it owns
 neither the sibling list nor the shared scroll state to act on it itself.
 
+**Right** (the rebindable `timelineClipNext`, `onEnterClipsRequested`) hands focus on to the row's own
+clips — see [focus](focus.md#clip-keyboard-mode).
+
 `TimelinePanelComponent::focusedTrackIndex_` is the model — an index into the doc's track order,
 **deliberately not a field on `TimelineDoc`**: this is ephemeral UI state that must never touch
 undo, reconcile or persistence. Two callbacks keep it in sync, both explicit rather than riding a
