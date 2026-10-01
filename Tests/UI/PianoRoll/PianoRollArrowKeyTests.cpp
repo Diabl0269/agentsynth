@@ -287,17 +287,19 @@ TEST(PianoRollNavigationTest, AtEitherEndTheSelectionIsKeptAndTheKeyIsStillConsu
     EXPECT_FALSE(f.undo.canUndo());
 }
 
-TEST(PianoRollNavigationTest, AltArrowsFallThroughWithNothingSelected) {
+TEST(PianoRollNavigationTest, AltArrowsWithNothingSelectedStartAtTheFirstOrLastNote) {
     PianoRollFixture f;
     const auto bed = makeNavBed(f);
     ASSERT_TRUE(bed.clipId.isValid());
     ASSERT_TRUE(f.roll.getSelectionForTest().isEmpty());
 
-    // There is plenty to navigate TO — what is missing is somewhere to navigate FROM, and that is
-    // what makes the key fall through to the panel instead of picking a note arbitrarily.
-    EXPECT_FALSE(f.roll.keyPressed(altArrow(juce::KeyPress::rightKey)));
-    EXPECT_FALSE(f.roll.keyPressed(altArrow(juce::KeyPress::leftKey)));
-    EXPECT_TRUE(f.roll.getSelectionForTest().isEmpty());
+    // With nothing selected a keyboard-only user still needs a way in: forward lands on the first
+    // note, back on the last, and navigation stays selection-only (never an undo step).
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::rightKey)));
+    EXPECT_TRUE(onlySelected(f, bed.a));
+    f.roll.getSelectionForTest().clear();
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::leftKey)));
+    EXPECT_TRUE(onlySelected(f, bed.d));
     EXPECT_FALSE(f.undo.canUndo());
 }
 

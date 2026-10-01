@@ -682,9 +682,11 @@ dispatched through `ApplicationCommandManager`:
 | Ctrl+V (macOS) / Cmd+Shift+V (Windows, Linux) | **Show or Hide Velocity Strip** (`pianoRollToggleVelocityLane`) — the Velocity header chip's twin. A real Control on macOS, where Cmd+V is Paste; on Windows/Linux JUCE's Cmd *is* Ctrl, so Ctrl+V would be Paste and those platforms take Cmd+Shift+V instead — the same per-platform split as the AI panel's Ctrl+A / Cmd+Shift+A. Inert while a text field (the header's velocity box) has focus. See [`timeline/piano-roll.md`](../timeline/piano-roll.md#velocity-strip) |
 | Option+S | **Show Only Scale Notes** (`pianoRollToggleScaleFilter`) — collapses the out-of-scale rows out of the grid, and makes ↑/↓ step by scale degree (above). One modifier away from Ctrl+S on purpose: adjacent verbs on adjacent chips should rhyme, and modifier equality is exact so they cannot collide. Remembered per clip; falls through with no clip open |
 
-Every arrow/octave/nav action returns `false` (falls through) when nothing is selected, so the key
-keeps whatever meaning it has elsewhere with an empty selection — nudge/transpose EDIT the
-selection, the two navigation actions only MOVE it. Order matters only where one default is a
+Every arrow/octave action returns `false` (falls through) when nothing is selected, so the key
+keeps whatever meaning it has elsewhere with an empty selection. The two navigation actions are
+the exception: with nothing selected, Next Note selects the clip's first note and Previous Note its
+last, so a keyboard-only user can reach a note without the pointer. Nudge/transpose EDIT the
+selection, while the navigation actions only MOVE it. Order matters only where one default is a
 modified form of another (Shift+Up vs Up, Alt+Left vs Left): the more specific action is matched
 first, so rebinding only one half of a pair can't let the other swallow it. `juce::KeyPress`
 equality is exact on modifiers, which is what keeps Left/Shift+Left/Alt+Left three separate
