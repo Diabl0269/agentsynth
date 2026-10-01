@@ -57,6 +57,16 @@ quartet is a thin wrapper resolving the members' rigid-body snap (see
 [selection](selection.md#group-drag-resolves-as-one-rigid-body)) and the card's own position as one
 undo step, rather than a second drag implementation living beside it.
 
+**A dropped card lands in the nearest free slot, like any other drop.** `finalizeMacroCardDrag` runs the card's own
+rect through `findFreeSlot` against `MacroGroupController::placementBlockers` (see
+[layout](layout.md#anti-overlap-search)), which leaves out the macro itself, its hidden members and its ancestors, so a
+card dropped onto a module or another card ends up beside it with the usual 12 px gap. The hidden members then take
+exactly the card's resolved delta from where the drag started. They are not resolved as a group of their own the way a
+plain multi-select drag is (`finalizeSelectionDrag`): they sit under the card, so a collision test on their bounds
+would push them away from a card that landed in free space. Card and members move in the one undo step; its
+"before" graph state is captured when the drag starts (`beginMacroCardDrag`), because every drag tick already writes
+the members' live positions into the graph.
+
 **Collapse/expand is a toggle, not a collapse-only command.** Cmd+Alt+G
 (`GraphEditor::toggleSelectionMacrosCollapsed`) gathers every macro owning at least one
 currently-selected node: if any is expanded it collapses them ALL; otherwise, every touched macro
