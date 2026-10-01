@@ -272,7 +272,9 @@ add_executable(Tests
     UI/Graph/ModMatrixTests.cpp
     UI/Graph/ModMatrixMacroRoutingTests.cpp
     UI/Graph/ModMatrixTitleTests.cpp
+    UI/Graph/ModMatrixKeyboardTests.cpp
     UI/Graph/ModMatrixPickerTests.cpp
+    UI/Graph/ModMatrixSourcesTests.cpp
     FX/FXModule/FXModuleAttenuverterTests.cpp
     FX/FXModule/FXModuleBitcrusherTests.cpp
     FX/FXModule/FXModuleChorusTests.cpp

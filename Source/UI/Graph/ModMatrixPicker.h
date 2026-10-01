@@ -12,7 +12,8 @@ namespace synth::ui {
  *  launches one itself. Choosing a row reports its id through `onChoose` and closes the box, so the
  *  caller applies it exactly as it would a combo selection.
  *
- *  Typing filters case-insensitively by the row text (module title plus output or target label); a
+ *  Typing filters case-insensitively by the row text (module title plus output or target label),
+ *  word by word: each space-separated word must appear somewhere in the row (see textMatchesQuery); a
  *  category header shows only while one of its rows does. The popup's height is fixed by the full
  *  list, so it never resizes under the cursor while filtering. Up/Down move the highlight, Return
  *  picks it (the first match until moved), Escape closes.
@@ -37,6 +38,10 @@ public:
     void parentHierarchyChanged() override;
     // Repaints the focus outline: a call-out is its own window, so nothing else will when focus moves.
     void focusOfChildComponentChanged(FocusChangeType) override { repaint(); }
+
+    /** True when every space-separated word of `query` appears in `text`, ignoring case and order.
+     *  An empty query matches everything. */
+    static bool textMatchesQuery(const juce::String& text, const juce::String& query);
 
     /** Closes the launching CallOutBox, if any. Called on a pick and on Escape. */
     void dismiss();

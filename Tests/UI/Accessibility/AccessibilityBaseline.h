@@ -43,6 +43,8 @@ inline constexpr AccessibilityBaselineEntry kAccessibilityBaseline[] = {
     {"MidiRemote", 0, 0},
     {"Mixer", 0, 0},
     {"AutomationLanes", 0, 0},
+    {"ModMatrix", 0, 0},
+    {"ModMatrixPicker", 0, 0},
 };
 // clang-format on
 

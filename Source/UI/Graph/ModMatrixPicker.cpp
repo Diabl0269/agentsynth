@@ -187,6 +187,7 @@ ModMatrixPicker::ModMatrixPicker(juce::String what, std::vector<Item> items, int
     addAndMakeVisible(viewport_);
     viewport_.setViewedComponent(&rowColumn_, false);
     viewport_.setScrollBarsShown(true, false);
+    viewport_.setWantsKeyboardFocus(false); // the search field keeps focus; Up/Down scroll the highlight
 
     rebuildRows();
     applyColours();
@@ -221,6 +222,18 @@ void ModMatrixPicker::rebuildRows() {
     applyFilter();
 }
 
+// Word by word: every space-separated word of the query must appear somewhere in the row, in any
+// order and ignoring case, so "osc 8" finds "Oscillator 8" and "cutoff filt" finds "Filter - Cutoff".
+bool ModMatrixPicker::textMatchesQuery(const juce::String& text, const juce::String& query) {
+    juce::StringArray words;
+    words.addTokens(query, " \t", "");
+    words.removeEmptyStrings();
+    for (const auto& word : words)
+        if (!text.containsIgnoreCase(word))
+            return false;
+    return true;
+}
+
 std::vector<ModMatrixPicker::Row*> ModMatrixPicker::visibleItemRows() const {
     std::vector<Row*> out;
     for (const auto& row : rows_)
@@ -243,7 +256,7 @@ void ModMatrixPicker::applyFilter() {
             headerHasMatch = false;
             continue;
         }
-        const bool matches = query.isEmpty() || row->text().containsIgnoreCase(query);
+        const bool matches = textMatchesQuery(row->text(), query);
         row->setVisible(matches);
         headerHasMatch = headerHasMatch || matches;
     }

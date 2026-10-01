@@ -5,6 +5,8 @@
 #include "Modules/MacroInletModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
+#include "UI/Graph/ModMatrixEndpoints.h"
+#include "UI/Graph/ModMatrixKeyboard.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -15,25 +17,6 @@
 #include <utility>
 
 namespace {
-// MacroInletModule deliberately declares NO getModulationTargets() — GraphEditor::connectPorts()
-// relies on that empty list to keep a plain cable drop onto a Macro In's jack a plain connection,
-// never auto-wrapped in a fresh attenuverter (Tests/Macros/MacroPortFlowTests.cpp's drop-a-cable tests
-// pin that). A modulation cable through an attenuverter
-// (docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter) can still
-// splice a MacroInletModule in as the DESTINATION of an EXISTING AttenuverterChain crossing a macro boundary, so this
-// row's destination combo needs something to show and match against — without changing what the module declares
-// globally (which would resurrect the auto-wrap problem for ordinary drops). Display-only: this never becomes a real
-// ModulationTarget the module advertises anywhere else. A spliced port is always Mono with its one active raw channel
-// at 0 (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed /
-// docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter — the internal jack an AttenuverterChain lands
-// on is never poly-fanned), so channel 0 is the only candidate.
-std::vector<ModulationTarget> destinationCandidatesForCombo(ModuleBase* module) {
-    auto targets = module->getModulationTargets();
-    if (targets.empty() && dynamic_cast<MacroInletModule*>(module) != nullptr)
-        targets.push_back({"In", 0});
-    return targets;
-}
-
 using NodeID = juce::AudioProcessorGraph::NodeID;
 using Connection = juce::AudioProcessorGraph::Connection;
 
@@ -133,12 +116,40 @@ public:
     std::function<void()> onShowPicker;
 
     void showPopup() override {
-        if (onShowPicker)
+        if (onShowPicker) {
+            // ComboBox::showPopupIfNotActive() raised the private "menu active" flag before calling
+            // this, and only the stock menu's close (or hidePopup) lowers it. The picker replaces that
+            // menu, so lower it here: left raised, every later click and Return is ignored as "already
+            // open", and the panel stops refreshing because the row reads as having a popup up.
+            juce::ComboBox::hidePopup();
             onShowPicker();
-        else
+        } else
             juce::ComboBox::showPopup();
     }
+    // The arrows belong to the matrix's grid navigation (ModMatrixKeyboard.h), not to stepping through
+    // the list: a stock combo re-points the routing on every arrow press, one undo step each.
+    bool keyPressed(const juce::KeyPress& key) override {
+        if (key == juce::KeyPress::upKey || key == juce::KeyPress::downKey || key == juce::KeyPress::leftKey ||
+            key == juce::KeyPress::rightKey)
+            return false;
+        if (key == juce::KeyPress::spaceKey) {
+            showPopup();
+            return true;
+        }
+        return juce::ComboBox::keyPressed(key);
+    }
     void paintOverChildren(juce::Graphics& g) override { synth::ui::paintFocusRegionOutline(*this, g); }
+};
+
+/** The row's amount slider: Up/Down nudge the amount (as on a mixer fader), Left/Right are left to the
+ *  matrix's grid navigation so the slider is never a dead end for the keyboard. */
+class AmountSlider : public juce::Slider {
+public:
+    bool keyPressed(const juce::KeyPress& key) override {
+        if (key == juce::KeyPress::leftKey || key == juce::KeyPress::rightKey)
+            return false;
+        return juce::Slider::keyPressed(key);
+    }
 };
 } // namespace
 
@@ -153,9 +164,13 @@ struct ModMatrixComponent::ModRow
     ~ModRow() override;
 
     void setRowIndex(int index) {
+        if (rowIndex != index)
+            applyRowNames(index);
         rowIndex = index;
         repaint();
     }
+    // Screen-reader names carry the row number, so VoiceOver says which routing a control belongs to.
+    void applyRowNames(int index);
     int rowIndex = 0;
 
     void paint(juce::Graphics& g) override;
@@ -188,7 +203,7 @@ struct ModMatrixComponent::ModRow
     std::vector<synth::ui::ModMatrixPicker::Item> destItems;
     juce::Component::SafePointer<juce::Component> sourcePicker;
     juce::Component::SafePointer<juce::Component> destPicker;
-    juce::Slider amountSlider;
+    AmountSlider amountSlider;
     juce::Label amountValueLabel;
     std::unique_ptr<juce::DrawableButton> bypassToggle;
     std::unique_ptr<juce::DrawableButton> deleteButton;
@@ -224,22 +239,35 @@ ModMatrixComponent::ModMatrixComponent(AudioEngine& engine, AppUndoManager* undo
     // ctor). Also matters here because this component nests INSIDE the "canvas" region (it is a
     // child of GraphEditor) — see FocusRegionRegistry::regionContaining's nesting note.
     setWantsKeyboardFocus(true);
+    setComponentID("modMatrix");
+    addKeyListener(&synth::ui::modMatrixArrowKeys());
+    contentContainer.addKeyListener(&synth::ui::modMatrixArrowKeys());
 
     addAndMakeVisible(viewport);
     viewport.setViewedComponent(&contentContainer);
+    // The row list is a scroll container, not a control: the arrow keys move between its rows'
+    // controls and scroll the focused one into view (ModMatrixKeyboard.cpp).
+    viewport.setWantsKeyboardFocus(false);
 
     addAndMakeVisible(addButton);
-    addButton.setComponentID("addModulation");
+    addButton.setComponentID(synth::ui::modmatrix_ids::kAdd);
+    addButton.setTooltip("Add a modulation routing");
     addButton.onClick = [this] { addModulation(); };
 
     addAndMakeVisible(flatToggle);
     flatToggle.onClick = [this] { setFlatSourceMenu(flatToggle.getToggleState()); };
     flatToggle.setToggleState(isSourceMenuFlat, juce::dontSendNotification);
+    flatToggle.setComponentID(synth::ui::modmatrix_ids::kFlat);
+    flatToggle.setTooltip("List sources in one flat list instead of grouped by category");
 
     startTimerHz(10);
 }
 
-ModMatrixComponent::~ModMatrixComponent() { stopTimer(); }
+ModMatrixComponent::~ModMatrixComponent() {
+    stopTimer();
+    removeKeyListener(&synth::ui::modMatrixArrowKeys());
+    contentContainer.removeKeyListener(&synth::ui::modMatrixArrowKeys());
+}
 
 // A routing change a row is running can splice out a port, and that path clears the panel; freeing the row
 // there would free the code still running. The clear waits for the next refresh instead.
@@ -490,6 +518,7 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     addAndMakeVisible(*deleteButton);
 
     amountSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    amountSlider.setWantsKeyboardFocus(true); // juce::Slider turns it off; the amount is a keyboard stop
     amountSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     amountSlider.setRange(-1.0, 1.0);
     amountSlider.onValueChange = [this] {
@@ -512,8 +541,9 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     destCombo.addListener(this);
     sourceCombo.onShowPicker = [this] { showPicker(true); };
     destCombo.onShowPicker = [this] { showPicker(false); };
-    sourceCombo.setTitle("Modulation source");
-    destCombo.setTitle("Modulation destination");
+    sourceCombo.setComponentID(synth::ui::modmatrix_ids::kSource);
+    destCombo.setComponentID(synth::ui::modmatrix_ids::kDest);
+    amountSlider.setComponentID(synth::ui::modmatrix_ids::kAmount);
     sourceCombo.setTooltip("Modulation source. Click to search the modules that can drive this routing.");
     destCombo.setTooltip("Modulation destination. Click to search the parameters this routing can drive.");
     deleteButton->onClick = [this] {
@@ -534,12 +564,10 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
         const auto& colors = lf->getTheme().colors;
         bypassToggle->setColour(juce::DrawableButton::backgroundOnColourId, colors.warning.withAlpha(0.35f));
     }
-    bypassToggle->setComponentID("modBypass");
-    deleteButton->setComponentID("modDelete");
-    bypassToggle->setTitle("Bypass modulation");
-    deleteButton->setTitle("Remove modulation routing");
-    amountSlider.setTitle("Modulation amount");
-    amountSlider.setTooltip("Modulation amount, from -1 to +1.");
+    bypassToggle->setComponentID(synth::ui::modmatrix_ids::kBypass);
+    deleteButton->setComponentID(synth::ui::modmatrix_ids::kDelete);
+    amountSlider.setTooltip("Modulation amount, from -1 to +1. Up and Down nudge it.");
+    applyRowNames(0);
     applyButtonIcons();
 
     // Attach to attenuverter params
@@ -697,6 +725,15 @@ void ModMatrixComponent::ModRow::parameterGestureChanged(int parameterIndex, boo
     }
 }
 
+void ModMatrixComponent::ModRow::applyRowNames(int index) {
+    const auto prefix = "Routing " + juce::String(index + 1) + " ";
+    sourceCombo.setTitle(prefix + "source");
+    destCombo.setTitle(prefix + "destination");
+    amountSlider.setTitle(prefix + "amount");
+    bypassToggle->setTitle(prefix + "bypass");
+    deleteButton->setTitle("Remove routing " + juce::String(index + 1));
+}
+
 void ModMatrixComponent::ModRow::populateCombos() {
     sourceCombo.clear(juce::dontSendNotification);
     destCombo.clear(juce::dontSendNotification);
@@ -729,16 +766,16 @@ void ModMatrixComponent::ModRow::populateCombos() {
                 auto* module = static_cast<ModuleBase*>(node->getProcessor());
                 juce::String displayName = synth::moduleTitle(*node);
 
-                for (int i = 0; i < module->getTotalNumOutputChannels(); ++i) {
-                    int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)i);
+                for (const auto& output : synth::ui::modSourceOutputs(*module)) {
+                    int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)output.channel);
                     juce::String label = displayName;
-                    if (module->getTotalNumOutputChannels() > 1)
-                        label += " Out " + juce::String(i + 1);
+                    if (output.label.isNotEmpty())
+                        label += " - " + output.label;
                     sourceCombo.addItem(label, itemId);
                     sourceItems.push_back({itemId, {}, label});
                 }
 
-                auto targets = destinationCandidatesForCombo(module);
+                auto targets = synth::ui::modDestinationCandidates(module);
                 for (const auto& target : targets) {
                     int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)target.channelIndex);
                     destCombo.addItem(displayName + ": " + target.name, itemId);
@@ -761,31 +798,32 @@ void ModMatrixComponent::ModRow::populateCombos() {
                 auto* module = static_cast<ModuleBase*>(node->getProcessor());
                 juce::String displayName = synth::moduleTitle(*node);
 
-                if (module->getTotalNumOutputChannels() > 0) {
-                    if (module->getTotalNumOutputChannels() == 1) {
-                        int itemId = (int)((node->nodeID.uid << 8) | 0);
+                const auto outputs = synth::ui::modSourceOutputs(*module);
+                if (!outputs.empty()) {
+                    if (outputs.size() == 1) {
+                        int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)outputs.front().channel);
                         catSourceSub.addItem(itemId, displayName);
                         sourceCombo.addItem(displayName, itemId);
                         sourceItems.push_back({itemId, categoryNames[cat], displayName});
                     } else {
                         juce::PopupMenu instSourceSub;
-                        for (int i = 0; i < module->getTotalNumOutputChannels(); ++i) {
-                            int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)i);
+                        for (const auto& output : outputs) {
+                            int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)output.channel);
                             // The closed-combobox label is resolved purely from this leaf item's own
                             // text (JUCE never concatenates ancestor submenu titles), so the module
                             // name must live here too, or a multi-output module's box shows a bare
-                            // "Out N" with no way to tell which module it is.
-                            instSourceSub.addItem(itemId, displayName + " - Out " + juce::String(i + 1));
-                            sourceCombo.addItem(displayName + " Out " + juce::String(i + 1), itemId);
-                            sourceItems.push_back(
-                                {itemId, categoryNames[cat], displayName + " - Out " + juce::String(i + 1)});
+                            // jack name with no way to tell which module it is.
+                            const auto label = displayName + " - " + output.label;
+                            instSourceSub.addItem(itemId, label);
+                            sourceCombo.addItem(label, itemId);
+                            sourceItems.push_back({itemId, categoryNames[cat], label});
                         }
                         catSourceSub.addSubMenu(displayName, instSourceSub);
                     }
                     sourceCount++;
                 }
 
-                auto targets = destinationCandidatesForCombo(module);
+                auto targets = synth::ui::modDestinationCandidates(module);
                 if (!targets.empty()) {
                     juce::PopupMenu instDestSub;
                     for (const auto& target : targets) {
@@ -849,7 +887,18 @@ void ModMatrixComponent::ModRow::refresh(const AudioEngine::ModRoutingInfo& info
         if (const auto real = realEndpointBehindPorts(graph, attenuverterId, /*incoming=*/false, isPort); real.valid())
             dest = real;
     }
-    sourceCombo.setSelectedId((int)((source.node.uid << 8) | (uint32_t)source.channel), juce::dontSendNotification);
+    // A routing saved from a raw channel that is no longer listed (an LFO's hidden pass-through, in a
+    // project from before the list followed the card's jacks) keeps a row of its own, so the box never
+    // goes blank and the routing stays editable.
+    const int sourceId = (int)((source.node.uid << 8) | (uint32_t)source.channel);
+    if (source.valid() && sourceCombo.indexOfItemId(sourceId) < 0) {
+        if (auto* node = owner.audioEngine.getGraph().getNodeForId(source.node)) {
+            const auto label = synth::moduleTitle(*node) + " - Out " + juce::String(source.channel + 1);
+            sourceCombo.addItem(label, sourceId);
+            sourceItems.push_back({sourceId, {}, label});
+        }
+    }
+    sourceCombo.setSelectedId(sourceId, juce::dontSendNotification);
     destCombo.setSelectedId((int)((dest.node.uid << 8) | (uint32_t)dest.channel), juce::dontSendNotification);
 }
 

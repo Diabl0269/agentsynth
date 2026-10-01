@@ -380,15 +380,26 @@ Its rows paint under these rules:
   to zebra and hover, and above the footer band.
 - **Grouped-menu labels bake in the module name.** A closed `ComboBox`'s label resolves ONLY from
   the matching leaf item's own text — JUCE never concatenates ancestor submenu titles — so a
-  multi-output or multi-target module's nested source/dest submenu leaves read `"<Module> · Out N"`
-  / `"<Module> · <target>"`, not a bare `"Out 2"`. `updateRowsFromGraph()` re-populates every row's
+  multi-output or multi-target module's nested source/dest submenu leaves read `"<Module> - <jack>"`
+  / `"<Module> - <target>"`, not a bare jack name. `updateRowsFromGraph()` re-populates every row's
   combos (`populateCombos()`) BEFORE re-applying its selection (`refresh()`), because
   `populateCombos()` clears the combo box as a side effect of rebuilding it.
+- **Sources are the jacks the card draws.** The source list offers one entry per visible output jack
+  (`synth::ui::modSourceOutputs`, `Source/UI/Graph/ModMatrixEndpoints.h/.cpp`), not one per raw output
+  channel: an LFO, whose card shows one CV jack over three raw channels (two are silent pass-throughs),
+  is one entry named just "LFO 1". A jack that fronts two poly heads (Poly MIDI's Pitch and Gate) is
+  listed once per head, named by role. A routing saved from a channel the list no longer offers keeps
+  an entry of its own (`"<Module> - Out N"`), so its box never goes blank.
 - **Searchable source and destination picker.** Clicking either combo (or Return/Space with it focused)
   opens `synth::ui::ModMatrixPicker` (`Source/UI/Graph/ModMatrixPicker.h/.cpp`) in a `juce::CallOutBox`
-  instead of the stock menu; `PickerComboBox` overrides `showPopup()` and stays the closed display. A
-  search field at the top takes focus and filters case-insensitively by the row text (module title plus
-  output or target label, e.g. "Filter - Cutoff"); rows sit under the same category headers the menu
+  instead of the stock menu; `PickerComboBox` overrides `showPopup()` and stays the closed display.
+  `ComboBox::showPopupIfNotActive()` raises the combo's private "menu active" flag before calling
+  `showPopup()`, and only the stock menu lowers it, so `PickerComboBox::showPopup()` lowers it itself
+  (`hidePopup()`) before opening the picker: left raised, the combo ignores every later click and the
+  panel stops refreshing. A search field at the top takes focus and filters word by word
+  (`ModMatrixPicker::textMatchesQuery`): every space-separated word of the query must appear in the row
+  text (module title plus output or target label, e.g. "Filter - Cutoff"), ignoring case and order, so
+  "osc 8" finds "Oscillator 8"; rows sit under the same category headers the menu
   had (Envelopes, LFOs, Oscillators, Sequencers, Filters, Effects, Other), and a header hides when none
   of its rows match. "Flat Sources" drops the headers. The popup's height comes from the full list, so it
   does not resize while typing. Up/Down move the highlight, Return picks the highlighted row (the first
@@ -396,8 +407,18 @@ Its rows paint under these rules:
   notification, so it goes through `ModRow::comboBoxChanged` and the macro-port routing like any other
   choice. The picker paints its own opaque themed panel (a parentless call-out is a new window that does
   not inherit the LookAndFeel), outlines itself with `paintFocusRegionOutline` while it holds focus, and
-  every control carries a title and tooltip: the combos ("Modulation source" / "Modulation
-  destination"), the search field, each row, the amount slider, and the bypass and delete buttons.
+  every control carries a title and tooltip: the combos, amount slider and bypass button are named with
+  their row ("Routing 2 source", "Routing 2 amount"), the delete button "Remove routing 2", plus the
+  search field, each picker row, and the Add Modulation and Flat Sources buttons.
+- **Keyboard.** The matrix is one focus region (Tab lands on it and leaves it). Inside it the arrow
+  keys walk its controls (`Source/UI/Graph/ModMatrixKeyboard.h/.cpp`, a stateless key listener on the
+  panel and its row container): Left/Right step through every control in reading order (Add
+  Modulation, Flat Sources, then each row's source, destination, amount, bypass, delete), Up/Down move
+  to the same column on the row above or below, and the amount slider keeps Up/Down to nudge the
+  amount, as a mixer fader does. A combo never re-points its routing on an arrow key (the stock combo
+  would, one undo step per press); Return or Space opens its picker. Every control draws the accent
+  focus ring through `AppLookAndFeel`. `AccessibilityCoverageTests` audits the open matrix and the
+  picker (`ModMatrix`, `ModMatrixPicker` at 0/0).
   Test seams: `ModMatrixComponent::setPickerLauncherForTest` (capture the picker instead of launching a
   window) and `ModMatrixPicker::setSearchTextForTest`.
 - **Labels follow the card title.** Every module in the source and destination combos is listed under
