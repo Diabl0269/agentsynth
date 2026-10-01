@@ -55,7 +55,9 @@ static juce::Point<int> estimateModuleSizeBaseTable(const juce::String& typeName
         // +40 for the Rate/Level/Glide CV jacks (3 input jacks, one row shared per pair
         // with the mono CV output already there — see ModuleComponentTest.
         // EstimatedModuleSizesMatchTheRealComponents, which pins this to the real component).
-        return {280, 361}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        // +76 for the Phase and Fade In knobs, which add a knob row (their CV jacks are knob-bound,
+        // so they draw no gutter row).
+        return {280, 437}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "VCA")
         return {280, 233}; // +20: the Audio L/R input pair adds a jack row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)

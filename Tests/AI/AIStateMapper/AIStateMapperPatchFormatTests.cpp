@@ -118,9 +118,9 @@ TEST(AIStateMapperTest, PolySequencerSurvivesRoundTrip) {
 TEST(AIStateMapperTest, ParamIdsGolden) {
     const std::map<juce::String, juce::String> golden = {
         {"ADSR", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
-                 "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync"},
+                 "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
         {"Amp Env", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
-                    "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync"},
+                    "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
         {"Attenuverter", "amount, bypassed"},
         // Audio Input is a ModuleBase, so it has ModuleBase's bypass parameter. Audio
         // Output is still the graph's raw IO node and still has none.
@@ -141,13 +141,13 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"External MIDI", "bypassed, channel, deviceIndex"},
         {"Filter", "bypassed, cutoff, drive, dualIO, filterType, muted, outputLevel, poly, resonance"},
         {"Filter Env", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
-                       "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync"},
+                       "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
         {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
         {"Gate", "attack, bypassed, dualIO, hold, muted, outputLevel, range, release, threshold"},
         // The host module has no parameters of its own beyond bypass/mute — the hosted
         // plugin's own parameters are exposed to the graph separately, as automation lanes.
         {"Hosted Plugin", "bypassed, muted"},
-        {"LFO", "bipolar, bypassed, glide, level, mode, muted, rateHz, rateSync, retrig, shape"},
+        {"LFO", "bipolar, bypassed, fadeIn, glide, level, mode, muted, phase, rateHz, rateSync, retrig, shape"},
         {"Limiter", "bypassed, dualIO, inputGain, muted, release, threshold"},
         {"MIDI Keyboard", "bypassed, octave"},
         // The four Macro I/O port node types: pure pass-throughs, so the inherited
@@ -166,7 +166,8 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Midi Input", ""},
         {"Mod Slot", "amount, bypassed"},
         {"Noise", "bypassed, color, level, muted, noiseType, poly"},
-        {"Oscillator", "bypassed, coarse, detune, dualIO, fine, level, muted, octave, pan, poly, unison, waveform"},
+        {"Oscillator", "bypassed, coarse, detune, dualIO, fine, glide, level, muted, octave, pan, poly, pulseWidth, "
+                       "unison, waveform"},
         {"Parametric EQ", "band1Freq, band1Gain, band1On, band1Q, band2Freq, band2Gain, band2On, band2Q, band3Freq, "
                           "band3Gain, band3On, band3Q, band4Freq, band4Gain, band4On, band4Q, bypassed, dualIO, muted, "
                           "outputGain"},

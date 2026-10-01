@@ -41,9 +41,11 @@ than running to `getNumChannels()`, or it erases the right leg.
 | **Oscillator (poly)** | ch13 | In | Shared Pan CV |
 | **Oscillator (poly/mono)** | ch14 | In | Unison CV (FRO314, same channel both modes) |
 | **Oscillator (poly/mono)** | ch15 | In | Detune CV (FRO314, same channel both modes) |
+| **Oscillator (poly/mono)** | ch16 | In | Pulse Width CV (same channel both modes) |
+| **Oscillator (poly/mono)** | ch17 | In | Glide CV (same channel both modes) |
 | **Oscillator (poly)** | ch0-7 | Out | Per-voice audio — `Audio L` |
 | **Oscillator (poly)** | ch8-13 | Out | Silent pass-throughs (prevent buffer aliasing) |
-| **Oscillator (poly)** | ch14-21 | Out | Per-voice audio — `Audio R` (`kRightBase`); ch14/15 alias the Unison/Detune CV inputs above |
+| **Oscillator (poly)** | ch14-21 | Out | Per-voice audio — `Audio R` (`kRightBase`); ch14-17 alias the Unison/Detune/Pulse Width/Glide CV inputs above |
 | **Oscillator (mono)** | ch0 | In/Out | Pitch CV in / `Audio L` out (shared channel, CV saved before clear) |
 | **Oscillator (mono)** | ch1 | In | Waveform CV |
 | **Oscillator (mono)** | ch2 | In | Octave CV |
@@ -51,7 +53,7 @@ than running to `getNumChannels()`, or it erases the right leg.
 | **Oscillator (mono)** | ch4 | In | Fine CV |
 | **Oscillator (mono)** | ch5 | In | Level CV |
 | **Oscillator (mono)** | ch6 | In | Pan CV |
-| **Oscillator (mono)** | ch14 | Out | `Audio R` (`kRightBase`); aliases the Unison CV input above |
+| **Oscillator (mono)** | ch14 | Out | `Audio R` (`kRightBase`); aliases the Unison CV input above; ch15-17 are further silent outputs |
 | **Wavetable (poly)** | ch0-7 | In | Per-voice pitch CV (Hz) |
 | **Wavetable (poly)** | ch8 | In | Shared Position CV |
 | **Wavetable (poly)** | ch9 | In | Shared Octave CV |
@@ -96,8 +98,9 @@ than running to `getNumChannels()`, or it erases the right leg.
 | **ADSR** | ch11 | In | Shared Decay CV |
 | **ADSR** | ch12 | In | Shared Sustain CV |
 | **ADSR** | ch13 | In | Shared Release CV |
+| **ADSR** | ch14 | In | Shared Velocity CV |
 | **ADSR (poly)** | ch0-7 | Out | Per-voice envelope (0–1) |
-| **ADSR** | ch8-13 | Out | Silent pass-throughs (prevent buffer aliasing) |
+| **ADSR** | ch8-14 | Out | Silent pass-throughs (prevent buffer aliasing) |
 | **Sample & Hold** | ch0 | In/Out | Signal in / held CV out (shared channel; read before overwrite) |
 | **Sample & Hold** | ch1 | In | Trigger / gate |
 | **Sample & Hold** | ch2 | In | Rate CV |

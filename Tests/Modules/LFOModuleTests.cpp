@@ -319,18 +319,20 @@ TEST_F(LFOModuleTest, SampleAndHold) {
     EXPECT_EQ(buffer.getSample(0, 0), buffer.getSample(0, 1));
 }
 
-// --- Rate/Level/Glide CV jacks -----------
+// --- Rate/Level/Glide/Phase/Fade In CV jacks -----------
 
 TEST_F(LFOModuleTest, CvPortLabelsAndCount) {
     EXPECT_EQ(lfo->getInputPortLabel(0), "Rate");
     EXPECT_EQ(lfo->getInputPortLabel(1), "Level");
     EXPECT_EQ(lfo->getInputPortLabel(2), "Glide");
-    EXPECT_EQ(lfo->getVisibleInputPortCount(), 3);
+    EXPECT_EQ(lfo->getInputPortLabel(3), "Phase");
+    EXPECT_EQ(lfo->getInputPortLabel(4), "Fade In");
+    EXPECT_EQ(lfo->getVisibleInputPortCount(), 5);
     EXPECT_EQ(lfo->getVisibleOutputPortCount(), 1);
     EXPECT_EQ(lfo->getOutputPortLabel(0), "CV");
 
     auto targets = lfo->getModulationTargets();
-    ASSERT_EQ(targets.size(), 3u);
+    ASSERT_EQ(targets.size(), 5u);
     EXPECT_EQ(targets[0].name, "Rate");
     EXPECT_EQ(targets[0].channelIndex, 0);
     EXPECT_EQ(targets[0].paramId, "rateHz");
@@ -340,6 +342,12 @@ TEST_F(LFOModuleTest, CvPortLabelsAndCount) {
     EXPECT_EQ(targets[2].name, "Glide");
     EXPECT_EQ(targets[2].channelIndex, 2);
     EXPECT_EQ(targets[2].paramId, "glide");
+    EXPECT_EQ(targets[3].name, "Phase");
+    EXPECT_EQ(targets[3].channelIndex, 3);
+    EXPECT_EQ(targets[3].paramId, "phase");
+    EXPECT_EQ(targets[4].name, "Fade In");
+    EXPECT_EQ(targets[4].channelIndex, 4);
+    EXPECT_EQ(targets[4].paramId, "fadeIn");
 
     // Every declared raw input channel must be claimed by mapInputChannel, or an unclaimed
     // channel below getVisibleInputPortCount() becomes a phantom poly-group head

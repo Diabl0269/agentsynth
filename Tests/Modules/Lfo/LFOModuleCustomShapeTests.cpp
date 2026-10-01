@@ -41,7 +41,8 @@ TEST(LFOModuleCustomShapeTest, ShapeChoiceListAppendsCustomAtIndexFive) {
 
 TEST(LFOModuleCustomShapeTest, ParamOrderUnchanged) {
     LFOModule lfo;
-    const char* expected[] = {"shape", "mode", "bipolar", "rateHz", "rateSync", "retrig", "level", "glide", "muted"};
+    const char* expected[] = {"shape", "mode",  "bipolar", "rateHz", "rateSync", "retrig",
+                              "level", "glide", "phase",   "fadeIn", "muted"};
     auto params = lfo.getParameters();
     // Index 0 is the inherited "bypassed" param; the rest follow the constructor's own order.
     ASSERT_GE(params.size(), 1 + (int)std::size(expected));
