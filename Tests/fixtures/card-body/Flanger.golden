@@ -1,26 +1,28 @@
-type Flanger size 280x237
+type Flanger size 280x309
   child 0 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 1 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O off - one Audio jack (Left + Right)" focusOrder=0 wantsFocus=1
-  child 4 knob id="Rate (Hz)" at 12,91 85x58 visible=1 title="Rate (Hz)" tip="Rate (Hz)" focusOrder=0 wantsFocus=1
-  child 5 label id="" at 12,73 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 6 knob id="Depth" at 97,91 85x58 visible=1 title="Depth" tip="Depth" focusOrder=0 wantsFocus=1
-  child 7 label id="" at 97,73 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 8 knob id="Centre Delay (ms)" at 182,91 85x58 visible=1 title="Centre Delay (ms)" tip="Centre Delay (ms)" focusOrder=0 wantsFocus=1
-  child 9 label id="" at 182,73 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 10 knob id="Feedback" at 12,167 85x58 visible=1 title="Feedback" tip="Feedback" focusOrder=0 wantsFocus=1
-  child 11 label id="" at 12,149 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 knob id="Mix" at 97,167 85x58 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
-  child 13 label id="" at 97,149 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Level" at 182,167 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 15 label id="" at 182,149 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 16 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
-  child 17 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
+  child 4 knob id="Rate (Hz)" at 12,109 85x58 visible=1 title="Rate (Hz)" tip="Rate (Hz)" focusOrder=0 wantsFocus=1
+  child 5 label id="" at 12,91 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 6 knob id="Depth" at 97,109 85x58 visible=1 title="Depth" tip="Depth" focusOrder=0 wantsFocus=1
+  child 7 label id="" at 97,91 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 knob id="Centre Delay (ms)" at 12,203 85x58 visible=1 title="Centre Delay (ms)" tip="Centre Delay (ms)" focusOrder=0 wantsFocus=1
+  child 9 label id="" at 12,185 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 10 knob id="Feedback" at 97,203 85x58 visible=1 title="Feedback" tip="Feedback" focusOrder=0 wantsFocus=1
+  child 11 label id="" at 97,185 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Mix" at 182,109 85x58 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 182,91 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 slider id="Level" at 44,265 224x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 12,265 32x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 label id="cardSectionHeader" at 12,73 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 17 label id="cardSectionHeader" at 12,167 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
+  child 19 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
-  in 1 37, 128
-  in 2 122, 128
-  in 3 207, 128
-  in 4 37, 204
-  in 5 122, 204
+  in 1 37, 146
+  in 2 122, 146
+  in 3 37, 240
+  in 4 122, 240
+  in 5 207, 146
   out 0 270, 58

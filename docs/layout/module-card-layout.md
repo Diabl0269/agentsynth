@@ -303,13 +303,13 @@ added.
 | Noise | Type `segmented`; Color, Level; footer (Poly, Show Scope) | As built: as designed |
 | Sampler | waveform and load row (card chrome, above the body); Mode `segmented`; Start, End, Level; Pitch: Pitch, Root, Fine; Grains: Grain Size, Density, Spray; footer: Loop, Reverse | The grain controls dim unless Mode is Granular (as built: a dim, not a swap or a hidden section, so their CV jacks keep a knob to land on and the mode switch never resizes the card; they stay on the card in Sample mode, as before). As built: Root stays a knob (an int over 24 steps, no stepper, and no note-name text); no `waveform` view in the body (it is chrome already) |
 | Wavetable | as today, as `tab` sections; Pan moves to Tune, Sync In to Phase | — |
-| Delay | (new ms/Sync `segmented`); Time `knobLarge`, Feedback, Mix; footer: (new Ping-pong), Level | Sync swaps Time for a division |
-| Reverb | Room: Size, Damping, (new Pre-delay); Mix: Dry, Wet `faderV`, Width; footer: Level | — |
+| Delay | Tempo Sync; Time `knobLarge`, Feedback, Mix; footer: Ping-pong, Level | Sync swaps Time for a division. As built: Tempo Sync is a boolean, so it draws as the toggle (a `segmented` switch only suits a choice); the division stays a choice in Time's cell |
+| Reverb | Room: Size, Damping, Pre-delay; Mix: Dry, Wet, Width; footer: Level | As built: Dry and Wet are both `faderV` (side by side, as the widget table says), Width a knob |
 | Chorus, Phaser, Flanger | Motion: Rate, Depth, Mix; Tone: Delay or Centre Freq, Feedback; footer: Level | — |
-| Distortion | Type `segmented`; Drive `knobLarge`, Mix; footer: Quality (oversampling), Level | — |
-| Bitcrusher | Bits, Downsample, Mix; footer: Dither, Level | — |
-| Ring Modulator | Drive, Character, Mix; footer: Quality, Level | — |
-| Pitch Shifter | Mode `segmented`; Pitch `knobLarge`, Fine, Mix; Window, Feedback; footer: Level | Frequency mode swaps Pitch+Fine for Shift (Hz) |
+| Distortion | Type `segmented`; Drive `knobLarge`, Mix; footer: Quality (oversampling), Level | As built: Quality is the Oversampling choice, drawn as a combo with its caption in the footer |
+| Bitcrusher | Bits, Downsample, Mix; footer: Dither, Level | As built: Dither is continuous, so it is a footer fader, not a pill |
+| Ring Modulator | Drive, Character, Mix; footer: Quality, Level | As built: Quality is the Oversampling choice, as for Distortion |
+| Pitch Shifter | Mode `segmented`; Pitch `knobLarge`, Fine, Mix; Window, Feedback; footer: Level | Frequency mode swaps Pitch+Fine for Shift (Hz). As built: a swap group holds one cell and two controls swap for one, so Pitch and Shift swap in one cell and Fine dims in Frequency mode (two conditional sections would hide knobs whose CV jacks stay knob-bound, and resize the card on every flip); the card never changes size on the mode |
 | Compressor | (new `gainReduction` view), Threshold `faderV`; Ratio, Makeup, Attack, Release; footer: (new Knee) | — |
 | Limiter | Input `faderV`, `gainReduction`, Ceiling `faderV`, Release | As built: Threshold is also on the card, before Release, so its CV jack has a knob to land on |
 | Gate | `threshold` view; Attack, Hold, Release; footer: Range, Level | As built: Threshold is a knob, because the Gate publishes no live level for the `threshold` view yet |

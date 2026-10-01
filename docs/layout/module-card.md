@@ -117,13 +117,13 @@ own table:
 
 | Effects | Height (px) |
 |---|---|
-| Delay | 337 |
-| Reverb | 313 |
-| Chorus / Phaser / Flanger | 237 |
-| Distortion | 283 |
-| Bitcrusher | 263 |
-| Ring Modulator | 331 |
-| Pitch Shifter | 387 |
+| Delay | 321 |
+| Reverb | 423 |
+| Chorus / Phaser / Flanger | 309 |
+| Distortion | 375 |
+| Bitcrusher | 229 |
+| Ring Modulator | 249 |
+| Pitch Shifter | 419 |
 
 | Other | Height (px) |
 |---|---|
