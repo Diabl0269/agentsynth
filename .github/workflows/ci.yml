@@ -329,6 +329,7 @@ jobs:
           -DENABLE_COVERAGE=ON \
           -DENABLE_TESTS=ON \
           -DENABLE_AI_HARNESS=ON \
+          -DAGENTSYNTH_PCH=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld \
@@ -683,8 +684,8 @@ jobs:
         # instruments that CI never runs (they gate no tests and need a live Ollama). One platform
         # is enough to catch a harness that stops compiling, and the Linux job builds them, so a
         # harness that stops compiling is still caught on every PR.
-        # AGENTSYNTH_PCH: precompiled JUCE headers (cmake/Pch.cmake), this job only. The other
-        # two jobs build without, which catches a file that needs the header for a missing include.
+        # AGENTSYNTH_PCH: precompiled JUCE headers (cmake/Pch.cmake), here and on Linux. Windows
+        # builds without, which catches a file that needs the header for a missing include.
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \

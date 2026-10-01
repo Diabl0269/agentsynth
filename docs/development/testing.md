@@ -62,8 +62,8 @@ cmake --build build
   default a build skips them to save time.
 - **`ENABLE_COVERAGE`** is a separate opt-in used by the Ubuntu CI job and `scripts/coverage.sh`.
 - **`ENABLE_AI_HARNESS`** defaults `OFF` — see [ai-harnesses.md](ai-harnesses.md).
-- **`AGENTSYNTH_PCH`** defaults `OFF` — precompiled JUCE headers, turned on only by the macOS CI
-  job. Leave it off locally: see [ci-pipeline.md](ci-pipeline.md#optimizations).
+- **`AGENTSYNTH_PCH`** defaults `OFF` — precompiled JUCE headers, turned on only by the macOS and
+  Linux CI jobs. Leave it off locally: see [ci-pipeline.md](ci-pipeline.md#optimizations).
 - **`ENABLE_PLUGIN`** defaults `ON`, so the plain `cmake --build build` above also builds
   `AgentSynthPlugin` — VST3 on every platform, plus AU on macOS — from the same
   `AudioEngine`/`MainComponent` code the standalone app uses (see

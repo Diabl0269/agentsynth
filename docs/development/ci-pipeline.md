@@ -96,25 +96,36 @@ look momentarily misleading during that window.
 - **A separate lint job** — instant formatting feedback without waiting for a full build.
 - **`coverage.sh --report-only`** — in CI, skips redundant configure/build/test steps and only merges
   profdata and generates the report.
-- **Precompiled JUCE headers on the macOS job** (`-DAGENTSYNTH_PCH=ON`, `cmake/Pch.cmake`) — a
-  source file spends most of its compile time parsing the JUCE module headers (one heavy UI file
-  measured 3.5 s, 94% of it front end, about 1.6 s of that JUCE), so Core, AppUI and Tests each
-  parse them once instead of once per file. Off everywhere else:
+- **Precompiled JUCE headers on the macOS and Linux jobs** (`-DAGENTSYNTH_PCH=ON`,
+  `cmake/Pch.cmake`) — a source file spends most of its compile time parsing the JUCE module
+  headers (one heavy UI file measured 3.5 s, 94% of it front end, about 1.6 s of that JUCE), so
+  Core, AppUI and Tests each parse them once instead of once per file. Measured in CI as build
+  time per file that missed the cache:
+
+  | Job | Without | With | One build's cache | Second build, same job |
+  |---|---|---|---|---|
+  | macOS | about 2.1 s (median of 14 runs) | 1.0 to 1.2 s | 238 MB (156 MB without) | 100% hits |
+  | Linux | 2.0 to 2.5 s | 0.9 to 1.1 s | 578 MB | 100% hits, 63 s |
+  | Windows | 2.7 to 4.3 s | 1.2 to 1.6 s | 199 MB | **11% hits** |
+
+  Off everywhere else:
+  - **Windows job**: MSVC compiles faster with the header, but the files that use it never hit
+    ccache: the second build in the same job recompiled 1,101 of 1,242 files, even with an empty
+    4 GB cache. The likely cause is that MSVC writes a different `.pch` each time it builds one
+    (three files of about 360 MB each) and ccache hashes that file. The job also catches a file
+    that compiles only because the header supplied a missing include.
   - **Local builds**: clang writes the build directory's absolute path into the header, so it is
     only valid at the path that built it. The local ccache is shared between checkouts through
     `base_dir` ([local-ci.md](local-ci.md)), which hands a second checkout the first one's header
     and fails every compile with "malformed or corrupted precompiled file". Neither
     `-fmodule-file-home-is-cwd` nor `-relocatable-pch` removes the path. Configuring with the
     option on while `base_dir` is set is refused.
-  - **Linux and Windows jobs**: not measured (gcc with coverage, MSVC `/Yu` through ccache). They
-    are also what catches a file that compiles only because the header supplied a missing include.
 
   What makes it cacheable: C++ only (`$<COMPILE_LANGUAGE:CXX>`), so the `-fobjc-arc` `.mm` files
   never see it; the app and plugin targets are left out; `-Xclang -fno-pch-timestamp`; and ccache
-  `sloppiness=pch_defines,time_macros`, set through the compiler launcher's environment. Measured
-  on macOS (Release, every target, empty ccache each time): the cache for one build grows from
-  156 MB to 238 MB, and a rebuild at the same path hits 100%. The earlier five-target attempt
-  measured the cold build at 367 s down to 234 s.
+  `sloppiness=pch_defines,time_macros`, set through the compiler launcher's environment.
+  `juce_dsp` is left out of the header: pre-included everywhere, its `jmin`/`jmax` overloads for
+  `SIMDRegister` make `juce::jmin<juce::int64>` a hard error on Linux.
 
 ## Dependency install: the apt mirror is not reliable
 
@@ -170,8 +181,8 @@ CI and silently did nothing on macOS.
 
 - **Unity builds** (`CMAKE_UNITY_BUILD`) — incompatible with JUCE: Objective-C++ `.mm` files cannot
   be merged into C++ unity translation units.
-- **Precompiled headers for local builds, and on by default** — see the precompiled-headers
-  entry under Optimizations for why they are limited to the macOS job. Two earlier attempts were
-  rejected outright: the first on the belief that JUCE's module `.cpp` and `.mm` files could not
+- **Precompiled headers for local builds and on Windows** — see the precompiled-headers entry
+  under Optimizations for why they are limited to the macOS and Linux jobs. Two earlier attempts
+  were rejected outright: the first on the belief that JUCE's module `.cpp` and `.mm` files could not
   be handled (they can be skipped), the second because the macOS ccache had no room for the
   extra 171 MB that five per-target headers added, before the Actions cache kept one generation.
