@@ -27,12 +27,13 @@ TEST(AutomationLanesFoldTest, FoldArrowClickOpensTheLaneRowsWhereTheLayoutPutsTh
     EXPECT_TRUE(header->getFoldArrow().isExpanded());
     const auto layout = f.panel.getClipLaneArea().getRowLayout();
     const int laneHeight = 40;
-    EXPECT_EQ(layout.trackExtraHeight(0), 2 * laneHeight);
+    const int addRowHeight = 24; // the "+ Add automation..." row closing the lanes
+    EXPECT_EQ(layout.trackExtraHeight(0), 2 * laneHeight + addRowHeight);
     const int firstLaneTop = layout.trackTop(0) + layout.trackRowHeight(0);
     const int lanesTop = f.panel.getClipLaneArea().getY();
     EXPECT_EQ(f.panel.laneRowBoundsForTest(cutoff).getY(), lanesTop + firstLaneTop);
     EXPECT_EQ(f.panel.laneRowBoundsForTest(res).getY(), lanesTop + firstLaneTop + laneHeight);
-    EXPECT_EQ(f.panel.getTrackHeaderAt(1)->getY(), leadTopFolded + 2 * laneHeight) << "Lead moves down";
+    EXPECT_EQ(f.panel.getTrackHeaderAt(1)->getY(), leadTopFolded + 2 * laneHeight + addRowHeight) << "Lead moves down";
     ASSERT_NE(f.panel.laneHeaderForTest(cutoff), nullptr);
     EXPECT_EQ(f.panel.laneHeaderForTest(cutoff)->getY(), firstLaneTop) << "the lane header sits at its row too";
     EXPECT_EQ(f.panel.laneEditorForTest(res)->getBounds().getY(), firstLaneTop + laneHeight);

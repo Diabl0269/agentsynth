@@ -367,6 +367,10 @@ void TimelinePanelComponent::syncTrackHeaders() {
         // The header only reports a fold-arrow press; this panel owns the fold state.
         const auto trackId = track.id;
         header->onAutomationToggleRequested = [this, trackId](synth::TrackId) { toggleAutomationForTrack(trackId); };
+        // The header menu's "Add automation...": the picker opens anchored on the header row.
+        header->onAddAutomationRequested = [this, header](synth::TrackId track) {
+            openAddAutomationPicker(track, *header);
+        };
         // Click-to-select and Up/Down between rows — see the two callbacks' own doc comments
         // in TimelineTrackHeaderComponent.h for why these are explicit callbacks rather than a real
         // focusGained() round trip.

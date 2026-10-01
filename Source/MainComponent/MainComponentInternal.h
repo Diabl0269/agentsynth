@@ -75,4 +75,13 @@ inline juce::File resolveExportSubdirectory(const juce::File& currentBundleDir, 
     return synth::ProjectBundle::getDefaultProjectsDirectory();
 }
 
+// A node's uuid, or a synthetic key from its graph id when it has none: macro port nodes are plain graph
+// nodes and the track-ownership walk must pass through them whether or not they carry a uuid. The key the
+// ownership map (MainComponent::resolveAutomationOwners) is built with, so anything asking "who owns this
+// node" must use it too. Used by MainComponentAutomationOwner.cpp and MainComponentAutomationLanes.cpp.
+inline juce::String ownershipKey(const juce::AudioProcessorGraph::Node& node) {
+    const juce::String uuid = node.properties["uuid"].toString();
+    return uuid.isNotEmpty() ? uuid : "node#" + juce::String(static_cast<int>(node.nodeID.uid));
+}
+
 } // namespace detail

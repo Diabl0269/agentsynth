@@ -20,13 +20,19 @@ int TimelineAutomationLanes::laneRowHeight() const {
     return std::max(kMinLaneRowHeight, (int)std::llround((double)base * viewState_.rowHeightScale));
 }
 
+int TimelineAutomationLanes::addRowHeight() const {
+    return std::max(kMinLaneRowHeight,
+                    (int)std::llround((double)AddAutomationRow::kBaseHeight * viewState_.rowHeightScale));
+}
+
 std::vector<int> TimelineAutomationLanes::extraHeights() const {
     std::vector<int> extras;
     if (doc_ == nullptr)
         return extras;
     const int rowHeight = laneRowHeight();
+    const int addHeight = addRowHeight();
     for (const auto& track : doc_->getTracks())
-        extras.push_back(isVisibleLane(track) ? (int)track.lanes.size() * rowHeight : 0);
+        extras.push_back(isVisibleLane(track) ? (int)track.lanes.size() * rowHeight + addHeight : 0);
     return extras;
 }
 
@@ -53,6 +59,8 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
             header->setBounds(0, y, width, rowHeight);
         y += rowHeight;
     }
+    if (auto* row = addRowFor(track))
+        row->setBounds(0, y, width, addRowHeight());
 }
 
 juce::Rectangle<int> TimelineAutomationLanes::laneRowContentBounds(synth::LaneId lane,
@@ -71,6 +79,20 @@ juce::Rectangle<int> TimelineAutomationLanes::laneRowContentBounds(synth::LaneId
                 return {0, y, bodies_->getWidth(), rowHeight};
             y += rowHeight;
         }
+    }
+    return {};
+}
+
+juce::Rectangle<int> TimelineAutomationLanes::addRowContentBounds(synth::TrackId track,
+                                                                  const TimelineRowLayout& layout) const {
+    if (doc_ == nullptr)
+        return {};
+    const auto& tracks = doc_->getTracks();
+    for (int i = 0; i < (int)tracks.size(); ++i) {
+        const auto& candidate = tracks[(size_t)i];
+        if (candidate.id == track && isVisibleLane(candidate))
+            return {0, layout.trackTop(i) + layout.trackRowHeight(i) + (int)candidate.lanes.size() * laneRowHeight(),
+                    bodies_->getWidth(), addRowHeight()};
     }
     return {};
 }

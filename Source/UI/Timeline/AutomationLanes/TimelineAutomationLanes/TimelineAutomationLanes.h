@@ -2,6 +2,7 @@
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
+#include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelineRowLayout.h"
@@ -59,6 +60,8 @@ public:
     /** Per-track clip-row height overrides in doc track order (0 = default), px. */
     std::vector<int> rowHeightOverrides() const;
     int laneRowHeight() const;
+    /** The "+ Add automation..." row closing an open track's lanes (zoom-scaled like a lane row), px. */
+    int addRowHeight() const;
 
     /** Places the lane headers of `track` with their first row at content y `firstRowY`. */
     void placeHeadersFor(synth::TrackId track, int firstRowY, int width);
@@ -66,10 +69,14 @@ public:
     void placeBodies(const TimelineRowLayout& layout);
     /** The lane's row in content coordinates (before scroll); empty when it is not visible. */
     juce::Rectangle<int> laneRowContentBounds(synth::LaneId lane, const TimelineRowLayout& layout) const;
+    /** The track's "+ Add automation..." row in content coordinates; empty when it has none. */
+    juce::Rectangle<int> addRowContentBounds(synth::TrackId track, const TimelineRowLayout& layout) const;
 
     // ---- Lane access ----
     AutomationLaneEditor* editorFor(synth::LaneId lane) const;
     AutomationLaneHeaderComponent* headerFor(synth::LaneId lane) const;
+    /** The track's "+ Add automation..." row while its lanes are open, else nullptr. */
+    AddAutomationRow* addRowFor(synth::TrackId track) const;
     void repaintEditors();
 
     /** Re-evaluates readouts of headers inside content rows [visibleTop, visibleBottom) at `beat`. */
@@ -77,6 +84,8 @@ public:
 
     /** Fired after a fold toggle or a change in which lanes are visible, so the panel relayouts. */
     std::function<void()> onLayoutChanged;
+    /** Fired when a track's "+ Add automation..." row is pressed; the panel opens the picker on it. */
+    std::function<void(synth::TrackId, juce::Component&)> onAddAutomationRequested;
     /** Fired when a lane editor takes keyboard focus. */
     std::function<void(synth::LaneId)> onLaneFocused;
 
@@ -87,6 +96,7 @@ private:
 
     bool isVisibleLane(const synth::Track& track) const;
     void syncPools();
+    void syncAddRows();
     void refreshPooled();
     juce::Colour unassignedColour() const;
 
@@ -103,6 +113,7 @@ private:
     std::set<synth::TrackId> collapsedUnassigned_; // Automation tracks the user closed
     std::map<synth::LaneId, std::unique_ptr<AutomationLaneEditor>> editors_;
     std::map<synth::LaneId, std::unique_ptr<AutomationLaneHeaderComponent>> headers_;
+    std::map<synth::TrackId, std::unique_ptr<AddAutomationRow>> addRows_; // one per track with open lanes
     double lastReadoutBeat_ = -1.0;
 };
 

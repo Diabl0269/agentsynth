@@ -28,6 +28,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentPanels.cpp
     Source/MainComponent/MainComponentTimeline.cpp
     Source/MainComponent/MainComponentAutomationOwner.cpp
+    Source/MainComponent/MainComponentAutomationLanes.cpp
     Source/MainComponent/MainComponentTrackHeaderHost.cpp
     Source/MainComponent/MainComponentTrackCreation.cpp
     Source/MainComponent/MainComponentTrackPresets.cpp
@@ -85,6 +86,11 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineRowLayout.h
     Source/UI/Timeline/TimelineRowLayout.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelAutomation.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelAddAutomation.cpp
+    Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.h
+    Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.cpp
+    Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h
+    Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.cpp
     Source/UI/Timeline/AutomationLanes/AutomationToolMapping.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneActions.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneActions.cpp

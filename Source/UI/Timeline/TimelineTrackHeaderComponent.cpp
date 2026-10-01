@@ -776,6 +776,8 @@ void TimelineTrackHeaderComponent::applyContextMenuChoice(int menuId) {
         host_->saveTrackAsPreset(trackId_);
     else if (menuId == kSetTrackPresetDefaultMenuId && host_->canSaveTrackPresetForTrack(trackId_))
         host_->setTrackPresetAsDefault(trackId_);
+    else if (menuId == kAddAutomationMenuId && onAddAutomationRequested)
+        onAddAutomationRequested(trackId_);
 }
 
 juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
@@ -788,6 +790,10 @@ juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
     const bool canSavePreset = host_ != nullptr && host_->canSaveTrackPresetForTrack(trackId_);
     menu.addItem(kSaveTrackPresetMenuId, "Save Track as Preset...", canSavePreset);
     menu.addItem(kSetTrackPresetDefaultMenuId, "Set as Default Track Preset", canSavePreset);
+    menu.addSeparator();
+    // Disabled when the track plays nothing automatable (or there is no host to ask).
+    menu.addItem(kAddAutomationMenuId, "Add automation...",
+                 host_ != nullptr && !host_->getAutomatableParameters(trackId_).empty());
     menu.addSeparator();
     menu.addItem(kDeleteTrackMenuId, "Delete Track");
     return menu;

@@ -499,6 +499,12 @@ The menu's items:
   rather than disabled, matching that menu's existing "Mute Macro" omit-when-meaningless
   precedent. See [`docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box`](../mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box) for what a saved preset carries and how
   loading it is gated.
+- **"Add automation..."** (above Delete Track) opens the picker of that track's parameters, the
+  entry point for a track with no lane yet (it has no fold arrow, so no "+ Add automation..." row
+  either): [`automation.md`](automation.md#adding-a-lane-from-the-timeline). Disabled while
+  `TrackHeaderHost::getAutomatableParameters()` has nothing to offer the track. The header only
+  reports the choice through `onAddAutomationRequested`; the panel opens the picker anchored on the
+  row.
 
 ## Test seams
 

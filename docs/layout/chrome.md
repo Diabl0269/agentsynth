@@ -419,6 +419,8 @@ Its rows paint under these rules:
   would, one undo step per press); Return or Space opens its picker. Every control draws the accent
   focus ring through `AppLookAndFeel`. `AccessibilityCoverageTests` audits the open matrix and the
   picker (`ModMatrix`, `ModMatrixPicker` at 0/0).
+  The picker is also the timeline's "Add automation..." list ([automation](../timeline/automation.md#adding-a-lane-from-the-timeline)):
+  an item's `searchText` adds words the row does not show.
   Test seams: `ModMatrixComponent::setPickerLauncherForTest` (capture the picker instead of launching a
   window) and `ModMatrixPicker::setSearchTextForTest`.
 - **Labels follow the card title.** Every module in the source and destination combos is listed under

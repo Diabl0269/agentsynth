@@ -255,3 +255,30 @@ TEST(ModMatrixPicker, SearchMatchesWordByWordInAnyOrder) {
     EXPECT_EQ(f.dest->getVisibleItemTextsForTest().front(), "FilterIn - Cutoff");
     EXPECT_EQ(f.dest->getHighlightedItemIndexForTest(), 0) << "the one match is ready for Return";
 }
+
+// The picker is reused outside the matrix (the timeline's "Add automation..." list): rows read as a bare
+// parameter name under a module header, so the module's title rides along as hidden search text, and every
+// word of a query must match, in any order.
+TEST(ModMatrixPicker, EveryWordOfTheQueryMustMatchTheRowOrItsHiddenSearchText) {
+    ModMatrixPicker picker("parameter",
+                           {{1, "Filter 1", "Cutoff", "Filter 1"},
+                            {2, "Filter 1", "Resonance", "Filter 1"},
+                            {3, "Oscillator 1", "Detune", "Oscillator 1"}},
+                           0, [](int) {});
+
+    picker.setSearchTextForTest("filter cut");
+    EXPECT_EQ(picker.getVisibleItemTextsForTest(), (std::vector<juce::String>{"Cutoff"}));
+    picker.setSearchTextForTest("cut filter");
+    EXPECT_EQ(picker.getVisibleItemTextsForTest(), (std::vector<juce::String>{"Cutoff"})) << "any order";
+    picker.setSearchTextForTest("osc cut");
+    EXPECT_TRUE(picker.getVisibleItemTextsForTest().empty()) << "both words must match";
+    picker.setSearchTextForTest("  filter  ");
+    EXPECT_EQ(picker.getVisibleItemTextsForTest().size(), 2u) << "extra spaces are ignored";
+}
+
+TEST(ModMatrixPicker, AReusedPickerCanBeRenamedForScreenReaders) {
+    ModMatrixPicker picker("parameter", {{1, {}, "Cutoff", {}}}, 0, [](int) {});
+    picker.setAccessibleNames("Add automation to Bass", "Search Bass parameters");
+    EXPECT_EQ(picker.getTitle(), "Add automation to Bass");
+    EXPECT_EQ(picker.getSearchEditorForTest().getTitle(), "Search Bass parameters");
+}

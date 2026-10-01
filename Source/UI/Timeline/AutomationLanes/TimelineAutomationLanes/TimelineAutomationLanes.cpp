@@ -22,6 +22,7 @@ TimelineAutomationLanes::TimelineAutomationLanes(TimelineViewState& viewState, j
 // Pooled children are removed from their parents before they die, so neither parent ever holds a
 // dangling child pointer during the owner's own teardown.
 TimelineAutomationLanes::~TimelineAutomationLanes() {
+    addRows_.clear();
     headers_.clear();
     editors_.clear();
 }
@@ -30,6 +31,7 @@ juce::Component& TimelineAutomationLanes::getBodies() noexcept { return *bodies_
 
 // A new doc invalidates every lane id and track id the pools and fold sets were keyed by.
 void TimelineAutomationLanes::setTimelineDoc(synth::TimelineDoc* doc) {
+    addRows_.clear();
     headers_.clear();
     editors_.clear();
     expanded_.clear();
@@ -103,6 +105,7 @@ bool TimelineAutomationLanes::isVisibleLane(const synth::Track& track) const {
 // on screen and re-reads everything they show.
 void TimelineAutomationLanes::sync() {
     if (doc_ == nullptr) {
+        addRows_.clear();
         headers_.clear();
         editors_.clear();
         return;
@@ -132,6 +135,7 @@ void TimelineAutomationLanes::syncPools() {
     for (auto it = headers_.begin(); it != headers_.end();)
         it = wanted.count(it->first) == 0 ? headers_.erase(it) : std::next(it);
 
+    syncAddRows();
     for (const auto id : wanted) {
         if (editors_.count(id) == 0) {
             auto editor = std::make_unique<AutomationLaneEditor>(viewState_);
@@ -155,7 +159,31 @@ void TimelineAutomationLanes::syncPools() {
     }
 }
 
+// One "+ Add automation..." row per track whose lanes are open, closing its lane rows. The same gate as
+// the lane rows: a track with no lanes shows nothing here and is reached through its header's context menu.
+void TimelineAutomationLanes::syncAddRows() {
+    for (auto it = addRows_.begin(); it != addRows_.end();) {
+        const auto* track = doc_->getTrack(it->first);
+        it = (track == nullptr || !isVisibleLane(*track)) ? addRows_.erase(it) : std::next(it);
+    }
+    for (const auto& track : doc_->getTracks()) {
+        if (!isVisibleLane(track) || addRows_.count(track.id) > 0)
+            continue;
+        auto row = std::make_unique<AddAutomationRow>(track.id);
+        AddAutomationRow* raw = row.get();
+        row->onAddRequested = [this, raw](synth::TrackId id) {
+            if (onAddAutomationRequested)
+                onAddAutomationRequested(id, *raw);
+        };
+        headerParent_.addAndMakeVisible(*row);
+        addRows_[track.id] = std::move(row);
+    }
+}
+
 void TimelineAutomationLanes::refreshPooled() {
+    for (auto& [id, row] : addRows_)
+        if (const auto* track = doc_->getTrack(id))
+            row->setTrackName(track->name);
     const auto unassigned = unassignedColour();
     for (auto& [id, header] : headers_) {
         header->refreshFromDoc();
@@ -181,6 +209,11 @@ AutomationLaneEditor* TimelineAutomationLanes::editorFor(synth::LaneId lane) con
 AutomationLaneHeaderComponent* TimelineAutomationLanes::headerFor(synth::LaneId lane) const {
     const auto it = headers_.find(lane);
     return it != headers_.end() ? it->second.get() : nullptr;
+}
+
+AddAutomationRow* TimelineAutomationLanes::addRowFor(synth::TrackId track) const {
+    const auto it = addRows_.find(track);
+    return it != addRows_.end() ? it->second.get() : nullptr;
 }
 
 void TimelineAutomationLanes::repaintEditors() {

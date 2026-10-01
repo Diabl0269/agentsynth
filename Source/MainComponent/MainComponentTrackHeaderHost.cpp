@@ -60,6 +60,8 @@ void collectHostedPluginLaneOptions(juce::AudioProcessorGraph& graph, const synt
             option.paramId = param.paramId;
             option.paramIndex = param.index;
             option.label = moduleLabel + juce::String::fromUTF8(" \xC2\xB7 ") + param.displayName;
+            option.moduleTitle = moduleLabel;
+            option.parameterName = param.displayName;
             options.push_back(std::move(option));
         }
     }
@@ -102,6 +104,8 @@ void collectChannelStripSendLaneOptions(juce::AudioProcessorGraph& graph, const 
                 option.paramId = paramId;
                 option.paramIndex = -1; // unused for a plain RangedAudioParameter
                 option.label = label;
+                option.moduleTitle = synth::moduleTitle(*node);
+                option.parameterName = label;
                 options.push_back(std::move(option));
             }
         }
@@ -243,41 +247,7 @@ std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> MainComponent::getAvai
 }
 
 synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) {
-    if (option.nodeUuid.isEmpty() || option.paramId.isEmpty())
-        return {};
-
-    auto* node = findNodeByUuid(option.nodeUuid);
-    auto* processor = node != nullptr ? node->getProcessor() : nullptr;
-    if (processor == nullptr)
-        return {}; // the node disappeared between offering and choosing
-
-    // resolveLaneParameter branches internally on whether `processor` is a live HostedPluginModule
-    // instance (normalised 0..1, index-hint rescue) or one of our own modules (an exact paramID
-    // match against a real RangedAudioParameter, e.g. ChannelStripModule's sendNLevel) — see
-    // AutomationBinding.h's class comment. laneValueBoundsFor/laneDefaultValueFor below read off
-    // whichever branch resolved, so this call needs no case split of its own.
-    const auto resolved = synth::resolveLaneParameter(processor, option.paramId, option.paramIndex);
-    if (!resolved.resolved())
-        return {}; // the parameter vanished between offering and choosing
-
-    synth::LaneId laneId;
-    const juce::String uuidCopy = option.nodeUuid;
-    const juce::String paramIdCopy = option.paramId;
-    const int paramIndexCopy = option.paramIndex;
-    auto mutate = [this, &laneId, uuidCopy, paramIdCopy, paramIndexCopy, &resolved] {
-        // The track that plays this module, else the shared Automation track (same rule as automateParameter).
-        const synth::TrackId trackId = trackForNewLane(uuidCopy);
-        if (!trackId.isValid())
-            return;
-
-        synth::AutomationLane::RangeSnapshot range;
-        const auto bounds = synth::laneValueBoundsFor(resolved);
-        range.minValue = static_cast<float>(bounds.minValue);
-        range.maxValue = static_cast<float>(bounds.maxValue);
-        range.defaultValue = static_cast<float>(synth::laneDefaultValueFor(resolved));
-        laneId = timelineDoc.addLane(trackId, uuidCopy, paramIdCopy, range, paramIndexCopy);
-    };
-    undoManager.recordTimelineChange(timelineDoc, mutate);
+    const synth::LaneId laneId = addLaneForOption(option, std::nullopt);
     if (!laneId.isValid())
         return {};
 

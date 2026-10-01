@@ -754,24 +754,14 @@ void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, 
         return;
     }
 
-    // Pick the lane's track (the one that plays this module, else the shared Automation track, created if
-    // need be), then bind the lane — both in the SAME mutation lambda, so a created track and its lane are ONE
-    // undo step, not two. addLane dedupes doc-wide, so a repeat call for a parameter that already has a lane
-    // mutates nothing and this is a no-op.
-    synth::LaneId laneId;
-    const juce::String uuidCopy = uuid;
-    auto mutate = [this, &laneId, uuidCopy, paramId, param] {
-        const synth::TrackId trackId = trackForNewLane(uuidCopy);
-        if (!trackId.isValid())
-            return; // kMaxTracks reached — nothing to bind onto
-
-        synth::AutomationLane::RangeSnapshot range;
-        range.minValue = param->getNormalisableRange().start;
-        range.maxValue = param->getNormalisableRange().end;
-        range.defaultValue = param->convertFrom0to1(param->getDefaultValue());
-        laneId = timelineDoc.addLane(trackId, uuidCopy, paramId, range);
-    };
-    undoManager.recordTimelineChange(timelineDoc, mutate);
+    // The lane goes on the track that plays this module (else the shared Automation track), picked inside the
+    // same mutation that binds it so a created track and its lane are ONE undo step. A repeat call for a
+    // parameter that already has a lane mutates nothing and returns the existing lane.
+    synth::AutomationLane::RangeSnapshot range;
+    range.minValue = param->getNormalisableRange().start;
+    range.maxValue = param->getNormalisableRange().end;
+    range.defaultValue = param->convertFrom0to1(param->getDefaultValue());
+    const synth::LaneId laneId = addLaneUndoable(uuid, paramId, -1, range, std::nullopt);
     if (!laneId.isValid())
         return;
 

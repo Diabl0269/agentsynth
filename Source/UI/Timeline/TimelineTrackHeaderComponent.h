@@ -180,7 +180,9 @@ struct TrackHeaderHost {
         juce::String nodeUuid;
         juce::String paramId;
         int paramIndex = -1;
-        juce::String label; // "Module name \xC2\xB7 parameter name", or "Send to <target>" for a send slot
+        juce::String label;         // "Module name \xC2\xB7 parameter name", or "Send to <target>" for a send slot
+        juce::String moduleTitle;   // the label's two halves, for the add-automation picker's grouping
+        juce::String parameterName; // ("Send to <target>" for a send slot)
     };
 
     /** Every not-yet-automated hosted-plugin instance parameter across the live graph, plus every
@@ -193,6 +195,32 @@ struct TrackHeaderHost {
      *  be created (kMaxTracks/kMaxLanesPerTrack reached, or the option's node/parameter no longer
      *  resolves). */
     virtual synth::LaneId addPluginAutomationLane(const PluginLaneOption& option) = 0;
+
+    /** One parameter the "Add automation..." picker can offer for a track: a built-in module's knob
+     *  parameter, a hosted plugin's instance parameter or a Channel Strip send slot. `nodeUuid` is empty for a
+     *  node that has never been automated and so has no uuid yet; `nodeUid` (the graph node id) then finds it,
+     *  and addAutomationLane() assigns the uuid. `paramIndex` means what PluginLaneOption::paramIndex does. */
+    struct AutomatableParameter {
+        juce::uint32 nodeUid = 0;
+        juce::String nodeUuid;
+        juce::String paramId;
+        int paramIndex = -1;
+        juce::String moduleTitle;   // the picker's group header
+        juce::String parameterName; // the picker's row text
+    };
+
+    /** Every parameter the modules `track` plays offer that has no lane yet, grouped by module (all of a
+     *  module's parameters are adjacent). For the Automation track: the parameters of modules no single
+     *  track plays. Empty for a host that cannot say. Non-pure with an inert default so every existing
+     *  TrackHeaderHost implementer (test stubs included) keeps compiling. */
+    virtual std::vector<AutomatableParameter> getAutomatableParameters(synth::TrackId /*track*/) { return {}; }
+
+    /** Creates `parameter`'s lane on `track` (not on the track the ownership rule would pick) as ONE undo step,
+     *  with the parameter's real range, and returns its id; the existing lane's id when the parameter already
+     *  has one. Invalid when it could not be created. Non-pure with an inert default. */
+    virtual synth::LaneId addAutomationLane(synth::TrackId /*track*/, const AutomatableParameter& /*parameter*/) {
+        return {};
+    }
 
     /** The properties file the colour picker's favourites shelf persists to, or nullptr for an
      *  in-memory-only picker (a header built for a test, or a host that hasn't wired one up yet).
@@ -306,6 +334,8 @@ public:
     // "Save track as preset.../Set as default", same id space.
     static constexpr int kSaveTrackPresetMenuId = 2002;
     static constexpr int kSetTrackPresetDefaultMenuId = 2003;
+    // "Add automation...": how a track with no lane yet gets its first one (it has no fold arrow).
+    static constexpr int kAddAutomationMenuId = 2004;
 
     TimelineTrackHeaderComponent(synth::TimelineDoc& doc, synth::TrackId trackId, TrackHeaderHost* host);
 
@@ -404,6 +434,8 @@ public:
     // Shown only when the track has lanes. The arrow and the A key only report a toggle request;
     // the panel owns the fold state and answers with setAutomationExpanded().
     std::function<void(synth::TrackId)> onAutomationToggleRequested;
+    // "Add automation..." from the context menu: the panel opens the track's parameter picker.
+    std::function<void(synth::TrackId)> onAddAutomationRequested;
     void setAutomationExpanded(bool expanded);
     bool isAutomationExpanded() const noexcept { return automationExpanded_; }
     /** True for the Automation track, drawn as the "Unassigned automation" section header. */
