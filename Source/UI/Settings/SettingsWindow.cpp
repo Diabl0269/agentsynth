@@ -474,7 +474,7 @@ bool SettingsWindow::keyPressed(const juce::KeyPress& key) {
 
 bool SettingsWindow::redirectWindowFocusToTabStrip(juce::Component* focused) {
     auto* window = getTopLevelComponent();
-    if (focused == nullptr || focused != window || window == this || !isShowing())
+    if (focused == nullptr || focused != window || window == this || !window->isVisible())
         return false;
     focusCurrentTab();
     return true;
