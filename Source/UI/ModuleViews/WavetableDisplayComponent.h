@@ -17,6 +17,7 @@
 */
 class WavetableDisplayComponent
     : public juce::Component
+    , public juce::SettableTooltipClient
     , public juce::Timer {
 public:
     static constexpr int kNumPoints = 256; // samples drawn per frame trace
@@ -25,6 +26,9 @@ public:
     explicit WavetableDisplayComponent(WavetableOscillatorModule& moduleToDisplay)
         : module(moduleToDisplay) {
         setInterceptsMouseClicks(false, false);
+        setTitle("Wavetable display");
+        setDescription("The wavetable frame at the scan position");
+        setTooltip("Wavetable display: the frame under the scan position");
         refreshWaveform();
         startTimerHz(15);
     }

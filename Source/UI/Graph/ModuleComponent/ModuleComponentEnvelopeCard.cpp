@@ -189,6 +189,8 @@ void ModuleComponent::applyEnvelopeKnobShortLabels() {
 
 void ModuleComponent::createEnvelopeCardControls() {
     envelopeCurveEditor = std::make_unique<synth::ui::CurveEditorComponent>();
+    envelopeCurveEditor->setTitle("Envelope curve");
+    envelopeCurveEditor->setDescription("Attack, hold, decay and release shape of the envelope");
     envelopeCurveEditor->setVisible(false); // collapsed by default -- see envelopeGraphToggle
     addChildComponent(envelopeCurveEditor.get());
 

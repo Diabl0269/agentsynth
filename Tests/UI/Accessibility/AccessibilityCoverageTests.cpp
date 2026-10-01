@@ -16,6 +16,10 @@
 #include "Auth/InMemoryTokenStore.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/FX/ParametricEQModule.h"
+#include "Modules/FilterModule.h"
+#include "Modules/SamplerModule.h"
+#include "Modules/VisualBuffer.h"
+#include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
@@ -25,7 +29,13 @@
 #include "UI/Chrome/WelcomeScreenComponent.h"
 #include "UI/Library/ModuleLibraryHelpPopup.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
+#include "UI/ModuleViews/FrequencyResponseComponent.h"
+#include "UI/ModuleViews/SampleWaveformComponent.h"
+#include "UI/ModuleViews/ScopeComponent.h"
+#include "UI/ModuleViews/ThresholdControlComponent.h"
+#include "UI/ModuleViews/WavetableDisplayComponent.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SettingsWindow.h"
@@ -305,6 +315,45 @@ TEST(AccessibilityCoverageTest, EQWindow) {
     ParametricEQModule eq;
     EQWindow window(eq);
     EXPECT_TRUE(matchesBaseline("EQWindow", auditAccessibility(window)));
+}
+
+// Every module view built on its own, so the audit reaches the focusable editors (the EQ curve, the curve
+// editor, the threshold slider) and the read-only visualizers sit beside them for the name/tooltip asserts
+// in ModuleViewsKeyboardTests.cpp.
+TEST(AccessibilityCoverageTest, ModuleViews) {
+    ParametricEQModule eq;
+    EQCurveComponent eqCurve(eq);
+    synth::ui::CurveEditorComponent curveEditor;
+    VisualBuffer buffer(256);
+    ScopeComponent scope(buffer);
+    FilterModule filter;
+    FrequencyResponseComponent response(filter);
+    WavetableOscillatorModule wavetable;
+    WavetableDisplayComponent wavetableDisplay(wavetable);
+    SamplerModule sampler;
+    SampleWaveformComponent waveform(sampler);
+    struct Source : ThresholdMeterSource {
+        float getMeterLevel() const override { return 0.0f; }
+        float getEffectiveThreshold() const override { return 0.5f; }
+        bool isOverThreshold() const override { return false; }
+        int getTriggerCount() const override { return 0; }
+        ThresholdScale getThresholdScale() const override { return ThresholdScale::Unipolar; }
+        juce::String getThresholdParamID() const override { return "trigThreshold"; }
+    } source;
+    juce::AudioParameterFloat threshold(juce::ParameterID("trigThreshold", 1), "Threshold", 0.0f, 1.0f, 0.5f);
+    ThresholdControlComponent thresholdControl(source, &threshold);
+    ThresholdControlComponent meterOnly(source);
+
+    juce::Component holder;
+    holder.setSize(600, 600);
+    for (juce::Component* view : std::initializer_list<juce::Component*>{
+             &eqCurve, &curveEditor, &scope, &response, &wavetableDisplay, &waveform, &thresholdControl, &meterOnly}) {
+        holder.addAndMakeVisible(view);
+        view->setBounds(0, 0, 200, 100);
+    }
+    EXPECT_TRUE(matchesBaseline("ModuleViews", auditAccessibility(holder)));
+    EXPECT_TRUE(eqCurve.getWantsKeyboardFocus() && curveEditor.getWantsKeyboardFocus())
+        << "the audit only sees the editors because they are Tab stops";
 }
 
 TEST(AccessibilityCoverageTest, WelcomeScreen) {

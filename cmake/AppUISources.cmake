@@ -164,6 +164,7 @@ set(APPUI_SOURCES
     Source/UI/Layout/ReorderDrag/ReorderLiftLook.h
     Source/UI/Layout/DragCursor.h
     Source/UI/Layout/FocusRing.h
+    Source/UI/Layout/TooltipHelpHandler.h
     Source/UI/Layout/PanelResizeHandle.h
     Source/UI/Layout/PanelResizeHandle.cpp
     Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
@@ -339,6 +340,8 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/FrequencyResponseComponent.h
     Source/UI/ModuleViews/FrequencyGrid.h
     Source/UI/ModuleViews/EQCurveComponent.h
+    Source/UI/ModuleViews/EQCurveKeyboard.cpp
+    Source/UI/ModuleViews/ModuleViewAccessibility.h
     Source/UI/ModuleViews/EQWindow.h
     Source/UI/ModuleViews/SampleWaveformComponent.h
     # Reusable breakpoint curve editor (FRO111) -- not yet wired into any module card.
@@ -348,6 +351,7 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/CurveEditor/CurveEditorGeometry.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.h
     Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveEditorKeyboard.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorPaint.cpp
     Source/UI/ModuleViews/WavetableDisplayComponent.h
     Source/UI/ModuleViews/TriggerMeterComponent.h

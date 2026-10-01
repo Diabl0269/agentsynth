@@ -3,7 +3,13 @@
 
 namespace synth::ui {
 
-CurveEditorComponent::CurveEditorComponent() { setWantsKeyboardFocus(false); }
+CurveEditorComponent::CurveEditorComponent() {
+    setWantsKeyboardFocus(true);
+    setTitle("Curve editor");
+    setDescription("Breakpoint curve");
+    setTooltip("Curve editor: Left/Right pick a point, Alt+arrows move it, Delete removes it. Mouse: drag points "
+               "and bend handles, double-click to add or remove a point");
+}
 
 CurveEditorGeometry CurveEditorComponent::currentGeometry() const {
     CurveGeometryConfig config = geometryConfig_;
@@ -36,6 +42,7 @@ void CurveEditorComponent::setModel(CurveModel model) {
         selectedIndex_ = -1;
     }
     repaint();
+    refreshAccessibilityValue();
 }
 
 void CurveEditorComponent::setMinVisibleRange(double minRange) {
@@ -115,23 +122,32 @@ int CurveEditorComponent::dragNodeTo(int index, juce::Point<float> point, bool b
         return index;
 
     const auto geometry = currentGeometry();
-    const CurveNode constraints = model_.getNode(index);
-
     const juce::Point<double> snapped =
         snapModelPoint(geometry, {geometry.timeForX(point.x), (double)geometry.levelForY(point.y)}, bypassSnap);
+    return applyNodeTarget(index, snapped);
+}
 
+int CurveEditorComponent::moveNodeInModel(CurveModel& model, int index, juce::Point<double> target) {
+    const CurveNode constraints = model.getNode(index);
     if (constraints.yMovable)
-        model_.setNodeY(index, (float)snapped.y);
-
+        model.setNodeY(index, (float)target.y);
     int newIndex = index;
     if (constraints.xMovable)
-        newIndex = model_.setNodeX(index, snapped.x).newIndex;
+        newIndex = model.setNodeX(index, target.x).newIndex;
+    return newIndex;
+}
 
+int CurveEditorComponent::applyNodeTarget(int index, juce::Point<double> target) {
+    const int newIndex = moveNodeInModel(model_, index, target);
+
+    if (selectedIndex_ == index)
+        selectedIndex_ = newIndex;
     if (onNodeChanged)
         onNodeChanged(newIndex);
     if (newIndex != index && onPointsChanged)
         onPointsChanged();
     repaint();
+    refreshAccessibilityValue();
     return newIndex;
 }
 
@@ -184,7 +200,7 @@ int CurveEditorComponent::addPointAt(juce::Point<float> point, bool bypassSnap) 
 
     beginGesture();
     const int index = model_.addPoint(snapped.x, (float)snapped.y);
-    selectedIndex_ = index;
+    setSelectedIndex(index);
     if (onPointsChanged)
         onPointsChanged();
     endGesture(); // change callback fires before the gesture closes -- see CurveEditorGridSnapTests
@@ -202,7 +218,9 @@ bool CurveEditorComponent::removeNode(int index) {
     const bool removed = model_.removePoint(index);
     if (removed) {
         if (selectedIndex_ == index)
-            selectedIndex_ = -1;
+            setSelectedIndex(-1);
+        else if (selectedIndex_ > index)
+            setSelectedIndex(selectedIndex_ - 1);
         if (onPointsChanged)
             onPointsChanged();
     }
@@ -251,7 +269,7 @@ void CurveEditorComponent::mouseDown(const juce::MouseEvent& e) {
         // stood right now (before any state changes) -- see `dragFrozenRange_`'s doc comment.
         // Never frozen for a bend-handle drag: bend never moves x, nothing to freeze against.
         dragFrozenRange_ = currentGeometry().getVisibleRange();
-        selectedIndex_ = hit.index;
+        setSelectedIndex(hit.index);
     }
     if (dragKind_ != DragKind::None)
         repaint();

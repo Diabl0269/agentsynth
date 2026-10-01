@@ -21,7 +21,6 @@ class EQWindow : public juce::Component {
 public:
     explicit EQWindow(ParametricEQModule& eq) {
         curve = std::make_unique<EQCurveComponent>(eq);
-        curve->setKeyboardEditable(true);
         addAndMakeVisible(*curve);
 
         spectrumToggle.setButtonText("Show Spectrum");
