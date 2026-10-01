@@ -354,7 +354,11 @@ tick/untick, the reorder commit, label, the one `applyCurrentLayout()` write pat
   app-layer class (`PluginCardLayoutStore`, `Source/Plugin/Hosting/`) injected into the card
   and the picker — Core never reads `ApplicationProperties`. Import/export of a preset is a
   file copy.
-- **Versioning:** `version: 1`; a higher version is refused visibly.
+- **Versioning:** `CardLayout` is read up to version 2 and a higher version is refused visibly. A layout
+  is **written as version 1** unless it uses a v2-only feature (`CardLayout::usesV2Features()`:
+  sections beyond one untitled grid, `hidden`, views, conditions, spans, widget kinds beyond
+  Auto/Knob/Toggle/Choice, `basedOn`), so a hosted-plugin card, which uses none, stays readable by older
+  builds. `layout.slots` remains the hosted card's flat view; `flatSlots()` gives it for a v2 layout.
 
 ---
 
@@ -429,7 +433,11 @@ grid, so "edit layout" there means at most hide/reorder of the knobs they *do* e
 The design for built-in modules is [module-card-layout.md](../layout/module-card-layout.md): it
 extends `CardLayout` to version 2 (sections, widget kinds, a hidden list with a "More" row), stores a
 built-in module's instance override as a node property rather than extra state, and keeps hosted
-cards writing version 1 unless they use a v2 feature.
+cards writing version 1 unless they use a v2 feature. The store is shared: `PluginCardLayoutStore` is
+a thin wrapper over `CardLayoutStore` (`Source/Plugin/Hosting/CardLayoutStore.*`), which keeps the
+`<root>/<key>/default.json` plus sibling `<preset>.json` logic keyed by a directory name; the plugin root
+(`<settings>/PluginCardLayouts/<format>-<uid>/`) is unchanged on disk, and `ModuleCardLayoutStore` is the
+second root (`<settings>/ModuleCardLayouts/<ModuleType>/`).
 
 ---
 
@@ -438,6 +446,7 @@ cards writing version 1 unless they use a v2 feature.
 - `Tests/Modules/CardLayoutTests.cpp`: round-trip, `kind: auto` derivation, orphan slot
   behaviour, precedence resolution with all three sources, automatic default rule
   (`isAutomatable`, bypass skipped, first 8).
+- `Tests/Plugin/ModuleCardLayoutStoreTests.cpp`: the same store for the `ModuleCardLayouts/<ModuleType>/` root.
 - `Tests/Plugin/PluginCardLayoutStoreTests.cpp`: default/preset files, listener broadcast,
   version refusal. Writing a default clears nothing by itself: dropping instance overrides when the
   user picks "All instances" is the picker's job.

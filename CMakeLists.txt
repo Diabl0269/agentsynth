@@ -420,6 +420,8 @@ add_library(Core STATIC
     Source/Modules/EnvelopeFollowerModule.h
     Source/Modules/CardLayout.cpp
     Source/Modules/CardLayout.h
+    Source/Modules/CardLayoutJson.cpp
+    Source/Modules/CardLayoutJson.h
     Source/Modules/MacroControlModule.h
     Source/Modules/RecordTapModule.cpp
     Source/Modules/RecordTapModule.h
