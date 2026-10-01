@@ -2,6 +2,10 @@
 #include "PluginScanCrashGuard.h"
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
+#if JUCE_MAC || JUCE_LINUX
+#include <unistd.h>
+#endif
 
 namespace synth {
 
@@ -483,6 +487,32 @@ bool PluginScanService::launchScanChildProcess(const juce::String& formatName, c
 // Child mode
 //==============================================================================
 
+// Plugins write files relative to the working directory, which a child inherits from wherever the
+// app was launched (often a source checkout), so they get a temp folder instead.
+juce::File pluginScratchDirectory() {
+    return juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("AgentSynthPluginScan");
+}
+
+bool enterPluginScratchDirectory() {
+    const auto dir = pluginScratchDirectory();
+    return dir.createDirectory().wasOk() && dir.setAsCurrentWorkingDirectory();
+}
+
+bool isParentGone(int originalParentPid, int currentParentPid) { return originalParentPid != currentParentPid; }
+
+void startParentWatchdog(int pollMs) {
+#if JUCE_MAC || JUCE_LINUX
+    const int originalParent = static_cast<int>(getppid());
+    std::thread([originalParent, pollMs] {
+        while (!isParentGone(originalParent, static_cast<int>(getppid())))
+            std::this_thread::sleep_for(std::chrono::milliseconds(pollMs));
+        std::_Exit(1);
+    }).detach();
+#else
+    juce::ignoreUnused(pollMs); // no portable parent-liveness probe wired up for Windows yet
+#endif
+}
+
 std::optional<int> runPluginScanChildMode(const juce::StringArray& args, juce::String& xmlOut,
                                           bool suppressCrashDialog) {
     const int flagIndex = args.indexOf(PluginScanService::kScanArgvFlag);
@@ -503,8 +533,11 @@ std::optional<int> runPluginScanChildMode(const juce::StringArray& args, juce::S
 
     // Every early-return above has already happened, so this really is the isolated scan
     // child — safe to go quiet on a crash from here on, if the caller asked us to.
-    if (suppressCrashDialog)
+    if (suppressCrashDialog) {
         installQuietCrashHandlers();
+        enterPluginScratchDirectory();
+        startParentWatchdog();
+    }
 
     // GUI initialisation before touching a format: AudioUnit needs a run loop to enumerate
     // components, and several VST3s assume a message thread exists during instantiation. This is

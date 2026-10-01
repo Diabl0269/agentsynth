@@ -59,6 +59,10 @@ public:
         }
 #endif
 
+        // Hosted plugins write files relative to the working directory; keep that out of the
+        // directory the app happened to be launched from.
+        synth::enterPluginScratchDirectory();
+
         migrateLegacyUserData();
 
         // Apply default theme so the LnF is valid before any Component is created.
