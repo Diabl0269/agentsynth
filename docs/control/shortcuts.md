@@ -1,8 +1,8 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **108 actions** across five categories —
-**General** (52, app-wide or routed per focused editor), **Graph** (6), **Timeline** (33),
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **109 actions** across five categories —
+**General** (53, app-wide or routed per focused editor), **Graph** (6), **Timeline** (33),
 **Piano Roll** (14) and **Mixer** (3) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
@@ -741,10 +741,10 @@ arrows: see [`mixer/panel.md`](../mixer/panel.md#side-pane-zones-and-visibility)
 
 ## Command vs surface actions
 
-The 108 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 109 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
-- **Command-dispatched** (68 actions) — every General action (including the transport family
+- **Command-dispatched** (69 actions) — every General action (including the transport family
   above), all six Graph actions, and the Timeline category's eight grid-set + two grid-cycle
   commands. `AppCommands::getCommandForAction(actionId)`
   returns a real `juce::CommandID` for these; `MainComponent` implements
