@@ -325,7 +325,17 @@ juce::String ControllersListComponent::getRowDisplayNameForTest(const juce::Stri
     return it == rows_.end() ? juce::String() : rowDisplayName(*it);
 }
 
-void ControllersListComponent::showContextMenuForRow(int rowIndex) {
+bool ControllersListComponent::showContextMenuForSelectedRow() {
+    const auto it =
+        std::find_if(rows_.begin(), rows_.end(), [&](const Row& r) { return r.profileId == selectedProfileId_; });
+    if (it == rows_.end())
+        return false;
+    const int rowIndex = static_cast<int>(it - rows_.begin());
+    showContextMenuForRow(rowIndex, localAreaToGlobal(boundsForRow(rowIndex)));
+    return true;
+}
+
+void ControllersListComponent::showContextMenuForRow(int rowIndex, std::optional<juce::Rectangle<int>> screenAnchor) {
     if (rowIndex < 0 || rowIndex >= static_cast<int>(rows_.size()))
         return;
 
@@ -356,13 +366,17 @@ void ControllersListComponent::showContextMenuForRow(int rowIndex) {
     if (!hosted_)
         appendFeedbackOutputSubmenu(*this, menu, rows_[static_cast<size_t>(rowIndex)]);
 
-    // Bare Options() -- menu at the mouse position, desktop-level (ModuleComponent's own default
-    // hook uses the same). A withParentComponent(this) would parent the popup INSIDE the 240px-wide
-    // list instead, clipping it at the dock edge for any row near the bottom.
-    if (auto& hook = test_hooks::contextMenuHookForTest())
+    // Desktop-level, at the mouse or at the anchor. A withParentComponent(this) would parent the
+    // popup INSIDE the 240px-wide list instead, clipping it at the dock edge for any row near the
+    // bottom.
+    if (auto& hook = test_hooks::contextMenuHookForTest()) {
         hook(menu);
-    else
-        menu.showMenuAsync(juce::PopupMenu::Options());
+        return;
+    }
+    auto options = juce::PopupMenu::Options();
+    if (screenAnchor)
+        options = options.withTargetScreenArea(*screenAnchor);
+    menu.showMenuAsync(options);
 }
 
 juce::Rectangle<int> ControllersListComponent::boundsForRow(int rowIndex) const {

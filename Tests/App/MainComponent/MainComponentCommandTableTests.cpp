@@ -74,6 +74,7 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::focusTimeline,
     AppCommands::focusLibrary,
     AppCommands::focusLibrarySearch,
+    AppCommands::openContextMenu,
     AppCommands::showWelcomeScreen,
     AppCommands::whatsNew,
 #if JUCE_MAC || JUCE_WINDOWS

@@ -109,6 +109,12 @@ this tightly so it can never steal an arrow key the clip lane area or piano roll
 claimed for themselves — every other keystroke that reaches this method still does so by bubbling
 up from wherever real focus actually is.
 
+## Open the row's menu from the keyboard
+
+Shift+F10 (Open Context Menu, see [`control/shortcuts.md`](../control/shortcuts.md#open-context-menu)) on a
+focused row shows the same menu a right-click does, at the row: `TimelineTrackHeaderComponent` implements
+`KeyboardContextMenuProvider` and calls `showContextMenu()`, the function `mouseDown()` calls for a right-click.
+
 ## Click to select
 
 `mouseDown()` on anything that is not a right-click calls `grabKeyboardFocus()` and fires

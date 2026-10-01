@@ -300,9 +300,14 @@ public:
      *  installs a capturing hook to inspect the menu the real mouseDown() gesture actually built,
      *  without ever opening a popup. */
     void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showContextMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+        showContextMenuHook_ = hook ? std::move(hook) : [this](juce::PopupMenu& m) { showRealContextMenu(m); };
     }
+
+    /** What a body right-click does: retargets the selection onto this module when it is outside it,
+     *  builds the menu (the small port menu for a macro port node) and shows it. `screenAnchor`
+     *  (screen coordinates) places the menu at the card instead of at the mouse; GraphEditor passes
+     *  the card's bounds for the keyboard path. */
+    void showContextMenu(std::optional<juce::Rectangle<int>> screenAnchor = {});
 
     // ---- MIDI Learn (ModuleComponentMidiLearn.cpp -- see its file comment for the design) ----
 
@@ -387,6 +392,9 @@ private:
     // headless test without opening a popup that segfaults with no display (see that setter's
     // comment).
     std::function<void(juce::PopupMenu&)> showContextMenuHook_;
+    // Where the real menu opens while showContextMenu() runs with an anchor; empty = at the mouse.
+    std::optional<juce::Rectangle<int>> menuAnchor_;
+    void showRealContextMenu(juce::PopupMenu& menu);
 
     // Auto-UI
     juce::OwnedArray<juce::Slider> sliders;

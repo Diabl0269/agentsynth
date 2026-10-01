@@ -4,6 +4,7 @@
 #include "Mixer/MixerViewDoc.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
@@ -16,6 +17,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 class AppUndoManager;
@@ -45,7 +47,9 @@ class MixerColumnComponent;
 // Right column walk, Up/Down fader nudge, Enter select-on-canvas and the rebindable M/S/R actions.
 namespace synth::ui {
 
-class MixerPanelComponent : public juce::Component {
+class MixerPanelComponent
+    : public juce::Component
+    , public KeyboardContextMenuProvider {
 public:
     MixerPanelComponent();
     ~MixerPanelComponent() override;
@@ -109,10 +113,7 @@ public:
                                                                 : synth::MixerZone::Scrolling;
     }
     /** The header context menu's "Pin left / Pin right / Unpin" items are driven through this seam. */
-    void setShowZoneMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showZoneMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
-    }
+    void setShowZoneMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) { showZoneMenuHook_ = std::move(hook); }
     void showChannelMenuForTest(const juce::String& channelId) { showChannelMenu(channelId); }
 
     MixerSectionLayout& getSectionLayout() noexcept { return sectionLayout_; }
@@ -293,6 +294,8 @@ public:
     void refreshTrackColours(); // see the .cpp definition
 
     bool keyPressed(const juce::KeyPress& key) override;
+    /** Opens the focused column's header right-click menu, anchored at that column. False with no column focused. */
+    bool showContextMenuForKeyboardFocus() override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
 
@@ -368,7 +371,8 @@ private:
     void scrollToColumn(const ColumnEntry& entry);
     void publishChannelsToPane(const synth::MixerSnapshot& snapshot);
     static juce::String channelIdFor(const synth::MixerColumn& column);
-    void showChannelMenu(const juce::String& channelId);
+    /** `anchor` (screen coordinates) places the menu at a column; empty opens it at the mouse. */
+    void showChannelMenu(const juce::String& channelId, std::optional<juce::Rectangle<int>> anchor = {});
     void wireHeaderMenus();
 
     // ---- View edits (pin / hide) -- implemented in MixerPanelViewEdits.cpp ---------------------
@@ -437,12 +441,10 @@ private:
     Zone rightZone_;
     synth::MixerViewDoc ownedViewDoc_ = synth::MixerViewDoc::forNewProject();
     synth::MixerViewDoc* viewDoc_ = &ownedViewDoc_;
-    std::function<void(juce::PopupMenu&)> showZoneMenuHook_ = [](juce::PopupMenu& m) {
-        m.showMenuAsync(juce::PopupMenu::Options());
-    };
-    std::vector<juce::String> channelIds_;        // every channel of the last rebuild, hidden ones too
-    juce::String soloShownId_;                    // the channel an Alt-click is showing alone
-    std::vector<juce::String> soloRestoreHidden_; // the hidden set to bring back
+    std::function<void(juce::PopupMenu&)> showZoneMenuHook_; // empty = show the real menu
+    std::vector<juce::String> channelIds_;                   // every channel of the last rebuild, hidden ones too
+    juce::String soloShownId_;                               // the channel an Alt-click is showing alone
+    std::vector<juce::String> soloRestoreHidden_;            // the hidden set to bring back
     bool syncingScroll_ = false;
     juce::PropertiesFile* settings_ = nullptr; // See setSettingsStore
     bool grewHostThisDrag_ = false;

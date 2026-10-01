@@ -143,6 +143,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Focus Library";
     if (actionId == "focusLibrarySearch")
         return "Focus Library Search";
+    if (actionId == "openContextMenu")
+        return "Open Context Menu";
     if (const auto name = transportAndSelectionActionName(actionId); name.isNotEmpty())
         return name;
     if (actionId == "timelineSnapToggle")

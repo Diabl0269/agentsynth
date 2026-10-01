@@ -51,6 +51,14 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
     return false;
 }
 
+bool MixerPanelComponent::showContextMenuForKeyboardFocus() {
+    if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size())
+        return false;
+    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    showChannelMenu(entry.channelId, entry.component->getScreenBounds());
+    return true;
+}
+
 juce::String MixerPanelComponent::sectionToggleActionId(MixerSection section) {
     switch (section) {
     case MixerSection::Inserts:

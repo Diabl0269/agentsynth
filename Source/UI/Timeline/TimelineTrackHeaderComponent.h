@@ -7,6 +7,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TrackChannelLinkSurface.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <vector>
@@ -266,7 +267,9 @@ struct TrackHeaderHost {
     virtual TrackChannelLinkSurface* getChannelLinkSurface() { return nullptr; }
 };
 
-class TimelineTrackHeaderComponent : public juce::Component {
+class TimelineTrackHeaderComponent
+    : public juce::Component
+    , public KeyboardContextMenuProvider {
 public:
     // Fixed row height. The header column scrolls (juce::Viewport in TimelinePanelComponent) rather
     // than compressing rows, so this stays constant however many tracks there are.
@@ -330,6 +333,8 @@ public:
     // THIS row genuinely holds real OS keyboard focus, by JUCE's own key-dispatch rule — no extra
     // "am I the focused one" guard is needed or wanted (see docs/timeline/tracks.md#keyboard-focus-and-msr).
     bool keyPressed(const juce::KeyPress& key) override;
+    /** Opens the same menu a right-click on this row does, anchored at the row. Always handled. */
+    bool showContextMenuForKeyboardFocus() override;
     // The four toggle buttons opt OUT of taking focus for themselves (juce::Button opts in by
     // default) — otherwise clicking M/S/R/A would silently move real focus off the row and onto the
     // button, exactly the trap TimelinePanelComponent's own tool-strip buttons avoid the same way.

@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 #include <vector>
 
 // ControllersListComponent.h (docs/control/midi-remote-ui.md#controllers-list-left): the
@@ -63,6 +64,9 @@ public:
     void setSelectedProfileId(const juce::String& profileId);
     juce::String getSelectedProfileId() const noexcept { return selectedProfileId_; }
 
+    /** Opens the right-click menu of the selected row, anchored at that row. False when no row is selected. */
+    bool showContextMenuForSelectedRow();
+
     /** Proves the live-refresh pipeline actually reaches this component's rows, without a
      *  getter into every row's own fields. */
     int getRowCountForTest() const noexcept { return static_cast<int>(rows_.size()); }
@@ -120,7 +124,8 @@ private:
         bool activityLit = false;
     };
 
-    void showContextMenuForRow(int rowIndex);
+    /** `screenAnchor` (screen coordinates) places the menu at the row instead of at the mouse. */
+    void showContextMenuForRow(int rowIndex, std::optional<juce::Rectangle<int>> screenAnchor = {});
     juce::Rectangle<int> boundsForRow(int rowIndex) const;
     int rowIndexAt(juce::Point<int> position) const;
 

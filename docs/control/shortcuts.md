@@ -1,8 +1,8 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **108 actions** across five categories —
-**General** (52, app-wide or routed per focused editor), **Graph** (6), **Timeline** (33),
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **109 actions** across five categories —
+**General** (53, app-wide or routed per focused editor), **Graph** (6), **Timeline** (33),
 **Piano Roll** (14) and **Mixer** (3) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
@@ -60,6 +60,7 @@ when reasoning about a key that "does nothing."
 | Tab / Shift+Tab | Focus Next / Previous Region — cycles keyboard focus between whichever of the app's focus regions are currently OPEN (Toolbar, Library, Canvas, Timeline, AI Panel, Mod Matrix); wraps at both ends. See [**Focus regions**](#focus-regions) below |
 | Cmd+Shift+T | Focus Timeline — opens the Timeline panel first if it's closed, then focuses it |
 | Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it (lands on the sidebar container, not the search field — see Cmd+F below) |
+| Shift+F10 | Open Context Menu (`openContextMenu`) — opens the right-click menu of whatever holds keyboard focus, anchored at that item. See [**Open Context Menu**](#open-context-menu) below. Rebindable |
 | Cmd+F | Focus Library Search — opens the Module Library first if it's closed, then focuses its search field specifically. See [**Library keyboard navigation**](#library-keyboard-navigation) below |
 
 Cmd+T (now `toggleBottomPanel`) and Space are always active (see
@@ -181,6 +182,32 @@ below for the Mixer region's own keyboard behaviour.
   root; the Timeline region root stays the panel). Both outlines CAN paint at once (the panel's own
   softer region border, plus the focused row's identical treatment around just that row) — deliberate,
   the same double-outline already ships for a focused row inside the Library region.
+
+### Open Context Menu
+
+`openContextMenu` (General, **Shift+F10** by default, rebindable) opens the same menu a right-click on the
+keyboard-focused item opens, placed at that item instead of at the mouse. It is a command like the
+focus-cycle keys: `MainComponent` performs it, inactive while the launch overlay is up front, and a
+detached panel window resolves the same bound key itself (`isOpenContextMenuKeyPress`), because
+`MainComponent::keyPressed` never sees keys typed in another top-level window.
+
+The action starts from the focused component and walks up its parents to the first one that implements
+`KeyboardContextMenuProvider` (`Source/UI/Layout/KeyboardContextMenu.h`). That provider's answer is
+final: a provider with nothing to open a menu for returns false, the key stays unhandled, and no outer
+provider is tried. Each provider calls its surface's existing right-click menu builder (the mouse path
+and the key share one function), never a second copy of the menu:
+
+| Focus is in | Menu opened |
+|-------------|-------------|
+| Timeline track header row (or its name label / chip) | The track's menu (Make Channel, Save Track as Preset, Delete Track), at the row |
+| Timeline clip lane | The selected clip's menu (the first one when several are selected), at the clip; "Split at pointer" acts at the clip's middle |
+| Mixer panel | The focused column's header menu (Pin left / Pin right / Unpin), at the column. Nothing with no column focused |
+| Graph canvas | The selected card's menu when exactly one module is selected, at the card; otherwise the canvas menu at the middle of the view. Nothing while focus is in the Mod Matrix |
+| Module library | The keyboard-focused row's menu, at the row. Only snippet rows have one (Delete Snippet) |
+| MIDI Remote panel | The selected controller's menu (Rename, Export, Delete, feedback output), at its row in the Controllers list |
+
+A new surface opts in by implementing the provider on the component that is, or contains, the focused
+one; no per-surface key handling is needed.
 
 ### Library keyboard navigation
 
@@ -714,10 +741,10 @@ arrows: see [`mixer/panel.md`](../mixer/panel.md#side-pane-zones-and-visibility)
 
 ## Command vs surface actions
 
-The 108 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 109 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
-- **Command-dispatched** (68 actions) — every General action (including the transport family
+- **Command-dispatched** (69 actions) — every General action (including the transport family
   above), all six Graph actions, and the Timeline category's eight grid-set + two grid-cycle
   commands. `AppCommands::getCommandForAction(actionId)`
   returns a real `juce::CommandID` for these; `MainComponent` implements

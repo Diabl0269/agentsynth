@@ -4,6 +4,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "SnippetManager.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/ModuleLibraryHelpPopup.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -19,6 +20,7 @@ class ModuleLibraryComponent
     : public juce::Component
     , public juce::DragAndDropContainer
     , public juce::SettableTooltipClient
+    , public synth::ui::KeyboardContextMenuProvider
     , private juce::ScrollBar::Listener
     , private juce::KeyListener {
 public:
@@ -353,6 +355,13 @@ public:
     // -------------------------------------------------------------------------
 
     bool keyPressed(const juce::KeyPress& key) override;
+    /** Opens the keyboard-focused row's right-click menu at that row. Only snippet rows have one
+     *  (Delete Snippet); false for any other row or with no row focused. */
+    bool showContextMenuForKeyboardFocus() override;
+    /** Replaces showing the real snippet-row menu (which never opens headlessly) with a capture of it. */
+    void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showContextMenuHook_ = std::move(hook);
+    }
 
 private:
     /** The KeyListener half of the scheme above — see the class comment. Only Up/Down/Return are
@@ -678,6 +687,10 @@ private:
     // clamps hoveredIndex (clampHoverToVisibleRow's call sites) so a snippet save, plugin scan, or
     // collapse animation completing can never leave it pointing at a row that is no longer visible.
     int keyboardFocusedIndex = -1;
+    /** Builds and shows the right-click menu of snippet row `index`; `screenAnchor` (screen
+     *  coordinates) places it at the row instead of at the mouse. */
+    void showSnippetContextMenu(int index, std::optional<juce::Rectangle<int>> screenAnchor = {});
+    std::function<void(juce::PopupMenu&)> showContextMenuHook_; // empty = show the real menu
     int pressedIndex = -1;          // row whose click is pending a mouseUp (Action / Plugin rows only)
     bool topStripHovered = false;   // hover state for the collapse-all chrome
     bool helpButtonHovered = false; // hover state for the "?" help button sharing that row

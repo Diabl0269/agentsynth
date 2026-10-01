@@ -115,6 +115,8 @@ public:
     using PatchLoadMode = synth::maincomponent::PatchLoadMode;
 
     EditSurface resolveEditSurface() const;
+    /** The component the open-context-menu action starts from: the real keyboard focus. */
+    juce::Component* getFocusedComponentForMenu() const;
 
     bool performRepeatSelection(int count);
 
@@ -231,6 +233,8 @@ public:
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption> getMidiDestinationOptionsForTest(synth::TrackId id);
     void setMidiDestinationConnectedForTest(synth::TrackId id, juce::uint32 nodeUid, bool connect);
     void setEditSurfaceOverrideForTest(std::optional<EditSurface> surface);
+    /** Stands in for the real keyboard focus, which needs a native peer a headless test has none of. */
+    void setFocusedComponentOverrideForTest(juce::Component* focused) { focusedComponentOverrideForTest_ = focused; }
     bool isAiPanelConfiguredVisible() const { return isAiPanelVisible; }
     bool isLibraryConfiguredVisible() const { return isLibraryVisible; }
     bool isBottomDockConfiguredVisible() const { return isBottomDockVisible; }
@@ -638,6 +642,7 @@ private:
                                                           timelineDoc};
     synth::midi::MidiLearnController midiLearnController_{audioEngine,   graphEditor, remoteEngine,
                                                           midiRemoteDoc, undoManager, statusBar};
+    juce::Component::SafePointer<juce::Component> focusedComponentOverrideForTest_;
     std::optional<EditSurface> editSurfaceOverrideForTest_; // consulted first by resolveEditSurface()
     bool midiRemoteDevicesOpenedAfterEngineUp_ = false;     // set by openMidiRemoteDevices(); test-only read
 

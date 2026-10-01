@@ -35,6 +35,7 @@ class ColourPickerPopup; // a unique_ptr return type only; 89 files include this
 }
 #include "UI/Graph/MinimapComponent.h"
 #include "UI/Graph/ModMatrixComponent.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 
 class GraphEditor
     : public juce::Component
@@ -42,6 +43,7 @@ class GraphEditor
     , public juce::DragAndDropTarget
     , public juce::FileDragAndDropTarget
     , public juce::SettableTooltipClient
+    , public synth::ui::KeyboardContextMenuProvider
     , private GraphCanvasHost {
 public:
     GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr = nullptr);
@@ -528,6 +530,10 @@ public:
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
     bool keyPressed(const juce::KeyPress& key) override;
+    /** With exactly one module card selected, opens that card's right-click menu at the card;
+     *  otherwise the canvas (background) menu at the middle of the view. False while keyboard focus
+     *  is inside the Mod Matrix, which has no menu of its own. */
+    bool showContextMenuForKeyboardFocus() override;
     juce::AudioProcessorGraph::NodeID getAttenuverterNodeAt(juce::Point<float> localPos);
 
     // ---- Cables: one wire as the USER sees it, not a graph edge (see GraphEditorTypes.h) ----
@@ -689,7 +695,8 @@ private:
 
     /** Inserts a clipboard-dialect payload at a canvas position, carrying module state through. */
     bool insertClipboardPayload(const juce::var& payload, juce::Point<int> canvasPos);
-    void showCanvasContextMenu(juce::Point<int> canvasPos);
+    /** `screenAnchor` places the real menu there instead of at the mouse. */
+    void showCanvasContextMenu(juce::Point<int> canvasPos, std::optional<juce::Rectangle<int>> screenAnchor = {});
     // See setShowCanvasContextMenuHookForTest. Null = show the real async menu.
     std::function<void(juce::PopupMenu&)> showCanvasContextMenuHook_;
 

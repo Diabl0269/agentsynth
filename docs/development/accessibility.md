@@ -33,7 +33,8 @@ knobs and sliders, so a stock control needs nothing. A custom-painted control ca
 
 1. Add a row to `ShortcutManager::getActionTable()` (`Source/ShortcutManager/ShortcutManager.h`),
    keeping each category's rows contiguous.
-2. Give it a default in `resetToDefaults()`.
+2. Give it a default in its category's `add…DefaultBindings()` in
+   `Source/ShortcutManager/ShortcutManagerDefaults.cpp`.
 3. Add its `getActionDescription` text in `Source/ShortcutManager/ShortcutManagerActionNames.cpp`.
 4. Update the row-order pin in `Tests/UI/Settings/ShortcutsSettingsTabTests.cpp`.
 5. Add it to [`docs/control/shortcuts.md`](../control/shortcuts.md).

@@ -290,6 +290,12 @@ void MainComponent::promptRepeatSelection() {
                             false);
 }
 
+juce::Component* MainComponent::getFocusedComponentForMenu() const {
+    if (focusedComponentOverrideForTest_ != nullptr)
+        return focusedComponentOverrideForTest_.getComponent();
+    return juce::Component::getCurrentlyFocusedComponent();
+}
+
 // ---- Keyboard/focus arbitration ----
 // ---- Keyboard/focus arbitration ----
 // Which surface currently owns Cmd+C/V/D (Space's togglePlayback is deliberately
