@@ -424,11 +424,16 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     // JUCE makes the tab strip a keyboard focus container its buttons never leave, and keeps them out
     // of the Tab order: make it plain, so Tab visits the tabs and then the selected tab's controls.
     tabs.getTabbedButtonBar().setFocusContainerType(juce::Component::FocusContainerType::none);
-    for (int i = 0; i < tabs.getNumTabs(); ++i)
+    for (int i = 0; i < tabs.getNumTabs(); ++i) {
+        // A tab's content is not a Tab stop of its own: its controls are, and an unnamed stop between
+        // the tab button and the first control is one key press nobody can explain.
+        if (auto* content = tabs.getTabContentComponent(i))
+            content->setWantsKeyboardFocus(false);
         if (auto* tabButton = tabs.getTabbedButtonBar().getTabButton(i)) {
             tabButton->setWantsKeyboardFocus(true); // Tab reaches the tab strip; Space or Return opens a tab
             tabButton->setTooltip("Show the " + tabs.getTabNames()[i] + " settings");
         }
+    }
 
     // Restore last selected tab — unless the caller asked for a specific tab by name (e.g. the
     // toolbar's feedback button opening Settings pre-selected to "Feedback"), in which case that
@@ -445,9 +450,11 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     tabs.setCurrentTabIndex(initialIndex, false);
 
     themeManager.addChangeListener(this);
+    juce::Desktop::getInstance().addFocusChangeListener(this);
 }
 
 SettingsWindow::~SettingsWindow() {
+    juce::Desktop::getInstance().removeFocusChangeListener(this);
     themeManager.removeChangeListener(this);
     appProperties.getUserSettings()->setValue("settingsTab", tabs.getCurrentTabIndex());
     appProperties.saveIfNeeded();
@@ -462,6 +469,14 @@ bool SettingsWindow::keyPressed(const juce::KeyPress& key) {
         onRequestClose();
     else
         synth::ui::closeHostingWindow(*this);
+    return true;
+}
+
+bool SettingsWindow::redirectWindowFocusToTabStrip(juce::Component* focused) {
+    auto* window = getTopLevelComponent();
+    if (focused == nullptr || focused != window || window == this || !isShowing())
+        return false;
+    focusCurrentTab();
     return true;
 }
 

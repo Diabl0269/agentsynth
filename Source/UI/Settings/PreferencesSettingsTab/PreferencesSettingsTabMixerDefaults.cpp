@@ -84,6 +84,8 @@ void PreferencesSettingsTab::setupMixerDefaultTrackPresetControls() {
     mixerDefaultTrackPresetAudioLabel.setText("Default Audio track preset:", juce::dontSendNotification);
     mixerDefaultTrackPresetAudioLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
     contentHost.addAndMakeVisible(mixerDefaultTrackPresetAudioCombo);
+    mixerDefaultTrackPresetAudioCombo.setTitle("Default Audio track preset");
+    mixerDefaultTrackPresetAudioCombo.setTooltip("The preset a new Audio track starts from.");
     populateMixerDefaultPresetCombo(mixerDefaultTrackPresetAudioCombo, synth::TrackPresetKind::Audio);
     // setMixerDefaultTrackPresetAudio also re-persists the value it just read, which is harmless
     // (idempotent) and keeps this to one code path rather than duplicating the combo-selection walk.
@@ -96,6 +98,8 @@ void PreferencesSettingsTab::setupMixerDefaultTrackPresetControls() {
     mixerDefaultTrackPresetInstrumentLabel.setText("Default Instrument track preset:", juce::dontSendNotification);
     mixerDefaultTrackPresetInstrumentLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
     contentHost.addAndMakeVisible(mixerDefaultTrackPresetInstrumentCombo);
+    mixerDefaultTrackPresetInstrumentCombo.setTitle("Default Instrument track preset");
+    mixerDefaultTrackPresetInstrumentCombo.setTooltip("The preset a new Instrument track starts from.");
     populateMixerDefaultPresetCombo(mixerDefaultTrackPresetInstrumentCombo, synth::TrackPresetKind::Instrument);
     setMixerDefaultTrackPresetInstrument(
         appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetInstrumentKey, {}));
@@ -177,6 +181,9 @@ void PreferencesSettingsTab::setupMixerPlacementControls() {
     mixerPlacementLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(mixerPlacementCombo);
+    mixerPlacementCombo.setTitle("Mixer placement");
+    mixerPlacementCombo.setTooltip(
+        "Where the mixer shows: as a tab beside the Timeline, in its own panel, or in a window.");
     mixerPlacementCombo.addItem("Tab beside the Timeline", kMixerPlacementTabComboId);
     mixerPlacementCombo.addItem("Own panel", kMixerPlacementOwnPanelComboId);
     mixerPlacementCombo.addItem("Window", kMixerPlacementWindowComboId);

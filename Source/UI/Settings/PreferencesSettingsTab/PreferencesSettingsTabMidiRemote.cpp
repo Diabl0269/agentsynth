@@ -67,6 +67,7 @@ void PreferencesSettingsTab::setupMidiRemoteControls() {
     midiRemoteTakeoverLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
     contentHost.addAndMakeVisible(midiRemoteTakeoverCombo);
+    midiRemoteTakeoverCombo.setTitle("Controllers default takeover");
     midiRemoteTakeoverCombo.addItem("Jump", kTakeoverJumpComboId);
     midiRemoteTakeoverCombo.addItem("Pick-up", kTakeoverPickupComboId);
     midiRemoteTakeoverCombo.addItem("Scale", kTakeoverScaleComboId);
@@ -77,6 +78,8 @@ void PreferencesSettingsTab::setupMidiRemoteControls() {
     midiRemoteTakeoverCombo.onChange = [this] { persistMidiRemoteDefaultTakeover(getMidiRemoteDefaultTakeover()); };
 
     contentHost.addAndMakeVisible(midiRemoteShowBadgesToggle);
+    midiRemoteShowBadgesToggle.setTooltip(
+        "Marks each control that a hardware controller is mapped to with a small MIDI badge.");
     setMidiRemoteShowBadgesEnabled(synth::midi::loadShowBadges(*appProperties.getUserSettings()));
     midiRemoteShowBadgesToggle.onClick = [this] {
         persistMidiRemoteShowBadges(midiRemoteShowBadgesToggle.getToggleState());

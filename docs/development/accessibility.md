@@ -78,6 +78,9 @@ and pinned by `Tests/UI/Accessibility/DialogKeyboardTests.cpp`:
   focused control into view instead), and an editable slider text box is its own stop, which an
   `ExpandingRangeSlider`-style subclass names (`<title> value`). `TabbedButtonBar` is a keyboard focus
   container whose buttons Tab never reaches; `SettingsWindow` makes it plain and the tab buttons stops.
+  A tab's content wrapper never wants focus, and `SettingsTabs` (`Source/UI/Settings/SettingsTabs.h`)
+  opens a tab on Space as well as Return and leaves focus on the tab button afterwards, so the next Tab
+  reaches the tab's first control. The window puts focus on the open tab's button when it first shows.
 - **Escape closes with Cancel semantics.** The surface's own `keyPressed` handles Escape (an
   `onRequestClose` callback if the caller set one, else `closeHostingWindow()`, which presses the
   hosting `DialogWindow`'s close button or dismisses the `CallOutBox`). A `juce::TextEditor` swallows

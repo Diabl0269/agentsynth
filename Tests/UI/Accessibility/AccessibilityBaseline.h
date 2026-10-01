@@ -26,7 +26,7 @@ inline constexpr AccessibilityBaselineEntry kAccessibilityBaseline[] = {
     {"Settings/Audio", 0, 0}, // Windows adds the audio driver-type drop-down; it is named from its caption too
     {"Settings/AI", 0, 0},
     {"Settings/Keyboard Shortcuts", 0, 0},
-    {"Settings/Preferences", 5, 0},
+    {"Settings/Preferences", 0, 0},
     {"Settings/Appearance", 0, 0},
     {"Settings/Feedback", 0, 0},
     {"DualIOPerModulePopup", 0, 0},

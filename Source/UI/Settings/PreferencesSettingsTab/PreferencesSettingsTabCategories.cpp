@@ -43,6 +43,7 @@ void PreferencesSettingsTab::setupCategorySelector() {
     categoryCombo.addItem(categoryName(kAllCategory), comboIdFromCategory(kAllCategory));
     for (auto category : kCategoriesInOrder)
         categoryCombo.addItem(categoryName(category), comboIdFromCategory(category));
+    categoryCombo.setTitle("Preferences category");
     categoryCombo.setTooltip("Choose which group of preferences to show, or All for every group with collapsible "
                              "sections. Typing in the filter searches all groups.");
     categoryCombo.setSelectedId(comboIdFromCategory(selectedCategory), juce::dontSendNotification);

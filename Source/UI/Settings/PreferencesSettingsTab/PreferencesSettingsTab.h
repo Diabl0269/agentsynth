@@ -3,6 +3,7 @@
 #include "MidiRemote/RemoteModel.h"
 #include "PatchSaveLocation.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/DialogKeyboard.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
@@ -536,6 +537,7 @@ private:
 
     juce::Viewport contentViewport;
     ContentHost contentHost{*this};
+    synth::ui::ScrollIntoViewOnFocus followFocus_{contentViewport};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PreferencesSettingsTab)
 };

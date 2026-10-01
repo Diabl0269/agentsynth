@@ -493,7 +493,7 @@ TEST_F(AccessibilitySettingsTest, SettingsWindowEscapeClosesItsDialogWindowWhenN
 TEST_F(AccessibilitySettingsTest, TheScrollingTabsKeepTheirViewportsOutOfTheTabOrder) {
     SettingsWindow window(deviceManager, appProperties, *aiService, *aiChat, shortcutManager, themeManager, nullptr);
     window.setSize(800, 600);
-    for (const char* tabName : {"Keyboard Shortcuts", "Appearance"})
+    for (const char* tabName : {"Keyboard Shortcuts", "Preferences", "Appearance"})
         for (auto* stop : walkTabOrder(tabContent(window, tabIndex(window, tabName))).forward)
             EXPECT_EQ(dynamic_cast<juce::Viewport*>(stop), nullptr) << tabName << " has an invisible Viewport stop";
 }
@@ -505,4 +505,86 @@ TEST_F(AccessibilitySettingsTest, AudioTabControlsAreAllNamedTabStops) {
     EXPECT_TRUE(walk.isCompleteCycle());
     for (const auto& name : walk.names())
         EXPECT_FALSE(name.startsWith("<unnamed")) << name;
+}
+
+// ============================================================================
+// Settings window: opening focus, Space on a tab, no hidden stop after a switch
+// ============================================================================
+
+TEST_F(AccessibilitySettingsTest, OpeningTheSettingsWindowTargetsTheOpenTabsButtonForFocus) {
+    SettingsWindow window(deviceManager, appProperties, *aiService, *aiChat, shortcutManager, themeManager, nullptr,
+                          nullptr, true, "Appearance");
+    window.setSize(800, 600);
+    auto* target = window.getCurrentTabButton();
+    ASSERT_NE(target, nullptr);
+    EXPECT_EQ(window.getCurrentTabIndex(), tabIndex(window, "Appearance"));
+    EXPECT_EQ(target, window.getTabs().getTabbedButtonBar().getTabButton(tabIndex(window, "Appearance")));
+    EXPECT_TRUE(target->getWantsKeyboardFocus());
+    EXPECT_NO_THROW(window.focusCurrentTab());
+}
+
+TEST_F(AccessibilitySettingsTest, FocusLandingOnTheHostingWindowMovesToTheTabStrip) {
+    SettingsWindow window(deviceManager, appProperties, *aiService, *aiChat, shortcutManager, themeManager, nullptr);
+    window.setSize(800, 600);
+    RecordingDialogWindow host;
+    host.setContentNonOwned(&window, false);
+    host.setVisible(true);
+    EXPECT_TRUE(window.redirectWindowFocusToTabStrip(&host));
+    EXPECT_FALSE(window.redirectWindowFocusToTabStrip(window.getCurrentTabButton()));
+    EXPECT_FALSE(window.redirectWindowFocusToTabStrip(nullptr));
+    host.clearContentComponent();
+}
+
+TEST_F(AccessibilitySettingsTest, SpaceAndReturnOnAFocusedTabButtonBothOpenItsTab) {
+    SettingsWindow window(deviceManager, appProperties, *aiService, *aiChat, shortcutManager, themeManager, nullptr);
+    window.setSize(800, 600);
+    const int ai = tabIndex(window, "AI");
+    const int feedback = tabIndex(window, "Feedback");
+    auto& bar = window.getTabs().getTabbedButtonBar();
+    for (const auto code : {juce::KeyPress::spaceKey, juce::KeyPress::returnKey}) {
+        window.getTabs().setCurrentTabIndex(ai);
+        auto* button = bar.getTabButton(feedback);
+        ASSERT_NE(button, nullptr);
+        EXPECT_TRUE(static_cast<juce::Component*>(button)->keyPressed(juce::KeyPress(code)));
+        EXPECT_EQ(window.getCurrentTabIndex(), feedback) << "key code " << code;
+    }
+}
+
+TEST_F(AccessibilitySettingsTest, AfterAKeyboardTabSwitchTabLandsOnTheNewTabsFirstControlNotAContentWrapper) {
+    SettingsWindow window(deviceManager, appProperties, *aiService, *aiChat, shortcutManager, themeManager, nullptr);
+    window.setSize(800, 600);
+    auto& bar = window.getTabs().getTabbedButtonBar();
+    auto* lastButton = bar.getTabButton(window.getNumTabs() - 1);
+    ASSERT_NE(lastButton, nullptr);
+    for (int i = 0; i < window.getNumTabs(); ++i) {
+        auto* content = window.getTabs().getTabContentComponent(i);
+        ASSERT_NE(content, nullptr);
+        EXPECT_FALSE(content->getWantsKeyboardFocus()) << window.getTabName(i) << " content is a Tab stop";
+
+        ASSERT_TRUE(sendReturn(*bar.getTabButton(i)));
+        ASSERT_EQ(window.getCurrentTabIndex(), i);
+        juce::KeyboardFocusTraverser traverser;
+        auto* next = traverser.getNextComponent(lastButton);
+        ASSERT_NE(next, nullptr) << window.getTabName(i);
+        EXPECT_NE(next, content) << window.getTabName(i) << ": Tab from the tab strip stops on the content wrapper";
+        EXPECT_TRUE(content->isParentOf(next)) << window.getTabName(i);
+        EXPECT_FALSE(synth::test::tabStopName(*next).startsWith("<unnamed"))
+            << window.getTabName(i) << ": " << synth::test::tabStopName(*next);
+    }
+}
+
+TEST_F(AccessibilitySettingsTest, EveryPreferencesControlIsNamedAndHasATooltip) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 700);
+    using Category = PreferencesSettingsTab::Category;
+    for (auto category : {Category::Graph, Category::Timeline, Category::Files, Category::Mixer, Category::Panels,
+                          Category::MidiRemote, Category::All}) {
+        tab.setSelectedCategory(category);
+        juce::String listing;
+        for (const auto& gap : synth::test::auditAccessibility(tab))
+            listing << "\n  " << (gap.kind == synth::test::Gap::Kind::MissingName ? "name " : "tip  ") << gap.path;
+        EXPECT_TRUE(listing.isEmpty()) << PreferencesSettingsTab::categoryName(category) << listing;
+    }
+    EXPECT_EQ(tab.getCategoryComboForTest().getTitle(), "Preferences category");
+    EXPECT_EQ(tab.getSearchFieldForTest().getTitle(), "Filter preferences");
 }
