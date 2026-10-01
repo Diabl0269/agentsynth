@@ -187,6 +187,17 @@ TEST_F(MainComponentTest, AccessibilityCoverageMainComponentDefaultProject) {
     EXPECT_TRUE(matchesBaseline("MainComponent", auditAccessibility(mc)));
 }
 
+// Tab lands on a focus region's root, so the root is what a screen reader names: every region
+// of the main window must have a title.
+TEST_F(MainComponentTest, EveryFocusRegionRootHasAScreenReaderName) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1400, 900);
+    for (const auto& region : mc.getFocusRegionsForTest().getRegions()) {
+        ASSERT_NE(region.root, nullptr) << region.id;
+        EXPECT_TRUE(region.root->getTitle().isNotEmpty()) << "focus region \"" << region.id << "\" has no title";
+    }
+}
+
 TEST(AccessibilityCoverageTest, ExportAudioDialog) {
     synth::ui::ExportAudioDialog dialog(16.0, false, 0.0, 0.0, 120.0, true,
                                         juce::File::getSpecialLocation(juce::File::tempDirectory), "Default");

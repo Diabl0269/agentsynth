@@ -761,7 +761,22 @@ bool MainComponent::initialiseAudioEngine() {
     return true;
 }
 
+namespace {
+// The name a screen reader speaks when Tab lands on a focus region. Only fills a root that has no
+// title of its own, so a panel that names itself (the toolbar, the mixer) keeps its name.
+void nameFocusRegionRoot(juce::Component& root, const juce::String& title) {
+    if (root.getTitle().isEmpty())
+        root.setTitle(title);
+}
+} // namespace
+
 void MainComponent::registerFocusRegions() {
+    nameFocusRegionRoot(moduleLibrary, "Module library");
+    nameFocusRegionRoot(graphEditor, "Patch canvas");
+    nameFocusRegionRoot(timelinePanel, "Timeline");
+    nameFocusRegionRoot(aiChatComponent, "AI assistant");
+    nameFocusRegionRoot(graphEditor.getModMatrix(), "Mod matrix");
+    nameFocusRegionRoot(bottomDock.getMidiRemotePanel(), "Controllers");
     rebuildFocusRegions();
 
     // Repaint whichever region gains/loses focus — see FocusRegion.h's comment on
