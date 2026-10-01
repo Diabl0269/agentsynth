@@ -22,6 +22,7 @@ layer map, signal flow and the index of the other topic docs.
 - `GraphEditorDragDrop.cpp` — estimated module size, drag-preview API, file/plugin drop, drop placement
 - `GraphEditorStereoWiring.cpp` — dual-I/O wiring, stereo-pair completion, module-resize handling
 - `GraphEditorAutoArrange.cpp` — auto-arrange: flattens the canvas for the pure layout and writes it back in one undo step
+- `GraphEditorModulators.cpp` — a timeline lane's modulators: a parameter's CV channel, adding an LFO card beside a module cabled into it (one undo step, joining the module's macro), removing one routing and a lone LFO, the mod-wire colour a row shows ([timeline/automation.md](../timeline/automation.md#modulators))
 - `GraphEditorPersistence.cpp` — patch save/load/new-patch
 
 `Source/UI/Graph/SmartConnectionEngine/` — `SmartConnectionEngine`, the first real

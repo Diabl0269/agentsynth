@@ -4,6 +4,7 @@
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelineRowLayout.h"
 #include "UI/Timeline/TimelineViewState.h"
@@ -82,6 +83,21 @@ public:
     /** Re-evaluates readouts of headers inside content rows [visibleTop, visibleBottom) at `beat`. */
     void tickReadouts(double beat, int visibleTop, int visibleBottom);
 
+    // ---- Modulator rows (derived from the graph through the host; TimelineAutomationLanesModulators.cpp) ----
+    /** Re-derives every visible lane's modulator rows. Call after any graph change. */
+    void refreshModulators();
+    /** A modulator row's height at the current zoom, px. */
+    int modulatorRowHeight() const;
+    /** Re-reads the live values of modulator rows inside content rows [visibleTop, visibleBottom). */
+    void tickModulatorValues(int visibleTop, int visibleBottom);
+    int modulatorCount(synth::LaneId lane) const;
+    /** The lane's `index`th modulator row / band, or nullptr. */
+    ModulatorRow* modulatorRowFor(synth::LaneId lane, int index) const;
+    ModulatorBand* modulatorBandFor(synth::LaneId lane, int index) const;
+    /** The lane's `index`th modulator row in content coordinates; empty when it is not visible. */
+    juce::Rectangle<int> modulatorRowContentBounds(synth::LaneId lane, int index,
+                                                   const TimelineRowLayout& layout) const;
+
     /** Fired after a fold toggle or a change in which lanes are visible, so the panel relayouts. */
     std::function<void()> onLayoutChanged;
     /** Fired when a track's "+ Add automation..." row is pressed; the panel opens the picker on it. */
@@ -94,7 +110,18 @@ private:
         Bodies();
     };
 
+    // One lane's modulator rows: the routings they were built from, a row in the header column and a
+    // band in the lanes region per routing, all in graph order.
+    struct LaneModulators {
+        std::vector<ModulatorInfo> infos;
+        std::vector<std::unique_ptr<ModulatorRow>> rows;
+        std::vector<std::unique_ptr<ModulatorBand>> bands;
+    };
+
     bool isVisibleLane(const synth::Track& track) const;
+    bool syncModulators();
+    void rebuildModulators(LaneModulators& entry, std::vector<ModulatorInfo> infos, const juce::String& parameterName);
+    int laneBlockHeight(const synth::AutomationLane& lane) const;
     void syncPools();
     void syncAddRows();
     void refreshPooled();
@@ -114,6 +141,7 @@ private:
     std::map<synth::LaneId, std::unique_ptr<AutomationLaneEditor>> editors_;
     std::map<synth::LaneId, std::unique_ptr<AutomationLaneHeaderComponent>> headers_;
     std::map<synth::TrackId, std::unique_ptr<AddAutomationRow>> addRows_; // one per track with open lanes
+    std::map<synth::LaneId, LaneModulators> modulators_;                  // one per visible lane
     double lastReadoutBeat_ = -1.0;
 };
 

@@ -22,6 +22,7 @@ TimelineAutomationLanes::TimelineAutomationLanes(TimelineViewState& viewState, j
 // Pooled children are removed from their parents before they die, so neither parent ever holds a
 // dangling child pointer during the owner's own teardown.
 TimelineAutomationLanes::~TimelineAutomationLanes() {
+    modulators_.clear();
     addRows_.clear();
     headers_.clear();
     editors_.clear();
@@ -31,6 +32,7 @@ juce::Component& TimelineAutomationLanes::getBodies() noexcept { return *bodies_
 
 // A new doc invalidates every lane id and track id the pools and fold sets were keyed by.
 void TimelineAutomationLanes::setTimelineDoc(synth::TimelineDoc* doc) {
+    modulators_.clear();
     addRows_.clear();
     headers_.clear();
     editors_.clear();
@@ -40,9 +42,10 @@ void TimelineAutomationLanes::setTimelineDoc(synth::TimelineDoc* doc) {
     sync();
 }
 
-// The lane headers hold the host and undo manager from construction, so a change rebuilds them.
+// The lane headers and modulator rows hold the host from construction, so a change rebuilds them.
 void TimelineAutomationLanes::setHost(TrackHeaderHost* host) {
     host_ = host;
+    modulators_.clear();
     headers_.clear();
     sync();
 }
@@ -105,6 +108,7 @@ bool TimelineAutomationLanes::isVisibleLane(const synth::Track& track) const {
 // on screen and re-reads everything they show.
 void TimelineAutomationLanes::sync() {
     if (doc_ == nullptr) {
+        modulators_.clear();
         addRows_.clear();
         headers_.clear();
         editors_.clear();
@@ -117,6 +121,7 @@ void TimelineAutomationLanes::sync() {
     prune(expanded_);
     prune(collapsedUnassigned_);
     syncPools();
+    syncModulators();
     refreshPooled();
 }
 

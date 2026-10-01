@@ -372,7 +372,7 @@ void GraphEditor::deleteModule(ModuleComponent* module) {
 
 // Request deletion by NodeID (called from ModuleComponent's delete button).
 // Resolves the module component and delegates to the single removal path.
-void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) {
+void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId, bool recordUndo) {
     if (nodeId.uid == 0)
         return;
     if (const auto refusal = outputDockDeleteRefusal(nodeId); refusal.isNotEmpty()) {
@@ -418,7 +418,8 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
         updateComponents();
     };
 
-    if (undoManager)
+    // recordUndo=false: a bigger gesture (removing a timeline modulator) already holds the undo record.
+    if (undoManager && recordUndo)
         undoManager->recordGraphAndMacroChange(graph, macros, doDelete);
     else
         doDelete();

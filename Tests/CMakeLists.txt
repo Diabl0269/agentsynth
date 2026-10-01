@@ -544,6 +544,9 @@ add_executable(Tests
     UI/Timeline/AutomationLanes/AutomationLanesEditingTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesUnassignedTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesLoadTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesModulatorRowTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesModulatorMainTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesModulatorEditTests.cpp
     UI/Timeline/TimelineViewStateTests.cpp
     UI/Mixer/MixerPanelComponentTests.cpp
     UI/Mixer/MixerPanelColumnDragTests.cpp

@@ -111,7 +111,8 @@ public:
     void rewireForPolyChange(ModuleComponent* module, const std::vector<LogicalPort>& previousInputMap,
                              const std::vector<LogicalPort>& previousOutputMap);
     void deleteModule(ModuleComponent* module);
-    void requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId);
+    /** `recordUndo=false`: the caller already opened a recordGraphAndMacroChange around it. */
+    void requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId, bool recordUndo = true);
     void replaceModule(ModuleComponent* module, const juce::String& newModuleType);
     void updateModulePosition(ModuleComponent* module);
 
@@ -482,6 +483,17 @@ public:
     void connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJack, juce::AudioProcessorGraph::NodeID dstId,
                       int dstJack, bool isMidi, bool recordUndo = true) override;
     bool nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const;
+
+    // ---- Modulators added from a timeline lane (GraphEditorModulators.cpp) ----
+    /** The raw CV channel that drives `paramId` on `nodeId`'s module; -1 when it has none. */
+    int modulationChannelFor(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) const;
+    /** An LFO beside `targetId`, cabled into `paramId`'s CV jack, as ONE undo step; invalid id when it can't. */
+    juce::AudioProcessorGraph::NodeID addLfoModulator(juce::AudioProcessorGraph::NodeID targetId,
+                                                      const juce::String& paramId);
+    /** Removes `routing` (and its source when `removeLonelySource` and no cable is left on it) as ONE undo step. */
+    void removeModulator(const ModulationRouting& routing, bool removeLonelySource);
+    /** The resolved colour of a modulation wire from `sourceId`. */
+    juce::Colour modulationWireColour(juce::AudioProcessorGraph::NodeID sourceId) const;
     /** Test seam: runs just the drag tick's modifier re-sample (no real 30 Hz timer needed). */
     void pumpDragModifierTickForTests();
 
@@ -652,6 +664,8 @@ private:
     bool dragSourceIsMidi = false;
     juce::Point<int> dragCurrentPos;
     void maybeShowModDropHint(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi);
+    // A new modulator's card: estimated, created, then re-resolved at its real size (GraphEditorModulators.cpp).
+    void placeNewModulator(juce::AudioProcessorGraph::Node& node, juce::AudioProcessorGraph::NodeID targetId);
     void refreshSmartSuggestions() override;
     void clearSmartSuggestions() override;
     void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor, const juce::String& moduleType) const override;

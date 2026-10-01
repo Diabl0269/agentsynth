@@ -29,6 +29,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentTimeline.cpp
     Source/MainComponent/MainComponentAutomationOwner.cpp
     Source/MainComponent/MainComponentAutomationLanes.cpp
+    Source/MainComponent/MainComponentModulators.cpp
     Source/MainComponent/MainComponentTrackHeaderHost.cpp
     Source/MainComponent/MainComponentTrackCreation.cpp
     Source/MainComponent/MainComponentTrackPresets.cpp
@@ -102,6 +103,11 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesLayout.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulators.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRow.cpp
+    Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRowEdits.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneInternal.h
@@ -293,6 +299,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroGroupController/MacroSelectionUnits.cpp
     Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
     Source/UI/Graph/GraphEditor/GraphEditorAutoArrange.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorModulators.cpp
     Source/UI/Graph/GraphEditor/GraphEditorOutputDock.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
     Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp

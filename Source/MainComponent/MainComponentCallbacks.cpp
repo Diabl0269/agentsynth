@@ -103,6 +103,9 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
             isDirty_ = nowDirty;
             notifyDocumentTitleChanged();
         }
+        // Every recorded edit lands here, including a cable patched on the canvas, which rebuilds no
+        // components and so never reaches onGraphStructureChanged: a lane's modulator rows follow it.
+        timelinePanel.refreshModulators();
         return;
     }
 

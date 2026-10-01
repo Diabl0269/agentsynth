@@ -147,4 +147,24 @@ AutomationLaneHeaderComponent* TimelinePanelComponent::laneHeaderForTest(synth::
     return automationLanes_.headerFor(lane);
 }
 
+// The panel has no graph: the host calls this after every graph change, and the lanes ask it back for
+// each open lane's routings. A changed set of rows relayouts through onLayoutChanged.
+void TimelinePanelComponent::refreshModulators() { automationLanes_.refreshModulators(); }
+
+ModulatorRow* TimelinePanelComponent::modulatorRowForTest(synth::LaneId lane, int index) const {
+    return automationLanes_.modulatorRowFor(lane, index);
+}
+
+ModulatorBand* TimelinePanelComponent::modulatorBandForTest(synth::LaneId lane, int index) const {
+    return automationLanes_.modulatorBandFor(lane, index);
+}
+
+juce::Rectangle<int> TimelinePanelComponent::modulatorRowBoundsForTest(synth::LaneId lane, int index) const {
+    const auto row = automationLanes_.modulatorRowContentBounds(lane, index, rowLayout());
+    if (row.isEmpty())
+        return {};
+    return row.translated(gridLanesBounds_.getX(),
+                          gridLanesBounds_.getY() - (int)std::llround(viewState_.trackScrollY));
+}
+
 } // namespace synth::ui

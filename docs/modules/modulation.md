@@ -40,6 +40,10 @@ Two consequences worth stating explicitly:
   keeps flowing whenever its source module is producing signal — a stopped transport does not
   silence an LFO.
 
+The timeline shows this layering directly: every CV routing into an automated parameter's jack is a
+**modulator row** under its automation lane, and the lane's "..." menu adds an LFO cabled into that
+jack in one step ([timeline/automation.md](../timeline/automation.md#modulators)).
+
 ### Recording a knob
 
 The reverse direction is the same idea run backwards, and it has one contract that governs every

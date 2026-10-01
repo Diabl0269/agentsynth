@@ -1,0 +1,247 @@
+// Concern: the modulator row's construction, names, layout and paint, and the band drawn behind it in
+// the lanes region. The edits, the live-value refresh and the menu live in ModulatorRowEdits.cpp.
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
+
+#include "UI/Layout/FocusRing.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+
+namespace synth::ui {
+
+namespace {
+constexpr int kPadding = 4;
+constexpr int kTagWidth = 22;
+constexpr int kMenuButtonWidth = 16;
+constexpr int kSyncWidth = 48;
+constexpr int kGap = 2;
+constexpr int kDepthTextWidth = 34; // "-100%"
+constexpr int kRateTextWidth = 42;  // "20.0 Hz"
+constexpr float kTagFontSize = 8.5f;
+constexpr float kTitleFontSize = 10.0f;
+constexpr float kValueFontSize = 9.0f;
+
+struct RowColours {
+    juce::Colour surface{0xff1B1F26};
+    juce::Colour border{0xff2A2F38};
+    juce::Colour text{0xffEAEEF3};
+    juce::Colour textMuted{0xff8A93A0};
+};
+
+RowColours coloursFor(const juce::Component& c) {
+    RowColours result;
+    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&c.getLookAndFeel())) {
+        const auto& t = lf->getTheme().colors;
+        result = {t.surface, t.border, t.textPrimary, t.textMuted};
+    }
+    return result;
+}
+
+// A small control's value, drawn beside its bar: the slider shows no text box of its own, because a
+// text box is an extra editable child with no name of its own for a screen reader, and not over the bar,
+// whose fader cap would cover it.
+void paintSliderValue(juce::Graphics& g, juce::Slider& slider, juce::Rectangle<int> area, juce::Colour colour) {
+    if (!slider.isVisible() || area.isEmpty())
+        return;
+    g.setColour(colour);
+    g.setFont(juce::Font(juce::FontOptions(kValueFontSize)));
+    g.drawText(slider.getTextFromValue(slider.getValue()), area, juce::Justification::centredRight, false);
+}
+} // namespace
+
+ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, const juce::String& parameterName)
+    : info_(info)
+    , host_(host)
+    , parameterName_(parameterName) {
+    setComponentID("modulatorRow");
+    if (info_.isLfo)
+        initLfoControls();
+    initDepthControl();
+    applyNames();
+    refreshValues();
+}
+
+// Tab reaches every control; a click does not move focus off the clips, whose Cmd+X/C/V the app
+// routes by where real focus sits (same rule as the lane header).
+void ModulatorRow::initLfoControls() {
+    const juce::StringArray shapes{"Sine", "Triangle", "Sawtooth", "Square", "S&H", "Custom"};
+    for (int i = 0; i < shapes.size(); ++i)
+        shape_.addItem(shapes[i], i + 1);
+    const juce::StringArray rates{"1/1", "1/2", "1/4", "1/8", "1/16", "1/32"};
+    for (int i = 0; i < rates.size(); ++i)
+        syncRate_.addItem(rates[i], i + 1);
+
+    rateHz_.setSliderStyle(juce::Slider::LinearBar);
+    rateHz_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+    rateHz_.setNormalisableRange(juce::NormalisableRange<double>(0.01, 20.0, 0.01, 0.5));
+    rateHz_.textFromValueFunction = [](double v) { return juce::String(v, v < 10.0 ? 2 : 1) + " Hz"; };
+    sync_.setButtonText("Sync");
+
+    for (juce::Component* c : std::initializer_list<juce::Component*>{&shape_, &syncRate_, &rateHz_, &sync_}) {
+        c->setMouseClickGrabsKeyboardFocus(false);
+        c->setWantsKeyboardFocus(true);
+        addChildComponent(c);
+    }
+    shape_.setVisible(true);
+    sync_.setVisible(true);
+
+    const auto lfo = info_.sourceUuid;
+    shape_.onChange = [this, lfo] {
+        edit(lfo, "shape", (float)(shape_.getSelectedId() - 1), ParameterEditPhase::Once);
+    };
+    syncRate_.onChange = [this, lfo] {
+        edit(lfo, "rateSync", (float)(syncRate_.getSelectedId() - 1), ParameterEditPhase::Once);
+    };
+    sync_.onClick = [this, lfo] {
+        edit(lfo, "mode", sync_.getToggleState() ? 1.0f : 0.0f, ParameterEditPhase::Once);
+        refreshValues(); // swaps the sync-rate combo and the Hz bar
+    };
+    wireDragEdits(rateHz_, lfo, "rateHz", [](double v) { return (float)v; });
+
+    addAndMakeVisible(menuButton_);
+    menuButton_.onClick = [this] { showMenu(); };
+}
+
+// The routing's depth is the hidden attenuverter's "amount" (-1..1), shown as a percentage. A direct
+// cable has no attenuverter and so no depth control.
+void ModulatorRow::initDepthControl() {
+    if (info_.attenuverterUuid.isEmpty())
+        return;
+    depth_.setSliderStyle(juce::Slider::LinearBar);
+    depth_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+    depth_.setRange(-100.0, 100.0, 1.0);
+    depth_.setDoubleClickReturnValue(true, 50.0);
+    depth_.textFromValueFunction = [](double v) { return juce::String(juce::roundToInt(v)) + "%"; };
+    depth_.setMouseClickGrabsKeyboardFocus(false);
+    depth_.setWantsKeyboardFocus(true);
+    addAndMakeVisible(depth_);
+    wireDragEdits(depth_, info_.attenuverterUuid, "amount", [](double v) { return (float)(v / 100.0); });
+}
+
+void ModulatorRow::setInfo(const ModulatorInfo& info, const juce::String& parameterName) {
+    jassert(info.key() == info_.key());
+    info_ = info;
+    parameterName_ = parameterName;
+    applyNames();
+    repaint();
+}
+
+// Every name says which parameter and which source it controls, so a screen reader moving through a
+// stack of rows ("Cutoff LFO shape", "Cutoff LFO depth") never has to guess.
+void ModulatorRow::applyNames() {
+    const auto who = parameterName_ + " " + (info_.isLfo ? juce::String("LFO") : info_.sourceTitle);
+    const auto name = [](juce::Component& c, const juce::String& text) {
+        c.setTitle(text);
+        if (auto* tip = dynamic_cast<juce::SettableTooltipClient*>(&c))
+            tip->setTooltip(text);
+    };
+    setTitle(who);
+    name(shape_, who + " shape");
+    name(syncRate_, who + " sync rate");
+    name(rateHz_, who + " rate");
+    name(sync_, who + " sync");
+    name(depth_, who + " depth");
+    name(menuButton_, "Modulator menu for " + who);
+}
+
+void ModulatorRow::resized() {
+    auto bounds = getLocalBounds().withTrimmedLeft(kIndent + kPadding).withTrimmedRight(kPadding);
+    const int lineHeight = bounds.getHeight() / 3;
+    auto title = bounds.removeFromTop(lineHeight);
+    auto middle = bounds.removeFromTop(lineHeight);
+    tagArea_ = title.removeFromLeft(kTagWidth);
+    if (info_.isLfo) {
+        menuButton_.setBounds(title.removeFromRight(kMenuButtonWidth).reduced(0, 1));
+        layoutLfoControls(middle, bounds);
+    } else {
+        layoutDepth(middle);
+    }
+    titleArea_ = title.withTrimmedLeft(kPadding);
+}
+
+// Line 2: the shape combo at the width its longest choice needs (the app's own sizing rule), then the
+// rate in what is left. Line 3: Sync, then depth. Nothing is clipped at the default column width.
+void ModulatorRow::layoutLfoControls(juce::Rectangle<int> shapeLine, juce::Rectangle<int> depthLine) {
+    const int shapeWidth =
+        juce::jmin(synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(shape_), shapeLine.getWidth() * 3 / 5);
+    shape_.setBounds(shapeLine.removeFromLeft(shapeWidth).reduced(0, 1));
+    shapeLine.removeFromLeft(kGap);
+    const int rateWidth =
+        juce::jmin(synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(syncRate_), shapeLine.getWidth());
+    syncRate_.setBounds(shapeLine.withWidth(rateWidth).reduced(0, 1));
+    rateTextArea_ = shapeLine.removeFromRight(kRateTextWidth);
+    rateHz_.setBounds(shapeLine.reduced(0, 3));
+
+    sync_.setBounds(depthLine.removeFromLeft(kSyncWidth).reduced(0, 1));
+    depthLine.removeFromLeft(kGap);
+    layoutDepth(depthLine);
+}
+
+void ModulatorRow::layoutDepth(juce::Rectangle<int> line) {
+    depthTextArea_ = line.removeFromRight(kDepthTextWidth);
+    depth_.setBounds(line.reduced(0, 3));
+}
+
+void ModulatorRow::paint(juce::Graphics& g) {
+    const auto colours = coloursFor(*this);
+    g.fillAll(colours.surface);
+    g.setColour(colours.border);
+    g.drawHorizontalLine(getHeight() - 1, (float)kIndent, (float)getWidth());
+    g.setColour(info_.colour.withAlpha(0.6f));
+    g.fillRect(kIndent, 0, 2, getHeight());
+
+    g.setColour(info_.colour);
+    g.setFont(juce::Font(juce::FontOptions(kTagFontSize, juce::Font::bold)));
+    g.drawText(info_.isLfo ? "LFO" : "CV", tagArea_, juce::Justification::centredLeft, false);
+    g.setColour(colours.text);
+    g.setFont(juce::Font(juce::FontOptions(kTitleFontSize)));
+    g.drawText(info_.sourceTitle, titleArea_, juce::Justification::centredLeft, true);
+}
+
+// The value text sits on the bars, and every Tab stop shows the shared accent ring over whatever its
+// look-and-feel draws, so focus reads the same on every control in the row.
+void ModulatorRow::paintOverChildren(juce::Graphics& g) {
+    const auto text = coloursFor(*this).text;
+    paintSliderValue(g, rateHz_, rateTextArea_, text);
+    paintSliderValue(g, depth_, depthTextArea_, text);
+    for (auto* child : getChildren())
+        if (child->isVisible())
+            synth::ui::paintFocusRing(g, child->getBounds().toFloat().expanded(1.0f), *child, 3.0f);
+}
+
+ModulatorRow::MenuButton::MenuButton()
+    : juce::Button("modulatorMenu") {
+    setComponentID("modulatorMenu");
+    setWantsKeyboardFocus(true);
+    setMouseClickGrabsKeyboardFocus(false);
+}
+
+// Three drawn dots, like the lane header's menu, so the button never depends on font coverage.
+void ModulatorRow::MenuButton::paintButton(juce::Graphics& g, bool highlighted, bool) {
+    const auto colours = coloursFor(*this);
+    const auto bounds = getLocalBounds().toFloat();
+    g.setColour(highlighted ? colours.text : colours.textMuted);
+    constexpr float dot = 2.5f;
+    for (int i = -1; i <= 1; ++i)
+        g.fillEllipse(
+            juce::Rectangle<float>(dot, dot).withCentre(bounds.getCentre().translated((float)i * 4.0f, 0.0f)));
+}
+
+ModulatorBand::ModulatorBand(juce::Colour colour)
+    : colour_(colour) {
+    setComponentID("modulatorBand");
+    setInterceptsMouseClicks(false, false);
+    setAccessible(false); // decoration: the row in the header column carries the names
+}
+
+void ModulatorBand::setColour(juce::Colour colour) {
+    if (colour == colour_)
+        return;
+    colour_ = colour;
+    repaint();
+}
+
+// Sections (where the modulator is on and off along the timeline) will be drawn here; until then the
+// whole row is one band, meaning the modulator runs everywhere.
+void ModulatorBand::paint(juce::Graphics& g) { g.fillAll(colour_.withAlpha(kBandAlpha)); }
+
+} // namespace synth::ui

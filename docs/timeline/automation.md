@@ -47,8 +47,8 @@ row, zoom-scaled like a lane row ([below](#adding-a-lane-from-the-timeline)).
 - a record-mode combo (Off/Read/Touch/Latch/Write, combo id = `LaneRecordMode` + 1, Write in the
   error colour) writing `TimelineDoc::setLaneRecordMode` as one undo step — a manual pick IS a user
   gesture, unlike `AutomationRecorder`'s own Write-drops-to-Touch-on-stop call;
-- a "..." menu: **Move to track** (every other MIDI/Audio track, `TimelineDoc::moveLaneToTrack`) and
-  **Delete lane** (`TimelineDoc::removeLane`), each one undo step.
+- a "..." menu: **Add LFO modulator** ([below](#modulators)), **Move to track** (every other MIDI/Audio
+  track, `TimelineDoc::moveLaneToTrack`) and **Delete lane** (`TimelineDoc::removeLane`), each one undo step.
 
 The edits live in `AutomationLaneActions` as free functions: a Delete or Move destroys the header
 that asked for it during the doc notification, so the header copies what it needs and makes the
@@ -127,6 +127,73 @@ the same ensure-uuid step the knob path takes.
 
 Test hooks: `setAddAutomationPickerHookForTest` (receives the picker instead of a call-out),
 `addAutomationRowForTest`, `addAutomationRowBoundsForTest`.
+
+## Modulators
+
+A lane can carry **modulators**: rows directly under the lane, one per modulation routing into that
+parameter's CV jack. An LFO's output then adds on top of the lane's automated base value, exactly as a
+CV cable on the canvas does ([modulation](../modules/modulation.md)).
+
+**Rows are derived from the graph, never stored in the timeline doc.** For each open lane the panel asks
+`TrackHeaderHost::getModulators(nodeUuid, paramId)`; `MainComponentModulators.cpp` finds the parameter's CV
+channel (`GraphEditor::modulationChannelFor`: the module's `getModulationTargets()` entry whose `paramId`
+matches, or whose name matches the parameter's display name when the target has no `paramId`) and returns
+every `AudioEngine::getModulationRoutings()` ModCV routing into that node and channel -- whether it was added
+from the lane or patched by hand on the canvas. Every node a row names is named by uuid (`ModulatorInfo`,
+`Source/UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h`), since node ids do not survive an undo
+restore. The rows refresh after every graph change: `MainComponent::reconcileTimelineAfterGraphChange` (undo,
+redo, load), `GraphEditor::onGraphStructureChanged` (anything that rebuilds cards), and the undo manager's
+change broadcast (a cable drag, which rebuilds no card). `TimelineAutomationLanes` pools a lane's rows by
+the routings' keys, so a refresh that finds the same routings keeps the same row objects (focus and an
+in-flight drag survive) and only a changed set rebuilds that lane's rows.
+
+**Add LFO modulator** (the lane's "..." menu) asks `TrackHeaderHost::addLfoModulator`, which reaches
+`GraphEditor::addLfoModulator` (`GraphEditorModulators.cpp`): a real LFO card (Sine, synced at 1/4, bipolar,
+full level) placed beside the target card (left of it, else right; anti-overlapped by `resolvePlacement`
+at its estimated and then its real size), cabled from its output into the parameter's CV jack through
+`connectPorts` (so `addModRouting` inserts the hidden attenuverter), the attenuverter given a uuid and a
+depth of 0.5. When the target is a macro member the LFO joins that macro (`addSelectionToMacro`, after the
+cable exists, so the cable is interior and no port is minted); otherwise `makeRoomFor` runs on the new card.
+All of it is ONE `recordGraphAndMacroChange` step. A parameter with no CV jack keeps the item, disabled, as
+"Add LFO modulator (no CV input)": a menu item has no tooltip, and the reason has to reach a screen reader.
+
+**The row** (`ModulatorRow`, `Source/UI/Timeline/AutomationLanes/Modulators/`) is 34 px times the row zoom,
+indented 44 px (one step further in than a lane header), two lines in the header column:
+
+- an `LFO` tag in the mod-wire colour (resolved by `GraphEditor::modulationWireColour`, i.e. through
+  `resolveCableColour`, so a user colour override applies), the LFO card's title, a **Sync** toggle and a
+  "..." menu: **Show on canvas** (select the card and centre the canvas on it) and **Remove modulator**;
+- the **shape** (Sine/Triangle/Sawtooth/Square/S&H/Custom), the **rate** (a 1/1..1/32 combo while synced,
+  a Hz bar while free-running) and the **depth** (the attenuverter's `amount`, shown as a percentage).
+
+Any other source (an envelope, an envelope follower, a macro control...) gets a read-only row: a `CV` tag,
+its card title and the depth only. A direct cable with no attenuverter has no depth control.
+
+Every edit goes through `TrackHeaderHost::setNodeParameter(uuid, paramId, value, ParameterEditPhase)`, which
+`MainComponent` implements with the canvas knobs' own undo idiom: `captureBeforeState` at `Begin`,
+`setValueNotifyingHost` per `Change` (the card follows live), `pushSnapshotFromCapture` at `End`; a combo
+pick, a toggle click or a key press is `Once` (all three). It does not call begin/endChangeGesture: the
+card's `ModuleComponent` captures into the same single undo slot on a gesture, and two owners of that slot
+would interleave. The rows read their values back (`getNodeParameter`) on the panel's existing transport
+poll, only for rows on screen, writing a control only when its value moved and never the one mid-drag.
+
+**Remove modulator** (`GraphEditor::removeModulator`) removes the routing (the attenuverter chain as a
+whole, or a direct cable's edges), sweeps a macro port the cable leaves empty, and removes the LFO too when
+no other cable leaves it, through `requestDeleteModule(..., recordUndo=false)` so every pre-removal unbind
+runs -- all one undo step. A row that triggers a removal is destroyed by the refresh before the host call
+returns, so it copies what it needs and makes the call its last statement.
+
+**Layout**: a lane's block is its row plus its modulator rows (`TimelineAutomationLanes::laneBlockHeight`,
+the one helper every geometry function walks), so modulator rows count into the track's extra height and
+move with the track. A track's modulators show whenever its lanes are open. Over the lanes region each row
+is a `ModulatorBand`: for now a faint band in the mod-wire colour (28%) across the whole row, meaning the
+modulator runs everywhere; sections of the timeline where it is on or off will be drawn there. The band
+takes no clicks, so the clip lanes underneath decide (and refuse) as they do for a lane row's backdrop.
+
+Every control is a Tab stop that a click does not take focus to, shows the accent focus ring, and is named
+for what it controls ("Cutoff LFO shape", "Cutoff LFO depth", "Modulator menu for Cutoff LFO"), with the
+same text as its tooltip. Test hooks: `refreshModulators`, `modulatorRowForTest`, `modulatorBandForTest`,
+`modulatorRowBoundsForTest`.
 
 ## The curve canvas
 
@@ -274,4 +341,7 @@ tool, the lane header's record mode, move and delete with undo, the value readou
 section (order, 26 px row, reorder, removal in the same undo step), the zoom anchor with lane rows,
 and a saved project with lanes and a macro LFO reopening, and the "+ Add automation..." row and header menu
 entry (`AutomationLanesAddRowTests.cpp`, with the MainComponent side, what each track offers and where a
-pick lands, in `AutomationLanesAddMainTests.cpp`).
+pick lands, in `AutomationLanesAddMainTests.cpp`). Modulators: `AutomationLanesModulatorRowTests.cpp` (layout,
+hit testing, row controls and names against a stub host), `AutomationLanesModulatorMainTests.cpp` (add, macro
+join, no CV jack, a hand-patched cable, remove, undo) and `AutomationLanesModulatorEditTests.cpp` (row edits and
+their undo, the CV moving across a render and stopping at depth 0, a saved project reopening with its row).
