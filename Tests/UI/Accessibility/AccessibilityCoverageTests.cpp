@@ -208,9 +208,6 @@ TEST_F(AccessibilitySettingsTest, EveryTabOfTheSettingsWindow) {
 
 // ============================================================================
 // The piano roll.
-// =====================================================================
-}
-
 // ============================================================================
 
 // A clip with notes open, the velocity strip shown and the scale-assist panel open: the header
@@ -236,134 +233,136 @@ TEST(AccessibilityCoverageTest, PianoRoll) {
     roll.getScaleAssistPanel().getScaleCombo().setSelectedId(9000, juce::sendNotificationSync);
     roll.resized();
     EXPECT_TRUE(matchesBaseline("PianoRoll", auditAccessibility(roll)));
-=======
-    // Dialogs and popups
-    // ============================================================================
+}
 
-    TEST_F(AccessibilitySettingsTest, DualIOPerModulePopup) {
-        PreferencesSettingsTab tab(appProperties);
-        tab.setSize(500, 460);
-        auto popup = tab.createDualIOPerModuleDefaultsPopupForTest();
-        ASSERT_NE(popup, nullptr);
-        EXPECT_TRUE(matchesBaseline("DualIOPerModulePopup", auditAccessibility(*popup)));
+// ============================================================================
+// Dialogs and popups
+// ============================================================================
+
+TEST_F(AccessibilitySettingsTest, DualIOPerModulePopup) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 460);
+    auto popup = tab.createDualIOPerModuleDefaultsPopupForTest();
+    ASSERT_NE(popup, nullptr);
+    EXPECT_TRUE(matchesBaseline("DualIOPerModulePopup", auditAccessibility(*popup)));
+}
+
+TEST(AccessibilityCoverageTest, SignInDialog) {
+    synth::AccountService service(
+        "http://mock-host:8787",
+        [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+           const std::atomic<bool>&) { return synth::AuthClient::HttpResult{}; },
+        std::make_unique<synth::InMemoryTokenStore>());
+    synth::SignInDialog dialog(service);
+    dialog.setSize(360, 220);
+    EXPECT_TRUE(matchesBaseline("SignInDialog", auditAccessibility(dialog)));
+}
+
+namespace {
+std::vector<synth::ui::MacroPortConfigDialog::PortRow> macroPortRows() {
+    using Row = synth::ui::MacroPortConfigDialog::PortRow;
+    Row mono;
+    mono.nodeUuid = "in-mono";
+    mono.isInput = true;
+    mono.name = "Pitch In";
+    Row poly;
+    poly.nodeUuid = "in-poly";
+    poly.isInput = true;
+    poly.name = "Voices In";
+    poly.shape = MacroPortShape::Poly;
+    poly.voiceCount = 4;
+    Row midi;
+    midi.nodeUuid = "out-midi";
+    midi.isInput = false;
+    midi.name = "Gate Out";
+    midi.kind = synth::MacroPortKind::Midi;
+    return {mono, poly, midi};
+}
+} // namespace
+
+TEST(AccessibilityCoverageTest, MacroPortConfigDialog) {
+    synth::ui::MacroPortConfigDialog dialog("My Macro", macroPortRows());
+    EXPECT_TRUE(matchesBaseline("MacroPortConfigDialog", auditAccessibility(dialog)));
+}
+
+TEST(AccessibilityCoverageTest, MacroAutoPortPromptDialog) {
+    synth::ui::MacroAutoPortPromptDialog dialog(2);
+    EXPECT_TRUE(matchesBaseline("MacroAutoPortPromptDialog", auditAccessibility(dialog)));
+}
+
+TEST(AccessibilityCoverageTest, EQWindow) {
+    ParametricEQModule eq;
+    EQWindow window(eq);
+    EXPECT_TRUE(matchesBaseline("EQWindow", auditAccessibility(window)));
+}
+
+TEST(AccessibilityCoverageTest, WelcomeScreen) {
+    synth::ui::WelcomeScreenComponent welcome;
+    welcome.setSize(900, 700);
+    welcome.setRecentProjects({juce::File("/tmp/Alpha.synthproj"), juce::File("/tmp/Beta.synthproj")});
+    EXPECT_TRUE(matchesBaseline("WelcomeScreen", auditAccessibility(welcome)));
+}
+
+TEST(AccessibilityCoverageTest, ColourPickerPopup) {
+    synth::ui::ColourPickerPopup popup(juce::Colours::red, nullptr, {}, {});
+    EXPECT_TRUE(matchesBaseline("ColourPickerPopup", auditAccessibility(popup)));
+}
+
+TEST(AccessibilityCoverageTest, ModuleLibraryHelpPopup) {
+    synth::ui::ModuleLibraryHelpPopup popup;
+    EXPECT_TRUE(matchesBaseline("ModuleLibraryHelpPopup", auditAccessibility(popup)));
+}
+
+// ============================================================================
+// Every built-in module card.
+// ============================================================================
+
+// One card per type in the module factory (the list the patch loader and the AI schema use). Left
+// out: "Hosted Plugin" (needs a plugin binary), "Track In", "Track Audio" and "Rec Tap" (bound to
+// timeline tracks or files), the "Macro In/Out" and "Macro MIDI In/Out" jacks and "Channel Strip"
+// and "Master" (mixer/macro plumbing with no canvas card of their own), and the alias keys "Amp
+// Env", "Filter Env" and "Mod Slot" (the same cards as "ADSR" and "Attenuverter").
+TEST(AccessibilityCoverageTest, EveryModuleCard) {
+    static const juce::StringArray skipped{
+        "Hosted Plugin",  "Track In",      "Track Audio", "Rec Tap", "Macro In",   "Macro Out", "Macro MIDI In",
+        "Macro MIDI Out", "Channel Strip", "Master",      "Amp Env", "Filter Env", "Mod Slot"};
+    std::vector<juce::String> types;
+    for (const auto& type : synth::AIStateMapper::moduleFactoryTypeNames())
+        if (!skipped.contains(type))
+            types.push_back(type);
+    std::sort(types.begin(), types.end());
+
+    AudioEngine audioEngine;
+    GraphEditor editor(audioEngine);
+    editor.setSize(2400, 2400);
+    auto& graph = audioEngine.getGraph();
+    std::vector<std::pair<juce::String, juce::AudioProcessorGraph::NodeID>> nodes;
+    int slot = 0;
+    for (const auto& type : types) {
+        auto node = graph.addNode(synth::AIStateMapper::createModule(type));
+        if (node == nullptr)
+            continue;
+        node->properties.set("x", 40 + (slot % 8) * 290);
+        node->properties.set("y", 40 + (slot / 8) * 310);
+        nodes.emplace_back(type, node->nodeID);
+        ++slot;
     }
+    editor.updateComponents();
+    sizeModuleComponents(editor);
 
-    TEST(AccessibilityCoverageTest, SignInDialog) {
-        synth::AccountService service(
-            "http://mock-host:8787",
-            [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&, int,
-               const std::atomic<bool>&) { return synth::AuthClient::HttpResult{}; },
-            std::make_unique<synth::InMemoryTokenStore>());
-        synth::SignInDialog dialog(service);
-        dialog.setSize(360, 220);
-        EXPECT_TRUE(matchesBaseline("SignInDialog", auditAccessibility(dialog)));
-    }
-
-    namespace {
-    std::vector<synth::ui::MacroPortConfigDialog::PortRow> macroPortRows() {
-        using Row = synth::ui::MacroPortConfigDialog::PortRow;
-        Row mono;
-        mono.nodeUuid = "in-mono";
-        mono.isInput = true;
-        mono.name = "Pitch In";
-        Row poly;
-        poly.nodeUuid = "in-poly";
-        poly.isInput = true;
-        poly.name = "Voices In";
-        poly.shape = MacroPortShape::Poly;
-        poly.voiceCount = 4;
-        Row midi;
-        midi.nodeUuid = "out-midi";
-        midi.isInput = false;
-        midi.name = "Gate Out";
-        midi.kind = synth::MacroPortKind::Midi;
-        return {mono, poly, midi};
-    }
-    } // namespace
-
-    TEST(AccessibilityCoverageTest, MacroPortConfigDialog) {
-        synth::ui::MacroPortConfigDialog dialog("My Macro", macroPortRows());
-        EXPECT_TRUE(matchesBaseline("MacroPortConfigDialog", auditAccessibility(dialog)));
-    }
-
-    TEST(AccessibilityCoverageTest, MacroAutoPortPromptDialog) {
-        synth::ui::MacroAutoPortPromptDialog dialog(2);
-        EXPECT_TRUE(matchesBaseline("MacroAutoPortPromptDialog", auditAccessibility(dialog)));
-    }
-
-    TEST(AccessibilityCoverageTest, EQWindow) {
-        ParametricEQModule eq;
-        EQWindow window(eq);
-        EXPECT_TRUE(matchesBaseline("EQWindow", auditAccessibility(window)));
-    }
-
-    TEST(AccessibilityCoverageTest, WelcomeScreen) {
-        synth::ui::WelcomeScreenComponent welcome;
-        welcome.setSize(900, 700);
-        welcome.setRecentProjects({juce::File("/tmp/Alpha.synthproj"), juce::File("/tmp/Beta.synthproj")});
-        EXPECT_TRUE(matchesBaseline("WelcomeScreen", auditAccessibility(welcome)));
-    }
-
-    TEST(AccessibilityCoverageTest, ColourPickerPopup) {
-        synth::ui::ColourPickerPopup popup(juce::Colours::red, nullptr, {}, {});
-        EXPECT_TRUE(matchesBaseline("ColourPickerPopup", auditAccessibility(popup)));
-    }
-
-    TEST(AccessibilityCoverageTest, ModuleLibraryHelpPopup) {
-        synth::ui::ModuleLibraryHelpPopup popup;
-        EXPECT_TRUE(matchesBaseline("ModuleLibraryHelpPopup", auditAccessibility(popup)));
-    }
-
-    // ============================================================================
-    // Every built-in module card.
-    // ============================================================================
-
-    // One card per type in the module factory (the list the patch loader and the AI schema use). Left
-    // out: "Hosted Plugin" (needs a plugin binary), "Track In", "Track Audio" and "Rec Tap" (bound to
-    // timeline tracks or files), the "Macro In/Out" and "Macro MIDI In/Out" jacks and "Channel Strip"
-    // and "Master" (mixer/macro plumbing with no canvas card of their own), and the alias keys "Amp
-    // Env", "Filter Env" and "Mod Slot" (the same cards as "ADSR" and "Attenuverter").
-    TEST(AccessibilityCoverageTest, EveryModuleCard) {
-        static const juce::StringArray skipped{
-            "Hosted Plugin",  "Track In",      "Track Audio", "Rec Tap", "Macro In",   "Macro Out", "Macro MIDI In",
-            "Macro MIDI Out", "Channel Strip", "Master",      "Amp Env", "Filter Env", "Mod Slot"};
-        std::vector<juce::String> types;
-        for (const auto& type : synth::AIStateMapper::moduleFactoryTypeNames())
-            if (!skipped.contains(type))
-                types.push_back(type);
-        std::sort(types.begin(), types.end());
-
-        AudioEngine audioEngine;
-        GraphEditor editor(audioEngine);
-        editor.setSize(2400, 2400);
-        auto& graph = audioEngine.getGraph();
-        std::vector<std::pair<juce::String, juce::AudioProcessorGraph::NodeID>> nodes;
-        int slot = 0;
-        for (const auto& type : types) {
-            auto node = graph.addNode(synth::AIStateMapper::createModule(type));
-            if (node == nullptr)
+    std::vector<Gap> gaps;
+    int cards = 0;
+    for (const auto& [type, id] : nodes) {
+        for (auto* card : editor.getModuleComponents()) {
+            if (card == nullptr || card->getNodeId() != id)
                 continue;
-            node->properties.set("x", 40 + (slot % 8) * 290);
-            node->properties.set("y", 40 + (slot / 8) * 310);
-            nodes.emplace_back(type, node->nodeID);
-            ++slot;
-        }
-        editor.updateComponents();
-        sizeModuleComponents(editor);
-
-        std::vector<Gap> gaps;
-        int cards = 0;
-        for (const auto& [type, id] : nodes) {
-            for (auto* card : editor.getModuleComponents()) {
-                if (card == nullptr || card->getNodeId() != id)
-                    continue;
-                ++cards;
-                for (auto gap : auditAccessibility(*card)) {
-                    gap.path = "[" + type + "] " + gap.path;
-                    gaps.push_back(gap);
-                }
+            ++cards;
+            for (auto gap : auditAccessibility(*card)) {
+                gap.path = "[" + type + "] " + gap.path;
+                gaps.push_back(gap);
             }
         }
-        ASSERT_GT(cards, 30) << "the audit must reach the built-in cards";
-        EXPECT_TRUE(matchesBaseline("ModuleCards", gaps));
     }
+    ASSERT_GT(cards, 30) << "the audit must reach the built-in cards";
+    EXPECT_TRUE(matchesBaseline("ModuleCards", gaps));
+}
