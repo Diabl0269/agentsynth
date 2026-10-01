@@ -188,8 +188,9 @@ private:
 // One undo step (node x/y AND macro bounds), geometry written synchronously, then only the light refresh. The whole
 // mutation, dock re-derivation included, runs inside the record so undo restores every position it wrote.
 //
-// "Home" is redefined here: the transient displaced / expand-nudge records describe an earlier arrangement, so they
-// are cleared, or a later collapse would drag neighbours "back" to spots this layout has just left.
+// "Home" is redefined here: the transient displaced (macro and module card) / expand-nudge records describe an earlier
+// arrangement, so they are cleared, or a later collapse would drag neighbours "back" to spots this layout has just
+// left.
 void GraphEditor::autoArrange() {
     auto& graph = audioEngine.getGraph();
     ArrangeCanvas canvas(graph, macros, content.getModules(), macroController_);
@@ -217,6 +218,7 @@ void GraphEditor::autoArrange() {
             }
         }
 
+        macroController_.clearModuleDisplacements();
         std::vector<juce::String> macroIds;
         for (const auto& macro : macros.getAll())
             macroIds.push_back(macro.id);

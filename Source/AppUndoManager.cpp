@@ -601,6 +601,15 @@ private:
 
 // =============================================================================
 
+namespace {
+// Every restore that replaces graph or macro state lands here: the module cards' make-room records describe the
+// arrangement that was just replaced (the macro ones are lost with the MacroSet), so they go before the rebuild.
+void refreshCanvasAfterRestore(GraphEditor& ge) {
+    ge.getMacroController().clearModuleDisplacements();
+    ge.updateComponents();
+}
+} // namespace
+
 AppUndoManager::AppUndoManager() {}
 
 juce::UndoableAction* AppUndoManager::createGraphSnapshotAction(juce::AudioProcessorGraph& graph,
@@ -615,7 +624,7 @@ juce::UndoableAction* AppUndoManager::createGraphSnapshotAction(juce::AudioProce
         },
         [ge] {
             if (ge)
-                ge->updateComponents();
+                refreshCanvasAfterRestore(*ge);
         },
         [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); });
 }
@@ -857,7 +866,7 @@ void AppUndoManager::pushGraphAndMacroActions(juce::AudioProcessorGraph& graph, 
             },
             [ge] {
                 if (ge)
-                    ge->updateComponents();
+                    refreshCanvasAfterRestore(*ge);
             },
             [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
     } else if (graphChanged) {
@@ -865,7 +874,7 @@ void AppUndoManager::pushGraphAndMacroActions(juce::AudioProcessorGraph& graph, 
     } else if (macrosChanged) {
         performAction(new MacroSnapshotAction(macros, macrosBefore, macrosAfter, [ge] {
             if (ge)
-                ge->updateComponents();
+                refreshCanvasAfterRestore(*ge);
         }));
     }
 }

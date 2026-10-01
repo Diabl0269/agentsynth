@@ -210,6 +210,7 @@ void ModuleComponent::createEnvelopeCardControls() {
     envelopeGraphToggle->onClick = [this] {
         envelopeCurveEditor->setVisible(envelopeGraphToggle->getToggleState());
         updateLayout();
+        owner.handleModuleResized(this);
     };
     addAndMakeVisible(envelopeGraphToggle.get());
 

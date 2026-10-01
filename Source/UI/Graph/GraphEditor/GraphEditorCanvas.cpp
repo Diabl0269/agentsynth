@@ -35,6 +35,9 @@ void GraphEditor::detachAllModuleComponents() {
     // to reset it (e.g. an AI patch apply landing mid-gesture). Cancel
     // unconditionally: harmless when nothing was active, correct when something was.
     cancelLiveDragGestures();
+    // Every graph-replacing path (project load, new patch, preset, AI apply, undo fallback) comes through here: the
+    // arrangement the make-room records describe is gone.
+    macroController_.clearModuleDisplacements();
     for (auto* comp : content.getModules())
         comp->detachFromProcessor();
     content.getModules().clear(); // Remove after detach so ~ModuleComponent doesn't double-detach freed params
@@ -83,6 +86,7 @@ void GraphEditor::updateComponents() {
             if (dragDropController_.isDragPreviewActive() &&
                 comp->getNodeId() == dragDropController_.getDragPreviewSelfId())
                 cancelLiveDragGestures();
+            macroController_.forgetModuleDisplacements(comp->getNodeId());
             content.removeChildComponent(comp);
             modules.remove(i);
         }

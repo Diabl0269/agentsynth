@@ -104,9 +104,29 @@ macroRowCentreY(index) == kMacroHeaderH + index * kMacroRowH + kMacroRowH / 2
 
 **Growth is anchored at the top-left and pushes neighbours, never itself.** Moving the module the
 user is currently interacting with would teleport it out from under the cursor, so
-`GraphEditor::handleModuleResized` feeds every module box to
-`LayoutUtil::resolveOverlapsAfterResize` and applies the displacements it returns. Shrinking returns
-an empty result set: nothing is pulled back up, the canvas just gains space.
+`GraphEditor::handleModuleResized` hands the card to `MacroGroupController::reflowForResizedModule`, for a loose card
+and a macro member alike. It first offers every neighbour this card pushed earlier its way back, then pushes whatever
+the new rect covers by the macro rules (the shortest way, cascade, canvas wall, pinned output dock, 160 ms glide). The
+pushes are remembered per card (transient, never saved) so a shrink returns them: a neighbour comes home only if the
+user has not moved it since and its old spot is clear (a spot the card still covers stays blocked and keeps its record).
+Undo/redo, Auto Arrange, a project load and deleting the card drop the records. See
+[layout.md](layout.md#making-room-when-something-grows).
+
+**Which in-place size changes reach `handleModuleResized`:**
+
+| Change | Entry point |
+|---|---|
+| Macros bank `Knobs` count | `applyMacroCountChange` |
+| Poly toggle | `applyPolyStateChange` |
+| Dual I/O toggle (and the stereo-pair sweep) | `applyDualIOLayoutChange` |
+| Audio Input device channel count, Hosted Plugin port re-measure | `refreshPortLayout` |
+| LFO shape set to Custom (Draw section) | `ModuleComponentLfoCard.cpp` |
+| Show Scope / Show Response toggles | `setScopeShown` / `setResponseShown` |
+| ADSR Show Envelope Graph | the toggle's `onClick` |
+
+Not wired because the card height does not change: the Spectrum toggle (a backdrop only), the ADSR BPM|MS switch (swaps
+knobs for combos in the same slots) and the Wavetable page tabs (the card is sized once at construction). A card that
+is still being constructed never makes room (it is not on the canvas yet).
 
 ## Header buttons
 

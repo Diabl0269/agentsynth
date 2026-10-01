@@ -74,26 +74,6 @@ bool intersectsAny(const juce::Rectangle<int>& candidate, const std::vector<Box>
 juce::Point<int> findFreeSlot(juce::Point<int> desired, int w, int h, const std::vector<Box>& others, NodeID selfId,
                               int gap = kCollisionGap);
 
-struct ArrangeResult {
-    NodeID id;
-    juce::Point<int> pos;
-};
-
-// A module has just changed footprint in place (only the Macro bank does this today, when its
-// "Knobs" count changes). `boxes` is every module box INCLUDING the resized one, already carrying
-// its new rect. Returns the new top-left for each OTHER box that had to move to stay clear —
-// boxes that do not move are not returned, so an empty result means the growth fitted as-is.
-//
-// The resized module never moves: it is the one the user is interacting with, and teleporting it
-// out from under the cursor is worse than nudging its neighbours. Displaced boxes are pushed
-// straight down past whatever they collided with and then run through findFreeSlot, so the result
-// is on-grid and gap-respecting. Deterministic: boxes are processed top-to-bottom, then
-// left-to-right, then by id, and the cascade is capped at kResolveMaxRounds passes.
-inline constexpr int kResolveMaxRounds = 4;
-
-std::vector<ArrangeResult> resolveOverlapsAfterResize(NodeID resizedId, const std::vector<Box>& boxes,
-                                                      int gap = kCollisionGap);
-
 // ---- Making room when something grows (docs/layout/layout.md#making-room-when-something-grows) ----
 //
 // One sibling on the canvas (a loose module, or a whole macro as ONE rigid unit) has grown; every
@@ -109,7 +89,7 @@ struct UnitMove {
     juce::Point<int> delta;
 };
 
-// Backstop on cascade rounds (kResolveMaxRounds above belongs to the older single-resize sweep). Displacements
+// Backstop on cascade rounds. Displacements
 // only ever grow, so the cascade settles well before this.
 inline constexpr int kDisplacementMaxRounds = 64;
 

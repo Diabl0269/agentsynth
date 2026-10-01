@@ -73,8 +73,8 @@ not collide with its own pre-drag position.
 
 ## Making room when something grows
 
-When a macro's hull or card gets bigger, or a macro member card does, the things beside it move
-aside instead of being covered. The pure geometry is `LayoutUtil::resolveDisplacement`; the canvas
+When a macro's hull or card gets bigger, or any module card does (a loose card or a macro member),
+the things beside it move aside instead of being covered. The pure geometry is `LayoutUtil::resolveDisplacement`; the canvas
 glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupControllerDisplacement.cpp`.
 
 - **Units.** Neighbours are compared one nesting level at a time. At the top level a unit is a loose
@@ -97,10 +97,16 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   hull, so that macro is treated as the grower one level up, all the way to the top level.
 - **When.** Only on discrete events, never while dragging: grouping (including nesting), adding
   modules to a macro (menu, Cmd-drag, library drop into a hull), expanding a macro, adding a port
-  (which lengthens the hull), and a macro member card changing size.
+  (which lengthens the hull), and a module card changing size in place (loose or macro member: the Macros knob count, the Scope / Response / envelope graph folds, an LFO's Draw section, a poly or Dual I/O toggle; the list is in [module-card.md](module-card.md)).
 - **Undo.** It runs inside the undo step of whatever caused the growth, so one undo puts the
   neighbours back with the macro. Positions are written at once, so hulls, port strips and cables
   are correct immediately.
+- **Shrinking a card.** A module card keeps the same kind of record for what its own growth pushed (in
+  `MacroGroupController`, keyed by the card, never saved). Each time the card changes size in place
+  (`reflowForResizedModule`) the neighbours it pushed first get their way back by the rule below, and only then does the
+  new footprint push what it covers. A neighbour whose old spot the card's new rect still covers stays blocked and keeps
+  its record, so grow, shrink, grow settles the same way every time. The records are dropped on undo/redo, Auto Arrange,
+  any graph replacement (project load, new patch, preset) and when the card is deleted.
 - **Shrinking.** Whatever a macro's growth pushed is remembered on that macro (`Macro::displaced`: which unit, how
   far, where it landed; never saved to a project file, and lost when an undo or redo restores a snapshot). Collapsing the
   macro, deleting one of its members or ports, or a member leaving it (drag or menu), offers each pushed unit its way back, newest push first
@@ -336,27 +342,6 @@ Finds the nearest grid-aligned top-left where a `w x h` box does not overlap any
 (excluding `selfId`). Starts at `snap(desired)`, then walks the expanding spiral. Returns
 `snap(desired)`, clamped to the canvas, when no clear slot is found inside the search radius — it
 never returns an out-of-bounds position.
-
-**`resolveOverlapsAfterResize`**
-
-```cpp
-inline constexpr int kResolveMaxRounds = 4;
-
-std::vector<ArrangeResult>
-resolveOverlapsAfterResize(NodeID resizedId,
-                           const std::vector<Box>& boxes,
-                           int gap = kCollisionGap);
-```
-
-Called after a module changes footprint in place. `boxes` is every module box **including** the
-resized one, already carrying its new rect. Returns a new top-left for each *other* box that had to
-move; boxes that stayed put are not returned, so an empty result means the new footprint fitted
-as-is.
-
-The resized module is never returned and never moves. Displaced boxes are pushed straight down past
-the lowest thing they collided with, then run through `findFreeSlot`, so results are on-grid and
-gap-respecting. The sweep is deterministic (top-to-bottom, then left-to-right, then id) and the
-cascade is capped at `kResolveMaxRounds` passes.
 
 **`computeHierarchicalArrange`**
 

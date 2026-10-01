@@ -641,7 +641,7 @@ JUCE fixes an `AudioProcessor`'s bus layout at construction, and rebuilding it w
 
 Changing `Knobs` resizes the module in place, anchored at its top-left, at `LayoutUtil::kMacroRowH` (44 px) per macro:
 
-- The bank never moves — it is the module under the user's cursor. Instead `GraphEditor::handleModuleResized` pushes any neighbour that the new footprint would cover straight down and re-settles it on the grid (`LayoutUtil::resolveOverlapsAfterResize`). Shrinking moves nothing back.
+- The bank never moves — it is the module under the user's cursor. Instead `GraphEditor::handleModuleResized` pushes any neighbour that the new footprint would cover aside the shortest way (`MacroGroupController::reflowForResizedModule`), and shrinking brings those neighbours back unless the user moved them or their old spot is taken.
 - **Shrinking disconnects the macros that disappear.** A jack that is no longer drawn cannot be unplugged, and the module already silences its channel, so any cable or mod routing on a hidden macro is removed rather than left as a dead entry in the mod matrix. The whole change — count, layout and disconnects — is one undo step.
 
 ---

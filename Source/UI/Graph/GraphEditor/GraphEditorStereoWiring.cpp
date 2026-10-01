@@ -504,9 +504,9 @@ void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeI
     }
 }
 
-// A module changed footprint in place (the Macro bank, when its "Knobs" count changes).
-// Drops any routing left on an output jack that is no longer visible, then pushes overlapping
-// neighbours clear. The resized module itself never moves.
+// A module changed footprint in place (the Macro bank's "Knobs" count, a Scope/Response/envelope-graph fold, a poly or
+// Dual I/O toggle, ...). Drops any routing left on an output jack that is no longer visible, then lets neighbours make
+// room (or come back). The resized module itself never moves.
 void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
     if (moduleComp == nullptr || moduleComp->getModule() == nullptr)
         return;
@@ -573,33 +573,10 @@ void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
             graph.removeConnection(c);
     }
 
-    // 2. A macro member growing widens its macro's hull: push the neighbours (siblings, then whatever
-    //    surrounds the macro) as whole units, inside the same undo step as the gesture.
-    if (const auto uuid = macroController_.nodeUuidFor(nodeId);
-        uuid.isNotEmpty() && macros.findByMember(uuid) != nullptr) {
-        macroController_.makeRoomFor("n:" + juce::String((juce::int64)nodeId.uid));
-        repaintCanvas();
-        return;
-    }
-
-    // 3. Nudge neighbours clear of the new footprint. The resized module stays put.
-    std::vector<synth::LayoutUtil::Box> boxes;
-    for (auto* comp : content.getModules())
-        if (comp != nullptr)
-            boxes.push_back({comp->getNodeId(), comp->getBounds()});
-
-    for (const auto& moved : synth::LayoutUtil::resolveOverlapsAfterResize(nodeId, boxes)) {
-        for (auto* comp : content.getModules()) {
-            if (comp == nullptr || comp->getNodeId() != moved.id)
-                continue;
-            comp->setTopLeftPosition(moved.pos);
-            if (auto* node = graph.getNodeForId(moved.id)) {
-                node->properties.set("x", moved.pos.x);
-                node->properties.set("y", moved.pos.y);
-            }
-        }
-    }
-
+    // 2. Neighbours this card pushed aside before come back if they can, then whatever the new footprint covers is
+    //    pushed clear (shortest way, cascade, glide). A macro member also widens its macro's hull, so the push runs
+    //    inside out as whole units, inside the same undo step as the gesture. The card itself never moves.
+    macroController_.reflowForResizedModule(nodeId);
     repaintCanvas();
 }
 

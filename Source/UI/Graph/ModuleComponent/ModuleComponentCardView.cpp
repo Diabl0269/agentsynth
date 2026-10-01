@@ -24,6 +24,7 @@ void ModuleComponent::setScopeShown(bool show) {
     scopeComponent->setVisible(show);
     rememberCardView([show](synth::CardViewState& state) { state.showScope = show; });
     updateLayout();
+    owner.handleModuleResized(this); // the card's height changed: neighbours make room (a restore is ignored)
 }
 
 // Hiding the response view also hides and clears its spectrum backdrop, which is back to the card default.
@@ -42,6 +43,7 @@ void ModuleComponent::setResponseShown(bool show) {
             state.showSpectrum.reset();
     });
     updateLayout();
+    owner.handleModuleResized(this);
 }
 
 void ModuleComponent::setSpectrumShown(bool show) {
