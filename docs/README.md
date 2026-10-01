@@ -80,6 +80,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 ## MIDI, shortcuts & remote control
 
 - [`docs/control/midi-input.md`](control/midi-input.md) · [`docs/control/shortcuts.md`](control/shortcuts.md) — external MIDI routing, keyboard shortcuts (incl. the Cmd-hold hints)
+- [`docs/control/focus-regions.md`](control/focus-regions.md) — Tab between the app's areas: the region registry, nesting, outlines, and the keys inside each area
 - [`docs/control/midi-remote.md`](control/midi-remote.md) · [`docs/control/midi-remote-ui.md`](control/midi-remote-ui.md) — Controllers: external controller profiles, drawn surfaces, right-click MIDI Learn on every control, message-thread apply with gestures, scope-by-target-type persistence; the panel and coverage table
 - [`docs/control/midi-remote-mpe.md`](control/midi-remote-mpe.md) — Controllers v2 design (not built): MPE zone detection, member channels kept out of mappings, per-note bend/pressure/timbre into Poly MIDI
 - [`docs/control/midi-remote-mcu-hui.md`](control/midi-remote-mcu-hui.md) — Controllers v2 design (not built): Mackie Control / HUI protocol surfaces, sourced protocol tables, a source-routing sink, the motor-fader/LCD renderer
