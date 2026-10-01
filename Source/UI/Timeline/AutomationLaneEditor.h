@@ -1,7 +1,9 @@
 #pragma once
 
+#include "EditTool.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelineViewState.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 #include <set>
@@ -13,8 +15,8 @@ namespace synth {
 class TransportService; // Forward declaration (Source/Transport/TransportService.h)
 }
 
-// AutomationLaneEditor — the automation strip's curve canvas, editing ONE synth::AutomationLane
-// at a time.
+// AutomationLaneEditor — the curve canvas of one automation lane row (folded out under its track in
+// the timeline panel), editing ONE synth::AutomationLane at a time.
 //
 // X is the SHARED TimelineViewState (absolute beats) — the exact same beatToX/xToBeat the clip
 // lanes and the piano roll use, so the canvas lines up with the playhead pixel-for-pixel. Y maps
@@ -24,13 +26,12 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // Non-owning TimelineDoc* / AppUndoManager* / TransportService* setters, null-safe. Every gesture
 // previews locally (a handful of `preview*_` members, read back in paint()) and commits to the doc
 // exactly ONCE on mouse-up, through AppUndoManager::recordTimelineChange — never during mouseDrag:
-// one gesture, one doc mutation, one listener fire, one republish. Panel-scoped Escape: clears
-// in-flight tool-drag state and returns true; returns false when idle so the key falls through to
-// TimelinePanelComponent, which closes the strip.
+// one gesture, one doc mutation, one listener fire, one republish. Escape clears in-flight tool-drag
+// state and returns true; returns false when idle so the key falls through to the panel.
 //
-// Four tools (member `tool_`): Pointer (drag a handle to move it; drag a segment to scrub its
-// left point's tension; double-click empty space adds a point), Pencil (freehand drag, thinned via
-// synth::AutomationRecorder's RDP helper on mouse-up), Line (drag previews a straight line, commits
+// Four tools (member `tool_`), normally chosen by the timeline's edit tool (setEditTool): Pointer (drag a handle to
+// move it; drag a segment to scrub its left point's tension; double-click empty space adds a point), Pencil (freehand
+// drag, thinned via synth::AutomationRecorder's RDP helper on mouse-up), Line (drag previews a straight line, commits
 // as its two snapped endpoints), Eraser (drag deletes every handle touched, in one mutation).
 // Right-click a segment shows Hold/Linear via the headless applySegmentCurveChoice() hook (menus
 // don't run in tests); right-click a handle shows Delete point.
@@ -51,6 +52,10 @@ public:
     void mouseDoubleClick(const juce::MouseEvent& e) override;
 
     bool keyPressed(const juce::KeyPress& key) override;
+    void focusGained(juce::Component::FocusChangeType cause) override;
+
+    /** Fired when this editor takes keyboard focus; may be null. */
+    std::function<void()> onFocused;
 
     // Non-owning setters; same null-safety contract as every other timeline sub-component.
     void setTimelineDoc(synth::TimelineDoc* doc) noexcept { doc_ = doc; }
@@ -68,8 +73,13 @@ public:
     }
     synth::LaneId getActiveLane() const noexcept { return laneId_; }
 
-    void setTool(Tool tool) noexcept { tool_ = tool; }
+    // Picks the tool directly and stops following the timeline's edit tool.
+    void setTool(Tool tool) noexcept;
     Tool getTool() const noexcept { return tool_; }
+    // Follows the timeline's edit tool (automationToolFor), re-read at every mouse-down for Shift.
+    void setEditTool(EditTool tool) noexcept;
+    // The curve's colour; unset = the theme's modWire.
+    void setCurveColour(juce::Colour colour);
 
     // ---- Headless hooks (juce::PopupMenu::showMenuAsync doesn't run headlessly) ----
 
@@ -142,6 +152,8 @@ private:
 
     synth::LaneId laneId_;
     Tool tool_ = Tool::Pointer;
+    std::optional<EditTool> editTool_; // set = tool_ follows it (see setEditTool)
+    std::optional<juce::Colour> curveColour_;
 
     DragMode dragMode_ = DragMode::None;
     juce::Point<int> mouseDownPos_;

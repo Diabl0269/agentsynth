@@ -84,12 +84,14 @@ TEST(TimelineRowLayoutTest, NearestTopWalksThroughExtras) {
 }
 
 // ---- Through the real panel: header column and clip lane read the same extras ----
+// Track A gets one automation lane and is folded open, so its lane row is the extra area.
 
 namespace {
 struct ExtrasPanel {
     synth::TimelineDoc doc;
     synth::ui::TimelinePanelComponent panel;
     synth::TrackId t0, t1;
+    int extra = 0;
 
     ExtrasPanel() {
         panel.setTimelineDoc(&doc);
@@ -99,7 +101,9 @@ struct ExtrasPanel {
         panel.getViewState().snap = synth::ui::TimelineViewState::Snap::Bar;
         t0 = doc.addTrack(synth::TrackKind::Midi, "A");
         t1 = doc.addTrack(synth::TrackKind::Midi, "B");
-        panel.setTrackExtraHeightsForTest({40, 0});
+        doc.addLane(t0, "node-uuid", "cutoff", {});
+        panel.setTrackAutomationExpanded(t0, true);
+        extra = panel.getClipLaneArea().getRowLayout().trackExtraHeight(0);
     }
 };
 } // namespace
@@ -108,13 +112,14 @@ TEST(TimelineRowLayoutIntegrationTest, HeadersAndClipRowsShiftTogetherPastAnExtr
     ExtrasPanel f;
     auto& lane = f.panel.getClipLaneArea();
     const int rowHeight = lane.getRowHeight();
+    EXPECT_EQ(f.extra, 40) << "one lane row at the default height, unzoomed";
     EXPECT_EQ(f.panel.getTrackHeaderAt(0)->getY(), 0);
-    EXPECT_EQ(f.panel.getTrackHeaderAt(1)->getY(), rowHeight + 40);
+    EXPECT_EQ(f.panel.getTrackHeaderAt(1)->getY(), rowHeight + f.extra);
     EXPECT_EQ(f.panel.getTrackHeaderAt(1)->getHeight(), rowHeight) << "a header is only the clip-row part";
 
     const auto layout = lane.getRowLayout();
-    EXPECT_EQ(layout.trackTop(1), rowHeight + 40);
-    EXPECT_EQ(layout.totalHeight(), 2 * rowHeight + 40);
+    EXPECT_EQ(layout.trackTop(1), rowHeight + f.extra);
+    EXPECT_EQ(layout.totalHeight(), 2 * rowHeight + f.extra);
 }
 
 // A real mouse-down at the shifted y lands on track 1's clip; the y track 1 WOULD have had under the
@@ -127,10 +132,10 @@ TEST(TimelineRowLayoutIntegrationTest, ClickAtTheShiftedYHitsTrackOne) {
     ASSERT_TRUE(clipId.isValid());
 
     const auto rect = lane.getClipRect(clipId);
-    EXPECT_EQ(rect.getY(), rowHeight + 40);
+    EXPECT_EQ(rect.getY(), rowHeight + f.extra);
 
     const float x = (float)rect.getCentreX();
-    const float shiftedY = (float)(rowHeight + 40 + rowHeight / 2);
+    const float shiftedY = (float)(rowHeight + f.extra + rowHeight / 2);
     EXPECT_EQ(lane.getRowLayout().trackIndexAtY((int)shiftedY), 1);
     EXPECT_FALSE(lane.getRowLayout().isInTrackRow(rowHeight + 10)) << "inside track 0's extra area";
 
@@ -151,5 +156,29 @@ TEST(TimelineRowLayoutIntegrationTest, TotalHeightIncludesTheExtraArea) {
     ExtrasPanel f;
     f.panel.setSize(1200, 400);
     const int total = f.panel.getClipLaneArea().getRowLayout().totalHeight();
-    EXPECT_EQ(total, 2 * f.panel.getClipLaneArea().getRowHeight() + 40);
+    EXPECT_EQ(total, 2 * f.panel.getClipLaneArea().getRowHeight() + f.extra);
+}
+
+// ---- Per-track row heights and the zoom anchor ----
+
+TEST(TimelineRowLayoutTest, RowHeightOverrideShortensOneTracksClipRow) {
+    const TimelineRowLayout layout(3, 50, {0, 0, 40}, {0, 0, 26});
+    EXPECT_EQ(layout.trackRowHeight(), 50) << "the default stays the default";
+    EXPECT_EQ(layout.trackRowHeight(2), 26);
+    EXPECT_EQ(layout.trackSpan(2), juce::Range<int>(100, 166));
+    EXPECT_TRUE(layout.hitAtY(125).inClipRow);
+    EXPECT_FALSE(layout.hitAtY(126).inClipRow) << "past the 26 px section row: its extra area";
+    EXPECT_EQ(layout.totalHeight(), 166);
+}
+
+TEST(TimelineRowLayoutTest, MapContentYKeepsTheSamePlaceInATrackAcrossAZoom) {
+    // Clip rows and lane rows double; the fixed 26 px row does not.
+    const TimelineRowLayout before(3, 50, {40, 0, 40}, {0, 0, 26});
+    const TimelineRowLayout after(3, 100, {80, 0, 80}, {0, 0, 26});
+    EXPECT_DOUBLE_EQ(TimelineRowLayout::mapContentY(before, after, 25.0), 50.0) << "middle of track 0's clip row";
+    EXPECT_DOUBLE_EQ(TimelineRowLayout::mapContentY(before, after, 70.0), 140.0) << "middle of track 0's lane";
+    EXPECT_DOUBLE_EQ(TimelineRowLayout::mapContentY(before, after, 115.0), 230.0) << "middle of track 1";
+    // Track 2 starts at 140 before and 280 after; its section row is fixed, its lane doubles.
+    EXPECT_DOUBLE_EQ(TimelineRowLayout::mapContentY(before, after, 153.0), 293.0) << "in the fixed row";
+    EXPECT_DOUBLE_EQ(TimelineRowLayout::mapContentY(before, after, 186.0), 280.0 + 26.0 + 40.0) << "mid lane";
 }

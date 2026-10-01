@@ -141,9 +141,9 @@ struct Metrics {
 
     // Timeline panel (bottom-docked, toggled via the toolbar / Cmd+T).
     int timelinePanelHeight{220}; // code-only; not parsed from user JSON
-    // 190 (was 160): widened alongside the M/S/R/A toggle row (TimelineTrackHeaderComponent::
+    // 190 (was 160): widened alongside the M/S/R toggle row (TimelineTrackHeaderComponent::
     // kToggleWidth 20->24, plus an explicit inter-button gap) so the wider toggles don't crush the
-    // name label down to a handful of pixels when a track's automation ("A") button is visible.
+    // name label down to a handful of pixels next to the fold arrow and lane badge.
     int timelineTrackHeaderWidth{190}; // code-only; not parsed from user JSON
     // 34 (was 28): grown so TimelineTransportBar's glyph buttons (kButtonSize 22->26) actually
     // render larger instead of being clamped back down by the strip height.
@@ -159,10 +159,9 @@ struct Metrics {
     // now only serves as the headless literal fallback and is kept equal to this default.
     int timelineTrackRowHeight{56}; // code-only; not parsed from user JSON
 
-    // The automation strip docked at the BOTTOM of the panel's lanes region (header row of
-    // tool buttons + lane/record-mode pickers, above the AutomationLaneEditor curve canvas). The
-    // clip-lane area (and the piano roll) shrink by exactly this much while the strip is open.
-    int timelineAutomationStripHeight{72}; // code-only; not parsed from user JSON
+    // One automation lane row folded out under its track (lane header + curve editor), before the
+    // vertical zoom scales it the same way it scales timelineTrackRowHeight.
+    int timelineAutomationLaneRowHeight{40}; // code-only; not parsed from user JSON
 };
 
 // Font family NAMES (resolved to embedded typefaces by the LnF) + a type scale (pt).

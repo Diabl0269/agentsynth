@@ -5,7 +5,7 @@
 // (setTransport/setMetronome/updateFromTransport/setTimelineDoc/setUndoManager) -- the
 // class's core lifecycle and wiring. TimelinePanelComponent is declared in
 // TimelinePanelComponent.h; sibling TimelinePanel*.cpp files in this directory hold the
-// rest of the class (edit-tool/automation strips, clip clipboard, shortcuts, track
+// rest of the class (edit-tool strip, automation lanes, clip clipboard, shortcuts, track
 // headers, layout/paint).
 
 #include "TimelinePanelComponent.h"
@@ -17,11 +17,7 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kAutomationToolRadioGroupId = 4200;
-
-// The edit-tool strip in the transport bar: six square icon buttons in their own radio group
-// (4300 — distinct from the automation strip's 4200, which is a different set of tools entirely
-// and must not untoggle these).
+// The edit-tool strip in the transport bar: square icon buttons in their own radio group.
 constexpr int kEditToolRadioGroupId = 4300;
 } // namespace
 
@@ -54,6 +50,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
             return;
         viewState_.trackScrollY = (double)y;
         clipLaneArea_.repaint();
+        placeLaneBodies();
         repaint(gridLanesBounds_);
     };
 
@@ -192,50 +189,10 @@ TimelinePanelComponent::TimelinePanelComponent() {
         trackHeaderHost_->auditionTrackNote(track->id, pitch, velocity, true);
     };
 
-    // Automation strip. All start invisible — resized()/showAutomationLane()/
-    // closeAutomationStrip() are the only things that flip visibility, driven by
-    // automationStripVisible_.
-    addChildComponent(automationEditor_);
-    automationEditor_.setComponentID("timelineAutomationEditor");
+    // The automation lane editors, over the clip lanes and under the playhead.
+    initAutomationLanes();
 
-    auto setUpToolButton = [this](juce::TextButton& button, const juce::String& glyph, const char* componentId,
-                                  synth::ui::AutomationLaneEditor::Tool tool) {
-        addChildComponent(button);
-        button.setComponentID(componentId);
-        button.setButtonText(glyph);
-        button.setClickingTogglesState(true);
-        button.setRadioGroupId(kAutomationToolRadioGroupId);
-        button.onClick = [this, tool] { automationEditor_.setTool(tool); };
-    };
-    setUpToolButton(automationToolPointerButton_, "P", "automationToolPointer",
-                    synth::ui::AutomationLaneEditor::Tool::Pointer);
-    setUpToolButton(automationToolPencilButton_, juce::String::fromUTF8("\xE2\x9C\x8E"), "automationToolPencil",
-                    synth::ui::AutomationLaneEditor::Tool::Pencil);
-    setUpToolButton(automationToolLineButton_, juce::String::fromUTF8("\xE2\x95\xB1"), "automationToolLine",
-                    synth::ui::AutomationLaneEditor::Tool::Line);
-    setUpToolButton(automationToolEraserButton_, juce::String::fromUTF8("\xE2\x8C\xAB"), "automationToolEraser",
-                    synth::ui::AutomationLaneEditor::Tool::Eraser);
-    automationToolPointerButton_.setToggleState(true, juce::dontSendNotification);
-
-    addChildComponent(laneCombo_);
-    laneCombo_.setComponentID("automationLaneCombo");
-    laneCombo_.onChange = [this] { applyAutomationLaneMenuChoice(laneCombo_.getSelectedId()); };
-
-    addChildComponent(recordModeCombo_);
-    recordModeCombo_.setComponentID("automationRecordModeCombo");
-    recordModeCombo_.addItem("Off", 1);
-    recordModeCombo_.addItem("Read", 2);
-    recordModeCombo_.addItem("Touch", 3);
-    recordModeCombo_.addItem("Latch", 4);
-    recordModeCombo_.addItem("Write", 5);
-    recordModeCombo_.onChange = [this] { applyAutomationRecordModeChoice(recordModeCombo_.getSelectedId()); };
-
-    addChildComponent(automationCloseButton_);
-    automationCloseButton_.setComponentID("automationCloseButton");
-    automationCloseButton_.setButtonText(juce::String::fromUTF8("\xE2\x9C\x95"));
-    automationCloseButton_.onClick = [this] { closeAutomationStrip(); };
-
-    // No transport-bar or automation-strip chrome may steal keyboard focus on click:
+    // No transport-bar chrome may steal keyboard focus on click:
     // MainComponent::resolveEditSurface() reads REAL focus, so clicking the snap toggle (or any
     // other chrome control) would otherwise silently reroute the very next Cmd+X/C/V/D from the
     // clips to the graph — the same failure the edit-tool strip above opts out of. juce::Button
@@ -244,13 +201,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // purpose still takes focus; only the incidental mouse-click grab is disabled.
     for (juce::Component* chrome :
          {static_cast<juce::Component*>(&addTrackButton_), static_cast<juce::Component*>(&snapToggleButton_),
-          static_cast<juce::Component*>(&followPlayheadButton_), static_cast<juce::Component*>(&snapCombo_),
-          static_cast<juce::Component*>(&automationToolPointerButton_),
-          static_cast<juce::Component*>(&automationToolPencilButton_),
-          static_cast<juce::Component*>(&automationToolLineButton_),
-          static_cast<juce::Component*>(&automationToolEraserButton_),
-          static_cast<juce::Component*>(&automationCloseButton_), static_cast<juce::Component*>(&laneCombo_),
-          static_cast<juce::Component*>(&recordModeCombo_)})
+          static_cast<juce::Component*>(&followPlayheadButton_), static_cast<juce::Component*>(&snapCombo_)})
         chrome->setMouseClickGrabsKeyboardFocus(false);
 
     // Added LAST so it is topmost — it draws over the ruler, the lanes grid AND the clips.
@@ -380,7 +331,7 @@ void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
     transportBar_.setTransport(transport);
     clipLaneArea_.setTransport(transport);
     pianoRoll_.setTransport(transport);
-    automationEditor_.setTransport(transport);
+    automationLanes_.setTransport(transport);
 }
 
 // Forwarded straight to the transport bar's own metronome toggle -- see
@@ -397,6 +348,10 @@ void TimelinePanelComponent::updateFromTransport(const synth::TransportService::
     ++transportUpdateCount_;
     playhead_.updateFromTransport(snapshot, outputLatencySeconds);
     transportBar_.updateFromTransport(snapshot);
+    // The lane headers' value readouts ride this same poll (nothing runs while the beat stands still).
+    const int visibleTop = (int)std::llround(viewState_.trackScrollY);
+    automationLanes_.tickReadouts(snapshot.ppq, visibleTop,
+                                  visibleTop + trackHeaderViewport_.getMaximumVisibleHeight());
 
     // Follow playhead: page-flip the view so the (latency-compensated) playhead stays on screen —
     // gated on all four of playing/enabled/roll-closed/no-drag-in-flight, so a stopped transport,
@@ -452,21 +407,19 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     doc_ = doc;
     if (doc_ != nullptr)
         doc_->addListener(this);
+    // Before the header rebuild, so the first layout already carries the lanes' rows. Lane and
+    // track ids from the old doc mean nothing against a new one: fold state and selection reset.
+    selectedAutomationLane_ = {};
+    automationLanes_.setTimelineDoc(doc_);
     routingPane_.setDoc(doc_);
     syncTrackHeaders();
     refreshRoutingPane();
     clipLaneArea_.setTimelineDoc(doc_);
     pianoRoll_.setTimelineDoc(doc_);
-    automationEditor_.setTimelineDoc(doc_);
     // The ruler draws (and edits) the doc's MARKERS — see TimelineRulerComponent's class comment
     // for why it never listens to the doc itself: this panel's timelineChanged() repaints it.
     ruler_.setTimelineDoc(doc_);
-    // A lane id selected against the OLD doc can't mean anything against a new one (a fresh
-    // preset/bundle load, or the flag-OFF null-doc case) — close outright rather than trying to
-    // re-resolve it.
-    automationStripVisible_ = false;
-    selectedAutomationLane_ = {};
-    automationEditor_.setActiveLane({});
+    syncAutomationLanes();
 }
 
 // It is MainComponent's existing AppUndoManager that gets forwarded here -- see the header for the
@@ -476,7 +429,7 @@ void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) {
     undoManager_ = undoManager;
     clipLaneArea_.setUndoManager(undoManager);
     pianoRoll_.setUndoManager(undoManager);
-    automationEditor_.setUndoManager(undoManager);
+    automationLanes_.setUndoManager(undoManager);
     // Marker drag/rename/recolour/delete are real edits and belong on the same one undo stack.
     ruler_.setUndoManager(undoManager);
 }

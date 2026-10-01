@@ -270,6 +270,9 @@ void ShortcutManager::addTimelineDefaultBindings() {
     bindings["timelineMuteFocusedTrack"] = juce::KeyPress('m', juce::ModifierKeys::noModifiers, 0);
     bindings["timelineSoloFocusedTrack"] = juce::KeyPress('s', juce::ModifierKeys::noModifiers, 0);
     bindings["timelineArmFocusedTrack"] = juce::KeyPress('r', juce::ModifierKeys::noModifiers, 0);
+    // Bare A folds the focused row's automation lanes, the letter the header's automation button
+    // used to carry. Free in every category: every other 'a' binding carries a modifier.
+    bindings["timelineToggleTrackAutomation"] = juce::KeyPress('a', juce::ModifierKeys::noModifiers, 0);
     // Clip keyboard mode: bare arrows step between clips (Right on a track header enters its
     // clips), Return opens the clip in its editor, Alt+Left/Right move it one grid step.
     // Piano-roll and mixer arrow keys live in other categories, so nothing here conflicts.

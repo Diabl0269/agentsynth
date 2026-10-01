@@ -41,10 +41,15 @@ void TimelinePanelComponent::beginTrackDrag(synth::TrackId trackId, int screenY)
     const auto layout = rowLayout();
     std::vector<ReorderDragAnimator::Slot> slots;
     int pressedKey = -1;
+    // The "Unassigned automation" section is pinned last: it is never a slot, so it can neither be
+    // dragged nor have another track dropped below it.
     for (int i = 0; i < trackHeaderList_.headers.size(); ++i) {
-        const auto id = trackHeaderList_.headers.getUnchecked(i)->getTrackId();
+        const auto* header = trackHeaderList_.headers.getUnchecked(i);
+        if (header->isSectionHeader())
+            continue;
+        const auto id = header->getTrackId();
         if (id == trackId)
-            pressedKey = i;
+            pressedKey = (int)reorderTrackIds_.size();
         reorderTrackIds_.push_back(id);
         const auto span = layout.trackSpan(i);
         slots.push_back({static_cast<float>(span.getStart()), static_cast<float>(span.getLength())});
@@ -217,7 +222,8 @@ void TimelinePanelComponent::placeTrackHeaders() {
                 std::lround(isDragged ? trackReorder_.getDraggedStart() : trackReorder_.getLayoutStart(key)));
             lift = isDragged ? trackReorder_.getLift() : 0.0f;
         }
-        header->setBounds(0, y, width, layout.trackRowHeight());
+        header->setBounds(0, y, width, layout.trackRowHeight(i));
+        automationLanes_.placeHeadersFor(header->getTrackId(), y + layout.trackRowHeight(i), width);
         header->setLift(lift);
         if (lift > 0.0f)
             header->toFront(false);

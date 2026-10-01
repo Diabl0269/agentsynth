@@ -26,15 +26,6 @@ constexpr const char* kPianoRollKeyLabelsPropertyKey = "pianoRollKeyLabels";
 // below it scroll, the button never does.
 constexpr int kAddTrackButtonHeight = 22;
 
-// Automation strip chrome geometry. Code-only (mirrors the rest of this file's literal
-// fallbacks); the strip's own height comes from the themed Metrics::timelineAutomationStripHeight.
-constexpr int kAutomationStripHeaderHeight = 24;
-// 28 (was 24): timeline-panel button-size sweep — .reduced(2) at the setBounds() call site takes
-// the effective width from 20 to 24 px.
-constexpr int kAutomationToolButtonWidth = 28;
-constexpr int kAutomationRecordModeComboWidth = 90;
-constexpr int kAutomationCloseButtonWidth = 24;
-
 // 28 (was 24): timeline-panel button-size sweep — .reduced(2) at the setBounds() call site takes
 // the effective width from 20 to 24 px.
 constexpr int kEditToolButtonWidth = 28;
@@ -314,7 +305,7 @@ void TimelinePanelComponent::scrollByWheel(int axis, double amount, bool eased) 
     applyWheelScroll(axis, amount);
 }
 
-// Horizontal scroll moves only the ruler and the lanes region (grid, clips/roll, automation lane,
+// Horizontal scroll moves only the ruler and the lanes region (grid, clips/roll, automation lanes,
 // marker stems, playhead) -- never the track headers, which scroll only vertically.
 void TimelinePanelComponent::applyWheelScroll(int axis, double amount) {
     if (axis == 1) {
@@ -378,11 +369,6 @@ void TimelinePanelComponent::zoomTimelineVertical(double factor) {
     zoomTrackRows(factor, visibleCentreYInLanes());
 }
 
-void TimelinePanelComponent::setTrackExtraHeightsForTest(std::vector<int> extraHeights) {
-    clipLaneArea_.setTrackExtraHeights(std::move(extraHeights));
-    layoutTrackHeaders();
-}
-
 double TimelinePanelComponent::maxTrackScrollPx() const {
     return std::max(0.0, (double)(rowLayout().totalHeight() - gridLanesBounds_.getHeight()));
 }
@@ -395,17 +381,19 @@ void TimelinePanelComponent::scrollTrackRows(double deltaPx) {
     syncTrackScroll();
 }
 
+// Keeps the row under the pointer put: the content y under the anchor is mapped from the old row
+// layout to the new one (clip rows and lane rows rescale, the section row does not), and the
+// scroll moves by whatever keeps that y at the same visible position. Read from the actual
+// (rounded, clamped) layouts rather than `factor`, so the clamps can't make the anchor drift.
 void TimelinePanelComponent::zoomTrackRows(double factor, double anchorLaneY) {
-    // Keep the row under the pointer put: contentY scales with the row height, the visible y must
-    // not move. Recompute from the actual (rounded, clamped) row heights rather than `factor` so
-    // the clamps can't make the anchor drift.
-    const int oldRowHeight = currentRowHeight();
+    const auto before = rowLayout();
     const double contentY = anchorLaneY + viewState_.trackScrollY;
     viewState_.scaleRowHeight(factor);
-    const int newRowHeight = currentRowHeight();
-    if (newRowHeight == oldRowHeight)
+    pushAutomationGeometry(); // lane rows follow the same zoom
+    const auto after = rowLayout();
+    if (after.trackRowHeight() == before.trackRowHeight() && after.totalHeight() == before.totalHeight())
         return;
-    viewState_.trackScrollY = contentY * (double)newRowHeight / (double)oldRowHeight - anchorLaneY;
+    viewState_.trackScrollY = TimelineRowLayout::mapContentY(before, after, contentY) - anchorLaneY;
     viewState_.scrollTracksPx(0.0, maxTrackScrollPx()); // clamp into the new range
     layoutTrackHeaders();
     syncTrackScroll();
@@ -417,6 +405,7 @@ void TimelinePanelComponent::syncTrackScroll() {
     // no feedback loop.
     trackHeaderViewport_.setViewPosition(0, (int)std::llround(viewState_.trackScrollY));
     clipLaneArea_.repaint();
+    placeLaneBodies();
     repaint(gridLanesBounds_);
 }
 
@@ -427,13 +416,11 @@ void TimelinePanelComponent::resized() {
     int transportBarHeight = 34;
     int trackHeaderWidth = 190;
     int rulerHeight = 30; // keep in step with Theme::Metrics::timelineRulerHeight
-    int automationStripHeight = 72;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& m = lf->getTheme().metrics;
         transportBarHeight = m.timelineTransportBarHeight;
         trackHeaderWidth = m.timelineTrackHeaderWidth;
         rulerHeight = m.timelineRulerHeight;
-        automationStripHeight = m.timelineAutomationStripHeight;
     }
 
     auto bounds = getLocalBounds();
@@ -464,14 +451,6 @@ void TimelinePanelComponent::resized() {
     ruler_.setBounds(lanes.removeFromTop(rulerHeight));
     gridLanesBounds_ = lanes;
 
-    // The automation strip is carved from the BOTTOM of gridLanesBounds_ (which is what
-    // shrinks the clip-lane area/piano roll below), leaving the ruler untouched above.
-    if (automationStripVisible_ && gridLanesBounds_.getHeight() > automationStripHeight) {
-        automationStripBounds_ = gridLanesBounds_.removeFromBottom(automationStripHeight);
-    } else {
-        automationStripBounds_ = {};
-    }
-
     // The clip-lane area fills EXACTLY the rect the grid below is painted into (paint()'s
     // gridLanesBounds_ loop, unchanged) — so clips line up with the bar/beat grid pixel-for-pixel.
     clipLaneArea_.setBounds(gridLanesBounds_);
@@ -498,10 +477,8 @@ void TimelinePanelComponent::resized() {
     // The playhead spans the WHOLE lanes region, ruler included, so the line reads as one stroke
     // from the ruler down through the tracks. Its local x == 0 is lanesBounds_.getX(), which is
     // also the ruler's — i.e. exactly TimelineViewState's origin, so no offset arithmetic is
-    // needed anywhere in the overlay. Trimmed by the strip height too, so the line never
-    // draws underneath the strip's own chrome.
-    playhead_.setBounds(!automationStripBounds_.isEmpty() ? lanesBounds_.withTrimmedBottom(automationStripHeight)
-                                                          : lanesBounds_);
+    // needed anywhere in the overlay. It runs straight through the automation lanes too.
+    playhead_.setBounds(lanesBounds_);
     // The piano roll's rect PLUS the ruler strip above it, expressed in the OVERLAY's coordinates.
     // While the roll is open the overlay skips these rows — the roll draws its own line
     // (LocalPlayheadClient), and the ruler strip is skipped too because it then labels bars
@@ -513,29 +490,11 @@ void TimelinePanelComponent::resized() {
     playhead_.setLocalPlayheadRegion(ruler_.getBounds().getUnion(pianoRoll_.getBounds()) -
                                      playhead_.getBounds().getPosition());
 
-    // Strip header row (tool buttons, lane/record-mode pickers, close) above the curve
-    // canvas. Visibility follows automationStripVisible_ exactly — nothing else flips it.
-    const bool stripOpen = !automationStripBounds_.isEmpty();
-    automationEditor_.setVisible(stripOpen);
-    automationToolPointerButton_.setVisible(stripOpen);
-    automationToolPencilButton_.setVisible(stripOpen);
-    automationToolLineButton_.setVisible(stripOpen);
-    automationToolEraserButton_.setVisible(stripOpen);
-    laneCombo_.setVisible(stripOpen);
-    recordModeCombo_.setVisible(stripOpen);
-    automationCloseButton_.setVisible(stripOpen);
-    if (stripOpen) {
-        auto strip = automationStripBounds_;
-        auto header = strip.removeFromTop(kAutomationStripHeaderHeight);
-        automationToolPointerButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
-        automationToolPencilButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
-        automationToolLineButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
-        automationToolEraserButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
-        automationCloseButton_.setBounds(header.removeFromRight(kAutomationCloseButtonWidth).reduced(2));
-        recordModeCombo_.setBounds(header.removeFromRight(kAutomationRecordModeComboWidth).reduced(2));
-        laneCombo_.setBounds(header.reduced(2));
-        automationEditor_.setBounds(strip);
-    }
+    // The automation lane editors cover the clip lanes' rect (each sits at its lane row); the piano
+    // roll takes that rect over while it is open, so they hide with the clip lanes.
+    automationLanes_.getBodies().setBounds(gridLanesBounds_);
+    automationLanes_.getBodies().setVisible(!rollOpen);
+    placeLaneBodies();
 
     // Snap selector: right-hand side of the transport bar. The transport controls (play/stop/
     // record/loop + BPM/time-sig + readout) fill the rest, left-aligned.

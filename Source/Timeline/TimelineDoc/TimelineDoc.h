@@ -52,7 +52,7 @@ using MarkerId = detail::TimelineId<detail::MarkerIdTag>;
 enum class TrackKind : int {
     Midi = 0,
     Audio = 1,      // Track Audio clip: docs/modules/modules.md#track-audio-module-timeline-audio-source-hidden
-    Automation = 2, // reserved: lanes may live on their own track row later
+    Automation = 2, // holds lanes no single track owns; always last ("Unassigned automation")
 };
 
 static_assert(static_cast<int>(TrackKind::Midi) == 0, "TrackKind is serialised as an int - renumbering breaks files");
@@ -337,16 +337,18 @@ public:
     static constexpr int kFormatVersion = 1;
 
     // -- Tracks ---------------------------------------------------------------
-    // Appends a track. Returns an invalid TrackId if the doc is already at kMaxTracks.
+    // Appends a track; Automation tracks stay last on every path. Invalid TrackId at kMaxTracks.
     TrackId addTrack(TrackKind kind, const juce::String& name);
     // Removes the track and everything on it. The id is retired, never reissued.
     bool removeTrack(TrackId id);
     // Moves the track to newIndex in tracks[] — display/serialization order only; the track's id,
     // clips, lanes and binding are untouched, and nothing downstream (the audio-thread snapshot,
     // TimelineClipLaneArea) keys a track by its position, only by id/uuid, so this is safe to call
-    // at any time. newIndex is clamped to [0, tracks.size() - 1]. No-op (no revision bump, no
-    // notification) when id doesn't resolve or is already at newIndex.
+    // at any time. newIndex is clamped to the non-Automation slots (an Automation track never
+    // moves). No-op (no revision bump, no notification) when id doesn't resolve or is at newIndex.
     bool moveTrack(TrackId id, int newIndex);
+    // Removes every lane-less, clip-less Automation track as one mutation; false when none.
+    bool removeEmptyAutomationTracks();
     bool setTrackName(TrackId id, const juce::String& name);
     bool setTrackColour(TrackId id, juce::uint32 colourArgb);
     bool setTrackMuted(TrackId id, bool muted);
@@ -690,6 +692,8 @@ private:
     }
 
     void finishMutation();
+    // `list` with its Automation tracks moved last, each group keeping its order.
+    static std::vector<Track> automationTracksLast(std::vector<Track> list);
     // splitClip's body; `secondsPerBeat` 0 keeps sourceStartSeconds unchanged.
     std::pair<ClipId, ClipId> splitClipImpl(ClipId id, double atBeat, double secondsPerBeat);
 

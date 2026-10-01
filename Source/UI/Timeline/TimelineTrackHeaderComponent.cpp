@@ -18,12 +18,12 @@ namespace {
 juce::KeyPress plainKey(int character) { return juce::KeyPress(character, juce::ModifierKeys::noModifiers, 0); }
 
 constexpr int kSwatchWidth = 8;
-// Widened from 20 (laid out edge-to-edge, no gap): the four M/S/R/A toggles read as one fused
+// Widened from 20 (laid out edge-to-edge, no gap): the M/S/R toggles read as one fused
 // block at that width, and this row was the worst offender in the timeline-panel button-size
 // sweep. Paired with kToggleGap below rather than just grown, so the buttons are also visually
 // separable now.
 constexpr int kToggleWidth = 24;
-// Inter-toggle gap, applied only BETWEEN adjacent M/S/R/A buttons (never before the first or after
+// Inter-toggle gap, applied only BETWEEN adjacent M/S/R buttons (never before the first or after
 // the last) — see TimelineTrackHeaderComponent::resized(). Growing kToggleWidth alone would have
 // left them still touching.
 constexpr int kToggleGap = 4;
@@ -36,6 +36,7 @@ constexpr float kRowDragThreshold = 4.0f;
 // the icon needs far less width than the longest label did, and the freed space goes to the name.
 constexpr int kKindBadgeWidth = 20;
 constexpr float kKindBadgeIconSize = 14.0f;
+constexpr int kLaneBadgeHeight = 14;
 
 // Fixed per-TrackKind label. Never edited, never doc-driven beyond the kind itself. Kept as the
 // fallback badge content for a headless build (no AppLookAndFeel) or one with no asset library —
@@ -70,6 +71,7 @@ synth::theme::Icon kindBadgeIcon(synth::TrackKind kind) {
 // pattern as TimelinePanelComponent::paint()).
 struct HeaderColours {
     juce::Colour surface{juce::Colour(0xff1B1F26)};
+    juce::Colour surfaceHi{juce::Colour(0xff232833)};
     juce::Colour border{juce::Colour(0xff2A2F38)};
     juce::Colour text{juce::Colour(0xffEAEEF3)};
     juce::Colour textMuted{juce::Colour(0xff8A93A0)};
@@ -86,6 +88,7 @@ HeaderColours coloursFor(const juce::Component& component) {
     if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&component.getLookAndFeel())) {
         const auto& c = lf->getTheme().colors;
         result.surface = c.surface;
+        result.surfaceHi = c.surfaceHi;
         result.border = c.border;
         result.text = c.textPrimary;
         result.textMuted = c.textMuted;
@@ -171,21 +174,14 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     setUpToggle(armButton_, "trackArmButton", [this] { toggleArmed(); });
     armButton_.setTooltip("Arm this track for recording");
 
-    // Automation open/close: a plain click button, not a toggle — the header never knows whether the
-    // strip is open or which track it's showing, only the panel does. Visibility (lanes or none) is
-    // set in refreshFromDoc(), including the call at the end of this constructor.
-    addAndMakeVisible(automationButton_);
-    automationButton_.setComponentID("trackHeaderAutomationButton");
-    automationButton_.setClickingTogglesState(false);
-    automationButton_.setTooltip("Show/hide this track's automation lane");
-    // Same focus opt-out as the M/S/R toggles above (see setUpToggle) — this button isn't
-    // built through that lambda since it isn't a doc-state toggle.
-    automationButton_.setWantsKeyboardFocus(false);
-    automationButton_.setMouseClickGrabsKeyboardFocus(false);
-    automationButton_.onClick = [this] {
+    // The automation fold arrow only reports the press: the panel owns the fold state and answers
+    // with setAutomationExpanded(). Visibility (lanes or none) is set in refreshFromDoc().
+    addChildComponent(foldArrow_);
+    foldArrow_.onClick = [this] {
         if (onAutomationToggleRequested)
             onAutomationToggleRequested(trackId_);
     };
+    foldArrow_.onPopupMenuRequested = [this] { showContextMenu(); };
 
     addAndMakeVisible(bindingChip_);
     bindingChip_.setComponentID("trackBindingChip");
@@ -392,12 +388,21 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
                                           "' channel, shared with other tracks. Click to find it.");
     }
 
-    automationButton_.setVisible(!t->lanes.empty());
+    foldArrow_.setVisible(!t->lanes.empty());
+    foldArrow_.setState(automationExpanded_, isSectionHeader() ? juce::String("Unassigned") : t->name,
+                        (int)t->lanes.size());
 
-    // An Automation-kind track hosts lanes; a node binding is meaningless for it, so the chip is
-    // hidden outright rather than shown pointing at nothing. Midi/Audio tracks are unaffected.
-    if (t->kind == synth::TrackKind::Automation) {
+    // The Automation track is the "Unassigned automation" section header: it hosts lanes no single
+    // track owns, so a node binding, a colour, M/S/R and a rename all mean nothing for it.
+    if (isSectionHeader()) {
         bindingChip_.setVisible(false);
+        for (juce::Component* hidden :
+             {static_cast<juce::Component*>(&colourSwatch_), static_cast<juce::Component*>(&muteButton_),
+              static_cast<juce::Component*>(&soloButton_), static_cast<juce::Component*>(&armButton_)})
+            hidden->setVisible(false);
+        nameLabel_.setText("Unassigned automation", juce::dontSendNotification);
+        nameLabel_.setEditable(false, false, false);
+        nameLabel_.setTooltip("Automation lanes no single track plays");
     } else {
         bindingChip_.setVisible(true);
 
@@ -422,7 +427,20 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     }
 
     applyThemeDerivedColours();
+    resized(); // the fold arrow and the lane badge come and go with the lanes
     repaint();
+}
+
+bool TimelineTrackHeaderComponent::isSectionHeader() const {
+    const auto* t = track();
+    return t != nullptr && t->kind == synth::TrackKind::Automation;
+}
+
+void TimelineTrackHeaderComponent::setAutomationExpanded(bool expanded) {
+    if (automationExpanded_ == expanded)
+        return;
+    automationExpanded_ = expanded;
+    refreshFromDoc();
 }
 
 //==============================================================================
@@ -453,25 +471,27 @@ void TimelineTrackHeaderComponent::lookAndFeelChanged() { applyThemeDerivedColou
 
 //==============================================================================
 void TimelineTrackHeaderComponent::resized() {
+    if (isSectionHeader()) { // one short row: arrow, "Unassigned automation", lane badge
+        auto row = getLocalBounds().reduced(kRowPadding, 0).withTrimmedLeft(kRowPadding);
+        layoutFoldArrowAndBadges(row);
+        nameLabel_.setBounds(row);
+        return;
+    }
     auto bounds = getLocalBounds().reduced(kRowPadding);
 
     colourSwatch_.setBounds(bounds.removeFromLeft(kSwatchWidth));
     bounds.removeFromLeft(kRowPadding);
 
-    // Top row: kind badge + name + (optional A) + R/S/M, right to left. Bottom row: the binding
-    // chip, full width (hidden entirely for Automation-kind tracks — see refreshFromDoc()).
+    // Top row: (fold arrow) + kind badge + (folded lane badge) + name, then R/S/M right to left.
+    // Bottom row: the binding chip, full width.
     auto topRow = bounds.removeFromTop(bounds.getHeight() / 2);
     armButton_.setBounds(topRow.removeFromRight(kToggleWidth));
     topRow.removeFromRight(kToggleGap);
     soloButton_.setBounds(topRow.removeFromRight(kToggleWidth));
     topRow.removeFromRight(kToggleGap);
     muteButton_.setBounds(topRow.removeFromRight(kToggleWidth));
-    if (automationButton_.isVisible()) {
-        topRow.removeFromRight(kToggleGap);
-        automationButton_.setBounds(topRow.removeFromRight(kToggleWidth));
-    }
 
-    kindBadgeBounds_ = topRow.removeFromLeft(kKindBadgeWidth);
+    layoutFoldArrowAndBadges(topRow);
     nameLabel_.setBounds(topRow);
 
     // Bottom row: the binding chip, sharing with the channel chip when one is showing.
@@ -483,8 +503,34 @@ void TimelineTrackHeaderComponent::resized() {
     bindingChip_.setBounds(bottomRow);
 }
 
+// The arrow leads the name row so it lines up with the lane rows indented beneath it. Only the
+// section header draws a lane-count badge: a track row's header column is too narrow to fit one
+// beside the name, so a folded track's arrow says the count in its name and tooltip instead.
+void TimelineTrackHeaderComponent::layoutFoldArrowAndBadges(juce::Rectangle<int>& row) {
+    const auto* t = track();
+    const int laneCount = t != nullptr ? (int)t->lanes.size() : 0;
+    if (foldArrow_.isVisible())
+        foldArrow_.setBounds(row.removeFromLeft(TrackFoldArrow::kSize)
+                                 .withSizeKeepingCentre(TrackFoldArrow::kSize, TrackFoldArrow::kSize));
+    kindBadgeBounds_ = isSectionHeader() ? juce::Rectangle<int>() : row.removeFromLeft(kKindBadgeWidth);
+    laneBadgeBounds_ = {};
+    if (laneCount > 0 && isSectionHeader()) {
+        const int width = laneCountBadgeWidth(laneCount);
+        laneBadgeBounds_ = row.removeFromRight(width).withSizeKeepingCentre(width, kLaneBadgeHeight);
+    }
+}
+
 void TimelineTrackHeaderComponent::paint(juce::Graphics& g) {
     const auto colours = coloursFor(*this);
+
+    if (isSectionHeader()) {
+        g.fillAll(colours.surfaceHi);
+        g.setColour(colours.border);
+        g.drawHorizontalLine(getHeight() - 1, 0.0f, (float)getWidth());
+        if (const auto* t = track())
+            paintLaneCountBadge(g, laneBadgeBounds_, (int)t->lanes.size(), *this);
+        return;
+    }
 
     g.fillAll(colours.surface);
 
@@ -525,6 +571,7 @@ void TimelineTrackHeaderComponent::paint(juce::Graphics& g) {
             g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), microSize, juce::Font::plain));
             g.drawText(kindBadgeText(t->kind), kindBadgeBounds_, juce::Justification::centred, false);
         }
+        paintLaneCountBadge(g, laneBadgeBounds_, (int)t->lanes.size(), *this);
     }
 }
 
@@ -555,7 +602,7 @@ void TimelineTrackHeaderComponent::paintOverChildren(juce::Graphics& g) {
 //==============================================================================
 void TimelineTrackHeaderComponent::mouseDown(const juce::MouseEvent& e) {
     // This only ever fires for a right-click that lands on the row's OWN background — a right-click
-    // on nameLabel_ or the M/S/R/A toggles reaches showContextMenu() straight from THEIR OWN
+    // on nameLabel_, the M/S/R toggles or the fold arrow reaches showContextMenu() straight from THEIR OWN
     // mouseDown() instead (ContextMenuForwardingLabel/ContextMenuForwardingButton in the header),
     // since JUCE dispatches a click to whichever component is directly under the cursor and
     // never routes it through here first.
@@ -650,6 +697,13 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
     }
     if (matchesAction(key, "timelineArmFocusedTrack", plainKey('r'))) {
         toggleArmed();
+        return true;
+    }
+    // A folds THIS row's lanes, like the arrow (a row without lanes still claims the key, so it never
+    // falls through to something else).
+    if (matchesAction(key, "timelineToggleTrackAutomation", plainKey('a'))) {
+        if (foldArrow_.isVisible() && onAutomationToggleRequested)
+            onAutomationToggleRequested(trackId_);
         return true;
     }
 

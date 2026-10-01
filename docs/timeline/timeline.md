@@ -16,7 +16,7 @@ This doc is the shell — the regions, the dock, the height and the slide. The r
 | [transport](transport.md) | The transport bar, recording, metronome and count-in |
 | [edit-tools](edit-tools.md) | The Cubase-style tool strip shared by the lanes and the roll |
 | [clips](clips.md) | Clip lanes: selection, drag/trim, authoring, import |
-| [automation](automation.md) | The automation strip and its curve canvas |
+| [automation](automation.md) | Automation lanes under their tracks and the curve editor |
 | [piano-roll](piano-roll.md) | The per-clip MIDI note editor |
 | [scale-assist](scale-assist.md) | The Scale Assist panel, the scale engine, random generation |
 | [focus](focus.md) | Which surface Cmd+C/V/D/X/R and Cmd+Shift+A act on |
@@ -26,7 +26,8 @@ Source layout — one file per concern; the class itself is declared in `Timelin
 | Unit | Concern |
 |------|---------|
 | `TimelinePanelComponent.cpp` | Ctor/dtor, shortcut-manager wiring, transport/doc/undo-manager setters |
-| `TimelinePanelStrips.cpp` | Edit-tool strip, piano-roll open/close, automation strip |
+| `TimelinePanelStrips.cpp` | Edit-tool strip, piano-roll open/close, snap selector setup |
+| `TimelinePanelAutomation.cpp` | Automation lanes under their tracks: geometry push, fold toggle, `showAutomationLane`, lane choices |
 | `TimelinePanelClipClipboard.cpp` | Clip clipboard: copy/paste/cut/duplicate/repeat/select-all |
 | `TimelinePanelShortcuts.cpp` | Panel-scoped keyboard shortcut dispatch (`matchesAction`/`keyPressed`) |
 | `TimelinePanelTrackHeaders.cpp` | Add-track menu, `timelineChanged`, header sync/layout, focus movement |
@@ -45,12 +46,11 @@ layout-plus-paint with no timer or animation of its own:
 +---------------------+----------------------------------------------+
 | "+ Track"            | Ruler  (bar/beat ticks, loop brace)          |  add-track (+ ruler)
 | Track header column  +----------------------------------------------+
-| (name/colour/M/S/R/  | Clip lanes  <-or->  Piano roll               |  tracks / clips <-> roll
-|  binding chip),      | (one of the two, same rect, playhead overlay |
-|  scrolls              | drawn on top of either)                     |  playhead
-|                       +----------------------------------------------+
-|                       | Automation strip (opens by shrinking the     |  automation (docked,
-|                       |  region above by its own fixed height)       |   optional)
+| (fold arrow/name/    | Clip lanes  <-or->  Piano roll               |  tracks / clips <-> roll
+|  colour/M/S/R/chip), | (one of the two, same rect, playhead overlay |
+|  scrolls             |  drawn on top of either)                     |  playhead
+|   lane headers under | lane editors in each open track's rows       |  automation
+|   an open track      |  (under the track they belong to)            |
 +---------------------+----------------------------------------------+
 ```
 
@@ -65,7 +65,7 @@ above. `resized()` lays out three child regions:
 All three are exposed as public rect getters (`getTransportBarBounds()`, `getTrackHeaderBounds()`,
 `getLanesBounds()`) so every consumer and its tests build on the same arithmetic instead of
 re-deriving it. The component owns no timer and no animation of its own, apart from the playhead
-overlay's and the automation strip's knob entry point.
+overlay's ([automation](automation.md) lane rows fold out inside the track rows, not as a region).
 
 Keyboard focus is orthogonal to this diagram, not another region: whichever of the graph editor,
 clip lanes or piano roll the user last clicked owns Cmd+C/V/D — see [focus](focus.md).

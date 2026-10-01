@@ -9,7 +9,7 @@
 #include "UI/Layout/SidePane/SidePane.h"
 #include "UI/Layout/SidePane/SidePaneToggleButton.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
-#include "UI/Timeline/AutomationLaneEditor.h"
+#include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
@@ -202,33 +202,27 @@ public:
     // resolveEditSurface()).
     const synth::ui::PianoRollComponent& getPianoRoll() const noexcept { return pianoRoll_; }
 
-    // ---- Automation strip ----
-    // Docked at the BOTTOM of the lanes region (gridLanesBounds_), toggled by lane selection: the
-    // clip-lane area (and the piano roll, sharing the same rect) shrink by exactly
-    // Metrics::timelineAutomationStripHeight while the strip is open. Right-click-any-knob
-    // (ModuleComponent -> GraphEditor::onAutomateParameterRequested -> MainComponent) is the other
-    // entry point into this — see MainComponent::automateParameter().
+    // ---- Automation lanes (folded out under their tracks -- TimelinePanelAutomation.cpp) ----
+    // Right-click-any-knob (ModuleComponent -> GraphEditor::onAutomateParameterRequested ->
+    // MainComponent::automateParameter) lands in showAutomationLane().
 
-    /** Opens the strip editing `id`. A no-op if `id` doesn't resolve to a live lane. */
+    /** Expands the lane's track, scrolls its row into view and focuses its editor. No-op for a lane
+     *  that doesn't resolve. */
     void showAutomationLane(synth::LaneId id);
-    /** Closes the strip (clip-lane area/piano roll return to full height). The strip's own close
-     *  button and this panel's Escape-when-idle (keyPressed below) both route here. */
-    void closeAutomationStrip();
-    bool isAutomationStripVisible() const noexcept { return automationStripVisible_; }
+    /** The lane last shown or focused; invalid when none. */
     synth::LaneId getSelectedAutomationLane() const noexcept { return selectedAutomationLane_; }
-    synth::ui::AutomationLaneEditor& getAutomationLaneEditor() noexcept { return automationEditor_; }
-    juce::ComboBox& getAutomationLaneCombo() noexcept { return laneCombo_; }
-    juce::ComboBox& getAutomationRecordModeCombo() noexcept { return recordModeCombo_; }
-    juce::Button& getAutomationCloseButton() noexcept { return automationCloseButton_; }
-    juce::Rectangle<int> getAutomationStripBounds() const noexcept { return automationStripBounds_; }
+    /** Folds a track's lanes open or closed (runtime-only, never saved). */
+    void setTrackAutomationExpanded(synth::TrackId track, bool expanded);
+    bool isTrackAutomationExpandedForTest(synth::TrackId track) const;
+    /** The lane's row over the lanes region, in this panel's coordinates; empty when not shown. */
+    juce::Rectangle<int> laneRowBoundsForTest(synth::LaneId lane) const;
+    /** The lane's editor / header while its row is shown, else nullptr. */
+    AutomationLaneEditor* laneEditorForTest(synth::LaneId lane) const;
+    AutomationLaneHeaderComponent* laneHeaderForTest(synth::LaneId lane) const;
 
-    /** One entry in the lane picker: either an EXISTING doc lane labelled "NodeName \xC2\xB7 param name"
-     *  (resolved via TrackHeaderHost::getNodeDisplayName; falls back to the uuid's first 8
-     *  characters when the node doesn't resolve), or an "Add lane..." entry for a hosted plugin
-     *  instance parameter that has none yet -- `isAddEntry` distinguishes the two, `id` is only
-     *  meaningful when it's false. In track order then lane order, existing lanes first, then
-     *  add-lane entries -- index i is menu id i + 1; see collectAutomationLaneOptions()'s
-     *  definition in TimelinePanelStrips.cpp for why. */
+    /** One lane choice: an EXISTING doc lane labelled "NodeName \xC2\xB7 param name", or an
+     *  "Add lane..." entry for a parameter that has none yet (`isAddEntry`; `id` is meaningful only
+     *  when false). Existing lanes first in track order, then add entries; index i is choice i + 1. */
     struct AutomationLaneOption {
         synth::LaneId id;
         juce::String label;
@@ -237,13 +231,11 @@ public:
     };
     std::vector<AutomationLaneOption> collectAutomationLaneOptions() const;
 
-    // ---- Headless hooks (juce::PopupMenu::showMenuAsync's "doesn't run headlessly" idiom applies
-    // here too — tests drive the choice directly rather than through a live juce::ComboBox) ----
+    /** Applies choice `selectedId` (index + 1) of collectAutomationLaneOptions(): shows an existing
+     *  lane, or adds the offered lane first. The headless backing of an "Add lane" choice. */
     void applyAutomationLaneMenuChoice(int selectedId);
-    void applyAutomationRecordModeChoice(int selectedId);
 
-    // Escape closes the strip when it's open and idle -- see its definition in
-    // TimelinePanelShortcuts.cpp for how it interacts with AutomationLaneEditor's own Escape.
+    // The panel's own keys (tools, snap, loop, follow) -- see TimelinePanelShortcuts.cpp.
     bool keyPressed(const juce::KeyPress& key) override;
 
     // Trackpad pinch: plain = horizontal zoom, Shift = vertical (row height) zoom.
@@ -409,8 +401,6 @@ public:
     // The Viewport's content component — a pixel-level test seam for what a track-reorder drag
     // paints. See createComponentSnapshot() at the call site.
     juce::Component& getTrackHeaderListForTest() noexcept { return trackHeaderList_; }
-    // Stand-in for automation sub-lane heights (per track index) until they exist.
-    void setTrackExtraHeightsForTest(std::vector<int> extraHeights);
     /** True from the first drag step of a track reorder until its drop has finished settling. */
     bool isTrackReorderActiveForTest() const noexcept { return trackReorder_.isReordering(); }
     /** The Esc key press a real track drag would receive from the window. */
@@ -533,18 +523,19 @@ private:
     bool trackDragCancelled_ = false; // Esc pressed in this gesture
     bool committingTrackDrag_ = false;
 
-    // ---- Automation strip ----
-    // A header's "A" button click lands here. The header itself never knows open/closed state, so
-    // this is the one place that decides: if the strip is already open on THIS track's lane, close
-    // it; otherwise open it on the track's first lane. A track with no lanes is a no-op (the button
-    // is hidden in that case anyway — see TimelineTrackHeaderComponent::refreshFromDoc()).
+    // ---- Automation lanes (TimelinePanelAutomation.cpp) ----
+    // A header's fold arrow (or its key) lands here.
     void toggleAutomationForTrack(synth::TrackId trackId);
-    // Repopulates the lane picker from the doc, preserving the current selection when it still
-    // resolves. Called whenever the doc notifies while the strip is open, and by showAutomationLane().
-    void syncAutomationLaneCombo();
-    // Re-reads the active lane's recordMode into the combo (no notification — this is a REFLECTION
-    // of doc state, not an edit).
-    void syncAutomationRecordModeCombo();
+    // Wires automationLanes_ into the panel (part of the constructor, kept out of its size ratchet).
+    void initAutomationLanes();
+    // Re-syncs the lane pools, pushes their row geometry into the clip lanes and relayouts.
+    void syncAutomationLanes();
+    // Pushes the lanes' extra heights and the section-row override into the clip lanes' layout.
+    void pushAutomationGeometry();
+    // Pushes fold state into the track headers, relayouts the rows and re-clamps the scroll.
+    void layoutAutomationRows();
+    // Repositions the lane editors after a scroll, resize or relayout.
+    void placeLaneBodies();
 
     // ---- Clip clipboard ----
     // One captured clip, relative to the earliest selected clip's start at copy time (see
@@ -670,7 +661,7 @@ private:
     TrackHeaderHost* trackHeaderHost_ = nullptr;
     // Non-owning, set by setTransport() alongside the sub-component forwards it already
     // does. Every other consumer of the transport reads it from its OWN copy (ruler_/playhead_/
-    // transportBar_/clipLaneArea_/pianoRoll_/automationEditor_); this is the one operation the
+    // transportBar_/clipLaneArea_/pianoRoll_/automationLanes_); this is the one operation the
     // panel itself performs directly against it — reading the CURRENT position/time-signature at
     // paste time (see pasteClipsAtPlayhead()).
     synth::TransportService* transport_ = nullptr;
@@ -753,24 +744,12 @@ private:
     SidePane sidePane_;
     SidePaneToggleButton sidePaneButton_;
 
-    // The strip's own copy of the undo manager (record-mode/lane-picker edits made directly
-    // by this panel, as opposed to automationEditor_'s edits, which it holds its own copy for).
+    // The panel's own copy of the undo manager (markers, the add-track menu's marker entry).
     AppUndoManager* undoManager_ = nullptr;
 
-    // Automation strip chrome — docked at the bottom of gridLanesBounds_ when automationStripVisible_.
-    // All start invisible (addChildComponent, not addAndMakeVisible); resized()/showAutomationLane()/
-    // closeAutomationStrip() are the only things that flip their visibility.
-    synth::ui::AutomationLaneEditor automationEditor_{viewState_};
-    juce::TextButton automationToolPointerButton_;
-    juce::TextButton automationToolPencilButton_;
-    juce::TextButton automationToolLineButton_;
-    juce::TextButton automationToolEraserButton_;
-    juce::ComboBox laneCombo_;
-    juce::ComboBox recordModeCombo_;
-    juce::TextButton automationCloseButton_;
-    bool automationStripVisible_ = false;
+    // After trackHeaderList_, which holds its lane headers and so must outlive it.
+    TimelineAutomationLanes automationLanes_{viewState_, trackHeaderList_};
     synth::LaneId selectedAutomationLane_;
-    juce::Rectangle<int> automationStripBounds_; // empty when the strip is closed
 
     juce::Rectangle<int> transportBarBounds_;
     juce::Rectangle<int> trackHeaderBounds_;

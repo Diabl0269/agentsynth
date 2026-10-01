@@ -32,6 +32,7 @@ juce::String shortPluginFormatLabel(const juce::String& format) {
 void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     trackHeaderHost_ = host;
     routingPane_.setHost(host);
+    automationLanes_.setHost(host); // lane headers name their parameter and module through it
     // Headers are constructed with the host, so any that already exist have to be rebuilt against
     // the new one rather than refreshed.
     trackHeaderList_.headers.clear();
@@ -289,6 +290,9 @@ void TimelinePanelComponent::openAddTrackMenu() {
 }
 
 void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
+    // The lane pools first: the header rebuild below lays rows out with their geometry.
+    automationLanes_.sync();
+    pushAutomationGeometry();
     syncTrackHeaders();
     refreshRoutingPane(); // a binding, name or colour change shows in the routing pane too
     clipLaneArea_.refreshFromDoc();
@@ -304,21 +308,10 @@ void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     // what swaps clipLaneArea_ back into view.
     pianoRoll_.refreshFromDoc();
 
-    // If the strip is open, re-derive it from the doc — the SAME "refresh, don't poll"
-    // discipline every other timeline sub-component follows. A mutation that removed the selected
-    // lane closes the strip outright (there is nothing left to show); anything else just repaints
-    // the curve and re-syncs the two pickers (a lane could have been added/removed elsewhere, or
-    // its recordMode could have changed from under us — AutomationRecorder's own Write-drops-to-
-    // Touch-on-stop).
-    if (automationStripVisible_) {
-        if (doc_ == nullptr || doc_->getLane(selectedAutomationLane_) == nullptr) {
-            closeAutomationStrip();
-        } else {
-            syncAutomationLaneCombo();
-            syncAutomationRecordModeCombo();
-            automationEditor_.repaint();
-        }
-    }
+    // Fold arrows, row positions and editor positions all follow the lanes' new state.
+    if (doc_ == nullptr || doc_->getLane(selectedAutomationLane_) == nullptr)
+        selectedAutomationLane_ = {};
+    layoutAutomationRows();
 }
 
 void TimelinePanelComponent::syncTrackHeaders() {
@@ -371,9 +364,7 @@ void TimelinePanelComponent::syncTrackHeaders() {
         auto* header =
             trackHeaderList_.headers.add(new TimelineTrackHeaderComponent(*doc_, track.id, trackHeaderHost_));
         header->setShortcutManager(shortcuts_);
-        // The header only ever reports "the A button was clicked" — this panel is the one that
-        // knows whether the strip is already open on this track's lane, so it's the one that
-        // decides open vs. close.
+        // The header only reports a fold-arrow press; this panel owns the fold state.
         const auto trackId = track.id;
         header->onAutomationToggleRequested = [this, trackId](synth::TrackId) { toggleAutomationForTrack(trackId); };
         // Click-to-select and Up/Down between rows — see the two callbacks' own doc comments
@@ -398,22 +389,6 @@ void TimelinePanelComponent::syncTrackHeaders() {
     layoutTrackHeaders();
 }
 
-void TimelinePanelComponent::toggleAutomationForTrack(synth::TrackId trackId) {
-    if (doc_ == nullptr)
-        return;
-    const auto* t = doc_->getTrack(trackId);
-    if (t == nullptr || t->lanes.empty())
-        return; // no-op: the button is hidden in this case anyway (see refreshFromDoc())
-
-    // Already open on one of THIS track's lanes -> close. Anything else (closed, or open on a
-    // different track) -> open this track's first lane, switching the strip if needed.
-    const bool openOnThisTrack = automationStripVisible_ && doc_->getTrackForLane(selectedAutomationLane_) == t;
-    if (openOnThisTrack)
-        closeAutomationStrip();
-    else
-        showAutomationLane(t->lanes.front().id);
-}
-
 void TimelinePanelComponent::layoutTrackHeaders() {
     // Row geometry comes from rowLayout() — the SAME model synth::ui::TimelineClipLaneArea paints
     // and hit-tests with, so header rows and clip rows never drift apart.
@@ -422,7 +397,13 @@ void TimelinePanelComponent::layoutTrackHeaders() {
     const int count = trackHeaderList_.headers.size();
     const int width = std::max(0, trackHeaderViewport_.getMaximumVisibleWidth());
 
-    trackHeaderList_.setSize(width, std::max(layout.trackTop(count), trackHeaderViewport_.getMaximumVisibleHeight()));
+    // The header viewport is taller than the lanes region (the ruler is taller than the "+ Track"
+    // strip), so the list carries that difference as slack below the last row: without it the
+    // viewport clamps the shared scroll short of maxTrackScrollPx() and the last lane row can never
+    // be scrolled fully into the lanes.
+    const int viewHeight = trackHeaderViewport_.getMaximumVisibleHeight();
+    const int slack = std::max(0, viewHeight - gridLanesBounds_.getHeight());
+    trackHeaderList_.setSize(width, std::max(layout.trackTop(count) + slack, viewHeight));
     placeTrackHeaders();
 }
 

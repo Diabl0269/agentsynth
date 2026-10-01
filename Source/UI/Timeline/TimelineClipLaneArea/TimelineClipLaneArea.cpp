@@ -144,7 +144,7 @@ int TimelineClipLaneArea::getRowHeight() const {
 
 TimelineRowLayout TimelineClipLaneArea::getRowLayout() const {
     const int trackCount = doc_ != nullptr ? (int)doc_->getTracks().size() : 0;
-    return TimelineRowLayout(trackCount, getRowHeight(), trackExtraHeights_);
+    return TimelineRowLayout(trackCount, getRowHeight(), trackExtraHeights_, trackRowHeightOverrides_);
 }
 
 void TimelineClipLaneArea::setTrackExtraHeights(std::vector<int> extraHeights) {
@@ -152,6 +152,29 @@ void TimelineClipLaneArea::setTrackExtraHeights(std::vector<int> extraHeights) {
         return;
     trackExtraHeights_ = std::move(extraHeights);
     repaint();
+}
+
+void TimelineClipLaneArea::setTrackRowHeightOverrides(std::vector<int> rowHeights) {
+    if (rowHeights == trackRowHeightOverrides_)
+        return;
+    trackRowHeightOverrides_ = std::move(rowHeights);
+    repaint();
+}
+
+// The automation lane editors sit over the extra areas, and the Automation track's section row
+// holds no clips: neither is this component's to answer. Returning false lets a click there reach
+// whatever is on top (an editor) or the panel behind it, instead of starting a marquee or a draw.
+bool TimelineClipLaneArea::hitTest(int x, int y) {
+    if (!juce::Component::hitTest(x, y))
+        return false;
+    if (doc_ == nullptr)
+        return true;
+    const auto hit = getRowLayout().hitAtY(y + (int)std::llround(viewState_.trackScrollY));
+    if (hit.trackIndex < 0)
+        return true; // below the last track: empty lane space stays clickable (deselect, marquee)
+    if (!hit.inClipRow)
+        return false;
+    return doc_->getTracks()[(size_t)hit.trackIndex].kind != synth::TrackKind::Automation;
 }
 
 double TimelineClipLaneArea::currentBeatsPerBar() const {
@@ -209,7 +232,7 @@ std::optional<int> TimelineClipLaneArea::trackIndexAt(juce::Point<int> pos) cons
 
 juce::Rectangle<int> TimelineClipLaneArea::rowBounds(const TimelineRowLayout& layout, int trackIndex) const {
     return {0, layout.trackTop(trackIndex) - (int)std::llround(viewState_.trackScrollY), getWidth(),
-            layout.trackRowHeight()};
+            layout.trackRowHeight(trackIndex)};
 }
 
 //==============================================================================
@@ -348,6 +371,7 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
         return;
 
     const auto layout = getRowLayout();
+    paintAutomationRows(g, layout);
     const auto& tracks = doc_->getTracks();
     for (int trackIndex = 0; trackIndex < (int)tracks.size(); ++trackIndex) {
         const auto& track = tracks[(size_t)trackIndex];

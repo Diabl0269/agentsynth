@@ -365,26 +365,28 @@ TEST(TimelineClipLaneAuthoringTest, EmptyRowHintTextIsPerKindAndOnlyForEmptyRows
 }
 
 TEST(TimelineClipLaneAuthoringTest, EmptyRowHintIsPaintedAndDroppedWhenTooNarrow) {
-    // Both fixtures paint ONE empty row at the same size, differing only in track kind — so any
-    // pixel difference is the hint line itself (an automation row never hints).
-    const auto imageFor = [](TrackKind kind, int width) {
+    // An empty MIDI row against the same lane with no track at all: the row itself paints nothing
+    // but its hint, so any pixel difference is the hint line. (An Automation row is no reference any
+    // more: it paints the "Unassigned automation" section band.)
+    const auto imageFor = [](bool withTrack, int width) {
         ClipLaneFixture f;
-        f.doc.addTrack(kind, "Row");
+        if (withTrack)
+            f.doc.addTrack(TrackKind::Midi, "Row");
         f.lane.setSize(width, f.lane.getRowHeight());
         return f.lane.createComponentSnapshot(f.lane.getLocalBounds());
     };
 
-    const auto wideMidi = imageFor(TrackKind::Midi, 1000);
-    const auto wideAutomation = imageFor(TrackKind::Automation, 1000);
+    const auto wideMidi = imageFor(true, 1000);
+    const auto wideBlank = imageFor(false, 1000);
     ASSERT_FALSE(wideMidi.isNull());
-    EXPECT_FALSE(imagesIdentical(wideMidi, wideAutomation)) << "an empty MIDI row must paint its hint line";
+    EXPECT_FALSE(imagesIdentical(wideMidi, wideBlank)) << "an empty MIDI row must paint its hint line";
 
     // Too narrow for the line plus its padding: dropped entirely rather than truncated, so the row
-    // paints exactly like the (never-hinting) automation one.
-    const auto narrowMidi = imageFor(TrackKind::Midi, 90);
-    const auto narrowAutomation = imageFor(TrackKind::Automation, 90);
+    // paints exactly like no row at all.
+    const auto narrowMidi = imageFor(true, 90);
+    const auto narrowBlank = imageFor(false, 90);
     ASSERT_FALSE(narrowMidi.isNull());
-    EXPECT_TRUE(imagesIdentical(narrowMidi, narrowAutomation)) << "a row too narrow to read must not paint the hint";
+    EXPECT_TRUE(imagesIdentical(narrowMidi, narrowBlank)) << "a row too narrow to read must not paint the hint";
 }
 
 TEST(TimelineClipLaneAuthoringTest, FileDropHighlightPaints) {

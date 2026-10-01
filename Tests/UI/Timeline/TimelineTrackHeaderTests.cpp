@@ -652,19 +652,19 @@ TEST(TimelineTrackHeaderTest, KindBadgeTextEmptyWhenTrackIsGone) {
     EXPECT_EQ(f.header->getKindBadgeTextForTest(), juce::String());
 }
 
-TEST(TimelineTrackHeaderTest, AutomationButtonHiddenUntilTheTrackHasALane) {
+TEST(TimelineTrackHeaderTest, FoldArrowHiddenUntilTheTrackHasALane) {
     HeaderFixture f;
-    EXPECT_FALSE(f.header->getAutomationButton().isVisible());
+    EXPECT_FALSE(f.header->getFoldArrow().isVisible());
 
     synth::AutomationLane::RangeSnapshot range;
     const auto laneId = f.doc.addLane(f.trackId, "node-uuid", "cutoff", range);
     ASSERT_TRUE(laneId.isValid());
     f.header->refreshFromDoc();
 
-    EXPECT_TRUE(f.header->getAutomationButton().isVisible());
+    EXPECT_TRUE(f.header->getFoldArrow().isVisible());
 }
 
-TEST(TimelineTrackHeaderTest, AutomationButtonClickFiresOnAutomationToggleRequestedWithTheTrackId) {
+TEST(TimelineTrackHeaderTest, FoldArrowClickFiresOnAutomationToggleRequestedWithTheTrackId) {
     HeaderFixture f;
     synth::AutomationLane::RangeSnapshot range;
     f.doc.addLane(f.trackId, "node-uuid", "cutoff", range);
@@ -677,7 +677,17 @@ TEST(TimelineTrackHeaderTest, AutomationButtonClickFiresOnAutomationToggleReques
         ++calls;
     };
 
-    f.header->getAutomationButton().onClick();
+    // A real left click on the arrow (its own mouseDown/mouseUp), not a direct onClick() call.
+    // juce::Button narrows mouseUp to protected, so it is reached through the Component base.
+    f.header->setBounds(0, 0, 190, 56);
+    auto& arrow = static_cast<juce::Component&>(f.header->getFoldArrow());
+    const juce::Point<float> centre = arrow.getLocalBounds().getCentre().toFloat();
+    const auto event =
+        juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), centre,
+                         juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                         &arrow, &arrow, juce::Time::getCurrentTime(), centre, juce::Time::getCurrentTime(), 1, false);
+    arrow.mouseDown(event);
+    arrow.mouseUp(event);
     EXPECT_EQ(calls, 1);
     EXPECT_TRUE(requestedTrack == f.trackId);
 }

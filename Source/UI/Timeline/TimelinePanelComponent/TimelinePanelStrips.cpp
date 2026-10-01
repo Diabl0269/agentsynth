@@ -1,13 +1,12 @@
 // TimelinePanelStrips.cpp
 //
 // The edit-tool strip (getToolButton/setActiveTool/applyToolStripTheme), the piano-roll
-// open/close pair, and the automation strip (lane/record-mode selection, show/close).
+// open/close pair and the snap selector's setup.
 // TimelinePanelComponent is declared in TimelinePanelComponent.h; sibling
 // TimelinePanel*.cpp files in this directory hold the rest of the class.
 
 #include "TimelinePanelComponent.h"
 
-#include "AppUndoManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -57,6 +56,8 @@ void TimelinePanelComponent::setActiveTool(EditTool tool) {
     // reached the visible one would silently change meaning the moment a clip was opened.
     clipLaneArea_.setActiveTool(tool);
     pianoRoll_.setActiveTool(tool);
+    // The automation lanes have no tool row of their own either (see automationToolFor).
+    automationLanes_.setEditTool(tool);
     // Every button is set explicitly rather than leaning on the radio group to untoggle its
     // siblings: this method is also reached from the number keys and from MainComponent, where no
     // button was clicked at all. dontSendNotification, or setting the state would re-enter here
@@ -143,116 +144,6 @@ void TimelinePanelComponent::closePianoRoll() {
     resized(); // the toolbar row goes away and the ruler moves back to the top — same reason as above
     ruler_.setMappingOverride(nullptr, 0); // back to the shared lanes mapping
     playhead_.repaint();                   // the overlay owns its whole rect again
-}
-
-//==============================================================================
-// ---- Automation strip ----
-
-void TimelinePanelComponent::showAutomationLane(synth::LaneId id) {
-    if (doc_ == nullptr || doc_->getLane(id) == nullptr)
-        return;
-
-    selectedAutomationLane_ = id;
-    automationStripVisible_ = true;
-    automationEditor_.setTimelineDoc(doc_);
-    automationEditor_.setActiveLane(id);
-    syncAutomationLaneCombo();
-    syncAutomationRecordModeCombo();
-    resized();
-    repaint();
-}
-
-void TimelinePanelComponent::closeAutomationStrip() {
-    if (!automationStripVisible_)
-        return;
-    automationStripVisible_ = false;
-    resized();
-    repaint();
-}
-
-// Existing lanes first (in track order then lane order), then "Add lane..." entries -- index i is
-// menu id i + 1, the same convention TimelineTrackHeaderComponent::collectBindingOptions() uses.
-std::vector<TimelinePanelComponent::AutomationLaneOption> TimelinePanelComponent::collectAutomationLaneOptions() const {
-    std::vector<AutomationLaneOption> options;
-    if (doc_ == nullptr)
-        return options;
-
-    for (const auto& track : doc_->getTracks()) {
-        for (const auto& lane : track.lanes) {
-            juce::String nodeLabel =
-                trackHeaderHost_ != nullptr ? trackHeaderHost_->getNodeDisplayName(lane.nodeUuid) : juce::String();
-            if (nodeLabel.isEmpty())
-                nodeLabel = lane.nodeUuid.substring(0, 8); // uuid-head fallback
-            juce::String paramLabel = trackHeaderHost_ != nullptr
-                                          ? trackHeaderHost_->getParameterDisplayName(lane.nodeUuid, lane.paramId)
-                                          : juce::String();
-            if (paramLabel.isEmpty())
-                paramLabel = lane.paramId;
-            options.push_back({lane.id, nodeLabel + juce::String::fromUTF8(" \xC2\xB7 ") + paramLabel, false, {}});
-        }
-    }
-
-    // "Add lane..." entries for hosted-plugin instance parameters that have none yet, listed
-    // after every existing lane.
-    if (trackHeaderHost_ != nullptr) {
-        for (auto& addOption : trackHeaderHost_->getAvailablePluginLaneOptions()) {
-            AutomationLaneOption option;
-            option.label = "Add: " + addOption.label;
-            option.isAddEntry = true;
-            option.addOption = addOption;
-            options.push_back(std::move(option));
-        }
-    }
-    return options;
-}
-
-void TimelinePanelComponent::syncAutomationLaneCombo() {
-    laneCombo_.clear(juce::dontSendNotification);
-    const auto options = collectAutomationLaneOptions();
-    int selectedId = 0;
-    for (int i = 0; i < (int)options.size(); ++i) {
-        laneCombo_.addItem(options[(size_t)i].label, i + 1);
-        if (options[(size_t)i].id == selectedAutomationLane_)
-            selectedId = i + 1;
-    }
-    laneCombo_.setSelectedId(selectedId, juce::dontSendNotification);
-}
-
-void TimelinePanelComponent::syncAutomationRecordModeCombo() {
-    int selectedId = 2; // Read — TimelineDoc's own default for a lane with no explicit mode set
-    if (const auto* lane = doc_ != nullptr ? doc_->getLane(selectedAutomationLane_) : nullptr)
-        selectedId = lane->recordMode + 1;
-    recordModeCombo_.setSelectedId(selectedId, juce::dontSendNotification);
-}
-
-void TimelinePanelComponent::applyAutomationLaneMenuChoice(int selectedId) {
-    const auto options = collectAutomationLaneOptions();
-    if (selectedId < 1 || selectedId > (int)options.size())
-        return;
-    const auto& chosen = options[(size_t)(selectedId - 1)];
-    if (chosen.isAddEntry) {
-        // Creates (find-or-create) the lane, then shows it — same shape as choosing an
-        // existing entry, just with one extra step first.
-        if (trackHeaderHost_ == nullptr)
-            return;
-        const auto laneId = trackHeaderHost_->addPluginAutomationLane(chosen.addOption);
-        if (laneId.isValid())
-            showAutomationLane(laneId);
-        return;
-    }
-    showAutomationLane(chosen.id);
-}
-
-void TimelinePanelComponent::applyAutomationRecordModeChoice(int selectedId) {
-    if (doc_ == nullptr || !selectedAutomationLane_.isValid())
-        return;
-    const int mode = selectedId - 1;
-    const auto laneId = selectedAutomationLane_;
-    auto mutate = [this, laneId, mode] { doc_->setLaneRecordMode(laneId, mode); };
-    if (undoManager_)
-        undoManager_->recordTimelineChange(*doc_, mutate);
-    else
-        mutate();
 }
 
 // The snap selector's items and change handler. Split out of the constructor, which sits at its function-size ratchet.

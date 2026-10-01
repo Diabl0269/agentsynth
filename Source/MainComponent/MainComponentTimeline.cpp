@@ -709,8 +709,8 @@ int MainComponent::cleanUnusedAssets() {
 // GraphEditor::onAutomateParameterRequested is wired to. Resolves `nodeId`'s uuid (assigning
 // one if it has none yet — the same ensure-uuid idiom createTrackInNode() uses), binds a lane
 // for `paramId` with the parameter's real NormalisableRange on the track that plays that module (else the
-// doc's find-or-create Automation-kind track; docs/timeline/automation.md#which-track-a-lane-lands-on), and opens the
-// timeline panel's automation strip on it. A no-op (with a status-bar message) if `nodeId` doesn't resolve to a live
+// doc's find-or-create Automation-kind track; docs/timeline/automation.md#which-track-a-lane-lands-on), and shows it
+// under its track in the timeline panel. A no-op (with a status-bar message) if `nodeId` doesn't resolve to a live
 // ModuleBase or `paramId` doesn't resolve to a real parameter on it.
 void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
     auto* node = audioEngine.getGraph().getNodeForId(nodeId);

@@ -46,6 +46,7 @@
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SettingsWindow.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <algorithm>
 #include <gtest/gtest.h>
@@ -508,4 +509,27 @@ TEST(AccessibilityCoverageTest, EveryModuleCard) {
     }
     ASSERT_GT(cards, 30) << "the audit must reach the built-in cards";
     EXPECT_TRUE(matchesBaseline("ModuleCards", gaps));
+}
+
+// ============================================================================
+// Timeline automation lanes: a lane row's header and the track header's fold arrow.
+// ============================================================================
+
+TEST(AccessibilityCoverageTest, AutomationLanes) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 500);
+    const auto track = doc.addTrack(synth::TrackKind::Midi, "Bass");
+    const auto lane = doc.addLane(track, "node-uuid", "cutoff", {});
+    panel.showAutomationLane(lane);
+
+    auto* laneHeader = panel.laneHeaderForTest(lane);
+    ASSERT_NE(laneHeader, nullptr);
+    auto gaps = auditAccessibility(*laneHeader);
+    for (auto gap : auditAccessibility(panel.getTrackHeaderAt(0)->getFoldArrow())) {
+        gap.path = "[fold arrow] " + gap.path;
+        gaps.push_back(gap);
+    }
+    EXPECT_TRUE(matchesBaseline("AutomationLanes", gaps));
 }

@@ -1,5 +1,6 @@
 // Concern: tracks.
 #include "TimelineDoc.h"
+#include <algorithm>
 
 namespace synth {
 
@@ -22,8 +23,31 @@ TrackId TimelineDoc::addTrack(TrackKind kind, const juce::String& name) {
         track.id = TrackId{nextTrackId++};
         track.kind = kind;
         track.name = name;
+        const TrackId id = track.id;
         tracks.push_back(std::move(track));
-        return tracks.back().id;
+        tracks = automationTracksLast(std::move(tracks));
+        return id;
+    });
+}
+
+// The Automation track holds lanes no single track owns and is drawn as the closing "Unassigned
+// automation" section, so every path that changes track order (add, move, load) keeps it last.
+std::vector<Track> TimelineDoc::automationTracksLast(std::vector<Track> list) {
+    std::stable_partition(list.begin(), list.end(), [](const Track& t) { return t.kind != TrackKind::Automation; });
+    return list;
+}
+
+// The Automation track only exists to hold lanes no single track owns. Callers that take a lane off
+// it (a move, a delete) run this inside the same undo step, so undo brings the track back with it.
+bool TimelineDoc::removeEmptyAutomationTracks() {
+    const auto isEmptyAutomation = [](const Track& t) {
+        return t.kind == TrackKind::Automation && t.lanes.empty() && t.clips.empty();
+    };
+    if (std::none_of(tracks.begin(), tracks.end(), isEmptyAutomation))
+        return false;
+    return applyMutation([&] {
+        tracks.erase(std::remove_if(tracks.begin(), tracks.end(), isEmptyAutomation), tracks.end());
+        return true;
     });
 }
 
@@ -43,8 +67,14 @@ bool TimelineDoc::moveTrack(TrackId id, int newIndex) {
     if (track == nullptr)
         return false;
 
+    if (track->kind == TrackKind::Automation)
+        return true; // pinned after every other track: never moves, and nothing moves below it
     const int oldIndex = (int)(track - tracks.data());
-    const int clampedIndex = juce::jlimit(0, (int)tracks.size() - 1, newIndex);
+    // The other tracks stay above the Automation track(s), so the last index they may take is the
+    // last non-Automation slot.
+    const int movable = (int)std::count_if(tracks.begin(), tracks.end(),
+                                           [](const Track& t) { return t.kind != TrackKind::Automation; });
+    const int clampedIndex = juce::jlimit(0, std::max(0, movable - 1), newIndex);
     if (clampedIndex == oldIndex)
         return true; // already there: no revision bump, no notification
 

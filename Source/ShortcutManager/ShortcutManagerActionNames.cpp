@@ -225,6 +225,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Solo Focused Track";
     if (actionId == "timelineArmFocusedTrack")
         return "Arm Focused Track";
+    if (actionId == "timelineToggleTrackAutomation")
+        return "Show/Hide Track Automation";
     // Clip keyboard mode. "Next Clip" also carries a track header into that track's clips.
     if (actionId == "timelineClipPrevious")
         return "Previous Clip";

@@ -9,8 +9,9 @@ namespace synth::ui {
 /**
  * @brief The ONE place the timeline's vertical row geometry comes from.
  *
- * Every track owns a clip row of `trackRowHeight()` pixels, followed by an optional "extra" area
- * (zero today; automation sub-lanes fold out there) whose height is per track. The clip lane
+ * Every track owns a clip row of `trackRowHeight(i)` pixels (the shared zoom-scaled height unless
+ * that track overrides it -- the Automation track's short section row), followed by an optional
+ * "extra" area (its expanded automation lanes) whose height is per track. The clip lane
  * (painting, hit tests, edit tools, range selection), the track-header column, the track reorder
  * drag, the scroll limit and the playhead overlay all read tops and spans from here, so none of them
  * can assume `index * rowHeight` and drift from another.
@@ -23,9 +24,11 @@ public:
     TimelineRowLayout() = default;
 
     /** @param trackCount number of tracks
-     *  @param clipRowHeight the (already zoom-scaled) height of each track's clip row
-     *  @param extraBelow per-track extra height under the clip row; missing/negative entries are 0 */
-    TimelineRowLayout(int trackCount, int clipRowHeight, const std::vector<int>& extraBelow = {});
+     *  @param clipRowHeight the (already zoom-scaled) default height of a track's clip row
+     *  @param extraBelow per-track extra height under the clip row; missing/negative entries are 0
+     *  @param rowHeightOverride per-track clip-row height, px; missing/non-positive = clipRowHeight */
+    TimelineRowLayout(int trackCount, int clipRowHeight, const std::vector<int>& extraBelow = {},
+                      const std::vector<int>& rowHeightOverride = {});
 
     struct Hit {
         int trackIndex = -1;    ///< -1 when y lies outside every track
@@ -34,8 +37,10 @@ public:
 
     int trackCount() const noexcept { return trackCount_; }
 
-    /** The clip row's height — the same for every track. */
+    /** The default clip-row height (what a track without an override gets). */
     int trackRowHeight() const noexcept { return rowHeight_; }
+    /** The clip-row height of one track (the default for an out-of-range index). */
+    int trackRowHeight(int trackIndex) const noexcept;
 
     /** Top of the track's clip row. Indices past the last track continue at the uniform pitch, so a
      *  header list that briefly outnumbers the doc still lays out sanely. */
@@ -60,11 +65,16 @@ public:
      *  -1 when the pointer is nearer the virtual row above the first or below the last track. */
     int trackIndexNearestTop(int fromTrack, int dy) const noexcept;
 
+    /** Where content y `y` of `from` lands in `to` (same tracks, rows resized): the same track at
+     *  the same fraction of its clip row or extra area. What keeps a zoom anchor still. */
+    static double mapContentY(const TimelineRowLayout& from, const TimelineRowLayout& to, double y) noexcept;
+
 private:
     int trackCount_ = 0;
     int rowHeight_ = 0;
     std::vector<int> tops_; // trackCount_ + 1 prefix sums of the spans: tops_[i] = top of track i
     std::vector<int> extras_;
+    std::vector<int> heights_; // per-track clip-row height
 };
 
 } // namespace synth::ui

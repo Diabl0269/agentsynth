@@ -368,7 +368,7 @@ non-audio — reports through the status bar and mutates the document not at all
 **Empty-row hint.** A row with no clips paints one dim line, centred, straight from doc state — no
 timer, no animation, `Theme::Colors::textMuted`: **"Double-click to add a clip — or arm (R) and
 record"** on a Midi row, **"Drop an audio file — or arm (R) and record"** on an Audio row, and
-nothing on an Automation row, whose content is breakpoints authored in the automation strip. The
+nothing on an Automation row, whose content is breakpoints authored in its lane rows. The
 line is dropped rather than truncated when the row is shorter than 24 px or narrower than the text
 plus its padding.
 

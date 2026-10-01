@@ -183,7 +183,8 @@ TEST(MixerSendAutomationLaneTest, ChoosingTheEntryCreatesABoundLane) {
         << "a real RangedAudioParameter's range, not the hosted-plugin {0, 1} convention";
     EXPECT_FLOAT_EQ(lane->range.maxValue, sendParam->getNormalisableRange().end);
 
-    EXPECT_TRUE(panel.isAutomationStripVisible());
+    EXPECT_TRUE(panel.isTrackAutomationExpandedForTest(doc.getTrackForLane(lane->id)->id))
+        << "the new lane's track folds open to show it";
     EXPECT_EQ(panel.getSelectedAutomationLane(), lane->id);
 
     // The lane already exists: re-collecting the picker must no longer offer an "Add lane..." entry

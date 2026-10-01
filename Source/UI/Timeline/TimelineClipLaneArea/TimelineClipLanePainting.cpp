@@ -392,4 +392,28 @@ void TimelineClipLaneArea::paintLiveRecordingStrip(juce::Graphics& g) {
     paintWaveformColumns(g, liveStripRect_, livePeaks_, numChannels, 0, bucketCount);
 }
 
+// The lane editors paint their own rows over the extra areas; this only fills what shows through
+// before they are placed (or past the last one), in the same bg-1 they use. The Automation track's
+// row continues its header column's section background across the lanes.
+void TimelineClipLaneArea::paintAutomationRows(juce::Graphics& g, const TimelineRowLayout& layout) {
+    juce::Colour laneBg(0xff13161B), sectionBg(0xff232833);
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
+        laneBg = lf->getTheme().colors.bg1;
+        sectionBg = lf->getTheme().colors.surfaceHi;
+    }
+    const int scroll = (int)std::llround(viewState_.trackScrollY);
+    const auto& tracks = doc_->getTracks();
+    for (int i = 0; i < (int)tracks.size(); ++i) {
+        const auto row = rowBounds(layout, i);
+        if (tracks[(size_t)i].kind == synth::TrackKind::Automation) {
+            g.setColour(sectionBg);
+            g.fillRect(row);
+        }
+        if (const int extra = layout.trackExtraHeight(i); extra > 0) {
+            g.setColour(laneBg);
+            g.fillRect(0, layout.trackTop(i) + layout.trackRowHeight(i) - scroll, getWidth(), extra);
+        }
+    }
+}
+
 } // namespace synth::ui

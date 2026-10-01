@@ -42,6 +42,7 @@ inline constexpr AccessibilityBaselineEntry kAccessibilityBaseline[] = {
     {"AIChat", 0, 0},
     {"MidiRemote", 0, 0},
     {"Mixer", 0, 0},
+    {"AutomationLanes", 0, 0},
 };
 // clang-format on
 

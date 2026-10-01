@@ -521,6 +521,7 @@ plumbing the mouse wheel and vertical zoom already use, via `ensureTrackVisible(
 | M | Mute Focused Track (`timelineMuteFocusedTrack`) — flips `Track::muted` on whichever row holds focus, through the exact same `performTrackEdit` one-undo-step path the M **button** already used |
 | S | Solo Focused Track (`timelineSoloFocusedTrack`) — `Track::soloed`, same path |
 | R | Arm Focused Track (`timelineArmFocusedTrack`) — `Track::armed`, same path |
+| A | Show/Hide Track Automation (`timelineToggleTrackAutomation`) — folds the focused row's automation lanes open or closed, like its fold arrow ([automation](../timeline/automation.md#lane-rows)); bare A is free in every category (every other `a` binding carries a modifier) |
 
 #### Settings and dialog arrow keys
 

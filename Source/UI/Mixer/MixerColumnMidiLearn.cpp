@@ -175,9 +175,9 @@ void MixerColumnComponent::showParamMidiLearnMenu(juce::RangedAudioParameter& pa
 
 // "Automate '<Param>'" on the fader, pan and send-level knobs -- the same
 // GraphEditor::onAutomateParameterRequested route a canvas knob's right-click uses
-// (MainComponent::automateParameter: creates the lane if needed and opens the automation strip on
-// it). The Channel Strip has no canvas card, so this is the only way to START a lane on one of its
-// parameters from a track with no lanes yet (the track header's A button only shows once one exists).
+// (MainComponent::automateParameter: creates the lane if needed and shows it under its track).
+// The Channel Strip has no canvas card, so this is the only way to START a lane on one of its
+// parameters from a track with no lanes yet (the track header's fold arrow only shows once one exists).
 void MixerColumnComponent::appendAutomateMenuItem(juce::PopupMenu& menu, juce::RangedAudioParameter& param) {
     if (!graphEditor_->onAutomateParameterRequested)
         return;
