@@ -4,7 +4,7 @@ Agent reference. The design for giving every built-in module a card drawn from l
 type-specific code: a hand-designed default per module type, a user override per instance or per
 type, knob/fader/switch widgets, and room for a future user-built "custom module".
 
-**Status:** designed, not built. Nothing here describes current behaviour unless it says "today".
+**Status:** designed and decided (see [Decisions](#decisions-2026-10-01)), not built. Nothing here describes current behaviour unless it says "today".
 Where the card is drawn today is [module-card.md](module-card.md); the hosted-plugin half of the
 same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-layout.md).
 
@@ -187,8 +187,8 @@ added.
 
 | Module | Sections, top to bottom | Contextual rules |
 |---|---|---|
-| Oscillator | waveform `segmented`; Pitch: Octave, Coarse, Fine; Unison: Voices, Detune, (new Pulse Width); Output: Level, Pan, (new Glide); footer | Detune dims at 1 voice; Pulse Width dims unless Square |
-| Filter | `response` view open; Type `choice`; Cutoff `knobLarge`, Resonance, Drive; Modulation: (new Env Amt, new Key Track), Level; footer with Spectrum | — |
+| Oscillator | waveform `segmented`; Pitch: Octave, Coarse, Fine, (new Glide); Unison: Voices, Detune, (new Pulse Width); Output: Level, Pan; footer | Detune dims at 1 voice; Pulse Width dims unless Square |
+| Filter | `response` view open; Type `choice`; Cutoff `knobLarge`, Resonance, Drive; Modulation: (new Key Track), Level; footer with Spectrum | Key Track dims while nothing is plugged into the (new) Pitch input |
 | VCA | Gain `faderH`; footer | — |
 | ADSR | `envelope` view open; Time/Tempo `segmented`; A H D S R `faderV`; (new Velocity) and the `threshold` view; footer | Tempo mode swaps each stage's time for its division in place |
 | LFO | `lfoShape` view; Shape `segmented` (incl. Draw → `lfoCurve` view); Free/Sync `segmented`; Rate `knobLarge`, (new Phase, new Fade in); Level, Glide; footer: Bipolar, Restart on note | Rate swaps Hz ↔ division; Glide dims unless S&H |
@@ -213,10 +213,39 @@ added.
 | Math | Clip `segmented`; footer | — |
 | Comparator | unchanged (`threshold` view) | — |
 
-Which "New" parameters are added, and whether the Filter gains envelope-amount and key-tracking
-inputs, are product decisions recorded on the implementation tickets, not here. Adding a parameter
-to a built-in module needs no change in `synth-platform/packages/contracts`: a patch node's `params`
-is an open record there, and per-module ranges come from the client.
+Adding a parameter to a built-in module needs no change in `synth-platform/packages/contracts`: a
+patch node's `params` is an open record there, and per-module ranges come from the client.
+
+### Decisions (2026-10-01)
+
+- **New controls: the full candidate list.** Oscillator pulse width and glide; LFO phase and fade-in;
+  ADSR velocity; Delay tempo sync and ping-pong; Reverb pre-delay; a gain-reduction meter on
+  Compressor and Limiter; Limiter ceiling; Compressor knee; Sampler end point, fine tune and reverse;
+  the MIDI Keyboard's existing octave parameter on its card. Each starts at a value that leaves an
+  existing patch sounding the same.
+- **Filter: Key Track, no Env Amt.** An envelope amount knob would duplicate what a cable already
+  does: dropping an ADSR cable on the Cutoff knob inserts an attenuverter whose signed amount is set
+  on the knob itself (Alt-drag, or a drag on the ring; [modulation.md](../modules/modulation.md)),
+  and the envelope's shape is the ADSR's. A built-in filter envelope would be a second ADSR with its
+  own gate input and poly handling, so it is not added either. Key tracking cannot be built from
+  cables, because pitch CV is in Hz and the cutoff input clamps to −1..1, so the Filter gains a
+  **Pitch** input (Hz, per voice in poly) and a **Key Track** amount: cutoff moves by
+  `keyTrack × log2(pitch / 261.63 Hz)` octaves, and does nothing while the input is unplugged.
+  Discoverability of the filter envelope is a smart-connection question, not a knob.
+- **ADSR stages are faders** by default (`faderV`), switchable per card.
+- **Hidden controls go to the folded More row.**
+- **A card that grows makes room, and gives it back.** Unfolding More, opening a view or a mode
+  swap that changes a loose card's height pushes the neighbours it now covers out of the way
+  (the [make-room rules](layout.md#making-room-when-something-grows) macros already use) and returns
+  them when the card shrinks, unless they were moved meanwhile. Today a loose card's growth only
+  pushes neighbours down and never brings them back; this lands before hiding controls does.
+- **Sequencers stay as they are** in this round. Scales, step count and richer patterns are a
+  separate piece of work that shares one scale engine with the piano roll's scale assist
+  (`Source/Timeline/MusicalScale.h`).
+- **Canvas pieces follow the design system.** New widgets (fader on a card, segmented switch,
+  stepper, section header, More row, the layout editor) match the AgentSynth design system's values
+  and are added to it by the work that builds them; card titles and section headers are never in
+  capitals.
 
 ---
 
@@ -259,7 +288,9 @@ model stays validatable so that path can be opened later without a format change
 
 ## Custom module (future)
 
-A user-built "synth in one card" is **a macro with a face**: the user groups ordinary modules
+A user-built "synth in one card" is **a macro with a face** (decided 2026-10-01): any macro may be
+given a face, and that is all a custom module is; there is no second kind of node or library item
+to tell apart. The user groups ordinary modules
 (Oscillator, ADSR, Filter, LFO, a Macros knob bank for their own knobs) into a macro, and the
 collapsed macro card renders a `CardLayout` whose items point at its members' parameters.
 
