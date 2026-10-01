@@ -5,19 +5,9 @@
 // the live graph and doc, and moves lanes saved before the rule existed.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MainComponentInternal.h"
 #include "Timeline/TrackOwnership.h"
 #include <set>
-
-namespace {
-
-// A node's uuid, or a synthetic key from its graph id when it has none: macro port nodes are plain graph
-// nodes and the chain walk must pass through them whether or not they carry a uuid.
-juce::String ownershipKey(const juce::AudioProcessorGraph::Node& node) {
-    const juce::String uuid = node.properties["uuid"].toString();
-    return uuid.isNotEmpty() ? uuid : "node#" + juce::String(static_cast<int>(node.nodeID.uid));
-}
-
-} // namespace
 
 std::map<juce::String, synth::TrackId> MainComponent::resolveAutomationOwners() const {
     const auto& graph = audioEngine.getGraph();
@@ -28,7 +18,7 @@ std::map<juce::String, synth::TrackId> MainComponent::resolveAutomationOwners() 
     for (auto* node : graph.getNodes()) {
         if (node == nullptr)
             continue;
-        keyOf[node->nodeID.uid] = ownershipKey(*node);
+        keyOf[node->nodeID.uid] = detail::ownershipKey(*node);
         owned.nodes.push_back(keyOf[node->nodeID.uid]);
     }
     for (const auto& conn : graph.getConnections()) {

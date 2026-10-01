@@ -27,6 +27,9 @@ loses them. The editors live in one click-through container over the lanes regio
 lanes and the piano roll, below the playhead), placed at their row's y minus the vertical scroll and
 clipped by it; the container hides while the piano roll is open.
 
+Under the last lane of an open track (the Unassigned section too) sits a 24 px "+ Add automation..."
+row, zoom-scaled like a lane row ([below](#adding-a-lane-from-the-timeline)).
+
 ### The lane header
 
 `AutomationLaneHeaderComponent` (`Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/`), indented
@@ -76,6 +79,54 @@ lanes are document data mutated only on the message thread. Contrast the add-tra
 ([add-track](add-track.md#menu-options-resolve-against-a-build-time-snapshot)), whose backing list
 a background thread mutates. Test hooks: `isTrackAutomationExpandedForTest`,
 `laneRowBoundsForTest`, `laneEditorForTest`, `laneHeaderForTest`.
+
+## Adding a lane from the timeline
+
+Right-clicking a knob is not the only way to put a lane on a track. Two entry points open the same
+picker of **that track's** parameters:
+
+- the **"+ Add automation..." row** that closes an open track's lane rows (`AddAutomationRow`,
+  `Source/UI/Timeline/AutomationLanes/AddAutomation/`): `AddAutomationRow::kBaseHeight` (24 px) times the same vertical zoom, text-muted 10 px,
+  indented like the lane headers, in the header column. It is one more row of the track's extra area
+  (`TimelineAutomationLanes::extraHeights()`), so it moves with the lanes in the one row layout and
+  with the track in a reorder drag. The lanes region behind it is the clip lanes' backdrop and takes no
+  click. It exists exactly while the track's lane rows do: an open track **with** lanes, and the
+  Unassigned section.
+- the track header's right-click **"Add automation..."** ([tracks](tracks.md#row-context-menu)). A
+  track with no lane has no fold arrow and so no row; this is how it gets its first lane. Once the lane
+  lands the track opens and the row appears under it.
+
+The row is a Tab stop with the accent focus ring; Return and Space press it in the same event
+(`juce::Button` posts its own Return click to the message queue and has no Space handling), its name and
+tooltip read "Add automation to <Track>", and a click does not take focus off the clips.
+
+**The picker** is the Mod Matrix's `ModMatrixPicker`, reused ([chrome](../layout/chrome.md)): a search
+field over rows grouped under their module's title, Up/Down/Return/Escape, a `juce::CallOutBox` anchored
+on the row or header. Two small generalisations: an item may carry `searchText` the row does not show (the
+module title, so typing "filter cut" finds Cutoff under "Filter 1"), and a query now matches word by word,
+every word anywhere in the row or its search text (a superset of the old substring match); and
+`setAccessibleNames` re-words its screen-reader names. `collectAddAutomationChoices` turns the host's
+parameters into its items, regrouped so a module's rows are adjacent, and drops any parameter that already
+has a lane.
+
+**What a track offers** (`TrackHeaderHost::getAutomatableParameters(TrackId)`, implemented by
+`MainComponentAutomationLanes.cpp`): the float and int parameters of every module
+[the track plays](#which-track-a-lane-lands-on), grouped by module title, plus that module set's hosted-plugin
+parameters and active Channel Strip send slots (the existing "Add lane..." sources, filtered to those
+nodes). Hidden plumbing is never offered: Attenuverter, macro port nodes, and the Track In / Track Audio
+sources. A parameter that already has a lane is left out. For the Unassigned section the list is the
+modules **no** single track plays (a shared effect, the master bus, an unconnected module).
+
+**What a pick does**: `TrackHeaderHost::addAutomationLane(TrackId, AutomatableParameter)` creates the lane
+**on the track the picker was opened for**, not the track the ownership rule would choose, as one undo step,
+then the panel calls `showAutomationLane` (opens the track, scrolls the row in, focuses its editor). It runs
+through the same helper `automateParameter` and `addPluginAutomationLane` use (`MainComponent::addLaneUndoable`:
+the parameter's real range and index hint, one `recordTimelineChange`), with the target track explicit
+instead of resolved inside the mutation. A node that has never been automated gets its uuid at that moment,
+the same ensure-uuid step the knob path takes.
+
+Test hooks: `setAddAutomationPickerHookForTest` (receives the picker instead of a call-out),
+`addAutomationRowForTest`, `addAutomationRowBoundsForTest`.
 
 ## The curve canvas
 
@@ -221,4 +272,6 @@ a lane lands on. `Tests/UI/Timeline/AutomationLanes/` covers the lane rows in de
 by mouse and keyboard, what a click at each y hits, the curve tools through the timeline's edit
 tool, the lane header's record mode, move and delete with undo, the value readout, the Unassigned
 section (order, 26 px row, reorder, removal in the same undo step), the zoom anchor with lane rows,
-and a saved project with lanes and a macro LFO reopening.
+and a saved project with lanes and a macro LFO reopening, and the "+ Add automation..." row and header menu
+entry (`AutomationLanesAddRowTests.cpp`, with the MainComponent side, what each track offers and where a
+pick lands, in `AutomationLanesAddMainTests.cpp`).

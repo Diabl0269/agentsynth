@@ -531,6 +531,8 @@ add_executable(Tests
     UI/Timeline/TransportBarMidiLearnTests.cpp
     UI/Timeline/TimelineRowLayoutTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesFoldTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesAddRowTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesAddMainTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesEditingTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesUnassignedTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesLoadTests.cpp

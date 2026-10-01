@@ -33,6 +33,9 @@ class ShortcutManager; // Forward declaration (Source/ShortcutManager/ShortcutMa
 namespace synth {
 class TransportService;
 class Metronome; // Forward declaration (Source/Transport/Metronome.h)
+namespace ui {
+class ModMatrixPicker; // Forward declaration (Source/UI/Graph/ModMatrixPicker.h): the add-automation picker
+} // namespace ui
 } // namespace synth
 
 // Bottom-docked timeline panel: ruler, grid, zoom/scroll, snap selector, click-to-seek/
@@ -219,6 +222,21 @@ public:
     /** The lane's editor / header while its row is shown, else nullptr. */
     AutomationLaneEditor* laneEditorForTest(synth::LaneId lane) const;
     AutomationLaneHeaderComponent* laneHeaderForTest(synth::LaneId lane) const;
+
+    // ---- Adding a lane from the timeline (TimelinePanelAddAutomation.cpp) ----
+    /** Opens the picker of `track`'s automatable parameters (the "+ Add automation..." row's and the header
+     *  menu's action), anchored on `anchor`; picking one creates the lane on that track and shows it. A
+     *  no-op without a host or a doc. */
+    void openAddAutomationPicker(synth::TrackId track, juce::Component& anchor);
+    /** Receives the picker instead of it being launched in a CallOutBox, which a headless test cannot
+     *  show. The hook owns the picker and may pick from it. Null = launch for real. */
+    void setAddAutomationPickerHookForTest(std::function<void(std::unique_ptr<ModMatrixPicker>)> hook) {
+        addAutomationPickerHook_ = std::move(hook);
+    }
+    /** The track's "+ Add automation..." row while its lanes are open, else nullptr. */
+    AddAutomationRow* addAutomationRowForTest(synth::TrackId track) const;
+    /** That row over the panel, in this panel's coordinates; empty when the track has none. */
+    juce::Rectangle<int> addAutomationRowBoundsForTest(synth::TrackId track) const;
 
     /** One lane choice: an EXISTING doc lane labelled "NodeName \xC2\xB7 param name", or an
      *  "Add lane..." entry for a parameter that has none yet (`isAddEntry`; `id` is meaningful only
@@ -536,6 +554,10 @@ private:
     void layoutAutomationRows();
     // Repositions the lane editors after a scroll, resize or relayout.
     void placeLaneBodies();
+    // The picker for `track`, wired to create and show the chosen lane; null without a host or doc.
+    std::unique_ptr<ModMatrixPicker> buildAddAutomationPickerFor(synth::TrackId track);
+    void addAutomationLaneFromPicker(synth::TrackId track, const TrackHeaderHost::AutomatableParameter& parameter);
+    std::function<void(std::unique_ptr<ModMatrixPicker>)> addAutomationPickerHook_;
 
     // ---- Clip clipboard ----
     // One captured clip, relative to the earliest selected clip's start at copy time (see

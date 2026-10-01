@@ -232,6 +232,16 @@ public:
     synth::midi::RemoteEngine& getRemoteEngineForTest() noexcept { return remoteEngine; }
     bool midiRemoteDevicesOpenedAfterEngineUpForTest() const noexcept { return midiRemoteDevicesOpenedAfterEngineUp_; }
     const auto& getCommandTableForTest() const { return commandTable(); } // CommandSpec stays private; read via auto
+    // The "Add automation..." host calls (TrackHeaderHost is a private base): what a track offers, and creating the
+    // lane on a given track.
+    std::vector<synth::ui::TrackHeaderHost::AutomatableParameter>
+    getAutomatableParametersForTest(synth::TrackId track) {
+        return getAutomatableParameters(track);
+    }
+    synth::LaneId addAutomationLaneForTest(synth::TrackId track,
+                                           const synth::ui::TrackHeaderHost::AutomatableParameter& parameter) {
+        return addAutomationLane(track, parameter);
+    }
     void setUrlOpenerForTest(std::function<void(const juce::URL&)> opener);
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption> getMidiDestinationOptionsForTest(synth::TrackId id);
     void setMidiDestinationConnectedForTest(synth::TrackId id, juce::uint32 nodeUid, bool connect);
@@ -340,6 +350,14 @@ private:
     // Which track plays which node (MainComponentAutomationOwner.cpp): where an automation lane goes.
     std::map<juce::String, synth::TrackId> resolveAutomationOwners() const;
     synth::TrackId trackForNewLane(const juce::String& nodeUuid);
+    // The one place a lane is bound (MainComponentAutomationLanes.cpp): on `target`, else on the track
+    // trackForNewLane() picks (created inside the same mutation), as ONE undo step. Invalid on failure.
+    synth::LaneId addLaneUndoable(const juce::String& uuid, const juce::String& paramId, int paramIndex,
+                                  const synth::AutomationLane::RangeSnapshot& range,
+                                  std::optional<synth::TrackId> target);
+    // addLaneUndoable() for a parameter resolved on the live graph (own module or hosted plugin).
+    synth::LaneId addLaneForOption(const synth::ui::TrackHeaderHost::PluginLaneOption& option,
+                                   std::optional<synth::TrackId> target);
     void moveLanesToOwningTracks(); // load-time: lanes saved on the Automation track follow their module
 
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
@@ -413,6 +431,10 @@ private:
     void addInstrumentPluginTrack(const synth::PluginIdentity& identity) override;
     std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> getAvailablePluginLaneOptions() const override;
     synth::LaneId addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) override;
+    std::vector<synth::ui::TrackHeaderHost::AutomatableParameter>
+    getAutomatableParameters(synth::TrackId track) override;
+    synth::LaneId addAutomationLane(synth::TrackId track,
+                                    const synth::ui::TrackHeaderHost::AutomatableParameter& parameter) override;
     juce::ApplicationProperties* getAppProperties() override;
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
     getMidiDestinationOptions(synth::TrackId forTrack) override;

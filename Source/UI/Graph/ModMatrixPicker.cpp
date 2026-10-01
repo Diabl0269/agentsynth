@@ -42,6 +42,7 @@ Palette paletteFor(juce::Component& comp) {
     }
     return p;
 }
+
 } // namespace
 
 // One header or item line. Items report a click and their own hover so the picker keeps the
@@ -72,6 +73,8 @@ public:
     Kind kind() const noexcept { return kind_; }
     int id() const noexcept { return id_; }
     const juce::String& text() const noexcept { return text_; }
+    const juce::String& searchText() const noexcept { return searchText_; }
+    void setSearchText(juce::String text) { searchText_ = std::move(text); }
     int preferredHeight() const noexcept { return kind_ == Kind::Header ? kHeaderHeight : kRowHeight; }
 
     void setHighlighted(bool on) {
@@ -120,6 +123,7 @@ private:
     Kind kind_;
     int id_;
     juce::String text_;
+    juce::String searchText_;
     bool isCurrent_;
     std::function<void(Row&)> onClick_;
     std::function<void(Row&)> onHover_;
@@ -217,6 +221,7 @@ void ModMatrixPicker::rebuildRows() {
                 if (it != visible.end())
                     setHighlight((int)(it - visible.begin()));
             }));
+        rows_.back()->setSearchText(item.searchText);
         rowColumn_.addAndMakeVisible(*rows_.back());
     }
     applyFilter();
@@ -256,7 +261,7 @@ void ModMatrixPicker::applyFilter() {
             headerHasMatch = false;
             continue;
         }
-        const bool matches = textMatchesQuery(row->text(), query);
+        const bool matches = textMatchesQuery(row->text() + " " + row->searchText(), query);
         row->setVisible(matches);
         headerHasMatch = headerHasMatch || matches;
     }
@@ -367,6 +372,11 @@ void ModMatrixPicker::chooseRow(const Row& row) {
     dismiss();
     if (callback)
         callback(id);
+}
+
+void ModMatrixPicker::setAccessibleNames(const juce::String& pickerTitle, const juce::String& searchTitle) {
+    setTitle(pickerTitle);
+    searchEditor_->setTitle(searchTitle);
 }
 
 void ModMatrixPicker::dismiss() {

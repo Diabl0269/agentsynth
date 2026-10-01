@@ -12,8 +12,8 @@ namespace synth::ui {
  *  launches one itself. Choosing a row reports its id through `onChoose` and closes the box, so the
  *  caller applies it exactly as it would a combo selection.
  *
- *  Typing filters case-insensitively by the row text (module title plus output or target label),
- *  word by word: each space-separated word must appear somewhere in the row (see textMatchesQuery); a
+ *  Typing filters case-insensitively by the row text (module title plus output or target label) and its
+ *  `searchText`, word by word: each space-separated word must appear somewhere in them (see textMatchesQuery); a
  *  category header shows only while one of its rows does. The popup's height is fixed by the full
  *  list, so it never resizes under the cursor while filtering. Up/Down move the highlight, Return
  *  picks it (the first match until moved), Escape closes.
@@ -26,6 +26,9 @@ public:
         int id = 0;
         juce::String category; // header this row sits under; empty = no header (a flat list)
         juce::String text;     // what the row shows and what the search matches
+        // Extra words the search also matches but the row does not show (the add-automation picker puts the
+        // module title here, since its rows read as just the parameter name under a module header).
+        juce::String searchText;
     };
 
     ModMatrixPicker(juce::String what, std::vector<Item> items, int selectedId, std::function<void(int)> onChoose);
@@ -42,6 +45,10 @@ public:
     /** True when every space-separated word of `query` appears in `text`, ignoring case and order.
      *  An empty query matches everything. */
     static bool textMatchesQuery(const juce::String& text, const juce::String& query);
+
+    /** Re-words what a screen reader announces for the box and its search field, for a caller that reuses the
+     *  picker for something other than modulation. The search field's placeholder follows `what`. */
+    void setAccessibleNames(const juce::String& pickerTitle, const juce::String& searchTitle);
 
     /** Closes the launching CallOutBox, if any. Called on a pick and on Escape. */
     void dismiss();

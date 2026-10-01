@@ -515,13 +515,43 @@ TEST(AccessibilityCoverageTest, EveryModuleCard) {
 }
 
 // ============================================================================
-// Timeline automation lanes: a lane row's header and the track header's fold arrow.
+// Timeline automation lanes: a lane row's header, the track header's fold arrow, the "+ Add automation..."
+// row and the picker it opens.
 // ============================================================================
+
+namespace {
+// Offers one parameter so the "+ Add automation..." picker has a row to audit.
+struct OneParameterHost : synth::ui::TrackHeaderHost {
+    std::vector<AutomatableParameter> getAutomatableParameters(synth::TrackId) override {
+        AutomatableParameter p;
+        p.moduleTitle = "Filter 1";
+        p.parameterName = "Cutoff";
+        return {p};
+    }
+    std::vector<BindingOption> getAvailableTrackInNodes(synth::TrackId) override { return {}; }
+    juce::String getNodeDisplayName(const juce::String&) override { return {}; }
+    void bindTrackTo(synth::TrackId, const juce::String&) override {}
+    void createAndBindTrackInNode(synth::TrackId) override {}
+    void selectNodeInGraph(const juce::String&) override {}
+    void deleteTrack(synth::TrackId) override {}
+    void performTrackEdit(const std::function<void()>& mutation) override {
+        if (mutation)
+            mutation();
+    }
+    void addMidiTrack() override {}
+    void addAudioTrack() override {}
+    void addInstrumentTrack(const juce::String&, bool) override {}
+    std::vector<PluginLaneOption> getAvailablePluginLaneOptions() const override { return {}; }
+    synth::LaneId addPluginAutomationLane(const PluginLaneOption&) override { return {}; }
+};
+} // namespace
 
 TEST(AccessibilityCoverageTest, AutomationLanes) {
     synth::TimelineDoc doc;
+    OneParameterHost host;
     synth::ui::TimelinePanelComponent panel;
     panel.setTimelineDoc(&doc);
+    panel.setTrackHeaderHost(&host);
     panel.setSize(1200, 500);
     const auto track = doc.addTrack(synth::TrackKind::Midi, "Bass");
     const auto lane = doc.addLane(track, "node-uuid", "cutoff", {});
@@ -534,6 +564,28 @@ TEST(AccessibilityCoverageTest, AutomationLanes) {
         gap.path = "[fold arrow] " + gap.path;
         gaps.push_back(gap);
     }
+    auto* addRow = panel.addAutomationRowForTest(track);
+    EXPECT_NE(addRow, nullptr) << "the open track closes its lanes with the add row";
+    if (addRow != nullptr) {
+        EXPECT_TRUE(addRow->getWantsKeyboardFocus()) << "a Tab stop";
+        for (auto gap : auditAccessibility(*addRow)) {
+            gap.path = "[add automation row] " + gap.path;
+            gaps.push_back(gap);
+        }
+    }
+    std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+    panel.setAddAutomationPickerHookForTest([&picker](auto p) { picker = std::move(p); });
+    panel.openAddAutomationPicker(track, *panel.getTrackHeaderAt(0));
+    EXPECT_NE(picker, nullptr);
+    if (picker != nullptr) {
+        picker->setSize(300, 200);
+        for (auto gap : auditAccessibility(*picker)) {
+            gap.path = "[add automation picker] " + gap.path;
+            gaps.push_back(gap);
+        }
+    }
+    panel.setAddAutomationPickerHookForTest(nullptr);
+    panel.setTrackHeaderHost(nullptr);
     EXPECT_TRUE(matchesBaseline("AutomationLanes", gaps));
 }
 
