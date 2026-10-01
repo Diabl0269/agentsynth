@@ -13,6 +13,7 @@
 #include "Mixer/MasterSplice.h"
 #include "Modules/AttenuverterModule.h"
 #include "Project/ViewDoc.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
@@ -20,6 +21,35 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace detail;
+
+namespace {
+
+// A card's body is built once, from the node's "cardLayout" at that moment; when the property has
+// changed since (a quick-path layout edit, or its undo or redo), the card has to be rebuilt.
+bool cardLayoutIsStale(const ModuleComponent& comp, const juce::AudioProcessorGraph::Node& node) {
+    const auto* body = comp.getCardBody();
+    if (body == nullptr)
+        return false;
+    const auto& stored = node.properties[synth::kCardLayoutNodeProperty];
+    const juce::String current = stored.isObject() ? juce::JSON::toString(stored, true) : juce::String();
+    return current != body->builtFromOverride();
+}
+
+// Swaps `stale` for a fresh card at the same index (so canvas order is kept) and deletes it. The old
+// card lets go of the processor before the new one binds to it. Making room is the caller's: a
+// restore puts every position back from its snapshot, and the quick path makes room inside its own
+// undo step (CardLayoutQuickEdit.cpp).
+ModuleComponent* rebuildCard(juce::OwnedArray<ModuleComponent>& modules, juce::Component& content,
+                             ModuleComponent& stale, const std::function<ModuleComponent*()>& build) {
+    stale.detachFromProcessor();
+    content.removeChildComponent(&stale);
+    auto* card = build();
+    modules.set(modules.indexOf(&stale), card, /*deleteOldElement*/ true);
+    content.addAndMakeVisible(card);
+    return card;
+}
+
+} // namespace
 
 void GraphEditor::detachAllModuleComponents() {
     // THE seam other UI hooks to unbind from live processors/parameters before they're freed by
@@ -115,6 +145,13 @@ void GraphEditor::updateComponents() {
             auto* newComp = modules.add(new ModuleComponent(processor, node->nodeID, *this, undoManager));
             content.addAndMakeVisible(newComp);
             existingComp = newComp;
+        } else if (cardLayoutIsStale(*existingComp, *node)) {
+            if (dragDropController_.isDragPreviewActive() &&
+                existingComp->getNodeId() == dragDropController_.getDragPreviewSelfId())
+                cancelLiveDragGestures();
+            existingComp = rebuildCard(modules, content, *existingComp, [&] {
+                return new ModuleComponent(processor, node->nodeID, *this, undoManager);
+            });
         }
 
         // Always sync position from properties OR deterministic fallback

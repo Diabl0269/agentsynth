@@ -138,7 +138,11 @@ TEST_F(ModuleComponentTest, NoMidiLearnItemsWhenTheHostNeverWiredTheCallback) {
     ASSERT_NE(slider, nullptr);
 
     const auto menu = rightClickChild(card, *slider);
-    EXPECT_EQ(menuItemTexts(menu).size(), 1u) << "just the pre-existing Automate item";
+    const auto texts = menuItemTexts(menu);
+    ASSERT_FALSE(texts.empty());
+    EXPECT_EQ(texts.front(), "Automate 'Cutoff'");
+    for (const auto& text : texts)
+        EXPECT_FALSE(text.contains("MIDI")) << "no MIDI Learn item without a host: " << text;
 }
 
 TEST_F(ModuleComponentTest, RightClickBoolToggleShowsMidiLearnAndDoesNotToggleTheParameter) {

@@ -365,6 +365,10 @@ is a common pattern when building poly patches.
 It calls `AudioEngine::getModulationRoutings()` (via the `GraphEditor`'s cached snapshot) to find
 which knobs have live modulation and paints a ring overlay proportional to the routed signal value,
 giving a real-time visual indication of modulation depth directly on the parameter knob.
+A card fader (`CardFader`, [module-card.md](../layout/module-card.md#faders-switches-and-steppers))
+shows the same routing as a bar beside its slot, from the base value to base + CV, in
+`mod-ring-positive` / `mod-ring-negative`, painted from the same snapshot in the same pass
+(`ModuleComponentModRings.cpp`); Alt-drag or a drag started on the bar adjusts the routing's amount.
 
 **Which knob a ring belongs on is `getModRingSliderIndex()`'s call, and it returns -1 for a knob that
 is not visible.** A card can page its controls (the Wavetable tab strip,

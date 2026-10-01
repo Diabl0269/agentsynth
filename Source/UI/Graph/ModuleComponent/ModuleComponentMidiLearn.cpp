@@ -27,6 +27,7 @@
 
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
+#include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -145,10 +146,16 @@ void ModuleComponent::collectPickCandidates(std::vector<synth::ui::PickCandidate
 // Menu
 // ============================================================================
 
+// A card-body control (a toggle, combo, switch or stepper) also gets the layout items.
 void ModuleComponent::showMidiLearnOnlyMenu(juce::RangedAudioParameter* param) {
     if (param == nullptr)
         return;
-    showMidiLearnOnlyMenu(param->paramID, param->getName(100));
+    juce::PopupMenu menu;
+    appendMidiLearnMenuItems(menu, param->paramID, param->getName(100));
+    synth::appendCardLayoutMenuItems(menu, owner, undoManager, nodeId, cardBody_.get(), param->paramID);
+    if (menu.getNumItems() == 0)
+        return;
+    showContextMenuHook_(menu);
 }
 
 // Hosted-plugin toggle/choice controls -- same menu, keyed on a plain paramId + display

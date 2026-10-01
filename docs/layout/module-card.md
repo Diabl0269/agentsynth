@@ -51,6 +51,9 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kLabelHeight` | 18 | label above a knob or combo |
 | `kRowHeight` | 24 | combo box, toggle, button |
 | `kKnobHeight` | 58 | rotary plus its text box |
+| `kKnobLargeHeight` | 80 | a large knob: 60 px dial plus its text box |
+| `kFaderVHeight` | 96 | a vertical fader's travel plus its text box (40 px wide, centred in its cell) |
+| `kFaderHHeight` | 28 | a horizontal fader: cap, modulation bar and value box |
 | `kWaveformHeight` | 72 | Sampler waveform overview |
 | `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |
 
@@ -115,6 +118,57 @@ so no card shows one today (the automatic layout hides nothing); it appears thro
   never changes a card's height (`CardBodyLayout.CardHeightNeverChangesWhileAKnobIsDragged`).
 - **Cables.** A modulation cable dragged over the folded row unfolds it, so a hidden parameter's knob
   can still take a new cable (`GraphEditor::dragConnection` asks each card under the cable).
+
+## Faders, switches and steppers
+
+A stored layout can draw a parameter as a widget other than the automatic one (`ParamItem.widget`,
+[module-card-layout.md](module-card-layout.md#widgets)); no card does by default, so every card still
+draws the automatic layout above. The plan honours the widget only where it suits the parameter and
+otherwise falls back to the automatic kind (`cardBodyKindFor` in `CardBodyPlan.cpp`). Each kind lays
+out as its own run, by the same measure-and-apply walk:
+
+| Widget | Widget class (`Source/UI/Graph/CardWidgets/`) | For | Run | Height under its 18 px caption |
+|---|---|---|---|---|
+| `knobLarge` | `CardKnobSlider` | a float or int | a grid, one per cell | 80 |
+| `faderV` | `CardFader` (vertical) | a float or int | a grid, one per cell, 40 px wide | 96 |
+| `faderH` | `CardFader` (horizontal) | a float or int | one per row, full width | 28 |
+| `segmented` | `CardSegmentedSwitch` | a choice with 2 to 6 values of at most 10 characters | one per row, full width | 24 |
+| `stepper` | `CardStepper` | an int spanning at most 24 steps | one per row, centred band | 24 |
+
+- **Faders.** `CardFader` is a linear `juce::Slider` painted by `AppLookAndFeel`'s fader painter
+  (`AppLookAndFeelFader.cpp`, the design system's Fader): a vertical one at 40 px wide gets the small
+  fader (4 px slot, 18x7 cap), a horizontal one the medium fader (4 px slot, 10x18 cap); the painter
+  also draws its focus ring round the cap. It carries every knob gesture through
+  `CardControlGestures` (the modulation-amount drag, the cable pickup on its landing dot, the hover
+  that highlights the landing cable, the keyboard steps) and is in the card's slider list, so
+  Automate, MIDI Learn, value reflection and the modulation-target lookup treat it as a knob. Its own
+  drag is the mixer fader's: Shift drags at an eighth of the rate (re-anchored where the drag is, so
+  the value never jumps), Cmd-click and double-click reset to the parameter's default, each one change
+  gesture. Modulation shows as a 3 px bar beside the slot (right of a vertical cap, under a horizontal
+  one) from the base value to base + CV; a cable lands on a dot just past the bar's zero end.
+- **Segmented switch.** Joined `TextButton` segments with the ADSR MS|BPM switch's look; the switch
+  is the one Tab stop and the segments take no clicks themselves (the switch hit-tests them), so a
+  right click reaches the card as the switch's.
+- **Stepper.** "-" value "+": two buttons, each a Tab stop; the card listens to the stepper and its
+  buttons, and a right click on a button resolves to the stepper's registered parameter.
+- **Height.** Switching a control between a knob and a fader changes the card's height, as a discrete
+  layout edit; a value change on any widget never does
+  (`CardBodyWidgetKind.NoValueChangeOnAnyNewWidgetResizesTheCard`).
+
+### Hide or show from the right-click menu
+
+Every control on a card drawn from layout data adds to its right-click menu, after Automate and the
+MIDI Learn block: **Hide from card** (or **Show on card** for a control in the More row), **Show as
+fader** / **Show as knob** for a float or int on the card, and a disabled **Edit Layout...** (the
+layout editor is not built yet; the module menu carries the same disabled item). The bespoke cards
+offer none of these. Each click is one write of the node's `cardLayout` override, one undo step,
+starting from the layout the card draws now (the automatic layout written out as explicit items,
+which builds the same card): Hide adds the parameter to `hidden` and leaves its item where it is, so
+Show on card puts it back exactly there; a parameter the layout never placed goes to the end of the
+last section; Show as fader picks `faderV`. A card builds its body once, so `updateComponents`
+rebuilds a card whose override no longer matches the one it was built from: the quick path writes,
+rebuilds and makes room inside one undo record, and undo and redo rebuild the same way
+(`CardLayoutQuickEdit.cpp`, `GraphEditorCanvas.cpp`).
 
 ## Modules that resize at runtime
 
@@ -272,7 +326,9 @@ Every rotary knob a card body builds (`CardBody::createKnob`, for the float and 
 a `synth::ui::CardKnobSlider` (`CardKnobSlider.h`), not a plain `juce::Slider` — it can redirect its
 own mouseDown/drag/up to `ModuleComponent::handleModAmountGesture()` instead of moving the knob,
 when `wantsModAmountGestureFor()` says the click should adjust a routed AttenuverterChain's amount
-(Alt-drag, or a drag starting on the ring's own annulus). See
+(Alt-drag, or a drag starting on the ring's own annulus). A card fader takes the same gesture (Alt-drag,
+or a drag starting on its modulation bar); both route their mouse through `CardControlGestures` and are
+wired by one call, `ModuleComponent::wireCardControlGestures`. See
 [`modules/modulation.md#drag-the-ring-to-adjust-a-routings-amount-without-touching-the-knob`](../modules/modulation.md#drag-the-ring-to-adjust-a-routings-amount-without-touching-the-knob)
 for the gesture itself and the depth band it moves; hosted-plugin card knobs
 (`ModuleComponentHostedPluginCard.cpp`) stay plain `juce::Slider`s — they are never modulation

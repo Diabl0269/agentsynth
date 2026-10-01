@@ -28,8 +28,9 @@ int kindRank(CardBodyItem::Kind kind) {
         return 2;
     case CardBodyItem::Kind::Knob:
         return 3;
+    default:
+        return -1; // the automatic layout never draws the other kinds
     }
-    return -1;
 }
 
 int declarationIndex(juce::AudioProcessor& module, const juce::RangedAudioParameter* param) {

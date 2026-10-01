@@ -28,7 +28,7 @@ class ExternalMidiModule; // Forward declaration — see Modules/ExternalMidiMod
 
 namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
-class CardKnobSlider;        // Forward declaration — see CardKnobSlider.h
+class CardControlGestures;   // Forward declaration — see UI/Graph/CardWidgets/CardControlGestures.h
 } // namespace synth::ui
 
 namespace synth::theme {
@@ -408,7 +408,8 @@ private:
     juce::Point<int> modAmountGestureLastPos_;
     juce::AudioProcessorGraph::NodeID firstAttenuverterForParam(juce::RangedAudioParameter* param) const;
     void handleModAmountGesture(juce::RangedAudioParameter* param, const juce::MouseEvent& e, int phase);
-    void wireCardKnobModAmountGesture(synth::ui::CardKnobSlider& knob, juce::RangedAudioParameter* param);
+    void wireCardControlGestures(juce::Slider& control, synth::ui::CardControlGestures& gestures,
+                                 juce::RangedAudioParameter* param);
 
     /** Pick up / redrag / disconnect a knob-landed cable, since its gutter jack is hidden. See .cpp. */
     bool wantsCablePickupGestureFor(juce::RangedAudioParameter* param, const juce::Slider& knob,

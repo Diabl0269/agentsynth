@@ -15,8 +15,11 @@ inline constexpr int kKnobColumns = 3;
 inline constexpr int kContentMargin = 12;       // left/right gutter for body content
 inline constexpr int kNarrowContentWidth = 200; // combos/toggles/load row stay this narrow, centred
 inline constexpr int kLabelHeight = 18;
-inline constexpr int kRowHeight = 24;  // combo box / toggle / button
-inline constexpr int kKnobHeight = 58; // rotary + its text box
+inline constexpr int kRowHeight = 24;       // combo box / toggle / button
+inline constexpr int kKnobHeight = 58;      // rotary + its text box
+inline constexpr int kKnobLargeHeight = 80; // a 60 px dial + its text box
+inline constexpr int kFaderVHeight = 96;    // a vertical fader's travel + its text box
+inline constexpr int kFaderHHeight = 28;    // a horizontal fader, cap, modulation bar and text box
 inline constexpr int kWaveformHeight = 72;
 inline constexpr int kBottomPadding = 12;
 // A port label box spans its jack centre +/- 10; clear it by a bit more before placing any content.
@@ -43,6 +46,13 @@ int layoutChoiceRun(const std::vector<CaptionedWidget>& combos, int y, const Bod
 int layoutToggleRun(const std::vector<juce::Component*>& toggles, int y, const BodyGeometry& g, bool apply);
 /** Knobs with their labels, `columns` per row (doubled on a double-width card). */
 int layoutKnobRun(const std::vector<CaptionedWidget>& knobs, int columns, int y, const BodyGeometry& g, bool apply);
+/** layoutKnobRun with any cell height; a `widgetWidth` above 0 centres a narrower widget in its cell. */
+int layoutGridRun(const std::vector<CaptionedWidget>& cells, int columns, int cellHeight, int widgetWidth, int y,
+                  const BodyGeometry& g, bool apply);
+/** One captioned widget per row, `rowHeight` tall, across the content width or (`wide` false) the
+ *  narrow band. */
+int layoutCaptionedRows(const std::vector<CaptionedWidget>& rows, int rowHeight, bool wide, int y,
+                        const BodyGeometry& g, bool apply);
 /** One full-width view `height` tall. */
 int layoutViewRow(juce::Component* view, int height, int y, const BodyGeometry& g, bool apply);
 
