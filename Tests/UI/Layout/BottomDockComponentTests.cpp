@@ -354,9 +354,9 @@ TEST(BottomDockComponentTests, TabButtonBoundsAreIdenticalWhetherTimelineOrMixer
             << "tab button " << i << " moved when switching tabs";
 }
 
-// A tab is a dedicated grab handle: the dragging-hand cursor shows on hover, through the drag, and
-// after the release (the tab is still a grab handle).
-TEST(BottomDockComponentTests, TabsShowTheDraggingHandCursorOnHoverAndThroughTheDrag) {
+// A tab keeps the normal arrow on hover and press; the dragging hand shows only once the press
+// becomes a real drag, and the arrow returns after Esc and on release.
+TEST(BottomDockComponentTests, TabsShowTheDraggingHandCursorOnlyWhileReallyDragged) {
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDCT>());
     mc.setSize(1400, 900);
@@ -367,16 +367,29 @@ TEST(BottomDockComponentTests, TabsShowTheDraggingHandCursorOnHoverAndThroughThe
     auto buttons = dock.getTabButtons();
     ASSERT_FALSE(buttons.empty());
     auto* button = buttons.front();
+    auto isNormal = [&button] { return button->getMouseCursor() == juce::MouseCursor::NormalCursor; };
+    auto isHand = [&button] { return button->getMouseCursor() == juce::MouseCursor::DraggingHandCursor; };
 
-    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::DraggingHandCursor) << "hover, before any press";
+    EXPECT_TRUE(isNormal()) << "hover, before any press";
     button->mouseDown(makeClickEvent(*button, {5.0f, 5.0f}));
-    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+    EXPECT_TRUE(isNormal()) << "pressed, not yet dragged";
+    button->mouseDrag(makeDragEvent(*button, {7.0f, 5.0f}, {5.0f, 5.0f}));
+    EXPECT_TRUE(isNormal()) << "2 px is below the drag threshold";
 
     button->mouseDrag(makeDragEvent(*button, {60.0f, 5.0f}, {5.0f, 5.0f}));
-    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
-
+    EXPECT_TRUE(isHand()) << "the press became a drag";
     button->mouseUp(makeClickEvent(*button, {60.0f, 5.0f}));
-    EXPECT_TRUE(button->getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
+    EXPECT_TRUE(isNormal()) << "released";
+
+    button = dock.getTabButtons().front();
+    button->mouseDown(makeClickEvent(*button, {5.0f, 5.0f}));
+    button->mouseDrag(makeDragEvent(*button, {60.0f, 5.0f}, {5.0f, 5.0f}));
+    ASSERT_TRUE(isHand());
+    ASSERT_TRUE(dock.sendEscapeToTabDragForTest());
+    button->mouseDrag(makeDragEvent(*button, {62.0f, 5.0f}, {5.0f, 5.0f}));
+    EXPECT_TRUE(isNormal()) << "Esc cancelled the drag; the next pointer move shows the arrow";
+    button->mouseUp(makeClickEvent(*button, {62.0f, 5.0f}));
+    EXPECT_TRUE(isNormal());
 }
 
 namespace {

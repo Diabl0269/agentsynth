@@ -386,6 +386,7 @@ void TimelinePanelComponent::syncTrackHeaders() {
         header->onRowDragStarted = [this](int screenY) { updateTrackDrag(screenY); };
         header->onRowDragged = [this](int screenY) { updateTrackDrag(screenY); };
         header->onRowDragEnded = [this](int) { endTrackDrag(); };
+        header->isRowDragging = [this] { return trackReorder_.isDragging(); };
         if (trackId == previouslyFocusedTrackId)
             focusedTrackIndex_ = trackHeaderList_.headers.size() - 1;
         trackHeaderList_.addAndMakeVisible(header);

@@ -7,8 +7,8 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TrackChannelLinkSurface.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/DragCursor.h"
 #include "UI/Layout/KeyboardContextMenu.h"
-#include "UI/Layout/NonModalLabel.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
 #include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -495,6 +495,9 @@ public:
     // stack frame. Every write this component makes to its own state must happen BEFORE this call;
     // nothing may touch `this` after it returns.
     std::function<void(int screenY)> onRowDragEnded;
+    // Whether the panel's reorder is really dragging (past its threshold, not cancelled by Esc), for
+    // the cursor. Unset, the row's own threshold decides.
+    std::function<bool()> isRowDragging;
 
     /** The chip menu's contents, in menu-id order (option i has menu id i + 1). Exposed so tests
      *  drive the choice without a juce::PopupMenu, which never runs headlessly. */
@@ -605,10 +608,12 @@ private:
     // untouched juce::Label behaviour. The binding chip and the colour swatch are deliberately left
     // as plain buttons — they already open a menu/picker of their own on click, and that stays (see
     // docs/timeline/tracks.md#row-context-menu).
-    class ContextMenuForwardingLabel : public synth::ui::NonModalLabel {
+    class ContextMenuForwardingLabel : public synth::ui::CursorDelegatingLabel {
     public:
         explicit ContextMenuForwardingLabel(TimelineTrackHeaderComponent& owner)
-            : owner_(owner) {}
+            : owner_(owner) {
+            setCursorSource(&owner); // a drag that starts on the name shows the row's cursor
+        }
         void mouseDown(const juce::MouseEvent& e) override {
             if (e.mods.isPopupMenu()) {
                 owner_.showContextMenu();

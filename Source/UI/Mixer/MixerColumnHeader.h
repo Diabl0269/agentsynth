@@ -1,7 +1,6 @@
 #pragma once
 
 #include "UI/Layout/DragCursor.h"
-#include "UI/Layout/NonModalLabel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -22,18 +21,6 @@
 // hosts the edit gesture.
 
 namespace synth::ui {
-
-/** A label that shows another component's cursor, so a child covering part of a drag handle still reads as one. */
-class CursorDelegatingLabel : public synth::ui::NonModalLabel {
-public:
-    void setCursorSource(juce::Component* source) noexcept { cursorSource_ = source; }
-    juce::MouseCursor getMouseCursor() override {
-        return cursorSource_ != nullptr ? cursorSource_->getMouseCursor() : juce::Label::getMouseCursor();
-    }
-
-private:
-    juce::Component::SafePointer<juce::Component> cursorSource_;
-};
 
 class MixerColumnHeader
     : public juce::Component
@@ -217,29 +204,26 @@ public:
 
     void resized() override { nameLabel_.setBounds(nameBounds()); }
 
-    /** Drag-to-reorder hooks. All three unset (Direct, Master, a bus) leaves the header a plain
-     *  click target. `onRelease` returns true when the gesture was a drag, which swallows the click. */
+    /** Drag-to-reorder hooks. All unset (Direct, Master, a pinned column) leaves the header a plain
+     *  click target. `onRelease` returns true when the gesture was a drag, which swallows the click.
+     *  `isDragging` says whether the press has become a real drag, for the cursor. */
     struct ReorderHooks {
         std::function<void(const juce::MouseEvent&)> onGrab;
         std::function<void(const juce::MouseEvent&)> onDrag;
         std::function<bool(const juce::MouseEvent&)> onRelease;
+        std::function<bool()> isDragging;
     };
     ReorderHooks reorderHooks;
-
-    /** The grab hand on hover and during the drag, but only for a header that can be dragged (hooks
-     *  set); Direct, Master and pinned headers stay a plain click target. Read live, so it follows
-     *  whenever the hooks are assigned. */
-    juce::MouseCursor getMouseCursor() override {
-        return reorderHooks.onGrab ? dragGrabCursor() : juce::Component::getMouseCursor();
-    }
 
     void mouseDown(const juce::MouseEvent& e) override {
         if (reorderHooks.onGrab && !e.mods.isPopupMenu())
             reorderHooks.onGrab(e);
     }
+    // The normal arrow on hover and press; the grab hand only once the press is a real drag.
     void mouseDrag(const juce::MouseEvent& e) override {
         if (reorderHooks.onDrag && !e.mods.isPopupMenu())
             reorderHooks.onDrag(e);
+        followDragCursor(*this, reorderHooks.isDragging && reorderHooks.isDragging());
     }
 
     // A press that never travels is a click. Deliberately not gated on juce::MouseEvent::
@@ -249,6 +233,7 @@ public:
     // genuine user gesture. A click that lands on the name label is that label's own (double-click
     // to rename), so only the header background selects the column.
     void mouseUp(const juce::MouseEvent& e) override {
+        endDragCursor(*this);
         if (e.mods.isPopupMenu() && onContextMenu) {
             const auto menu = onContextMenu; // the pick may rebuild, and destroy, this header
             menu(e);

@@ -179,6 +179,26 @@ TEST(TimelinePanelTrackReorderTests, EscapeMidDragCancelsWithoutMovingTracksOrAd
     EXPECT_EQ(r.trackOrder().size(), 2u) << "the last undo step is still the third track's creation";
 }
 
+// The row follows the panel's own reorder state for its cursor: the hand once the drag lifts, the
+// arrow again on the first pointer move after Esc and after the release.
+TEST(TimelinePanelTrackReorderTests, TheDraggingHandShowsOnlyWhileTheReorderIsReallyDragging) {
+    TrackDragRig r(3);
+    const int rh = r.rowHeight();
+    auto drag = dragOf(r, 0);
+    auto* row = r.panel->getTrackHeaderAt(0);
+    auto isHand = [row] { return row->getMouseCursor() == juce::MouseCursor::DraggingHandCursor; };
+    drag.down();
+    EXPECT_FALSE(isHand()) << "pressed";
+    drag.dragTo(drag.pressY + rh + 30);
+    EXPECT_TRUE(isHand()) << "dragging";
+
+    ASSERT_TRUE(r.panel->sendEscapeToTrackDragForTest());
+    drag.dragTo(drag.pressY + rh + 32);
+    EXPECT_FALSE(isHand()) << "Esc cancelled the reorder, though the button is still held";
+    drag.up(drag.pressY + rh + 32);
+    EXPECT_FALSE(isHand());
+}
+
 TEST(TimelinePanelTrackReorderTests, APressBelowTheThresholdIsAPlainClick) {
     TrackDragRig r(3);
     const auto original = r.trackOrder();

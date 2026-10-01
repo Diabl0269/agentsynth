@@ -336,7 +336,6 @@ private:
             : juce::TextButton(text)
             , owner_(owner)
             , tab_(tab) {
-            setMouseCursor(dragGrabCursor()); // a tab is a grab handle: the hand on hover and while dragging
             setTitle(text);
             setWantsKeyboardFocus(false); // the strip's one Tab stop is stripFocus_
         }
@@ -346,11 +345,14 @@ private:
             owner_.beginTabDrag(tab_, e);
             juce::TextButton::mouseDown(e);
         }
+        // The normal arrow on hover and press; the grab hand only once the press is a real drag.
         void mouseDrag(const juce::MouseEvent& e) override {
             owner_.dragTab(e);
+            followDragCursor(*this, owner_.isTabDragging());
             juce::TextButton::mouseDrag(e);
         }
         void mouseUp(const juce::MouseEvent& e) override {
+            endDragCursor(*this);
             if (!owner_.endTabDrag())
                 juce::TextButton::mouseUp(e);
             else
@@ -421,6 +423,8 @@ private:
     void beginTabDrag(Tab tab, const juce::MouseEvent& e);
     /** True while `tab` is being dragged past the drag threshold (its slot shows the dashed outline). */
     bool isTabLifted(Tab tab) const noexcept { return liftedTab_ == tab; }
+    /** True while a tab press has become a real drag (past the threshold, not cancelled by Esc). */
+    bool isTabDragging() const noexcept { return reorder_.isDragging(); }
     void paintTabSlot(juce::Graphics& g, juce::Rectangle<int> bounds) const;
     void dragTab(const juce::MouseEvent& e);
     /** True when the gesture was a real drag (the mouse-up must not also click the tab). */

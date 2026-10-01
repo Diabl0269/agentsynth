@@ -118,7 +118,6 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     , trackId_(trackId)
     , host_(host) {
     setComponentID("timelineTrackHeader");
-    setMouseCursor(dragGrabCursor()); // the row background is a grab handle; child widgets keep their own cursor
     // Makes this row a real focus target (Up/Down between rows, M/S/R for the row that holds
     // focus) — same setWantsKeyboardFocus(true) pattern TimelineClipLaneArea/PianoRollComponent
     // already use for the surfaces they own.
@@ -649,14 +648,15 @@ void TimelineTrackHeaderComponent::mouseDrag(const juce::MouseEvent& e) {
         draggingRow_ = true;
         if (onRowDragStarted)
             onRowDragStarted(e.getScreenPosition().y);
-        return;
-    }
-
-    if (onRowDragged)
+    } else if (onRowDragged) {
         onRowDragged(e.getScreenPosition().y);
+    }
+    // The normal arrow on hover and press; the grab hand only once the press is a real drag.
+    followDragCursor(*this, isRowDragging ? isRowDragging() : draggingRow_);
 }
 
 void TimelineTrackHeaderComponent::mouseUp(const juce::MouseEvent& e) {
+    endDragCursor(*this);
     if (!draggingRow_)
         return; // a plain click that never crossed the threshold — nothing to finish
 
