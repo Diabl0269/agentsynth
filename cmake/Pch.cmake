@@ -6,11 +6,11 @@
 # Included right after the ccache launcher block in the root CMakeLists.txt, BEFORE any target
 # exists, because a target copies CMAKE_<LANG>_COMPILER_LAUNCHER when it is created.
 #
-# OFF by default. The macOS and Linux CI jobs turn it on. It stays off for local builds because
-# clang writes the build directory's absolute path into the header, so the file is only valid at
-# the path that built it, and the local ccache is shared between checkouts
-# (docs/development/local-ci.md). It stays off for the Windows job because files that use the
-# header never hit ccache there (measured; see docs/development/ci-pipeline.md).
+# OFF by default. The three CI jobs turn it on. It stays off for local builds because clang writes
+# the build directory's absolute path into the header, so the file is only valid at the path that
+# built it, and the local ccache is shared between checkouts (docs/development/local-ci.md). A
+# local build is therefore also what catches a source file that compiles in CI only because the
+# header supplied an include it forgot.
 option(AGENTSYNTH_PCH "Precompile the JUCE module headers for Core, AppUI and Tests" OFF)
 
 # A ccache base_dir makes two checkouts hash the header's compile identically, so the second one
@@ -81,6 +81,12 @@ function(synth_enable_pch target)
         target_precompile_headers(${target} PRIVATE
             "$<$<COMPILE_LANGUAGE:CXX>:<${header}$<ANGLE-R>>")
     endforeach()
+    if(MSVC)
+        # Without these MSVC writes a different .pch on every build, ccache hashes that file, and
+        # every source that uses the header misses the cache on every run. Measured with the two
+        # flags together; which of them is the one that matters was not separated.
+        target_compile_options(${target} PRIVATE /Brepro /experimental:deterministic)
+    endif()
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         # Without this clang stamps each included file's modification time into the header, so a
         # fresh checkout of identical sources produces a different file and ccache never hits.
