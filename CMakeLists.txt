@@ -396,6 +396,9 @@ add_library(Core STATIC
     Source/Modules/PortRole.h
     Source/Modules/AudioInputModule.h
     Source/Modules/OscillatorModule.h
+    Source/Modules/Oscillator/OscillatorModuleMono.cpp
+    Source/Modules/Oscillator/OscillatorModulePoly.cpp
+    Source/Modules/Oscillator/PitchGlide.h
     Source/Modules/ADSRModule.h
     Source/Modules/FilterModule.h
     Source/Modules/FrequencyText.h

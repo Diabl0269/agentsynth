@@ -6,6 +6,7 @@
 #include "SchmittTrigger.h"
 #include "ThresholdMeterSource.h"
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <bitset>
 #include <cmath>
@@ -16,9 +17,9 @@ class ADSRModule
     , public ThresholdMeterSource {
 public:
     ADSRModule(const juce::String& name = "ADSR")
-        : ModuleBase(name, 14, 14) // 8 gate CV per voice + shared Threshold/Attack/Hold/Decay/Sustain/Release
-                                   // CV (ch8-13); 8 env + silent ch8-13. Outputs match inputs so the
-                                   // highest CV channel read (13) never aliases a live graph buffer -- see
+        : ModuleBase(name, 15, 15) // 8 gate CV per voice + shared Threshold/Attack/Hold/Decay/Sustain/Release/
+                                   // Velocity CV (ch8-14); 8 env + silent ch8-14. Outputs match inputs so the
+                                   // highest CV channel read (14) never aliases a live graph buffer -- see
                                    // docs/modules/poly-channel-layout.md.
     {
         // Times move to a LINEAR [0, 5] range; the retired minimum-time clamps (2 ms attack /
@@ -85,6 +86,10 @@ public:
         // Sample & Hold / Comparator own `trigThreshold` as bipolar CV. ADSR gates are unipolar.
         addParameter(thresholdParam = new juce::AudioParameterFloat("gateThreshold", "Threshold", 0.0f, 1.0f, 0.5f));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
+        // Velocity: how far the note's velocity scales the output, in percent. 0 ignores velocity.
+        addParameter(velocityParam = new juce::AudioParameterFloat(
+                         "velocity", "Velocity", juce::NormalisableRange<float>(0.0f, 100.0f), 0.0f,
+                         juce::AudioParameterFloatAttributes().withLabel("%")));
         addMuteParameter();
         enableVisualBuffer(true);
     }
@@ -113,6 +118,15 @@ public:
         // mid-ramp into a slope change, never a level jump, entirely on its own.
         smoothedSustain.reset(sampleRate, 0.02);
         smoothedSustain.setCurrentAndTargetValue(sustainParam->get());
+        // The Velocity amount is an output gain, so a knob step would click: 10 ms smoother. Each
+        // voice's own velocity scale slews in 5 ms when a retrigger lands on a sounding envelope.
+        smoothedVelocity.reset(sampleRate, 0.01);
+        smoothedVelocity.setCurrentAndTargetValue(velocityParam->get() * 0.01f);
+        velocitySlewStep = 1.0f / (0.005f * (float)sampleRate);
+        for (int v = 0; v < MAX_VOICES; ++v) {
+            voiceVelocity[v] = 1.0f;
+            velocityScale[v] = 1.0f;
+        }
     }
 
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -148,6 +162,10 @@ public:
         smoothedSustain.setTargetValue(
             modulateNormalised(*sustainParam, *sustainParam, blockCV(buffer, kSustainChannel)));
 
+        // Velocity amount: a level (an output gain), so like Sustain it is never gated by tempo sync.
+        smoothedVelocity.setTargetValue(
+            0.01f * modulateNormalised(*velocityParam, velocityParam->get(), blockCV(buffer, kVelocityChannel)));
+
         const bool poly = *polyParam;
         const float baseThreshold = thresholdParam->get();
         const float* thresholdCV = numChannels > kThresholdChannel ? buffer.getReadPointer(kThresholdChannel) : nullptr;
@@ -170,6 +188,7 @@ public:
             float* envOut = buffer.getWritePointer(0);
 
             for (int smp = 0; smp < numSamples; ++smp) {
+                const float velocityAmount = smoothedVelocity.getNextValue();
                 bool midiNoteOnThisSample = false;
                 for (const auto metadata : midiMessages) {
                     if (metadata.samplePosition != smp)
@@ -181,6 +200,7 @@ public:
                         // flag -- a note-off + note-on landing on the same sample (a gapless
                         // mono legato transition) nets out to "still held" on the flag, but must
                         // still re-articulate.
+                        armVelocity(0, message.getFloatVelocity(), velocityAmount);
                         envelopes[0].noteOn();
                         lastTriggeredVoice = 0;
                         ++firedThisBlock;
@@ -206,6 +226,7 @@ public:
                 // with the Schmitt trigger's own held state is unchanged from before.
                 const bool active = heldNotes.any() || gateTriggers[0].high;
                 if (active && !previousActive[0] && !midiNoteOnThisSample) {
+                    armVelocity(0, gateSample, velocityAmount); // no MIDI velocity: the gate level is it
                     envelopes[0].noteOn();
                     lastTriggeredVoice = 0;
                     ++firedThisBlock;
@@ -216,7 +237,8 @@ public:
 
                 envOut[smp] =
                     envelopes[0].getNextSample(makeParameters(attack, hold, decay, smoothedSustain.getNextValue(),
-                                                              release, attackCurve, decayCurve, releaseCurve));
+                                                              release, attackCurve, decayCurve, releaseCurve)) *
+                    velocityScaleFor(0, velocityAmount);
             }
 
             for (const auto metadata : midiMessages) {
@@ -249,6 +271,7 @@ public:
                     threshold = juce::jlimit(0.0f, 1.0f, threshold + thresholdCV[smp]);
                 lastThreshold = threshold;
 
+                const float velocityAmount = smoothedVelocity.getNextValue();
                 const synth::EnvelopeParameters ep = makeParameters(attack, hold, decay, smoothedSustain.getNextValue(),
                                                                     release, attackCurve, decayCurve, releaseCurve);
 
@@ -259,6 +282,7 @@ public:
 
                     const auto edge = gateTriggers[v].process(gateSample, threshold);
                     if (edge == SchmittTrigger::Edge::Rising) {
+                        armVelocity(v, gateSample, velocityAmount); // the gate level is the velocity
                         envelopes[v].noteOn();
                         lastTriggeredVoice = v;
                         if (v == 0)
@@ -266,7 +290,7 @@ public:
                     } else if (edge == SchmittTrigger::Edge::Falling) {
                         envelopes[v].noteOff();
                     }
-                    voiceData[v][smp] = envelopes[v].getNextSample(ep);
+                    voiceData[v][smp] = envelopes[v].getNextSample(ep) * velocityScaleFor(v, velocityAmount);
                 }
             }
 
@@ -316,21 +340,27 @@ public:
             return "Sustain";
         case 6:
             return "Release";
+        case 7:
+            return "Velocity";
         default:
             return ModuleBase::getInputPortLabel(i);
         }
     }
     juce::String getOutputPortLabel(int) const override { return "Env"; }
     int getVisibleInputPortCount() const override {
-        return 7;
-    } // Gate, Threshold, Attack, Hold, Decay, Sustain, Release
+        return 8;
+    } // Gate, Threshold, Attack, Hold, Decay, Sustain, Release, Velocity
     int getVisibleOutputPortCount() const override { return 1; }
     ModuleType getModuleType() const override { return ModuleType::ADSR; }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Threshold", kThresholdChannel},        {"Attack", kAttackChannel, "attack"},
-                {"Hold", kHoldChannel, "hold"},          {"Decay", kDecayChannel, "decay"},
-                {"Sustain", kSustainChannel, "sustain"}, {"Release", kReleaseChannel, "release"}};
+        return {{"Threshold", kThresholdChannel},
+                {"Attack", kAttackChannel, "attack"},
+                {"Hold", kHoldChannel, "hold"},
+                {"Decay", kDecayChannel, "decay"},
+                {"Sustain", kSustainChannel, "sustain"},
+                {"Release", kReleaseChannel, "release"},
+                {"Velocity", kVelocityChannel, "velocity"}};
     }
 
     LogicalPort mapInputChannel(int raw) const override {
@@ -359,8 +389,8 @@ public:
             int jack;
         };
         static constexpr SharedCvJack kSharedCvJacks[] = {
-            {kThresholdChannel, 1}, {kAttackChannel, 2},  {kHoldChannel, 3},
-            {kDecayChannel, 4},     {kSustainChannel, 5}, {kReleaseChannel, 6},
+            {kThresholdChannel, 1}, {kAttackChannel, 2},  {kHoldChannel, 3},     {kDecayChannel, 4},
+            {kSustainChannel, 5},   {kReleaseChannel, 6}, {kVelocityChannel, 7},
         };
         for (const auto& jack : kSharedCvJacks) {
             if (raw == jack.channel) {
@@ -460,6 +490,24 @@ private:
         return {attack, hold, decay, release};
     }
 
+    /** Records the velocity (0..1) a voice was triggered with. A voice whose envelope is idle takes
+        its new scale at once -- nothing is sounding to click -- so a soft note after a loud one
+        does not start with the loud note's scale. */
+    void armVelocity(int voice, float velocity, float amount) noexcept {
+        voiceVelocity[voice] = juce::jlimit(0.0f, 1.0f, velocity);
+        if (envelopes[voice].getLevel() <= 1.0e-4f)
+            velocityScale[voice] = 1.0f - amount + amount * voiceVelocity[voice];
+    }
+
+    /** Output scale (1 - v + v * velocity) for a voice, slewed so a retrigger never steps it. At
+        a Velocity of 0 the target is exactly 1 and the scale never leaves it. */
+    float velocityScaleFor(int voice, float amount) noexcept {
+        const float target = 1.0f - amount + amount * voiceVelocity[voice];
+        float& scale = velocityScale[voice];
+        scale += juce::jlimit(-velocitySlewStep, velocitySlewStep, target - scale);
+        return scale;
+    }
+
     static constexpr int MAX_VOICES = 8;
     static constexpr int kThresholdChannel = 8;
     // Stage-time/level CV jacks, appended after Threshold -- never inserted, so a saved
@@ -470,6 +518,7 @@ private:
     static constexpr int kDecayChannel = 11;
     static constexpr int kSustainChannel = 12;
     static constexpr int kReleaseChannel = 13;
+    static constexpr int kVelocityChannel = 14;
 
     // Readout formatting for attack/hold/decay/release: below 1 s in milliseconds, at or above
     // 1 s in seconds. Decimal count shrinks as the magnitude grows so "0.10 ms" and "4999 ms"
@@ -543,6 +592,10 @@ private:
 
     synth::EnvelopeGenerator envelopes[MAX_VOICES];
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedSustain;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedVelocity; // amount, 0..1
+    std::array<float, MAX_VOICES> voiceVelocity{1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+    std::array<float, MAX_VOICES> velocityScale{1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+    float velocitySlewStep = 0.01f;
     SchmittTrigger gateTriggers[MAX_VOICES];
     bool previousActive[MAX_VOICES] = {};
     std::bitset<128> heldNotes; // keyed by MIDI note number only, channel-agnostic
@@ -558,6 +611,7 @@ private:
     juce::AudioParameterFloat* decayCurveParam = nullptr;
     juce::AudioParameterFloat* releaseCurveParam = nullptr;
     juce::AudioParameterFloat* thresholdParam = nullptr;
+    juce::AudioParameterFloat* velocityParam = nullptr;
     juce::AudioParameterBool* tempoSyncParam = nullptr;
     juce::AudioParameterChoice* attackDivParam = nullptr;
     juce::AudioParameterChoice* holdDivParam = nullptr;

@@ -118,12 +118,12 @@ TEST_F(ModuleComponentTest, AdsrPolyToggleIsLaidOutInsideTheModule) {
         << "Poly toggle must sit inside the module's bounds to be visible and clickable";
 }
 
-// The ADSR card no longer has its own bespoke slider-grid branch. Its five remaining
-// knobs (attack/hold/decay/sustain/release — attackCurve/decayCurve/releaseCurve moved onto the
+// The ADSR card no longer has its own bespoke slider-grid branch. Its six remaining
+// knobs (attack/hold/decay/sustain/release/velocity — attackCurve/decayCurve/releaseCurve moved onto the
 // envelope graph's bend handles, see ModuleComponentEnvelopeCardTests.cpp) flow through the
 // generic layout every other module uses: the "Poly" toggle and the Threshold control (both
 // generic auto-UI, laid out before the knob grid on every module that has them) sit ABOVE the
-// knobs, which then wrap into two rows (3, then 2) — the envelope graph's own disclosure row
+// knobs, which then wrap into two rows (3, then 3) — the envelope graph's own disclosure row
 // comes last, below the knob grid.
 TEST_F(ModuleComponentTest, AdsrKnobsWrapIntoTheGenericThreePerRowGrid) {
     AudioEngine engine;
@@ -136,7 +136,7 @@ TEST_F(ModuleComponentTest, AdsrKnobsWrapIntoTheGenericThreePerRowGrid) {
         if (auto* slider = dynamic_cast<juce::Slider*>(child))
             adsrSliders.push_back(slider);
 
-    ASSERT_EQ(adsrSliders.size(), 5u) << "attack/hold/decay/sustain/release";
+    ASSERT_EQ(adsrSliders.size(), 6u) << "attack/hold/decay/sustain/release/velocity";
 
     const auto moduleBounds = moduleComponent.getLocalBounds();
     int maxSliderBottom = 0;
@@ -153,7 +153,7 @@ TEST_F(ModuleComponentTest, AdsrKnobsWrapIntoTheGenericThreePerRowGrid) {
     }
 
     // Row wrap: the first three share a row (added in parameter order: attack/hold/decay), the
-    // remaining two (sustain/release) start a new row back at the first column.
+    // remaining three (sustain/release/velocity) start a new row back at the first column.
     EXPECT_EQ(adsrSliders[0]->getY(), adsrSliders[1]->getY());
     EXPECT_EQ(adsrSliders[1]->getY(), adsrSliders[2]->getY());
     EXPECT_GT(adsrSliders[3]->getY(), adsrSliders[2]->getY());

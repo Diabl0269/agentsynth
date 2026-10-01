@@ -541,9 +541,10 @@ the jacks never existed and the AI schema advertised ports nothing could connect
 `ModulationTargetBindingTests` now checks every target's channel against the declared input count.
 
 Also covered, appended after each module's existing channels so saved patches keep theirs: the
-LFO (Rate ch0, Level ch1, Glide ch2; Rate CV applies in Hz mode only), the ADSR (Attack ch9, Hold
-ch10, Decay ch11, Sustain ch12, Release ch13, after Threshold ch8; a tempo-synced stage ignores its
-time CV) and every remaining Parametric EQ parameter (B1/B4 Freq+Gain, each band's Q, Output on
+LFO (Rate ch0, Level ch1, Glide ch2, Phase ch3, Fade In ch4; Rate CV applies in Hz mode only), the
+ADSR (Attack ch9, Hold ch10, Decay ch11, Sustain ch12, Release ch13, Velocity ch14, after Threshold
+ch8; a tempo-synced stage ignores its time CV), the Oscillator's Pulse Width ch16 and Glide ch17
+(after Unison/Detune) and every remaining Parametric EQ parameter (B1/B4 Freq+Gain, each band's Q, Output on
 ch6-14) — see [`lfo.md`](lfo.md),
 [`modules.md#adsr-envelope-module`](modules.md#adsr-envelope-module) and
 [`fx-modules.md#parametric-eq-module`](fx-modules.md#parametric-eq-module). Not yet covered: the

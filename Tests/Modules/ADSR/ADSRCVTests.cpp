@@ -18,6 +18,7 @@ TEST_F(ADSRTest, InputPortLabelsForNewCvJacks) {
     EXPECT_EQ(adsr.getInputPortLabel(4), "Decay");
     EXPECT_EQ(adsr.getInputPortLabel(5), "Sustain");
     EXPECT_EQ(adsr.getInputPortLabel(6), "Release");
+    EXPECT_EQ(adsr.getInputPortLabel(7), "Velocity");
 }
 
 TEST_F(ADSRTest, StageTimeCvJacksMapToModCv) {
@@ -27,7 +28,8 @@ TEST_F(ADSRTest, StageTimeCvJacksMapToModCv) {
         const char* label;
     };
     const Case cases[] = {
-        {9, 2, "Attack"}, {10, 3, "Hold"}, {11, 4, "Decay"}, {12, 5, "Sustain"}, {13, 6, "Release"},
+        {9, 2, "Attack"},   {10, 3, "Hold"},    {11, 4, "Decay"},
+        {12, 5, "Sustain"}, {13, 6, "Release"}, {14, 7, "Velocity"},
     };
     for (const auto& c : cases) {
         SCOPED_TRACE(c.label);

@@ -27,7 +27,7 @@ std::unique_ptr<ModMatrixPicker> openSourcePicker(MatrixCanvas& c) {
 
 TEST(ModMatrixSources, AnLfoOffersItsOneCvJack) {
     LFOModule lfo;
-    ASSERT_EQ(lfo.getTotalNumOutputChannels(), 3) << "two pass-through channels sit behind the CV jack";
+    ASSERT_EQ(lfo.getTotalNumOutputChannels(), 5) << "four pass-through channels sit behind the CV jack";
 
     const auto outputs = synth::ui::modSourceOutputs(lfo);
     ASSERT_EQ(outputs.size(), 1u);
