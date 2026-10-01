@@ -657,8 +657,16 @@ TEST(TimelineTrackHeaderTest, KindBadgeTextEmptyWhenTrackIsGone) {
     EXPECT_EQ(f.header->getKindBadgeTextForTest(), juce::String());
 }
 
-TEST(TimelineTrackHeaderTest, FoldArrowHiddenUntilTheTrackHasALane) {
+TEST(TimelineTrackHeaderTest, EveryTrackHasTheFoldArrowEvenWithNoLane) {
     HeaderFixture f;
+    EXPECT_TRUE(f.header->getFoldArrow().isVisible()) << "an empty track folds out to '+ Add automation...'";
+    EXPECT_TRUE(f.header->getFoldArrow().getWantsKeyboardFocus());
+    EXPECT_EQ(f.header->getFoldArrow().getTitle(), "Show Track 1 automation") << "no lane count to report";
+    EXPECT_EQ(f.header->getFoldArrow().getTooltip(), "Show Track 1 automation");
+}
+
+TEST(TimelineTrackHeaderTest, TheUnassignedSectionHasTheFoldArrowOnlyWhileItHoldsLanes) {
+    HeaderFixture f(TrackKind::Automation);
     EXPECT_FALSE(f.header->getFoldArrow().isVisible());
 
     synth::AutomationLane::RangeSnapshot range;

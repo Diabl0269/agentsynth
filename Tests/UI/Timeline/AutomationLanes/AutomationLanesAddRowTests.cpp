@@ -113,10 +113,42 @@ TEST(AutomationLanesAddRowTest, TheRowExistsOnlyUnderAnOpenTrackAndSitsAtTheLayo
     EXPECT_EQ(f.row(), nullptr) << "folding removes it";
 }
 
-TEST(AutomationLanesAddRowTest, ATrackWithNoLanesShowsNoRowEvenWhenOpened) {
+TEST(AutomationLanesAddRowTest, ATrackWithNoLanesOpensToJustTheAddRow) {
     AddFixture f;
-    f.panel.setTrackAutomationExpanded(f.lead, true);
-    EXPECT_EQ(f.panel.addAutomationRowForTest(f.lead), nullptr) << "Lead has no lane: its menu is the way in";
+    auto* header = f.panel.getTrackHeaderAt(1); // Lead: no lanes
+    ASSERT_NE(header, nullptr);
+    ASSERT_TRUE(header->getFoldArrow().isVisible()) << "every track has the arrow";
+    EXPECT_EQ(f.panel.addAutomationRowForTest(f.lead), nullptr) << "folded: nothing under it";
+
+    clickButton(header->getFoldArrow());
+
+    ASSERT_TRUE(f.panel.isTrackAutomationExpandedForTest(f.lead));
+    auto* row = f.panel.addAutomationRowForTest(f.lead);
+    ASSERT_NE(row, nullptr);
+    const auto layout = f.panel.getClipLaneArea().getRowLayout();
+    EXPECT_EQ(layout.trackExtraHeight(1), AddAutomationRow::kBaseHeight) << "the add row is the whole fold-out";
+    EXPECT_EQ(row->getY(), layout.trackTop(1) + layout.trackRowHeight(1));
+    const auto bounds = f.panel.addAutomationRowBoundsForTest(f.lead);
+    EXPECT_EQ(f.componentAt({bounds.getX() + 60, bounds.getCentreY()}), row) << "a real click lands on the row";
+
+    clickButton(*row);
+    ASSERT_NE(f.picker, nullptr);
+    EXPECT_EQ(f.host.asked.back(), f.lead) << "the picker lists Lead's parameters";
+    f.picker->chooseVisibleItemForTest(0);
+    const auto* lead = f.doc.getTrack(f.lead);
+    ASSERT_EQ(lead->lanes.size(), 1u) << "its first lane, made from the timeline";
+    EXPECT_NE(f.panel.laneEditorForTest(lead->lanes.front().id), nullptr) << "and shown under the track";
+}
+
+TEST(AutomationLanesAddRowTest, ReturnAndSpaceOnAnEmptyTracksArrowFoldIt) {
+    AddFixture f;
+    auto& arrow = f.panel.getTrackHeaderAt(1)->getFoldArrow();
+    EXPECT_TRUE(arrow.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    EXPECT_TRUE(f.panel.isTrackAutomationExpandedForTest(f.lead));
+    EXPECT_EQ(arrow.getTitle(), "Hide Lead automation");
+    EXPECT_TRUE(arrow.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    EXPECT_FALSE(f.panel.isTrackAutomationExpandedForTest(f.lead));
+    EXPECT_EQ(f.panel.addAutomationRowForTest(f.lead), nullptr);
 }
 
 TEST(AutomationLanesAddRowTest, TheRowScalesWithRowZoom) {
@@ -204,9 +236,8 @@ TEST(AutomationLanesAddRowTest, TheUnassignedSectionHasItsRowAndOffersTheAutomat
 
 TEST(AutomationLanesAddRowTest, TheHeaderMenuOffersAddAutomationAndOpensThePickerForAnEmptyTrack) {
     AddFixture f;
-    auto* header = f.panel.getTrackHeaderAt(1); // Lead: no lanes, so no fold arrow
+    auto* header = f.panel.getTrackHeaderAt(1); // Lead: no lanes, folded
     ASSERT_NE(header, nullptr);
-    EXPECT_FALSE(header->getFoldArrow().isVisible());
 
     const auto menu = header->buildContextMenu();
     const auto* item = findMenuItem(menu, "Add automation...");

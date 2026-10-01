@@ -111,8 +111,12 @@ void TimelineAutomationLanes::setExpanded(synth::TrackId track, bool expanded) {
         onLayoutChanged();
 }
 
+// An open ordinary track shows its "+ Add automation..." row even with no lanes yet: that is how the
+// timeline starts automation. The Unassigned section has no add-only state; it exists for its lanes.
 bool TimelineAutomationLanes::isVisibleLane(const synth::Track& track) const {
-    return !track.lanes.empty() && isExpanded(track.id);
+    if (track.lanes.empty() && track.kind == synth::TrackKind::Automation)
+        return false;
+    return isExpanded(track.id);
 }
 
 // Drops fold state for tracks that are gone, then brings both pools in line with the lanes now
@@ -180,8 +184,7 @@ void TimelineAutomationLanes::syncPools() {
     }
 }
 
-// One "+ Add automation..." row per track whose lanes are open, closing its lane rows. The same gate as
-// the lane rows: a track with no lanes shows nothing here and is reached through its header's context menu.
+// One "+ Add automation..." row per open track, closing its lane rows (the only row of a track with no lanes).
 void TimelineAutomationLanes::syncAddRows() {
     for (auto it = addRows_.begin(); it != addRows_.end();) {
         const auto* track = doc_->getTrack(it->first);
