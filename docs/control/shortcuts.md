@@ -988,23 +988,5 @@ Quantise pitches, Scale, Scale filter and Velocity chips.
 
 ## Canvas mouse gestures
 
-Multi-select is layered on top of the existing pan gesture rather than replacing it, so no existing
-habit changes. See [`layout/selection.md`](../layout/selection.md) for the full contract.
-
-| Gesture | Action |
-|---------|--------|
-| Drag on empty canvas | Pan (unchanged) |
-| **Shift** + drag on empty canvas | Marquee-select, replacing the selection |
-| **Cmd/Ctrl + Shift** + drag | Marquee-select, adding to the selection |
-| Click a module | Select just that module |
-| **Shift**/**Cmd** + click a module | Toggle that module in the selection |
-| Drag any selected module | Move the whole selection together |
-| Drag a module across an expanded macro's outline | Join, leave, or move it between macros (a plain drag by default; **Cmd** + drag when "Drag modules into and out of macros without Cmd" is off in `Settings → Preferences`; single module only, never a group). See [macro membership](../macros/menu-and-membership.md#cmd-drag-across-a-hull-border) |
-| Click empty canvas | Clear the selection |
-| Right-click a module | Copy / Duplicate / Paste / Save as Snippet / Delete for the whole selection |
-| Right-click empty canvas | Paste Here (at the click point) / Select All Modules / Go to Output (see [Locate Master](#locate-master); greyed out with neither Master nor Audio Output) |
-| Double-click a connected jack | Disconnect every cable on that port (on by default; `Settings → Preferences`) |
-
-Right-clicking empty canvas keeps the selection rather than clearing it, so the menu can still act
-on what is selected. "Paste Here" drops the group at the click point and re-anchors the paste
-cascade there, so a following `Cmd+V` continues from the same place.
+Pan, marquee, click and drag on the canvas are mouse gestures, not rebindable shortcuts; the table
+is in [`layout/selection.md`](../layout/selection.md#canvas-mouse-gestures).
