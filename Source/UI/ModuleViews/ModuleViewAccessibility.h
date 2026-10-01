@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/TooltipHelpHandler.h"
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -74,7 +75,7 @@ private:
  *  is `getText()`. */
 inline std::unique_ptr<juce::AccessibilityHandler> makeValueTextHandler(juce::Component& view,
                                                                         std::function<juce::String()> getText) {
-    return std::make_unique<juce::AccessibilityHandler>(
+    return std::make_unique<TooltipHelpHandler>(
         view, juce::AccessibilityRole::group, juce::AccessibilityActions{},
         juce::AccessibilityHandler::Interfaces{std::make_unique<TextValueInterface>(std::move(getText))});
 }

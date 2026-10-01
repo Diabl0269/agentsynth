@@ -98,6 +98,14 @@ TEST(EQCurveKeyboard, IsATabStopWithANameAndATooltip) {
     EXPECT_TRUE(rig.curve->getTooltip().isNotEmpty());
 }
 
+// The stock handler reads only getHelpText(), so without this a screen reader never hears the tooltip.
+TEST(EQCurveKeyboard, ScreenReaderHelpIsTheTooltip) {
+    EqRig rig;
+    auto handler = rig.curve->createAccessibilityHandler();
+    ASSERT_NE(handler, nullptr);
+    EXPECT_EQ(handler->getHelp(), rig.curve->getTooltip());
+}
+
 TEST(EQCurveKeyboard, LeftAndRightSelectBandsAndClampAtTheEnds) {
     EqRig rig;
     EXPECT_EQ(rig.curve->getSelectedBand(), -1);
