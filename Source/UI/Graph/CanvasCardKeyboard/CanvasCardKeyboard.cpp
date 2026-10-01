@@ -96,6 +96,11 @@ bool CanvasCardKeyboard::selectInDirection(CardDirection direction) {
         return true;
 
     editor_.selectModule(target, /*additive=*/false);
+    // Keyboard focus stays on the canvas while the selection moves, so nothing a screen reader
+    // follows changes: say which card the arrow landed on.
+    if (auto* card = findCard(editor_, target); card != nullptr && card->getTitle().isNotEmpty())
+        juce::AccessibilityHandler::postAnnouncement(card->getTitle() + ", card",
+                                                     juce::AccessibilityHandler::AnnouncementPriority::medium);
     for (const auto& c : cards)
         if (c.id == target && !editor_.getVisibleCanvasRect().contains(c.bounds))
             editor_.centreViewOn(c.bounds.getCentre());
