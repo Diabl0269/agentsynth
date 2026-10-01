@@ -490,9 +490,9 @@ resolving a dense cluster (the returned slot overlaps none), the pure auto-arran
 others→Single); **bucket constants on grid** (`kNarrowWidth`/`kSingleWidth`/`kDoubleWidth` all
 %8==0, `kDoubleWidth == 2 × kSingleWidth`); **column stride** (`kSingleWidth + kLayerGapX == 360`);
 **Macro bank geometry** (`macroBankHeight` grows one `kMacroRowH` per macro, `macroRowCentreY`
-evenly spaced and always inside the bank); **`resolveOverlapsAfterResize`** (no-op when clear,
-pushes the neighbour below past the new bottom edge and on-grid, never moves the resized module,
-cascades through a stack until nothing overlaps, shrinking moves nobody back).
+evenly spaced and always inside the bank); **card make-room on resize** (`CardMakeRoomTests.cpp`, through the real card path: a grown card pushes the neighbour the
+shortest way, shrinking returns it, repeated toggles settle, a hand-moved or home-taken neighbour stays, one undo, load
+never pushes, the Scope toggle).
 
 ## Theme system
 

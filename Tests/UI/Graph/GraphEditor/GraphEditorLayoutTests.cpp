@@ -253,7 +253,7 @@ void setKnobs(juce::AudioProcessor* macros, int count) {
 
 } // namespace
 
-TEST_F(GraphEditorTest, MacroBankGrowsAndPushesTheModuleBelowItDown) {
+TEST_F(GraphEditorTest, MacroBankGrowsAndPushesTheModuleBelowItClear) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1200, 900);
@@ -278,17 +278,19 @@ TEST_F(GraphEditorTest, MacroBankGrowsAndPushesTheModuleBelowItDown) {
     ASSERT_NE(vcaComp, nullptr);
 
     const auto macroTopLeftBefore = macroComp->getPosition();
-    const int vcaYBefore = vcaComp->getY();
+    const auto vcaBefore = vcaComp->getPosition();
     ASSERT_LT(macroComp->getBottom(), vcaComp->getY()) << "test setup: the two must start clear of each other";
 
     setKnobs(macroNode->getProcessor(), 16);
 
     EXPECT_EQ(macroComp->getHeight(), synth::LayoutUtil::macroBankHeight(16));
     EXPECT_EQ(macroComp->getPosition(), macroTopLeftBefore) << "the resized module must not move";
-    EXPECT_GT(vcaComp->getY(), vcaYBefore) << "the module below must be pushed clear";
-    EXPECT_GE(vcaComp->getY(), macroComp->getBottom() + synth::LayoutUtil::kCollisionGap);
+    // It leaves by the shortest way (here sideways, not necessarily down), with the usual clearance.
+    EXPECT_NE(vcaComp->getPosition(), vcaBefore) << "the module below must be pushed clear";
+    EXPECT_FALSE(vcaComp->getBounds().expanded(synth::LayoutUtil::kCollisionGap).intersects(macroComp->getBounds()));
 
     // The displaced position must be persisted, or a reload would drop it back into the overlap.
+    EXPECT_EQ(static_cast<int>(vcaNode->properties.getWithDefault("x", -1)), vcaComp->getX());
     EXPECT_EQ(static_cast<int>(vcaNode->properties.getWithDefault("y", -1)), vcaComp->getY());
 }
 

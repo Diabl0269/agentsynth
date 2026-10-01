@@ -133,8 +133,9 @@ static juce::String containerOfKey(const MacroGroupController& controller, const
 
 // Inside-out: settle the grower's own level, then, because a pushed neighbour may have widened the enclosing
 // macro's hull, treat that macro as the grower one level up, to the root. Runs inside the caller's undo record.
-// When the grower is a macro, every push (at every level) is recorded on it so that collapsing it, or removing a
-// port, can offer the neighbours their way back (returnDisplacedNeighbours).
+// Every push (at every level) is recorded on the grower, on the macro when it is one and in `moduleDisplaced_` when it
+// is a module card, so that collapsing it, removing a port or shrinking the card can offer the neighbours their way
+// back (returnDisplacedNeighbours, reflowForResizedModule).
 void MacroGroupController::makeRoomFor(const juce::String& growerKey) {
     CardGlideAnimator::Scope glide(host_.cardGlide());
     auto& macros = host_.getMacros();
@@ -150,9 +151,13 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey) {
                 std::find_if(units.begin(), units.end(), [&move](const LayoutUnit& u) { return u.key == move.key; });
             moveUnitBy(move.key, move.delta);
             movedAny = true;
-            if (auto* grower = growerMacroId.isNotEmpty() ? macros.find(growerMacroId) : nullptr;
-                grower != nullptr && unit != units.end())
-                grower->displaced.push_back({move.key, move.delta, unit->rect.getPosition() + move.delta});
+            if (unit == units.end())
+                continue;
+            const synth::Macro::DisplacedNeighbour record{move.key, move.delta, unit->rect.getPosition() + move.delta};
+            if (growerMacroId.isEmpty())
+                moduleDisplaced_[growerKey].push_back(record);
+            else if (auto* grower = macros.find(growerMacroId))
+                grower->displaced.push_back(record);
         }
         if (container.isEmpty())
             break;
@@ -203,24 +208,16 @@ void MacroGroupController::restoreCardAfterCollapse(const juce::String& macroId)
 }
 
 // A neighbour comes home only if the user has not touched it (still exactly where the push left it) and its old spot
-// is clear of every other unit at that level, the shrunken macro or its collapsed card included. Newest push first,
-// so a unit pushed twice retraces its steps and each landedAt is checked against where the last return left it.
-// `keepBlocked` (the macro stays open, e.g. a port was deleted) keeps the records that only lacked room, so a later
-// shrink can still return them; a collapse clears everything.
-void MacroGroupController::returnDisplacedNeighbours(const juce::String& macroId, bool keepBlocked) {
-    CardGlideAnimator::Scope glide(host_.cardGlide());
-    auto* macro = host_.getMacros().find(macroId);
-    if (macro == nullptr || macro->displaced.empty())
-        return;
-    const auto records = std::move(macro->displaced);
-    macro->displaced.clear();
-
+// is clear of every other unit at that level, the shrunken macro or card included. Newest push first, so a unit
+// pushed twice retraces its steps and each landedAt is checked against where the last return left it. Shared by
+// macros and module cards; answers the records that only lacked room, in push order.
+MacroGroupController::DisplacedRecords MacroGroupController::returnRecordedNeighbours(const DisplacedRecords& records,
+                                                                                      bool& movedAny) {
     // Newest first. A cascade tail (C pushed by B pushed by A) is checked while B still sits on C's home, so a single
     // pass would strand it: repeat over what is still blocked until a pass returns nothing.
-    bool movedAny = false;
-    std::vector<synth::Macro::DisplacedNeighbour> kept(records.rbegin(), records.rend());
+    DisplacedRecords kept(records.rbegin(), records.rend());
     for (size_t pass = 0; pass <= records.size() && !kept.empty(); ++pass) {
-        std::vector<synth::Macro::DisplacedNeighbour> stillBlocked;
+        DisplacedRecords stillBlocked;
         bool movedThisPass = false;
         for (const auto& rec : kept) {
             const auto units = buildLayoutUnits(containerOfKey(*this, host_.getMacros(), rec.unitKey));
@@ -249,12 +246,49 @@ void MacroGroupController::returnDisplacedNeighbours(const juce::String& macroId
         if (!movedThisPass)
             break;
     }
+    return DisplacedRecords(kept.rbegin(), kept.rend());
+}
 
+// `keepBlocked` (the macro stays open, e.g. a port was deleted) keeps the records that only lacked room, so a later
+// shrink can still return them; a collapse clears everything.
+void MacroGroupController::returnDisplacedNeighbours(const juce::String& macroId, bool keepBlocked) {
+    CardGlideAnimator::Scope glide(host_.cardGlide());
+    auto* macro = host_.getMacros().find(macroId);
+    if (macro == nullptr || macro->displaced.empty())
+        return;
+    const auto records = std::move(macro->displaced);
+    macro->displaced.clear();
+
+    bool movedAny = false;
+    const auto kept = returnRecordedNeighbours(records, movedAny);
     if (keepBlocked)
         if (auto* live = host_.getMacros().find(macroId))
-            live->displaced.assign(kept.rbegin(), kept.rend());
+            live->displaced = kept;
     if (movedAny)
         host_.requestRepaint();
+}
+
+// A card changed size in place: the neighbours it pushed before get their way back first (what its new rect still
+// covers stays blocked and keeps its record), then makeRoomFor pushes what the new rect covers. Grow, shrink, grow
+// again therefore settles the same way every time.
+void MacroGroupController::reflowForResizedModule(juce::AudioProcessorGraph::NodeID nodeId) {
+    CardGlideAnimator::Scope glide(host_.cardGlide());
+    const auto key = nodeKey(nodeId);
+    if (const auto found = moduleDisplaced_.find(key); found != moduleDisplaced_.end()) {
+        const auto records = std::move(found->second);
+        moduleDisplaced_.erase(found);
+        bool movedAny = false;
+        auto kept = returnRecordedNeighbours(records, movedAny);
+        if (!kept.empty())
+            moduleDisplaced_[key] = std::move(kept);
+        if (movedAny)
+            host_.requestRepaint();
+    }
+    makeRoomFor(key);
+}
+
+void MacroGroupController::forgetModuleDisplacements(juce::AudioProcessorGraph::NodeID nodeId) {
+    moduleDisplaced_.erase(nodeKey(nodeId));
 }
 
 // Boxes for findFreeSlot, built like buildLayoutUnits but flattened over every level instead of one: a module being

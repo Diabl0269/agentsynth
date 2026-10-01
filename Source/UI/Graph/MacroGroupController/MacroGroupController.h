@@ -36,6 +36,7 @@
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <optional>
 #include <set>
 #include <utility>
@@ -207,6 +208,17 @@ public:
      * macro that stays open). Call it inside the undo record of whatever shrank the macro (collapse, port delete); it
      * opens none of its own. */
     void returnDisplacedNeighbours(const juce::String& macroId, bool keepBlocked = false);
+    /** A card changed size in place (Macros knob count, Scope/Response/envelope-graph fold, port count, ...). First
+     *  offers the neighbours this card pushed aside earlier their way back (a home the card's new rect still covers
+     *  stays blocked and keeps its record), then pushes whatever the new rect covers via makeRoomFor. A shrink
+     *  therefore returns neighbours and a grow pushes them, repeatably. Call it inside the undo record of whatever
+     *  resized the card; it opens none of its own. Loose and macro-member cards share it. */
+    void reflowForResizedModule(juce::AudioProcessorGraph::NodeID nodeId);
+    /** Drops the pushes remembered for every module card. Called where a card's "home" stops meaning anything: an
+     *  undo/redo restore, Auto Arrange, a project load or any other graph replacement. */
+    void clearModuleDisplacements() { moduleDisplaced_.clear(); }
+    /** Drops the pushes remembered for one module card (it was deleted). */
+    void forgetModuleDisplacements(juce::AudioProcessorGraph::NodeID nodeId);
     /** What a module being PLACED must keep clear of, as boxes for LayoutUtil::findFreeSlot: every visible module,
      *  every collapsed card and every open hull, flattened across nesting levels, except `excludeNodes` themselves,
      *  every macro that contains them (their own hull and its ancestors), the collapsed macros a drag of them carries,
@@ -400,6 +412,15 @@ private:
     void sweepOneSidedMacroPorts(std::vector<juce::AudioProcessorGraph::NodeID> candidates);
     GraphCanvasHost& host_;
     JUCE_DECLARE_WEAK_REFERENCEABLE(MacroGroupController)
+
+    // The shared return walk behind returnDisplacedNeighbours and reflowForResizedModule: offers each record (newest
+    // first, repeated until a pass returns nothing) its way back and answers the ones that could not go, in push
+    // order. `movedAny` is set when at least one neighbour moved.
+    using DisplacedRecords = std::vector<synth::Macro::DisplacedNeighbour>;
+    DisplacedRecords returnRecordedNeighbours(const DisplacedRecords& records, bool& movedAny);
+    // Transient (never saved, not part of any snapshot): what a module card's growth pushed aside, keyed by the
+    // grower's "n:<nodeUid>". The macro counterpart lives on synth::Macro::displaced.
+    std::map<juce::String, DisplacedRecords> moduleDisplaced_;
 
     // ---- Internal-only helpers (no cross-file caller outside this class; original visibility
     // on GraphEditor was private and stays private here) ----
