@@ -248,6 +248,10 @@ void MainComponent::wireTimelineRecordToggle() {
     // that can see both the armed tracks (timelineDoc) and the transport bar's record button.
     audioEngine.setMidiCaptureSink(&midiRecorder);
     timelinePanel.getTransportBar().onRecordToggled = [this](bool wantRecording) { handleRecordToggle(wantRecording); };
+    // Return to Start runs the command itself, so the button shares its locate-and-track-nudge behaviour.
+    timelinePanel.getTransportBar().onReturnToStart = [this] {
+        commandManager.invokeDirectly(AppCommands::transportReturnToStart, false);
+    };
 }
 
 // The transport bar's onRecordToggled body, extracted out of wireTimelineRecordToggle().

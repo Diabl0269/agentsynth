@@ -249,6 +249,10 @@ add_library(Core STATIC
     Source/Project/ModuleFileRefs.h
     Source/Project/ProjectCollector.cpp
     Source/Project/ProjectCollector.h
+    Source/Project/ProjectCommandLine.cpp
+    Source/Project/ProjectCommandLine.h
+    Source/Project/ViewDoc.cpp
+    Source/Project/ViewDoc.h
     Source/MidiRemote/RemoteEngine/RemoteEngine.h
     Source/MidiRemote/RemoteEngine/RemoteEngine.cpp
     Source/MidiRemote/RemoteEngine/RemoteEngineApply.cpp
@@ -385,6 +389,7 @@ add_library(Core STATIC
     Source/Timeline/TimelineValidator.cpp
     Source/Timeline/TimelineValidator.h
     # Modules
+    Source/Modules/CardViewState.h
     Source/Modules/ModuleBase.h
     Source/Modules/ModuleFileStateKeys.h
     Source/Modules/PortRole.h

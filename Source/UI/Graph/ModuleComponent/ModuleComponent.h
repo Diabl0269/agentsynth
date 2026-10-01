@@ -607,6 +607,14 @@ private:
     void createExternalMidiControls(ExternalMidiModule* extMidi);
     void updateLayout();
 
+    // The optional panels (Show Scope / Show Response / Show Spectrum) -- ModuleComponentCardView.cpp.
+    // The setters are the body of a toggle's click and of restoreCardView(); message thread only.
+    void setScopeShown(bool show);
+    void setResponseShown(bool show);
+    void setSpectrumShown(bool show);
+    void restoreCardView();
+    void rememberCardView(const std::function<void(synth::CardViewState&)>& edit);
+
     // Compact docked widget for the four macro-port types
     // (docs/macros/ports.md#how-a-port-is-drawn) — no header chrome, no body. layoutMacroPortWidget sizes the
     // card's height from the module's own visible jack count (updateLayout's early branch); its

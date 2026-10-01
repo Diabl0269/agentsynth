@@ -7,7 +7,7 @@
 # (+1 comment, +1 code) never moves excess, so it never trips this ratchet.
 44 Source/AI/AIIntegrationService/AIIntegrationService.h
 24 Source/AI/AIProvider.h
-108 Source/AI/AIStateMapper/AIStateMapper.h
+107 Source/AI/AIStateMapper/AIStateMapper.h
 2 Source/AI/AccountService.h
 30 Source/AI/PatchDiff.h
 25 Source/AI/RemoteProvider.h
@@ -21,7 +21,7 @@
 38 Source/Plugin/Hosting/HostedPluginBackend.h
 76 Source/Plugin/Hosting/HostedPluginModule.h
 147 Source/Plugin/Hosting/PluginScanService.h
-58 Source/ProjectBundle.h
+56 Source/ProjectBundle.h
 56 Source/SnippetManager.h
 53 Source/Timeline/AssetManager.h
 118 Source/Timeline/AudioClipStreamer.h
@@ -45,4 +45,4 @@
 56 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
 24 Source/UI/Timeline/TimelinePlayheadOverlay.h
 43 Source/UI/Timeline/TimelineRulerComponent.h
-107 Source/UI/Timeline/TimelineTrackHeaderComponent.h
+106 Source/UI/Timeline/TimelineTrackHeaderComponent.h

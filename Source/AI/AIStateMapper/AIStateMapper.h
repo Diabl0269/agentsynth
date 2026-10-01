@@ -55,6 +55,7 @@ enum class PatchValidationError {
     InternalModuleNotAllowed,
     MixerPanLawNotAllowed,
     MixerViewNotAllowed,
+    ViewNotAllowed,
 };
 
 /**

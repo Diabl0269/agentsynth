@@ -6,6 +6,7 @@
 #include "Mixer/MixerPanLaw.h"
 #include "Mixer/MixerViewDoc.h"
 #include "PatchDocument.h"
+#include "Project/ViewDoc.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportDoc.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -32,7 +33,8 @@ struct ProjectLoadResult {
  * ("balance"/"compensated", docs/mixer/mixer.md#pan-law) -- absent means "balance" -- and a `"mixerView"`
  * object (`MixerViewDoc::toVar()`, which mixer channels are pinned or hidden and the order of the buses,
  * docs/mixer/panel.md#side-pane-zones-and-visibility) -- absent means every column scrolling and shown --
- * and a `"transport"` object (`TransportDoc`) -- absent means 120 BPM 4/4, loop 0-4 off.
+ * a `"transport"` object (`TransportDoc`) -- absent means 120 BPM 4/4, loop 0-4 off -- and a `"view"`
+ * object (`ViewDoc`, the graph canvas zoom and pan) -- absent means the default view.
  * `Audio/`/`Peaks/` hold recorded takes and their waveform-peak sidecars.
  *
  * **Asset policy.** `synth::Clip::assetRef` must be a path relative to the bundle root
@@ -119,7 +121,8 @@ public:
     static ProjectLoadResult save(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                   const TimelineDoc& timeline, PatchDocument& patchDocument, const MacroSet& macros,
                                   const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw = MixerPanLaw::Balance,
-                                  const MixerViewDoc* mixerView = nullptr, const TransportDoc* transport = nullptr);
+                                  const MixerViewDoc* mixerView = nullptr, const TransportDoc* transport = nullptr,
+                                  const ViewDoc* view = nullptr);
 
     /** Loads `<bundleDir>/project.json` into `graph`/`timeline`/`patchDocument`/`macros`/
      *  `midiRemote`, following the fixed, all-or-nothing order documented on the class. On any
@@ -127,11 +130,14 @@ public:
      *  non-null, receives the loaded (or, absent, Balance) pan law -- always written on success,
      *  even by a caller that passes nullptr, the field is still detached from the root either way.
      *  `outMixerView`, when non-null, receives the loaded view document (empty when the key is absent or
-     *  malformed -- presentation state never blocks opening a project), pruned to channels that exist. */
+     *  malformed -- presentation state never blocks opening a project), pruned to channels that exist.
+     *  `outTransport` receives the saved tempo (defaults when the key is absent); `outView` the saved canvas view,
+     *  and is left untouched when the key is absent, so a caller seeds it with the view to keep. A malformed
+     *  `"transport"` or `"view"` rejects the whole file. */
     static ProjectLoadResult load(const juce::File& bundleDir, juce::AudioProcessorGraph& graph, TimelineDoc& timeline,
                                   PatchDocument& patchDocument, MacroSet& macros, MidiRemoteProjectDoc& midiRemote,
                                   MixerPanLaw* outPanLaw = nullptr, MixerViewDoc* outMixerView = nullptr,
-                                  TransportDoc* outTransport = nullptr);
+                                  TransportDoc* outTransport = nullptr, ViewDoc* outView = nullptr);
 
     /** `<userMusicDirectory>/<kProjectsFolderName>`, created on demand. Starting directory for
      *  project save/open/export dialogs (see MainComponent). */
@@ -144,11 +150,13 @@ public:
      *  explicit save — see docs/architecture/project-bundle.md#autosave-and-crash-recovery). Before writing, the
      *  PREVIOUS `autosave.json` (if any) is rotated into the numbered backup history — see the class comment's
      *  "Autosave backup history" section. `maxBackups <= 0` disables rotation (plain overwrite). */
-    static ProjectLoadResult
-    saveAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph, const TimelineDoc& timeline,
-                 PatchDocument& patchDocument, const MacroSet& macros, int maxBackups,
-                 const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw = MixerPanLaw::Balance,
-                 const MixerViewDoc* mixerView = nullptr, const TransportDoc* transport = nullptr);
+    static ProjectLoadResult saveAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
+                                          const TimelineDoc& timeline, PatchDocument& patchDocument,
+                                          const MacroSet& macros, int maxBackups,
+                                          const MidiRemoteProjectDoc& midiRemote,
+                                          MixerPanLaw panLaw = MixerPanLaw::Balance,
+                                          const MixerViewDoc* mixerView = nullptr,
+                                          const TransportDoc* transport = nullptr, const ViewDoc* view = nullptr);
 
     /** True if `<bundleDir>/autosave.json` exists. Checked on open, before `project.json` loads —
      *  see MainComponent::openFromFile. */
@@ -159,7 +167,8 @@ public:
     static ProjectLoadResult loadAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                           TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
                                           MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw = nullptr,
-                                          MixerViewDoc* outMixerView = nullptr, TransportDoc* outTransport = nullptr);
+                                          MixerViewDoc* outMixerView = nullptr, TransportDoc* outTransport = nullptr,
+                                          ViewDoc* outView = nullptr);
 
     /** Deletes `<bundleDir>/autosave.json` if present. A no-op if it doesn't exist. Called once a
      *  pending sidecar has been resolved: after the user answers the recovery prompt (either arm),
@@ -173,14 +182,15 @@ private:
     static juce::var buildProjectJson(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                       const TimelineDoc& timeline, PatchDocument& patchDocument, const MacroSet& macros,
                                       const MidiRemoteProjectDoc& midiRemote, MixerPanLaw panLaw,
-                                      const MixerViewDoc* mixerView, const TransportDoc* transport);
+                                      const MixerViewDoc* mixerView, const TransportDoc* transport,
+                                      const ViewDoc* view);
 
     // Shared by load()/loadAutosave(): the fixed, all-or-nothing validation order documented on the
     // class, parametrized only on which file to read.
     static ProjectLoadResult loadFromFile(const juce::File& jsonFile, juce::AudioProcessorGraph& graph,
                                           TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
                                           MidiRemoteProjectDoc& midiRemote, MixerPanLaw* outPanLaw,
-                                          MixerViewDoc* outMixerView, TransportDoc* outTransport);
+                                          MixerViewDoc* outMixerView, TransportDoc* outTransport, ViewDoc* outView);
 
     // The logrotate step saveAutosave() runs before writing new content to autosave.json — see the
     // class comment's "Autosave backup history" section. A no-op when maxBackups <= 0.

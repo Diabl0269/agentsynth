@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/NonModalLabel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -23,7 +24,7 @@
 namespace synth::ui {
 
 /** A label that shows another component's cursor, so a child covering part of a drag handle still reads as one. */
-class CursorDelegatingLabel : public juce::Label {
+class CursorDelegatingLabel : public synth::ui::NonModalLabel {
 public:
     void setCursorSource(juce::Component* source) noexcept { cursorSource_ = source; }
     juce::MouseCursor getMouseCursor() override {

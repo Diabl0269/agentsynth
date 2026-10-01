@@ -122,6 +122,9 @@ TEST_F(MainComponentTest, ContinuouslyChangingTransportRecordsNoStepUntilItSettl
     MainComponent mc(std::make_unique<MockProvider>());
     mc.setSize(1600, 900);
     mc.getAudioEngine().suspendDeviceCallback();
+    // The poll is driven by hand with a fake clock below; a real 10 Hz tick landing in settle() would compare
+    // the wall clock against that fake one and record the step early.
+    mc.stopTimer();
     auto& transport = mc.getAudioEngine().getTransport();
 
     // A drag: the value differs on every poll, so it never holds for the debounce interval.

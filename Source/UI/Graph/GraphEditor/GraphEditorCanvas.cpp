@@ -12,6 +12,7 @@
 #include "CanvasAccessibilityClip.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/AttenuverterModule.h"
+#include "Project/ViewDoc.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
@@ -347,7 +348,7 @@ void GraphEditor::updateTransform() {
 void GraphEditor::applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor) {
     float oldZoom = zoomLevel;
     zoomLevel += wheelDelta * 0.1f * zoomLevel;
-    zoomLevel = juce::jlimit(0.1f, 2.0f, zoomLevel);
+    zoomLevel = juce::jlimit(synth::ViewDoc::kMinZoom, synth::ViewDoc::kMaxZoom, zoomLevel);
 
     if (oldZoom != zoomLevel) {
         // Transform the anchor position to get the graph point before scaling
@@ -368,6 +369,26 @@ void GraphEditor::applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor)
 
     // Only a real scale change costs a re-raster; a clamped wheel tick at the 0.1/2.0 limits
     // must not keep the cards soft forever.
+    if (oldZoom != zoomLevel)
+        beginOrRefreshZoomGesture();
+}
+
+// The canvas view a project saves. Applying one is a view change only: it is not an edit, so it records no undo
+// step and does not mark the document unsaved (the same as any pan or zoom).
+synth::ViewDoc GraphEditor::getViewDoc() const {
+    synth::ViewDoc view;
+    view.zoom = zoomLevel;
+    view.panX = panOffset.x;
+    view.panY = panOffset.y;
+    return view;
+}
+
+void GraphEditor::applyViewDoc(const synth::ViewDoc& view) {
+    const float oldZoom = zoomLevel;
+    zoomLevel = juce::jlimit(synth::ViewDoc::kMinZoom, synth::ViewDoc::kMaxZoom, view.zoom);
+    panOffset = {view.panX, view.panY};
+    updateTransform();
+    // A changed scale re-rasters every card, exactly as a wheel tick does.
     if (oldZoom != zoomLevel)
         beginOrRefreshZoomGesture();
 }
@@ -526,9 +547,7 @@ void GraphEditor::fitViewToModules() {
         return; // not laid out yet; a later paint/resize will settle the view
 
     float scale = juce::jmin(view.getWidth() / box.getWidth(), view.getHeight() / box.getHeight());
-    const float kMinZoom = 0.1f; // matches the wheel-zoom clamp in contentWheelPositionChanged
-    const float kMaxZoom = 2.0f;
-    scale = juce::jlimit(kMinZoom, kMaxZoom, scale);
+    scale = juce::jlimit(synth::ViewDoc::kMinZoom, synth::ViewDoc::kMaxZoom, scale);
     zoomLevel = scale;
     // Centre the (expanded) box within the viewport. screen = content * scale + panOffset.
     float targetCenterX = view.getX() + view.getWidth() * 0.5f;

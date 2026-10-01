@@ -2,6 +2,7 @@
 
 #include "Transport/TransportService.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
+#include "UI/Layout/NonModalLabel.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
@@ -30,7 +31,7 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 // outcome — see docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step
 // (MidiRecorder wiring entry).
 //
-// No SVG assets: the four transport glyphs (play/stop, record, loop, metronome) are drawn as plain
+// No SVG assets: the transport glyphs (return to start, play/stop, record, loop, metronome) are drawn as plain
 // juce::Path/juce::Rectangle shapes in GlyphButton::paintButton, each inside a centred square with
 // generous inset (see GlyphButton). Record engaged is the one theme-independent colour on the bar —
 // see kRecordRedArgb.
@@ -97,7 +98,13 @@ public:
     // is clicked — never cached by the caller.
     int getCountInBars() const noexcept { return countInBars_; }
 
+    // Return to Start: a click asks the owner to run the app's own `transportReturnToStart` command, so the
+    // button and the command (shortcut, MIDI) can never drift apart. Unset (tests, headless), it just locates
+    // the transport to beat 0. Not a MIDI Learn target: the four glyph buttons above are the only ones.
+    std::function<void()> onReturnToStart;
+
     // ---- test accessors ----
+    juce::Button& getReturnToStartButton() noexcept { return returnToStartButton_; }
     juce::Button& getMetronomeButton() noexcept { return metronomeButton_; }
     juce::ComboBox& getCountInCombo() noexcept { return countInCombo_; }
 
@@ -176,12 +183,14 @@ private:
     // playback/record/loop/metronome — juce::Button has no isPopupMenu() guard of its own.
     class GlyphButton : public synth::ui::midilearn::RightClickSafeButton<juce::Button> {
     public:
-        enum class Glyph { PlayStop, Record, Loop, Metronome };
+        enum class Glyph { PlayStop, Record, Loop, Metronome, ReturnToStart };
         GlyphButton(const juce::String& name, Glyph glyph)
             : synth::ui::midilearn::RightClickSafeButton<juce::Button>(name)
             , glyph_(glyph) {}
         Glyph getGlyph() const noexcept { return glyph_; }
         void paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool shouldDrawDown) override;
+        // The keyboard-focus ring: a Tab-reachable glyph button must show where focus is.
+        void paintOverChildren(juce::Graphics& g) override;
 
         // THE colour this glyph is drawn in — paintButton()'s only source, and the record button's
         // red/idle test seam (see getRecordGlyphColourForTest). Record is the one glyph whose lit
@@ -220,7 +229,7 @@ private:
     // drag-to-scrub are independent gestures — JUCE dispatches mouseDoubleClick separately from
     // mouseDown/mouseDrag/mouseUp, so overriding the latter three here does not disturb Label's
     // own editDoubleClick handling.
-    class BpmDragLabel : public juce::Label {
+    class BpmDragLabel : public synth::ui::NonModalLabel {
     public:
         explicit BpmDragLabel(TimelineTransportBar& owner) noexcept
             : owner_(owner) {}
@@ -241,13 +250,14 @@ private:
 
     synth::TransportService* transport_ = nullptr;
 
+    GlyphButton returnToStartButton_{"timelineTransportReturnToStart", GlyphButton::Glyph::ReturnToStart};
     GlyphButton playStopButton_{"timelineTransportPlayStop", GlyphButton::Glyph::PlayStop};
     GlyphButton recordButton_{"timelineTransportRecord", GlyphButton::Glyph::Record};
     GlyphButton loopButton_{"timelineTransportLoop", GlyphButton::Glyph::Loop};
     GlyphButton metronomeButton_{"timelineTransportMetronome", GlyphButton::Glyph::Metronome};
     juce::ComboBox countInCombo_;
     BpmDragLabel bpmLabel_{*this};
-    juce::Label timeSigLabel_;
+    synth::ui::NonModalLabel timeSigLabel_;
 
     juce::String lastReadoutText_;
     int readoutRepaintCount_ = 0;

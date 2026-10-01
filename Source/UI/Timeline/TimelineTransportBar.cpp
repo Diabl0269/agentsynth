@@ -1,5 +1,6 @@
 #include "TimelineTransportBar.h"
 #include "Transport/Metronome.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -66,7 +67,11 @@ juce::Colour TimelineTransportBar::GlyphButton::glyphColour() const {
         return getToggleState() ? juce::Colour(kRecordRedArgb) : textPrimary.withAlpha(0.75f);
     if (getToggleState())
         return accent;
-    return glyph_ == Glyph::PlayStop ? textPrimary : textPrimary.withAlpha(0.7f);
+    return (glyph_ == Glyph::PlayStop || glyph_ == Glyph::ReturnToStart) ? textPrimary : textPrimary.withAlpha(0.7f);
+}
+
+void TimelineTransportBar::GlyphButton::paintOverChildren(juce::Graphics& g) {
+    synth::ui::paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f);
 }
 
 void TimelineTransportBar::GlyphButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool) {
@@ -144,6 +149,16 @@ void TimelineTransportBar::GlyphButton::paintButton(juce::Graphics& g, bool shou
         g.fillPath(arrowHead);
         break;
     }
+    case Glyph::ReturnToStart: {
+        // "Skip to start": a bar on the left edge with a left-pointing triangle against it.
+        const float barWidth = juce::jmax(1.5f, glyphArea.getWidth() * 0.16f);
+        g.fillRect(glyphArea.getX(), glyphArea.getY(), barWidth, glyphArea.getHeight());
+        const auto tri = glyphArea.withTrimmedLeft(barWidth + glyphArea.getWidth() * 0.08f);
+        juce::Path triangle;
+        triangle.addTriangle(tri.getRight(), tri.getY(), tri.getRight(), tri.getBottom(), tri.getX(), tri.getCentreY());
+        g.fillPath(triangle);
+        break;
+    }
     case Glyph::Metronome: {
         // A plain "quarter note" glyph (notehead + stem) — asset-free and distinct at a glance from
         // Record's plain circle. Proportioned as a group inside the square so it reads as a note
@@ -174,7 +189,20 @@ void TimelineTransportBar::BpmDragLabel::mouseDrag(const juce::MouseEvent& e) {
 
 //==============================================================================
 TimelineTransportBar::TimelineTransportBar() {
+    addAndMakeVisible(returnToStartButton_);
+    returnToStartButton_.setComponentID("timelineTransportReturnToStart");
+    returnToStartButton_.setTitle("Return to Start");
+    returnToStartButton_.setDescription("Move the playhead to the start of the timeline");
+    returnToStartButton_.setTooltip("Return to Start");
+    returnToStartButton_.onClick = [this] {
+        if (onReturnToStart)
+            onReturnToStart();
+        else if (transport_ != nullptr)
+            transport_->locateBeat(0.0);
+    };
+
     addAndMakeVisible(playStopButton_);
+    playStopButton_.setTitle("Play / Stop");
     playStopButton_.setComponentID("timelineTransportPlayStop");
     playStopButton_.setClickingTogglesState(false); // the transport is the truth
     playStopButton_.setTooltip("Play / Stop");
@@ -188,6 +216,7 @@ TimelineTransportBar::TimelineTransportBar() {
     };
 
     addAndMakeVisible(recordButton_);
+    recordButton_.setTitle("Record");
     recordButton_.setComponentID("timelineTransportRecord");
     recordButton_.setClickingTogglesState(false); // the owner is authoritative — see setRecordingState
     recordButton_.setTooltip("Record (arms the first armed track; implies Play)");
@@ -197,6 +226,7 @@ TimelineTransportBar::TimelineTransportBar() {
     };
 
     addAndMakeVisible(loopButton_);
+    loopButton_.setTitle("Loop");
     loopButton_.setComponentID("timelineTransportLoop");
     loopButton_.setClickingTogglesState(false); // the transport is the truth
     loopButton_.setTooltip("Loop");
@@ -208,6 +238,7 @@ TimelineTransportBar::TimelineTransportBar() {
     };
 
     addAndMakeVisible(metronomeButton_);
+    metronomeButton_.setTitle("Metronome");
     metronomeButton_.setComponentID("timelineTransportMetronome");
     metronomeButton_.setClickingTogglesState(false); // this bar owns the visual explicitly below
     metronomeButton_.setTooltip("Metronome click (summed after the graph - never recorded or bounced)");
@@ -405,6 +436,8 @@ void TimelineTransportBar::resized() {
         button.setBounds(bounds.removeFromLeft(buttonSize).withSizeKeepingCentre(buttonSize, buttonSize));
     };
 
+    placeButton(returnToStartButton_);
+    bounds.removeFromLeft(kGap);
     placeButton(playStopButton_);
     bounds.removeFromLeft(kGap);
     placeButton(recordButton_);

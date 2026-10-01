@@ -291,6 +291,11 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
                 juce::var extraState = mb->getExtraState();
                 if (!extraState.isVoid())
                     n->setProperty("state", extraState);
+                // Which card panels are open (scope / response / spectrum): presentation only, so it has
+                // its own key ("cardView") rather than sharing "state", whose shape each module type owns.
+                const juce::var view = mb->getCardViewState().toVar();
+                if (!view.isVoid())
+                    n->setProperty("cardView", view);
             }
 
             // Position
@@ -513,10 +518,17 @@ void AIStateMapper::applyExtraStateToProcessor(juce::AudioProcessor* processor, 
     // Untrusted (model-authored) JSON never reaches setExtraState: a module may read this as a
     // filename (SamplerModule does), so honouring it for remote output would let a patch suggestion
     // name an arbitrary file for the app to open. Our own snapshots and presets are trusted.
-    if (!trusted || !nodeObj->hasProperty("state"))
+    if (!trusted)
         return;
-    if (auto* mb = dynamic_cast<ModuleBase*>(processor))
+    auto* mb = dynamic_cast<ModuleBase*>(processor);
+    if (mb == nullptr)
+        return;
+    if (nodeObj->hasProperty("state"))
         mb->setExtraState(nodeObj->getProperty("state"));
+    // "cardView" is presentation only and cannot name a file, but it stays trusted-only too: a provider has no
+    // business opening scopes on the user's cards.
+    if (nodeObj->hasProperty("cardView"))
+        mb->setCardViewState(CardViewState::fromVar(nodeObj->getProperty("cardView")));
 }
 
 bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessorGraph& graph, bool clearExisting,

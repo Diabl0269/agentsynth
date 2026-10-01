@@ -27,6 +27,7 @@ class AudioEngine;
 class ModuleComponent;
 class MacroCardComponent;
 namespace synth {
+struct ViewDoc;              // Forward declaration (Source/Project/ViewDoc.h)
 class PluginCardLayoutStore; // hosted-plugin card layouts, see setPluginCardLayoutStore
 class MidiRemoteProjectDoc;  // see setMidiRemoteProjectDocForUndo
 } // namespace synth
@@ -73,6 +74,9 @@ public:
     void centreViewOn(juce::Point<float> canvasPoint);
     void fitViewToModules();
     void zoomAroundCentre(float wheelDelta);
+    /** The canvas zoom and pan as they are now; `applyViewDoc` clamps to the wheel-zoom range. Message thread. */
+    synth::ViewDoc getViewDoc() const;
+    void applyViewDoc(const synth::ViewDoc& view);
     synth::ui::MinimapModel buildMinimapModel();
 
     // ---- Locate Master ---- See GraphEditorTypes.h for the LocateMasterResult enum.
