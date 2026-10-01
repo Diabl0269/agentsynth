@@ -77,11 +77,14 @@ than running to `getNumChannels()`, or it erases the right leg.
 | **Filter (poly)** | ch9 | In | Shared Resonance CV |
 | **Filter (poly)** | ch10 | In | Shared Drive CV |
 | **Filter (poly)** | ch11-18 | In/Out | Per-voice audio — `Audio R` (`kRightBase`), own ladder per voice |
+| **Filter (poly)** | ch19-26 | In | Per-voice `Pitch` (Hz) for Key Track (`kPitchBase`); one jack, eight wide |
+| **Filter (poly/mono)** | ch27 | In | Key Track CV (same channel both modes) |
 | **Filter (mono)** | ch0 | In/Out | `Audio L` in / filtered out |
 | **Filter (mono)** | ch1 | In | Cutoff CV |
 | **Filter (mono)** | ch2 | In | Resonance CV |
 | **Filter (mono)** | ch3 | In | Drive CV |
 | **Filter (mono)** | ch11 | In/Out | `Audio R` (`kRightBase`) in / filtered out |
+| **Filter (mono)** | ch19 | In | `Pitch` (Hz) for Key Track (`kPitchBase`); ch20-26 unused in mono |
 | **VCA (poly)** | ch0-7 | In | Per-voice audio — `Audio L` |
 | **VCA (poly)** | ch8-15 | In | Per-voice envelope/CV |
 | **VCA (poly)** | ch16-23 | In | Per-voice audio — `Audio R` (`kRightBase`) |

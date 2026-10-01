@@ -11,13 +11,13 @@
 
 TEST(FilterStereo, AudioRIsItsOwnBlockInAndOut) {
     EXPECT_EQ(FilterModule::kRightBase, 11);
-    EXPECT_EQ(FilterModule::kNumChannels, 19);
+    EXPECT_EQ(FilterModule::kNumChannels, 28) << "Pitch ch19-26 and Key Track CV ch27 are appended above Audio R";
 
     FilterModule filter;
     // A processor needs the right leg as an input as well as an output, unlike a pure source.
     EXPECT_EQ(filter.getTotalNumInputChannels(), FilterModule::kNumChannels);
     EXPECT_EQ(filter.getTotalNumOutputChannels(), FilterModule::kNumChannels);
-    EXPECT_EQ(filter.getVisibleInputPortCount(), 5);
+    EXPECT_EQ(filter.getVisibleInputPortCount(), 7); // Audio L/R, Cutoff, Resonance, Drive, Pitch, Key Track
     EXPECT_EQ(filter.getVisibleOutputPortCount(), 2);
 }
 
@@ -56,14 +56,14 @@ TEST(FilterStereo, CVTargetChannelsAreUnchangedInBothVoiceModes) {
     FilterModule filter;
 
     auto mono = filter.getModulationTargets();
-    ASSERT_EQ(mono.size(), 3u);
+    ASSERT_EQ(mono.size(), 4u) << "Cutoff, Resonance, Drive, then Key Track on its own channel";
     EXPECT_EQ(mono[0].channelIndex, 1);
     EXPECT_EQ(mono[1].channelIndex, 2);
     EXPECT_EQ(mono[2].channelIndex, 3);
 
     setBoolParam(filter, "poly", true);
     auto poly = filter.getModulationTargets();
-    ASSERT_EQ(poly.size(), 3u);
+    ASSERT_EQ(poly.size(), 4u);
     EXPECT_EQ(poly[0].channelIndex, 8);
     EXPECT_EQ(poly[1].channelIndex, 9);
     EXPECT_EQ(poly[2].channelIndex, 10);

@@ -135,11 +135,11 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Chorus", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
         {"Comparator", "bypassed, muted, trigThreshold"},
         {"Compressor", "attack, bypassed, dualIO, makeupGain, muted, ratio, release, threshold"},
-        {"Delay", "bypassed, dualIO, feedback, mix, muted, outputLevel, time"},
+        {"Delay", "bypassed, dualIO, feedback, mix, muted, outputLevel, pingPong, tempoSync, time, timeDiv"},
         {"Distortion", "bypassed, drive, dualIO, mix, muted, outputLevel, oversampling, type"},
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},
-        {"Filter", "bypassed, cutoff, drive, dualIO, filterType, muted, outputLevel, poly, resonance"},
+        {"Filter", "bypassed, cutoff, drive, dualIO, filterType, keyTrack, muted, outputLevel, poly, resonance"},
         {"Filter Env", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
                        "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync, velocity"},
         {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
@@ -183,7 +183,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
                            "Step 2 Chord, Step 2 Root, Step 3 Chord, Step 3 Root, Step 4 Chord, Step 4 Root, "
                            "Step 5 Chord, Step 5 Root, Step 6 Chord, Step 6 Root, Step 7 Chord, Step 7 Root, "
                            "Step 8 Chord, Step 8 Root, bpm, bypassed, run, syncToTransport"},
-        {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, roomSize, wet, width"},
+        {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, preDelay, roomSize, wet, width"},
         {"Ring Modulator", "bypassed, character, drive, dualIO, mix, muted, outputLevel, oversampling"},
         {"Sample & Hold", "bypassed, clock, holdMode, level, muted, offset, rate, slew, source, trigThreshold"},
         {"Sampler",

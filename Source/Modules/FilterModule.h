@@ -2,6 +2,7 @@
 
 #include "FrequencyText.h"
 #include "ModuleBase.h"
+#include "ParameterText.h"
 #include <atomic>
 #include <juce_dsp/juce_dsp.h>
 #include <optional>
@@ -24,9 +25,16 @@ public:
     static constexpr int kNumCVInputs = 3;                        // Cutoff, Resonance, Drive
     static constexpr int kNumInputs = kPolyCVBase + kNumCVInputs; // 11
     static constexpr int kRightBase = kNumInputs;                 // Audio R block starts here
-    static constexpr int kNumChannels = kRightBase + kNumVoices;  // 19, in and out
-    static constexpr int kLegCount = 2;                           // 0 = Audio L, 1 = Audio R
-    static constexpr int kNumVisibleInputs = 2 + kNumCVInputs;    // Audio L, Audio R, then CV
+    // Key Track and its Pitch input are appended above Audio R so no saved channel moves: Pitch is a
+    // per-voice block (one channel in mono, eight in poly) and Key Track's CV is one shared channel,
+    // the same raw channels in both voice modes.
+    static constexpr int kPitchBase = kRightBase + kNumVoices;         // 19-26: per-voice pitch in Hz
+    static constexpr int kKeyTrackCVChannel = kPitchBase + kNumVoices; // 27
+    static constexpr int kNumChannels = kKeyTrackCVChannel + 1;        // 28, in and out
+    static constexpr float kKeyTrackRefHz = 261.63f;                   // middle C: no shift at any Key Track
+    static constexpr int kLegCount = 2;                                // 0 = Audio L, 1 = Audio R
+    static constexpr int kNumVisibleInputs = 2 + kNumCVInputs;         // Audio L, Audio R, then CV
+    static constexpr int kExtraJacks = 2;                              // Pitch, Key Track (after Drive)
 
     /** Raw channel carrying CV jack `cv` (0 = Cutoff, 1 = Resonance, 2 = Drive). Mono packs the CV
         block directly above the single audio channel (1-3); poly puts it above the voice fan (8-10). */
@@ -36,10 +44,11 @@ public:
     static constexpr int legBaseChannel(int leg) { return leg == 0 ? 0 : kRightBase; }
 
     FilterModule()
-        // 19 in / 19 out: Audio L on 0-7, shared CV on 8-10, Audio R on 11-18. Declaring the
+        // 28 in / 28 out: Audio L on 0-7, shared CV on 8-10, Audio R on 11-18, Pitch on 19-26 and Key
+        // Track CV on 27. Declaring the
         // outputs above every CV input channel also makes JUCE hand this node private copies of
         // shared CV buffers, so the end-of-block CV clear can only ever zero our own copy.
-        // StereoAudio::Declared: 19 outputs, so the Auto shape test cannot see this module's stereo
+        // StereoAudio::Declared: 28 outputs, so the Auto shape test cannot see this module's stereo
         // pair — its right leg is the kRightBase block, and it ships SPLIT.
         : ModuleBase("Filter", kNumChannels, kNumChannels, StereoAudio::Declared) {
         addParameter(cutoffParam = new juce::AudioParameterFloat("cutoff", "Cutoff",
@@ -51,6 +60,11 @@ public:
                          "filterType", "Filter Type",
                          juce::StringArray{"LPF24", "LPF12", "HPF24", "HPF12", "BPF24", "BPF12", "Notch"}, 0));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
+        // Key Track: how far the cutoff follows the Pitch input, in percent of one octave per octave
+        // around middle C. 0 (default) leaves the cutoff alone, as does an unplugged Pitch jack.
+        addParameter(keyTrackParam = new juce::AudioParameterFloat("keyTrack", "Key Track",
+                                                                   juce::NormalisableRange<float>(0.0f, 100.0f), 0.0f,
+                                                                   synth::percentAttributes()));
         // Dual I/O comes from the ctor's StereoAudio::Declared above (defaults to split: this module
         // filters in stereo). Collapsed, its jack layout is the plain mono one — Audio,
         // Cutoff, Resonance, Drive.
@@ -82,6 +96,8 @@ public:
         smoothedResonance.setCurrentAndTargetValue(*resonanceParam);
         smoothedDrive.reset(sampleRate, 0.005);
         smoothedDrive.setCurrentAndTargetValue(*driveParam);
+        smoothedKeyTrack.reset(sampleRate, 0.005);
+        smoothedKeyTrack.setCurrentAndTargetValue(keyTrackParam->get() * 0.01f);
         prepareOutputLevel(sampleRate);
     }
 
@@ -102,6 +118,8 @@ public:
         smoothedCutoff.setTargetValue(*cutoffParam);
         smoothedResonance.setTargetValue(*resonanceParam);
         smoothedDrive.setTargetValue(*driveParam);
+        smoothedKeyTrack.setTargetValue(
+            0.01f * modulateNormalised(*keyTrackParam, keyTrackParam->get(), blockCV(buffer, kKeyTrackCVChannel)));
         applyFilterType(filterTypeParam->getIndex());
 
         modulatedCutoff.store(*cutoffParam, std::memory_order_relaxed);
@@ -136,12 +154,21 @@ public:
         int cvStartChannel = cvChannelFor(0, polyParam->get());
         for (int ch = cvStartChannel; ch < kRightBase && ch < buffer.getNumChannels(); ++ch)
             buffer.clear(ch, 0, numSamples);
+        // The Pitch block and Key Track CV above Audio R are inputs only: clear them too.
+        for (int ch = kPitchBase; ch < kNumChannels && ch < buffer.getNumChannels(); ++ch)
+            buffer.clear(ch, 0, numSamples);
     }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
         if (polyParam->get())
-            return {{"Cutoff", 8, "cutoff"}, {"Resonance", 9, "resonance"}, {"Drive", 10, "drive"}};
-        return {{"Cutoff", 1, "cutoff"}, {"Resonance", 2, "resonance"}, {"Drive", 3, "drive"}};
+            return {{"Cutoff", 8, "cutoff"},
+                    {"Resonance", 9, "resonance"},
+                    {"Drive", 10, "drive"},
+                    {"Key Track", kKeyTrackCVChannel, "keyTrack"}};
+        return {{"Cutoff", 1, "cutoff"},
+                {"Resonance", 2, "resonance"},
+                {"Drive", 3, "drive"},
+                {"Key Track", kKeyTrackCVChannel, "keyTrack"}};
     }
     /** Audio R sits next to Audio L rather than after Drive, so the two legs read as a pair. Visible
         jack order is presentation only — connections persist by raw channel index, so the CV jacks
@@ -150,12 +177,12 @@ public:
         const int audioJacks = splitAudioJackCount();
         if (i >= 0 && i < audioJacks)
             return splitAudioLabel(i);
-        const juce::String cvLabels[] = {"Cutoff", "Resonance", "Drive"};
+        const juce::String cvLabels[] = {"Cutoff", "Resonance", "Drive", "Pitch", "Key Track"};
         const int cv = i - audioJacks;
-        return (cv >= 0 && cv < kNumCVInputs) ? cvLabels[cv] : ModuleBase::getInputPortLabel(i);
+        return (cv >= 0 && cv < kNumCVInputs + kExtraJacks) ? cvLabels[cv] : ModuleBase::getInputPortLabel(i);
     }
     juce::String getOutputPortLabel(int i) const override { return splitAudioLabel(i); }
-    int getVisibleInputPortCount() const override { return splitAudioJackCount() + kNumCVInputs; }
+    int getVisibleInputPortCount() const override { return splitAudioJackCount() + kNumCVInputs + kExtraJacks; }
     int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
     int rightAudioLegChannel() const override { return kRightBase; }
     // Audio L/R are read in place at ch0(-7)/kRightBase(+) above -- a genuine stereo
@@ -187,6 +214,26 @@ public:
             }
         }
 
+        // Pitch (per voice in poly, ch19 alone in mono) and Key Track CV, after the three CV jacks.
+        const int pitchJack = splitAudioJackCount() + kNumCVInputs;
+        const int pitchSpan = poly ? kNumVoices : 1;
+        if (raw >= kPitchBase && raw < kPitchBase + pitchSpan) {
+            LogicalPort p;
+            p.visibleJackIndex = pitchJack;
+            p.role = PortRole::Pitch;
+            p.isPolyGroupHead = (raw == kPitchBase);
+            p.polyVoiceSpan = (raw == kPitchBase) ? pitchSpan : 1;
+            return p;
+        }
+        if (raw == kKeyTrackCVChannel) {
+            LogicalPort p;
+            p.visibleJackIndex = pitchJack + 1;
+            p.role = PortRole::ModCV;
+            p.isPolyGroupHead = true;
+            p.polyVoiceSpan = 1;
+            return p;
+        }
+
         // Unclaimed channels (the poly CV block while in mono, and vice versa) are addressable but
         // never a jack head. Deliberately not ModuleBase's default: it reports isPolyGroupHead for
         // any raw channel below the VISIBLE jack count, so growing to 5 jacks would make raw ch4 a
@@ -203,7 +250,7 @@ public:
         if (auto audio = mapAudioLeg(raw))
             return *audio;
 
-        // Silent pass-through channels (the CV block, and voices 1-7 in mono): addressable but never
+        // Silent pass-through channels (the CV block, the Pitch block, and voices 1-7 in mono): addressable but never
         // a poly-bus head. Deliberately not ModuleBase's default, which clamps the raw channel onto
         // a visible jack index and so would advertise mono ch1 (Cutoff CV) as the Audio R head.
         LogicalPort p;
@@ -255,6 +302,7 @@ private:
         const float* cvCutoffCh = (numChannels > 1) ? buffer.getReadPointer(1) : nullptr;
         const float* cvResCh = (numChannels > 2) ? buffer.getReadPointer(2) : nullptr;
         const float* cvDriveCh = (numChannels > 3) ? buffer.getReadPointer(3) : nullptr;
+        const float* pitchCh = (numChannels > kPitchBase) ? buffer.getReadPointer(kPitchBase) : nullptr;
 
         juce::dsp::AudioBlock<float> block(buffer);
         auto singleChannelBlock = block.getSingleChannelBlock(0);
@@ -288,8 +336,12 @@ private:
             else if (totalCutoffMod < 0.0f)
                 f = baseCutoff * std::pow(20.0f / baseCutoff, -totalCutoffMod);
             f = juce::jlimit(20.0f, 20000.0f, f);
-            if (cutoffCVActive)
-                modulatedCutoff.store(f, std::memory_order_relaxed);
+            // Key Track: after the cutoff CV, per sample (the smoother is advanced even while the
+            // Pitch jack is empty so it never lags a later patch-in).
+            const float keyTracked = keyTrackedCutoff(f, smoothedKeyTrack.getNextValue(), pitchCh ? pitchCh[i] : 0.0f);
+            if (cutoffCVActive || keyTracked != f)
+                modulatedCutoff.store(keyTracked, std::memory_order_relaxed);
+            f = keyTracked;
             ladders[0][0].setCutoffFrequencyHz(f);
 
             float totalResMod = cvResCh ? cvResCh[i] : 0.0f;
@@ -376,6 +428,8 @@ private:
         const float baseCutoffPoly = smoothedCutoff.getCurrentValue();
         const float baseRes = smoothedResonance.getCurrentValue();
         const float baseDrive = smoothedDrive.getCurrentValue();
+        const float keyTrack = smoothedKeyTrack.getCurrentValue();
+        smoothedKeyTrack.skip(numSamples);
         smoothedCutoff.skip(numSamples);
         smoothedResonance.skip(numSamples);
         smoothedDrive.skip(numSamples);
@@ -410,7 +464,7 @@ private:
         float res = juce::jlimit(0.0f, 1.0f, baseRes + cvRes);
         float drive = juce::jlimit(1.0f, 10.0f, baseDrive + (cvDrv * 9.0f));
 
-        modulatedCutoff.store(f, std::memory_order_relaxed);
+        modulatedCutoff.store(keyTrackedCutoff(f, keyTrack, blockEndPitch(buffer, 0)), std::memory_order_relaxed);
         modulatedResonance.store(res, std::memory_order_relaxed);
         modulatedDrive.store(drive, std::memory_order_relaxed);
 
@@ -428,12 +482,15 @@ private:
                 if (buffer.getRMSLevel(ch, 0, numSamples) < 1e-6f)
                     continue;
 
-                ladders[leg][v].setCutoffFrequencyHz(f);
+                // Key Track moves each voice's cutoff by its own pitch (the value its Pitch channel
+                // ends the block on); both legs of a voice share it.
+                const float voiceF = keyTrackedCutoff(f, keyTrack, blockEndPitch(buffer, v));
+                ladders[leg][v].setCutoffFrequencyHz(voiceF);
                 ladders[leg][v].setResonance(res);
                 ladders[leg][v].setDrive(drive);
 
                 if (isNotchMode) {
-                    svfsForNotch[leg][v].setCutoffFrequency(f);
+                    svfsForNotch[leg][v].setCutoffFrequency(voiceF);
                     svfsForNotch[leg][v].setResonance(0.707f + res * 15.0f);
                     svfsForNotch[leg][v].setType(juce::dsp::StateVariableTPTFilterType::bandpass);
                     float* audioData = buffer.getWritePointer(ch);
@@ -449,6 +506,23 @@ private:
                 }
             }
         }
+    }
+
+    /** Cutoff after Key Track: `f` times (pitch / middle C) ^ keyTrack, i.e. `keyTrack` octaves of
+        cutoff movement per octave of pitch around middle C, clamped to the filter's range. Returns `f`
+        untouched (not even re-clamped) at Key Track 0 or with no pitch (<= 0, the empty jack). */
+    static float keyTrackedCutoff(float f, float keyTrack, float pitchHz) {
+        if (keyTrack <= 0.0f || pitchHz <= 0.0f)
+            return f;
+        return juce::jlimit(20.0f, 20000.0f, f * std::pow(pitchHz / kKeyTrackRefHz, keyTrack));
+    }
+
+    /** Voice `v`'s Pitch (Hz) at the end of the block; 0 when the graph handed us no such channel. */
+    static float blockEndPitch(const juce::AudioBuffer<float>& buffer, int v) {
+        const int ch = kPitchBase + v;
+        return (ch < buffer.getNumChannels() && buffer.getNumSamples() > 0)
+                   ? buffer.getReadPointer(ch)[buffer.getNumSamples() - 1]
+                   : 0.0f;
     }
 
     void applyFilterType(int typeIndex) {
@@ -486,11 +560,13 @@ private:
     juce::SmoothedValue<float> smoothedCutoff;
     juce::SmoothedValue<float> smoothedResonance;
     juce::SmoothedValue<float> smoothedDrive;
+    juce::SmoothedValue<float> smoothedKeyTrack; // 0..1
     juce::AudioParameterFloat* cutoffParam = nullptr;
     juce::AudioParameterFloat* resonanceParam = nullptr;
     juce::AudioParameterFloat* driveParam = nullptr;
     juce::AudioParameterChoice* filterTypeParam = nullptr;
     juce::AudioParameterBool* polyParam = nullptr;
+    juce::AudioParameterFloat* keyTrackParam = nullptr;
     std::atomic<float> modulatedCutoff{440.0f};
     std::atomic<float> modulatedResonance{0.1f};
     std::atomic<float> modulatedDrive{1.0f};

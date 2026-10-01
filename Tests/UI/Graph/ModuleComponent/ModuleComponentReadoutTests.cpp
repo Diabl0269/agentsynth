@@ -5,6 +5,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 #include "Modules/ADSRModule.h"
+#include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -96,4 +97,12 @@ TEST(ModuleComponentReadout, AdsrVelocityReadsAsPercent) {
     f.expectReadout("velocity", "Velocity", 0.0f, "0 %");
     f.expectReadout("velocity", "Velocity", 75.0f, "75 %");
     EXPECT_NEAR(f.typed("velocity", "60%"), 60.0f, 1.0e-3f);
+}
+
+TEST(ModuleComponentReadout, FilterKeyTrackReadsAsPercent) {
+    ReadoutCard<FilterModule> f;
+    ASSERT_NE(f.card, nullptr);
+    f.expectReadout("keyTrack", "Key Track", 0.0f, "0 %");
+    f.expectReadout("keyTrack", "Key Track", 100.0f, "100 %");
+    EXPECT_NEAR(f.typed("keyTrack", "50%"), 50.0f, 1.0e-3f);
 }
