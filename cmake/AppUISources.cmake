@@ -26,6 +26,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentCommandPredicates.cpp
     Source/MainComponent/MainComponentSelectionCommands.cpp
     Source/MainComponent/MainComponentPanels.cpp
+    Source/MainComponent/MainComponentDockFocus.cpp
     Source/MainComponent/MainComponentTimeline.cpp
     Source/MainComponent/MainComponentAutomationOwner.cpp
     Source/MainComponent/MainComponentAutomationLanes.cpp
@@ -194,6 +195,10 @@ set(APPUI_SOURCES
     Source/UI/Layout/FoldAllButton.cpp
     Source/UI/Layout/TabSwitchKeys.h
     Source/UI/Layout/TabSwitchKeys.cpp
+    Source/UI/Layout/TabStripKeys.h
+    Source/UI/Layout/ListBoxFocusRing.h
+    Source/UI/Layout/ListBoxFocusRing.cpp
+    Source/UI/Layout/TabStripKeys.cpp
     Source/UI/Mixer/MixerPlacementController.h
     Source/UI/Mixer/MixerPlacementController.cpp
     Source/UI/Mixer/MixerMirrorController.h
@@ -421,6 +426,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModMatrixPicker.h
     Source/UI/Settings/AudioSettingsTab.cpp
     Source/UI/Settings/AudioSettingsTab.h
+    Source/UI/Settings/SettingsTabs.cpp
+    Source/UI/Settings/SettingsTabs.h
     Source/UI/Settings/SettingsWindow.cpp
     Source/UI/Settings/SettingsWindow.h
     Source/UI/Chrome/WelcomeScreenComponent.cpp

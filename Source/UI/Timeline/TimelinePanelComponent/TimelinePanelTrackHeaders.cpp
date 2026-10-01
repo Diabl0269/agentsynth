@@ -283,9 +283,31 @@ void TimelinePanelComponent::openAddTrackMenu() {
     menu.addItem(kCreateChannelsMenuId, "Create Channels", canCreateChannels);
 
     juce::Component::SafePointer<TimelinePanelComponent> safeThis(this);
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addTrackButton_), [safeThis](int result) {
+    // Opened from the keyboard, the menu hands focus back to "+ Track" when it closes (finishAddTrackMenu).
+    const bool fromKeyboard = isAddTrackButtonFocused();
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addTrackButton_),
+                       [safeThis, fromKeyboard](int result) {
+                           if (auto* self = safeThis.getComponent())
+                               self->finishAddTrackMenu(result, fromKeyboard);
+                       });
+}
+
+// Picked or dismissed, a menu opened from the keyboard hands focus back to "+ Track"; otherwise focus
+// would be left nowhere and the next Tab would restart at the toolbar.
+void TimelinePanelComponent::finishAddTrackMenu(int result, bool openedFromKeyboard) {
+    applyAddTrackMenuChoice(result);
+    if (!openedFromKeyboard)
+        return;
+    // The callback runs while the menu's own window still holds key focus, so a grab here is lost when
+    // it closes; take focus back once the menu is gone. Test mode records the move at once.
+    if (recordFocusForTest_) {
+        focusAddTrackButton();
+        return;
+    }
+    juce::Component::SafePointer<TimelinePanelComponent> safeThis(this);
+    juce::MessageManager::callAsync([safeThis] {
         if (auto* self = safeThis.getComponent())
-            self->applyAddTrackMenuChoice(result);
+            self->focusAddTrackButton();
     });
 }
 
@@ -375,7 +397,7 @@ void TimelinePanelComponent::syncTrackHeaders() {
         // in TimelineTrackHeaderComponent.h for why these are explicit callbacks rather than a real
         // focusGained() round trip.
         header->onSelectRequested = [this, trackId] { setFocusedTrack(trackId); };
-        header->onFocusMoveRequested = [this](int direction) { moveFocusedTrack(direction); };
+        header->onFocusMoveRequested = [this](int direction) { stepTrackFocusFromHeader(direction); };
         header->onEnterClipsRequested = [this, trackId] { return enterTrackClips(trackId); };
         // Whole-row drag-to-reorder — see TimelineTrackHeaderComponent::onRowDragStarted's
         // own comment for the division of labour (the row detects the gesture, this panel resolves
@@ -417,6 +439,7 @@ void TimelinePanelComponent::layoutTrackHeaders() {
 // "where am I" without walking the component tree asking each row whether it
 // hasKeyboardFocus(true) (which is also unreliable headlessly with no native peer).
 void TimelinePanelComponent::setFocusedTrack(synth::TrackId id) {
+    addTrackFocusRecorded_ = false;
     for (int i = 0; i < trackHeaderList_.headers.size(); ++i) {
         if (trackHeaderList_.headers.getUnchecked(i)->getTrackId() == id) {
             focusedTrackIndex_ = i;
@@ -435,12 +458,69 @@ void TimelinePanelComponent::moveFocusedTrack(int direction) {
     const int count = trackHeaderList_.headers.size();
     if (count == 0)
         return;
+    addTrackFocusRecorded_ = false;
     focusedTrackIndex_ = focusedTrackIndex_ < 0 ? 0 : juce::jlimit(0, count - 1, focusedTrackIndex_ + direction);
     // Best-effort: without a native peer (headless tests) this is a harmless no-op, same as every
     // other grabKeyboardFocus() call in this codebase (see TimelineClipLaneArea's own mouseDown).
     trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();
     ensureTrackVisible(focusedTrackIndex_);
     refreshRoutingPane();
+}
+
+// Down on the last row leaves the rows for "+ Track" (the next stop in the column); anything else is
+// the clamped row step. selectAdjacentTrack deliberately does not come through here: it selects a
+// track and must keep clamping.
+void TimelinePanelComponent::stepTrackFocusFromHeader(int direction) {
+    const int count = trackHeaderList_.headers.size();
+    if (direction > 0 && count > 0 && focusedTrackIndex_ == count - 1) {
+        focusAddTrackButton();
+        return;
+    }
+    moveFocusedTrack(direction);
+}
+
+// Best-effort like every grabKeyboardFocus() here: without a native peer the grab is a no-op, so
+// test mode records the move instead.
+void TimelinePanelComponent::focusAddTrackButton() {
+    if (recordFocusForTest_)
+        addTrackFocusRecorded_ = true;
+    else
+        addTrackButton_.grabKeyboardFocus();
+}
+
+bool TimelinePanelComponent::isAddTrackButtonFocused() const {
+    return recordFocusForTest_ ? addTrackFocusRecorded_ : addTrackButton_.hasKeyboardFocus(false);
+}
+
+// Up goes back to the last row (to the panel root when there are no tracks), Down is consumed (the
+// button is the last stop), Return/Space press it. Space is claimed here because juce::Button only
+// presses on Return and a bare Space would otherwise bubble up and toggle playback.
+bool TimelinePanelComponent::handleAddTrackButtonKey(const juce::KeyPress& key) {
+    if (!isAddTrackButtonFocused() || key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
+        return false;
+    if (key.isKeyCode(juce::KeyPress::returnKey) || key.isKeyCode(juce::KeyPress::spaceKey)) {
+        addTrackButton_.triggerClick();
+        return true;
+    }
+    if (key.isKeyCode(juce::KeyPress::downKey))
+        return true;
+    if (!key.isKeyCode(juce::KeyPress::upKey))
+        return false;
+    const int count = trackHeaderList_.headers.size();
+    if (count == 0) {
+        if (recordFocusForTest_)
+            addTrackFocusRecorded_ = false;
+        else
+            grabKeyboardFocus();
+        return true;
+    }
+    focusedTrackIndex_ = count - 1;
+    addTrackFocusRecorded_ = false;
+    if (!recordFocusForTest_)
+        trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();
+    ensureTrackVisible(focusedTrackIndex_);
+    refreshRoutingPane();
+    return true;
 }
 
 // Moves track-header focus one row `direction` (-1 up, +1 down) -- the same step the header's

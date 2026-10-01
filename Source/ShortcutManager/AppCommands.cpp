@@ -264,11 +264,6 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return selectNextTrack;
     if (actionId == "selectPreviousTrack")
         return selectPreviousTrack;
-    // The Settings window answers these two actions itself, by action id, for its own tab strip.
-    if (actionId == "tabPrevious")
-        return tabPrevious;
-    if (actionId == "tabNext")
-        return tabNext;
     // Every SURFACE action lands here — see kNoCommand.
     return kNoCommand;
 }

@@ -31,8 +31,15 @@ int ShortcutHintOverlay::capWidth(const juce::String& text, bool compact) const 
 }
 
 juce::String ShortcutHintOverlay::keyTextFor(const juce::String& actionId) const {
-    const auto binding = shortcuts_.getBinding(actionId);
+    return keyTextForBinding(shortcuts_.getBinding(actionId));
+}
+
+juce::String ShortcutHintOverlay::keyTextForBinding(const juce::KeyPress& binding) const {
     return bindingShownInMode(binding) ? hint::formatKeyCapTextForPlatform(binding) : juce::String();
+}
+
+juce::String ShortcutHintOverlay::keyTextForTarget(const Target& target) const {
+    return target.fixedKey.isValid() ? keyTextForBinding(target.fixedKey) : keyTextFor(target.actionId);
 }
 
 juce::Rectangle<int> ShortcutHintOverlay::boundsInOverlay(const juce::Component& c) const {
@@ -94,7 +101,7 @@ void ShortcutHintOverlay::addBubbleEntries(const DockHintInfo& dock) {
         const auto area = target.area ? target.area() : c->getLocalBounds();
         if (area.isEmpty() || !isHintable(*c, area.getCentre()))
             continue;
-        const auto text = keyTextFor(target.actionId);
+        const auto text = keyTextForTarget(target);
         if (text.isEmpty())
             continue;
         hint::BubbleRequest request;

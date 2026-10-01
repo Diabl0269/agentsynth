@@ -31,8 +31,8 @@ the Settings window is.
 - The tab opens on the category you last picked and remembers it across Settings windows and launches
   (user setting `preferencesCategory`, saved as the name "All", "Graph", "Timeline", "Files", "Mixer",
   "Panels" or "MidiRemote"). With nothing saved, or a value that names none of them, it opens on All.
-- **Tab keys**: Cmd+Option+Left / Right (and Cmd+1..9) switch the Settings window's tabs, also from the filter
-  field. → [`shortcuts.md`](../control/shortcuts.md#switching-tabs)
+- **Tab keys**: Cmd+1..9 switches the Settings window's tabs, also from the filter field (Left / Right on the
+  focused tab strip step through them). → [`shortcuts.md`](../control/shortcuts.md#switching-tabs)
 
 | Category | Rows |
 | --- | --- |

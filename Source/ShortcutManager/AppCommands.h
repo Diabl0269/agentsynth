@@ -112,10 +112,7 @@ enum CommandIDs {
     selectNextTrack,
     selectPreviousTrack,
     // Copies external samples/wavetables into the project, saves, optionally zips. Menu-only.
-    collectAndArchive,
-    // Previous/next tab of the bottom dock (wrapping).
-    tabPrevious,
-    tabNext
+    collectAndArchive
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears

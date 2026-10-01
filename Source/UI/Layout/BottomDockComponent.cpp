@@ -8,6 +8,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReadOnlyTextValue.h"
+#include "UI/Layout/TabStripKeys.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -814,8 +815,8 @@ juce::Component* BottomDockComponent::getActivePanelRoot() noexcept {
 }
 
 // Plain Left/Right/Home/End walk the tabs that are offered, in the user's tab order, and stop at the
-// ends; Return hands focus to the selected tab's panel root. Everything else (Cmd+1/2/3 included)
-// is left for the app-wide shortcuts.
+// ends (tabStripKeyTarget); Return hands focus to the selected tab's panel root. Everything else
+// (Cmd+1/2/3 included) is left for the app-wide shortcuts.
 bool BottomDockComponent::handleTabStripKey(const juce::KeyPress& key) {
     if (key.getModifiers().isAnyModifierKeyDown())
         return false;
@@ -826,41 +827,20 @@ bool BottomDockComponent::handleTabStripKey(const juce::KeyPress& key) {
     if (offered.empty())
         return false;
     const int current = (int)(std::find(offered.begin(), offered.end(), activeTab_) - offered.begin());
-    const int last = (int)offered.size() - 1;
 
-    if (key.isKeyCode(juce::KeyPress::leftKey))
-        selectTabAt(std::max(0, current - 1));
-    else if (key.isKeyCode(juce::KeyPress::rightKey))
-        selectTabAt(std::min(last, current + 1));
-    else if (key.isKeyCode(juce::KeyPress::homeKey))
-        selectTabAt(0);
-    else if (key.isKeyCode(juce::KeyPress::endKey))
-        selectTabAt(last);
-    else if (key.isKeyCode(juce::KeyPress::returnKey)) {
-        if (auto* panel = getActivePanelRoot()) {
-            if (panelFocusHook_)
-                panelFocusHook_(*panel);
-            else
-                panel->grabKeyboardFocus();
-        }
-    } else
+    if (const auto target = tabStripKeyTarget(key, current, (int)offered.size())) {
+        selectTabAt(*target);
+        return true;
+    }
+    if (!key.isKeyCode(juce::KeyPress::returnKey))
         return false;
+    if (auto* panel = getActivePanelRoot()) {
+        if (panelFocusHook_)
+            panelFocusHook_(*panel);
+        else
+            panel->grabKeyboardFocus();
+    }
     return true;
-}
-
-std::optional<BottomDockComponent::Tab> BottomDockComponent::adjacentOfferedTab(int direction) const {
-    std::vector<Tab> offered;
-    for (Tab t : tabOrder_)
-        if (isTabOfferedInStrip(t))
-            offered.push_back(t);
-    if (offered.empty())
-        return std::nullopt;
-    const auto count = static_cast<int>(offered.size());
-    const auto it = std::find(offered.begin(), offered.end(), activeTab_);
-    if (it == offered.end())
-        return direction < 0 ? offered.back() : offered.front();
-    const int index = static_cast<int>(it - offered.begin());
-    return offered[static_cast<size_t>(((index + (direction < 0 ? -1 : 1)) % count + count) % count)];
 }
 
 void BottomDockComponent::selectTabAt(int offeredIndex) {

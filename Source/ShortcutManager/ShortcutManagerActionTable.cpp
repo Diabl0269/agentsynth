@@ -42,10 +42,6 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
         {"toggleMixerPanel", ShortcutCategory::General},
         {"toggleMidiRemotePanel", ShortcutCategory::General},
         {"toggleSidePane", ShortcutCategory::General},
-        // Previous/next tab of whichever tabbed surface is in front: the Settings window's tab
-        // strip, or the main window's bottom dock. Cycles with wrap-around.
-        {"tabPrevious", ShortcutCategory::General},
-        {"tabNext", ShortcutCategory::General},
         {"selectAllModules", ShortcutCategory::General},
         {"copySelection", ShortcutCategory::General},
         {"pasteSelection", ShortcutCategory::General},

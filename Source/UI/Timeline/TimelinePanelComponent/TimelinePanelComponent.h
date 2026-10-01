@@ -447,6 +447,19 @@ public:
     bool selectAdjacentTrack(int direction);
     bool handleRootFocusKey(const juce::KeyPress& key);
 
+    // ---- "+ Track" keyboard stop (TimelinePanelTrackHeaders.cpp) ----
+    // The last stop of the track-header column; rationale beside the definitions.
+    /** Message thread only. Moves keyboard focus to "+ Track". */
+    void focusAddTrackButton();
+    /** True while "+ Track" holds keyboard focus (or, in test mode, was last focused through this panel). */
+    bool isAddTrackButtonFocused() const;
+    /** Keys for "+ Track" while it holds focus; false for any other focus owner or an unclaimed key. */
+    bool handleAddTrackButtonKey(const juce::KeyPress& key);
+    /** The "+ Track" menu's close callback (rationale beside the definition). */
+    void finishAddTrackMenu(int result, bool openedFromKeyboard);
+    /** Headless stand-in for real focus (no native window): focus moves are recorded, not grabbed. */
+    void setRecordFocusForTest(bool record) noexcept { recordFocusForTest_ = record; }
+
     /** Builds the "+ Track" menu WITHOUT showing it — openAddTrackMenu() calls this then shows the
      *  result async. The headless test seam for inspecting menu CONTENTS (item text, enabled state,
      *  submenus). Triggers ensureInstrumentPluginsScanned() on the host first (openAddTrackMenu()'s
@@ -502,6 +515,9 @@ private:
     // cached visible area.
     void ensureTrackVisible(int index);
     int focusedTrackIndex_ = -1;
+    void stepTrackFocusFromHeader(int direction);
+    bool recordFocusForTest_ = false;
+    bool addTrackFocusRecorded_ = false;
 
     // ---- Clip keyboard mode (TimelinePanelClipKeyboard.cpp) ----
     bool enterTrackClips(synth::TrackId trackId);

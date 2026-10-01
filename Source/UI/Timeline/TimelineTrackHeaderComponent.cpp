@@ -353,6 +353,8 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
         return;
 
     nameLabel_.setText(t->name, juce::dontSendNotification);
+    // The row is the keyboard stop (Up/Down walk the rows), so a screen reader names it by its track.
+    setTitle(t->name);
 
     // Re-derived from the live graph on every refresh rather than cached across edits --
     // a cable drag elsewhere can form or break this track's link with no doc change at all.
@@ -400,6 +402,7 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
               static_cast<juce::Component*>(&soloButton_), static_cast<juce::Component*>(&armButton_)})
             hidden->setVisible(false);
         nameLabel_.setText("Unassigned automation", juce::dontSendNotification);
+        setTitle("Unassigned automation");
         nameLabel_.setEditable(false, false, false);
         nameLabel_.setTooltip("Automation lanes no single track plays");
     } else {

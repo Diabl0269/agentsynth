@@ -395,6 +395,8 @@ namespace {
 // name was ever saved.
 constexpr const char* kSettingsTabNameKey = "settingsTabName";
 constexpr const char* kSettingsTabIndexKey = "settingsTab";
+// The main window samples its hints on a 10 Hz timer too (MainComponent::timerCallback).
+constexpr int kHintPollHz = 10;
 
 int rememberedTabIndex(juce::PropertiesFile& settings, const juce::StringArray& tabNames) {
     const auto name = settings.getValue(kSettingsTabNameKey);
@@ -437,9 +439,8 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     tabs.addTab("Feedback", juce::Colours::transparentBlack, feedbackSettingsTab, true);
 
     addAndMakeVisible(tabs);
-    // JUCE makes the tab strip a keyboard focus container its buttons never leave, and keeps them out
-    // of the Tab order: make it plain, so Tab visits the tabs and then the selected tab's controls.
-    tabs.getTabbedButtonBar().setFocusContainerType(juce::Component::FocusContainerType::none);
+    // The strip is one Tab stop (SettingsTabs::getStripFocus), ahead of the open tab's controls; its
+    // buttons are not stops of their own.
     for (int i = 0; i < tabs.getNumTabs(); ++i) {
         // A tab's content is not a Tab stop of its own: its controls are, and an unnamed stop between
         // the tab button and the first control is one key press nobody can explain.
@@ -453,7 +454,6 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
             tabSwitchKeys.attachToTextEditorsIn(*content);
         }
         if (auto* tabButton = tabs.getTabbedButtonBar().getTabButton(i)) {
-            tabButton->setWantsKeyboardFocus(true); // Tab reaches the tab strip; Space or Return opens a tab
             tabButton->setTooltip(
                 "Show the " + tabs.getTabNames()[i] + " settings" +
                 (i < 9 ? " (" + platformCommandKeyName() + "+" + juce::String(i + 1) + ")" : juce::String()));
@@ -474,11 +474,39 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
         initialIndex = rememberedTabIndex(*appProperties.getUserSettings(), tabs.getTabNames());
     tabs.setCurrentTabIndex(initialIndex, false);
 
+    attachShortcutHints();
+    startTimerHz(kHintPollHz);
+
     themeManager.addChangeListener(this);
     juce::Desktop::getInstance().addFocusChangeListener(this);
 }
 
+// Holding Cmd names each tab's positional key on its button, the way the main window names its buttons'.
+void SettingsWindow::attachShortcutHints() {
+    shortcutHints = std::make_unique<synth::ui::ShortcutHintOverlay>(*this, shortcutManager);
+    for (int i = 0; i < tabs.getNumTabs() && i < 9; ++i)
+        if (auto* tabButton = tabs.getTabbedButtonBar().getTabButton(i))
+            shortcutHints->addFixedKeyTarget(*tabButton,
+                                             juce::KeyPress('1' + i, juce::ModifierKeys::commandModifier, '1' + i));
+}
+
+void SettingsWindow::modifierKeysChanged(const juce::ModifierKeys& modifiers) {
+    if (shortcutHints != nullptr)
+        shortcutHints->sample(modifiers);
+}
+
+// JUCE sends modifierKeysChanged only to the component under the mouse, so with the pointer outside
+// this window a held Cmd would never reach the hints. Poll the live modifiers instead, as the main
+// window's timer does, and only while this window holds keyboard focus (a Cmd held in another window
+// is not for these tabs).
+void SettingsWindow::timerCallback() {
+    if (shortcutHints != nullptr)
+        shortcutHints->sample(hasKeyboardFocus(true) ? juce::ModifierKeys::getCurrentModifiersRealtime()
+                                                     : juce::ModifierKeys());
+}
+
 SettingsWindow::~SettingsWindow() {
+    stopTimer();
     juce::Desktop::getInstance().removeFocusChangeListener(this);
     themeManager.removeChangeListener(this);
     appProperties.getUserSettings()->setValue(kSettingsTabNameKey, tabs.getTabNames()[tabs.getCurrentTabIndex()]);
@@ -499,12 +527,7 @@ bool SettingsWindow::handleTabKey(const juce::KeyPress& key) {
             tabs.setCurrentTabIndex(position);
         return true;
     }
-    const bool previous = ShortcutManager::keyPressMatches(shortcutManager.getBinding("tabPrevious"), key);
-    const bool next = ShortcutManager::keyPressMatches(shortcutManager.getBinding("tabNext"), key);
-    if (!previous && !next)
-        return false;
-    tabs.setCurrentTabIndex((tabs.getCurrentTabIndex() + (next ? 1 : -1) + count) % count);
-    return true;
+    return false;
 }
 
 bool SettingsWindow::keyPressed(const juce::KeyPress& key) {

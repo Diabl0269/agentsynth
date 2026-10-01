@@ -71,8 +71,9 @@ TEST(ModuleComponentKeyboard, EnterFocusesTheFirstBodyControlAndHeaderButtonsCom
               ModuleComponent::kHeaderHeight);
 }
 
-TEST(ModuleComponentKeyboard, TabAndShiftTabWrapInsideTheCard) {
+TEST(ModuleComponentKeyboard, TabWalksInteriorStopsAndExitsPastTheLastOne) {
     FilterCard f;
+    f.editor.selectModule(f.id, false);
     f.card->setRecordFocusForTest(true);
     ASSERT_TRUE(f.card->enterFromKeyboard());
     const auto stops = f.card->getKeyboardControls();
@@ -82,9 +83,53 @@ TEST(ModuleComponentKeyboard, TabAndShiftTabWrapInsideTheCard) {
         EXPECT_EQ(f.card->getRecordedFocusForTest(), stops[i]);
     }
     ASSERT_TRUE(f.card->keyPressed(kTab));
-    EXPECT_EQ(f.card->getRecordedFocusForTest(), stops.front()) << "Tab wraps to the first control";
+    EXPECT_EQ(f.card->getRecordedFocusForTest(), &f.editor) << "Tab on the last control leaves the card";
+    EXPECT_EQ(f.editor.getSelectedNodes(), std::vector<juce::AudioProcessorGraph::NodeID>{f.id});
+}
+
+TEST(ModuleComponentKeyboard, ShiftTabWalksBackAndExitsBeforeTheFirstStop) {
+    FilterCard f;
+    f.editor.selectModule(f.id, false);
+    f.card->setRecordFocusForTest(true);
+    ASSERT_TRUE(f.card->enterFromKeyboard());
+    const auto stops = f.card->getKeyboardControls();
+
+    ASSERT_TRUE(f.card->keyPressed(kTab));
     ASSERT_TRUE(f.card->keyPressed(kShiftTab));
-    EXPECT_EQ(f.card->getRecordedFocusForTest(), stops.back()) << "Shift+Tab wraps to the last control";
+    EXPECT_EQ(f.card->getRecordedFocusForTest(), stops.front()) << "an interior Shift+Tab steps back";
+    ASSERT_TRUE(f.card->keyPressed(kShiftTab));
+    EXPECT_EQ(f.card->getRecordedFocusForTest(), &f.editor) << "Shift+Tab on the first control leaves the card";
+    EXPECT_EQ(f.editor.getSelectedNodes(), std::vector<juce::AudioProcessorGraph::NodeID>{f.id});
+}
+
+// A control must leave Escape, Tab and the app's Cmd chords alone for the card (and the window) to
+// see them; each stop type on a Filter card (knob, combo, toggle/header buttons) is checked, then
+// the card's own handler is run for the same focus.
+TEST(ModuleComponentKeyboard, NoStopSwallowsEscapeTabOrACommandChord) {
+    FilterCard f;
+    f.editor.selectModule(f.id, false);
+    f.card->setRecordFocusForTest(true);
+    const juce::KeyPress focusTimeline('t', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    bool sawKnob = false, sawCombo = false, sawButton = false;
+
+    const auto stops = f.card->getKeyboardControls();
+    for (size_t i = 0; i < stops.size(); ++i) {
+        auto* stop = stops[i];
+        sawKnob = sawKnob || dynamic_cast<juce::Slider*>(stop) != nullptr;
+        sawCombo = sawCombo || dynamic_cast<juce::ComboBox*>(stop) != nullptr;
+        sawButton = sawButton || dynamic_cast<juce::Button*>(stop) != nullptr;
+        for (const auto& k : {kEscape, kTab, kShiftTab, focusTimeline})
+            EXPECT_FALSE(stop->keyPressed(k)) << stop->getTitle() << " swallowed a key meant for the card";
+
+        ASSERT_TRUE(f.card->enterFromKeyboard());
+        for (size_t step = 0; step < i; ++step)
+            ASSERT_TRUE(f.card->keyPressed(kTab));
+        ASSERT_EQ(f.card->getRecordedFocusForTest(), stop);
+        EXPECT_FALSE(f.card->keyPressed(focusTimeline)) << "Cmd chords bubble on to the window";
+        EXPECT_TRUE(f.card->keyPressed(kEscape));
+        EXPECT_EQ(f.card->getRecordedFocusForTest(), &f.editor) << "Escape exits from " << stop->getTitle();
+    }
+    EXPECT_TRUE(sawKnob && sawCombo && sawButton);
 }
 
 TEST(ModuleComponentKeyboard, EscapeReturnsToTheCanvasWithTheCardStillSelected) {

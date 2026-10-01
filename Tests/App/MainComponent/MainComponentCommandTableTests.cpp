@@ -69,9 +69,6 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     // Same shape as toggleMixerPanel's own row above -- a third tab on the same dock.
     AppCommands::toggleMidiRemotePanel,
     AppCommands::toggleSidePane,
-    // Step the dock's tabs, wrapping; right after the rows that show a tab.
-    AppCommands::tabPrevious,
-    AppCommands::tabNext,
     AppCommands::focusNextRegion,
     AppCommands::focusPrevRegion,
     AppCommands::focusTimeline,

@@ -359,6 +359,8 @@ add_executable(Tests
     Modules/OscillatorUnisonDetuneCVAliasingTests.cpp
     UI/Settings/SettingsWindowTests.cpp
     UI/Settings/SettingsWindowTabKeysTests.cpp
+    UI/Settings/SettingsWindowTabStripTests.cpp
+    UI/Settings/SettingsWindowShortcutHintsTests.cpp
     App/ShortcutManager/ShortcutManagerActionRegressionTests.cpp
     App/ShortcutManager/ShortcutManagerApiTests.cpp
     App/ShortcutManager/ShortcutManagerBottomPanelMigrationTests.cpp
@@ -369,7 +371,7 @@ add_executable(Tests
     App/ShortcutManager/ShortcutManagerCursorActionsTests.cpp
     App/ShortcutManager/ShortcutManagerMarkerActionsTests.cpp
     App/ShortcutManager/ShortcutManagerSelectionStepTests.cpp
-    App/ShortcutManager/ShortcutManagerTabKeysTests.cpp
+    App/ShortcutManager/ShortcutManagerRemovedActionsTests.cpp
     UI/Settings/ShortcutsSettingsTabTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviourTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviourTests.cpp
@@ -495,6 +497,7 @@ add_executable(Tests
     UI/Timeline/TimelineTrackHeaderTests.cpp
     UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp
     UI/Timeline/TimelineTrackFocusTests.cpp
+    UI/Timeline/TimelineAddTrackKeyboardTests.cpp
     UI/Timeline/TimelineClipKeyboardTests.cpp
     UI/Timeline/TimelineClipKeyboardNavTests.cpp
     UI/Timeline/TimelineClipLane/TimelineClipLaneAreaTests.cpp
@@ -538,6 +541,8 @@ add_executable(Tests
     UI/Layout/ArrowKeyNavigationTests.cpp
     UI/Layout/FoldAllButtonTests.cpp
     UI/Layout/TabSwitchKeysTests.cpp
+    UI/Layout/TabStripKeysTests.cpp
+    UI/Layout/ListBoxFocusRingTests.cpp
     UI/Timeline/AutomationEditorTests.cpp
     UI/Timeline/TimelineTransportBarTests.cpp
     UI/Timeline/TransportBarMidiLearnTests.cpp
