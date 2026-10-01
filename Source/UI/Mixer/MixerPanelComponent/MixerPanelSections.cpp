@@ -57,6 +57,7 @@ void MixerPanelComponent::onSectionGeometryChanged() {
         growHostToFitSections();
     }
     resized();
+    reconcileRowFocus();
     repaintDragBubbleStrip();
 }
 

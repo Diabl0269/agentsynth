@@ -58,7 +58,9 @@ MixerMasterColumn::MixerMasterColumn() {
     fader_.setChannelName("Master");
     addAndMakeVisible(meter_);
     meter_.setTitle("Master meter");
+    meter_.setTooltip("Master output level meter");
     meterReadout_.setTitle("Master peak");
+    meterReadout_.setTooltip("Peak level: click to reset it, Option-click to reset every channel");
     addAndMakeVisible(meterReadout_);
     meterReadout_.onResetAllRequested = [this] {
         if (onResetAllMetersRequested)
@@ -157,6 +159,7 @@ void MixerMasterColumn::refreshMuteAccessibility() {
     const bool muted = m != nullptr && m->isMuted();
     muteButton_.setToggleState(muted, juce::dontSendNotification);
     muteButton_.setTitle(juce::String("Master mute, ") + (muted ? "on" : "off"));
+    muteButton_.setTooltip("Mute the master output");
 }
 
 void MixerMasterColumn::toggleMuted() {
@@ -187,6 +190,7 @@ void MixerMasterColumn::refreshPanLawButton() {
     const bool compensated = audioEngine_->getMixerPanLaw() == synth::MixerPanLaw::Compensated;
     panLawButton_.setButtonText(compensated ? "Pan: Comp." : "Pan: Bal.");
     panLawButton_.setTitle(juce::String("Mixer pan law (this project): ") + (compensated ? "Compensated" : "Balance"));
+    panLawButton_.setTooltip("Pan law for this project: click to choose Balance or Compensated");
 }
 
 void MixerMasterColumn::showPanLawMenu() {

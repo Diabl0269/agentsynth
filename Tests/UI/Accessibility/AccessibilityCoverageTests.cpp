@@ -33,6 +33,8 @@
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Library/ModuleLibraryHelpPopup.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
+#include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
@@ -210,6 +212,37 @@ TEST_F(MainComponentTest, EveryFocusRegionRootHasAScreenReaderName) {
         ASSERT_NE(region.root, nullptr) << region.id;
         EXPECT_TRUE(region.root->getTitle().isNotEmpty()) << "focus region \"" << region.id << "\" has no title";
     }
+}
+
+// Two tracks, one bus, a send on the first track and each strip's default inserts (a Parametric EQ among
+// them), every section shown, so
+// each kind of strip control (and the send, insert and EQ rows) is on screen to be audited.
+TEST_F(MainComponentTest, AccessibilityCoverageMixerPanel) {
+    synth::test::PersistedKeysGuard guard({"bottomDockVisible", "bottomDockActiveTab", "bottomDockTabOrder",
+                                           "mixerSectionInsertsHidden", "mixerSectionSendsHidden",
+                                           "mixerSectionEqHidden"});
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1400, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+    mc.simulateAddAudioTrackClick();
+    auto& panel = mc.getBottomDock().getMixerPanel();
+    const auto bus = panel.createBus();
+    panel.rebuild();
+    ASSERT_NE(panel.getStripColumnForTest(0), nullptr);
+    panel.getStripColumnForTest(0)->getSendList().addSendTo(bus);
+    panel.rebuild();
+    for (const auto section :
+         {synth::ui::MixerSection::Inserts, synth::ui::MixerSection::Sends, synth::ui::MixerSection::Eq})
+        panel.getSectionLayout().setHidden(section, false);
+    panel.setSize(1400, 700);
+    panel.resized();
+    ASSERT_NE(panel.getMasterColumnForTest(), nullptr);
+    ASSERT_NE(panel.getStripColumnForTest(2), nullptr) << "two tracks and a bus";
+    ASSERT_EQ(panel.getStripColumnForTest(0)->getSendList().getRowCount(), 1);
+    ASSERT_GE(panel.getStripColumnForTest(0)->getInsertList().getRowCount(), 1);
+    EXPECT_TRUE(matchesBaseline("Mixer", auditAccessibility(panel)));
 }
 
 TEST(AccessibilityCoverageTest, ExportAudioDialog) {

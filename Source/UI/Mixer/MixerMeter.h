@@ -23,7 +23,9 @@
 
 namespace synth::ui {
 
-class MixerMeter : public juce::Component {
+class MixerMeter
+    : public juce::Component
+    , public juce::SettableTooltipClient {
 public:
     MixerMeter() = default;
 

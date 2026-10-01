@@ -686,6 +686,11 @@ public:
     void applyLfoWaveTool(int toolIndex);     // 0-3: LfoCustomWave::Tool; 4: Reset to Default
     void setLfoGridDivisions(int n);          // 0: grid Off (no snap); else {n, min(n, 8)}, snap on
 
+    // ---- Parametric EQ card ----
+    /** Opens the pop-out EQ editor, or raises it when it is already open. Public so the mixer's EQ key
+     *  reaches the same window the card's "Open EQ Window" button does. */
+    void openEqWindow();
+
 private:
     /** Paints the "mapped" badge on every registered control that has one, and the armed control's
      *  breathing outline. Called from paint() (ModuleComponentPaint.cpp). */
@@ -772,7 +777,6 @@ private:
     // same constants the layout uses, so the two cannot drift apart.
     void layoutParametricEQ();
     int parametricEQHeight() const;
-    void openEqWindow();
     // Brackets a curve's edits in one undo step. Uses a SafePointer, so a pop-out window that
     // outlives this component becomes a no-op rather than a dangling call.
     void wireEqGestureCallbacks(EQCurveComponent& curve);

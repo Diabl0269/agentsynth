@@ -36,6 +36,9 @@ void MixerSectionDivider::setLayout(MixerSectionLayout* layout, MixerSection sec
     layout_ = layout;
     section_ = section;
     setTitle(juce::String("Resize ") + MixerSectionLayout::nameOf(section));
+    setTooltip(section == MixerSection::Eq ? juce::String()
+                                           : "Drag to resize the " + juce::String(MixerSectionLayout::nameOf(section)) +
+                                                 " section, double-click to reset it");
     setMouseCursor(isResizable() ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::NormalCursor);
     repaint();
 }
@@ -105,6 +108,7 @@ void MixerCollapsedSection::setLayout(MixerSectionLayout* layout, MixerSection s
     layout_ = layout;
     section_ = section;
     setTitle(juce::String("Show ") + MixerSectionLayout::nameOf(section));
+    setTooltip("Show the " + juce::String(MixerSectionLayout::nameOf(section)) + " section");
 }
 
 void MixerCollapsedSection::setSummary(const juce::String& summary) {

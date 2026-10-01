@@ -14,7 +14,9 @@
 // the same fan-out the mixer panel header's own "Reset Meters" button performs directly.
 namespace synth::ui {
 
-class MixerMeterReadout : public juce::Component {
+class MixerMeterReadout
+    : public juce::Component
+    , public juce::SettableTooltipClient {
 public:
     MixerMeterReadout();
 

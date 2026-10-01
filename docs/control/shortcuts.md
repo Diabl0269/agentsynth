@@ -1,9 +1,9 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **109 actions** across five categories —
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **111 actions** across five categories —
 **General** (53, app-wide or routed per focused editor), **Graph** (6), **Timeline** (33),
-**Piano Roll** (14) and **Mixer** (3) — every one of them rebindable, including keys that used to be hardcoded:
+**Piano Roll** (14) and **Mixer** (5) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
 any key except Escape commits it, swapping with whatever action in the **same category** already
@@ -551,6 +551,8 @@ thickness the same way a track-header row does.
 | Up / Down | Nudge the focused fader by 1.0 dB (undo: one step, the same `parameterGestureChanged` bracket a mouse drag uses). No-op on Direct (no fader) or with nothing focused |
 | Shift+Up / Shift+Down | Nudge by 0.1 dB — the gain parameter's own declared interval |
 | Enter | Select the focused column's macro (or bare node, if unboxed) on the canvas — mirrors clicking the column |
+| Tab | Move into the focused column's send and insert rows (`mixerEnterRows`) — see [Mixer row navigation](#mixer-row-navigation). With no column focused, or nothing to enter, the key is left unhandled and the app-wide region cycle gets it |
+| E | Open the focused strip's EQ window (`mixerOpenEq`) — only while the EQ section is shown and the strip has a Parametric EQ insert |
 | M | Mute Focused Track (`timelineMuteFocusedTrack`) — same action id and `performTrackEdit`-equivalent undo bracket the Timeline row's M key uses; Master has its own mute, Direct has none |
 | S | Solo Focused Track (`timelineSoloFocusedTrack`) — strips only, always through `AudioEngine::setChannelStripSoloed`, never a direct `setSoloed()` (root `CLAUDE.md`'s invariant); no-op on Direct/Master |
 | R | Arm Focused Track (`timelineArmFocusedTrack`) — only when the focused strip is linked to exactly one track (`MixerColumn.linkedToTrack`); routes through `MainComponent::performTrackEdit`, never a direct `TimelineDoc` write |
@@ -568,6 +570,31 @@ own handler is a `group` role titled with the channel name; the M/S buttons carr
 on/off state in their title (`"Lead 1 mute, on"`) since they are built with
 `setClickingTogglesState(false)`, which would otherwise report a plain button to a screen reader
 rather than a toggle.
+
+### Mixer row navigation
+
+With the Inserts or Sends section shown, **Tab** (`mixerEnterRows`, Mixer category) moves keyboard focus from the
+focused column into its rows. Row focus is state of the panel (`MixerPanelComponent::rowFocus_`, a kind and an
+index, like `focusedColumnIndex_`), never real focus on a child, so the panel stays the single focusable leaf.
+Rows walk in layout order: the insert rows, then the send rows. The focused row is drawn with
+`synth::ui::paintFocusRing` and scrolled into its section's frame, and the panel's accessibility description
+announces it ("Send to Reverb Bus, -6.0 dB", "Insert 2, Compressor").
+
+| Shortcut | Action in row mode |
+|----------|--------------------|
+| Up / Down | Previous / next row, clamped at either end |
+| Left / Right | Lower / raise the focused send's level by 1.0 dB (Shift: 0.1 dB); one undo step per press, through the parameter's change gesture. No-op on an insert row (the arrows never walk columns while rows hold the keys) |
+| Return | On an insert, select its channel on the canvas, exactly what the EQ thumbnail's click does |
+| Delete / Backspace | Remove the focused send or insert through the same path its menu uses; one undo step. A branching insert chain is read-only and keeps its rows. Focus moves to a surviving row, or back to the column when none is left |
+| Esc | Back to column mode |
+
+Tab never traps: it is claimed only when a column is focused and one of its shown sections has rows, and it falls
+through to the app-wide region cycle otherwise. Row mode also ends when the panel loses real focus, and is kept
+valid when a rebuild or a section toggle removes the row it names.
+
+**Why E and not Return opens the EQ.** Return already selects the focused column on the canvas, so the EQ action
+defaults to a bare E (Ctrl+E, the section toggle, is unaffected). It does what the card's "Open EQ Window" button
+does: it opens the pop-out Parametric EQ editor of the strip's first EQ insert.
 
 **Snap toggles MAGNETISM, not the grid.** Turning snap off stops edits being pulled onto the
 division; it does **not** change which grid lines are drawn. Paint sites read
@@ -741,17 +768,20 @@ tool (`timelineToolRange`, bare **2**) arrived without moving any other key.
 
 ## Mixer
 
-The three Mixer actions are surface-resolved like the piano roll's: `MixerPanelComponent::keyPressed()`
-reads them only while the mixer (the panel, a column control, or its side pane's list) has focus. They
-are the keyboard twins of the toolbar's Inserts / Sends / EQ toggles and call the same
+The five Mixer actions are surface-resolved like the piano roll's: `MixerPanelComponent::keyPressed()`
+reads them only while the mixer (the panel, a column control, or its side pane's list) has focus. The first
+three are the keyboard twins of the toolbar's Inserts / Sends / EQ toggles and call the same
 `MixerSectionLayout::toggleHidden`, so a key and a click can never disagree; the toggles' tooltips
-name the current binding ("Hide Sends  (Ctrl+S)") and follow a rebind.
+name the current binding ("Hide Sends  (Ctrl+S)") and follow a rebind. The other two are
+[row navigation and the EQ key](#mixer-row-navigation).
 
 | Shortcut (macOS) | Windows / Linux | Action |
 |------------------|-----------------|--------|
 | Ctrl+I | Ctrl+Alt+I | Show or Hide Mixer Inserts (`mixerToggleInserts`) |
 | Ctrl+S | Ctrl+Alt+S | Show or Hide Mixer Sends (`mixerToggleSends`) |
 | Ctrl+E | Ctrl+Alt+E | Show or Hide Mixer EQ (`mixerToggleEq`) |
+| Tab | Tab | Enter Mixer Send and Insert Rows (`mixerEnterRows`) |
+| E | E | Open Mixer EQ (`mixerOpenEq`) |
 
 **Real Control on macOS, Ctrl+Alt elsewhere.** Cmd+S is Save and Cmd+I / Cmd+E are taken, so macOS uses
 the physical Control key, as `pianoRollToggleScalePanel` does. On Windows and Linux JUCE's Cmd *is* Ctrl,
@@ -762,7 +792,7 @@ arrows: see [`mixer/panel.md`](../mixer/panel.md#side-pane-zones-and-visibility)
 
 ## Command vs surface actions
 
-The 109 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 111 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
 - **Command-dispatched** (69 actions) — every General action (including the transport family
@@ -771,11 +801,11 @@ doesn't this key do anything":
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
   their enabled/disabled state is whatever `getCommandInfo` reports.
-- **Surface-resolved** (40 actions) — the timeline panel's own keys (`timelineSnapToggle`,
+- **Surface-resolved** (42 actions) — the timeline panel's own keys (`timelineSnapToggle`,
   `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, the six
   `timelineTool*` digits, and the two `timelineJumpToLocator*` keys), the three track-header
   keys (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`), the seven
-  clip-keyboard keys (`timelineClip*`), and every piano roll action. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
+  clip-keyboard keys (`timelineClip*`), every piano roll action, and the five `mixer*` actions. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
   `juce::ApplicationCommandManager`'s own "not a command" value) for every one of these — they are
   never dispatched through the command manager at all. Instead, the owning component's own
   `keyPressed()` calls a small `matchesAction(key, actionId, fallback)` helper that reads

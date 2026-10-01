@@ -527,8 +527,8 @@ bus.
   in the Mixer shortcut category ([shortcuts](../control/shortcuts.md#mixer)).
 - **Right: Reset Meters and + Bus.** "Reset Meters" calls `resetAllMeterReadouts()`; "+ Bus" calls
   `createBus()` then `rebuild()`, so the new bus's column is there at once.
-- **No keyboard focus.** All six buttons give up focus, so the panel stays the mixer's single
-  focusable leaf.
+- **Tab stops.** The three toggles, Reset Meters and + Bus are each their own Tab stop, with a name and a
+  tooltip; see [Header controls and names](#header-controls-and-names).
 
 While a section divider is dragged, the panel paints a mono "5 rows" bubble beside the dragged
 divider at the left edge of the first column (`paintDragBubble`).
@@ -719,6 +719,56 @@ several controls. The one other focusable element is the side pane's channel lis
   extracted from the M and S buttons' own `onClick` so a keypress and a real click can never diverge,
   plus an `onArmTrack` callback routed through `MainComponent::performTrackEdit`.
 
+- **Tab** (`mixerEnterRows`, rebindable, Mixer category) moves into the focused column's rows --
+  [below](#keyboard-walk-through-the-send-and-insert-rows). With no column focused, or no rows to
+  enter, `keyPressed()` returns false so the app-wide Tab region cycle still gets the key.
+- **E** (`mixerOpenEq`, rebindable) opens the focused strip's EQ window while the EQ section is shown. It
+  is E rather than Return because Return already selects the focused column on the canvas. The window is the
+  card's own pop-out editor (`ModuleComponent::openEqWindow()`), reached through
+  `MixerPanelComponent::onOpenEqWindow`, which tests replace.
+
+### Keyboard walk through the send and insert rows
+
+Row focus is panel state (`MixerPanelComponent::rowFocus_`, a `MixerRowRef` of kind and index, in
+`MixerRowFocus.h`), not real focus on a child, so the panel stays the single focusable leaf.
+`MixerPanelRowKeyboard.cpp` owns it. Rows walk in layout order -- the focused column's insert rows, then
+its send rows -- and only for sections that are shown: hiding Inserts or Sends moves the focus to a row of
+the other section, or back to column mode when none is left. Master has insert rows only; Direct has none.
+
+- **Up and Down** step rows, clamped at either end. **Left and Right** lower and raise the focused
+  send's level by 1.0 dB (Shift: 0.1 dB) through `MixerSendList::nudgeLevel()`, one undo step per press:
+  `captureBeforeState`, then the parameter's begin-gesture, set and end-gesture (what a knob drag produces),
+  then `pushSnapshotFromCapture`. On an insert row the arrows do nothing, and never walk columns.
+- **Return** on an insert selects its channel on the canvas, the same `selectOnCanvas` the EQ thumbnail's
+  click and the insert list's "Edit on canvas" link use. **Delete** or **Backspace** removes the send or
+  insert through `MixerSendList::removeRow()` / `MixerInsertList::removeRow()` -- the paths their menus
+  use, undoable -- and a branching insert chain (read-only) keeps its rows. **Esc** returns to column mode.
+- Removing a row rebuilds the mixer and destroys the list that did it, so the panel touches nothing of
+  the old column afterwards: `reconcileRowFocus()` re-derives the row from the new lists, clamping the
+  index, falling to the other section, or leaving row mode. It runs after every `rebuild()` and every
+  section toggle, and `focusLost()` ends row mode.
+- The focused row is outlined with `synth::ui::paintFocusRing` (the panel is the component that holds focus,
+  so the ring is painted by the panel over its children, clipped to the section's frame) and scrolled into view
+  with `MixerSectionViewport::revealRange()`. The panel's accessibility **description** carries the row text --
+  `"Send to Reverb Bus, -6.0 dB"` (plus `", muted"`), `"Insert 2, Compressor"` (plus `", bypassed"`) -- and
+  announces a change.
+
+### Header controls and names
+
+The toolbar's Inserts, Sends and EQ toggles, Reset Meters and + Bus, the side pane's Filter channels field and
+its All / Tracks / Buses chips are each their own Tab stop, with a `setTitle` name and a tooltip. A key that
+one of them does not use bubbles to the panel, so the column keys still work after a click on one. Return
+triggers a button (`juce::Button::keyPressed`); Space is registered as a button shortcut
+(`addShortcut`), because JUCE buttons do not react to Space on their own. The toggles' tooltips name their
+shortcut (`"Hide Sends  (Ctrl+S)"`) and follow a rebind. `AppLookAndFeel::drawDrawableButton` paints the focus
+ring for the toggles.
+
+Every control in every strip carries a name and a tooltip: the fader and pan sliders, M and S, the meter and its
+peak readout, the EQ thumbnail, the channel name and chip, the send knobs and mute buttons, and the send and
+insert lists (their tooltip follows the part of a row under the pointer). `AccessibilityCoverageTests.cpp` audits a
+mixer with two tracks, a bus, a send, an insert and all three sections shown as the **Mixer** surface of the
+accessibility ratchet ([`docs/development/accessibility.md`](../development/accessibility.md)).
+
 **FRO227: the mixer is its own `MainComponent::EditSurface` (`Mixer`)** — real focus inside
 `MixerPanelComponent` (the panel itself or a column control, since every column control gives focus
 back up) makes `resolveEditSurface()` report `Mixer` while the panel is actually showing. Cmd+C/V/D
@@ -778,9 +828,10 @@ already applies for the fader's own "-3.0 dB" text (see that class's `applyDbAcc
 (FRO294) so `MixerSendList`'s own per-send pan knobs reapply the identical text after their own
 `SliderParameterAttachment`, rather than a second copy of the formatting.
 
-**The section controls never take keyboard focus either.** The section viewports (a
-`juce::Viewport` wants focus by default), dividers, hidden-section strips and the toolbar's
-buttons all set `setWantsKeyboardFocus(false)`, so the panel stays the single focusable leaf. The
+**The column's section controls never take keyboard focus.** The section viewports (a
+`juce::Viewport` wants focus by default), dividers and hidden-section strips all set
+`setWantsKeyboardFocus(false)`, so the panel stays the single focusable leaf (the toolbar's buttons are
+the deliberate exception). The
 toolbar's section toggles are toggle buttons named "Inserts"/"Sends"/"EQ", and a hidden section's
 strip is a button titled "Show Sends", so both are reachable from a screen reader; a hidden section's insert
 or send rows leave the accessibility tree with it.

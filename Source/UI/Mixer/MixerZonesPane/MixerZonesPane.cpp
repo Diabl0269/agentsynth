@@ -27,6 +27,7 @@ MixerZonesPane::MixerZonesPane() {
     filter_.setFont(juce::Font(juce::FontOptions(12.0f)));
     filter_.setSelectAllWhenFocused(true);
     filter_.setTitle("Filter channels");
+    filter_.setTooltip("Filter the channel list by name");
     filter_.setDescription("Narrows the channel list below by name. The mixer itself is not filtered.");
     filter_.onTextChange = [this] { rebuildList(); };
     auto release = [this] {
@@ -45,9 +46,11 @@ MixerZonesPane::MixerZonesPane() {
         chip.setButtonText(kChipNames[i]);
         chip.setTitle(juce::String(kChipNames[i]) + " channels");
         chip.setDescription(kChipHelp[i]);
+        chip.setTooltip(kChipHelp[i]);
         chip.setRadioGroupId(kChipRadioGroup);
         chip.setClickingTogglesState(true);
-        chip.setWantsKeyboardFocus(false);
+        chip.setWantsKeyboardFocus(true);
+        chip.addShortcut(juce::KeyPress(juce::KeyPress::spaceKey));
         chip.setToggleState(i == 0, juce::dontSendNotification);
         chip.onClick = [this, i] { setChip(static_cast<Chip>(i)); };
         addAndMakeVisible(chip);
@@ -59,6 +62,7 @@ MixerZonesPane::MixerZonesPane() {
     hiddenLabel_.setInterceptsMouseClicks(false, false);
     addAndMakeVisible(showAll_);
     showAll_.setDescription("Shows every hidden channel in the mixer again");
+    showAll_.setTooltip("Show every hidden channel in the mixer again");
     showAll_.onClick = [this] {
         if (onShowAll)
             onShowAll();

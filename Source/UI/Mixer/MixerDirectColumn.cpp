@@ -25,6 +25,7 @@ MixerDirectColumn::MixerDirectColumn() {
     // getTitle() resolve directly instead of falling through ButtonAccessibilityHandler's own
     // getButtonText() fallback).
     makeChannelButton_.setTitle("Make channel");
+    makeChannelButton_.setTooltip("Turn this input into a mixer channel");
     // MixerPanelComponent is the single focusable leaf -- see
     // MixerColumnComponent.cpp's ctor comment for why every child control does this.
     makeChannelButton_.setWantsKeyboardFocus(false);

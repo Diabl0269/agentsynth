@@ -9,7 +9,9 @@
 // shared MixerSectionLayout, so a gesture in any one column changes every column.
 namespace synth::ui {
 
-class MixerSectionDivider : public juce::Component {
+class MixerSectionDivider
+    : public juce::Component
+    , public juce::SettableTooltipClient {
 public:
     MixerSectionDivider();
 
@@ -35,7 +37,9 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerSectionDivider)
 };
 
-class MixerCollapsedSection : public juce::Component {
+class MixerCollapsedSection
+    : public juce::Component
+    , public juce::SettableTooltipClient {
 public:
     MixerCollapsedSection();
 

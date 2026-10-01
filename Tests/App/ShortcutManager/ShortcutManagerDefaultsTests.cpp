@@ -36,6 +36,8 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "mixerToggleInserts",
         "mixerToggleSends",
         "mixerToggleEq",
+        "mixerEnterRows",
+        "mixerOpenEq",
         // TimelinePanelComponent::keyPressed (also consults timelineSnapToggle, shared with the roll)
         "timelineSnapToggle",
         "timelineToggleLoop",

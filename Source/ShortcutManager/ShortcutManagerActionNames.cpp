@@ -57,6 +57,22 @@ juce::String transportAndSelectionActionName(const juce::String& actionId) {
     return {};
 }
 
+// The Mixer category, split out of getActionDescription to keep that function under the function-size
+// cap. Empty when `actionId` is not a Mixer action.
+juce::String mixerActionName(const juce::String& actionId) {
+    if (actionId == "mixerToggleInserts")
+        return "Show or Hide Mixer Inserts";
+    if (actionId == "mixerToggleSends")
+        return "Show or Hide Mixer Sends";
+    if (actionId == "mixerToggleEq")
+        return "Show or Hide Mixer EQ";
+    if (actionId == "mixerEnterRows")
+        return "Enter Mixer Send and Insert Rows";
+    if (actionId == "mixerOpenEq")
+        return "Open Mixer EQ";
+    return {};
+}
+
 } // namespace
 
 juce::String ShortcutManager::getActionDescription(const juce::String& actionId) {
@@ -249,11 +265,7 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Toggle Scale Panel";
     if (actionId == "pianoRollToggleVelocityLane")
         return "Show or Hide Velocity Strip";
-    if (actionId == "mixerToggleInserts")
-        return "Show or Hide Mixer Inserts";
-    if (actionId == "mixerToggleSends")
-        return "Show or Hide Mixer Sends";
-    if (actionId == "mixerToggleEq")
-        return "Show or Hide Mixer EQ";
+    if (const auto mixer = mixerActionName(actionId); mixer.isNotEmpty())
+        return mixer;
     return actionId;
 }

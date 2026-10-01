@@ -393,7 +393,7 @@ TEST_F(MixerSectionPanelTest, AListLongerThanItsSectionScrollsWithTheWheelInside
     EXPECT_EQ(shortList.getViewPositionY(), 0);
 }
 
-TEST_F(MixerSectionPanelTest, SectionControlsNeverTakeKeyboardFocusFromThePanel) {
+TEST_F(MixerSectionPanelTest, ColumnSectionControlsNeverTakeKeyboardFocusFromThePanel) {
     openMixer(1);
     setDockHeight(600);
     auto* column = strips()[0];
@@ -402,12 +402,17 @@ TEST_F(MixerSectionPanelTest, SectionControlsNeverTakeKeyboardFocusFromThePanel)
     for (auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq}) {
         EXPECT_FALSE(column->getSectionDividerForTest(section).getWantsKeyboardFocus());
         EXPECT_FALSE(column->getCollapsedSectionForTest(section).getWantsKeyboardFocus());
-        EXPECT_FALSE(panel().getToolbarForTest().getSectionToggleForTest(section).getWantsKeyboardFocus());
     }
-    EXPECT_FALSE(panel().getToolbarForTest().getAddBusButtonForTest().getWantsKeyboardFocus());
-    EXPECT_FALSE(panel().getToolbarForTest().getResetMetersButtonForTest().getWantsKeyboardFocus());
     EXPECT_FALSE(column->getSectionViewportForTest(MixerSection::Inserts).getWantsKeyboardFocus());
     EXPECT_FALSE(column->getSectionViewportForTest(MixerSection::Sends).getWantsKeyboardFocus());
+}
+
+TEST_F(MixerSectionPanelTest, ToolbarButtonsAreTheirOwnTabStops) {
+    openMixer(1);
+    for (auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq})
+        EXPECT_TRUE(panel().getToolbarForTest().getSectionToggleForTest(section).getWantsKeyboardFocus());
+    EXPECT_TRUE(panel().getToolbarForTest().getAddBusButtonForTest().getWantsKeyboardFocus());
+    EXPECT_TRUE(panel().getToolbarForTest().getResetMetersButtonForTest().getWantsKeyboardFocus());
 }
 
 TEST_F(MixerSectionPanelTest, SectionsPersistAcrossAppLaunches) {

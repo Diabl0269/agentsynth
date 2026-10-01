@@ -117,8 +117,10 @@ set(APPUI_SOURCES
     Source/UI/Mixer/EqResponseCurve.h
     Source/UI/Mixer/MixerEqThumbnail.h
     Source/UI/Mixer/MixerEqThumbnail.cpp
+    Source/UI/Mixer/MixerRowFocus.h
     Source/UI/Mixer/MixerSendList.h
     Source/UI/Mixer/MixerSendList.cpp
+    Source/UI/Mixer/MixerSendListRows.cpp
     Source/UI/Mixer/MixerSections/MixerSectionLayout.h
     Source/UI/Mixer/MixerSections/MixerSectionLayout.cpp
     Source/UI/Mixer/MixerSections/MixerSectionViewport.h
@@ -135,6 +137,7 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelRowKeyboard.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelColumnDrag.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelViewEdits.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelZones.cpp

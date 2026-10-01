@@ -19,6 +19,8 @@ bool MixerPanelComponent::matchesAction(const juce::KeyPress& key, const juce::S
 }
 
 bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
+    if (rowFocus_.has_value() && handleRowKey(key))
+        return true;
     if (key.isKeyCode(juce::KeyPress::leftKey))
         return moveFocus(-1);
     if (key.isKeyCode(juce::KeyPress::rightKey))
@@ -40,12 +42,21 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
     if (matchesAction(key, "timelineArmFocusedTrack", juce::KeyPress('r', juce::ModifierKeys::noModifiers, 0)))
         return armFocusedTrack();
 
+    // Rebindable, Mixer category: into the focused column's send / insert rows (Tab by default; with
+    // nothing to enter it is left unhandled, so the app-wide region cycle still gets it), and the
+    // focused column's EQ window. See MixerPanelRowKeyboard.cpp.
+    if (matchesAction(key, "mixerEnterRows",
+                      juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0)))
+        return enterRows();
+    if (matchesAction(key, "mixerOpenEq", juce::KeyPress('e', juce::ModifierKeys::noModifiers, 0)))
+        return openFocusedEq();
+
     // Rebindable, Mixer category: the toolbar's Inserts / Sends / EQ toggles, through the same
     // MixerSectionLayout::toggleHidden a click calls, so a key and a click can never diverge.
     for (const auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq})
         if (matchesAction(key, sectionToggleActionId(section), defaultSectionToggleKey(section))) {
             sectionLayout_.toggleHidden(section);
-            return true;
+            return true; // onSectionGeometryChanged() has already re-checked the row focus
         }
 
     return false;
@@ -232,6 +243,7 @@ void MixerPanelComponent::syncFocusVisuals() {
             break;
         }
     }
+    syncRowVisuals();
 }
 
 void MixerPanelComponent::revealFocusedColumn() {
@@ -248,6 +260,7 @@ void MixerPanelComponent::paintOverChildren(juce::Graphics& g) {
     // with no native peer (same accepted gap TimelineTrackFocusTests documents). The two may
     // co-paint, same as a region root and a focused row elsewhere in this app.
     synth::ui::paintFocusRegionOutline(*this, g);
+    paintRowFocusRing(g);
     paintDragBubble(g);
 }
 

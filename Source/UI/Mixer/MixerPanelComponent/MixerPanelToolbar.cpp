@@ -17,8 +17,8 @@ MixerSection sectionAt(size_t index) { return (MixerSection)(int)index; }
 } // namespace
 
 // The toggles are label-only DrawableButtons so the look-and-feel paints them with the same accent
-// wash as the main toolbar's toggles. None of the buttons take keyboard focus: the panel stays the
-// mixer's single focusable leaf.
+// wash as the main toolbar's toggles. Every button is its own Tab stop that acts on Return and Space; the focused
+// column's keys stay with the panel because a key a button does not use bubbles up to it.
 MixerPanelToolbar::MixerPanelToolbar() {
     setWantsKeyboardFocus(false);
     for (size_t i = 0; i < toggles_.size(); ++i) {
@@ -26,7 +26,8 @@ MixerPanelToolbar::MixerPanelToolbar() {
         toggle.setButtonText(MixerSectionLayout::nameOf(sectionAt(i)));
         toggle.setTitle(MixerSectionLayout::nameOf(sectionAt(i)));
         toggle.setClickingTogglesState(false); // the layout is the source of truth, see refresh()
-        toggle.setWantsKeyboardFocus(false);
+        toggle.setWantsKeyboardFocus(true);
+        toggle.addShortcut(juce::KeyPress(juce::KeyPress::spaceKey));
         toggle.onClick = [this, i] {
             if (layout_ != nullptr)
                 layout_->toggleHidden(sectionAt(i));
@@ -36,9 +37,14 @@ MixerPanelToolbar::MixerPanelToolbar() {
     addAndMakeVisible(paneButton_);
     for (auto* button : {&resetMetersButton_, &addBusButton_}) {
         button->setClickingTogglesState(false);
-        button->setWantsKeyboardFocus(false);
+        button->setWantsKeyboardFocus(true);
+        button->addShortcut(juce::KeyPress(juce::KeyPress::spaceKey)); // Return is a Button's own
         addAndMakeVisible(*button);
     }
+    resetMetersButton_.setTitle("Reset meters");
+    resetMetersButton_.setTooltip("Reset every channel's peak readout to -inf");
+    addBusButton_.setTitle("Add bus");
+    addBusButton_.setTooltip("Add a bus channel (a group or send target)");
     resetMetersButton_.onClick = [this] {
         if (onResetMeters)
             onResetMeters();
