@@ -475,6 +475,8 @@ private:
             {"timelineMuteFocusedTrack", ShortcutCategory::Timeline},
             {"timelineSoloFocusedTrack", ShortcutCategory::Timeline},
             {"timelineArmFocusedTrack", ShortcutCategory::Timeline},
+            // Folds the focused track header's automation lanes open/closed (bare A).
+            {"timelineToggleTrackAutomation", ShortcutCategory::Timeline},
             {"timelineClipPrevious", ShortcutCategory::Timeline},
             {"timelineClipNext", ShortcutCategory::Timeline},
             {"timelineClipAbove", ShortcutCategory::Timeline},

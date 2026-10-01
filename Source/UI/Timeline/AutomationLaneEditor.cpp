@@ -4,6 +4,7 @@
 #include "Timeline/AutomationRecorder.h"
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/AutomationLanes/AutomationToolMapping.h"
 #include <algorithm>
 #include <cmath>
 
@@ -15,6 +16,28 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     setComponentID("automationLaneEditor");
     setInterceptsMouseClicks(true, false);
     setWantsKeyboardFocus(true);
+}
+
+void AutomationLaneEditor::setTool(Tool tool) noexcept {
+    editTool_.reset();
+    tool_ = tool;
+}
+
+void AutomationLaneEditor::setEditTool(EditTool tool) noexcept {
+    editTool_ = tool;
+    tool_ = automationToolFor(tool, false);
+}
+
+void AutomationLaneEditor::setCurveColour(juce::Colour colour) {
+    if (curveColour_ == colour)
+        return;
+    curveColour_ = colour;
+    repaint();
+}
+
+void AutomationLaneEditor::focusGained(juce::Component::FocusChangeType) {
+    if (onFocused)
+        onFocused();
 }
 
 //==============================================================================
@@ -192,11 +215,11 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
         }
     }
 
-    juce::Colour curveColour;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+    juce::Colour curveColour = juce::Colours::cyan;
+    if (curveColour_.has_value())
+        curveColour = *curveColour_;
+    else if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
         curveColour = lf->getTheme().colors.modWire;
-    else
-        curveColour = juce::Colours::cyan;
 
     juce::Path path;
     AutomationCursor cursor{};
@@ -302,6 +325,10 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
     if (!e.mods.isLeftButtonDown())
         return;
 
+    // Shift is read here rather than when the tool was picked: the Draw tool draws a line only
+    // while Shift is held as the gesture starts.
+    if (editTool_.has_value())
+        tool_ = automationToolFor(*editTool_, e.mods.isShiftDown());
     mouseDownPos_ = pos;
 
     switch (tool_) {
@@ -533,7 +560,7 @@ bool AutomationLaneEditor::keyPressed(const juce::KeyPress& key) {
             repaint();
             return true;
         }
-        return false; // idle — let the panel decide whether to close the strip
+        return false; // idle — the key belongs to the panel
     }
     return false;
 }

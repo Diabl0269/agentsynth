@@ -308,10 +308,10 @@ is cleared whether or not a column is found, and by a refused move. Not showing,
 lands on the name area itself, past the menu-vs-drag threshold, is claimed by the drag.
 
 **FRO292: an active send's level can carry its own automation lane.** Right-click the send knob
-→ **Automate 'Send N Level'** creates the lane and opens the automation strip on it (the same
+→ **Automate 'Send N Level'** creates the lane and shows it under its track (the same
 `onAutomateParameterRequested` route a canvas knob uses — the only way in from a track with no lanes
-yet, since the track header's `A` button only appears once one exists). Once the strip is open, its
-lane picker also offers an "Add lane…" entry per
+yet, since the track header's fold arrow only appears once one exists). The timeline's lane choices
+(`collectAutomationLaneOptions`) also offer an "Add lane…" entry per
 active, not-yet-automated slot, labelled by `synth::describeSendSlotLabel` with the SAME "Send to
 \<target\>" / "Send N (no target)" text the knob's own accessible title uses, so the picker entry and
 the knob it drives always read the same thing. A `sendNLevel` is an ordinary `RangedAudioParameter`

@@ -44,14 +44,6 @@ bool TimelinePanelComponent::matchesAction(const juce::KeyPress& key, const juce
 }
 
 bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
-    // Escape closes the strip when it's open and idle (the editor's own keyPressed already
-    // consumed it if there was tool-drag state to cancel -- see AutomationLaneEditor's class
-    // comment). Same panel-scoped idiom as every other timeline sub-component's Delete/Escape.
-    if (key == juce::KeyPress::escapeKey && automationStripVisible_) {
-        closeAutomationStrip();
-        return true;
-    }
-
     // Cmd+Shift+T / Tab land on the panel ROOT, not on any row (docs/control/shortcuts.md's Focus
     // regions section), so the keys that carry a keyboard-only user into the track headers and clips
     // are claimed here. Scoped to REAL focus being on THIS exact component (never "focus is somewhere

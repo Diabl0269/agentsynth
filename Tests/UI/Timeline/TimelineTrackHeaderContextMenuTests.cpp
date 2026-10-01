@@ -180,12 +180,12 @@ TEST(TimelineTrackHeaderContextMenuTest, RightClickOnArmButtonOpensHeaderMenuWit
     EXPECT_FALSE(f.track()->armed) << "a right-click must not ALSO fire the button's own onClick (toggle arm)";
 }
 
-TEST(TimelineTrackHeaderContextMenuTest, RightClickOnAutomationButtonOpensHeaderMenuWithoutToggling) {
+TEST(TimelineTrackHeaderContextMenuTest, RightClickOnFoldArrowOpensHeaderMenuWithoutToggling) {
     HeaderFixture f;
     bool toggled = false;
     f.header->onAutomationToggleRequested = [&toggled](TrackId) { toggled = true; };
 
-    const auto menu = rightClickChild(*f.header, f.header->getAutomationButton());
+    const auto menu = rightClickChild(*f.header, f.header->getFoldArrow());
 
     EXPECT_NE(findItemByText(menu, "Delete Track"), nullptr);
     EXPECT_FALSE(toggled) << "a right-click must not ALSO fire onAutomationToggleRequested";

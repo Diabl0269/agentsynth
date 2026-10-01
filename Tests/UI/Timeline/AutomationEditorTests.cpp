@@ -8,8 +8,9 @@
 //      scrub, curve-toggle hook, double-click-adds-point, the publish-discipline pin (no mutation
 //      during mouseDrag, exactly one revision bump on commit) and a paint smoke test. The
 //      component compiles and runs unconditionally, same as TimelineClipLaneArea/PianoRollComponent.
-//   2. synth::ui::TimelinePanelComponent's automation strip — opens/closes with a lane selection,
-//      shrinks the clip-lane area, and the record-mode selector's headless hook.
+//   2. synth::ui::TimelinePanelComponent's lane rows — showAutomationLane opens the track, the
+//      record-mode combo, and each track's fold arrow. The deeper lane-row coverage lives in
+//      Tests/UI/Timeline/AutomationLanes/.
 //   3. MainComponent integration — right-click-any-knob's headless hook
 //      (MainComponent::automateParameter).
 
@@ -344,10 +345,10 @@ TEST(AutomationLaneEditorTest, SnapshotSmoke) {
 }
 
 // ============================================================================
-// 2. synth::ui::TimelinePanelComponent — automation strip
+// 2. synth::ui::TimelinePanelComponent — lanes fold out under their track
 // ============================================================================
 
-TEST(TimelinePanelAutomationStripTest, StripOpensWithLaneSelectionAndCloseRestores) {
+TEST(TimelinePanelAutomationLanesTest, ShowAutomationLaneOpensTheTrackAndAddsTheLaneRow) {
     // Doc BEFORE panel (members die in reverse): ~TimelinePanelComponent de-registers from the
     // doc, so the doc must still be alive then — flagged as a stack-use-after-scope by ASAN.
     TimelineDoc doc;
@@ -355,30 +356,33 @@ TEST(TimelinePanelAutomationStripTest, StripOpensWithLaneSelectionAndCloseRestor
     panel.setSize(1200, 400);
     panel.setTimelineDoc(&doc);
 
-    const auto trackId = doc.addTrack(TrackKind::Automation, "Automation");
+    const auto trackId = doc.addTrack(TrackKind::Midi, "Bass");
     AutomationLane::RangeSnapshot range;
     range.minValue = 0.0f;
     range.maxValue = 1.0f;
     const auto laneId = doc.addLane(trackId, "node-uuid-2", "cutoff", range);
     ASSERT_TRUE(laneId.isValid());
 
-    const int heightBefore = panel.getClipLaneArea().getHeight();
-    EXPECT_FALSE(panel.isAutomationStripVisible());
+    const int totalBefore = panel.getClipLaneArea().getRowLayout().totalHeight();
+    EXPECT_FALSE(panel.isTrackAutomationExpandedForTest(trackId)) << "a track starts folded";
+    EXPECT_EQ(panel.laneEditorForTest(laneId), nullptr);
 
     panel.showAutomationLane(laneId);
-    EXPECT_TRUE(panel.isAutomationStripVisible());
+    EXPECT_TRUE(panel.isTrackAutomationExpandedForTest(trackId));
     EXPECT_EQ(panel.getSelectedAutomationLane(), laneId);
-    EXPECT_FALSE(panel.getAutomationStripBounds().isEmpty());
-    EXPECT_LT(panel.getClipLaneArea().getHeight(), heightBefore) << "the clip-lane area must shrink";
-    EXPECT_EQ(panel.getAutomationLaneEditor().getActiveLane(), laneId);
+    EXPECT_FALSE(panel.laneRowBoundsForTest(laneId).isEmpty());
+    ASSERT_NE(panel.laneEditorForTest(laneId), nullptr);
+    EXPECT_EQ(panel.laneEditorForTest(laneId)->getActiveLane(), laneId);
+    EXPECT_GT(panel.getClipLaneArea().getRowLayout().totalHeight(), totalBefore) << "the lane row adds height";
+    EXPECT_EQ(panel.getClipLaneArea().getHeight(), panel.getLanesBounds().getHeight() - panel.getRuler().getHeight())
+        << "nothing is carved off the bottom of the lanes any more";
 
-    panel.closeAutomationStrip();
-    EXPECT_FALSE(panel.isAutomationStripVisible());
-    EXPECT_TRUE(panel.getAutomationStripBounds().isEmpty());
-    EXPECT_EQ(panel.getClipLaneArea().getHeight(), heightBefore) << "closing restores full height";
+    panel.setTrackAutomationExpanded(trackId, false);
+    EXPECT_EQ(panel.getClipLaneArea().getRowLayout().totalHeight(), totalBefore) << "folding restores the rows";
+    EXPECT_EQ(panel.laneEditorForTest(laneId), nullptr);
 }
 
-TEST(TimelinePanelAutomationStripTest, RecordModeSelectorWritesDoc) {
+TEST(TimelinePanelAutomationLanesTest, RecordModeComboWritesTheDocAsOneUndoStep) {
     // Doc/undo before the panel — same destruction-order rule as the test above.
     TimelineDoc doc;
     AppUndoManager undo;
@@ -387,34 +391,38 @@ TEST(TimelinePanelAutomationStripTest, RecordModeSelectorWritesDoc) {
     panel.setTimelineDoc(&doc);
     panel.setUndoManager(&undo);
 
-    const auto trackId = doc.addTrack(TrackKind::Automation, "Automation");
+    const auto trackId = doc.addTrack(TrackKind::Midi, "Lead");
     AutomationLane::RangeSnapshot range;
     const auto laneId = doc.addLane(trackId, "node-uuid-3", "resonance", range);
     panel.showAutomationLane(laneId);
+    auto* header = panel.laneHeaderForTest(laneId);
+    ASSERT_NE(header, nullptr);
 
     EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Read)) << "default";
+    EXPECT_EQ(header->getRecordModeCombo().getSelectedId(), static_cast<int>(synth::LaneRecordMode::Read) + 1);
 
-    panel.applyAutomationRecordModeChoice(4); // 1-based combo id 4 -> LaneRecordMode::Latch (3)
+    // The combo's own change notification, as a pick from its menu delivers it.
+    header->getRecordModeCombo().setSelectedId(4, juce::sendNotificationSync); // Latch
     EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Latch));
     ASSERT_TRUE(undo.canUndo());
     undo.undo();
     EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Read));
+    EXPECT_EQ(panel.laneHeaderForTest(laneId), header) << "the header survives an edit that keeps its lane";
+    EXPECT_EQ(header->getRecordModeCombo().getSelectedId(), static_cast<int>(synth::LaneRecordMode::Read) + 1)
+        << "the combo follows the undo";
 }
 
-TEST(TimelinePanelAutomationStripTest, TrackHeaderAutomationButtonTogglesTheStripForThatTrack) {
+TEST(TimelinePanelAutomationLanesTest, EachTracksFoldArrowFoldsOnlyThatTrack) {
     // Doc before the panel — same destruction-order rule as the tests above.
     TimelineDoc doc;
     synth::ui::TimelinePanelComponent panel;
     panel.setSize(1200, 400);
     panel.setTimelineDoc(&doc);
 
-    // Two Automation tracks, each with one lane — syncTrackHeaders() (driven by setTimelineDoc's
-    // initial refresh, then this addTrack/addLane notification) builds a header per track and wires
-    // its onAutomationToggleRequested straight into TimelinePanelComponent::toggleAutomationForTrack.
-    const auto trackA = doc.addTrack(TrackKind::Automation, "Automation A");
+    const auto trackA = doc.addTrack(TrackKind::Midi, "A");
     AutomationLane::RangeSnapshot range;
     const auto laneA = doc.addLane(trackA, "node-uuid-a", "cutoff", range);
-    const auto trackB = doc.addTrack(TrackKind::Automation, "Automation B");
+    const auto trackB = doc.addTrack(TrackKind::Midi, "B");
     const auto laneB = doc.addLane(trackB, "node-uuid-b", "resonance", range);
     ASSERT_TRUE(laneA.isValid());
     ASSERT_TRUE(laneB.isValid());
@@ -425,24 +433,19 @@ TEST(TimelinePanelAutomationStripTest, TrackHeaderAutomationButtonTogglesTheStri
     ASSERT_NE(headerA, nullptr);
     ASSERT_NE(headerB, nullptr);
 
-    // First click on track A's button: strip was closed -> opens on track A's (only) lane.
-    headerA->getAutomationButton().onClick();
-    EXPECT_TRUE(panel.isAutomationStripVisible());
-    EXPECT_EQ(panel.getSelectedAutomationLane(), laneA);
+    headerA->getFoldArrow().onClick();
+    EXPECT_TRUE(panel.isTrackAutomationExpandedForTest(trackA));
+    EXPECT_FALSE(panel.isTrackAutomationExpandedForTest(trackB));
+    EXPECT_NE(panel.laneEditorForTest(laneA), nullptr);
+    EXPECT_EQ(panel.laneEditorForTest(laneB), nullptr);
 
-    // Second click on the SAME track's button: strip is already open on this track -> closes.
-    headerA->getAutomationButton().onClick();
-    EXPECT_FALSE(panel.isAutomationStripVisible());
+    headerB->getFoldArrow().onClick();
+    EXPECT_TRUE(panel.isTrackAutomationExpandedForTest(trackA)) << "opening B leaves A open";
+    EXPECT_TRUE(panel.isTrackAutomationExpandedForTest(trackB));
 
-    // A different track's button while closed: opens on that track's lane.
-    headerB->getAutomationButton().onClick();
-    EXPECT_TRUE(panel.isAutomationStripVisible());
-    EXPECT_EQ(panel.getSelectedAutomationLane(), laneB);
-
-    // Track A's button while the strip shows track B's lane: switches the strip, doesn't close it.
-    headerA->getAutomationButton().onClick();
-    EXPECT_TRUE(panel.isAutomationStripVisible());
-    EXPECT_EQ(panel.getSelectedAutomationLane(), laneA);
+    headerA->getFoldArrow().onClick();
+    EXPECT_FALSE(panel.isTrackAutomationExpandedForTest(trackA));
+    EXPECT_TRUE(panel.isTrackAutomationExpandedForTest(trackB));
 }
 
 // ============================================================================
@@ -540,7 +543,7 @@ TEST_F(AutomationEditorMainComponentTest, KnobAutomateHookCreatesLaneOnAutomatio
     }
 
     EXPECT_TRUE(mc.isBottomDockConfiguredVisible());
-    EXPECT_TRUE(mc.getTimelinePanel().isAutomationStripVisible());
+    EXPECT_TRUE(mc.getTimelinePanel().isTrackAutomationExpandedForTest(autoTrackId));
     EXPECT_EQ(mc.getTimelinePanel().getSelectedAutomationLane(), cutoffLaneId);
 
     // A second parameter on the SAME node reuses the same Automation track (not a new one).

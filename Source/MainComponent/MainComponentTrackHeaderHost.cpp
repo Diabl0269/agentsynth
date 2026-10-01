@@ -32,7 +32,7 @@ juce::String describeNodeForBinding(juce::AudioProcessorGraph::Node* node) {
     return synth::moduleTitle(*node);
 }
 
-// The automation strip lane picker's "Add lane..." entries for a hosted plugin's own parameters,
+// The timeline's "Add lane..." lane choices for a hosted plugin's own parameters,
 // which have no ModuleComponent knob to right-click (the plugin has its own editor; see
 // docs/modules/modulation.md#hosted-plugin-parameters-as-automation-lanes's Hosted Plugin table).
 // Every live HostedPluginModule with a published instance offers every parameter that doesn't
@@ -180,6 +180,23 @@ juce::String MainComponent::getParameterDisplayName(const juce::String& uuid, co
     const auto resolution = synth::resolveLaneParameter(processor, paramId, hint);
     if (auto* param = resolution.liveParameter())
         return param->getName(64);
+    return {};
+}
+
+// A lane header's value readout. A lane stores values in the parameter's own units (a hosted
+// parameter's are already 0..1), so a ranged parameter is normalised through its own range before
+// asking it for its text -- the same text its knob shows.
+juce::String MainComponent::getParameterValueText(const juce::String& uuid, const juce::String& paramId, double value) {
+    auto* node = findNodeByUuid(uuid);
+    if (node == nullptr)
+        return {};
+    auto* processor = node->getProcessor();
+    const auto resolution =
+        synth::resolveLaneParameter(processor, paramId, synth::captureParamIndexHint(processor, paramId));
+    if (resolution.rangedParam != nullptr)
+        return resolution.rangedParam->getText(resolution.rangedParam->convertTo0to1((float)value), 16);
+    if (resolution.hostedParam != nullptr)
+        return resolution.hostedParam->getText(juce::jlimit(0.0f, 1.0f, (float)value), 16);
     return {};
 }
 

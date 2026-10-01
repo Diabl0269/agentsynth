@@ -537,7 +537,7 @@ bool TimelineDoc::fromVar(const juce::var& state) {
         parsedNextMarkerId = std::max(parsedNextMarkerId, marker.id.value + 1);
 
     return applyMutation([&] {
-        tracks = std::move(parsed);
+        tracks = automationTracksLast(std::move(parsed)); // an older file may list it anywhere
         markers = std::move(parsedMarkers);
         nextTrackId = parsedNextTrackId;
         nextClipId = parsedNextClipId;

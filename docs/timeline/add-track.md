@@ -36,12 +36,12 @@ into the member `instrumentPluginMenuSnapshot_` the moment the menu is built by
 `buildAddTrackMenu()`. `applyAddTrackMenuChoice` resolves strictly against that snapshot, never by
 re-collecting.
 
-**Why, and why this differs from the automation strip's lane picker.** The known-plugin list
+**Why, and why this differs from the timeline's automation lane choices.** The known-plugin list
 backing this menu is mutated by `PluginScanService::runScan` on a BACKGROUND thread and re-sorted
 by name in `MainComponent::getInstrumentPluginOptions()`. A scan completing between the menu
 opening and the click landing can otherwise change what index N means, silently resolving the click
 against a plugin the menu never actually showed there — the live symptom is a menu showing
-"Massive", clicking it, and getting a Sampler track instead. The automation strip's lane picker
+"Massive", clicking it, and getting a Sampler track instead. The automation lane choices
 (`collectAutomationLaneOptions` / `applyAutomationLaneMenuChoice`) deliberately re-runs its
 collector at click time, because an automation lane is document data mutated only on the message
 thread, so that is safe.

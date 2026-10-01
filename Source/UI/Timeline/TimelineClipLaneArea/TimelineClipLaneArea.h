@@ -451,6 +451,10 @@ public:
 
     // Extra height under each track's clip row (by track index); empty = uniform rows.
     void setTrackExtraHeights(std::vector<int> extraHeights);
+    // Per-track clip-row height (by track index, px); 0 or missing = getRowHeight().
+    void setTrackRowHeightOverrides(std::vector<int> rowHeights);
+    // False over a track's automation lanes and over the Automation track's section row.
+    bool hitTest(int x, int y) override;
 
     // The live rect for a clip id, using its CURRENT doc geometry (never a mid-drag preview) —
     // what tests use to compute where to synthesize a mouse event. Returns an empty rect if the id
@@ -671,6 +675,9 @@ private:
     void paintEmptyRowHint(juce::Graphics& g, const synth::Track& track, juce::Rectangle<int> bounds);
     // The accent wash marking the audio row an OS file drop would land on.
     void paintFileDropHighlight(juce::Graphics& g, juce::Rectangle<int> bounds);
+    // The backdrops of the rows that are not clip rows: a track's automation lanes, the Automation
+    // track's section row.
+    void paintAutomationRows(juce::Graphics& g, const TimelineRowLayout& layout);
     // Shared by updateLiveRecording()'s "nothing recording (any more)" branch and its
     // track-vanished branch.
     void clearLiveRecording();
@@ -680,7 +687,8 @@ private:
     std::optional<juce::Rectangle<int>> keyboardMenuAnchor_;
     ClipSelectionModel& selection_;
     synth::TimelineDoc* doc_ = nullptr;
-    std::vector<int> trackExtraHeights_; // see setTrackExtraHeights
+    std::vector<int> trackExtraHeights_;       // see setTrackExtraHeights
+    std::vector<int> trackRowHeightOverrides_; // see setTrackRowHeightOverrides
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;
     // Non-owning, may stay null (see setApplicationProperties). Read at use time, never cached.

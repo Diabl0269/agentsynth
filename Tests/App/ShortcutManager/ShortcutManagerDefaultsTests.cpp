@@ -64,6 +64,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineMuteFocusedTrack",
         "timelineSoloFocusedTrack",
         "timelineArmFocusedTrack",
+        "timelineToggleTrackAutomation",
     };
     return ids;
 }

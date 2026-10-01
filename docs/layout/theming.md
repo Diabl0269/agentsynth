@@ -152,7 +152,7 @@ rather than repeating it.
 | `timelineTransportBarHeight` | `34` | Timeline transport-bar strip height (px) — sized so `TimelineTransportBar`'s 26 px glyph buttons are not clamped back down by the strip |
 | `timelineRulerHeight` | `30` | Timeline ruler strip height, top of the lanes region (px) — the strip carries TWO tiled rows, the bar/beat numbers (17 px) and the marker band (13 px); at 24 the marker flag was squeezed to 9 px |
 | `timelineTrackRowHeight` | `56` | The row height BOTH the track-header column and the clip-lane area lay their rows out at — the single source keeping header rows and clip rows aligned. `TimelineTrackHeaderComponent::kRowHeight` is only the headless literal fallback and is kept equal to this default. |
-| `timelineAutomationStripHeight` | `72` | The automation strip docked at the BOTTOM of the panel's lanes region (px) — the clip-lane area and the piano roll shrink by exactly this much while the strip is open |
+| `timelineAutomationLaneRowHeight` | `40` | One automation lane row folded out under its track (px), scaled by the vertical zoom like `timelineTrackRowHeight` ([automation](../timeline/automation.md#lane-rows)) |
 
 The chrome these govern is [chrome](chrome.md); the alignment-guide constants are
 [layout](layout.md#alignment-guides).

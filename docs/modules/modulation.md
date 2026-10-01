@@ -95,7 +95,7 @@ through the one shared resolver, `synth::resolveLaneParameter`
 AI-tool path and the UI path. The resolver's shape and the normalised-range note are in
 [`architecture/plugin-layer.md`](../architecture/plugin-layer.md#automation-lanes-on-hosted-plugin-parameters).
 
-The automation strip's lane picker offers **"Add lane…"** entries for a hosted plugin's
+The timeline's lane choices (`TimelinePanelComponent::collectAutomationLaneOptions`) offer **"Add lane…"** entries for a hosted plugin's
 not-yet-automated instance parameters (there is no `ModuleComponent` knob to right-click for them —
 the plugin has its own editor). Choosing one creates a lane with a `RangeSnapshot` of
 `{0, 1, default}` (a hosted parameter's native domain is always 0..1) and captures `paramIndexHint`
@@ -430,8 +430,8 @@ mismatched jacks needed touching, and `ModulationTargetBindingTests` sweeps ever
 a new mismatch cannot ship (a jack that really has no knob goes in that test's `knoblessTargets()`
 list, with a reason).
 
-**Right-click any knob → "Automate '\<Param\>'"** opens that parameter's automation lane in the
-timeline panel's automation strip (creating its lane/track on first use) — see
+**Right-click any knob → "Automate '\<Param\>'"** opens that parameter's automation lane under its
+track in the timeline panel (creating the lane on first use, the track folds open) — see
 [`timeline/automation.md`](../timeline/automation.md#the-knob-entry-point) for the full path
 (`ModuleComponent` → `GraphEditor::onAutomateParameterRequested` → `MainComponent::automateParameter`).
 

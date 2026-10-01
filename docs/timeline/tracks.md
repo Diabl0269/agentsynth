@@ -48,9 +48,11 @@ rebuilds them, so a mute click does not destroy the row the user is typing a nam
 
 ## Row contents
 
-Colour swatch (click opens a full colour picker), a track-kind badge, a name label (double-click to
-edit), an `A` button (visible only when `Track::lanes` is non-empty), `M` / `S` / `R` toggles, and
-the binding chip.
+A fold arrow (visible only when `Track::lanes` is non-empty), colour swatch (click opens a full
+colour picker), a track-kind badge, an "N lanes" badge while the lanes are folded, a name label
+(double-click to edit), `M` / `S` / `R` toggles, and the binding chip. The Automation track is
+drawn differently, as the "Unassigned automation" section header
+([automation](automation.md#unassigned-automation)).
 
 `R` flips `Track::armed` in the document and nothing else — **arming is not recording**. The record
 button and `MidiRecorder::startRecording` live on the transport bar
@@ -177,8 +179,10 @@ threshold it is a plain click-to-select.
   40 ms auto-repeat step, through `scrollTrackRows()` so the clip lanes stay in step). The auto-repeat
   is only requested for a showing panel: it is a process-wide mouse-source setting and a synthesized
   drag never releases.
-- Every row is one `rowHeight` tall today (automation lanes live in their own strip, not in the
-  list); extents are passed per row, so a taller row would work without changing the gesture.
+- A slot is the track's whole span, its open automation lanes included, and the lane headers ride
+  with their track's row while it is lifted (`TimelineAutomationLanes::placeHeadersFor`).
+- The "Unassigned automation" section is no slot: it can't be dragged, and no track can be dropped
+  below it (the doc enforces the same through `moveTrack`).
 - The clip lanes to the right are not animated: they follow the new order when the drop commits
   (`refreshFromDoc()`), and stay in the old order during the drag.
 - A header rebuild that is not the drop itself (an added track, an undo, an AI patch) discards the
@@ -203,8 +207,9 @@ specifically to pin it.
 
 `synth::ui::TimelineRowLayout` (`Source/UI/Timeline/TimelineRowLayout.h`) is the one place row
 geometry comes from. Each track owns a clip row (the themed `Metrics::timelineTrackRowHeight` times
-the vertical-zoom scale) followed by an optional per-track extra area, zero today, where automation
-sub-rows will fold out. The model answers `trackTop(i)`, `trackSpan(i)`, `hitAtY(y)` (track plus
+the vertical-zoom scale, unless the track overrides it: the Automation track's section row is a fixed
+26 px) followed by an optional per-track extra area holding its open automation lanes
+([automation](automation.md#lane-rows)). The model answers `trackTop(i)`, `trackSpan(i)`, `hitAtY(y)` (track plus
 whether `y` is in its clip row), `totalHeight()` and `trackIndexNearestTop(from, dy)`; every y is a
 content coordinate, before `trackScrollY`.
 
@@ -212,7 +217,14 @@ content coordinate, before `trackScrollY`.
 `rowLayout()`, so the header column, clip painting, hit testing, edit tools, range selection, the
 track reorder slots, `ensureTrackVisible()` and the scroll limit cannot disagree. Nothing computes
 `index * rowHeight` any more: ask the layout. Extra heights enter through
-`TimelineClipLaneArea::setTrackExtraHeights()`; a header row is only the clip-row part of its slot.
+`TimelineClipLaneArea::setTrackExtraHeights()` and row overrides through
+`setTrackRowHeightOverrides()`, both pushed by `TimelinePanelComponent::pushAutomationGeometry()`
+on every doc change, fold toggle and vertical zoom; a header row is only the clip-row part of its
+slot. The clip lanes paint nothing but a bg-1 backdrop in an extra area and a surface-hi band on
+the section row, and their `hitTest()` refuses both, so a click there reaches the lane editor on
+top (or nothing). A vertical zoom keeps the row under the pointer put with
+`TimelineRowLayout::mapContentY(before, after, y)`, which maps per track and per part: the lane rows
+rescale with the clip rows, the section row does not.
 
 ## Focus outline
 
@@ -288,8 +300,8 @@ Three states, two of them amber (`theme.colors.warning`):
 | `orphaned` | `"Missing"` (amber) | it WAS bound and the node is gone — retained, never auto-deleted |
 
 An `Automation`-kind track shows **no chip at all** (`setVisible(false)`, decided in
-`refreshFromDoc()`): that track hosts lanes, and a node binding is meaningless for it, so the
-bottom half-row is simply empty. `Midi` and `Audio` tracks are unaffected.
+`refreshFromDoc()`): that track hosts lanes, and a node binding is meaningless for it (it is drawn as
+the one-row "Unassigned automation" section). `Midi` and `Audio` tracks are unaffected.
 
 The chip always carries a tooltip explaining what it shows and, when amber, how to fix it. A bound
 name carries a `"#id"` suffix only in the re-bind menu, and only on an option whose display name
@@ -440,29 +452,33 @@ An automation track, or no selection, shows one muted line instead: "Nothing to 
 automation track." / "Select a MIDI or audio track to see its routing." Every control opts out of
 keyboard focus so a click never moves it off the panel.
 
-## The automation button
+## The automation fold arrow
 
-The `A` button toggles this track's automation lane in the single, doc-wide automation strip
-([automation](automation.md)). The header only reports the click via
-`onAutomationToggleRequested` — it never tracks open/closed state itself, since it cannot see
-whether another track's lane is the one currently shown.
-`TimelinePanelComponent::toggleAutomationForTrack` decides: already open on one of this track's own
-lanes closes the strip; anything else — closed, or open on a different track — opens the track's
-first lane.
+`TrackFoldArrow` (`Source/UI/Timeline/AutomationLanes/`) sits at the left of the name row: pointing
+right while the track's lanes are folded, down while they are open under the track
+([automation](automation.md#lane-rows)). It is a Tab stop; Return or Space toggles it, and its
+name and tooltip say what the next press does ("Show Bass automation" / "Hide Bass automation").
+The rebindable "Show/Hide Track Automation" action (`timelineToggleTrackAutomation`, Timeline
+category, default bare A) does the same from the focused header row. A right-click on the arrow
+opens the row menu and never toggles.
+
+The header only reports a toggle via `onAutomationToggleRequested`; the panel owns the fold state
+(runtime-only, per `TrackId`, never saved) and answers with `setAutomationExpanded()`. While folded,
+a muted "N lanes" badge follows the kind badge.
 
 ## Row context menu
 
 **Right-click a header means anywhere on the row.** `TimelineTrackHeaderComponent::mouseDown()`
 only ever sees a click that lands on the row's own background, because JUCE hands a click to
 whichever component is directly under the cursor and never bubbles it to an ancestor on its own. A
-right-click on `nameLabel_` or the M/S/R/A toggles — almost every pixel of the row — would
+right-click on `nameLabel_`, the M/S/R toggles or the fold arrow — almost every pixel of the row — would
 otherwise be swallowed silently instead of reaching this menu at all, while the binding chip and
 the colour swatch would still show SOMETHING (their own menu or picker, opened for the wrong
 reason, since `juce::Button` fires `onClick` from any mouse button).
 
 Two small nested classes in `TimelineTrackHeaderComponent.h` close that: `ContextMenuForwardingLabel`
 (wraps `nameLabel_`) and `ContextMenuForwardingButton` (wraps `muteButton_` / `soloButton_` /
-`armButton_` / `automationButton_`). Each forwards a right-click straight to `showContextMenu()`
+`armButton_`); `TrackFoldArrow` does the same through its `onPopupMenuRequested`. Each forwards a right-click straight to `showContextMenu()`
 and, for the buttons, never lets the click reach `juce::TextButton`'s own `onClick`, so a
 right-click on Mute does not also toggle mute. The binding chip and colour swatch are untouched —
 they keep opening their own menu or picker.

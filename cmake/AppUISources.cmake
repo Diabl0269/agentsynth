@@ -84,6 +84,18 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineTransportBarMidiLearn.cpp
     Source/UI/Timeline/TimelineRowLayout.h
     Source/UI/Timeline/TimelineRowLayout.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelAutomation.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationToolMapping.h
+    Source/UI/Timeline/AutomationLanes/AutomationLaneActions.h
+    Source/UI/Timeline/AutomationLanes/AutomationLaneActions.cpp
+    Source/UI/Timeline/AutomationLanes/TrackFoldArrow.h
+    Source/UI/Timeline/AutomationLanes/TrackFoldArrow.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderMenu.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesLayout.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneInternal.h

@@ -9,6 +9,7 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/NonModalLabel.h"
+#include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <vector>
@@ -54,6 +55,13 @@ struct TrackHeaderHost {
 
     /** A parameter's display name, or empty when it doesn't resolve (callers fall back to paramId). */
     virtual juce::String getParameterDisplayName(const juce::String& /*uuid*/, const juce::String& /*paramId*/) {
+        return {};
+    }
+
+    /** A lane value (in the lane's own units) as its parameter displays it, or empty when the
+     *  parameter doesn't resolve (callers fall back to the number). */
+    virtual juce::String getParameterValueText(const juce::String& /*uuid*/, const juce::String& /*paramId*/,
+                                               double /*value*/) {
         return {};
     }
 
@@ -163,10 +171,11 @@ struct TrackHeaderHost {
      *  reasoning as the two methods above. */
     virtual void addInstrumentPluginTrack(const synth::PluginIdentity& identity) { juce::ignoreUnused(identity); }
 
-    /** One parameter with no automation lane yet — the automation strip's lane picker "Add lane..."
-     *  entries. Despite the name, also covers a ChannelStripModule send slot; `paramId`/
-     *  `paramIndex` mean what HostedPluginModule::InstanceParameterInfo documents for a hosted
-     *  parameter, and `paramIndex` is unused (-1) for a send slot's plain RangedAudioParameter. */
+    /** One parameter with no automation lane yet — an "Add lane..." entry of the panel's lane
+     *  choices (TimelinePanelComponent::collectAutomationLaneOptions). Despite the name, also covers a
+     * ChannelStripModule send slot; `paramId`/ `paramIndex` mean what HostedPluginModule::InstanceParameterInfo
+     * documents for a hosted parameter, and `paramIndex` is unused (-1) for a send slot's plain RangedAudioParameter.
+     */
     struct PluginLaneOption {
         juce::String nodeUuid;
         juce::String paramId;
@@ -309,7 +318,7 @@ public:
     void paint(juce::Graphics& g) override;
     // The per-row keyboard-focus outline (see setWantsKeyboardFocus below) — painted OVER
     // children for the same reason TimelinePanelComponent's own region-outline override is: the
-    // colour swatch and the M/S/R/A toggles sit flush against this row's left/right edges, so an
+    // colour swatch and the M/S/R toggles sit flush against this row's left/right edges, so an
     // outline drawn in paint() would be hidden under them.
     void paintOverChildren(juce::Graphics& g) override;
     void setLift(float lift);
@@ -336,8 +345,8 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
     /** Opens the same menu a right-click on this row does, anchored at the row. Always handled. */
     bool showContextMenuForKeyboardFocus() override;
-    // The four toggle buttons opt OUT of taking focus for themselves (juce::Button opts in by
-    // default) — otherwise clicking M/S/R/A would silently move real focus off the row and onto the
+    // The three toggle buttons opt OUT of taking focus for themselves (juce::Button opts in by
+    // default) — otherwise clicking M/S/R would silently move real focus off the row and onto the
     // button, exactly the trap TimelinePanelComponent's own tool-strip buttons avoid the same way.
     // nameLabel_ is deliberately excluded: it needs its own focus machinery for double-click rename.
     void focusGained(juce::Component::FocusChangeType cause) override;
@@ -391,18 +400,20 @@ public:
     // every other test accessor here returns a plain value.
     int getKindBadgeIconForTest() const;
 
-    // ---- Automation open/close button -------------------------------------------
-    // Visible only when the track has at least one automation lane. The header never decides
-    // open-vs-close itself — it just reports the click and TimelinePanelComponent (which owns the
-    // single automation strip) works out whether that means "open this track's lane" or "close the
-    // strip that's already showing it".
+    // ---- Automation fold arrow ------------------------------------------------------
+    // Shown only when the track has lanes. The arrow and the A key only report a toggle request;
+    // the panel owns the fold state and answers with setAutomationExpanded().
     std::function<void(synth::TrackId)> onAutomationToggleRequested;
+    void setAutomationExpanded(bool expanded);
+    bool isAutomationExpanded() const noexcept { return automationExpanded_; }
+    /** True for the Automation track, drawn as the "Unassigned automation" section header. */
+    bool isSectionHeader() const;
 
     // ---- whole-row drag-to-reorder -----------------------------------------
     //
     // "Whole row" on purpose: a small dedicated handle is too fiddly a target for dragging a track
-    // (see the ticket) — everything except the interactive children (name label, swatch, M/S/R/A
-    // buttons, binding chip; each is its own child Component and intercepts its own mouseDown) is a
+    // (see the ticket) — everything except the interactive children (name label, swatch, M/S/R
+    // buttons, fold arrow, binding chip; each is its own child Component and intercepts its own mouseDown) is a
     // drag surface. This row is deliberately sibling-blind (it never sees the other rows or the
     // scroll state — see the class comment), so it hands raw SCREEN Y positions up rather than
     // computing an insertion index itself; TimelinePanelComponent (which owns the ordered header
@@ -479,7 +490,7 @@ public:
     juce::Button& getColourSwatch() noexcept { return colourSwatch_; }
     juce::Button& getBindingChip() noexcept { return bindingChip_; }
     ChannelChipComponent& getChannelChip() noexcept { return channelChip_; }
-    juce::Button& getAutomationButton() noexcept { return automationButton_; }
+    TrackFoldArrow& getFoldArrow() noexcept { return foldArrow_; }
     juce::Colour getResolvedColour() const noexcept { return resolvedColour_; }
 
     /** Builds a ColourPickerPopup wired with the EXACT same onPreview/onCommit callbacks the real
@@ -525,7 +536,7 @@ private:
 
     // JUCE hands a click to whichever child component is directly under the cursor and never
     // bubbles it up to an ancestor on its own — mouseDown() below only ever sees a right-click that
-    // lands on this row's own background pixels. nameLabel_ and the M/S/R/A toggles cover almost
+    // lands on this row's own background pixels. nameLabel_ and the M/S/R toggles cover almost
     // every OTHER pixel of the row and have no popup menu of their own, so a right-click there used
     // to be swallowed silently instead of ever reaching showContextMenu() (4 real right-click spots that a direct
     // `header.mouseDown(...)` test can't catch, since
@@ -559,11 +570,11 @@ private:
         TimelineTrackHeaderComponent& owner_;
     };
 
-    // Same fix as ContextMenuForwardingLabel, for the M/S/R/A toggle buttons — plus one thing those
+    // Same fix as ContextMenuForwardingLabel, for the M/S/R toggle buttons — plus one thing those
     // need that the label doesn't: juce::Button (unlike juce::Slider, which already checks
     // `e.mods.isPopupMenu()` itself before starting a value-drag — see juce_Slider.cpp) fires
     // onClick from ANY mouse button. Left un-forwarded, a bare juce::TextButton here would have BOTH
-    // opened the context menu AND toggled mute/solo/arm/automation on the very same right-click.
+    // opened the context menu AND toggled mute/solo/arm on the very same right-click.
     // Never calling the base class's mouseDown() for a popup click keeps Button::isDown() false for
     // the whole gesture, so the matching mouseUp() (still the plain juce::TextButton one — no
     // override needed) finds `wasDown` false and skips the click it would otherwise fire.
@@ -660,7 +671,7 @@ private:
     ContextMenuForwardingButton muteButton_{*this, "M"};
     ContextMenuForwardingButton soloButton_{*this, "S"};
     ContextMenuForwardingButton armButton_{*this, "R"};
-    ContextMenuForwardingButton automationButton_{*this, "A"};
+    TrackFoldArrow foldArrow_;
     juce::TextButton bindingChip_;
     // The CHANNEL chip -- what this track's audio ends up in, as opposed to bindingChip_'s
     // "which node feeds it". Hidden whenever the track reaches no channel yet.
@@ -676,6 +687,10 @@ private:
     // Set in resized(); the kind badge itself is drawn straight from track()->kind in paint(), so
     // this is only a hit-rect for tests, not a cache of the badge's text.
     juce::Rectangle<int> kindBadgeBounds_;
+    juce::Rectangle<int> laneBadgeBounds_; // the section header's "N lanes" badge; empty when not shown
+    bool automationExpanded_ = false;
+    // Carves the fold arrow, the kind badge and the section header's "N lanes" badge off `row`.
+    void layoutFoldArrowAndBadges(juce::Rectangle<int>& row);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineTrackHeaderComponent)
 };
