@@ -33,6 +33,14 @@ order never depend on placement. The bespoke cards (Sequencer, Poly Sequencer, M
 EQ, Attenuverter, and the Wavetable's tab pages) build their widgets through the same card body
 but place them themselves; MIDI Keyboard, External MIDI and a hosted plugin build their own.
 
+**Section headers and renamed controls.** A section with a title (one the user added or renamed in the
+layout editor) starts with a header row, `kSectionHeaderHeight` tall across the content width: a small
+bold label in the title's own case (UI text is never all caps), created after every widget so it never
+changes Tab or screen-reader order, and measured by the same walk, so measure == apply holds. An
+untitled section (every automatic layout) has none, which keeps those cards pixel for pixel as before.
+A control the layout renames shows the new name as its caption (a toggle's text), with the full
+parameter name as the caption's tooltip; its component ID stays the parameter's own name.
+
 Around the body, `layoutDefaultContent(bool apply)` adds the card's chrome (Sampler and Wavetable
 rows above it; the envelope graph, LFO wave editor, Show Response / Spectrum / Scope rows below it;
 the More row last). It runs twice per size change: once with `apply = false` to measure the
@@ -55,6 +63,7 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kFaderVHeight` | 96 | a vertical fader's travel plus its text box (40 px wide, centred in its cell) |
 | `kFaderHHeight` | 28 | a horizontal fader: cap, modulation bar and value box |
 | `kWaveformHeight` | 72 | Sampler waveform overview |
+| `kSectionHeaderHeight` | 18 | a titled section's header row |
 | `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |
 
 Generic bool-parameter toggles, and the `freqResponse` / `spectrum` / `scope` show-hide toggles, lay
@@ -159,9 +168,9 @@ out as its own run, by the same measure-and-apply walk:
 
 Every control on a card drawn from layout data adds to its right-click menu, after Automate and the
 MIDI Learn block: **Hide from card** (or **Show on card** for a control in the More row), **Show as
-fader** / **Show as knob** for a float or int on the card, and a disabled **Edit Layout...** (the
-layout editor is not built yet; the module menu carries the same disabled item). The bespoke cards
-offer none of these. Each click is one write of the node's `cardLayout` override, one undo step,
+fader** / **Show as knob** for a float or int on the card, and **Edit Layout...**, which opens the
+layout editor beside the card ([module-card-layout.md](module-card-layout.md#editing-a-layout)); the
+module menu carries the same item. The bespoke cards offer none of these. Each click is one write of the node's `cardLayout` override, one undo step,
 starting from the layout the card draws now (the automatic layout written out as explicit items,
 which builds the same card): Hide adds the parameter to `hidden` and leaves its item where it is, so
 Show on card puts it back exactly there; a parameter the layout never placed goes to the end of the

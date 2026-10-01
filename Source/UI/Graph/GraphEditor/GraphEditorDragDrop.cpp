@@ -69,7 +69,7 @@ static juce::Point<int> bespokeCardSizeTable(const juce::String& typeName) {
     if (typeName == "External MIDI")
         return {280, 146};
     if (typeName == "Hosted Plugin")
-        // Bypass and mute live in the header; a bare card's body is the Open Editor / Choose knobs
+        // Bypass and mute live in the header; a bare card's body is the Open Editor / Edit Layout...
         // button row, one jack a side while empty. The card grows with the loaded plugin's real port count,
         // like the Macro bank and Audio Input; the estimate is the resting size, and
         // finalizeNewDrop re-resolves against the real component anyway. Library-less until the

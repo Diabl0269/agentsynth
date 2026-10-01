@@ -37,6 +37,7 @@
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Chrome/ToolbarComponent.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
+#include "UI/Graph/CardBody/ModuleCardLayoutStore.h"
 #include "UI/Layout/BottomDockComponent.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/UIAnimation.h"
@@ -58,8 +59,9 @@
 class AudioEngine;
 class GraphEditor;
 namespace synth {
-struct CollectResult; // Project/ProjectCollector.h
-}
+struct CollectResult;          // Project/ProjectCollector.h
+class ModuleCardLayoutBinding; // UI/Graph/CardBody/ModuleCardLayoutBinding.h
+} // namespace synth
 class MainComponent
     : public juce::Component
     , public juce::DragAndDropContainer
@@ -592,8 +594,10 @@ private:
     AudioEngine& audioEngine;                      // the single access point either way
 
     synth::PluginCardLayoutStore pluginCardLayoutStore; // declared before graphEditor: outlives its listeners
+    synth::ModuleCardLayoutStore moduleCardLayoutStore; // likewise: every built-in card resolves against it
     std::unique_ptr<GraphEditor> graphEditorOwner_;     // heap-held so this header need not include GraphEditor.h
     GraphEditor& graphEditor;
+    std::unique_ptr<synth::ModuleCardLayoutBinding> moduleCardLayoutBinding_; // after graphEditor: dies first
 
     std::unique_ptr<synth::ui::WelcomeScreenComponent>
         welcomeScreen_; // null in Hosted mode; added last so it paints on top

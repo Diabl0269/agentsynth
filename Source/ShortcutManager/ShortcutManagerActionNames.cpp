@@ -73,6 +73,19 @@ juce::String mixerActionName(const juce::String& actionId) {
     return {};
 }
 
+// The card layout editor's list keys. Empty when `actionId` is not one of them.
+juce::String layoutEditorActionName(const juce::String& actionId) {
+    if (actionId == "layoutEditorToggleShown")
+        return "Show or Hide the Control on the Card";
+    if (actionId == "layoutEditorMoveUp")
+        return "Move the Control Up";
+    if (actionId == "layoutEditorMoveDown")
+        return "Move the Control Down";
+    if (actionId == "layoutEditorRename")
+        return "Rename the Control";
+    return {};
+}
+
 // The canvas's card keys (CanvasCardKeyboard). Empty when `actionId` is not one of them.
 juce::String canvasCardActionName(const juce::String& actionId) {
     if (actionId == "canvasSelectCardLeft")
@@ -294,5 +307,7 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Show or Hide Velocity Strip";
     if (const auto mixer = mixerActionName(actionId); mixer.isNotEmpty())
         return mixer;
+    if (const auto editor = layoutEditorActionName(actionId); editor.isNotEmpty())
+        return editor;
     return actionId;
 }

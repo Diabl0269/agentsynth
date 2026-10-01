@@ -10,6 +10,7 @@ class ThresholdControlComponent;
 namespace synth {
 
 class CardMoreButton;
+class ModuleCardLayoutStore;
 
 /**
  * Owns the parameter widgets, captions, attachments and views of a built-in module's card body: it
@@ -22,11 +23,12 @@ class CardBody {
 public:
     /** `card` owns this and outlives it; `layout` nullopt = the automatic layout. */
     CardBody(ModuleComponent& card, juce::AudioProcessor& module, const std::optional<CardLayout>& layout);
-    /** The body for `module`'s card, its layout resolved for node `nodeId`; null when the card builds
-     *  its own widgets (cardBodyBuildsWidgetsFor). Message thread only. */
+    /** The body for `module`'s card, its layout resolved for node `nodeId` against `store` (may be
+     *  null); null when the card builds its own widgets (cardBodyBuildsWidgetsFor). Message thread only. */
     static std::unique_ptr<CardBody> createFor(ModuleComponent& card, juce::AudioProcessor& module,
                                                const juce::AudioProcessorGraph& graph,
-                                               juce::AudioProcessorGraph::NodeID nodeId);
+                                               juce::AudioProcessorGraph::NodeID nodeId,
+                                               ModuleCardLayoutStore* store = nullptr);
     ~CardBody();
 
     // ---- Building (the card's constructor, in this order) --------------------------------------
@@ -54,6 +56,8 @@ public:
     bool drawsFromLayout() const;
     /** The node's "cardLayout" JSON this body was built from; empty for none. */
     const juce::String& builtFromOverride() const noexcept { return builtFromOverride_; }
+    /** True when `node`'s override or its type's stored default changed since this body was built. */
+    bool isStaleFor(const juce::AudioProcessorGraph::Node& node) const;
 
     // ---- The More row ----------------------------------------------------------------------------
     bool hasMoreRow() const { return !plan_.more.empty(); }
@@ -79,6 +83,7 @@ private:
     void createSegmented(CardBodyItem& item, juce::AudioParameterChoice& param);
     void createStepper(CardBodyItem& item, juce::AudioParameterInt& param);
     juce::Label* addCaption(CardBodyItem& item, juce::RangedAudioParameter& param, juce::Justification justification);
+    void createSectionHeaders();
     void createMoreButton();
     void applyMoreVisibility();
     int layoutItems(const std::vector<int>& indices, int columns, int y, const cardbody::BodyGeometry& g, bool apply,
@@ -89,6 +94,8 @@ private:
     CardBodyPlan plan_;
     std::optional<CardLayout> layout_;
     juce::String builtFromOverride_;
+    juce::WeakReference<ModuleCardLayoutStore> store_;
+    int builtFromRevision_ = 0;
     bool moreUnfolded_ = false;
 
     // Widgets before attachments: members unwind in reverse, so an attachment never outlives its widget.

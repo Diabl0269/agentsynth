@@ -11,6 +11,7 @@
 #include "Modules/MasterModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ShortcutManager/AppCommands.h"
+#include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
@@ -284,6 +285,9 @@ void MainComponent::wireGraphEditorCallbacks() {
     };
     // Hosted-plugin cards resolve their layout against this store; the member outlives graphEditor.
     graphEditor.setPluginCardLayoutStore(&pluginCardLayoutStore);
+    // Built-in cards resolve their per-type default against this store, and a default written from the
+    // layout editor re-lays out every card of that type.
+    moduleCardLayoutBinding_ = std::make_unique<synth::ModuleCardLayoutBinding>(graphEditor, moduleCardLayoutStore);
     // A hosted-plugin card's "Open Editor" button. Mirrors onAutomateParameterRequested's
     // shape — GraphEditor owns neither the module lookup nor the window manager.
     graphEditor.onOpenPluginEditorRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {

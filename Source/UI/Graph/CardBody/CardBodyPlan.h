@@ -18,6 +18,10 @@ struct CardBodyItem {
     CardView view = CardView::Scope;             ///< Meaningful for a view only.
     juce::Component* widget = nullptr;           ///< Null until built, and always in a measure-only plan.
     juce::Component* label = nullptr;            ///< The caption above a knob or choice; null otherwise.
+    std::optional<juce::String> caption;         ///< The layout's label override; nullopt = the parameter's name.
+
+    /** The text the card shows for this parameter: the override, else the parameter's name. */
+    juce::String captionText() const;
 };
 
 /**
@@ -28,7 +32,12 @@ struct CardBodyItem {
 struct CardBodyPlan {
     struct Section {
         int columns = CardSection::kDefaultColumns;
-        std::vector<int> items; ///< Indices into `items`, in card order.
+        std::vector<int> items;            ///< Indices into `items`, in card order.
+        std::optional<juce::String> title; ///< Drawn as a header row above the items; nullopt = none.
+        juce::Component* header = nullptr; ///< The header row; null until built, and without a title.
+
+        /** True when the section draws a header row: a non-empty title over at least one item. */
+        bool hasHeader() const { return title.has_value() && title->trim().isNotEmpty() && !items.empty(); }
     };
 
     std::vector<CardBodyItem> items; ///< Parameter items in declaration order (the build order), then views.

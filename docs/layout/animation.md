@@ -195,8 +195,9 @@ and `TimelinePanelComponent` (`TimelinePanelTrackDrag.cpp`, [drag to reorder](..
 Owners on `ReorderDragSession`, all vertical: `MixerSendList` (`MixerSendList.cpp`, a send row is dragged by its target
 name; the rebuild its commit causes gets the settle handed over via `settleInto`, [reordering sends](../mixer/sends-and-buses.md#reordering-sends)), `MacroPortConfigDialog`
 (`MacroPortConfigDialogRowOrdering.cpp`, [renaming and reordering ports](../macros/configure-io.md#renaming-and-reordering-ports)),
-and `PluginKnobPickerComponent` (`PluginKnobPickerComponentDrag.cpp`,
-[choosing knobs](../control/plugin-card-layout.md#choosing-knobs-as-built-fro132)). The pointer is converted into the list's own
+and `CardLayoutEditorComponent` (`CardLayoutEditorComponentDrag.cpp`, the card layout editor and the plugin
+picker built on it; group headers take part as fixed slots, so a row dropped under one joins that group,
+[editing a layout](module-card-layout.md#editing-a-layout)). The pointer is converted into the list's own
 coordinates on every event, and the commit goes out once, on release.
 
 ### Drag-and-drop cursor

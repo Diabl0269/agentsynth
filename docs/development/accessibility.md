@@ -195,7 +195,11 @@ control into view is the owner's `ScrollIntoViewOnFocus`.
 
 - **Attached to**: every Settings tab (`SettingsWindow` creates one per tab content), the Export Audio
   dialog, the Sign in dialog and the Configure I/O (macro port) dialog. The mixer, timeline, piano roll,
-  module library and canvas have their own arrow handling and do not use it.
+  module library, canvas and the card layout editor's list have their own arrow handling and do not use
+  it. The layout editor's list is like the module library's: each row (a control, or a group header) is
+  one focus stop that takes its own keys (Up/Down between rows; Space, Cmd+Up/Down and Enter are the
+  rebindable Layout Editor actions), so the arrows walk rows and never land on a row's widget combo,
+  which Tab reaches ([module-card-layout.md](../layout/module-card-layout.md#accessibility)).
 - **Native controls keep their arrows.** A `ComboBox`, `Slider` or `TextEditor` consumes the arrows before
   they bubble, so a list can walk onto one but not through it: Down lands on a combo box, the next Down
   changes the combo's selection, and Tab is what moves on. The macro port rows' swatch and Delete buttons

@@ -349,12 +349,6 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/HostedParameterAttachment.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponent.cpp
-    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentDrag.cpp
-    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentRows.cpp
-    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentScope.cpp
-    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerComponentTestSeams.cpp
-    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerRow.h
-    Source/UI/Graph/PluginKnobPicker/PluginKnobPickerRow.cpp
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.h
     Source/UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.cpp
     Source/UI/MidiRemote/MidiLearnMenu.h
@@ -515,4 +509,23 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardWidgets/CardStepper.cpp
     Source/UI/Graph/CardWidgets/CardStepper.h
     Source/UI/Graph/ModuleComponent/ModuleComponentModRings.cpp
+    Source/UI/Graph/CardBody/ModuleCardLayoutBinding.cpp
+    Source/UI/Graph/CardBody/ModuleCardLayoutBinding.h
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorSource.h
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorModel.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorModel.h
+    Source/UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.cpp
+    Source/UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h
+    Source/UI/Graph/CardLayoutEditor/HostedCardLayoutSource.cpp
+    Source/UI/Graph/CardLayoutEditor/HostedCardLayoutSource.h
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorRow.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorRow.h
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponent.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponent.h
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponentDrag.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponentKeyboard.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponentRows.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponentScope.cpp
+    Source/UI/Graph/CardLayoutEditor/CardLayoutEditorComponentTestSeams.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentLayoutEditor.cpp
 )

@@ -4,16 +4,17 @@ Agent reference. The design for giving every built-in module a card drawn from l
 type-specific code: a hand-designed default per module type, a user override per instance or per
 type, knob/fader/switch widgets, and room for a future user-built "custom module".
 
-**Status:** model, store, override, `CardBody`, the new widgets and the right-click quick path built;
-every card draws the automatic layout until the user changes it. Built: `CardLayout` v2 and its
-reader/writer, the shared layout store with its `ModuleCardLayouts` root, the per-instance `cardLayout`
-node property with its undo, the pure resolver with an empty code-default registry, `CardBody`, which
-builds and lays out every built-in card's body from the resolved layout, with the folded More row and
-the Threshold view in its view registry, the `knobLarge`, `faderV`, `faderH`, `segmented` and `stepper`
-widgets, and Hide from card / Show on card / Show as fader / Show as knob on every control's right-click
-menu ([What exists](#what-exists)). Everything else (conditions, section headers, spans, label
-overrides, default layouts, the editor) is designed and decided (see [Decisions](#decisions-2026-10-01)),
-not built. Nothing here describes
+**Status:** model, store, override, `CardBody`, the new widgets, the right-click quick path and the
+layout editor built; every card draws the automatic layout until the user changes it. Built: `CardLayout`
+v2 and its reader/writer, the shared layout store with its `ModuleCardLayouts` root (the app owns one and
+every card resolves its per-type default against it), the per-instance `cardLayout` node property with
+its undo, the pure resolver with an empty code-default registry, `CardBody`, which builds and lays out
+every built-in card's body from the resolved layout, with the folded More row, section header rows,
+label overrides and the Threshold view in its view registry, the `knobLarge`, `faderV`, `faderH`,
+`segmented` and `stepper` widgets, Hide from card / Show on card / Show as fader / Show as knob on every
+control's right-click menu, and the **Edit Layout...** editor shared with the hosted plugin's picker
+([What exists](#what-exists)). Everything else (conditions, spans, default layouts) is designed and
+decided (see [Decisions](#decisions-2026-10-01)), not built. Nothing here describes
 current behaviour unless it says "today" or "built".
 Where the card is drawn today is [module-card.md](module-card.md); the hosted-plugin half of the
 same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-layout.md).
@@ -27,9 +28,10 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
   declaration order. No module has a code default, so every card draws the **automatic layout**: all
   combos, then all toggles, then the Threshold view, then a 3-column knob grid, each group in
   declaration order, pixel for pixel the card that existed before `CardBody`. A stored layout (the
-  node's `cardLayout` override) is honoured for order, grid columns, hiding and widget choice (where
-  the widget suits the parameter); label overrides, spans, conditions and section titles are not
-  drawn yet. The user changes it from a control's right-click menu ([Editing a layout](#editing-a-layout)).
+  node's `cardLayout` override, else the type's stored default) is honoured for order, grid columns,
+  hiding, widget choice (where the widget suits the parameter), section titles (a header row) and
+  label overrides (the caption); spans and conditions are not drawn yet. The user changes it from a
+  control's right-click menu or the layout editor ([Editing a layout](#editing-a-layout)).
 - Exceptions are hard-coded: skip rules for the ADSR curves/divisions/tempo-sync and the threshold
   parameter (`CardBodyPlan.cpp`'s `isEditedElsewhere`), the LFO custom-wave editor, the Sampler/Wavetable chrome, the Wavetable tab strip
   (a name-keyed page table in `WavetableTabStrip.cpp`, the only grouping that exists), and fully
@@ -55,12 +57,21 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 | The view registry (only `threshold` is registered) | `CardBodyViews.*` |
 | The size estimate for a card before it exists, measured from the plan | `CardBodyMeasure.*` (`GraphEditor::estimateModuleSize`) |
 | The widgets: `CardFader`, `CardSegmentedSwitch`, `CardStepper`, and `CardControlGestures` (the gestures a knob and a fader share) | `Source/UI/Graph/CardWidgets/` |
-| The right-click quick path (the explicit layout, the edits, the undoable write and rebuild, the menu items) | `CardLayoutQuickEdit.*`; the stale-card rebuild in `GraphEditorCanvas.cpp` |
+| The right-click quick path (the explicit layout, the edits, the undoable write and rebuild, the menu items) | `CardLayoutQuickEdit.*`; the stale-card rebuild in `GraphEditorCanvas.cpp` (`CardBody::isStaleFor`) |
+| The app's store, bound to the GraphEditor's cards; a default written or cleared rebuilds that type's cards | `ModuleCardLayoutBinding.*` (owned by `MainComponent`) |
+| The layout editor: the panel, its rows, its working model, and the two sources (built-in module, hosted plugin) | `Source/UI/Graph/CardLayoutEditor/`; `ModuleComponentLayoutEditor.cpp` opens it |
 | A fader's modulation bar and drop outline beside the knob rings | `Source/UI/Graph/ModuleComponent/ModuleComponentModRings.cpp` |
 
-As built: the card resolves its layout once, when it is built (instance override, then code default,
-then automatic; the app constructs no `ModuleCardLayoutStore` yet, so the per-type step is skipped). A
-stored layout is honoured only for the cards drawn from layout data; the bespoke ones (Sequencer, Poly
+As built: the card resolves its layout once, when it is built (instance override, then the type's
+stored default, then code default, then automatic). `MainComponent` owns one `ModuleCardLayoutStore`
+(the real `<settings>/ModuleCardLayouts`) and binds it to its GraphEditor with a
+`ModuleCardLayoutBinding`, which hangs the store on the editor's property set (no `GraphEditor` member)
+and listens to it: a default written or cleared bumps the store's in-memory revision for that type, and
+`updateComponents` rebuilds every card built from an older revision (`CardBody::isStaleFor`, which never
+reads the disk), each rebuilt card then making room for its new height. A card on an editor with no
+binding (most tests) skips the per-type step. The size estimate for a card before it exists
+(`CardBodyMeasure`) still measures the automatic layout, so a type with a stored default is placed at
+its automatic height and re-flows once built. A stored layout is honoured only for the cards drawn from layout data; the bespoke ones (Sequencer, Poly
 Sequencer, Macros, Parametric EQ, Attenuverter, Wavetable, macro ports) always build from the
 automatic plan. The fold state of the More row is per card and not saved; a card opens folded.
 A card builds its body once; when its node's `cardLayout` changes (a quick-path click, its undo or
@@ -316,22 +327,36 @@ patch node's `params` is an open record there, and per-module ranges come from t
 ## Editing a layout
 
 - **Quick path, on any control:** the right-click menu gains **Hide from card**, **Show as
-  fader / Show as knob** (for a continuous parameter) and **Edit Layout…**. On a control in the More
+  fader / Show as knob** (for a continuous parameter) and **Edit Layout...**. On a control in the More
   row, **Show on card** puts it back where the default had it. Built: each click edits the layout the
-  card draws now (the automatic layout written out as explicit items when the node has none), Show as
-  fader picks `faderV`, and **Edit Layout...** shows disabled (also in the module menu) until the
-  editor exists ([module-card.md](module-card.md#hide-or-show-from-the-right-click-menu)).
-- **The editor:** `PluginKnobPicker` generalises into a card layout editor in a `CallOutBox` beside
-  the card: search, one row per parameter grouped by section with a tick (shown/hidden), drag to
-  reorder, click a label to rename, a Knob/Fader/… choice per row, **+ Add group**, **Apply to: this
-  module / all <Type> modules**, **Presets**, **Reset to default**. The card re-lays out live. The
-  hosted-plugin picker becomes the same component with the plugin's parameter source.
-- **Module menu:** **Edit Layout…** goes in `buildModuleContextMenu`
-  (`ModuleComponentInteraction.cpp`) in the block after Bypass Module, where a hosted plugin's
-  **Choose knobs…** sits today; once the editor is shared, the plugin item is renamed to match.
-- **Undo:** one step per editor session (open → close) and one per quick-path click, recorded like a
-  title change (`AppUndoManager::recordStructuralChange` around the node-property write).
-  **Apply to all** writes the per-type file and clears this instance's override in the same step.
+  card draws now (the automatic layout written out as explicit items when the node has none), and Show
+  as fader picks `faderV` ([module-card.md](module-card.md#hide-or-show-from-the-right-click-menu)).
+- **The editor (built):** **Edit Layout...** (a control's menu, or the module menu in the block after
+  Bypass Module) opens `CardLayoutEditorComponent` in a `juce::CallOutBox` beside the card. It lists
+  every control the card can show, grouped by section under a header row per group: a tick (shown, or
+  hidden in the More row; a hidden row keeps its place), a grab handle to drag it (the shared reorder
+  drag; a row dropped under a group's header joins that group), its name (click to rename; an empty
+  name, or the control's own, clears the override), and a widget choice listing only the widgets the
+  card would really draw it as (`cardBodyKindFor`, the automatic one first; a toggle, or a choice too
+  long to segment, gets none). A header's title is renamed the same way. Above the list: **Apply to**
+  (this module / all <Type> modules), **Presets** (save as, load, delete, in the type's
+  `ModuleCardLayouts/<Type>/` folder), **Reset to default**, a search (it hides rows, never group
+  headers, so a drop can still land in any group) and **+ Add group** (a titled "New group" at the end).
+  Every edit writes at once and the card re-lays out live; there is no OK button.
+- **Two sources, one editor.** What the list edits comes from a `CardLayoutEditorSource`:
+  `BuiltInCardLayoutSource` (the card's own parameters, the node's `cardLayout`, the type's default
+  in the bound store) and `HostedCardLayoutSource` (a hosted instance's parameters, its extra-state
+  layout, written as the flat v1 slot list). The hosted plugin's **Edit Layout...** is this editor
+  (`PluginKnobPickerComponent` adds touch-to-add); its module-menu item is named **Edit Layout...**
+  too. The hosted source has no groups and no widget choice, and an unticked row leaves its layout
+  (it lists after the ticked ones), as before.
+- **Undo:** one step per quick-path click, and one per editor session on a built-in card: the
+  session takes a graph snapshot when it opens and records the difference when the panel closes
+  (`AppUndoManager::recordGraphChangeSince`), so the layout, its label and widget edits and the
+  neighbours a taller card pushed aside undo together. **Apply to all** writes the per-type file and
+  clears this module's override inside that same step; undo gives the override back, but the per-type
+  file is a setting, not part of the project, and stays. A session that changes nothing records
+  nothing. The hosted editor keeps one step per edit (`recordNodeExtraStateChange`), as the picker did.
 - **Direct in-card editing** (dragging controls on the card itself) is a later addition on top of the
   same model; the editor comes first because it is fully keyboard-reachable.
 
@@ -387,8 +412,14 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   accessible value.
 - `stepper`: − and + are separate buttons with titles ("Octave down", "Octave up").
 - More row: a button titled "More controls (N)", Enter/Space unfolds it.
-- Editor: a list with arrow-key navigation, Space ticks, Cmd+Up/Down reorders, Enter renames; every
-  button has a title and tooltip. New keys are rebindable `ShortcutManager` actions.
+- Editor (built): each row (a control or a group header) is one focus stop with the accent focus ring,
+  a title and a tooltip naming its keys as bound now. Up/Down move between rows (fixed list keys);
+  Space shows or hides, Cmd+Up/Down moves (across a group's edge into the next group), Enter renames:
+  the rebindable **Layout Editor** actions (`layoutEditorToggleShown`, `layoutEditorMoveUp`,
+  `layoutEditorMoveDown`, `layoutEditorRename`, [shortcuts.md](../control/shortcuts.md#layout-editor)).
+  The widget choice is a Tab stop of its own; the tick and name take no focus (the row's keys reach
+  them). Escape is left to the CallOutBox, which closes the panel. Every button and combo has a title
+  and tooltip; the search field has no hidden Tab stops.
 - The app's accessibility coverage check passes with no new exemption.
 
 ---
@@ -426,11 +457,19 @@ tooltip naming the full parameter name when the label was shortened or renamed.
 - `Tests/AI/CardLayoutTrustTests.cpp`: `cardLayout` round-trips on the trusted path and through a
   node-preserving undo (`applySnapshotPreservingNodes`); untrusted apply ignores it; `.agsnip` on disk drops it; the in-app
   clipboard keeps it; not in `getPatchSchema()`.
-- `Tests/UI/Graph/CardLayoutEditor/`: the picker tests, generalised (search, tick, reorder, rename,
-  widget kind, scope switch, presets, reset), plus the real right-click path for Edit Layout… and one
-  undo step per session.
-- E2E: add a Filter, hide Drive, switch Level to a fader, save, reopen, and the card matches; Apply to
-  all and a second Filter shows it.
+- `Tests/UI/Graph/CardLayoutEditor/` (built): `CardLayoutEditorBuiltInTests.cpp` opens the editor
+  through the real right-click path (a control's menu and the module menu) and covers tick, rename,
+  widget choice (only suitable kinds), + Add group with a header row on the card and measure == apply,
+  a real drag across a group header, search, one undo step per session (and none for a session that
+  changes nothing), Apply to all clearing the override in that step with another Filter re-laid out,
+  a per-type default written elsewhere rebuilding only that type's cards, presets and reset;
+  `CardLayoutEditorKeyboardTests.cpp` a keyboard-only session, the rebindable keys and the
+  accessibility audit with no gaps; `CardLayoutEditorModelTests.cpp` the working model in both modes.
+  The hosted source keeps `Tests/UI/Graph/PluginKnobPicker/` (search, tick, reorder, label, scope,
+  presets, reset, touch-to-add, the entry points).
+- E2E (built, `CardLayoutEditorE2ETests.cpp`): add a Filter, hide Drive, rename Cutoff to Freq, make
+  Level a fader, save (`graphToJSON`), reload into a fresh canvas (`applyJSONToGraph`, trusted), and
+  the card matches; Apply to all and a Filter added later shows it.
 
 ---
 

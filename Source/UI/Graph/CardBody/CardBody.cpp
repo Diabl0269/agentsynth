@@ -82,24 +82,36 @@ CardBody::CardBody(ModuleComponent& card, juce::AudioProcessor& module, const st
 CardBody::~CardBody() = default;
 
 // The layout chain (docs/layout/module-card-layout.md#where-a-layout-comes-from): the node's own
-// override, then the code default, then automatic. No per-type store is wired into the app yet, so
-// that step is skipped. A card built on a processor that is not a graph node (tests) has no
-// override, which resolves to the automatic layout.
+// override, then the type's stored default in `store` (the app binds one per GraphEditor,
+// ModuleCardLayoutBinding), then the code default, then automatic. A card built on a processor that
+// is not a graph node (tests) has no override. The override and the store's revision are recorded so
+// isStaleFor can tell, without reading the store, that the card must be rebuilt.
 std::unique_ptr<CardBody> CardBody::createFor(ModuleComponent& card, juce::AudioProcessor& module,
                                               const juce::AudioProcessorGraph& graph,
-                                              juce::AudioProcessorGraph::NodeID nodeId) {
+                                              juce::AudioProcessorGraph::NodeID nodeId, ModuleCardLayoutStore* store) {
     if (!cardBodyBuildsWidgetsFor(module))
         return nullptr;
     juce::StringArray paramIds;
     for (auto* param : module.getParameters())
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param))
             paramIds.add(ranged->paramID);
+    const auto type = AIStateMapper::getFactoryTypeName(&module);
     const auto stored = getCardLayoutOverride(graph, nodeId);
-    const auto resolved = resolveModuleCardLayout(AIStateMapper::getFactoryTypeName(&module), stored, nullptr,
-                                                  DefaultCardLayouts::builtIn(), &paramIds);
+    const auto resolved = resolveModuleCardLayout(type, stored, store, DefaultCardLayouts::builtIn(), &paramIds);
     auto body = std::make_unique<CardBody>(card, module, resolved.layout);
     body->builtFromOverride_ = stored.isVoid() ? juce::String() : juce::JSON::toString(stored, true);
+    body->store_ = store;
+    body->builtFromRevision_ = store != nullptr ? store->getRevision(type) : 0;
     return body;
+}
+
+bool CardBody::isStaleFor(const juce::AudioProcessorGraph::Node& node) const {
+    const auto& stored = node.properties[kCardLayoutNodeProperty];
+    const juce::String current = stored.isObject() ? juce::JSON::toString(stored, true) : juce::String();
+    if (current != builtFromOverride_)
+        return true;
+    const auto* store = store_.get();
+    return store != nullptr && store->getRevision(AIStateMapper::getFactoryTypeName(&module_)) != builtFromRevision_;
 }
 
 void CardBody::createViews() {
@@ -132,9 +144,36 @@ void CardBody::createParameterWidgets() {
         else if (item.kind == CardBodyItem::Kind::Stepper)
             createStepper(item, *static_cast<juce::AudioParameterInt*>(item.param));
     }
+    createSectionHeaders();
     if (hasMoreRow())
         createMoreButton();
     applyMoreVisibility();
+}
+
+// A titled section's header row: a small caption-style label, in the title's own case (UI text is
+// never all caps). Created after every parameter widget so child, Tab and screen-reader order stay
+// the declaration order; a header takes no focus.
+void CardBody::createSectionHeaders() {
+    for (auto& section : plan_.sections) {
+        if (!section.hasHeader())
+            continue;
+        auto* header = new juce::Label("sectionHeader", section.title->trim());
+        widgets_.add(header);
+        header->setComponentID("cardSectionHeader");
+        header->setJustificationType(juce::Justification::centredLeft);
+        header->setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+        header->setInterceptsMouseClicks(false, false);
+        header->setWantsKeyboardFocus(false);
+        card_.addAndMakeVisible(header);
+        section.header = header;
+    }
+}
+
+// A renamed control keeps its full parameter name in the caption's tooltip, so the rename never hides
+// what the control is.
+static void nameRenamedCaption(juce::Label& label, const CardBodyItem& item, juce::RangedAudioParameter& param) {
+    if (item.caption.has_value())
+        label.setTooltip(param.getName(100));
 }
 
 // juce::ComboBox::mouseDown already refuses to open its popup on a right click, so a plain combo takes
@@ -153,7 +192,8 @@ void CardBody::createChoice(CardBodyItem& item, juce::AudioParameterChoice& para
     comboAttachments_.add(new juce::ComboBoxParameterAttachment(param, *combo));
     card_.comboParams.add(&param);
 
-    auto* label = new juce::Label(param.getName(100), param.getName(100));
+    auto* label = new juce::Label(param.getName(100), item.captionText());
+    nameRenamedCaption(*label, item, param);
     widgets_.add(label);
     card_.comboLabels.add(label);
     card_.addAndMakeVisible(label);
@@ -185,7 +225,8 @@ void CardBody::createKnob(CardBodyItem& item, juce::RangedAudioParameter& param)
         applyAdsrTimeSkew(*knob, param);
     card_.sliderParams.add(&param);
 
-    auto* label = new juce::Label(param.getName(100), param.getName(100));
+    auto* label = new juce::Label(param.getName(100), item.captionText());
+    nameRenamedCaption(*label, item, param);
     widgets_.add(label);
     card_.sliderLabels.add(label);
     label->setJustificationType(juce::Justification::centred);
@@ -196,10 +237,12 @@ void CardBody::createKnob(CardBodyItem& item, juce::RangedAudioParameter& param)
 
 // A plain juce::ToggleButton toggles on a right click too, so a learnable toggle is right-click safe.
 void CardBody::createToggle(CardBodyItem& item, juce::AudioParameterBool& param) {
-    auto* toggle = new LearnableToggle(param.getName(100));
+    auto* toggle = new LearnableToggle(item.captionText());
     widgets_.add(toggle);
     card_.toggles.add(toggle);
     toggle->setComponentID(param.getName(100));
+    if (item.caption.has_value())
+        toggle->setTooltip(param.getName(100));
     card_.addAndMakeVisible(toggle);
     toggle->addMouseListener(&card_, false);
     card_.registerMidiLearnable(*toggle, &param);
@@ -210,7 +253,8 @@ void CardBody::createToggle(CardBodyItem& item, juce::AudioParameterBool& param)
 // The caption above a fader, switch or stepper: the parameter's display name, as a knob's.
 juce::Label* CardBody::addCaption(CardBodyItem& item, juce::RangedAudioParameter& param,
                                   juce::Justification justification) {
-    auto* label = new juce::Label(param.getName(100), param.getName(100));
+    auto* label = new juce::Label(param.getName(100), item.captionText());
+    nameRenamedCaption(*label, item, param);
     widgets_.add(label);
     label->setJustificationType(justification);
     card_.addAndMakeVisible(label);

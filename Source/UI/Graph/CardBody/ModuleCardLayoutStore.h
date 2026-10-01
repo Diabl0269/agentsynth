@@ -3,6 +3,7 @@
 // App-layer, NOT Core: the default root is derived from userSettingsOptions() (Source/UserSettings.h).
 
 #include "Plugin/Hosting/CardLayoutStore.h"
+#include <map>
 
 namespace synth {
 
@@ -50,12 +51,18 @@ public:
     void addListener(Listener* listener) { listeners_.add(listener); }
     void removeListener(Listener* listener) { listeners_.remove(listener); }
 
+    /** Counts this store's default writes for `moduleType` (in memory, starts at 0); no I/O. */
+    int getRevision(const juce::String& moduleType) const;
+
 private:
     static juce::String directoryKey(const juce::String& moduleType);
     static juce::var ownerOf(const juce::String& moduleType);
+    void defaultChanged(const juce::String& moduleType);
 
     juce::ListenerList<Listener> listeners_;
+    std::map<juce::String, int> revisions_;
 
+    JUCE_DECLARE_WEAK_REFERENCEABLE(ModuleCardLayoutStore)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModuleCardLayoutStore)
 };
 

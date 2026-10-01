@@ -1,5 +1,5 @@
 // PluginKnobPickerTests.cpp (docs/control/plugin-card-layout.md#choosing-knobs): the
-// "Choose knobs..." popover. Everything runs against Tests/StubPluginInstance.h, the same fake
+// "Edit Layout..." popover. Everything runs against Tests/StubPluginInstance.h, the same fake
 // hosted instance the other picker tests use, and a PickerRig modelled on HostedPluginCardTests.cpp's
 // own Rig (real engine graph node + real PluginCardLayoutStore on a temp directory).
 //
@@ -9,7 +9,7 @@
 //   3. Presets: save/load/delete, reset to automatic.
 //   4. Touch-to-add: via a real gesture, and the off-thread -> message-thread hop.
 //   5. Missing parameters.
-//   6. Entry points: the card's "Choose knobs..." button and its context-menu item, both driven by a
+//   6. Entry points: the card's "Edit Layout..." button and its context-menu item, both driven by a
 //      real synthesized gesture through the real handler (a virtual seam stubs the actual
 //      juce::CallOutBox, which would otherwise crash a display-less runner).
 
@@ -239,7 +239,7 @@ TEST(PluginKnobPickerTest, DraggingAcheckedRowToANewIndexReordersTheLayout) {
 // Headless, so the picker is not showing and the animator lands every glide instantly.
 
 namespace {
-constexpr float kRowStride = 26.0f; // PluginKnobPickerRow::kRowHeight
+constexpr float kRowStride = 26.0f; // CardLayoutEditorRow::kRowHeight
 
 // Hand-built events on a row's grab handle. The list position is turned into handle-local coordinates
 // at every event, because the handle moves with its row while the row is dragged.
@@ -558,7 +558,7 @@ public:
     int callOutBoxLaunches = 0;
 
 protected:
-    void launchPluginKnobPickerCallOutBox(std::unique_ptr<juce::Component>, juce::Rectangle<int>) override {
+    void launchCardLayoutEditorCallOutBox(std::unique_ptr<juce::Component>, juce::Rectangle<int>) override {
         ++callOutBoxLaunches;
     }
 };
@@ -595,7 +595,7 @@ TEST(PluginKnobPickerEntryPointTest, ChooseKnobsButtonOpensThePickerThroughTheRe
     card.detachFromProcessor();
 }
 
-TEST(PluginKnobPickerEntryPointTest, ContextMenuOffersChooseKnobsForAHostedPluginNodeOnly) {
+TEST(PluginKnobPickerEntryPointTest, ContextMenuEditLayoutOpensThePickerForAHostedPluginNode) {
     PickerRig rig;
     auto node = rig.addPlugin({knobSpec("k", "Knob")});
     RecordingModuleComponent card(node.module, node.nodeId, rig.editor);
@@ -605,7 +605,7 @@ TEST(PluginKnobPickerEntryPointTest, ContextMenuOffersChooseKnobsForAHostedPlugi
     card.setShowContextMenuHookForTest([&capturedMenu](juce::PopupMenu& m) { capturedMenu = m; });
     card.mouseDown(rightClickAt(card, {card.getWidth() / 2, card.getHeight() - 10}));
 
-    const auto* item = findMenuItemByText(capturedMenu, "Choose knobs...");
+    const auto* item = findMenuItemByText(capturedMenu, "Edit Layout...");
     ASSERT_NE(item, nullptr);
     ASSERT_TRUE(static_cast<bool>(item->action));
     item->action();

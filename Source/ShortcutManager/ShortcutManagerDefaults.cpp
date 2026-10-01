@@ -399,3 +399,13 @@ void ShortcutManager::addPianoRollDefaultBindings() {
     bindings["mixerEnterRows"] = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0);
     bindings["mixerOpenEq"] = juce::KeyPress('e', juce::ModifierKeys::noModifiers, 0);
 }
+
+// The card layout editor's list keys: Space shows or hides the focused control, Cmd+Up/Down moves it
+// (the list's plain Up/Down move the focus), Return renames it. The panel is the only thing focused
+// while it is open, so these share keys freely with the other categories.
+void ShortcutManager::addLayoutEditorDefaultBindings() {
+    bindings["layoutEditorToggleShown"] = juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, 0);
+    bindings["layoutEditorMoveUp"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::commandModifier, 0);
+    bindings["layoutEditorMoveDown"] = juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::commandModifier, 0);
+    bindings["layoutEditorRename"] = juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::noModifiers, 0);
+}

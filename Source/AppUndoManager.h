@@ -107,6 +107,9 @@ public:
      *  for why. Clears the capture as a side effect; void if nothing was captured. */
     juce::var takeCapturedGraphBeforeState();
 
+    /** Pushes one graph undo step from an earlier graphToJSON to now; false (none) when they match. */
+    bool recordGraphChangeSince(juce::AudioProcessorGraph& graph, const juce::var& beforeState);
+
     /**
      * @brief Records a timeline-only mutation (add/remove track, clip, note, lane, breakpoint, ...)
      *        as an undoable snapshot, on the SAME shared undo stack as the graph's own changes.

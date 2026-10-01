@@ -5,6 +5,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
+#include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SettingsWindow.h"

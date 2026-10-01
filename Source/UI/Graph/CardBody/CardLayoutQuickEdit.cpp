@@ -137,10 +137,8 @@ bool performCardQuickEdit(GraphEditor& editor, AppUndoManager* undo, juce::Audio
     return true;
 }
 
-void appendEditLayoutMenuItem(juce::PopupMenu& menu) {
-    juce::PopupMenu::Item item("Edit Layout...");
-    item.setEnabled(false);
-    menu.addItem(item);
+void appendEditLayoutMenuItem(juce::PopupMenu& menu, std::function<void()> open) {
+    menu.addItem("Edit Layout...", std::move(open));
 }
 
 // The actions run after the menu closes, by which time the card may be gone (and is, once an edit
@@ -174,7 +172,11 @@ void appendCardLayoutMenuItems(juce::PopupMenu& menu, GraphEditor& editor, AppUn
         menu.addItem(fader ? "Show as knob" : "Show as fader",
                      action(fader ? CardQuickEdit::ShowAsKnob : CardQuickEdit::ShowAsFader));
     }
-    appendEditLayoutMenuItem(menu);
+    appendEditLayoutMenuItem(menu, [safeEditor, nodeId] {
+        if (auto* ed = safeEditor.getComponent())
+            if (auto* card = cardFor(*ed, nodeId))
+                card->showCardLayoutEditor();
+    });
 }
 
 } // namespace synth

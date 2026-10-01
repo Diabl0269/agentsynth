@@ -131,6 +131,7 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
     for (const auto& source : layout.sections) {
         CardBodyPlan::Section section;
         section.columns = juce::jlimit(1, 6, source.columns);
+        section.title = source.title;
         for (const auto& item : source.items) {
             if (const auto* p = std::get_if<CardParamItem>(&item)) {
                 const int index = plan.findParam(p->paramId);
@@ -139,6 +140,8 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
                 // The widget applies to a hidden parameter too: it shows that way in the More row.
                 auto& planned = plan.items[(size_t)index];
                 planned.kind = cardBodyKindFor(*planned.param, p->widget).value_or(planned.kind);
+                if (p->label.has_value() && p->label->trim().isNotEmpty())
+                    planned.caption = p->label->trim();
                 if (layout.hidden.contains(p->paramId)) {
                     placed.erase(index);
                     continue;
@@ -198,6 +201,12 @@ std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParamet
         return automatic;
     }
     return automatic;
+}
+
+juce::String CardBodyItem::captionText() const {
+    if (caption.has_value())
+        return *caption;
+    return param != nullptr ? param->getName(100) : juce::String();
 }
 
 int CardBodyPlan::findParam(const juce::String& paramId) const {
