@@ -211,6 +211,7 @@ endif()
 add_library(Core STATIC
     Source/AudioEngine/AudioEngine.h
     Source/AudioEngine/ModulationRoutingTypes.h
+    Source/AudioEngine/ModuleTitle.h
     Source/AudioEngine/DeviceStateInputs.h
     Source/AudioEngine/DeviceStateInputs.cpp
     Source/AudioEngine/AudioEngineBounceSuspend.cpp

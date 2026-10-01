@@ -3,6 +3,7 @@
 
 #include "MixerSends.h"
 
+#include "AudioEngine/ModuleTitle.h"
 #include "MacroSet.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/ChannelMacroLookup.h"
@@ -275,16 +276,12 @@ NodeID findKeyTargetChannel(juce::AudioProcessorGraph& graph, NodeID module) {
     return findStripFedByTrackSource(graph, module);
 }
 
-// The module half is the card title the canvas paints (a custom "displayName" first, then the
-// processor's auto-numbered "Compressor 2" -- GraphEditor::getModuleTitle's own rule, restated
-// here because Core cannot reach a GraphEditor).
+// The module half is the card title the canvas paints (synth::moduleTitle).
 juce::String keySendTargetName(juce::AudioProcessorGraph& graph, NodeID module, const juce::String& channelName) {
     auto* node = graph.getNodeForId(module);
     if (node == nullptr)
         return "No target";
-    auto title = node->properties["displayName"].toString();
-    if (title.isEmpty() && node->getProcessor() != nullptr)
-        title = node->getProcessor()->getName();
+    const auto title = synth::moduleTitle(*node);
     return "Key: " + title + (channelName.isNotEmpty() ? " on " + channelName : juce::String());
 }
 

@@ -16,7 +16,7 @@
 GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     : audioEngine(engine)
     , content(*this)
-    , modMatrix(engine, undoMgr)
+    , modMatrix(engine, undoMgr, this)
     , undoManager(undoMgr) {
     addAndMakeVisible(content);
     addAndMakeVisible(modMatrix);

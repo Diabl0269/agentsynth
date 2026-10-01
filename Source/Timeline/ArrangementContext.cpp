@@ -1,4 +1,5 @@
 #include "ArrangementContext.h"
+#include "AudioEngine/ModuleTitle.h"
 #include <cmath>
 #include <unordered_map>
 
@@ -65,7 +66,7 @@ std::unordered_map<juce::String, juce::String> buildDisplayNameByUuid(const juce
             continue;
         const juce::String uuid = node->properties["uuid"].toString();
         if (uuid.isNotEmpty())
-            byUuid[uuid] = node->getProcessor()->getName();
+            byUuid[uuid] = synth::moduleTitle(*node);
     }
     return byUuid;
 }

@@ -351,3 +351,122 @@ TEST(HierarchicalArrange, OpenMacroHullMatchesTheDrawnGeometry) {
     EXPECT_EQ(tall.getBottom(),
               tall.getY() + kHullChipRow + kHullPortRowsBelowChip + 10 * kHullPortRowHeight + kHullPortFooter);
 }
+
+// A source block that only feeds one row is placed as late as possible: one column before its nearest consumer, not
+// at column 0 over the row start.
+TEST(HierarchicalArrange, AModulatorFeedingOnlyOneConsumerSitsInTheColumnBeforeIt) {
+    ArrangeInput in;
+    in.blocks = {module("in", 280, 200, 1), module("a", 280, 300, 2, 1), module("b", 280, 300, 3, 1),
+                 module("c", 280, 300, 4, 2), module("lfo", 280, 300, 100, 3)};
+    in.edges = {flow("in", "a"), flow("a", "b"), flow("b", "c"), mod("lfo", "c")};
+    in.trackStarts = {"in"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    EXPECT_EQ(out.positions.at("lfo").x, out.positions.at("b").x) << "the column right before its consumer";
+    EXPECT_LT(out.positions.at("lfo").x, out.positions.at("c").x);
+    EXPECT_GT(out.positions.at("lfo").x, out.positions.at("in").x);
+    EXPECT_EQ(out.positions.at("lfo").y, out.positions.at("c").y)
+        << "level with its consumer, not at the column's bottom";
+    expectTopLevelClear(in, out);
+
+    const auto again = computeHierarchicalArrange(in);
+    EXPECT_EQ(again.positions, out.positions);
+}
+
+// With several consumers the nearest one decides; the row start itself never moves.
+TEST(HierarchicalArrange, TheNearestConsumerDecidesAndTheRowStartStaysPut) {
+    ArrangeInput in;
+    in.blocks = {module("in", 280, 200, 1), module("a", 280, 300, 2, 1), module("b", 280, 300, 3, 1),
+                 module("c", 280, 300, 4, 2), module("lfo", 280, 300, 100, 3)};
+    in.edges = {flow("in", "a"), flow("a", "b"), flow("b", "c"), mod("lfo", "b"), mod("lfo", "c")};
+    in.trackStarts = {"in"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    EXPECT_EQ(out.positions.at("lfo").x, out.positions.at("a").x);
+    EXPECT_EQ(out.positions.at("in").x, kArrangeOriginX);
+}
+
+// Macro -> modulator (MIDI retrigger) and modulator -> macro form a cycle at the macro level: the modulator stays one
+// column before the macro and the blocks after the macro keep their columns.
+TEST(HierarchicalArrange, AModulatorFedByItsOwnMacroStaysOneColumnBeforeIt) {
+    ArrangeInput in;
+    in.blocks = {module("in", 280, 200, 1), module("pre", 280, 300, 2, 1), card("macro", 280, 90, 3),
+                 module("post", 280, 300, 4, 2), module("lfo", 280, 300, 100, 3)};
+    in.edges = {flow("in", "pre"), flow("pre", "macro"), flow("macro", "post"), flow("macro", "lfo"),
+                mod("lfo", "macro")};
+    in.trackStarts = {"in"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    EXPECT_EQ(out.positions.at("lfo").x, out.positions.at("pre").x);
+    EXPECT_LT(out.positions.at("pre").x, out.positions.at("macro").x);
+    EXPECT_LT(out.positions.at("macro").x, out.positions.at("post").x);
+    EXPECT_EQ(out.positions.at("lfo").y, out.positions.at("macro").y);
+    EXPECT_EQ(computeHierarchicalArrange(in).positions, out.positions);
+}
+
+// One modulator feeding two macros of the same row sits before the nearer one.
+TEST(HierarchicalArrange, AModulatorFeedingTwoMacrosOfOneRowSitsBeforeTheNearerOne) {
+    ArrangeInput in;
+    in.blocks = {module("in", 280, 200, 1), card("m1", 280, 90, 2), card("m2", 280, 90, 3),
+                 module("lfo", 280, 300, 100, 3)};
+    in.edges = {flow("in", "m1"), flow("m1", "m2"), mod("lfo", "m1"), mod("lfo", "m2")};
+    in.trackStarts = {"in"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    EXPECT_EQ(out.positions.at("lfo").x, out.positions.at("in").x);
+    EXPECT_LT(out.positions.at("lfo").x, out.positions.at("m1").x);
+}
+
+// A modulator's row follows what it modulates: MIDI from track 1's start must not pull an LFO that only modulates track
+// 2's macro into track 1's row.
+TEST(HierarchicalArrange, AModulatorFedFromAnotherRowLandsInItsConsumersRow) {
+    ArrangeInput in;
+    in.blocks = {module("in1", 280, 200, 1), card("m1", 280, 90, 2), module("in2", 280, 200, 3), card("m2", 280, 90, 4),
+                 module("lfo", 280, 300, 100, 3)};
+    in.edges = {flow("in1", "m1"), flow("in2", "m2"), flow("in1", "lfo"), mod("lfo", "m2")};
+    in.trackStarts = {"in1", "in2"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    EXPECT_GT(out.positions.at("lfo").y, out.positions.at("m1").y + 90) << "below track 1's row";
+    EXPECT_EQ(out.positions.at("lfo").y, out.positions.at("m2").y);
+    EXPECT_LT(out.positions.at("lfo").x, out.positions.at("m2").x);
+    EXPECT_EQ(computeHierarchicalArrange(in).positions, out.positions);
+}
+
+// A block with a real signal output keeps its row even when it also modulates another row.
+TEST(HierarchicalArrange, ABlockWithASignalOutputKeepsItsRowWhenItAlsoModulatesAnotherRow) {
+    ArrangeInput in;
+    in.blocks = {module("in1", 280, 200, 1), module("x", 280, 300, 2, 3), card("m1", 280, 90, 3),
+                 module("in2", 280, 200, 4), card("m2", 280, 90, 5)};
+    in.edges = {flow("in1", "x"), flow("x", "m1"), flow("in2", "m2"), mod("x", "m2")};
+    in.trackStarts = {"in1", "in2"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    EXPECT_LT(out.positions.at("x").y, out.positions.at("in2").y) << "still in track 1's row";
+}
+
+// Columns are shared by every row, so a wide block in another row's cell of the same column must not leave a gap
+// between a pulled-up source and its consumer: the source hugs the right edge of its column.
+TEST(HierarchicalArrange, APulledUpSourceHugsTheRightEdgeOfAWideColumn) {
+    ArrangeInput in;
+    in.blocks = {module("in1", 280, 200, 1), module("m1", 280, 300, 2, 1), module("in2", 2000, 200, 3),
+                 module("m2", 280, 300, 4, 1), module("lfo", 280, 300, 100, 3)};
+    in.edges = {flow("in1", "m1"), flow("in2", "m2"), mod("lfo", "m1")};
+    in.trackStarts = {"in1", "in2"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    const auto lfo = out.positions.at("lfo");
+    const auto m1 = out.positions.at("m1");
+    EXPECT_EQ(out.positions.at("in1").x, kArrangeOriginX) << "the row start stays left-aligned";
+    EXPECT_LT(lfo.x + 280, m1.x) << "still before its consumer";
+    EXPECT_GE(lfo.x + 280 + kLayerGapX, m1.x - 20) << "no gap the width of the other row's wide block";
+    expectTopLevelClear(in, out);
+    EXPECT_EQ(computeHierarchicalArrange(in).positions, out.positions);
+}

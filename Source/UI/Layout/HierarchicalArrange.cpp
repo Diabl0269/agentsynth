@@ -185,6 +185,7 @@ struct Rows {
     std::vector<int> key;
     std::vector<int> stackOrder; // shared-row blocks: their place in the consumer-count order
     std::vector<int> finalRank;  // row -> position, top to bottom
+    std::vector<int> anchor;     // row -> the block the row starts at (a track's start, a component's leftmost source)
 };
 
 // Every unassigned block adjacent to an assigned one joins the earliest assigned neighbour's row, to a fixed point.
@@ -231,6 +232,7 @@ void assignComponentRows(Rows& rows, const Graph& g, const std::vector<std::vect
         const int row = static_cast<int>(rows.category.size());
         rows.category.push_back(2);
         rows.key.push_back(leftmost);
+        rows.anchor.push_back(leftmost);
         for (int v : comp)
             rows.rowOf[v] = row;
     }
@@ -242,6 +244,24 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
     rows.rowOf.assign(g.n, -1);
     rows.stackOrder.assign(g.n, 0);
 
+    // A modulator's row follows what it modulates, not what feeds it: a block with modulation consumers and no signal
+    // cable leaving it (only a MIDI retrigger cable coming in, say) is placed like a pure modulator further down, so a
+    // signal edge into it never pulls it into the row of whatever feeds it.
+    std::vector<bool> modulator(g.n, false);
+    for (int i = 0; i < g.n; ++i)
+        modulator[i] = g.flowOut[i].empty() && !g.modOut[i].empty() && g.modIn[i].empty();
+    auto withoutModulators = [&](const std::vector<std::vector<int>>& adjacency) {
+        auto kept = adjacency;
+        for (int i = 0; i < g.n; ++i) {
+            if (modulator[i])
+                kept[i].clear();
+            kept[i].erase(std::remove_if(kept[i].begin(), kept[i].end(), [&](int j) { return modulator[j]; }),
+                          kept[i].end());
+        }
+        return kept;
+    };
+    const auto flowAll = withoutModulators(g.flowAll);
+
     // Track rows: each start claims what its chain reaches, unless an earlier track already did.
     int trackNo = 0;
     for (const auto& s : starts) {
@@ -251,13 +271,14 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
         const int row = static_cast<int>(rows.category.size());
         rows.category.push_back(1);
         rows.key.push_back(trackNo++);
+        rows.anchor.push_back(a);
         rows.rowOf[a] = row;
         std::vector<int> stack{a};
         while (!stack.empty()) {
             const int u = stack.back();
             stack.pop_back();
             for (int v : g.flowOut[u])
-                if (rows.rowOf[v] < 0) {
+                if (rows.rowOf[v] < 0 && !modulator[v]) {
                     rows.rowOf[v] = row;
                     stack.push_back(v);
                 }
@@ -265,14 +286,14 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
     }
     // Things feeding a track's chain (an instrument before its Track In's channel...) join the earliest track they
     // touch.
-    propagateRows(rows.rowOf, g.flowAll);
-    assignComponentRows(rows, g, g.flowAll, g.flowIn, /*includeIsolated=*/false);
+    propagateRows(rows.rowOf, flowAll);
+    assignComponentRows(rows, g, flowAll, g.flowIn, /*includeIsolated=*/false);
 
-    // A pure modulator (no signal cables at all, nothing feeding it) whose consumers sit in two or more rows is shared:
-    // it goes in the shared row on top. One consumer row: it joins that row.
+    // A modulator whose consumers sit in two or more rows is shared: it goes in the shared row on top. One consumer
+    // row: it joins that row.
     std::vector<std::pair<int, int>> shared; // (-consumers, index)
     for (int i = 0; i < g.n; ++i) {
-        if (rows.rowOf[i] >= 0 || !g.flowAll[i].empty() || !g.modIn[i].empty() || g.modOut[i].empty())
+        if (rows.rowOf[i] >= 0 || !modulator[i])
             continue;
         std::set<int> consumerRows;
         for (int c : g.modOut[i])
@@ -288,6 +309,7 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
         const int row = static_cast<int>(rows.category.size());
         rows.category.push_back(0);
         rows.key.push_back(0);
+        rows.anchor.push_back(-1);
         for (size_t k = 0; k < shared.size(); ++k) {
             rows.rowOf[shared[k].second] = row;
             rows.stackOrder[shared[k].second] = static_cast<int>(k);
@@ -317,13 +339,29 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
     return rows;
 }
 
+// The edges that do not count for columns: an in-row signal edge u -> v where v also modulates u. v is then u's own
+// modulator taking input from it (an LFO retriggered by MIDI from the macro it modulates), so it belongs before u, not
+// after it; counting both directions would be a cycle that pins both at column 0 and flattens everything after.
+std::vector<bool> feedbackEdges(const Graph& g, const std::vector<int>& rowOf) {
+    std::set<std::pair<int, int>> modulates;
+    for (const auto& e : g.edges)
+        if (e.mod && rowOf[e.a] == rowOf[e.b])
+            modulates.insert({e.a, e.b});
+    std::vector<bool> ignored(g.edges.size(), false);
+    for (size_t i = 0; i < g.edges.size(); ++i) {
+        const auto& e = g.edges[i];
+        ignored[i] = !e.mod && rowOf[e.a] == rowOf[e.b] && modulates.count({e.b, e.a}) > 0;
+    }
+    return ignored;
+}
+
 // Longest path from a row's sources, over the edges inside the row; a cycle is broken by ignoring back-edges.
-std::vector<int> computeDepths(const Graph& g, const std::vector<int>& rowOf) {
+std::vector<int> computeDepths(const Graph& g, const std::vector<int>& rowOf, const std::vector<bool>& ignored) {
     std::vector<int> depth(g.n, 0);
     std::vector<std::vector<int>> out(g.n);
     std::vector<int> indegree(g.n, 0);
-    for (const auto& e : g.edges)
-        if (rowOf[e.a] == rowOf[e.b]) {
+    for (size_t i = 0; i < g.edges.size(); ++i)
+        if (const auto& e = g.edges[i]; rowOf[e.a] == rowOf[e.b] && !ignored[i]) {
             out[e.a].push_back(e.b);
             ++indegree[e.b];
         }
@@ -345,6 +383,60 @@ std::vector<int> computeDepths(const Graph& g, const std::vector<int>& rowOf) {
         }
     }
     return depth;
+}
+
+// A source block (nothing feeding it inside its row) that is not its row's anchor is pulled right up to its nearest
+// consumer: depth = (smallest consumer depth) - 1. Without this every such block sits over column 0, far from what it
+// feeds. A consumer has an incoming edge, so it is never a source itself and its depth never changes here.
+// `consumerOf[i]` is the consumer a moved block follows (-1 for every block that stayed put).
+std::vector<int> placeSourcesAsLateAsPossible(const Graph& g, const Rows& rows, const std::vector<bool>& ignored,
+                                              std::vector<int>& depth) {
+    std::vector<bool> hasInput(g.n, false);
+    std::vector<int> consumerOf(g.n, -1);
+    for (size_t i = 0; i < g.edges.size(); ++i)
+        if (const auto& e = g.edges[i]; rows.rowOf[e.a] == rows.rowOf[e.b] && !ignored[i])
+            hasInput[e.b] = true;
+    for (size_t i = 0; i < g.edges.size(); ++i)
+        if (const auto& e = g.edges[i];
+            rows.rowOf[e.a] == rows.rowOf[e.b] && !ignored[i] &&
+            (consumerOf[e.a] < 0 || std::tie(depth[e.b], e.b) < std::tie(depth[consumerOf[e.a]], consumerOf[e.a])))
+            consumerOf[e.a] = e.b;
+    for (int i = 0; i < g.n; ++i) {
+        if (hasInput[i] || rows.anchor[rows.rowOf[i]] == i || consumerOf[i] < 0) {
+            consumerOf[i] = -1;
+            continue;
+        }
+        depth[i] = std::max(0, depth[consumerOf[i]] - 1);
+    }
+    return consumerOf;
+}
+
+// Stack order of a row (sorted by column): a moved source takes the slot its consumer has in the next column, so it
+// lands beside what it feeds instead of under everything else in its column.
+void seatMovedSources(std::vector<int>& members, const std::vector<int>& depth, const std::vector<int>& consumerOf) {
+    auto slotInColumn = [&](int block) {
+        int slot = 0;
+        for (int m : members) {
+            if (m == block)
+                return slot;
+            slot += depth[m] == depth[block] ? 1 : 0;
+        }
+        return slot;
+    };
+    std::vector<int> moved;
+    for (int m : members)
+        if (consumerOf[m] >= 0)
+            moved.push_back(m);
+    for (int m : moved) {
+        const int slot = slotInColumn(consumerOf[m]);
+        members.erase(std::find(members.begin(), members.end(), m));
+        auto at = members.begin();
+        int seen = 0;
+        for (; at != members.end() && depth[*at] <= depth[m]; ++at)
+            if (depth[*at] == depth[m] && seen++ == slot)
+                break;
+        members.insert(at, m);
+    }
 }
 
 Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const std::vector<juce::String>& starts) {
@@ -374,7 +466,9 @@ Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const s
 
     const Graph g = buildGraph(ctx, levelIndex, n);
     const Rows rows = assignRows(ctx, g, levelIndex, starts);
-    const auto depth = computeDepths(g, rows.rowOf);
+    const auto ignored = feedbackEdges(g, rows.rowOf);
+    auto depth = computeDepths(g, rows.rowOf, ignored);
+    const auto consumerOf = placeSourcesAsLateAsPossible(g, rows, ignored, depth);
 
     int maxDepth = 0;
     for (int d : depth)
@@ -405,12 +499,16 @@ Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const s
                 return rows.stackOrder[a] < rows.stackOrder[b];
             return std::make_tuple(blocks[a]->roleRank, a) < std::make_tuple(blocks[b]->roleRank, b);
         });
+        seatMovedSources(members, depth, consumerOf);
         std::vector<int> stackY(maxDepth + 1, 0);
         int rowHeight = 0;
         for (int i : members) {
             const int k = depth[i];
-            // Left-aligned in its column: a wider block elsewhere in the column never shifts a neighbour sideways.
-            const juce::Point<int> slot{colX[k], y + stackY[k]};
+            // Left-aligned in its column: a wider block elsewhere in the column never shifts a neighbour sideways. A
+            // source pulled up to its consumer is right-aligned instead, so a wide block in another row's cell of
+            // the same column never leaves a gap between it and what it feeds.
+            const int x = consumerOf[i] >= 0 ? colX[k] + colW[k] - gridUp(size[i].x) : colX[k];
+            const juce::Point<int> slot{x, y + stackY[k]};
             const juce::Point<int> anchor{gridUp(slot.x - anchorOff[i].x), gridUp(slot.y - anchorOff[i].y)};
             frame.items.push_back({blocks[i], anchor});
             const juce::Rectangle<int> rect(anchor + anchorOff[i], juce::Point<int>(anchor + anchorOff[i]) + size[i]);

@@ -306,6 +306,31 @@ Its rows paint under these rules:
   / `"<Module> · <target>"`, not a bare `"Out 2"`. `updateRowsFromGraph()` re-populates every row's
   combos (`populateCombos()`) BEFORE re-applying its selection (`refresh()`), because
   `populateCombos()` clears the combo box as a side effect of rebuilding it.
+- **Searchable source and destination picker.** Clicking either combo (or Return/Space with it focused)
+  opens `synth::ui::ModMatrixPicker` (`Source/UI/Graph/ModMatrixPicker.h/.cpp`) in a `juce::CallOutBox`
+  instead of the stock menu; `PickerComboBox` overrides `showPopup()` and stays the closed display. A
+  search field at the top takes focus and filters case-insensitively by the row text (module title plus
+  output or target label, e.g. "Filter - Cutoff"); rows sit under the same category headers the menu
+  had (Envelopes, LFOs, Oscillators, Sequencers, Filters, Effects, Other), and a header hides when none
+  of its rows match. "Flat Sources" drops the headers. The popup's height comes from the full list, so it
+  does not resize while typing. Up/Down move the highlight, Return picks the highlighted row (the first
+  match until moved), Escape closes, a click picks. A pick selects the combo's id with a synchronous
+  notification, so it goes through `ModRow::comboBoxChanged` and the macro-port routing like any other
+  choice. The picker paints its own opaque themed panel (a parentless call-out is a new window that does
+  not inherit the LookAndFeel), outlines itself with `paintFocusRegionOutline` while it holds focus, and
+  every control carries a title and tooltip: the combos ("Modulation source" / "Modulation
+  destination"), the search field, each row, the amount slider, and the bypass and delete buttons.
+  Test seams: `ModMatrixComponent::setPickerLauncherForTest` (capture the picker instead of launching a
+  window) and `ModMatrixPicker::setSearchTextForTest`.
+- **Labels follow the card title.** Every module in the source and destination combos is listed under
+  `synth::moduleTitle` (`Source/AudioEngine/ModuleTitle.h`): the custom title the user gave the card,
+  else the auto-numbered name ("LFO 3"). The 10 Hz tick compares a hash of every module title
+  (`moduleTitlesSignature`) as well as the node count, so a rename (which changes no node count)
+  re-populates the combos; a combo popup or picker that is open is never repopulated underneath the
+  user, the change lands on the first tick after it closes.
+- **Re-pointing a row goes through macro ports**, exactly like a dragged mod cable, as one undo step
+  (the row's "Add Modulation" and delete buttons are undo steps too). See
+  [`macros/auto-ports.md`](../macros/auto-ports.md#the-mod-matrix-re-points-like-a-drag).
 - **Bypass and delete are `DrawableButton`s** (`Icon::ModuleBypass` / `Icon::ModuleDelete`,
   `ImageFitted`), not `TextButton`s — retinted via `ModRow::applyButtonIcons()`, called from the
   constructor and from `ModRow::lookAndFeelChanged()`, mirroring

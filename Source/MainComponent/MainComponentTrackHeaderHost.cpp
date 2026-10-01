@@ -5,6 +5,7 @@
 // MainComponent.h; the rest of its implementation lives in the sibling MainComponent*.cpp units
 // next to this one.
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/ModuleTitle.h"
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h" // findMidiNodesReachedFrom, isMacroPortNode
@@ -19,16 +20,16 @@
 
 namespace {
 
-// Human-readable identity for a graph node — the binding chip's base label and the re-bind menu's
-// starting point. Plain processor name only: appending "#id" unconditionally was itself the source
-// of founder confusion (a chip reading "Track In #16" reads like a module name, not a binding), and
-// the id means nothing outside a menu actually showing two same-named candidates at once.
+// Human-readable identity for a graph node: its card title (synth::moduleTitle), the binding chip's base
+// label and the re-bind and MIDI-destination menus' starting point. Appending "#id" unconditionally was
+// itself the source of founder confusion (a chip reading "Track In #16" reads like a module name, not a
+// binding), and the id means nothing outside a menu actually showing two same-named candidates at once.
 // getAvailableTrackInNodes (below) is where that disambiguation happens, over the option list it is
-// building — never here, and never on the chip.
+// building, never here, and never on the chip.
 juce::String describeNodeForBinding(juce::AudioProcessorGraph::Node* node) {
     if (node == nullptr || node->getProcessor() == nullptr)
         return {};
-    return node->getProcessor()->getName();
+    return synth::moduleTitle(*node);
 }
 
 // The automation strip lane picker's "Add lane..." entries for a hosted plugin's own parameters,

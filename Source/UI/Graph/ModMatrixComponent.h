@@ -2,10 +2,13 @@
 
 #include "AppUndoManager.h"
 #include "AudioEngine/ModulationRoutingTypes.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 
 class AudioEngine;
+class GraphEditor;
 
 class ModMatrixComponent
     : public juce::Component
@@ -27,7 +30,10 @@ public:
     /** Returns true for odd rows (zebra striping). */
     static bool isZebraRow(int rowIndex) noexcept { return rowIndex % 2 == 1; }
 
-    ModMatrixComponent(AudioEngine& engine, AppUndoManager* undoMgr = nullptr);
+    /** `editor` is the owning canvas. With it, a row re-point enters and leaves macros through ports
+     *  the way a dragged cable does, as one undo step; without it (headless unit tests of the
+     *  panel alone) the re-point is a plain graph edit. */
+    ModMatrixComponent(AudioEngine& engine, AppUndoManager* undoMgr = nullptr, GraphEditor* editor = nullptr);
     ~ModMatrixComponent() override;
 
     void paint(juce::Graphics& g) override;
@@ -40,10 +46,7 @@ public:
 
     void setFlatSourceMenu(bool shouldBeFlat);
 
-    void clearRows() {
-        rows.clear();
-        repaint();
-    }
+    void clearRows();
 
     // Safely detach all rows from their processors before graph rebuild
     void detachAllRows();
@@ -55,92 +58,55 @@ public:
     // Test-only: the closed-combobox label text for a given row's source/destination combo.
     // Exercises the exact JUCE label-resolution path (ComboBox::setSelectedId ->
     // getItemForId over the root menu) that the grouped-menu label bug hit.
-    juce::String getRowSourceComboTextForTest(int rowIndex) const {
-        if (rowIndex < 0 || rowIndex >= (int)rows.size())
-            return {};
-        return rows[(size_t)rowIndex]->sourceCombo.getText();
-    }
-    juce::String getRowDestComboTextForTest(int rowIndex) const {
-        if (rowIndex < 0 || rowIndex >= (int)rows.size())
-            return {};
-        return rows[(size_t)rowIndex]->destCombo.getText();
+    juce::String getRowSourceComboTextForTest(int rowIndex) const;
+    juce::String getRowDestComboTextForTest(int rowIndex) const;
+
+    /** Test-only: the live combos of a row, so a test drives the real comboBoxChanged path by
+     *  selecting an id (see encodeComboId). Null when the row does not exist. */
+    juce::ComboBox* getRowSourceComboForTest(int rowIndex);
+    juce::ComboBox* getRowDestComboForTest(int rowIndex);
+    int getNumRowsForTest() const noexcept { return (int)rows.size(); }
+
+    /** Where a row's searchable picker opens. The default is a juce::CallOutBox anchored on the combo; a
+     *  headless test has no window to host one, so it substitutes a launcher that takes the picker. */
+    using PickerLauncher = std::function<void(std::unique_ptr<juce::Component> picker, juce::Rectangle<int> anchor)>;
+    void setPickerLauncherForTest(PickerLauncher launcher) { pickerLauncher = std::move(launcher); }
+
+    /** The id a source/destination combo item carries for (node, channel). */
+    static int encodeComboId(juce::AudioProcessorGraph::NodeID node, int channel) noexcept {
+        return (int)((node.uid << 8) | (juce::uint32)channel);
     }
 
 private:
     AudioEngine& audioEngine;
     AppUndoManager* undoManager = nullptr;
+    GraphEditor* graphEditor = nullptr;
     bool isSourceMenuFlat = false;
 
     juce::TextButton addButton{"Add Modulation"};
     juce::ToggleButton flatToggle{"Flat Sources"};
 
-    struct ModRow
-        : public juce::Component
-        , public juce::ComboBox::Listener
-        , public juce::AudioProcessorParameter::Listener {
-        ModRow(ModMatrixComponent& owner, juce::AudioProcessorGraph::NodeID id);
-
-        void parameterValueChanged(int parameterIndex, float newValue) override;
-        void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
-        ~ModRow() override;
-
-        void setRowIndex(int index) {
-            rowIndex = index;
-            repaint();
-        }
-        int rowIndex = 0;
-
-        void paint(juce::Graphics& g) override;
-        void resized() override;
-        void mouseEnter(const juce::MouseEvent& e) override;
-        void mouseExit(const juce::MouseEvent& e) override;
-        void comboBoxChanged(juce::ComboBox* comboBox) override;
-        void lookAndFeelChanged() override;
-
-        // Re-applies the themed bypass/delete icons; called from the constructor and again from
-        // lookAndFeelChanged() on every theme switch (mirrors ModuleComponent::applyHeaderButtonIcons).
-        void applyButtonIcons();
-
-        ModMatrixComponent& owner;
-        juce::AudioProcessorGraph::NodeID attenuverterId;
-
-        // Keeps the attenuverter's processor alive for at least as long as this row holds parameter
-        // attachments into it. juce::ParameterAttachment's destructor unconditionally calls
-        // parameter.removeListener() on the reference it captured at construction, so the processor
-        // MUST outlive amountAttachment/bypassAttachment — including when the node has already been
-        // removed from the graph (removeModRouting) before updateRowsFromGraph() erases this row.
-        // Graph nodes are reference counted; removeNode() drops the node from the processing list
-        // immediately, and holding this Ptr only defers destruction of the object itself.
-        juce::AudioProcessorGraph::Node::Ptr attenuverterNode;
-
-        juce::ComboBox sourceCombo;
-        juce::ComboBox destCombo;
-        juce::Slider amountSlider;
-        juce::Label amountValueLabel;
-        std::unique_ptr<juce::DrawableButton> bypassToggle;
-        std::unique_ptr<juce::DrawableButton> deleteButton;
-
-        std::unique_ptr<juce::SliderParameterAttachment> amountAttachment;
-        std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
-
-        std::map<int, float> gestureStartValues;
-
-        void detach();
-        void refresh(const ModRoutingInfo& info);
-        void populateCombos();
-    };
+    // Defined in ModMatrixComponent.cpp: keeping it out of this header means the rows' combo,
+    // picker and routing internals can change without recompiling everything that includes
+    // GraphEditor.h.
+    struct ModRow;
 
     std::vector<std::unique_ptr<ModRow>> rows;
     juce::Viewport viewport;
     juce::Component contentContainer;
 
     void addModulation();
+    bool anyPopupOpen() const;
 
 public:
     void updateRowsFromGraph();
 
 private:
     int lastNodeCount = 0;
+    int routingChangeDepth = 0; // > 0 while a row's routing change runs: rows are not rebuilt or freed under it
+    bool clearPending = false;
+    size_t lastNamesSignature = 0; // hash of every module title the combos list; a rename changes it
+    PickerLauncher pickerLauncher;
     int hoveredRow_ = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModMatrixComponent)
