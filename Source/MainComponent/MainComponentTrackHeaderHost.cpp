@@ -248,15 +248,8 @@ synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeade
     const juce::String paramIdCopy = option.paramId;
     const int paramIndexCopy = option.paramIndex;
     auto mutate = [this, &laneId, uuidCopy, paramIdCopy, paramIndexCopy, &resolved] {
-        synth::TrackId trackId;
-        for (const auto& track : timelineDoc.getTracks()) {
-            if (track.kind == synth::TrackKind::Automation) {
-                trackId = track.id;
-                break;
-            }
-        }
-        if (!trackId.isValid())
-            trackId = timelineDoc.addTrack(synth::TrackKind::Automation, "Automation");
+        // The track that plays this module, else the shared Automation track (same rule as automateParameter).
+        const synth::TrackId trackId = trackForNewLane(uuidCopy);
         if (!trackId.isValid())
             return;
 

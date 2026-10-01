@@ -27,6 +27,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentSelectionCommands.cpp
     Source/MainComponent/MainComponentPanels.cpp
     Source/MainComponent/MainComponentTimeline.cpp
+    Source/MainComponent/MainComponentAutomationOwner.cpp
     Source/MainComponent/MainComponentTrackHeaderHost.cpp
     Source/MainComponent/MainComponentTrackCreation.cpp
     Source/MainComponent/MainComponentTrackPresets.cpp

@@ -187,6 +187,9 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     // own copy (and the module cards' MIDI Learn badges) must follow before the reconcile below
     // re-resolves targets against it.
     midiLearnController_.publishAssignments();
+    // Lanes saved on the shared Automation track move to the track that plays their module, before the
+    // reconcile below so it republishes (and rebinds the recorder against) the final layout.
+    moveLanesToOwningTracks();
     // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
     // (and rebinds the recorder) against the graph as it now stands.
     reconcileTimelineAfterGraphChange();
@@ -237,6 +240,7 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     remoteEngine.resetActivePages();
     // loadAutosave just replaced midiRemoteDoc wholesale, same as loadBundleFromFile above.
     midiLearnController_.publishAssignments();
+    moveLanesToOwningTracks(); // same load-time lane move as loadBundleFromFile
     reconcileTimelineAfterGraphChange();
     // Deliberately NOT markDocumentClean(): the recovered state is not what's on disk (project.json
     // still holds the older, last-explicitly-saved content), so the document must read as dirty —

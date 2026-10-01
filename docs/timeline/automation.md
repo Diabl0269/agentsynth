@@ -114,12 +114,40 @@ is a `GraphEditor` host seam mirroring `onSaveSnippetRequested` exactly: `GraphE
 
 `MainComponent::automateParameter(nodeId, paramId)` — public, and also the test's headless hook —
 resolves the node's uuid (ensure-uuid, mirrored into the processor, the same idiom
-`createTrackInNode()` and `AIStateMapper` use at every uuid writer site), finds the first
-`TrackKind::Automation` track or creates one, binds a lane with the parameter's real
+`createTrackInNode()` and `AIStateMapper` use at every uuid writer site), picks the lane's track
+([below](#which-track-a-lane-lands-on)), binds a lane with the parameter's real
 `NormalisableRange` (`addLane` dedupes doc-wide — a repeat call for an already-automated parameter
 is a no-op that returns the existing lane), opens the timeline panel via the SAME toggle-button
 click path `simulateToggleTimelineClick()` uses if it is hidden, and opens the strip on that lane.
+Track creation (fallback case) and the lane are one undo step.
 
+## Which track a lane lands on
+
+The lane goes on the track that plays its module, so it sits next to the clips it shapes; a module
+no single track plays falls back to the doc's one `TrackKind::Automation` track (found or created).
+`addPluginAutomationLane` (the strip's "Add lane..." entries) follows the same rule.
+
+"Plays" is `synth::resolveTrackOwners` (`Source/Timeline/TrackOwnership.{h,cpp}`, pure), the same
+claim auto-arrange makes for its track rows ([layout](../layout/layout.md#auto-arrange)) except that
+sharing means no owner instead of "the earlier track":
+
+1. A track owns what its start node (Track In / Track Audio) reaches through cables, unless another
+   track reaches it too (the master bus, a shared effect: unowned).
+2. A node nothing reaches, whose owned cable neighbours all belong to one track, joins it (an
+   instrument feeding the channel, an LFO cabled into a filter's CV jack).
+3. A pure modulator (modulation consumers, no cable leaving, nothing modulating it) follows what it
+   modulates: one owning track, or unowned when its consumers span two. A MIDI retrigger cable into
+   it does not claim it.
+
+`MainComponent::resolveAutomationOwners` builds the input from the live graph (every cable is a
+flow edge, `getModulationRoutings()` the modulation edges) and the doc's tracks with a binding.
+
+**Opening a project** (`loadBundleFromFile`, `loadAutosaveFromFile`) runs
+`MainComponent::moveLanesToOwningTracks`: each lane on an Automation track whose module has an owner
+moves there through `TimelineDoc::moveLaneToTrack` (same lane id, points, record mode, range; one
+revision bump each), and an Automation track emptied by the move (no lanes, no clips) is removed.
+It is part of the load, not an undo step. Lanes of unowned modules stay put. Lanes created by the AI
+timeline ops (`TimelineOps`, no graph) still start on the Automation track and move on the next open.
 See [`modulation.md`](../modules/modulation.md) for the user-facing description of the right-click route.
 
 ## A lane follows its send through a reorder (FRO296)

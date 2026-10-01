@@ -525,6 +525,7 @@ public:
     LaneId addLane(TrackId trackId, const juce::String& nodeUuid, const juce::String& paramId,
                    const AutomationLane::RangeSnapshot& range, int paramIndexHint = -1);
     bool removeLane(LaneId id);
+    bool moveLaneToTrack(LaneId laneId, TrackId destTrack);
     // Sorted insert. A point at the exact same beat REPLACES the existing one. `value` is
     // denormalised and clamped into the lane's range snapshot; `tension` is clamped to [-1, 1];
     // `curve` must be a BreakpointCurve value.

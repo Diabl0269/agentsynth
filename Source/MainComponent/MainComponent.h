@@ -334,6 +334,10 @@ private:
     void publishTimelineAndRebindRecorder();
     void reconcileTimelineAfterGraphChange();
     void reconcileTimelineBindingsOnly();
+    // Which track plays which node (MainComponentAutomationOwner.cpp): where an automation lane goes.
+    std::map<juce::String, synth::TrackId> resolveAutomationOwners() const;
+    synth::TrackId trackForNewLane(const juce::String& nodeUuid);
+    void moveLanesToOwningTracks(); // load-time: lanes saved on the Automation track follow their module
 
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                       const juce::String& trackNamePrefix, bool poly);

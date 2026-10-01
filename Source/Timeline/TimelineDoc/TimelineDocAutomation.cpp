@@ -70,6 +70,27 @@ bool TimelineDoc::removeLane(LaneId id) {
     });
 }
 
+// Moves a lane to another track as ONE mutation (one revision bump), keeping its id, points, record mode, range,
+// index hint and orphan flag. False -- nothing changes -- for an unknown lane or track, the lane's own track, or a
+// destination already at kMaxLanesPerTrack. For when a lane's owning track is decided after the fact
+// (docs/timeline/automation.md#which-track-a-lane-lands-on).
+bool TimelineDoc::moveLaneToTrack(LaneId laneId, TrackId destTrack) {
+    Track* from = nullptr;
+    auto* lane = findLane(laneId, &from);
+    auto* dest = findTrack(destTrack);
+    if (lane == nullptr || dest == nullptr || dest == from)
+        return false;
+    if (static_cast<int>(dest->lanes.size()) >= kMaxLanesPerTrack)
+        return false;
+
+    return applyMutation([&] {
+        AutomationLane moved = std::move(*lane);
+        from->lanes.erase(from->lanes.begin() + (lane - from->lanes.data()));
+        dest->lanes.push_back(std::move(moved));
+        return true;
+    });
+}
+
 bool TimelineDoc::addBreakpoint(LaneId laneId, double beat, double value, float tension, int curve) {
     auto* lane = findLane(laneId);
     if (lane == nullptr)

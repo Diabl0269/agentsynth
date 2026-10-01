@@ -123,3 +123,38 @@ TEST_F(TimelineDocTest, FromVarClampsBreakpointValuesToTheRangeSnapshot) {
 // The audio half of Clip: an asset reference that must stay inside the bundle, a gain, two fades
 // and a source offset. Everything here is ADDITIVE — kFormatVersion stays 1, an absent field loads
 // as its default, and the path rule is enforced identically by the mutation API and by fromVar.
+
+TEST_F(TimelineDocTest, MoveLaneToTrackKeepsTheLaneAndBumpsRevisionOnce) {
+    const auto from = doc.addTrack(TrackKind::Automation, "Automation");
+    const auto to = doc.addTrack(TrackKind::Midi, "T");
+    const auto lane = doc.addLane(from, "uuid-filter", "cutoff", makeRange(20.0f, 20000.0f, 1000.0f), 7);
+    ASSERT_TRUE(doc.addBreakpoint(lane, 2.0, 500.0));
+    ASSERT_TRUE(doc.setLaneRecordMode(lane, static_cast<int>(synth::LaneRecordMode::Latch)));
+    const auto revisionBefore = doc.getRevision();
+
+    ASSERT_TRUE(doc.moveLaneToTrack(lane, to));
+
+    EXPECT_EQ(doc.getRevision(), revisionBefore + 1);
+    EXPECT_TRUE(doc.getTrack(from)->lanes.empty());
+    ASSERT_EQ(doc.getTrack(to)->lanes.size(), 1u);
+    const auto* moved = doc.getLane(lane);
+    ASSERT_NE(moved, nullptr);
+    EXPECT_EQ(doc.getTrackForLane(lane)->id, to);
+    EXPECT_EQ(moved->points.size(), 1u);
+    EXPECT_EQ(moved->recordMode, static_cast<int>(synth::LaneRecordMode::Latch));
+    EXPECT_EQ(moved->paramIndexHint, 7);
+    EXPECT_FLOAT_EQ(moved->range.maxValue, 20000.0f);
+}
+
+TEST_F(TimelineDocTest, MoveLaneToTrackRejectsBadIdsAndTheSameTrack) {
+    const auto from = doc.addTrack(TrackKind::Midi, "A");
+    const auto to = doc.addTrack(TrackKind::Midi, "B");
+    const auto lane = doc.addLane(from, "uuid", "cutoff", makeRange(0.0f, 1.0f, 0.0f));
+    const auto revisionBefore = doc.getRevision();
+
+    EXPECT_FALSE(doc.moveLaneToTrack(LaneId{999}, to));
+    EXPECT_FALSE(doc.moveLaneToTrack(lane, TrackId{999}));
+    EXPECT_FALSE(doc.moveLaneToTrack(lane, from));
+    EXPECT_EQ(doc.getRevision(), revisionBefore);
+    EXPECT_EQ(doc.getTrackForLane(lane)->id, from);
+}
