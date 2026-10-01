@@ -92,27 +92,37 @@ static void setDualIO(juce::AudioProcessor& proc, bool dual) {
 // and every jack is a modulation target on the matching raw channel (audio pair + jack index).
 // `hasKeyPair`: a Key (sidechain) pair is appended after the CV jacks (Compressor) — one
 // collapsed "Key" jack, or Key L/R when split; its full map is pinned in FXModuleSidechainKeyTests.
-static void expectStereoCvJacks(ModuleBase& module, const std::vector<juce::String>& cvLabels,
-                                bool hasKeyPair = false) {
+// `trailingCv`: one more CV jack appended after everything else (Compressor Knee, after the Key
+// pair), a modulation target on `trailingChannel`.
+static void expectStereoCvJacks(ModuleBase& module, const std::vector<juce::String>& cvLabels, bool hasKeyPair = false,
+                                const juce::String& trailingCv = {}, int trailingChannel = -1) {
     const int keyJacks = hasKeyPair ? 1 : 0;
-    ASSERT_EQ(module.getVisibleInputPortCount(), 1 + (int)cvLabels.size() + keyJacks);
+    const int trailing = trailingCv.isEmpty() ? 0 : 1;
+    ASSERT_EQ(module.getVisibleInputPortCount(), 1 + (int)cvLabels.size() + keyJacks + trailing);
     EXPECT_EQ(module.getInputPortLabel(0), "Audio");
     for (size_t i = 0; i < cvLabels.size(); ++i)
         EXPECT_EQ(module.getInputPortLabel(1 + (int)i), cvLabels[i]);
 
     const auto targets = module.getModulationTargets();
-    ASSERT_EQ(targets.size(), cvLabels.size());
+    ASSERT_EQ(targets.size(), cvLabels.size() + (size_t)trailing);
     for (size_t i = 0; i < cvLabels.size(); ++i) {
         EXPECT_EQ(targets[i].name, cvLabels[i]);
         EXPECT_EQ(targets[i].channelIndex, 2 + (int)i);
         EXPECT_NE(module.parameterForModTarget(targets[i]), nullptr) << cvLabels[i] << " binds to no knob";
     }
-    EXPECT_EQ(module.getTotalNumInputChannels(), 2 + (int)cvLabels.size() + 2 * keyJacks);
+    if (trailing != 0) {
+        EXPECT_EQ(targets.back().name, trailingCv);
+        EXPECT_EQ(targets.back().channelIndex, trailingChannel);
+        EXPECT_NE(module.parameterForModTarget(targets.back()), nullptr) << trailingCv << " binds to no knob";
+    }
+    EXPECT_EQ(module.getTotalNumInputChannels(), 2 + (int)cvLabels.size() + 2 * keyJacks + trailing);
     if (hasKeyPair)
         EXPECT_EQ(module.getInputPortLabel(1 + (int)cvLabels.size()), "Key");
+    if (trailing != 0)
+        EXPECT_EQ(module.getInputPortLabel(1 + (int)cvLabels.size() + keyJacks), trailingCv);
 
     setDualIO(module, true);
-    ASSERT_EQ(module.getVisibleInputPortCount(), 2 + (int)cvLabels.size() + 2 * keyJacks);
+    ASSERT_EQ(module.getVisibleInputPortCount(), 2 + (int)cvLabels.size() + 2 * keyJacks + trailing);
     EXPECT_EQ(module.getInputPortLabel(0), "Left");
     EXPECT_EQ(module.getInputPortLabel(1), "Right");
     for (size_t i = 0; i < cvLabels.size(); ++i)
@@ -171,7 +181,8 @@ TEST(PortLabelTests, PhaserPortLabels) {
 
 TEST(PortLabelTests, CompressorPortLabels) {
     CompressorModule comp;
-    expectStereoCvJacks(comp, {"Threshold", "Ratio", "Attack", "Release", "Makeup"}, /*hasKeyPair=*/true);
+    expectStereoCvJacks(comp, {"Threshold", "Ratio", "Attack", "Release", "Makeup"}, /*hasKeyPair=*/true, "Knee",
+                        CompressorModule::kKneeCvChannel);
 }
 
 TEST(PortLabelTests, FlangerPortLabels) {
@@ -181,7 +192,7 @@ TEST(PortLabelTests, FlangerPortLabels) {
 
 TEST(PortLabelTests, LimiterPortLabels) {
     LimiterModule limiter;
-    expectStereoCvJacks(limiter, {"Threshold", "Release", "Input Gain"});
+    expectStereoCvJacks(limiter, {"Threshold", "Release", "Input Gain", "Ceiling"});
 }
 
 TEST(PortLabelTests, PitchShifterPortLabels) {

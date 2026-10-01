@@ -134,7 +134,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
          "send4Pan"},
         {"Chorus", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
         {"Comparator", "bypassed, muted, trigThreshold"},
-        {"Compressor", "attack, bypassed, dualIO, makeupGain, muted, ratio, release, threshold"},
+        {"Compressor", "attack, bypassed, dualIO, knee, makeupGain, muted, ratio, release, threshold"},
         {"Delay", "bypassed, dualIO, feedback, mix, muted, outputLevel, pingPong, tempoSync, time, timeDiv"},
         {"Distortion", "bypassed, drive, dualIO, mix, muted, outputLevel, oversampling, type"},
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
@@ -148,7 +148,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         // plugin's own parameters are exposed to the graph separately, as automation lanes.
         {"Hosted Plugin", "bypassed, muted"},
         {"LFO", "bipolar, bypassed, fadeIn, glide, level, mode, muted, phase, rateHz, rateSync, retrig, shape"},
-        {"Limiter", "bypassed, dualIO, inputGain, muted, release, threshold"},
+        {"Limiter", "bypassed, ceiling, dualIO, inputGain, muted, release, threshold"},
         {"MIDI Keyboard", "bypassed, octave"},
         // The four Macro I/O port node types: pure pass-throughs, so the inherited
         // "bypassed" is the whole parameter set — same reasoning as Rec Tap/Track In/Track Audio,
@@ -187,7 +187,8 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Ring Modulator", "bypassed, character, drive, dualIO, mix, muted, outputLevel, oversampling"},
         {"Sample & Hold", "bypassed, clock, holdMode, level, muted, offset, rate, slew, source, trigThreshold"},
         {"Sampler",
-         "bypassed, density, dualIO, grainSize, level, loop, muted, pitch, playMode, rootNote, spray, start"},
+         "bypassed, density, dualIO, end, fine, grainSize, level, loop, muted, pitch, playMode, reverse, rootNote, "
+         "spray, start"},
         {"Sequencer", "F.Env 1, F.Env 2, F.Env 3, F.Env 4, F.Env 5, F.Env 6, F.Env 7, F.Env 8, Gate 1, Gate 2, "
                       "Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Pitch 1, Pitch 2, Pitch 3, Pitch 4, Pitch 5, "
                       "Pitch 6, Pitch 7, Pitch 8, bpm, bypassed, run, syncToTransport"},

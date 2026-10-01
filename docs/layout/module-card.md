@@ -83,12 +83,12 @@ card against `Tests/fixtures/card-body/card-geometry.golden`. Fresh cards, singl
 |---|---|---|---|
 | Oscillator | 433 | Sample & Hold | 451 |
 | Filter | 403 | Comparator | 185 |
-| LFO | 361 | Sampler | 545 |
+| LFO | 361 | Sampler | 571 |
 | VCA | 233 | Chorus / Phaser / Flanger | 237 |
 | ADSR (Amp Env, Filter Env) | 389 | Bitcrusher | 263 |
 | Poly MIDI | 185 | Pitch Shifter | 387 |
 | Distortion | 283 | Compressor / Gate | 257 |
-| Ring Modulator | 331 | Limiter | 161 |
+| Ring Modulator | 331 | Limiter | 237 |
 | Delay | 337 | Voice Mixer | 301 |
 | Noise | 261 | Math | 239 |
 | Envelope Follower | 235 | Channel Strip | 409 |
