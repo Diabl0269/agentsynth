@@ -223,6 +223,31 @@ void GraphEditor::removeModulator(const ModulationRouting& routing, bool removeL
     repaintCanvas();
 }
 
+// Every canvas removal of a modulation goes through here (or reads the ports first): the chain is cut and the
+// ports it crossed are swept in one step, so no inlet or outlet is left holding a cable that drives nothing.
+// A chain no routing lists (a dangling end) is just cut.
+void GraphEditor::removeModulationChain(NodeID attenId) {
+    for (const auto& r : audioEngine.getModulationRoutings())
+        if (r.kind == AudioEngine::RoutingKind::AttenuverterChain && r.attenuverterNodeID == attenId) {
+            removeModulator(r, /*removeLonelySource=*/false);
+            return;
+        }
+    auto cut = [this, attenId] { audioEngine.removeModRouting(attenId); };
+    if (undoManager != nullptr)
+        undoManager->recordStructuralChange(audioEngine.getGraph(), cut);
+    else
+        cut();
+    repaintCanvas();
+}
+
+std::vector<NodeID> GraphEditor::modulationChainPorts(NodeID attenId) {
+    const auto isPort = [this](NodeID id) { return macroController_.nodeIsMacroPort(id); };
+    for (const auto& r : audioEngine.getModulationRoutings())
+        if (r.kind == AudioEngine::RoutingKind::AttenuverterChain && r.attenuverterNodeID == attenId)
+            return synth::ui::resolveRouting(audioEngine.getGraph(), r, isPort).ports;
+    return {};
+}
+
 // Resolved exactly as the canvas resolves a mod wire from that source (mode, user overrides, theme), so
 // a modulator row is the colour of the cable it stands for.
 juce::Colour GraphEditor::modulationWireColour(NodeID sourceId) const {

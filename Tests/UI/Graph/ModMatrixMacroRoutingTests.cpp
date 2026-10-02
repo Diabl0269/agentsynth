@@ -170,3 +170,26 @@ TEST(ModMatrixMacroRouting, DeletingARowTakesThePortItUsedWithIt) {
     ASSERT_TRUE(c.undo.undo());
     EXPECT_EQ(c.nodesOf<MacroInletModule>().size(), 1u) << "one undo brings back the row and its port";
 }
+
+// Regression test for FRO512: with the auto-delete preference off the row's port was left behind.
+TEST(ModMatrixMacroRouting, DeletingARowTakesItsPortEvenWithAutoDeleteOff) {
+    MatrixCanvas c(Boxed::DestInside);
+    c.editor.setAutoDeleteMacroPortsOnLastCableEnabled(false);
+    c.addRow();
+    c.pickSource(c.lfo);
+    c.pickDest(c.filterIn);
+    ASSERT_EQ(c.nodesOf<MacroInletModule>().size(), 1u);
+
+    auto* del = dynamic_cast<juce::Button*>(findDescendantWithID(c.matrix(), "modDelete"));
+    ASSERT_NE(del, nullptr);
+    del->onClick();
+
+    EXPECT_TRUE(c.nodesOf<MacroInletModule>().empty());
+    EXPECT_TRUE(c.macro().ports.empty());
+    EXPECT_FALSE(c.edge(c.lfo, c.filterIn, kCutoff));
+    for (const auto& conn : c.engine.getGraph().getConnections())
+        EXPECT_NE(conn.source.nodeID, c.lfo) << "no LFO cable left behind";
+
+    ASSERT_TRUE(c.undo.undo());
+    EXPECT_EQ(c.nodesOf<MacroInletModule>().size(), 1u);
+}

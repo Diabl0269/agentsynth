@@ -12,6 +12,8 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "MacroDragTestHelpers.h"
+#include "Modules/LFOModule.h"
+#include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <optional>
@@ -38,6 +40,58 @@ void expectStrictlyBetween(float mid, float a, float b) {
     EXPECT_NE(mid, a);
     EXPECT_NE(mid, b);
 }
+
+// An LFO at x = `lfoX` (outside the macro's hull when large) dragged with real jack/knob drag calls onto the
+// Position knob of a Wavetable member of an expanded macro. Returns the release point (canvas coordinates).
+struct KnobDropRig {
+    AudioEngine engine;
+    GraphEditor editor{engine};
+    NodeID lfo, member;
+    juce::Point<float> dropPoint;
+
+    explicit KnobDropRig(bool lfoInsideMacro) {
+        editor.setSize(1600, 1200);
+        member = addModuleAt(editor, engine, std::make_unique<WavetableOscillatorModule>(), 100, 100);
+        auto filler = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 500);
+        std::vector<NodeID> members{member, filler};
+        if (lfoInsideMacro) {
+            lfo = addModuleAt(editor, engine, std::make_unique<LFOModule>(), 100, 900);
+            members.push_back(lfo);
+        } else {
+            lfo = addModuleAt(editor, engine, std::make_unique<LFOModule>(), 900, 100);
+        }
+        editor.setSelectedNodes(members);
+        const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
+        editor.getMacroController().setMacroCollapsed(macroId, false);
+    }
+
+    void dropLfoOnTheKnob() {
+        auto* memberComp = findComponent(editor, member);
+        juce::Slider* position = nullptr;
+        for (auto* child : memberComp->getChildren())
+            if (auto* sl = dynamic_cast<juce::Slider*>(child))
+                if (sl->getComponentID() == "Position")
+                    position = sl;
+        ASSERT_NE(position, nullptr);
+        const auto at = memberComp->getBounds().getPosition() + position->getBounds().getCentre();
+        dropPoint = editor.getChildComponent(0)->getLocalPoint(nullptr, at).toFloat();
+        editor.beginConnectionDrag(findComponent(editor, lfo), 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+        editor.dragConnection(at);
+        editor.endConnectionDrag(at);
+    }
+
+    // The visible cables that end on a macro port, as (cable, point at the port end).
+    std::vector<std::pair<GraphEditor::VisibleCable, juce::Point<float>>> portEnds() {
+        std::vector<std::pair<GraphEditor::VisibleCable, juce::Point<float>>> ends;
+        for (const auto& c : editor.buildVisibleCables()) {
+            if (editor.getMacroController().nodeIsMacroPort(NodeID{c.id.srcUid}))
+                ends.push_back({c, c.p1});
+            if (editor.getMacroController().nodeIsMacroPort(NodeID{c.id.dstUid}))
+                ends.push_back({c, c.p2});
+        }
+        return ends;
+    }
+};
 
 } // namespace
 
@@ -170,4 +224,38 @@ TEST(MacroCrossingAnimation, PlainDragOutsideAnyHullArmsNoAnimation) {
 
     EXPECT_FALSE(editor.isMacroCrossingAnimLiveForTest())
         << "a plain move that never crosses a hull must arm no animation at all";
+}
+
+// ---------------------------------------------------------------------------------------------
+// 5. A cable dropped from outside a macro onto a knob inside it has no earlier self to slide from:
+//    each new cable's port end emerges from the drop point and settles on the port.
+// ---------------------------------------------------------------------------------------------
+
+TEST(MacroCrossingAnimation, ALfoDroppedOnAKnobInsideAMacroSlidesItsPortEndInFromTheDropPoint) {
+    KnobDropRig r(/*lfoInsideMacro=*/false);
+    r.dropLfoOnTheKnob();
+
+    ASSERT_TRUE(r.editor.isMacroCrossingAnimLiveForTest()) << "a drop that mints a port must arm the slide";
+    const auto atStart = r.portEnds();
+    ASSERT_FALSE(atStart.empty());
+    for (const auto& [cable, end] : atStart) {
+        EXPECT_NEAR(end.x, r.dropPoint.x, 0.5f) << "at t = 0 the port end sits where the cable was released";
+        EXPECT_NEAR(end.y, r.dropPoint.y, 0.5f);
+    }
+
+    r.editor.advanceMacroCrossingAnimForTest(0.5f);
+    r.editor.finishMacroCrossingAnimForTest();
+    EXPECT_FALSE(r.editor.isMacroCrossingAnimLiveForTest());
+    const auto settled = r.portEnds();
+    ASSERT_EQ(settled.size(), atStart.size());
+    for (const auto& [cable, end] : settled)
+        EXPECT_TRUE(std::abs(end.x - r.dropPoint.x) > 0.5f || std::abs(end.y - r.dropPoint.y) > 0.5f)
+            << "after finish the end rests on the port's own anchor";
+}
+
+TEST(MacroCrossingAnimation, ASameLevelKnobDropArmsNothing) {
+    KnobDropRig r(/*lfoInsideMacro=*/true);
+    r.dropLfoOnTheKnob();
+
+    EXPECT_FALSE(r.editor.isMacroCrossingAnimLiveForTest()) << "no port was minted, so nothing slides";
 }

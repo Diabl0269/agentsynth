@@ -4,6 +4,8 @@
 
 #include "MacroCrossingAnimator.h"
 
+#include <algorithm>
+
 namespace {
 
 using graph_editor_types::CableId;
@@ -104,6 +106,35 @@ bool MacroCrossingAnimator::arm(const std::vector<VisibleCable>& before, const s
 
     flashBounds_ = flashBounds;
     live_ = !tweens_.empty() || !flashBounds_.isEmpty();
+    return live_;
+}
+
+// A cable with no earlier self has no "before" to match, so the slide's start is the drop point itself:
+// the port end emerges from where the cable was released (docs/layout/animation.md "Motion rules").
+bool MacroCrossingAnimator::armSlideFrom(const std::vector<VisibleCable>& before,
+                                         const std::vector<VisibleCable>& after, juce::Point<float> dropPoint,
+                                         const std::function<bool(uint32_t)>& isPortUid) {
+    tweens_.clear();
+    flashBounds_ = {};
+    progress_ = 0.0f;
+    live_ = false;
+
+    for (const auto& a : after) {
+        const bool existedBefore =
+            std::any_of(before.begin(), before.end(), [&a](const auto& b) { return b.id == a.id; });
+        const bool srcOnPort = isPortUid(a.id.srcUid);
+        const bool dstOnPort = isPortUid(a.id.dstUid);
+        if (existedBefore || (!srcOnPort && !dstOnPort))
+            continue;
+        CableTween tween;
+        tween.afterId = a.id;
+        tween.toP1 = a.p1;
+        tween.toP2 = a.p2;
+        tween.fromP1 = srcOnPort ? dropPoint : a.p1;
+        tween.fromP2 = dstOnPort ? dropPoint : a.p2;
+        tweens_.push_back(tween);
+    }
+    live_ = !tweens_.empty();
     return live_;
 }
 

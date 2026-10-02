@@ -422,6 +422,14 @@ into one straight cable that never had a single well-defined "old anchor" — bo
 already sat where the new cable's endpoints are; only the bend at the port disappeared. Scoping to
 the dragged module's own cables sidesteps that case rather than mismatching it.
 
+**A cable dropped across a hull slides in from the drop point.** Releasing a cable (on a jack or a knob) that
+crosses an expanded macro's boundary mints a port, and the new cables have no earlier self to match.
+`endConnectionDrag` snapshots the visible cables before the mint and hands both snapshots plus the release point to
+`armMacroPortSlide`, which calls `MacroCrossingAnimator::armSlideFrom`: every cable that is new and ends on a macro
+port has that port-side end emerge from the release point and settle on the port (the other end stays put, there is
+no module flash). A same-level drop mints no port and arms nothing. The driver is the same one, started by
+`startMacroCrossingDriver`.
+
 **`GraphEditor::buildVisibleCables()` stays a pure memo of live graph/component state** — the tween
 never teaches it anything about macros. `MacroCrossingAnimator::applyTo()` runs as the very last step
 of `buildVisibleCables()` (after `rebuildVisibleCables()` itself returns), overwriting a matched

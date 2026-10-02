@@ -335,17 +335,23 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                         undoManager->recordGraphAndMacroChange(graph, macros, doMutation);
                     else
                         doMutation();
-                } else if (!autoCreateMacroPortsOnDragEnabled ||
-                           !macroController_.maybeAutoCreateMacroPortsForDrag(realSrc->nodeID, srcJack, realDst->nodeID,
-                                                                              dstJack, dragSourceIsMidi)) {
+                } else {
                     // If this completed drag crosses a macro boundary (an EXPANDED macro's member on
                     // one side, something outside that same macro on the other — the collapsed-card
                     // drop above is a different code path), mint and wire a matching port instead of
                     // the plain direct connection. Gated by autoCreateMacroPortsOnDragEnabled
-                    // (Preferences); when it handles the drag it returns true and the plain
-                    // connectPorts below is skipped entirely
+                    // (Preferences); when it handles the drag the plain connectPorts is skipped entirely
+                    // and the cables it made slide in from the drop point
                     // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
-                    connectPorts(realSrc->nodeID, srcJack, realDst->nodeID, dstJack, dragSourceIsMidi, true);
+                    std::vector<VisibleCable> cablesBeforeDrop;
+                    if (autoCreateMacroPortsOnDragEnabled)
+                        cablesBeforeDrop = rebuildVisibleCables();
+                    if (autoCreateMacroPortsOnDragEnabled &&
+                        macroController_.maybeAutoCreateMacroPortsForDrag(realSrc->nodeID, srcJack, realDst->nodeID,
+                                                                          dstJack, dragSourceIsMidi))
+                        armMacroPortSlide(cablesBeforeDrop, content.getLocalPoint(nullptr, screenPos).toFloat());
+                    else
+                        connectPorts(realSrc->nodeID, srcJack, realDst->nodeID, dstJack, dragSourceIsMidi, true);
                 }
                 connectedToAModule = true;
             }

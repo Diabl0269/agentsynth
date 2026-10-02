@@ -314,15 +314,8 @@ void GraphEditor::mouseDoubleClick(const juce::MouseEvent& e) {
     }
 
     auto attenId = getAttenuverterNodeAt(localPos.toFloat());
-    if (attenId.uid != 0) {
-        if (undoManager) {
-            undoManager->recordStructuralChange(audioEngine.getGraph(),
-                                                [this, attenId] { audioEngine.removeModRouting(attenId); });
-        } else {
-            audioEngine.removeModRouting(attenId);
-        }
-        repaintCanvas();
-    }
+    if (attenId.uid != 0)
+        removeModulationChain(attenId);
 }
 
 juce::AudioProcessorGraph::NodeID GraphEditor::getAttenuverterNodeAt(juce::Point<float> localPos) {
@@ -669,7 +662,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
     // Gated on autoDeleteMacroPortsOnLastCableEnabled (Preferences) — off, this is always false
     // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
     bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled && macroController_.nodeIsMacroPort(nodeId);
-    if (autoDeleteMacroPortsOnLastCableEnabled && !touchesMacroPort) {
+    if (!touchesMacroPort) { // a modulation cable counts whatever the preference says
         auto isTargetChannelPrescan = [&targetChannels](int channel) {
             return std::find(targetChannels.begin(), targetChannels.end(), channel) != targetChannels.end();
         };
@@ -681,7 +674,8 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
                 farNode = c.destination.nodeID;
             else
                 continue;
-            if (macroController_.nodeIsMacroPort(farNode)) {
+            if ((autoDeleteMacroPortsOnLastCableEnabled && macroController_.nodeIsMacroPort(farNode)) ||
+                !modulationChainPorts(farNode).empty()) {
                 touchesMacroPort = true;
                 break;
             }
@@ -690,8 +684,13 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
 
     // Same connection-removal logic either way — the macro-port branch below just also collects
     // which nodes were touched, for the auto-delete scan run afterwards.
-    std::vector<juce::AudioProcessorGraph::NodeID> touchedNodes;
-    auto doDisconnect = [this, &graph, nodeId, targetChannels, isInput, &touchedNodes] {
+    std::vector<juce::AudioProcessorGraph::NodeID> touchedNodes, chainPorts; // chainPorts: read before each cut
+    auto cutChain = [this, &chainPorts](juce::AudioProcessorGraph::NodeID attenId) {
+        const auto ports = modulationChainPorts(attenId);
+        chainPorts.insert(chainPorts.end(), ports.begin(), ports.end());
+        audioEngine.removeModRouting(attenId);
+    };
+    auto doDisconnect = [this, &graph, nodeId, targetChannels, isInput, &touchedNodes, cutChain] {
         std::vector<juce::AudioProcessorGraph::Connection> toRemove;
         auto isTargetChannel = [&targetChannels](int channel) {
             return std::find(targetChannels.begin(), targetChannels.end(), channel) != targetChannels.end();
@@ -702,7 +701,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
                 if (c.destination.nodeID == nodeId && isTargetChannel(c.destination.channelIndex)) {
                     if (auto* srcNode = graph.getNodeForId(c.source.nodeID)) {
                         if (dynamic_cast<AttenuverterModule*>(srcNode->getProcessor()) != nullptr)
-                            audioEngine.removeModRouting(srcNode->nodeID);
+                            cutChain(srcNode->nodeID);
                         else {
                             toRemove.push_back(c);
                             touchedNodes.push_back(c.source.nodeID);
@@ -713,7 +712,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
                 if (c.source.nodeID == nodeId && isTargetChannel(c.source.channelIndex)) {
                     if (auto* dstNode = graph.getNodeForId(c.destination.nodeID)) {
                         if (dynamic_cast<AttenuverterModule*>(dstNode->getProcessor()) != nullptr)
-                            audioEngine.removeModRouting(dstNode->nodeID);
+                            cutChain(dstNode->nodeID);
                         else {
                             toRemove.push_back(c);
                             touchedNodes.push_back(c.destination.nodeID);
@@ -727,11 +726,12 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
     };
 
     if (touchesMacroPort) {
-        auto doDisconnectAndPrune = [this, doDisconnect, nodeId, &touchedNodes] {
+        auto doDisconnectAndPrune = [this, doDisconnect, nodeId, &touchedNodes, &chainPorts] {
             doDisconnect();
             touchedNodes.push_back(nodeId);
             for (auto touched : touchedNodes)
                 macroController_.autoDeleteOrphanedMacroPort(touched);
+            macroController_.sweepOneSidedMacroPorts(chainPorts, /*ignorePreference=*/true);
             updateComponents();
         };
         if (undoManager)
