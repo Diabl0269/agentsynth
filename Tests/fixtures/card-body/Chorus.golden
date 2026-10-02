@@ -8,7 +8,7 @@ type Chorus size 280x309
   child 6 knob id="Depth" at 97,109 85x58 visible=1 title="Depth" tip="Depth" focusOrder=0 wantsFocus=1
   child 7 label id="" at 97,91 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 8 knob id="Centre Delay (ms)" at 12,203 85x58 visible=1 title="Centre Delay (ms)" tip="Centre Delay (ms)" focusOrder=0 wantsFocus=1
-  child 9 label id="" at 12,185 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 9 label id="" at 12,185 85x18 visible=1 title="" tip="Centre Delay (ms)" focusOrder=0 wantsFocus=0
   child 10 knob id="Feedback" at 97,203 85x58 visible=1 title="Feedback" tip="Feedback" focusOrder=0 wantsFocus=1
   child 11 label id="" at 97,185 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 knob id="Mix" at 182,109 85x58 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1

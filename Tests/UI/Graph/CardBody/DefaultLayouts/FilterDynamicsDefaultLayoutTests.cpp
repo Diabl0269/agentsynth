@@ -75,8 +75,9 @@ TEST(FilterDynamicsDefaultLayout, EveryTypeHasADesignedDefaultAtRevisionOneWithN
     }
     EXPECT_EQ(sectionOrder(*defaults.find("Filter")),
               (std::vector<juce::String>{"type", "tone", "modulation", "footer"}));
-    EXPECT_EQ(sectionOrder(*defaults.find("Compressor")), (std::vector<juce::String>{"main", "footer"}));
-    EXPECT_EQ(sectionOrder(*defaults.find("Limiter")), (std::vector<juce::String>{"main"}));
+    EXPECT_EQ(sectionOrder(*defaults.find("Compressor")),
+              (std::vector<juce::String>{"meter", "levels", "dynamics", "footer"}));
+    EXPECT_EQ(sectionOrder(*defaults.find("Limiter")), (std::vector<juce::String>{"meter", "levels", "timing"}));
     EXPECT_EQ(sectionOrder(*defaults.find("Gate")), (std::vector<juce::String>{"main", "footer"}));
 }
 
@@ -126,7 +127,8 @@ TEST(FilterDynamicsDefaultLayout, TheFilterHasTypeLargeCutoffModulationAndAFoote
         expectReachable(built, id);
 }
 
-TEST(FilterDynamicsDefaultLayout, TheCompressorShowsTheGainReductionViewThenAThresholdFaderAndAKneeFooter) {
+TEST(FilterDynamicsDefaultLayout,
+     TheCompressorShowsTheGainReductionViewThenThresholdAndMakeupFadersSideBySideAndAKneeFooter) {
     Built built("Compressor");
     ASSERT_NE(built.body, nullptr);
     auto* meter = dynamic_cast<GainReductionMeterComponent*>(viewWidget(*built.body, synth::CardView::GainReduction));
@@ -142,16 +144,29 @@ TEST(FilterDynamicsDefaultLayout, TheCompressorShowsTheGainReductionViewThenAThr
     auto* knee = dynamic_cast<synth::ui::CardFader*>(built.body->findWidget("knee"));
     ASSERT_NE(knee, nullptr) << "Knee is in the footer, a horizontal fader";
     EXPECT_EQ(knee->getSliderStyle(), juce::Slider::LinearHorizontal);
+    auto* makeup = dynamic_cast<synth::ui::CardFader*>(built.body->findWidget("makeupGain"));
+    ASSERT_NE(makeup, nullptr);
+    EXPECT_EQ(makeup->getSliderStyle(), juce::Slider::LinearVertical);
     EXPECT_GE(meter->getBottom(), 0);
     EXPECT_LE(meter->getBottom(), threshold->getY());
-    EXPECT_LT(built.body->findWidget("ratio")->getY(), built.body->findWidget("release")->getY());
+    EXPECT_EQ(threshold->getY(), makeup->getY()) << "the two faders share a row";
+    EXPECT_LT(threshold->getX(), makeup->getX());
+    EXPECT_LE(threshold->getBottom(), built.body->findWidget("ratio")->getY());
+    EXPECT_EQ(built.body->findWidget("ratio")->getY(), built.body->findWidget("attack")->getY());
+    EXPECT_EQ(built.body->findWidget("attack")->getY(), built.body->findWidget("release")->getY());
+    // The relabelled Makeup keeps its full name in the caption's tooltip.
+    const auto& plan = built.body->getPlan();
+    auto* makeupLabel = dynamic_cast<juce::Label*>(plan.items[(size_t)plan.findParam("makeupGain")].label);
+    ASSERT_NE(makeupLabel, nullptr);
+    EXPECT_EQ(makeupLabel->getText(), "Makeup (dB)");
+    EXPECT_EQ(makeupLabel->getTooltip(), "Makeup Gain (dB)");
     EXPECT_GT(knee->getY(), built.body->findWidget("release")->getBottom());
     EXPECT_FALSE(built.body->hasMoreRow());
     for (const char* id : {"threshold", "ratio", "makeupGain", "attack", "release", "knee"})
         expectReachable(built, id);
 }
 
-TEST(FilterDynamicsDefaultLayout, TheLimiterReadsAsASignalPathInputMeterCeilingRelease) {
+TEST(FilterDynamicsDefaultLayout, TheLimiterReadsAsMeterThenInputAndCeilingFadersSideBySideThenThresholdAndRelease) {
     Built built("Limiter");
     ASSERT_NE(built.body, nullptr);
     auto* meter = viewWidget(*built.body, synth::CardView::GainReduction);
@@ -162,9 +177,11 @@ TEST(FilterDynamicsDefaultLayout, TheLimiterReadsAsASignalPathInputMeterCeilingR
     ASSERT_NE(ceiling, nullptr);
     EXPECT_EQ(input->getSliderStyle(), juce::Slider::LinearVertical);
     EXPECT_EQ(ceiling->getSliderStyle(), juce::Slider::LinearVertical);
-    EXPECT_LE(input->getBottom(), meter->getY());
-    EXPECT_LE(meter->getBottom(), ceiling->getY());
+    EXPECT_LE(meter->getBottom(), input->getY());
+    EXPECT_EQ(input->getY(), ceiling->getY()) << "the two faders share a row";
+    EXPECT_LT(input->getX(), ceiling->getX());
     EXPECT_LT(ceiling->getY(), built.body->findWidget("release")->getY());
+    EXPECT_EQ(built.body->findWidget("threshold")->getY(), built.body->findWidget("release")->getY());
     EXPECT_FALSE(built.body->hasMoreRow());
     for (const char* id : {"inputGain", "ceiling", "threshold", "release"})
         expectReachable(built, id);

@@ -22,6 +22,12 @@ inline CardParamItem param(const juce::String& paramId, CardWidget widget = Card
     return item;
 }
 
+/** `item` captioned `text` instead of its parameter name (the full name stays in the caption's tooltip). */
+inline CardParamItem labelled(CardParamItem item, const juce::String& text) {
+    item.label = text;
+    return item;
+}
+
 /** `item` shown only while `conditionParam`'s value is one of `is` (a swap with its neighbours). */
 inline CardParamItem showWhen(CardParamItem item, const juce::String& conditionParam, juce::StringArray is) {
     item.when = CardCondition{conditionParam, std::move(is), CardConditionEffect::Show};

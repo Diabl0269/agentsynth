@@ -21,11 +21,6 @@ CardLayout layoutOf(std::vector<CardSection> sections) {
     return layout;
 }
 
-CardParamItem labelled(CardParamItem item, const juce::String& caption) {
-    item.label = caption;
-    return item;
-}
-
 // One ADSR stage in tempo-sync's two readings: the time as a fader while tempoSync is off, its note
 // division in the same cell while it is on. The caption is the same either way, so a stage keeps its name.
 // The four pairs all test tempoSync with the same values; each pair is its own swap group (a member whose

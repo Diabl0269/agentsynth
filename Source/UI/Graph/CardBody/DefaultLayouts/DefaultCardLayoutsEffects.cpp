@@ -35,10 +35,11 @@ CardLayout reverbLayout() {
                      footer({param("outputLevel")})});
 }
 
-// Chorus, Phaser and Flanger share the shape; `centreParam` is the tone control that differs.
-CardLayout modulationLayout(const juce::String& centreParam) {
+// Chorus, Phaser and Flanger share the shape; `centre` is the tone control that differs. The delay-based
+// ones relabel "Centre Delay (ms)" as "Delay (ms)": at a knob's width the full name would ellipsise.
+CardLayout modulationLayout(CardParamItem centre) {
     return layoutOf({section("motion", juce::String("Motion"), {param("rate"), param("depth"), param("mix")}),
-                     section("tone", juce::String("Tone"), {param(centreParam), param("feedback")}),
+                     section("tone", juce::String("Tone"), {std::move(centre), param("feedback")}),
                      footer({param("outputLevel")})});
 }
 
@@ -76,9 +77,9 @@ CardLayout pitchShifterLayout() {
 void registerEffectCardLayouts(DefaultCardLayouts& defaults) {
     defaults.add("Delay", delayLayout(), kRevision);
     defaults.add("Reverb", reverbLayout(), kRevision);
-    defaults.add("Chorus", modulationLayout("centreDelay"), kRevision);
-    defaults.add("Flanger", modulationLayout("centreDelay"), kRevision);
-    defaults.add("Phaser", modulationLayout("centreFreq"), kRevision);
+    defaults.add("Chorus", modulationLayout(labelled(param("centreDelay"), "Delay (ms)")), kRevision);
+    defaults.add("Flanger", modulationLayout(labelled(param("centreDelay"), "Delay (ms)")), kRevision);
+    defaults.add("Phaser", modulationLayout(param("centreFreq")), kRevision);
     defaults.add("Distortion", distortionLayout(), kRevision);
     defaults.add("Bitcrusher", bitcrusherLayout(), kRevision);
     defaults.add("Ring Modulator", ringModulatorLayout(), kRevision);

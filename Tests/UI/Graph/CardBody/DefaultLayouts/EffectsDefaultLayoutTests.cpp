@@ -208,3 +208,17 @@ TEST(EffectsDefaultLayout, TheEstimateEqualsTheRealCardForEveryEffect) {
         EXPECT_EQ(*estimate, juce::Point<int>(card->getWidth(), card->getHeight()));
     }
 }
+
+TEST(EffectsDefaultLayout, ChorusAndFlangerRelabelCentreDelayAndKeepTheFullNameInTheTooltip) {
+    for (const char* type : {"Chorus", "Flanger"}) {
+        SCOPED_TRACE(type);
+        CardCanvas canvas;
+        const auto id = canvas.add(synth::AIStateMapper::createModule(type), 0, 0);
+        canvas.editor.updateComponents();
+        const auto& plan = canvas.card(id)->getCardBody()->getPlan();
+        auto* label = dynamic_cast<juce::Label*>(plan.items[(size_t)plan.findParam("centreDelay")].label);
+        ASSERT_NE(label, nullptr);
+        EXPECT_EQ(label->getText(), "Delay (ms)");
+        EXPECT_EQ(label->getTooltip(), "Centre Delay (ms)");
+    }
+}

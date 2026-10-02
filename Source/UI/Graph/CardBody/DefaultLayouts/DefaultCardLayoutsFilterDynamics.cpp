@@ -24,27 +24,33 @@ CardLayout filterLayout() {
     return layout;
 }
 
-// The meter first, so the reduction reads at a glance above the controls that cause it.
+// The meter first, so the reduction reads at a glance above the controls that cause it. Threshold and
+// Makeup are two faders side by side, their levels compared at a glance; the three time and ratio knobs
+// share one row. "Makeup Gain (dB)" is relabelled: at a knob's width it would ellipsise.
 CardLayout compressorLayout() {
     CardLayout layout;
     layout.sections = {
-        section("main", std::nullopt,
-                {view(CardView::GainReduction), param("threshold", CardWidget::FaderV), param("ratio"),
-                 param("makeupGain"), param("attack"), param("release")}),
+        section("meter", std::nullopt, {view(CardView::GainReduction)}),
+        section(
+            "levels", std::nullopt,
+            {param("threshold", CardWidget::FaderV), labelled(param("makeupGain", CardWidget::FaderV), "Makeup (dB)")},
+            2),
+        section("dynamics", std::nullopt, {param("ratio"), param("attack"), param("release")}),
         footer({param("knee")}),
     };
     return layout;
 }
 
-// Top to bottom is the signal path: what goes in, what the limiter takes off, the ceiling it stops at.
-// Threshold stays on the card, beside Release: its CV jack needs a knob to land on, which a folded More
-// row does not give it.
+// Top to bottom is the signal path: the reduction the limiter makes, what goes in and the ceiling it stops
+// at (two faders side by side), then Threshold and Release. Threshold stays on the card, beside Release: its
+// CV jack needs a knob to land on, which a folded More row does not give it.
 CardLayout limiterLayout() {
     CardLayout layout;
     layout.sections = {
-        section("main", std::nullopt,
-                {param("inputGain", CardWidget::FaderV), view(CardView::GainReduction),
-                 param("ceiling", CardWidget::FaderV), param("threshold"), param("release")}),
+        section("meter", std::nullopt, {view(CardView::GainReduction)}),
+        section("levels", std::nullopt, {param("inputGain", CardWidget::FaderV), param("ceiling", CardWidget::FaderV)},
+                2),
+        section("timing", std::nullopt, {param("threshold"), param("release")}),
     };
     return layout;
 }
