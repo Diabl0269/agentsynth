@@ -18,14 +18,15 @@
 
 namespace {
 
-juce::MouseEvent makeHullMouseEvent(juce::Component& comp, juce::Point<int> position, bool shift = false) {
+juce::MouseEvent makeHullMouseEvent(juce::Component& comp, juce::Point<int> position, bool shift = false,
+                                    int numClicks = 1) {
     const auto pos = position.toFloat();
     int flags = juce::ModifierKeys::leftButtonModifier;
     if (shift)
         flags |= juce::ModifierKeys::shiftModifier;
     return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, juce::ModifierKeys(flags), 0.0f,
                             0.0f, 0.0f, 0.0f, 0.0f, &comp, &comp, juce::Time::getCurrentTime(), pos,
-                            juce::Time::getCurrentTime(), 1, false);
+                            juce::Time::getCurrentTime(), numClicks, false);
 }
 
 struct HullFixture {
@@ -125,6 +126,48 @@ TEST(MacroHullDrag, OnClickWithoutMovingSelectsTheMacroAndPushesNoUndo) {
 
     EXPECT_EQ(f.editor.getSelectionCount(), 2);
     EXPECT_FALSE(f.undo.canUndo());
+}
+
+namespace {
+void clickAt(HullFixture& f, juce::Point<int> p, int numClicks = 1) {
+    f.editor.mouseDown(makeHullMouseEvent(f.editor, p, false, numClicks));
+    f.editor.mouseUp(makeHullMouseEvent(f.editor, p, false, numClicks));
+}
+} // namespace
+
+// The hull reads as empty canvas, so a click on an already-selected macro's hull clears.
+TEST(MacroHullDrag, ClickingTheHullOfASelectedMacroClearsInOneClick) {
+    HullFixture f;
+    ASSERT_TRUE(f.pointIsEmptyHull());
+    f.editor.clearSelection();
+
+    clickAt(f, f.emptyHullPoint);
+    EXPECT_EQ(f.editor.getSelectionCount(), 2) << "first click selects the macro";
+    clickAt(f, f.emptyHullPoint);
+    EXPECT_EQ(f.editor.getSelectionCount(), 0) << "second click on the same empty hull clears";
+}
+
+TEST(MacroHullDrag, DoubleClickOnTheHullKeepsTheMacroSelected) {
+    HullFixture f;
+    ASSERT_TRUE(f.pointIsEmptyHull());
+    f.editor.clearSelection();
+
+    clickAt(f, f.emptyHullPoint, 1);
+    clickAt(f, f.emptyHullPoint, 2);
+    EXPECT_EQ(f.editor.getSelectionCount(), 2) << "the second click of a double-click must not deselect";
+}
+
+TEST(MacroHullDrag, ClickingEmptyCanvasOutsideTheHullClearsASelectedMacroInOneClick) {
+    HullFixture f;
+    ASSERT_TRUE(f.pointIsEmptyHull());
+    f.editor.clearSelection();
+    clickAt(f, f.emptyHullPoint);
+    ASSERT_EQ(f.editor.getSelectionCount(), 2);
+
+    const juce::Point<int> outside(1550, 1150);
+    ASSERT_TRUE(f.editor.getMacroController().macroHullAt(outside).isEmpty());
+    clickAt(f, outside);
+    EXPECT_EQ(f.editor.getSelectionCount(), 0);
 }
 
 TEST(MacroHullDrag, ShiftDragInsideTheHullStillMarqueesInBothModes) {

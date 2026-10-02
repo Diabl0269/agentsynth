@@ -943,7 +943,10 @@ void GraphEditor::mouseUp(const juce::MouseEvent& e) {
             return; // right-click keeps the selection so the context menu can act on it
 
         const auto canvasPos = content.getLocalPoint(this, e.getPosition());
-        if (const auto hullMacroId = macroController_.macroHullAt(canvasPos); hullMacroId.isNotEmpty())
+        const auto hullMacroId = macroController_.macroHullAt(canvasPos);
+        // The hull is big and reads as empty canvas: a single click on an already-selected macro's
+        // hull clears. The second click of a double-click still selects (numClicks >= 2).
+        if (hullMacroId.isNotEmpty() && !(macroController_.isMacroSelected(hullMacroId) && e.getNumberOfClicks() < 2))
             macroController_.selectMacro(hullMacroId, false);
         else
             clearSelection();

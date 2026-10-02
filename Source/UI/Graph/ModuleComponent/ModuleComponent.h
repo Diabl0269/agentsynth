@@ -605,6 +605,11 @@ private:
     bool ctrlTogglePending = false;
     std::vector<juce::AudioProcessorGraph::NodeID> ctrlPressSelection;
 
+    // A plain press on a module that is already part of a multi-selection keeps the group so a drag
+    // moves it all; if the press turns out to be a click (no movement) mouseUp collapses the
+    // selection onto this module instead. Mirrors the Controller Surface's collapse-on-mouseUp.
+    bool plainClickCollapsePending = false;
+
     // Cmd+press arms a deferred additive-select TOGGLE and a macro-membership DRAG at
     // once, resolved at mouseUp by whether the press moved. See mouseDown/mouseUp.
     bool cmdReparentPending = false;

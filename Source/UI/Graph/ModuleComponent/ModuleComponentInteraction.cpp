@@ -665,6 +665,9 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             // (isCommandDown() is true whenever Ctrl is), so reparentArmed is true there and mouseUp
             // arbitrates by whether the drag actually crossed a hull (see mouseUp's own comment).
 
+            plainClickCollapsePending = !e.mods.isCtrlDown() && !e.mods.isCommandDown() && !e.mods.isShiftDown() &&
+                                        owner.isNodeSelected(nodeId) && owner.getSelectedNodes().size() > 1;
+
             if (e.mods.isCtrlDown()) {
                 ctrlTogglePending = true;
                 ctrlPressSelection = owner.getSelectedNodes();
@@ -868,6 +871,8 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     synth::ui::endDragCursor(*this); // first: the release below may rebuild and destroy this card
 
     const bool moved = getPosition() != dragStartPosition;
+    const bool collapseOnClick = plainClickCollapsePending && !moved;
+    plainClickCollapsePending = false;
 
     // Captured into a local BEFORE clearing the member below — mouseUp's own reparent-vs-plain-
     // finalize choice further down still needs it, and this is the ONE gate for that choice (see
@@ -903,6 +908,9 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
         owner.cancelSelectionDrag();
         owner.clearMacroDragCandidate();
         owner.getDragDropController().endDragPreview();
+        // A plain click on one member of a group picks just that module (a drag kept the group).
+        if (collapseOnClick)
+            owner.selectModule(nodeId, false);
         return;
     }
 
