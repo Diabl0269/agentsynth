@@ -328,7 +328,7 @@ the track recolours its lanes at once; text-muted on the Unassigned section). Th
 background (amber, green) is darkened toward black, and on a dark theme lightened, until it reaches a 3:1
 contrast ratio, keeping its hue. A point being dragged is accent, one the eraser has touched is error, and
 every point has a 1 px outline in the lane background so it stays distinct where it sits on the line. Where
-points crowd (a neighbour on either side closer than two handle widths on screen, as in a shape stamped at a
+points crowd (a neighbour on either side closer than two handle widths along the time axis, as in a shape stamped at a
 fine grid) their handles are not drawn, so a dense run reads as its curve; the handle under the pointer and
 the one being dragged, scrubbed or erased are always drawn, every point is still hit-tested, and zooming in
 brings the handles back (`AutomationLanes/AutomationHandleDensity.h`). Under

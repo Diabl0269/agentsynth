@@ -76,8 +76,10 @@ TEST(AutomationLanesShapePaintTest, CrowdedNeighboursHideEachOthersHandles) {
     using synth::ui::visibleHandleMask;
     const auto mask = visibleHandleMask({{0.0f, 10.0f}, {40.0f, 10.0f}, {45.0f, 10.0f}, {90.0f, 10.0f}}, 20.0f);
     EXPECT_EQ(mask, (std::vector<bool>{true, false, false, true}));
-    EXPECT_EQ(visibleHandleMask({{0.0f, 0.0f}, {5.0f, 30.0f}}, 20.0f), (std::vector<bool>{true, true}))
-        << "distance is on screen, so a steep step keeps both";
+    EXPECT_EQ(visibleHandleMask({{0.0f, 0.0f}, {5.0f, 30.0f}, {10.0f, 0.0f}}, 20.0f),
+              (std::vector<bool>{false, false, false}))
+        << "spacing is along the time axis, so a fine square's top/bottom points are crowded too";
+    EXPECT_EQ(visibleHandleMask({{0.0f, 0.0f}, {25.0f, 30.0f}}, 20.0f), (std::vector<bool>{true, true}));
 }
 
 TEST(AutomationLanesShapePaintTest, ADenseStampDrawsNoHandlesUntilZoomedIn) {
