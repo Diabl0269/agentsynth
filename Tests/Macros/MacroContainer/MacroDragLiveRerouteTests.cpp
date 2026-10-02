@@ -169,3 +169,52 @@ TEST(MacroDragLiveReroute, WithAutoDeleteOffCuttingTheOutsideLegKeepsThePort) {
 
     EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u) << "the preference keeps hand-made ports";
 }
+
+// After a drag out, the modulation runs LFO -> attenuverter -> inlet -> knob. Cutting it from the LFO
+// side (its cable or its jack) still takes the inlet and the inside half.
+TEST(MacroDragLiveReroute, AModulationReroutedByADragOutIsFullyRemovedFromTheLfoSide) {
+    for (const bool viaJack : {false, true}) {
+        SCOPED_TRACE(viaJack ? "jack" : "cable");
+        AudioEngine engine;
+        AppUndoManager undo;
+        GraphEditor editor(engine, &undo);
+        undo.setGraphEditor(&editor);
+        editor.setSize(2400, 1400);
+        auto member = addModuleAt(editor, engine, std::make_unique<WavetableOscillatorModule>(), 100, 100);
+        auto filler = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 600);
+        auto lfo = addModuleAt(editor, engine, std::make_unique<LFOModule>(), 1000, 150);
+        const auto baseNodes = engine.getGraph().getNumNodes();
+        // Connected while everything sits outside, then grouped: the modulation crosses through an inlet.
+        auto* memberComp = findComponent(editor, member);
+        juce::Slider* position = nullptr;
+        for (auto* child : memberComp->getChildren())
+            if (auto* sl = dynamic_cast<juce::Slider*>(child); sl != nullptr && sl->getComponentID() == "Position")
+                position = sl;
+        ASSERT_NE(position, nullptr);
+        editor.beginConnectionDrag(findComponent(editor, lfo), 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+        editor.endConnectionDrag(memberComp->getBounds().getPosition() + position->getBounds().getCentre());
+        editor.setSelectedNodes({member, filler});
+        const auto macroId = editor.getMacroController().groupSelectionIntoMacro(/*autoCreatePorts=*/true);
+        editor.getMacroController().setMacroCollapsed(macroId, false);
+        editor.setSelectedNodes({});
+        ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
+
+        if (viaJack) {
+            editor.disconnectPort(findComponent(editor, lfo), 0, /*isInput=*/false, /*isMidi=*/false);
+        } else {
+            std::optional<GraphEditor::VisibleCable> lfoCable;
+            for (const auto& c : editor.buildVisibleCables())
+                if (c.id.srcUid == lfo.uid)
+                    lfoCable = c;
+            ASSERT_TRUE(lfoCable.has_value());
+            editor.disconnectCable(*lfoCable);
+        }
+
+        EXPECT_TRUE(editor.getMacros().find(macroId)->ports.empty()) << "the inlet goes";
+        EXPECT_TRUE(engine.getModulationRoutings().empty()) << "the modulation goes";
+        EXPECT_EQ(engine.getGraph().getNumNodes(), baseNodes) << "no port or attenuverter left";
+        ASSERT_TRUE(undo.undo());
+        EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u) << "one Cmd+Z brings it all back";
+        EXPECT_FALSE(engine.getModulationRoutings().empty());
+    }
+}
