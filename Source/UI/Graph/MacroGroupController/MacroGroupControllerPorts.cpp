@@ -567,17 +567,34 @@ juce::String MacroGroupController::changeMacroPortShape(const juce::String& macr
                 }
         }
 
+        // Stereo <-> StereoCollapsed carries the same two raw legs on different channels (Stereo's right leg is
+        // raw kRightBase, StereoCollapsed's is raw 1): the PORT-side channel is remapped so a split or a join keeps
+        // both legs wired on both sides of the port; the other end of each edge is unchanged.
+        const bool stereoPairSwitch =
+            (oldShape == MacroPortShape::Stereo && newShape == MacroPortShape::StereoCollapsed) ||
+            (oldShape == MacroPortShape::StereoCollapsed && newShape == MacroPortShape::Stereo);
+        auto portChannelFor = [&](int oldChannel) {
+            if (!stereoPairSwitch)
+                return oldChannel;
+            if (oldShape == MacroPortShape::Stereo && oldChannel == MacroInletModule::kRightBase)
+                return 1;
+            if (oldShape == MacroPortShape::StereoCollapsed && oldChannel == 1)
+                return (int)MacroInletModule::kRightBase;
+            return oldChannel;
+        };
+
         auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
         for (const auto& e : savedEdges) {
             if (g.getNodeForId(e.otherId) == nullptr)
                 continue;
-            const bool channelStillActive = mb != nullptr && mb->mapOutputChannel(e.myChannel).role == PortRole::Audio;
+            const int portChannel = portChannelFor(e.myChannel);
+            const bool channelStillActive = mb != nullptr && mb->mapOutputChannel(portChannel).role == PortRole::Audio;
             if (!channelStillActive)
                 continue;
             if (e.oldNodeIsSource)
-                g.addConnection({{node->nodeID, e.myChannel}, {e.otherId, e.otherChannel}});
+                g.addConnection({{node->nodeID, portChannel}, {e.otherId, e.otherChannel}});
             else
-                g.addConnection({{e.otherId, e.otherChannel}, {node->nodeID, e.myChannel}});
+                g.addConnection({{e.otherId, e.otherChannel}, {node->nodeID, portChannel}});
         }
 
         // A Mono->Stereo/StereoCollapsed grow adds a raw channel the OLD Mono port never

@@ -6,6 +6,8 @@
 // ModuleComponent.h is included first (for ModuleComponent::kMacroPortWidgetHeaderY, and the JUCE module headers these
 // declarations depend on).
 
+#include "Modules/MacroInletModule.h"
+#include "Modules/MacroOutletModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
@@ -14,6 +16,7 @@
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 #include <vector>
 
 namespace detail {
@@ -81,6 +84,22 @@ inline ModuleType getType(juce::AudioProcessor* module) {
 inline bool isMacroPortType(ModuleType t) {
     return t == ModuleType::MacroInlet || t == ModuleType::MacroOutlet || t == ModuleType::MacroMidiInlet ||
            t == ModuleType::MacroMidiOutlet;
+}
+
+/** The shape of a Macro In / Macro Out port node when it is a stereo pair (Stereo = two jacks, StereoCollapsed = one
+ *  stereo jack); nullopt for any other module or port shape. Drives the "Split into Left/Right Jacks" / "Join into
+ *  One Stereo Jack" menu item and the hint in the port's tooltip. */
+inline std::optional<MacroPortShape> macroPortStereoShape(juce::AudioProcessor* module) {
+    MacroPortShape shape = MacroPortShape::Mono;
+    if (auto* inlet = dynamic_cast<MacroInletModule*>(module))
+        shape = inlet->getPortShape();
+    else if (auto* outlet = dynamic_cast<MacroOutletModule*>(module))
+        shape = outlet->getPortShape();
+    else
+        return std::nullopt;
+    if (shape == MacroPortShape::Stereo || shape == MacroPortShape::StereoCollapsed)
+        return shape;
+    return std::nullopt;
 }
 
 /** The MIDI jack's fixed y — the generic layout's own "38, below the header" convention, compacted

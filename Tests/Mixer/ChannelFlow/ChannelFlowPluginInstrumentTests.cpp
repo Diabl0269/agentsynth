@@ -87,10 +87,13 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackBuildsDefaultChannelWithNoAdsr) {
     EXPECT_EQ(findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA), nullptr);
     std::vector<juce::String> expectedMembers{nodeUuid(trackIn), nodeUuid(plugin), nodeUuid(gate),
                                               nodeUuid(eq),      nodeUuid(comp),   nodeUuid(strip)};
+    // The strip leaves the macro through its one output port, itself a member of the macro.
+    expectedMembers.push_back(nodeUuid(outletsFedByStripCFT(graph, strip).front()));
     auto actualMembers = macro.members;
     std::sort(expectedMembers.begin(), expectedMembers.end());
     std::sort(actualMembers.begin(), actualMembers.end());
-    EXPECT_EQ(actualMembers, expectedMembers) << "exactly Track In/plugin/Gate/EQ/Compressor/Strip, nothing else";
+    EXPECT_EQ(actualMembers, expectedMembers)
+        << "exactly Track In/plugin/Gate/EQ/Compressor/Strip and the strip's output port, nothing else";
 
     bool midiWired = false;
     for (const auto& c : graph.getConnections())

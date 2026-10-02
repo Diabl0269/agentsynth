@@ -85,10 +85,8 @@ TEST(ChannelFlowMakeChannelCore, ExclusiveChainAndItsOwnLfoMoveIntoTheChannelMac
     auto* master = findNodeOfTypeCFT(graph, ModuleType::Master);
     ASSERT_NE(master, nullptr);
     EXPECT_FALSE(macro->hasMember(nodeUuid(master))) << "Master stays outside the macro";
-    EXPECT_TRUE(graph.isConnected({{strip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}))
-        << "Strip -> Master stays a PLAIN edge, never a macro port";
-    EXPECT_TRUE(graph.isConnected(
-        {{strip->nodeID, ChannelStripModule::kRightBase}, {master->nodeID, MasterModule::kMixRight}}));
+    EXPECT_TRUE(stripFeedsMasterMixCFT(graph, strip, master))
+        << "Strip -> Master Mix, plain or through the macro's output port";
     EXPECT_FALSE(graph.isConnected({{rig.filterA->nodeID, 0}, {rig.output->nodeID, 0}}));
     EXPECT_TRUE(graph.isConnected({{rig.filterB->nodeID, 0}, {master->nodeID, MasterModule::kDirectLeft}}))
         << "track B keeps its own direct path, now through Master's Direct input";
@@ -153,7 +151,7 @@ TEST(ChannelFlowMakeChannelCore, MergePointBecomesItsOwnBusChannelAndTheRenderIs
     ASSERT_NE(leadStrip, nullptr);
     ASSERT_NE(busStrip, nullptr);
     ASSERT_NE(master, nullptr);
-    EXPECT_TRUE(graph.isConnected({{busStrip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}));
+    EXPECT_TRUE(stripFeedsMasterMixCFT(graph, busStrip, master));
     EXPECT_FALSE(graph.isConnected({{leadStrip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}))
         << "the track reaches Master only through the bus, never twice";
     EXPECT_TRUE(editor.nodeNeedsChannel(rig.trackInB->nodeID)) << "track B can still get its own channel";
@@ -439,7 +437,7 @@ TEST(ChannelFlowMakeChannelCore, MergeFollowedByASecondSharedEffectBoxesBothInto
     ASSERT_NE(busStrip, nullptr);
     auto* master = findNodeOfTypeCFT(graph, ModuleType::Master);
     ASSERT_NE(master, nullptr);
-    EXPECT_TRUE(graph.isConnected({{busStrip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}))
+    EXPECT_TRUE(stripFeedsMasterMixCFT(graph, busStrip, master))
         << "the bus strip sits after BOTH shared effects, not spliced in the middle";
     EXPECT_FALSE(graph.isConnected({{rig.m1->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}))
         << "m1 must not leak straight to Master now that m2 sits between it and the bus strip";

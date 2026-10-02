@@ -11,6 +11,8 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MacroSet.h"
+#include "Modules/ChannelStripModule.h"
+#include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/Hosting/PluginScanService.h"
@@ -391,4 +393,55 @@ inline bool modulatesCFT(juce::AudioProcessorGraph& graph, juce::AudioProcessorG
         }
     }
     return false;
+}
+
+// ============================================================================
+// Strip -> Master Mix, plain or through the track macro's output port.
+// Core builds Strip -> Master Mix as two plain edges; the app then moves them behind ONE outlet of the
+// strip's macro, so app-level tests accept either and the dedicated tests pin the port.
+// ============================================================================
+
+// Every Macro Out node the strip's main legs (ch0 / kRightBase) feed.
+inline std::vector<juce::AudioProcessorGraph::Node*> outletsFedByStripCFT(juce::AudioProcessorGraph& graph,
+                                                                          juce::AudioProcessorGraph::Node* strip) {
+    std::vector<juce::AudioProcessorGraph::Node*> out;
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.nodeID != strip->nodeID || c.destination.isMIDI())
+            continue;
+        auto* dest = graph.getNodeForId(c.destination.nodeID);
+        if (isModuleOfTypeCFT(dest, ModuleType::MacroOutlet) && std::find(out.begin(), out.end(), dest) == out.end())
+            out.push_back(dest);
+    }
+    return out;
+}
+
+// True when `strip`'s stereo pair reaches Master Mix L / Mix R -- directly, or through one macro outlet. `viaOutlet`
+// (optional) reports which.
+inline bool stripFeedsMasterMixCFT(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node* strip,
+                                   juce::AudioProcessorGraph::Node* master, bool* viaOutlet = nullptr) {
+    if (strip == nullptr || master == nullptr)
+        return false;
+    bool through = false;
+    for (const auto [stripLeg, mixLeg] :
+         {std::pair<int, int>{0, MasterModule::kMixLeft}, {ChannelStripModule::kRightBase, MasterModule::kMixRight}}) {
+        if (graph.isConnected({{strip->nodeID, stripLeg}, {master->nodeID, mixLeg}}))
+            continue;
+        bool found = false;
+        for (const auto& c : graph.getConnections()) {
+            if (c.source.nodeID != strip->nodeID || c.source.channelIndex != stripLeg)
+                continue;
+            auto* dest = graph.getNodeForId(c.destination.nodeID);
+            if (!isModuleOfTypeCFT(dest, ModuleType::MacroOutlet))
+                continue;
+            for (int portChannel = 0; portChannel < 8 && !found; ++portChannel)
+                found = c.destination.channelIndex == portChannel &&
+                        graph.isConnected({{dest->nodeID, portChannel}, {master->nodeID, mixLeg}});
+        }
+        if (!found)
+            return false;
+        through = true;
+    }
+    if (viaOutlet != nullptr)
+        *viaOutlet = through;
+    return true;
 }

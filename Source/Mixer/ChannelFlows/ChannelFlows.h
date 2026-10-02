@@ -47,7 +47,7 @@ struct DefaultChannelLayout {
  * (bypassed) -> EQ (bypassed) -> Compressor (bypassed) -> Channel Strip (Stereo) -> Master (Mix),
  * after `source`. See
  * ChannelFlowsDefaultChannel.cpp for the channel-numbering derivation, the Master-splice ordering,
- * and why Strip->Master is a plain edge.
+ * and why Core builds Strip->Master as a plain edge (the app then moves it behind the track macro's output port).
  *
  * NO UNDO — a plain graph mutation; the caller must already be inside its own undo transaction.
  *

@@ -318,6 +318,17 @@ juce::PopupMenu ModuleComponent::buildMacroPortContextMenu() {
         const juce::String uuid = ownership.port->nodeUuid;
         m.addItem("Rename Port...", [this, macroId, uuid] { owner.promptRenameMacroPort(macroId, uuid); });
         m.addItem("Configure I/O...", [this, macroId] { owner.promptConfigureMacroIO(macroId); });
+        // A stereo port switches between one stereo jack and two (Left/Right) jacks in one undo step; both legs stay
+        // wired on both sides of the port (MacroGroupController::changeMacroPortShape).
+        if (const auto shape = macroPortStereoShape(module);
+            shape.has_value() && ownership.port->kind == synth::MacroPortKind::AudioCV) {
+            const bool split = *shape == MacroPortShape::Stereo;
+            m.addItem(split ? "Join into One Stereo Jack" : "Split into Left/Right Jacks",
+                      [this, macroId, uuid, split] {
+                          owner.getMacroController().changeMacroPortShape(
+                              macroId, uuid, split ? MacroPortShape::StereoCollapsed : MacroPortShape::Stereo, 1);
+                      });
+        }
         m.addSeparator();
         // Drops the cable by default, splicing it back together only when the "splice the
         // cable back" preference is on — MacroGroupController::deleteMacroPortManually, the SAME

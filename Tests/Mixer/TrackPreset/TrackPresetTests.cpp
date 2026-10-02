@@ -50,8 +50,8 @@ TEST(TrackPreset, InsertingTwiceProducesTwoIndependentCopies) {
     const auto second = synth::TrackPresetManager::insertTrackPreset(preset, target, {900, 0});
 
     // Track In + Oscillator + Filter + the default Gate -> EQ -> Compressor -> Channel Strip chain
-    // makeChannelFromNode folds the region into (the default channel chain).
-    ASSERT_EQ(first.size(), 7u);
+    // makeChannelFromNode folds the region into (the default channel chain), + the strip's output port.
+    ASSERT_EQ(first.size(), 8u);
     EXPECT_EQ(second.size(), first.size());
     EXPECT_EQ(countNodesOfTypeCFT(target, ModuleType::Oscillator), 2);
     EXPECT_EQ(countNodesOfTypeCFT(target, ModuleType::Filter), 2);

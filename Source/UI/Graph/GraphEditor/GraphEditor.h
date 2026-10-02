@@ -414,6 +414,10 @@ public:
     /** "Make channel" for the chain starting at `source`; boxes it into a new collapsed macro. */
     bool makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, const juce::String& channelName);
     bool nodeNeedsChannel(juce::AudioProcessorGraph::NodeID source) const;
+    /** Moves a channel strip's Master-bound edges behind its track macro's output port, split into two jacks when the
+     *  "Split Left/Right jacks" preference is on. No undo of its own: call inside the caller's undo transaction,
+     *  before updateComponents(). */
+    void routeChannelOutputThroughMacroPort(const juce::String& stripUuid);
     bool isChannelMacroForTrack(const juce::String& memberUuid) const;
     juce::AudioProcessorGraph::NodeID channelSourceForSelection() const;
     void requestMakeChannel(juce::AudioProcessorGraph::NodeID source);

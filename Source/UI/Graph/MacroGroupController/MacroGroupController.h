@@ -411,6 +411,14 @@ public:
     /** Runs `mutation` with auto-ports applied; no undo of its own, call updateComponents() after. */
     bool applyProgrammaticConnectionChange(bool autoCreatePorts, const std::function<bool()>& mutation);
 
+    /** Moves the Channel Strip `stripUuid`'s Master-bound edges (both legs) behind ONE outlet of the strip's macro,
+     *  so a track's sound visibly leaves through the card's output port: a single stereo jack, or two jacks when
+     *  `splitJacks` (the "Split Left/Right jacks" preference). Sweeps a preset's captured one-sided outlet of the
+     *  strip first; sends and strip -> bus edges stay plain. No-op when the strip is in no macro. No undo of its
+     *  own: call inside the caller's undo transaction, before updateComponents()
+     *  (docs/macros/auto-ports.md#track-outputs). */
+    void routeStripOutputThroughMacroPort(const juce::String& stripUuid, bool splitJacks);
+
     // ---- General-purpose node-uuid plumbing --------------------------------------------------
     //
     // These two are general graph-uuid lookups, not macro-specific state — they happen to have
@@ -435,7 +443,8 @@ public:
     bool macroHasMuteEligibleMember(const juce::String& macroId) const;
 
 private:
-    void routeFreshEdgesThroughMacroPorts(std::set<juce::AudioProcessorGraph::Connection> fresh);
+    void routeFreshEdgesThroughMacroPorts(std::set<juce::AudioProcessorGraph::Connection> fresh,
+                                          MacroPortShape stereoShape = MacroPortShape::Stereo);
     GraphCanvasHost& host_;
     JUCE_DECLARE_WEAK_REFERENCEABLE(MacroGroupController)
 

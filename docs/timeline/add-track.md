@@ -160,10 +160,12 @@ graph+timeline transaction with a third domain, the macro set:
    reusing the existing singleton after the first channel; the same "Rec Tap when spliced, else Audio
    Output" target the old direct wire used) and wires the strip into Master's Mix input.
 3. `GraphEditor::addMacroForMembers` boxes `{Track Audio, Gate, EQ, Compressor, Channel Strip}` into ONE
-   collapsed macro named after the track. **Master stays outside the macro**, and the
-   Strip → Master cable is left a plain graph edge, deliberately never a macro port — see
-   [`docs/mixer/mixer.md`](../mixer/mixer.md#the-factory-default-chain) for why: the Mix-vs-Direct classification `spliceMasterNode`
-   does would break behind a `MacroOutlet`.
+   collapsed macro named after the track. **Master stays outside the macro.** Core builds the
+   Strip → Master cable as a plain graph edge; the app then moves it behind ONE output port of the macro
+   (`GraphEditor::routeChannelOutputThroughMacroPort`, a single stereo jack, or two with the Split
+   Left/Right jacks preference), so the track's sound visibly leaves through its own card — see
+   [`docs/mixer/mixer.md`](../mixer/mixer.md#the-factory-default-chain). The Mix-vs-Direct classification
+   `spliceMasterNode` does looks through macro ports to the strip behind them.
 4. Bind the track to the `Track Audio` node's uuid and give it the palette colour for its index.
 
 `GraphEditor::updateComponents()` runs **inside** the transaction's mutation, not after, so

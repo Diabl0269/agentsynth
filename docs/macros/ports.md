@@ -97,6 +97,16 @@ can reach, or sums into the SAME mono jack the peer already exposes when it does
 raw channel, matching how a collapsed FX jack's own dual-raw-leg pair carries one cable. The whole
 thing — delete, create, replay, auto-wire — is still the ONE undo step the modal promises.
 
+### Switching a stereo port between one jack and two
+
+A stereo port can be switched without losing a cable. The port's right-click menu offers **Split into
+Left/Right Jacks** (`StereoCollapsed` to `Stereo`) or **Join into One Stereo Jack** (`Stereo` to
+`StereoCollapsed`); the menu is reachable from the keyboard like every port menu, and the port's tooltip
+says so ("Right-click to split or join the left/right jacks"). It calls `changeMacroPortShape`, which
+swaps the node as above and, for this one pair of shapes, remaps the PORT-side raw channel of every cable
+on both sides of the port (`Stereo`'s right leg is raw `kRightBase`, `StereoCollapsed`'s is raw 1), so
+both legs stay wired; the other end of each cable is unchanged. One undo step.
+
 There is deliberately **no shape inheritance**. Inheritance is the right rule for Dual I/O on a real
 DSP module (`ModuleBase::hasStereoOutputPairShape` derives it from channel counts, never from a
 per-module registration) and the wrong frame for a node constructed on demand: a port is created

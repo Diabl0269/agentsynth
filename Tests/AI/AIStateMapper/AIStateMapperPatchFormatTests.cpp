@@ -161,7 +161,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Macros", "bypassed, macro1, macro10, macro11, macro12, macro13, macro14, macro15, macro16, macro2, macro3, "
                    "macro4, macro5, macro6, macro7, macro8, macro9, macroBipolar, macroCount, muted"},
         // The mix bus: a fader and a mute, no pan.
-        {"Master", "bypassed, gain, muted"},
+        {"Master", "bypassed, dualIO, gain, muted"},
         {"Math", "bypassed, clip, muted"},
         {"Midi Input", ""},
         {"Mod Slot", "amount, bypassed"},
