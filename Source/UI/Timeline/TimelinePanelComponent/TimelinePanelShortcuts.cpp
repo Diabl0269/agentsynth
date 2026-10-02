@@ -30,6 +30,8 @@ std::vector<std::pair<juce::Component*, juce::String>> TimelinePanelComponent::g
     std::vector<std::pair<juce::Component*, juce::String>> targets;
     for (auto tool : kAllEditTools)
         targets.emplace_back(getToolButton(tool), toolActionIdFor(tool));
+    for (auto shape : kAllDrawShapes)
+        targets.emplace_back(shapeStrip_.getButton(shape), "timelineShape" + juce::String(drawShapeName(shape)));
     targets.emplace_back(&snapToggleButton_, "timelineSnapToggle");
     targets.emplace_back(&followPlayheadButton_, "timelineFollowPlayheadToggle");
     return targets;
@@ -66,6 +68,10 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
 
     // Cmd+Left / Cmd+Right glide the cursor while held (TimelinePanelCursorGlide.cpp).
     if (handleCursorGlideKey(key))
+        return true;
+
+    // Shift+digit shapes, Draw-again and the lane range's keys, before the bare tool digits below.
+    if (handleDrawShapeKey(key))
         return true;
 
     // Number keys pick a tool, BEFORE the letter keys below.

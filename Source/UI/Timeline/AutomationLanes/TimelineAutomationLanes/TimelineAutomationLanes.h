@@ -4,6 +4,8 @@
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/LaneRangeSelection.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorBand.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 #include "UI/Timeline/EditTool.h"
@@ -106,6 +108,19 @@ public:
     /** How many of `track`'s lanes are shown as amount bands rather than as lane rows. */
     int hiddenLaneCount(synth::TrackId track) const;
 
+    // ---- Draw shapes and the lane range (TimelineAutomationLanesShapes.cpp) ----
+    void setDrawShape(DrawShape shape);
+    /** The one lane range across every lane. */
+    LaneRangeSelection& getLaneRange() noexcept { return laneRange_; }
+    /** True while a lane range with width sits on a lane that is on screen. */
+    bool hasLaneRange() const;
+    /** Stamps `shape` over the lane range (one undo step); false when nothing changed. */
+    bool stampShapeOnLaneRange(DrawShape shape);
+    /** Removes the points inside the lane range (one undo step); false when nothing changed. */
+    bool deleteLaneRangePoints();
+    /** Fired after the lane range changes in any way. */
+    std::function<void()> onLaneRangeChanged;
+
     /** Fired after a fold toggle or a change in which lanes are visible, so the panel relayouts. */
     std::function<void()> onLayoutChanged;
     /** Fired when a track's "+ Add automation..." row is pressed; the panel opens the picker on it. */
@@ -138,6 +153,7 @@ private:
     void syncAddRows();
     void refreshPooled();
     juce::Colour unassignedColour() const;
+    void laneRangeChanged();
 
     TimelineViewState& viewState_;
     juce::Component& headerParent_;
@@ -147,6 +163,8 @@ private:
     AppUndoManager* undo_ = nullptr;
     synth::TransportService* transport_ = nullptr;
     EditTool editTool_ = EditTool::Select;
+    DrawShape drawShape_ = DrawShape::Free;
+    LaneRangeSelection laneRange_;
 
     std::set<synth::TrackId> expanded_;            // MIDI/Audio tracks the user opened
     std::set<synth::TrackId> collapsedUnassigned_; // Automation tracks the user closed

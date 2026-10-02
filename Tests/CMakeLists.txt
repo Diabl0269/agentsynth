@@ -218,6 +218,7 @@ add_executable(Tests
     UI/Chrome/ShortcutHint/ShortcutHintOverlayTests.cpp
     UI/Chrome/ShortcutHint/ShortcutHintMainWindowTests.cpp
     UI/Chrome/ShortcutHint/ShortcutHintModifierTests.cpp
+    UI/Chrome/ShortcutHint/ShortcutHintShiftTests.cpp
     UI/Graph/GraphEditor/GraphEditorTests.cpp
     UI/Graph/GraphEditor/GraphEditorModDropHintTests.cpp
     UI/Graph/GraphEditor/GraphEditorKnobAnchorTests.cpp
@@ -556,6 +557,8 @@ add_executable(Tests
     UI/Timeline/AutomationLanes/AutomationLanesAddRowTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesAddMainTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesEditingTests.cpp
+    UI/Timeline/AutomationLanes/AutomationLanesShapeTests.cpp
+    UI/Timeline/AutomationLanes/LaneShapeGeneratorTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesUnassignedTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesLoadTests.cpp
     UI/Timeline/AutomationLanes/AutomationLanesColourCursorTests.cpp

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AutomationLanes/LaneShapes/AutomationLaneShapeGesture.h"
 #include "EditTool.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelineViewState.h"
@@ -63,12 +64,14 @@ public:
     void setUndoManager(AppUndoManager* undoManager) noexcept { undoManager_ = undoManager; }
     AppUndoManager* getUndoManager() const noexcept { return undoManager_; }
     void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
+    synth::TransportService* getTransport() const noexcept { return transport_; }
 
     // Which lane this canvas shows/edits. Invalid (default-constructed) means "nothing to show" —
     // paint() then draws only the grid backdrop. Resets any in-flight drag.
     void setActiveLane(synth::LaneId id) noexcept {
         laneId_ = id;
         dragMode_ = DragMode::None;
+        shapeGesture_.cancel();
         repaint();
     }
     synth::LaneId getActiveLane() const noexcept { return laneId_; }
@@ -78,6 +81,12 @@ public:
     Tool getTool() const noexcept { return tool_; }
     // Follows the timeline's edit tool (automationToolFor), re-read at every mouse-down for Shift.
     void setEditTool(EditTool tool) noexcept;
+    // What the Draw tool puts down (AutomationLaneShapeGesture): the pen, a line, or a stamped shape.
+    void setDrawShape(DrawShape shape) noexcept;
+    DrawShape getDrawShape() const noexcept { return shapeGesture_.getDrawShape(); }
+    // The shared lane range (non-owning, may be null) and this lane's shape/range gestures.
+    void setLaneRange(LaneRangeSelection* range) noexcept { shapeGesture_.setLaneRange(range); }
+    AutomationLaneShapeGesture& getShapeGesture() noexcept { return shapeGesture_; }
     // The curve's and points' colour; unset = the theme's modWire. Drawn pushed to a readable contrast on the lane
     // background.
     void setCurveColour(juce::Colour colour);
@@ -101,7 +110,7 @@ public:
     // resolve — what a test uses to compute where to synthesize a mouse event, mirroring
     // TimelineClipLaneArea::getClipRect / PianoRollComponent::getNoteRect.
     juce::Rectangle<int> getHandleRectForTest(double beat) const;
-    bool isDragActiveForTest() const noexcept { return dragMode_ != DragMode::None; }
+    bool isDragActiveForTest() const noexcept { return dragMode_ != DragMode::None || shapeGesture_.isActive(); }
 
     // Pure value<->y mapping for the active lane's current range (no drag state involved) — what a
     // test uses to place a synthetic mouse event at a target value.
@@ -191,6 +200,8 @@ private:
 
     // ---- Eraser preview (beats of the handles touched so far this drag) ----
     std::set<double> erasedBeats_;
+
+    AutomationLaneShapeGesture shapeGesture_{*this, viewState_};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AutomationLaneEditor)
 };

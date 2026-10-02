@@ -27,9 +27,9 @@ struct DockHintInfo {
     std::vector<DockTabHint> tabs; // offered in the strip, in tab order (detached tabs excluded)
 };
 
-// ShortcutHintOverlay: hold Cmd (or, on macOS, Ctrl; or Option/Alt) on its own for ~500 ms and a key-cap
-// bubble appears on every visible registered button (Ctrl too); Option shows only the buttons whose live
-// binding uses Option. Release and they fade out. Any other key, a mouse click or a loss of
+// ShortcutHintOverlay: hold Cmd (or, on macOS, Ctrl; or Option/Alt; or Shift) on its own for ~500 ms and a
+// key-cap bubble appears on every visible registered button (Ctrl too); Option and Shift show only the
+// buttons whose live binding uses that modifier. Release and they fade out. Any other key, a mouse click or a loss of
 // window focus cancels at once. A full-window child of the host that paints only while showing and
 // never takes a click (docs/control/shortcuts.md#shortcut-hints).
 //
@@ -107,7 +107,7 @@ private:
         juce::String fallbackActionId;              // shown while actionId is unbound
     };
     // The one modifier whose hold drives the hints; None = no hint modifier, or more than one.
-    enum class HintModifier { None, Cmd, Ctrl, Alt };
+    enum class HintModifier { None, Cmd, Ctrl, Alt, Shift };
 
     void timerCallback() override;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;

@@ -17,7 +17,9 @@ TimelineAutomationLanes::Bodies::Bodies() {
 TimelineAutomationLanes::TimelineAutomationLanes(TimelineViewState& viewState, juce::Component& headerParent)
     : viewState_(viewState)
     , headerParent_(headerParent)
-    , bodies_(std::make_unique<Bodies>()) {}
+    , bodies_(std::make_unique<Bodies>()) {
+    laneRange_.onChanged = [this] { laneRangeChanged(); };
+}
 
 // Pooled children are removed from their parents before they die, so neither parent ever holds a
 // dangling child pointer during the owner's own teardown.
@@ -40,6 +42,7 @@ void TimelineAutomationLanes::setTimelineDoc(synth::TimelineDoc* doc) {
     editors_.clear();
     expanded_.clear();
     collapsedUnassigned_.clear();
+    laneRange_.clear();
     doc_ = doc;
     sync();
 }
@@ -168,6 +171,8 @@ void TimelineAutomationLanes::syncPools() {
             editor->setUndoManager(undo_);
             editor->setTransport(transport_);
             editor->setEditTool(editTool_);
+            editor->setDrawShape(drawShape_);
+            editor->setLaneRange(&laneRange_);
             editor->setActiveLane(id);
             editor->onFocused = [this, id] {
                 if (onLaneFocused)

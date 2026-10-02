@@ -29,7 +29,13 @@ void AutomationLaneEditor::setTool(Tool tool) noexcept {
 
 void AutomationLaneEditor::setEditTool(EditTool tool) noexcept {
     editTool_ = tool;
-    tool_ = automationToolFor(tool, false);
+    tool_ = automationToolFor(tool, false, getDrawShape());
+}
+
+void AutomationLaneEditor::setDrawShape(DrawShape shape) noexcept {
+    shapeGesture_.setDrawShape(shape);
+    if (editTool_.has_value())
+        tool_ = automationToolFor(*editTool_, false, shape);
 }
 
 void AutomationLaneEditor::setCurveColour(juce::Colour colour) {
@@ -196,9 +202,11 @@ void AutomationLaneEditor::paint(juce::Graphics& g) {
         return;
 
     paintBipolarGuide(g, *this, lane->range.minValue, lane->range.maxValue, (float)valueToY(0.0));
+    shapeGesture_.paintUnderCurve(g);
     paintCommittedCurve(g, *lane);
     paintToolPreview(g);
     paintHandles(g, *lane);
+    shapeGesture_.paintOverCurve(g);
 }
 
 void AutomationLaneEditor::paintGridBackdrop(juce::Graphics& g) {
@@ -358,11 +366,15 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
 
     if (!e.mods.isLeftButtonDown())
         return;
+    if (shapeGesture_.mouseDown(e, editTool_)) {
+        repaint();
+        return;
+    }
 
     // Shift is read here rather than when the tool was picked: the Draw tool draws a line only
     // while Shift is held as the gesture starts.
     if (editTool_.has_value())
-        tool_ = automationToolFor(*editTool_, e.mods.isShiftDown());
+        tool_ = automationToolFor(*editTool_, e.mods.isShiftDown(), getDrawShape());
     mouseDownPos_ = pos;
 
     switch (tool_) {
@@ -408,7 +420,7 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
 }
 
 void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
-    if (doc_ == nullptr || !laneId_.isValid())
+    if (doc_ == nullptr || !laneId_.isValid() || shapeGesture_.mouseDrag(e))
         return;
     const auto pos = e.getPosition();
 
@@ -440,7 +452,9 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
     repaint();
 }
 
-void AutomationLaneEditor::mouseUp(const juce::MouseEvent&) {
+void AutomationLaneEditor::mouseUp(const juce::MouseEvent& e) {
+    if (shapeGesture_.mouseUp(e))
+        return;
     if (doc_ == nullptr || !laneId_.isValid()) {
         dragMode_ = DragMode::None;
         return;
@@ -586,6 +600,8 @@ void AutomationLaneEditor::mouseDoubleClick(const juce::MouseEvent& e) {
 
 //==============================================================================
 bool AutomationLaneEditor::keyPressed(const juce::KeyPress& key) {
+    if (shapeGesture_.keyPressed(key))
+        return true;
     if (key == juce::KeyPress::escapeKey) {
         if (dragMode_ != DragMode::None) {
             dragMode_ = DragMode::None;

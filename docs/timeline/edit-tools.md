@@ -78,7 +78,9 @@ one un-toggles the rest, and each carries a tooltip with the digit (`"Split (3)"
 
 Laid out left-to-right in `kAllEditTools` order (1, 2, 3, 4, 5, 7, 8) immediately left of the snap
 combo and toggle in the transport bar: both are "how the next edit behaves" chrome, so they read as
-one group without pushing the transport controls off their left-aligned home.
+one group without pushing the transport controls off their left-aligned home. While Draw is the active
+tool, the Draw shape buttons slide out between the Draw button and the follow-playhead toggle
+([automation](automation.md#draw-shapes-and-the-lane-range)).
 
 `applyToolStripTheme()` (constructor plus `lookAndFeelChanged()`) re-applies each icon from
 `AppLookAndFeel::getIcon` and sets the active-tool highlight as a **background colour**
