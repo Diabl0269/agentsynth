@@ -1,6 +1,6 @@
 // MainComponentModulators.cpp -- the TrackHeaderHost side of a timeline lane's modulators: the timeline
 // has no graph, so this is where a lane's (node, parameter) is turned into the routings into its CV jack,
-// where "Add LFO modulator" / "Remove modulator" reach the GraphEditor, and where a modulator row's
+// where "Add modulator..." / "Remove modulator" reach the GraphEditor, and where a modulator row's
 // controls read and write live parameters through the canvas knobs' own undo path; and the load-time migration
 // of a project's retired LFO sections lanes to amount lanes.
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -14,6 +14,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h"
+#include "UI/Timeline/AutomationLanes/Modulators/RemoveLfoConfirm.h"
 
 namespace {
 juce::String uuidOf(juce::AudioProcessorGraph::Node* node) {
@@ -27,6 +28,19 @@ synth::ui::ResolvedRouting resolveThroughPorts(AudioEngine& engine, GraphEditor&
     return synth::ui::resolveRouting(engine.getGraph(), routing, [&editor](juce::AudioProcessorGraph::NodeID id) {
         return editor.getMacroController().nodeIsMacroPort(id);
     });
+}
+
+// "<module title> <parameter>" for a routing's real destination ("Pad oscillator detune").
+juce::String destinationName(juce::AudioProcessorGraph& graph, const synth::ui::RoutingEndpoint& dest) {
+    auto* node = graph.getNodeForId(dest.node);
+    if (node == nullptr)
+        return {};
+    auto title = synth::moduleTitle(*node);
+    if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+        for (const auto& t : module->getModulationTargets())
+            if (t.channelIndex == dest.channel && t.name.isNotEmpty())
+                return title + " " + t.name;
+    return title;
 }
 } // namespace
 
@@ -81,10 +95,87 @@ juce::String MainComponent::addLfoModulator(const juce::String& nodeUuid, const 
     return uuidOf(audioEngine.getGraph().getNodeForId(lfoId));
 }
 
+// Every LFO in the project for the "Add modulator..." picker, in graph order: where it lives (the innermost macro
+// it sits in), what it already moves (each routing's real destination, macro ports looked through) and whether it
+// already moves (`nodeUuid`, `paramId`) itself. Names and uuids are read from the live graph, never cached.
+std::vector<synth::ui::TrackHeaderHost::LfoChoice> MainComponent::getLfoChoices(const juce::String& nodeUuid,
+                                                                                const juce::String& paramId) {
+    std::vector<synth::ui::TrackHeaderHost::LfoChoice> result;
+    auto& graph = audioEngine.getGraph();
+    auto* target = findNodeByUuid(nodeUuid);
+    const int raw = target != nullptr ? graphEditor.modulationChannelFor(target->nodeID, paramId) : -1;
+    for (auto* node : graph.getNodes()) {
+        if (dynamic_cast<LFOModule*>(node->getProcessor()) == nullptr)
+            continue;
+        synth::ui::TrackHeaderHost::LfoChoice choice;
+        choice.uuid = uuidOf(node);
+        choice.name = synth::moduleTitle(*node);
+        if (const auto* macro = graphEditor.getMacros().findByMember(choice.uuid))
+            choice.macroName = macro->name;
+        for (const auto& r : audioEngine.getModulationRoutings()) {
+            if (!r.hasSource || !r.hasDest || r.role != PortRole::ModCV)
+                continue;
+            const auto real = resolveThroughPorts(audioEngine, graphEditor, r);
+            if (real.source.node != node->nodeID)
+                continue;
+            if (target != nullptr && real.dest.node == target->nodeID && real.dest.channel == raw)
+                choice.movesThisParameter = true;
+            choice.targets.push_back(destinationName(graph, real.dest));
+        }
+        result.push_back(std::move(choice));
+    }
+    return result;
+}
+
+// Both nodes are found again by uuid; the host call is one undo step and adds no card.
+bool MainComponent::connectModulator(const juce::String& lfoUuid, const juce::String& nodeUuid,
+                                     const juce::String& paramId) {
+    auto* lfo = findNodeByUuid(lfoUuid);
+    auto* target = findNodeByUuid(nodeUuid);
+    return lfo != nullptr && target != nullptr &&
+           graphEditor.connectExistingLfoModulator(lfo->nodeID, target->nodeID, paramId);
+}
+
 // The row names its routing by uuids (node ids do not survive an undo restore), so it is looked up
 // again in the live graph, by the real modulator and parameter (ports looked through). Only an LFO source is
-// taken with the routing.
+// taken with the routing. When that would delete the LFO (this routing is its last destination) the person is
+// asked first, unless they switched the question off; the removal itself runs from the answer.
 void MainComponent::removeModulator(const synth::ui::ModulatorInfo& modulator) {
+    auto* target = findNodeByUuid(modulator.targetUuid);
+    auto* lfo = modulator.isLfo ? findNodeByUuid(modulator.sourceUuid) : nullptr;
+    const auto* settings = appProperties.getUserSettings();
+    const bool ask = settings == nullptr || settings->getBoolValue(synth::ui::kAskBeforeRemovingLfoKey, true);
+    if (target == nullptr || lfo == nullptr || !ask || lfoMovesMoreThanOneRouting(lfo->nodeID)) {
+        performRemoveModulator(modulator);
+        return;
+    }
+    auto* param = findParameterByID(target->getProcessor(), modulator.paramId);
+    const auto targetName = param != nullptr ? param->getName(64) : modulator.paramId;
+    juce::Component::SafePointer<MainComponent> safeThis(this);
+    synth::ui::confirmRemoveLfo(synth::ui::removeLfoConfirmText(synth::moduleTitle(*lfo), targetName),
+                                [safeThis, modulator](bool confirmed, bool dontAskAgain) {
+                                    auto* self = safeThis.getComponent();
+                                    if (self == nullptr || !confirmed)
+                                        return;
+                                    if (dontAskAgain)
+                                        if (auto* userSettings = self->appProperties.getUserSettings()) {
+                                            userSettings->setValue(synth::ui::kAskBeforeRemovingLfoKey, "0");
+                                            userSettings->saveIfNeeded();
+                                        }
+                                    self->performRemoveModulator(modulator);
+                                });
+}
+
+// True when `lfoId` drives more than one routing, so removing one of them leaves the LFO in place.
+bool MainComponent::lfoMovesMoreThanOneRouting(juce::AudioProcessorGraph::NodeID lfoId) {
+    int count = 0;
+    for (const auto& r : audioEngine.getModulationRoutings())
+        if (r.hasSource && r.hasDest && resolveThroughPorts(audioEngine, graphEditor, r).source.node == lfoId)
+            ++count;
+    return count > 1;
+}
+
+void MainComponent::performRemoveModulator(const synth::ui::ModulatorInfo& modulator) {
     auto* target = findNodeByUuid(modulator.targetUuid);
     if (target == nullptr)
         return;

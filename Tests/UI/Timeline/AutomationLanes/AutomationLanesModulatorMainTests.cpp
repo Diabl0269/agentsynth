@@ -98,7 +98,7 @@ TEST_F(TimelinePanelIntegrationTest, AParameterWithNoCvJackCannotBeModulated) {
     juce::PopupMenu::MenuItemIterator it(menu, true);
     const juce::PopupMenu::Item* add = nullptr;
     while (it.next())
-        if (it.getItem().itemID == synth::ui::AutomationLaneHeaderComponent::kAddLfoModulatorMenuId)
+        if (it.getItem().itemID == synth::ui::AutomationLaneHeaderComponent::kAddModulatorMenuId)
             add = &it.getItem();
     ASSERT_NE(add, nullptr);
     EXPECT_FALSE(add->isEnabled);

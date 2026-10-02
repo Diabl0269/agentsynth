@@ -27,6 +27,50 @@ void PreferencesSettingsTab::persistDoubleClickSpansLocators(bool enabled) {
     appProperties.getUserSettings()->saveIfNeeded();
 }
 
+bool PreferencesSettingsTab::isAskBeforeRemovingLfoEnabled() const {
+    return askBeforeRemovingLfoToggle.getToggleState();
+}
+
+void PreferencesSettingsTab::setAskBeforeRemovingLfoEnabled(bool enabled) {
+    askBeforeRemovingLfoToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistAskBeforeRemovingLfo(enabled);
+}
+
+// The toggles after the loop-selection one: double-click-spans-locators and the LFO-removal question, each
+// DEFAULT TRUE like the rows around them and read at use time (TimelineClipLaneArea, MainComponent::removeModulator).
+void PreferencesSettingsTab::initTimelineEditingToggles() {
+    contentHost.addAndMakeVisible(doubleClickSpansLocatorsToggle);
+    // DEFAULT TRUE, same idiom as the rows above.
+    doubleClickSpansLocatorsToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue(kTimelineDoubleClickSpansLocatorsKey, true),
+        juce::dontSendNotification);
+    doubleClickSpansLocatorsToggle.setTooltip(
+        "When on (the default), double-clicking empty lane space inside the loop locators creates a clip spanning "
+        "them. Outside the locators - or with no locators set - you still get a one-bar clip. Turn it off to always "
+        "get one bar.");
+    doubleClickSpansLocatorsToggle.onClick = [this] {
+        persistDoubleClickSpansLocators(doubleClickSpansLocatorsToggle.getToggleState());
+    };
+
+    contentHost.addAndMakeVisible(askBeforeRemovingLfoToggle);
+    askBeforeRemovingLfoToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue(kTimelineAskBeforeRemovingLfoKey, true),
+        juce::dontSendNotification);
+    askBeforeRemovingLfoToggle.setTooltip(
+        "When on (the default), removing the last modulator an LFO has asks first, because it also deletes the LFO "
+        "and its settings. Turn it off to remove it straight away; Cmd+Z / Ctrl+Z still brings it back. An LFO that "
+        "moves other things never asks.");
+    askBeforeRemovingLfoToggle.onClick = [this] {
+        persistAskBeforeRemovingLfo(askBeforeRemovingLfoToggle.getToggleState());
+    };
+}
+
+void PreferencesSettingsTab::persistAskBeforeRemovingLfo(bool enabled) {
+    // Nothing live to push: MainComponent::removeModulator reads this key at use time (on the next removal).
+    appProperties.getUserSettings()->setValue(kTimelineAskBeforeRemovingLfoKey, enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+}
+
 void PreferencesSettingsTab::persistLoopSelectionArms(bool enabled) {
     // Read at use time by TimelinePanelComponent's P handler and MainComponent's
     // onLoopRangeRequested — nothing live to push here, unlike the GraphEditor settings above.
@@ -98,15 +142,19 @@ void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool
                                                   const GroupMatchFn& groupMatches, const SetVisibleFn& setGroupVisible,
                                                   const BeginGroupFn& beginGroup) {
     enterCategory(Category::Timeline, y);
-    // Group 5: the two loop-locator toggles (no divider between them).
+    // Group 5: the two loop-locator toggles and the LFO-removal question (no divider between them).
     {
-        const bool visible = groupMatches({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle});
-        setGroupVisible({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle}, visible);
+        const bool visible =
+            groupMatches({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle, &askBeforeRemovingLfoToggle});
+        setGroupVisible({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle, &askBeforeRemovingLfoToggle},
+                        visible);
         beginGroup(visible);
         if (visible) {
             loopSelectionArmsToggle.setBounds({0, y, contentWidth, 24});
             y += 34;
             doubleClickSpansLocatorsToggle.setBounds({0, y, contentWidth, 24});
+            y += 34;
+            askBeforeRemovingLfoToggle.setBounds({0, y, contentWidth, 24});
             y += 24;
         }
         pendingDivider = pendingDivider || visible;

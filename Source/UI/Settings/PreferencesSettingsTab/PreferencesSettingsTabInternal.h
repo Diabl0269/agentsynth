@@ -49,6 +49,11 @@ constexpr const char* kPianoRollKeyLabelsKey = "pianoRollKeyLabels";
 // for anyone who wants the plain one-bar clip back.
 constexpr const char* kTimelineDoubleClickSpansLocatorsKey = "timelineDoubleClickSpansLocators";
 
+// Read at use time by MainComponent::removeModulator (kAskBeforeRemovingLfoKey in RemoveLfoConfirm.h is the
+// same string, duplicated for the reason above). DEFAULT TRUE: removing the last thing an LFO moves deletes the
+// LFO and its settings, so the timeline asks first; the dialog's "Don't ask again" box turns this off too.
+constexpr const char* kTimelineAskBeforeRemovingLfoKey = "timelineAskBeforeRemovingLfo";
+
 // Autosave. Read at use time by MainComponent::maybeAutosave every timerCallback() tick,
 // duplicated here for the same reason kNaturalScrollingKey above is. DEFAULT ON at 2 minutes:
 // autosave is a safety net, not an opt-in, so an install that never opens this tab still gets it.

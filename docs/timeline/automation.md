@@ -47,7 +47,7 @@ row (an open track with no lanes shows only that row), zoom-scaled like a lane r
 - a record-mode combo (Off/Read/Touch/Latch/Write, combo id = `LaneRecordMode` + 1, Write in the
   error colour) writing `TimelineDoc::setLaneRecordMode` as one undo step — a manual pick IS a user
   gesture, unlike `AutomationRecorder`'s own Write-drops-to-Touch-on-stop call;
-- a "..." menu: **Add LFO modulator** ([below](#modulators)), **Move to track** (every other MIDI/Audio
+- a "..." menu: **Add modulator...** ([below](#modulators)), **Move to track** (every other MIDI/Audio
   track, `TimelineDoc::moveLaneToTrack`; the [amount lanes](#amount-lane) of the lane's modulators move with it) and
   **Delete lane** (`TimelineDoc::removeLane`), each one undo step.
 
@@ -106,7 +106,7 @@ field over rows grouped under their module's title, Up/Down/Return/Escape, a `ju
 on the row or header. Two small generalisations: an item may carry `searchText` the row does not show (the
 module title, so typing "filter cut" finds Cutoff under "Filter 1"), and a query now matches word by word,
 every word anywhere in the row or its search text (a superset of the old substring match); and
-`setAccessibleNames` re-words its screen-reader names. `collectAddAutomationChoices` turns the host's
+`setAccessibleNames` re-words its screen-reader names. A third, for the [add-modulator picker](#modulators): an item may carry a muted second line (`detail`, also searched) and be `enabled = false` (greyed, never highlighted or picked). `collectAddAutomationChoices` turns the host's
 parameters into its items, regrouped so a module's rows are adjacent, and drops any parameter that already
 has a lane.
 
@@ -148,15 +148,33 @@ change broadcast (a cable drag, which rebuilds no card). `TimelineAutomationLane
 the routings' keys, so a refresh that finds the same routings keeps the same row objects (focus and an
 in-flight drag survive) and only a changed set rebuilds that lane's rows.
 
-**Add LFO modulator** (the lane's "..." menu) asks `TrackHeaderHost::addLfoModulator`, which reaches
-`GraphEditor::addLfoModulator` (`GraphEditorModulators.cpp`): a real LFO card (Sine, synced at 1/4, bipolar,
-full level) placed beside the target card (left of it, else right; anti-overlapped by `resolvePlacement`
-at its estimated and then its real size), cabled from its output into the parameter's CV jack through
-`connectPorts` (so `addModRouting` inserts the hidden attenuverter), the attenuverter given a uuid and a
-depth of 0.5. When the target is a macro member the LFO joins that macro (`addSelectionToMacro`, after the
-cable exists, so the cable is interior and no port is minted); otherwise `makeRoomFor` runs on the new card.
-All of it is ONE `recordGraphAndMacroChange` step. A parameter with no CV jack keeps the item, disabled, as
-"Add LFO modulator (no CV input)": a menu item has no tooltip, and the reason has to reach a screen reader.
+**Add modulator...** (the lane's "..." menu) opens a picker, the Mod Matrix's `ModMatrixPicker` again (as
+"+ Add automation..." does): a search field, then **New LFO** first and every LFO in the project after it
+(`AddModulatorPicker`, `Source/UI/Timeline/AutomationLanes/AddModulator/`; the rows come from
+`TrackHeaderHost::getLfoChoices`, a graph walk for `LFOModule` nodes). An LFO row's first line is its card
+title, plus "inside macro Pads" when it sits in a macro; its second line is what it already moves ("moves
+Pad oscillator detune", several joined with commas, or "not connected yet"). The search matches word by word
+over the name, the macro and the targets. An LFO that already moves **this** parameter stays in the list,
+greyed, with "already moves Cutoff" as its reason: it is not highlighted by Up/Down and a click or Return on
+it does nothing. Up/Down/Return/Escape work as in the other pickers. The item stays disabled, as "Add
+modulator... (no CV input)", on a parameter with no CV jack: a menu item has no tooltip, and the reason has to
+reach a screen reader.
+
+- **New LFO** asks `TrackHeaderHost::addLfoModulator`, which reaches `GraphEditor::addLfoModulator`
+  (`GraphEditorModulators.cpp`): a real LFO card (Sine, synced at 1/4, bipolar, full level) placed beside the
+  target card (left of it, else right; anti-overlapped by `resolvePlacement` at its estimated and then its
+  real size), cabled from its output into the parameter's CV jack through `connectPorts` (so `addModRouting`
+  inserts the hidden attenuverter), the attenuverter given a uuid and a depth of 0.5. When the target is a
+  macro member the LFO joins that macro (`addSelectionToMacro`, after the cable exists, so the cable is
+  interior and no port is minted); otherwise `makeRoomFor` runs on the new card. All of it is ONE
+  `recordGraphAndMacroChange` step.
+- **An existing LFO** asks `TrackHeaderHost::connectModulator`, which reaches
+  `GraphEditor::connectExistingLfoModulator`: no new card; the same cable and depth, made inside
+  `MacroGroupController::applyProgrammaticConnectionChange` (as the Mod Matrix and the mixer sends do), so an
+  LFO and a knob in different macros are joined through macro ports. The cable, its depth and any ports are
+  ONE undo step. The new modulator row appears through `getModulators`, which already looks through ports.
+
+Test hook: `synth::ui::test_hooks::addModulatorPickerHookForTest` (receives the picker instead of a call-out).
 
 **The row** (`ModulatorRow`, `Source/UI/Timeline/AutomationLanes/Modulators/`) is 54 px times the row zoom,
 indented 28 px (one step further in than a lane header), three lines in the header column (title; shape and
@@ -199,6 +217,16 @@ runs -- all one undo step. The routing's [amount lane](#amount-lane) goes in the
 when the LFO stays to drive another jack. A row
 that triggers a removal is destroyed by the refresh before the host call returns, so it copies what it
 needs and makes the call its last statement.
+
+**Asking first.** A removal that would also delete the LFO (this routing is the last thing it moves) first
+shows "Remove LFO 1?": "Cutoff is the last thing LFO 1 moves, so removing it also deletes LFO 1 and its
+settings. Cmd+Z brings it back." (Ctrl+Z off macOS), a **Don't ask again** box, and **Remove LFO** (Return) /
+**Cancel** (Escape). Cancel changes nothing. Confirming removes as one undo step; with the box ticked it also
+turns the preference off. The question is `confirmRemoveLfo` (`Modulators/RemoveLfoConfirm.{h,cpp}`), asked by
+`MainComponent::removeModulator` before it calls `performRemoveModulator`; an LFO with another destination
+never asks. The preference is the user setting `timelineAskBeforeRemovingLfo` (default ON), toggled in
+Settings, Preferences, Timeline ("Ask before removing an LFO's last destination") and read at use time.
+Test hook: `synth::ui::test_hooks::removeLfoConfirmHookForTest`.
 
 **Layout**: a lane's block is its row plus its modulator rows (`TimelineAutomationLanes::laneBlockHeight`,
 the one helper every geometry function walks), so modulator rows count into the track's extra height and
