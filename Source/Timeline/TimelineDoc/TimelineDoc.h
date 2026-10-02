@@ -252,6 +252,11 @@ struct Track {
     bool muted = false;
     bool soloed = false;
     bool armed = false;
+    // The clip row's height relative to the timeline's shared row height (1 = default). Display
+    // data only, saved with the project; always within [kMinHeightScale, kMaxHeightScale].
+    static constexpr double kMinHeightScale = 0.5;
+    static constexpr double kMaxHeightScale = 4.0;
+    double heightScale = 1.0;
     juce::String bindingUuid; // MIDI tracks: uuid of the Track In node this track feeds.
                               // May be empty — an unbound track is legal, it just plays nowhere.
     std::vector<Clip> clips;
@@ -354,6 +359,8 @@ public:
     bool setTrackMuted(TrackId id, bool muted);
     bool setTrackSoloed(TrackId id, bool soloed);
     bool setTrackArmed(TrackId id, bool armed);
+    // Clamped to [Track::kMinHeightScale, Track::kMaxHeightScale]; non-finite is refused.
+    bool setTrackHeightScale(TrackId id, double scale);
     // Binds the track to a graph node by its "uuid" property. Pass an empty string to unbind.
     bool setTrackBinding(TrackId id, const juce::String& nodeUuid);
 

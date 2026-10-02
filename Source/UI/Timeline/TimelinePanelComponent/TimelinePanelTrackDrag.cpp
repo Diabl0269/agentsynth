@@ -230,6 +230,18 @@ void TimelinePanelComponent::placeTrackHeaders() {
     }
 }
 
+// The gap a lifted row leaves is that row's own clip-row height, which a per-track height can change.
+int TimelinePanelComponent::liftedTrackRowHeight() const {
+    const auto layout = rowLayout();
+    if (doc_ != nullptr) {
+        const auto& tracks = doc_->getTracks();
+        for (int i = 0; i < (int)tracks.size(); ++i)
+            if (tracks[(size_t)i].id == liftedTrackId_)
+                return layout.trackRowHeight(i);
+    }
+    return layout.trackRowHeight();
+}
+
 // Drawn under the rows (each row fills its own bounds, and the gap is exactly where none stands):
 // the dashed marker of the slot the dragged row will land in.
 void TimelinePanelComponent::TrackHeaderList::paint(juce::Graphics& g) {
@@ -242,7 +254,7 @@ void TimelinePanelComponent::TrackHeaderList::paint(juce::Graphics& g) {
         return;
 
     const juce::Rectangle<float> gap(0.0f, reorder.getLayoutStart(key), static_cast<float>(getWidth()),
-                                     static_cast<float>(owner_.currentRowHeight()));
+                                     static_cast<float>(owner_.liftedTrackRowHeight()));
     juce::Path outline;
     outline.addRoundedRectangle(gap.reduced(0.5f), kRowRadius);
     juce::Path dashed;

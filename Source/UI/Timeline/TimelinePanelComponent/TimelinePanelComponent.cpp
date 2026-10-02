@@ -212,6 +212,8 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // region itself is set in resized(), which is the only place the offset is known.
     playhead_.setLocalPlayheadClient(&pianoRoll_);
 
+    initTrackHeaderWidthHandle(); // after the playhead: the seam handle must win the hit test
+
     // Every tool button, snapToggleButton_ and followPlayheadButton_ now exist — set their initial
     // (no-manager-installed, hardcoded-default) tooltip text. setShortcutManager re-runs this once
     // a real manager is wired, and again on every bindings-changed notification.

@@ -106,6 +106,25 @@ bool readOptionalArray(const juce::var& v, const juce::Array<juce::var>*& out) {
     return out != nullptr;
 }
 
+// A track's plain fields (everything but its id, kind, clips and lanes). A colour outside 32 bits or a
+// non-finite height is refused; a height outside its range is clamped, it is display data.
+bool readTrackFields(const juce::DynamicObject& tObj, Track& track) {
+    std::int64_t colourValue = static_cast<std::int64_t>(track.colourArgb);
+    if (!readOptionalString(tObj.getProperty("name"), track.name) ||
+        !readOptionalInt64(tObj.getProperty("colourArgb"), colourValue) ||
+        !readOptionalBool(tObj.getProperty("muted"), track.muted) ||
+        !readOptionalBool(tObj.getProperty("soloed"), track.soloed) ||
+        !readOptionalBool(tObj.getProperty("armed"), track.armed) ||
+        !readOptionalDouble(tObj.getProperty("heightScale"), track.heightScale) ||
+        !readOptionalString(tObj.getProperty("bindingUuid"), track.bindingUuid))
+        return false;
+    if (colourValue < 0 || colourValue > 0xffffffffLL || !std::isfinite(track.heightScale))
+        return false;
+    track.colourArgb = static_cast<juce::uint32>(colourValue);
+    track.heightScale = std::clamp(track.heightScale, Track::kMinHeightScale, Track::kMaxHeightScale);
+    return true;
+}
+
 } // namespace
 
 // -------------------------------------------------------------- serialisation --
@@ -131,6 +150,8 @@ juce::var TimelineDoc::toVar() const {
         t->setProperty("muted", track.muted);
         t->setProperty("soloed", track.soloed);
         t->setProperty("armed", track.armed);
+        if (track.heightScale != 1.0) // left out at the default, so older files and fixtures stay byte-identical
+            t->setProperty("heightScale", track.heightScale);
         t->setProperty("bindingUuid", track.bindingUuid);
 
         juce::Array<juce::var> clipVars;
@@ -279,17 +300,8 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                 return false;
             track.kind = static_cast<TrackKind>(kindValue);
 
-            std::int64_t colourValue = static_cast<std::int64_t>(track.colourArgb);
-            if (!readOptionalString(tObj->getProperty("name"), track.name) ||
-                !readOptionalInt64(tObj->getProperty("colourArgb"), colourValue) ||
-                !readOptionalBool(tObj->getProperty("muted"), track.muted) ||
-                !readOptionalBool(tObj->getProperty("soloed"), track.soloed) ||
-                !readOptionalBool(tObj->getProperty("armed"), track.armed) ||
-                !readOptionalString(tObj->getProperty("bindingUuid"), track.bindingUuid))
+            if (!readTrackFields(*tObj, track))
                 return false;
-            if (colourValue < 0 || colourValue > 0xffffffffLL)
-                return false;
-            track.colourArgb = static_cast<juce::uint32>(colourValue);
 
             const juce::Array<juce::var>* clipList = nullptr;
             if (!readOptionalArray(tObj->getProperty("clips"), clipList))

@@ -489,6 +489,7 @@ add_executable(Tests
     UI/Timeline/TimelinePanel/TimelinePanelMarkerTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelZoomSnapScrollTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelTrackHeaderTests.cpp
+    UI/Timeline/TimelinePanel/TimelinePanelTrackSizingTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelTrackReorderTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelAppWiringTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelResizeTests.cpp

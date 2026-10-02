@@ -453,6 +453,9 @@ public:
     void setTrackExtraHeights(std::vector<int> extraHeights);
     // Per-track clip-row height (by track index, px); 0 or missing = getRowHeight().
     void setTrackRowHeightOverrides(std::vector<int> rowHeights);
+    // A track's height scale shown mid-drag in place of its saved Track::heightScale.
+    void setTrackHeightPreview(synth::TrackId track, double scale);
+    void clearTrackHeightPreview();
     // False over a track's automation lanes and over the Automation track's section row.
     bool hitTest(int x, int y) override;
 
@@ -689,6 +692,8 @@ private:
     synth::TimelineDoc* doc_ = nullptr;
     std::vector<int> trackExtraHeights_;       // see setTrackExtraHeights
     std::vector<int> trackRowHeightOverrides_; // see setTrackRowHeightOverrides
+    synth::TrackId heightPreviewTrack_;
+    double heightPreviewScale_ = 1.0;
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;
     // Non-owning, may stay null (see setApplicationProperties). Read at use time, never cached.

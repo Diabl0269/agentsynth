@@ -81,6 +81,9 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineSoloFocusedTrack",
         "timelineArmFocusedTrack",
         "timelineToggleTrackAutomation",
+        "timelineIncreaseTrackHeight",
+        "timelineDecreaseTrackHeight",
+        "timelineResetTrackHeight",
     };
     return ids;
 }

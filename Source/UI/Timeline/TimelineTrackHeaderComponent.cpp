@@ -18,6 +18,10 @@ namespace {
 juce::KeyPress plainKey(int character) { return juce::KeyPress(character, juce::ModifierKeys::noModifiers, 0); }
 
 constexpr int kSwatchWidth = 8;
+constexpr int kHeightHandleThickness = 5; // the strip along the row's bottom edge
+const juce::KeyPress kIncreaseHeightKey('=', juce::ModifierKeys::altModifier, 0);
+const juce::KeyPress kDecreaseHeightKey('-', juce::ModifierKeys::altModifier, 0);
+const juce::KeyPress kResetHeightKey('0', juce::ModifierKeys::altModifier, 0);
 // Widened from 20 (laid out edge-to-edge, no gap): the M/S/R toggles read as one fused
 // block at that width, and this row was the worst offender in the timeline-panel button-size
 // sweep. Paired with kToggleGap below rather than just grown, so the buttons are also visually
@@ -181,6 +185,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
             onAutomationToggleRequested(trackId_);
     };
     foldArrow_.onPopupMenuRequested = [this] { showContextMenu(); };
+    initHeightHandle();
 
     addAndMakeVisible(bindingChip_);
     bindingChip_.setComponentID("trackBindingChip");
@@ -353,6 +358,7 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
         return;
 
     nameLabel_.setText(t->name, juce::dontSendNotification);
+    refreshHeightHandleText();
     // The row is the keyboard stop (Up/Down walk the rows), so a screen reader names it by its track.
     setTitle(t->name);
 
@@ -491,8 +497,12 @@ void TimelineTrackHeaderComponent::resized() {
         auto row = getLocalBounds().reduced(kRowPadding, 0).withTrimmedLeft(kRowPadding);
         layoutFoldArrowAndBadges(row);
         nameLabel_.setBounds(row);
+        heightHandle_.setVisible(false); // a fixed section row, not a clip row to resize
         return;
     }
+    heightHandle_.setVisible(true);
+    heightHandle_.setBounds(getLocalBounds().removeFromBottom(kHeightHandleThickness));
+    heightHandle_.toFront(false);
     auto bounds = getLocalBounds().reduced(kRowPadding);
 
     colourSwatch_.setBounds(bounds.removeFromLeft(kSwatchWidth));
@@ -718,6 +728,19 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
     }
     // A folds THIS row's lanes, like the arrow (a row without an arrow still claims the key, so it never
     // falls through to something else).
+    if (onHeightStepRequested && !isSectionHeader()) {
+        int step = 2; // none
+        if (matchesAction(key, "timelineIncreaseTrackHeight", kIncreaseHeightKey))
+            step = 1;
+        else if (matchesAction(key, "timelineDecreaseTrackHeight", kDecreaseHeightKey))
+            step = -1;
+        else if (matchesAction(key, "timelineResetTrackHeight", kResetHeightKey))
+            step = 0;
+        if (step != 2) {
+            onHeightStepRequested(trackId_, step);
+            return true;
+        }
+    }
     if (matchesAction(key, "timelineToggleTrackAutomation", plainKey('a'))) {
         if (foldArrow_.isVisible() && onAutomationToggleRequested)
             onAutomationToggleRequested(trackId_);
@@ -795,6 +818,12 @@ void TimelineTrackHeaderComponent::applyContextMenuChoice(int menuId) {
         host_->setTrackPresetAsDefault(trackId_);
     else if (menuId == kAddAutomationMenuId && onAddAutomationRequested)
         onAddAutomationRequested(trackId_);
+    else if (menuId == kIncreaseHeightMenuId && onHeightStepRequested)
+        onHeightStepRequested(trackId_, 1);
+    else if (menuId == kDecreaseHeightMenuId && onHeightStepRequested)
+        onHeightStepRequested(trackId_, -1);
+    else if (menuId == kResetHeightMenuId && onHeightStepRequested)
+        onHeightStepRequested(trackId_, 0);
 }
 
 juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
@@ -812,6 +841,22 @@ juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
     menu.addItem(kAddAutomationMenuId, "Add automation...",
                  host_ != nullptr && !host_->getAutomatableParameters(trackId_).empty());
     menu.addSeparator();
+    // The keyboard path to the row height, each item naming its rebindable shortcut.
+    if (!isSectionHeader()) {
+        const auto addHeightItem = [&](int id, const juce::String& text, const juce::String& action,
+                                       const juce::KeyPress& fallback) {
+            juce::PopupMenu::Item item(text);
+            item.itemID = id;
+            item.shortcutKeyDescription = bindingText(action, fallback);
+            menu.addItem(std::move(item));
+        };
+        addHeightItem(kIncreaseHeightMenuId, "Increase Track Height", "timelineIncreaseTrackHeight",
+                      kIncreaseHeightKey);
+        addHeightItem(kDecreaseHeightMenuId, "Decrease Track Height", "timelineDecreaseTrackHeight",
+                      kDecreaseHeightKey);
+        addHeightItem(kResetHeightMenuId, "Reset Track Height", "timelineResetTrackHeight", kResetHeightKey);
+        menu.addSeparator();
+    }
     menu.addItem(kDeleteTrackMenuId, "Delete Track");
     return menu;
 }
@@ -833,6 +878,46 @@ void TimelineTrackHeaderComponent::showContextMenu() {
         if (auto* self = safeThis.getComponent())
             self->applyContextMenuChoice(result);
     });
+}
+
+// The strip along the row's bottom edge resizes this track only. Mouse-only (the row itself is the
+// Tab stop); the keyboard path is the three height actions on the focused row and the menu items.
+void TimelineTrackHeaderComponent::initHeightHandle() {
+    heightHandle_.setComponentID("trackHeightHandle");
+    heightHandle_.onDragStarted = [this] {
+        if (onHeightDragStarted)
+            onHeightDragStarted(trackId_);
+    };
+    heightHandle_.onDragged = [this](int delta) {
+        if (onHeightDragged)
+            onHeightDragged(trackId_, delta);
+    };
+    heightHandle_.onDragEnded = [this] {
+        if (onHeightDragEnded)
+            onHeightDragEnded(trackId_);
+    };
+    heightHandle_.onResetRequested = [this] {
+        if (onHeightStepRequested)
+            onHeightStepRequested(trackId_, 0);
+    };
+    addAndMakeVisible(heightHandle_);
+    refreshHeightHandleText();
+}
+
+void TimelineTrackHeaderComponent::refreshHeightHandleText() {
+    const auto* t = track();
+    const juce::String name = t != nullptr ? t->name : juce::String("track");
+    heightHandle_.setTitle("Resize " + name);
+    heightHandle_.setTooltip("Drag to resize " + name + "; double-click for the default height. Keys on the track: " +
+                             bindingText("timelineIncreaseTrackHeight", kIncreaseHeightKey) + " taller, " +
+                             bindingText("timelineDecreaseTrackHeight", kDecreaseHeightKey) + " shorter, " +
+                             bindingText("timelineResetTrackHeight", kResetHeightKey) + " default.");
+}
+
+juce::String TimelineTrackHeaderComponent::bindingText(const juce::String& actionId,
+                                                       const juce::KeyPress& fallback) const {
+    const auto key = shortcuts_ != nullptr ? shortcuts_->getBinding(actionId) : fallback;
+    return key.isValid() ? key.getTextDescriptionWithIcons() : juce::String("unbound");
 }
 
 } // namespace synth::ui

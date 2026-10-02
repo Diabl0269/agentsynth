@@ -164,3 +164,52 @@ TEST_F(TimelineDocTest, AudioTrackKindIsFullyUsable) {
     EXPECT_TRUE(doc.setTrackArmed(track, true));
     EXPECT_TRUE(doc.setTrackBinding(track, "uuid-audio-1"));
 }
+
+// A track's own row height: display data saved with the project, clamped, and left out of the file
+// at the default so older projects and fixtures stay byte-identical.
+TEST_F(TimelineDocTest, SetTrackHeightScaleClampsAndNotifiesOnlyOnAChange) {
+    const auto id = doc.addTrack(TrackKind::Midi, "Bass");
+    CountingListener listener;
+    doc.addListener(&listener);
+    EXPECT_TRUE(doc.setTrackHeightScale(id, 1.0));
+    EXPECT_EQ(listener.calls, 0) << "the value already stored: no notification";
+    EXPECT_TRUE(doc.setTrackHeightScale(id, 2.0));
+    EXPECT_EQ(doc.getTrack(id)->heightScale, 2.0);
+    EXPECT_EQ(listener.calls, 1);
+    EXPECT_TRUE(doc.setTrackHeightScale(id, 99.0));
+    EXPECT_EQ(doc.getTrack(id)->heightScale, Track::kMaxHeightScale);
+    EXPECT_TRUE(doc.setTrackHeightScale(id, 0.01));
+    EXPECT_EQ(doc.getTrack(id)->heightScale, Track::kMinHeightScale);
+    EXPECT_FALSE(doc.setTrackHeightScale(id, std::numeric_limits<double>::quiet_NaN()));
+    EXPECT_FALSE(doc.setTrackHeightScale(TrackId{9999}, 2.0));
+    doc.removeListener(&listener);
+}
+
+TEST_F(TimelineDocTest, TrackHeightScaleRoundTripsAndIsLeftOutAtTheDefault) {
+    const auto tall = doc.addTrack(TrackKind::Midi, "Tall");
+    const auto plain = doc.addTrack(TrackKind::Midi, "Plain");
+    ASSERT_TRUE(doc.setTrackHeightScale(tall, 1.75));
+
+    const auto var = doc.toVar();
+    const auto& tracks = *var.getProperty("tracks", {}).getArray();
+    EXPECT_EQ((double)tracks[0].getProperty("heightScale", {}), 1.75);
+    EXPECT_FALSE(tracks[1].getDynamicObject()->hasProperty("heightScale")) << "default: not written";
+
+    TimelineDoc loaded;
+    ASSERT_TRUE(loaded.fromVar(var));
+    EXPECT_EQ(loaded.getTrack(tall)->heightScale, 1.75);
+    EXPECT_EQ(loaded.getTrack(plain)->heightScale, 1.0);
+}
+
+TEST_F(TimelineDocTest, ALoadedTrackHeightScaleIsClampedAndANonNumberIsRefused) {
+    const auto id = doc.addTrack(TrackKind::Midi, "Bass");
+    auto var = doc.toVar();
+    var.getProperty("tracks", {}).getArray()->getReference(0).getDynamicObject()->setProperty("heightScale", 40.0);
+    TimelineDoc loaded;
+    ASSERT_TRUE(loaded.fromVar(var));
+    EXPECT_EQ(loaded.getTrack(id)->heightScale, Track::kMaxHeightScale);
+
+    var.getProperty("tracks", {}).getArray()->getReference(0).getDynamicObject()->setProperty("heightScale", "tall");
+    TimelineDoc rejected;
+    EXPECT_FALSE(rejected.fromVar(var));
+}

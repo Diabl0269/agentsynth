@@ -142,9 +142,36 @@ int TimelineClipLaneArea::getRowHeight() const {
     return std::max(8, (int)std::llround((double)base * viewState_.rowHeightScale));
 }
 
+// A track's own height (Track::heightScale, or the drag preview) rides on top of the shared zoom, so
+// it enters the one layout as that track's row-height override. A fixed override (the Unassigned
+// section row) wins: that row is not a clip row to resize.
 TimelineRowLayout TimelineClipLaneArea::getRowLayout() const {
-    const int trackCount = doc_ != nullptr ? (int)doc_->getTracks().size() : 0;
-    return TimelineRowLayout(trackCount, getRowHeight(), trackExtraHeights_, trackRowHeightOverrides_);
+    if (doc_ == nullptr)
+        return TimelineRowLayout(0, getRowHeight(), trackExtraHeights_, trackRowHeightOverrides_);
+    const auto& tracks = doc_->getTracks();
+    const int rowHeight = getRowHeight();
+    std::vector<int> overrides(tracks.size(), 0);
+    for (size_t i = 0; i < tracks.size(); ++i) {
+        if (i < trackRowHeightOverrides_.size() && trackRowHeightOverrides_[i] > 0) {
+            overrides[i] = trackRowHeightOverrides_[i];
+            continue;
+        }
+        const double scale = tracks[i].id == heightPreviewTrack_ ? heightPreviewScale_ : tracks[i].heightScale;
+        if (scale != 1.0)
+            overrides[i] = std::max(8, (int)std::llround((double)rowHeight * scale));
+    }
+    return TimelineRowLayout((int)tracks.size(), rowHeight, trackExtraHeights_, overrides);
+}
+
+void TimelineClipLaneArea::setTrackHeightPreview(synth::TrackId track, double scale) {
+    heightPreviewTrack_ = track;
+    heightPreviewScale_ = std::clamp(scale, synth::Track::kMinHeightScale, synth::Track::kMaxHeightScale);
+    repaint();
+}
+
+void TimelineClipLaneArea::clearTrackHeightPreview() {
+    heightPreviewTrack_ = {};
+    repaint();
 }
 
 void TimelineClipLaneArea::setTrackExtraHeights(std::vector<int> extraHeights) {
@@ -244,7 +271,7 @@ juce::Rectangle<int> TimelineClipLaneArea::computeClipRect(const TimelineViewSta
     const int left = (int)std::llround(x0);
     const int right = (int)std::llround(x1);
     return {left, layout.trackTop(trackIndex) - (int)std::llround(viewState.trackScrollY), std::max(right - left, 1),
-            layout.trackRowHeight()};
+            layout.trackRowHeight(trackIndex)};
 }
 
 juce::Rectangle<int> TimelineClipLaneArea::computeClipRect(const TimelineViewState& viewState, int trackIndex,
@@ -403,10 +430,10 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
 
 void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip, const synth::Track& track,
                                      int trackIndex, const TimelineRowLayout& layout) {
-    const int rowHeight = layout.trackRowHeight();
     const auto geometry = effectiveGeometryFor(clip);
     const auto rect =
         computeClipRect(viewState_, layout, effectiveRowFor(clip.id, trackIndex), geometry.start, geometry.length);
+    const int rowHeight = rect.getHeight(); // the row it is drawn in (a dragged clip's target row)
     if (rect.getRight() < 0 || rect.getX() > getWidth())
         return; // cheap offscreen cull — same reasoning as the panel's own bar-line loop
 

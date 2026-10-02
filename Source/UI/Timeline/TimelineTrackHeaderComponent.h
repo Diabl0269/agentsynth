@@ -8,6 +8,7 @@
 #include "TrackChannelLinkSurface.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/EdgeResizeHandle.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorInfo.h"
 #include "UI/Timeline/AutomationLanes/TrackFoldArrow.h"
@@ -361,6 +362,9 @@ public:
     static constexpr int kSetTrackPresetDefaultMenuId = 2003;
     // "Add automation...": how a track with no lane yet gets its first one (it has no fold arrow).
     static constexpr int kAddAutomationMenuId = 2004;
+    static constexpr int kIncreaseHeightMenuId = 2005;
+    static constexpr int kDecreaseHeightMenuId = 2006;
+    static constexpr int kResetHeightMenuId = 2007;
 
     TimelineTrackHeaderComponent(synth::TimelineDoc& doc, synth::TrackId trackId, TrackHeaderHost* host);
 
@@ -415,7 +419,10 @@ public:
      *  every other surface-resolved key in this app). Forwarded by TimelinePanelComponent to every
      *  header it owns (setShortcutManager both propagates to existing rows and is re-applied to a
      *  freshly built one in syncTrackHeaders()). */
-    void setShortcutManager(ShortcutManager* manager) { shortcuts_ = manager; }
+    void setShortcutManager(ShortcutManager* manager) {
+        shortcuts_ = manager;
+        refreshHeightHandleText();
+    }
 
     /** Fired from keyPressed() on a bare Up/Down that this row claims (direction -1/+1) — the row
      *  cannot move focus to a sibling itself (it is deliberately host/graph/panel-free), so it hands
@@ -461,6 +468,14 @@ public:
     std::function<void(synth::TrackId)> onAutomationToggleRequested;
     // "Add automation..." from the context menu: the panel opens the track's parameter picker.
     std::function<void(synth::TrackId)> onAddAutomationRequested;
+
+    // ---- Row height: the bottom-edge handle, its three actions and menu items --------
+    std::function<void(synth::TrackId)> onHeightDragStarted;
+    std::function<void(synth::TrackId, int deltaPx)> onHeightDragged;
+    std::function<void(synth::TrackId)> onHeightDragEnded;
+    /** +1 taller, -1 shorter, 0 back to the default height. */
+    std::function<void(synth::TrackId, int direction)> onHeightStepRequested;
+    EdgeResizeHandle& getHeightHandle() noexcept { return heightHandle_; }
     void setAutomationExpanded(bool expanded);
     bool isAutomationExpanded() const noexcept { return automationExpanded_; }
     // How many of the track's lanes the panel draws as an LFO modulator's sections rather than as lane
@@ -737,6 +752,10 @@ private:
     ContextMenuForwardingButton soloButton_{*this, "S"};
     ContextMenuForwardingButton armButton_{*this, "R"};
     TrackFoldArrow foldArrow_;
+    EdgeResizeHandle heightHandle_{EdgeResizeHandle::Axis::Vertical};
+    void initHeightHandle();
+    void refreshHeightHandleText();
+    juce::String bindingText(const juce::String& actionId, const juce::KeyPress& fallback) const;
     juce::TextButton bindingChip_;
     // The CHANNEL chip -- what this track's audio ends up in, as opposed to bindingChip_'s
     // "which node feeds it". Hidden whenever the track reaches no channel yet.
