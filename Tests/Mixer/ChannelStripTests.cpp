@@ -372,9 +372,10 @@ TEST(MasterModuleTest, MuteClears) {
         expectChannel(buffer, ch, 0.0f, "muted");
 }
 
-TEST(MasterModuleTest, FourLabelledInputJacksAndNoDualIOToggle) {
+TEST(MasterModuleTest, FourLabelledInputJacksByDefault) {
     MasterModule master;
-    EXPECT_FALSE(master.hasDualIOParameter()) << "opted out: its inputs are two stereo blocks, not an FX pair";
+    EXPECT_TRUE(master.hasDualIOParameter()) << "declared: ships split, collapsed is covered by MasterDualIOTests";
+    EXPECT_TRUE(master.isDualIO());
     EXPECT_EQ(master.getVisibleInputPortCount(), 4);
     EXPECT_EQ(master.getVisibleOutputPortCount(), 2);
     EXPECT_EQ(master.getInputPortLabel(MasterModule::kDirectLeft), "Direct L");

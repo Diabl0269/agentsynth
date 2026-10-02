@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
 
@@ -34,6 +35,8 @@ juce::String outputDockDeleteRefusal(juce::AudioProcessorGraph& graph, juce::Aud
  *     way it re-routes anything else);
  *   - every audio connection that fed that node's ch0/ch1 is re-routed into Master — into Mix when
  *     it comes from a Channel Strip, into Direct otherwise (MIDI and wider channels are left alone).
+ *     "Comes from a Channel Strip" looks backward THROUGH macro port nodes, so a strip whose output
+ *     leaves its track macro by an outlet still lands on Mix;
  *
  * NO UNDO — for a caller already inside its own undo transaction
  * (synth::buildDefaultAudioChannel, called from AppUndoManager::recordGraphTimelineAndMacroChange).
@@ -41,10 +44,15 @@ juce::String outputDockDeleteRefusal(juce::AudioProcessorGraph& graph, juce::Aud
  * in exactly the ONE recordCombinedChange step it always was.
  *
  * @param position canvas position for a newly created node (ignored when Master already exists).
+ * @param onNewModule optional hook run on the fresh Master processor (moduleType "Master") BEFORE it
+ *        enters the graph, so the app can apply preferences Core cannot see (same type as
+ *        DefaultChannelLayout::NewModuleHook). Not called when Master already exists.
  * @return the Master node (existing or newly spliced), or nullptr when the graph has no Audio
  *         Output to splice in front of.
  */
-juce::AudioProcessorGraph::Node* spliceMasterNode(juce::AudioProcessorGraph& graph, juce::Point<int> position);
+juce::AudioProcessorGraph::Node*
+spliceMasterNode(juce::AudioProcessorGraph& graph, juce::Point<int> position,
+                 const std::function<void(juce::AudioProcessor&, const juce::String&)>& onNewModule = {});
 
 /**
  * Returns the graph's Master node, splicing one in first if there is none (docs/mixer/mixer.md#node-types) via
@@ -61,9 +69,12 @@ juce::AudioProcessorGraph::Node* spliceMasterNode(juce::AudioProcessorGraph& gra
  * docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step.
  *
  * @param position canvas position for a newly created node (ignored when Master already exists).
+ * @param onNewModule forwarded to spliceMasterNode().
  * @return the Master node, or nullptr when the graph has no Audio Output to splice in front of.
  */
-juce::AudioProcessorGraph::Node* ensureMasterNode(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager,
-                                                  TimelineDoc& doc, juce::Point<int> position);
+juce::AudioProcessorGraph::Node*
+ensureMasterNode(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, TimelineDoc& doc,
+                 juce::Point<int> position,
+                 const std::function<void(juce::AudioProcessor&, const juce::String&)>& onNewModule = {});
 
 } // namespace synth

@@ -37,8 +37,8 @@ struct DefaultChannelLayout {
     juce::Point<int> compressor;
     juce::Point<int> strip;
     juce::Point<int> master;
-    /** Applied to each insert FX (Gate/EQ/Compressor; never Strip/Master) before it enters the graph,
-     *  so the app can apply preferences Core cannot see (left/right jacks). Empty = no-op. */
+    /** Applied to each insert FX (Gate/EQ/Compressor, and Master when the flow splices one; never Strip) before it
+     * enters the graph, so the app can apply preferences Core cannot see (left/right jacks). Empty = no-op. */
     NewModuleHook onNewModule;
 };
 
@@ -294,6 +294,14 @@ juce::AudioProcessorGraph::NodeAndChannel
 resolveThroughPorts(juce::AudioProcessorGraph& graph,
                     const std::vector<juce::AudioProcessorGraph::Connection>& connections,
                     juce::AudioProcessorGraph::NodeAndChannel pin);
+
+/** The BACKWARD twin of resolveThroughPorts: the pin that ultimately drives `pin`, following macro
+ *  port nodes upstream (each passes channel k straight to channel k; at most 16 hops). `pin` itself
+ *  when it is not a port, or when a port has nothing feeding it. Pure query over `connections`. */
+juce::AudioProcessorGraph::NodeAndChannel
+resolveSourceThroughPorts(juce::AudioProcessorGraph& graph,
+                          const std::vector<juce::AudioProcessorGraph::Connection>& connections,
+                          juce::AudioProcessorGraph::NodeAndChannel pin);
 
 // ---- Track presets (docs/mixer/track-presets.md) ----------------------------------------------------------
 
