@@ -143,6 +143,8 @@ public:
     EditTool getActiveTool() const noexcept { return activeTool_; }
     /** The strip button for a tool. Never null once the panel is constructed. */
     juce::DrawableButton* getToolButton(EditTool tool) const noexcept;
+    /** Every button this panel owns that has a keyboard shortcut, with its action id: the hint overlay's targets. */
+    std::vector<std::pair<juce::Component*, juce::String>> getShortcutHintTargets();
 
     // ---- Clip clipboard (Cmd+C/V/D on the TimelineClips surface) ----
     // See TimelinePanelClipClipboard.cpp for why this panel owns the clipboard.
@@ -532,6 +534,7 @@ private:
     void stepTrackFocusFromHeader(int direction);
     bool recordFocusForTest_ = false;
     bool addTrackFocusRecorded_ = false;
+    bool addTrackFromTop_ = false; // "+ Track" was entered from above (root Down, Up off row 0), not from the last row
 
     // ---- Clip keyboard mode (TimelinePanelClipKeyboard.cpp) ----
     bool enterTrackClips(synth::TrackId trackId);

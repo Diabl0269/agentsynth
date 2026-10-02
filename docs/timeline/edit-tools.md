@@ -109,4 +109,9 @@ Both `TimelineClipLaneArea` and `PianoRollComponent` cache one cursor per tool
 (`rebuildToolCursors()`), rebuilt only on a theme change — never per mouse-move, since building one
 renders an icon into an `Image`.
 
+Under Draw the piano roll's velocity strip and every automation lane editor
+(`AutomationLaneEditor::getMouseCursor()`) show that same pen cursor over their own area, because a child
+does not inherit its parent's cursor; under every other tool they keep the arrow. The lane editor builds its
+pen lazily from the themed Draw icon and drops it on a theme change.
+
 Tests: `Tests/UI/Timeline/TimelinePanel/TimelinePanelToolStripTests.cpp`.

@@ -85,6 +85,14 @@ TEST_F(BottomDockTabStripTest, ArrowsFollowTheUsersTabOrderAndSkipTabsNotOffered
     dock().reorderTabsForTest(Tab::Timeline, Tab::MidiRemote);
 }
 
+TEST_F(BottomDockTabStripTest, DownAlsoMovesFocusIntoTheSelectedPanelsRegionRoot) {
+    juce::Component* focused = nullptr;
+    dock().setPanelFocusHookForTest([&focused](juce::Component& c) { focused = &c; });
+
+    EXPECT_TRUE(press(juce::KeyPress::downKey));
+    EXPECT_EQ(focused, &mc().getTimelinePanel());
+}
+
 TEST_F(BottomDockTabStripTest, ReturnMovesFocusIntoTheSelectedPanelsRegionRoot) {
     juce::Component* focused = nullptr;
     dock().setPanelFocusHookForTest([&focused](juce::Component& c) { focused = &c; });
@@ -107,7 +115,7 @@ TEST_F(BottomDockTabStripTest, ModifiedAndUnrelatedKeysAreLeftForTheAppShortcuts
     EXPECT_FALSE(press('2', juce::ModifierKeys::commandModifier)) << "Cmd+2 still reaches the shortcut table";
     EXPECT_FALSE(press(juce::KeyPress::returnKey, juce::ModifierKeys::shiftModifier));
     EXPECT_FALSE(press(juce::KeyPress::tabKey)) << "Tab still cycles the focus regions";
-    EXPECT_FALSE(press(juce::KeyPress::downKey));
+    EXPECT_FALSE(press(juce::KeyPress::upKey)) << "Up has nothing above the strip to enter";
     EXPECT_EQ(dock().getActiveTab(), Tab::Timeline);
 }
 

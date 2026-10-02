@@ -38,8 +38,9 @@ ShortcutHintOverlay::~ShortcutHintOverlay() {
     host_.removeKeyListener(this);
 }
 
-void ShortcutHintOverlay::addTarget(juce::Component& component, const juce::String& actionId) {
-    targets_.push_back({juce::Component::SafePointer<juce::Component>(&component), actionId});
+void ShortcutHintOverlay::addTarget(juce::Component& component, const juce::String& actionId,
+                                    const juce::String& fallbackActionId) {
+    targets_.push_back({juce::Component::SafePointer<juce::Component>(&component), actionId, {}, {}, fallbackActionId});
 }
 
 void ShortcutHintOverlay::addFixedKeyTarget(juce::Component& component, const juce::KeyPress& key) {
@@ -74,14 +75,14 @@ bool ShortcutHintOverlay::isAnyHintModifierDown(const juce::ModifierKeys& mods) 
     return mods.isCommandDown() || mods.isAltDown();
 }
 
-// Cmd shows every bound target; Ctrl and Option only those whose CURRENT binding uses that key.
+// Cmd and Ctrl show every bound target, so either key reveals bare-key tools (edit tools, follow
+// playhead) as well as chords; Option shows only targets whose CURRENT binding uses Option.
 bool ShortcutHintOverlay::bindingShownInMode(const juce::KeyPress& binding) const noexcept {
     switch (mode_) {
-    case HintModifier::Ctrl:
-        return binding.getModifiers().isCtrlDown();
     case HintModifier::Alt:
         return binding.getModifiers().isAltDown();
     case HintModifier::Cmd:
+    case HintModifier::Ctrl:
     case HintModifier::None:
         break;
     }

@@ -24,6 +24,16 @@ sends** — its list is the post-fader chain between Master and the Rec Tap or A
 strip's, and `MixerMasterColumn::setColumn()` feeds it from the snapshot. Its column model — ordering,
 kinds and queries — is headless, in `Source/Mixer/MixerModel/`.
 
+**Source line.** Under a strip's header a small `MixerSourceLine` names what plays into the channel: "From
+Oscillator 6", with "From" muted and the names in the primary text colour (a feeding track's name, or a bus's
+feeding strips, comma-joined and ellipsised to the column). Hovering it shows the full list ("Plays into this
+channel: A, B"); the same words are its accessible description and its name is the visible text. It is blank
+when the one source only repeats the channel's own name. **The row exists only while some strip column needs
+it:** after every rebuild `MixerPanelComponent` calls `MixerSectionLayout::setSourceLineVisible(any strip has
+a source line)`; when none does the row is 0 px and the sections and fader move up, and when any does every
+column (strips, Direct and Master) reserves the same 14 px, so the columns without a source keep an aligned
+blank and every fader stays level. It is information, not a control: it takes no focus and has no key.
+
 **Column colour.** A column's header shows a swatch and a 2px stripe across its top edge in the colour of the
 one track that feeds it (the colour the Timeline shows), so a channel and its track match at a glance. A bus, a
 channel shared by two tracks and an orphan strip have no single track and keep their macro's colour.

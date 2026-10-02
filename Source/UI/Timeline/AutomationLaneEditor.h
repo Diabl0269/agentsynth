@@ -78,8 +78,15 @@ public:
     Tool getTool() const noexcept { return tool_; }
     // Follows the timeline's edit tool (automationToolFor), re-read at every mouse-down for Shift.
     void setEditTool(EditTool tool) noexcept;
-    // The curve's colour; unset = the theme's modWire.
+    // The curve's and points' colour; unset = the theme's modWire. Drawn pushed to a readable contrast on the lane
+    // background.
     void setCurveColour(juce::Colour colour);
+    // The colour the curve and points are painted in right now (see setCurveColour).
+    juce::Colour getResolvedCurveColour() const;
+
+    // The pen while the Draw tool is the active tool (the plain arrow otherwise), like the piano roll's velocity strip.
+    juce::MouseCursor getMouseCursor() override;
+    void lookAndFeelChanged() override;
 
     // ---- Headless hooks (juce::PopupMenu::showMenuAsync doesn't run headlessly) ----
 
@@ -154,6 +161,8 @@ private:
     Tool tool_ = Tool::Pointer;
     std::optional<EditTool> editTool_; // set = tool_ follows it (see setEditTool)
     std::optional<juce::Colour> curveColour_;
+    juce::MouseCursor penCursor_;
+    bool penCursorBuilt_ = false;
 
     DragMode dragMode_ = DragMode::None;
     juce::Point<int> mouseDownPos_;

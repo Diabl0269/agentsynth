@@ -26,6 +26,15 @@ juce::String toolActionIdFor(synth::ui::EditTool tool) { return "timelineTool" +
 constexpr const char* kTimelineLoopSelectionArmsPropertyKey = "timelineLoopSelectionArms";
 } // namespace
 
+std::vector<std::pair<juce::Component*, juce::String>> TimelinePanelComponent::getShortcutHintTargets() {
+    std::vector<std::pair<juce::Component*, juce::String>> targets;
+    for (auto tool : kAllEditTools)
+        targets.emplace_back(getToolButton(tool), toolActionIdFor(tool));
+    targets.emplace_back(&snapToggleButton_, "timelineSnapToggle");
+    targets.emplace_back(&followPlayheadButton_, "timelineFollowPlayheadToggle");
+    return targets;
+}
+
 // The same three lines PianoRollComponent::matchesAction runs -- deliberately duplicated rather
 // than shared, because factoring it out would mean a header both surfaces include just to hold a
 // two-branch comparison, and the contract (not the code) is the thing that has to stay identical.

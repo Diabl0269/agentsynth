@@ -9,6 +9,7 @@
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
 #include "MixerSendList.h"
+#include "MixerSourceLine.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Mixer/MixerSections/MixerSectionControls.h"
@@ -57,11 +58,13 @@ public:
     void setColumn(const synth::MixerColumn& column, const juce::String& sourceLine);
 
     juce::AudioProcessorGraph::NodeID getNodeId() const noexcept { return nodeId_; }
+    /** True when the line under the header has something to say (a source that differs from the channel's name). */
+    bool hasSourceLine() const noexcept { return showsSourceLine_; }
 
     /** Test seam: the header this column owns -- a test drives its inline rename through
      *  MixerColumnHeader::getNameLabelForTest()'s real Label editor gestures. */
     MixerColumnHeader& getHeaderForTest() noexcept { return header_; }
-    juce::Label& getSourceLineLabelForTest() noexcept { return sourceLineLabel_; }
+    MixerSourceLine& getSourceLineLabelForTest() noexcept { return sourceLineLabel_; }
 
     /** Unbinds the fader/pan/mute/solo/meter from whatever live processor/parameters they
      *  currently reference, and clears this column's own raw pointers into the graph -- called by
@@ -338,6 +341,7 @@ private:
     juce::AudioProcessorGraph::NodeID nodeId_;
     juce::String uuid_;
     juce::String sourceLine_;
+    bool showsSourceLine_ = false;
     /** The uuid of the first (signal-order) Parametric EQ among this column's inserts -- see
      *  rebindControls(). Empty when the column has no EQ insert. */
     juce::String eqNodeUuid_;
@@ -348,7 +352,7 @@ private:
     juce::AudioProcessorGraph::NodeID eqNodeId_;
 
     MixerColumnHeader header_;
-    juce::Label sourceLineLabel_;
+    MixerSourceLine sourceLineLabel_;
     MixerInsertList insertList_;
     MixerEqThumbnail eqThumbnail_;
     MixerSendList sendList_;

@@ -471,12 +471,19 @@ void TimelinePanelComponent::moveFocusedTrack(int direction) {
     refreshRoutingPane();
 }
 
-// Down on the last row leaves the rows for "+ Track" (the next stop in the column); anything else is
-// the clamped row step. selectAdjacentTrack deliberately does not come through here: it selects a
-// track and must keep clamping.
+// "+ Track" sits above the rows but is also the stop below the last one, so it is entered from both
+// ends: Up off the first row lands on it from the top, Down off the last row from the bottom. Anything
+// else is the clamped row step. selectAdjacentTrack deliberately does not come through here: it
+// selects a track and must keep clamping.
 void TimelinePanelComponent::stepTrackFocusFromHeader(int direction) {
     const int count = trackHeaderList_.headers.size();
     if (direction > 0 && count > 0 && focusedTrackIndex_ == count - 1) {
+        addTrackFromTop_ = false;
+        focusAddTrackButton();
+        return;
+    }
+    if (direction < 0 && count > 0 && focusedTrackIndex_ == 0) {
+        addTrackFromTop_ = true;
         focusAddTrackButton();
         return;
     }
@@ -496,8 +503,9 @@ bool TimelinePanelComponent::isAddTrackButtonFocused() const {
     return recordFocusForTest_ ? addTrackFocusRecorded_ : addTrackButton_.hasKeyboardFocus(false);
 }
 
-// Up goes back to the last row (to the panel root when there are no tracks), Down is consumed (the
-// button is the last stop), Return/Space press it. Space is claimed here because juce::Button only
+// Entered from the top, Up goes to the panel root and Down to the first row. Entered from the last row,
+// Up goes back to it (to the panel root when there are no tracks) and Down is consumed (the button is
+// the last stop). Return/Space press it. Space is claimed here because juce::Button only
 // presses on Return and a bare Space would otherwise bubble up and toggle playback.
 bool TimelinePanelComponent::handleAddTrackButtonKey(const juce::KeyPress& key) {
     if (!isAddTrackButtonFocused() || key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
@@ -506,12 +514,17 @@ bool TimelinePanelComponent::handleAddTrackButtonKey(const juce::KeyPress& key) 
         addTrackButton_.triggerClick();
         return true;
     }
-    if (key.isKeyCode(juce::KeyPress::downKey))
+    const int count = trackHeaderList_.headers.size();
+    if (key.isKeyCode(juce::KeyPress::downKey)) {
+        if (addTrackFromTop_ && count > 0) {
+            focusedTrackIndex_ = -1; // moveFocusedTrack seeds row 0 from "nothing focused"
+            moveFocusedTrack(1);
+        }
         return true;
+    }
     if (!key.isKeyCode(juce::KeyPress::upKey))
         return false;
-    const int count = trackHeaderList_.headers.size();
-    if (count == 0) {
+    if (count == 0 || addTrackFromTop_) {
         if (recordFocusForTest_)
             addTrackFocusRecorded_ = false;
         else

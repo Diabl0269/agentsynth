@@ -54,6 +54,37 @@ TEST(MixerSectionLayoutTest, WithRoomEverySectionGetsItsHeightAndTheFaderTakesTh
     EXPECT_EQ(g.faderHeight, g.msTop - g.faderTop);
 }
 
+TEST(MixerSectionLayoutTest, WithoutASourceLineTheRowIsZeroPixelsAndEverythingBelowMovesUp) {
+    Layout layout;
+    const auto with = layout.resolve(600);
+    EXPECT_EQ(with.sourceLineTop, 26);
+    EXPECT_EQ(with.sourceLineHeight, 14);
+
+    EXPECT_TRUE(layout.setSourceLineVisible(false));
+    EXPECT_FALSE(layout.setSourceLineVisible(false)) << "no change, no notification";
+    const auto without = layout.resolve(600);
+    EXPECT_EQ(without.sourceLineHeight, 0);
+    EXPECT_EQ(without.sectionTop[at(MixerSection::Inserts)], with.sectionTop[at(MixerSection::Inserts)] - 14);
+    EXPECT_EQ(without.faderTop, with.faderTop - 14);
+    EXPECT_EQ(without.msTop, with.msTop) << "the M/S row stays on the column's bottom edge";
+    EXPECT_EQ(without.faderHeight, with.faderHeight + 14) << "the fader takes the row back";
+}
+
+TEST(MixerSectionLayoutTest, TheSourceLineVisibilityChangesTheRequiredHeightAndNotifiesOnlyWhenAsked) {
+    Layout layout;
+    const int with = layout.requiredColumnHeight();
+    int notified = 0;
+    layout.onGeometryChanged = [&notified] { ++notified; };
+
+    layout.setSourceLineVisible(false, /*notify=*/false);
+    EXPECT_EQ(notified, 0);
+    EXPECT_EQ(layout.requiredColumnHeight(), with - Layout::kSourceLineHeight);
+    EXPECT_FALSE(layout.isSourceLineVisible());
+    layout.setSourceLineVisible(true);
+    EXPECT_EQ(notified, 1);
+    EXPECT_EQ(layout.requiredColumnHeight(), with);
+}
+
 // Regression test for FRO298: at the bottom dock's default column height the fader must keep its
 // minimum; the sections give way first, EQ then Sends then Inserts.
 TEST(MixerSectionLayoutTest, AShortColumnGivesWayEqThenSendsThenInsertsAndTheFaderKeepsItsMinimum) {

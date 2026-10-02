@@ -39,7 +39,11 @@ juce::String ShortcutHintOverlay::keyTextForBinding(const juce::KeyPress& bindin
 }
 
 juce::String ShortcutHintOverlay::keyTextForTarget(const Target& target) const {
-    return target.fixedKey.isValid() ? keyTextForBinding(target.fixedKey) : keyTextFor(target.actionId);
+    if (target.fixedKey.isValid())
+        return keyTextForBinding(target.fixedKey);
+    if (target.fallbackActionId.isNotEmpty() && !shortcuts_.getBinding(target.actionId).isValid())
+        return keyTextFor(target.fallbackActionId);
+    return keyTextFor(target.actionId);
 }
 
 juce::Rectangle<int> ShortcutHintOverlay::boundsInOverlay(const juce::Component& c) const {

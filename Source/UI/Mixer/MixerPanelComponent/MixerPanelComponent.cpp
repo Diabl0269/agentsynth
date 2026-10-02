@@ -336,6 +336,13 @@ void MixerPanelComponent::rebuild() {
         stripColumns_.push_back(std::move(widget));
     }
 
+    // The row under the headers exists only while some strip column has a source to name; Direct and
+    // Master share the layout and leave it blank. No notification: this rebuild lays out at its end.
+    bool anySourceLine = false;
+    for (const auto& strip : stripColumns_)
+        anySourceLine = anySourceLine || strip->hasSourceLine();
+    sectionLayout_.setSourceLineVisible(anySourceLine, false);
+
     if (directColumn_ != nullptr) {
         const bool showDirect = snapshot.hasDirect && !viewDoc_->isHidden(synth::MixerViewDoc::kDirectId);
         directColumn_->setVisible(showDirect);
@@ -608,8 +615,8 @@ void MixerPanelComponent::resetAllMeterReadouts() {
 void MixerPanelComponent::resized() {
     // Same "muted" colour source as MixerInsertList::paint()'s empty-state text -- resolved
     // here (rather than once in the ctor) so a theme switch's re-skin pass is picked up the next
-    // time this panel lays out, the same staleness window MixerColumnHeader/sourceLineLabel_ accept
-    // for their own theme-derived text colours.
+    // time this panel lays out, the same staleness window MixerColumnHeader accepts for its own
+    // theme-derived text colours.
     const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const auto muted = laf != nullptr ? laf->getTheme().colors.textMuted : juce::Colour(0xff8A93A0);
     emptyHint_.setColour(juce::Label::textColourId, muted);

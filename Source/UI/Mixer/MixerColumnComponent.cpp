@@ -58,11 +58,9 @@ MixerColumnComponent::MixerColumnComponent() {
     };
     header_.onNameEdited = [this](const juce::String& newName) { commitHeaderRename(newName); };
     addAndMakeVisible(sourceLineLabel_);
-    // Plain text under the header, not part of its drag handle: a press there reaches the column itself.
-    sourceLineLabel_.setInterceptsMouseClicks(false, false);
-    sourceLineLabel_.setFont(juce::Font(juce::FontOptions(10.0f)));
-    sourceLineLabel_.setJustificationType(juce::Justification::centredLeft);
-    sourceLineLabel_.setColour(juce::Label::textColourId, juce::Colour(0xff8A93A0));
+    // Text under the header, not part of its drag handle: it takes the mouse for its tooltip, and a press on it
+    // is forwarded to this column (mouseUp below) like a press on the empty column body.
+    sourceLineLabel_.addMouseListener(this, false);
 
     insertViewport_.setList(insertList_);
     addAndMakeVisible(insertViewport_);
@@ -171,8 +169,10 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     // caller-resolved (comma-joined) names of column.feedingTracks, the same tracks a "source line" names for a
     // single-source column.
     // A linked channel's single track usually carries the channel's own name; repeating it under the header
-    // says nothing, so the row stays (sections line up across columns) but shows text only when it differs.
-    sourceLineLabel_.setText(sourceLine_ == column.name ? juce::String() : sourceLine_, juce::dontSendNotification);
+    // says nothing, so the line shows only when it differs. The panel keeps the row (every column's faders stay
+    // level) while any column shows one, and drops it when none does.
+    showsSourceLine_ = sourceLine_.isNotEmpty() && sourceLine_ != column.name;
+    sourceLineLabel_.setSources(showsSourceLine_ ? sourceLine_ : juce::String());
     insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,
                            column.sourceNodeId, column.nodeId);
 
@@ -500,7 +500,7 @@ void MixerColumnComponent::resized() {
     const auto inner = getLocalBounds().reduced(MixerSectionLayout::kColumnInset);
     auto top = inner;
     header_.setBounds(top.removeFromTop(MixerSectionLayout::kHeaderHeight));
-    sourceLineLabel_.setBounds(top.removeFromTop(MixerSectionLayout::kSourceLineHeight));
+    sourceLineLabel_.setBounds(inner.getX(), geometry.sourceLineTop, inner.getWidth(), geometry.sourceLineHeight);
     layoutSections(geometry, inner);
 
     auto row = [&inner](int y, int height) { return juce::Rectangle<int>(inner.getX(), y, inner.getWidth(), height); };

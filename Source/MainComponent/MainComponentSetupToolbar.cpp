@@ -327,6 +327,8 @@ void MainComponent::assembleToolbar() {
                          {&bottomDock.getMixerPanel().getSidePaneButton(), "toggleSidePane"},
                          {&timelinePanel.getSidePaneButton(), "toggleSidePane"},
                          {&statusBar.getTransportButton(), "togglePlayback"}};
+    for (const auto& target : timelinePanel.getShortcutHintTargets())
+        hintParts.buttons.push_back(target);
     hintParts.dock = &bottomDock;
     hintParts.transport = &timelinePanel.getTransportBar();
     hintParts.pianoRoll = &timelinePanel.getPianoRoll();
