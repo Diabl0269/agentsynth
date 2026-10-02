@@ -454,28 +454,11 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
     const bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled &&
                                   (macroController_.nodeIsMacroPort(srcId) || macroController_.nodeIsMacroPort(dstId));
 
-    // An attenuverter chain is a hidden node plus its two edges — removing the routing takes all
-    // of it, which is also what double-clicking the knob does.
+    // An attenuverter chain is a hidden node plus its two edges, and the macro ports it crossed go with it --
+    // whatever the auto-delete preference says, since the removal is the request. Double-clicking the knob
+    // takes the same path.
     if (cable.kind == VisibleCable::Kind::AttenuverterChain) {
-        const juce::AudioProcessorGraph::NodeID attenId{cable.id.attenUid};
-        auto removeChain = [this, attenId] { audioEngine.removeModRouting(attenId); };
-        if (touchesMacroPort) {
-            auto doMutation = [this, removeChain, srcId, dstId] {
-                removeChain();
-                macroController_.autoDeleteOrphanedMacroPort(srcId);
-                macroController_.autoDeleteOrphanedMacroPort(dstId);
-                updateComponents();
-            };
-            if (undoManager)
-                undoManager->recordGraphAndMacroChange(graph, macros, doMutation);
-            else
-                doMutation();
-        } else if (undoManager) {
-            undoManager->recordStructuralChange(graph, removeChain);
-        } else {
-            removeChain();
-        }
-        repaintCanvas();
+        removeModulationChain(juce::AudioProcessorGraph::NodeID{cable.id.attenUid});
         return;
     }
 

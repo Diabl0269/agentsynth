@@ -504,9 +504,16 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     sourceCombo.setTooltip("Modulation source. Click to search the modules that can drive this routing.");
     destCombo.setTooltip("Modulation destination. Click to search the parameters this routing can drive.");
     deleteButton->onClick = [this] {
-        // Through the seam so the ports only this routing used go with it.
-        applyRoutingChange({[&engine = owner.audioEngine, atten = attenuverterId] {
+        // Through the seam so the ports only this routing used go with it; the chain's ports are read before the
+        // cut and swept whatever the auto-delete preference says, as every canvas removal does. Captures by value:
+        // the sweep can rebuild the panel under this row.
+        applyRoutingChange({[&engine = owner.audioEngine, editor = owner.graphEditor, atten = attenuverterId] {
+                               const auto ports = editor != nullptr ? editor->modulationChainPorts(atten)
+                                                                    : std::vector<juce::AudioProcessorGraph::NodeID>{};
                                engine.removeModRouting(atten);
+                               if (editor != nullptr)
+                                   editor->getMacroController().sweepOneSidedMacroPorts(ports,
+                                                                                        /*ignorePreference=*/true);
                                return true;
                            }},
                            /*slideAttenuverter=*/false);

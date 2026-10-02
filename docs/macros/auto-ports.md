@@ -426,6 +426,20 @@ splice-out on auto-delete is the identical `spliceOutMacroPort` call direct dele
 resulting graph and macro state is indistinguishable from a port deleted that way — nothing in
 [`docs/macros/ports.md`](ports.md#cable-rendering-across-the-boundary)'s table changes.
 
+### Removing a modulation takes its whole chain
+
+Every canvas way of removing a modulation that crosses a macro boundary clears the chain through the
+ports, not just the attenuverter: right-click **Disconnect Cable**, double-clicking the cable's amount
+knob, **Disconnect** on the modulated knob's jack, the Mod Matrix's delete button and the timeline's
+**Remove modulator**. Each reads the chain (`GraphEditor::modulationChainPorts`, the ports on both
+sides of the attenuverter, however many macros deep) before it cuts, then runs
+`sweepOneSidedMacroPorts(ports, ignorePreference=true)` in the same undo step. Without that, an LFO
+outside a macro that modulated a member's knob kept `LFO -> inlet` after the removal, because the
+single-port auto-delete keeps a port that still has any cable. The sweep ignores the auto-delete
+preference: the removal is the request, so a port left behind would be the bug. `GraphEditor::removeModulationChain`
+is the one entry point for removing a chain from its attenuverter id. A second chain from the same
+source keeps working, and one undo restores the cable, the attenuverter and the ports.
+
 ## Nested macros
 
 A macro can sit inside another (`Macro::parentId`; made by Create Macro or Cmd+G on whole macros or on modules inside

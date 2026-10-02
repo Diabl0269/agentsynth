@@ -498,6 +498,10 @@ public:
     /** Removes `routing` (and its source when `removeLonelySource` and no cable is left on it) as ONE undo step,
      *  or, with `recordUndo` false, as a plain edit for a caller whose own undo step already surrounds it. */
     void removeModulator(const ModulationRouting& routing, bool removeLonelySource, bool recordUndo = true);
+    /** Removes the whole chain through hidden attenuverter `attenId` (ports it crossed included) as ONE undo step. */
+    void removeModulationChain(juce::AudioProcessorGraph::NodeID attenId);
+    /** The macro ports the chain through `attenId` crosses, read before a cut; empty when it crosses none. */
+    std::vector<juce::AudioProcessorGraph::NodeID> modulationChainPorts(juce::AudioProcessorGraph::NodeID attenId);
     /** The resolved colour of a modulation wire from `sourceId`. */
     juce::Colour modulationWireColour(juce::AudioProcessorGraph::NodeID sourceId) const;
     /** Test seam: runs just the drag tick's modifier re-sample (no real 30 Hz timer needed). */
