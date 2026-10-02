@@ -24,29 +24,50 @@ std::optional<juce::Rectangle<int>> placeBubble(const BubbleRequest& request, ju
     return bubble;
 }
 
+namespace {
+
+// Slides `bubble` sideways off every placed bubble it overlaps, each slide capped at half its width.
+juce::Rectangle<int> slidOffPlaced(juce::Rectangle<int> bubble, const std::vector<juce::Rectangle<int>>& placed) {
+    for (const auto& other : placed) {
+        if (!bubble.intersects(other))
+            continue;
+        const int overlap = std::min(bubble.getRight(), other.getRight()) - std::max(bubble.getX(), other.getX());
+        const int shift = std::min(overlap, bubble.getWidth() / 2);
+        bubble.translate(bubble.getCentreX() >= other.getCentreX() ? shift : -shift, 0);
+    }
+    return bubble;
+}
+
+} // namespace
+
+// Row 0 is the bubble's own place; when it still collides after the slide, rows further from the button
+// are tried (a row of narrow icon buttons with wide "Shift+2" key text off the Mac), each with the same
+// slide, before the bubble is left out.
 std::vector<std::optional<juce::Rectangle<int>>> placeBubbles(const std::vector<BubbleRequest>& requests,
                                                               juce::Rectangle<int> window) {
     std::vector<std::optional<juce::Rectangle<int>>> result(requests.size());
     std::vector<juce::Rectangle<int>> placed;
+    const auto overlapsPlaced = [&](const juce::Rectangle<int>& r) {
+        return std::any_of(placed.begin(), placed.end(),
+                           [&](const juce::Rectangle<int>& other) { return r.intersects(other); });
+    };
     for (size_t i = 0; i < requests.size(); ++i) {
-        auto bubble = placeBubble(requests[i], window);
-        if (!bubble)
+        const auto first = placeBubble(requests[i], window);
+        if (!first)
             continue;
+        const auto limit = requests[i].container.isEmpty() ? window : requests[i].container.getIntersection(window);
+        const int step =
+            (first->getHeight() + kStaggerGap) * (first->getY() >= requests[i].anchor.getCentreY() ? 1 : -1);
 
-        for (const auto& other : placed) {
-            if (!bubble->intersects(other))
+        for (int row = 0; row <= kMaxStaggerRows; ++row) {
+            const auto bubble = slidOffPlaced(first->translated(0, row * step), placed);
+            const auto& bounds = row == 0 ? window : limit;
+            if (overlapsPlaced(bubble) || !bounds.contains(bubble))
                 continue;
-            const int overlap = std::min(bubble->getRight(), other.getRight()) - std::max(bubble->getX(), other.getX());
-            const int shift = std::min(overlap, bubble->getWidth() / 2);
-            bubble->translate(bubble->getCentreX() >= other.getCentreX() ? shift : -shift, 0);
+            placed.push_back(bubble);
+            result[i] = bubble;
+            break;
         }
-
-        const bool stillOverlaps = std::any_of(
-            placed.begin(), placed.end(), [&](const juce::Rectangle<int>& other) { return bubble->intersects(other); });
-        if (stillOverlaps || !window.contains(*bubble))
-            continue;
-        placed.push_back(*bubble);
-        result[i] = bubble;
     }
     return result;
 }

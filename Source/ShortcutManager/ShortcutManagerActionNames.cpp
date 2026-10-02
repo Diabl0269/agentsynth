@@ -137,6 +137,24 @@ juce::String focusedTrackActionName(const juce::String& actionId) {
     return {};
 }
 
+// The timeline's Draw shapes (Shift+1..6), split out of getActionDescription for the function-size cap.
+// Free is "Free Draw Shape" so it does not read as a free-standing verb in a filtered list.
+juce::String drawShapeActionName(const juce::String& actionId) {
+    if (actionId == "timelineShapeFree")
+        return "Free Draw Shape";
+    if (actionId == "timelineShapeLine")
+        return "Line Shape";
+    if (actionId == "timelineShapeSine")
+        return "Sine Shape";
+    if (actionId == "timelineShapeTriangle")
+        return "Triangle Shape";
+    if (actionId == "timelineShapeSaw")
+        return "Saw Shape";
+    if (actionId == "timelineShapeSquare")
+        return "Square Shape";
+    return {};
+}
+
 } // namespace
 
 juce::String ShortcutManager::getActionDescription(const juce::String& actionId) {
@@ -251,6 +269,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Mute Tool";
     if (actionId == "timelineToolDraw")
         return "Draw Tool";
+    if (const auto name = drawShapeActionName(actionId); name.isNotEmpty())
+        return name;
     // "Locator 1"/"Locator 2" rather than "loop start"/"loop end": the two are the same pair of
     // numbers, and every DAW that has this key calls them locators.
     if (actionId == "timelineJumpToLocator1")

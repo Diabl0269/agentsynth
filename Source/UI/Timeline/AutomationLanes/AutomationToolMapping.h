@@ -26,4 +26,10 @@ constexpr AutomationLaneEditor::Tool automationToolFor(EditTool tool, bool shift
     return AutomationLaneEditor::Tool::Pointer;
 }
 
+// The same, with the Draw tool's shape: Line draws a straight line without Shift. The periodic shapes are
+// stamped by AutomationLaneShapeGesture before the curve tool is consulted, so they map like Free.
+constexpr AutomationLaneEditor::Tool automationToolFor(EditTool tool, bool shiftDown, DrawShape shape) noexcept {
+    return automationToolFor(tool, shiftDown || (tool == EditTool::Draw && shape == DrawShape::Line));
+}
+
 } // namespace synth::ui

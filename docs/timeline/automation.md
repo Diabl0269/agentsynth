@@ -327,7 +327,11 @@ the track recolours its lanes at once; text-muted on the Unassigned section). Th
 `readableOn(colour, laneBackground)` (`TrackColour.h`): a palette colour too pale for the light theme's lane
 background (amber, green) is darkened toward black, and on a dark theme lightened, until it reaches a 3:1
 contrast ratio, keeping its hue. A point being dragged is accent, one the eraser has touched is error, and
-every point has a 1 px outline in the lane background so it stays distinct where it sits on the line. Under
+every point has a 1 px outline in the lane background so it stays distinct where it sits on the line. Where
+points crowd (a neighbour on either side closer than two handle widths along the time axis, as in a shape stamped at a
+fine grid) their handles are not drawn, so a dense run reads as its curve; the handle under the pointer and
+the one being dragged, scrubbed or erased are always drawn, every point is still hit-tested, and zooming in
+brings the handles back (`AutomationLanes/AutomationHandleDensity.h`). Under
 the Draw tool the lane shows the pen cursor ([edit-tools](edit-tools.md#tool-cursors)).
 
 X is the SAME shared `TimelineViewState` the clip lanes use, so it lines up with the playhead
@@ -346,9 +350,10 @@ produce.
 
 `AutomationLaneEditor::Tool` stays the editor's internal enum; the lanes have no tool row of their
 own and follow the timeline's edit tool ([edit-tools](edit-tools.md)) through one function,
-`automationToolFor(EditTool, shiftDown)` (`AutomationLanes/AutomationToolMapping.h`):
-Select → Pointer, Draw → Pencil (Line while Shift is held at mouse-down), Erase → Eraser, every
-other tool → Pointer. `TimelinePanelComponent::setActiveTool` fans the tool out to every editor
+`automationToolFor(EditTool, shiftDown, DrawShape)` (`AutomationLanes/AutomationToolMapping.h`):
+Select → Pointer, Draw → Pencil (Line while Shift is held at mouse-down, or when the Line shape is
+picked), Erase → Eraser, every other tool → Pointer. The periodic Draw shapes and the Range tool's
+lane range are taken before the tool mapping is consulted ([Draw shapes](#draw-shapes-and-the-lane-range)). `TimelinePanelComponent::setActiveTool` fans the tool out to every editor
 (`setEditTool`), and the editor re-reads Shift at each mouse-down.
 
 | Tool | Gesture |
@@ -363,6 +368,58 @@ Right-click a SEGMENT shows Hold/Linear, ticking the current one, routed through
 
 Escape clears in-flight tool-drag state and returns `true`; when idle it returns `false` so the key
 falls through to the panel.
+
+## Draw shapes and the lane range
+
+The Draw tool puts down one of six shapes (`synth::ui::DrawShape`, `AutomationLanes/LaneShapes/DrawShape.h`):
+**Free** (the freehand pen; Shift+drag still draws a straight line), **Line** (a straight line), and four
+periodic shapes, **Sine**, **Triangle**, **Saw** and **Square**. The panel owns the shape next to the edit
+tool and pushes it to every lane editor the same way (`TimelinePanelComponent::setDrawShape`), the
+[amount lanes](#amount-lane)' editors included (`ModulatorBand::setDrawShape`), so a box stamp works on an LFO's
+amount too and creates its lane like a first pen stroke. The lane range is for ordinary lanes only.
+
+**The shape strip.** Six small icon buttons (`DrawShapeStrip`) slide out of the right side of the Draw button
+while Draw is the active tool or a lane range is selected (whatever the tool, so Range-drag then one click on a
+shape stamps it), and slide back when neither holds (`updateShapeStripShowing`): one `PanelSlide` on one
+`AnimationDriver`, 160 ms `easeOutCubic` in and 110 ms `easeInCubic` out, retargeted from where it is on an
+interruption, landing at once when the panel is not on screen. The transport row gives the strip a width
+proportional to the slide (`layoutTransportRow`, re-run on every frame instead of the whole panel layout), and
+the buttons ride on the strip's right edge so they come out from behind the Draw button. Closed, the strip is
+hidden, so it is neither a hint target nor in the accessibility tree. Each button is titled "Sine shape", its
+tooltip names its key ("Sine shape  (Shift+3)"), the active shape is lit like the active tool, and like the tool
+buttons it never takes keyboard focus: its keyboard path is the shortcut.
+
+**Keys.** Shift+1..Shift+6 (`timelineShapeFree`..`timelineShapeSquare`, rebindable) pick Draw and that shape,
+and stamp it over the lane range when there is one. Pressing the Draw key again while Draw is the tool steps to
+the next shape, wrapping after Square.
+
+**The box stamp.** With a periodic shape, a drag on a lane draws a box: its x edges are the press and the
+pointer, both snapped; its y edges are the swing (low and high value). The shape previews inside a dashed box
+with a chip such as "8 cycles · 2 bars". One cycle is one snap step (`divisionBeats`), or one beat with snap
+off. Esc cancels. On release every point inside the span is replaced by the generated shape in one
+`editBreakpoints` call, one undo step.
+
+**Generation** is a pure function, `generateShapePoints(shape, start, end, cycleBeats, lo, hi)`
+(`LaneShapes/LaneShapeGenerator.h`): Sine is 16 Linear points per cycle starting at the middle going up;
+Triangle is 2 points per cycle; Saw ramps up and drops through a Hold top point placed a sliver
+(`sawDropBeats`, at most 1/960 beat) before the next cycle, because a lane's beats are unique; Square is two
+Hold points per cycle. A closing Linear point sits exactly at the span's end, so the segment into any point
+after the span keeps its meaning. `estimateShapePointCount` bounds the size first: a stamp that would take the
+lane past `kMaxBreakpointsPerLane` is refused before anything is generated, with no undo entry, and the lane
+shows why for a moment.
+
+**The lane range.** With the Range tool, a drag on a lane selects a snapped beat span on that lane only
+(`LaneRangeSelection`: one lane range at a time across every lane, owned by `TimelineAutomationLanes`). It is
+painted like the clip lanes' range, a wash with accent edges. Esc clears it, and so does a press anywhere
+else: on a lane with another tool, or anywhere in the clip lanes (which also covers starting a clip range).
+Starting a lane range clears the clip range. Picking a tool keeps it, so Range-drag, then a shape (its key, or
+Draw and its button) stamps over the span at the lane's full height (min to max); Line ramps from the curve's
+value at the start to its value at the end; Free does nothing. Delete or Backspace removes the points inside
+it. Each is one undo step, and the range stays for the next verb. Stamped points are ordinary breakpoints:
+Select moves them, the eraser removes them.
+
+`AutomationLaneShapeGesture` holds all of this for one editor. The editor forwards its mouse, key and paint
+calls to it first, so the editor's own tools are unchanged.
 
 ## One gesture, one mutation
 
@@ -482,4 +539,12 @@ double-click, editing and erasing the last point, the bipolar picture, names and
 `AutomationLanesAmountIntegrationTests.cpp` (hidden as a lane, an orphaned lane row after a canvas delete,
 Remove modulator with and without the LFO, Move to track, a saved project reopening, and a project saved with
 sections inside a macro migrated on load); the row's readout is in `AutomationLanesModulatorRowTests.cpp`; the
-applier driving an attenuverter's `amount` from a lane is in `AutomationApplierTests.cpp`.
+applier driving an attenuverter's `amount` from a lane is in `AutomationApplierTests.cpp`. Draw shapes:
+`LaneShapeGeneratorTests.cpp` (points per cycle, where each shape starts, the saw's drop, the square's holds,
+partial cycles, the estimate), `AutomationLanesShapePaintTests.cpp` (the preview stroke read back from
+rendered pixels mid-drag; crowded handles hidden, the hovered one drawn, all back and grabbable zoomed in) and
+`AutomationLanesShapeTests.cpp` (a sine box at 1/4 snap over a bar is four
+cycles in one undo step, snap off is a cycle per beat, the chip, Esc, the strip shown only with Draw, Shift+3,
+Draw again stepping shapes, the lane range and a click elsewhere clearing it, a shape button and a shape key
+stamping over it, Line ramping on it, Delete, the point cap refusal, stamped points edited with Select,
+double-click and the eraser).

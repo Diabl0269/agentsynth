@@ -56,6 +56,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelShapes.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelShortcuts.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelCursorGlide.cpp
@@ -102,6 +103,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h
     Source/UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.cpp
     Source/UI/Timeline/AutomationLanes/AutomationToolMapping.h
+    Source/UI/Timeline/AutomationLanes/AutomationHandleDensity.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneActions.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneActions.cpp
     Source/UI/Timeline/AutomationLanes/TrackFoldArrow.h
@@ -113,6 +115,15 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesLayout.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulators.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesShapes.cpp
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/LaneRangeSelection.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/LaneShapeGenerator.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/LaneShapeGenerator.cpp
+    Source/UI/Timeline/AutomationLanes/LaneShapes/AutomationLaneShapeGesture.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/AutomationLaneShapeGesture.cpp
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeStrip.h
+    Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShapeStrip.cpp
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBand.h
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBand.cpp
     Source/UI/Timeline/AutomationLanes/Modulators/ModulatorBandEdits.cpp

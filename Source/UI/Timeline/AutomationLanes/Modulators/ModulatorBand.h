@@ -48,6 +48,8 @@ public:
     void setTransport(synth::TransportService* transport);
     void setHost(TrackHeaderHost* host) noexcept { host_ = host; }
     void setEditTool(EditTool tool);
+    /** The Draw tool's shape, so a box stamp works on the amount lane like on any lane. */
+    void setDrawShape(DrawShape shape);
 
     /** The routing this band stands for, under `ownerLane` (whose track a new amount lane goes on). */
     void setModulator(const ModulatorInfo& info, synth::LaneId ownerLane, const juce::String& parameterName);
@@ -105,6 +107,7 @@ private:
     synth::TransportService* transport_ = nullptr;
     TrackHeaderHost* host_ = nullptr;
     EditTool tool_ = EditTool::Select;
+    DrawShape drawShape_ = DrawShape::Free;
 
     ModulatorInfo info_;
     synth::LaneId ownerLane_;

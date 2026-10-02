@@ -116,6 +116,7 @@ void TimelineAutomationLanes::wireBand(ModulatorBand& band) const {
     band.setUndoManager(undo_);
     band.setTransport(transport_);
     band.setEditTool(editTool_);
+    band.setDrawShape(drawShape_);
 }
 
 void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::LaneId lane,

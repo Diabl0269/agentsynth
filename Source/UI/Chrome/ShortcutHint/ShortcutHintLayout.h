@@ -10,6 +10,10 @@ namespace synth::ui::hint {
 
 /** How far a bubble overlaps the bottom edge of the button it labels. */
 inline constexpr int kBubbleOverlap = 4;
+/** The gap between a bubble and one staggered into the next row when neighbours would collide. */
+inline constexpr int kStaggerGap = 2;
+/** How many extra rows a colliding bubble may be staggered into before it is left out. */
+inline constexpr int kMaxStaggerRows = 2;
 /** Gap between a dock tab's name and the bubble inside that tab. */
 inline constexpr int kTabNameGap = 6;
 /** Bottom-panel-hidden row: pill height, gap between pills, and gap above the status bar. */

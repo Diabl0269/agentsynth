@@ -64,6 +64,8 @@ ShortcutHintOverlay::HintModifier ShortcutHintOverlay::hintModifierOf(const juce
 #endif
     if (held == juce::ModifierKeys::altModifier)
         return HintModifier::Alt;
+    if (held == juce::ModifierKeys::shiftModifier)
+        return HintModifier::Shift;
     return HintModifier::None;
 }
 
@@ -72,15 +74,18 @@ bool ShortcutHintOverlay::isAnyHintModifierDown(const juce::ModifierKeys& mods) 
     if (mods.isCtrlDown())
         return true;
 #endif
-    return mods.isCommandDown() || mods.isAltDown();
+    return mods.isCommandDown() || mods.isAltDown() || mods.isShiftDown();
 }
 
 // Cmd and Ctrl show every bound target, so either key reveals bare-key tools (edit tools, follow
-// playhead) as well as chords; Option shows only targets whose CURRENT binding uses Option.
+// playhead) as well as chords; Option and Shift show only targets whose CURRENT binding uses that key
+// (Shift reveals the Draw shapes' Shift+digit keys without flooding the window with every chord).
 bool ShortcutHintOverlay::bindingShownInMode(const juce::KeyPress& binding) const noexcept {
     switch (mode_) {
     case HintModifier::Alt:
         return binding.getModifiers().isAltDown();
+    case HintModifier::Shift:
+        return binding.getModifiers().isShiftDown();
     case HintModifier::Cmd:
     case HintModifier::Ctrl:
     case HintModifier::None:
@@ -107,7 +112,10 @@ void ShortcutHintOverlay::sample(const juce::ModifierKeys& mods) {
     }
 
     const auto mode = hintModifierOf(mods);
-    if (mode == HintModifier::None) {
+    // Shift in a text field is typing capitals, not asking for hints (the field eats the keys, so no
+    // key press would ever reach keyPressed() below to cancel them).
+    const bool typing = dynamic_cast<juce::TextEditor*>(juce::Component::getCurrentlyFocusedComponent()) != nullptr;
+    if (mode == HintModifier::None || (mode == HintModifier::Shift && typing)) {
         // A modifier plus another (Cmd+Shift): that is a chord in the making, not a hint request.
         cancelNow();
         return;

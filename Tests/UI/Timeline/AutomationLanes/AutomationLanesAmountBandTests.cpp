@@ -183,3 +183,26 @@ TEST_F(TimelinePanelIntegrationTest, TheBandIsOneNamedTabStopWithAValueAndAToolt
     EXPECT_EQ(value->getCurrentValueAsString(), "+30%");
     EXPECT_TRUE(band->getTooltip().startsWith("Draw to change how much"));
 }
+
+TEST_F(TimelinePanelIntegrationTest, AShapeBoxStampsOntoTheAmountLaneInOneUndoStep) {
+    AmountScene s;
+    ASSERT_NE(s.band(), nullptr);
+    s.panel().setActiveTool(synth::ui::EditTool::Draw);
+    s.panel().setDrawShape(synth::ui::DrawShape::Square);
+    ASSERT_EQ(s.band()->getEditor()->getDrawShape(), synth::ui::DrawShape::Square) << "the band follows the shape";
+
+    // Snap is one bar, so a box over bars 2-3 is two square cycles swinging -50%..+50%.
+    s.drag({s.x(4.0), s.yFor(0.5)}, {s.x(12.0), s.yFor(-0.5)}, 12);
+    s.flush();
+
+    const auto* lane = s.amountLane();
+    ASSERT_NE(lane, nullptr) << "the stamp created the amount lane";
+    ASSERT_EQ(lane->points.size(), 2u * 2u + 1u) << "two cycles and the close";
+    EXPECT_NEAR(lane->points.front().beat, 4.0, 1.0e-6);
+    EXPECT_NEAR(lane->points.front().value, 0.5, 0.05);
+    EXPECT_NEAR(lane->points[1].value, -0.5, 0.05) << "below the centre: inverted half of the square";
+    EXPECT_NEAR(lane->points.back().beat, 12.0, 1.0e-6);
+
+    ASSERT_TRUE(s.undo().undo());
+    EXPECT_EQ(s.amountLane(), nullptr) << "one undo takes the stamp and the lane";
+}

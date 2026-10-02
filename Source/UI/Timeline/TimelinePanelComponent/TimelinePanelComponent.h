@@ -11,6 +11,7 @@
 #include "UI/Layout/SidePane/SidePane.h"
 #include "UI/Layout/SidePane/SidePaneToggleButton.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeStrip.h"
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/CursorGlide/TimelineCursorGlide.h"
@@ -147,6 +148,14 @@ public:
     juce::DrawableButton* getToolButton(EditTool tool) const noexcept;
     /** Every button this panel owns that has a keyboard shortcut, with its action id: the hint overlay's targets. */
     std::vector<std::pair<juce::Component*, juce::String>> getShortcutHintTargets();
+
+    // ---- Draw shapes and the lane range (TimelinePanelShapes.cpp) ----
+    void setDrawShape(DrawShape shape);
+    DrawShape getDrawShape() const noexcept { return drawShape_; }
+    /** Picks Draw and `shape`, and stamps it over the lane range when there is one: a shape button or key. */
+    void pickDrawShape(DrawShape shape);
+    DrawShapeStrip& getDrawShapeStrip() noexcept { return shapeStrip_; }
+    TimelineAutomationLanes& getAutomationLanes() noexcept { return automationLanes_; }
 
     // ---- Clip clipboard (Cmd+C/V/D on the TimelineClips surface) ----
     // See TimelinePanelClipClipboard.cpp for why this panel owns the clipboard.
@@ -524,6 +533,14 @@ private:
     void timerCallback() override;
     void layoutTrackHeaders();
 
+    // ---- Draw shapes (TimelinePanelShapes.cpp) ----
+    void initDrawShapes();
+    void updateShapeStripShowing();
+    void refreshShapeTooltips();
+    bool handleDrawShapeKey(const juce::KeyPress& key);
+    // Lays out the transport row (snap, follow, shape strip, tool strip, transport bar).
+    void layoutTransportRow();
+
     // ---- Side pane (TimelinePanelSidePane.cpp) ----
     void initSidePane();
     // Carves the pane's current width off the left of `body` (the area under the transport strip).
@@ -852,6 +869,8 @@ private:
     TimelineAutomationLanes automationLanes_{viewState_, trackHeaderList_};
     synth::LaneId selectedAutomationLane_;
 
+    DrawShape drawShape_ = DrawShape::Free;
+    DrawShapeStrip shapeStrip_{*this};
     juce::Rectangle<int> transportBarBounds_;
     juce::Rectangle<int> trackHeaderBounds_;
     juce::Rectangle<int> lanesBounds_;

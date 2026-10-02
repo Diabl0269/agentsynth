@@ -253,6 +253,15 @@ void ShortcutManager::addTimelineDefaultBindings() {
     bindings["timelineToolErase"] = juce::KeyPress('5', juce::ModifierKeys::noModifiers, 0);
     bindings["timelineToolMute"] = juce::KeyPress('7', juce::ModifierKeys::noModifiers, 0);
     bindings["timelineToolDraw"] = juce::KeyPress('8', juce::ModifierKeys::noModifiers, 0);
+    // The Draw tool's shapes (synth::ui::DrawShape), Shift+1..6 in strip order: each picks Draw and the
+    // shape. Stored as Shift plus the digit, never as the shifted glyph; keyPressMatches maps the '!'
+    // macOS delivers back to '1'. No shipped version bound Shift+digit, so no saved setting shadows these.
+    bindings["timelineShapeFree"] = juce::KeyPress('1', juce::ModifierKeys::shiftModifier, 0);
+    bindings["timelineShapeLine"] = juce::KeyPress('2', juce::ModifierKeys::shiftModifier, 0);
+    bindings["timelineShapeSine"] = juce::KeyPress('3', juce::ModifierKeys::shiftModifier, 0);
+    bindings["timelineShapeTriangle"] = juce::KeyPress('4', juce::ModifierKeys::shiftModifier, 0);
+    bindings["timelineShapeSaw"] = juce::KeyPress('5', juce::ModifierKeys::shiftModifier, 0);
+    bindings["timelineShapeSquare"] = juce::KeyPress('6', juce::ModifierKeys::shiftModifier, 0);
     // Option+1 / Option+2: park the cursor on the left / right loop locator.
     //
     // A PLAIN Alt chord, deliberately NOT Ctrl+Shift+digit, and the reason is a real bug rather

@@ -435,6 +435,8 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 | F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like J/L/P, so it works whichever timeline surface (lanes or roll) has focus |
 | P | Loop the Selection — sets the transport loop to the selected clips' (or, with the roll open, the edited clip's) span. Whether it also arms looping is `Settings → Preferences → "Timeline: P (loop selection) also switches looping on"` (default on; off = locators only) |
 | 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline/edit-tools.md`](../timeline/edit-tools.md#numbering)) |
+| Shift+1 .. Shift+6 | Pick the Draw tool and a shape: 1 Free, 2 Line, 3 Sine, 4 Triangle, 5 Saw, 6 Square (`timelineShapeFree` .. `timelineShapeSquare`, titled "Free Draw Shape", "Line Shape", ...). With a lane range selected the shape is also stamped over it. Pressing the Draw key again while Draw is the tool steps to the next shape, wrapping ([automation](../timeline/automation.md#draw-shapes-and-the-lane-range)). Stored as Shift plus the digit; `keyPressMatches` maps the `!`..`^` macOS delivers back to the digit. Shift+digit was never bound before, so no saved setting shadows these |
+| Delete / Backspace, Esc (with a lane range) | Remove the points inside the automation lane range (one undo step); Esc clears the lane range |
 | Cmd+Left / Cmd+Right (hold) | Glide the cursor back / forward, accelerating while held, settling to the grid on release when snap is on (`timelineGlideBack` / `timelineGlideForward`) — [`timeline/transport.md`](../timeline/transport.md#gliding-the-cursor). A tap moves one grid step (one beat with snap off). Neither chord was bound before: the other Timeline arrows are bare or Alt, the grid cycle is Ctrl+Shift |
 | Option+1 | Jump to Locator 1 — parks the cursor on the LEFT loop locator (`timelineJumpToLocator1`) |
 | Option+2 | Jump to Locator 2 — the RIGHT loop locator (`timelineJumpToLocator2`) |
@@ -623,8 +625,8 @@ stops playback wrapping (the same rule `TimelineRulerComponent::braceStateFor` f
 | Ctrl+Shift+Left | Grid Coarser (step toward Bar) |
 | Ctrl+Shift+Right | Grid Finer (step toward 1/128) |
 
-**Three Timeline families share the digit row**, separated only by their modifier set: **bare** =
-the edit tools, **Ctrl+Shift** = set the grid, **Option** = jump to a locator. Modifier equality on
+**Four Timeline families share the digit row**, separated only by their modifier set: **bare** =
+the edit tools, **Shift** = the Draw shapes, **Ctrl+Shift** = set the grid, **Option** = jump to a locator. Modifier equality on
 the binding side is exact (`keyPressMatches` normalizes only the key CODE), so none of the three can
 reach another; `ShortcutManagerTest.BareToolDigitsDoNotCollideWithTheGridOrLocatorCommands` is the
 tripwire. The grid-set family is on its ORIGINAL `Ctrl+Shift+digit` home, which is also what every
@@ -877,11 +879,14 @@ button it labels; release and they shrink back and fade out. The
 overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-window child of
 `MainComponent` that paints only while the hints are up.
 
-- **Three hold keys.** **Cmd** alone and **Ctrl** alone (macOS; off the Mac Ctrl is Cmd) both show
+- **Four hold keys.** **Cmd** alone and **Ctrl** alone (macOS; off the Mac Ctrl is Cmd) both show
   every target that has any binding, bare keys included (the timeline's edit tools, Follow playhead,
   Space on Play), so whichever modifier you reach for reveals everything. **Option/Alt** alone shows
   only the targets whose *current* binding uses Option -- the Mac Option+letter shortcuts (`⌥S` on the
-  piano roll's Scale filter chip). The filter reads the binding fresh each time, so a rebind moves a target in or out
+  piano roll's Scale filter chip). **Shift** alone does the same for Shift: it shows the targets whose current
+  binding uses Shift, such as the timeline's Draw shape buttons (Shift+1..6) while their strip is out. Shift is
+  ignored while a text field has focus (that is typing capitals), and a mouse press cancels it like any other
+  hold, so Shift+drag and Shift+click work as before. The filter reads the binding fresh each time, so a rebind moves a target in or out
   of the set and its bubble follows the new key. Switching from one hold key to another, or adding a
   second modifier, cancels like any chord; the latch, fade-out resume and delay all work per key. A
   different key pressed while the hints are fading out starts over from the 500 ms delay.
@@ -911,7 +916,8 @@ overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-wind
 - **Placement** (`ShortcutHintLayout.h`, pure geometry): centred under the button, overlapping its
   bottom edge by 4 px; flipped above if that leaves the window (or the bottom panel, for buttons inside
   it); an overlapping later bubble slides sideways by the overlap, up to half its width, else it is
-  left out. A dock tab carries its bubble inside the tab, 6 px after the name.
+  staggered up to two rows further from its button, sliding again in each row (2 px gap; a row of narrow icon buttons with wide "Shift+2"
+  key text off the Mac, like the Draw shapes), and left out only when no row fits. A dock tab carries its bubble inside the tab, 6 px after the name.
 - **Motion.** One tween value `t` (0 hidden, 1 settled) drives every bubble's scale, position and
   opacity: `hint::animatedBubbleBounds(target, origin, t)` is `target` at t = 1 and, at t = 0, 0.6 of
   its size centred on `origin`. The origin is the labelled button's centre for a bubble below or

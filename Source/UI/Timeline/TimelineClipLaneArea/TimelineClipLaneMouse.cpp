@@ -34,6 +34,8 @@ using namespace detail;
 
 //==============================================================================
 void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
+    if (onPressed)
+        onPressed();
     grabKeyboardFocus();
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;

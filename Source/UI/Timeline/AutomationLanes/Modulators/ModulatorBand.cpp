@@ -63,6 +63,12 @@ void ModulatorBand::setEditTool(EditTool tool) {
     updateClickRouting();
 }
 
+void ModulatorBand::setDrawShape(DrawShape shape) {
+    drawShape_ = shape;
+    if (editor_ != nullptr)
+        editor_->setDrawShape(shape);
+}
+
 // A routing with an Attenuverter gets the curve editor over its proxy lane and becomes a Tab stop; a direct
 // cable has no amount to edit, so its band is decoration the row in the header column already names, and
 // takes no clicks so the clip lanes underneath still decide.
@@ -76,6 +82,7 @@ void ModulatorBand::setModulator(const ModulatorInfo& info, synth::LaneId ownerL
         editor_->setTimelineDoc(&proxy_);
         editor_->setTransport(transport_);
         editor_->setEditTool(tool_);
+        editor_->setDrawShape(drawShape_);
         // The band is the one Tab stop and the one accessible node: the editor's press hands focus up to it.
         editor_->setWantsKeyboardFocus(false);
         editor_->setAccessible(false);

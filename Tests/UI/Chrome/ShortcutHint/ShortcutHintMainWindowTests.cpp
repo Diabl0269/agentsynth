@@ -112,9 +112,11 @@ TEST_F(ShortcutHintMainWindowTest, TheTimelineListsEveryShortcutButtonItOwnsAsAH
     }
     for (const char* expected :
          {"timelineToolSelect", "timelineToolRange", "timelineToolSplit", "timelineToolGlue", "timelineToolErase",
-          "timelineToolMute", "timelineToolDraw", "timelineSnapToggle", "timelineFollowPlayheadToggle"})
+          "timelineToolMute", "timelineToolDraw", "timelineSnapToggle", "timelineFollowPlayheadToggle",
+          "timelineShapeFree", "timelineShapeLine", "timelineShapeSine", "timelineShapeTriangle", "timelineShapeSaw",
+          "timelineShapeSquare"})
         EXPECT_NE(std::find(ids.begin(), ids.end(), juce::String(expected)), ids.end()) << expected;
-    EXPECT_EQ(ids.size(), 9u);
+    EXPECT_EQ(ids.size(), 15u);
     for (auto tool : synth::ui::kAllEditTools)
         EXPECT_NE(std::find_if(targets.begin(), targets.end(),
                                [&](const auto& t) { return t.first == panel.getToolButton(tool); }),
@@ -128,6 +130,8 @@ TEST_F(ShortcutHintMainWindowTest, HoldingCmdLabelsTheTimelineEditToolsSnapFollo
     setDockOpen(mc, true);
     mc.getBottomDock().setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
 
+    // Draw is the tool, so its shape strip is out and every target the panel lists is on screen.
+    mc.getTimelinePanel().setActiveTool(synth::ui::EditTool::Draw);
     auto* overlay = findOverlay(mc);
     ASSERT_NE(overlay, nullptr);
     double now = 0.0;
@@ -142,6 +146,35 @@ TEST_F(ShortcutHintMainWindowTest, HoldingCmdLabelsTheTimelineEditToolsSnapFollo
     }
     // The loop button's key is the timeline's bare L while the transport action is unbound.
     EXPECT_TRUE(bubbleOver(*overlay, panel.getTransportBar().getLoopButton(), keyText(mc, "timelineToggleLoop")));
+    overlay->modifierKeysChanged(juce::ModifierKeys());
+}
+
+TEST_F(ShortcutHintMainWindowTest, HoldingShiftLabelsTheDrawShapesAndNotTheBareToolKeys) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.newPatchForTest();
+    setDockOpen(mc, true);
+    mc.getBottomDock().setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
+    auto& panel = mc.getTimelinePanel();
+    panel.setActiveTool(synth::ui::EditTool::Draw);
+
+    auto* overlay = findOverlay(mc);
+    ASSERT_NE(overlay, nullptr);
+    double now = 0.0;
+    overlay->setClockForTest([&] { return now; });
+    const juce::ModifierKeys shift(juce::ModifierKeys::shiftModifier);
+    overlay->modifierKeysChanged(shift);
+    now += ShortcutHintOverlay::kShowDelayMs;
+    overlay->modifierKeysChanged(shift);
+    ASSERT_TRUE(overlay->areHintsShowing());
+
+    for (auto shape : synth::ui::kAllDrawShapes) {
+        const auto id = "timelineShape" + juce::String(synth::ui::drawShapeName(shape));
+        EXPECT_TRUE(bubbleOver(*overlay, *panel.getDrawShapeStrip().getButton(shape), keyText(mc, id.toRawUTF8())))
+            << id;
+    }
+    EXPECT_FALSE(bubbleOver(*overlay, *panel.getToolButton(synth::ui::EditTool::Draw), keyText(mc, "timelineToolDraw")))
+        << "a bare digit does not use Shift";
     overlay->modifierKeysChanged(juce::ModifierKeys());
 }
 

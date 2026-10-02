@@ -184,6 +184,8 @@ public:
     // repaints every other viewState_ scroll/zoom writer in that class already issues — because
     // this component has no reference to the ruler and no business repainting it directly.
     std::function<void()> onViewScrolledByDrag;
+    /** Fired at the start of every mouse press on the clip lanes; may be unset. */
+    std::function<void()> onPressed;
 
     // Whether a Move/Resize(-Left/-Right) drag is currently in flight — the panel's follow-playhead
     // guard reads this so a drag in progress and an auto-scroll page-flip never fight over

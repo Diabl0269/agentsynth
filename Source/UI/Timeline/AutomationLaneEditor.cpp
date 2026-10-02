@@ -4,6 +4,7 @@
 #include "Timeline/AutomationRecorder.h"
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/AutomationLanes/AutomationHandleDensity.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h"
 #include "UI/Timeline/AutomationLanes/AutomationToolMapping.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
@@ -29,7 +30,13 @@ void AutomationLaneEditor::setTool(Tool tool) noexcept {
 
 void AutomationLaneEditor::setEditTool(EditTool tool) noexcept {
     editTool_ = tool;
-    tool_ = automationToolFor(tool, false);
+    tool_ = automationToolFor(tool, false, getDrawShape());
+}
+
+void AutomationLaneEditor::setDrawShape(DrawShape shape) noexcept {
+    shapeGesture_.setDrawShape(shape);
+    if (editTool_.has_value())
+        tool_ = automationToolFor(*editTool_, false, shape);
 }
 
 void AutomationLaneEditor::setCurveColour(juce::Colour colour) {
@@ -196,9 +203,11 @@ void AutomationLaneEditor::paint(juce::Graphics& g) {
         return;
 
     paintBipolarGuide(g, *this, lane->range.minValue, lane->range.maxValue, (float)valueToY(0.0));
+    shapeGesture_.paintUnderCurve(g);
     paintCommittedCurve(g, *lane);
     paintToolPreview(g);
     paintHandles(g, *lane);
+    shapeGesture_.paintOverCurve(g);
 }
 
 void AutomationLaneEditor::paintGridBackdrop(juce::Graphics& g) {
@@ -314,7 +323,11 @@ void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::Automati
         erase = juce::Colours::red;
     }
 
-    for (const auto& bp : lane.points) {
+    // Crowded handles are left out (visibleHandleMask) so a dense run reads as its curve; the one being
+    // dragged, scrubbed, erased or hovered is always drawn.
+    const auto visible = visibleHandleMask(handleScreenPositions(lane), kHandleRadiusPx * 4.0f);
+    for (std::size_t i = 0; i < lane.points.size(); ++i) {
+        const auto& bp = lane.points[i];
         double beat = bp.beat;
         double value = bp.value;
         bool active = false;
@@ -327,12 +340,49 @@ void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::Automati
         }
 
         const bool erased = dragMode_ == DragMode::Eraser && erasedBeats_.count(bp.beat) > 0;
+        const bool hovered = hoveredBeat_ == bp.beat;
+        if (!visible[i] && !active && !erased && !hovered)
+            continue;
         const float x = (float)viewState_.beatToX(beat);
         const float y = (float)valueToY(value);
         g.setColour(erased ? erase : (active ? accent : normal));
         g.fillEllipse(x - kHandleRadiusPx, y - kHandleRadiusPx, kHandleRadiusPx * 2.0f, kHandleRadiusPx * 2.0f);
         g.setColour(outline);
         g.drawEllipse(x - kHandleRadiusPx, y - kHandleRadiusPx, kHandleRadiusPx * 2.0f, kHandleRadiusPx * 2.0f, 1.0f);
+    }
+}
+
+std::vector<juce::Point<float>> AutomationLaneEditor::handleScreenPositions(const synth::AutomationLane& lane) const {
+    std::vector<juce::Point<float>> screen;
+    screen.reserve(lane.points.size());
+    for (const auto& bp : lane.points)
+        screen.push_back({(float)viewState_.beatToX(bp.beat), (float)valueToY(bp.value)});
+    return screen;
+}
+
+int AutomationLaneEditor::visibleHandleCountForTest() const {
+    const auto* lane = doc_ != nullptr ? doc_->getLane(laneId_) : nullptr;
+    if (lane == nullptr)
+        return 0;
+    const auto mask = visibleHandleMask(handleScreenPositions(*lane), kHandleRadiusPx * 4.0f);
+    return (int)std::count(mask.begin(), mask.end(), true);
+}
+
+// A hidden handle under the pointer is drawn, so the point about to be grabbed is always visible.
+void AutomationLaneEditor::mouseMove(const juce::MouseEvent& e) {
+    std::optional<double> hovered;
+    if (auto hit = hitTestHandle(e.getPosition()))
+        hovered = hit->beat;
+    if (hovered != hoveredBeat_) {
+        hoveredBeat_ = hovered;
+        repaint();
+    }
+}
+
+void AutomationLaneEditor::mouseExit(const juce::MouseEvent&) {
+    if (hoveredBeat_.has_value()) {
+        hoveredBeat_.reset();
+        repaint();
     }
 }
 
@@ -358,11 +408,15 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
 
     if (!e.mods.isLeftButtonDown())
         return;
+    if (shapeGesture_.mouseDown(e, editTool_)) {
+        repaint();
+        return;
+    }
 
     // Shift is read here rather than when the tool was picked: the Draw tool draws a line only
     // while Shift is held as the gesture starts.
     if (editTool_.has_value())
-        tool_ = automationToolFor(*editTool_, e.mods.isShiftDown());
+        tool_ = automationToolFor(*editTool_, e.mods.isShiftDown(), getDrawShape());
     mouseDownPos_ = pos;
 
     switch (tool_) {
@@ -408,7 +462,7 @@ void AutomationLaneEditor::mouseDown(const juce::MouseEvent& e) {
 }
 
 void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
-    if (doc_ == nullptr || !laneId_.isValid())
+    if (doc_ == nullptr || !laneId_.isValid() || shapeGesture_.mouseDrag(e))
         return;
     const auto pos = e.getPosition();
 
@@ -440,7 +494,9 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
     repaint();
 }
 
-void AutomationLaneEditor::mouseUp(const juce::MouseEvent&) {
+void AutomationLaneEditor::mouseUp(const juce::MouseEvent& e) {
+    if (shapeGesture_.mouseUp(e))
+        return;
     if (doc_ == nullptr || !laneId_.isValid()) {
         dragMode_ = DragMode::None;
         return;
@@ -586,6 +642,8 @@ void AutomationLaneEditor::mouseDoubleClick(const juce::MouseEvent& e) {
 
 //==============================================================================
 bool AutomationLaneEditor::keyPressed(const juce::KeyPress& key) {
+    if (shapeGesture_.keyPressed(key))
+        return true;
     if (key == juce::KeyPress::escapeKey) {
         if (dragMode_ != DragMode::None) {
             dragMode_ = DragMode::None;

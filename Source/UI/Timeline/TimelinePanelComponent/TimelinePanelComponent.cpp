@@ -61,6 +61,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
 
     initSnapCombo();
     initSidePane();
+    initDrawShapes();
 
     // The edit-tool strip, left of the snap controls in the transport bar (see resized()). Radio
     // buttons rather than a combo: which tool is active has to be readable at a glance mid-edit,
@@ -336,6 +337,8 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
     transportBar_.getMetronomeButton().setTooltip(
         synth::ui::formatShortcutHint("Metronome click (summed after the graph - never recorded or bounced)",
                                       shortcutHintFor(shortcuts_, "transportToggleMetronome", {})));
+
+    refreshShapeTooltips();
 }
 
 //==============================================================================
