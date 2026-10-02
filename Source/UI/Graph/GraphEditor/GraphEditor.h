@@ -829,6 +829,9 @@ private:
     // Arms macroCrossingAnim_ from a pre-splice cable snapshot the caller takes (see its definition).
     void armMacroCrossingAnimation(const std::vector<VisibleCable>& cablesBeforeSplice, uint32_t crossingNodeUid,
                                    juce::Rectangle<int> flashBounds);
+    // Slides the port-side end of every cable a cable drop created from `dropPoint` (canvas coordinates) to its anchor.
+    void armMacroPortSlide(const std::vector<VisibleCable>& cablesBeforeDrop, juce::Point<float> dropPoint);
+    void startMacroCrossingDriver();
 
     // ---- Cable memo (perf) ----
     std::vector<VisibleCable> rebuildVisibleCables();

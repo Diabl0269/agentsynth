@@ -641,9 +641,22 @@ void GraphEditor::animateDropLanding(ModuleComponent* module, juce::Point<int> f
 // macroCrossingDriverAnim_, exactly like every other AnimationDriver use in this file.
 void GraphEditor::armMacroCrossingAnimation(const std::vector<VisibleCable>& cablesBeforeSplice,
                                             uint32_t crossingNodeUid, juce::Rectangle<int> flashBounds) {
-    if (!macroCrossingAnim_.arm(cablesBeforeSplice, rebuildVisibleCables(), crossingNodeUid, flashBounds))
-        return;
+    if (macroCrossingAnim_.arm(cablesBeforeSplice, rebuildVisibleCables(), crossingNodeUid, flashBounds))
+        startMacroCrossingDriver();
+}
 
+// A cable dropped across a macro boundary has no earlier self to slide from, so each cable it created that
+// ends on a minted port emerges from the drop point instead (MacroCrossingAnimator::armSlideFrom).
+void GraphEditor::armMacroPortSlide(const std::vector<VisibleCable>& cablesBeforeDrop, juce::Point<float> dropPoint) {
+    const auto isPort = [this](uint32_t uid) { return macroController_.nodeIsMacroPort(NodeID{uid}); };
+    if (macroCrossingAnim_.armSlideFrom(cablesBeforeDrop, rebuildVisibleCables(), dropPoint, isPort)) {
+        cablesCacheValid = false; // the memo was built before the slide existed
+        startMacroCrossingDriver();
+    }
+}
+
+// The one place macroCrossingDriverAnim_ is started, whichever gesture armed macroCrossingAnim_.
+void GraphEditor::startMacroCrossingDriver() {
     juce::Component::SafePointer<GraphEditor> safeEditor(this);
     macroCrossingDriverAnim_.start(
         vblankUpdater,
