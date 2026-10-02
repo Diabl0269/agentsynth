@@ -154,7 +154,7 @@ TEST_F(NoiseModuleTest, CVModulationMonoAndPoly) {
         monoBuffer.setSample(8, i, 0.5f); // Color CV = +0.5
 
     module->processBlock(monoBuffer, midiMessages);
-    EXPECT_TRUE(std::abs(monoBuffer.getSample(0, 0)) > 0.0001f);
+    EXPECT_TRUE(monoBuffer.getMagnitude(0, 0, 512) > 0.0001f); // any one random sample can land near zero
 
     // Poly CV on channel 8
     auto* polyParam = dynamic_cast<juce::AudioParameterBool*>(module->getParameters()[4]);
@@ -166,7 +166,7 @@ TEST_F(NoiseModuleTest, CVModulationMonoAndPoly) {
         polyBuffer.setSample(8, i, -0.5f); // Color CV = -0.5
 
     module->processBlock(polyBuffer, midiMessages);
-    EXPECT_TRUE(std::abs(polyBuffer.getSample(0, 0)) > 0.0001f);
+    EXPECT_TRUE(polyBuffer.getMagnitude(0, 0, 512) > 0.0001f);
 }
 
 class NoiseModuleMuteBypassTest
