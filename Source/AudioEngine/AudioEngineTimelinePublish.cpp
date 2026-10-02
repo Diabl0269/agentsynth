@@ -2,6 +2,7 @@
 // gate it keeps honest.
 
 #include "AudioEngine.h"
+#include "AudioEngine/SamplerMidiWiring.h"
 #include "AudioEngine/SidechainConnections.h"
 #include "AudioEngine/StereoDownMix.h"
 #include "Mixer/SoloAudibleSet.h"
@@ -27,6 +28,7 @@ void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
     refreshSoloGate();
     refreshSidechainKeys();
     refreshNormalling();
+    refreshMidiWiring();
 
     auto snapshot = synth::TimelineSnapshot::buildFrom(doc);
 
@@ -171,6 +173,11 @@ void AudioEngine::refreshSoloGate() {
 // replacements that reach publishTimeline, and from changeListenerCallback for every other topology
 // change (a plain cable drag or unplug never reaches publishTimeline).
 void AudioEngine::refreshSidechainKeys() { synth::publishSidechainConnections(mainProcessorGraph); }
+
+// Runs at the same three call sites as refreshNormalling() (publishTimeline, the plugin's setStateInformation, and
+// the graph's own change broadcast) because a plain canvas cable drag reaches neither of the first two. Opening a
+// project is covered earlier still: applyJSONToGraph publishes the wiring itself, under the callback lock.
+void AudioEngine::refreshMidiWiring() { synth::publishSamplerMidiWiring(mainProcessorGraph); }
 
 namespace {
 // True iff `nodeId`'s raw ch0 has an incoming connection and `rightChannel` does not. Shared by

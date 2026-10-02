@@ -223,6 +223,8 @@ add_library(Core STATIC
     Source/AudioEngine/AudioEngineRenderPass.cpp
     Source/AudioEngine/AudioEngineRuntimeState.cpp
     Source/AudioEngine/AudioEngineTimelinePublish.cpp
+    Source/AudioEngine/SamplerMidiWiring.cpp
+    Source/AudioEngine/SamplerMidiWiring.h
     Source/AudioEngine/SidechainConnections.cpp
     Source/AudioEngine/SidechainConnections.h
     Source/AudioEngine/StereoDownMix.cpp

@@ -8,6 +8,7 @@
 #include "AIStateMapper.h"
 
 #include "AIStateMapperInternal.h"
+#include "AudioEngine/SamplerMidiWiring.h"
 #include "Mixer/MasterSplice.h"
 
 #include <map>
@@ -940,9 +941,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         }
     }
 
+    synth::publishSamplerMidiWiring(graph); // the nodes were already audible while cables landed
     if (outIdMap != nullptr)
         *outIdMap = idMap;
-
     return true;
 }
 
