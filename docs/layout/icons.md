@@ -7,8 +7,8 @@ CoreText runtime font-family swap corruption described in
 
 ## The icon enum
 
-`synth::theme::Icon` in `Source/UI/Theme/IconLibrary.h` defines 44 icons, `TransportPlay = 0`
-through `ToolRange`, followed by `kCount`:
+`synth::theme::Icon` in `Source/UI/Theme/IconLibrary.h` defines 45 icons, `TransportPlay = 0`
+through `MixerSources`, followed by `kCount`:
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
@@ -22,7 +22,7 @@ WaveformTriangle ToggleMinimap    ModuleDualIO
 ToolSelect       ToolSplit        ToolGlue         ToolErase
 ToolMute         ToolDraw
 TrackMidi        TrackAudio       TrackAutomation  FollowPlayhead
-CatIO            ActionDetachWindow ToolRange
+CatIO            ActionDetachWindow ToolRange        MixerSources
 ```
 
 **Ordinals are append-only.** New entries go immediately before `kCount`, never grouped in beside a
@@ -79,6 +79,9 @@ Notes on individual entries:
 - **`ToolRange`** (43) is the Range edit tool's glyph (`EditTool::Range`, key 2): two vertical edge
   bars with a double-headed arrow between them — a span of time, not an object. Strip button and
   cursor use it exactly like the other `Tool*` glyphs above.
+- **`MixerSources`** (44) is the mixer column header's sources badge: an arrow running into a bracket,
+  "plays into this channel". It is a muted base the badge (`MixerIconButton`) clones hover and on variants
+  from, the same ladder the toolbar set uses.
 
 ## Token to tint map
 
@@ -97,7 +100,7 @@ Notes on individual entries:
 | `ToolSelect` … `ToolDraw`, `ToolRange` | `textPrimary` — which tool is ACTIVE is a per-button highlight painted with the `toolActive` token, not a different icon tint; the glyph itself never changes colour |
 | `TrackMidi`, `TrackAudio`, `TrackAutomation` | `textMuted` — quiet identity chrome, the same convention as the category icons |
 | `FollowPlayhead` | `textPrimary` |
-| `ActionDetachWindow` | `textMuted` |
+| `ActionDetachWindow`, `MixerSources` | `textMuted` |
 
 **The muted tint on the toolbar set is a base, not the drawn colour.**
 `MainComponent::applyToolbarIcons()` clones that base and re-tints it via `Drawable::replaceColour`

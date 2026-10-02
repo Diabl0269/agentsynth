@@ -25,6 +25,10 @@ namespace synth {
 class MidiRemoteProjectDoc;
 } // namespace synth
 
+namespace synth::ui {
+class ColourPickerPopup;
+} // namespace synth::ui
+
 namespace synth::midi {
 class RemoteEngine;
 class MidiLearnController;
@@ -79,6 +83,10 @@ public:
     /** MainComponent wires this to performTrackEdit(moveTrack) plus a mixer rebuild -- fired when a mixer
      *  track column is dropped in a new place. */
     void setOnMoveTrack(std::function<void(synth::TrackId, int newIndex)> callback);
+    /** MainComponent wires this to the track colour picker its Timeline swatch opens -- fired by a mixer column's
+     *  colour dot, so one pick recolours the track, its macro and both views. */
+    void
+    setOnBuildTrackColourPicker(std::function<std::unique_ptr<synth::ui::ColourPickerPopup>(synth::TrackId)> callback);
 
     /** Whether the active tab has a side pane (the Mixer's zones list and the Timeline's routing view do). */
     bool hasActiveSidePane() const noexcept { return activeTab_ == Tab::Mixer || activeTab_ == Tab::Timeline; }

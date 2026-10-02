@@ -403,8 +403,8 @@ void MixerMasterColumn::paintOverChildren(juce::Graphics& g) {
 }
 
 // Master lays out against the SAME shared MixerSectionLayout geometry as every strip column, so its
-// Inserts row and its fader line up with theirs: the source-line slot under the header stays empty,
-// and so do the Sends, EQ and pan rows Master has no content for.
+// Inserts row and its fader line up with theirs: the Sends, EQ and pan rows Master has no content for
+// stay empty.
 void MixerMasterColumn::resized() {
     // Same meter width as MixerColumnComponent -- the Master column stays visually consistent with
     // every strip column's meter (docs/mixer/mixer.md meters section).

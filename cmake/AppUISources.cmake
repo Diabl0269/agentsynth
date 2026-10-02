@@ -83,6 +83,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelSidePane.cpp
     Source/UI/Timeline/TrackChannelLinkSurface.h
+    Source/UI/Timeline/TrackColourPicker.h
+    Source/UI/Timeline/TrackColourPicker.cpp
     Source/UI/Timeline/CursorGlide/TimelineCursorGlide.h
     Source/UI/Timeline/CursorGlide/TimelineCursorGlide.cpp
     Source/UI/Timeline/CursorGlide/PhysicalKeyState.h
@@ -152,6 +154,10 @@ set(APPUI_SOURCES
     Source/UI/Timeline/ClipSelectionModel.h
     Source/UI/Timeline/RangeSelectionModel.h
     Source/UI/Mixer/MixerColumnHeader.h
+    Source/UI/Mixer/MixerHeader/MixerIconButton.h
+    Source/UI/Mixer/MixerHeader/MixerIconButton.cpp
+    Source/UI/Mixer/MixerHeader/MixerColourDot.h
+    Source/UI/Mixer/MixerHeader/MixerColourDot.cpp
     Source/UI/Mixer/MixerMeterScale.h
     Source/UI/Mixer/MixerMeterBallistics.h
     # MeterColourStops.h/.cpp moved to Core's own source list (root CMakeLists.txt, FRO147) --
@@ -192,6 +198,7 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelRowKeyboard.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelColour.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelColumnDrag.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelViewEdits.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelZones.cpp
@@ -201,6 +208,10 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerZonesPane/MixerZonesPaneKeyboard.cpp
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.h
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.cpp
+    Source/UI/Layout/ReducedMotion.h
+    Source/UI/Layout/ReducedMotion.cpp
+    Source/UI/Layout/CalloutReveal.h
+    Source/UI/Layout/CalloutReveal.cpp
     Source/UI/Layout/SidePane/SidePane.h
     Source/UI/Layout/SidePane/SidePane.cpp
     Source/UI/Layout/SidePane/SidePaneToggleButton.h

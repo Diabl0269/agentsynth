@@ -429,6 +429,8 @@ void ShortcutManager::addPianoRollDefaultBindings() {
     // Return is not free for the EQ: it already selects the focused column on the canvas.
     bindings["mixerEnterRows"] = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0);
     bindings["mixerOpenEq"] = juce::KeyPress('e', juce::ModifierKeys::noModifiers, 0);
+    // Bare B bypasses the focused send or insert row; it is only read while a row holds the panel's row focus.
+    bindings["mixerToggleRowBypass"] = juce::KeyPress('b', juce::ModifierKeys::noModifiers, 0);
 }
 
 // The card layout editor's list keys: Space shows or hides the focused control, Cmd+Up/Down moves it

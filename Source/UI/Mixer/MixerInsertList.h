@@ -2,6 +2,7 @@
 
 #include "MacroSet.h"
 #include "Mixer/MixerModel/MixerModel.h"
+#include "UI/Mixer/MixerHeader/MixerIconButton.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -17,6 +18,9 @@ class GraphEditor;
 // existing drag-reorder widget in this codebase fits a mixer insert list). Each mutation is ONE
 // AppUndoManager::recordGraphAndMacroChange, via MixerModel's spliceOutInsert/spliceInInsert/
 // reorderInsert (Core, pure graph splices).
+//
+// Each row ends in a bypass icon button (the module's own bypass, one undo step); a bypassed row's name is dimmed.
+// With the row focused in the panel's row walk, the rebindable "mixerToggleRowBypass" key (B) does the same.
 //
 // Branching chain: the same list, read-only, plus a bottom "Edit on canvas" link that resolves and
 // selects editOnCanvasTargetUuid exactly like a column header click does.
@@ -82,6 +86,18 @@ public:
     int getEntryCountForTest() const noexcept { return (int)entries_.size(); }
     bool isLinearForTest() const noexcept { return linear_; }
 
+    // ---- Bypass (docs/mixer/panel.md#bypassing-a-row) ----
+    /** Flips row `rowIndex`'s module bypass as ONE undo step, then fires onMutated. Out of range or unconfigured:
+     * no-op. */
+    void toggleBypassForRow(int rowIndex);
+    /** Names the bypass key for the buttons' tooltips ("B"); null leaves the tooltips without a key. */
+    std::function<juce::String()> bypassShortcutText;
+    /** The row's bypass button -- the real child a click or a Space press reaches. Null out of range. */
+    MixerIconButton* getBypassButtonForTest(int rowIndex) const noexcept {
+        return rowIndex >= 0 && rowIndex < (int)bypassButtons_.size() ? bypassButtons_[(size_t)rowIndex].get()
+                                                                      : nullptr;
+    }
+
     /** The transparent, name-only proxy component behind row `rowIndex` -- see
      *  RowAccessibilityProxy's own comment on why paint() above draws every row itself while
      *  accessibility still needs a real child Component per row. Null out of range. */
@@ -103,6 +119,7 @@ public:
 
 private:
     static constexpr int kRowHeight = 18;
+    static constexpr int kBypassWidth = 18;
 
     // paint() above draws every row itself (a plain custom-painted list, not real per-row
     // components), so VoiceOver/NVDA had nothing to land on for a row at all -- one of these, sized
@@ -121,6 +138,8 @@ private:
     void showAddMenu();
     void mutateAndNotify(const std::function<bool()>& mutation);
     void rebuildRowAccessibilityProxies();
+    void rebuildBypassButtons();
+    juce::String bypassTooltip(int rowIndex) const;
 
     juce::AudioProcessorGraph* graph_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
@@ -136,6 +155,8 @@ private:
     // One per entries_ row, rebuilt (and re-titled "<name>, bypassed"/"<name>") every
     // setEntries() -- see RowAccessibilityProxy's own comment.
     std::vector<std::unique_ptr<RowAccessibilityProxy>> rowProxies_;
+    // One per entries_ row, rebuilt with the proxies.
+    std::vector<std::unique_ptr<MixerIconButton>> bypassButtons_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerInsertList)
 };

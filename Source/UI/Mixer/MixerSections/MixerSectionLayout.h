@@ -26,7 +26,6 @@ public:
     // Column chrome every column kind lays out around the sections (pixels).
     static constexpr int kColumnInset = 2;
     static constexpr int kHeaderHeight = 24;
-    static constexpr int kSourceLineHeight = 14;
     static constexpr int kPanHeight = 28;
     static constexpr int kMeterReadoutHeight = 12;
     static constexpr int kMsRowHeight = 20;
@@ -44,8 +43,6 @@ public:
         std::array<int, kSectionCount> sectionTop{};
         std::array<int, kSectionCount> sectionHeight{};
         std::array<int, kSectionCount> dividerTop{};
-        int sourceLineTop = 0;
-        int sourceLineHeight = 0; // 0 while no column needs the line (see setSourceLineVisible)
         int panTop = 0;
         int panHeight = 0;
         int readoutTop = 0;
@@ -69,13 +66,6 @@ public:
     bool isHidden(MixerSection section) const noexcept;
     void setHidden(MixerSection section, bool hidden);
     void toggleHidden(MixerSection section) { setHidden(section, !isHidden(section)); }
-
-    /** Whether the row under the header names each column's source. The panel shows it only while some strip
-     *  column has one to name; every column then reserves the row, so faders stay level. A hidden row is 0 px.
-     *  `notify` false is for a caller that re-lays out itself right after. Returns whether it changed. */
-    bool isSourceLineVisible() const noexcept { return sourceLineVisible_; }
-    int sourceLineHeight() const noexcept { return sourceLineVisible_ ? kSourceLineHeight : 0; }
-    bool setSourceLineVisible(bool visible, bool notify = true);
 
     /** Every column's geometry for a column `columnHeight` px tall. */
     Geometry resolve(int columnHeight) const noexcept;
@@ -109,7 +99,6 @@ private:
     std::array<int, kSectionCount> requested_{kDefaultInsertRows * kInsertRowHeight, kDefaultSendRows* kSendRowHeight,
                                               kEqHeight};
     std::array<bool, kSectionCount> hidden_{false, false, false};
-    bool sourceLineVisible_ = true;
     int hoveredDivider_ = -1;
     int draggingDivider_ = -1;
     int dragStartHeight_ = 0;

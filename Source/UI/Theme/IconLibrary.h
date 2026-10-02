@@ -76,6 +76,8 @@ enum class Icon : int {
     ActionDetachWindow,
     // EditTool::Range's glyph — appended, not grouped with the Tool* block (append-only, as CatIO).
     ToolRange,
+    // The mixer column header's sources badge ("plays into this channel") -- appended, as above.
+    MixerSources,
     kCount
 };
 

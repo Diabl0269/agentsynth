@@ -126,6 +126,7 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
             onLiveMixerStateChanged();
     };
     masterColumn_->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
+    masterColumn_->getInsertList().bypassShortcutText = [this] { return bypassShortcutText(); };
     wireHeaderMenus();
 }
 
@@ -140,6 +141,7 @@ void MixerPanelComponent::copyWiringFrom(const MixerPanelComponent& other) {
     onMakeChannelForNode = other.onMakeChannelForNode;
     onGraphMutated = other.onGraphMutated;
     onArmTrack = other.onArmTrack;
+    buildTrackColourPicker = other.buildTrackColourPicker;
     onMoveTrack = other.onMoveTrack;
     onPublishMidiRemoteAssignments = other.onPublishMidiRemoteAssignments;
     onSoloMidiLearnRequested = other.onSoloMidiLearnRequested;
@@ -317,6 +319,12 @@ void MixerPanelComponent::rebuild() {
             return onQuerySoloMidiMapping ? onQuerySoloMidiMapping(nodeId) : juce::String();
         };
         widget->setHeaderContextMenu([this, channelId](const juce::MouseEvent&) { showChannelMenu(channelId); });
+        widget->setColourEditable(colourRouteFor(column.feedingTracks, column.uuid) != ColourRoute::None);
+        widget->onColourPickRequested = [this, uuid = column.uuid](juce::Rectangle<int> dotScreenBounds) {
+            openColourPicker(uuid, dotScreenBounds);
+        };
+        widget->getInsertList().bypassShortcutText = [this] { return bypassShortcutText(); };
+        widget->getSendList().bypassShortcutText = [this] { return bypassShortcutText(); };
         content_.addAndMakeVisible(*widget);
         // Only the scrolling group reorders: a pinned column stays where the zone puts it.
         if (viewDoc_->getZone(channelId) == synth::MixerZone::Scrolling)
@@ -335,13 +343,6 @@ void MixerPanelComponent::rebuild() {
 
         stripColumns_.push_back(std::move(widget));
     }
-
-    // The row under the headers exists only while some strip column has a source to name; Direct and
-    // Master share the layout and leave it blank. No notification: this rebuild lays out at its end.
-    bool anySourceLine = false;
-    for (const auto& strip : stripColumns_)
-        anySourceLine = anySourceLine || strip->hasSourceLine();
-    sectionLayout_.setSourceLineVisible(anySourceLine, false);
 
     if (directColumn_ != nullptr) {
         const bool showDirect = snapshot.hasDirect && !viewDoc_->isHidden(synth::MixerViewDoc::kDirectId);

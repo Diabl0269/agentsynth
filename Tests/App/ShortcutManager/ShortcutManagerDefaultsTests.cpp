@@ -39,6 +39,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "mixerToggleEq",
         "mixerEnterRows",
         "mixerOpenEq",
+        "mixerToggleRowBypass",
         // CardLayoutEditorComponent's row keys (CardLayoutEditorComponentKeyboard.cpp)
         "layoutEditorToggleShown",
         "layoutEditorMoveUp",

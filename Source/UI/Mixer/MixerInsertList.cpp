@@ -7,6 +7,7 @@
 #include "AppUndoManager.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Mixer/MixerSections/MixerSectionViewport.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -44,8 +45,59 @@ void MixerInsertList::setEntries(const std::vector<synth::MixerInsertEntry>& ent
     sourceNodeId_ = sourceNodeId;
     stripNodeId_ = stripNodeId;
     rebuildRowAccessibilityProxies();
+    rebuildBypassButtons();
     resized();
     repaint();
+}
+
+// Rebuilt wholesale with the proxies: the row count and every row's identity can both change on one edit, and a
+// button's title and tooltip carry the row's name and bypass state. The tooltip is computed when shown, so a rebound
+// key shows up without a rebuild.
+void MixerInsertList::rebuildBypassButtons() {
+    bypassButtons_.clear();
+    for (int i = 0; i < (int)entries_.size(); ++i) {
+        const auto& entry = entries_[(size_t)i];
+        auto button = std::make_unique<MixerIconButton>("mixerInsertBypass");
+        button->setIcon(synth::theme::Icon::ModuleBypass);
+        button->setToggleState(entry.bypassed, juce::dontSendNotification);
+        button->setTitle(entry.name + " bypass, " + (entry.bypassed ? "on" : "off"));
+        button->tooltipProvider = [this, i] { return bypassTooltip(i); };
+        button->onClick = [this, i] { toggleBypassForRow(i); };
+        addAndMakeVisible(*button);
+        bypassButtons_.push_back(std::move(button));
+    }
+}
+
+juce::String MixerInsertList::bypassTooltip(int rowIndex) const {
+    if (rowIndex < 0 || rowIndex >= (int)entries_.size())
+        return {};
+    const auto& entry = entries_[(size_t)rowIndex];
+    const auto base = entry.bypassed ? "Turn " + entry.name + " back on" : "Bypass " + entry.name;
+    return formatShortcutHint(base, bypassShortcutText ? bypassShortcutText() : juce::String());
+}
+
+// The module's own bypass parameter is part of the graph state, so one captured before/after pair is a complete
+// undo step. The change reaches the canvas card through the parameter itself; onMutated refreshes every mixer view.
+// The rebuild it triggers destroys this list, so nothing may touch it afterwards.
+void MixerInsertList::toggleBypassForRow(int rowIndex) {
+    if (rowIndex < 0 || rowIndex >= (int)entries_.size() || graph_ == nullptr || undoManager_ == nullptr)
+        return;
+    auto* node = graph_->getNodeForId(entries_[(size_t)rowIndex].nodeId);
+    auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+    if (module == nullptr)
+        return;
+    undoManager_->captureBeforeState(*graph_);
+    module->setBypassed(!module->isBypassed());
+    undoManager_->pushSnapshotFromCapture(*graph_);
+    // The row reads right even where nothing rebuilds the list afterwards (a bare list in a test).
+    auto& entry = entries_[(size_t)rowIndex];
+    entry.bypassed = module->isBypassed();
+    bypassButtons_[(size_t)rowIndex]->setToggleState(entry.bypassed, juce::dontSendNotification);
+    bypassButtons_[(size_t)rowIndex]->setTitle(entry.name + " bypass, " + (entry.bypassed ? "on" : "off"));
+    rowProxies_[(size_t)rowIndex]->setTitle(entry.bypassed ? entry.name + ", bypassed" : entry.name);
+    repaint();
+    if (onMutated)
+        onMutated();
 }
 
 void MixerInsertList::rebuildRowAccessibilityProxies() {
@@ -135,7 +187,8 @@ void MixerInsertList::paint(juce::Graphics& g) {
         const auto& entry = entries_[(size_t)i];
         auto row = getLocalBounds().withY(i * kRowHeight).withHeight(kRowHeight);
         g.setColour(entry.bypassed ? disabled : text);
-        g.drawText(entry.name, row.reduced(2, 0), juce::Justification::centredLeft, true);
+        g.drawText(entry.name, row.withTrimmedRight(kBypassWidth).reduced(2, 0), juce::Justification::centredLeft,
+                   true);
     }
     if (!linear_) {
         auto linkRow = getLocalBounds().withY(contentRows * kRowHeight).withHeight(kRowHeight);
@@ -147,6 +200,9 @@ void MixerInsertList::paint(juce::Graphics& g) {
 void MixerInsertList::resized() {
     for (int i = 0; i < (int)rowProxies_.size(); ++i)
         rowProxies_[(size_t)i]->setBounds(getLocalBounds().withY(i * kRowHeight).withHeight(kRowHeight));
+    for (int i = 0; i < (int)bypassButtons_.size(); ++i)
+        bypassButtons_[(size_t)i]->setBounds(
+            getLocalBounds().withY(i * kRowHeight).withHeight(kRowHeight).removeFromRight(kBypassWidth).reduced(1));
 }
 
 void MixerInsertList::mouseDown(const juce::MouseEvent& event) {

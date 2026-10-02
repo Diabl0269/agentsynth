@@ -43,6 +43,8 @@ juce::String MixerSendList::describeRow(int rowIndex) const {
             text << ", " << juce::String(level->get(), 1) << " dB";
     if (entry.muted)
         text << ", muted";
+    if (entry.bypassed)
+        text << ", bypassed";
     return text;
 }
 

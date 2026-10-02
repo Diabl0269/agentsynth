@@ -30,6 +30,8 @@ struct MixerSendEntry {
     bool preFader = false;
     /** Silenced independent of its level (ChannelStripModule::isSendMuted). */
     bool muted = false;
+    /** Ramped to silence without touching its level (ChannelStripModule::isSendBypassed). */
+    bool bypassed = false;
     /** Summed to (L+R)*0.5 before its own pan law (ChannelStripModule::isSendMono). */
     bool mono = false;
     /** The bus this slot feeds. Invalid when the slot's cable has been cut on the canvas, in which

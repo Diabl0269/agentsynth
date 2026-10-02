@@ -160,7 +160,7 @@ TEST_F(MixerSectionPanelTest, FadersShareOneTopAcrossColumnsWithDifferentInsertC
     EXPECT_EQ(yInPanel(panel(), s[0]->getSectionViewportForTest(MixerSection::Sends)),
               yInPanel(panel(), s[1]->getSectionViewportForTest(MixerSection::Sends)));
     EXPECT_EQ(yInPanel(panel(), master->getMeterReadoutForTest()), yInPanel(panel(), s[0]->getMeterReadoutForTest()))
-        << "Master has no source line, pan or sends, yet its fader row lines up with every strip's";
+        << "Master has no pan or sends, yet its fader row lines up with every strip's";
     EXPECT_EQ(yInPanel(panel(), master->getInsertViewportForTest()),
               yInPanel(panel(), s[0]->getSectionViewportForTest(MixerSection::Inserts)));
 }

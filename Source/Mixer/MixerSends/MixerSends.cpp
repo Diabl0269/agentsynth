@@ -384,7 +384,8 @@ bool removeSend(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot) 
     strip->setSendActive(slot, false);
     strip->setSendPreFader(slot, false);
     strip->setSendMuted(slot, false); // A reused slot always starts unmuted
-    strip->setSendMono(slot, false);  // And stereo
+    strip->setSendBypassed(slot, false);
+    strip->setSendMono(slot, false); // And stereo
     return true;
 }
 
@@ -393,6 +394,14 @@ bool setSendMuted(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot
     if (strip == nullptr || !strip->isSendActive(slot))
         return false;
     strip->setSendMuted(slot, muted);
+    return true;
+}
+
+bool setSendBypassed(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot, bool bypassed) {
+    auto* strip = stripAt(graph, sourceStrip);
+    if (strip == nullptr || !strip->isSendActive(slot))
+        return false;
+    strip->setSendBypassed(slot, bypassed);
     return true;
 }
 
@@ -477,6 +486,7 @@ bool swapSends(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slotA, 
     const bool activeA = strip->isSendActive(slotA), activeB = strip->isSendActive(slotB);
     const bool preA = strip->isSendPreFader(slotA), preB = strip->isSendPreFader(slotB);
     const bool muteA = strip->isSendMuted(slotA), muteB = strip->isSendMuted(slotB);
+    const bool bypassA = strip->isSendBypassed(slotA), bypassB = strip->isSendBypassed(slotB);
     const bool monoA = strip->isSendMono(slotA), monoB = strip->isSendMono(slotB);
     strip->setSendActive(slotA, activeB);
     strip->setSendActive(slotB, activeA);
@@ -484,6 +494,8 @@ bool swapSends(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slotA, 
     strip->setSendPreFader(slotB, preA);
     strip->setSendMuted(slotA, muteB);
     strip->setSendMuted(slotB, muteA);
+    strip->setSendBypassed(slotA, bypassB);
+    strip->setSendBypassed(slotB, bypassA);
     strip->setSendMono(slotA, monoB);
     strip->setSendMono(slotB, monoA);
 

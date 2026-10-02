@@ -105,6 +105,8 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::actiondetachwindow_svg, BinaryData::actiondetachwindow_svgSize},
         // The Range edit tool (appended after the rest of the Tool* glyphs; see Icon::ToolRange).
         {BinaryData::toolrange_svg, BinaryData::toolrange_svgSize},
+        // The mixer header's sources badge (appended after Icon::ToolRange).
+        {BinaryData::mixersources_svg, BinaryData::mixersources_svgSize},
     };
     static_assert(std::size(kTable) == (size_t)Icon::kCount,
                   "kTable size does not match Icon::kCount - update binaryDataForIcon lookup table");

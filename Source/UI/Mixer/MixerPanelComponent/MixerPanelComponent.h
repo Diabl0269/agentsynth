@@ -33,6 +33,7 @@ struct MixerSnapshot;
 } // namespace synth
 
 namespace synth::ui {
+class ColourPickerPopup;
 class MixerColumnComponent;
 class MixerSendList;
 } // namespace synth::ui
@@ -169,6 +170,22 @@ public:
      *  this ISN'T a graph change of, but the undo-bracket convention every other track edit goes
      *  through regardless). */
     std::function<void(synth::TrackId)> onArmTrack;
+
+    /** Builds the colour picker of one track -- the one its Timeline swatch opens. MainComponent wires it through
+     *  BottomDockComponent; left null, a track column's dot is a plain swatch (a column with a macro still opens the
+     *  macro's picker). */
+    std::function<std::unique_ptr<ColourPickerPopup>(synth::TrackId)> buildTrackColourPicker;
+
+    /** What a column's colour dot recolours: its one feeding track, its channel macro, or nothing. */
+    enum class ColourRoute { None, Track, Macro };
+    /** Test seam: the route the strip column `uuid` would take; None when there is no such column. */
+    ColourRoute getColourRouteForTest(const juce::String& uuid) const;
+    /** Test seam: receives the picker a dot click built (null when there is none) instead of opening a CallOutBox,
+     *  the same split ColourPickerPopup's own seams use. A null hook restores the real launch. */
+    void setShowColourPickerHookForTest(
+        std::function<void(ColourRoute, std::unique_ptr<ColourPickerPopup>, juce::Rectangle<int>)> hook) {
+        showColourPickerHook_ = std::move(hook);
+    }
 
     /** Fired when a track column is dropped in a new place: moves `trackId` to timeline index
      *  `newIndex`. BottomDockComponent wires this to MainComponent::performTrackEdit(moveTrack) --
@@ -318,6 +335,10 @@ public:
 
 private:
     void selectOnCanvas(const juce::String& targetId);
+    // ---- Colour dot -- implemented in MixerPanelColour.cpp ----
+    ColourRoute colourRouteFor(const std::vector<synth::TrackId>& feedingTracks, const juce::String& uuid) const;
+    void openColourPicker(const juce::String& uuid, juce::Rectangle<int> dotScreenBounds);
+    juce::String bypassShortcutText() const;
     void wireSectionLayout();
     void onSectionGeometryChanged();
     void onSectionAppearanceChanged();
@@ -371,6 +392,7 @@ private:
     bool stepRow(int direction);
     bool nudgeFocusedSend(float deltaDb);
     bool removeFocusedRow();
+    bool toggleFocusedRowBypass();
     bool openFocusedRow();
     bool openFocusedEq();
     void openEqWindowOnCanvas(juce::AudioProcessorGraph::NodeID nodeId);
@@ -503,6 +525,7 @@ private:
     synth::MidiRemoteProjectDoc* midiRemoteDoc_ = nullptr; // See setMidiRemoteDoc
     AudioEngine* audioEngine_ = nullptr;
     ShortcutManager* shortcuts_ = nullptr;
+    std::function<void(ColourRoute, std::unique_ptr<ColourPickerPopup>, juce::Rectangle<int>)> showColourPickerHook_;
     synth::MeterReader meterReader_ = synth::MeterReader::Mixer; // See configure()
 
     std::vector<std::unique_ptr<MixerColumnComponent>> stripColumns_;

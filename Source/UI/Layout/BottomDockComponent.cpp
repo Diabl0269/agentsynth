@@ -5,6 +5,7 @@
 #include "BottomDockComponent.h"
 
 #include "AudioEngine/AudioEngine.h"
+#include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReadOnlyTextValue.h"
@@ -229,6 +230,11 @@ void BottomDockComponent::setOnArmTrack(std::function<void(synth::TrackId)> call
 
 void BottomDockComponent::setOnMoveTrack(std::function<void(synth::TrackId, int)> callback) {
     mixer_->onMoveTrack = std::move(callback);
+}
+
+void BottomDockComponent::setOnBuildTrackColourPicker(
+    std::function<std::unique_ptr<synth::ui::ColourPickerPopup>(synth::TrackId)> callback) {
+    mixer_->buildTrackColourPicker = std::move(callback);
 }
 
 void BottomDockComponent::setActiveTab(Tab tab) {

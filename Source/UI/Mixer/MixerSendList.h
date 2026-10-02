@@ -4,6 +4,7 @@
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerSends/MixerSends.h"
 #include "UI/Layout/ReorderDrag/ReorderDragSession.h"
+#include "UI/Mixer/MixerHeader/MixerIconButton.h"
 #include <cmath>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -17,8 +18,8 @@ class GraphEditor;
 // MixerInsertList and laid out directly under it.
 //
 // One row per ACTIVE slot, in slot order: the target bus's name (click to retarget -- the same menu
-// also carries a ticked "Mono" item), a small rotary level knob, a small rotary pan knob, an "M"
-// mute toggle, a PRE/POST toggle and an `x` remove; then a "+ Send" row while the strip has a free
+// also carries a ticked "Mono" item), a small rotary level knob, a small rotary pan knob, a bypass icon
+// toggle, an "M" mute toggle, a PRE/POST toggle and an `x` remove; then a "+ Send" row while the strip has a free
 // slot. Each mutation is ONE AppUndoManager::recordGraphAndMacroChange around synth::MixerSends'
 // Core flows (which have no undo of their own), exactly as MixerInsertList wraps the insert
 // splices.
@@ -119,6 +120,13 @@ public:
     void togglePreFaderForRow(int rowIndex);
     /** Flips row `rowIndex`'s mute bit via synth::setSendMuted, one recordGraphAndMacroChange. */
     void toggleMuteForRow(int rowIndex);
+    /** Flips row `rowIndex`'s bypass bit via synth::setSendBypassed, one recordGraphAndMacroChange -- the bypass
+     *  button's click and the panel's bypass key (B) both land here. */
+    void toggleBypassForRow(int rowIndex);
+    /** Names the bypass key for the buttons' tooltips ("B"); null leaves the tooltips without a key. */
+    std::function<juce::String()> bypassShortcutText;
+    /** The row's real bypass button. Null out of range. */
+    MixerIconButton* getBypassButtonForTest(int rowIndex) const;
     /** Flips row `rowIndex`'s mono bit via synth::setSendMono, one recordGraphAndMacroChange
      *  -- the target menu's "Mono" item and this class's own headless test seam both call this. */
     void toggleMonoForRow(int rowIndex);
@@ -184,10 +192,11 @@ public:
 
 private:
     static constexpr int kRowHeight = 20;
-    static constexpr int kKnobWidth = 20;
-    static constexpr int kPanKnobWidth = 20;
-    static constexpr int kToggleWidth = 30;
-    static constexpr int kMuteWidth = 18;
+    static constexpr int kKnobWidth = 18;
+    static constexpr int kPanKnobWidth = 18;
+    static constexpr int kToggleWidth = 26;
+    static constexpr int kMuteWidth = 16;
+    static constexpr int kBypassWidth = 16;
     static constexpr int kRemoveWidth = 14;
     // Painted (not a real component) only when a row is mono -- see paint()'s own comment.
     static constexpr int kMonoMarkerWidth = 6;
@@ -203,6 +212,8 @@ private:
         // manual setToggleState mirroring the strip's own mute button convention) so mute gets the
         // same real hit area, accessibility role and on/off colouring with no new ad-hoc paint.
         std::unique_ptr<juce::TextButton> muteButton;
+        // The bypass icon toggle, sitting between the knobs and the M button.
+        std::unique_ptr<MixerIconButton> bypassButton;
     };
 
     // paint() above draws the "+ Send" row itself (plain text, no component), so VoiceOver/
@@ -232,6 +243,11 @@ private:
     void showAddMenu();
     void mutateAndNotify(const std::function<bool()>& mutation);
     juce::String targetNameFor(juce::AudioProcessorGraph::NodeID target) const;
+    /** "Bypass Send to Bus 1  (B)", or "Turn ... back on" while it is bypassed. */
+    juce::String bypassTooltip(int rowIndex) const;
+    /** Re-reads row `rowIndex`'s bypass bit into its button, its title and the dimmed look of its controls. */
+    void applyBypassLook(int rowIndex);
+    static juce::String bypassTitle(const synth::MixerSendEntry& entry);
     juce::String targetNameFor(const synth::SendTarget& target) const;
     /** The separator + one "Key: ..." item per legal Key target, calling `choose` on pick. */
     void appendKeyTargetItems(juce::PopupMenu& menu, const std::function<void(synth::SendTarget)>& choose) const;

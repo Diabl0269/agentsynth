@@ -10,7 +10,8 @@ Every new or changed control:
 1. **Is keyboard-reachable** - either it is its own Tab stop (`setWantsKeyboardFocus(true)`), or it
    sits inside a focus region that moves between its items with the arrow keys (the mixer panel is
    one focusable leaf; its columns and faders are reached with Left/Right/Up/Down, and Tab moves from a
-   column into its send and insert rows). It acts on
+   column into its send and insert rows; the small icon buttons that take no key of their own -- a column's colour dot
+   and sources badge, and each row's bypass button -- are Tab stops too). It acts on
    Space/Enter or the arrow keys the way a native control would, and every new key is a rebindable
    action (below). The exceptions are the arrow keys of a list of controls (below), the Settings window's
    Cmd+1..9 (a fixed positional key; see Switching tabs and Tab strips), and a key inside a focused editor that a native control would also

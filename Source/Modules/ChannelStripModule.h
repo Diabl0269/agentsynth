@@ -188,7 +188,8 @@ public:
         smoothedGainR_.setCurrentAndTargetValue(targetR);
         for (int slot = 0; slot < kMaxSends; ++slot) {
             smoothedSend_[slot].reset(sampleRate, kSmoothingSeconds);
-            smoothedSend_[slot].setCurrentAndTargetValue(sendTargetGain(slot));
+            // A send restored as bypassed starts silent rather than ramping down from its level.
+            smoothedSend_[slot].setCurrentAndTargetValue(isSendBypassed(slot) ? 0.0f : sendTargetGain(slot));
             // The pan VALUE is what's smoothed (not the two derived gains directly), same
             // shape as the strip's own gain/pan split -- writeSendLegs() re-derives gainL/gainR from
             // the smoothed value every sample via the shared ModuleBase::panGains law.
@@ -341,6 +342,12 @@ public:
     bool isSendMuted(int slot) const noexcept {
         return slot >= 0 && slot < kMaxSends && (muteMask_.load(std::memory_order_relaxed) & (1u << slot)) != 0;
     }
+    /** Per-send bypass -- non-parameter trusted extra state, same lifecycle as isSendMuted. A bypassed
+     *  send's level ramps to silence and back (writeSendLegs), so toggling it never clicks; its level
+     *  parameter is untouched. */
+    bool isSendBypassed(int slot) const noexcept {
+        return slot >= 0 && slot < kMaxSends && (bypassMask_.load(std::memory_order_relaxed) & (1u << slot)) != 0;
+    }
     /** Per-send mono -- non-parameter trusted extra state, same lifecycle as isSendMuted
      *  above. When set, writeSendLegs sums the tapped L/R signal to (L+R)*0.5 on BOTH legs before
      *  applying the send's own pan law, rather than carrying the strip's stereo image unchanged. */
@@ -391,6 +398,7 @@ public:
             setSendActive(slot, true);
             setSendPreFader(slot, false);
             setSendMuted(slot, false);
+            setSendBypassed(slot, false);
             setSendMono(slot, false);
             return slot;
         }
@@ -420,6 +428,14 @@ public:
         const juce::uint32 bit = 1u << slot;
         auto mask = muteMask_.load(std::memory_order_relaxed);
         muteMask_.store(muted ? (mask | bit) : (mask & ~bit), std::memory_order_relaxed);
+    }
+    /** Bypasses/restores send `slot` without touching its level parameter. No-op out of range. */
+    void setSendBypassed(int slot, bool bypassed) {
+        if (slot < 0 || slot >= kMaxSends)
+            return;
+        const juce::uint32 bit = 1u << slot;
+        auto mask = bypassMask_.load(std::memory_order_relaxed);
+        bypassMask_.store(bypassed ? (mask | bit) : (mask & ~bit), std::memory_order_relaxed);
     }
     /** Sums/unsums send `slot`'s tapped L/R to (L+R)*0.5 before its own pan law. No-op
      *  out of range. */
@@ -503,6 +519,7 @@ public:
             entry->setProperty("slot", slot);
             entry->setProperty("pre", isSendPreFader(slot));
             entry->setProperty("mute", isSendMuted(slot));
+            entry->setProperty("bypass", isSendBypassed(slot));
             entry->setProperty("mono", isSendMono(slot));
             sends.add(juce::var(entry));
         }
@@ -561,6 +578,7 @@ private:
         activeMask_.store(0, std::memory_order_relaxed);
         preMask_.store(0, std::memory_order_relaxed);
         muteMask_.store(0, std::memory_order_relaxed);
+        bypassMask_.store(0, std::memory_order_relaxed);
         monoMask_.store(0, std::memory_order_relaxed);
         if (const auto* array = sends.getArray()) {
             for (const auto& entry : *array) {
@@ -575,6 +593,7 @@ private:
                 // Absent (an entry saved before mute/mono existed) means off, same
                 // "unset means off" rule "pre" already established -- an old project loads unchanged.
                 setSendMuted(slot, obj->hasProperty("mute") && static_cast<bool>(obj->getProperty("mute")));
+                setSendBypassed(slot, obj->hasProperty("bypass") && static_cast<bool>(obj->getProperty("bypass")));
                 setSendMono(slot, obj->hasProperty("mono") && static_cast<bool>(obj->getProperty("mono")));
             }
         }
@@ -640,7 +659,10 @@ private:
             advanced |= bit;
             auto& smoothed = smoothedSend_[slot];
             auto& smoothedPan = smoothedSendPan_[slot];
-            smoothed.setTargetValue(sendTargetGain(slot));
+            // A bypassed send's level target is silence, reached through the same smoother as any level
+            // change, so bypassing and restoring never click.
+            const bool bypassed = isSendBypassed(slot);
+            smoothed.setTargetValue(bypassed ? 0.0f : sendTargetGain(slot));
             smoothedPan.setTargetValue(sendPanParams_[slot]->get());
             // A muted slot is silenced the same way a solo-gated-shut leg is -- the hygiene
             // pass already cleared it, so just don't write over that silence. The level parameter
@@ -649,6 +671,12 @@ private:
                 smoothed.skip(numSamples);
                 smoothedPan.skip(numSamples);
                 continue; // already silent from the hygiene pass
+            }
+
+            // Fully ramped down: the legs stay at the hygiene pass's silence until it is restored.
+            if (bypassed && !smoothed.isSmoothing() && smoothed.getCurrentValue() == 0.0f) {
+                smoothedPan.skip(numSamples);
+                continue;
             }
 
             const bool mono = isSendMono(slot);
@@ -738,8 +766,9 @@ private:
     // reads — one relaxed load each per block, so a strip's own slots are always self-consistent.
     std::atomic<juce::uint32> activeMask_{0};
     std::atomic<juce::uint32> preMask_{0};
-    std::atomic<juce::uint32> muteMask_{0}; // per-send mute, same lifecycle as preMask_
-    std::atomic<juce::uint32> monoMask_{0}; // per-send mono, same lifecycle as muteMask_
+    std::atomic<juce::uint32> muteMask_{0};   // per-send mute, same lifecycle as preMask_
+    std::atomic<juce::uint32> bypassMask_{0}; // per-send bypass, same lifecycle as muteMask_
+    std::atomic<juce::uint32> monoMask_{0};   // per-send mono, same lifecycle as muteMask_
     std::atomic<juce::uint32> soloAudibleMask_{0};
 
     static int legIndex(int leg) noexcept { return leg == 1 ? 1 : 0; }

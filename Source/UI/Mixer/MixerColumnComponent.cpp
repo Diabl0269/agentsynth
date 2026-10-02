@@ -57,10 +57,10 @@ MixerColumnComponent::MixerColumnComponent() {
             onColumnClicked();
     };
     header_.onNameEdited = [this](const juce::String& newName) { commitHeaderRename(newName); };
-    addAndMakeVisible(sourceLineLabel_);
-    // Text under the header, not part of its drag handle: it takes the mouse for its tooltip, and a press on it
-    // is forwarded to this column (mouseUp below) like a press on the empty column body.
-    sourceLineLabel_.addMouseListener(this, false);
+    header_.onColourClicked = [this](juce::Rectangle<int> dotScreenBounds) {
+        if (onColourPickRequested)
+            onColourPickRequested(dotScreenBounds);
+    };
 
     insertViewport_.setList(insertList_);
     addAndMakeVisible(insertViewport_);
@@ -150,29 +150,26 @@ void MixerColumnComponent::configure(juce::AudioProcessorGraph& graph, AppUndoMa
     };
 }
 
-void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juce::String& sourceLine) {
+void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juce::String& sources) {
     nodeId_ = column.nodeId;
     uuid_ = column.uuid;
-    sourceLine_ = sourceLine;
 
     header_.setColour(column.colour);
     header_.setDisplayName(column.name);
-    // A linked column has exactly one feeding track, so `sourceLine` is that track's name.
-    header_.setLinkedTrack(column.linkedToTrack, column.linkedToTrack ? sourceLine : juce::String());
+    // A linked column has exactly one feeding track, so `sources` is that track's name.
+    header_.setLinkedTrack(column.linkedToTrack, column.linkedToTrack ? sources : juce::String());
     header_.setBusBadgeVisible(column.kind == synth::MixerColumn::Kind::Bus);
     juce::StringArray receivesFrom;
     for (const auto& name : column.receivesFrom)
         receivesFrom.add(name);
     header_.setReceivesFrom(receivesFrom);
 
-    // Doubles as docs/mixer/panel.md#what-the-mixer-shows's "the tracks that play into it" row -- `sourceLine` is the
-    // caller-resolved (comma-joined) names of column.feedingTracks, the same tracks a "source line" names for a
-    // single-source column.
-    // A linked channel's single track usually carries the channel's own name; repeating it under the header
-    // says nothing, so the line shows only when it differs. The panel keeps the row (every column's faders stay
-    // level) while any column shows one, and drops it when none does.
-    showsSourceLine_ = sourceLine_.isNotEmpty() && sourceLine_ != column.name;
-    sourceLineLabel_.setSources(showsSourceLine_ ? sourceLine_ : juce::String());
+    // `sources` is the caller-resolved (comma-joined) names of column.feedingTracks, or a bus's feeding strips.
+    // A linked channel's single track usually carries the channel's own name, and the link glyph already says so,
+    // so the badge shows only when the sources differ from it. It lives in the header, so a channel without one
+    // costs no row and the columns' faders stay level without any reserved space.
+    showsSources_ = sources.isNotEmpty() && sources != column.name;
+    header_.setSources(showsSources_ ? sources : juce::String());
     insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,
                            column.sourceNodeId, column.nodeId);
 
@@ -500,7 +497,6 @@ void MixerColumnComponent::resized() {
     const auto inner = getLocalBounds().reduced(MixerSectionLayout::kColumnInset);
     auto top = inner;
     header_.setBounds(top.removeFromTop(MixerSectionLayout::kHeaderHeight));
-    sourceLineLabel_.setBounds(inner.getX(), geometry.sourceLineTop, inner.getWidth(), geometry.sourceLineHeight);
     layoutSections(geometry, inner);
 
     auto row = [&inner](int y, int height) { return juce::Rectangle<int>(inner.getX(), y, inner.getWidth(), height); };

@@ -508,7 +508,8 @@ the playhead, so clip movement is new.
 here, not a per-column child: `MixerPanelComponent` is the Mixer region's own root (see **Focus
 regions** above), `setWantsKeyboardFocus(true)`, and every child control inside a column (the
 fader/pan sliders, the M/S buttons, Direct's "Make channel" button) gives up keyboard focus
-(`setWantsKeyboardFocus(false)`) so it can never intercept these keys — the same trap
+(`setWantsKeyboardFocus(false)`), except the small icon buttons that take no key beyond Return and Space (the colour dot,
+the sources badge and the per-row bypass buttons, besides the toolbar), so they can never intercept these keys — the same trap
 `TimelineTrackHeaderComponent` sidesteps by being the focusable leaf itself, just one level higher
 here because a column hosts several controls, not one. The focused column is
 `MixerPanelComponent::focusedColumnIndex_` — ephemeral UI state, an index into the same
@@ -559,6 +560,7 @@ announces it ("Send to Reverb Bus, -6.0 dB", "Insert 2, Compressor").
 | Left / Right | Lower / raise the focused send's level by 1.0 dB (Shift: 0.1 dB); one undo step per press, through the parameter's change gesture. No-op on an insert row (the arrows never walk columns while rows hold the keys) |
 | Return | On an insert, select its channel on the canvas, exactly what the EQ thumbnail's click does |
 | Delete / Backspace | Remove the focused send or insert through the same path its menu uses; one undo step. A branching insert chain is read-only and keeps its rows. Focus moves to a surviving row, or back to the column when none is left |
+| B | Bypass the focused row (`mixerToggleRowBypass`): an insert's module, or the send's own bypass. One undo step; B again toggles it back. Claimed only in row mode |
 | Esc | Back to column mode |
 
 Tab never traps: it is claimed only when a column is focused and one of its shown sections has rows, and it falls
@@ -755,6 +757,7 @@ name the current binding ("Hide Sends  (Ctrl+S)") and follow a rebind. The other
 | Ctrl+E | Ctrl+Alt+E | Show or Hide Mixer EQ (`mixerToggleEq`) |
 | Tab | Tab | Enter Mixer Send and Insert Rows (`mixerEnterRows`) |
 | E | E | Open Mixer EQ (`mixerOpenEq`) |
+| B | B | Bypass Mixer Send or Insert (`mixerToggleRowBypass`) |
 
 **Real Control on macOS, Ctrl+Alt elsewhere.** Cmd+S is Save and Cmd+I / Cmd+E are taken, so macOS uses
 the physical Control key, as `pianoRollToggleScalePanel` does. On Windows and Linux JUCE's Cmd *is* Ctrl,
@@ -945,7 +948,7 @@ Mod Matrix, AI Panel and Show/Hide Panel buttons; the dock tabs; the timeline tr
 play/stop, record, loop and metronome buttons (loop shows the bare L of `timelineToggleLoop`, or the
 `transportToggleLoop` binding while L is unbound); the timeline's seven edit-tool buttons, Snap and Follow
 playhead (`TimelinePanelComponent::getShortcutHintTargets()` is the one list, so a new shortcut button there is
-labelled by adding it to it; the per-row M/S/R buttons act on the focused row and are not labelled); the status bar's play/stop; the mixer toolbar's
+labelled by adding it to it; the per-row M/S/R buttons act on the focused row and are not labelled, and neither are the mixer's per-row bypass buttons, whose tooltips name B instead); the status bar's play/stop; the mixer toolbar's
 Inserts, Sends and EQ toggles; and, while a clip is open, the piano roll's Quantise, Quantise length,
 Quantise pitches, Scale, Scale filter and Velocity chips.
 

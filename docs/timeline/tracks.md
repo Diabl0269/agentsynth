@@ -57,7 +57,8 @@ rebuilds them, so a mute click does not destroy the row the user is typing a nam
 ## Row contents
 
 A fold arrow (visible only when `Track::lanes` is non-empty), colour swatch (click opens a full
-colour picker), a track-kind badge, an "N lanes" badge while the lanes are folded, a name label
+colour picker, built by `buildTrackColourPicker` in `TrackColourPicker.h`, which the mixer column's colour dot
+shares -- [the colour dot](../mixer/panel.md#the-colour-dot)), a track-kind badge, an "N lanes" badge while the lanes are folded, a name label
 (double-click to edit), `M` / `S` / `R` toggles, and the binding chip. The Automation track is
 drawn differently, as the "Unassigned automation" section header
 ([automation](automation.md#unassigned-automation)).
@@ -303,7 +304,8 @@ active the last time `refreshFromDoc()` ran.
 
 Clicking it builds a `synth::ui::ColourPickerPopup` (`Source/UI/Chrome/ColourPickerPopup.h` — see
 [`layout/colour-overrides.md`](../layout/colour-overrides.md#colour-picker-popup)) via
-`buildColourPicker()` and launches it
+`buildColourPicker()` -- a thin wrapper over the shared `buildTrackColourPicker` (`Source/UI/Timeline/TrackColourPicker.h`,
+which the mixer column's colour dot calls too) -- and launches it
 in a `juce::CallOutBox` anchored on the swatch.
 
 Its favourites shelf persists through `TrackHeaderHost::getAppProperties()` — a non-pure

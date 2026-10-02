@@ -90,7 +90,7 @@ int addSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID 
 /** addSend for either kind: a Key target is wired onto the module's Key L/R inputs. Same refusals. */
 int addSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, const SendTarget& target);
 
-/** Clears slot `slot`'s cables and its active bit (and its mute/mono bits). Higher slots keep
+/** Clears slot `slot`'s cables and its active bit (and its mute/bypass/mono bits). Higher slots keep
  *  their own raw channels, so nothing else is re-wired (only the VISIBLE jack indices renumber).
  *  False when `sourceStrip` is not a strip or the slot was not active. */
 bool removeSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
@@ -99,6 +99,11 @@ bool removeSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Nod
  *  is not a strip or `slot` is not active. */
 bool setSendMuted(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot,
                   bool muted);
+
+/** Bypasses/restores an active slot (its audio ramps out and back in), never its level parameter. False (no
+ *  change) when `sourceStrip` is not a strip or `slot` is not active. */
+bool setSendBypassed(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot,
+                     bool bypassed);
 
 /** Sums/unsums an active slot's L/R to mono. False when `sourceStrip`/`slot` don't resolve. */
 bool setSendMono(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot, bool mono);

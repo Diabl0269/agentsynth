@@ -414,9 +414,8 @@ TEST(MixerPanelColumnDragTests, TheDraggingHandShowsOnlyWhileAColumnIsReallyDrag
 }
 
 // The name label covers part of the handle, and JUCE asks the deepest component for the cursor, so it
-// delegates to the header: the arrow at rest, the hand while the column is dragged. The source line under
-// the header is not part of the handle and keeps the arrow throughout.
-TEST(MixerPanelColumnDragTests, TheNameLabelShowsTheHeadersCursorAndTheSourceLineKeepsTheArrow) {
+// delegates to the header: the arrow at rest, the hand while the column is dragged.
+TEST(MixerPanelColumnDragTests, TheNameLabelShowsTheHeadersCursor) {
     ColumnDragRig r(2);
     auto* strip = r.panel->getStripColumnForTest(0);
     ASSERT_NE(strip, nullptr);
@@ -427,31 +426,30 @@ TEST(MixerPanelColumnDragTests, TheNameLabelShowsTheHeadersCursorAndTheSourceLin
     drag.down();
     drag.dragTo(drag.pressX + 40);
     EXPECT_TRUE(header.getNameLabelForTest().getMouseCursor() == juce::MouseCursor::DraggingHandCursor);
-    EXPECT_TRUE(strip->getSourceLineLabelForTest().getMouseCursor() == juce::MouseCursor::NormalCursor);
     ASSERT_TRUE(r.panel->sendEscapeToColumnDragForTest());
     drag.up(drag.pressX + 40);
 }
 
 // The drag handle is exactly the header as drawn. Every row of the header resolves, top-down from the
-// panel the way a real press does, to the header or its name label (which forwards to the header), and a
-// press there followed by a drag lifts the column. A press on the source line just below starts nothing.
+// panel the way a real press does, to the header, its name label or its colour dot (which both forward to the header),
+// and a press there followed by a drag lifts the column. A press on the first section just below starts nothing.
 TEST(MixerPanelColumnDragTests, ThePressAreaIsExactlyTheDrawnHeader) {
     ColumnDragRig r(2);
     r.mc.getBottomDock().setActiveTab(synth::ui::BottomDockComponent::Tab::Mixer); // hit-testing skips a hidden panel
     auto* strip = r.panel->getStripColumnForTest(0);
     ASSERT_NE(strip, nullptr);
     const auto handle = strip->getHeaderForTest().getBounds();
-    const auto below = strip->getSourceLineLabelForTest().getBounds();
-    ASSERT_EQ(below.getY(), handle.getBottom()) << "the source line sits right under the header";
+    const auto below = strip->getSectionViewportForTest(synth::ui::MixerSection::Inserts).getBounds();
+    ASSERT_EQ(below.getY(), handle.getBottom()) << "the first section sits right under the header";
 
     for (int y = handle.getY(); y < below.getBottom(); y += 3) {
-        for (int x : {handle.getX() + 1, handle.getCentreX(), handle.getRight() - 2}) {
+        for (int x : {handle.getX() + 1, handle.getX() + 12, handle.getCentreX(), handle.getRight() - 2}) {
             strip = r.panel->getStripColumnForTest(0);
             auto& h = strip->getHeaderForTest();
             auto* hit = r.panel->getComponentAt(r.panel->getLocalPoint(strip, juce::Point<int>(x, y)));
             ASSERT_NE(hit, nullptr) << "(" << x << ", " << y << ")";
             const bool inHeader = y < handle.getBottom();
-            const bool isHandle = hit == &h || hit == &h.getNameLabelForTest();
+            const bool isHandle = hit == &h || hit == &h.getNameLabelForTest() || hit == &h.getColourDotForTest();
             EXPECT_EQ(isHandle, inHeader) << "column point (" << x << ", " << y << ")";
             // Dispatch as JUCE would: to the hit component, plus the header for its forwarding name label.
             auto& target = hit == &h.getNameLabelForTest() ? static_cast<juce::Component&>(h) : *hit;
@@ -464,23 +462,4 @@ TEST(MixerPanelColumnDragTests, ThePressAreaIsExactlyTheDrawnHeader) {
             target.mouseUp(makeClickEvent(*hit, local.translated(40.0f, 0.0f)));
         }
     }
-}
-
-// The source line names the tracks feeding a channel, so it is blank when it would only repeat the
-// header's name (a channel linked to one track of the same name) and shown when it says more.
-TEST(MixerPanelColumnDragTests, TheSourceLineIsBlankWhenItWouldRepeatTheChannelName) {
-    ColumnDragRig r(3);
-    auto* linked = r.panel->getStripColumnForTest(1);
-    ASSERT_NE(linked, nullptr);
-    EXPECT_TRUE(linked->getSourceLineLabelForTest().getText().isEmpty())
-        << "header '" << linked->getHeaderForTest().getDisplayName() << "'";
-
-    const auto original = r.trackOrder();
-    auto& doc = r.mc.getTimelineDoc();
-    doc.setTrackBinding(original[2], doc.getTrack(original[0])->bindingUuid); // tracks 0 and 2 feed one strip
-    r.panel->rebuild();
-    auto* shared = r.panel->getStripColumnForTest(0);
-    const auto line = shared->getSourceLineLabelForTest().getText();
-    EXPECT_TRUE(line.contains(doc.getTrack(original[0])->name) && line.contains(doc.getTrack(original[2])->name))
-        << "a channel fed by two tracks names both: '" << line << "'";
 }

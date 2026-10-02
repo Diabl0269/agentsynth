@@ -8,6 +8,7 @@
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Timeline/TrackColourPicker.h"
 #include <algorithm>
 
 void MainComponent::wireTimelinePanel() {
@@ -149,6 +150,23 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     bottomDock.setOnMoveTrack([this](synth::TrackId id, int newIndex) {
         performTrackEdit([this, id, newIndex] { timelineDoc.moveTrack(id, newIndex); });
         bottomDock.rebuildMixer();
+    });
+
+    // A mixer column's colour dot opens the SAME picker the track's Timeline swatch does (preview with no undo, one
+    // undo step on commit, the track's channel macro following), so a pick recolours the track everywhere. The
+    // mixer re-tints from timelineChanged like it does for a Timeline-side pick.
+    bottomDock.setOnBuildTrackColourPicker([this](synth::TrackId id) {
+        juce::Component::SafePointer<MainComponent> safeThis(this);
+        synth::ui::TrackColourPickerContext context;
+        context.doc = &timelineDoc;
+        context.favourites = appProperties.getUserSettings();
+        context.link = &trackChannelLink_;
+        context.performEdit = [safeThis](const std::function<void()>& mutation) {
+            if (auto* self = safeThis.getComponent())
+                self->performTrackEdit(mutation);
+        };
+        context.isAlive = [safeThis] { return safeThis != nullptr; };
+        return synth::ui::buildTrackColourPicker(context, id);
     });
 
     // The dock's top-edge drag (one handle for every tab, not the Timeline panel's own)
