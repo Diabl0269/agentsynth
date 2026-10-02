@@ -9,6 +9,7 @@
 #include "ProjectBundle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Mixer/MixerZonesPane/MixerZonesPane.h"
 #include "UI/Mixer/MixerZonesPane/MixerZonesRow.h"
 #include <gtest/gtest.h>

@@ -7,6 +7,7 @@
 #include "MainComponentInternal.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <algorithm>
 
 void MainComponent::wireTimelinePanel() {

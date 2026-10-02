@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/PanelResizeHandle.h"
@@ -9,11 +10,10 @@
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include "UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h"
 #include "UI/Mixer/MixerMirrorController.h"
-#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
-#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -34,12 +34,15 @@ class MidiLearnController;
 //
 // The ONE component MainComponent.h holds for the dock (see
 // docs/mixer/panel.md#what-the-mixer-shows): owns `timelinePanel` by reference (NOT a
-// copy/move -- MainComponent still owns and constructs it) and a MixerPanelComponent by value.
-// MainComponent::resized()'s existing dock carve (`timelinePanel.setBounds(...)`) becomes
+// copy/move -- MainComponent still owns and constructs it) and a MixerPanelComponent by unique_ptr (so this header
+// needn't include it). MainComponent::resized()'s existing dock carve (`timelinePanel.setBounds(...)`) becomes
 // `bottomDock.setBounds(...)` -- one line changed, not two new carve blocks; the open/close slide,
 // height and persisted-visible state stay MainComponent's own (isBottomDockVisible/timelineSlide_),
 // gating the whole dock rather than just the Timeline tab.
 namespace synth::ui {
+
+class MixerPanelComponent;
+class TimelinePanelComponent;
 
 class BottomDockComponent : public juce::Component {
 public:
@@ -56,6 +59,7 @@ public:
                         AppUndoManager& undoManager, GraphEditor& graphEditor,
                         juce::ApplicationProperties& appProperties, synth::theme::AppLookAndFeel* lookAndFeel,
                         ShortcutManager* shortcutManager);
+    ~BottomDockComponent() override;
 
     /** Reads the persisted active tab and tab order once ("bottomDockActiveTab" /
      *  "bottomDockTabOrder", docs/layout/chrome.md's "Panel collapse and persistence" table);
@@ -99,19 +103,13 @@ public:
      *  macro change (MainComponent's existing reconcile funnel is the natural place). Also
      *  rebuilds the "both places" mirror view when one is open, so a mirror never shows a stale
      *  column set. */
-    void rebuildMixer() {
-        mixer_.rebuild();
-        mixerMirror_.rebuildIfOpen();
-    }
+    void rebuildMixer();
     /** Cheap in-place re-tint of every mixer column from the current track colours (docked view and, if open, the
      *  mirror) -- called on every TimelineDoc notification; a no-op unless a track colour changed. */
-    void refreshMixerTrackColours() {
-        mixer_.refreshTrackColours();
-        mixerMirror_.refreshTrackColoursIfOpen();
-    }
-    MixerPanelComponent& getMixerPanel() noexcept { return mixer_; }
+    void refreshMixerTrackColours();
+    MixerPanelComponent& getMixerPanel() noexcept;
     // Const overload for resolveEditSurface(), a const member function.
-    const MixerPanelComponent& getMixerPanel() const noexcept { return mixer_; }
+    const MixerPanelComponent& getMixerPanel() const noexcept;
 
     /** Re-syncs the docked mixer's + (if open) the "both places" mirror's mute/solo/pan-law
      *  visuals from something that changed them OUTSIDE either view's own click -- today, a hardware
@@ -119,26 +117,17 @@ public:
      *  live click-to-click case (one view's own button) is instead cross-wired directly through
      *  mixer_.onLiveMixerStateChanged in the constructor below -- see MixerMirrorController.h's
      *  class comment for the full mechanism. */
-    void refreshLiveMixerVisualsEverywhere() {
-        mixer_.refreshLiveMixerVisuals();
-        mixerMirror_.refreshLiveVisualsIfOpen();
-    }
+    void refreshLiveMixerVisualsEverywhere();
 
     /** Source/UI/CLAUDE.md's mixer-unbind invariant applies to EVERY live MixerPanelComponent,
      *  not only the docked one -- MainComponent wires this (not getMixerPanel().unbindAllColumns()
      *  directly) to GraphEditor::onBeforeDetachAllModuleComponents, so a mirror view open when a
      *  graph-replacing mutation (undo/redo restore, New Patch, Load, AI patch apply) runs is
      *  unbound first too. */
-    void unbindAllMixerViews() {
-        mixer_.unbindAllColumns();
-        mixerMirror_.unbindIfOpen();
-    }
+    void unbindAllMixerViews();
     /** Sibling of unbindAllMixerViews() for MixerPanelComponent::rebuildIfUnbound()'s own
      *  contract (MainComponent wires this to GraphEditor::onGraphStructureChanged). */
-    void rebuildIfUnboundMixerViews() {
-        mixer_.rebuildIfUnbound();
-        mixerMirror_.rebuildIfUnboundIfOpen();
-    }
+    void rebuildIfUnboundMixerViews();
 
     /** Mirrors rebuildMixer() above -- see its call site's own comment. */
     void rebuildMidiRemote() { midiRemotePanel_.rebuildFromProfiles(); }
@@ -154,10 +143,7 @@ public:
      *  DetachablePanelHost is detached -- its own window is a separate top-level Component, so
      *  THIS dock's isVisible() says nothing about whether that window is on screen), matching the
      *  Timeline panel's own precedent (docs/layout/rendering.md). */
-    void refreshMeters() {
-        mixer_.refreshMeters();
-        mixerMirror_.refreshMetersIfOpen(); // Independent meter cadence, own MeterReader slot
-    }
+    void refreshMeters();
 
     /** "is the mixer panel showing anywhere a meter tick would be visible" --
      *  docked on the Mixer tab (`isMixerTabActive() && isVisible()`, the pre-existing check) OR
@@ -441,7 +427,7 @@ private:
     static const char* actionIdForTab(Tab tab) noexcept;
 
     TimelinePanelComponent& timelinePanel_;
-    MixerPanelComponent mixer_;
+    std::unique_ptr<MixerPanelComponent> mixer_;
     // The panel and its host follow the same "declared before its host so the reference
     // is valid" rule as mixer_/mixerHost_ below.
     synth::ui::MidiRemotePanelComponent midiRemotePanel_;

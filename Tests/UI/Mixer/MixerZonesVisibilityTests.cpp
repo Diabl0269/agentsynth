@@ -2,6 +2,7 @@
 // toggles, "Show all", Alt-click solo-show, Master's disabled eye, the filter box and chips (which narrow
 // only the list) and keyboard navigation skipping hidden columns.
 #include "MixerZonesTestRig.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <gtest/gtest.h>
 
 namespace {

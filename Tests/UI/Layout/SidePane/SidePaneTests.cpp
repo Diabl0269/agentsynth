@@ -5,6 +5,7 @@
 #include "../../Mixer/MixerZonesTestRig.h"
 #include "UI/Layout/SidePane/SidePane.h"
 #include "UI/Layout/SidePane/SidePaneToggleButton.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <gtest/gtest.h>
 
 namespace {

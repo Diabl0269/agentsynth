@@ -6,6 +6,7 @@
 #include "Branding.h"
 #include "MainComponent.h"
 #include "MainComponentShortcutHints.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Settings/SettingsWindow.h"
 // Generated at CMake CONFIGURE time from local git history -- see the root CMakeLists.txt's
 // "What's New" block. ${CMAKE_BINARY_DIR}/generated is on AppUI's private include path.

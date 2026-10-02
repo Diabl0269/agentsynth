@@ -7,6 +7,7 @@
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/TimelineAudioSourceModule.h"

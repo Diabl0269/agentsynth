@@ -2,6 +2,7 @@
 // mixerHost_ between its three homes. The Own panel has its own slide, persisted height and
 // resize handle, kept entirely inside this class.
 #include "MixerPlacementController.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 
 #include <algorithm>
 

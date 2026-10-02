@@ -9,6 +9,8 @@
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReadOnlyTextValue.h"
 #include "UI/Layout/TabStripKeys.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -52,8 +54,9 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
                                          juce::ApplicationProperties& appProperties,
                                          synth::theme::AppLookAndFeel* lookAndFeel, ShortcutManager* shortcutManager)
     : timelinePanel_(timelinePanel)
+    , mixer_(std::make_unique<MixerPanelComponent>())
     , timelineHost_(timelinePanel_, "Timeline", "timelineWindowBounds", &appProperties, lookAndFeel, shortcutManager)
-    , mixerHost_(mixer_, "Mixer", "mixerWindowBounds", &appProperties, lookAndFeel, shortcutManager)
+    , mixerHost_(*mixer_, "Mixer", "mixerWindowBounds", &appProperties, lookAndFeel, shortcutManager)
     , midiRemoteHost_(midiRemotePanel_, "Controllers", "midiRemoteWindowBounds", &appProperties, lookAndFeel,
                       shortcutManager)
     , mixerMirror_(appProperties,
@@ -119,15 +122,15 @@ BottomDockComponent::BottomDockComponent(TimelinePanelComponent& timelinePanel, 
     addAndMakeVisible(mixerHost_);
     addAndMakeVisible(midiRemoteHost_);
 
-    mixer_.configure(audioEngine.getGraph(), doc, graphEditor.getMacros(), undoManager, graphEditor, audioEngine);
+    mixer_->configure(audioEngine.getGraph(), doc, graphEditor.getMacros(), undoManager, graphEditor, audioEngine);
     // The docked mixer's own live mute/solo/pan-law changes reach the "both places" mirror
     // (if open) the instant they happen -- the mirror's own symmetric half of this cross-wire lives
     // in MixerMirrorController::open() (mirror_->onLiveMixerStateChanged), which points back at
     // mixer_.refreshLiveMixerVisuals(). Safe unconditionally: refreshLiveVisualsIfOpen() is a no-op
     // while the mirror is closed.
-    mixer_.onLiveMixerStateChanged = [this] { mixerMirror_.refreshLiveVisualsIfOpen(); };
+    mixer_->onLiveMixerStateChanged = [this] { mixerMirror_.refreshLiveVisualsIfOpen(); };
     // A pin / hide edit (or its undo) rebuilds the docked mixer and, if open, the mirror.
-    mixer_.onMixerViewChanged = [this] { rebuildMixer(); };
+    mixer_->onMixerViewChanged = [this] { rebuildMixer(); };
 
     // Last, so the top few pixels always belong to the resize gesture whatever tab is showing. The
     // dock is the handle's owner, so the desired height it reports is already the TOTAL dock height.
@@ -213,19 +216,19 @@ void BottomDockComponent::setOnGraphTopologyChanged(std::function<void()> callba
     // Forwards straight through: MixerInsertList::onMutated -> MixerColumnComponent::onMutated ->
     // MixerPanelComponent::onGraphMutated (wired per-column in MixerPanelComponent::rebuild()) ->
     // this callback.
-    mixer_.onGraphMutated = std::move(callback);
+    mixer_->onGraphMutated = std::move(callback);
 }
 
 void BottomDockComponent::setOnMakeChannelForNode(std::function<void(juce::AudioProcessorGraph::NodeID)> callback) {
-    mixer_.onMakeChannelForNode = std::move(callback);
+    mixer_->onMakeChannelForNode = std::move(callback);
 }
 
 void BottomDockComponent::setOnArmTrack(std::function<void(synth::TrackId)> callback) {
-    mixer_.onArmTrack = std::move(callback);
+    mixer_->onArmTrack = std::move(callback);
 }
 
 void BottomDockComponent::setOnMoveTrack(std::function<void(synth::TrackId, int)> callback) {
-    mixer_.onMoveTrack = std::move(callback);
+    mixer_->onMoveTrack = std::move(callback);
 }
 
 void BottomDockComponent::setActiveTab(Tab tab) {
@@ -297,6 +300,42 @@ bool BottomDockComponent::hasAnyVisibleTab() const noexcept {
     return false;
 }
 
+BottomDockComponent::~BottomDockComponent() = default;
+
+void BottomDockComponent::rebuildMixer() {
+    mixer_->rebuild();
+    mixerMirror_.rebuildIfOpen();
+}
+
+void BottomDockComponent::refreshMixerTrackColours() {
+    mixer_->refreshTrackColours();
+    mixerMirror_.refreshTrackColoursIfOpen();
+}
+
+void BottomDockComponent::refreshLiveMixerVisualsEverywhere() {
+    mixer_->refreshLiveMixerVisuals();
+    mixerMirror_.refreshLiveVisualsIfOpen();
+}
+
+void BottomDockComponent::unbindAllMixerViews() {
+    mixer_->unbindAllColumns();
+    mixerMirror_.unbindIfOpen();
+}
+
+void BottomDockComponent::rebuildIfUnboundMixerViews() {
+    mixer_->rebuildIfUnbound();
+    mixerMirror_.rebuildIfUnboundIfOpen();
+}
+
+void BottomDockComponent::refreshMeters() {
+    mixer_->refreshMeters();
+    mixerMirror_.refreshMetersIfOpen(); // Independent meter cadence, own MeterReader slot
+}
+
+MixerPanelComponent& BottomDockComponent::getMixerPanel() noexcept { return *mixer_; }
+
+const MixerPanelComponent& BottomDockComponent::getMixerPanel() const noexcept { return *mixer_; }
+
 BottomDockComponent::Tab BottomDockComponent::pickFallbackActiveTab() const noexcept {
     if (isTabOfferedInStrip(activeTab_))
         return activeTab_;
@@ -324,7 +363,7 @@ void BottomDockComponent::openMixerMirror() {
     // headless tests (no real LookAndFeel installed yet) leave the mirror window unthemed, matching
     // a real detach's own fallback.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    mixerMirror_.open(mixer_, lf, shortcutManager_, mixerHost_.onAppShortcutFallback,
+    mixerMirror_.open(*mixer_, lf, shortcutManager_, mixerHost_.onAppShortcutFallback,
                       mixerHost_.isCreatingNativeWindows());
 }
 
@@ -379,7 +418,7 @@ void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     if (!timelineHost_.isDetached())
         timelinePanel_.setVisible(timelineActive);
     if (!mixerHost_.isDetached())
-        mixer_.setVisible(mixerActive);
+        mixer_->setVisible(mixerActive);
     if (!midiRemoteHost_.isDetached())
         midiRemotePanel_.setVisible(midiRemoteActive);
     timelineTabButton_.setToggleState(timelineActive, juce::dontSendNotification);
@@ -391,7 +430,7 @@ void BottomDockComponent::applyTabVisibility(bool allowMixerRebuild) {
         if (auto* handler = c->getAccessibilityHandler())
             handler->notifyAccessibilityEvent(juce::AccessibilityEvent::valueChanged);
     if (mixerActive && allowMixerRebuild)
-        mixer_.rebuild();
+        mixer_->rebuild();
     // Catches up on any profile/assignment change that happened while this tab was hidden,
     // same reasoning as the Mixer tab's own "coming back into view" rebuild above --
     // allowMixerRebuild's false-on-pure-detach exception applies here too, for the same reason (a
@@ -638,13 +677,13 @@ void BottomDockComponent::cancelTabDrag() {
 
 bool BottomDockComponent::toggleActiveSidePane(bool forceOpen) {
     if (activeTab_ == Tab::Mixer)
-        return mixer_.toggleSidePane(forceOpen);
+        return mixer_->toggleSidePane(forceOpen);
     return activeTab_ == Tab::Timeline && timelinePanel_.toggleSidePane(forceOpen);
 }
 
 bool BottomDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID stripId) {
     setActiveTab(Tab::Mixer);
-    return mixer_.revealColumn(stripId);
+    return mixer_->revealColumn(stripId);
 }
 
 // Splits tabButtonsArea_ between the tabs currently offered (isTabOfferedInStrip -- skips a Mixer
@@ -805,7 +844,7 @@ juce::Component* BottomDockComponent::getActivePanelRoot() noexcept {
         return nullptr;
     switch (activeTab_) {
     case Tab::Mixer:
-        return &mixer_;
+        return mixer_.get();
     case Tab::MidiRemote:
         return &midiRemotePanel_;
     case Tab::Timeline:

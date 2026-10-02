@@ -8,6 +8,7 @@
 #include "MainComponent/MainComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerMasterColumn.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cstdlib>
 #include <gtest/gtest.h>

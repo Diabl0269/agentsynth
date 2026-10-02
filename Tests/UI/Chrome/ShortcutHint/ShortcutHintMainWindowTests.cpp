@@ -5,6 +5,7 @@
 #include "UI/Chrome/ShortcutHint/ShortcutHintOverlay.h"
 #include "UI/Chrome/ShortcutHint/ShortcutHintText.h"
 #include "UI/Layout/BottomDockComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Timeline/EditTool.h"
 #include <algorithm>
 

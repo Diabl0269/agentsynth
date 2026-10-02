@@ -20,6 +20,7 @@
 #include "UI/Mixer/MixerInsertList.h"
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerMeter.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Mixer/MixerSendList.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <gtest/gtest.h>
