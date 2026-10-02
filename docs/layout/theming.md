@@ -248,6 +248,15 @@ invalidated and re-rendered once. No animation loop or per-tick repaint is added
 
 ## Themed widgets
 
+**One shared component per control.** Every control in the app (knob, fader, button, icon button,
+toggle, chip, combo, tab, fold arrow, colour swatch, menu) is drawn by ONE shared implementation:
+an `AppLookAndFeel` override, an `IconLibrary` icon, or a shared widget class under
+`Source/UI/Layout/`. A surface never paints its own copy of a control, so changing a control's look
+in one place changes it everywhere. Each shared control also has a card in the AgentSynth Design
+System (the design reference kept in step with this code); a look change updates both together. A
+new control kind gets a shared implementation and a design-system card first, then its call sites.
+Hand-drawn copies that predate this rule are being folded onto the shared ones.
+
 These stock-widget overrides are implemented in `AppLookAndFeel`:
 
 - **ComboBox** — `drawComboBox` (pressed/disabled/focused states, drawn chevron arrow),
