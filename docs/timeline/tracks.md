@@ -316,6 +316,10 @@ preview/commit
 contract. `createColourPickerForTest()` exposes `buildColourPicker()`'s exact wiring without ever
 launching the `CallOutBox`.
 
+A track that owns its channel macro gets a picker that also writes the macro's colour (preview, cancel and
+the one-step commit included), and recolouring the macro writes the track back: see
+[A track and its macro share a colour](../mixer/mixer.md#a-track-and-its-macro-share-a-colour).
+
 ## Binding chips
 
 Three states, two of them amber (`theme.colors.warning`):

@@ -2,7 +2,8 @@
 // What a LINK actually does (docs/mixer/mixer.md#channels-follow-audio-not-tracks), driven through the real
 // track-header buttons: names sync both ways, colour previews live and commits as one undo step, a linked track's M/S
 // drive its CHANNEL (not note gating) while a shared channel's tracks keep today's note gating, and the channel chip
-// names/reveals the channel with a repaint-gated meter.
+// names/reveals the channel with a repaint-gated meter. A track also shares its colour with the channel macro it plays
+// (both ways, the first track in timeline order owning a shared macro).
 //
 // Most cases run on a rig of real collaborators (AudioEngine + GraphEditor + TimelineDoc +
 // AppUndoManager + TrackChannelLinkController + real TimelineTrackHeaderComponents over a stub
@@ -128,6 +129,9 @@ struct LinkRigApp {
         editor.updateComponents();
         for (const auto& track : doc.getTracks())
             headers.push_back(std::make_unique<TimelineTrackHeaderComponent>(doc, track.id, &host));
+        // What every real session has already done by the time the user can edit: a project open or a track
+        // creation ends in this reconcile, so each owned macro already wears its track's colour.
+        link.reconcileLinkedTracks();
     }
 
     synth::TrackId addTrack(const juce::String& name, const juce::String& bindingUuid) {
@@ -286,17 +290,171 @@ TEST_F(ChannelFlowTest, ColourPickerCommitIsOneUndoStepCoveringTrackAndChannel) 
     EXPECT_FALSE(rig.undo.canUndo()) << "the preview frames left no steps of their own behind";
 }
 
-TEST_F(ChannelFlowTest, ASharedChannelsTrackKeepsTheOrdinarySingleTargetColourPicker) {
+TEST_F(ChannelFlowTest, OnlyTheFirstTrackPlayingASharedMacroDrivesItsColour) {
     LinkRigApp rig;
     const juce::Colour originalMacro = rig.editor.getMacros().find(rig.drumsMacroId)->colour;
 
-    auto picker = rig.header(rig.kick).createColourPickerForTest();
+    auto snarePicker = rig.header(rig.snare).createColourPickerForTest();
+    ASSERT_NE(snarePicker, nullptr);
+    snarePicker->setCurrentColourForTest(juce::Colours::magenta);
+    EXPECT_EQ(rig.doc.getTrack(rig.snare)->colourArgb, juce::Colours::magenta.getARGB());
+    EXPECT_EQ(rig.editor.getMacros().find(rig.drumsMacroId)->colour, originalMacro)
+        << "a later track's colour is its own; the macro follows the owning track";
+    snarePicker->commitForTest();
+
+    auto kickPicker = rig.header(rig.kick).createColourPickerForTest();
+    ASSERT_NE(kickPicker, nullptr);
+    kickPicker->setCurrentColourForTest(juce::Colours::orange);
+    EXPECT_EQ(rig.editor.getMacros().find(rig.drumsMacroId)->colour, juce::Colours::orange)
+        << "the first track in timeline order owns the macro";
+}
+
+// -------------------------------------------------------------------------------------------
+// (b2) Recolouring the macro recolours the track that owns it
+// -------------------------------------------------------------------------------------------
+
+TEST_F(ChannelFlowTest, MacroPickerPreviewMovesTheOwningTrackWithNoUndoStep) {
+    LinkRigApp rig;
+    const int serialBefore = rig.undo.getEditSerial();
+    auto picker = rig.editor.createMacroColourPickerForTest(rig.leadMacroId);
+    ASSERT_NE(picker, nullptr);
+
+    for (const auto colour : {juce::Colours::red, juce::Colours::green}) {
+        picker->setCurrentColourForTest(colour);
+        EXPECT_EQ(rig.doc.getTrack(rig.lead)->colourArgb, colour.getARGB()) << "the track follows every tick";
+    }
+    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore);
+}
+
+TEST_F(ChannelFlowTest, MacroPickerCommitIsOneUndoStepCoveringMacroAndTrack) {
+    LinkRigApp rig;
+    const juce::uint32 originalTrack = rig.doc.getTrack(rig.lead)->colourArgb;
+    const juce::Colour originalMacro = rig.editor.getMacros().find(rig.leadMacroId)->colour;
+    ASSERT_FALSE(rig.undo.canUndo());
+
+    auto picker = rig.editor.createMacroColourPickerForTest(rig.leadMacroId);
     ASSERT_NE(picker, nullptr);
     picker->setCurrentColourForTest(juce::Colours::magenta);
+    picker->setCurrentColourForTest(juce::Colours::orange);
+    picker->commitForTest();
 
+    EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->colour, juce::Colours::orange);
+    EXPECT_EQ(rig.doc.getTrack(rig.lead)->colourArgb, juce::Colours::orange.getARGB());
+
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->colour, originalMacro);
+    EXPECT_EQ(rig.doc.getTrack(rig.lead)->colourArgb, originalTrack) << "one Cmd+Z, both sides";
+    EXPECT_FALSE(rig.undo.canUndo());
+}
+
+TEST_F(ChannelFlowTest, MacroPickerCloseWithNoNetChangeRestoresTheTrackAndRecordsNothing) {
+    LinkRigApp rig;
+    const juce::uint32 originalTrack = rig.doc.getTrack(rig.lead)->colourArgb;
+    const juce::Colour originalMacro = rig.editor.getMacros().find(rig.leadMacroId)->colour;
+    const int serialBefore = rig.undo.getEditSerial();
+
+    auto picker = rig.editor.createMacroColourPickerForTest(rig.leadMacroId);
+    ASSERT_NE(picker, nullptr);
+    picker->setCurrentColourForTest(juce::Colours::magenta);
+    picker->setCurrentColourForTest(originalMacro);
+    picker->commitForTest();
+
+    EXPECT_EQ(rig.doc.getTrack(rig.lead)->colourArgb, originalTrack);
+    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore);
+}
+
+TEST_F(ChannelFlowTest, RecolouringASharedMacroMovesTheFirstTrackAndLeavesTheOthers) {
+    LinkRigApp rig;
+    const juce::uint32 snareBefore = rig.doc.getTrack(rig.snare)->colourArgb;
+
+    auto picker = rig.editor.createMacroColourPickerForTest(rig.drumsMacroId);
+    ASSERT_NE(picker, nullptr);
+    picker->setCurrentColourForTest(juce::Colours::orange);
+    picker->commitForTest();
+
+    EXPECT_EQ(rig.doc.getTrack(rig.kick)->colourArgb, juce::Colours::orange.getARGB());
+    EXPECT_EQ(rig.doc.getTrack(rig.snare)->colourArgb, snareBefore);
+}
+
+TEST_F(ChannelFlowTest, ATrackWiredInThroughAMacroPortStillOwnsTheMacroItsInstrumentSitsIn) {
+    LinkRigApp rig;
+    // The Track In outside the hull, as when a MIDI track drives a shared instrument through a macro port.
+    rig.editor.getMacros().removeMemberEverywhere(rig.doc.getTrack(rig.kick)->bindingUuid);
+
+    auto trackPicker = rig.header(rig.kick).createColourPickerForTest();
+    ASSERT_NE(trackPicker, nullptr);
+    trackPicker->setCurrentColourForTest(juce::Colours::orange);
+    EXPECT_EQ(rig.editor.getMacros().find(rig.drumsMacroId)->colour, juce::Colours::orange);
+    trackPicker->commitForTest();
+
+    auto macroPicker = rig.editor.createMacroColourPickerForTest(rig.drumsMacroId);
+    ASSERT_NE(macroPicker, nullptr);
+    macroPicker->setCurrentColourForTest(juce::Colours::magenta);
     EXPECT_EQ(rig.doc.getTrack(rig.kick)->colourArgb, juce::Colours::magenta.getARGB());
-    EXPECT_EQ(rig.editor.getMacros().find(rig.drumsMacroId)->colour, originalMacro)
-        << "a shared channel keeps its own colour";
+}
+
+TEST_F(ChannelFlowTest, AMacroNoTrackPlaysKeepsItsOwnColourBothWays) {
+    LinkRigApp rig;
+    juce::String freeUuid;
+    addPlainNodeCFT(rig.graph(), "Oscillator", {800, 0}, freeUuid);
+    const auto freeId = rig.editor.getMacroController().addMacroForMembers({freeUuid}, "Free", {800, 0});
+    rig.editor.getMacros().find(freeId)->colour = juce::Colour(0xff123456);
+    const juce::uint32 leadBefore = rig.doc.getTrack(rig.lead)->colourArgb;
+
+    rig.link.reconcileLinkedTracks();
+    EXPECT_EQ(rig.editor.getMacros().find(freeId)->colour, juce::Colour(0xff123456)) << "no track to follow";
+
+    auto picker = rig.editor.createMacroColourPickerForTest(freeId);
+    ASSERT_NE(picker, nullptr);
+    picker->setCurrentColourForTest(juce::Colours::orange);
+    picker->commitForTest();
+    EXPECT_EQ(rig.editor.getMacros().find(freeId)->colour, juce::Colours::orange);
+    EXPECT_EQ(rig.doc.getTrack(rig.lead)->colourArgb, leadBefore) << "no track is touched";
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_EQ(rig.editor.getMacros().find(freeId)->colour, juce::Colour(0xff123456));
+}
+
+// -------------------------------------------------------------------------------------------
+// (b3) Opening a project: macros adopt their track's colour, without a change to save
+// -------------------------------------------------------------------------------------------
+
+TEST_F(ChannelFlowTest, ReconcileAfterOpenMakesMacrosWearTheirTracksColourAndMarksNothingChanged) {
+    LinkRigApp rig;
+    rig.doc.setTrackColour(rig.lead, juce::Colours::teal.getARGB());
+    rig.doc.setTrackColour(rig.kick, juce::Colours::orange.getARGB());
+    rig.doc.setTrackColour(rig.snare, juce::Colours::pink.getARGB());
+    const int serialBefore = rig.undo.getEditSerial();
+
+    rig.link.reconcileLinkedTracks(); // the funnel a project open ends in
+
+    EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->colour, juce::Colours::teal);
+    EXPECT_EQ(rig.editor.getMacros().find(rig.drumsMacroId)->colour, juce::Colours::orange)
+        << "a shared macro takes its first track's colour";
+    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore) << "adopting a colour on open is not an edit";
+    EXPECT_FALSE(rig.undo.canUndo());
+}
+
+TEST_F(ChannelFlowTest, ReconcileAfterOpenReachesAChannelMacroNestedAroundTheInstrument) {
+    LinkRigApp rig;
+    auto& macros = rig.editor.getMacros();
+    const auto members = macros.find(rig.leadMacroId)->members; // Track In, Oscillator, Channel Strip
+    ASSERT_EQ(members.size(), 3u);
+    macros.removeMemberEverywhere(members[0]);
+    macros.removeMemberEverywhere(members[1]);
+    synth::Macro child;
+    child.name = "Voice";
+    child.members = {members[0], members[1]};
+    child.colour = juce::Colour(0xff010203);
+    const auto childId = macros.add(child);
+    ASSERT_TRUE(macros.setParent(childId, rig.leadMacroId));
+    rig.doc.setTrackColour(rig.lead, juce::Colours::teal.getARGB());
+    const int serialBefore = rig.undo.getEditSerial();
+
+    rig.link.reconcileLinkedTracks();
+
+    EXPECT_EQ(macros.find(rig.leadMacroId)->colour, juce::Colours::teal) << "the channel macro, not the child";
+    EXPECT_EQ(macros.find(childId)->colour, juce::Colour(0xff010203));
+    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore);
 }
 
 // -------------------------------------------------------------------------------------------
@@ -521,7 +679,7 @@ TEST_F(ChannelFlowTest, AnUnboxedLinkedChainDrivesTheChannelsMuteButKeepsTheOrdi
     // Name and colour need a macro to sync INTO, so both decline and the header keeps its ordinary
     // track-only behaviour...
     EXPECT_FALSE(rig.link.renameLinkedTrackAndChannel(bare, "Renamed"));
-    EXPECT_EQ(rig.link.buildLinkedChannelColourPicker(bare, nullptr), nullptr);
+    EXPECT_EQ(rig.link.buildOwnedMacroColourPicker(bare, nullptr), nullptr);
     header.getNameLabel().setText("Renamed", juce::sendNotificationSync);
     EXPECT_EQ(rig.doc.getTrack(bare)->name, "Renamed") << "the track itself still renames";
 

@@ -126,18 +126,8 @@ instrument. Linked means:
 
 - **Names sync both ways.** Renaming the track renames the channel (strip and macro), and the
   reverse.
-- **Colour syncs live.** The track colour, the channel's macro colour and the mixer column colour
-  always match, and they update **while the colour picker is still being dragged**, not only on
-  commit. `synth::ui::ColourPickerPopup` (`Source/UI/Chrome/ColourPickerPopup.h`,
-  [`docs/layout/colour-overrides.md`](../layout/colour-overrides.md#colour-picker-popup)) separates a
-  live-preview callback — fires on every drag or favourite click, writes straight into its target
-  with **no undo step** — from a commit-once callback that fires once, on close, as the real edit. A
-  linked track and channel fan the SAME preview write out on every drag frame; a cancel restores
-  every destination to its original colour, exactly like the single-target case; a commit is **one**
-  undo step covering all of them, not several separate edits, matching the existing "one `Cmd+Z`
-  undoes a dozen preview colours" semantics. It fans out over TWO stored targets, not three: **a
-  channel's colour IS its macro's colour**, so the mixer column reads the macro rather than a third
-  copy on the strip.
+- **Colour follows the track.** See [A track and its macro share a colour](#a-track-and-its-macro-share-a-colour);
+  that rule is wider than the link and applies to every track whose instrument sits in a channel macro.
 - **The track header's M and S drive the strip.** Not note gating — the linked channel's mute and
   solo. A redirect, not a mirror: the track's own `muted`/`soloed` stay false, so there is only one
   copy.
@@ -176,6 +166,35 @@ field on the strip, so an **unboxed** linked channel syncs neither name nor colo
 still drive the strip. And soloing a linked channel silences every other channel, a shared one
 included, even when that shared channel's own track is note-gate soloed: that is a DAW mixer solo,
 not a bug.
+
+### A track and its macro share a colour
+
+A track's macro is the **channel macro its instrument sits in**: the macro boxing the channel strip the track's
+audio reaches, resolved with `synth::nearestChannelMacro` (never `MacroSet::findByMember`, which stops at a nested
+child). Going through the strip rather than the track's Track In node matters for a MIDI track wired into a shared
+instrument, whose Track In can sit outside the macro. The track colour, that macro's colour and
+the mixer column colour always match, because a channel's colour IS its macro's colour:
+
+- **Both ways.** Recolouring the track recolours the macro; recolouring the macro (the macro card's colour
+  action) recolours the track that owns it.
+- **Live, one undo step.** Both pickers (`synth::ui::ColourPickerPopup`,
+  [`docs/layout/colour-overrides.md`](../layout/colour-overrides.md#colour-picker-popup)) write the other side on
+  every drag frame with no undo step; a close with no net change restores both; a commit is **one** graph +
+  timeline + macro step, so one `Cmd+Z` restores both. The macro half joins `MacroGroupController`'s
+  `makeMacroColourMirror` / `recordMacroColourHook`, the same way a rename joins `recordMacroRenameHook`.
+- **A shared macro follows its owning track.** When several tracks play one macro (Kick, Snare and Hats into one
+  sampler) the owner is the **first track in timeline order**. Only the owner's picker touches the macro; the
+  other tracks keep their own colour, and the macro never follows them.
+- **A macro no track plays keeps its own colour**, and recolouring it touches no track.
+- **Opening a project adopts the track colour.** `TrackChannelLinkController::syncMacroColoursToTracks` runs
+  from `reconcileLinkedTracks` (the funnel every project open, new track and undo/redo restore reaches) and from
+  `MainComponent::reconcileTimelineBindingsOnly` (the end of every canvas structural change, so a channel built by
+  a cable drag takes the colour at once). It writes the macro directly with no undo step, so a project whose macro
+  colour disagreed does not open as changed. A track whose stored colour is unset resolves through the same
+  palette the header paints with.
+- **Unboxed instruments** have no macro, so nothing syncs and the header's own picker is used.
+
+Macro port colours (FRO32) do not follow the track.
 
 ### Column badges
 

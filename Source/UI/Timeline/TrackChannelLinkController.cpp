@@ -8,6 +8,7 @@
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 
 namespace synth::ui {
@@ -26,13 +27,17 @@ TrackChannelLinkController::TrackChannelLinkController(AudioEngine& engine, synt
     , undo_(undo)
     , graphEditor_(graphEditor) {
     installMacroRenameHook();
+    installMacroColourHooks();
 }
 
 TrackChannelLinkController::~TrackChannelLinkController() {
     // The controller is destroyed with MainComponent, which owns the GraphEditor too -- but member
     // teardown order is not this class' to assume, so the hook is dropped explicitly rather than
     // left holding a `this` that is going away.
-    graphEditor_.getMacroController().recordMacroRenameHook = nullptr;
+    auto& macroController = graphEditor_.getMacroController();
+    macroController.recordMacroRenameHook = nullptr;
+    macroController.makeMacroColourMirror = nullptr;
+    macroController.recordMacroColourHook = nullptr;
 }
 
 juce::AudioProcessorGraph& TrackChannelLinkController::graph() const { return engine_.getGraph(); }
@@ -61,6 +66,21 @@ synth::TrackId TrackChannelLinkController::linkedTrackForMacro(const juce::Strin
         if (info.linked && macro->hasMember(info.stripUuid))
             return track.id;
     }
+    return {};
+}
+
+const synth::Macro* TrackChannelLinkController::macroForTrack(const synth::Track& track) const {
+    // Through the strip the track's audio reaches (not the track's own Track In node, which can sit outside the
+    // macro hull when the track drives a shared instrument through a macro port). resolve() is empty for an
+    // Automation track and for an unbound or orphaned one.
+    const auto info = resolve(track.id);
+    return info.hasChannel ? macroForStrip(info.stripUuid) : nullptr;
+}
+
+synth::TrackId TrackChannelLinkController::owningTrackForMacro(const juce::String& macroId) const {
+    for (const auto& track : doc_.getTracks())
+        if (const auto* macro = macroForTrack(track); macro != nullptr && macro->id == macroId)
+            return track.id;
     return {};
 }
 
@@ -151,19 +171,18 @@ void TrackChannelLinkController::installMacroRenameHook() {
         };
 }
 
-// ---- (b) Colour syncs live ----------------------------------------------------------------
+// ---- (b) Colour syncs live, both ways -----------------------------------------------------
 
 std::unique_ptr<ColourPickerPopup>
-TrackChannelLinkController::buildLinkedChannelColourPicker(synth::TrackId track, juce::PropertiesFile* favourites) {
-    const auto info = resolve(track);
-    if (!info.linked)
-        return nullptr;
-    const auto* macro = macroForStrip(info.stripUuid);
-    if (macro == nullptr)
-        return nullptr; // unboxed chain: colour sync is a no-op, the header's own picker still works
+TrackChannelLinkController::buildOwnedMacroColourPicker(synth::TrackId track, juce::PropertiesFile* favourites) {
     const auto* t = doc_.getTrack(track);
     if (t == nullptr)
         return nullptr;
+    const auto* macro = macroForTrack(*t);
+    if (macro == nullptr)
+        return nullptr; // no macro to follow: the header's own picker still works
+    if (owningTrackForMacro(macro->id).value != track.value)
+        return nullptr; // a macro follows its owning track only; a later track's colour is its own
 
     const juce::String macroId = macro->id;
     const juce::uint32 originalTrackColour = t->colourArgb;
@@ -205,6 +224,53 @@ TrackChannelLinkController::buildLinkedChannelColourPicker(synth::TrackId track,
         });
 }
 
+void TrackChannelLinkController::installMacroColourHooks() {
+    // The macro card's picker, mirrored onto the owning track. The mirror (resolved once when the picker opens)
+    // writes the track with no undo step on every drag frame, and puts the original back on a close with no net
+    // change; the record hook runs the commit as
+    // ONE graph+timeline+macro step so a single Cmd+Z restores both. Both decline for a macro no track plays.
+    auto& controller = graphEditor_.getMacroController();
+    controller.makeMacroColourMirror = [this](const juce::String& macroId) -> std::function<void(juce::Colour)> {
+        const auto track = owningTrackForMacro(macroId); // once per picker, not once per drag frame
+        if (!track.isValid())
+            return {};
+        return [this, track](juce::Colour colour) { doc_.setTrackColour(track, colour.getARGB()); };
+    };
+    controller.recordMacroColourHook = [this](const juce::String& macroId, juce::Colour colour,
+                                              const std::function<void()>& recolourMutation) {
+        const auto track = owningTrackForMacro(macroId);
+        if (!track.isValid())
+            return false;
+        undo_.recordGraphTimelineAndMacroChange(graph(), doc_, macros(), [this, track, colour, &recolourMutation] {
+            recolourMutation();
+            doc_.setTrackColour(track, colour.getARGB());
+        });
+        return true;
+    };
+}
+
+void TrackChannelLinkController::syncMacroColoursToTracks() {
+    juce::StringArray seen;
+    bool changed = false;
+    int index = 0;
+    for (const auto& track : doc_.getTracks()) {
+        const int trackIndex = index++;
+        const auto* macro = macroForTrack(track);
+        if (macro == nullptr || seen.contains(macro->id))
+            continue; // unowned, or already settled by the first track that plays it
+        seen.add(macro->id);
+        const auto wanted = synth::ui::resolveTrackColour(track.colourArgb, trackIndex, /*muted=*/false);
+        if (macro->colour == wanted)
+            continue;
+        if (auto* m = macros().find(macro->id)) {
+            m->colour = wanted;
+            changed = true;
+        }
+    }
+    if (changed)
+        graphEditor_.repaint();
+}
+
 // ---- (c) The track header's M/S drive the strip --------------------------------------------
 
 bool TrackChannelLinkController::toggleLinkedChannelMuted(synth::TrackId track) {
@@ -241,6 +307,8 @@ void TrackChannelLinkController::reconcileLinkedTracks() {
     if (reconciling_)
         return;
     const juce::ScopedValueSetter<bool> guard(reconciling_, true);
+
+    syncMacroColoursToTracks();
 
     // Collected first: the transfer writes the doc, and a doc write notifies listeners while this
     // loop would otherwise still be walking the track list it is mutating through.

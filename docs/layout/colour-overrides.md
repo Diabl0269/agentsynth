@@ -122,11 +122,12 @@ colour first silently restores the original, outside any undo-recorded mutation,
 the real edit as the ONE undo step whose undo target is the original colour. Dragging through a
 dozen preview colours before landing on a choice therefore costs exactly one Cmd+Z, not a dozen.
 
-**A caller may fan the preview out to more than one target.** A timeline track that is LINKED to a
-mixer channel builds its picker through `TrackChannelLinkController` instead, whose preview callback
+**A caller may fan the preview out to more than one target.** A timeline track that owns its
+channel macro builds its picker through `TrackChannelLinkController` instead, whose preview callback
 writes the track colour AND the channel macro's colour on every drag frame, whose no-net-change
 close restores both, and whose commit restores both and then performs ONE compound undo step
-covering them. **The popup's own contract is unchanged** — fanning out is entirely the caller's
+covering them. The macro card's picker mirrors onto the owning track the same way
+([`docs/mixer/mixer.md`](../mixer/mixer.md#a-track-and-its-macro-share-a-colour)). **The popup's own contract is unchanged** — fanning out is entirely the caller's
 business.
 
 **Committing always reconciles with `juce::ColourSelector::getCurrentColour()`** rather than trusting

@@ -711,10 +711,12 @@ void MacroGroupController::setMacroColour(const juce::String& macroId, juce::Col
             m->colour = colour;
     };
 
-    if (host_.undo())
-        host_.undo()->recordGraphAndMacroChange(graph, host_.getMacros(), doRecolour);
-    else
-        doRecolour();
+    if (!(recordMacroColourHook && recordMacroColourHook(macroId, colour, doRecolour))) {
+        if (host_.undo())
+            host_.undo()->recordGraphAndMacroChange(graph, host_.getMacros(), doRecolour);
+        else
+            doRecolour();
+    }
 
     host_.syncMacroCards();
     host_.requestRepaint();
