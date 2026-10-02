@@ -628,6 +628,9 @@ public:
     /** Lands the tween at its final state, same as the real driver's onComplete. */
     void finishMacroCrossingAnimForTest();
 
+    /** The glide that slides cards between positions; AppUndoManager opens a Scope on it around undo/redo. */
+    CardGlideAnimator& getCardGlide() noexcept { return cardGlide_; }
+
     // ---- Card-glide test seams (CardGlideAnimator.h) ----
     CardGlideAnimator& getCardGlideForTest() noexcept { return cardGlide_; }
     /** Advances the glide to `t` (0..1) with no VBlank. */

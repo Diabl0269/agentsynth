@@ -20,6 +20,7 @@ add_executable(Tests
     UI/Graph/AutoArrangeTests.cpp
     UI/Graph/AutoArrangeMacroTests.cpp
     UI/Graph/CardGlide/CardGlideTests.cpp
+    UI/Graph/CardGlide/CardGlideUndoTests.cpp
     UI/Graph/OutputDockTests.cpp
     Modules/OscillatorTests.cpp
     Modules/OscillatorPulseWidthGlideTests.cpp
@@ -497,6 +498,7 @@ add_executable(Tests
     UI/Timeline/TimelinePanel/TimelinePanelTrackHeaderTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelTrackSizingTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelTrackReorderTests.cpp
+    UI/Timeline/TimelinePanel/TimelinePanelTrackReorderUndoGlideTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelAppWiringTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelResizeTests.cpp
     UI/Timeline/TimelinePanel/TimelinePanelAuthoringGestureTests.cpp

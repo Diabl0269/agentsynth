@@ -195,6 +195,67 @@ void TimelinePanelComponent::cancelTrackDrag() {
     onTrackReorderFrame();
 }
 
+// An undo/redo that only reordered the tracks: where each row stands right now, in the old order, so the rebuilt
+// rows can glide to their new places the way the drop glided them forward. Empty for any other rebuild.
+std::vector<TimelinePanelComponent::GlideRow> TimelinePanelComponent::rowsToGlideAfterUndo() const {
+    std::vector<GlideRow> rows;
+    if (doc_ == nullptr || undoManager_ == nullptr || !undoManager_->isRestoring() || !canAnimateTrackGlide())
+        return rows;
+    const auto& tracks = doc_->getTracks();
+    if (static_cast<int>(tracks.size()) != trackHeaderList_.headers.size())
+        return rows;
+    for (const auto* header : trackHeaderList_.headers) {
+        if (header->isSectionHeader())
+            continue;
+        const bool known = std::any_of(tracks.begin(), tracks.end(),
+                                       [header](const synth::Track& t) { return t.id == header->getTrackId(); });
+        if (!known)
+            return {};
+        rows.push_back(
+            {header->getTrackId(), static_cast<float>(header->getY()), static_cast<float>(header->getHeight())});
+    }
+    return rows;
+}
+
+// Same shared ReorderDragAnimator the drop uses: the rows start at their old slots and release() glides each one
+// to the slot the rebuilt list put it in (frames run only while a tween is in flight). No row is lifted.
+void TimelinePanelComponent::glideTrackRowsFrom(const std::vector<GlideRow>& old) {
+    if (old.size() < 2)
+        return;
+    const auto layout = rowLayout();
+    std::vector<ReorderDragAnimator::Slot> slots;
+    std::vector<float> finalStarts;
+    std::vector<synth::TrackId> ids;
+    for (const auto& row : old) {
+        int index = -1;
+        for (int i = 0; i < trackHeaderList_.headers.size(); ++i)
+            if (trackHeaderList_.headers.getUnchecked(i)->getTrackId() == row.id)
+                index = i;
+        if (index < 0)
+            return;
+        ids.push_back(row.id);
+        slots.push_back({row.y, row.height});
+        finalStarts.push_back(static_cast<float>(layout.trackTop(index)));
+    }
+    bool moved = false;
+    for (size_t i = 0; i < slots.size(); ++i)
+        moved = moved || slots[i].start != finalStarts[i];
+    if (!moved)
+        return;
+
+    trackFrames_.stop();
+    trackReorder_.begin(slots, 0, 0.0f, slots[0].start - 2.0f * ReorderDragAnimator::kDragThresholdPx,
+                        canAnimateTrackGlide());
+    trackReorder_.dragTo(slots[0].start); // lifts nothing visible: the dragged row has not moved
+    reorderTrackIds_ = ids;
+    liftedTrackId_ = {};
+    trackReorder_.release(finalStarts);
+    trackGenerationSeen_ = 0;
+    startTrackFramesIfNeeded();
+    placeTrackHeaders();
+    trackHeaderList_.repaint();
+}
+
 // A rebuild is about to destroy the rows a held drag belongs to.
 void TimelinePanelComponent::discardTrackDrag() {
     trackCancelKey_.disarm();

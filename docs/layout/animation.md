@@ -200,6 +200,26 @@ picker built on it; group headers take part as fixed slots, so a row dropped und
 [editing a layout](module-card-layout.md#editing-a-layout)). The pointer is converted into the list's own
 coordinates on every event, and the commit goes out once, on release.
 
+### Undo and redo glide
+
+The rule: **anything that glides forward glides on undo and redo.** An undo that jumps looks like a different
+app from the edit it reverses. The two entry points are `AppUndoManager::undo()` and `redo()` (the Cmd+Z / Cmd+Shift+Z
+path); nothing else needs to know.
+
+- **Graph cards.** Both open a `CardGlideAnimator::Scope` around the restore. The scope captures every card's bounds
+  before it, and after the restore's `updateComponents()` arms the usual slide from those rects to the restored ones,
+  with the same geometry-final-at-once contract, 160 ms `easeOutCubic` and cable following as a forward move. Cards the
+  restore rebuilds (node removed or re-created) have no "before" and land at once; a project load never goes through
+  `undo()` and so never glides.
+- **Timeline track rows.** `AppUndoManager::isRestoring()` is true during the restore. When the timeline panel rebuilds
+  its header rows while it is set and the rebuild is a pure reorder (same tracks, new order),
+  `TimelinePanelComponent::glideTrackRowsFrom` starts the rows at their old slots and `release()`s the shared
+  `ReorderDragAnimator` to the new ones (140 ms settle, frames only while it runs). No row is lifted. Any other rebuild
+  lands at once.
+- **Off-screen.** Same check as the forward move (the app has no Reduce Motion setting): the timeline glide runs only
+  while the panel is showing (`ReorderDragAnimator`'s `animate` flag), so headless tests land at once unless a test
+  forces it.
+
 ### Drag-and-drop cursor
 
 Every place the user drags an item to move, reorder or drop it shows the grabbing-hand cursor,
@@ -283,7 +303,7 @@ strings.
 | **Mixer Own-panel show/hide** | `PanelSlide` fraction tween (190 ms, `easeInOutCubic`) on the controller's OWN driver — not the shared one | `MixerPlacementController` |
 | **Macro port names zoom fade** | Alpha is a pure function of zoom (`easeInOutCubic` over 0.5 to 0.7), no driver or timer, so not a time-bounded-rule exception; the strip fill recedes; on an open macro the same factor also slides each port's interior jack onto its boundary jack and narrows the painted strip to a rail (layout widths fixed) | `GraphEditor` / `MacroCardComponent` |
 | **Empty-canvas first-run hint** | Static drawn text, no animation — drawn only when `isCanvasEmpty(nodeCount)` returns `true` | `GraphEditor` |
-| **Dock tab, mixer column and timeline track reorder** | Lifted item follows the pointer; neighbours glide aside (160 ms, `easeOutCubic`); settle on drop (140 ms); Esc returns it (140 ms, `easeInCubic`) — frames only while a tween runs; see [Reorder drag](#reorder-drag) | `BottomDockComponent`, `MixerPanelComponent`, `TimelinePanelComponent` via `ReorderDragAnimator` |
+| **Dock tab, mixer column and timeline track reorder** | Undo/redo of a timeline track reorder glides the rows too (140 ms; see [Undo and redo glide](#undo-and-redo-glide)); lifted item follows the pointer; neighbours glide aside (160 ms, `easeOutCubic`); settle on drop (140 ms); Esc returns it (140 ms, `easeInCubic`) — frames only while a tween runs; see [Reorder drag](#reorder-drag) | `BottomDockComponent`, `MixerPanelComponent`, `TimelinePanelComponent` via `ReorderDragAnimator` |
 | **Side pane open/close** | The pane's width tweens 160 ms `easeOutCubic` in, 110 ms `easeInCubic` out from the current width; content keeps its full width and is revealed; lands at once when not on screen; see [side pane](side-pane.md) | `SidePane` |
 | **Zones list row drag** | The Mixer side pane's channel rows and group headings make room for a dragged row (160 ms, `easeOutCubic`) on the shared vertical `ReorderDragAnimator`; the drop only assigns a group | `MixerZonesPane` via `ReorderDragAnimator` |
 | **Library rows** | Hover highlight; grab / dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()`; search-query substring highlight on matching labels | `ModuleLibraryComponent` |
@@ -292,7 +312,7 @@ strings.
 | **Timeline playhead** | 30 Hz vertical position line, **playing only**, repainting only the strip between its old and new x | `TimelinePlayheadOverlay` |
 | **Cursor glide** | While Cmd+Left / Cmd+Right is held, a VBlank frame per refresh moves the transport cursor (ease-in speed, capped); on release a 140 ms `easeOutCubic` settle lands it on the grid. Both are `ReorderFramePump` runs, so frames stop with the key; see [`docs/timeline/transport.md`](../timeline/transport.md#gliding-the-cursor) | `TimelineCursorGlide` via `TimelinePanelComponent` |
 | **Zoom settle debounce** | `zoomSettleAnim`: a DEBOUNCE `AnimationDriver` (140 ms, `kZoomSettleMs`) with a no-op `onUpdate` — zero repaints while running, all the work in `onComplete`, which thaws the frozen card rasters | `GraphEditor` |
-| **Card make-room / return / auto-arrange glide** | Cards moved by a make-room push, a macro slid in from the canvas edge, a neighbour return or Auto Arrange slide from the old to the new spot (160 ms, `easeOutCubic`): geometry is final at once, the real card is hidden (alpha 0) and a snapshot glides on a canvas overlay; cables touching it follow; hulls and port strips land at once; undo/redo and loads land at once; a retarget starts from the drawn position; frames only while it runs; see [Making room](layout.md#making-room-when-something-grows) | `CardGlideAnimator` via `GraphEditor` |
+| **Card make-room / return / auto-arrange glide** | Cards moved by a make-room push, a macro slid in from the canvas edge, a neighbour return or Auto Arrange slide from the old to the new spot (160 ms, `easeOutCubic`): geometry is final at once, the real card is hidden (alpha 0) and a snapshot glides on a canvas overlay; cables touching it follow; hulls and port strips land at once; undo/redo glide the cards back and forth (see [Undo and redo glide](#undo-and-redo-glide)); loads land at once; a retarget starts from the drawn position; frames only while it runs; see [Making room](layout.md#making-room-when-something-grows) | `CardGlideAnimator` via `GraphEditor` |
 | **Macro-crossing cable slide + module flash (FRO41)** | Also on a cable drop that mints a macro port: the new cables' port ends emerge from the release point (no flash). On a Cmd-drag finalize that actually crosses an expanded macro's hull: a cable re-routed through an auto-created/removed port slides to its new anchor (220 ms, `easeOutCubic`), and the dragged module gets a fading ring — pure tween state in `MacroCrossingAnimator` (`Source/UI/Graph/MacroCrossingAnimator/`), driven by `macroCrossingDriverAnim_`; see [`docs/macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41`](../macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41) | `GraphEditor` |
 | **Shortcut hint bubbles** | One tween value `t` scales (0.6 -> 1), moves (from the labelled button's centre, or 12 px below a hidden-panel pill) and fades every Cmd-hold key-cap bubble: 160 ms `easeOutCubic` in, 110 ms `easeInCubic` back out from the current `t`; pure geometry in `hint::animatedBubbleBounds`; one `AnimationDriver`, no timer besides the 500 ms show delay; see [`docs/control/shortcuts.md`](../control/shortcuts.md#shortcut-hints) | `ShortcutHintOverlay` |
 | **Toolbar toggle pill** | Instant state change (accent pill when on), no timer or animation — driven by `applyToolbarIcons()`'s and `setLibraryVisible()`'s `setToggleState(dontSendNotification)` calls | `ToolbarComponent` |
