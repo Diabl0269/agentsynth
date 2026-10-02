@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 #include <vector>
 
 class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
@@ -11,7 +13,8 @@ namespace synth::ui {
 struct TrackHeaderHost;
 
 // The header-column half of one automation lane row, under the track that owns the lane: a stripe
-// in the track's colour, the parameter and module names, the curve's value at the playhead, the
+// in the track's colour, the parameter and module names, the curve's value at the playhead (or the
+// selected point's value, see setSelectedPointValue), the
 // lane's record mode and a menu (add a modulator, move to another track, delete). Holds no lane state of its own;
 // every value is re-read from the doc by refreshFromDoc() / setReadoutBeat().
 // Message thread only. A Delete or Move from the menu destroys this component before the call
@@ -35,7 +38,12 @@ public:
     void refreshFromDoc();
     /** Re-evaluates the value readout at `beat`; repaints only when the text changed. */
     void setReadoutBeat(double beat);
+    /** The value text at the playhead, whatever the slot is showing. */
     juce::String getValueText() const { return valueText_; }
+    /** The selected point's value text in the accent colour, or an empty optional for the playhead
+     *  value again. Cheap to call repeatedly: nothing repaints unless the text or the mode changed. */
+    void setSelectedPointValue(const std::optional<juce::String>& text);
+    LaneValueReadout& getReadout() noexcept { return readout_; }
 
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
@@ -75,10 +83,10 @@ private:
     juce::Colour trackColour_{juce::Colours::grey};
     juce::ComboBox recordMode_;
     MenuButton menuButton_;
+    LaneValueReadout readout_;
     std::vector<synth::TrackId> moveTargets_; // what buildMenu() last listed under "Move to track"
 
     juce::Rectangle<int> nameArea_;
-    juce::Rectangle<int> readoutArea_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AutomationLaneHeaderComponent)
 };

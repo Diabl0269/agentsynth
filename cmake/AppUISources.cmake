@@ -113,6 +113,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderMenu.cpp
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.h
+    Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/LaneValueReadout.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesLayout.cpp

@@ -154,6 +154,7 @@ private:
     void syncPools();
     void syncAddRows();
     void refreshPooled();
+    void updateSelectedReadout(synth::LaneId lane);
     juce::Colour unassignedColour() const;
     void laneRangeChanged();
 
