@@ -230,6 +230,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/ListBoxFocusRing.h
     Source/UI/Layout/ListBoxFocusRing.cpp
     Source/UI/Layout/TabStripKeys.cpp
+    Source/UI/Layout/TextFieldKeys.h
+    Source/UI/Layout/TextFieldKeys.cpp
     Source/UI/Mixer/MixerPlacementController.h
     Source/UI/Mixer/MixerPlacementController.cpp
     Source/UI/Mixer/MixerMirrorController.h
