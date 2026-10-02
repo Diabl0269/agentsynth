@@ -17,6 +17,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
+#include <utility>
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "CanvasAccessibilityClip.h"
@@ -402,6 +403,33 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     repaintCanvas();
 }
 
+// The membership half of a reparent drop, across nesting levels. The module leaves its current macro one
+// level at a time (each step builds its own port plan against the graph as it then stands, see the
+// TRANSFER ORDERING note below) until it sits directly in `joinId`, or in no macro when `joinId` is empty:
+// so pulling a child's member out of both the child and its parent is one gesture. Stepping down into a
+// macro nested below the module's owner needs no leave at all (the owner's boundary is unchanged): the
+// module just moves to that descendant. `leaveId` is only a sanity gate: the walk starts from the
+// module's real owner.
+namespace {
+void applyMacroMembershipChange(synth::MacroSet& macros, MacroGroupController& controller, const juce::String& uuid,
+                                const juce::String& leaveId, const juce::String& joinId) {
+    if (leaveId.isNotEmpty()) {
+        for (const auto* owner = macros.findByMember(uuid); owner != nullptr && owner->id != joinId;
+             owner = macros.findByMember(uuid)) {
+            const auto chain = joinId.isNotEmpty() ? macros.ancestorChain(joinId) : std::vector<juce::String>();
+            if (std::find(chain.begin(), chain.end(), owner->id) != chain.end()) {
+                auto* live = macros.find(owner->id);
+                live->members.erase(std::remove(live->members.begin(), live->members.end(), uuid), live->members.end());
+                break;
+            }
+            controller.removeSelectionFromMacro(owner->id, {uuid}, /*recordUndo=*/false);
+        }
+    }
+    if (joinId.isNotEmpty())
+        controller.addSelectionToMacro(joinId, {uuid}, /*recordUndo=*/false);
+}
+} // namespace
+
 // ---- Cmd-drag macro reparent (docs/macros/menu-and-membership.md) -----------------------------
 //
 // A Cmd-armed drag (or a plain single-module drag with the drag-without-Cmd preference) joins,
@@ -426,9 +454,115 @@ void GraphEditor::updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID dra
     const auto targets = macroController_.macroDragJoinOrLeaveTarget(draggedNodeId, canvasCentre);
     if (targets.leave == macroDragLeaveId_ && targets.join == macroDragJoinId_ && !nodeChanged)
         return;
+    if ((targets.leave.isNotEmpty() || targets.join.isNotEmpty()) &&
+        canApplyMembershipLive(draggedNodeId, targets.leave)) {
+        applyMembershipLive(draggedNodeId, targets.leave, targets.join);
+        return;
+    }
+    const auto hullsBefore = snapshotPaintedHulls();
     macroDragLeaveId_ = targets.leave;
     macroDragJoinId_ = targets.join;
+    glideHullsFrom(hullsBefore);
     repaintCanvas();
+}
+
+// A crossing is applied the moment it happens, so the cables are already re-routed through (or away from) the
+// macro's ports when the mouse is released and nothing moves on the drop. Not for a group drag, and not when
+// leaving would empty the macro: that dissolves it, and the module could not drag back in, so that one still
+// waits for the drop.
+bool GraphEditor::canApplyMembershipLive(juce::AudioProcessorGraph::NodeID draggedNodeId,
+                                         const juce::String& leaveId) const {
+    if (getSelectionCount() > 1)
+        return false;
+    if (leaveId.isEmpty())
+        return true;
+    const auto uuid = macroController_.nodeUuidFor(draggedNodeId);
+    const auto* owner = macros.findByMember(uuid);
+    if (owner == nullptr)
+        return true;
+    for (const auto& member : owner->members)
+        if (member != uuid && !owner->memberIsPort(member))
+            return true;
+    return !macros.childrenOf(owner->id).empty();
+}
+
+// The macros as they stood at press are kept the first time, so the drop records the whole gesture as one undo
+// step however many times it crossed. The borders are re-frozen for the new membership: the macro the module
+// just joined now holds it in until its centre leaves that border, so a module on the edge does not flicker in
+// and out.
+void GraphEditor::applyMembershipLive(juce::AudioProcessorGraph::NodeID draggedNodeId, const juce::String& leaveId,
+                                      const juce::String& joinId) {
+    if (!liveMembershipChanged_) {
+        macrosBeforeLiveDrag_ = macros.toVar();
+        liveMembershipPressOwner_ = currentOwnerOfDraggedModule();
+        liveMembershipChanged_ = true;
+    }
+    const auto hullsBefore = snapshotPaintedHulls();
+    const auto cablesBefore = rebuildVisibleCables();
+    macroController_.setMakeRoomDeferred(true);
+    applyMacroMembershipChange(macros, macroController_, macroController_.nodeUuidFor(draggedNodeId), leaveId, joinId);
+    macroController_.setMakeRoomDeferred(false);
+    liveMembershipAway_ = currentOwnerOfDraggedModule() != liveMembershipPressOwner_;
+    macroController_.clearFrozenDragHulls();
+    macroController_.freezeHullsForDrag(draggedNodeId);
+    macroDragLeaveId_.clear();
+    macroDragJoinId_.clear();
+    macroDragDraggedNodeId_ = draggedNodeId;
+    armMacroCrossingAnimation(cablesBefore, draggedNodeId.uid, {});
+    glideHullsFrom(hullsBefore);
+    repaintCanvas();
+}
+
+bool GraphEditor::hasMacroDragCandidate() const {
+    return macroDragLeaveId_.isNotEmpty() || macroDragJoinId_.isNotEmpty() || liveMembershipAway_;
+}
+
+juce::String GraphEditor::getMacroDragLiveOwnerId() const {
+    return liveMembershipAway_ ? currentOwnerOfDraggedModule() : juce::String();
+}
+
+juce::String GraphEditor::currentOwnerOfDraggedModule() const {
+    const auto* owner = macroController_.macroForNode(macroDragDraggedNodeId_);
+    return owner != nullptr ? owner->id : juce::String();
+}
+
+// A drag that stops being a reparent drag (Cmd released with the drag-without-Cmd preference off) is a plain
+// move again, so a crossing it already applied is put back. The undo record still happens on the drop: the
+// round trip can mint fresh port nodes.
+void GraphEditor::revertLiveMembership() {
+    const auto draggedNodeId = macroDragDraggedNodeId_;
+    const auto current = currentOwnerOfDraggedModule();
+    if (!liveMembershipChanged_ || current == liveMembershipPressOwner_)
+        return;
+    const auto hullsBefore = snapshotPaintedHulls();
+    const auto cablesBefore = rebuildVisibleCables();
+    macroController_.setMakeRoomDeferred(true);
+    applyMacroMembershipChange(macros, macroController_, macroController_.nodeUuidFor(draggedNodeId), current,
+                               liveMembershipPressOwner_);
+    macroController_.setMakeRoomDeferred(false);
+    liveMembershipAway_ = false;
+    macroController_.clearFrozenDragHulls();
+    macroController_.freezeHullsForDrag(draggedNodeId);
+    armMacroCrossingAnimation(cablesBefore, draggedNodeId.uid, {});
+    glideHullsFrom(hullsBefore);
+}
+
+// A drag that changed membership live but ended without the drop finalize (cancelled mid-gesture) still records
+// its change as one undo step.
+void GraphEditor::recordUnfinishedLiveMembershipChange() {
+    if (!liveMembershipChanged_)
+        return;
+    liveMembershipChanged_ = false;
+    liveMembershipAway_ = false;
+    const auto macrosBefore = std::exchange(macrosBeforeLiveDrag_, juce::var());
+    if (undoManager != nullptr)
+        undoManager->recordGraphAndMacroChange(
+            audioEngine.getGraph(), macros,
+            [this] {
+                for (const auto& grower : macroController_.takeDeferredMakeRoom())
+                    macroController_.makeRoomFor(grower);
+            },
+            undoManager->takeCapturedGraphBeforeState(), macrosBefore);
 }
 
 void GraphEditor::beginMacroDragFreeze(juce::AudioProcessorGraph::NodeID draggedNodeId) {
@@ -436,8 +570,13 @@ void GraphEditor::beginMacroDragFreeze(juce::AudioProcessorGraph::NodeID dragged
 }
 
 void GraphEditor::clearMacroDragCandidate(bool keepFrozenBorders) {
+    if (keepFrozenBorders)
+        revertLiveMembership();
+    else
+        recordUnfinishedLiveMembershipChange();
     const bool nodeWasSet = macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{};
     const bool froze = !keepFrozenBorders && macroController_.hasFrozenDragHulls();
+    const auto hullsBefore = snapshotPaintedHulls(); // a border held still at press glides to its live bounds
     if (!keepFrozenBorders)
         macroController_.clearFrozenDragHulls();
     if (macroDragLeaveId_.isEmpty() && macroDragJoinId_.isEmpty() && !nodeWasSet && !froze)
@@ -445,17 +584,19 @@ void GraphEditor::clearMacroDragCandidate(bool keepFrozenBorders) {
     macroDragLeaveId_.clear();
     macroDragJoinId_.clear();
     macroDragDraggedNodeId_ = {};
+    glideHullsFrom(hullsBefore);
     repaintCanvas();
 }
 
-// The border painted for macroId (and read by its chip, buttons and strips). Normally the live
+// The border drawn for macroId (and read by its chip, buttons and strips) once any glide has settled
+// (paintedMacroHullBounds adds the glide). Normally the live
 // hull. While a reparent drag moves one of macroId's OWN members (macroId is that member's macro
 // or one of its ancestors) the live union would chase the dragged card, so instead: the border
 // frozen at press while the drag is still staying inside (macroDragLeaveId_ empty), and the hull
 // without that member once a LEAVE is armed, so the macro visibly lets go of it. A macro the drag
 // might JOIN holds none of the dragged module, so it keeps its live bounds. Without a frozen
 // snapshot (a drag that never went through a press) the excluding hull is painted from the first tick.
-juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& macroId) const {
+juce::Rectangle<int> GraphEditor::macroHullTargetBounds(const juce::String& macroId) const {
     if (macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{}) {
         const auto* ownMacro = macroController_.macroForNode(macroDragDraggedNodeId_);
         const auto ancestors = ownMacro != nullptr ? macros.ancestorChain(ownMacro->id) : std::vector<juce::String>();
@@ -497,33 +638,6 @@ void GraphEditor::setMacroDropCandidate(const juce::String& macroId) {
     macroDragJoinId_ = macroId;
     repaintCanvas();
 }
-
-// The membership half of a reparent drop, across nesting levels. The module leaves its current macro one
-// level at a time (each step builds its own port plan against the graph as it then stands, see the
-// TRANSFER ORDERING note below) until it sits directly in `joinId`, or in no macro when `joinId` is empty:
-// so pulling a child's member out of both the child and its parent is one gesture. Stepping down into a
-// macro nested below the module's owner needs no leave at all (the owner's boundary is unchanged): the
-// module just moves to that descendant. `leaveId` is only a sanity gate: the walk starts from the
-// module's real owner.
-namespace {
-void applyMacroMembershipChange(synth::MacroSet& macros, MacroGroupController& controller, const juce::String& uuid,
-                                const juce::String& leaveId, const juce::String& joinId) {
-    if (leaveId.isNotEmpty()) {
-        for (const auto* owner = macros.findByMember(uuid); owner != nullptr && owner->id != joinId;
-             owner = macros.findByMember(uuid)) {
-            const auto chain = joinId.isNotEmpty() ? macros.ancestorChain(joinId) : std::vector<juce::String>();
-            if (std::find(chain.begin(), chain.end(), owner->id) != chain.end()) {
-                auto* live = macros.find(owner->id);
-                live->members.erase(std::remove(live->members.begin(), live->members.end(), uuid), live->members.end());
-                break;
-            }
-            controller.removeSelectionFromMacro(owner->id, {uuid}, /*recordUndo=*/false);
-        }
-    }
-    if (joinId.isNotEmpty())
-        controller.addSelectionToMacro(joinId, {uuid}, /*recordUndo=*/false);
-}
-} // namespace
 
 // The single-undo-step finalize (docs/macros/menu-and-membership.md): modeled on
 // finalizeMacroCardDrag (GraphEditorSelection.cpp) — ONE lambda runs the ordinary position finalize
@@ -572,29 +686,45 @@ void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juc
     const juce::String uuid = macroController_.nodeUuidFor(module->getNodeId());
     auto& graph = audioEngine.getGraph();
     const juce::var graphBeforeOverride = undoManager ? undoManager->takeCapturedGraphBeforeState() : juce::var();
+    // A drag that already changed membership as it crossed records against the macros as they were at press.
+    const juce::var macrosBeforeOverride = liveMembershipChanged_ ? macrosBeforeLiveDrag_ : juce::var();
+    const bool movedLive = liveMembershipAway_;
+    liveMembershipChanged_ = false;
+    liveMembershipAway_ = false;
+    macrosBeforeLiveDrag_ = juce::var();
 
     // Snapshot the pre-mutation cable geometry and the dragged module's own bounds now,
     // while `module` is still known-good — doFinalize's macroController_ calls are free to add or
     // remove macro-port components (see this method's own header comment above), so both are
     // captured up front rather than read off `module` once the splice has already run. A plain
     // drag (no leave/join candidate) skips the snapshot entirely — nothing to diff, nothing to
-    // animate, and MacroCrossingAnimator::arm() is never even called.
-    const bool crossedHull = leaveId.isNotEmpty() || joinId.isNotEmpty();
+    // animate, and MacroCrossingAnimator::arm() is never even called. A crossing applied mid-drag already slid
+    // its cables; the drop only flashes the module where it lands.
+    const bool crossedHull = leaveId.isNotEmpty() || joinId.isNotEmpty() || movedLive;
     const auto crossingNodeUid = module->getNodeId().uid;
     const auto crossingFlashBounds = crossedHull ? module->getBounds() : juce::Rectangle<int>();
     const auto cablesBeforeSplice = crossedHull ? rebuildVisibleCables() : std::vector<VisibleCable>();
 
-    auto doFinalize = [this, module, leaveId, joinId, uuid] {
+    auto doFinalize = [this, module, leaveId, joinId, uuid, movedLive] {
         finalizeModuleDrag(module);
         applyMacroMembershipChange(macros, macroController_, uuid, leaveId, joinId);
+        // The joined border grew around the card where it was dragged; it settles here, so its neighbours make
+        // room for where it really is.
+        if (movedLive) {
+            for (const auto& grower : macroController_.takeDeferredMakeRoom())
+                macroController_.makeRoomFor(grower);
+            if (const auto* owner = macros.findByMember(uuid))
+                macroController_.makeRoomFor("m:" + owner->id);
+        }
     };
 
     if (undoManager)
-        undoManager->recordGraphAndMacroChange(graph, macros, doFinalize, graphBeforeOverride);
+        undoManager->recordGraphAndMacroChange(graph, macros, doFinalize, graphBeforeOverride, macrosBeforeOverride);
     else
         doFinalize();
 
-    if (crossedHull)
+    // A slide a mid-drag crossing started is left to finish; arming again would cut it short.
+    if (crossedHull && !(macroCrossingAnim_.isLive() && leaveId.isEmpty() && joinId.isEmpty()))
         armMacroCrossingAnimation(cablesBeforeSplice, crossingNodeUid, crossingFlashBounds);
 
     clearMacroDragCandidate();

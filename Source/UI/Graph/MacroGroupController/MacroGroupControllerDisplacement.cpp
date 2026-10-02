@@ -136,7 +136,14 @@ static juce::String containerOfKey(const MacroGroupController& controller, const
 // Every push (at every level) is recorded on the grower, on the macro when it is one and in `moduleDisplaced_` when it
 // is a module card, so that collapsing it, removing a port or shrinking the card can offer the neighbours their way
 // back (returnDisplacedNeighbours, reflowForResizedModule).
+// Deferred while a drag applies a macro crossing live: the macro must not slide or push its neighbours under the
+// pointer, so the drop makes the room once the module has landed.
 void MacroGroupController::makeRoomFor(const juce::String& growerKey) {
+    if (makeRoomDeferred_) {
+        if (std::find(deferredMakeRoom_.begin(), deferredMakeRoom_.end(), growerKey) == deferredMakeRoom_.end())
+            deferredMakeRoom_.push_back(growerKey);
+        return;
+    }
     CardGlideAnimator::Scope glide(host_.cardGlide());
     auto& macros = host_.getMacros();
     const auto growerMacroId =

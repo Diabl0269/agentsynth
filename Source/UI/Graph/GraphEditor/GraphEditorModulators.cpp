@@ -7,6 +7,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
+#include "Modules/AttenuverterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
@@ -193,6 +194,7 @@ void GraphEditor::placeNewModulator(juce::AudioProcessorGraph::Node& node, NodeI
 // LFO's sections lane in the same step).
 void GraphEditor::removeModulator(const ModulationRouting& routing, bool removeLonelySource, bool recordUndo) {
     auto& graph = audioEngine.getGraph();
+    const auto cablesBefore = snapshotCablesForRetract();
     auto mutation = [this, &graph, routing, removeLonelySource] {
         // The chain is read before anything is cut: once the attenuverter is gone there is no edge to follow.
         const auto isPort = [this](NodeID id) { return macroController_.nodeIsMacroPort(id); };
@@ -221,6 +223,7 @@ void GraphEditor::removeModulator(const ModulationRouting& routing, bool removeL
     else
         mutation();
     repaintCanvas();
+    retractCablesGoneSince(cablesBefore);
 }
 
 // Every canvas removal of a modulation goes through here (or reads the ports first): the chain is cut and the
@@ -238,6 +241,56 @@ void GraphEditor::removeModulationChain(NodeID attenId) {
     else
         cut();
     repaintCanvas();
+}
+
+// A port the cut left with nothing on its outer side is dead weight: an inlet nothing feeds still carries its inside
+// leg into the member, and when that leg is a modulation (inlet -> attenuverter -> knob) the knob stays modulated by
+// silence. A plain one-sided port follows the auto-delete preference; a modulation hanging off one is cut whatever
+// the preference says, because the cable that fed it was the one the person removed, and its ports go with it.
+void GraphEditor::pruneMacroPortsAfterCut(const std::vector<NodeID>& touched, std::vector<NodeID> chainPorts) {
+    auto& graph = audioEngine.getGraph();
+    for (const auto id : touched)
+        macroController_.autoDeleteOrphanedMacroPort(id);
+
+    std::vector<NodeID> oneSided;
+    for (const auto id : touched) {
+        if (!macroController_.nodeIsMacroPort(id))
+            continue;
+        bool hasIn = false, hasOut = false;
+        std::vector<NodeID> attenuverters;
+        for (const auto& c : graph.getConnections()) {
+            const bool in = c.destination.nodeID == id, out = c.source.nodeID == id;
+            if (!in && !out)
+                continue;
+            hasIn = hasIn || in;
+            hasOut = hasOut || out;
+            const auto other = in ? c.source.nodeID : c.destination.nodeID;
+            if (auto* n = graph.getNodeForId(other);
+                n != nullptr && dynamic_cast<AttenuverterModule*>(n->getProcessor()))
+                attenuverters.push_back(other);
+        }
+        // Only the side facing out of the macro may be the empty one: an inlet with nothing feeding it, an outlet
+        // feeding nothing. A port wired outside but not yet inside is waiting to be patched, and stays.
+        const auto uuid = macroController_.nodeUuidFor(id);
+        const auto* macro = macros.findByMember(uuid);
+        const auto port = macro != nullptr ? std::find_if(macro->ports.begin(), macro->ports.end(),
+                                                          [&](const synth::MacroPort& p) { return p.nodeUuid == uuid; })
+                                           : std::vector<synth::MacroPort>::const_iterator();
+        if (macro == nullptr || port == macro->ports.end() || (port->isInput ? hasIn || !hasOut : hasOut || !hasIn))
+            continue;
+        if (attenuverters.empty()) {
+            oneSided.push_back(id);
+            continue;
+        }
+        for (const auto atten : attenuverters) {
+            const auto ports = modulationChainPorts(atten);
+            chainPorts.insert(chainPorts.end(), ports.begin(), ports.end());
+            audioEngine.removeModRouting(atten);
+        }
+        chainPorts.push_back(id);
+    }
+    macroController_.sweepOneSidedMacroPorts(chainPorts, /*ignorePreference=*/true);
+    macroController_.sweepOneSidedMacroPorts(oneSided, /*ignorePreference=*/false);
 }
 
 std::vector<NodeID> GraphEditor::modulationChainPorts(NodeID attenId) {

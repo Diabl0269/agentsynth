@@ -25,6 +25,25 @@ std::vector<juce::String> insideUuids(const synth::MacroSet& macros, const synth
             out.push_back(uuid);
     return out;
 }
+
+/** The node that really sits at the far end of a leg landing on `other`. A modulation's hidden attenuverter is never a
+ *  macro member, so where a leg reaches one, the attenuverter stands for the module on its other channel-0 edge (the
+ *  LFO feeding it, or the module whose knob it drives); any other node is itself. `cameFrom` is the leg's near end,
+ *  so the walk never steps back across it. */
+juce::AudioProcessorGraph::NodeID throughAttenuverter(juce::AudioProcessorGraph& graph,
+                                                      juce::AudioProcessorGraph::NodeID other,
+                                                      juce::AudioProcessorGraph::NodeID cameFrom) {
+    auto* node = graph.getNodeForId(other);
+    if (node == nullptr || dynamic_cast<AttenuverterModule*>(node->getProcessor()) == nullptr)
+        return other;
+    for (const auto& c : graph.getConnections()) {
+        if (c.destination.nodeID == other && c.destination.channelIndex == 0 && c.source.nodeID != cameFrom)
+            return c.source.nodeID;
+        if (c.source.nodeID == other && c.source.channelIndex == 0 && c.destination.nodeID != cameFrom)
+            return c.destination.nodeID;
+    }
+    return other;
+}
 } // namespace
 
 juce::String MacroGroupController::macroPortNodeTypeName(bool isInput, synth::MacroPortKind kind) {
@@ -363,12 +382,14 @@ MacroGroupController::buildMacroPortCrossingPlanForNewMembers(const juce::String
                        [&](const MacroPortCrossingGroup& g) { return addedUids.count(g.internalNodeId.uid) == 0; }),
         plan.end());
 
-    // Drop any edge whose external endpoint is one of macroId's OWN existing ports —
-    // macroPortsThatBecomeInteriorOnAdd handles that port instead.
+    // Drop any edge whose external endpoint is one of macroId's OWN existing ports (directly, or through a
+    // modulation's attenuverter) — macroPortsThatBecomeInteriorOnAdd handles that port instead.
+    auto& graph = host_.graph();
     for (auto& g : plan)
         g.edges.erase(std::remove_if(g.edges.begin(), g.edges.end(),
                                      [&](const MacroPortCrossingEdge& e) {
-                                         const juce::String extUuid = nodeUuidFor(e.externalNodeId);
+                                         const juce::String extUuid = nodeUuidFor(
+                                             throughAttenuverter(graph, e.externalNodeId, g.internalNodeId));
                                          return extUuid.isNotEmpty() && macro->memberIsPort(extUuid);
                                      }),
                       g.edges.end());
@@ -407,7 +428,7 @@ MacroGroupController::macroPortsThatBecomeInteriorOnAdd(const juce::String& macr
             else
                 continue;
             anyEdge = true;
-            const juce::String otherUuid = nodeUuidFor(other);
+            const juce::String otherUuid = nodeUuidFor(throughAttenuverter(graph, other, portId));
             if (otherUuid.isEmpty() || interiorAfterAdd.count(otherUuid) == 0) {
                 anyExternal = true;
                 break;
@@ -446,10 +467,15 @@ MacroGroupController::buildMacroPortCrossingPlanForRemovedMembers(const juce::St
         if (id.uid != 0)
             removedUids.insert(id.uid);
     }
+    // An edge whose external end is a modulation's attenuverter counts for the module feeding that attenuverter.
+    auto& graph = host_.graph();
     for (auto& g : plan)
-        g.edges.erase(std::remove_if(
-                          g.edges.begin(), g.edges.end(),
-                          [&](const MacroPortCrossingEdge& e) { return removedUids.count(e.externalNodeId.uid) == 0; }),
+        g.edges.erase(std::remove_if(g.edges.begin(), g.edges.end(),
+                                     [&](const MacroPortCrossingEdge& e) {
+                                         const auto far =
+                                             throughAttenuverter(graph, e.externalNodeId, g.internalNodeId);
+                                         return removedUids.count(far.uid) == 0;
+                                     }),
                       g.edges.end());
     plan.erase(
         std::remove_if(plan.begin(), plan.end(), [](const MacroPortCrossingGroup& g) { return g.edges.empty(); }),
@@ -491,7 +517,7 @@ MacroGroupController::macroPortsThatBecomeObsoleteOnRemove(const juce::String& m
             else
                 continue;
             anyEdge = true;
-            const juce::String otherUuid = nodeUuidFor(other);
+            const juce::String otherUuid = nodeUuidFor(throughAttenuverter(graph, other, portId));
             if (otherUuid.isNotEmpty() && interiorAfterRemove.count(otherUuid) != 0) {
                 anyInterior = true;
                 break;

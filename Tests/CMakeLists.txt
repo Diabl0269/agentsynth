@@ -21,6 +21,8 @@ add_executable(Tests
     UI/Graph/AutoArrangeMacroTests.cpp
     UI/Graph/CardGlide/CardGlideTests.cpp
     UI/Graph/CardGlide/CardGlideUndoTests.cpp
+    UI/Graph/MacroHullGlideTests.cpp
+    UI/Graph/CableRetractTests.cpp
     UI/Graph/OutputDockTests.cpp
     Modules/OscillatorTests.cpp
     Modules/OscillatorPulseWidthGlideTests.cpp
@@ -455,6 +457,7 @@ add_executable(Tests
     Macros/MacroContainer/MacroHullDragTests.cpp
     Macros/MacroContainer/MacroDragMembershipTests.cpp
     Macros/MacroContainer/MacroDragTransferTests.cpp
+    Macros/MacroContainer/MacroDragLiveRerouteTests.cpp
     Macros/MacroContainer/MacroCrossingAnimationTests.cpp
     Macros/MacroContainer/MacroNestedGeometryTests.cpp
     Macros/MacroContainer/MacroNestedCableTests.cpp

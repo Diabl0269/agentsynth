@@ -4,7 +4,6 @@
 #include "MidiRemote/RemoteModel.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
-#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 /**
@@ -613,23 +612,6 @@ void refreshCanvasAfterRestore(GraphEditor& ge) {
 
 AppUndoManager::AppUndoManager() {}
 
-// Both undo() and redo() land here (docs/layout/animation.md "Undo and redo glide"). isRestoring() lets views glide
-// rather than snap while it runs. The glide scope captures the cards' bounds before the restore and arms a slide from
-// them afterwards, so the canvas moves back the way the edit moved forward. A restore that rebuilds the cards matches
-// none and lands at once.
-void AppUndoManager::beginRestore() {
-    restoring_ = true;
-    if (graphEditor != nullptr)
-        glideScope_ = std::make_shared<CardGlideAnimator::Scope>(graphEditor->getCardGlide());
-}
-
-void AppUndoManager::endRestore(bool did) {
-    glideScope_.reset(); // arms the slide from the captured bounds to the restored ones
-    restoring_ = false;
-    if (did)
-        ++editSerial_;
-}
-
 juce::UndoableAction* AppUndoManager::createGraphSnapshotAction(juce::AudioProcessorGraph& graph,
                                                                 const juce::var& beforeState,
                                                                 const juce::var& afterState) {
@@ -645,11 +627,6 @@ juce::UndoableAction* AppUndoManager::createGraphSnapshotAction(juce::AudioProce
                 refreshCanvasAfterRestore(*ge);
         },
         [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); });
-}
-
-void AppUndoManager::setRestoreHooks(std::function<void()> beforeRestore, std::function<void()> afterRestore) {
-    beforeRestore_ = std::move(beforeRestore);
-    afterRestore_ = std::move(afterRestore);
 }
 
 void AppUndoManager::recordStructuralChange(juce::AudioProcessorGraph& graph, std::function<void()> mutation) {
@@ -913,7 +890,8 @@ void AppUndoManager::pushGraphAndMacroActions(juce::AudioProcessorGraph& graph, 
 
 bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
                                                const std::function<void()>& mutation,
-                                               const juce::var& graphBeforeOverride) {
+                                               const juce::var& graphBeforeOverride,
+                                               const juce::var& macrosBeforeOverride) {
     if (!mutation)
         return false;
 
@@ -926,7 +904,7 @@ bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph,
     // would be too late). Every other caller passes the default and keeps today's behaviour exactly.
     const juce::var graphBefore =
         graphBeforeOverride.isVoid() ? synth::AIStateMapper::graphToJSON(graph) : graphBeforeOverride;
-    const juce::var macrosBefore = macros.toVar();
+    const juce::var macrosBefore = macrosBeforeOverride.isVoid() ? macros.toVar() : macrosBeforeOverride;
 
     mutation();
 

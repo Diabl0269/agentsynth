@@ -115,7 +115,7 @@ TEST(MacroDropPlacement, PlainDragOfALooseModuleIntoAnOpenHullJoinsWithoutCmd) {
     const auto target = c.ctl().macroHullBounds(macroId).getCentre() - c.rect(loose).getCentre();
 
     dragBodyBy(c.comp(loose), target, kPlainClick, [&] {
-        EXPECT_EQ(c.editor.getMacroDragJoinId(), macroId) << "the hull is emphasised during a plain drag";
+        EXPECT_EQ(c.editor.getMacroDragLiveOwnerId(), macroId) << "it joins, emphasised, during a plain drag";
     });
 
     EXPECT_TRUE(c.editor.getMacros().find(macroId)->hasMember(uuidOf(c.engine, loose)));

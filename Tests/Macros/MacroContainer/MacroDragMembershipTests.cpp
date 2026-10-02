@@ -156,9 +156,11 @@ TEST(MacroDragMembership, DraggingAnEdgeMemberPastTheFrozenBorderReleasesIt) {
 
         editor.setSelectedNodes({a});
         dragBodyBy(*compA, {900, 0}, mods, [&] {
-            EXPECT_EQ(editor.getMacroDragLeaveId(), macroId);
-            EXPECT_EQ(editor.paintedMacroHullBounds(macroId), excludingA)
-                << "once A's centre is past the frozen border the hull paints without A";
+            EXPECT_EQ(editor.getMacroController().macroForNode(a), nullptr)
+                << "A leaves as soon as its centre is past the frozen border, before the drop";
+            EXPECT_TRUE(editor.isHullGlideLiveForTest()) << "the border glides in rather than snapping";
+            editor.finishHullGlideForTest();
+            EXPECT_EQ(editor.paintedMacroHullBounds(macroId), excludingA) << "and settles without A";
         });
 
         EXPECT_EQ(editor.getMacroController().macroForNode(a), nullptr) << "dropped outside: A left the macro";
@@ -188,8 +190,10 @@ TEST(MacroDragMembership, SideStripsDoNotFollowAMemberDraggedOutOfTheMacro) {
 
     editor.setSelectedNodes({a});
     dragBodyBy(*compA, {900, 0}, kPlainClick, [&] {
-        const auto live = editor.getMacroController().macroHullBounds(macroId);
-        ASSERT_GT(live.getRight(), excluding.getRight() + 400) << "sanity: the live hull chases A";
+        // Where a border chasing A would reach: A's own card plus the hull margin.
+        const auto live = excluding.getUnion(compA->getBounds()).expanded(20);
+        ASSERT_GT(live.getRight(), excluding.getRight() + 400) << "sanity: A is far outside the macro";
+        editor.finishHullGlideForTest();
         // Software image: a native-backed image reads back zeros on a headless Windows runner.
         juce::Image img(juce::Image::ARGB, live.getRight() + 60, live.getBottom() + 60, true,
                         juce::SoftwareImageType());
@@ -602,8 +606,8 @@ TEST(MacroDragMembership, CmdPressedAfterDragBeganStillReparentsInOneUndoStep) {
     // zero further delta), NOT the same `dragPos` as tick one -- reusing `dragPos` would double
     // the move instead of holding it still.
     compA->mouseDrag(realMouseEvent(*compA, pressPos, pressPos, kCmdClick, /*wasDragged=*/true));
-    EXPECT_EQ(editor.getMacroDragLeaveId(), macroId)
-        << "pressing Cmd mid-drag, after the press already happened, must still arm the candidate";
+    EXPECT_EQ(editor.getMacroController().macroForNode(nodeIdForUuid(engine, uuidA)), nullptr)
+        << "pressing Cmd mid-drag, after the press already happened, must still take A out";
 
     const int serialBeforeUp = undo.getEditSerial();
     compA->mouseUp(realMouseEvent(*compA, pressPos, pressPos, kCmdClick, /*wasDragged=*/true));
@@ -649,13 +653,14 @@ TEST(MacroDragMembership, CmdReleasedMidDragRevertsToAPlainMove) {
     compA->mouseDown(realMouseEvent(*compA, pressPos, pressPos, kCmdClick));
 
     compA->mouseDrag(realMouseEvent(*compA, dragPos, pressPos, kCmdClick, /*wasDragged=*/true));
-    EXPECT_EQ(editor.getMacroDragLeaveId(), macroId) << "sanity: LEAVE must arm first, same as test 2";
+    EXPECT_EQ(editor.getMacroController().macroForNode(a), nullptr) << "sanity: A leaves first, same as test 2";
 
     // Cmd goes UP mid-drag, cursor otherwise held at the SAME screen point (see the sibling test
     // above for why that means `pressPos` again here, not `dragPos`) -- this must disarm the
     // candidate immediately, not wait for mouseUp to notice.
     compA->mouseDrag(realMouseEvent(*compA, pressPos, pressPos, plain, /*wasDragged=*/true));
     EXPECT_FALSE(editor.hasMacroDragCandidate()) << "releasing Cmd mid-drag must disarm the candidate immediately";
+    EXPECT_NE(editor.getMacroController().macroForNode(a), nullptr) << "and put A back in its macro at once";
 
     compA->mouseUp(realMouseEvent(*compA, pressPos, pressPos, plain, /*wasDragged=*/true));
 

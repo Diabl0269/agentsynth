@@ -92,9 +92,11 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // A live reparent drag whose leave OR join candidate (GraphEditor::getMacroDragLeaveId
         // / getMacroDragJoinId) is THIS macro gets the SAME dashed hull, just emphasized — heavier,
         // fully opaque, and topped with a solid stroke — rather than a second visual language for
-        // "about to change" (docs/macros/menu-and-membership.md). A transfer emphasises both.
-        const bool isDragCandidate =
-            macro.id == editor.getMacroDragLeaveId() || macro.id == editor.getMacroDragJoinId();
+        // "about to change" (docs/macros/menu-and-membership.md). A transfer emphasises both, and a macro
+        // the drag has already moved its module into stays emphasised until the drop.
+        const bool isDragCandidate = macro.id == editor.getMacroDragLeaveId() ||
+                                     macro.id == editor.getMacroDragJoinId() ||
+                                     macro.id == editor.getMacroDragLiveOwnerId();
 
         juce::Path outline;
         outline.addRoundedRectangle(hull.toFloat(), 10.0f);
@@ -444,15 +446,12 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
     // Both cable kinds populate id.srcUid/dstUid with the REAL logical endpoints — for an
     // AttenuverterChain that's the true mod source/destination the chain proxies, never the hidden
     // attenuverter itself (buildVisibleCables() constructs it that way, and the attenuverter splice
-    // logic already treats them as such). Decide BEFORE mutating whether removing this cable can leave a
-    // macro port with no connections left, so the right undo transaction is chosen up front. Gated
-    // on autoDeleteMacroPortsOnLastCableEnabled (Preferences) — off, this is always false and both
-    // branches below fall through to the plain graph-only recordStructuralChange path
-    // (see docs/macros/auto-ports.md#ports-on-a-cable-drag).
+    // logic already treats them as such). Decide BEFORE mutating whether removing this cable touches a
+    // macro port, so the right undo transaction is chosen up front: pruneMacroPortsAfterCut may then drop a
+    // port left cableless or one-sided (see docs/macros/auto-ports.md#auto-deleting-a-port-when-its-last-cable-goes).
     const juce::AudioProcessorGraph::NodeID srcId{cable.id.srcUid};
     const juce::AudioProcessorGraph::NodeID dstId{cable.id.dstUid};
-    const bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled &&
-                                  (macroController_.nodeIsMacroPort(srcId) || macroController_.nodeIsMacroPort(dstId));
+    const bool touchesMacroPort = macroController_.nodeIsMacroPort(srcId) || macroController_.nodeIsMacroPort(dstId);
 
     // An attenuverter chain is a hidden node plus its two edges, and the macro ports it crossed go with it --
     // whatever the auto-delete preference says, since the removal is the request. Double-clicking the knob
@@ -461,6 +460,8 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
         removeModulationChain(juce::AudioProcessorGraph::NodeID{cable.id.attenUid});
         return;
     }
+
+    const auto cablesBefore = snapshotCablesForRetract();
 
     // Expand audio/poly fans via resolvePolyLink so a collapsed stereo (or poly voice) cable that
     // only drew its head edge still removes every raw channel the user-visible wire owns.
@@ -500,8 +501,7 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
     if (touchesMacroPort) {
         auto doMutation = [this, removeEdges, srcId, dstId] {
             removeEdges();
-            macroController_.autoDeleteOrphanedMacroPort(srcId);
-            macroController_.autoDeleteOrphanedMacroPort(dstId);
+            pruneMacroPortsAfterCut({srcId, dstId}, {});
             updateComponents();
         };
         if (undoManager)
@@ -516,6 +516,7 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
 
     hoveredCableId.reset();
     repaintCanvas();
+    retractCablesGoneSince(cablesBefore);
 }
 
 void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
@@ -637,6 +638,10 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             g.drawText(badge, pill, juce::Justification::centred, false);
         }
     }
+    // Removed cables pulling back into their source jack and fading (CableRetractAnimator.h).
+    for (const auto& ghost : editor.cableRetract_.ghosts())
+        strokeWire(ghost.p1, ghost.p2, editor.colourForCable(ghost).withMultipliedAlpha(editor.cableRetract_.opacity()),
+                   ghost.kind != GraphEditor::VisibleCable::Kind::Direct, 0.0f, 2.0f, false);
     // ---- End cables ----
 
     // ---- Expanded-macro grouping hull (see paintExpandedMacroHulls
@@ -655,12 +660,8 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             }
 
             auto posInContent = editor.dragSourceModule->getBounds().getPosition() + p;
-            auto mouseInContent = getLocalPoint(&(editor), editor.dragCurrentPos);
-
-            // Since 'content' is transformed, we need to handle coordinates
-            // carefully. But if this 'paint' is called on content, and we use
-            // getLocalPoint(editor, ...) it should be transformed back. Actually,
-            // easier: editor.dragCurrentPos is screen pos.
+            // dragCurrentPos is a screen position; the content component is transformed, so map it from the
+            // screen rather than from the editor.
             auto mouseLocal = getLocalPoint(nullptr, editor.dragCurrentPos);
 
             // In-progress drag wire: resolved through the same colour path as a real cable, so

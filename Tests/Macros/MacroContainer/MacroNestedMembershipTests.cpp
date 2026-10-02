@@ -173,10 +173,8 @@ TEST(MacroNestedDrag, DraggingAChildsMemberIntoTheParentsSpaceTransfersItUpOneLe
     const auto childAtPress = f.ctl().macroHullBounds(f.childId);
     const juce::Point<int> belowChild{childAtPress.getCentreX(), childAtPress.getBottom() + 40};
     ASSERT_TRUE(f.ctl().macroHullBounds(f.parentId).contains(belowChild)) << "sanity: still inside the parent";
-    dragBodyBy(*comp, deltaTo(*comp, belowChild), kCmdClick, [&] {
-        EXPECT_EQ(f.editor.getMacroDragLeaveId(), f.childId);
-        EXPECT_EQ(f.editor.getMacroDragJoinId(), f.parentId);
-    });
+    dragBodyBy(*comp, deltaTo(*comp, belowChild), kCmdClick,
+               [&] { EXPECT_EQ(ownerOf(f, f.c1), f.parentId) << "moved up a level as it crossed"; });
 
     EXPECT_EQ(ownerOf(f, f.c1), f.parentId);
     EXPECT_EQ(ownerOf(f, f.c2), f.childId);
@@ -194,10 +192,8 @@ TEST(MacroNestedDrag, DraggingAChildsMemberOutOfEveryHullLeavesAllLevelsInOneGes
     auto* comp = findComponent(f.editor, f.c1);
     ASSERT_NE(comp, nullptr);
 
-    dragBodyBy(*comp, deltaTo(*comp, kOutsideSpace), kCmdClick, [&] {
-        EXPECT_EQ(f.editor.getMacroDragLeaveId(), f.childId);
-        EXPECT_TRUE(f.editor.getMacroDragJoinId().isEmpty()) << "the parent's hull no longer chases the module";
-    });
+    dragBodyBy(*comp, deltaTo(*comp, kOutsideSpace), kCmdClick,
+               [&] { EXPECT_TRUE(ownerOf(f, f.c1).isEmpty()) << "out of every level as it crossed"; });
 
     EXPECT_TRUE(ownerOf(f, f.c1).isEmpty()) << "out of the child AND the parent";
     EXPECT_EQ(ownerOf(f, f.c2), f.childId);
@@ -213,10 +209,8 @@ TEST(MacroNestedDrag, DraggingAParentsOwnMemberIntoTheChildHullTransfersItDown) 
     ASSERT_NE(comp, nullptr);
     const auto childCentre = f.ctl().macroHullBounds(f.childId).getCentre();
 
-    dragBodyBy(*comp, deltaTo(*comp, childCentre), kCmdClick, [&] {
-        EXPECT_EQ(f.editor.getMacroDragLeaveId(), f.parentId);
-        EXPECT_EQ(f.editor.getMacroDragJoinId(), f.childId);
-    });
+    dragBodyBy(*comp, deltaTo(*comp, childCentre), kCmdClick,
+               [&] { EXPECT_EQ(ownerOf(f, f.p1), f.childId) << "moved down a level as it crossed"; });
 
     EXPECT_EQ(ownerOf(f, f.p1), f.childId);
     EXPECT_EQ(ownerOf(f, f.p2), f.parentId);
