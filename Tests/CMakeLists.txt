@@ -475,6 +475,8 @@ add_executable(Tests
     Macros/MacroDropPlacementTests.cpp
     Macros/MacroHullDisplacementTests.cpp
     Macros/MacroProjectLoadTests.cpp
+    Macros/MacroPortCanvasEdgeTests.cpp
+    Macros/MacroProjectReopenTests.cpp
     Macros/MacroCardPortButtonsTests.cpp
     Macros/MacroPortWidgetTests.cpp
     Macros/MacroPortZoomMergeTests.cpp

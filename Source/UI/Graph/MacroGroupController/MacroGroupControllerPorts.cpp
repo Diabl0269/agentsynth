@@ -730,6 +730,8 @@ void MacroGroupController::createMacroPortFromDroppedCable(const juce::String& m
 
         host_.updateComponents();
         makeRoomFor("m:" + macroId);
+        for (const auto& crossedId : otherCrossings)
+            makeRoomFor("m:" + crossedId);
     };
 
     if (host_.undo())

@@ -233,7 +233,10 @@ several ports and pushed the '+' under a jack; a strip gives every port its own 
   (`computeMacroHullBounds`). `MacroGroupController::macroHullPortLayout` is the one layout: it gives
   each port's docked widget bounds, its **outer jack** (on the hull's dashed border, where cables from
   outside land) and its **inner jack** (5 px inside the strip's inner edge, where cables to members
-  start). `dockMacroPortWidgets` sets each widget to those bounds. A widget is a bare
+  start). An input widget overhangs the hull's left border by `LayoutUtil::kMacroPortOverhang` (5 px), so the
+  hull's left edge must stay at least that far inside the canvas: adding a port slides a macro that would
+  poke past the top-left back into view in the same undo step
+  ([layout.md](../layout/layout.md#making-room-when-something-grows)). `dockMacroPortWidgets` sets each widget to those bounds. A widget is a bare
   `ModuleComponent` that draws only its jacks (10 px on the boundary side, 7 px on the interior side)
   and its name; the strips (fill and divider from the hull's top edge, under the name chip; the rows still
 start below the chip row) are painted under it by `paintMacroPortStrips` from

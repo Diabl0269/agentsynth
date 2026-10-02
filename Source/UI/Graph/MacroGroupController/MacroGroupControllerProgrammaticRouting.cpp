@@ -11,6 +11,7 @@
 #include "MacroNesting.h"
 #include "Modules/ModuleBase.h"
 #include <algorithm>
+#include <map>
 #include <set>
 
 namespace {
@@ -101,8 +102,17 @@ bool MacroGroupController::applyProgrammaticConnectionChange(bool autoCreatePort
     const auto added = minus(after, before);
     const auto removed = minus(before, after);
 
-    if (autoCreatePorts && !added.empty())
+    if (autoCreatePorts && !added.empty()) {
+        std::map<juce::String, size_t> portCounts;
+        for (const auto& m : host_.getMacros().getAll())
+            portCounts[m.id] = m.ports.size();
         routeFreshEdgesThroughMacroPorts({added.begin(), added.end()});
+        // A macro that gained a port may now reach past the canvas's top-left: slide it into view in the caller's
+        // undo record, as every other way of adding a port does.
+        for (const auto& [macroId, count] : portCounts)
+            if (const auto* macro = host_.getMacros().find(macroId); macro != nullptr && macro->ports.size() > count)
+                makeRoomFor("m:" + macroId);
+    }
 
     std::vector<NodeID> touched;
     for (const auto& c : removed) {

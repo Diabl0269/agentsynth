@@ -93,6 +93,15 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   it is not taken, and the unit instead goes the smaller of right or down. The same rule applies
   to a move that would land on a pinned unit (which never moves). A unit that is blocked both
   ways is left where it is.
+  The wall also applies to an open macro's hull. An input port's widget overhangs the hull's left
+  border by 5 px (`LayoutUtil::kMacroPortOverhang`), and anything left of x = 0 is neither painted
+  nor clickable. So whenever a macro grows (a new port from the card, the chip, the Mod Matrix or a
+  cable dropped on it, or a member added), and its hull's left edge minus that overhang, or its top,
+  would be past the canvas, the whole macro (and every macro enclosing it) slides right/down by
+  the shortfall, rigidly, in the same undo step and with the same make-room glide
+  (`makeRoomFor` calls `nudgeHullIntoCanvas` first). A macro whose hull already clears the wall is
+  not moved. Opening a project never moves anything: a hull saved left of the canvas stays there until
+  the next change that grows it.
 - **Inside out.** After the grower's own level is settled, its enclosing macro may have a bigger
   hull, so that macro is treated as the grower one level up, all the way to the top level.
 - **When.** Only on discrete events, never while dragging: grouping (including nesting), adding

@@ -495,10 +495,11 @@ MacroGroupController::macroHullPortLayout(const juce::String& macroId) const {
         const int top = firstRowTop + entry.row * kMacroPortRowHeight;
         const int height = entry.rows * kMacroPortRowHeight;
         const int jackY = top + kMacroPortRowHeight / 2;
-        // The widget overhangs the hull border by 5px so its boundary jack (5px in from its own
+        // The widget overhangs the hull border by kMacroPortOverhang so its boundary jack (5px in from its own
         // edge) sits exactly on the border; the interior jack sits 5px inside the strip's inner edge.
+        constexpr int kOverhang = synth::LayoutUtil::kMacroPortOverhang;
         if (port.isInput) {
-            entry.widgetBounds = {hull.getX() - 5, top, inW + 5, height};
+            entry.widgetBounds = {hull.getX() - kOverhang, top, inW + kOverhang, height};
             entry.outerJack = {hull.getX(), jackY};
             entry.innerJack = {hull.getX() + inW - 5, jackY};
         } else {
