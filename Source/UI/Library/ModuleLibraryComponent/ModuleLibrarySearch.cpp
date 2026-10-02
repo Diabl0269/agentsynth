@@ -1,30 +1,6 @@
-// ModuleLibrarySearch.cpp -- the search box: query normalisation/matching, highlight-span
-// computation, live filtering of buildRows()'s section/child visibility, and the search field's
-// theme colours.
+// ModuleLibrarySearch.cpp -- the search box: query normalisation, live filtering of buildRows()'s section/child
+// visibility, and the search field's theme colours.
 #include "ModuleLibraryComponent.h"
-
-bool ModuleLibraryComponent::textMatchesQuery(const juce::String& text, const juce::String& query) {
-    const auto q = normalisedSearchQuery(query);
-    return q.isNotEmpty() && text.containsIgnoreCase(q);
-}
-
-std::vector<ModuleLibraryComponent::HighlightSpan>
-ModuleLibraryComponent::highlightSpansFor(const juce::String& text, const juce::String& query) {
-    std::vector<HighlightSpan> spans;
-    const auto q = normalisedSearchQuery(query);
-    if (q.isEmpty() || text.isEmpty())
-        return spans;
-    const int qLen = q.length();
-    int from = 0;
-    while (from + qLen <= text.length()) {
-        const int hit = text.indexOfIgnoreCase(from, q);
-        if (hit < 0)
-            break;
-        spans.push_back({hit, qLen});
-        from = hit + qLen;
-    }
-    return spans;
-}
 
 void ModuleLibraryComponent::setSearchText(const juce::String& text) {
     if (searchEditor.getText() != text)
@@ -47,17 +23,19 @@ void ModuleLibraryComponent::applySearchQuery(const juce::String& text) {
 
 bool ModuleLibraryComponent::sectionVisibleInSearch(size_t headerIndex, size_t end) const {
     const auto q = normalisedSearchQuery(searchQuery);
-    if (textMatchesQuery(entries[headerIndex].text, q))
+    if (q.isEmpty())
+        return false;
+    if (synth::ui::searchMatches(entries[headerIndex].text, q))
         return true;
     for (size_t j = headerIndex + 1; j < end; ++j)
-        if (textMatchesQuery(entries[j].text, q))
+        if (synth::ui::searchMatches(entries[j].text, q))
             return true;
     return false;
 }
 
 bool ModuleLibraryComponent::childVisibleInSearch(const Entry& entry) const {
     const auto q = normalisedSearchQuery(searchQuery);
-    return textMatchesQuery(entry.text, q) || textMatchesQuery(entry.section, q);
+    return q.isNotEmpty() && (synth::ui::searchMatches(entry.text, q) || synth::ui::searchMatches(entry.section, q));
 }
 
 void ModuleLibraryComponent::applySearchEditorColours() {

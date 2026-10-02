@@ -58,7 +58,7 @@ guaranteed across the embedded typefaces (see the font limitation in
 the shapes the old two-state version switched between.
 
 Rows also carry a hover highlight, a grab / dragging-hand cursor when draggable, per-module
-descriptions surfaced as `setTooltip()` via `descriptionFor(name)`, and the search-query substring
+descriptions surfaced as `setTooltip()` via `descriptionFor(name)`, and the search-query
 highlight described below.
 
 ## Search
@@ -68,7 +68,7 @@ ALL strip. The two together are `kPinnedChromeHeight`; the scrollbar, the row cl
 all start below that band, so the field never scrolls away and a scrolled row cannot steal a click
 from it.
 
-Typing a query — trimmed, case-insensitive substring — filters `buildRows()`:
+Typing a query — trimmed, matched by the shared [search matcher](chrome.md#shared-search) (every word, any order, ignoring case) — filters `buildRows()`:
 
 - Module, snippet and empty-hint rows that do not contain the query are hidden.
 - A section stays visible when its header matches **or** any of its children match, and a header
@@ -77,7 +77,8 @@ Typing a query — trimmed, case-insensitive substring — filters `buildRows()`
   rewritten and `onCollapseStateChanged` does not fire, so clearing the field restores exactly the
   collapse state the user had.
 - Matching runs in the visible label are highlighted with the theme accent (fill plus accent text).
-  `highlightSpansFor` is the pure helper `paint()` uses, and tests cover it directly.
+  `paint()` calls the shared `synth::ui::drawSearchHighlightedText`; the matcher and spans are tested in
+  `SearchMatchTests`. A blank query is guarded at the library's call sites (it hides nothing).
 - A query that matches nothing leaves `buildRows()` empty and the body draws "No matching modules".
 - Filtering is layout-only. `getDraggableModuleNames()` is unfiltered, because callers that
   instantiate through the factory must not see a search-shrunk catalogue.

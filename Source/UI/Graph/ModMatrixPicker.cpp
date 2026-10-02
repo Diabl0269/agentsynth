@@ -1,6 +1,7 @@
 #include "ModMatrixPicker.h"
 
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/SearchMatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 
@@ -107,6 +108,14 @@ public:
         palette_ = p;
         repaint();
     }
+    // The (trimmed) search query whose matched letters this row paints highlighted.
+    void setQuery(const juce::String& query) {
+        if (query_ != query) {
+            query_ = query;
+            repaint();
+        }
+    }
+    const juce::String& query() const noexcept { return query_; }
 
     void paint(juce::Graphics& g) override {
         auto bounds = getLocalBounds();
@@ -121,17 +130,19 @@ public:
             g.fillRoundedRectangle(bounds.toFloat().reduced(2.0f, 1.0f), 3.0f);
         }
         // The row a combo currently holds is set apart by colour and weight, not by a glyph.
-        g.setColour(!isEnabled() ? palette_.muted : isCurrent_ ? palette_.accent : palette_.text);
-        g.setFont(juce::Font(juce::FontOptions(kRowFontSize, isCurrent_ ? juce::Font::bold : juce::Font::plain)));
+        const auto textColour = !isEnabled() ? palette_.muted : isCurrent_ ? palette_.accent : palette_.text;
+        const juce::Font rowFont(juce::FontOptions(kRowFontSize, isCurrent_ ? juce::Font::bold : juce::Font::plain));
+        const auto fill = palette_.accent.withAlpha(0.28f);
         if (detail_.isEmpty()) {
-            g.drawText(text_, bounds.reduced(12, 0), juce::Justification::centredLeft, true);
+            drawSearchHighlightedText(g, text_, query_, bounds.reduced(12, 0), rowFont, textColour, fill,
+                                      palette_.accent);
             return;
         }
         auto lines = bounds.reduced(12, 3);
-        g.drawText(text_, lines.removeFromTop(lines.getHeight() / 2), juce::Justification::centredLeft, true);
-        g.setColour(palette_.muted);
-        g.setFont(juce::Font(juce::FontOptions(kDetailFontSize)));
-        g.drawText(detail_, lines, juce::Justification::centredLeft, true);
+        drawSearchHighlightedText(g, text_, query_, lines.removeFromTop(lines.getHeight() / 2), rowFont, textColour,
+                                  fill, palette_.accent);
+        drawSearchHighlightedText(g, detail_, query_, lines, juce::Font(juce::FontOptions(kDetailFontSize)),
+                                  palette_.muted, fill, palette_.accent);
     }
 
     void mouseEnter(const juce::MouseEvent&) override {
@@ -153,6 +164,7 @@ private:
     juce::String text_;
     juce::String searchText_;
     juce::String detail_;
+    juce::String query_;
     bool isCurrent_;
     std::function<void(Row&)> onClick_;
     std::function<void(Row&)> onHover_;
@@ -260,18 +272,6 @@ void ModMatrixPicker::rebuildRows() {
     applyFilter();
 }
 
-// Word by word: every space-separated word of the query must appear somewhere in the row, in any
-// order and ignoring case, so "osc 8" finds "Oscillator 8" and "cutoff filt" finds "Filter - Cutoff".
-bool ModMatrixPicker::textMatchesQuery(const juce::String& text, const juce::String& query) {
-    juce::StringArray words;
-    words.addTokens(query, " \t", "");
-    words.removeEmptyStrings();
-    for (const auto& word : words)
-        if (!text.containsIgnoreCase(word))
-            return false;
-    return true;
-}
-
 std::vector<ModMatrixPicker::Row*> ModMatrixPicker::visibleItemRows() const {
     std::vector<Row*> out;
     for (const auto& row : rows_)
@@ -286,6 +286,10 @@ void ModMatrixPicker::applyFilter() {
     const auto query = searchEditor_->getText().trim();
     Row* pendingHeader = nullptr;
     bool headerHasMatch = false;
+    // Word by word, in any order, ignoring case: "osc 8" finds "Oscillator 8" (synth::ui::searchMatches).
+    int bestIndex = -1;
+    int bestScore = 0;
+    int visibleIndex = 0;
     for (const auto& row : rows_) {
         if (row->kind() == Row::Kind::Header) {
             if (pendingHeader != nullptr)
@@ -294,15 +298,27 @@ void ModMatrixPicker::applyFilter() {
             headerHasMatch = false;
             continue;
         }
-        const bool matches = textMatchesQuery(row->text() + " " + row->detail() + " " + row->searchText(), query);
+        const auto haystack = row->text() + " " + row->detail() + " " + row->searchText();
+        const bool matches = searchMatches(haystack, query);
         row->setVisible(matches);
+        row->setQuery(query);
         headerHasMatch = headerHasMatch || matches;
+        if (matches) {
+            const int score = searchScore(haystack, query);
+            if (row->isEnabled() && (bestIndex < 0 || score < bestScore)) {
+                bestIndex = visibleIndex;
+                bestScore = score;
+            }
+            ++visibleIndex;
+        }
     }
     if (pendingHeader != nullptr)
         pendingHeader->setVisible(headerHasMatch);
 
     layoutRowColumn();
-    setHighlight(nextPickable(-1, 1));
+    // The best match leads on a query (the first among equals); with none pickable the highlight stays on the first
+    // row.
+    setHighlight(query.isNotEmpty() && bestIndex >= 0 ? bestIndex : nextPickable(-1, 1));
     viewport_.setViewPosition(0, 0);
 }
 
@@ -458,6 +474,13 @@ std::vector<juce::String> ModMatrixPicker::getVisibleItemDetailsForTest() const 
     for (auto* row : visibleItemRows())
         details.push_back(row->detail());
     return details;
+}
+
+std::vector<std::vector<SearchSpan>> ModMatrixPicker::getVisibleItemHighlightSpansForTest() const {
+    std::vector<std::vector<SearchSpan>> spans;
+    for (auto* row : visibleItemRows())
+        spans.push_back(searchHighlightSpans(row->text(), row->query()));
+    return spans;
 }
 
 bool ModMatrixPicker::isVisibleItemPickableForTest(int index) const {

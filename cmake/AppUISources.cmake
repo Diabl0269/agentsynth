@@ -224,6 +224,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/ArrowKeyNavigation.cpp
     Source/UI/Layout/FoldAllButton.h
     Source/UI/Layout/FoldAllButton.cpp
+    Source/UI/Layout/SearchMatch.h
+    Source/UI/Layout/SearchMatch.cpp
     Source/UI/Layout/TabSwitchKeys.h
     Source/UI/Layout/TabSwitchKeys.cpp
     Source/UI/Layout/TabStripKeys.h

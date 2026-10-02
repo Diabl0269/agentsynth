@@ -2,6 +2,8 @@
 // and layout. The row drag is MixerZonesPaneDrag.cpp.
 #include "MixerZonesPane.h"
 
+#include "UI/Layout/SearchMatch.h"
+
 namespace synth::ui {
 
 namespace {
@@ -102,7 +104,7 @@ bool MixerZonesPane::passesFilter(const MixerZoneChannel& channel) const {
     if (chip_ == Chip::Buses && channel.kind != MixerZoneChannelKind::Bus)
         return false;
     const auto text = filter_.getText().trim();
-    return text.isEmpty() || channel.name.containsIgnoreCase(text);
+    return synth::ui::searchMatches(channel.name, text);
 }
 
 std::vector<MixerZonesPane::Item> MixerZonesPane::buildItems() const {
@@ -156,6 +158,7 @@ void MixerZonesPane::rebuildList() {
     for (const auto& channel : channels_) {
         auto& row = rowFor(channel);
         row.setChannel(channel);
+        row.setHighlightQuery(filter_.getText().trim());
         const bool listed = std::any_of(items_.begin(), items_.end(), [&](const Item& item) {
             return !item.isHeader && item.channelId == channel.id;
         });

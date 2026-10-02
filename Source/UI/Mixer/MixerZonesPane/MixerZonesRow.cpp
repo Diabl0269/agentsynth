@@ -4,6 +4,7 @@
 
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
+#include "UI/Layout/SearchMatch.h"
 
 namespace synth::ui {
 
@@ -101,6 +102,13 @@ void MixerZonesRow::setChannel(const MixerZoneChannel& channel) {
     repaint();
 }
 
+void MixerZonesRow::setHighlightQuery(const juce::String& query) {
+    if (query == highlightQuery_)
+        return;
+    highlightQuery_ = query;
+    repaint();
+}
+
 void MixerZonesRow::setLift(float lift) {
     if (lift == lift_)
         return;
@@ -142,9 +150,8 @@ void MixerZonesRow::paint(juce::Graphics& g) {
     g.setColour(channel_.colour.withMultipliedAlpha(dim));
     g.fillRoundedRectangle(bounds.removeFromLeft(kSwatchWidth).reduced(0, 6).toFloat(), 2.0f);
     bounds.removeFromLeft(kInset);
-    g.setColour(text.withMultipliedAlpha(dim));
-    g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText(channel_.name, bounds, juce::Justification::centredLeft, true);
+    drawSearchHighlightedText(g, channel_.name, highlightQuery_, bounds, juce::Font(juce::FontOptions(12.0f)),
+                              text.withMultipliedAlpha(dim), accent.withAlpha(0.28f), accent);
 }
 
 void MixerZonesRow::mouseDown(const juce::MouseEvent& e) {

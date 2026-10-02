@@ -5,6 +5,7 @@
 #include "MidiRemote/ContinuousTarget.h"
 #include "ShortcutManager/AppCommands.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/SearchMatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <array>
 
@@ -19,7 +20,7 @@ std::vector<ActionPickerRow> buildActionPickerRows(const juce::String& filter, i
             if (AppCommands::getCommandForAction(id) == AppCommands::kNoCommand)
                 continue;
             const auto label = ShortcutManager::getActionDescription(id);
-            if (needle.isNotEmpty() && !label.containsIgnoreCase(needle))
+            if (!synth::ui::searchMatches(label, needle))
                 continue;
             ActionPickerRow row;
             row.actionId = id;
@@ -43,7 +44,7 @@ std::vector<ActionPickerRow> buildActionPickerRows(const juce::String& filter, i
     std::vector<ActionPickerRow> continuousGroup;
     for (const auto kind : kContinuousKinds) {
         const auto label = synth::continuousTargetDisplayName(kind);
-        if (needle.isNotEmpty() && !label.containsIgnoreCase(needle))
+        if (!synth::ui::searchMatches(label, needle))
             continue;
         ActionPickerRow row;
         row.isContinuous = true;
@@ -64,7 +65,7 @@ std::vector<ActionPickerRow> buildActionPickerRows(const juce::String& filter, i
     // (see docs/control/midi-remote.md#pages).
     std::vector<ActionPickerRow> pageGroup;
     auto addPageRow = [&](const juce::String& label, synth::PageCommand command, int pageNumber) {
-        if (needle.isNotEmpty() && !label.containsIgnoreCase(needle))
+        if (!synth::ui::searchMatches(label, needle))
             return;
         ActionPickerRow row;
         row.isPage = true;
@@ -156,9 +157,9 @@ void ActionPickerComponent::paintListBoxItem(int row, juce::Graphics& g, int wid
         g.setColour(accentColour.withAlpha(0.2f));
         g.fillRect(0, 0, width, height);
     }
-    g.setColour(textColour);
-    g.setFont(juce::Font(juce::FontOptions(13.0f)));
-    g.drawText(r.label, 16, 0, width - 24, height, juce::Justification::centredLeft);
+    drawSearchHighlightedText(g, r.label, searchEditor_.getText().trim(), {16, 0, width - 24, height},
+                              juce::Font(juce::FontOptions(13.0f)), textColour, accentColour.withAlpha(0.28f),
+                              accentColour);
 }
 
 void ActionPickerComponent::resized() {

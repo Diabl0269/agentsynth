@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/SearchMatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <functional>
@@ -210,6 +211,8 @@ private:
 
         void setConnected(bool connected) { toggle_.setToggleState(connected, juce::dontSendNotification); }
         void setDisplayName(const juce::String& name) { label_.setText(name, juce::dontSendNotification); }
+        // The search text whose matched letters the label paints highlighted (blank = none).
+        void setHighlightQuery(const juce::String& query) { label_.setHighlightQuery(query); }
 
         juce::String getDisplayedText() const { return label_.getText(); }
         Kind getKind() const noexcept { return kind_; }
@@ -227,6 +230,7 @@ private:
                 toggle_.setColour(juce::ToggleButton::tickColourId, tick);
                 toggle_.setColour(juce::ToggleButton::tickDisabledColourId, tickOff);
                 label_.setColour(juce::Label::textColourId, text);
+                label_.setHighlightColour(tick);
             } else {
                 // Header and hint rows both read as secondary text — a section title and an
                 // explanatory hint are equally "not the main content" of the list.
@@ -241,9 +245,35 @@ private:
         static constexpr int kSectionIndent = 4;
         static constexpr float kHeaderFontSize = 11.0f;
 
+        // A Label that paints the letters the picker's search matched with the shared highlight.
+        class HighlightLabel : public juce::Label {
+        public:
+            void setHighlightQuery(const juce::String& query) {
+                if (query_ != query) {
+                    query_ = query;
+                    repaint();
+                }
+            }
+            void setHighlightColour(juce::Colour c) { accent_ = c; }
+
+            void paint(juce::Graphics& g) override {
+                if (query_.isEmpty()) {
+                    juce::Label::paint(g);
+                    return;
+                }
+                drawSearchHighlightedText(g, getText(), query_, getBorderSize().subtractedFrom(getLocalBounds()),
+                                          getFont(), findColour(textColourId), accent_.withAlpha(0.28f), accent_,
+                                          getJustificationType());
+            }
+
+        private:
+            juce::String query_;
+            juce::Colour accent_ = juce::Colours::lightblue;
+        };
+
         Kind kind_;
         juce::ToggleButton toggle_;
-        juce::Label label_;
+        HighlightLabel label_;
         std::function<void()> onToggle_;
     };
 
@@ -374,8 +404,9 @@ private:
                 groupHasMatch = false;
                 continue;
             }
-            const bool matches = row->getKind() != Row::Kind::Toggle || query.isEmpty() ||
-                                 row->getDisplayedText().containsIgnoreCase(query);
+            const bool matches =
+                row->getKind() != Row::Kind::Toggle || synth::ui::searchMatches(row->getDisplayedText(), query);
+            row->setHighlightQuery(row->getKind() == Row::Kind::Toggle ? query : juce::String());
             row->setVisible(matches);
             if (matches)
                 groupHasMatch = true;

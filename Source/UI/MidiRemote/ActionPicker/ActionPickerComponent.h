@@ -29,9 +29,9 @@ struct ActionPickerRow {
     int pageNumber = 1; // valid iff isPage; only meaningful for pageCommand == go ("Page N")
 };
 
-/** The rows the picker shows for `filter` (case-insensitive substring of the row's own label;
- *  empty = everything) and `effectivePageCount` (>= 1, the selected control's controller's own
- *  RemoteEngine::getEffectivePageCount -- 1 with no controller selected). A category (action,
+/** The rows the picker shows for `filter` (every whitespace-separated word must appear in the row's own label, any
+ *  order, ignoring case -- synth::ui::searchMatches; empty = everything) and `effectivePageCount` (>= 1, the selected
+ * control's controller's own RemoteEngine::getEffectivePageCount -- 1 with no controller selected). A category (action,
  *  continuous, or page) with no matching row gets no header. */
 std::vector<ActionPickerRow> buildActionPickerRows(const juce::String& filter, int effectivePageCount = 1);
 

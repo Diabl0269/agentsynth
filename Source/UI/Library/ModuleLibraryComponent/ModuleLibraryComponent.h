@@ -5,6 +5,7 @@
 #include "SnippetManager.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Layout/SearchMatch.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/ModuleLibraryHelpPopup.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -58,12 +59,6 @@ public:
     static constexpr int kHelpButtonSize = 18;
     static constexpr int kHelpButtonMargin = 6;
 
-    /** Inclusive [start, start+length) range of a case-insensitive query hit inside a label. */
-    struct HighlightSpan {
-        int start = 0;
-        int length = 0;
-    };
-
     static constexpr const char* kSnippetsHeader = "Snippets";
     static constexpr const char* kPluginsHeader = "Plugins";
     /** The one row the Plugins section always has: the scan trigger, and — when nothing has been
@@ -87,17 +82,10 @@ public:
     /** Invoked when the user picks "Delete Snippet" from a snippet row's context menu. */
     std::function<void(const juce::String&)> onSnippetDeleteRequested;
 
-    // -------------------------------------------------------------------------
-    // Search
-    // -------------------------------------------------------------------------
+    // ---- Search ----
 
     /** Trimmed query: empty means the library is unfiltered. */
     static juce::String normalisedSearchQuery(const juce::String& raw) { return raw.trim(); }
-
-    static bool textMatchesQuery(const juce::String& text, const juce::String& query);
-
-    /** Non-overlapping case-insensitive hits of `query` inside `text`, in left-to-right order. */
-    static std::vector<HighlightSpan> highlightSpansFor(const juce::String& text, const juce::String& query);
 
     void setSearchText(const juce::String& text);
 
@@ -105,11 +93,7 @@ public:
 
     bool isSearchActive() const { return normalisedSearchQuery(searchQuery).isNotEmpty(); }
 
-    /** Grabs keyboard focus on the search field specifically — the destination
-     *  `AppCommands::focusLibrarySearch` (Cmd+F) needs, distinct from `FocusRegionRegistry`'s
-     *  region-root focus (Cmd+Shift+L lands on `this`, not the search field; see FocusRegion.h /
-     *  docs/control/shortcuts.md's Focus regions section). The caller (MainComponent) is responsible for
-     *  opening the Library first if it is closed, mirroring every other direct-focus shortcut. */
+    /** Focuses the search field itself (Cmd+F, `AppCommands::focusLibrarySearch`), not the region root. */
     void focusSearchField() { searchEditor.grabKeyboardFocus(); }
 
     // -------------------------------------------------------------------------
@@ -661,10 +645,6 @@ private:
     bool childVisibleInSearch(const Entry& entry) const;
 
     void applySearchEditorColours();
-
-    static void drawHighlightedText(juce::Graphics& g, const juce::String& text, const juce::String& query,
-                                    juce::Rectangle<int> bounds, const juce::Font& font, juce::Colour normal,
-                                    juce::Colour highlightFill, juce::Colour highlightText);
 
     /** @param progress 0 = open (pointing down) .. 1 = folded (pointing right). Drawn as the open
      *  triangle rotated by -90° * progress: for a square area the endpoints are exactly the two

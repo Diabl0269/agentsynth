@@ -64,11 +64,13 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
                 if (icon != nullptr) {
                     icon->drawWithin(g, juce::Rectangle<float>(20.0f, (float)row.y + 2.0f, 16.0f, 16.0f),
                                      juce::RectanglePlacement::centred, 1.0f);
-                    drawHighlightedText(g, headerLabel, query, {40, row.y, contentWidth - 50, 20}, headerFont,
-                                        headerColour, accentColour.withAlpha(0.28f), accentColour);
+                    synth::ui::drawSearchHighlightedText(g, headerLabel, query, {40, row.y, contentWidth - 50, 20},
+                                                         headerFont, headerColour, accentColour.withAlpha(0.28f),
+                                                         accentColour);
                 } else {
-                    drawHighlightedText(g, headerLabel, query, {20, row.y, contentWidth - 30, 20}, headerFont,
-                                        headerColour, accentColour.withAlpha(0.28f), accentColour);
+                    synth::ui::drawSearchHighlightedText(g, headerLabel, query, {20, row.y, contentWidth - 30, 20},
+                                                         headerFont, headerColour, accentColour.withAlpha(0.28f),
+                                                         accentColour);
                 }
                 continue;
             }
@@ -85,8 +87,9 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
 
             if (entry.kind == RowKind::EmptyHint) {
                 const juce::Font hintFont(juce::FontOptions(13.0f));
-                drawHighlightedText(g, entry.text, query, {20, row.y, contentWidth - 40, kItemHeight - 4}, hintFont,
-                                    mutedColour.withAlpha(0.7f), accentColour.withAlpha(0.28f), accentColour);
+                synth::ui::drawSearchHighlightedText(
+                    g, entry.text, query, {20, row.y, contentWidth - 40, kItemHeight - 4}, hintFont,
+                    mutedColour.withAlpha(0.7f), accentColour.withAlpha(0.28f), accentColour);
                 continue;
             }
 
@@ -131,8 +134,8 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
             // Greyed out = already in the patch and not addable again.
             const juce::Colour labelColour = enabled ? itemColour : mutedColour.withAlpha(0.5f);
             const juce::Font itemFont(juce::FontOptions(16.0f));
-            drawHighlightedText(g, entry.text, query, {20, row.y, contentWidth - 60, kItemHeight - 4}, itemFont,
-                                labelColour, accentColour.withAlpha(0.28f), accentColour);
+            synth::ui::drawSearchHighlightedText(g, entry.text, query, {20, row.y, contentWidth - 60, kItemHeight - 4},
+                                                 itemFont, labelColour, accentColour.withAlpha(0.28f), accentColour);
 
             if (entry.kind == RowKind::Snippet) {
                 g.setColour(mutedColour);
@@ -195,42 +198,6 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
                    kSearchHeight + 2, contentWidth - 20 - kHelpButtonSize - kHelpButtonMargin, kTopStripHeight - 4,
                    juce::Justification::centredRight);
     }
-}
-
-void ModuleLibraryComponent::drawHighlightedText(juce::Graphics& g, const juce::String& text, const juce::String& query,
-                                                 juce::Rectangle<int> bounds, const juce::Font& font,
-                                                 juce::Colour normal, juce::Colour highlightFill,
-                                                 juce::Colour highlightText) {
-    g.setFont(font);
-    const auto spans = highlightSpansFor(text, query);
-    if (spans.empty()) {
-        g.setColour(normal);
-        g.drawText(text, bounds, juce::Justification::centredLeft, true);
-        return;
-    }
-
-    const float baseX = (float)bounds.getX();
-    for (const auto& span : spans) {
-        const float preW = font.getStringWidthFloat(text.substring(0, span.start));
-        const float matchW = font.getStringWidthFloat(text.substring(span.start, span.start + span.length));
-        g.setColour(highlightFill);
-        g.fillRoundedRectangle(baseX + preW - 1.0f, (float)bounds.getY() + 4.0f, matchW + 2.0f,
-                               juce::jmax(8.0f, (float)bounds.getHeight() - 8.0f), 2.0f);
-    }
-
-    juce::AttributedString as;
-    as.setJustification(juce::Justification::centredLeft);
-    as.setWordWrap(juce::AttributedString::none);
-    int pos = 0;
-    for (const auto& span : spans) {
-        if (span.start > pos)
-            as.append(text.substring(pos, span.start), font, normal);
-        as.append(text.substring(span.start, span.start + span.length), font, highlightText);
-        pos = span.start + span.length;
-    }
-    if (pos < text.length())
-        as.append(text.substring(pos), font, normal);
-    as.draw(g, bounds.toFloat());
 }
 
 void ModuleLibraryComponent::drawChevron(juce::Graphics& g, juce::Rectangle<float> area, float progress,

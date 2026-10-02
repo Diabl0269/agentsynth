@@ -64,6 +64,8 @@ public:
 
     void setChannel(const MixerZoneChannel& channel);
     const MixerZoneChannel& getChannel() const noexcept { return channel_; }
+    /** The channel-filter text whose matched letters the name paints highlighted (blank = none). */
+    void setHighlightQuery(const juce::String& query);
     /** 0..1: how strongly the row is drawn lifted while it is dragged. */
     void setLift(float lift);
     /** Draws the keyboard cursor's outline on this row. */
@@ -83,6 +85,7 @@ private:
     Hooks hooks_;
     MixerZoneChannel channel_;
     MixerZonesEye eye_;
+    juce::String highlightQuery_;
     float lift_ = 0.0f;
     bool cursor_ = false;
 

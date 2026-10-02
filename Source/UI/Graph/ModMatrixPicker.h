@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/SearchMatch.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -13,9 +14,11 @@ namespace synth::ui {
  *  caller applies it exactly as it would a combo selection.
  *
  *  Typing filters case-insensitively by the row text (module title plus output or target label) and its
- *  `searchText`, word by word: each space-separated word must appear somewhere in them (see textMatchesQuery); a
- *  category header shows only while one of its rows does. The popup's height is fixed by the full
- *  list, so it never resizes under the cursor while filtering. Up/Down move the highlight, Return
+ *  `searchText`, word by word: each space-separated word must appear somewhere in them (synth::ui::searchMatches), and
+ *  highlights the matched letters in the row text and its detail line; a
+ *  category header shows only while one of its rows does. The
+ *  highlighted row on a query is the best match (synth::ui::searchScore), the first among equals. The popup's height is
+ * fixed by the full list, so it never resizes under the cursor while filtering. Up/Down move the highlight, Return
  *  picks it (the first match until moved), Escape closes.
  *
  *  Styling is self-contained (opaque themed panel, explicit colours), like MidiDestinationPicker: a
@@ -47,10 +50,6 @@ public:
     // Repaints the focus outline: a call-out is its own window, so nothing else will when focus moves.
     void focusOfChildComponentChanged(FocusChangeType) override { repaint(); }
 
-    /** True when every space-separated word of `query` appears in `text`, ignoring case and order.
-     *  An empty query matches everything. */
-    static bool textMatchesQuery(const juce::String& text, const juce::String& query);
-
     /** Re-words what a screen reader announces for the box and its search field, for a caller that reuses the
      *  picker for something other than modulation. The search field's placeholder follows `what`. */
     void setAccessibleNames(const juce::String& pickerTitle, const juce::String& searchTitle);
@@ -67,6 +66,8 @@ public:
     std::vector<juce::String> getVisibleItemTextsForTest() const;
     /** The second lines of the visible item rows, in order (empty for a one-line row). */
     std::vector<juce::String> getVisibleItemDetailsForTest() const;
+    /** The highlighted letter ranges of the visible item rows' text, in order (empty for a row with no hit). */
+    std::vector<std::vector<SearchSpan>> getVisibleItemHighlightSpansForTest() const;
     /** False for a visible item row shown disabled. */
     bool isVisibleItemPickableForTest(int index) const;
     /** Picks the nth visible ITEM row, as a click on it would. */
