@@ -806,6 +806,9 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
             return; // modifier-click toggled selection; the dragger was never armed
 
         dragger.dragComponent(this, e, nullptr);
+        // Held at the canvas origin: the drop slides the rest of the patch instead
+        // (GraphEditor::slidePatchForEdgeDrop).
+        setTopLeftPosition(dragStartPosition + owner.clampDragDeltaToCanvas(getPosition() - dragStartPosition));
         // An output-dock card only moves vertically (its x is derived); the rest of the dock follows its y.
         if (owner.isOutputDockNode(nodeId)) {
             setTopLeftPosition(dragStartPosition.x, getY());
@@ -817,6 +820,7 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
         owner.dragSelectionBy(getPosition() - dragStartPosition, this);
         // Update the landing ghost to follow the live drag position.
         owner.getDragDropController().updateDragPreview(getPosition());
+        owner.refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); // the frame steps out ahead of the card
 
         // Gap 3: re-derive reparentArmed live for a SINGLE-module drag, so Cmd pressed or released
         // mid-drag arms/disarms reparent on the spot instead of only whatever mouseDown latched —
@@ -968,9 +972,13 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
         else
             doFinalize();
     } else {
-        owner.finalizeModuleDrag(this);
+        // Graph AND macros too: a drop held at the canvas origin slides collapsed macro cards (their `bounds`).
+        auto doFinalize = [this] { owner.finalizeModuleDrag(this); };
         if (undoManager)
-            undoManager->pushSnapshotFromCapture(owner.getAudioEngine().getGraph());
+            undoManager->recordGraphAndMacroChange(owner.getAudioEngine().getGraph(), owner.getMacros(), doFinalize,
+                                                   undoManager->takeCapturedGraphBeforeState());
+        else
+            doFinalize();
     }
     owner.clearMacroDragCandidate();
     owner.getDragDropController().endDragPreview();

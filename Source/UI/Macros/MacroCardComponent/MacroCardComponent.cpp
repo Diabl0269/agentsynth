@@ -251,6 +251,8 @@ void MacroCardComponent::mouseDrag(const juce::MouseEvent& e) {
     if (!bodyDragActive)
         return;
     dragger.dragComponent(this, e, nullptr);
+    // Held at the canvas origin: the drop slides the rest of the patch instead (GraphEditor::slidePatchForEdgeDrop).
+    setTopLeftPosition(dragStartPosition + owner.clampDragDeltaToCanvas(getPosition() - dragStartPosition));
     if (getPosition() != dragStartPosition)
         synth::ui::showDragCursor(*this); // the move has really started
     // dragMacroCardBy is the one repaint call for this gesture (via GraphEditor::repaintCanvas,

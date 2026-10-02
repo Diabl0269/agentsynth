@@ -43,6 +43,7 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     setWantsKeyboardFocus(true);
 
     configureCardGlide();
+    configureCanvasFrame();
     startTimerHz(30);
 }
 

@@ -298,6 +298,7 @@ void GraphEditor::beginSelectionDrag(juce::AudioProcessorGraph::NodeID initiator
             selectionDragStartPositions.emplace_back(comp->getNodeId(), comp->getPosition());
     }
     selectionDragActive = selectionDragStartPositions.size() > 1 && !isOutputDockNode(initiator);
+    beginCanvasEdgeDrag();
 }
 
 void GraphEditor::dragSelectionBy(juce::Point<int> delta, ModuleComponent* initiator) {
@@ -319,10 +320,13 @@ void GraphEditor::dragSelectionBy(juce::Point<int> delta, ModuleComponent* initi
 }
 
 void GraphEditor::finalizeSelectionDrag() {
+    // Every exit path: a drop can both grow and shrink the canvas frame.
+    const juce::ScopeGuard frameRefresh{[this] { refreshCanvasFrame(CanvasFrame::Mode::Animate); }};
     if (!selectionDragActive) {
         selectionDragStartPositions.clear();
         return;
     }
+    slidePatchForEdgeDrop(); // a drag held at the canvas origin: the rest of the patch makes room
 
     // Resolve the group as a single rigid body: snap and de-overlap its bounding box, then apply
     // that one offset to every member. Running finalizeModuleDrag() per module would let members
@@ -393,8 +397,11 @@ void GraphEditor::finalizeSelectionDrag() {
 // never moved (positions loaded from a preset are not necessarily grid-aligned, so a
 // finalize on a zero-delta drag would visibly nudge the group).
 void GraphEditor::cancelSelectionDrag() {
+    edgeDrag_.reset();
     selectionDragActive = false;
     selectionDragStartPositions.clear();
+    // A drag that came back to where it started grew the frame on the way: fit it again.
+    refreshCanvasFrame(CanvasFrame::Mode::Animate);
 }
 
 // Cancels a live drag when the component that armed it (ModuleComponent or
@@ -443,6 +450,7 @@ void GraphEditor::beginMacroCardDrag(const juce::String& macroId) {
 
 void GraphEditor::dragMacroCardBy(const juce::String&, juce::Point<int> delta) {
     dragSelectionBy(delta, nullptr);
+    refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); // the frame steps out ahead of the card
     // Matches ModuleComponent::mouseDrag's own per-frame repaint call exactly (one repaint per
     // drag tick), but goes through repaintCanvas() rather than a bare Component::repaint(): once
     // rebuildVisibleCables() anchors a collapsed macro's boundary cables on the LIVE
@@ -461,8 +469,11 @@ void GraphEditor::dragMacroCardBy(const juce::String&, juce::Point<int> delta) {
 // apart. They are NOT resolved as a group of their own the way finalizeSelectionDrag does: they are hidden under the
 // card, so a collision test on their own bounds would shove them away from a card that landed in free space.
 void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point<int> newCardTopLeft) {
+    // Every exit path: a drop can both grow and shrink the canvas frame.
+    const juce::ScopeGuard frameRefresh{[this] { refreshCanvasFrame(CanvasFrame::Mode::Animate); }};
     auto& graph = audioEngine.getGraph();
     auto doFinalize = [this, macroId, newCardTopLeft] {
+        slidePatchForEdgeDrop(); // a card held at the canvas origin: the rest of the patch makes room
         auto* m = macros.find(macroId);
         if (m == nullptr || selectionDragStartPositions.empty()) {
             finalizeSelectionDrag();

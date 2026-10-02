@@ -71,8 +71,7 @@ bool intersectsAny(const juce::Rectangle<int>& candidate, const std::vector<Box>
 juce::Point<int> findFreeSlot(juce::Point<int> desired, int w, int h, const std::vector<Box>& others, NodeID selfId,
                               int gap) {
     auto clamp = [&](juce::Point<int> p) -> juce::Point<int> {
-        return {juce::jlimit(0, juce::jmax(0, kCanvasMax - w), p.x),
-                juce::jlimit(0, juce::jmax(0, kCanvasMax - h), p.y)};
+        return {juce::jmax(0, p.x), juce::jmax(0, p.y)}; // the origin is the wall; there is no right/bottom limit
     };
 
     auto snapped = snap(desired);

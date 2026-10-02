@@ -11,7 +11,6 @@ inline constexpr int kGridSize = 8;         // snap quantum
 inline constexpr int kCollisionGap = 12;    // min clear gap enforced between module bounding boxes
 inline constexpr int kSpiralStep = 8;       // spiral ring step (== kGridSize so results stay on-grid)
 inline constexpr int kSpiralMaxRings = 256; // hard cap; 256*8 = 2048px search radius before giving up
-inline constexpr int kCanvasMax = 10000;
 // ---- Auto-arrange spacing ----
 inline constexpr int kLayerGapX = 80;          // horizontal gap between adjacent layer columns
 inline constexpr int kIntraLayerGapY = 40;     // vertical gap between stacked modules in the same layer
@@ -73,7 +72,7 @@ bool intersectsAny(const juce::Rectangle<int>& candidate, const std::vector<Box>
 
 // Starting at desired (top-left, snap it inside), find nearest snapped top-left whose (w x h) box does
 // not intersect any others (inflated by gap). Returns desired-snapped if already clear. Square spiral on
-// grid, step=kSpiralStep, up to kSpiralMaxRings rings. Clamp to [0, kCanvasMax-w] x [0, kCanvasMax-h].
+// grid, step=kSpiralStep, up to kSpiralMaxRings rings. Clamp to x,y >= 0 only (the canvas frame grows to fit).
 juce::Point<int> findFreeSlot(juce::Point<int> desired, int w, int h, const std::vector<Box>& others, NodeID selfId,
                               int gap = kCollisionGap);
 

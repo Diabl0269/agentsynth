@@ -955,6 +955,7 @@ void GraphEditor::timerCallback() {
     if (content.connectionAnimPhase >= 1.0f)
         content.connectionAnimPhase -= 1.0f;
     repaintCanvas();
+    refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); // live drags only grow; update() early-outs when unchanged
 
     // Pressing or RELEASING Ctrl is not a mouse move, and suggestions were only recomputed from
     // updateDragPreview — so a drag that stopped moving kept showing a stale insert preview after

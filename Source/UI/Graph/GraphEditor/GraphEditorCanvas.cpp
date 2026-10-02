@@ -62,6 +62,8 @@ void GraphEditor::detachAllModuleComponents() {
     // to reset it (e.g. an AI patch apply landing mid-gesture). Cancel
     // unconditionally: harmless when nothing was active, correct when something was.
     cancelLiveDragGestures();
+    // The reload's updateComponents() lands the canvas frame at its new size with no glide.
+    canvasFrame_.requestSnapOnNextUpdate();
     // Every graph-replacing path (project load, new patch, preset, AI apply, undo fallback) comes through here: the
     // arrangement the make-room records describe is gone.
     macroController_.clearModuleDisplacements();
@@ -213,12 +215,16 @@ void GraphEditor::updateComponents() {
     // see it until the next frame.
     applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
 
+    refreshCanvasFrame(CanvasFrame::Mode::Animate);
     repaint();
 }
 
+// The colour outside the canvas frame; GraphContentComponent::paint draws the frame itself.
 void GraphEditor::paint(juce::Graphics& g) {
-    // GraphEditor itself can draw a background or overlay if needed
-    // But content handles it now.
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        lf->fillThemedBackground(g, getLocalBounds().toFloat(), /*isCanvas*/ false);
+    else
+        g.fillAll(juce::Colours::darkgrey);
 }
 
 // Draws the empty-canvas onboarding hint centred in the visible, untransformed viewport,
@@ -241,7 +247,7 @@ void GraphEditor::paintOverChildren(juce::Graphics& g) {
     // Drawn here (OUTER, untransformed GraphEditor local coordinates) so it is ALWAYS
     // centred in the visible viewport regardless of pan/zoom on the inner canvas.
     // The inner GraphContentComponent runs in a transformed (pan+zoom) space over a
-    // ~10000x10000 virtual canvas — any rect drawn there would land off-screen once the
+    // virtual canvas (the canvas frame plus slack) — any rect drawn there would land off-screen once the
     // user pans or zooms. Drawing here, in getLocalBounds(), guarantees centre alignment.
     //
     // Gate: only when canvas is empty. Show/hide is driven by the existing updateComponents()
@@ -359,7 +365,7 @@ void GraphEditor::updateTransform() {
     t = t.scaled(zoomLevel, zoomLevel);
     t = t.translated(panOffset);
 
-    content.setBounds(0, 0, 10000, 10000);
+    applyContentBounds();
     content.setTransform(t);
     // A zoomed-out macro port's interior jack slides onto its boundary jack (getPortCenter reads the zoom), so the
     // memoized cable endpoints go stale with the zoom itself; the strips/widgets repaint live.
@@ -877,7 +883,8 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
         // transform, so a raw e.getPosition() delta would make the macro drift at any zoom other
         // than 1.0 (a delta of N screen pixels is N/zoom canvas pixels).
         auto canvasPos = content.getLocalPoint(this, e.getPosition()).roundToInt();
-        dragSelectionBy(canvasPos - macroChipDragStartCanvasPos, nullptr);
+        dragSelectionBy(clampDragDeltaToCanvas(canvasPos - macroChipDragStartCanvasPos), nullptr);
+        refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); // the frame steps out ahead of the hull
         repaintCanvas();
         return;
     }

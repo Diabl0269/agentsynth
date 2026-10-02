@@ -132,8 +132,13 @@ TEST(LayoutUtilTest, FindFreeSlotResolvesDenseCluster) {
     // Result must be within canvas bounds
     EXPECT_GE(result.x, 0);
     EXPECT_GE(result.y, 0);
-    EXPECT_LE(result.x, kCanvasMax - w);
-    EXPECT_LE(result.y, kCanvasMax - h);
+}
+
+TEST(LayoutUtilTest, FindFreeSlotFarRightIsNotClamped) {
+    using namespace synth::LayoutUtil;
+    const auto result = findFreeSlot({20000, 400}, 200, 150, {}, juce::AudioProcessorGraph::NodeID{1});
+    EXPECT_EQ(result.x, 20000);
+    EXPECT_EQ(result.y, 400);
 }
 
 // ============================================================================

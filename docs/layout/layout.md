@@ -22,7 +22,7 @@ This folder holds the rest of the editor's presentation layer:
 
 ## The soft grid
 
-Modules are free-form — placeable anywhere on the 10000x10000 canvas — but two rules are always
+Modules are free-form — placeable anywhere on the canvas (right and down without limit; the origin is the wall) — but two rules are always
 enforced:
 
 1. **Snap on drag-release.** A module's top-left corner rounds to the nearest `kGridSize` (8 px)
@@ -43,12 +43,38 @@ equals the grid size, so an anti-overlap placement is grid-aligned by constructi
 ## Canvas coordinates
 
 All layout and collision logic runs in **canvas coordinates** — the `content` child component,
-bounded `0, 0, 10000, 10000`. The zoom/pan transform lives on `content.setTransform(...)` and is
+sized to the [canvas frame](#canvas-frame) plus slack. The zoom/pan transform lives on `content.setTransform(...)` and is
 invisible to `LayoutUtil`. Never pass screen-space coordinates into a layout function.
 
 Module positions persist on the JUCE audio-graph node's property bag as integer `"x"` and `"y"`
 keys. `GraphEditor::updateComponents()` reconciles those back to `setTopLeftPosition(x, y)` after
 every state change (preset load, undo/redo, auto-arrange).
+
+## Canvas frame
+
+The patch canvas is a visible frame (`CanvasFrame`, `Source/UI/Graph/CanvasFrame/`), not a fixed-size area. Outside it
+is the theme `bg0`; inside is `bg1` with the dot grid, a 10 px rounded corner and a 1 screen px `border` outline.
+
+- **Size.** Starts at 1800 x 1100 and is never smaller. It keeps 400 px past the outermost card (loose modules,
+  collapsed macro cards, open macro hulls, the output dock), rounded up to 400 px steps.
+- **Right and down only.** The origin (0,0) is the wall: a JUCE child at a negative position is unpainted and
+  unclickable. `findFreeSlot` clamps x,y >= 0 only.
+- **Past the left/top edge, the patch slides.** A drag that would push its cards past the origin is held there
+  (`CanvasEdgeDrag`, armed in `beginSelectionDrag`, applied by `clampDragDeltaToCanvas` in the module card, macro card
+  and hull chip drags), and it remembers how far the pointer went past. On drop, `slidePatchForEdgeDrop` moves every
+  other top-level unit right/down by that overshoot (rounded up to the grid) inside the drop's own undo record, so the
+  dragged cards end up where the pointer left them relative to everything else. The view pans by the same amount and
+  the frame's animated rect shifts with it, so nothing jumps on screen: the frame glides out to the left/top. A drag
+  that moves only part of a macro (one member out of an open hull) is not held; that hull's edge stays
+  `nudgeHullIntoCanvas`'s job. A single-card drop now records graph and macros together, since the slide moves
+  collapsed macro cards.
+- **Grows live, shrinks on drop.** Every drag event (module card, macro card, hull chip) and the 30 Hz tick only grow the target (`Mode::GrowOnly`), so a card dragged out
+  and back does not pulse the frame. Every drop and every `updateComponents()` (add, delete, undo, redo, load)
+  re-fits it both ways (`Mode::Animate`).
+- **Animated.** Every size change glides (220 ms, `easeOutCubic`, retargeting from the current rect). A project
+  open snaps with no glide (`detachAllModuleComponents` arms it).
+- **Content.** The `content` component is the frame TARGET (not the animated size) plus 2000 px of slack, so a fast
+  drag never clips a card.
 
 ## Anti-overlap search
 
@@ -286,7 +312,6 @@ inline constexpr int kGridSize       = 8;    // snap quantum
 inline constexpr int kCollisionGap   = 12;   // minimum clear gap between bounding boxes (px)
 inline constexpr int kSpiralStep     = 8;    // spiral ring step — equals kGridSize
 inline constexpr int kSpiralMaxRings = 256;  // hard cap: 256*8 = 2048 px search radius
-inline constexpr int kCanvasMax      = 10000;
 inline constexpr int kLayerGapX      = 80;
 inline constexpr int kIntraLayerGapY = 40;
 inline constexpr int kArrangeOriginX = 40;
@@ -371,8 +396,8 @@ During any module drag — moving an existing module, or dragging one in from th
 two cues are drawn over the canvas so placement is predictable.
 
 **Grid dots.** Subtle dots at 40 px spacing (5 x `kGridSize`), drawn in the `textPrimary` theme
-colour at about 8% alpha. Dots are computed only over the canvas's *visible* clip region, never all
-10000 x 10000 px, so the cost is negligible at low zoom.
+colour at about 8% alpha. Dots are computed only over the canvas's *visible* clip region, never the
+whole canvas, so the cost is negligible at low zoom.
 
 **Landing ghost.** A translucent rounded rectangle tracks the exact position the module will land —
 the result of `resolvePlacement()`, which snaps to the grid *and* runs the anti-overlap spiral in

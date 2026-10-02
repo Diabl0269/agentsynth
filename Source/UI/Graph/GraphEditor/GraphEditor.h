@@ -7,6 +7,8 @@
 #include "PatchDocument.h"
 #include "UI/Graph/CableColour.h"
 #include "UI/Graph/CableRetractAnimator/CableRetractAnimator.h"
+#include "UI/Graph/CanvasFrame/CanvasEdgeDrag.h"
+#include "UI/Graph/CanvasFrame/CanvasFrame.h"
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphCanvasHost.h"
 #include "UI/Graph/GraphDragDropController/GraphDragDropController.h"
@@ -205,6 +207,8 @@ public:
     /** Discards the recorded drag origins without re-resolving any position. */
     void cancelSelectionDrag();
     bool isSelectionDragActive() const override { return selectionDragActive; }
+    /** A live drag delta with the dragged cards held at the canvas origin (GraphEditorCanvasFrame.cpp). */
+    juce::Point<int> clampDragDeltaToCanvas(juce::Point<int> rawDelta) { return edgeDrag_.clampDelta(rawDelta); }
 
     bool isMacroChipDragActive() const { return macroChipDragId.isNotEmpty(); } // test accessor
     void cancelLiveDragGestures();
@@ -652,6 +656,12 @@ public:
     void advanceCableRetractForTest(float t);
     void finishCableRetractForTest();
 
+    /** The visible canvas frame rect (canvas coordinates, animated) and its retarget hook (GraphEditorCanvasFrame.cpp).
+     */
+    juce::Rectangle<float> getCanvasFrameRect() const { return canvasFrame_.current(); }
+    void refreshCanvasFrame(CanvasFrame::Mode mode);
+    CanvasFrame& getCanvasFrameForTest() noexcept { return canvasFrame_; }
+
     /** The glide that slides cards between positions; AppUndoManager opens a Scope on it around undo/redo. */
     CardGlideAnimator& getCardGlide() noexcept { return cardGlide_; }
 
@@ -831,6 +841,8 @@ private:
     // ---- Animation members ----
     // Drop-landing tween; both must be members so they outlive the VBlank frame callbacks.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
+    CanvasFrame canvasFrame_{vblankUpdater}; // growing patch frame (CanvasFrame.h)
+    CanvasEdgeDrag edgeDrag_;                // a drag held at the canvas origin (CanvasEdgeDrag.h)
     synth::ui::AnimationDriver dropLandingAnim;
 
     // Mod-matrix panel ease; modMatrixTargetBounds is the final position set on complete.
@@ -870,6 +882,10 @@ private:
     void updateTransform();
     void applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor);
     void configureCardGlide();
+    void configureCanvasFrame();
+    void applyContentBounds();
+    void beginCanvasEdgeDrag();
+    void slidePatchForEdgeDrop();
     void animateDropLanding(ModuleComponent* module, juce::Point<int> fromPos, juce::Point<int> toPos);
 
     // Arms macroCrossingAnim_ from a pre-splice cable snapshot the caller takes (see its definition).

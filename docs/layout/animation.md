@@ -381,6 +381,7 @@ strings.
 | Feature | Animation | Owner |
 |---|---|---|
 | **Module drop landing** | Eased tween from drop position to the snapped, anti-overlapped final position (`easeOutBack`); `computeDropFinalPosition` is a pure helper | `GraphEditor` |
+| **Canvas frame resize** | The patch frame grows/shrinks right and down to keep 400 px past the outermost card (220 ms, `easeOutCubic`, time-bounded, retargets from the current rect); project open snaps. See [Canvas frame](layout.md#canvas-frame) | `GraphEditor` via `CanvasFrame` |
 | **Mod-matrix show/hide** | Open-fraction tween, `easeInOutCubic` | `GraphEditor` |
 | **Library sidebar show/hide** | `PanelSlide` fraction tween (190 ms, `easeInOutCubic`), shared driver | `MainComponent` |
 | **Library section collapse/expand** | Band-height fold (150 ms), `easeInOutCubic` | `ModuleLibraryComponent` |
