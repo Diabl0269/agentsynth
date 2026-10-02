@@ -233,6 +233,7 @@ set(APPUI_SOURCES
     Source/UI/Layout/ReorderDrag/ReorderLiftLook.h
     Source/UI/Layout/DragCursor.h
     Source/UI/Layout/FocusRing.h
+    Source/UI/Layout/FocusRing.cpp
     Source/UI/Layout/TooltipHelpHandler.h
     Source/UI/Layout/NonModalLabel.cpp
     Source/UI/Layout/NonModalLabel.h

@@ -12,6 +12,7 @@
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <gtest/gtest.h>
 
 namespace {

@@ -3,6 +3,7 @@
 // that column drag-to-reorder still works inside the scrolling group. Drives a real off-screen
 // MainComponent with hand-built mouse events.
 #include "MixerZonesTestRig.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <gtest/gtest.h>
 
 namespace {

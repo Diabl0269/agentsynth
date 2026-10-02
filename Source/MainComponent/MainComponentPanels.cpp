@@ -8,6 +8,7 @@
 #include "MidiRemote/MidiRemotePreferences.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "WhatsNewData.h"
 #include <algorithm>
 

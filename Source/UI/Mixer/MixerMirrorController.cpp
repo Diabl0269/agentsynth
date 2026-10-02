@@ -3,6 +3,8 @@
 // directly (there is no dock slot to reparent it out of -- see the class comment).
 #include "MixerMirrorController.h"
 
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+
 namespace synth::ui {
 
 MixerMirrorController::MixerMirrorController(juce::ApplicationProperties& appProperties, ConfigureFn configure)
@@ -17,6 +19,36 @@ MixerMirrorController::MixerMirrorController(juce::ApplicationProperties& appPro
 }
 
 MixerMirrorController::~MixerMirrorController() = default;
+
+void MixerMirrorController::unbindIfOpen() {
+    if (mirror_)
+        mirror_->unbindAllColumns();
+}
+
+void MixerMirrorController::rebuildIfUnboundIfOpen() {
+    if (mirror_)
+        mirror_->rebuildIfUnbound();
+}
+
+void MixerMirrorController::rebuildIfOpen() {
+    if (mirror_)
+        mirror_->rebuild();
+}
+
+void MixerMirrorController::refreshTrackColoursIfOpen() {
+    if (mirror_)
+        mirror_->refreshTrackColours();
+}
+
+void MixerMirrorController::refreshMetersIfOpen() {
+    if (mirror_)
+        mirror_->refreshMeters();
+}
+
+void MixerMirrorController::refreshLiveVisualsIfOpen() {
+    if (mirror_)
+        mirror_->refreshLiveMixerVisuals();
+}
 
 void MixerMirrorController::open(MixerPanelComponent& sourcePanel, synth::theme::AppLookAndFeel* lookAndFeel,
                                  ShortcutManager* shortcutManager,

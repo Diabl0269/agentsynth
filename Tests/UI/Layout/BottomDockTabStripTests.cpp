@@ -5,6 +5,7 @@
 #include "BottomDockActiveTabResetGuard.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Layout/BottomDockComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <gtest/gtest.h>
 #include <memory>
 #include <optional>

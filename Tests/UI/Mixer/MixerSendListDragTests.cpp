@@ -22,6 +22,7 @@
 #include "Modules/ChannelStripModule.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <gtest/gtest.h>
 
 namespace {

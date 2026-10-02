@@ -15,6 +15,7 @@
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

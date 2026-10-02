@@ -94,6 +94,29 @@ look momentarily misleading during that window.
 - **`JUCE_WEB_BROWSER=0`** — drops the unused `WebBrowserComponent` and removes the WebKit/libsoup
   dependencies on Linux.
 - **A separate lint job** — instant formatting feedback without waiting for a full build.
+- **Narrow reach for often-edited headers** — an edit to a header recompiles every file that
+  includes it, directly or through another header, on every platform. Headers that are edited
+  almost daily stay out of other headers. The shortcut table and command mapping live in `.cpp`
+  files. `BottomDockComponent.h` forward-declares `MixerPanelComponent` and
+  `TimelinePanelComponent` and holds the mixer through a `unique_ptr`;
+  `MixerMirrorController.h` forward-declares `MixerPanelComponent` too.
+  `FocusRing.h` keeps its body (and its `AppLookAndFeel.h` include) in `FocusRing.cpp`. A file
+  that needs the full class includes it itself. To measure a header, run
+  `touch <header> && ninja | grep -c 'Building CXX'` in a built Ninja tree (`ninja -n` does not
+  work here). To find out which headers spread it, run `ninja -t deps`.
+
+  | Header | Files recompiled before | After |
+  |---|---|---|
+  | `MixerPanelComponent.h` | 160 | 56 |
+  | `AppLookAndFeel.h` | 633 | 562 |
+
+  Not cut, because each needs a class split rather than an include move:
+  - `GraphEditor.h` (348): about 190 `.cpp` files and 130 test files include it directly. The
+    largest spreader, `PreferencesSettingsTab.h`, adds only 20 because it uses nested enums.
+  - `MainComponent.h` (146): every includer includes it directly.
+  - `AppLookAndFeel.h`'s remaining 562: `FocusRegion.h`, `MainComponent.h` and the module view
+    headers use the theme for real. Forward-declaring it in the headers that hold only a pointer
+    would save 27 more.
 - **`coverage.sh --report-only`** — in CI, skips redundant configure/build/test steps and only merges
   profdata and generates the report.
 - **Precompiled JUCE headers on all three build jobs** (`-DAGENTSYNTH_PCH=ON`,

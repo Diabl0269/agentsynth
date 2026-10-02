@@ -4,6 +4,7 @@
 // Drives a real off-screen MainComponent, so every edit goes through the real undo and rebuild path.
 #include "MixerZonesTestRig.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelToolbar.h"
 #include <gtest/gtest.h>
 

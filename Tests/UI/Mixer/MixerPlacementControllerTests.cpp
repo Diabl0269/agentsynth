@@ -6,6 +6,7 @@
 // uses for "bottomDockActiveTab".
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
 

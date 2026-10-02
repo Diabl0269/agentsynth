@@ -5,6 +5,7 @@
 #include "MixerOwnPanelTestFixture.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/PanelResizeHandle.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 
 namespace {
 using Handle = synth::ui::PanelResizeHandle;

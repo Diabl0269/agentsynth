@@ -2,13 +2,17 @@
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
-#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
-#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 
+namespace synth::theme {
+class AppLookAndFeel;
+}
+
 namespace synth::ui {
+
+class MixerPanelComponent;
 
 // MixerMirrorController.h (docs/mixer/panel.md#placement-and-detachable-windows): owns
 // the OPTIONAL second live Mixer view the "detachedPanelBothPlaces" preference adds. Unlike a
@@ -73,34 +77,16 @@ public:
      *  mirror_ is never left holding a stale binding across a close() (rebuild()/unbindAllColumns()
      *  only mutate stripColumns_, which the next open() rebuilds from scratch anyway via rebuild()
      *  below). */
-    void unbindIfOpen() {
-        if (mirror_)
-            mirror_->unbindAllColumns();
-    }
-    void rebuildIfUnboundIfOpen() {
-        if (mirror_)
-            mirror_->rebuildIfUnbound();
-    }
+    void unbindIfOpen();
+    void rebuildIfUnboundIfOpen();
     /** BottomDockComponent::rebuildMixer()'s own extension point -- called unconditionally from
      *  there (mirror_ may not exist yet; the null check makes that free). */
-    void rebuildIfOpen() {
-        if (mirror_)
-            mirror_->rebuild();
-    }
-    void refreshTrackColoursIfOpen() {
-        if (mirror_)
-            mirror_->refreshTrackColours();
-    }
-    void refreshMetersIfOpen() {
-        if (mirror_)
-            mirror_->refreshMeters();
-    }
+    void rebuildIfOpen();
+    void refreshTrackColoursIfOpen();
+    void refreshMetersIfOpen();
     /** The cheap per-strip refresh (no rebuild) BottomDockComponent's own mixer_'s
      *  onLiveMixerStateChanged drives this with -- see the class comment. */
-    void refreshLiveVisualsIfOpen() {
-        if (mirror_)
-            mirror_->refreshLiveMixerVisuals();
-    }
+    void refreshLiveVisualsIfOpen();
     /** BottomDockComponent's own theme re-skin pass -- mirrors DetachablePanelHost::refreshDetachedWindowTheme(). */
     void refreshThemeIfOpen() {
         if (window_ != nullptr)

@@ -15,6 +15,7 @@
 // bottomDock.getMixerPanel().grabKeyboardFocus() call that documents the panel-visibility gate wins
 // regardless of whether that grab actually lands anywhere in this environment.
 #include "FocusArbitrationTestFixture.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 
 // ============================================================================
 // 1. resolveEditSurface() -- Mixer joins the override round trip, and the dock's own open/active

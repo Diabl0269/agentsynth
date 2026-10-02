@@ -12,6 +12,7 @@
 #include "ProjectBundle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MeterColourStops.h"
+#include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include <cmath>
 
 namespace {
