@@ -272,6 +272,7 @@ TEST(TimelinePanelCursorGlide, CmdRightIsConsumedAndATapNudgesTheSharedState) {
     panel.setSize(1200, 320);
     panel.setTransport(&transport);
     panel.setTransportNudgeState(&nudge);
+    panel.setGlideClockForTest([] { return 1000.0; }); // frozen: press and release are one tap apart
 
     const juce::KeyPress cmdRight(juce::KeyPress::rightKey, juce::ModifierKeys::commandModifier, 0);
     EXPECT_TRUE(panel.keyPressed(cmdRight));

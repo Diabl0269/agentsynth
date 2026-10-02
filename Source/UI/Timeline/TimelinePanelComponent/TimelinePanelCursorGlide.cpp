@@ -7,13 +7,31 @@
 #include "TimelinePanelComponent.h"
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Timeline/CursorGlide/PhysicalKeyState.h"
 
 namespace synth::ui {
 
 namespace {
-// Whether the glide key and every modifier it was pressed with are physically down right now.
+std::optional<ArrowKey> arrowOf(int keyCode) {
+    if (keyCode == juce::KeyPress::leftKey)
+        return ArrowKey::Left;
+    if (keyCode == juce::KeyPress::rightKey)
+        return ArrowKey::Right;
+    if (keyCode == juce::KeyPress::upKey)
+        return ArrowKey::Up;
+    if (keyCode == juce::KeyPress::downKey)
+        return ArrowKey::Down;
+    return std::nullopt;
+}
+
+// Whether the glide key and every modifier it was pressed with are physically down right now. An
+// arrow asks the OS (PhysicalKeyState.cpp: JUCE's own key state drops a Cmd chord at once on macOS);
+// any other rebound key, and every key off the Mac, uses JUCE's.
 bool keyAndModifiersDown(const juce::KeyPress& key) {
-    if (!juce::KeyPress::isKeyCurrentlyDown(key.getKeyCode()))
+    std::optional<bool> physical;
+    if (const auto arrow = arrowOf(key.getKeyCode()))
+        physical = physicalArrowKeyDown(*arrow);
+    if (!physical.value_or(juce::KeyPress::isKeyCurrentlyDown(key.getKeyCode())))
         return false;
     const int wanted = key.getModifiers().getRawFlags() & juce::ModifierKeys::allKeyboardModifiers;
     const int current = juce::ModifierKeys::currentModifiers.getRawFlags() & juce::ModifierKeys::allKeyboardModifiers;
@@ -59,7 +77,9 @@ void TimelinePanelComponent::pageViewToShowBeat(double beat) {
 
 TimelineCursorGlide::Host TimelinePanelComponent::makeCursorGlideHost() {
     TimelineCursorGlide::Host host;
-    host.nowMs = [] { return juce::Time::getMillisecondCounterHiRes(); };
+    host.nowMs = [this] {
+        return glideClockForTest_ ? glideClockForTest_() : juce::Time::getMillisecondCounterHiRes();
+    };
     host.cursorBeat = [this] {
         return transport_ == nullptr ? 0.0
                                      : synth::effectiveCursorBeat(*nudge_, transport_->getPositionSnapshot(),

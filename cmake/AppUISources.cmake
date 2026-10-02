@@ -84,6 +84,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TrackChannelLinkSurface.h
     Source/UI/Timeline/CursorGlide/TimelineCursorGlide.h
     Source/UI/Timeline/CursorGlide/TimelineCursorGlide.cpp
+    Source/UI/Timeline/CursorGlide/PhysicalKeyState.h
+    Source/UI/Timeline/CursorGlide/PhysicalKeyState.cpp
     Source/UI/Timeline/TrackChannelLinkController.h
     Source/UI/Timeline/TrackChannelLinkController.cpp
     Source/UI/Timeline/TimelineTransportBar.h

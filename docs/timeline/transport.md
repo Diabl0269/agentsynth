@@ -220,8 +220,12 @@ and `timelineGlideForward`, resolved by `TimelinePanelComponent::keyPressed` lik
   off it stops where it is.
 - **Key repeat** from the OS is swallowed: only the first key-down starts the ramp.
 - **Key up** is seen through `keyStateChanged` and `modifierKeysChanged` on the panel, and every frame also
-  checks `KeyPress::isKeyCurrentlyDown` plus the modifiers, so a release that never reaches the panel (focus
-  moved mid-hold) still ends the glide. Releasing Cmd first ends it too.
+  checks whether the key and its modifiers are still down, so a release that never reaches the panel (focus
+  moved mid-hold) still ends the glide. Releasing Cmd first ends it too. On macOS an arrow key's state comes
+  from the window server (`physicalArrowKeyDown`, `Source/UI/Timeline/CursorGlide/PhysicalKeyState.cpp`), not
+  `KeyPress::isKeyCurrentlyDown`: Cocoa drops the key-up of a Command chord, so JUCE fakes one straight after
+  the key-down and would end every Cmd+arrow hold as a tap. Other keys, and every key off the Mac, use JUCE's
+  state.
 - **Frames.** `TimelineCursorGlide` (`Source/UI/Timeline/CursorGlide/`) runs a `ReorderFramePump` (the shared
   VBlank `AnimationDriver`) while a key is held, and another for the settle. No free-running timer; nothing
   runs when idle. The settle lands at once when the panel is not on screen.

@@ -279,6 +279,7 @@ public:
         nudge_ = state != nullptr ? state : &ownNudge_;
     }
     synth::ui::TimelineCursorGlide& getCursorGlide() noexcept { return cursorGlide_; }
+    void setGlideClockForTest(std::function<double()> nowMs) { glideClockForTest_ = std::move(nowMs); }
 
     // Trackpad pinch: plain = horizontal zoom, Shift = vertical (row height) zoom.
     void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override;
@@ -749,7 +750,8 @@ private:
     synth::ui::TimelineCursorGlide::Host makeCursorGlideHost();
     synth::TransportNudgeState ownNudge_;
     synth::TransportNudgeState* nudge_ = &ownNudge_;
-    double lastOutputLatencySeconds_ = 0.0; // as last handed to updateFromTransport
+    double lastOutputLatencySeconds_ = 0.0;     // as last handed to updateFromTransport
+    std::function<double()> glideClockForTest_; // declared before cursorGlide_, whose host reads it
     synth::ui::TimelineCursorGlide cursorGlide_{*this, makeCursorGlideHost()};
 
     // NOTE AUDITION — the track the currently-sounding preview note was sent TO. Invalid means
