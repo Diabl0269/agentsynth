@@ -461,6 +461,8 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
         return;
     }
 
+    const auto cablesBefore = snapshotCablesForRetract();
+
     // Expand audio/poly fans via resolvePolyLink so a collapsed stereo (or poly voice) cable that
     // only drew its head edge still removes every raw channel the user-visible wire owns.
     auto removeEdges = [this, &graph, srcId, dstId, cable] {
@@ -514,6 +516,7 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
 
     hoveredCableId.reset();
     repaintCanvas();
+    retractCablesGoneSince(cablesBefore);
 }
 
 void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
@@ -635,6 +638,10 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             g.drawText(badge, pill, juce::Justification::centred, false);
         }
     }
+    // Removed cables pulling back into their source jack and fading (CableRetractAnimator.h).
+    for (const auto& ghost : editor.cableRetract_.ghosts())
+        strokeWire(ghost.p1, ghost.p2, editor.colourForCable(ghost).withMultipliedAlpha(editor.cableRetract_.opacity()),
+                   ghost.kind != GraphEditor::VisibleCable::Kind::Direct, 0.0f, 2.0f, false);
     // ---- End cables ----
 
     // ---- Expanded-macro grouping hull (see paintExpandedMacroHulls
@@ -653,12 +660,8 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             }
 
             auto posInContent = editor.dragSourceModule->getBounds().getPosition() + p;
-            auto mouseInContent = getLocalPoint(&(editor), editor.dragCurrentPos);
-
-            // Since 'content' is transformed, we need to handle coordinates
-            // carefully. But if this 'paint' is called on content, and we use
-            // getLocalPoint(editor, ...) it should be transformed back. Actually,
-            // easier: editor.dragCurrentPos is screen pos.
+            // dragCurrentPos is a screen position; the content component is transformed, so map it from the
+            // screen rather than from the editor.
             auto mouseLocal = getLocalPoint(nullptr, editor.dragCurrentPos);
 
             // In-progress drag wire: resolved through the same colour path as a real cable, so

@@ -72,7 +72,17 @@ tween a Cmd-drag that crosses a macro's hull can arm on finalize (see
 [`docs/macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41`](../macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41)).
 It lives at the memo-wrapper level, not inside `rebuildVisibleCables()`, purely so the tween can
 overwrite a matched cable's endpoints without teaching that enumeration anything about macros; while
-no tween is live it is a no-op and the memo's own live-graph anchors show through unchanged.
+no tween is live it is a no-op and the memo's own live-graph anchors show through unchanged. It offsets
+each matched endpoint from its LIVE anchor, so a slide started mid-drag stays attached to the moving card.
+
+### Retracting removed cables
+
+A cable that goes away does not vanish: it retracts into its source jack and fades over 180 ms (linear
+progress, `easeInCubic` pull). `CableRetractAnimator` (`Source/UI/Graph/CableRetractAnimator/`) is pure
+state, armed by `GraphEditor::retractCablesGoneSince(before)` from `disconnectCable`, `disconnectPort`,
+`removeModulator` and `AppUndoManager::undo()`/`redo()`, so Cmd+Z taking a cable away animates too. The
+ghosts paint in `GraphContentComponent::paint` after the live cables. Project load and New do not go
+through undo/redo and do not animate.
 
 ## Knob landing
 

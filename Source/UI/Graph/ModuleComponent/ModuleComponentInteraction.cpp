@@ -309,7 +309,6 @@ void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIs
         auto it = gestureStartValues.find(parameterIndex);
         if (it != gestureStartValues.end()) {
             // Capture after snapshot and push as undo action
-            auto* graphEditor = &owner;
             undoManager->pushSnapshotFromCapture(owner.getAudioEngine().getGraph());
             gestureStartValues.erase(it);
         }

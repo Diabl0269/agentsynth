@@ -330,6 +330,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorMacroCards.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroHullStrips.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroHullGlide.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorCableRetract.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroCableAnchors.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.h
@@ -337,6 +338,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.h
     Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.cpp
     Source/UI/Graph/MacroHullGlide/MacroHullGlide.h
+    Source/UI/Graph/CableRetractAnimator/CableRetractAnimator.h
+    Source/UI/Graph/CableRetractAnimator/CableRetractAnimator.cpp
     Source/UI/Graph/MacroHullGlide/MacroHullGlide.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupController.h
     Source/UI/Graph/MacroGroupController/MacroGroupControllerDisplacement.cpp

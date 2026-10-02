@@ -452,11 +452,6 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
         // still tell MidiLearnController which uuid its assignments used to target. Empty is a
         // normal case (a node MIDI Remote never touched) -- retargetNode() below is a no-op then.
         const juce::String oldNodeUuid = oldNode->properties["uuid"].toString();
-        auto* oldProc = oldNode->getProcessor();
-        int oldNumInputs = oldProc->getTotalNumInputChannels();
-        int oldNumOutputs = oldProc->getTotalNumOutputChannels();
-        bool oldAcceptsMidi = oldProc->acceptsMidi();
-        bool oldProducesMidi = oldProc->producesMidi();
 
         // 3. Get new module capabilities before addNode moves it
         int newNumInputs = newProcessor->getTotalNumInputChannels();
@@ -641,6 +636,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
 
     if (nodeId.uid == 0)
         return;
+    const auto cablesBefore = snapshotCablesForRetract();
 
     // A visible jack can front an N-voice fan (and Poly MIDI's single jack fronts two), so gather every
     // raw channel it owns — otherwise "Disconnect" would leave 7 of 8 voices still wired.
@@ -740,6 +736,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
         doDisconnect();
     }
     repaint();
+    retractCablesGoneSince(cablesBefore);
 }
 
 // True when the visible jack already has at least one graph edge or mod routing.

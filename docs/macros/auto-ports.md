@@ -332,8 +332,14 @@ identically to before. See
 `GraphEditor::autoDeleteOrphanedMacroPort`. When a mutation drops a connection touching a macro port
 node down to **zero** remaining connections, the port is spliced out (`spliceOutMacroPort`, the same
 helper ungroup and direct deletion share) and the macro is dissolved too if that was its last member.
-A port with one of its two legs still wired — or one of several fan-in or fan-out connections still
-wired — survives; only reaching zero triggers the splice.
+A plain port with one of several fan-in or fan-out connections still wired survives.
+
+**A cut that leaves a port with nothing on its OUTER side takes the port with it**
+(`GraphEditor::pruneMacroPortsAfterCut`, run by `disconnectCable` and `disconnectPort`): an inlet nothing
+feeds, or an outlet feeding nothing, is removed together with its inside leg, even though that leg is
+still wired. If a modulation hangs off the port (port to attenuverter to knob), the modulation is removed
+too, whatever the auto-delete preference says. A plain one-sided port follows the auto-delete preference.
+A port wired outside but not yet inside stays, waiting to be patched.
 
 **Hooked at explicit user-gesture call sites, each checked BEFORE mutating so the right undo
 transaction is chosen up front:**
@@ -341,9 +347,11 @@ transaction is chosen up front:**
 - `GraphEditor::disconnectCable` — upgraded from its graph-only `recordStructuralChange` to
   `recordGraphAndMacroChange` ONLY when at least one of the cable's two logical endpoints
   (`cable.id.srcUid`/`dstUid` — the REAL endpoints even for an `AttenuverterChain` cable, never the
-  hidden attenuverter itself) resolves to a macro port. An ordinary cable's removal is unchanged.
+  hidden attenuverter itself) resolves to a macro port. An ordinary cable's removal is unchanged. A far-end macro port counts
+  regardless of the auto-delete preference, since the cut can prune it (above).
 - `GraphEditor::disconnectPort` — the same treatment, upgraded only when the clicked jack's own node,
-  or the far end of any connection about to be removed, resolves to a macro port.
+  or the far end of any connection about to be removed, resolves to a macro port (the far end counting
+  regardless of the auto-delete preference).
 - `deleteSelection`, `deleteModule` and `requestDeleteModule` — deleting an ORDINARY member can
   strand a *different* port cableless (the member was that port's only remaining connection), which
   neither call site above can catch, since neither the port nor its cable is directly involved in the

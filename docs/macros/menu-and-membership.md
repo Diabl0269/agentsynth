@@ -144,6 +144,12 @@ one shot. Three members, each scoped to exactly one direction of one operation, 
   BOTH halves from the start. Audio still reached its destination either way (the stranded port
   was a live pass-through), so this was graph clutter and a misleading picture, not broken sound.
 
+  A modulation chain (LFO to attenuverter to knob) re-routes through macro ports on every drag in or out,
+  not just the first: in `MacroGroupControllerPortSplice.cpp` a hidden attenuverter stands for the module on
+  its other channel-0 edge (`throughAttenuverter`) in `macroPortsThatBecomeInteriorOnAdd`,
+  `macroPortsThatBecomeObsoleteOnRemove` and the edge filters of both crossing-plan builders. A modulation
+  re-routed by a drag out takes the grouping shape LFO to attenuverter to inlet to knob.
+
 `buildMacroPortCrossingPlan`'s own `memberUids.size() < 2` early return was removed: the incremental
 callers legitimately need a crossing plan for a one-member "inside" set — removing one of a macro's
 two ordinary members leaves exactly one remaining member whose newly external cable still needs a port
@@ -255,8 +261,9 @@ drag mid-gesture) `GraphEditor::beginMacroDragFreeze`
 snapshots the live hull, dragged card included, of the member's own macro and every ancestor into
 `MacroGroupController` (`freezeHullsForDrag`); `clearMacroDragCandidate` drops it. While it is held,
 `macroDragJoinOrLeaveTarget` tests the LEAVE against the frozen border (falling back to
-`macroHullBoundsExcluding` when no drag holds one, e.g. a plain query). Membership still changes only
-on drop.
+`macroHullBoundsExcluding` when no drag holds one, e.g. a plain query). Membership changes
+[live, the moment the centre crosses](#live-membership-during-the-drag), and the macro just joined is frozen
+again so the module stays a member until its centre leaves that border.
 
 `GraphEditor::paintedMacroHullBounds(macroId)` is the one painted border: the frozen rect for the
 member's own macro and ancestors while `macroDragLeaveId_` is empty (staying), `macroHullBoundsExcluding`
@@ -265,18 +272,52 @@ including one the drag might JOIN (its hull holds none of the dragged module). T
 input/output strips and their '+'/'-' footers (`paintMacroPortStrips`) and, through
 `MacroGroupController::setPaintedHullProvider`, the name chip, the collapse button and the hull hit tests
 (`macroHullAt`, `macroHullPortButtonAt`) all read it, so none of them stretches to the dragged card. Port
-widgets are laid out from the live hull and are not re-docked per tick, so while a LEAVE is armed they stay
-where they were on the old border.
+widgets follow the painted border: while it glides (see [Macro borders glide](#macro-borders-glide)) the
+glide driver re-docks them every frame.
 
 **The Windows and Linux arbitration happens at `mouseUp`, and only decides WHICH of the two gestures
 a reparent-armed drag ends up as, never WHETHER one can fire** — that is `reparentArmed`'s job,
-decided at press. If the last candidate `mouseDrag` computed is non-empty, `mouseUp` reparents;
+decided at press. A crossing already applied live is not applied again. If the last candidate `mouseDrag`
+computed is non-empty (a group drag, or a leave that would dissolve the macro, which wait for the drop),
+or the module already moved live, `mouseUp` reparents;
 otherwise it falls through to the plain finalize path, which carries Ctrl's own insert-between
 behaviour (`SmartConnectionEngine` samples `isInsertModifierDown()` live, from inside
 `finalizeModuleDrag`). Because Windows and Linux cannot express "Ctrl but not Cmd" at all, a
 Ctrl-drag there that crosses a cable AND a hull in the same gesture performs BOTH. That is a genuine
 platform limitation, not a bug — there is no way to offer the two gestures as separately addressable
 without a second, unrelated modifier.
+
+### Live membership during the drag
+
+**The module joins or leaves the moment its centre crosses the border, not on release.** When
+`updateMacroDragCandidate` finds a crossing, `canApplyMembershipLive` / `applyMembershipLive`
+(`GraphEditorDragDrop.cpp`) run the same incremental add and remove as the drop path, so the cables
+re-route through (or away from) the macro's ports during the drag and nothing moves on release. The
+macro just joined is re-frozen (its border held where it is), so the module stays a member until its
+centre leaves that border — the same hysteresis as the press-time freeze. Two cases still wait for the
+drop: a group (multi-selection) drag, and a leave when the module is the macro's last ordinary member
+(leaving would dissolve the macro). Crossing back and forth any number of times is still ONE undo step
+back to the press state: the drag keeps the macros as they were at press (`macrosBeforeLiveDrag_`) and
+passes them as `macrosBeforeOverride` to `AppUndoManager::recordGraphAndMacroChange`, next to the
+mousedown graph capture described below.
+
+Other live-drag rules: `hasMacroDragCandidate()` is also true while the module sits somewhere other
+than at press, and `getMacroDragLiveOwnerId()` names the macro it was moved into, whose hull stays
+emphasised until the drop. If the drag stops being a reparent drag mid-gesture (Cmd released with the
+drag-without-Cmd preference off), `revertLiveMembership` puts the crossing back. A drag cancelled before
+the drop still records its change (`recordUnfinishedLiveMembershipChange`). On drop, the joined macro
+makes room for its neighbours at the module's final spot (`makeRoomFor`), and the module flashes only if
+no crossing slide is still running.
+
+### Macro borders glide
+
+A macro's border glides to its new bounds instead of snapping (220 ms, `easeOutCubic`). `MacroHullGlide`
+(`Source/UI/Graph/MacroHullGlide/`) is pure state; `GraphEditor::paintedMacroHullBounds` applies it on top
+of `macroHullTargetBounds` (the former body of `paintedMacroHullBounds`), so the dashed outline, the port
+strips, the chip and buttons and the docked port widgets all glide together, the driver re-docking the port
+widgets each frame. It is armed at a live membership change, at a candidate change, and when a drag ends
+and the frozen border is released. Each edge is an offset from the live border, so a border that keeps
+moving still lands on it.
 
 **One undo step, and it must reuse the mousedown-time graph capture.**
 `GraphEditor::finalizeMacroMembershipDrag` is modelled on `finalizeMacroCardDrag`: one lambda runs the
@@ -406,7 +447,8 @@ editing commands below handle nesting. A patch with no nesting behaves exactly a
 ## Cable crawl and module flash (FRO41)
 
 **A drag that actually crosses a hull (a real join, leave, or transfer — never a plain move) also
-gets a short, time-bounded animation once `finalizeMacroMembershipDrag` lands**: the module itself
+gets a short, time-bounded animation, started when the crossing is applied (live, mid-drag) or when
+`finalizeMacroMembershipDrag` lands**: the module itself
 gets a fading ring on top of its card (`GraphEditor::GraphContentComponent::paintOverChildren`), and
 any cable that just changed which node it lands on — because the port splicing above auto-created or
 removed a macro port for it — slides from its old anchor to its new one instead of jumping there.
@@ -437,8 +479,9 @@ no module flash). A same-level drop mints no port and arms nothing. The driver i
 
 **`GraphEditor::buildVisibleCables()` stays a pure memo of live graph/component state** — the tween
 never teaches it anything about macros. `MacroCrossingAnimator::applyTo()` runs as the very last step
-of `buildVisibleCables()` (after `rebuildVisibleCables()` itself returns), overwriting a matched
-cable's endpoints with the current lerp; once the tween finishes, `applyTo()` is a no-op and the
+of `buildVisibleCables()` (after `rebuildVisibleCables()` itself returns), offsetting a matched
+cable's endpoints from their LIVE anchors by `(from - to) * (1 - progress)` rather than lerping between
+fixed points, so a slide started mid-drag stays attached to the moving card; once the tween finishes, `applyTo()` is a no-op and the
 memo's own freshly-computed anchor shows through unchanged, which is already the correct final
 position.
 

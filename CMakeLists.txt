@@ -233,6 +233,7 @@ add_library(Core STATIC
     Source/AppUndoManager.h
     Source/AppUndoManagerMixerView.cpp
     Source/AppUndoManagerTransport.cpp
+    Source/AppUndoManagerHistory.cpp
     Source/AutomationLaunch.cpp
     Source/AutomationLaunch.h
     Source/Branding.h

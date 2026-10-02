@@ -6,6 +6,7 @@
 #include "Modules/MacroPortShape.h"
 #include "PatchDocument.h"
 #include "UI/Graph/CableColour.h"
+#include "UI/Graph/CableRetractAnimator/CableRetractAnimator.h"
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphCanvasHost.h"
 #include "UI/Graph/GraphDragDropController/GraphDragDropController.h"
@@ -229,6 +230,10 @@ public:
     juce::Rectangle<int> paintedMacroHullBounds(const juce::String& macroId) const;
     /** Single-undo-step finalize (position + leave + join). `module` must not be touched afterwards. */
     void finalizeMacroMembershipDrag(ModuleComponent* module, const juce::String& leaveId, const juce::String& joinId);
+    /** The cables as drawn now, for retractCablesGoneSince() after a change that may remove some. */
+    std::vector<graph_editor_types::VisibleCable> snapshotCablesForRetract();
+    /** Retracts and fades every cable in `before` that is no longer drawn (CableRetractAnimator.h). */
+    void retractCablesGoneSince(const std::vector<graph_editor_types::VisibleCable>& before);
     /** True once the drag in progress has moved its module into or out of a macro (applied as it crossed). */
     bool hasLiveMacroMembershipChange() const noexcept { return liveMembershipChanged_; }
 
@@ -642,6 +647,10 @@ public:
     /** Lands every macro border glide (MacroHullGlide.h), as the real driver's onComplete does. */
     void finishHullGlideForTest();
     bool isHullGlideLiveForTest() const noexcept { return hullGlide_.isLive(); }
+    // ---- Cable-retract test seams (CableRetractAnimator.h) ----
+    const CableRetractAnimator& getCableRetractForTest() const noexcept { return cableRetract_; }
+    void advanceCableRetractForTest(float t);
+    void finishCableRetractForTest();
 
     /** The glide that slides cards between positions; AppUndoManager opens a Scope on it around undo/redo. */
     CardGlideAnimator& getCardGlide() noexcept { return cardGlide_; }
@@ -834,6 +843,10 @@ private:
 
     // Paint-only slide of cards a make-room / return / auto-arrange moved (CardGlideAnimator.h).
     CardGlideAnimator cardGlide_;
+
+    // Removed cables retracting into their source jack (CableRetractAnimator.h) plus its driver.
+    CableRetractAnimator cableRetract_;
+    synth::ui::AnimationDriver cableRetractDriverAnim_;
 
     // Expanded macro borders gliding to new bounds (MacroHullGlide.h) plus its driver.
     MacroHullGlide hullGlide_;

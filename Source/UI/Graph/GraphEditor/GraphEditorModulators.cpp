@@ -194,6 +194,7 @@ void GraphEditor::placeNewModulator(juce::AudioProcessorGraph::Node& node, NodeI
 // LFO's sections lane in the same step).
 void GraphEditor::removeModulator(const ModulationRouting& routing, bool removeLonelySource, bool recordUndo) {
     auto& graph = audioEngine.getGraph();
+    const auto cablesBefore = snapshotCablesForRetract();
     auto mutation = [this, &graph, routing, removeLonelySource] {
         // The chain is read before anything is cut: once the attenuverter is gone there is no edge to follow.
         const auto isPort = [this](NodeID id) { return macroController_.nodeIsMacroPort(id); };
@@ -222,6 +223,7 @@ void GraphEditor::removeModulator(const ModulationRouting& routing, bool removeL
     else
         mutation();
     repaintCanvas();
+    retractCablesGoneSince(cablesBefore);
 }
 
 // Every canvas removal of a modulation goes through here (or reads the ports first): the chain is cut and the

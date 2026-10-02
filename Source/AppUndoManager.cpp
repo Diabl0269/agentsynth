@@ -647,6 +647,18 @@ juce::UndoableAction* AppUndoManager::createGraphSnapshotAction(juce::AudioProce
         [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); });
 }
 
+// Distinct from the pre/post-restore lambdas SnapshotAction already carries: those are the
+// GraphEditor's component lifecycle (detach before processors are freed, reconcile after), and
+// the "pre" half of that pair deliberately fires LAZILY — a parameter-only undo frees nothing,
+// so it never runs. These two always fire, in every case, which is what a caller needs for:
+//
+//  - `beforeRestore` — opening an AutomationRecorder::ScopedProgrammaticApply, so the parameter
+//    writes a restore performs are never mistaken for a user's gesture. A parameter-only undo
+//    is exactly the case that writes parameters, so hanging this off the lazy hook would miss it.
+//  - `afterRestore` — re-running the timeline's binding reconciliation + publish. A graph
+//    restore can strand a track/lane binding, and a timeline restore comes back out of
+//    TimelineDoc::fromVar with every orphan flag reset to false (it is runtime-derived state),
+//    so BOTH domains need the same pass.
 void AppUndoManager::setRestoreHooks(std::function<void()> beforeRestore, std::function<void()> afterRestore) {
     beforeRestore_ = std::move(beforeRestore);
     afterRestore_ = std::move(afterRestore);

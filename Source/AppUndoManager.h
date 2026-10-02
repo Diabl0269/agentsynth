@@ -253,19 +253,6 @@ public:
      * @brief Hooks fired around EVERY restore this manager performs on undo/redo — the graph's
      *        SnapshotAction and the timeline's TimelineSnapshotAction alike.
      *
-     * Distinct from the pre/post-restore lambdas SnapshotAction already carries: those are the
-     * GraphEditor's component lifecycle (detach before processors are freed, reconcile after), and
-     * the "pre" half of that pair deliberately fires LAZILY — a parameter-only undo frees nothing,
-     * so it never runs. These two always fire, in every case, which is what a caller needs for:
-     *
-     *  - `beforeRestore` — opening an AutomationRecorder::ScopedProgrammaticApply, so the parameter
-     *    writes a restore performs are never mistaken for a user's gesture. A parameter-only undo
-     *    is exactly the case that writes parameters, so hanging this off the lazy hook would miss it.
-     *  - `afterRestore` — re-running the timeline's binding reconciliation + publish. A graph
-     *    restore can strand a track/lane binding, and a timeline restore comes back out of
-     *    TimelineDoc::fromVar with every orphan flag reset to false (it is runtime-derived state),
-     *    so BOTH domains need the same pass.
-     *
      * Installed once by the app-level owner (MainComponent). Actions capture this manager, not the
      * callbacks, so hooks installed after an action was pushed still apply to it.
      */
@@ -274,20 +261,8 @@ public:
     // Convenience methods that delegate to undoManager
     bool canUndo() const { return undoManager.canUndo(); }
     bool canRedo() const { return undoManager.canRedo(); }
-    // Undo and redo bump the edit serial for the same reason a fresh edit does: after a save, an
-    // undo moves the document AWAY from what is on disk, so it has to read as modified.
-    bool undo() {
-        beginRestore();
-        const bool did = undoManager.undo();
-        endRestore(did);
-        return did;
-    }
-    bool redo() {
-        beginRestore();
-        const bool did = undoManager.redo();
-        endRestore(did);
-        return did;
-    }
+    bool undo();
+    bool redo();
     bool isRestoring() const noexcept { return restoring_; }
     void clearUndoHistory() { undoManager.clearUndoHistory(); }
     void beginNewTransaction() { undoManager.beginNewTransaction(); }
@@ -316,6 +291,8 @@ public:
     }
 
 private:
+    // Undo or redo one step, retracting the cables it takes away.
+    bool applyHistoryStep(bool redoStep);
     // THE one wrapper every push goes through, so the serial below can never drift from what the
     // undo stack actually holds - nothing outside this class calls undoManager.perform().
     bool performAction(juce::UndoableAction* action) {
