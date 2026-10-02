@@ -655,13 +655,13 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
     }
 }
 
-// The canvas content is (0,0,10000,10000) and anything left of or above the origin is clipped and unclickable, while
-// the hull grows outward by the fixed strip widths and an input port's widget overhangs the hull by
-// LayoutUtil::kMacroPortOverhang. So a hull that would poke past the top-left (an expand, a new port, a member dropped
-// in) translates everything that defines it, rigidly: every non-port member module (persisted the way a finished
-// selection drag does, as node x/y) and the collapsed nested cards a drag of those members carries (their `bounds`).
-// Always called inside the caller's undo record, so undo restores the old positions with the rest of the graph and
-// macro state; a project that is merely opened never comes through here.
+// The canvas content is (0,0) to the canvas frame plus slack (it grows right/down only) and anything left of or above
+// the origin is clipped and unclickable, while the hull grows outward by the fixed strip widths and an input port's
+// widget overhangs the hull by LayoutUtil::kMacroPortOverhang. So a hull that would poke past the top-left (an expand,
+// a new port, a member dropped in) translates everything that defines it, rigidly: every non-port member module
+// (persisted the way a finished selection drag does, as node x/y) and the collapsed nested cards a drag of those
+// members carries (their `bounds`). Always called inside the caller's undo record, so undo restores the old positions
+// with the rest of the graph and macro state; a project that is merely opened never comes through here.
 juce::Point<int> MacroGroupController::nudgeHullIntoCanvas(const juce::String& macroId) {
     const auto hull = macroHullBounds(macroId);
     const int dx = juce::jmax(0, synth::LayoutUtil::kMacroPortOverhang - hull.getX());

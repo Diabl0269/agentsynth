@@ -19,10 +19,10 @@ namespace synth::ui {
 
 namespace {
 // content_'s fixed size (content-local units, i.e. before the view transform) -- generous enough
-// that panning never runs out of room for any controller template shipped or user-authored, same
-// "just make it big" choice GraphEditor's own content makes (10000x10000) rather than sizing to
-// the current profile's actual bounding box, which would have to be recomputed on every
-// setControls() and every group move.
+// that panning never runs out of room for any controller template shipped or user-authored. A fixed
+// "just make it big" extent rather than sizing to the current profile's actual bounding box (the
+// patch canvas grows instead, docs/layout/layout.md#canvas-frame, but a controller surface is small), which would have
+// to be recomputed on every setControls() and every group move.
 constexpr int kContentExtent = 6000;
 
 // Wheel-to-pixels and wheel-to-zoom tuning, the same shape (a plain multiplier on the raw wheel

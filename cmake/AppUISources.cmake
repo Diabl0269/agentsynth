@@ -335,6 +335,11 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.h
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.cpp
+    Source/UI/Graph/CanvasFrame/CanvasFrame.h
+    Source/UI/Graph/CanvasFrame/CanvasFrame.cpp
+    Source/UI/Graph/CanvasFrame/CanvasEdgeDrag.h
+    Source/UI/Graph/CanvasFrame/CanvasEdgeDrag.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorCanvasFrame.cpp
     Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.h
     Source/UI/Graph/MacroCrossingAnimator/MacroCrossingAnimator.cpp
     Source/UI/Graph/MacroHullGlide/MacroHullGlide.h

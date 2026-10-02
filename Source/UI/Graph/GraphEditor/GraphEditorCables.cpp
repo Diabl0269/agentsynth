@@ -524,10 +524,27 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     // installed, so the cast returns null and we fall back to plain fills/lines.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
+    // Outside colour over the whole content, then the canvas frame (bg1 + dot grid, rounded, hairline border).
     if (lf != nullptr)
-        lf->fillThemedBackground(g, getLocalBounds().toFloat(), /*isCanvas*/ true);
+        lf->fillThemedBackground(g, getLocalBounds().toFloat(), /*isCanvas*/ false);
     else
         g.fillAll(juce::Colours::darkgrey);
+
+    {
+        constexpr float kFrameCorner = 10.0f;
+        const auto frame = editor.getCanvasFrameRect();
+        juce::Path outline;
+        outline.addRoundedRectangle(frame, kFrameCorner);
+        g.saveState();
+        g.reduceClipRegion(outline);
+        if (lf != nullptr) // with no theme installed (headless tests) the frame is the plain fill, no different
+            lf->fillThemedBackground(g, frame, /*isCanvas*/ true);
+        g.restoreState();
+        if (lf != nullptr) {
+            g.setColour(lf->getTheme().colors.border);
+            g.strokePath(outline, juce::PathStrokeType(1.0f / juce::jmax(0.01f, editor.zoomLevel)));
+        }
+    }
 
     // ---- Drag-preview grid dots (only while a module is being dragged) ----
     // Draw subtle dots at kGridSize*5 = 40px spacing over the VISIBLE canvas region only.

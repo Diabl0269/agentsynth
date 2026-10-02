@@ -368,12 +368,15 @@ juce::Point<int> GraphEditor::computeDropFinalPosition(juce::Point<int> dropPoin
 }
 
 void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
+    // Every exit path: a drop can both grow and shrink the canvas frame.
+    const juce::ScopeGuard frameRefresh{[this] { refreshCanvasFrame(CanvasFrame::Mode::Animate); }};
     if (module == nullptr)
         return;
     if (isOutputDockNode(module->getNodeId())) {
         finalizeOutputDockDrag(module); // vertical only; x stays derived
         return;
     }
+    slidePatchForEdgeDrop(); // a card held at the canvas origin: the rest of the patch makes room
     auto clear = resolvePlacement(module->getPosition(), module->getWidth(), module->getHeight(), module->getNodeId());
     module->setTopLeftPosition(clear);
     // Persist the snapped/cleared position to graph node properties so it survives reload.
@@ -680,6 +683,8 @@ void GraphEditor::setMacroDropCandidate(const juce::String& macroId) {
 // join still works because it only ever looks B up by id, lazily, inside its own call.
 void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juce::String& leaveId,
                                               const juce::String& joinId) {
+    // Every exit path: a drop can both grow and shrink the canvas frame.
+    const juce::ScopeGuard frameRefresh{[this] { refreshCanvasFrame(CanvasFrame::Mode::Animate); }};
     if (module == nullptr)
         return;
 
