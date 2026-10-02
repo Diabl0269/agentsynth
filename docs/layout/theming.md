@@ -265,6 +265,12 @@ These stock-widget overrides are implemented in `AppLookAndFeel`:
   submenu chevron, disabled dim). It also paints a 14x14 waveform glyph left of the item text for
   waveform combos; `drawComboBox` renders the selected waveform glyph in the closed combo, and
   `positionComboBoxText` shifts the label right when the selected item carries a glyph.
+  `drawPopupMenuBackground` draws the rounded surface and border (the same background serves
+  ComboBox dropdowns). JUCE's menu window fills itself white and turns opaque whenever
+  `PopupMenu::backgroundColourId` is fully opaque, which showed square white corners behind the
+  rounded shape; the theme therefore sets that colour to the surface at alpha 0.99, so the
+  window is non-opaque and the corners stay transparent in all four themes. (Platforms without
+  semi-transparent windows still get an opaque window; JUCE decides that.)
 - **Linear sliders (the fader)** — `drawLinearSlider` (`AppLookAndFeelFader.cpp`, geometry in
   `AppLookAndFeelFader.h`) draws every `LinearVertical` / `LinearHorizontal` slider (the Bar styles
   route the same way) as a fader: a recessed slot (`bg0`, 1 px `border`, 2 px longer than the travel
