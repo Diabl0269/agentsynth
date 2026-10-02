@@ -4,6 +4,7 @@
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_data_structures/juce_data_structures.h>
+#include <memory>
 
 namespace synth {
 class TimelineDoc;          // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
@@ -274,17 +275,18 @@ public:
     // Undo and redo bump the edit serial for the same reason a fresh edit does: after a save, an
     // undo moves the document AWAY from what is on disk, so it has to read as modified.
     bool undo() {
+        beginRestore();
         const bool did = undoManager.undo();
-        if (did)
-            ++editSerial_;
+        endRestore(did);
         return did;
     }
     bool redo() {
+        beginRestore();
         const bool did = undoManager.redo();
-        if (did)
-            ++editSerial_;
+        endRestore(did);
         return did;
     }
+    bool isRestoring() const noexcept { return restoring_; }
     void clearUndoHistory() { undoManager.clearUndoHistory(); }
     void beginNewTransaction() { undoManager.beginNewTransaction(); }
 
@@ -324,6 +326,10 @@ private:
     juce::var capturedBeforeState;
     // See getEditSerial(). Incremented by performAction() and by a successful undo/redo.
     int editSerial_ = 0;
+    bool restoring_ = false;
+    std::shared_ptr<void> glideScope_; // a CardGlideAnimator::Scope, see beginRestore()
+    void beginRestore();
+    void endRestore(bool did);
 
     // See setRestoreHooks(). Safe for an action to hold `this` and call through these: every action
     // lives inside `undoManager`, which is a member destroyed with this object.

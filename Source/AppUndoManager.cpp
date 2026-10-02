@@ -4,6 +4,7 @@
 #include "MidiRemote/RemoteModel.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 /**
@@ -611,6 +612,23 @@ void refreshCanvasAfterRestore(GraphEditor& ge) {
 } // namespace
 
 AppUndoManager::AppUndoManager() {}
+
+// Both undo() and redo() land here (docs/layout/animation.md "Undo and redo glide"). isRestoring() lets views glide
+// rather than snap while it runs. The glide scope captures the cards' bounds before the restore and arms a slide from
+// them afterwards, so the canvas moves back the way the edit moved forward. A restore that rebuilds the cards matches
+// none and lands at once.
+void AppUndoManager::beginRestore() {
+    restoring_ = true;
+    if (graphEditor != nullptr)
+        glideScope_ = std::make_shared<CardGlideAnimator::Scope>(graphEditor->getCardGlide());
+}
+
+void AppUndoManager::endRestore(bool did) {
+    glideScope_.reset(); // arms the slide from the captured bounds to the restored ones
+    restoring_ = false;
+    if (did)
+        ++editSerial_;
+}
 
 juce::UndoableAction* AppUndoManager::createGraphSnapshotAction(juce::AudioProcessorGraph& graph,
                                                                 const juce::var& beforeState,

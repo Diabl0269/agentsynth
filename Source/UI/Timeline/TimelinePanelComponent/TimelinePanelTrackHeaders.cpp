@@ -374,6 +374,7 @@ void TimelinePanelComponent::syncTrackHeaders() {
             ? trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId()
             : synth::TrackId();
 
+    const auto reorderedRows = rowsToGlideAfterUndo();
     trackHeaderList_.headers.clear();
     focusedTrackIndex_ = -1;
     // A drag's OWN commit (commitTrackDrag) sets committingTrackDrag_ and finishes the gesture
@@ -418,6 +419,7 @@ void TimelinePanelComponent::syncTrackHeaders() {
         trackHeaderList_.addAndMakeVisible(header);
     }
     layoutTrackHeaders();
+    glideTrackRowsFrom(reorderedRows);
 }
 
 void TimelinePanelComponent::layoutTrackHeaders() {

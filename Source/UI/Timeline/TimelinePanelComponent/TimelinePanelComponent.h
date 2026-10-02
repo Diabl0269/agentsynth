@@ -466,6 +466,10 @@ public:
     // The Viewport's content component — a pixel-level test seam for what a track-reorder drag
     // paints. See createComponentSnapshot() at the call site.
     juce::Component& getTrackHeaderListForTest() noexcept { return trackHeaderList_; }
+    /** Lets the undo/redo row glide run on an off-screen panel (no peer, so isShowing() is false). */
+    void forceTrackGlideForTest(bool on) noexcept { trackGlideForcedForTest_ = on; }
+    /** One frame of the row glide, as the VBlank pump would run it. */
+    void advanceTrackGlideForTest() { onTrackReorderFrame(); }
     /** True from the first drag step of a track reorder until its drop has finished settling. */
     bool isTrackReorderActiveForTest() const noexcept { return trackReorder_.isReordering(); }
     /** The Esc key press a real track drag would receive from the window. */
@@ -599,6 +603,16 @@ private:
     void startTrackFramesIfNeeded();
     void onTrackReorderFrame();
     void autoscrollForTrackPointer(int screenY);
+    // Undo/redo of a track reorder: the old rows' places, then the glide of the rebuilt rows from them.
+    struct GlideRow {
+        synth::TrackId id;
+        float y = 0.0f;
+        float height = 0.0f;
+    };
+    std::vector<GlideRow> rowsToGlideAfterUndo() const;
+    bool canAnimateTrackGlide() const { return isShowing() || trackGlideForcedForTest_; }
+    bool trackGlideForcedForTest_ = false;
+    void glideTrackRowsFrom(const std::vector<GlideRow>& old);
     float trackPointerY(int screenY) const;
     // Places every row: static slots, or the animator's positions while a reorder is in flight.
     void placeTrackHeaders();

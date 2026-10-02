@@ -146,7 +146,8 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   offset by the card's drawn-minus-final position). Open-macro hulls and port strips land at once. Only cards visible
   both before and after glide; a card that just appeared or is being dragged does not. A second move mid-glide
   retargets from the drawn position. One `CardGlideAnimator::Scope` around the whole action (expand, collapse,
-  `makeRoomFor`, `returnDisplacedNeighbours`, auto-arrange) arms once. Loading a project, undo/redo and paste never
+  `makeRoomFor`, `returnDisplacedNeighbours`, auto-arrange) arms once. Undo and redo glide too: a move that glided
+  forward glides back (see [Undo and redo glide](animation.md#undo-and-redo-glide)). Loading a project and paste never
   glide: they land at once.
 
 ## Output dock

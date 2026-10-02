@@ -1,8 +1,8 @@
 // CardGlideTests.cpp
 //
 // The card glide overlay (CardGlideAnimator): geometry is final and synchronous, the real cards are hidden for the
-// glide, hit-tests land on the final rect, cables follow, and loads/undo never glide. Driven with no VBlank through
-// GraphEditor's advance/finish seams. (docs/layout/animation.md,
+// glide, hit-tests land on the final rect, cables follow, and loads never glide (undo/redo glide:
+// CardGlideUndoTests.cpp). Driven with no VBlank through GraphEditor's advance/finish seams. (docs/layout/animation.md,
 // docs/layout/layout.md#making-room-when-something-grows)
 
 #include "../../../Macros/MacroContainer/MacroContainerTestHelpers.h"
@@ -279,7 +279,7 @@ TEST(CardGlide, CableEndpointsFollowAGlidingCardAndSettleOnTheFinalAnchor) {
     EXPECT_EQ(find(c.editor.buildVisibleCables()).p1, end.p1);
 }
 
-// ---- Never on load or undo ----
+// ---- Never on load ----
 
 TEST(CardGlide, OpeningAProjectWithOpenCollapsedAndNestedMacrosNeverGlides) {
     Canvas c;
@@ -312,22 +312,6 @@ TEST(CardGlide, OpeningAProjectWithOpenCollapsedAndNestedMacrosNeverGlides) {
 
     EXPECT_EQ(c.glide().armCount(), 0);
     EXPECT_FALSE(c.glide().isLive());
-    for (auto* comp : c.editor.getModuleComponents())
-        EXPECT_EQ(comp->getAlpha(), 1.0f);
-}
-
-TEST(CardGlide, UndoAndRedoOfAnArrangeLandAtOnce) {
-    Canvas c;
-    c.scramble();
-    c.editor.autoArrange();
-    c.land();
-    const int arms = c.glide().armCount();
-
-    ASSERT_TRUE(c.undo.undo());
-    EXPECT_FALSE(c.glide().isLive());
-    ASSERT_TRUE(c.undo.redo());
-    EXPECT_FALSE(c.glide().isLive());
-    EXPECT_EQ(c.glide().armCount(), arms);
     for (auto* comp : c.editor.getModuleComponents())
         EXPECT_EQ(comp->getAlpha(), 1.0f);
 }
