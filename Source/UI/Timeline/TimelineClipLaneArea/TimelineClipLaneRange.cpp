@@ -17,6 +17,7 @@
 
 #include "TimelineClipLaneArea.h"
 #include "TimelineClipLaneInternal.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 
 #include "AppUndoManager.h"
 #include "Transport/TransportService.h"
@@ -235,7 +236,7 @@ void TimelineClipLaneArea::showRangeContextMenu(juce::Point<int> localPos) {
     menu.addItem("Split at range edges", [this] { applyRangeChoice(RangeChoice::SplitAtEdges); });
     menu.addItem("Delete range", [this] { applyRangeChoice(RangeChoice::Delete); });
     menu.addItem("Delete range and close gap", [this] { applyRangeChoice(RangeChoice::DeleteCloseGap); });
-    menu.showMenuAsync(juce::PopupMenu::Options());
+    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
 }
 
 } // namespace synth::ui

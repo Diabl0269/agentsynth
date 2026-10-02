@@ -15,6 +15,7 @@
 // mouseDown()/right-click path, then clears the stub so it never leaks into a later test sharing
 // the process.
 #include "ControllersListComponent.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -421,9 +422,7 @@ void ControllersListComponent::showContextMenuForRow(int rowIndex, std::optional
         hook(menu);
         return;
     }
-    auto options = juce::PopupMenu::Options();
-    if (screenAnchor)
-        options = options.withTargetScreenArea(*screenAnchor);
+    const auto options = synth::ui::contextMenuOptions(screenAnchor);
     menu.showMenuAsync(options);
 }
 

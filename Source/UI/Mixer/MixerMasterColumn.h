@@ -10,6 +10,7 @@
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Mixer/MixerSections/MixerSectionControls.h"
 #include "UI/Mixer/MixerSections/MixerSectionLayout.h"
@@ -127,8 +128,9 @@ public:
     /** Same seam as ModuleComponent::setShowContextMenuHookForTest -- see
      *  MixerColumnComponent::setShowContextMenuHookForTest's comment. */
     void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showContextMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+        showContextMenuHook_ = hook ? std::move(hook) : [](juce::PopupMenu& m) {
+            m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+        };
     }
 
     /** The project's pan-law control, next to the mute button -- the mixer has no other
@@ -136,8 +138,9 @@ public:
     juce::TextButton& getPanLawButtonForTest() noexcept { return panLawButton_; }
     /** Same test-seam idiom as setShowContextMenuHookForTest, for the pan-law button's own menu. */
     void setShowPanLawMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
-        showPanLawMenuHook_ =
-            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+        showPanLawMenuHook_ = hook ? std::move(hook) : [](juce::PopupMenu& m) {
+            m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+        };
     }
 
     /** The cheap per-strip refresh for Master -- mute button + pan-law label, no rebuild.
@@ -173,7 +176,7 @@ private:
     // Backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
     int midiLearnArmedRepaintCount_ = 0;
     std::function<void(juce::PopupMenu&)> showContextMenuHook_ = [](juce::PopupMenu& m) {
-        m.showMenuAsync(juce::PopupMenu::Options());
+        m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
     };
 
     // True once setColumn() saw >= 1 insert -- switches the meter to outputPeakProvider.
@@ -197,7 +200,7 @@ private:
     // comment on where this lives and why.
     juce::TextButton panLawButton_;
     std::function<void(juce::PopupMenu&)> showPanLawMenuHook_ = [](juce::PopupMenu& m) {
-        m.showMenuAsync(juce::PopupMenu::Options());
+        m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
     };
     bool keyboardFocused_ = false;
 

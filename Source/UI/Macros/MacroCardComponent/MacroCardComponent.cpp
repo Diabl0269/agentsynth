@@ -1,6 +1,7 @@
 #include "MacroCardComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -12,7 +13,7 @@ MacroCardComponent::MacroCardComponent(GraphEditor& owner, juce::String macroId)
     : owner(owner)
     , macroId(std::move(macroId)) {
     setInterceptsMouseClicks(true, false);
-    showContextMenuHook_ = [](juce::PopupMenu& menu) { menu.showMenuAsync(juce::PopupMenu::Options()); };
+    showContextMenuHook_ = [](juce::PopupMenu& menu) { menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer()); };
 }
 
 MacroCardComponent::~MacroCardComponent() { finishRename(false); }

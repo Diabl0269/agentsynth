@@ -8,6 +8,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 
 #include "CanvasAccessibilityClip.h"
 #include "Mixer/MasterSplice.h"
@@ -732,7 +733,7 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
                 if (safeThis != nullptr)
                     safeThis->disconnectCable(captured);
             });
-            m.showMenuAsync(juce::PopupMenu::Options());
+            m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
             return;
         }
 
@@ -755,7 +756,8 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
             const auto priorSelection = getSelectedNodes();
             if (priorSelection.empty())
                 macroController_.selectMacro(hullMacroId, false);
-            buildMacroMenu(hullMacroId, nullptr, &priorSelection).showMenuAsync(juce::PopupMenu::Options());
+            buildMacroMenu(hullMacroId, nullptr, &priorSelection)
+                .showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
             return;
         }
 
@@ -782,7 +784,7 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
                 if (showCanvasContextMenuHook_)
                     showCanvasContextMenuHook_(menu);
                 else
-                    menu.showMenuAsync(juce::PopupMenu::Options());
+                    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
             } else {
                 macroController_.deleteBottomMacroPort(hit->macroId, hit->isInput);
             }

@@ -2,6 +2,7 @@
 // (add/reorder/remove), each ONE recordGraphAndMacroChange around MixerModel's Core splice
 // primitives.
 #include "MixerInsertList.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
@@ -174,7 +175,7 @@ void MixerInsertList::showRowMenu(int rowIndex) {
     menu.addItem(3, "Remove");
     menu.addSeparator();
     menu.addItem(4, "Add...");
-    menu.showMenuAsync(juce::PopupMenu::Options(), [this, rowIndex](int result) {
+    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer(), [this, rowIndex](int result) {
         if (result == 1)
             moveRow(rowIndex, -1);
         else if (result == 2)
@@ -191,7 +192,7 @@ void MixerInsertList::showAddMenu() {
     int id = 1;
     for (const auto& name : kAddableModuleTypes)
         menu.addItem(id++, name);
-    menu.showMenuAsync(juce::PopupMenu::Options(), [this](int result) {
+    menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer(), [this](int result) {
         if (result >= 1 && result <= kAddableModuleTypes.size())
             addModule(kAddableModuleTypes[result - 1]);
     });

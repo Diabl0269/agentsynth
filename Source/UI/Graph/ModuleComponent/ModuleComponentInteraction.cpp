@@ -13,6 +13,7 @@
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/LayoutUtil.h"
 #include <cmath>
@@ -583,7 +584,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             m.addItem("Disconnect",
                       [this, port] { owner.disconnectPort(this, port->index, port->isInput, port->isMidi); });
 
-            m.showMenuAsync(juce::PopupMenu::Options());
+            m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
         } else if (e.getNumberOfClicks() >= 2 && owner.getDoubleClickPortDisconnectEnabled()) {
             // Intercept the second click so it does not start another cable drag.
             if (owner.isPortConnected(this, port->index, port->isInput, port->isMidi))
@@ -856,9 +857,7 @@ void ModuleComponent::showContextMenu(std::optional<juce::Rectangle<int>> screen
 }
 
 void ModuleComponent::showRealContextMenu(juce::PopupMenu& menu) {
-    auto options = juce::PopupMenu::Options();
-    if (menuAnchor_)
-        options = options.withTargetScreenArea(*menuAnchor_);
+    const auto options = synth::ui::contextMenuOptions(menuAnchor_);
     menu.showMenuAsync(options);
 }
 

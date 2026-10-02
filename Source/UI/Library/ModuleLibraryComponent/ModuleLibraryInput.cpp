@@ -2,6 +2,7 @@
 // (Up/Down/Left/Right/Enter, including the searchEditor KeyListener interception) and starting a
 // drag-and-drop session for a row.
 #include "ModuleLibraryComponent.h"
+#include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 
 void ModuleLibraryComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
@@ -137,9 +138,7 @@ void ModuleLibraryComponent::showSnippetContextMenu(int index, std::optional<juc
         showContextMenuHook_(m);
         return;
     }
-    auto options = juce::PopupMenu::Options();
-    if (screenAnchor)
-        options = options.withTargetScreenArea(*screenAnchor);
+    const auto options = synth::ui::contextMenuOptions(screenAnchor);
     m.showMenuAsync(options);
 }
 
