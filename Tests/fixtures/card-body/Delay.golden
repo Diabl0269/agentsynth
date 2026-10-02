@@ -13,9 +13,9 @@ type Delay size 280x343
   child 11 label id="" at 12,73 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 12 combo id="" at 12,139 85x24 visible=0 title="Time Div" tip="Time Div" focusOrder=0 wantsFocus=1
   child 13 label id="" at 12,121 85x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 toggle id="Ping-Pong" at 12,303 72x20 visible=1 title="Ping-Pong" tip="Ping-Pong" focusOrder=0 wantsFocus=1
-  child 15 slider id="Level" at 122,299 146x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 16 label id="" at 90,299 32x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 toggle id="Ping-Pong" at 12,303 70x20 visible=1 title="Ping-Pong" tip="Ping-Pong" focusOrder=0 wantsFocus=1
+  child 15 slider id="Level" at 119,299 149x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 16 label id="" at 88,299 31x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 17 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
   child 18 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58

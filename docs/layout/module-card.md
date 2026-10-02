@@ -182,7 +182,9 @@ layout adds it.
   `juce::ToggleButton`, and `AppLookAndFeel::paintTogglePill` draws it: a 20 px rounded pill, filled
   with the tick colour and the text in the background colour when on, an outlined surface when off,
   the accent focus ring round the pill. Width is the text plus 10 px each side
-  (`AppLookAndFeel::togglePillWidth`, which the size estimate uses too).
+  (`AppLookAndFeel::togglePillWidth`, which the size estimate uses too). Pill and footer-caption
+  text is measured and painted in the embedded Inter (`AppLookAndFeel::uiTextWidth` / `uiFont`), never
+  the system typeface, so every width is the same on every platform.
 
 ## Conditions: swap and dim
 

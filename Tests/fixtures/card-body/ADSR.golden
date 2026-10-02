@@ -1,6 +1,6 @@
-type ADSR size 280x597
+type ADSR size 280x565
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 12,557 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 189,525 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 component id="" at 12,93 256x150 visible=1 title="Envelope curve" tip="Curve editor: Left/Right pick a point, Alt+arrows move it, Delete removes it. Mouse: drag points and bend handles, double-click to add or remove a point" focusOrder=0 wantsFocus=1
   child 3 component id="" at 12,463 256x48 visible=1 title="Threshold meter" tip="Input level against the trigger threshold; the marker is the effective threshold" focusOrder=0 wantsFocus=0
   child 4 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
@@ -33,7 +33,7 @@ type ADSR size 280x597
   child 31 component id="" at 4,52 12x12 visible=1 title="Gate input" tip="" focusOrder=0 wantsFocus=0
   child 32 component id="" at 4,72 12x12 visible=1 title="Threshold input" tip="" focusOrder=0 wantsFocus=0
   child 33 component id="" at 264,52 12x12 visible=1 title="Env output" tip="" focusOrder=0 wantsFocus=0
-  child 34 toggle id="" at 59,525 127x20 visible=1 title="Show Envelope Graph" tip="Show Envelope Graph" focusOrder=0 wantsFocus=1
+  child 34 toggle id="" at 59,525 124x20 visible=1 title="Show Envelope Graph" tip="Show Envelope Graph" focusOrder=0 wantsFocus=1
   in 0 10, 58
   in 1 10, 78
   in 2 48, 386

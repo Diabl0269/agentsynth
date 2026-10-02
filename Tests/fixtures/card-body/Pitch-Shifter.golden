@@ -19,8 +19,8 @@ type Pitch Shifter size 280x419
   child 17 label id="" at 97,295 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 18 knob id="Mix" at 97,237 85x58 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
   child 19 label id="" at 97,219 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 20 slider id="Level" at 44,375 139x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 21 label id="" at 12,375 32x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 slider id="Level" at 43,375 140x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 21 label id="" at 12,375 31x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 22 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
   child 23 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58

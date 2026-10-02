@@ -193,6 +193,12 @@ public:
     static constexpr float kDisabledControlAlpha = 0.45f;
     // The width a pill needs for `text`; needs no theme, so a size estimate can ask it too.
     static int togglePillWidth(const juce::String& text);
+    // The embedded Inter regular at `height` (the default font only when font assets are absent), and the
+    // width of `text` in it. Card and footer geometry measures with these, never the system typeface,
+    // so a card lays out identically on every platform. The typeface is created per call, not cached in
+    // a static (a static outlives JUCE shutdown and trips the leak detector).
+    static juce::Font uiFont(float height);
+    static int uiTextWidth(const juce::String& text, float height);
     void paintTogglePill(juce::Graphics&, juce::ToggleButton&, bool shouldDrawButtonAsHighlighted,
                          bool keyboardFocused);
 

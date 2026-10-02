@@ -1,6 +1,6 @@
 type Distortion size 280x375
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 189,335 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 12,335 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
@@ -11,10 +11,10 @@ type Distortion size 280x375
   child 9 label id="" at 12,219 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 10 component id="Type" at 12,91 256x24 visible=1 title="Type" tip="Type" focusOrder=0 wantsFocus=1
   child 11 label id="" at 12,73 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 combo id="" at 87,301 181x24 visible=1 title="Oversampling" tip="Oversampling" focusOrder=0 wantsFocus=1
-  child 13 label id="" at 12,299 75x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 slider id="Level" at 44,331 139x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 15 label id="" at 12,331 32x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 combo id="" at 83,301 74x24 visible=1 title="Oversampling" tip="Oversampling" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 12,299 71x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 slider id="Level" at 194,299 74x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 163,299 31x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
   child 17 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58

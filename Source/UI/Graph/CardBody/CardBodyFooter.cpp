@@ -24,9 +24,7 @@ struct Chip {
 
 int captionWidth(const juce::String& text) {
     constexpr int kCaptionGap = 6;
-    return juce::GlyphArrangement::getStringWidthInt(juce::Font(juce::FontOptions(Theme::kTogglePillFontHeight)),
-                                                     text) +
-           kCaptionGap;
+    return Theme::uiTextWidth(text, Theme::kTogglePillFontHeight) + kCaptionGap;
 }
 
 Chip pillChip(juce::Component* widget, const juce::String& text) {

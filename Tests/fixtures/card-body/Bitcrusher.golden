@@ -11,15 +11,15 @@ type Bitcrusher size 280x229
   child 9 label id="" at 12,73 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 10 knob id="Mix" at 182,91 85x58 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
   child 11 label id="" at 182,73 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 slider id="Dither" at 49,153 90x28 visible=1 title="Dither" tip="Dither" focusOrder=0 wantsFocus=1
-  child 13 label id="" at 12,153 37x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 slider id="Level" at 177,153 91x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 15 label id="" at 145,153 32x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 12 slider id="Dither" at 47,153 92x28 visible=1 title="Dither" tip="Dither" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 12,153 35x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 slider id="Level" at 176,153 92x28 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 145,153 31x28 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 16 component id="" at 4,52 12x12 visible=1 title="Audio input" tip="" focusOrder=0 wantsFocus=0
   child 17 component id="" at 264,52 12x12 visible=1 title="Audio output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
   in 1 122, 128
   in 2 37, 128
   in 3 207, 128
-  in 4 56, 178
+  in 4 54, 178
   out 0 270, 58

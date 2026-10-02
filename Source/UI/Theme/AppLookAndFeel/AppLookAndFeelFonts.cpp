@@ -66,6 +66,16 @@ juce::Typeface::Ptr loadEmbeddedTypeface(const juce::String& family, bool bold, 
 #endif
 }
 
+juce::Font AppLookAndFeel::uiFont(float height) {
+    if (auto face = loadEmbeddedTypeface("Inter", false, false))
+        return juce::Font(juce::FontOptions(face).withHeight(height));
+    return juce::Font(juce::FontOptions(height));
+}
+
+int AppLookAndFeel::uiTextWidth(const juce::String& text, float height) {
+    return juce::GlyphArrangement::getStringWidthInt(uiFont(height), text);
+}
+
 void AppLookAndFeel::refreshTypefaces() {
     uiTypeface = loadEmbeddedTypeface(theme.type.uiFamily, false, false);
     monoTypeface = loadEmbeddedTypeface(theme.type.monoFamily, false, false);

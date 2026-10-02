@@ -163,7 +163,7 @@ void CardBody::styleFooterItems() {
         if (auto* toggle = dynamic_cast<juce::ToggleButton*>(item.widget); toggle != nullptr && item.pill)
             synth::ui::setTogglePillStyle(*toggle, true);
         if (auto* label = dynamic_cast<juce::Label*>(item.label)) {
-            label->setFont(juce::Font(juce::FontOptions(synth::theme::AppLookAndFeel::kTogglePillFontHeight)));
+            label->setFont(synth::theme::AppLookAndFeel::uiFont(synth::theme::AppLookAndFeel::kTogglePillFontHeight));
             label->setJustificationType(juce::Justification::centredLeft);
         }
     }
