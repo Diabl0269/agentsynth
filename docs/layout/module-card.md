@@ -237,6 +237,12 @@ out as its own run, by the same measure-and-apply walk:
   the value never jumps), Cmd-click and double-click reset to the parameter's default, each one change
   gesture. Modulation shows as a 3 px bar beside the slot (right of a vertical cap, under a horizontal
   one) from the base value to base + CV; a cable lands on a dot just past the bar's zero end.
+- **A choice beside a fader.** A choice in a swap group with a vertical fader (the ADSR's note division
+  taking its time's place in Tempo mode) is drawn as a vertical *stepped* fader too (`promoteChoicesBesideFaders`
+  in `CardBodyPlan.cpp`): a combo does not fit a 40 px wide cell, but the fader's value box shows the step's
+  text whole ("1/16", "1/4.", "1/8T"). It takes the same cell as the fader it replaces, so a swap moves
+  nothing; the slider steps over the choice's integer values, so the arrow keys, Page Up/Down and Home/End walk
+  the divisions, and it keeps the knob gestures, MIDI Learn and its accessible title (the parameter's name).
 - **Segmented switch.** Joined `TextButton` segments (the look the ADSR's old MS|BPM switch had); a
   bool parameter draws as two segments, its off and on texts (the ADSR's Tempo Sync reads "Time" and
   "Tempo"); the switch

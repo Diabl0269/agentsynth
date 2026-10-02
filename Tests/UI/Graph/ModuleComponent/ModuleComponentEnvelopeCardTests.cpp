@@ -10,6 +10,7 @@
 
 #include "Modules/ADSRModule.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -266,18 +267,19 @@ TEST_F(ModuleComponentTest, EnvelopePlayheadMapsStageToSegmentOnlyWhenGraphIsOpe
 }
 
 // tempoSync and the four divisions are ordinary items of the layout: the Time/Tempo switch is a segmented
-// switch (not a toggle), and each division is a combo that shares its stage's cell, so a fresh card has
-// exactly the four division combos and no generic toggle for tempoSync.
-TEST_F(ModuleComponentTest, AdsrTempoSyncIsASwitchAndTheFourDivisionsAreCombosInTheStageCells) {
+// switch (not a toggle), and each division is a stepped fader that shares its stage's cell, so a fresh card has
+// exactly the four division faders, no division combo and no generic toggle for tempoSync.
+TEST_F(ModuleComponentTest, AdsrTempoSyncIsASwitchAndTheFourDivisionsAreSteppedFadersInTheStageCells) {
     AudioEngine engine;
     GraphEditor editor(engine);
     ADSRModule processor;
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
-    EXPECT_EQ(countChildrenOfType(moduleComponent, /*wantToggle*/ false), 4)
-        << "attackDiv/holdDiv/decayDiv/releaseDiv, one per stage";
+    EXPECT_EQ(countChildrenOfType(moduleComponent, /*wantToggle*/ false), 0) << "no division is a combo";
     auto* body = moduleComponent.getCardBody();
     ASSERT_NE(body, nullptr);
+    for (const char* division : {"attackDiv", "holdDiv", "decayDiv", "releaseDiv"})
+        EXPECT_NE(dynamic_cast<synth::ui::CardFader*>(body->findWidget(division)), nullptr) << division;
     EXPECT_NE(dynamic_cast<synth::ui::CardSegmentedSwitch*>(body->findWidget("tempoSync")), nullptr);
 }
 

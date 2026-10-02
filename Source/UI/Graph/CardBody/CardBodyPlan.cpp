@@ -172,6 +172,21 @@ void applyFooterKind(CardBodyItem& item) {
         item.kind = CardBodyItem::Kind::FaderH;
 }
 
+// A choice that swaps with a vertical fader in one cell (the ADSR's note division in place of its time) is
+// drawn as a vertical stepped fader over the choice's steps: a combo has no room in a 40 px wide, tall fader
+// cell (its text truncates), while a fader's value box shows the choice's text whole. Called as each member
+// joins the group, so the order of fader and choice does not matter.
+void promoteChoicesBesideFaders(CardBodyPlan& plan, const CardBodyPlan::SwapGroup& group) {
+    bool hasFader = false;
+    for (int member : group.members)
+        hasFader = hasFader || plan.items[(size_t)member].kind == CardBodyItem::Kind::FaderV;
+    if (!hasFader)
+        return;
+    for (int member : group.members)
+        if (auto& item = plan.items[(size_t)member]; item.kind == CardBodyItem::Kind::Choice)
+            item.kind = CardBodyItem::Kind::FaderV;
+}
+
 // Placement state while one section is read: consecutive `show` items testing the same parameter join
 // one swap group.
 struct SectionPlacer {
@@ -209,6 +224,7 @@ struct SectionPlacer {
         }
         auto& group = plan.swapGroups.back();
         group.members.push_back(index);
+        promoteChoicesBesideFaders(plan, group);
         group.span = std::max(group.span, juce::jlimit(1, 6, source.span));
         if (group.members.size() == 1 || cellHeight(planned.kind) > cellHeight(group.cellKind))
             group.cellKind = planned.kind;

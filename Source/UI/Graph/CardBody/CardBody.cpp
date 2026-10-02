@@ -283,7 +283,10 @@ juce::Label* CardBody::addCaption(CardBodyItem& item, juce::RangedAudioParameter
 
 // Everything a knob has -- the sliders/sliderParams entry (Automate, value reflection, modulation-target
 // lookup), MIDI Learn, the card gestures, the attachment and the ADSR display skew -- plus the default
-// a Cmd-click or double-click returns to. The painter picks the look from the fader's size.
+// a Cmd-click or double-click returns to. The painter picks the look from the fader's size. A choice drawn
+// as a fader (a division swapping with its time, promoteChoicesBesideFaders) is a stepped one: the
+// attachment gives it the choice's integer steps, its value box the step's text, and its default is the
+// choice's default.
 void CardBody::createFader(CardBodyItem& item, juce::RangedAudioParameter& param) {
     const bool vertical = item.kind == CardBodyItem::Kind::FaderV;
     auto* fader = new synth::ui::CardFader(vertical ? synth::ui::CardFader::Orientation::Vertical

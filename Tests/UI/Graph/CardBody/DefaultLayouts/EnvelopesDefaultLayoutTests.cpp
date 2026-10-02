@@ -115,7 +115,7 @@ TEST(EnvelopesDefaultLayout, TheAdsrCardHasTheDesignedSectionsInOrder) {
         for (const char* stage : {"attack", "hold", "decay", "sustain", "release"})
             EXPECT_EQ(kindOf(plan, stage), Kind::FaderV) << stage;
         for (const char* division : {"attackDiv", "holdDiv", "decayDiv", "releaseDiv"})
-            EXPECT_EQ(kindOf(plan, division), Kind::Choice) << division;
+            EXPECT_EQ(kindOf(plan, division), Kind::FaderV) << division << ": a stepped fader beside its time";
         EXPECT_EQ(kindOf(plan, "velocity"), Kind::FaderH);
         EXPECT_TRUE(plan.more.empty()) << "every parameter but the three curve amounts the graph edits is placed";
         EXPECT_EQ(plan.swapGroups.size(), 4u) << "one swap group per stage: time or its division";
@@ -162,6 +162,45 @@ TEST(EnvelopesDefaultLayout, TheStageFadersValueBoxesHoldEveryReadingWithoutTrun
     }
 }
 
+// In Tempo mode each stage's division is a stepped vertical fader over the choice's steps: every division
+// reads whole in the 40 px value box, a step moves it one division, and the arrow keys walk the list.
+TEST(EnvelopesDefaultLayout, EveryDivisionFitsItsStageCellWithoutTruncating) {
+    CardCanvas canvas;
+    const auto id = canvas.add(std::make_unique<ADSRModule>(), 0, 0);
+    canvas.editor.updateComponents();
+    flip(canvas, id, "tempoSync", 1.0f);
+    auto* body = canvas.card(id)->getCardBody();
+    for (const char* paramId : {"attackDiv", "holdDiv", "decayDiv", "releaseDiv"}) {
+        SCOPED_TRACE(paramId);
+        auto* fader = dynamic_cast<synth::ui::CardFader*>(body->findWidget(paramId));
+        ASSERT_NE(fader, nullptr);
+        ASSERT_TRUE(fader->isVisible());
+        auto* choice = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(canvas.processor(id), paramId));
+        ASSERT_NE(choice, nullptr);
+        EXPECT_EQ(fader->getInterval(), 1.0) << "stepped over the choice's steps";
+        EXPECT_EQ(fader->getMinimum(), 0.0);
+        EXPECT_EQ(fader->getMaximum(), (double)(choice->choices.size() - 1));
+        juce::Label* box = nullptr;
+        for (auto* child : fader->getChildren())
+            if (auto* label = dynamic_cast<juce::Label*>(child))
+                box = label;
+        ASSERT_NE(box, nullptr);
+        const auto available = box->getBorderSize().subtractedFrom(box->getLocalBounds()).getWidth();
+        EXPECT_GE(available, 36);
+        for (int step = 0; step < choice->choices.size(); ++step) {
+            const auto text = fader->getTextFromValue((double)step);
+            EXPECT_EQ(text, synth::ui::CardFader::compactValueText(choice->choices[step]));
+            EXPECT_LE(juce::GlyphArrangement::getStringWidthInt(box->getFont(), text), available) << text;
+        }
+        fader->setValue(0.0, juce::sendNotificationSync);
+        EXPECT_EQ(choice->getIndex(), 0);
+        EXPECT_TRUE(fader->keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
+        EXPECT_EQ(choice->getIndex(), 1) << "an arrow key steps one division";
+        EXPECT_TRUE(fader->keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+        EXPECT_EQ(choice->getIndex(), 0);
+    }
+}
+
 TEST(EnvelopesDefaultLayout, AStageSwapKeepsItsBoundsAndTheCardsHeight) {
     CardCanvas canvas;
     const auto id = canvas.add(std::make_unique<ADSRModule>(), 0, 0);
@@ -188,8 +227,7 @@ TEST(EnvelopesDefaultLayout, AStageSwapKeepsItsBoundsAndTheCardsHeight) {
         EXPECT_FALSE(fader->isVisible());
         EXPECT_TRUE(combo->isVisible());
         EXPECT_EQ(fader->getBounds(), faderBounds) << "a swapped-out fader keeps its cell";
-        EXPECT_EQ(combo->getY(), faderBounds.getY());
-        EXPECT_TRUE(combo->getX() <= faderBounds.getX() && combo->getRight() >= faderBounds.getRight());
+        EXPECT_EQ(combo->getBounds(), faderBounds) << "the division fills the cell of the fader it replaces";
         EXPECT_EQ(card->getHeight(), height);
 
         flip(canvas, id, "tempoSync", 0.0f);

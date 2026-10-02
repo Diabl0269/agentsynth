@@ -18,14 +18,14 @@ type Filter Env size 280x597
   child 16 label id="" at 68,297 40x18 visible=1 title="" tip="Hold" focusOrder=0 wantsFocus=0
   child 17 component id="Tempo Sync" at 12,267 256x24 visible=1 title="Tempo Sync" tip="Tempo Sync" focusOrder=0 wantsFocus=1
   child 18 label id="" at 12,249 256x18 visible=1 title="" tip="Tempo Sync" focusOrder=0 wantsFocus=0
-  child 19 combo id="" at 12,315 51x24 visible=0 title="Attack Div" tip="Attack Div" focusOrder=0 wantsFocus=1
-  child 20 label id="" at 12,297 51x18 visible=0 title="" tip="Attack Div" focusOrder=0 wantsFocus=0
-  child 21 combo id="" at 63,315 51x24 visible=0 title="Hold Div" tip="Hold Div" focusOrder=0 wantsFocus=1
-  child 22 label id="" at 63,297 51x18 visible=0 title="" tip="Hold Div" focusOrder=0 wantsFocus=0
-  child 23 combo id="" at 114,315 51x24 visible=0 title="Decay Div" tip="Decay Div" focusOrder=0 wantsFocus=1
-  child 24 label id="" at 114,297 51x18 visible=0 title="" tip="Decay Div" focusOrder=0 wantsFocus=0
-  child 25 combo id="" at 216,315 51x24 visible=0 title="Release Div" tip="Release Div" focusOrder=0 wantsFocus=1
-  child 26 label id="" at 216,297 51x18 visible=0 title="" tip="Release Div" focusOrder=0 wantsFocus=0
+  child 19 slider id="Attack Div" at 17,315 40x96 visible=0 title="Attack Div" tip="Attack Div" focusOrder=0 wantsFocus=1
+  child 20 label id="" at 17,297 40x18 visible=0 title="" tip="Attack Div" focusOrder=0 wantsFocus=0
+  child 21 slider id="Hold Div" at 68,315 40x96 visible=0 title="Hold Div" tip="Hold Div" focusOrder=0 wantsFocus=1
+  child 22 label id="" at 68,297 40x18 visible=0 title="" tip="Hold Div" focusOrder=0 wantsFocus=0
+  child 23 slider id="Decay Div" at 119,315 40x96 visible=0 title="Decay Div" tip="Decay Div" focusOrder=0 wantsFocus=1
+  child 24 label id="" at 119,297 40x18 visible=0 title="" tip="Decay Div" focusOrder=0 wantsFocus=0
+  child 25 slider id="Release Div" at 221,315 40x96 visible=0 title="Release Div" tip="Release Div" focusOrder=0 wantsFocus=1
+  child 26 label id="" at 221,297 40x18 visible=0 title="" tip="Release Div" focusOrder=0 wantsFocus=0
   child 27 toggle id="Poly" at 12,525 41x20 visible=1 title="Poly" tip="Poly" focusOrder=0 wantsFocus=1
   child 28 slider id="Velocity" at 12,429 256x28 visible=1 title="Velocity" tip="Velocity" focusOrder=0 wantsFocus=1
   child 29 label id="" at 12,411 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
