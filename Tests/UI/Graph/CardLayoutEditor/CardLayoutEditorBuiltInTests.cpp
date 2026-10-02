@@ -149,7 +149,7 @@ TEST(CardLayoutEditorBuiltIn, AddGroupAndATitleDrawAHeaderRowOnTheCardAndMeasure
     ASSERT_EQ(plan.sections.size(), 2u);
     ASSERT_NE(plan.sections[1].header, nullptr);
     const auto g = synth::cardbody::BodyGeometry::forCardWidth(card->getWidth());
-    EXPECT_EQ(card->getCardBody()->layout(0, g, false, false), card->getCardBody()->layout(0, g, true, false))
+    EXPECT_EQ(card->getCardBody()->layout(0, g, false), card->getCardBody()->layout(0, g, true))
         << "measure == apply with a header row";
     const int headerY = plan.sections[1].header->getY();
     const auto* lastWidget = card->getCardBody()->findWidget(lastKey);

@@ -1,12 +1,14 @@
 // ModuleComponent Wavetable card tests: display/load chrome, jack columns, mod-drop targets, tab paging.
+// The tabs themselves are the card body's (layout data); their layout tests are
+// Tests/UI/Graph/CardBody/DefaultLayouts/WavetableDefaultLayoutTests.cpp.
 
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
+#include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Graph/ModuleComponent/WavetableTabStrip.h"
 #include "UI/Layout/LayoutUtil.h"
 #include <algorithm>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -16,38 +18,36 @@
 #include <vector>
 
 namespace {
-// The tab buttons live inside the card's WavetableTabStrip child, not directly on the card.
-std::vector<juce::TextButton*> findWavetableTabs(ModuleComponent& card) {
-    std::vector<juce::TextButton*> tabs;
+constexpr int kTabCount = 5; // Tune, Unison, Phase, Sub, File
+
+// The card body's tab strip: a direct child of the card.
+synth::ui::CardSegmentedSwitch* findTabStrip(ModuleComponent& card) {
     for (auto* child : card.getChildren())
-        if (auto* strip = dynamic_cast<WavetableTabStrip*>(child))
-            for (auto* grandchild : strip->getChildren())
-                if (auto* b = dynamic_cast<juce::TextButton*>(grandchild))
-                    if (b->getComponentID().startsWith("wtTab"))
-                        tabs.push_back(b);
-    return tabs;
+        if (auto* strip = dynamic_cast<synth::ui::CardSegmentedSwitch*>(child))
+            if (strip->getComponentID() == "cardTabStrip")
+                return strip;
+    return nullptr;
 }
 
-// A real left click (mouseDown + mouseUp) on `button`. Button re-declares mouseDown/mouseUp as
-// protected overrides of Component's public virtuals, so they are reached through a Component&
-// (docs/development/test-patterns.md, "test the real mouse path").
-void clickButton(juce::Button& button) {
-    auto& asComponent = static_cast<juce::Component&>(button);
-    const auto centre = button.getLocalBounds().getCentre().toFloat();
-    const auto event = [&] {
-        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), centre,
-                                juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f,
-                                0.0f, &asComponent, &asComponent, juce::Time::getCurrentTime(), centre,
-                                juce::Time::getCurrentTime(), 1, false);
-    };
-    asComponent.mouseDown(event());
-    asComponent.mouseUp(event());
+// A real left click (mouseDown + mouseUp) at `local` on the strip: its segments take no clicks, the
+// strip picks the segment under the press.
+void clickStripAt(juce::Component& strip, juce::Point<int> local) {
+    const auto at = local.toFloat();
+    const auto event =
+        juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), at,
+                         juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                         &strip, &strip, juce::Time::getCurrentTime(), at, juce::Time::getCurrentTime(), 1, false);
+    strip.mouseDown(event);
+    strip.mouseUp(event);
+}
+
+void selectTab(ModuleComponent& card, int tab) {
+    findTabStrip(card)->setSelectedIndex(tab, juce::sendNotificationSync);
 }
 } // namespace
 
-// The tab buttons sit inside the WavetableTabStrip child, one level below the card. A point on a
-// tab, hit-tested from the card, must land on that tab (the strip must not swallow it), and a real
-// click there must switch the page without resizing the card.
+// A point on a tab, hit-tested from the card, must land on the strip (nothing above it may swallow
+// it), and a real click there must switch the tab without resizing the card.
 TEST_F(ModuleComponentTest, WavetableTabRealClickThroughTheCardSwitchesThePage) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -55,8 +55,9 @@ TEST_F(ModuleComponentTest, WavetableTabRealClickThroughTheCardSwitchesThePage) 
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
     moduleComponent.setVisible(true);
 
-    const auto tabs = findWavetableTabs(moduleComponent);
-    ASSERT_EQ(tabs.size(), (size_t)WavetableTabStrip::kNumPages);
+    auto* strip = findTabStrip(moduleComponent);
+    ASSERT_NE(strip, nullptr);
+    ASSERT_EQ(strip->getNumSegments(), kTabCount);
     const int height = moduleComponent.getHeight();
 
     const auto isVisibleSlider = [&](const juce::String& id) {
@@ -66,20 +67,21 @@ TEST_F(ModuleComponentTest, WavetableTabRealClickThroughTheCardSwitchesThePage) 
                     return s->isVisible();
         return false;
     };
-    ASSERT_TRUE(isVisibleSlider("Octave")) << "the Tune page should be showing first";
+    ASSERT_TRUE(isVisibleSlider("Octave")) << "the Tune tab should be showing first";
 
-    for (int page = WavetableTabStrip::kNumPages - 1; page >= 0; --page) {
-        auto* tab = tabs[(size_t)page];
-        const auto pointOnCard = moduleComponent.getLocalPoint(tab, tab->getLocalBounds().getCentre());
-        EXPECT_EQ(moduleComponent.getComponentAt(pointOnCard), tab)
-            << "a click on tab " << page << " does not reach its button";
+    for (int tab = kTabCount - 1; tab >= 0; --tab) {
+        const auto segmentCentre = strip->getSegment(tab)->getBounds().getCentre();
+        const auto pointOnCard = moduleComponent.getLocalPoint(strip, segmentCentre);
+        EXPECT_EQ(moduleComponent.getComponentAt(pointOnCard), strip)
+            << "a click on tab " << tab << " misses the strip";
 
-        clickButton(*tab);
-        EXPECT_TRUE(tab->getToggleState()) << "tab " << page << " is not selected after a real click";
-        EXPECT_EQ(moduleComponent.getHeight(), height) << "the card resized on tab " << page;
+        clickStripAt(*strip, segmentCentre);
+        EXPECT_EQ(strip->getSelectedIndex(), tab) << "tab " << tab << " is not selected after a real click";
+        EXPECT_TRUE(strip->getSegment(tab)->getToggleState());
+        EXPECT_EQ(moduleComponent.getHeight(), height) << "the card resized on tab " << tab;
     }
 
-    // Back on Tune (page 0) after the loop, and Unison-page knobs are hidden again.
+    // Back on Tune (tab 0) after the loop, and Unison-tab knobs are hidden again.
     EXPECT_TRUE(isVisibleSlider("Octave"));
     EXPECT_FALSE(isVisibleSlider("Detune"));
 }
@@ -128,8 +130,9 @@ TEST_F(ModuleComponentTest, WavetableCardBuildsDisplayAndLoadButton) {
     // Height is deliberately not asserted here: EstimatedModuleSizesMatchTheRealComponents
     // already pins the real card against GraphEditor::estimateModuleSize for every offered
     // type, so duplicating the number would just be a second thing to update by hand.
-    // Width IS asserted: the card went double-width in issue #180 and the wide-card branches
-    // of layoutDefaultContent (6 knob columns, paired combos) hang off that.
+    // Width IS asserted: the card is double-width, and the chrome beside the
+    // two-column jack gutter and the body's wide-card branches (doubled knob columns, paired combos)
+    // hang off that.
     EXPECT_EQ(moduleComponent.getWidth(), synth::LayoutUtil::kDoubleWidth);
     EXPECT_GT(moduleComponent.getHeight(), 100);
 }
@@ -170,15 +173,15 @@ TEST_F(ModuleComponentTest, WavetableCardBuildsFolderBrowserChrome) {
     EXPECT_NO_THROW(nextButton->triggerClick());
 }
 
-// The 16 CV jacks run in two columns so the gutter stops dictating the card height — but BOTH
-// stay on the left. Inputs-left / outputs-right is what makes signal flow read left to right,
-// and splitting inputs across both edges costs more in comprehension than the height saves.
+// The CV jacks run in two columns so the gutter stops dictating the card height -- but BOTH stay on
+// the left. Inputs-left / outputs-right is what makes signal flow read left to right, and splitting
+// inputs across both edges costs more in comprehension than the height saves.
 //
-// This only holds for the DRAWN (non-knob-bound) jacks. A CV jack whose target resolves to
-// a bound, VISIBLE knob (only the pinned Position/Warp knobs, which never sit behind the tab strip
-// -- docs/modules/modulation.md#drag-to-knob-modulation) draws no gutter dot at all;
-// getPortCenter(i, true) for that `i` returns the knob's own landing anchor instead, which
-// legitimately sits wherever that knob is in the body grid, including past the card's midline.
+// This only holds for the DRAWN (non-knob-bound) jacks. A CV jack whose target resolves to a bound,
+// VISIBLE knob outside the tabs (only the pinned Position and Warp Amt knobs --
+// docs/modules/modulation.md#drag-to-knob-modulation) draws no gutter dot at all; getPortCenter(i, true)
+// for that `i` returns the knob's own landing anchor instead, which legitimately sits wherever that knob
+// is in the body. A knob on a tab never binds its jack, so the gutter is the same on every tab.
 // `drawnInputJackIndices()` is the one list of which indices are still real gutter jacks.
 TEST_F(ModuleComponentTest, WavetableCardKeepsEveryInputJackOnTheLeft) {
     AudioEngine engine;
@@ -191,8 +194,7 @@ TEST_F(ModuleComponentTest, WavetableCardKeepsEveryInputJackOnTheLeft) {
     ASSERT_EQ(numJacks, WavetableOscillatorModule::kNumJacks);
 
     const auto drawn = moduleComponent.drawnInputJackIndices();
-    ASSERT_LT((int)drawn.size(), numJacks)
-        << "expected at least the pinned Position/Warp CV jacks to be knob-bound on the default tab page";
+    ASSERT_EQ((int)drawn.size(), numJacks - 2) << "exactly the pinned Position and Warp Amt CV jacks are knob-bound";
 
     std::set<std::pair<int, int>> seen;
     std::set<int> columns;
@@ -273,12 +275,10 @@ TEST_F(ModuleComponentTest, KnobsResolveToTheirCVJackAsModulationDropTargets) {
     const auto octaveCentre = octave->getBounds().getCentre();
     ASSERT_TRUE(moduleComponent.getModTargetPortForPoint(octaveCentre).has_value());
 
-    findWavetableTabs(moduleComponent)
-        .at(1)
-        ->onClick(); // headless: triggerClick posts async, with no pump to deliver it
+    selectTab(moduleComponent, 1);
 
     EXPECT_FALSE(moduleComponent.getModTargetPortForPoint(octaveCentre).has_value())
-        << "a knob whose page is hidden must not accept a modulation drop";
+        << "a knob whose tab is not selected must not accept a modulation drop";
 }
 
 // The highlight is what makes the drop aimed rather than guessed at.
@@ -306,17 +306,15 @@ TEST_F(ModuleComponentTest, ModulationDropTargetHighlightTracksTheHoveredKnob) {
     EXPECT_NO_THROW(moduleComponent.paint(g));
 }
 
-// Controls are paged. Switching pages must not resize the card — a card that grew and shrank
-// would shove its neighbours around the canvas on every tab click.
+// Controls are on tabs. Switching tabs must not resize the card -- a card that grew and shrank would
+// shove its neighbours around the canvas on every tab click.
 TEST_F(ModuleComponentTest, WavetableTabsSwitchContentWithoutResizingTheCard) {
     AudioEngine engine;
     GraphEditor editor(engine);
     WavetableOscillatorModule processor;
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
-    const auto tabs = findWavetableTabs(moduleComponent);
-
-    ASSERT_GE(tabs.size(), 4u) << "expected a multi-page tab strip";
+    ASSERT_NE(findTabStrip(moduleComponent), nullptr);
 
     const auto visibleSliderNames = [&] {
         std::set<juce::String> names;
@@ -330,18 +328,18 @@ TEST_F(ModuleComponentTest, WavetableTabsSwitchContentWithoutResizingTheCard) {
     const int height = moduleComponent.getHeight();
     const auto firstPage = visibleSliderNames();
 
-    // Position and Warp Amt are pinned above the strip, so they survive every page switch.
+    // Position and Warp Amt are pinned above the strip, so they survive every tab switch.
     EXPECT_TRUE(firstPage.count("Position")) << "Position must stay pinned";
     EXPECT_TRUE(firstPage.count("Warp Amt")) << "Warp Amt must stay pinned";
 
-    for (size_t i = 1; i < tabs.size(); ++i) {
-        tabs[i]->onClick(); // headless: triggerClick posts async, with no message pump to deliver it
+    for (int i = 1; i < kTabCount; ++i) {
+        selectTab(moduleComponent, i);
         EXPECT_EQ(moduleComponent.getHeight(), height) << "the card resized on tab " << i;
 
         const auto page = visibleSliderNames();
         EXPECT_TRUE(page.count("Position")) << "Position vanished on tab " << i;
         EXPECT_TRUE(page.count("Warp Amt")) << "Warp Amt vanished on tab " << i;
-        EXPECT_NE(page, firstPage) << "tab " << i << " shows the same controls as the first page";
+        EXPECT_NE(page, firstPage) << "tab " << i << " shows the same controls as the first tab";
 
         // Whatever is showing must be laid out inside the card.
         for (auto* child : moduleComponent.getChildren())
@@ -350,10 +348,10 @@ TEST_F(ModuleComponentTest, WavetableTabsSwitchContentWithoutResizingTheCard) {
                     << child->getComponentID() << " is outside the card on tab " << i;
     }
 
-    // Every knob must be reachable from some page — a control on no page is unusable.
+    // Every knob must be reachable from some tab -- a control on no tab is unusable.
     std::set<juce::String> everSeen;
-    for (size_t i = 0; i < tabs.size(); ++i) {
-        tabs[i]->onClick(); // headless: triggerClick posts async, with no message pump to deliver it
+    for (int i = 0; i < kTabCount; ++i) {
+        selectTab(moduleComponent, i);
         for (const auto& n : visibleSliderNames())
             everSeen.insert(n);
     }
@@ -364,27 +362,26 @@ TEST_F(ModuleComponentTest, WavetableTabsSwitchContentWithoutResizingTheCard) {
     EXPECT_EQ((int)everSeen.size(), totalSliders) << "some knob is not reachable from any tab";
 }
 
-// A modulation ring is drawn from its knob's bounds. A knob on an inactive tab page keeps the
-// bounds it had when its page was last laid out, so before this guard the ring kept painting on
-// empty card after a page switch — an orange arc floating with no knob under it.
+// A modulation ring is drawn from its knob's bounds. A knob on an unselected tab keeps the bounds it
+// had when its tab was last laid out, so without this guard the ring would keep painting on empty
+// card after a tab switch -- an orange arc floating with no knob under it.
 TEST_F(ModuleComponentTest, ModulationRingsSkipKnobsOnInactiveTabPages) {
     AudioEngine engine;
     GraphEditor editor(engine);
     WavetableOscillatorModule processor;
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
-    const auto tabs = findWavetableTabs(moduleComponent);
-    ASSERT_GE(tabs.size(), 2u);
+    ASSERT_NE(findTabStrip(moduleComponent), nullptr);
 
-    // Page 0 (Tune) owns Octave; Position is pinned above the strip.
+    // Tab 0 (Tune) owns Octave; Position is pinned above the strip.
     EXPECT_GE(moduleComponent.getModRingSliderIndex("Octave"), 0);
     EXPECT_GE(moduleComponent.getModRingSliderIndex("Position"), 0);
 
-    tabs[1]->onClick(); // headless: triggerClick posts async, with no message pump to deliver it
+    selectTab(moduleComponent, 1);
 
     EXPECT_EQ(moduleComponent.getModRingSliderIndex("Octave"), -1)
-        << "a ring must not be drawn for a knob whose page is hidden";
-    EXPECT_GE(moduleComponent.getModRingSliderIndex("Position"), 0) << "a pinned knob keeps its ring on every page";
+        << "a ring must not be drawn for a knob whose tab is not selected";
+    EXPECT_GE(moduleComponent.getModRingSliderIndex("Position"), 0) << "a pinned knob keeps its ring on every tab";
 
     // A parameter with no knob at all never gets a ring.
     EXPECT_EQ(moduleComponent.getModRingSliderIndex("Not A Parameter"), -1);

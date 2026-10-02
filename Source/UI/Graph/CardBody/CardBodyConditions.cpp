@@ -109,7 +109,22 @@ bool CardBodyPlan::isOnCard(int item) const {
     if (item < 0 || item >= (int)items.size())
         return false;
     const int section = items[(size_t)item].section;
-    return section >= 0 && sections[(size_t)section].visible;
+    if (section < 0 || !sections[(size_t)section].visible)
+        return false;
+    const int group = sections[(size_t)section].tabGroup;
+    return group < 0 || tabGroups[(size_t)group].sections[(size_t)tabGroups[(size_t)group].selected] == section;
+}
+
+bool CardBodyPlan::isTabbed(int item) const {
+    if (item < 0 || item >= (int)items.size())
+        return false;
+    const int section = items[(size_t)item].section;
+    return section >= 0 && sections[(size_t)section].tabGroup >= 0;
+}
+
+juce::String CardBodyPlan::tabTitle(int section) const {
+    const auto& title = sections[(size_t)section].title;
+    return title.has_value() && title->trim().isNotEmpty() ? title->trim() : sections[(size_t)section].id;
 }
 
 bool CardBodyPlan::hasFooter() const {
@@ -122,9 +137,9 @@ bool CardBodyPlan::hasFooter() const {
 // ---- The live card body ----------------------------------------------------------------------------
 
 // What shows now: a More-row parameter while the row is unfolded; a placed one while its section is
-// shown and (in a swap group) its condition holds. Only those the body governs are touched (the More
-// row, swap groups, conditional sections), so a widget a card hides itself (a Wavetable page) stays
-// as the card left it. A folded or swapped-out widget is hidden, not
+// shown (a tab section only while its tab is selected) and (in a swap group) its condition holds. Only
+// those the body governs are touched (the More row, swap groups, conditional and tab sections), so a
+// widget a card hides itself stays as the card left it. A folded, swapped-out or other-tab widget is hidden, not
 // destroyed: it keeps its attachment, MIDI Learn entry and value. A dimmed widget and its caption are
 // marked (AppLookAndFeel::kDimmedProperty), which the look-and-feel paints greyed out; it keeps its
 // cell and stays enabled, so it is still a Tab stop, in the accessibility tree and operable.
@@ -136,7 +151,7 @@ void CardBody::applyVisibility() {
     for (int i = 0; i < (int)plan_.items.size(); ++i) {
         auto& item = plan_.items[(size_t)i];
         const bool folded = inMore.count(i) > 0;
-        const bool governed = folded || item.swapGroup >= 0 ||
+        const bool governed = folded || item.swapGroup >= 0 || plan_.isTabbed(i) ||
                               (item.section >= 0 && plan_.sections[(size_t)item.section].visibleWhen.has_value());
         bool visible = folded ? moreUnfolded_ : plan_.isOnCard(i) && item.shown;
         if (item.kind == CardBodyItem::Kind::View)

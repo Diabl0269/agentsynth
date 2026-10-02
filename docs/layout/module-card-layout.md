@@ -14,8 +14,8 @@ label overrides and the Threshold and Envelope views in its view registry, the `
 `segmented` and `stepper` widgets, Hide from card / Show on card / Show as fader / Show as knob on every
 control's right-click menu, the **Edit Layout...** editor shared with the hosted plugin's picker,
 conditions read live (dim, swap groups, conditional sections, code dim rules), the footer row with the
-small toggle pill, and the code-default registry split into one unit per module family
-([What exists](#what-exists)). Everything else (spans, the default layouts themselves) is designed and
+small toggle pill, `presentation: tab` sections drawn as one tab strip, and the code-default registry
+split into one unit per module family ([What exists](#what-exists)). Everything else (spans, the default layouts themselves) is designed and
 decided (see [Decisions](#decisions-2026-10-01)), not built. Nothing here describes
 current behaviour unless it says "today" or "built".
 Where the card is drawn today is [module-card.md](module-card.md); the hosted-plugin half of the
@@ -35,10 +35,10 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
   label overrides (the caption), conditions and the footer row; spans are not drawn yet. The user changes it from a
   control's right-click menu or the layout editor ([Editing a layout](#editing-a-layout)).
 - Exceptions are hard-coded: skip rules for the ADSR curves/divisions/tempo-sync and the threshold
-  parameter (`CardBodyPlan.cpp`'s `isEditedElsewhere`), the LFO custom-wave editor, the Sampler/Wavetable chrome, the Wavetable tab strip
-  (a name-keyed page table in `WavetableTabStrip.cpp`, the only grouping that exists), and fully
-  bespoke bodies for Sequencer, Poly Sequencer, MIDI Keyboard, Macros, Attenuverter, Parametric EQ
-  and External MIDI.
+  parameter and the Wavetable's Table choice (`CardBodyPlan.cpp`'s `isEditedElsewhere`), the LFO
+  custom-wave editor, the Sampler/Wavetable chrome, and fully bespoke bodies for Sequencer, Poly
+  Sequencer, MIDI Keyboard, Macros, Attenuverter, Parametric EQ and External MIDI. The Wavetable's
+  tab strip is layout data (`tab` sections in its code default).
 - Dual-mode modules show both modes' controls at once (LFO Hz and Sync Rate; Sample & Hold Rate with
   an external clock; Sampler grain knobs in Sample mode; Pitch Shifter semitones and Hz).
 - `CardLayout` (`Source/Modules/CardLayout.h`): hosted-plugin cards use the flat version 1 slot list;
@@ -59,6 +59,7 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 | The view registry (`threshold`, and the ADSR's `envelope`) | `CardBodyViews.*` |
 | Conditions read live: `when` (dim, swap groups), `visibleWhen`, code dim rules, the parameter listener | `CardBodyConditions.cpp` |
 | The footer row (`CardSection::kFooterId`) and the small toggle pill | `CardBodyFooter.cpp`; `Source/UI/Graph/CardWidgets/CardTogglePill.h`, `AppLookAndFeel::paintTogglePill` |
+| Tab groups (consecutive `tab` sections) and their strip, the selected tab | `CardBodyPlan.*` (`TabGroup`), `CardBodyLayout.cpp`, `CardBodyTabs.cpp` (the strip is a `CardSegmentedSwitch`) |
 | One registration unit per module family, and the `cardlayout::` builders | `Source/UI/Graph/CardBody/DefaultLayouts/` |
 | The size estimate for a card before it exists, measured from the plan | `CardBodyMeasure.*` (`GraphEditor::estimateModuleSize`) |
 | The widgets: `CardFader`, `CardSegmentedSwitch`, `CardStepper`, and `CardControlGestures` (the gestures a knob and a fader share) | `Source/UI/Graph/CardWidgets/` |
@@ -78,7 +79,7 @@ binding (most tests) skips the per-type step. The size estimate for a card befor
 (`CardBodyMeasure`) measures the type's code default (or the automatic layout) with its conditions read
 at the fresh module's values, so it never sees a stored default: a type with one is placed at its
 code-default height and re-flows once built. A stored layout is honoured only for the cards drawn from layout data; the bespoke ones (Sequencer, Poly
-Sequencer, Macros, Parametric EQ, Attenuverter, Wavetable, macro ports) always build from the
+Sequencer, Macros, Parametric EQ, Attenuverter, macro ports) always build from the
 automatic plan. The fold state of the More row is per card and not saved; a card opens folded.
 A card builds its body once; when its node's `cardLayout` changes (a quick-path click, its undo or
 redo), `GraphEditor::updateComponents` sees that the card was built from a different override and
@@ -247,10 +248,27 @@ envelope, LFO curve and threshold components plug in unchanged.
   joins it unless the layout places or hides it; a card without a footer keeps its chrome rows.
   Show on card never puts a control into the footer. Details in
   [module-card.md](module-card.md#the-footer-row).
+- **Tab strips (built).** A run of consecutive `presentation: tab` sections (the footer never counts)
+  is one **tab group**: one strip across the content width, `kRowHeight` tall with a `kTabStripGap`
+  above it, then the selected tab's section after another `kTabStripGap`, laid out where the run's first section stands. Each tab is labelled
+  with its section's title (its id when untitled) and draws no header row. The group takes its tallest
+  tab's height whichever is selected, measured by the same walk, so a tab switch never resizes the card;
+  the other tabs' widgets are hidden (`CardBodyPlan::isOnCard` is false for them), keep their bounds,
+  take no modulation ring or cable drop, and stay in the parameter arrays, bound, learnable and
+  automatable. A knob on a tab, selected or not, never binds its CV jack
+  (`ModuleComponent::getModTargetKnobAnchor`, and the size estimate's same rule): the jack stays in the
+  gutter, so the jack layout is the same on every tab, while a cable dropped on the knob still lands on
+  its jack. The strip is a `CardSegmentedSwitch` (the joined-button look the Wavetable's own strip
+  had): one Tab stop, Left/Right step through the tabs and stop at the ends, Home/End jump, the accent
+  focus ring, titled "Control tabs" with a tooltip naming its keys, a group of radio buttons named after
+  the tabs to a screen reader. The strip is created after every parameter widget, so the controls' child
+  and screen-reader order stay the declaration order. The selected tab is the card's own (a rebuilt card
+  opens on its first tab) and is never saved, as the Wavetable's page never was. A tab section's
+  `visibleWhen` hides its controls, not its tab. Details in [module-card.md](module-card.md#tab-strips).
 - **Bespoke cards.** Sequencer, Poly Sequencer, MIDI Keyboard, Macros, Attenuverter, Parametric EQ
   and External MIDI keep their own bodies; their editable surface is at most hide/reorder of a plain
-  knob row they expose. The Wavetable tab strip becomes `presentation: tab` sections, so its page
-  table leaves `WavetableTabStrip.cpp`. ADSR, LFO and Sampler become ordinary layouts with views.
+  knob row they expose. The Wavetable is a layout card: its pages are `presentation: tab` sections of
+  its code default (built). ADSR, LFO and Sampler become ordinary layouts with views.
 
 ---
 
@@ -302,7 +320,7 @@ added.
 | LFO | Shape; Sync switch; Rate `knobLarge` on its own row; Phase, Fade in, Level, Glide (one row of four); footer: Bipolar, Retrig | Rate swaps Hz and the division in one cell on Sync; Glide dims unless S&H. As built: Shape stays a combo (six values do not fit one switch); the Sync control is a Free/Sync `segmented` switch on the `mode` bool (its own off and on texts); no `lfoShape` view (no component to wrap); the custom-wave editor stays card chrome and opens under the body on Custom, so Draw needs no `lfoCurve` view in the body |
 | Noise | Type `segmented`; Color, Level; footer (Poly, Show Scope) | As built: as designed |
 | Sampler | waveform and load row (card chrome, above the body); Mode `segmented`; Start, End, Level; Pitch: Pitch, Root, Fine; Grains: Grain Size, Density, Spray; footer: Loop, Reverse | The grain controls dim unless Mode is Granular (as built: a dim, not a swap or a hidden section, so their CV jacks keep a knob to land on and the mode switch never resizes the card; they stay on the card in Sample mode, as before). As built: Root stays a knob (an int over 24 steps, no stepper, and no note-name text); no `waveform` view in the body (it is chrome already) |
-| Wavetable | as today, as `tab` sections; Pan moves to Tune, Sync In to Phase | — |
+| Wavetable | as today, as `tab` sections; Pan moves to Tune, Sync In to Phase | As built: Warp, Position and Warp Amt pinned in one untitled section above the strip (the Warp combo on its own row above the two knobs: a run holds one widget kind); tabs Tune (Octave, Coarse, Fine, Level, Pan), Unison (Stack; Unison, Detune, Width, Blend), Phase (Sync In; Phase, Rand Phase, Spread), Sub (Sub Oct, Sub Wave; Sub), File (Import, Interp); a footer with Poly and Show Scope; Table stays chrome beside the display; the card is 560x578 (565 before) |
 | Delay | Tempo Sync; Time `knobLarge`, Feedback, Mix; footer: Ping-pong, Level | Sync swaps Time for a division. As built: Tempo Sync is a Time/Sync `segmented` switch on the boolean (its own off and on texts); the division stays a choice in Time's cell |
 | Reverb | Room: Size, Damping, Pre-delay; Mix: Dry, Wet, Width; footer: Level | As built: Dry and Wet are both `faderV` (side by side, as the widget table says), Width a knob |
 | Chorus, Phaser, Flanger | Motion: Rate, Depth, Mix; Tone: Delay or Centre Freq, Feedback; footer: Level | As built: Chorus and Flanger caption Centre Delay as "Delay (ms)" (the full name stays in the tooltip), because the full caption ellipsises at a knob's width |
@@ -326,17 +344,16 @@ patch node's `params` is an open record there, and per-module ranges come from t
 
 As built: `DefaultCardLayouts::builtIn()` calls one registration function per module family, each in
 its own unit under `Source/UI/Graph/CardBody/DefaultLayouts/` (`DefaultCardLayoutsSources.cpp`:
-Oscillator, Noise, Sampler, LFO; Wavetable stays bespoke for now; `DefaultCardLayoutsEnvelopes.cpp`: ADSR, Amp Env, Filter
+Oscillator, Noise, Sampler, LFO, Wavetable; `DefaultCardLayoutsEnvelopes.cpp`: ADSR, Amp Env, Filter
 Env, VCA, Envelope Follower, Sample & Hold, Math, Voice Mixer, Poly MIDI, MIDI Keyboard;
 `DefaultCardLayoutsFilterDynamics.cpp`: Filter, Compressor, Limiter, Gate; `DefaultCardLayoutsEffects.cpp`:
 Delay, Reverb, Chorus, Phaser, Flanger, Distortion, Bitcrusher, Ring Modulator, Pitch Shifter), all
 empty so far (the envelopes and utilities family has its entries, below). An entry is `defaults.add(type, layout, revision, dimRules)`, written with the
 `cardlayout::` builders in `DefaultCardLayoutsFamilies.h` (`param`, `showWhen`, `dimUnless`, `view`,
-`section`, `footer`). A family's goldens (`Tests/fixtures/card-body/<Type>.golden`) are recaptured with
+`section`, `tab`, `footer`). A family's goldens (`Tests/fixtures/card-body/<Type>.golden`) are recaptured with
 `CARDBODY_WRITE_GOLDEN=<Type>,<Type>`, and its heights live in its own table in
 [module-card.md](module-card.md#body-layout), so no two families edit the same file. The MIDI Keyboard
-and the Wavetable build no data-driven body today, so an entry for them has no effect until their cards
-do.
+builds no data-driven body today, so an entry for it has no effect until its card does.
 
 The envelopes and utilities family, as built. The ADSR draws its graph as the card body's `envelope`
 view (the `CurveEditorComponent` unchanged, built by `CardBodyViews.cpp`); the card wires it to the
@@ -398,7 +415,12 @@ envelope view out draws no graph and no toggle.
   (this module / all <Type> modules), **Presets** (save as, load, delete, in the type's
   `ModuleCardLayouts/<Type>/` folder), **Reset to default**, a search (it hides rows, never group
   headers, so a drop can still land in any group) and **+ Add group** (a titled "New group" at the end).
-  Every edit writes at once and the card re-lays out live; there is no OK button.
+  Every edit writes at once and the card re-lays out live; there is no OK button. A `tab` section is
+  listed as a group like any other, its header titled "Tab: <title>" (built): its controls can be
+  hidden, moved within it or onto a neighbouring tab, and the tab renamed by renaming its header, and
+  every edit keeps the section a tab. Not built: adding or removing a tab, reordering tabs, turning a
+  group into a tab or back, and choosing which tab a new card opens on (+ Add group always adds a grid
+  group at the end).
 - **Two sources, one editor.** What the list edits comes from a `CardLayoutEditorSource`:
   `BuiltInCardLayoutSource` (the card's own parameters, the node's `cardLayout`, the type's default
   in the bound store) and `HostedCardLayoutSource` (a hosted instance's parameters, its extra-state
@@ -468,6 +490,9 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   accessible value.
 - `stepper`: − and + are separate buttons with titles ("Octave down", "Octave up").
 - More row: a button titled "More controls (N)", Enter/Space unfolds it.
+- Tab strip (built): one Tab stop; Left/Right switch tabs and stop at the ends, Home/End jump to the
+  first and last; the accent focus ring; titled "Control tabs" with a tooltip naming those keys; a
+  group of radio buttons titled with the tab names, each with a tooltip.
 - Editor (built): each row (a control or a group header) is one focus stop with the accent focus ring,
   a title and a tooltip naming its keys as bound now. Up/Down move between rows (fixed list keys);
   Space shows or hides, Cmd+Up/Down moves (across a group's edge into the next group), Enter renames:
@@ -505,6 +530,13 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   heights for every type without a code default; each code default builds with no missing
   `paramId`; measure and apply agree; a `show` swap and a `dim` rule change no height;
   `estimateModuleSize` matches every library type.
+- `Tests/UI/Graph/CardBody/DefaultLayouts/WavetableDefaultLayoutTests.cpp` (built): the five tabs in
+  order as one strip, Position and Warp pinned on every tab, Pan on Tune and Sync In on Phase, a tab
+  switch that moves nothing outside the tab's own controls (card, jacks, pinned controls, chrome,
+  footer), only the pinned knobs taking their jacks, the estimate equal to the real card with measure ==
+  apply on every tab, the strip's keys and accessibility, the tab kept per card and never saved, and the
+  layout editor listing the tabs and hiding, moving and renaming within them. The family files beside it
+  pin each family's designed layout the same way.
 - `Tests/UI/Graph/CardBody/CardBodyBindingTests.cpp` (built for knob, toggle and choice) and
   `CardBodyLoadTests.cpp` (project load with stored layouts and LFO/ADSR macro members): every widget kind drives its parameter,
   registers for MIDI Learn and accepts the modulation-amount gesture; a hidden parameter keeps its

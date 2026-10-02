@@ -30,8 +30,8 @@ every card draws the **automatic layout**, which is the generic card exactly: al
 toggles, then the Threshold view, then a 3-column knob grid, each group in parameter declaration
 order. Widgets are built in declaration order whatever the layout, so child, Tab and screen-reader
 order never depend on placement. The bespoke cards (Sequencer, Poly Sequencer, Macros, Parametric
-EQ, Attenuverter, and the Wavetable's tab pages) build their widgets through the same card body
-but place them themselves; MIDI Keyboard, External MIDI and a hosted plugin build their own.
+EQ, Attenuverter) build their widgets through the same card body but place them themselves; MIDI
+Keyboard, External MIDI and a hosted plugin build their own.
 
 **Section headers and renamed controls.** A section with a title (one the user added or renamed in the
 layout editor) starts with a header row, `kSectionHeaderHeight` tall across the content width: a small
@@ -64,6 +64,7 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kFaderHHeight` | 28 | a horizontal fader: cap, modulation bar and value box |
 | `kWaveformHeight` | 72 | Sampler waveform overview |
 | `kSectionHeaderHeight` | 18 | a titled section's header row |
+| `kTabStripGap` | 8 | above a tab strip, and between it and its selected tab's controls |
 | `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |
 
 Generic bool-parameter toggles, and the `freqResponse` / `spectrum` / `scope` show-hide toggles, lay
@@ -88,8 +89,8 @@ and the chrome rows, footer row and More row around the body); only the bespoke 
 table. `ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` builds every library type and
 fails if either path drifts from the real card, and `CardBodyGolden` pins every child's bounds of
 every card against one file per type, `Tests/fixtures/card-body/<Type>.golden`. Fresh cards, single
-width (280), one table per module family, so the work on one family's default layouts edits only its
-own table:
+width (280) unless noted, one table per module family, so the work on one family's default layouts
+edits only its own table:
 
 | Sources | Height (px) |
 |---|---|
@@ -97,6 +98,7 @@ own table:
 | Noise | 245 |
 | Sampler | 565 |
 | LFO | 391 |
+| Wavetable | 578 (double width, 560) |
 
 | Envelopes and utilities | Height (px) |
 |---|---|
@@ -134,7 +136,7 @@ own table:
 | Track In | 100 |
 
 From the table (bespoke): Sequencer and Poly Sequencer 560x406, MIDI Keyboard 560x160 (an Octave stepper row above the keys), Macros (tracks
-its `Knobs` count, 458 at the default), Attenuverter (square, `kNarrowWidth`), Wavetable 560x565,
+its `Knobs` count, 458 at the default), Attenuverter (square, `kNarrowWidth`),
 Parametric EQ 560x592, External MIDI 146, Hosted Plugin 135, and Audio Input / Audio Output on a
 100 px floor.
 
@@ -185,6 +187,32 @@ layout adds it.
   (`AppLookAndFeel::togglePillWidth`, which the size estimate uses too). Pill and footer-caption
   text is measured and painted in the embedded Inter (`AppLookAndFeel::uiTextWidth` / `uiFont`), never
   the system typeface, so every width is the same on every platform.
+
+## Tab strips
+
+A run of consecutive `presentation: tab` sections in a layout is drawn as one **tab strip** with one
+tab's controls under it (`CardBodyTabs.cpp`, laid out by `CardBodyLayout.cpp`;
+[module-card-layout.md](module-card-layout.md#rendering)). The Wavetable's code default is the only one
+with tabs today; a stored layout keeps them.
+
+- **Geometry.** The strip spans the content width, `kRowHeight` tall, `kTabStripGap` below where the
+  run's first section stands; the selected tab's section follows after `kTabStripGap`, laid out like any section (a tab draws
+  no header row: its title is on the tab). The group is as tall as its **tallest** tab whichever is
+  selected, measured by the same walk (measure == apply on every tab), so a tab switch never resizes the
+  card or moves anything outside the group.
+- **Hidden tabs.** The other tabs' widgets are hidden but keep their bounds, bindings, MIDI Learn and
+  automation; a hidden knob paints no modulation ring and takes no cable drop (it is off the card for
+  `CardBodyPlan::isOnCard`).
+- **Jacks.** A knob on a tab never binds its CV jack, selected or not (`getModTargetKnobAnchor`; the
+  size estimate applies the same rule): the jack stays in the gutter, so the jack layout and the
+  content top are the same on every tab. A cable dropped on the visible knob still connects to its jack.
+- **The strip.** A `CardSegmentedSwitch`, componentID `cardTabStrip`: joined buttons with connected
+  edges, the look the Wavetable's own strip had. One Tab stop between the controls above it and the
+  tab's controls; Left/Right step through the tabs and stop at the ends, Home/End jump to the first and
+  last; the accent focus ring; titled "Control tabs" with a tooltip naming the keys; to a screen reader,
+  a group of radio buttons titled with the tab names, each with a tooltip. A switch re-lays the card out
+  and repaints the canvas so cables re-anchor (`CardBody::selectTab`).
+- **State.** The selected tab is per card and never saved; a new or rebuilt card opens on its first tab.
 
 ## Conditions: swap and dim
 
@@ -317,7 +345,7 @@ Undo/redo, Auto Arrange, a project load and deleting the card drop the records. 
 | ADSR Show Envelope Graph (opens or closes the card body's `envelope` view) | the toggle's `onClick`, `CardBody::setViewOpen` |
 
 Not wired because the card height does not change: the Spectrum toggle (a backdrop only), a layout's swap group or dim,
-the ADSR's Time|Tempo switch (a swap group: each stage fader for its division in the same cell) and the Wavetable page tabs (the card is sized once at construction). A card that
+the ADSR's Time|Tempo switch (a swap group: each stage fader for its division in the same cell) and a tab switch (a tab group is as tall as its tallest tab). A card that
 is still being constructed never makes room (it is not on the canvas yet).
 
 ## Header buttons
@@ -557,65 +585,53 @@ via `ModuleLibraryComponent::categoryIconForHeader` — see [icons](icons.md).
 ## Wavetable card
 
 The Wavetable card is **double-width**: 15 knobs, 8 combos and a 16-jack port stack. Laid out flat
-that came to 560x869 — technically correct and genuinely unusable, a wall of identical knobs with no
-hierarchy. Three mechanisms bring it to 560x554 and give it a reading order.
+that came to 560x869 -- technically correct and genuinely unusable, a wall of identical knobs with no
+hierarchy. Three mechanisms bring it to 560x578 and give it a reading order.
 
 **Two-column jack gutter, both columns on the LEFT.** `getInputPortColumns()` returns 2 for a card
-with more than 10 visible input jacks at double width; `getPortCenter()` then lays the inputs out
-**column-major** — jack 0 top-left, running down then over — at `kPortColumnStride` (100 px) apart.
+with more than 10 drawn input jacks at double width; `getPortCenter()` then lays the inputs out
+**column-major** -- jack 0 top-left, running down then over -- at `kPortColumnStride` (100 px) apart.
 Sixteen jacks in one column set a roughly 390 px floor on the card height before a single control is
-placed.
+placed. Only the pinned Position and Warp Amt knobs take their jacks; the other fourteen are drawn, in
+two columns of seven, on every tab ([tab strips](#tab-strips)).
 
-**Inputs stay on the left, outputs on the right — that convention is not negotiable for a saving in
+**Inputs stay on the left, outputs on the right -- that convention is not negotiable for a saving in
 height.** It is what makes signal flow read left to right across a patch. Spilling the overflow down
 the right edge was tried and reverted: it reads as an output, and inputs and outputs are drawn
-identically, so the side is the only cue there is. The real objection to an interior column — the
-module covers the lower half of a cable being dragged towards it — is answered by not aiming at the
+identically, so the side is the only cue there is. The real objection to an interior column -- the
+module covers the lower half of a cable being dragged towards it -- is answered by not aiming at the
 gutter at all; release the cable **on the destination knob** instead, see
 [modulation.md](../modules/modulation.md#drag-to-knob-modulation).
 
-Everything that touches jack geometry — wire drawing, hit-testing (`getPortForPoint`), painting —
+Everything that touches jack geometry -- wire drawing, hit-testing (`getPortForPoint`), painting --
 reads `getPortCenter`, so this is the only place that changes. One consequence:
 `getContentTopY()` takes the **maximum** y over all inputs rather than the last one's, because with
 more than one column an odd jack count leaves the second column a row short, so the last jack is not
 the lowest.
 
-**Tabbed control body.** The 23 controls are grouped into five pages — Tune / Unison / Phase / Sub /
-File — by the page table in `WavetableTabStrip.cpp`, which maps parameter *display names* to pages.
-The strip is a real collaborator: `WavetableTabStrip` (`Source/UI/Graph/ModuleComponent/`) is a
-`juce::Component` child of the card that owns the tab buttons (`wtTab0`..`wtTab4`, one radio group
-per card), the active page and the control -> page assignment. `ModuleComponent` still owns the
-sliders/combos and lends them to the strip via `addSlider`/`addCombo`, so modulation rings, drop
-targeting and MIDI Learn keep reading the card's own arrays; the strip only toggles their visibility
-and sets their bounds. `ModuleComponent` keeps just the hookup (`createWavetableTabs()`) and the
-`onPageChanged` callback (re-layout, repaint, `notifyModuleContentChanged()`). Three controls sit outside the strip: `Position` and `Warp` / `Warp Amt` are **pinned**
-above it (they are what you actually perform with), and `Table` is laid out in the chrome band
-beside the display it selects.
+**Tabs are layout data.** The controls are the card body's, placed by the Wavetable's code default
+(`DefaultCardLayoutsSources.cpp`): an untitled section with Warp, Position and Warp Amt pinned above
+the strip (they are what you actually perform with; the Warp combo sits on its own row above the two
+knobs, because a run holds one widget kind), then five `tab` sections -- Tune (Octave, Coarse, Fine,
+Level, Pan), Unison (Stack; Unison, Detune, Width, Blend), Phase (Sync In; Phase, Rand Phase, Spread),
+Sub (Sub Oct, Sub Wave; Sub) and File (Import, Interp) -- drawn as one tab strip, then a footer with
+the Poly and Show Scope pills. Each tab stacks its combos above its knobs, and its section's columns
+size the knob cells to its count. The strip, its keys, its accessibility and the rule that a tab switch
+never moves anything are the card body's ([tab strips](#tab-strips)); Edit Layout lists each tab as a
+group and can hide, move and rename within it. **Table** is not a body control: it sits in the chrome
+beside the display it selects (`ModuleComponent::createWavetableTableSelector`; the body's plan skips
+the parameter).
 
-- **Jacks are never tabbed.** All 16 CV inputs stay on the card at all times, so a cable can never
-  point at a hidden port. Only knobs and combos page.
-- **Anything that paints from a knob's bounds must check visibility.** A hidden knob keeps the
-  bounds it had when its page was last laid out. Modulation rings go through
-  `getModRingSliderIndex()` and drop targeting through `getModTargetPortForPoint()`; both return
-  "none" for a knob whose page is hidden, so a ring cannot paint over empty card and a hidden knob
-  cannot swallow a cable drop.
-- The card is sized to the **tallest** page (`WavetableTabStrip::getTallestPageHeight()`), not the
-  active one. A card that grew and shrank would
-  shove its neighbours around the canvas on every tab click.
-- Page knob rows are **centred** and page combos run three across — most pages carry fewer than the
-  6 available knob columns, and left-aligning them stranded half the card's width.
-- `createWavetableTabs()` must run **after** `createControls()` (it hands the strip the controls that
-  call creates) and must end by calling `updateLayout()` — `createControls()` has already sized the card,
-  so without a second pass the card keeps its flat-grid height and the tabbed layout never applies.
+**Chrome beside the ports.** The display, the `Table` combo, the button row and the caption sit
+**beside** the jack stack, starting 60 px down (`ModuleComponent::layoutWavetableChrome`) -- the same
+reclaim the Parametric EQ card makes for its response curve (see [visualizers](visualizers.md)). Its
+bottom, `ModuleComponent::wavetableChromeBottomY()` (242), is also what the size estimate reads; the
+body starts below both it and the lowest jack.
 
-**Chrome beside the ports.** The display, `Table` combo, button row and caption sit **beside** the
-jack stack, starting just under the header — the same reclaim the Parametric EQ card makes for its
-response curve (see [visualizers](visualizers.md)). The body still starts below the lowest jack.
-
-The final size is pinned by `EstimatedModuleSizesMatchTheRealComponents`;
-`WavetableCardSplitsItsJackGutterIntoTwoColumns` and
-`WavetableTabsSwitchContentWithoutResizingTheCard` guard the two mechanisms above, including that
-every knob is reachable from some page — a control on no page is unusable.
+The card is measured from its plan like every layout card (`CardBodyMeasure.cpp`: double width, the
+two-column gutter, the chrome bottom), pinned by `EstimatedModuleSizesMatchTheRealComponents` and
+`WavetableDefaultLayout.TheEstimateEqualsTheRealCard`; `ModuleComponentWavetableTests.cpp` guards the
+gutter, drop targets and rings, and `WavetableDefaultLayoutTests.cpp` the tabs.
 
 `ModuleComponent` also builds two file affordances for Wavetable modules: a **"Load Wavetable..."**
 `TextButton` opening an async `juce::FileChooser` starting in the module's browser folder, which on

@@ -26,12 +26,12 @@ using namespace cardbody;
 // The knob a modulation target lands on, by the card's own rule (ModuleComponent::
 // sliderIndexForModTarget): the knob of its bound parameter, else the knob named like the jack. Only a
 // knob on the card counts: placed in a shown section (a swapped-out one keeps its cell), never one in
-// the folded More row.
+// the folded More row, and never one in a tab section (ModuleComponent::getModTargetKnobAnchor).
 bool targetHasShownKnob(const CardBodyPlan& plan, ModuleBase& module, const ModulationTarget& target) {
     const auto* bound = module.parameterForModTarget(target);
     for (int i = 0; i < (int)plan.items.size(); ++i) {
         const auto& item = plan.items[(size_t)i];
-        if (!isContinuousKind(item.kind) || !plan.isOnCard(i))
+        if (!isContinuousKind(item.kind) || !plan.isOnCard(i) || plan.isTabbed(i))
             continue;
         if (bound != nullptr ? item.param == bound : item.param->getName(100) == target.name)
             return true;
@@ -54,8 +54,15 @@ bool jackIsKnobBound(const CardBodyPlan& plan, ModuleBase& module, int jack) {
     return false;
 }
 
-// ModuleComponent::getContentTopY on a single-width card (one input column).
-int contentTopY(const CardBodyPlan& plan, ModuleBase& module) {
+// The card's width (ModuleComponent::updateLayout): the Wavetable is double width, the rest single.
+int cardWidthFor(ModuleBase& module) {
+    return module.getModuleType() == ModuleType::Wavetable ? synth::LayoutUtil::kDoubleWidth
+                                                           : synth::LayoutUtil::kSingleWidth;
+}
+
+// ModuleComponent::getContentTopY: the lowest drawn jack, column-major in two columns on a double-width
+// card with more than ten drawn inputs (getInputPortColumns, getPortCenter).
+int contentTopY(const CardBodyPlan& plan, ModuleBase& module, int width) {
     const int header = ModuleComponent::kPortGutterHeaderHeight;
     int y = header + (module.acceptsMidi() ? 30 : 0);
     const int portOffset = module.producesMidi() ? 20 : 0;
@@ -63,8 +70,10 @@ int contentTopY(const CardBodyPlan& plan, ModuleBase& module) {
     for (int i = 0; i < module.getVisibleInputPortCount(); ++i)
         if (!jackIsKnobBound(plan, module, i))
             ++drawn;
-    if (drawn > 0)
-        y = std::max(y, header + portOffset + (drawn - 1) * 20 + 20 + kPortLabelClearance);
+    const int columns = width >= synth::LayoutUtil::kDoubleWidth && drawn > 10 ? 2 : 1;
+    const int rows = (drawn + columns - 1) / columns;
+    if (rows > 0)
+        y = std::max(y, header + portOffset + (rows - 1) * 20 + 20 + kPortLabelClearance);
     if (const int outs = module.getVisibleOutputPortCount(); outs > 0)
         y = std::max(y, header + portOffset + (outs - 1) * 20 + 20 + kPortLabelClearance);
     return y;
@@ -117,7 +126,7 @@ int measureRowsBelowBody(const CardBodyPlan& plan, ModuleBase& module, int y, co
     return y;
 }
 
-// The fresh card's height: port gutter, Sampler chrome, the body, then the rows below it. Nullopt when
+// The fresh card's height: port gutter, Sampler or Wavetable chrome, the body, then the rows below it. Nullopt when
 // the fresh module would open a section this does not model (a remembered view, a Custom LFO).
 std::optional<int> measureHeight(ModuleBase& module, const DefaultCardLayouts& defaults) {
     const auto view = module.getCardViewState();
@@ -131,11 +140,14 @@ std::optional<int> measureHeight(ModuleBase& module, const DefaultCardLayouts& d
     const auto* entry = defaults.find(AIStateMapper::getFactoryTypeName(&module));
     const auto plan = entry != nullptr ? CardBodyPlan::forModule(module, entry->layout, entry->dimRules)
                                        : CardBodyPlan::forModule(module, std::nullopt);
-    const auto g = BodyGeometry::forCardWidth(synth::LayoutUtil::kSingleWidth);
-    int y = contentTopY(plan, module);
+    const int width = cardWidthFor(module);
+    const auto g = BodyGeometry::forCardWidth(width);
+    int y = contentTopY(plan, module, width);
     if (dynamic_cast<SamplerModule*>(&module) != nullptr)
         y += kWaveformHeight + 8 + kRowHeight + 8;
-    y = layoutCardBodySections(plan, module, y, g, /*apply*/ false, /*tabbed*/ false);
+    if (module.getModuleType() == ModuleType::Wavetable) // beside the jack gutter on its double-width card
+        y = std::max(y, ModuleComponent::wavetableChromeBottomY());
+    y = layoutCardBodySections(plan, module, y, g, /*apply*/ false);
     y = measureRowsBelowBody(plan, module, y, g);
     return std::max(100, y + kBottomPadding);
 }
@@ -157,7 +169,7 @@ std::optional<juce::Point<int>> measureDataDrivenCardSizeWith(const juce::String
     if (module == nullptr || !cardBodyLayoutIsDataDriven(*module) || module->getModuleType() == ModuleType::AudioInput)
         return std::nullopt;
     if (const auto height = measureHeight(*module, defaults))
-        return juce::Point<int>(synth::LayoutUtil::kSingleWidth, *height);
+        return juce::Point<int>(cardWidthFor(*module), *height);
     return std::nullopt;
 }
 

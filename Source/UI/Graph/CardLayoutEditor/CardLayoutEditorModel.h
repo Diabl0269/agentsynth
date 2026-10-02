@@ -22,6 +22,7 @@ public:
         juce::String name; ///< The parameter's or view's own name, or the section title.
         bool shown = true;
         bool placed = true; ///< False for an unticked row that left the layout.
+        bool tab = false;   ///< A header of a `tab` section: one tab of the card's tab strip.
         std::optional<juce::String> label;
         CardWidget widget = CardWidget::Auto;
         std::vector<CardWidget> widgetChoices;

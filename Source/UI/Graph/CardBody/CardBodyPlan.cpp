@@ -26,8 +26,9 @@ ModuleType typeOf(juce::AudioProcessor& module) {
 bool isAdsr(juce::AudioProcessor& module) { return typeOf(module) == ModuleType::ADSR; }
 
 // Parameters with no widget of their own. bypassed/muted/dualIO are the header buttons. The ADSR's
-// three curve amounts are edited on the envelope graph's bend handles. A parameter a registered view
-// edits (the Threshold slider inside the Threshold view) gets no knob either. The ADSR's tempoSync and
+// three curve amounts are edited on the envelope graph's bend handles, and the Wavetable's Table choice
+// by the card's chrome beside the display it selects. A parameter a registered view edits (the
+// Threshold slider inside the Threshold view) gets no knob either. The ADSR's tempoSync and
 // four note divisions are ordinary items: a layout swaps each division in for its time with a condition
 // on tempoSync (one mechanism, the layout's), and the automatic layout shows them as plain controls.
 bool isEditedElsewhere(juce::AudioProcessor& module, const juce::RangedAudioParameter& param) {
@@ -39,6 +40,8 @@ bool isEditedElsewhere(juce::AudioProcessor& module, const juce::RangedAudioPara
         if (id == "attackCurve" || id == "decayCurve" || id == "releaseCurve")
             return true;
     }
+    if (typeOf(module) == ModuleType::Wavetable && id == "table")
+        return true;
     if (const auto* threshold = findCardViewFactory(CardView::Threshold);
         threshold != nullptr && cardViewAvailableFor(CardView::Threshold, module))
         return id.isNotEmpty() && id == threshold->ownedParamId(module);
@@ -276,6 +279,20 @@ void placePolyInFooter(const CardLayout& layout, CardBodyPlan& plan, const std::
     }
 }
 
+// A `tab` section joins the tab group the section before it opened, or opens one; any other section
+// ends the run. The footer is never a tab.
+void joinTabGroup(const CardSection& source, CardBodyPlan& plan) {
+    auto& section = plan.sections.back();
+    const int index = (int)plan.sections.size() - 1;
+    if (source.presentation != CardPresentation::Tab || section.footer)
+        return;
+    const bool continues = index > 0 && plan.sections[(size_t)index - 1].tabGroup >= 0;
+    if (!continues)
+        plan.tabGroups.push_back({});
+    section.tabGroup = (int)plan.tabGroups.size() - 1;
+    plan.tabGroups.back().sections.push_back(index);
+}
+
 // Sections in layout order, except that a footer section (CardSection::kFooterId) always comes last,
 // wherever the layout lists it. A parameter listed in `hidden`, named nowhere, or named a second time
 // goes to the More row.
@@ -291,11 +308,13 @@ void placeFromLayout(juce::AudioProcessor& module, const CardLayout& layout, Car
     std::set<int> named;
     for (const auto* source : order) {
         CardBodyPlan::Section section;
+        section.id = source->id;
         section.columns = juce::jlimit(1, 6, source->columns);
         section.title = source->title;
         section.visibleWhen = source->visibleWhen;
         section.footer = source->id == CardSection::kFooterId;
         plan.sections.push_back(std::move(section));
+        joinTabGroup(*source, plan);
         const int sectionIndex = (int)plan.sections.size() - 1;
         SectionPlacer placer{plan, plan.sections.back(), sectionIndex, {}};
         for (const auto& item : source->items)
@@ -398,8 +417,8 @@ bool cardBodyBuildsWidgetsFor(juce::AudioProcessor& module) {
            dynamic_cast<HostedPluginModule*>(&module) == nullptr;
 }
 
-// The bespoke cards lay their widgets out themselves (or page them, the Wavetable), so a stored
-// layout never moves anything on them; they always build from the automatic plan.
+// The bespoke cards lay their widgets out themselves, so a stored layout never moves anything on them;
+// they always build from the automatic plan.
 bool cardBodyLayoutIsDataDriven(juce::AudioProcessor& module) {
     if (!cardBodyBuildsWidgetsFor(module) || dynamic_cast<MacroControlModule*>(&module) != nullptr)
         return false;
@@ -408,7 +427,6 @@ bool cardBodyLayoutIsDataDriven(juce::AudioProcessor& module) {
     case ModuleType::PolySequencer:
     case ModuleType::Attenuverter:
     case ModuleType::ParametricEQ:
-    case ModuleType::Wavetable:
     case ModuleType::MacroInlet:
     case ModuleType::MacroOutlet:
     case ModuleType::MacroMidiInlet:

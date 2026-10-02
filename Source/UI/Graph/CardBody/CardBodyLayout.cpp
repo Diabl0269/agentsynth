@@ -1,9 +1,9 @@
 // CardBodyLayout.cpp -- laying a card body out: each shown section's items in card order, as cells (one
 // item, or one swap group showing whichever member's condition holds), grouped into runs of one kind (a
-// combo stack, toggle rows, a knob grid, a full-width view) placed by the shared run layouts. One
-// function measures (apply = false) and places (apply = true), so the measured height and the real
-// positions cannot drift apart; with null widgets (a plan never built) it measures statically. The
-// footer row is CardBodyFooter.cpp.
+// combo stack, toggle rows, a knob grid, a full-width view) placed by the shared run layouts; a run of
+// tab sections is one tab strip over the selected tab. One function measures (apply = false) and places
+// (apply = true), so the measured height and the real positions cannot drift apart; with null widgets
+// (a plan never built) it measures statically. The footer row is CardBodyFooter.cpp.
 #include "CardBody.h"
 #include "CardBodyLayoutWalk.h"
 #include "CardBodyViews.h"
@@ -102,26 +102,25 @@ void fitSwapCell(const CardBodyPlan& plan, const Cell& cell) {
 
 int layoutRunKind(Kind kind, const std::vector<cardbody::CaptionedWidget>& captioned,
                   const std::vector<juce::Component*>& plain, int columns, int y, const cardbody::BodyGeometry& g,
-                  bool apply, bool tabbed) {
+                  bool apply) {
     switch (kind) {
     case Kind::Choice:
-        return tabbed ? y : cardbody::layoutChoiceRun(captioned, y, g, apply);
+        return cardbody::layoutChoiceRun(captioned, y, g, apply);
     case Kind::Toggle:
         return cardbody::layoutToggleRun(plain, y, g, apply);
     case Kind::Knob:
-        return tabbed ? y : cardbody::layoutKnobRun(captioned, columns, y, g, apply);
+        return cardbody::layoutKnobRun(captioned, columns, y, g, apply);
     case Kind::KnobLarge:
-        return tabbed ? y : cardbody::layoutGridRun(captioned, columns, cardbody::kKnobLargeHeight, 0, y, g, apply);
+        return cardbody::layoutGridRun(captioned, columns, cardbody::kKnobLargeHeight, 0, y, g, apply);
     case Kind::FaderV:
-        return tabbed ? y
-                      : cardbody::layoutGridRun(captioned, columns, cardbody::kFaderVHeight,
-                                                synth::ui::CardFader::kVerticalWidth, y, g, apply);
+        return cardbody::layoutGridRun(captioned, columns, cardbody::kFaderVHeight,
+                                       synth::ui::CardFader::kVerticalWidth, y, g, apply);
     case Kind::FaderH:
-        return tabbed ? y : cardbody::layoutCaptionedRows(captioned, cardbody::kFaderHHeight, true, y, g, apply);
+        return cardbody::layoutCaptionedRows(captioned, cardbody::kFaderHHeight, true, y, g, apply);
     case Kind::Segmented:
-        return tabbed ? y : cardbody::layoutCaptionedRows(captioned, cardbody::kRowHeight, true, y, g, apply);
+        return cardbody::layoutCaptionedRows(captioned, cardbody::kRowHeight, true, y, g, apply);
     case Kind::Stepper:
-        return tabbed ? y : cardbody::layoutCaptionedRows(captioned, cardbody::kRowHeight, false, y, g, apply);
+        return cardbody::layoutCaptionedRows(captioned, cardbody::kRowHeight, false, y, g, apply);
     case Kind::View:
         break;
     }
@@ -129,7 +128,7 @@ int layoutRunKind(Kind kind, const std::vector<cardbody::CaptionedWidget>& capti
 }
 
 int layoutRun(const CardBodyPlan& plan, juce::AudioProcessor& module, const std::vector<Cell>& run, int columns, int y,
-              const cardbody::BodyGeometry& g, bool apply, bool tabbed) {
+              const cardbody::BodyGeometry& g, bool apply) {
     const auto kind = run.front().runKind;
     if (kind == Kind::View) {
         const auto& view = plan.items[(size_t)run.front().item];
@@ -145,8 +144,8 @@ int layoutRun(const CardBodyPlan& plan, juce::AudioProcessor& module, const std:
         captioned.emplace_back(item != nullptr ? item->widget : nullptr, item != nullptr ? item->label : nullptr);
         plain.push_back(item != nullptr ? item->widget : nullptr);
     }
-    y = layoutRunKind(kind, captioned, plain, columns, y, g, apply, tabbed);
-    if (apply && !tabbed)
+    y = layoutRunKind(kind, captioned, plain, columns, y, g, apply);
+    if (apply)
         for (const auto& cell : run)
             if (cell.group >= 0 && cell.item >= 0)
                 fitSwapCell(plan, cell);
@@ -154,48 +153,84 @@ int layoutRun(const CardBodyPlan& plan, juce::AudioProcessor& module, const std:
 }
 
 int layoutCells(const CardBodyPlan& plan, juce::AudioProcessor& module, const std::vector<Cell>& cells, int columns,
-                int y, const cardbody::BodyGeometry& g, bool apply, bool tabbed) {
+                int y, const cardbody::BodyGeometry& g, bool apply) {
     for (size_t i = 0; i < cells.size();) {
         const size_t end = runEnd(cells, i);
         const std::vector<Cell> run(cells.begin() + (long)i, cells.begin() + (long)end);
-        y = layoutRun(plan, module, run, columns, y, g, apply, tabbed);
+        y = layoutRun(plan, module, run, columns, y, g, apply);
         i = end;
     }
     return y;
 }
 
+int layoutSectionCells(const CardBodyPlan& plan, juce::AudioProcessor& module, const CardBodyPlan::Section& section,
+                       int y, const cardbody::BodyGeometry& g, bool apply) {
+    return layoutCells(plan, module, cellsOf(plan, section.items, true), section.columns, y, g, apply);
+}
+
+// A tab group: the strip across the content width, a gap either side of it, then the selected tab's
+// section. The group takes
+// its tallest tab's height whichever is selected, so a tab switch never resizes the card; the other
+// tabs are only measured (their widgets are hidden and keep their bounds).
+int layoutTabGroup(const CardBodyPlan& plan, juce::AudioProcessor& module, const CardBodyPlan::TabGroup& group, int y,
+                   const cardbody::BodyGeometry& g, bool apply) {
+    y += cardbody::kTabStripGap;
+    if (apply && group.strip != nullptr)
+        group.strip->setBounds(g.contentX, y, g.contentW, cardbody::kRowHeight);
+    y += cardbody::kRowHeight + cardbody::kTabStripGap;
+    int tallest = 0;
+    for (int tab = 0; tab < (int)group.sections.size(); ++tab) {
+        const auto& section = plan.sections[(size_t)group.sections[(size_t)tab]];
+        if (!section.visible)
+            continue;
+        const bool selected = tab == group.selected;
+        tallest = std::max(tallest, layoutSectionCells(plan, module, section, y, g, apply && selected) - y);
+    }
+    return y + tallest;
+}
+
 } // namespace
 
 int layoutCardBodyItems(const CardBodyPlan& plan, juce::AudioProcessor& module, const std::vector<int>& indices,
-                        int columns, int y, const cardbody::BodyGeometry& g, bool apply, bool tabbed) {
-    return layoutCells(plan, module, cellsOf(plan, indices, false), columns, y, g, apply, tabbed);
+                        int columns, int y, const cardbody::BodyGeometry& g, bool apply) {
+    return layoutCells(plan, module, cellsOf(plan, indices, false), columns, y, g, apply);
 }
 
 // A titled section starts with its header row across the content width; an untitled one (every
 // automatic layout) has none, so those cards keep their exact geometry. A section whose visibleWhen
-// does not hold takes no space; the footer is laid out on its own, under the card's chrome.
+// does not hold takes no space; the footer is laid out on its own, under the card's chrome. A run of
+// tab sections is laid out once, as its tab group, where its first section stands.
 int layoutCardBodySections(const CardBodyPlan& plan, juce::AudioProcessor& module, int y,
-                           const cardbody::BodyGeometry& g, bool apply, bool tabbed) {
-    for (const auto& section : plan.sections) {
-        if (!section.visible || section.footer)
+                           const cardbody::BodyGeometry& g, bool apply) {
+    for (int s = 0; s < (int)plan.sections.size(); ++s) {
+        const auto& section = plan.sections[(size_t)s];
+        if (section.footer)
             continue;
-        if (section.hasHeader() && !tabbed) {
+        if (section.tabGroup >= 0) {
+            const auto& group = plan.tabGroups[(size_t)section.tabGroup];
+            if (group.sections.front() == s)
+                y = layoutTabGroup(plan, module, group, y, g, apply);
+            continue;
+        }
+        if (!section.visible)
+            continue;
+        if (section.hasHeader()) {
             if (apply && section.header != nullptr)
                 section.header->setBounds(g.contentX, y, g.contentW, cardbody::kSectionHeaderHeight);
             y += cardbody::kSectionHeaderHeight;
         }
-        y = layoutCells(plan, module, cellsOf(plan, section.items, true), section.columns, y, g, apply, tabbed);
+        y = layoutSectionCells(plan, module, section, y, g, apply);
     }
     return y;
 }
 
-int CardBody::layout(int y, const cardbody::BodyGeometry& g, bool apply, bool tabbed) const {
-    return layoutCardBodySections(plan_, module_, y, g, apply, tabbed);
+int CardBody::layout(int y, const cardbody::BodyGeometry& g, bool apply) const {
+    return layoutCardBodySections(plan_, module_, y, g, apply);
 }
 
 int CardBody::layoutItems(const std::vector<int>& indices, int columns, int y, const cardbody::BodyGeometry& g,
-                          bool apply, bool tabbed) const {
-    return layoutCardBodyItems(plan_, module_, indices, columns, y, g, apply, tabbed);
+                          bool apply) const {
+    return layoutCardBodyItems(plan_, module_, indices, columns, y, g, apply);
 }
 
 } // namespace synth

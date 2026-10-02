@@ -53,11 +53,15 @@ void CardLayoutEditorGrip::mouseUp(const juce::MouseEvent&) {
 CardLayoutEditorRow::CardLayoutEditorRow(const CardLayoutEditorModel::Row& row, bool draggable, bool renameable)
     : key_(row.key)
     , header_(row.kind == CardLayoutEditorModel::Row::Kind::Header)
+    , tab_(header_ && row.tab)
     , draggable_(draggable && !header_)
     , name_(row.name)
     , labelOverride_(row.label) {
     setWantsKeyboardFocus(true);
-    if (header_) {
+    if (tab_) {
+        setTitle("Tab: " + shownName());
+        setTooltip("A tab of the card's tab strip; click its title to rename the tab (Enter)");
+    } else if (header_) {
         setTitle("Group: " + shownName());
         setTooltip("A group of controls on the card; click its title to rename it (Enter)");
     } else {
@@ -168,7 +172,7 @@ void CardLayoutEditorRow::commitName(const juce::String& text) {
     }
     nameLabel_.setText(shownName(), juce::dontSendNotification);
     if (header_)
-        setTitle("Group: " + shownName());
+        setTitle((tab_ ? "Tab: " : "Group: ") + shownName());
     if (onRenamed)
         onRenamed(trimmed);
 }

@@ -85,10 +85,10 @@ TEST(CardBodyWidgetKind, EachKindIsBuiltAsItsWidgetAtItsSizeAndMeasureEqualsAppl
 
     // The live walk measures what it places, and a plan never built (null widgets) measures the same.
     const auto g = synth::cardbody::BodyGeometry::forCardWidth(card->getWidth());
-    const int measured = body->layout(100, g, /*apply*/ false, false);
-    EXPECT_EQ(body->layout(100, g, /*apply*/ true, false), measured);
+    const int measured = body->layout(100, g, /*apply*/ false);
+    EXPECT_EQ(body->layout(100, g, /*apply*/ true), measured);
     const auto staticPlan = synth::CardBodyPlan::forModule(*canvas.processor(id), layout);
-    EXPECT_EQ(synth::layoutCardBodySections(staticPlan, *canvas.processor(id), 100, g, false, false), measured);
+    EXPECT_EQ(synth::layoutCardBodySections(staticPlan, *canvas.processor(id), 100, g, false), measured);
     int lowest = 0;
     for (const auto& item : body->getPlan().items)
         if (item.widget != nullptr && item.widget->isVisible())

@@ -91,6 +91,7 @@ private:
 
     juce::String key_;
     bool header_ = false;
+    bool tab_ = false; ///< A header of a tab section.
     bool draggable_ = false;
     juce::String name_; ///< The control's own name, or the group title.
     std::optional<juce::String> labelOverride_;
