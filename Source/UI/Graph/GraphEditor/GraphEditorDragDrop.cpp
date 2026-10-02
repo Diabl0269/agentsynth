@@ -499,7 +499,9 @@ void GraphEditor::applyMembershipLive(juce::AudioProcessorGraph::NodeID draggedN
     }
     const auto hullsBefore = snapshotPaintedHulls();
     const auto cablesBefore = rebuildVisibleCables();
+    macroController_.setMakeRoomDeferred(true);
     applyMacroMembershipChange(macros, macroController_, macroController_.nodeUuidFor(draggedNodeId), leaveId, joinId);
+    macroController_.setMakeRoomDeferred(false);
     liveMembershipAway_ = currentOwnerOfDraggedModule() != liveMembershipPressOwner_;
     macroController_.clearFrozenDragHulls();
     macroController_.freezeHullsForDrag(draggedNodeId);
@@ -534,8 +536,10 @@ void GraphEditor::revertLiveMembership() {
         return;
     const auto hullsBefore = snapshotPaintedHulls();
     const auto cablesBefore = rebuildVisibleCables();
+    macroController_.setMakeRoomDeferred(true);
     applyMacroMembershipChange(macros, macroController_, macroController_.nodeUuidFor(draggedNodeId), current,
                                liveMembershipPressOwner_);
+    macroController_.setMakeRoomDeferred(false);
     liveMembershipAway_ = false;
     macroController_.clearFrozenDragHulls();
     macroController_.freezeHullsForDrag(draggedNodeId);
@@ -553,7 +557,12 @@ void GraphEditor::recordUnfinishedLiveMembershipChange() {
     const auto macrosBefore = std::exchange(macrosBeforeLiveDrag_, juce::var());
     if (undoManager != nullptr)
         undoManager->recordGraphAndMacroChange(
-            audioEngine.getGraph(), macros, [] {}, undoManager->takeCapturedGraphBeforeState(), macrosBefore);
+            audioEngine.getGraph(), macros,
+            [this] {
+                for (const auto& grower : macroController_.takeDeferredMakeRoom())
+                    macroController_.makeRoomFor(grower);
+            },
+            undoManager->takeCapturedGraphBeforeState(), macrosBefore);
 }
 
 void GraphEditor::beginMacroDragFreeze(juce::AudioProcessorGraph::NodeID draggedNodeId) {
@@ -701,9 +710,12 @@ void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juc
         applyMacroMembershipChange(macros, macroController_, uuid, leaveId, joinId);
         // The joined border grew around the card where it was dragged; it settles here, so its neighbours make
         // room for where it really is.
-        if (movedLive)
+        if (movedLive) {
+            for (const auto& grower : macroController_.takeDeferredMakeRoom())
+                macroController_.makeRoomFor(grower);
             if (const auto* owner = macros.findByMember(uuid))
                 macroController_.makeRoomFor("m:" + owner->id);
+        }
     };
 
     if (undoManager)

@@ -223,6 +223,9 @@ public:
     /** Pushes every neighbour clear of `growerKey`, then repeats one level up. Call it INSIDE the undo record of
      *  whatever grew the unit; it opens none of its own. */
     void makeRoomFor(const juce::String& growerKey);
+    /** While deferred, makeRoomFor only remembers its grower; takeDeferredMakeRoom() hands the list back. */
+    void setMakeRoomDeferred(bool deferred) noexcept { makeRoomDeferred_ = deferred; }
+    std::vector<juce::String> takeDeferredMakeRoom() { return std::exchange(deferredMakeRoom_, {}); }
     /** The other half of makeRoomFor: walks `macroId`'s recorded pushes newest-first and moves each neighbour back
      *  by its delta when the user has not moved it since AND its home spot is clear of every other unit at that level
      *  (the collapsed card included). Clears the record (`keepBlocked`: except pushes that only lacked room, for a
@@ -458,6 +461,8 @@ private:
     std::function<juce::Rectangle<int>(const juce::String&)> paintedHullProvider_;
     std::map<juce::String, juce::Rectangle<int>> frozenDragHulls_;
     juce::AudioProcessorGraph::NodeID frozenDragNode_;
+    bool makeRoomDeferred_ = false;
+    std::vector<juce::String> deferredMakeRoom_;
 
     // The shared return walk behind returnDisplacedNeighbours and reflowForResizedModule: offers each record (newest
     // first, repeated until a pass returns nothing) its way back and answers the ones that could not go, in push

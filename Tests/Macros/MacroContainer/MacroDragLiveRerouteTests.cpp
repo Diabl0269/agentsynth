@@ -338,3 +338,35 @@ TEST(MacroDragLiveReroute, TheBorderGlidesToItsNewSizeAndThePortWidgetsGoWithIt)
     const auto painted = r.editor.paintedMacroHullBounds(r.macroId);
     EXPECT_LE(std::abs(portComp->getX() - painted.getX()), 60) << "the inlet sits on the drawn border's left side";
 }
+
+// A macro at the canvas's left edge that gains an input port slides into view, but not under the pointer: during
+// the drag the members hold still, and the slide happens on the drop, in the same undo step.
+TEST(MacroDragLiveReroute, AMacroAtTheCanvasEdgeMakesRoomOnTheDropNotUnderThePointer) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(2400, 1400);
+    auto lfo = addModuleAt(editor, engine, std::make_unique<LFOModule>(), 0, 40);
+    auto osc = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 400, 40);
+    editor.connectPorts(lfo, 0, osc, 0, /*isMidi=*/false);
+    editor.setSelectedNodes({lfo, osc});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(/*autoCreatePorts=*/true);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    editor.setSelectedNodes({});
+    ASSERT_TRUE(editor.getMacros().find(macroId)->ports.empty());
+    const auto oscAtPress = findComponent(editor, osc)->getPosition();
+
+    auto* compLfo = findComponent(editor, lfo);
+    dragBodyBy(*compLfo, {0, 900}, kPlainClick, [&] {
+        ASSERT_EQ(editor.getMacroController().macroForNode(lfo), nullptr) << "sanity: the LFO left as it crossed";
+        EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u) << "sanity: its input port is minted live";
+        EXPECT_EQ(findComponent(editor, osc)->getPosition(), oscAtPress) << "nothing in the macro moves mid-drag";
+    });
+
+    editor.finishHullGlideForTest();
+    EXPECT_GE(editor.getMacroController().macroHullBounds(macroId).getX(), synth::LayoutUtil::kMacroPortOverhang)
+        << "on the drop the macro slides far enough in for its new input port to be on the canvas";
+    ASSERT_TRUE(undo.undo());
+    EXPECT_NE(editor.getMacroController().macroForNode(lfo), nullptr) << "one Cmd+Z undoes the drag and the slide";
+}
