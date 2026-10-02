@@ -398,11 +398,9 @@ void MainComponent::clearTimelineForNewPatch() {
 // now reachable directly so guardUnsavedChanges can hand it in as `proceed`.
 void MainComponent::newPatch() {
     ProgrammaticApplyScope guard(*this);
-    // Two undo steps, deliberately: GraphEditor::newPatch() owns the graph's own
-    // recordStructuralChange, and folding the timeline into it would mean either nesting
-    // transactions or duplicating the clear. The timeline is cleared FIRST so the graph's step
-    // is the newer one — Cmd+Z brings the canvas back, Cmd+Z again brings the timeline back,
-    // and the post-restore reconcile re-derives the bindings after each.
+    // The timeline and graph clears below are recorded as undo steps (each owns its own
+    // transaction), but startFreshUndoHistory() below drops them: New starts an empty history, so
+    // Cmd+Z can't bring back a half of the old project (canvas without its macros or tracks).
     clearTimelineForNewPatch();
     graphEditor.newPatch();
     // A new document is not the old bundle, so the next take goes to app data rather
@@ -417,6 +415,7 @@ void MainComponent::newPatch() {
     // ...and starts with Master pinned right and nothing hidden; the reconcile below rebuilds the mixer.
     bottomDock.getMixerPanel().getViewDoc() = synth::MixerViewDoc::forNewProject();
     reconcileTimelineAfterGraphChange();
+    startFreshUndoHistory();
     markDocumentClean();
     setCurrentPatchName("Untitled");
     statusBar.showMessage("New patch");
@@ -425,6 +424,8 @@ void MainComponent::newPatch() {
     // has let the action proceed (a Cancel answer never runs newPatch() at all).
     hideWelcomeScreen();
 }
+
+void MainComponent::startFreshUndoHistory() { undoManager.clearUndoHistory(); }
 
 // The graph node carrying this uuid, or nullptr.
 juce::AudioProcessorGraph::Node* MainComponent::findNodeByUuid(const juce::String& uuid) const {
