@@ -1,12 +1,13 @@
 // Concern: TimelineAutomationLanes' modulator rows -- the routings into each visible lane's CV jack,
-// re-derived from the graph through the host, pooled per lane, and their live values -- and which lanes
-// are really a modulator's sections.
+// re-derived from the graph through the host, pooled per lane, and their live values and amounts -- and
+// which lanes are really a modulator's amount lane.
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
-#include "UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h"
+#include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include <cmath>
+#include <limits>
 
 namespace synth::ui {
 
@@ -29,11 +30,12 @@ int TimelineAutomationLanes::modulatorRowHeight() const {
 }
 
 // Asks the graph, once per sync, what routes into every lane's CV jack, and from that which lanes are only
-// a modulator's sections: an LFO's `level` lane, on the same track as a lane the LFO modulates, is drawn as
-// that modulator row's band and not as a lane row. A sections lane the graph itself modulates stays a lane
-// row, so nothing it carries is ever hidden. Folded tracks are asked too: their fold arrow's lane count
-// leaves the sections out. Returns true when the set of such lanes changed, i.e. when the lane pools and the
-// layout must follow.
+// a modulator's amount lane: the `amount` lane of a hidden Attenuverter that one of those routings runs
+// through is drawn as that modulator row's band, not as a lane row. Matched by the Attenuverter's uuid, never
+// by the parameter name alone (other modules have an `amount` too). An amount lane the graph itself modulates,
+// or one whose routing reaches no lane in the doc, stays a lane row, so nothing it carries is ever hidden.
+// Folded tracks are asked too: their fold arrow's lane count leaves the amount lanes out. Returns true when
+// the set of such lanes changed, i.e. when the lane pools and the layout must follow.
 bool TimelineAutomationLanes::deriveRoutings() {
     routings_.clear();
     for (const auto& track : doc_->getTracks())
@@ -41,37 +43,34 @@ bool TimelineAutomationLanes::deriveRoutings() {
             routings_[lane.id] =
                 host_ != nullptr ? host_->getModulators(lane.nodeUuid, lane.paramId) : std::vector<ModulatorInfo>{};
 
-    std::set<synth::LaneId> sections;
-    for (const auto& track : doc_->getTracks()) {
-        for (const auto& lane : track.lanes) {
-            for (const auto& info : routings_[lane.id]) {
-                const auto* level = info.isLfo ? sectionsLaneFor(*doc_, info.sourceUuid) : nullptr;
-                if (level != nullptr && level->id != lane.id && doc_->getTrackForLane(level->id) == &track &&
-                    routings_[level->id].empty())
-                    sections.insert(level->id);
-            }
+    std::set<synth::LaneId> amounts;
+    for (const auto& [laneId, infos] : routings_) {
+        for (const auto& info : infos) {
+            const auto* amount = amountLaneFor(*doc_, info.attenuverterUuid);
+            if (amount != nullptr && amount->id != laneId && routings_[amount->id].empty())
+                amounts.insert(amount->id);
         }
     }
-    const bool changed = sections != sectionsLanes_;
-    sectionsLanes_ = std::move(sections);
+    const bool changed = amounts != amountLanes_;
+    amountLanes_ = std::move(amounts);
     return changed;
 }
 
-bool TimelineAutomationLanes::isSectionsLane(synth::LaneId lane) const { return sectionsLanes_.count(lane) > 0; }
+bool TimelineAutomationLanes::isAmountLane(synth::LaneId lane) const { return amountLanes_.count(lane) > 0; }
 
 int TimelineAutomationLanes::hiddenLaneCount(synth::TrackId track) const {
     const auto* t = doc_ != nullptr ? doc_->getTrack(track) : nullptr;
     int count = 0;
     if (t != nullptr)
         for (const auto& lane : t->lanes)
-            count += isSectionsLane(lane.id) ? 1 : 0;
+            count += isAmountLane(lane.id) ? 1 : 0;
     return count;
 }
 
 // The rows are not stored anywhere: the graph is the truth, so whatever routes into the lane's CV jack
 // -- added from the lane's menu or patched by hand on the canvas -- is a row. A refresh that finds the
 // same routings keeps the same rows (keyboard focus and an in-flight drag survive it) and only re-reads
-// their titles, colours, values and sections; a changed set of routings rebuilds that lane's rows.
+// their titles, colours, values and amounts; a changed set of routings rebuilds that lane's rows.
 // Returns true when any lane's rows were rebuilt or dropped, i.e. when the layout must be redone.
 bool TimelineAutomationLanes::syncModulators() {
     bool rebuilt = false;
@@ -80,7 +79,7 @@ bool TimelineAutomationLanes::syncModulators() {
         if (!isVisibleLane(track))
             continue;
         for (const auto& lane : track.lanes) {
-            if (isSectionsLane(lane.id))
+            if (isAmountLane(lane.id))
                 continue;
             visible.insert(lane.id);
             auto infos = routings_[lane.id];
@@ -99,6 +98,7 @@ bool TimelineAutomationLanes::syncModulators() {
             entry.infos = std::move(infos);
         }
     }
+    refreshModulatorAmounts(std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
     for (auto it = modulators_.begin(); it != modulators_.end();) {
         if (visible.count(it->first) > 0) {
             ++it;
@@ -112,6 +112,7 @@ bool TimelineAutomationLanes::syncModulators() {
 
 void TimelineAutomationLanes::wireBand(ModulatorBand& band) const {
     band.setTimelineDoc(doc_);
+    band.setHost(host_);
     band.setUndoManager(undo_);
     band.setTransport(transport_);
     band.setEditTool(editTool_);
@@ -139,13 +140,13 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
 void TimelineAutomationLanes::refreshModulators() {
     if (doc_ == nullptr)
         return;
-    // A cable patched or removed by hand can turn a sections lane back into a lane row (or the reverse),
+    // A cable patched or removed by hand can turn an amount lane back into a lane row (or the reverse),
     // which the lane pools and the track's lane count must follow.
-    const bool sectionsChanged = deriveRoutings();
-    if (sectionsChanged)
+    const bool amountLanesChanged = deriveRoutings();
+    if (amountLanesChanged)
         syncPools();
     const bool rebuilt = syncModulators();
-    if ((sectionsChanged || rebuilt) && onLayoutChanged)
+    if ((amountLanesChanged || rebuilt) && onLayoutChanged)
         onLayoutChanged();
 }
 
@@ -157,6 +158,37 @@ void TimelineAutomationLanes::tickModulatorValues(int visibleTop, int visibleBot
             const auto b = row->getBounds();
             if (b.getBottom() > visibleTop && b.getY() < visibleBottom)
                 row->refreshValues();
+        }
+    }
+    refreshModulatorAmounts(visibleTop, visibleBottom);
+}
+
+// What each routing's amount is now: its amount lane at the playhead, else the Attenuverter's knob. The row
+// shows it, the band speaks it and draws its flat line from it; both are in the owning track's colour.
+void TimelineAutomationLanes::refreshModulatorAmounts(int visibleTop, int visibleBottom) {
+    const auto unassigned = unassignedColour();
+    const double beat = std::max(0.0, lastReadoutBeat_);
+    for (auto& [laneId, entry] : modulators_) {
+        const auto colour = laneColourFor(*doc_, laneId, unassigned);
+        for (size_t i = 0; i < entry.rows.size(); ++i) {
+            auto& row = *entry.rows[i];
+            const auto b = row.getBounds();
+            if (b.getBottom() <= visibleTop || b.getY() >= visibleBottom)
+                continue;
+            const auto& info = entry.infos[i];
+            row.setTrackColour(colour);
+            entry.bands[i]->setTrackColour(colour);
+            if (info.attenuverterUuid.isEmpty()) {
+                row.setAmount(std::nullopt);
+                continue;
+            }
+            const auto* lane = amountLaneFor(*doc_, info.attenuverterUuid);
+            const double amount =
+                lane != nullptr
+                    ? laneValueAt(*lane, beat)
+                    : (host_ != nullptr ? (double)host_->getNodeParameter(info.attenuverterUuid, kAmountParamId) : 0.0);
+            row.setAmount(amount);
+            entry.bands[i]->setAmountReadout(amount);
         }
     }
 }
