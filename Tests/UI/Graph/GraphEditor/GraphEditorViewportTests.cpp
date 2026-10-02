@@ -321,11 +321,12 @@ TEST_F(GraphEditorTest, AGraphEditInvalidatesImmediately) {
     const int rebuildBeforeDisconnect = editor.getCableRebuildCountForTest();
 
     editor.disconnectCable(toRemove);
-    // Invalidated, not yet rebuilt: repaintCanvas() only drops the memo.
-    EXPECT_EQ(editor.getCableRebuildCountForTest(), rebuildBeforeDisconnect);
+    // Rebuilt exactly once, right away: the disconnect diffs the cables drawn before and after it to retract
+    // the removed one (CableRetractAnimator), and that read is what refills the memo.
+    EXPECT_EQ(editor.getCableRebuildCountForTest(), rebuildBeforeDisconnect + 1);
 
     const auto& afterDisconnect = editor.buildVisibleCables();
-    EXPECT_EQ(editor.getCableRebuildCountForTest(), rebuildBeforeDisconnect + 1);
+    EXPECT_EQ(editor.getCableRebuildCountForTest(), rebuildBeforeDisconnect + 1) << "and the memo then holds";
     EXPECT_EQ(afterDisconnect.size(), 1u);
     for (const auto& c : afterDisconnect)
         EXPECT_FALSE(c.id == toRemove.id);
