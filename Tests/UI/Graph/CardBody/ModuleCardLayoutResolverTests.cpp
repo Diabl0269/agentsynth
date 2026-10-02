@@ -4,6 +4,8 @@
 // default, then the code default, then automatic. Registries and stores are injected, so nothing
 // touches the real settings folder.
 
+#include "AI/AIStateMapper/AIStateMapper.h"
+#include "Modules/ADSRModule.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutResolver.h"
 #include <gtest/gtest.h>
 
@@ -105,4 +107,17 @@ TEST_F(ModuleCardLayoutResolverTest, AV1LayoutIsUpgradedWhenTheParameterListIsKn
 
     resolved = resolveModuleCardLayout("Filter", flat("cutoff").toVar(), nullptr, defaults);
     EXPECT_EQ(resolved.layout, flat("cutoff")) << "without the list the layout is returned as read";
+}
+
+// updateModuleNames numbers two ADSRs "ADSR 1" and "ADSR 2". The card's layout is looked up by
+// the factory type name, which for an ADSR used to be that display name, so a card rebuilt after an
+// undo found no default and drew the flat automatic list instead of the envelope card.
+TEST(ModuleCardLayoutResolver, ANumberedEnvelopeStillGetsItsCodeDefault) {
+    for (const char* name : {"ADSR 1", "ADSR 2", "Amp Env 3", "Filter Env 1"}) {
+        ADSRModule module(name);
+        const auto type = synth::AIStateMapper::getFactoryTypeName(&module);
+        const auto resolved = resolveModuleCardLayout(type, juce::var(), nullptr, DefaultCardLayouts::builtIn());
+        EXPECT_EQ(resolved.source, Source::CodeDefault) << name << " resolved as \"" << type << "\"";
+        EXPECT_NE(synth::AIStateMapper::createModule(type), nullptr) << "\"" << type << "\" must still rebuild";
+    }
 }

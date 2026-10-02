@@ -18,6 +18,14 @@
 namespace synth {
 
 namespace {
+// "Oscillator 1" -> "Oscillator": the trailing instance number updateModuleNames adds.
+juce::String stripNumericSuffix(const juce::String& name) {
+    const int lastSpace = name.lastIndexOf(" ");
+    if (lastSpace != -1 && name.substring(lastSpace + 1).containsOnly("0123456789"))
+        return name.substring(0, lastSpace);
+    return name;
+}
+
 // A patch's "remove" entry. False (nothing removed, the id keeps its mapping) for a node the output dock protects:
 // Audio Output never leaves the patch, nor Master while a mixer channel exists.
 bool removePatchNode(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id) {
@@ -51,10 +59,7 @@ std::unique_ptr<juce::AudioProcessor> AIStateMapper::createModule(const juce::St
     }
 
     // Strip trailing number suffix for backwards compatibility (e.g., "Oscillator 1" → "Oscillator")
-    juce::String baseName = type;
-    int lastSpace = baseName.lastIndexOf(" ");
-    if (lastSpace != -1 && baseName.substring(lastSpace + 1).containsOnly("0123456789"))
-        baseName = baseName.substring(0, lastSpace);
+    const juce::String baseName = stripNumericSuffix(type);
 
     it = detail::moduleFactory().find(baseName);
     if (it != detail::moduleFactory().end())
@@ -125,7 +130,10 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
             // only by the display name it was constructed with — so emit that name rather than the
             // generic key, or an Amp Env comes back from every save/undo as a plain "ADSR".
             // createModule resolves any name containing "Env"/"ADSR", so this always round-trips.
-            return mb->getName();
+            // The " <n>" updateModuleNames appends to tell two apart is dropped: it is not part of
+            // the type, and a card's layout is looked up by this key ("ADSR 1" has no default
+            // layout, so an undo that rebuilt the card drew the flat automatic list).
+            return stripNumericSuffix(mb->getName());
         case ModuleType::LFO:
             return "LFO";
         case ModuleType::Sequencer:
